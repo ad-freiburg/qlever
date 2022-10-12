@@ -169,12 +169,12 @@ constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
 }
 // _____________________________________________________________________________
 auto NumericLiteralDouble =
-    [](double value) -> Matcher<std::variant<int64_t, double>> {
+    [](double value) -> Matcher<const std::variant<int64_t, double>&> {
   return testing::VariantWith<double>(testing::DoubleEq(value));
 };
 
 auto NumericLiteralInt =
-    [](int64_t value) -> Matcher<std::variant<int64_t, double>> {
+    [](int64_t value) -> Matcher<const std::variant<int64_t, double>&> {
   return testing::VariantWith<int64_t>(testing::Eq(value));
 };
 // _____________________________________________________________________________
@@ -525,18 +525,39 @@ auto Select =
       detail::Select(distinct, reduced, std::move(selection)));
 };
 
+// Return a `Matcher` that tests whether the descriptor of the expression of a
+// `SparqlFilter` matches the given `expectedDescriptor`.
+auto stringMatchesFilter =
+    [](const std::string& expectedDescriptor) -> Matcher<const SparqlFilter&> {
+  auto inner = AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl,
+                           getDescriptor, testing::Eq(expectedDescriptor));
+  return AD_FIELD(SparqlFilter, expression_, inner);
+};
+
+// Return a `Matcher` that tests whether the descriptors of the expressions of
+// the given `vector` of `SparqlFilter`s  matches the given
+// `expectedDescriptors`.
+auto stringsMatchFilters =
+    [](const std::vector<std::string>& expectedDescriptors)
+    -> Matcher<const std::vector<SparqlFilter>&> {
+  auto matchers =
+      ad_utility::transform(expectedDescriptors, stringMatchesFilter);
+  return testing::ElementsAreArray(matchers);
+};
+
 auto SolutionModifier =
     [](const std::vector<std::variant<
            std::string, std::pair<std::string, ::Variable>, ::Variable>>&
            groupKeys = {},
-       const vector<SparqlFilter>& havingClauses = {},
+       const vector<std::string>& havingClauses = {},
        const std::vector<std::variant<::VariableOrderKey,
                                       ExpressionOrderKeyTest>>& orderKeys = {},
        const LimitOffsetClause& limitOffset = {})
     -> Matcher<const SolutionModifiers&> {
   return testing::AllOf(
       AD_FIELD(SolutionModifiers, groupByVariables_, GroupKeys(groupKeys)),
-      AD_FIELD(SolutionModifiers, havingClauses_, testing::Eq(havingClauses)),
+      AD_FIELD(SolutionModifiers, havingClauses_,
+               stringsMatchFilters(havingClauses)),
       AD_FIELD(SolutionModifiers, orderBy_, OrderKeys(orderKeys)),
       AD_FIELD(SolutionModifiers, limitOffset_, testing::Eq(limitOffset)));
 };
@@ -582,7 +603,7 @@ auto RootGraphPattern = [](const Matcher<const p::GraphPattern&>& m)
 template <auto SubMatcherLambda>
 struct MatcherWithDefaultFilters {
   Matcher<const p::GraphPatternOperation&> operator()(
-      vector<SparqlFilter>&& filters, const auto&... childMatchers) {
+      vector<std::string>&& filters, const auto&... childMatchers) {
     return SubMatcherLambda(std::move(filters), childMatchers...);
   }
 
@@ -595,7 +616,7 @@ struct MatcherWithDefaultFilters {
 template <auto SubMatcherLambda>
 struct MatcherWithDefaultFiltersAndOptional {
   Matcher<const ParsedQuery::GraphPattern&> operator()(
-      bool optional, vector<SparqlFilter>&& filters,
+      bool optional, vector<std::string>&& filters,
       const auto&... childMatchers) {
     return SubMatcherLambda(optional, std::move(filters), childMatchers...);
   }
@@ -608,12 +629,12 @@ struct MatcherWithDefaultFiltersAndOptional {
 
 namespace detail {
 auto GraphPattern =
-    [](bool optional, const vector<SparqlFilter>& filters,
+    [](bool optional, const vector<std::string>& filters,
        auto&&... childMatchers) -> Matcher<const ParsedQuery::GraphPattern&> {
   return testing::AllOf(
       AD_FIELD(ParsedQuery::GraphPattern, _optional, testing::Eq(optional)),
       AD_FIELD(ParsedQuery::GraphPattern, _filters,
-               testing::UnorderedElementsAreArray(filters)),
+               stringsMatchFilters(filters)),
       AD_FIELD(ParsedQuery::GraphPattern, _graphPatterns,
                testing::ElementsAre(childMatchers...)));
 };
@@ -623,7 +644,7 @@ auto GraphPattern =
     MatcherWithDefaultFiltersAndOptional<detail::GraphPattern>{};
 
 namespace detail {
-auto OptionalGraphPattern = [](vector<SparqlFilter>&& filters,
+auto OptionalGraphPattern = [](vector<std::string>&& filters,
                                const auto&... childMatchers)
     -> Matcher<const p::GraphPatternOperation&> {
   return detail::Optional(
@@ -635,7 +656,7 @@ auto OptionalGraphPattern =
     MatcherWithDefaultFilters<detail::OptionalGraphPattern>{};
 
 namespace detail {
-auto GroupGraphPattern = [](vector<SparqlFilter>&& filters,
+auto GroupGraphPattern = [](vector<std::string>&& filters,
                             const auto&... childMatchers)
     -> Matcher<const p::GraphPatternOperation&> {
   return Group(detail::GraphPattern(false, filters, childMatchers...));
@@ -645,7 +666,7 @@ auto GroupGraphPattern = [](vector<SparqlFilter>&& filters,
 auto GroupGraphPattern = MatcherWithDefaultFilters<detail::GroupGraphPattern>{};
 
 namespace detail {
-auto MinusGraphPattern = [](vector<SparqlFilter>&& filters,
+auto MinusGraphPattern = [](vector<std::string>&& filters,
                             const auto&... childMatchers)
     -> Matcher<const p::GraphPatternOperation&> {
   return Minus(detail::GraphPattern(false, filters, childMatchers...));
@@ -688,9 +709,10 @@ auto LimitOffset = [](const LimitOffsetClause& limitOffset = {})
     -> Matcher<const ::ParsedQuery&> {
   return AD_FIELD(ParsedQuery, _limitOffset, testing::Eq(limitOffset));
 };
-auto Having = [](const vector<SparqlFilter>& havingClauses = {})
+auto Having = [](const vector<std::string>& havingClauses = {})
     -> Matcher<const ::ParsedQuery&> {
-  return AD_FIELD(ParsedQuery, _havingClauses, testing::Eq(havingClauses));
+  return AD_FIELD(ParsedQuery, _havingClauses,
+                  stringsMatchFilters(havingClauses));
 };
 auto OrderKeys =
     [](const std::vector<std::pair<::Variable, bool>>& orderKeys = {})

@@ -1,14 +1,16 @@
 // Copyright 2021, University of Freiburg,
 // Chair of Algorithms and Data Structures
 // Authors:
-//   Hannah Bast <bast@cs.uni-freiburg.de>
-//   2022 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+//   2021 -    Hannah Bast <bast@cs.uni-freiburg.de>
+//   2022      Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+//   2022 -    Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
 #include <string>
 #include <vector>
 
+#include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "parser/SparqlParser.h"
@@ -129,8 +131,15 @@ PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
 }
 
 // ___________________________________________________________________________
-SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx) {
-  return SparqlExpressionPimpl{visit(ctx), std::move(ctx->getText())};
+SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx,
+                                                    bool allowLanguageFilters) {
+  SparqlExpressionPimpl result{visit(ctx), std::move(ctx->getText())};
+  if (allowLanguageFilters) {
+    checkUnsupportedLangOperationAllowFilters(ctx, result);
+  } else {
+    checkUnsupportedLangOperation(ctx, result);
+  }
+  return result;
 }
 
 // ____________________________________________________________________________________
@@ -288,9 +297,13 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
 
     pattern._graphPatterns = std::move(subOps);
     for (auto& filter : filters) {
-      if (filter._type == SparqlFilter::LANG_MATCHES) {
-        pattern.addLanguageFilter(filter._lhs, filter._rhs);
+      if (auto langFilterData =
+              filter.expression_.getLanguageFilterExpression();
+          langFilterData.has_value()) {
+        const auto& [variable, language] = langFilterData.value();
+        pattern.addLanguageFilter(variable.name(), language);
       } else {
+        checkUnsupportedLangOperation(ctx, filter.expression_);
         pattern._filters.push_back(std::move(filter));
       }
     }
@@ -470,34 +483,15 @@ LimitOffsetClause Visitor::visit(Parser::LimitOffsetClausesContext* ctx) {
 
 // ____________________________________________________________________________________
 vector<SparqlFilter> Visitor::visit(Parser::HavingClauseContext* ctx) {
-  return visitVector(ctx->havingCondition());
+  auto expressions = visitVector(ctx->havingCondition());
+  return ad_utility::transform(std::move(expressions), [](auto&& expression) {
+    return SparqlFilter{std::move(expression)};
+  });
 }
-
-namespace {
-SparqlFilter parseFilter(auto* ctx, const Visitor::PrefixMap& prefixMap) {
-  try {
-    return SparqlParser::parseFilterExpression(ctx->getText(), prefixMap);
-  } catch (const std::bad_optional_access& error) {
-    throw ParseException("The expression " + ctx->getText() +
-                         " is currently not supported by Qlever inside a "
-                         "FILTER or HAVING clause.");
-  } catch (const ParseException& error) {
-    throw ParseException("The expression " + ctx->getText() +
-                         " is currently not supported by Qlever inside a "
-                         "FILTER or HAVING clause. Details: " +
-                         error.what());
-  }
-}
-}  // namespace
 
 // ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::HavingConditionContext* ctx) {
-  SparqlFilter filter = parseFilter(ctx, prefixMap_);
-  if (filter._type == SparqlFilter::LANG_MATCHES) {
-    reportNotSupported(ctx, "Language filters in HAVING clauses are");
-  } else {
-    return filter;
-  }
+  return {visitExpressionPimpl(ctx->constraint())};
 }
 
 // ____________________________________________________________________________________
@@ -738,6 +732,7 @@ std::string Visitor::visit(Parser::DataBlockValueContext* ctx) {
   if (ctx->iri()) {
     return visit(ctx->iri());
   } else if (ctx->rdfLiteral()) {
+    // TODO<joka921> This is still wrong for XSD literals
     return visit(ctx->rdfLiteral());
   } else if (ctx->numericLiteral()) {
     // TODO implement
@@ -791,7 +786,9 @@ GraphPatternOperation Visitor::visit(
 
 // ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
-  return parseFilter(ctx->constraint(), prefixMap_);
+  // The second argument means that the expression `LANG(?var) = "language"` is
+  // allowed.
+  return SparqlFilter{visitExpressionPimpl(ctx->constraint(), true)};
 }
 
 // ____________________________________________________________________________________
@@ -1471,7 +1468,7 @@ ExpressionPtr Visitor::visit(Parser::UnaryExpressionContext* ctx) {
   if (ctx->children[0]->getText() == "-") {
     return createExpression<sparqlExpression::UnaryMinusExpression>(
         std::move(child));
-  } else if (ctx->getText() == "!") {
+  } else if (ctx->children[0]->getText() == "!") {
     return createExpression<sparqlExpression::UnaryNegateExpression>(
         std::move(child));
   } else {
@@ -1486,9 +1483,14 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
   using namespace sparqlExpression;
 
   if (ctx->rdfLiteral()) {
-    // TODO<joka921> : handle strings with value datatype that are
-    // not in the knowledge base correctly.
-    return make_unique<StringOrIriExpression>(visit(ctx->rdfLiteral()));
+    auto tripleComponent = TurtleStringParser<TokenizerCtre>::parseTripleObject(
+        visit(ctx->rdfLiteral()));
+    if (tripleComponent.isString()) {
+      return make_unique<StringOrIriExpression>(tripleComponent.getString());
+    } else {
+      return make_unique<IdExpression>(
+          tripleComponent.toValueIdIfNotString().value());
+    }
   } else if (ctx->numericLiteral()) {
     auto integralWrapper = [](int64_t x) {
       return ExpressionPtr{make_unique<IntExpression>(x)};
@@ -1520,6 +1522,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return visit(ctx->aggregate());
   } else if (ctx->regexExpression()) {
     return visit(ctx->regexExpression());
+  } else if (ctx->langExpression()) {
+    return visit(ctx->langExpression());
     // TODO: Implement built-in calls according to the following examples.
     //
     // } else if (ad_utility::getLowercase(ctx->children[0]->getText()) ==
@@ -1553,6 +1557,18 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
   try {
     return std::make_unique<sparqlExpression::RegexExpression>(
         visit(exp[0]), visit(exp[1]), std::move(flags));
+  } catch (const std::exception& e) {
+    reportError(ctx, e.what());
+  }
+}
+
+// _____________________________________________________________________________
+ExpressionPtr Visitor::visit(Parser::LangExpressionContext* ctx) {
+  // The constructor of `LangExpression` throws if the subexpression is not a
+  // single variable.
+  try {
+    return std::make_unique<sparqlExpression::LangExpression>(
+        visit(ctx->expression()));
   } catch (const std::exception& e) {
     reportError(ctx, e.what());
   }
@@ -1653,7 +1669,7 @@ ExpressionPtr Visitor::visit(Parser::IriOrFunctionContext* ctx) {
 std::string Visitor::visit(Parser::RdfLiteralContext* ctx) {
   // TODO: This should really be an RdfLiteral class that stores a unified
   //  version of the string, and the langtag/datatype separately.
-  string ret = visit(ctx->string());
+  string ret = ctx->string()->getText();
   if (ctx->LANGTAG()) {
     ret += ctx->LANGTAG()->getText();
   } else if (ctx->iri()) {
@@ -1780,7 +1796,7 @@ void Visitor::visitIf(Target* target, Ctx* ctx) {
   }
 }
 
-// ____________________________________________________________________________________
+// _____________________________________________________________________________
 template <typename Ctx>
 void Visitor::visitIf(Ctx* ctx) requires voidWhenVisited<Visitor, Ctx> {
   if (ctx) {
@@ -1788,7 +1804,7 @@ void Visitor::visitIf(Ctx* ctx) requires voidWhenVisited<Visitor, Ctx> {
   }
 }
 
-// ____________________________________________________________________________________
+// _____________________________________________________________________________
 void Visitor::reportError(antlr4::ParserRuleContext* ctx,
                           const std::string& msg) {
   throw ParseException{
@@ -1798,8 +1814,31 @@ void Visitor::reportError(antlr4::ParserRuleContext* ctx,
       generateMetadata(ctx)};
 }
 
-// ____________________________________________________________________________________
+// _____________________________________________________________________________
 void Visitor::reportNotSupported(antlr4::ParserRuleContext* ctx,
                                  const std::string& feature) {
   reportError(ctx, feature + " currently not supported by QLever.");
+}
+
+// _____________________________________________________________________________
+void Visitor::checkUnsupportedLangOperation(
+    antlr4::ParserRuleContext* ctx,
+    SparqlQleverVisitor::SparqlExpressionPimpl expression) {
+  if (expression.containsLangExpression()) {
+    reportError(ctx,
+                "The `LANG()` function is only supported in the construct "
+                "`FILTER(LANG(?variable) = \"langtag\"`");
+  }
+}
+
+// _____________________________________________________________________________
+void Visitor::checkUnsupportedLangOperationAllowFilters(
+    antlr4::ParserRuleContext* ctx,
+    SparqlQleverVisitor::SparqlExpressionPimpl expression) {
+  if (expression.containsLangExpression() &&
+      !expression.getLanguageFilterExpression()) {
+    reportError(ctx,
+                "The `LANG()` function is only supported in the construct "
+                "`FILTER(LANG(?variable) = \"langtag\"`");
+  }
 }

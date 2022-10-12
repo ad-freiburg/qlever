@@ -358,6 +358,9 @@ class SparqlAutomaticVisitor : public antlr4::tree::AbstractParseTreeVisitor {
   virtual antlrcpp::Any visitRegexExpression(
       SparqlAutomaticParser::RegexExpressionContext* context) = 0;
 
+  virtual antlrcpp::Any visitLangExpression(
+      SparqlAutomaticParser::LangExpressionContext* context) = 0;
+
   virtual antlrcpp::Any visitSubstringExpression(
       SparqlAutomaticParser::SubstringExpressionContext* context) = 0;
 

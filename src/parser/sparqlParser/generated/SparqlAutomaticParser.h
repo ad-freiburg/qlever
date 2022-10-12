@@ -297,25 +297,26 @@ class SparqlAutomaticParser : public antlr4::Parser {
     RuleBrackettedExpression = 110,
     RuleBuiltInCall = 111,
     RuleRegexExpression = 112,
-    RuleSubstringExpression = 113,
-    RuleStrReplaceExpression = 114,
-    RuleExistsFunc = 115,
-    RuleNotExistsFunc = 116,
-    RuleAggregate = 117,
-    RuleIriOrFunction = 118,
-    RuleRdfLiteral = 119,
-    RuleNumericLiteral = 120,
-    RuleNumericLiteralUnsigned = 121,
-    RuleNumericLiteralPositive = 122,
-    RuleNumericLiteralNegative = 123,
-    RuleBooleanLiteral = 124,
-    RuleString = 125,
-    RuleIri = 126,
-    RulePrefixedName = 127,
-    RuleBlankNode = 128,
-    RuleIriref = 129,
-    RulePnameLn = 130,
-    RulePnameNs = 131
+    RuleLangExpression = 113,
+    RuleSubstringExpression = 114,
+    RuleStrReplaceExpression = 115,
+    RuleExistsFunc = 116,
+    RuleNotExistsFunc = 117,
+    RuleAggregate = 118,
+    RuleIriOrFunction = 119,
+    RuleRdfLiteral = 120,
+    RuleNumericLiteral = 121,
+    RuleNumericLiteralUnsigned = 122,
+    RuleNumericLiteralPositive = 123,
+    RuleNumericLiteralNegative = 124,
+    RuleBooleanLiteral = 125,
+    RuleString = 126,
+    RuleIri = 127,
+    RulePrefixedName = 128,
+    RuleBlankNode = 129,
+    RuleIriref = 130,
+    RulePnameLn = 131,
+    RulePnameNs = 132
   };
 
   explicit SparqlAutomaticParser(antlr4::TokenStream* input);
@@ -442,6 +443,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
   class BrackettedExpressionContext;
   class BuiltInCallContext;
   class RegexExpressionContext;
+  class LangExpressionContext;
   class SubstringExpressionContext;
   class StrReplaceExpressionContext;
   class ExistsFuncContext;
@@ -2399,7 +2401,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
     antlr4::tree::TerminalNode* STR();
     std::vector<ExpressionContext*> expression();
     ExpressionContext* expression(size_t i);
-    antlr4::tree::TerminalNode* LANG();
+    LangExpressionContext* langExpression();
     antlr4::tree::TerminalNode* LANGMATCHES();
     antlr4::tree::TerminalNode* DATATYPE();
     antlr4::tree::TerminalNode* BOUND();
@@ -2483,6 +2485,23 @@ class SparqlAutomaticParser : public antlr4::Parser {
   };
 
   RegexExpressionContext* regexExpression();
+
+  class LangExpressionContext : public antlr4::ParserRuleContext {
+   public:
+    LangExpressionContext(antlr4::ParserRuleContext* parent,
+                          size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* LANG();
+    ExpressionContext* expression();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual antlrcpp::Any accept(
+        antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  LangExpressionContext* langExpression();
 
   class SubstringExpressionContext : public antlr4::ParserRuleContext {
    public:

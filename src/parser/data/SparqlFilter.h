@@ -5,35 +5,17 @@
 #pragma once
 
 #include <string>
-#include <vector>
 
-using std::string;
-using std::vector;
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
 class SparqlFilter {
  public:
-  enum FilterType {
-    EQ = 0,
-    NE = 1,
-    LT = 2,
-    LE = 3,
-    GT = 5,
-    GE = 6,
-    LANG_MATCHES = 7,
-    REGEX = 8,
-    PREFIX = 9
-  };
+  [[nodiscard]] std::string asString() const;
 
-  [[nodiscard]] string asString() const;
-
-  FilterType _type;
-  string _lhs;
-  string _rhs;
-  vector<string> _additionalLhs = {};
-  vector<string> _additionalPrefixes = {};
-  bool _regexIgnoreCase = false;
-  // True if the str function was applied to the left side.
-  bool _lhsAsString = false;
-
-  bool operator==(const SparqlFilter&) const = default;
+  sparqlExpression::SparqlExpressionPimpl expression_;
+  // TODO<joka921> This comparison is only used for the unit tests, maybe it
+  // should be defined there, because it is only approximate.
+  bool operator==(const SparqlFilter& other) const {
+    return expression_.getDescriptor() == other.expression_.getDescriptor();
+  }
 };

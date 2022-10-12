@@ -4,6 +4,8 @@
 
 #include "RelationalExpressions.h"
 
+#include "engine/sparqlExpressions/LangExpression.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "util/LambdaHelpers.h"
 #include "util/TypeTraits.h"
@@ -382,6 +384,73 @@ string RelationalExpression<Comp>::getCacheKey(
 template <Comparison Comp>
 std::span<SparqlExpression::Ptr> RelationalExpression<Comp>::children() {
   return {children_.data(), children_.size()};
+}
+
+// _____________________________________________________________________________
+template <Comparison Comp>
+std::optional<SparqlExpression::LangFilterData>
+RelationalExpression<Comp>::getLanguageFilterExpression() const {
+  if (Comp != valueIdComparators::Comparison::EQ) {
+    return std::nullopt;
+  }
+
+  // We support both directions: LANG(?x) = "en" and "en" = LANG(?x).
+  auto getLangFilterData =
+      [](const auto& left, const auto& right) -> std::optional<LangFilterData> {
+    const auto* varPtr = dynamic_cast<const LangExpression*>(left.get());
+    const auto* langPtr =
+        dynamic_cast<const StringOrIriExpression*>(right.get());
+
+    if (!varPtr || !langPtr) {
+      return std::nullopt;
+    }
+
+    return LangFilterData{varPtr->variable(), langPtr->value()};
+  };
+
+  const auto& child1 = children_[0];
+  const auto& child2 = children_[1];
+
+  if (auto langFilterData = getLangFilterData(child1, child2)) {
+    return langFilterData;
+  } else {
+    return getLangFilterData(child2, child1);
+  }
+}
+
+template <Comparison comp>
+SparqlExpression::Estimates
+RelationalExpression<comp>::getEstimatesForFilterExpression(
+    uint64_t inputSizeEstimate,
+    [[maybe_unused]] const std::optional<Variable>& firstSortedVariable) const {
+  size_t sizeEstimate = 0;
+
+  if (comp == valueIdComparators::Comparison::EQ) {
+    sizeEstimate = inputSizeEstimate / 1000;
+  } else if (comp == valueIdComparators::Comparison::NE) {
+    sizeEstimate = inputSizeEstimate;
+  } else {
+    sizeEstimate = inputSizeEstimate / 50;
+  }
+
+  size_t costEstimate = sizeEstimate;
+
+  auto canBeEvaluatedWithBinarySearch = [&firstSortedVariable](
+                                            const Ptr& left, const Ptr& right) {
+    auto varPtr = dynamic_cast<const VariableExpression*>(left.get());
+    if (!varPtr || varPtr->value() != firstSortedVariable) {
+      return false;
+    }
+    return right->isConstantExpression();
+  };
+
+  // TODO<joka921> This check has to be more complex once we support proper
+  // filtering on the `LocalVocab`.
+  if (canBeEvaluatedWithBinarySearch(children_[0], children_[1]) ||
+      canBeEvaluatedWithBinarySearch(children_[1], children_[0])) {
+    costEstimate = 0;
+  }
+  return {sizeEstimate, costEstimate};
 }
 
 // Explicit instantiations

@@ -11,10 +11,11 @@ namespace checkUsePatternTrick {
 bool isVariableContainedInGraphPattern(
     const Variable& variable, const ParsedQuery::GraphPattern& graphPattern,
     const SparqlTriple* tripleToIgnore) {
-  for (const SparqlFilter& filter : graphPattern._filters) {
-    if (filter._lhs == variable.name() || filter._rhs == variable.name()) {
-      return true;
-    }
+  if (std::ranges::any_of(
+          graphPattern._filters, [&variable](const SparqlFilter& filter) {
+            return filter.expression_.isVariableContained(variable);
+          })) {
+    return true;
   }
   auto check = [&](const parsedQuery::GraphPatternOperation& op) {
     return isVariableContainedInGraphPatternOperation(variable, op,

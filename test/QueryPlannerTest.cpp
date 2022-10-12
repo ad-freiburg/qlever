@@ -670,12 +670,12 @@ TEST(QueryPlannerTest, testFilterAfterSeed) {
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
-        "{\n  JOIN\n  {\n    FILTER     {\n      "
-        "SCAN POS with P = \"<r>\"\n      qet-width: 2 \n   "
-        " } with ?x != ?y\n\n    qet-width: 2 \n  }"
-        " join-column: [0]\n  |X|\n  {\n    SCAN PSO with P = \""
-        "<r>\"\n    qet-width: 2 \n  } join-column: [0]\n "
-        " qet-width: 3 \n}",
+        "{\n  FILTER   {\n    JOIN\n    {\n      SCAN POS with P = \"<r>\"\n   "
+        "   qet-width: 2 \n    } join-column: [0]\n    |X|\n    {\n      SCAN "
+        "PSO with P = \"<r>\"\n      qet-width: 2 \n    } join-column: [0]\n   "
+        " qet-width: 3 \n  } with "
+        "N16sparqlExpression10relational20RelationalExpressionILN18valueIdCompa"
+        "rators10ComparisonE3EEE#column_1##column_0#\n  qet-width: 3 \n}",
         qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
@@ -695,12 +695,12 @@ TEST(QueryPlannerTest, testFilterAfterJoin) {
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
-        "{\n  FILTER   {\n    JOIN\n    {\n      "
-        "SCAN POS with P = \"<r>\"\n      qet-width: 2 \n"
-        "    } join-column: [0]\n    |X|\n    {\n      "
-        "SCAN PSO with P = \"<r>\"\n      qet-width: 2 \n"
-        "    } join-column: [0]\n    qet-width: 3 \n  }"
-        " with ?x != ?z\n\n  qet-width: 3 \n}",
+        "{\n  FILTER   {\n    JOIN\n    {\n      SCAN POS with P = \"<r>\"\n   "
+        "   qet-width: 2 \n    } join-column: [0]\n    |X|\n    {\n      SCAN "
+        "PSO with P = \"<r>\"\n      qet-width: 2 \n    } join-column: [0]\n   "
+        " qet-width: 3 \n  } with "
+        "N16sparqlExpression10relational20RelationalExpressionILN18valueIdCompa"
+        "rators10ComparisonE3EEE#column_1##column_2#\n  qet-width: 3 \n}",
         qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;

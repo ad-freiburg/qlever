@@ -6,23 +6,18 @@
 
 #pragma once
 
-#include <engine/QueryExecutionContext.h>
-#include <engine/ResultTable.h>
-#include <engine/RuntimeInformation.h>
-#include <util/Exception.h>
-#include <util/Log.h>
-#include <util/Timer.h>
-
 #include <iomanip>
 #include <iostream>
 #include <memory>
 #include <utility>
 
+#include "engine/QueryExecutionContext.h"
+#include "engine/ResultTable.h"
+#include "engine/RuntimeInformation.h"
 #include "parser/data/Variable.h"
-
-using std::endl;
-using std::pair;
-using std::shared_ptr;
+#include "util/Exception.h"
+#include "util/Log.h"
+#include "util/Timer.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
@@ -31,11 +26,11 @@ class Operation {
  public:
   using VariableToColumnMap = ad_utility::HashMap<std::string, size_t>;
   // Default Constructor.
-  Operation() : _executionContext(nullptr), _hasComputedSortColumns(false) {}
+  Operation() : _executionContext(nullptr) {}
 
   // Typical Constructor.
   explicit Operation(QueryExecutionContext* executionContext)
-      : _executionContext(executionContext), _hasComputedSortColumns(false) {}
+      : _executionContext(executionContext) {}
 
   // Destructor.
   virtual ~Operation() {
@@ -61,20 +56,14 @@ class Operation {
   /**
    * @return A list of columns on which the result of this operation is sorted.
    */
-  const vector<size_t>& getResultSortedOn() {
-    if (!_hasComputedSortColumns) {
-      _hasComputedSortColumns = true;
-      _resultSortedColumns = resultSortedOn();
-    }
-    return _resultSortedColumns;
-  }
+  const vector<size_t>& getResultSortedOn() const;
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
   const Engine& getEngine() const { return _executionContext->getEngine(); }
 
   // Get a unique, not ambiguous string representation for a subtree.
-  // This should possible act like an ID for each subtree.
+  // This should act like an ID for each subtree.
   // Calls  `asStringImpl` and adds the information about the `LIMIT` clause.
   virtual string asString(size_t indent = 0) const final {
     auto result = asStringImpl(indent);
@@ -139,6 +128,12 @@ class Operation {
   QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
   }
+
+  // If the result of this `Operation` is sorted (either because this
+  // `Operation` enforces this sorting, or because it preserve the sorting of
+  // its children), return the variable that is the primary sort key. Else
+  // return nullopt.
+  virtual std::optional<Variable> getPrimarySortKeyVariable() const final;
 
  protected:
   // The QueryExecutionContext for this particular element.
@@ -238,10 +233,7 @@ class Operation {
   template <typename F>
   void forAllDescendants(F f) const;
 
-  vector<size_t> _resultSortedColumns;
   RuntimeInformation _runtimeInfo;
-
-  bool _hasComputedSortColumns;
 
   // Collect all the warnings that were created during the creation or
   // execution of this operation.
@@ -272,4 +264,10 @@ class Operation {
   // a subquery that doesn't select all variables.
   mutable std::optional<VariableToColumnMap>
       externallyVisibleVariableToColumnMap_;
+
+  // Mutex that protects the `_resultSortedColumns` below.
+  mutable CopyableMutex _resultSortedColumnsMutex;
+
+  // Store the list of columns by which the result is sorted.
+  mutable std::optional<vector<size_t>> _resultSortedColumns = std::nullopt;
 };

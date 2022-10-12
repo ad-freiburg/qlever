@@ -582,6 +582,11 @@ class SparqlAutomaticBaseVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
+  virtual antlrcpp::Any visitLangExpression(
+      SparqlAutomaticParser::LangExpressionContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual antlrcpp::Any visitSubstringExpression(
       SparqlAutomaticParser::SubstringExpressionContext* ctx) override {
     return visitChildren(ctx);
