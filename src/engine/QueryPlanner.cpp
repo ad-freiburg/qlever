@@ -425,7 +425,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
             rightVar = true;
             rightCol = sub._qet->getVariableColumn(
                 arg._innerRight.getVariable().name());
-            rightColName = Variable{arg._right.getString()};
+            rightColName = Variable{arg._right.getVariable()};
           } else {
             rightVar = false;
             rightCol = sub._qet->getVariableColumn(
