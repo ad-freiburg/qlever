@@ -75,6 +75,10 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
       *getExecutionContext(), columnMap, inputResultTable._idTable,
       getExecutionContext()->getAllocator(), *inputResultTable._localVocab);
 
+  // TODO<joka921> This should be a mandatory argument to the EvaluationContest
+  // constructor.
+  evaluationContext._columnsByWhichResultIsSorted = inputResultTable._sortedBy;
+
   sparqlExpression::ExpressionResult expressionResult =
       _expression.getPimpl()->evaluate(&evaluationContext);
 
