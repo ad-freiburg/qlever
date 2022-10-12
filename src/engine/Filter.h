@@ -19,7 +19,7 @@ class Filter : public Operation {
   sparqlExpression::SparqlExpressionPimpl _expression;
 
  public:
-  virtual size_t getResultWidth() const override;
+  size_t getResultWidth() const override;
 
  public:
   Filter(QueryExecutionContext* qec,
@@ -27,42 +27,38 @@ class Filter : public Operation {
          sparqlExpression::SparqlExpressionPimpl expression);
 
  private:
-  virtual string asStringImpl(size_t indent = 0) const override;
+  string asStringImpl(size_t indent = 0) const override;
 
  public:
-  virtual string getDescriptor() const override;
+  string getDescriptor() const override;
 
-  virtual std::vector<size_t> resultSortedOn() const override {
+  std::vector<size_t> resultSortedOn() const override {
     return _subtree->resultSortedOn();
   }
 
-  virtual void setTextLimit(size_t limit) override {
-    _subtree->setTextLimit(limit);
-  }
+  void setTextLimit(size_t limit) override { _subtree->setTextLimit(limit); }
 
-  virtual size_t getSizeEstimate() override;
+  size_t getSizeEstimate() override;
 
-  virtual size_t getCostEstimate() override;
+  size_t getCostEstimate() override;
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; };
   std::vector<QueryExecutionTree*> getChildren() override {
     return {_subtree.get()};
   }
 
-  virtual bool knownEmptyResult() override {
-    return _subtree->knownEmptyResult();
-  }
+  bool knownEmptyResult() override { return _subtree->knownEmptyResult(); }
 
-  virtual float getMultiplicity(size_t col) override {
+  float getMultiplicity(size_t col) override {
     return _subtree->getMultiplicity(col);
   }
 
  private:
-  virtual VariableToColumnMap computeVariableToColumnMap() const override {
+  VariableToColumnMap computeVariableToColumnMap() const override {
     return _subtree->getVariableColumns();
   }
 
-  virtual void computeResult(ResultTable* result) override;
+  void computeResult(ResultTable* result) override;
 
   template <int WIDTH>
   void computeFilterImpl(ResultTable* outputResultTable,

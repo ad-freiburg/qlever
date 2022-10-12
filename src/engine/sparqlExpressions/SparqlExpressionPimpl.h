@@ -103,7 +103,7 @@ class SparqlExpressionPimpl {
   };
   Estimates getEstimatesForFilterExpression(
       uint64_t inputSizeEstimate,
-      const std::optional<Variable>& firstSortedVariable);
+      const std::optional<Variable>& primarySortKeyVariable);
 
   SparqlExpression* getPimpl() { return _pimpl.get(); }
   [[nodiscard]] const SparqlExpression* getPimpl() const {

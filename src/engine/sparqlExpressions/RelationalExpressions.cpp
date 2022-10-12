@@ -394,7 +394,7 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
     return std::nullopt;
   }
 
-  // We support both directions (LANG(?x) = "ln" and "ln" = LANG(?x)
+  // We support both directions: LANG(?x) = "en" and "en" = LANG(?x).
   auto getLangFilterData =
       [](const auto& left, const auto& right) -> std::optional<LangFilterData> {
     const auto* varPtr = dynamic_cast<const LangExpression*>(left.get());

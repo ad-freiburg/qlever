@@ -1468,7 +1468,7 @@ ExpressionPtr Visitor::visit(Parser::UnaryExpressionContext* ctx) {
   if (ctx->children[0]->getText() == "-") {
     return createExpression<sparqlExpression::UnaryMinusExpression>(
         std::move(child));
-  } else if (ctx->getText() == "!") {
+  } else if (ctx->children[0]->getText() == "!") {
     return createExpression<sparqlExpression::UnaryNegateExpression>(
         std::move(child));
   } else {

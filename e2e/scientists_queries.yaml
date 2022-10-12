@@ -1354,7 +1354,7 @@ queries:
       - selected: [ "?x" ]
       - contains_row: [ "<Max_Planck_Medal>" ]
 
-  # The query checks the bugfix of issue #800. A filter previously was never applied to the
+  # The query checks the bugfix of issue #800. Previously, a filter was never applied to the
   # result of a (materialized) full index scan.
   - query: filter-on-full-scan
     type: no-text
@@ -1367,7 +1367,7 @@ queries:
       - num_cols: 3
       - num_rows : 8
       - selected: [ "?x", "?y", "?z" ]
-      - contains_row: [ "<David_Zeisberger>", "<Children>", "<David_Zeisberger>"]# The query checks the bugfix of issue #800. A filter previously was never applied to the
+      - contains_row: [ "<David_Zeisberger>", "<Children>", "<David_Zeisberger>"]
 
   # Variable repeated in triple
   - query: filter-on-full-scan

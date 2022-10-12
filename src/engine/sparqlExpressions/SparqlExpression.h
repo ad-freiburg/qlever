@@ -117,7 +117,7 @@ class SparqlExpression {
   using Estimates = SparqlExpressionPimpl::Estimates;
   virtual Estimates getEstimatesForFilterExpression(
       uint64_t inputSizeEstimate,
-      [[maybe_unused]] const std::optional<Variable>& firstSortedVariable)
+      [[maybe_unused]] const std::optional<Variable>& primarySortKeyVariable)
       const {
     // Default estimates: Each element can be computed in O(1) and nothing is
     // filtered out.
@@ -126,7 +126,7 @@ class SparqlExpression {
 
   // Returns true iff this expression is a simple constant. Default
   // implementation returns `false`.
-  virtual bool isConstantExpression() const { return true; }
+  virtual bool isConstantExpression() const { return false; }
 
   // __________________________________________________________________________
   virtual ~SparqlExpression() = default;
