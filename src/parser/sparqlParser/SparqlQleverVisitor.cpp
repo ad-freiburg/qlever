@@ -1669,7 +1669,7 @@ ExpressionPtr Visitor::visit(Parser::IriOrFunctionContext* ctx) {
 std::string Visitor::visit(Parser::RdfLiteralContext* ctx) {
   // TODO: This should really be an RdfLiteral class that stores a unified
   //  version of the string, and the langtag/datatype separately.
-  string ret = visit(ctx->string());
+  string ret = ctx->string()->getText();
   if (ctx->LANGTAG()) {
     ret += ctx->LANGTAG()->getText();
   } else if (ctx->iri()) {
