@@ -226,13 +226,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       // we only consist of triples, store them and all the bound variables.
       for (const SparqlTriple& t : v._triples) {
         if (isVariable(t._s)) {
-          boundVariables.insert(t._s.getString());
+          boundVariables.insert(t._s.getVariable().name());
         }
         if (isVariable(t._p)) {
           boundVariables.insert(t._p._iri);
         }
         if (isVariable(t._o)) {
-          boundVariables.insert(t._o.getString());
+          boundVariables.insert(t._o.getVariable().name());
         }
       }
       candidateTriples._triples.insert(
@@ -398,17 +398,20 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         for (auto& sub : candidatesIn) {
           size_t leftCol, rightCol;
           Id leftValue, rightValue;
-          std::string leftColName, rightColName;
+          // TODO<joka921> directly
+          Variable leftColName{"?undefined"}, rightColName{"?undefined"};
           size_t min, max;
           bool leftVar, rightVar;
           if (isVariable(arg._left)) {
             leftVar = true;
-            leftCol = sub._qet->getVariableColumn(arg._innerLeft);
-            leftColName = arg._left.getString();
+            leftCol = sub._qet->getVariableColumn(
+                arg._innerLeft.getVariable().name());
+            leftColName = Variable{arg._left.getString()};
           } else {
             leftVar = false;
             leftColName = generateUniqueVarName();
-            leftCol = sub._qet->getVariableColumn(arg._innerLeft);
+            leftCol = sub._qet->getVariableColumn(
+                arg._innerLeft.getVariable().name());
             if (auto opt = arg._left.toValueId(_qec->getIndex().getVocab());
                 opt.has_value()) {
               leftValue = opt.value();
@@ -420,11 +423,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           // TODO<joka921> This is really much code duplication, get rid of it!
           if (isVariable(arg._right)) {
             rightVar = true;
-            rightCol = sub._qet->getVariableColumn(arg._innerRight);
-            rightColName = arg._right.getString();
+            rightCol = sub._qet->getVariableColumn(
+                arg._innerRight.getVariable().name());
+            rightColName = Variable{arg._right.getString()};
           } else {
             rightVar = false;
-            rightCol = sub._qet->getVariableColumn(arg._innerRight);
+            rightCol = sub._qet->getVariableColumn(
+                arg._innerRight.getVariable().name());
             rightColName = generateUniqueVarName();
             if (auto opt = arg._right.toValueId(_qec->getIndex().getVocab());
                 opt.has_value()) {
@@ -564,9 +569,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
   }
   vector<SubtreePlan> added;
 
-  std::string predicateVariable = patternTrickTuple.predicate_.name();
-  std::string countVariable =
-      aliases.empty() ? generateUniqueVarName() : aliases[0]._target.name();
+  Variable predicateVariable = patternTrickTuple.predicate_;
+  Variable countVariable =
+      aliases.empty() ? generateUniqueVarName() : aliases[0]._target;
   if (previous != nullptr && !previous->empty()) {
     added.reserve(previous->size());
     for (const auto& parent : *previous) {
@@ -790,14 +795,14 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         LOG(DEBUG) << "Subject variable same as object variable" << std::endl;
         // Need to handle this as IndexScan with a new unique
         // variable + Filter. Works in both directions
-        std::string filterVar = generateUniqueVarName();
+        Variable filterVar = generateUniqueVarName();
         auto scanTriple = node._triple;
         scanTriple._o = filterVar;
         auto scanTree =
             makeExecutionTree<IndexScan>(_qec, PSO_FREE_S, scanTriple);
         auto plan = makeSubtreePlan<Filter>(
             _qec, scanTree, SparqlFilter::FilterType::EQ,
-            node._triple._s.getString(), filterVar, vector<string>{},
+            node._triple._s.getString(), filterVar.name(), vector<string>{},
             vector<string>{});
         pushPlan(std::move(plan));
       } else if (isVariable(node._triple._s)) {
@@ -941,24 +946,12 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
     start = end + 1;
   }
 
-  // Generate unique variable names that connect the nunNullChunks
-  std::vector<std::string> connectionVarNames(nonNullChunks.size() + 1);
-  // TODO<joka921, kramerfl> Does it always hold that `left` and `right` are
-  // variables at this point?
-  connectionVarNames[0] = left.toString();
-  connectionVarNames.back() = right.toString();
-  for (size_t i = 1; i + 1 < connectionVarNames.size(); i++) {
-    connectionVarNames[i] = generateUniqueVarName();
-  }
-
   // Stores the pattern for every non null chunk
   std::vector<ParsedQuery::GraphPattern> chunkPatterns;
   chunkPatterns.reserve(nonNullChunks.size());
 
   for (size_t chunkIdx = 0; chunkIdx < nonNullChunks.size(); ++chunkIdx) {
     std::array<size_t, 2> chunk = nonNullChunks[chunkIdx];
-    std::string chunkLeft = connectionVarNames[chunkIdx];
-    std::string chunkRight = connectionVarNames[chunkIdx + 1];
     size_t numChildren = chunk[1] - chunk[0];
 
     // This vector maps the indices of child paths that can be null
@@ -1089,8 +1082,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
-  std::string innerLeft = generateUniqueVarName();
-  std::string innerRight = generateUniqueVarName();
+  Variable innerLeft = generateUniqueVarName();
+  Variable innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
       seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
@@ -1111,8 +1104,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
-  std::string innerLeft = generateUniqueVarName();
-  std::string innerRight = generateUniqueVarName();
+  Variable innerLeft = generateUniqueVarName();
+  Variable innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
       seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
@@ -1133,8 +1126,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMax(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
-  std::string innerLeft = generateUniqueVarName();
-  std::string innerRight = generateUniqueVarName();
+  Variable innerLeft = generateUniqueVarName();
+  Variable innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
       seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
@@ -1189,8 +1182,9 @@ ParsedQuery::GraphPattern QueryPlanner::uniteGraphPatterns(
 }
 
 // _____________________________________________________________________________
-std::string QueryPlanner::generateUniqueVarName() {
-  return "?:" + std::to_string(_internalVarCount++);
+Variable QueryPlanner::generateUniqueVarName() {
+  return Variable{"?_qlever_internal_variable_query_planner_" +
+                  std::to_string(_internalVarCount++)};
 }
 
 // _____________________________________________________________________________
@@ -1669,7 +1663,7 @@ QueryPlanner::TripleGraph::identifyTextCliques() const {
     if (isTextNode(i)) {
       auto& triple = _nodeMap.find(i)->second->_triple;
       auto& cvar = triple._s;
-      contextVarToTextNodesIds[cvar.getString()].push_back(i);
+      contextVarToTextNodesIds[cvar.getVariable().name()].push_back(i);
     }
   }
   return contextVarToTextNodesIds;
@@ -1891,7 +1885,8 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
       adjNodes.insert(_adjLists[nid].begin(), _adjLists[nid].end());
       auto& triple = _nodeMap[nid]->_triple;
       trips.push_back(triple);
-      if (triple._s == cvar && triple._o.isString() &&
+      // TODO<joka921> Make the `cvar` a `Variable`.
+      if (triple._s == Variable{cvar} && triple._o.isString() &&
           !triple._o.isVariable()) {
         if (!wordPart.empty()) {
           wordPart += " ";

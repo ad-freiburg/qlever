@@ -28,8 +28,8 @@ class CountAvailablePredicates : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   size_t _subjectColumnIndex;
-  std::string _predicateVarName;
-  std::string _countVarName;
+  Variable _predicateVarName;
+  Variable _countVarName;
 
  public:
   /**
@@ -37,8 +37,8 @@ class CountAvailablePredicates : public Operation {
    * predicates and their counts for all entities.
    */
   explicit CountAvailablePredicates(QueryExecutionContext* qec,
-                                    std::string predicateVariable,
-                                    std::string countVariable);
+                                    Variable predicateVariable,
+                                    Variable countVariable);
 
   /**
    * @brief Creates a new CountAvailablePredicates operation that returns
@@ -48,8 +48,7 @@ class CountAvailablePredicates : public Operation {
   CountAvailablePredicates(QueryExecutionContext* qec,
                            std::shared_ptr<QueryExecutionTree> subtree,
                            size_t subjectColumnIndex,
-                           std::string predicateVariable,
-                           std::string countVariable);
+                           Variable predicateVariable, Variable countVariable);
 
  protected:
   [[nodiscard]] string asStringImpl(size_t indent) const override;

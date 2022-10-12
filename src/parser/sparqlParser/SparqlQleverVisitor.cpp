@@ -362,9 +362,7 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
     return term.visit(
         ad_utility::OverloadCallOperator{iri, blankNode, literal});
   };
-  auto varTriple = [](const Variable& var) {
-    return TripleComponent{var.name()};
-  };
+  auto varTriple = [](const Variable& var) { return TripleComponent{var}; };
   auto varOrTerm = [&varTriple, &graphTerm](VarOrTerm varOrTerm) {
     return varOrTerm.visit(
         ad_utility::OverloadCallOperator{varTriple, graphTerm});

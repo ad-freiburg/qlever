@@ -37,13 +37,13 @@ class QueryPlanner {
       Node(size_t id, const SparqlTriple& t)
           : _id(id), _triple(t), _variables(), _cvar(), _wordPart() {
         if (isVariable(t._s)) {
-          _variables.insert(t._s.getString());
+          _variables.insert(t._s.getVariable().name());
         }
         if (isVariable(t._p)) {
           _variables.insert(t._p._iri);
         }
         if (isVariable(t._o)) {
-          _variables.insert(t._o.getString());
+          _variables.insert(t._o.getVariable().name());
         }
       }
 
@@ -60,13 +60,13 @@ class QueryPlanner {
         _variables.insert(cvar);
         for (const auto& t : trips) {
           if (isVariable(t._s)) {
-            _variables.insert(t._s.getString());
+            _variables.insert(t._s.getVariable().name());
           }
           if (isVariable(t._p)) {
             _variables.insert(t._p._iri);
           }
           if (isVariable(t._o)) {
-            _variables.insert(t._o.getString());
+            _variables.insert(t._o.getVariable().name());
           }
         }
       }
@@ -238,7 +238,7 @@ class QueryPlanner {
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right);
 
-  [[nodiscard]] std::string generateUniqueVarName();
+  [[nodiscard]] Variable generateUniqueVarName();
 
   // Creates a tree of unions with the given patterns as the trees leaves
   [[nodiscard]] ParsedQuery::GraphPattern uniteGraphPatterns(

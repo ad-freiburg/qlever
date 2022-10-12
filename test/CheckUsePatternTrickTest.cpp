@@ -277,7 +277,7 @@ TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
                              ._triples;
   ASSERT_EQ(triples2.size(), 1u);
   const auto& triple = triples2[0];
-  ASSERT_EQ(triple._s.getString(), "?x");
+  ASSERT_EQ(triple._s.getVariable().name(), "?x");
   ASSERT_EQ(triple._p.asString(), "<is-a>");
-  ASSERT_EQ(triple._o.getString(), "?y");
+  ASSERT_EQ(triple._o.getVariable().name(), "?y");
 }

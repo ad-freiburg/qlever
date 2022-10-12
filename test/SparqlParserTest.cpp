@@ -42,13 +42,13 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(3u, triples.size());
       ASSERT_EQ(Variable{"?x"}, selectClause2.getSelectedVariables()[0]);
       ASSERT_EQ(Variable{"?z"}, selectClause2.getSelectedVariables()[1]);
-      ASSERT_EQ("?x", triples[0]._s);
+      ASSERT_EQ(Variable{"?x"}, triples[0]._s);
       ASSERT_EQ("<http://rdf.myprefix.com/myrel>", triples[0]._p._iri);
-      ASSERT_EQ("?y", triples[0]._o);
-      ASSERT_EQ("?y", triples[1]._s);
+      ASSERT_EQ(Variable{"?y"}, triples[0]._o);
+      ASSERT_EQ(Variable{"?y"}, triples[1]._s);
       ASSERT_EQ("<http://rdf.myprefix.com/ns/myrel>", triples[1]._p._iri);
-      ASSERT_EQ("?z", triples[1]._o);
-      ASSERT_EQ("?y", triples[2]._s);
+      ASSERT_EQ(Variable{"?z"}, triples[1]._o);
+      ASSERT_EQ(Variable{"?y"}, triples[2]._s);
       ASSERT_EQ("<nsx:rel2>", triples[2]._p._iri);
       ASSERT_EQ("<http://abc.de>", triples[2]._o);
       ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
@@ -71,13 +71,13 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(3u, triples.size());
       ASSERT_EQ(Variable{"?x"}, selectClause.getSelectedVariables()[0]);
       ASSERT_EQ(Variable{"?z"}, selectClause.getSelectedVariables()[1]);
-      ASSERT_EQ("?x", triples[0]._s);
+      ASSERT_EQ(Variable{"?x"}, triples[0]._s);
       ASSERT_EQ("<http://rdf.myprefix.com/myrel>", triples[0]._p._iri);
-      ASSERT_EQ("?y", triples[0]._o);
-      ASSERT_EQ("?y", triples[1]._s);
+      ASSERT_EQ(Variable{"?y"}, triples[0]._o);
+      ASSERT_EQ(Variable{"?y"}, triples[1]._s);
       ASSERT_EQ("<http://rdf.myprefix.com/ns/myrel>", triples[1]._p._iri);
-      ASSERT_EQ("?z", triples[1]._o);
-      ASSERT_EQ("?y", triples[2]._s);
+      ASSERT_EQ(Variable{"?z"}, triples[1]._o);
+      ASSERT_EQ(Variable{"?y"}, triples[2]._s);
       ASSERT_EQ("<nsx:rel2>", triples[2]._p._iri);
       ASSERT_EQ("<http://abc.de>", triples[2]._o);
       ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
@@ -99,13 +99,13 @@ TEST(ParserTest, testParse) {
 
       ASSERT_EQ(Variable{"?x"}, selectClause.getSelectedVariables()[0]);
       ASSERT_EQ(Variable{"?z"}, selectClause.getSelectedVariables()[1]);
-      ASSERT_EQ("?x", triples[0]._s);
+      ASSERT_EQ(Variable{"?x"}, triples[0]._s);
       ASSERT_EQ("<Directed_by>", triples[0]._p._iri);
-      ASSERT_EQ("?y", triples[0]._o);
-      ASSERT_EQ("?y", triples[1]._s);
+      ASSERT_EQ(Variable{"?y"}, triples[0]._o);
+      ASSERT_EQ(Variable{"?y"}, triples[1]._s);
       ASSERT_EQ("<http://ns/myrel.extend>", triples[1]._p._iri);
-      ASSERT_EQ("?z", triples[1]._o);
-      ASSERT_EQ("?y", triples[2]._s);
+      ASSERT_EQ(Variable{"?z"}, triples[1]._o);
+      ASSERT_EQ(Variable{"?y"}, triples[2]._s);
       ASSERT_EQ("<nsx:rel2>", triples[2]._p._iri);
       ASSERT_EQ("\"Hello... World\"", triples[2]._o);
       ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
@@ -156,10 +156,10 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ("?y", filters[0]._rhs);
       ASSERT_EQ(SparqlFilter::FilterType::NE, filters[0]._type);
       ASSERT_EQ(4u, triples.size());
-      ASSERT_EQ("?c", triples[2]._s);
+      ASSERT_EQ(Variable{"?c"}, triples[2]._s);
       ASSERT_EQ(CONTAINS_ENTITY_PREDICATE, triples[2]._p._iri);
-      ASSERT_EQ("?x", triples[2]._o);
-      ASSERT_EQ("?c", triples[3]._s);
+      ASSERT_EQ(Variable{"?x"}, triples[2]._o);
+      ASSERT_EQ(Variable{"?c"}, triples[3]._s);
       ASSERT_EQ(CONTAINS_WORD_PREDICATE, triples[3]._p._iri);
       ASSERT_EQ("coca* abuse", triples[3]._o);
     }
@@ -196,9 +196,9 @@ TEST(ParserTest, testParse) {
       const auto& triples = child._graphPatterns[0].getBasic()._triples;
       auto filters = child._filters;
       ASSERT_EQ(1u, triples.size());
-      ASSERT_EQ("?y", triples[0]._s);
+      ASSERT_EQ(Variable{"?y"}, triples[0]._s);
       ASSERT_EQ("<test2>", triples[0]._p._iri);
-      ASSERT_EQ("?z", triples[0]._o);
+      ASSERT_EQ(Variable{"?z"}, triples[0]._o);
       ASSERT_EQ(0u, filters.size());
       ASSERT_TRUE(child._optional);
     }
@@ -304,10 +304,10 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(1u, c._triples.size());
       ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
 
-      ASSERT_EQ(c._triples[0]._s, "?city");
+      ASSERT_EQ(c._triples[0]._s, Variable{"?city"});
       ASSERT_EQ(c._triples[0]._p._iri,
                 "<http://www.wikidata.org/prop/direct/P31>");
-      ASSERT_EQ(c._triples[0]._o, "?citytype");
+      ASSERT_EQ(c._triples[0]._o, Variable{"?citytype"});
 
       const auto& values1 = std::get<p::Values>(pq.children()[0])._inlineValues;
       vector<string> vvars = {"?citytype"};
@@ -414,9 +414,9 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(1u, c._triples.size());
       ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
 
-      ASSERT_EQ(c._triples[0]._s, "?movie");
+      ASSERT_EQ(c._triples[0]._s, Variable{"?movie"});
       ASSERT_EQ(c._triples[0]._p._iri, "<directed-by>");
-      ASSERT_EQ(c._triples[0]._o, "?director");
+      ASSERT_EQ(c._triples[0]._o, Variable{"?director"});
 
       ASSERT_EQ(10u, pq._limitOffset._limit);
       ASSERT_EQ(false, pq._orderBy[0].isDescending_);
@@ -444,9 +444,9 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(1u, c._triples.size());
       ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
 
-      ASSERT_EQ(c._triples[0]._s, "?movie");
+      ASSERT_EQ(c._triples[0]._s, Variable{"?movie"});
       ASSERT_EQ(c._triples[0]._p._iri, "<directed-by>");
-      ASSERT_EQ(c._triples[0]._o, "?director");
+      ASSERT_EQ(c._triples[0]._o, Variable{"?director"});
 
       ASSERT_EQ(10u, pq._limitOffset._limit);
       ASSERT_EQ(true, pq._orderBy[0].isDescending_);
@@ -484,7 +484,7 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(0, pq._rootGraphPattern._filters.size());
       ASSERT_EQ(3u, pq._limitOffset._offset);
 
-      ASSERT_EQ(c._triples[0]._s, "?movie");
+      ASSERT_EQ(c._triples[0]._s, Variable{"?movie"});
       ASSERT_EQ(c._triples[0]._p._iri, "<directed-by>");
       ASSERT_EQ(c._triples[0]._o, "<Scott%2C%20Ridley>");
 
@@ -516,13 +516,13 @@ TEST(ParserTest, testParse) {
                 parsed_sub_query.get()._rootGraphPattern._filters[0]._type);
       ASSERT_EQ(0, parsed_sub_query.get()._limitOffset._offset);
 
-      ASSERT_EQ(c_subquery._triples[0]._s, "?movie");
+      ASSERT_EQ(c_subquery._triples[0]._s, Variable{"?movie"});
       ASSERT_EQ(c_subquery._triples[0]._p._iri, "<directed-by>");
-      ASSERT_EQ(c_subquery._triples[0]._o, "?director");
+      ASSERT_EQ(c_subquery._triples[0]._o, Variable{"?director"});
 
-      ASSERT_EQ(c_subquery._triples[1]._s, "?movie");
+      ASSERT_EQ(c_subquery._triples[1]._s, Variable{"?movie"});
       ASSERT_EQ(c_subquery._triples[1]._p._iri, "<from-year>");
-      ASSERT_EQ(c_subquery._triples[1]._o, "?year");
+      ASSERT_EQ(c_subquery._triples[1]._o, Variable{"?year"});
 
       ASSERT_EQ(std::numeric_limits<uint64_t>::max(),
                 parsed_sub_query.get()._limitOffset._limit);
@@ -568,7 +568,7 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(0, pq._rootGraphPattern._filters.size());
       ASSERT_EQ(3u, pq._limitOffset._offset);
 
-      ASSERT_EQ(c._triples[0]._s, "?movie");
+      ASSERT_EQ(c._triples[0]._s, Variable{"?movie"});
       ASSERT_EQ(c._triples[0]._p._iri, "<directed-by>");
       ASSERT_EQ(c._triples[0]._o, "<Scott%2C%20Ridley>");
 
@@ -600,9 +600,9 @@ TEST(ParserTest, testParse) {
                 parsed_sub_query.get()._rootGraphPattern._filters[0]._type);
       ASSERT_EQ(0, parsed_sub_query.get()._limitOffset._offset);
 
-      ASSERT_EQ(c_subquery._triples[0]._s, "?movie");
+      ASSERT_EQ(c_subquery._triples[0]._s, Variable{"?movie"});
       ASSERT_EQ(c_subquery._triples[0]._p._iri, "<directed-by>");
-      ASSERT_EQ(c_subquery._triples[0]._o, "?director");
+      ASSERT_EQ(c_subquery._triples[0]._o, Variable{"?director"});
 
       ASSERT_EQ(std::numeric_limits<uint64_t>::max(),
                 parsed_sub_query.get()._limitOffset._limit);
@@ -629,9 +629,9 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(0u, aux_parsed_sub_sub_query._rootGraphPattern._filters.size());
       ASSERT_EQ(0, aux_parsed_sub_sub_query._limitOffset._offset);
 
-      ASSERT_EQ(c_sub_subquery._triples[0]._s, "?movie");
+      ASSERT_EQ(c_sub_subquery._triples[0]._s, Variable{"?movie"});
       ASSERT_EQ(c_sub_subquery._triples[0]._p._iri, "<from-year>");
-      ASSERT_EQ(c_sub_subquery._triples[0]._o, "?year");
+      ASSERT_EQ(c_sub_subquery._triples[0]._o, Variable{"?year"});
 
       ASSERT_EQ(std::numeric_limits<uint64_t>::max(),
                 aux_parsed_sub_sub_query._limitOffset._limit);
@@ -752,13 +752,13 @@ TEST(ParserTest, testExpandPrefixes) {
   ASSERT_EQ(3u, c._triples.size());
   ASSERT_EQ(Variable{"?x"}, selectClause.getSelectedVariables()[0]);
   ASSERT_EQ(Variable{"?z"}, selectClause.getSelectedVariables()[1]);
-  ASSERT_EQ("?x", c._triples[0]._s);
+  ASSERT_EQ(Variable{"?x"}, c._triples[0]._s);
   ASSERT_EQ("<http://rdf.myprefix.com/myrel>", c._triples[0]._p._iri);
-  ASSERT_EQ("?y", c._triples[0]._o);
-  ASSERT_EQ("?y", c._triples[1]._s);
+  ASSERT_EQ(Variable{"?y"}, c._triples[0]._o);
+  ASSERT_EQ(Variable{"?y"}, c._triples[1]._s);
   ASSERT_EQ("<http://rdf.myprefix.com/ns/myrel>", c._triples[1]._p._iri);
-  ASSERT_EQ("?z", c._triples[1]._o);
-  ASSERT_EQ("?y", c._triples[2]._s);
+  ASSERT_EQ(Variable{"?z"}, c._triples[1]._o);
+  ASSERT_EQ(Variable{"?y"}, c._triples[2]._s);
   ASSERT_EQ("<nsx:rel2>", c._triples[2]._p._iri);
   ASSERT_EQ("<http://abc.de>", c._triples[2]._o);
   ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
@@ -919,10 +919,10 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, selectClause.getSelectedVariables().size());
     ASSERT_EQ(Variable{"?movie"}, selectClause.getSelectedVariables()[0]);
     ASSERT_EQ(2u, c._triples.size());
-    ASSERT_EQ("?movie", c._triples[0]._s);
+    ASSERT_EQ(Variable{"?movie"}, c._triples[0]._s);
     ASSERT_EQ("<from-year>", c._triples[0]._p._iri);
     ASSERT_EQ(":v:date:0000000000000002000-00-00T00:00:00", c._triples[0]._o);
-    ASSERT_EQ("?movie", c._triples[1]._s);
+    ASSERT_EQ(Variable{"?movie"}, c._triples[1]._s);
     ASSERT_EQ("<directed-by>", c._triples[1]._p._iri);
     ASSERT_EQ("<Scott%2C%20Ridley>", c._triples[1]._o);
   }
@@ -942,11 +942,11 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, selectClause.getSelectedVariables().size());
     ASSERT_EQ(Variable{"?movie"}, selectClause.getSelectedVariables()[0]);
     ASSERT_EQ(2u, c._triples.size());
-    ASSERT_EQ("?movie", c._triples[0]._s);
+    ASSERT_EQ(Variable{"?movie"}, c._triples[0]._s);
     ASSERT_EQ("<from-year>", c._triples[0]._p._iri);
     ASSERT_EQ("\"00-00-2000\"^^<http://www.w3.org/2010/XMLSchema#date>",
               c._triples[0]._o);
-    ASSERT_EQ("?movie", c._triples[1]._s);
+    ASSERT_EQ(Variable{"?movie"}, c._triples[1]._s);
     ASSERT_EQ("<directed-by>", c._triples[1]._p._iri);
     ASSERT_EQ("<Scott%2C%20Ridley>", c._triples[1]._o);
   }
@@ -1189,8 +1189,10 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(1u, triples.size());
-    ASSERT_EQ((SparqlTriple{"?x", PropertyPath::fromIri("@en@<label>"), "?y"}),
-              triples[0]);
+    ASSERT_EQ(
+        (SparqlTriple{Variable{"?x"}, PropertyPath::fromIri("@en@<label>"),
+                      Variable{"?y"}}),
+        triples[0]);
   }
   {
     ParsedQuery q = SparqlParser::parseQuery(
@@ -1199,12 +1201,13 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(2u, triples.size());
-    ASSERT_EQ((SparqlTriple{"<somebody>", PropertyPath::fromIri("?p"), "?y"}),
+    ASSERT_EQ((SparqlTriple{"<somebody>", PropertyPath::fromIri("?p"),
+                            Variable{"?y"}}),
               triples[0]);
-    ASSERT_EQ(
-        (SparqlTriple{
-            "?y", PropertyPath::fromIri("<QLever-internal-function/langtag>"),
-            "<QLever-internal-function/@en>"}),
-        triples[1]);
+    ASSERT_EQ((SparqlTriple{
+                  Variable{"?y"},
+                  PropertyPath::fromIri("<QLever-internal-function/langtag>"),
+                  "<QLever-internal-function/@en>"}),
+              triples[1]);
   }
 }

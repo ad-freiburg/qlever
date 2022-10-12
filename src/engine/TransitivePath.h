@@ -38,12 +38,14 @@ class TransitivePath : public Operation {
   size_t _maxDist;
 
  public:
+  // TODO<joka921> Understand this interface and refactor it to
+  // `std::variant<Variable, ID>` or something similar for the `left...` and
+  // `right...` parameters0.
   TransitivePath(QueryExecutionContext* qec,
                  std::shared_ptr<QueryExecutionTree> child, bool leftIsVar,
                  bool rightIsVar, size_t leftSubCol, size_t rightSubCol,
-                 Id leftValue, Id rightValue, const std::string& leftColName,
-                 const std::string& rightColName, size_t minDist,
-                 size_t maxDist);
+                 Id leftValue, Id rightValue, const Variable& leftColName,
+                 const Variable& rightColName, size_t minDist, size_t maxDist);
 
   /**
    * Returns a new TransitivePath operation that uses the fact that leftop

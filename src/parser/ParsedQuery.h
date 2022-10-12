@@ -52,7 +52,7 @@ class SparqlPrefix {
 
 inline bool isVariable(const string& elem) { return elem.starts_with("?"); }
 inline bool isVariable(const TripleComponent& elem) {
-  return elem.isString() && isVariable(elem.getString());
+  return elem.isVariable();
 }
 
 inline bool isVariable(const PropertyPath& elem) {

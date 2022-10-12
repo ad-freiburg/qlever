@@ -753,36 +753,40 @@ TEST(SparqlParser, HavingCondition) {
 }
 
 TEST(SparqlParser, GroupGraphPattern) {
+  using Var = Variable;
   auto expectGraphPattern = ExpectCompleteParse<&Parser::groupGraphPattern>{
       {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
   auto expectGroupGraphPatternFails =
       ExpectParseFails<&Parser::groupGraphPattern>();
-  auto DummyTriplesMatcher = m::Triples({{"?x", "?y", "?z"}});
+  auto DummyTriplesMatcher =
+      m::Triples({{Variable{"?x"}, "?y", Variable{"?z"}}});
 
   // Empty GraphPatterns are not supported.
   expectGroupGraphPatternFails("{ }");
   expectGroupGraphPatternFails("{ SELECT *  WHERE { } }");
+
+  SparqlTriple abc{Variable{"?a"}, "?b", Variable{"?c"}};
+  SparqlTriple def{Variable{"?d"}, "?e", Variable{"?f"}};
   // Test the Components alone.
+  expectGraphPattern("{ { ?a ?b ?c } }",
+                     m::GraphPattern(m::GroupGraphPattern(m::Triples({abc}))));
   expectGraphPattern(
-      "{ { ?a ?b ?c } }",
-      m::GraphPattern(m::GroupGraphPattern(m::Triples({{"?a", "?b", "?c"}}))));
-  expectGraphPattern("{ { ?a ?b ?c } UNION { ?d ?e ?f } }",
-                     m::GraphPattern(m::Union(
-                         m::GraphPattern(m::Triples({{"?a", "?b", "?c"}})),
-                         m::GraphPattern(m::Triples({{"?d", "?e", "?f"}})))));
+      "{ { ?a ?b ?c } UNION { ?d ?e ?f } }",
+      m::GraphPattern(m::Union(m::GraphPattern(m::Triples({abc})),
+                               m::GraphPattern(m::Triples({def})))));
   expectGraphPattern(
       "{ { ?a ?b ?c } UNION { ?d ?e ?f } UNION { ?g ?h ?i } }",
-      m::GraphPattern(
-          m::Union(m::GraphPattern(m::Union(
-                       m::GraphPattern(m::Triples({{"?a", "?b", "?c"}})),
-                       m::GraphPattern(m::Triples({{"?d", "?e", "?f"}})))),
-                   m::GraphPattern(m::Triples({{"?g", "?h", "?i"}})))));
+      m::GraphPattern(m::Union(
+          m::GraphPattern(m::Union(m::GraphPattern(m::Triples({abc})),
+                                   m::GraphPattern(m::Triples({def})))),
+          m::GraphPattern(
+              m::Triples({{Variable{"?g"}, "?h", Variable{"?i"}}})))));
   expectGraphPattern("{ OPTIONAL { ?a <foo> <bar> } }",
                      m::GraphPattern(m::OptionalGraphPattern(
-                         m::Triples({{"?a", "<foo>", "<bar>"}}))));
+                         m::Triples({{Variable{"?a"}, "<foo>", "<bar>"}}))));
   expectGraphPattern("{ MINUS { ?a <foo> <bar> } }",
                      m::GraphPattern(m::MinusGraphPattern(
-                         m::Triples({{"?a", "<foo>", "<bar>"}}))));
+                         m::Triples({{Variable{"?a"}, "<foo>", "<bar>"}}))));
   expectGraphPattern(
       "{ FILTER (?a = 10) . ?x ?y ?z }",
       m::GraphPattern(false, {{SparqlFilter::FilterType::EQ, "?a", "10"}},
@@ -792,8 +796,7 @@ TEST(SparqlParser, GroupGraphPattern) {
   expectGraphPattern("{ VALUES (?a ?b) { (<foo> <bar>) (<a> <b>) } }",
                      m::GraphPattern(m::InlineData(
                          {"?a", "?b"}, {{"<foo>", "<bar>"}, {"<a>", "<b>"}})));
-  expectGraphPattern("{ ?x ?y ?z }",
-                     m::GraphPattern(m::Triples({{"?x", "?y", "?z"}})));
+  expectGraphPattern("{ ?x ?y ?z }", m::GraphPattern(DummyTriplesMatcher));
   expectGraphPattern(
       "{ SELECT *  WHERE { ?x ?y ?z } }",
       m::GraphPattern(m::SubSelect(m::AsteriskSelect(false, false),
@@ -802,17 +805,18 @@ TEST(SparqlParser, GroupGraphPattern) {
   expectGraphPattern(
       "{ ?x ?y ?z ; ?f <bar> }",
       m::GraphPattern(m::Triples({{"?x", "?y", "?z"}, {"?x", "?f", "<bar>"}})));
-  expectGraphPattern("{ ?x ?y ?z . <foo> ?f <bar> }",
-                     m::GraphPattern(m::Triples(
-                         {{"?x", "?y", "?z"}, {"<foo>", "?f", "<bar>"}})));
+  expectGraphPattern(
+      "{ ?x ?y ?z . <foo> ?f <bar> }",
+      m::GraphPattern(m::Triples(
+          {{Variable{"?x"}, "?y", Variable{"?z"}}, {"<foo>", "?f", "<bar>"}})));
   expectGraphPattern(
       "{ ?x <is-a> <Actor> . FILTER(?x != ?y) . ?y <is-a> <Actor> . "
       "FILTER(?y < ?x) }",
       m::GraphPattern(false,
                       {{SparqlFilter::FilterType::NE, "?x", "?y"},
                        {SparqlFilter::FilterType::LT, "?y", "?x"}},
-                      m::Triples({{"?x", "<is-a>", "<Actor>"},
-                                  {"?y", "<is-a>", "<Actor>"}})));
+                      m::Triples({{Variable{"?x"}, "<is-a>", "<Actor>"},
+                                  {Variable{"?y"}, "<is-a>", "<Actor>"}})));
   expectGraphPattern(
       "{?x <is-a> <Actor> . FILTER(?x != ?y) . ?y <is-a> <Actor> . ?c "
       "ql:contains-entity ?x . ?c ql:contains-word \"coca* abuse\"}",
@@ -868,12 +872,12 @@ TEST(SparqlParser, SelectQuery) {
       {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
   auto expectSelectQueryFails = ExpectParseFails<&Parser::selectQuery>{};
   auto DummyGraphPatternMatcher =
-      m::GraphPattern(m::Triples({{"?x", "?y", "?z"}}));
-  expectSelectQuery(
-      "SELECT * WHERE { ?a <bar> ?foo }",
-      testing::AllOf(m::SelectQuery(
-          m::AsteriskSelect(),
-          m::GraphPattern(m::Triples({{"?a", "<bar>", "?foo"}})))));
+      m::GraphPattern(m::Triples({{Variable{"?x"}, "?y", Variable{"?z"}}}));
+  expectSelectQuery("SELECT * WHERE { ?a <bar> ?foo }",
+                    testing::AllOf(m::SelectQuery(
+                        m::AsteriskSelect(),
+                        m::GraphPattern(m::Triples(
+                            {{Variable{"?a"}, "<bar>", Variable{"?foo"}}})))));
   expectSelectQuery("SELECT * WHERE { ?x ?y ?z }",
                     testing::AllOf(m::SelectQuery(m::AsteriskSelect(),
                                                   DummyGraphPatternMatcher)));
@@ -892,9 +896,9 @@ TEST(SparqlParser, SelectQuery) {
       testing::AllOf(
           m::SelectQuery(
               m::Select({Variable{"?x"}}),
-              m::GraphPattern(false,
-                              {{SparqlFilter::FilterType::NE, "?x", "<foo>"}},
-                              m::Triples({{"?x", "?y", "?z"}}))),
+              m::GraphPattern(
+                  false, {{SparqlFilter::FilterType::NE, "?x", "<foo>"}},
+                  m::Triples({{Variable{"?x"}, "?y", Variable{"?z"}}}))),
           m::pq::LimitOffset({10, 5})));
   expectSelectQuery(
       "SELECT ?x WHERE { ?x ?y ?z } HAVING (?x > 5) ORDER BY ?y ",
@@ -931,13 +935,16 @@ TEST(SparqlParser, ConstructQuery) {
   auto expectConstructQuery = ExpectCompleteParse<&Parser::constructQuery>{
       {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
   auto expectConstructQueryFails = ExpectParseFails<&Parser::constructQuery>{};
+  using Var = Variable;
   expectConstructQuery(
       "CONSTRUCT { } WHERE { ?a ?b ?c }",
-      m::ConstructQuery({}, m::GraphPattern(m::Triples({{"?a", "?b", "?c"}}))));
-  expectConstructQuery("CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c }",
-                       testing::AllOf(m::ConstructQuery(
-                           {{Variable{"?a"}, Iri{"<foo>"}, Variable{"?c"}}},
-                           m::GraphPattern(m::Triples({{"?a", "?b", "?c"}})))));
+      m::ConstructQuery(
+          {}, m::GraphPattern(m::Triples({{Var{"?a"}, "?b", Var{"?c"}}}))));
+  expectConstructQuery(
+      "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c }",
+      testing::AllOf(m::ConstructQuery(
+          {{Variable{"?a"}, Iri{"<foo>"}, Variable{"?c"}}},
+          m::GraphPattern(m::Triples({{Var{"?a"}, "?b", Var{"?c"}}})))));
   expectConstructQuery(
       "CONSTRUCT { ?a <foo> ?c . <bar> ?b <baz> } WHERE { ?a ?b ?c . FILTER(?a "
       "> 0) .}",
@@ -945,12 +952,13 @@ TEST(SparqlParser, ConstructQuery) {
           {{Variable{"?a"}, Iri{"<foo>"}, Variable{"?c"}},
            {Iri{"<bar>"}, Variable{"?b"}, Iri{"<baz>"}}},
           m::GraphPattern(false, {{SparqlFilter::FilterType::GT, "?a", "0"}},
-                          m::Triples({{"?a", "?b", "?c"}}))));
+                          m::Triples({{Var{"?a"}, "?b", Var{"?c"}}}))));
   expectConstructQuery(
       "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c } ORDER BY ?a LIMIT 10",
       testing::AllOf(
-          m::ConstructQuery({{Variable{"?a"}, Iri{"<foo>"}, Variable{"?c"}}},
-                            m::GraphPattern(m::Triples({{"?a", "?b", "?c"}}))),
+          m::ConstructQuery(
+              {{Variable{"?a"}, Iri{"<foo>"}, Variable{"?c"}}},
+              m::GraphPattern(m::Triples({{Var{"?a"}, "?b", Var{"?c"}}}))),
           m::pq::LimitOffset({10}),
           m::pq::OrderKeys({{Variable{"?a"}, false}})));
   // This case of the grammar is not useful without Datasets, but we still
@@ -969,13 +977,14 @@ TEST(SparqlParser, Query) {
       {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
   auto expectQueryFails = ExpectParseFails<&Parser::query>{};
   // Test that `_originalString` is correctly set.
-  expectQuery("SELECT * WHERE { ?a <bar> ?foo }",
-              testing::AllOf(
-                  m::SelectQuery(
-                      m::AsteriskSelect(),
-                      m::GraphPattern(m::Triples({{"?a", "<bar>", "?foo"}}))),
-                  m::pq::OriginalString("SELECT * WHERE { ?a <bar> ?foo }"),
-                  m::VisibleVariables({Variable{"?a"}, Variable{"?foo"}})));
+  expectQuery(
+      "SELECT * WHERE { ?a <bar> ?foo }",
+      testing::AllOf(
+          m::SelectQuery(m::AsteriskSelect(),
+                         m::GraphPattern(m::Triples(
+                             {{Variable{"?a"}, "<bar>", Variable{"?foo"}}}))),
+          m::pq::OriginalString("SELECT * WHERE { ?a <bar> ?foo }"),
+          m::VisibleVariables({Variable{"?a"}, Variable{"?foo"}})));
   expectQuery("SELECT * WHERE { ?x ?y ?z }",
               m::pq::OriginalString("SELECT * WHERE { ?x ?y ?z }"));
   expectQuery(
@@ -989,14 +998,16 @@ TEST(SparqlParser, Query) {
       "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c }",
       testing::AllOf(
           m::ConstructQuery({{Variable{"?a"}, Iri{"<foo>"}, Variable{"?c"}}},
-                            m::GraphPattern(m::Triples({{"?a", "?b", "?c"}}))),
+                            m::GraphPattern(m::Triples(
+                                {{Variable{"?a"}, "?b", Variable{"?c"}}}))),
           m::VisibleVariables(
               {Variable{"?a"}, Variable{"?b"}, Variable{"?c"}})));
   expectQuery(
       "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } LIMIT 10",
       testing::AllOf(
           m::ConstructQuery({{Variable{"?x"}, Iri{"<foo>"}, Iri{"<bar>"}}},
-                            m::GraphPattern(m::Triples({{"?x", "?y", "?z"}}))),
+                            m::GraphPattern(m::Triples(
+                                {{Variable{"?x"}, "?y", Variable{"?z"}}}))),
           m::pq::OriginalString(
               "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } LIMIT 10"),
           m::pq::LimitOffset({10}),
