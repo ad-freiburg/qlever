@@ -316,7 +316,7 @@ void Operation::setSelectedVariablesForSubquery(
 }
 
 // ___________________________________________________________________________
-std::optional<Variable> Operation::getFirstSortedVariable() const {
+std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
   const auto& varToColMap = getExternallyVisibleVariableColumns();
   const auto& sortedIndices = getResultSortedOn();
 

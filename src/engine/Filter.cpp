@@ -60,6 +60,7 @@ void Filter::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Filter result computation done." << endl;
 }
 
+// _____________________________________________________________________________
 template <int WIDTH>
 void Filter::computeFilterImpl(ResultTable* outputResultTable,
                                const ResultTable& inputResultTable) {
@@ -67,7 +68,7 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
   for (const auto& [variable, columnIndex] : _subtree->getVariableColumns()) {
     // TODO<joka921> The "ResultType" is currently unused, but we can use it in
     // the future for optimizations (in the style of "we know that this complete
-    // column consists of floats".
+    // column consists of floats").
     columnMap[variable] = std::pair(columnIndex, qlever::ResultType::KB);
   }
 
@@ -75,7 +76,7 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
       *getExecutionContext(), columnMap, inputResultTable._idTable,
       getExecutionContext()->getAllocator(), *inputResultTable._localVocab);
 
-  // TODO<joka921> This should be a mandatory argument to the EvaluationContest
+  // TODO<joka921> This should be a mandatory argument to the EvaluationContext
   // constructor.
   evaluationContext._columnsByWhichResultIsSorted = inputResultTable._sortedBy;
 
@@ -136,4 +137,23 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
   std::visit(visitor, std::move(expressionResult));
 
   outputResultTable->_idTable = output.moveToDynamic();
+}
+
+// _____________________________________________________________________________
+size_t Filter::getSizeEstimate() {
+  return _expression
+      .getEstimatesForFilterExpression(
+          _subtree->getSizeEstimate(),
+          _subtree->getRootOperation()->getPrimarySortKeyVariable())
+      .sizeEstimate;
+}
+
+// _____________________________________________________________________________
+size_t Filter::getCostEstimate() {
+  return _subtree->getCostEstimate() +
+         _expression
+             .getEstimatesForFilterExpression(
+                 _subtree->getSizeEstimate(),
+                 _subtree->getRootOperation()->getPrimarySortKeyVariable())
+             .costEstimate;
 }

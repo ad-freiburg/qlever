@@ -40,22 +40,9 @@ class Filter : public Operation {
     _subtree->setTextLimit(limit);
   }
 
-  virtual size_t getSizeEstimate() override {
-    return _expression
-        .getEstimatesForFilterExpression(
-            _subtree->getSizeEstimate(),
-            _subtree->getRootOperation()->getFirstSortedVariable())
-        .sizeEstimate;
-  }
+  virtual size_t getSizeEstimate() override;
 
-  virtual size_t getCostEstimate() override {
-    return _subtree->getCostEstimate() +
-           _expression
-               .getEstimatesForFilterExpression(
-                   _subtree->getSizeEstimate(),
-                   _subtree->getRootOperation()->getFirstSortedVariable())
-               .costEstimate;
-  }
+  virtual size_t getCostEstimate() override;
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; };
   std::vector<QueryExecutionTree*> getChildren() override {

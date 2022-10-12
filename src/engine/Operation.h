@@ -133,7 +133,7 @@ class Operation {
   // `Operation` enforces this sorting, or because it preserve the sorting of
   // its children), return the variable that is the primary sort key. Else
   // return nullopt.
-  virtual std::optional<Variable> getFirstSortedVariable() const final;
+  virtual std::optional<Variable> getPrimarySortKeyVariable() const final;
 
  protected:
   // The QueryExecutionContext for this particular element.
