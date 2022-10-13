@@ -34,4 +34,11 @@ class Variable {
   [[nodiscard]] const std::string& targetVariable() const { return _name; }
 
   bool operator==(const Variable&) const = default;
+
+  // Make the type hashable for absl, see
+  // https://abseil.io/docs/cpp/guides/hash.
+  template <typename H>
+  friend H AbslHashValue(H h, const Variable& v) {
+    return H::combine(std::move(h), v._name);
+  }
 };

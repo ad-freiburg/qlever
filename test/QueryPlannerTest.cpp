@@ -239,7 +239,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
                 {std::make_pair<Node, vector<size_t>>(
                      QueryPlanner::TripleGraph::Node(
-                         0, "?c", "abc",
+                         0, Variable{"?c"}, "abc",
                          {
                              SparqlTriple(
                                  Variable{"?c"},
@@ -279,7 +279,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
                 {std::make_pair<Node, vector<size_t>>(
                      QueryPlanner::TripleGraph::Node(
-                         0, "?c", "abc",
+                         0, Variable{"?c"}, "abc",
                          {SparqlTriple(
                               Variable{"?c"},
                               "<QLever-internal-function/contains-entity>",
@@ -321,7 +321,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
                 {std::make_pair<Node, vector<size_t>>(
                      QueryPlanner::TripleGraph::Node(
-                         0, "?c", "abc",
+                         0, Variable{"?c"}, "abc",
                          {SparqlTriple(
                               Var{"?c"},
                               "<QLever-internal-function/contains-entity>",
@@ -400,7 +400,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
                                                 Node, std::vector<size_t>>>(
             {std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
-                     0, "?c", "abc",
+                     0, Var{"?c"}, "abc",
                      {SparqlTriple(Var{"?c"},
                                    "<QLever-internal-function/contains-entity>",
                                    Var{"?x"}),
@@ -413,7 +413,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
                  {1, 2}),
              std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
-                     1, "?c2", "xx",
+                     1, Var{"?c2"}, "xx",
                      {SparqlTriple(Var{"?c2"},
                                    "<QLever-internal-function/contains-entity>",
                                    Var{"?y"}),
@@ -454,7 +454,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
                                                 Node, std::vector<size_t>>>(
             {std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
-                     0, "?c", "abc",
+                     0, Var{"?c"}, "abc",
                      {SparqlTriple(Var{"?c"},
                                    "<QLever-internal-function/contains-entity>",
                                    Var{"?x"}),
@@ -467,7 +467,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
                  {1, 2, 3}),
              std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
-                     1, "?c2", "xx",
+                     1, Var{"?c2"}, "xx",
                      {SparqlTriple(Var{"?c2"},
                                    "<QLever-internal-function/contains-entity>",
                                    Var{"?y"}),

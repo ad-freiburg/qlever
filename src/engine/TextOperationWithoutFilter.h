@@ -16,8 +16,8 @@ using std::vector;
 class TextOperationWithoutFilter : public Operation {
  private:
   const string _words;
-  const std::set<string> _variables;
-  const string _cvar;
+  const ad_utility::HashSet<Variable> _variables;
+  const Variable _cvar;
 
   size_t _textLimit;
 
@@ -26,8 +26,8 @@ class TextOperationWithoutFilter : public Operation {
 
  public:
   TextOperationWithoutFilter(QueryExecutionContext* qec, const string& words,
-                             const std::set<string>& variables,
-                             const string& cvar, size_t textLimit = 1);
+                             const ad_utility::HashSet<Variable>& variables,
+                             const Variable& cvar, size_t textLimit = 1);
 
  protected:
   virtual string asStringImpl(size_t indent = 0) const override;
@@ -61,9 +61,9 @@ class TextOperationWithoutFilter : public Operation {
     return _variables.size() - 1;
   }
 
-  const std::set<string>& getVars() const { return _variables; }
+  const ad_utility::HashSet<Variable>& getVars() const { return _variables; }
 
-  const string getCVar() const { return _cvar; }
+  const Variable& getCVar() const { return _cvar; }
 
   virtual bool knownEmptyResult() override {
     return _executionContext &&

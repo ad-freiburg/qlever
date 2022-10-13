@@ -17,10 +17,13 @@ using std::pair;
 using std::vector;
 
 class TextOperationWithFilter : public Operation {
+ public:
+  using SetOfVariables = ad_utility::HashSet<Variable>;
+
  private:
   const string _words;
-  const std::set<string> _variables;
-  const string _cvar;
+  const SetOfVariables _variables;
+  const Variable _cvar;
   size_t _textLimit;
 
   std::shared_ptr<QueryExecutionTree> _filterResult;
@@ -31,7 +34,7 @@ class TextOperationWithFilter : public Operation {
 
  public:
   TextOperationWithFilter(QueryExecutionContext* qec, const string& words,
-                          const std::set<string>& variables, const string& cvar,
+                          const SetOfVariables& variables, const Variable& cvar,
                           std::shared_ptr<QueryExecutionTree> filterResult,
                           size_t filterColumn, size_t textLimit = 1);
 
@@ -65,9 +68,9 @@ class TextOperationWithFilter : public Operation {
     return _variables.size() - 1;
   }
 
-  const std::set<string>& getVars() const { return _variables; }
+  const SetOfVariables& getVars() const { return _variables; }
 
-  const string getCVar() const { return _cvar; }
+  const Variable& getCVar() const { return _cvar; }
 
   virtual bool knownEmptyResult() override {
     return _filterResult->knownEmptyResult() ||

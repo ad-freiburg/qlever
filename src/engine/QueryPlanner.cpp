@@ -747,7 +747,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
 
     using enum IndexScan::ScanType;
 
-    if (!node._cvar.empty()) {
+    if (node._cvar.has_value()) {
       seeds.push_back(getTextLeafPlan(node));
       continue;
     }
@@ -1197,8 +1197,10 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   plan._idsOfIncludedNodes |= (size_t(1) << node._id);
   auto& tree = *plan._qet;
   AD_CHECK(node._wordPart.size() > 0);
+  // TODO<joka921> The `TextOperationWithoutFilter` should also take a
+  // `Variable` as a parameter
   auto textOp = std::make_shared<TextOperationWithoutFilter>(
-      _qec, node._wordPart, node._variables, node._cvar);
+      _qec, node._wordPart, node._variables, node._cvar.value());
   tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER,
                     textOp);
   return plan;
@@ -1429,12 +1431,12 @@ QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
 string QueryPlanner::TripleGraph::asString() const {
   std::ostringstream os;
   for (size_t i = 0; i < _adjLists.size(); ++i) {
-    if (_nodeMap.find(i)->second->_cvar.size() == 0) {
+    if (!_nodeMap.find(i)->second->_cvar.has_value()) {
       os << i << " " << _nodeMap.find(i)->second->_triple.asString() << " : (";
     } else {
-      os << i << " {TextOP for " << _nodeMap.find(i)->second->_cvar
-         << ", wordPart: \"" << _nodeMap.find(i)->second->_wordPart
-         << "\"} : (";
+      os << i << " {TextOP for "
+         << _nodeMap.find(i)->second->_cvar.value().name() << ", wordPart: \""
+         << _nodeMap.find(i)->second->_wordPart << "\"} : (";
     }
 
     for (size_t j = 0; j < _adjLists[i].size(); ++j) {
@@ -1647,15 +1649,15 @@ bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, vector<size_t>>
+ad_utility::HashMap<Variable, vector<size_t>>
 QueryPlanner::TripleGraph::identifyTextCliques() const {
-  ad_utility::HashMap<string, vector<size_t>> contextVarToTextNodesIds;
+  ad_utility::HashMap<Variable, vector<size_t>> contextVarToTextNodesIds;
   // Fill contextVar -> triples map
   for (size_t i = 0; i < _adjLists.size(); ++i) {
     if (isTextNode(i)) {
       auto& triple = _nodeMap.find(i)->second->_triple;
       auto& cvar = triple._s;
-      contextVarToTextNodesIds[cvar.getVariable().name()].push_back(i);
+      contextVarToTextNodesIds[cvar.getVariable()].push_back(i);
     }
   }
   return contextVarToTextNodesIds;
@@ -1767,16 +1769,15 @@ vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
     const vector<SparqlFilter>& origFilters,
     const vector<size_t>& nodes) const {
   vector<SparqlFilter> ret;
-  ad_utility::HashSet<string> coveredVariables;
+  ad_utility::HashSet<Variable> coveredVariables;
   for (auto n : nodes) {
     auto& node = *_nodeMap.find(n)->second;
     coveredVariables.insert(node._variables.begin(), node._variables.end());
   }
   for (auto& f : origFilters) {
-    if (std::ranges::any_of(f.expression_.containedVariables(),
-                            [&](const auto* var) {
-                              return coveredVariables.contains(var->name());
-                            })) {
+    if (std::ranges::any_of(
+            f.expression_.containedVariables(),
+            [&](const auto* var) { return coveredVariables.contains(*var); })) {
       ret.push_back(f);
     }
   }
@@ -1857,7 +1858,7 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
   // complex than need be.
 
   // Create a map from context var to triples it occurs in (the cliques).
-  ad_utility::HashMap<string, vector<size_t>> cvarsToTextNodes(
+  ad_utility::HashMap<Variable, vector<size_t>> cvarsToTextNodes(
       identifyTextCliques());
   if (cvarsToTextNodes.empty()) {
     return;
@@ -1880,7 +1881,7 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
       auto& triple = _nodeMap[nid]->_triple;
       trips.push_back(triple);
       // TODO<joka921> Make the `cvar` a `Variable`.
-      if (triple._s == Variable{cvar} && triple._o.isString() &&
+      if (triple._s == cvar && triple._o.isString() &&
           !triple._o.isVariable()) {
         if (!wordPart.empty()) {
           wordPart += " ";
