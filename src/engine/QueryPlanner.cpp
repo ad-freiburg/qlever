@@ -180,7 +180,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // all Variables that have been bound be the children we have dealt with
   // so far. TODO<joka921> verify that we get no false positives with plans
   // that create no single binding for a variable "by accident".
-  ad_utility::HashSet<string> boundVariables;
+  ad_utility::HashSet<Variable> boundVariables;
 
   // lambda that optimizes a set of triples, other execution plans and filters
   // under the assumption that they are commutative and can be joined in an
@@ -227,13 +227,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       // we only consist of triples, store them and all the bound variables.
       for (const SparqlTriple& t : v._triples) {
         if (isVariable(t._s)) {
-          boundVariables.insert(t._s.getVariable().name());
+          boundVariables.insert(t._s.getVariable());
         }
         if (isVariable(t._p)) {
-          boundVariables.insert(t._p._iri);
+          boundVariables.insert(Variable{t._p._iri});
         }
         if (isVariable(t._o)) {
-          boundVariables.insert(t._o.getVariable().name());
+          boundVariables.insert(t._o.getVariable());
         }
       }
       candidateTriples._triples.insert(
@@ -241,12 +241,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           std::make_move_iterator(v._triples.begin()),
           std::make_move_iterator(v._triples.end()));
     } else if constexpr (std::is_same_v<p::Bind, std::decay_t<decltype(v)>>) {
-      if (boundVariables.count(v._target.name())) {
+      if (boundVariables.contains(v._target)) {
         AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                  "The target variable of a BIND must not be used before the "
                  "BIND clause");
       }
-      boundVariables.insert(v._target.name());
+      boundVariables.insert(v._target);
 
       // Assumption for now: BIND does not commute. This is always safe.
       auto lastRow = optimizeCommutativ(candidateTriples, candidatePlans,
@@ -283,7 +283,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         auto vc = v[0]._qet->getVariableColumns();
         if (std::all_of(vc.begin(), vc.end(),
                         [&boundVariables](const auto& el) {
-                          return !boundVariables.count(el.first);
+                          return !boundVariables.contains(Variable{el.first});
                         })) {
           // all variables in the optional are unbound so far, so this optional
           // actually is not an optional.
@@ -299,7 +299,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       {
         auto vc = v[0]._qet->getVariableColumns();
         std::for_each(vc.begin(), vc.end(), [&boundVariables](const auto& el) {
-          boundVariables.insert(el.first);
+          boundVariables.insert(Variable{el.first});
         });
       }
 
