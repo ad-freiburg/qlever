@@ -93,8 +93,8 @@ struct TurtleTokenCtre {
   static constexpr auto Exponent = grp(ExponentString);
 
   static constexpr auto DoubleString =
-      fixed_string("[\\+\\-]?([0-9]+\\.[0-9]*") + ExponentString + "|" +
-      ExponentString + ")";
+      fixed_string("[\\+\\-]?([0-9]+\\.[0-9]*") + ExponentString +
+      "|\\.[0-9]+" + ExponentString + "|[0-9]+" + ExponentString + ")";
 
   static constexpr auto Double = grp(DoubleString);
 

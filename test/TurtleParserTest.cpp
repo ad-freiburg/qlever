@@ -13,6 +13,10 @@ using std::string;
 using namespace std::literals;
 using Parser = TurtleStringParser<Tokenizer>;
 
+// TODO<joka921>
+// I just found out that many of these tests only test the re2 based parser
+// and not the ctre based parser... This would be a good place to fix this..
+
 // TODO<joka921>: Use the following abstractions and the alias `Parser` in all
 // of this file. Set up a `Parser` with the given `input` and call the given
 // `rule` (a member function of `Parser` that returns a bool). Return the
@@ -296,9 +300,11 @@ TEST(TurtleParserTest, predicateObjectList) {
 
 TEST(TurtleParserTest, numericLiteral) {
   std::vector<std::string> literals{"2",   "-2",     "42.209",   "-42.239",
-                                    ".74", "2.3e12", "2.34E-14", "-0.3e2"};
+                                    ".74", "2.3e12", "2.34E-14", "-0.3e2",
+                                    "3E2", "-14E-1", ".1E1",     "-.2E0"};
   std::vector<TripleComponent> expected{2,   -2,     42.209,   -42.239,
-                                        .74, 2.3e12, 2.34e-14, -0.3e2};
+                                        .74, 2.3e12, 2.34e-14, -0.3e2,
+                                        3e2, -14e-1, .1e1,     -.2e0};
 
   auto checkNumericLiteral = checkParseResult<&Parser::numericLiteral>;
   for (size_t i = 0; i < literals.size(); ++i) {
