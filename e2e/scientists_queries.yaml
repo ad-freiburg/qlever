@@ -766,8 +766,8 @@ queries:
       }
     checks:
       - num_rows: 3072
-      - num_cols: 1
-      - selected: ["?x, ?y"]
+      - num_cols: 2
+      - selected: ["?x", "?y"]
       - contains_row: ["<Christian_Bohr>", "<Aage_Bohr>"]
 
   - query : property_path_trans_and_or
