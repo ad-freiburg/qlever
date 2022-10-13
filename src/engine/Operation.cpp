@@ -2,8 +2,10 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach  (johannes.kalmbach@gmail.com)
 
-#include <engine/Operation.h>
-#include <engine/QueryExecutionTree.h>
+#include "./Operation.h"
+
+#include "engine/QueryExecutionTree.h"
+#include "util/TransparentFunctors.h"
 
 template <typename F>
 void Operation::forAllDescendants(F f) {
@@ -311,4 +313,34 @@ void Operation::setSelectedVariablesForSubquery(
           internalVariables.at(variable.name());
     }
   }
+}
+
+// ___________________________________________________________________________
+std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
+  const auto& varToColMap = getExternallyVisibleVariableColumns();
+  const auto& sortedIndices = getResultSortedOn();
+
+  if (sortedIndices.empty()) {
+    return std::nullopt;
+  }
+
+  // TODO<joka921> Can be simplified using views once they are properly
+  // supported inside clang.
+  auto it =
+      std::ranges::find(varToColMap, sortedIndices.front(), ad_utility::second);
+  if (it == varToColMap.end()) {
+    return std::nullopt;
+  }
+  return Variable{it->first};
+}
+
+// ___________________________________________________________________________
+const vector<size_t>& Operation::getResultSortedOn() const {
+  // TODO<joka921> refactor this without a mutex (for details see the
+  // `getVariableColumns` method for details.
+  std::lock_guard l{_resultSortedColumnsMutex};
+  if (!_resultSortedColumns.has_value()) {
+    _resultSortedColumns = resultSortedOn();
+  }
+  return _resultSortedColumns.value();
 }

@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "re2/re2.h"
 
@@ -35,6 +36,11 @@ class RegexExpression : public SparqlExpression {
 
   // _________________________________________________________________________
   [[nodiscard]] bool isPrefixExpression() const;
+
+  // _________________________________________________________________________
+  Estimates getEstimatesForFilterExpression(
+      uint64_t inputSize,
+      const std::optional<Variable>& firstSortedVariable) const override;
 };
 namespace detail {
 // Check if `regex` is a prefix regex which means that it starts with `^` and

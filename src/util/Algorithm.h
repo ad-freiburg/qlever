@@ -77,17 +77,18 @@ void appendVector(std::vector<T>& destination, U&& source) {
 }
 
 /**
- * Applies the UnaryOperation to all elements of the vector and return a new
+ * Applies the UnaryOperation to all elements of the range and return a new
  * vector which contains the results.
  */
-template <typename Input, typename F,
-          typename Output = std::invoke_result_t<F, Input&&>>
-std::vector<Output> transform(std::vector<Input>&& input, F unaryOp) {
+template <typename Range, typename F>
+auto transform(Range&& input, F unaryOp) {
+  using Output = std::decay_t<decltype(unaryOp(
+      *ad_utility::makeForwardingIterator<Range>(input.begin())))>;
   std::vector<Output> out;
   out.reserve(input.size());
-  std::transform(std::make_move_iterator(input.begin()),
-                 std::make_move_iterator(input.end()), std::back_inserter(out),
-                 unaryOp);
+  std::transform(ad_utility::makeForwardingIterator<Range>(input.begin()),
+                 ad_utility::makeForwardingIterator<Range>(input.end()),
+                 std::back_inserter(out), unaryOp);
   return out;
 }
 

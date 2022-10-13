@@ -457,7 +457,7 @@ queries:
         ?x ql:has-predicate ?predicate .
       }
       GROUP BY ?predicate
-      HAVING (?predicate < "<Z") (?predicate = <Religion>)
+      HAVING (?predicate < <S>) (?predicate >= <Religion>)
     checks:
       - num_rows: 1
       - num_cols: 2
@@ -534,20 +534,22 @@ queries:
       - contains_row: ["<Professor>", '352']
 
 
-  - query : having-group-concat
-    type: no-text
-    sparql: |
-      SELECT ?profession (GROUP_CONCAT(DISTINCT ?award) as ?awards) WHERE {
-        ?s <Profession> ?profession .
-        ?s <Award_Won> ?award .
-      }
-      GROUP BY ?profession
-      HAVING (?awards = <Victoria_Cross>)
-    checks:
-      - num_rows: 1
-      - num_cols: 2
-      - selected: ["?profession", "?awards"]
-      - contains_row: ["<Apothecary>", '<Victoria_Cross>']
+  # the following query requires a filter on LOCAL_VOCAB(the group concat result) which is currently not supported.
+  # TODO<joka921> reactivate this test as soon as we have a proper implementation for the local vocabularies.
+#  - query : having-group-concat
+#    type: no-text
+#    sparql: |
+#      SELECT ?profession (GROUP_CONCAT(DISTINCT ?award) as ?awards) WHERE {
+#        ?s <Profession> ?profession .
+#        ?s <Award_Won> ?award .
+#      }
+#      GROUP BY ?profession
+#      HAVING (?awards = <Victoria_Cross>)
+#    checks:
+#      - num_rows: 1
+#      - num_cols: 2
+#      - selected: ["?profession", "?awards"]
+#      - contains_row: ["<Apothecary>", '<Victoria_Cross>']
 
 
 # the following query requires a prefix filter on LOCAL_VOCAB(the group concat result) which is currently not supported.
@@ -1202,6 +1204,7 @@ queries:
       }
     checks:
       - num_cols: 1
+      - num_rows: 1
       - selected: ["?s"]
       - contains_row: ["<Justin_Boyan>"]
   - query : xsd-value-in-property-path
@@ -1350,3 +1353,49 @@ queries:
       - num_rows : 150
       - selected: [ "?x" ]
       - contains_row: [ "<Max_Planck_Medal>" ]
+
+  # The query checks the bugfix of issue #800. Previously, a filter was never applied to the
+  # result of a (materialized) full index scan.
+  - query: filter-on-full-scan
+    type: no-text
+    sparql: |
+      SELECT ?x ?y ?z WHERE {
+        ?x ?y ?z .
+        FILTER (?x = ?z)
+      }
+    checks:
+      - num_cols: 3
+      - num_rows : 8
+      - selected: [ "?x", "?y", "?z" ]
+      - contains_row: [ "<David_Zeisberger>", "<Children>", "<David_Zeisberger>"]
+
+  # Variable repeated in triple
+  - query: filter-on-full-scan
+    type: no-text
+    sparql: |
+      SELECT ?x WHERE {
+        ?x <Children> ?x .
+      }
+    checks:
+      - num_cols: 1
+      - num_rows : 2
+      - selected: [ "?x"]
+      - contains_row: [ "<David_Zeisberger>"]
+      - contains_row: [ "<Nathan_Gross_(Writer)>"]
+
+  - query: complex-filter-expression
+    type: no-text
+    sparql: |
+      SELECT * WHERE {
+        ?x <is-a> <Scientist> .
+        ?x <Height> ?height
+        FILTER (?x < <B> || ?height / 2 > 1.0)
+      }
+    checks:
+      - num_cols: 2
+      - num_rows : 12
+      - selected: [ "?x", "?height"]
+      - contains_row: [ "<Al_Gore>", 1.87]
+      - contains_row: [ "<Granville_Woods>", 2.1336]
+
+

@@ -1,7 +1,6 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
-// Created by johannes on 09.05.21.
-//
+//  Copyright 2021, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SPARQLEXPRESSION_H
 #define QLEVER_SPARQLEXPRESSION_H
@@ -23,6 +22,9 @@
 #include "util/ConstexprSmallString.h"
 
 namespace sparqlExpression {
+
+// TODO<joka921>  Move the definitions of the functions into a
+// `SparqlExpression.cpp`
 
 /// Virtual base class for an arbitrary Sparql Expression which holds the
 /// structure of the expression as well as the logic to evaluate this expression
@@ -92,6 +94,39 @@ class SparqlExpression {
   virtual std::optional<::Variable> getVariableOrNullopt() const {
     return std::nullopt;
   }
+
+  // For the following three functions (`containsLangExpression`,
+  // `getLanguageFilterExpression`, and `getEstimatesForFilterExpression`, see
+  // the documentation of the functions of the same names in
+  // `SparqlExpressionPimpl.h`. Each of them has a default implementation that
+  // is correct for most of the expressions.
+  virtual bool containsLangExpression() const {
+    return std::ranges::any_of(children(),
+                               [](const SparqlExpression::Ptr& child) {
+                                 return child->containsLangExpression();
+                               });
+  }
+
+  // ___________________________________________________________________________
+  using LangFilterData = SparqlExpressionPimpl::LangFilterData;
+  virtual std::optional<LangFilterData> getLanguageFilterExpression() const {
+    return std::nullopt;
+  }
+
+  // ___________________________________________________________________________
+  using Estimates = SparqlExpressionPimpl::Estimates;
+  virtual Estimates getEstimatesForFilterExpression(
+      uint64_t inputSizeEstimate,
+      [[maybe_unused]] const std::optional<Variable>& primarySortKeyVariable)
+      const {
+    // Default estimates: Each element can be computed in O(1) and nothing is
+    // filtered out.
+    return {inputSizeEstimate, inputSizeEstimate};
+  }
+
+  // Returns true iff this expression is a simple constant. Default
+  // implementation returns `false`.
+  virtual bool isConstantExpression() const { return false; }
 
   // __________________________________________________________________________
   virtual ~SparqlExpression() = default;

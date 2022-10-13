@@ -120,7 +120,7 @@ class QueryPlanner {
     void collapseTextCliques();
 
    private:
-    vector<pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
+    vector<std::pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
         const vector<SparqlFilter>& origFilters,
         ad_utility::HashMap<string, vector<size_t>>& contextVarTotextNodes)
         const;
@@ -311,9 +311,6 @@ class QueryPlanner {
   [[nodiscard]] void applyFiltersIfPossible(
       vector<SubtreePlan>& row, const vector<SparqlFilter>& filters,
       bool replaceInsteadOfAddPlans) const;
-
-  [[nodiscard]] std::shared_ptr<Filter> createFilterOperation(
-      const SparqlFilter& filter, const SubtreePlan& parent) const;
 
   /**
    * @brief Optimize a set of triples, filters and precomputed candidates

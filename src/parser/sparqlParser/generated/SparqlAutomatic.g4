@@ -469,7 +469,7 @@ brackettedExpression
 
 builtInCall	  :  	  aggregate
 | STR '(' expression ')'
-| LANG '(' expression ')'
+| langExpression
 | LANGMATCHES '(' expression ',' expression ')'
 | DATATYPE '(' expression ')'
 | BOUND '(' var ')'
@@ -524,6 +524,7 @@ builtInCall	  :  	  aggregate
 | notExistsFunc;
 
 regexExpression	  :  	REGEX '(' expression ',' expression ( ',' expression )? ')';
+langExpression : LANG '(' expression ')';
 substringExpression	  :  	SUBSTR '(' expression ',' expression ( ',' expression )? ')' ;
 strReplaceExpression	  :  	REPLACE '(' expression ',' expression ',' expression ( ',' expression )? ')';
 existsFunc	  :  	EXISTS groupGraphPattern;
