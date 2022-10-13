@@ -230,8 +230,7 @@ addLinkAndDiscoverTest(ParseExceptionTest parser)
 
 addLinkAndDiscoverTest(TransparentFunctorsTest)
 
-# TODO<joka921> This is the only test that currently doesn't link... find out why.
-#addLinkAndDiscoverTest(SelectClauseTest engine)
+addLinkAndDiscoverTest(SelectClauseTest parser)
 
 addLinkAndDiscoverTestSerial(RelationalExpressionTest sparqlExpressions index engine)
 

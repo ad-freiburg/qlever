@@ -22,6 +22,7 @@ add_library(parser
         data/LimitOffsetClause.h data/SparqlFilter.h data/SparqlFilter.cpp
         data/OrderKey.h data/GroupKey.h ParseException.cpp SelectClause.cpp
         SelectClause.h GraphPatternOperation.cpp GraphPatternOperation.h
-        GraphPattern.cpp GraphPattern.h ConstructClause.h)
+        # The `Variable.cpp` from the subdirectory is linked here because otherwise we get linking errors.
+        GraphPattern.cpp GraphPattern.h ConstructClause.h data/Variable.cpp)
 target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2 absl::flat_hash_map util)
 

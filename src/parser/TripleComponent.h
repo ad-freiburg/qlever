@@ -11,11 +11,11 @@
 #include <string>
 #include <variant>
 
-#include "../global/Constants.h"
-#include "../global/Id.h"
-#include "../util/Exception.h"
-#include "../util/Forward.h"
+#include "global/Constants.h"
+#include "global/Id.h"
 #include "parser/data/Variable.h"
+#include "util/Exception.h"
+#include "util/Forward.h"
 
 /// A wrapper around a `std::variant` that can hold the different types that the
 /// subject, predicate, or object of a triple can have in the Turtle Parser.

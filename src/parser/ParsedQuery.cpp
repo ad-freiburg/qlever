@@ -418,8 +418,7 @@ ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}
 // TODO<joka921> Change the first argument to `Variable`, but first merge
 // the filter-PR.
 void ParsedQuery::GraphPattern::addLanguageFilter(
-    const std::string& variableAsString, const std::string& languageInQuotes) {
-  Variable variable{variableAsString};
+    const Variable& variable, const std::string& languageInQuotes) {
   auto langTag = languageInQuotes.substr(1, languageInQuotes.size() - 2);
   // Find all triples where the object is the `variable` and the predicate is a
   // simple `IRIREF` (neither a variable nor a complex property path). Search in

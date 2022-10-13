@@ -301,7 +301,7 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
               filter.expression_.getLanguageFilterExpression();
           langFilterData.has_value()) {
         const auto& [variable, language] = langFilterData.value();
-        pattern.addLanguageFilter(variable.name(), language);
+        pattern.addLanguageFilter(variable, language);
       } else {
         checkUnsupportedLangOperation(ctx, filter.expression_);
         pattern._filters.push_back(std::move(filter));

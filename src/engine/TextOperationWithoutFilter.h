@@ -14,9 +14,12 @@ using std::pair;
 using std::vector;
 
 class TextOperationWithoutFilter : public Operation {
+ public:
+  using SetOfVariables = ad_utility::HashSet<Variable>;
+
  private:
   const string _words;
-  const ad_utility::HashSet<Variable> _variables;
+  const SetOfVariables _variables;
   const Variable _cvar;
 
   size_t _textLimit;
@@ -26,7 +29,7 @@ class TextOperationWithoutFilter : public Operation {
 
  public:
   TextOperationWithoutFilter(QueryExecutionContext* qec, const string& words,
-                             const ad_utility::HashSet<Variable>& variables,
+                             const SetOfVariables& variables,
                              const Variable& cvar, size_t textLimit = 1);
 
  protected:
@@ -61,7 +64,7 @@ class TextOperationWithoutFilter : public Operation {
     return _variables.size() - 1;
   }
 
-  const ad_utility::HashSet<Variable>& getVars() const { return _variables; }
+  const SetOfVariables& getVars() const { return _variables; }
 
   const Variable& getCVar() const { return _cvar; }
 

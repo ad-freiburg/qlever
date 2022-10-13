@@ -19,8 +19,7 @@ size_t TextOperationWithoutFilter::getResultWidth() const {
 // _____________________________________________________________________________
 TextOperationWithoutFilter::TextOperationWithoutFilter(
     QueryExecutionContext* qec, const string& words,
-    const ad_utility::HashSet<Variable>& variables, const Variable& cvar,
-    size_t textLimit)
+    const SetOfVariables& variables, const Variable& cvar, size_t textLimit)
     : Operation(qec),
       _words(words),
       _variables(variables),

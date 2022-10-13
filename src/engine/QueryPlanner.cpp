@@ -399,7 +399,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         for (auto& sub : candidatesIn) {
           size_t leftCol, rightCol;
           Id leftValue, rightValue;
-          // TODO<joka921> directly
+          // TODO<joka921> Refactor the `TransitivePath` class s.t. we don't
+          // have to specify a `Variable` that isn't used at all in the case of
+          // a fixed subject or object.
           Variable leftColName{"?undefined"}, rightColName{"?undefined"};
           size_t min, max;
           bool leftVar, rightVar;
@@ -1198,8 +1200,6 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   plan._idsOfIncludedNodes |= (size_t(1) << node._id);
   auto& tree = *plan._qet;
   AD_CHECK(node._wordPart.size() > 0);
-  // TODO<joka921> The `TextOperationWithoutFilter` should also take a
-  // `Variable` as a parameter
   auto textOp = std::make_shared<TextOperationWithoutFilter>(
       _qec, node._wordPart, node._variables, node._cvar.value());
   tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER,
@@ -1881,7 +1881,6 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
       adjNodes.insert(_adjLists[nid].begin(), _adjLists[nid].end());
       auto& triple = _nodeMap[nid]->_triple;
       trips.push_back(triple);
-      // TODO<joka921> Make the `cvar` a `Variable`.
       if (triple._s == cvar && triple._o.isString() &&
           !triple._o.isVariable()) {
         if (!wordPart.empty()) {
