@@ -820,13 +820,15 @@ TEST(SparqlParser, GroupGraphPattern) {
                       {Var{"?y"}, "<is-a>", "<Actor>"},
                       {Var{"?c"}, CONTAINS_ENTITY_PREDICATE, Var{"?x"}},
                       {Var{"?c"}, CONTAINS_WORD_PREDICATE, "coca* abuse"}})));
-  expectGraphPattern("{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) }",
-                     m::GraphPattern(m::Triples({{Var{"?x"}, "<is-a>", "<Actor>"}}),
-                                     m::Bind(Var{"?y"}, "10-?foo")));
-  expectGraphPattern("{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) . ?a ?b ?c }",
-                     m::GraphPattern(m::Triples({{Var{"?x"}, "<is-a>", "<Actor>"}}),
-                                     m::Bind(Var{"?y"}, "10-?foo"),
-                                     m::Triples({{Var{"?a"}, "?b", Var{"?c"}}})));
+  expectGraphPattern(
+      "{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) }",
+      m::GraphPattern(m::Triples({{Var{"?x"}, "<is-a>", "<Actor>"}}),
+                      m::Bind(Var{"?y"}, "10-?foo")));
+  expectGraphPattern(
+      "{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) . ?a ?b ?c }",
+      m::GraphPattern(m::Triples({{Var{"?x"}, "<is-a>", "<Actor>"}}),
+                      m::Bind(Var{"?y"}, "10-?foo"),
+                      m::Triples({{Var{"?a"}, "?b", Var{"?c"}}})));
   expectGraphPattern(
       "{?x <is-a> <Actor> . OPTIONAL { ?x <foo> <bar> } }",
       m::GraphPattern(m::Triples({{Var{"?x"}, "<is-a>", "<Actor>"}}),
@@ -890,7 +892,8 @@ TEST(SparqlParser, SelectQuery) {
       testing::AllOf(
           m::SelectQuery(m::Select({Variable{"?x"}}),
                          m::GraphPattern(false, {"(?x!=<foo>)"},
-                                         m::Triples({{Variable{"?x"}, "?y", Variable{"?z"}}}))),
+                                         m::Triples({{Variable{"?x"}, "?y",
+                                                      Variable{"?z"}}}))),
           m::pq::LimitOffset({10, 5})));
   expectSelectQuery(
       "SELECT ?x WHERE { ?x ?y ?z } HAVING (?x > 5) ORDER BY ?y ",
@@ -940,10 +943,11 @@ TEST(SparqlParser, ConstructQuery) {
   expectConstructQuery(
       "CONSTRUCT { ?a <foo> ?c . <bar> ?b <baz> } WHERE { ?a ?b ?c . FILTER(?a "
       "> 0) .}",
-      m::ConstructQuery({{Variable{"?a"}, Iri{"<foo>"}, Variable{"?c"}},
-                         {Iri{"<bar>"}, Variable{"?b"}, Iri{"<baz>"}}},
-                        m::GraphPattern(false, {"(?a>0)"},
-                                        m::Triples({{Var{"?a"}, "?b", Var{"?c"}}}))));
+      m::ConstructQuery(
+          {{Variable{"?a"}, Iri{"<foo>"}, Variable{"?c"}},
+           {Iri{"<bar>"}, Variable{"?b"}, Iri{"<baz>"}}},
+          m::GraphPattern(false, {"(?a>0)"},
+                          m::Triples({{Var{"?a"}, "?b", Var{"?c"}}}))));
   expectConstructQuery(
       "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c } ORDER BY ?a LIMIT 10",
       testing::AllOf(
