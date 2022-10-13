@@ -800,8 +800,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             makeExecutionTree<IndexScan>(_qec, PSO_FREE_S, scanTriple);
         // The simplest way to set up the filtering expression is to use the
         // parser.
-        std::string filterString = absl::StrCat(
-            "FILTER (", scanTriple._s.getString(), "=", filterVar.name(), ")");
+        std::string filterString =
+            absl::StrCat("FILTER (", scanTriple._s.getVariable().name(), "=",
+                         filterVar.name(), ")");
         auto filter = sparqlParserHelpers::ParserAndVisitor{filterString}
                           .parseTypesafe(&SparqlAutomaticParser::filterR)
                           .resultOfParse_;
