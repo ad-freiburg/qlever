@@ -180,7 +180,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // all Variables that have been bound be the children we have dealt with
   // so far. TODO<joka921> verify that we get no false positives with plans
   // that create no single binding for a variable "by accident".
-  ad_utility::HashSet<std::string> boundVariables;
+  ad_utility::HashSet<string> boundVariables;
 
   // lambda that optimizes a set of triples, other execution plans and filters
   // under the assumption that they are commutative and can be joined in an
@@ -407,7 +407,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
             leftVar = true;
             leftCol = sub._qet->getVariableColumn(
                 arg._innerLeft.getVariable().name());
-            leftColName = Variable{arg._left.getString()};
+            leftColName = Variable{arg._left.getVariable()};
           } else {
             leftVar = false;
             leftColName = generateUniqueVarName();
