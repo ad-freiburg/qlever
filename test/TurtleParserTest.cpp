@@ -130,7 +130,7 @@ TEST(TurtleParserTest, prefixedName) {
 }
 
 TEST(TurtleParserTest, prefixID) {
-  auto runtCommonTests = [](const auto& checker) {
+  auto runCommonTests = [](const auto& checker) {
     auto p = checker("@prefix bla:<www.bla.org/> .");
     ASSERT_EQ(p._prefixMap["bla"], "www.bla.org/");
 
@@ -153,8 +153,8 @@ TEST(TurtleParserTest, prefixID) {
 
   auto checkRe2 = checkParseResult<Re2Parser, &Re2Parser::prefixID>;
   auto checkCTRE = checkParseResult<CtreParser, &CtreParser::prefixID>;
-  runtCommonTests(checkRe2);
-  runtCommonTests(checkCTRE);
+  runCommonTests(checkRe2);
+  runCommonTests(checkCTRE);
 }
 
 TEST(TurtleParserTest, stringParse) {
@@ -171,10 +171,10 @@ TEST(TurtleParserTest, stringParse) {
     checker(s3, s3);
     checker(s4, s4);
   };
-  auto checkStringRe2 = checkParseResult<Re2Parser, &Re2Parser::stringParse>;
-  auto checkStringCtre = checkParseResult<CtreParser, &CtreParser::stringParse>;
-  runCommonTests(checkStringRe2);
-  runCommonTests(checkStringCtre);
+  auto checkRe2 = checkParseResult<Re2Parser, &Re2Parser::stringParse>;
+  auto checkCtre = checkParseResult<CtreParser, &CtreParser::stringParse>;
+  runCommonTests(checkRe2);
+  runCommonTests(checkCtre);
 }
 
 TEST(TurtleParserTest, rdfLiteral) {
