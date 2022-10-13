@@ -78,8 +78,8 @@ TEST(TransitivePathTest, computeTransitivePath) {
   expected.push_back({I(7), I(7)});
   expected.push_back({I(10), I(11)});
 
-  TransitivePath T(nullptr, nullptr, false, false, 0, 0, I(0), I(0), "bim"s,
-                   "bam"s, 0, 0);
+  TransitivePath T(nullptr, nullptr, false, false, 0, 0, I(0), I(0),
+                   Variable{"?bim"}, Variable{"?bam"}, 0, 0);
 
   T.computeTransitivePath<2>(&result, sub, true, true, 0, 1, I(0), I(0), 1,
                              std::numeric_limits<size_t>::max());
