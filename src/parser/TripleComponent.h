@@ -34,12 +34,24 @@ class TripleComponent {
   template <typename... Args>
   requires std::is_constructible_v<Variant, Args&&...> TripleComponent(
       Args&&... args)
-      : _variant(AD_FWD(args)...) {}
+      : _variant(AD_FWD(args)...) {
+    if (isString()) {
+      // Previously we stored variables as strings, so this check is a way
+      // to easily track places where this old behavior is accidentally still
+      // in place.
+      AD_CHECK(!getString().starts_with("?"));
+    }
+  }
 
   /// Construct from `string_view`s. We need to explicitly implement this
   /// constructor because  `string_views` are not implicitly convertible to
   /// `std::string`. Note that this constructor is deliberately NOT explicit.
-  TripleComponent(std::string_view sv) : _variant{std::string{sv}} {}
+  TripleComponent(std::string_view sv) : _variant{std::string{sv}} {
+    // Previously we stored variables as strings, so this check is a way
+    // to easily track places where this old behavior is accidentally still
+    // in place.
+    AD_CHECK(!getString().starts_with("?"));
+  }
 
   /// Defaulted copy and move constructors.
   TripleComponent(const TripleComponent&) = default;
