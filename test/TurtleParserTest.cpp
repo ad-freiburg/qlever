@@ -478,12 +478,7 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
       // Test the skipping of unsupported triples with the "overflow to double"
       // behavior.
       std::string input{
-          // TODO<joka921> The missing `.` after the IRI is confusing the CTRE
-          // parser
-          // Check if this can be easily fixed, or if this should be documented
-          // as
-          // one of the issues with this parser.
-          "<a> <b> 99999999999999999999999. <c> <d> \"invalid\"^^xsd:integer. "
+          "<a> <b> 99999999999999999999999. <c> <d> \"invalid\"^^xsd:integer . "
           "<e> <f> 234"};
       std::vector<TurtleTriple> expected{
           {"<a>", "<b>", 99999999999999999999999.0}, {"<e>", "<f>", 234}};
