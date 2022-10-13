@@ -11,13 +11,14 @@
 
 using std::string;
 using namespace std::literals;
-using Parser = TurtleStringParser<Tokenizer>;
+using Re2Parser = TurtleStringParser<Tokenizer>;
+using CtreParser = TurtleStringParser<TokenizerCtre>;
 
 // TODO<joka921>: Use the following abstractions and the alias `Parser` in all
 // of this file. Set up a `Parser` with the given `input` and call the given
 // `rule` (a member function of `Parser` that returns a bool). Return the
 // parser, if the call to `rule` returns true, else return `std::nullopt`.
-template <auto rule, size_t blankNodePrefix = 0>
+template <typename Parser, auto rule, size_t blankNodePrefix = 0>
 std::optional<Parser> parseRule(const std::string& input) {
   Parser parser;
   parser.setBlankNodePrefixOnlyForTesting(blankNodePrefix);
@@ -32,14 +33,14 @@ std::optional<Parser> parseRule(const std::string& input) {
 // emitted triples are as expected. Returns the `Parser` instance that is used
 // to parse the rule for further inspection. The anonymous blank nodes that are
 // generated will start with "_:g_<blankNodePrefix>_".
-template <auto rule, size_t blankNodePrefix = 0>
+template <typename Parser, auto rule, size_t blankNodePrefix = 0>
 auto checkParseResult =
     [](const std::string& input,
        std::optional<TripleComponent> expectedLastParseResult = {},
        std::optional<size_t> expectedPosition = {},
        std::optional<std::vector<TurtleTriple>> expectedTriples = {})
     -> Parser {
-  auto optionalParser = parseRule<rule, blankNodePrefix>(input);
+  auto optionalParser = parseRule<Parser, rule, blankNodePrefix>(input);
   // We have to wrap this code into a void lambda because the `ASSERT_...`
   // macros only work inside void functions and we want to return the parser.
   [&]() {
@@ -129,40 +130,51 @@ TEST(TurtleParserTest, prefixedName) {
 }
 
 TEST(TurtleParserTest, prefixID) {
-  auto checkPrefixId = checkParseResult<&Parser::prefixID>;
-  auto p = checkPrefixId("@prefix bla:<www.bla.org/> .");
-  ASSERT_EQ(p._prefixMap["bla"], "www.bla.org/");
+  auto runCommonTests = [](const auto& checker) {
+    auto p = checker("@prefix bla:<www.bla.org/> .");
+    ASSERT_EQ(p._prefixMap["bla"], "www.bla.org/");
 
-  // different spaces that don't change meaning
-  std::string s;
-  p = checkPrefixId("@prefix bla: <www.bla.org/>.");
-  ASSERT_EQ(p._prefixMap["bla"], "www.bla.org/");
+    // different spaces that don't change meaning
+    std::string s;
+    p = checker("@prefix bla: <www.bla.org/>.");
+    ASSERT_EQ(p._prefixMap["bla"], "www.bla.org/");
 
-  // invalid LL1
-  ASSERT_THROW(checkPrefixId("@prefix bla<www.bla.org/>."),
-               Parser::ParseException);
+    // invalid LL1
+    ASSERT_THROW(checker("@prefix bla<www.bla.org/>."),
+                 Re2Parser::ParseException);
 
-  s = "@prefxxix bla<www.bla.org/>.";
-  p.setInputStream(s);
-  p._lastParseResult = "comp1";
-  ASSERT_FALSE(p.prefixID());
-  ASSERT_EQ(p._lastParseResult, "comp1");
-  ASSERT_EQ(p.getPosition(), 0u);
+    s = "@prefxxix bla<www.bla.org/>.";
+    p.setInputStream(s);
+    p._lastParseResult = "comp1";
+    ASSERT_FALSE(p.prefixID());
+    ASSERT_EQ(p._lastParseResult, "comp1");
+    ASSERT_EQ(p.getPosition(), 0u);
+  };
+
+  auto checkRe2 = checkParseResult<Re2Parser, &Re2Parser::prefixID>;
+  auto checkCTRE = checkParseResult<CtreParser, &CtreParser::prefixID>;
+  runCommonTests(checkRe2);
+  runCommonTests(checkCTRE);
 }
 
 TEST(TurtleParserTest, stringParse) {
-  auto checkString = checkParseResult<&Parser::stringParse>;
-  std::string s1("\"double quote\"");
-  std::string s2("\'single quote\'");
-  std::string s3("\"\"\"multiline \n double quote\"\"\"");
-  std::string s4("\'\'\'multiline \n single quote\'\'\'");
+  auto runCommonTests = [](const auto& checker) {
+    std::string s1("\"double quote\"");
+    std::string s2("\'single quote\'");
+    std::string s3("\"\"\"multiline \n double quote\"\"\"");
+    std::string s4("\'\'\'multiline \n single quote\'\'\'");
 
-  checkString(s1, s1);
-  checkString(s2, s2);
-  // the main thing to test here is that s3 does not prefix-match the simple
-  // string "" but the complex string """..."""
-  checkString(s3, s3);
-  checkString(s4, s4);
+    checker(s1, s1);
+    checker(s2, s2);
+    // the main thing to test here is that s3 does not prefix-match the simple
+    // string "" but the complex string """..."""
+    checker(s3, s3);
+    checker(s4, s4);
+  };
+  auto checkRe2 = checkParseResult<Re2Parser, &Re2Parser::stringParse>;
+  auto checkCtre = checkParseResult<CtreParser, &CtreParser::stringParse>;
+  runCommonTests(checkRe2);
+  runCommonTests(checkCtre);
 }
 
 TEST(TurtleParserTest, rdfLiteral) {
@@ -185,124 +197,152 @@ TEST(TurtleParserTest, rdfLiteral) {
   expected.emplace_back(144321);
 
   for (size_t i = 0; i < literals.size(); ++i) {
-    checkParseResult<&Parser::rdfLiteral>(literals[i], expected[i]);
+    checkParseResult<Re2Parser, &Re2Parser::rdfLiteral>(literals[i],
+                                                        expected[i]);
+    checkParseResult<CtreParser, &CtreParser::rdfLiteral>(literals[i],
+                                                          expected[i]);
   }
 
-  TurtleStringParser<Tokenizer> p;
-  p._prefixMap["doof"] = "www.doof.org/";
-  string s("\"valuePrefixed\"^^doof:sometype");
-  p.setInputStream(s);
-  ASSERT_TRUE(p.rdfLiteral());
-  ASSERT_EQ(p._lastParseResult, "\"valuePrefixed\"^^<www.doof.org/sometype>");
-  ASSERT_EQ(p.getPosition(), s.size());
+  auto runCommonTests = [](auto p) {
+    p._prefixMap["doof"] = "www.doof.org/";
+
+    string s("\"valuePrefixed\"^^doof:sometype");
+    p.setInputStream(s);
+    ASSERT_TRUE(p.rdfLiteral());
+    ASSERT_EQ(p._lastParseResult, "\"valuePrefixed\"^^<www.doof.org/sometype>");
+    ASSERT_EQ(p.getPosition(), s.size());
+  };
+  runCommonTests(Re2Parser{});
+  runCommonTests(CtreParser{});
 }
 
 TEST(TurtleParserTest, blankNode) {
-  auto checkBlankNode = checkParseResult<&Parser::blankNode, 4>;
-  checkBlankNode(" _:blank1", "_:u_blank1", 9);
-  checkBlankNode(" _:blank1 someRemainder", "_:u_blank1", 9);
-  Parser p = checkBlankNode("  _:blank2 someOtherStuff", "_:u_blank2", 10);
-  ASSERT_EQ(p._numBlankNodes, 0u);
-  // anonymous blank node
-  p = checkBlankNode(" [    \n\t  ]", "_:g_4_0", 11u);
-  ASSERT_EQ(p._numBlankNodes, 1u);
+  auto runCommonTests = [](const auto& checker) {
+    checker(" _:blank1", "_:u_blank1", 9);
+    checker(" _:blank1 someRemainder", "_:u_blank1", 9);
+    auto p = checker("  _:blank2 someOtherStuff", "_:u_blank2", 10);
+    ASSERT_EQ(p._numBlankNodes, 0u);
+    // anonymous blank node
+    p = checker(" [    \n\t  ]", "_:g_4_0", 11u);
+    ASSERT_EQ(p._numBlankNodes, 1u);
+  };
+  auto checkRe2 = checkParseResult<Re2Parser, &Re2Parser::blankNode, 4>;
+  auto checkCtre = checkParseResult<CtreParser, &CtreParser::blankNode, 4>;
+  runCommonTests(checkRe2);
+  runCommonTests(checkCtre);
 }
 
 TEST(TurtleParserTest, blankNodePropertyList) {
-  TurtleStringParser<Tokenizer> p;
-  p._activeSubject = "<s>";
-  p._activePredicate = "<p1>";
+  auto runCommonTests = [](auto p) {
+    p._activeSubject = "<s>";
+    p._activePredicate = "<p1>";
 
-  string blankNodeL = "[<p2> <ob2>; <p3> <ob3>]";
-  std::vector<TurtleTriple> exp = {{"<s>", "<p1>", "_:g_5_0"},
-                                   {"_:g_5_0", "<p2>", "<ob2>"},
-                                   {"_:g_5_0", "<p3>", "<ob3>"}};
-  p.setInputStream(blankNodeL);
-  p.setBlankNodePrefixOnlyForTesting(5);
-  ASSERT_TRUE(p.blankNodePropertyList());
-  ASSERT_EQ(p._triples, exp);
-  ASSERT_EQ(p.getPosition(), blankNodeL.size());
+    string blankNodeL = "[<p2> <ob2>; <p3> <ob3>]";
+    std::vector<TurtleTriple> exp = {{"<s>", "<p1>", "_:g_5_0"},
+                                     {"_:g_5_0", "<p2>", "<ob2>"},
+                                     {"_:g_5_0", "<p3>", "<ob3>"}};
+    p.setInputStream(blankNodeL);
+    p.setBlankNodePrefixOnlyForTesting(5);
+    ASSERT_TRUE(p.blankNodePropertyList());
+    ASSERT_EQ(p._triples, exp);
+    ASSERT_EQ(p.getPosition(), blankNodeL.size());
 
-  blankNodeL = "[<2> <ob2>; \"invalidPred\" <ob3>]";
-  p.setInputStream(blankNodeL);
-  ASSERT_THROW(p.blankNodePropertyList(),
-               TurtleParser<Tokenizer>::ParseException);
+    blankNodeL = "[<2> <ob2>; \"invalidPred\" <ob3>]";
+    p.setInputStream(blankNodeL);
+    ASSERT_THROW(p.blankNodePropertyList(),
+                 TurtleParser<Tokenizer>::ParseException);
+  };
+  runCommonTests(Re2Parser{});
+  runCommonTests(CtreParser{});
 }
 
 TEST(TurtleParserTest, object) {
-  TurtleStringParser<Tokenizer> p;
-  string sub = "<sub>";
-  string pred = "<pred>";
-  p._activeSubject = sub;
-  p._activePredicate = pred;
-  p._prefixMap["b"] = "bla/";
-  string iri = " b:iri";
-  p.setInputStream(iri);
-  ASSERT_TRUE(p.object());
-  ASSERT_EQ(p._lastParseResult, "<bla/iri>");
-  auto exp = TurtleTriple{sub, pred, "<bla/iri>"};
-  ASSERT_EQ(p._triples.back(), exp);
+  auto runCommonTests = [](auto p) {
+    string sub = "<sub>";
+    string pred = "<pred>";
+    p._activeSubject = sub;
+    p._activePredicate = pred;
+    p._prefixMap["b"] = "bla/";
+    string iri = " b:iri";
+    p.setInputStream(iri);
+    ASSERT_TRUE(p.object());
+    ASSERT_EQ(p._lastParseResult, "<bla/iri>");
+    auto exp = TurtleTriple{sub, pred, "<bla/iri>"};
+    ASSERT_EQ(p._triples.back(), exp);
 
-  string literal = "\"literal\"";
-  p.setInputStream(literal);
-  ASSERT_TRUE(p.object());
-  ASSERT_EQ(p._lastParseResult, literal);
-  exp = TurtleTriple{sub, pred, literal};
-  ASSERT_EQ(p._triples.back(), exp);
+    string literal = "\"literal\"";
+    p.setInputStream(literal);
+    ASSERT_TRUE(p.object());
+    ASSERT_EQ(p._lastParseResult, literal);
+    exp = TurtleTriple{sub, pred, literal};
+    ASSERT_EQ(p._triples.back(), exp);
 
-  string blank = "_:someblank";
-  p.setInputStream(blank);
-  ASSERT_TRUE(p.object());
-  ASSERT_EQ(p._lastParseResult, "_:u_someblank");
+    string blank = "_:someblank";
+    p.setInputStream(blank);
+    ASSERT_TRUE(p.object());
+    ASSERT_EQ(p._lastParseResult, "_:u_someblank");
 
-  exp = TurtleTriple{sub, pred, "_:u_someblank"};
-  ASSERT_EQ(p._triples.back(), exp);
+    exp = TurtleTriple{sub, pred, "_:u_someblank"};
+    ASSERT_EQ(p._triples.back(), exp);
+  };
+  runCommonTests(Re2Parser{});
+  runCommonTests(CtreParser{});
 }
 
 TEST(TurtleParserTest, objectList) {
-  TurtleStringParser<Tokenizer> parser;
-  parser._activeSubject = "<s>";
-  parser._activePredicate = "<p>";
-  string objectL = " <ob1>, <ob2>, <ob3>";
-  std::vector<TurtleTriple> exp;
-  exp.push_back({"<s>", "<p>", "<ob1>"});
-  exp.push_back({"<s>", "<p>", "<ob2>"});
-  exp.push_back({"<s>", "<p>", "<ob3>"});
-  parser.setInputStream(objectL);
-  ASSERT_TRUE(parser.objectList());
-  ASSERT_EQ(parser._triples, exp);
-  ASSERT_EQ(parser.getPosition(), objectL.size());
+  auto runCommonTests = [](auto parser) {
+    parser._activeSubject = "<s>";
+    parser._activePredicate = "<p>";
+    string objectL = " <ob1>, <ob2>, <ob3>";
+    std::vector<TurtleTriple> exp;
+    exp.push_back({"<s>", "<p>", "<ob1>"});
+    exp.push_back({"<s>", "<p>", "<ob2>"});
+    exp.push_back({"<s>", "<p>", "<ob3>"});
+    parser.setInputStream(objectL);
+    ASSERT_TRUE(parser.objectList());
+    ASSERT_EQ(parser._triples, exp);
+    ASSERT_EQ(parser.getPosition(), objectL.size());
 
-  parser.setInputStream("@noObject");
-  ASSERT_FALSE(parser.objectList());
+    parser.setInputStream("@noObject");
+    ASSERT_FALSE(parser.objectList());
 
-  parser.setInputStream("<obj1>, @illFormed");
-  ASSERT_THROW(parser.objectList(), TurtleParser<Tokenizer>::ParseException);
+    parser.setInputStream("<obj1>, @illFormed");
+    ASSERT_THROW(parser.objectList(), TurtleParser<Tokenizer>::ParseException);
+  };
+  runCommonTests(Re2Parser{});
+  runCommonTests(CtreParser{});
 }
 
 TEST(TurtleParserTest, predicateObjectList) {
-  TurtleStringParser<Tokenizer> parser;
-  parser._activeSubject = "<s>";
-  string predL = "\n <p1> <ob1>;<p2> \"ob2\",\n <ob3>";
-  std::vector<TurtleTriple> exp;
-  exp.push_back({"<s>", "<p1>", "<ob1>"});
-  exp.push_back({"<s>", "<p2>", "\"ob2\""});
-  exp.push_back({"<s>", "<p2>", "<ob3>"});
-  parser.setInputStream(predL);
-  ASSERT_TRUE(parser.predicateObjectList());
-  ASSERT_EQ(parser._triples, exp);
-  ASSERT_EQ(parser.getPosition(), predL.size());
+  auto runCommonTests = [](auto parser) {
+    parser._activeSubject = "<s>";
+    string predL = "\n <p1> <ob1>;<p2> \"ob2\",\n <ob3>";
+    std::vector<TurtleTriple> exp;
+    exp.push_back({"<s>", "<p1>", "<ob1>"});
+    exp.push_back({"<s>", "<p2>", "\"ob2\""});
+    exp.push_back({"<s>", "<p2>", "<ob3>"});
+    parser.setInputStream(predL);
+    ASSERT_TRUE(parser.predicateObjectList());
+    ASSERT_EQ(parser._triples, exp);
+    ASSERT_EQ(parser.getPosition(), predL.size());
+  };
+  runCommonTests(Re2Parser{});
+  runCommonTests(CtreParser{});
 }
 
 TEST(TurtleParserTest, numericLiteral) {
   std::vector<std::string> literals{"2",   "-2",     "42.209",   "-42.239",
-                                    ".74", "2.3e12", "2.34E-14", "-0.3e2"};
+                                    ".74", "2.3e12", "2.34E-14", "-0.3e2",
+                                    "3E2", "-14E-1", ".1E1",     "-.2E0"};
   std::vector<TripleComponent> expected{2,   -2,     42.209,   -42.239,
-                                        .74, 2.3e12, 2.34e-14, -0.3e2};
+                                        .74, 2.3e12, 2.34e-14, -0.3e2,
+                                        3e2, -14e-1, .1e1,     -.2e0};
 
-  auto checkNumericLiteral = checkParseResult<&Parser::numericLiteral>;
+  auto checkRe2 = checkParseResult<Re2Parser, &Re2Parser::numericLiteral>;
+  auto checkCtre = checkParseResult<CtreParser, &CtreParser::numericLiteral>;
   for (size_t i = 0; i < literals.size(); ++i) {
-    checkNumericLiteral(literals[i], expected[i]);
+    checkRe2(literals[i], expected[i]);
+    checkCtre(literals[i], expected[i]);
   }
 }
 
@@ -329,125 +369,130 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
       ASSERT_EQ(result[0]._object, expectedObjects[i]);
     }
   };
-  {
-    // Test the default mode (overflowing integers throw an exception).
-    std::vector<std::string> inputs{
-        "<a> <b> 99999999999999999999999",
-        "<a> <b> \"99999999999999999999\"^^xsd:integer",
-        "<a> <b> \"9999.0\"^^xsd:integer",
-        "<a> <b> \"-9999.0\"^^xsd:int",
-        "<a> <b> \"9999E4\"^^xsd:integer",
-        "<a> <b> \"9999E4\"^^xsd:int",
-        "<a> <b> \"kartoffelsalat\"^^xsd:integer",
-        "<a> <b> \"123kartoffel\"^^xsd:integer",
-        "<a> <b> \"kartoffelsalat\"^^xsd:double",
-        "<a> <b> \"123kartoffel\"^^xsd:decimal"};
-    TurtleStringParser<Tokenizer> parser;
-    parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
-    for (const auto& input : inputs) {
-      assertParsingFails(parser, input);
+  auto runCommonTests = [&assertParsingFails, &testTripleObjects,
+                         &parseAllTriples]<typename Parser>(const Parser&) {
+    {
+      // Test the default mode (overflowing integers throw an exception).
+      std::vector<std::string> inputs{
+          "<a> <b> 99999999999999999999999",
+          "<a> <b> \"99999999999999999999\"^^xsd:integer",
+          "<a> <b> \"9999.0\"^^xsd:integer",
+          "<a> <b> \"-9999.0\"^^xsd:int",
+          "<a> <b> \"9999E4\"^^xsd:integer",
+          "<a> <b> \"9999E4\"^^xsd:int",
+          "<a> <b> \"kartoffelsalat\"^^xsd:integer",
+          "<a> <b> \"123kartoffel\"^^xsd:integer",
+          "<a> <b> \"kartoffelsalat\"^^xsd:double",
+          "<a> <b> \"123kartoffel\"^^xsd:decimal"};
+      Parser parser;
+      parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+      for (const auto& input : inputs) {
+        assertParsingFails(parser, input);
+      }
     }
-  }
-  {
-    // These all work when the datatype is double.
-    std::vector<std::string> inputs{
-        "<a> <b> 99999999999999999999999.0",
-        "<a> <b> \"-9999999999999999999999\"^^xsd:double",
-        "<a> <b> \"9999999999999999999999\"^^xsd:decimal",
-        "<a> <b> \"99999999999999999999E4\"^^xsd:double",
-        "<a> <b> \"99999999999999999999.0E4\"^^xsd:decimal"};
-    std::vector<double> expectedObjects{
-        99999999999999999999999.0, -9999999999999999999999.0,
-        9999999999999999999999.0, 99999999999999999999E4,
-        99999999999999999999E4};
-    TurtleStringParser<Tokenizer> parser;
-    parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
-    testTripleObjects(parser, inputs, expectedObjects);
-  }
-  {
-    // Test the overflow to double mode.
-    std::vector<std::string> nonWorkingInputs{
-        "<a> <b> \"9999.0\"^^xsd:integer",
-        "<a> <b> \"-9999.0\"^^xsd:int",
-        "<a> <b> \"9999E4\"^^xsd:integer",
-        "<a> <b> \"9999E4\"^^xsd:int",
-        "<a> <b> \"kartoffelsalat\"^^xsd:integer",
-        "<a> <b> \"123kartoffel\"^^xsd:integer"};
-    TurtleStringParser<Tokenizer> parser;
-    parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
-    parser.integerOverflowBehavior() =
-        TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
-    for (const auto& input : nonWorkingInputs) {
-      assertParsingFails(parser, input);
+    {
+      // These all work when the datatype is double.
+      std::vector<std::string> inputs{
+          "<a> <b> 99999999999999999999999.0",
+          "<a> <b> \"-9999999999999999999999\"^^xsd:double",
+          "<a> <b> \"9999999999999999999999\"^^xsd:decimal",
+          "<a> <b> \"99999999999999999999E4\"^^xsd:double",
+          "<a> <b> \"99999999999999999999.0E4\"^^xsd:decimal"};
+      std::vector<double> expectedObjects{
+          99999999999999999999999.0, -9999999999999999999999.0,
+          9999999999999999999999.0, 99999999999999999999E4,
+          99999999999999999999E4};
+      Parser parser;
+      parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+      testTripleObjects(parser, inputs, expectedObjects);
     }
-    std::vector<std::string> workingInputs{
-        "<a> <b> 99999999999999999999999",
-        "<a> <b> \"-99999999999999999999\"^^xsd:integer",
-    };
-    std::vector<double> expectedDoubles{99999999999999999999999.0,
-                                        -99999999999999999999.0};
-    testTripleObjects(parser, workingInputs, expectedDoubles);
-  }
-  {
-    // Test the "all integers become doubles" mode.
-    std::vector<std::string> nonWorkingInputs{
-        "<a> <b> \"kartoffelsalat\"^^xsd:integer",
-        "<a> <b> \"123kartoffel\"^^xsd:integer"};
-    TurtleStringParser<Tokenizer> parser;
-    parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
-    parser.integerOverflowBehavior() =
-        TurtleParserIntegerOverflowBehavior::AllToDouble;
-    for (const auto& input : nonWorkingInputs) {
-      assertParsingFails(parser, input);
+    {
+      // Test the overflow to double mode.
+      std::vector<std::string> nonWorkingInputs{
+          "<a> <b> \"9999.0\"^^xsd:integer",
+          "<a> <b> \"-9999.0\"^^xsd:int",
+          "<a> <b> \"9999E4\"^^xsd:integer",
+          "<a> <b> \"9999E4\"^^xsd:int",
+          "<a> <b> \"kartoffelsalat\"^^xsd:integer",
+          "<a> <b> \"123kartoffel\"^^xsd:integer"};
+      Parser parser;
+      parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+      parser.integerOverflowBehavior() =
+          TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+      for (const auto& input : nonWorkingInputs) {
+        assertParsingFails(parser, input);
+      }
+      std::vector<std::string> workingInputs{
+          "<a> <b> 99999999999999999999999",
+          "<a> <b> \"-99999999999999999999\"^^xsd:integer",
+      };
+      std::vector<double> expectedDoubles{99999999999999999999999.0,
+                                          -99999999999999999999.0};
+      testTripleObjects(parser, workingInputs, expectedDoubles);
     }
-    std::vector<std::string> workingInputs{
-        "<a> <b> \"123\"^^xsd:integer",
-        "<a> <b> 456",
-        "<a> <b> \"-9999.0\"^^xsd:integer",
-        "<a> <b> \"9999.0\"^^xsd:short",
-        "<a> <b> \"9999E4\"^^xsd:nonNegativeInteger",
-        "<a> <b> \"9999E4\"^^xsd:int",
-        "<a> <b> 99999999999999999999999",
-        "<a> <b> \"99999999999999999999\"^^xsd:integer",
-    };
-    std::vector<double> expectedDoubles{123.0,
-                                        456.0,
-                                        -9999.0,
-                                        9999.0,
-                                        9999e4,
-                                        9999e4,
-                                        99999999999999999999999.0,
-                                        99999999999999999999.0};
-    testTripleObjects(parser, workingInputs, expectedDoubles);
-  }
-  {
-    // Test the skipping of unsupported triples with the "overflow is error"
-    // behavior.
-    std::string input{
-        "<a> <b> 123. <c> <d> 99999999999999999999999. <e> <f> 234"};
-    std::vector<TurtleTriple> expected{{"<a>", "<b>", 123},
-                                       {"<e>", "<f>", 234}};
-    TurtleStringParser<Tokenizer> parser;
-    parser.invalidLiteralsAreSkipped() = true;
-    auto result = parseAllTriples(parser, input);
-    ASSERT_EQ(result, expected);
-  }
-  {
-    // Test the skipping of unsupported triples with the "overflow to double"
-    // behavior.
-    std::string input{
-        "<a> <b> 99999999999999999999999. <c> <d> \"invalid\"^^xsd:integer. "
-        "<e> <f> 234"};
-    std::vector<TurtleTriple> expected{
-        {"<a>", "<b>", 99999999999999999999999.0}, {"<e>", "<f>", 234}};
-    TurtleStringParser<Tokenizer> parser;
-    parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
-    parser.invalidLiteralsAreSkipped() = true;
-    parser.integerOverflowBehavior() =
-        TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
-    auto result = parseAllTriples(parser, input);
-    ASSERT_EQ(result, expected);
-  }
+    {
+      // Test the "all integers become doubles" mode.
+      std::vector<std::string> nonWorkingInputs{
+          "<a> <b> \"kartoffelsalat\"^^xsd:integer",
+          "<a> <b> \"123kartoffel\"^^xsd:integer"};
+      Parser parser;
+      parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+      parser.integerOverflowBehavior() =
+          TurtleParserIntegerOverflowBehavior::AllToDouble;
+      for (const auto& input : nonWorkingInputs) {
+        assertParsingFails(parser, input);
+      }
+      std::vector<std::string> workingInputs{
+          "<a> <b> \"123\"^^xsd:integer",
+          "<a> <b> 456",
+          "<a> <b> \"-9999.0\"^^xsd:integer",
+          "<a> <b> \"9999.0\"^^xsd:short",
+          "<a> <b> \"9999E4\"^^xsd:nonNegativeInteger",
+          "<a> <b> \"9999E4\"^^xsd:int",
+          "<a> <b> 99999999999999999999999",
+          "<a> <b> \"99999999999999999999\"^^xsd:integer",
+      };
+      std::vector<double> expectedDoubles{123.0,
+                                          456.0,
+                                          -9999.0,
+                                          9999.0,
+                                          9999e4,
+                                          9999e4,
+                                          99999999999999999999999.0,
+                                          99999999999999999999.0};
+      testTripleObjects(parser, workingInputs, expectedDoubles);
+    }
+    {
+      // Test the skipping of unsupported triples with the "overflow is error"
+      // behavior.
+      std::string input{
+          "<a> <b> 123. <c> <d> 99999999999999999999999. <e> <f> 234"};
+      std::vector<TurtleTriple> expected{{"<a>", "<b>", 123},
+                                         {"<e>", "<f>", 234}};
+      Parser parser;
+      parser.invalidLiteralsAreSkipped() = true;
+      auto result = parseAllTriples(parser, input);
+      ASSERT_EQ(result, expected);
+    }
+    {
+      // Test the skipping of unsupported triples with the "overflow to double"
+      // behavior.
+      std::string input{
+          "<a> <b> 99999999999999999999999. <c> <d> \"invalid\"^^xsd:integer . "
+          "<e> <f> 234"};
+      std::vector<TurtleTriple> expected{
+          {"<a>", "<b>", 99999999999999999999999.0}, {"<e>", "<f>", 234}};
+      Parser parser;
+      parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+      parser.invalidLiteralsAreSkipped() = true;
+      parser.integerOverflowBehavior() =
+          TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+      auto result = parseAllTriples(parser, input);
+      ASSERT_EQ(result, expected);
+    }
+  };
+  runCommonTests(Re2Parser{});
+  runCommonTests(CtreParser{});
 }
 
 TEST(TurtleParserTest, DateLiterals) {
@@ -463,34 +508,44 @@ TEST(TurtleParserTest, DateLiterals) {
       ":v:date:0000000000000002083-12-00T00:00:00"};
 
   for (size_t i = 0; i < dateLiterals.size(); ++i) {
-    checkParseResult<&Parser::object>(dateLiterals[i], expected[i]);
+    checkParseResult<Re2Parser, &Re2Parser::object>(dateLiterals[i],
+                                                    expected[i]);
+    checkParseResult<CtreParser, &CtreParser::object>(dateLiterals[i],
+                                                      expected[i]);
   }
 }
 
 TEST(TurtleParserTest, booleanLiteral) {
-  constexpr auto bl = &Parser::booleanLiteral;
-  checkParseResult<bl>("true",
-                       "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>");
-  checkParseResult<bl>("false",
-                       "\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>");
-  ASSERT_FALSE(parseRule<bl>("maybe"));
+  auto runCommonTests = [](const auto& ruleChecker, const auto& ruleParser) {
+    ruleChecker("true", "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>");
+    ruleChecker("false",
+                "\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>");
+    ASSERT_FALSE(ruleParser("maybe"));
+  };
+  runCommonTests(checkParseResult<Re2Parser, &Re2Parser::booleanLiteral>,
+                 parseRule<Re2Parser, &Re2Parser::booleanLiteral>);
+  runCommonTests(checkParseResult<CtreParser, &CtreParser::booleanLiteral>,
+                 parseRule<CtreParser, &CtreParser::booleanLiteral>);
 }
 
 TEST(TurtleParserTest, collection) {
-  std::string nil = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>";
-  std::string first = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>";
-  std::string rest = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>";
+  auto runCommonTests = [](const auto& checker) {
+    using TC = TripleComponent;
+    using TT = TurtleTriple;
+    std::string nil = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>";
+    std::string first = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>";
+    std::string rest = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>";
 
-  using TC = TripleComponent;
-  using TT = TurtleTriple;
-  auto checkCollection = checkParseResult<&Parser::collection, 22>;
-  checkCollection("()", "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>");
+    checker("()", "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>");
 
-  checkCollection("(42 <alpha> \"me\")", TC{"_:g_22_0"}, {},
-                  std::vector<TT>{{"_:g_22_0", first, 42},
-                                  {"_:g_22_0", rest, "_:g_22_1"},
-                                  {"_:g_22_1", first, "<alpha>"},
-                                  {"_:g_22_1", rest, "_:g_22_2"},
-                                  {"_:g_22_2", first, "\"me\""},
-                                  {"_:g_22_2", rest, nil}});
+    checker("(42 <alpha> \"me\")", TC{"_:g_22_0"}, {},
+            std::vector<TT>{{"_:g_22_0", first, 42},
+                            {"_:g_22_0", rest, "_:g_22_1"},
+                            {"_:g_22_1", first, "<alpha>"},
+                            {"_:g_22_1", rest, "_:g_22_2"},
+                            {"_:g_22_2", first, "\"me\""},
+                            {"_:g_22_2", rest, nil}});
+  };
+  runCommonTests(checkParseResult<Re2Parser, &Re2Parser::collection, 22>);
+  runCommonTests(checkParseResult<CtreParser, &CtreParser::collection, 22>);
 }

@@ -748,8 +748,7 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
     while (_triples.size() < PARSER_MIN_TRIPLES_AT_ONCE &&
            !_isParserExhausted) {
       bool parsedStatement;
-      bool exceptionThrown = false;
-      typename TurtleParser<T>::ParseException ex;
+      std::optional<ParseException> ex;
       // If this buffer reads from an mmaped file, then exceptions are
       // immediately rethrown. If we are reading from a stream in chunks of
       // bytes, we can try again with a larger buffer.
@@ -759,7 +758,6 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
         parsedStatement = this->statement();
       } catch (const typename TurtleParser<T>::ParseException& p) {
         parsedStatement = false;
-        exceptionThrown = true;
         ex = p;
       }
 
@@ -782,8 +780,8 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
             auto s = std::min(size_t(1000), size_t(d.size()));
             LOG(INFO) << "Logging first 1000 unparsed characters\n";
             LOG(INFO) << std::string_view(d.data(), s) << std::endl;
-            if (exceptionThrown) {
-              throw ex;
+            if (ex.has_value()) {
+              throw ex.value();
 
             } else {
               this->raise(
@@ -796,8 +794,8 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
           continue;
         } else {
           // there are no more bytes in the buffer
-          if (exceptionThrown) {
-            throw ex;
+          if (ex.has_value()) {
+            throw ex.value();
           } else {
             // we are at the end of an input stream without an exception
             // the input is exhausted, but we still may retrieve

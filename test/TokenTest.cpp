@@ -26,8 +26,8 @@ TEST(TokenTest, Numbers) {
   string decimal3 = "32.3";
   string noDecimal = "-23.";
 
-  string double1 = "e+3";
-  string double2 = "E-92";
+  string double1 = "2e+3";
+  string double2 = "-.5E-92";
   string double3 = "+43.8e+3";
   string double4 = "-42.3e-2";
   string double5 = "-42.3E+3";

@@ -26,6 +26,8 @@
 #include <locale>
 #include <string_view>
 
+#include "parser/ParseException.h"
+
 using std::string;
 
 enum class TurtleParserIntegerOverflowBehavior {
@@ -71,14 +73,7 @@ inline std::string_view stripDoubleQuotes(std::string_view input) {
 template <class Tokenizer_T>
 class TurtleParser {
  public:
-  class ParseException : public std::exception {
-   public:
-    ParseException() = default;
-    const char* what() const throw() { return _msg.c_str(); }
-
-   private:
-    string _msg = "Error parsing turtle input";
-  };
+  using ParseException = ::ParseException;
 
   // The CTRE Tokenizer implies relaxed parsing.
   static constexpr bool UseRelaxedParsing =
@@ -210,7 +205,7 @@ class TurtleParser {
       LOG(INFO) << "The next " << num_bytes << " bytes are:\n"
                 << std::string_view(d.data(), s) << std::endl;
     }
-    throw ParseException();
+    throw ParseException("Error while parsing turtle input");
   }
 
   // Throw an exception or simply ignore the current triple, depending on the

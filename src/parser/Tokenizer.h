@@ -95,8 +95,9 @@ struct TurtleToken {
   const RE2 Decimal;
   const string ExponentString = "[eE][+-]?[0-9]+";
   const RE2 Exponent;
-  const string DoubleString =
-      "[+-]?([0-9]+\\.[0-9]*" + ExponentString + "|" + ExponentString + ")";
+  const string DoubleString = "[+-]?([0-9]+\\.[0-9]*" + ExponentString +
+                              "|\\.[0-9]+" + ExponentString + "|[0-9]+" +
+                              ExponentString + ")";
   const RE2 Double;
 
   const string HexString = "0-9A-Fa-f";
