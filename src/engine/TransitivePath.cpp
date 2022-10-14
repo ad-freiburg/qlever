@@ -14,8 +14,8 @@
 TransitivePath::TransitivePath(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     bool leftIsVar, bool rightIsVar, size_t leftSubCol, size_t rightSubCol,
-    Id leftValue, Id rightValue, const std::string& leftColName,
-    const std::string& rightColName, size_t minDist, size_t maxDist)
+    Id leftValue, Id rightValue, const Variable& leftColName,
+    const Variable& rightColName, size_t minDist, size_t maxDist)
     : Operation(qec),
       _leftSideTree(nullptr),
       _leftSideCol(-1),
@@ -29,8 +29,9 @@ TransitivePath::TransitivePath(
       _rightSubCol(rightSubCol),
       _leftValue(leftValue),
       _rightValue(rightValue),
-      _leftColName(leftColName),
-      _rightColName(rightColName),
+      // TODO<joka921> Those should also be variables.
+      _leftColName(leftColName.name()),
+      _rightColName(rightColName.name()),
       _minDist(minDist),
       _maxDist(maxDist) {
   _variableColumns[_leftColName] = 0;

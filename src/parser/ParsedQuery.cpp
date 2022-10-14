@@ -415,8 +415,10 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
 // __________________________________________________________________________
 ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}
 
+// TODO<joka921> Change the first argument to `Variable`, but first merge
+// the filter-PR.
 void ParsedQuery::GraphPattern::addLanguageFilter(
-    const std::string& variable, const std::string& languageInQuotes) {
+    const Variable& variable, const std::string& languageInQuotes) {
   auto langTag = languageInQuotes.substr(1, languageInQuotes.size() - 2);
   // Find all triples where the object is the `variable` and the predicate is a
   // simple `IRIREF` (neither a variable nor a complex property path). Search in
@@ -451,7 +453,7 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
   // case a triple `?variable ql:langtag "language"` is added at the end of the
   // graph pattern.
   if (matchingTriples.empty()) {
-    LOG(DEBUG) << "language filter variable " + variable +
+    LOG(DEBUG) << "language filter variable " + variable.name() +
                       " did not appear as object in any suitable "
                       "triple. "
                       "Using literal-to-language predicate instead.\n";

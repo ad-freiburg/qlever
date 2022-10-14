@@ -301,7 +301,7 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
               filter.expression_.getLanguageFilterExpression();
           langFilterData.has_value()) {
         const auto& [variable, language] = langFilterData.value();
-        pattern.addLanguageFilter(variable.name(), language);
+        pattern.addLanguageFilter(variable, language);
       } else {
         checkUnsupportedLangOperation(ctx, filter.expression_);
         pattern._filters.push_back(std::move(filter));
@@ -375,9 +375,7 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
     return term.visit(
         ad_utility::OverloadCallOperator{iri, blankNode, literal});
   };
-  auto varTriple = [](const Variable& var) {
-    return TripleComponent{var.name()};
-  };
+  auto varTriple = [](const Variable& var) { return TripleComponent{var}; };
   auto varOrTerm = [&varTriple, &graphTerm](VarOrTerm varOrTerm) {
     return varOrTerm.visit(
         ad_utility::OverloadCallOperator{varTriple, graphTerm});

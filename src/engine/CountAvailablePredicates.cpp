@@ -7,9 +7,9 @@
 #include "./CallFixedSize.h"
 
 // _____________________________________________________________________________
-CountAvailablePredicates::CountAvailablePredicates(
-    QueryExecutionContext* qec, std::string predicateVariable,
-    std::string countVariable)
+CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
+                                                   Variable predicateVariable,
+                                                   Variable countVariable)
     : Operation(qec),
       _subtree(nullptr),
       _subjectColumnIndex(0),
@@ -19,8 +19,8 @@ CountAvailablePredicates::CountAvailablePredicates(
 // _____________________________________________________________________________
 CountAvailablePredicates::CountAvailablePredicates(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
-    size_t subjectColumnIndex, std::string predicateVariable,
-    std::string countVariable)
+    size_t subjectColumnIndex, Variable predicateVariable,
+    Variable countVariable)
     : Operation(qec),
       _subtree(QueryExecutionTree::createSortedTree(std::move(subtree),
                                                     {subjectColumnIndex})),
@@ -64,8 +64,8 @@ vector<size_t> CountAvailablePredicates::resultSortedOn() const {
 Operation::VariableToColumnMap
 CountAvailablePredicates::computeVariableToColumnMap() const {
   ad_utility::HashMap<string, size_t> varCols;
-  varCols[_predicateVarName] = 0;
-  varCols[_countVarName] = 1;
+  varCols[_predicateVarName.name()] = 0;
+  varCols[_countVarName.name()] = 1;
   return varCols;
 }
 

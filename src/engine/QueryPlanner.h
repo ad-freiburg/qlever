@@ -35,19 +35,24 @@ class QueryPlanner {
 
     struct Node {
       Node(size_t id, const SparqlTriple& t)
-          : _id(id), _triple(t), _variables(), _cvar(), _wordPart() {
+          // TODO<joka921> should the `_cvar` be an `optional` or a `variant`.
+          : _id(id),
+            _triple(t),
+            _variables(),
+            _cvar(std::nullopt),
+            _wordPart() {
         if (isVariable(t._s)) {
-          _variables.insert(t._s.getString());
+          _variables.insert(t._s.getVariable());
         }
         if (isVariable(t._p)) {
-          _variables.insert(t._p._iri);
+          _variables.insert(Variable{t._p._iri});
         }
         if (isVariable(t._o)) {
-          _variables.insert(t._o.getString());
+          _variables.insert(t._o.getVariable());
         }
       }
 
-      Node(size_t id, const string& cvar, const string& wordPart,
+      Node(size_t id, const Variable& cvar, const string& wordPart,
            const vector<SparqlTriple>& trips)
           : _id(id),
             _triple(cvar,
@@ -60,13 +65,13 @@ class QueryPlanner {
         _variables.insert(cvar);
         for (const auto& t : trips) {
           if (isVariable(t._s)) {
-            _variables.insert(t._s.getString());
+            _variables.insert(t._s.getVariable());
           }
           if (isVariable(t._p)) {
-            _variables.insert(t._p._iri);
+            _variables.insert(Variable{t._p._iri});
           }
           if (isVariable(t._o)) {
-            _variables.insert(t._o.getString());
+            _variables.insert(t._o.getVariable());
           }
         }
       }
@@ -85,17 +90,22 @@ class QueryPlanner {
       friend std::ostream& operator<<(std::ostream& out, const Node& n) {
         out << "id: " << n._id << " triple: " << n._triple.asString()
             << " vars_ ";
-        for (const std::string& s : n._variables) {
-          out << s << ", ";
+        for (const auto& s : n._variables) {
+          out << s.name() << ", ";
         }
-        out << " cvar " << n._cvar << " wordPart " << n._wordPart;
+        // TODO<joka921> Should the `cvar` and the `wordPart` be stored
+        // together?
+        if (n._cvar.has_value()) {
+          out << " cvar " << n._cvar.value().name() << " wordPart "
+              << n._wordPart;
+        }
         return out;
       }
 
       size_t _id;
       SparqlTriple _triple;
-      std::set<std::string> _variables;
-      string _cvar;
+      ad_utility::HashSet<Variable> _variables;
+      std::optional<Variable> _cvar = std::nullopt;
       string _wordPart;
     };
 
@@ -112,7 +122,7 @@ class QueryPlanner {
     ad_utility::HashMap<size_t, Node*> _nodeMap;
     std::list<TripleGraph::Node> _nodeStorage;
 
-    ad_utility::HashMap<string, vector<size_t>> identifyTextCliques() const;
+    ad_utility::HashMap<Variable, vector<size_t>> identifyTextCliques() const;
 
     vector<size_t> bfsLeaveOut(size_t startNode,
                                ad_utility::HashSet<size_t> leaveOut) const;
@@ -238,7 +248,7 @@ class QueryPlanner {
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right);
 
-  [[nodiscard]] std::string generateUniqueVarName();
+  [[nodiscard]] Variable generateUniqueVarName();
 
   // Creates a tree of unions with the given patterns as the trees leaves
   [[nodiscard]] ParsedQuery::GraphPattern uniteGraphPatterns(

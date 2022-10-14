@@ -55,13 +55,13 @@ bool isVariableContainedInGraphPatternOperation(
             if (&triple == tripleToIgnore) {
               return false;
             }
-            return (triple._s == variable.name() ||
+            return (triple._s == variable ||
                     // Complex property paths are not allowed to contain
                     // variables in SPARQL, so this check is sufficient.
                     // TODO<joka921> Still make the interface of the
                     // `PropertyPath` class typesafe.
                     triple._p.asString() == variable.name() ||
-                    triple._o == variable.name());
+                    triple._o == variable);
           });
     } else if constexpr (std::is_same_v<T, p::Values>) {
       return ad_utility::contains(arg._inlineValues._variables,
@@ -145,27 +145,27 @@ std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
       [&]() -> std::optional<PatternTrickData> {
     if ((triple._p._iri == HAS_PREDICATE_PREDICATE) && isVariable(triple._s) &&
         isVariable(triple._o) && triple._s != triple._o) {
-      Variable predicateVariable{triple._o.getString()};
+      Variable predicateVariable{triple._o.getVariable()};
       return PatternTrickData{predicateVariable,
-                              Variable{triple._s.getString()},
+                              triple._s.getVariable(),
                               {predicateVariable},
                               true};
     } else if (isVariable(triple._s) && isVariable(triple._p) &&
                isVariable(triple._o)) {
       // Check that the three variables are pairwise distinct.
-      std::vector<std::string> variables{
-          triple._s.getString(), triple._o.getString(), triple._p.asString()};
+      std::vector<string> variables{triple._s.getVariable().name(),
+                                    triple._o.getVariable().name(),
+                                    triple._p.asString()};
       std::ranges::sort(variables);
       if (std::unique(variables.begin(), variables.end()) != variables.end()) {
         return std::nullopt;
       }
 
       Variable predicateVariable{triple._p.getIri()};
-      return PatternTrickData{
-          predicateVariable,
-          Variable{triple._s.getString()},
-          {predicateVariable, Variable{triple._o.getString()}},
-          true};
+      return PatternTrickData{predicateVariable,
+                              triple._s.getVariable(),
+                              {predicateVariable, triple._o.getVariable()},
+                              true};
     } else {
       return std::nullopt;
     }
@@ -204,7 +204,7 @@ std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
     return std::nullopt;
   }
 
-  PatternTrickTuple patternTrickTuple{Variable{triple._s.getString()},
+  PatternTrickTuple patternTrickTuple{triple._s.getVariable(),
                                       patternTrickData.predicateVariable_};
   return patternTrickTuple;
 }

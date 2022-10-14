@@ -148,7 +148,7 @@ Operation::VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   // Helper lambdas that add the respective triple component as the next column.
   auto addSubject = [&]() {
     if (_subject.isVariable()) {
-      res[_subject.getString()] = col++;
+      res[_subject.getVariable().name()] = col++;
     }
   };
   auto addPredicate = [&]() {
@@ -158,7 +158,7 @@ Operation::VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   };
   auto addObject = [&]() {
     if (_object.isVariable()) {
-      res[_object.getString()] = col++;
+      res[_object.getVariable().name()] = col++;
     }
   };
 

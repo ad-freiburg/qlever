@@ -180,7 +180,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // all Variables that have been bound be the children we have dealt with
   // so far. TODO<joka921> verify that we get no false positives with plans
   // that create no single binding for a variable "by accident".
-  ad_utility::HashSet<std::string> boundVariables;
+  ad_utility::HashSet<Variable> boundVariables;
 
   // lambda that optimizes a set of triples, other execution plans and filters
   // under the assumption that they are commutative and can be joined in an
@@ -227,13 +227,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       // we only consist of triples, store them and all the bound variables.
       for (const SparqlTriple& t : v._triples) {
         if (isVariable(t._s)) {
-          boundVariables.insert(t._s.getString());
+          boundVariables.insert(t._s.getVariable());
         }
         if (isVariable(t._p)) {
-          boundVariables.insert(t._p._iri);
+          boundVariables.insert(Variable{t._p._iri});
         }
         if (isVariable(t._o)) {
-          boundVariables.insert(t._o.getString());
+          boundVariables.insert(t._o.getVariable());
         }
       }
       candidateTriples._triples.insert(
@@ -241,12 +241,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           std::make_move_iterator(v._triples.begin()),
           std::make_move_iterator(v._triples.end()));
     } else if constexpr (std::is_same_v<p::Bind, std::decay_t<decltype(v)>>) {
-      if (boundVariables.count(v._target.name())) {
+      if (boundVariables.contains(v._target)) {
         AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                  "The target variable of a BIND must not be used before the "
                  "BIND clause");
       }
-      boundVariables.insert(v._target.name());
+      boundVariables.insert(v._target);
 
       // Assumption for now: BIND does not commute. This is always safe.
       auto lastRow = optimizeCommutativ(candidateTriples, candidatePlans,
@@ -283,7 +283,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         auto vc = v[0]._qet->getVariableColumns();
         if (std::all_of(vc.begin(), vc.end(),
                         [&boundVariables](const auto& el) {
-                          return !boundVariables.count(el.first);
+                          return !boundVariables.contains(Variable{el.first});
                         })) {
           // all variables in the optional are unbound so far, so this optional
           // actually is not an optional.
@@ -299,7 +299,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       {
         auto vc = v[0]._qet->getVariableColumns();
         std::for_each(vc.begin(), vc.end(), [&boundVariables](const auto& el) {
-          boundVariables.insert(el.first);
+          boundVariables.insert(Variable{el.first});
         });
       }
 
@@ -399,17 +399,22 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         for (auto& sub : candidatesIn) {
           size_t leftCol, rightCol;
           Id leftValue, rightValue;
-          std::string leftColName, rightColName;
+          // TODO<joka921> Refactor the `TransitivePath` class s.t. we don't
+          // have to specify a `Variable` that isn't used at all in the case of
+          // a fixed subject or object.
+          Variable leftColName{"?undefined"}, rightColName{"?undefined"};
           size_t min, max;
           bool leftVar, rightVar;
           if (isVariable(arg._left)) {
             leftVar = true;
-            leftCol = sub._qet->getVariableColumn(arg._innerLeft);
-            leftColName = arg._left.getString();
+            leftCol = sub._qet->getVariableColumn(
+                arg._innerLeft.getVariable().name());
+            leftColName = Variable{arg._left.getVariable()};
           } else {
             leftVar = false;
             leftColName = generateUniqueVarName();
-            leftCol = sub._qet->getVariableColumn(arg._innerLeft);
+            leftCol = sub._qet->getVariableColumn(
+                arg._innerLeft.getVariable().name());
             if (auto opt = arg._left.toValueId(_qec->getIndex().getVocab());
                 opt.has_value()) {
               leftValue = opt.value();
@@ -421,11 +426,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           // TODO<joka921> This is really much code duplication, get rid of it!
           if (isVariable(arg._right)) {
             rightVar = true;
-            rightCol = sub._qet->getVariableColumn(arg._innerRight);
-            rightColName = arg._right.getString();
+            rightCol = sub._qet->getVariableColumn(
+                arg._innerRight.getVariable().name());
+            rightColName = Variable{arg._right.getVariable()};
           } else {
             rightVar = false;
-            rightCol = sub._qet->getVariableColumn(arg._innerRight);
+            rightCol = sub._qet->getVariableColumn(
+                arg._innerRight.getVariable().name());
             rightColName = generateUniqueVarName();
             if (auto opt = arg._right.toValueId(_qec->getIndex().getVocab());
                 opt.has_value()) {
@@ -565,9 +572,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
   }
   vector<SubtreePlan> added;
 
-  std::string predicateVariable = patternTrickTuple.predicate_.name();
-  std::string countVariable =
-      aliases.empty() ? generateUniqueVarName() : aliases[0]._target.name();
+  Variable predicateVariable = patternTrickTuple.predicate_;
+  Variable countVariable =
+      aliases.empty() ? generateUniqueVarName() : aliases[0]._target;
   if (previous != nullptr && !previous->empty()) {
     added.reserve(previous->size());
     for (const auto& parent : *previous) {
@@ -742,7 +749,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
 
     using enum IndexScan::ScanType;
 
-    if (!node._cvar.empty()) {
+    if (node._cvar.has_value()) {
       seeds.push_back(getTextLeafPlan(node));
       continue;
     }
@@ -788,15 +795,16 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         LOG(DEBUG) << "Subject variable same as object variable" << std::endl;
         // Need to handle this as IndexScan with a new unique
         // variable + Filter. Works in both directions
-        std::string filterVar = generateUniqueVarName();
+        Variable filterVar = generateUniqueVarName();
         auto scanTriple = node._triple;
         scanTriple._o = filterVar;
         auto scanTree =
             makeExecutionTree<IndexScan>(_qec, PSO_FREE_S, scanTriple);
         // The simplest way to set up the filtering expression is to use the
         // parser.
-        std::string filterString = absl::StrCat(
-            "FILTER (", scanTriple._s.getString(), "=", filterVar, ")");
+        std::string filterString =
+            absl::StrCat("FILTER (", scanTriple._s.getVariable().name(), "=",
+                         filterVar.name(), ")");
         auto filter = sparqlParserHelpers::ParserAndVisitor{filterString}
                           .parseTypesafe(&SparqlAutomaticParser::filterR)
                           .resultOfParse_;
@@ -944,24 +952,12 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
     start = end + 1;
   }
 
-  // Generate unique variable names that connect the nunNullChunks
-  std::vector<std::string> connectionVarNames(nonNullChunks.size() + 1);
-  // TODO<joka921, kramerfl> Does it always hold that `left` and `right` are
-  // variables at this point?
-  connectionVarNames[0] = left.toString();
-  connectionVarNames.back() = right.toString();
-  for (size_t i = 1; i + 1 < connectionVarNames.size(); i++) {
-    connectionVarNames[i] = generateUniqueVarName();
-  }
-
   // Stores the pattern for every non null chunk
   std::vector<ParsedQuery::GraphPattern> chunkPatterns;
   chunkPatterns.reserve(nonNullChunks.size());
 
   for (size_t chunkIdx = 0; chunkIdx < nonNullChunks.size(); ++chunkIdx) {
     std::array<size_t, 2> chunk = nonNullChunks[chunkIdx];
-    std::string chunkLeft = connectionVarNames[chunkIdx];
-    std::string chunkRight = connectionVarNames[chunkIdx + 1];
     size_t numChildren = chunk[1] - chunk[0];
 
     // This vector maps the indices of child paths that can be null
@@ -1092,8 +1088,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
-  std::string innerLeft = generateUniqueVarName();
-  std::string innerRight = generateUniqueVarName();
+  Variable innerLeft = generateUniqueVarName();
+  Variable innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
       seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
@@ -1114,8 +1110,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
-  std::string innerLeft = generateUniqueVarName();
-  std::string innerRight = generateUniqueVarName();
+  Variable innerLeft = generateUniqueVarName();
+  Variable innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
       seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
@@ -1136,8 +1132,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMax(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
-  std::string innerLeft = generateUniqueVarName();
-  std::string innerRight = generateUniqueVarName();
+  Variable innerLeft = generateUniqueVarName();
+  Variable innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
       seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
@@ -1192,9 +1188,9 @@ ParsedQuery::GraphPattern QueryPlanner::uniteGraphPatterns(
 }
 
 // _____________________________________________________________________________
-std::string QueryPlanner::generateUniqueVarName() {
-  return "?_qlever_internal_variable_query_planner_" +
-         std::to_string(_internalVarCount++);
+Variable QueryPlanner::generateUniqueVarName() {
+  return Variable{"?_qlever_internal_variable_query_planner_" +
+                  std::to_string(_internalVarCount++)};
 }
 
 // _____________________________________________________________________________
@@ -1205,7 +1201,7 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   auto& tree = *plan._qet;
   AD_CHECK(node._wordPart.size() > 0);
   auto textOp = std::make_shared<TextOperationWithoutFilter>(
-      _qec, node._wordPart, node._variables, node._cvar);
+      _qec, node._wordPart, node._variables, node._cvar.value());
   tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER,
                     textOp);
   return plan;
@@ -1436,12 +1432,12 @@ QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
 string QueryPlanner::TripleGraph::asString() const {
   std::ostringstream os;
   for (size_t i = 0; i < _adjLists.size(); ++i) {
-    if (_nodeMap.find(i)->second->_cvar.size() == 0) {
+    if (!_nodeMap.find(i)->second->_cvar.has_value()) {
       os << i << " " << _nodeMap.find(i)->second->_triple.asString() << " : (";
     } else {
-      os << i << " {TextOP for " << _nodeMap.find(i)->second->_cvar
-         << ", wordPart: \"" << _nodeMap.find(i)->second->_wordPart
-         << "\"} : (";
+      os << i << " {TextOP for "
+         << _nodeMap.find(i)->second->_cvar.value().name() << ", wordPart: \""
+         << _nodeMap.find(i)->second->_wordPart << "\"} : (";
     }
 
     for (size_t j = 0; j < _adjLists[i].size(); ++j) {
@@ -1654,15 +1650,15 @@ bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, vector<size_t>>
+ad_utility::HashMap<Variable, vector<size_t>>
 QueryPlanner::TripleGraph::identifyTextCliques() const {
-  ad_utility::HashMap<string, vector<size_t>> contextVarToTextNodesIds;
+  ad_utility::HashMap<Variable, vector<size_t>> contextVarToTextNodesIds;
   // Fill contextVar -> triples map
   for (size_t i = 0; i < _adjLists.size(); ++i) {
     if (isTextNode(i)) {
       auto& triple = _nodeMap.find(i)->second->_triple;
       auto& cvar = triple._s;
-      contextVarToTextNodesIds[cvar.getString()].push_back(i);
+      contextVarToTextNodesIds[cvar.getVariable()].push_back(i);
     }
   }
   return contextVarToTextNodesIds;
@@ -1774,16 +1770,15 @@ vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
     const vector<SparqlFilter>& origFilters,
     const vector<size_t>& nodes) const {
   vector<SparqlFilter> ret;
-  ad_utility::HashSet<string> coveredVariables;
+  ad_utility::HashSet<Variable> coveredVariables;
   for (auto n : nodes) {
     auto& node = *_nodeMap.find(n)->second;
     coveredVariables.insert(node._variables.begin(), node._variables.end());
   }
   for (auto& f : origFilters) {
-    if (std::ranges::any_of(f.expression_.containedVariables(),
-                            [&](const auto* var) {
-                              return coveredVariables.contains(var->name());
-                            })) {
+    if (std::ranges::any_of(
+            f.expression_.containedVariables(),
+            [&](const auto* var) { return coveredVariables.contains(*var); })) {
       ret.push_back(f);
     }
   }
@@ -1864,7 +1859,7 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
   // complex than need be.
 
   // Create a map from context var to triples it occurs in (the cliques).
-  ad_utility::HashMap<string, vector<size_t>> cvarsToTextNodes(
+  ad_utility::HashMap<Variable, vector<size_t>> cvarsToTextNodes(
       identifyTextCliques());
   if (cvarsToTextNodes.empty()) {
     return;

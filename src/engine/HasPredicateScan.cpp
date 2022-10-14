@@ -400,21 +400,31 @@ void HasPredicateScan::computeSubqueryS(
 }
 
 void HasPredicateScan::setSubject(const TripleComponent& subject) {
-  if (!subject.isString()) {
-    throw ParseException{absl::StrCat(
-        "The object of a ql:has-predicate triple must be an IRI, but was \"",
-        subject.toString(), "\"")};
+  // TODO<joka921> Make the _subject and _object `Variant<Variable,...>`.
+  if (subject.isString()) {
+    _subject = subject.getString();
+  } else if (subject.isVariable()) {
+    _subject = subject.getVariable().name();
+  } else {
+    throw ParseException{
+        absl::StrCat("The subject of a ql:has-predicate triple must be an IRI "
+                     "or a variable, but was \"",
+                     subject.toString(), "\"")};
   }
-  _subject = subject.getString();
 }
 
 void HasPredicateScan::setObject(const TripleComponent& object) {
-  if (!object.isString()) {
-    throw ParseException{absl::StrCat(
-        "The object of a ql:has-predicate triple must be an IRI, but was \"",
-        object.toString(), "\"")};
+  // TODO<joka921> Make the _subject and _object `Variant<Variable,...>`.
+  if (object.isString()) {
+    _object = object.getString();
+  } else if (object.isVariable()) {
+    _object = object.getVariable().name();
+  } else {
+    throw ParseException{
+        absl::StrCat("The object of a ql:has-predicate triple must be an IRI "
+                     "or a variable, but was \"",
+                     object.toString(), "\"")};
   }
-  _object = object.getString();
 }
 
 const std::string& HasPredicateScan::getObject() const { return _object; }

@@ -11,10 +11,11 @@
 #include <string>
 #include <variant>
 
-#include "../global/Constants.h"
-#include "../global/Id.h"
-#include "../util/Exception.h"
-#include "../util/Forward.h"
+#include "global/Constants.h"
+#include "global/Id.h"
+#include "parser/data/Variable.h"
+#include "util/Exception.h"
+#include "util/Forward.h"
 
 /// A wrapper around a `std::variant` that can hold the different types that the
 /// subject, predicate, or object of a triple can have in the Turtle Parser.
@@ -24,7 +25,7 @@
 class TripleComponent {
  private:
   // The underlying variant type.
-  using Variant = std::variant<std::string, double, int64_t>;
+  using Variant = std::variant<std::string, double, int64_t, Variable>;
   Variant _variant;
 
  public:
@@ -33,12 +34,24 @@ class TripleComponent {
   template <typename... Args>
   requires std::is_constructible_v<Variant, Args&&...> TripleComponent(
       Args&&... args)
-      : _variant(AD_FWD(args)...) {}
+      : _variant(AD_FWD(args)...) {
+    if (isString()) {
+      // Previously we stored variables as strings, so this check is a way
+      // to easily track places where this old behavior is accidentally still
+      // in place.
+      AD_CHECK(!getString().starts_with("?"));
+    }
+  }
 
   /// Construct from `string_view`s. We need to explicitly implement this
   /// constructor because  `string_views` are not implicitly convertible to
   /// `std::string`. Note that this constructor is deliberately NOT explicit.
-  TripleComponent(std::string_view sv) : _variant{std::string{sv}} {}
+  TripleComponent(std::string_view sv) : _variant{std::string{sv}} {
+    // Previously we stored variables as strings, so this check is a way
+    // to easily track places where this old behavior is accidentally still
+    // in place.
+    AD_CHECK(!getString().starts_with("?"));
+  }
 
   /// Defaulted copy and move constructors.
   TripleComponent(const TripleComponent&) = default;
@@ -85,7 +98,7 @@ class TripleComponent {
   /// TODO<joka921> This is a hack which has to be replaced once we have a
   /// proper type for a variable.
   [[nodiscard]] bool isVariable() const {
-    return isString() && getString().starts_with('?');
+    return std::holds_alternative<Variable>(_variant);
   }
 
   /// Access the value. If one of those methods is called but the variant
@@ -101,6 +114,10 @@ class TripleComponent {
   }
   [[nodiscard]] const int64_t& getInt() const {
     return std::get<int64_t>(_variant);
+  }
+
+  [[nodiscard]] const Variable& getVariable() const {
+    return std::get<Variable>(_variant);
   }
 
   /// Convert to an RDF literal. `std::strings` will be emitted directly,
@@ -129,6 +146,9 @@ class TripleComponent {
         return Id::makeFromInt(value);
       } else if constexpr (std::is_same_v<T, double>) {
         return Id::makeFromDouble(value);
+      } else if constexpr (std::is_same_v<T, Variable>) {
+        // Cannot turn a variable into a ValueId.
+        AD_FAIL()
       } else {
         static_assert(ad_utility::alwaysFalse<T>);
       }
@@ -158,8 +178,15 @@ class TripleComponent {
   /// creation of descriptors and cache keys.
   friend std::ostream& operator<<(std::ostream& stream,
                                   const TripleComponent& obj) {
-    std::visit([&stream](const auto& value) -> void { stream << value; },
-               obj._variant);
+    std::visit(
+        [&stream]<typename T>(const T& value) -> void {
+          if constexpr (std::is_same_v<T, Variable>) {
+            stream << value.name();
+          } else {
+            stream << value;
+          }
+        },
+        obj._variant);
     return stream;
   }
 

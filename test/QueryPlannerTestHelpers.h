@@ -4,12 +4,15 @@
 
 #pragma once
 
+#include "./util/GTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
 #include "gmock/gmock-matchers.h"
 #include "gmock/gmock.h"
 #include "parser/SparqlParser.h"
+
+using ad_utility::source_location;
 
 namespace queryPlannerTestHelpers {
 using namespace ::testing;
@@ -55,7 +58,9 @@ QueryExecutionTree parseAndPlan(std::string query) {
 // TODO<joka921> use `source_location` as soon as qup42's PR is integrated...
 // Check that the `QueryExecutionTree` that is obtained by parsing and planning
 // the `query` matches the `matcher`.
-void expect(std::string query, auto matcher) {
+void expect(std::string query, auto matcher,
+            source_location l = source_location::current()) {
+  auto trace = generateLocationTrace(l, "expect");
   auto qet = parseAndPlan(std::move(query));
   EXPECT_THAT(qet, matcher);
 }

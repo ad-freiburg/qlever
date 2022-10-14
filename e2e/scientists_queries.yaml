@@ -758,6 +758,17 @@ queries:
       - contains_row: ["<Weight>", 1]
       - contains_row: ["<label>", 1]
 
+  - query : property_path_plus
+    type: no-text
+    sparql: |
+      SELECT ?x ?y WHERE {
+        ?x <Children>+ ?y .
+      }
+    checks:
+      - num_rows: 3072
+      - num_cols: 2
+      - selected: ["?x", "?y"]
+      - contains_row: ["<Christian_Bohr>", "<Aage_Bohr>"]
 
   - query : property_path_trans_and_or
     type: no-text

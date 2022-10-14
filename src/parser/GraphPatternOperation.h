@@ -102,15 +102,14 @@ class Subquery {
   const ParsedQuery& get() const;
 };
 
-// It seems as if this class is never actually set.
-// TODO<joka921> Further explore this and throw it out.
 struct TransPath {
   // The name of the left and right end of the transitive operation
   TripleComponent _left;
   TripleComponent _right;
   // The name of the left and right end of the subpath
-  std::string _innerLeft;
-  std::string _innerRight;
+  // TODO<joka921> Should this be a `Variable`? or `optional<Variable>`?
+  TripleComponent _innerLeft;
+  TripleComponent _innerRight;
   size_t _min = 0;
   size_t _max = 0;
   GraphPattern _childGraphPattern;

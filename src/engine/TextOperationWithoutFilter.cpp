@@ -19,7 +19,7 @@ size_t TextOperationWithoutFilter::getResultWidth() const {
 // _____________________________________________________________________________
 TextOperationWithoutFilter::TextOperationWithoutFilter(
     QueryExecutionContext* qec, const string& words,
-    const std::set<string>& variables, const string& cvar, size_t textLimit)
+    const SetOfVariables& variables, const Variable& cvar, size_t textLimit)
     : Operation(qec),
       _words(words),
       _variables(variables),
@@ -32,11 +32,12 @@ Operation::VariableToColumnMap
 TextOperationWithoutFilter::computeVariableToColumnMap() const {
   ad_utility::HashMap<string, size_t> vcmap;
   size_t index = 0;
-  vcmap[_cvar] = index++;
-  vcmap[absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, _cvar.substr(1))] = index++;
+  vcmap[_cvar.name()] = index++;
+  vcmap[absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, _cvar.name().substr(1))] =
+      index++;
   for (const auto& var : _variables) {
     if (var != _cvar) {
-      vcmap[var] = index++;
+      vcmap[var.name()] = index++;
     }
   }
   return vcmap;
