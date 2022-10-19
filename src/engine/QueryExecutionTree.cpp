@@ -520,9 +520,22 @@ ad_utility::streams::stream_generator QueryExecutionTree::writeRdfGraphTurtle(
     co_yield ' ';
     co_yield triple._predicate;
     co_yield ' ';
-    co_yield triple._object.starts_with('"')
-        ? RdfEscaping::validRDFLiteralFromNormalized(triple._object)
-        : triple._object;
+    // NOTE: It's tempting to co_yield an expression using a ternary operator
+    // here, but that's wrong because function argument is a std::string_view,
+    // which depends on the std::string `triple._object`, which might have
+    // changed when the function is executed.
+    //
+    // co_yield triple._object.starts_with('"')
+    //     ? RdfEscaping::validRDFLiteralFromNormalized(triple._object)
+    //     : triple._object;
+    //
+    if (triple._object.starts_with('"')) {
+      std::string objectAsValidRdfLiteral =
+          RdfEscaping::validRDFLiteralFromNormalized(triple._object);
+      co_yield objectAsValidRdfLiteral;
+    } else {
+      co_yield triple._object;
+    }
     co_yield " .\n";
   }
 }
