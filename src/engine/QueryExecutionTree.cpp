@@ -520,7 +520,9 @@ ad_utility::streams::stream_generator QueryExecutionTree::writeRdfGraphTurtle(
     co_yield ' ';
     co_yield triple._predicate;
     co_yield ' ';
-    co_yield triple._object;
+    co_yield triple._object.starts_with('"')
+        ? RdfEscaping::validRDFLiteralFromNormalized(triple._object)
+        : triple._object;
     co_yield " .\n";
   }
 }
