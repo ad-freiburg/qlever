@@ -140,13 +140,20 @@ void Bind::computeExpressionBind(
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
     if constexpr (isVariable) {
-      auto column = getInternallyVisibleVariableColumns().at(singleResult);
-      for (size_t i = 0; i < inSize; ++i) {
-        output(i, inCols) = output(i, column);
+      if (singleResult.name() == "?RAND") {
+        for (size_t i = 0; i < inSize; ++i) {
+          output(i, inCols) = Id::makeFromDouble(drand48());
+        }
+        *resultType = qlever::ResultType::FLOAT;
+      } else {
+        auto column = getInternallyVisibleVariableColumns().at(singleResult);
+        for (size_t i = 0; i < inSize; ++i) {
+          output(i, inCols) = output(i, column);
+        }
+        *resultType =
+            evaluationContext._variableToColumnAndResultTypeMap.at(singleResult)
+                .second;
       }
-      *resultType =
-          evaluationContext._variableToColumnAndResultTypeMap.at(singleResult)
-              .second;
     } else if constexpr (isStrongId) {
       for (size_t i = 0; i < inSize; ++i) {
         output(i, inCols) = singleResult;

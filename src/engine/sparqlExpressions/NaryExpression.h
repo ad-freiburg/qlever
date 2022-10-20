@@ -8,9 +8,11 @@
 #ifndef QLEVER_NARYEXPRESSION_H
 #define QLEVER_NARYEXPRESSION_H
 
-#include "../../util/GeoSparqlHelpers.h"
-#include "./SparqlExpression.h"
-#include "./SparqlExpressionGenerators.h"
+#include <engine/sparqlExpressions/SparqlExpression.h>
+#include <engine/sparqlExpressions/SparqlExpressionGenerators.h>
+#include <util/GeoSparqlHelpers.h>
+
+#include <cstdlib>
 
 namespace sparqlExpression {
 namespace detail {
@@ -170,19 +172,61 @@ using LatitudeExpression =
 using DistExpression =
     NARY<2, FV<decltype(ad_utility::wktDist), StringValueGetter>>;
 
+// Date functions.
+template <size_t pos1, size_t pos2>
+inline auto extractNumberFromDate = [](const auto& dateAsString) -> long int {
+  static_assert(pos2 > pos1);
+  const size_t offset = std::strlen(VALUE_DATE_PREFIX) + 15;
+  if (dateAsString.size() >= pos2) {
+    return std::atol(dateAsString.data() + offset + pos1);
+  } else {
+    return 0;
+  }
+};
+using YearExpression =
+    NARY<1, FV<decltype(extractNumberFromDate<0, 4>), StringValueGetter>>;
+using MonthExpression =
+    NARY<1, FV<decltype(extractNumberFromDate<5, 7>), StringValueGetter>>;
+using DayExpression =
+    NARY<1, FV<decltype(extractNumberFromDate<8, 10>), StringValueGetter>>;
+
+// Convert to string.
+inline auto str = [](const auto& s) -> std::string { return s; };
+using StrExpression = NARY<1, FV<decltype(str), StringValueGetter>>;
+
+// Compute string length. NOTE: The implementation assumes that if the string
+// contains one quote, it contains at least two.
+inline auto strlen = [](const auto& s) -> long int {
+  auto pos = s.find_last_of('"');
+  if (pos == std::string::npos || pos == 0) {
+    return static_cast<long int>(s.size());
+  } else {
+    return static_cast<long int>(pos - 1);
+  }
+};
+using StrlenExpression = NARY<1, FV<decltype(strlen), StringValueGetter>>;
+
 }  // namespace detail
 
 using detail::AddExpression;
 using detail::AndExpression;
-using detail::DistExpression;
 using detail::DivideExpression;
-using detail::LatitudeExpression;
-using detail::LongitudeExpression;
 using detail::MultiplyExpression;
 using detail::OrExpression;
 using detail::SubtractExpression;
 using detail::UnaryMinusExpression;
 using detail::UnaryNegateExpression;
+
+using detail::DistExpression;
+using detail::LatitudeExpression;
+using detail::LongitudeExpression;
+
+using detail::DayExpression;
+using detail::MonthExpression;
+using detail::YearExpression;
+
+using detail::StrExpression;
+using detail::StrlenExpression;
 
 }  // namespace sparqlExpression
 

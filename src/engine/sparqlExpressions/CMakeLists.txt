@@ -5,11 +5,11 @@ add_library(sparqlExpressions
         GroupConcatExpression.h
         SparqlExpressionGenerators.h
         SparqlExpressionValueGetters.h SparqlExpressionValueGetters.cpp
-        NaryExpression.h
+        NaryExpression.h NaryExpression.cpp
         SetOfIntervals.h SetOfIntervals.cpp
         LiteralExpression.h GroupConcatExpression.h
         SparqlExpressionPimpl.h SparqlExpressionPimpl.cpp
-        SampleExpression.h SampleExpression.cpp NaryExpression.cpp
+        SampleExpression.h SampleExpression.cpp
         RelationalExpressions.cpp AggregateExpression.cpp RegexExpression.cpp
         LangExpression.cpp)
 
