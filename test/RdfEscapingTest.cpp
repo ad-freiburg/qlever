@@ -22,9 +22,8 @@ TEST(RdfEscapingTest, testEscapeForTsv) {
 }
 
 TEST(RdfEscapingTest, testValidRDFLiteralFromNormalized) {
-  ASSERT_EQ(validRDFLiteralFromNormalized(R"(""alpha")"), R"("\"alpha")");
-  ASSERT_EQ(validRDFLiteralFromNormalized(R"("be"ta"@en)"), R"("be\"ta"@en)");
-  ASSERT_EQ(validRDFLiteralFromNormalized(R"("gamma""^^<string>)"),
-            R"("gamma\""^^<string>)");
+  ASSERT_EQ(validRDFLiteralFromNormalized(R"(""\a\"")"), R"("\"\\a\\\"")");
+  ASSERT_EQ(validRDFLiteralFromNormalized(R"("\b\"@en)"), R"("\\b\\"@en)");
+  ASSERT_EQ(validRDFLiteralFromNormalized(R"("\c""^^<s>)"), R"("\\c\""^^<s>)");
 }
 }  // namespace RdfEscaping

@@ -223,14 +223,17 @@ std::string validRDFLiteralFromNormalized(std::string_view normLiteral) {
   size_t posLastQuote = normLiteral.rfind('"');
   // If there are onyl two quotes (the first and the last, which every
   // normalized literal has), there is nothing to do.
-  if (posSecondQuote == posLastQuote) {
+  if (posSecondQuote == posLastQuote &&
+      normLiteral.find('\\') == std::string::npos) {
     return std::string{normLiteral};
   }
-  // Otherwise escape all quotes in the part between the first and the last
-  // quote and leave the rest unchanged.
+  // Otherwise escape first all backlashes then all quotes (the order is
+  // important) in the part between the first and the last quote and leave the
+  // rest unchanged.
   std::string content = std::string(normLiteral.substr(1, posLastQuote - 1));
-  return absl::StrCat("\"", detail::replaceAll(content, "\"", "\\\""),
-                      normLiteral.substr(posLastQuote));
+  content = detail::replaceAll(content, "\\", "\\\\");
+  content = detail::replaceAll(content, "\"", "\\\"");
+  return absl::StrCat("\"", content, normLiteral.substr(posLastQuote));
 }
 
 /**
