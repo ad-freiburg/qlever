@@ -7,10 +7,11 @@
 
 // Generated from AcceptHeader.g4 by ANTLR 4.9.2
 
-#include "../../Exception.h"
-#include "../MediaTypes.h"
-#include "./generated/AcceptHeaderVisitor.h"
 #include "antlr4-runtime.h"
+#include "util/Exception.h"
+#include "util/HttpServer/HttpParser/generated/AcceptHeaderVisitor.h"
+#include "util/HttpServer/MediaTypes.h"
+#include "util/Log.h"
 
 /**
  * /brief Visitor class for the ANTLR-based Accept header parser. Main
@@ -103,9 +104,18 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
             ctx->type()->getText()}};
       }
     }
+    // TODO<joka921> Implement proper parsing of parameters. For now we just
+    // ignore them which is more graceful than always throwing, because a lot
+    // of agents (especially web browsers) automatically add some default
+    // parameters.
     if (!ctx->parameter().empty()) {
+      LOG(WARN) << "Ignoring unsupported media type parameters, the first of "
+                   "which is \""
+                << ctx->parameter()[0]->getText() << std::endl;
+      /*
       throw NotSupportedException{
           "Media type parameters, e.g.  \"charset=...\""};
+      */
     }
     return V{ad_utility::toMediaType(ctx->getText())};
   }
