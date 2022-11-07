@@ -13,6 +13,7 @@
 // module, etc.
 using VariableToColumnMap = ad_utility::HashMap<Variable, size_t>;
 
-// Return a vector that contains the contents of the `VariableToColumnMap` in ascending order of the column indices.
+// Return a vector that contains the contents of the `VariableToColumnMap` in
+// ascending order of the column indices.
 std::vector<std::pair<Variable, size_t>> sortedByColumnIndex(
     VariableToColumnMap map);
