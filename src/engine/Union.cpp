@@ -68,16 +68,6 @@ vector<size_t> Union::resultSortedOn() const { return {}; }
 VariableToColumnMap Union::computeVariableToColumnMap() const {
   using VarAndIndex = std::pair<Variable, size_t>;
 
-  // TODO<joka921> The "sorting by index" or "sorting by keys" should
-  // be a separate function, it is duplicated at least in the MultiColumnJoin.
-  auto getVarsSortedByIndex = [](const auto& subtree) {
-    const auto& subtreeVariableColumns = subtree->getVariableColumns();
-    std::vector<VarAndIndex> varsAsPairs(subtreeVariableColumns.begin(),
-                                         subtreeVariableColumns.end());
-    std::ranges::sort(varsAsPairs, {}, ad_utility::second);
-    return varsAsPairs;
-  };
-
   VariableToColumnMap variableColumns;
   size_t column = 0;
 
@@ -89,12 +79,11 @@ VariableToColumnMap Union::computeVariableToColumnMap() const {
         }
       };
 
-  auto addVariablesForSubtree =
-      [&getVarsSortedByIndex,
-       &addVariableColumnIfNotExists](const auto& subtree) {
-        std::ranges::for_each(getVarsSortedByIndex(subtree),
-                              addVariableColumnIfNotExists);
-      };
+  auto addVariablesForSubtree = [&addVariableColumnIfNotExists](
+                                    const auto& subtree) {
+    std::ranges::for_each(sortedByColumnIndex(subtree->getVariableColumns()),
+                          addVariableColumnIfNotExists);
+  };
 
   std::ranges::for_each(_subtrees, addVariablesForSubtree);
   return variableColumns;

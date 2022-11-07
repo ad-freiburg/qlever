@@ -729,12 +729,12 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
   p->_leftSideTree = leftop;
   p->_leftSideCol = inputCol;
   const auto& var = leftop->getVariableColumns();
-  for (auto col : var) {
-    if (col.second != inputCol) {
-      if (col.second > inputCol) {
-        p->_variableColumns[col.first] = col.second + 1;
+  for (const auto& [variable, columnIndex] : var) {
+    if (columnIndex != inputCol) {
+      if (columnIndex > inputCol) {
+        p->_variableColumns[variable] = columnIndex + 1;
       } else {
-        p->_variableColumns[col.first] = col.second + 2;
+        p->_variableColumns[variable] = columnIndex + 2;
       }
       p->_resultWidth++;
     }
@@ -745,6 +745,9 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePath> TransitivePath::bindRightSide(
     std::shared_ptr<QueryExecutionTree> rightop, size_t inputCol) const {
+  // TODO<joka921> `bindRightSide` and `bindLeftSide` are almost the same,
+  // could and should this be made generic? It probably requires refactoring
+  // quite a lot of this class though.
   // Enforce required sorting of `rightop`.
   rightop =
       QueryExecutionTree::createSortedTree(std::move(rightop), {inputCol});
@@ -753,13 +756,12 @@ std::shared_ptr<TransitivePath> TransitivePath::bindRightSide(
   p->_rightSideTree = rightop;
   p->_rightSideCol = inputCol;
   const auto& var = rightop->getVariableColumns();
-  // TODO<joka921> Use structured binding to make this more readable.
-  for (auto col : var) {
-    if (col.second != inputCol) {
-      if (col.second > inputCol) {
-        p->_variableColumns[col.first] = col.second + 1;
+  for (const auto& [variable, columnIndex] : var) {
+    if (columnIndex != inputCol) {
+      if (columnIndex > inputCol) {
+        p->_variableColumns[variable] = columnIndex + 1;
       } else {
-        p->_variableColumns[col.first] = col.second + 2;
+        p->_variableColumns[variable] = columnIndex + 2;
       }
       p->_resultWidth++;
     }

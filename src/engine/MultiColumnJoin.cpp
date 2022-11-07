@@ -119,14 +119,8 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
 VariableToColumnMap MultiColumnJoin::computeVariableToColumnMap() const {
   VariableToColumnMap retVal(_left->getVariableColumns());
   size_t columnIndex = retVal.size();
-  const auto variableColumnsRightSorted = [&] {
-    const auto& r = _right->getVariableColumns();
-    using P = std::pair<Variable, size_t>;
-    std::vector<P> v(r.begin(), r.end());
-    std::sort(v.begin(), v.end(),
-              [](const auto& a, const auto& b) { return a.second < b.second; });
-    return v;
-  }();
+  const auto variableColumnsRightSorted =
+      sortedByColumnIndex(_right->getVariableColumns());
   for (const auto& it : variableColumnsRightSorted) {
     bool isJoinColumn = false;
     for (const std::array<ColumnIndex, 2>& a : _joinColumns) {
