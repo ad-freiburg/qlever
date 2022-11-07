@@ -13,11 +13,6 @@
 // module, etc.
 using VariableToColumnMap = ad_utility::HashMap<Variable, size_t>;
 
-// TODO<joka921> Comment and move to .cpp file.
-inline std::vector<std::pair<Variable, size_t>> sortedByColumnIndex(
-    VariableToColumnMap map) {
-  std::vector<std::pair<Variable, size_t>> result{
-      std::make_move_iterator(map.begin()), std::make_move_iterator(map.end())};
-  std::ranges::sort(result, {}, ad_utility::second);
-  return result;
-}
+// Return a vector that contains the contents of the `VariableToColumnMap` in ascending order of the column indices.
+std::vector<std::pair<Variable, size_t>> sortedByColumnIndex(
+    VariableToColumnMap map);
