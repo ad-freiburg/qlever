@@ -28,8 +28,8 @@ TextOperationWithoutFilter::TextOperationWithoutFilter(
       _sizeEstimate(std::numeric_limits<size_t>::max()) {}
 
 // _____________________________________________________________________________
-Operation::VariableToColumnMap
-TextOperationWithoutFilter::computeVariableToColumnMap() const {
+VariableToColumnMap TextOperationWithoutFilter::computeVariableToColumnMap()
+    const {
   VariableToColumnMap vcmap;
   size_t index = 0;
   vcmap[_cvar] = index++;

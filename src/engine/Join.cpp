@@ -149,7 +149,7 @@ void Join::computeResult(ResultTable* result) {
 }
 
 // _____________________________________________________________________________
-Operation::VariableToColumnMap Join::computeVariableToColumnMap() const {
+VariableToColumnMap Join::computeVariableToColumnMap() const {
   VariableToColumnMap retVal;
   if (!isFullScanDummy(_left) && !isFullScanDummy(_right)) {
     retVal = _left->getVariableColumns();

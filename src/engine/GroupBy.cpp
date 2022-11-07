@@ -95,7 +95,7 @@ vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
   return cols;
 }
 
-Operation::VariableToColumnMap GroupBy::computeVariableToColumnMap() const {
+VariableToColumnMap GroupBy::computeVariableToColumnMap() const {
   VariableToColumnMap result;
   // The returned columns are all groupByVariables followed by aggregrates.
   size_t colIndex = 0;

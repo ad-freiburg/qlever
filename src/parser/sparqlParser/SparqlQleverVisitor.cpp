@@ -441,11 +441,7 @@ parsedQuery::GraphPatternOperation Visitor::visit(
 // ____________________________________________________________________________________
 parsedQuery::GraphPatternOperation Visitor::visit(
     Parser::ServiceGraphPatternContext* ctx) {
-  auto beg = ctx->groupGraphPattern()->getStart()->getStartIndex();
-  auto s = ctx->groupGraphPattern()->getStop()->getStopIndex();
-  auto s = ctx->getStart()->getInputStream()->getText()
-
-               reportNotSupported(ctx, "Federated queries (SERVICE) are");
+  reportNotSupported(ctx, "Federated queries (SERVICE) are");
 }
 
 // ____________________________________________________________________________________

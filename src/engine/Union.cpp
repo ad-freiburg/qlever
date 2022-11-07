@@ -65,7 +65,7 @@ size_t Union::getResultWidth() const {
 vector<size_t> Union::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
-Operation::VariableToColumnMap Union::computeVariableToColumnMap() const {
+VariableToColumnMap Union::computeVariableToColumnMap() const {
   using VarAndIndex = std::pair<Variable, size_t>;
 
   // TODO<joka921> The "sorting by index" or "sorting by keys" should

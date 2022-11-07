@@ -141,7 +141,7 @@ vector<size_t> IndexScan::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-Operation::VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
+VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   VariableToColumnMap res;
   size_t col = 0;
 

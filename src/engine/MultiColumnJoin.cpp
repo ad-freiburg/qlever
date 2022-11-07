@@ -116,8 +116,7 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
 }
 
 // _____________________________________________________________________________
-Operation::VariableToColumnMap MultiColumnJoin::computeVariableToColumnMap()
-    const {
+VariableToColumnMap MultiColumnJoin::computeVariableToColumnMap() const {
   VariableToColumnMap retVal(_left->getVariableColumns());
   size_t columnIndex = retVal.size();
   const auto variableColumnsRightSorted = [&] {

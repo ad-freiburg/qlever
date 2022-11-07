@@ -145,7 +145,7 @@ RegexExpression::RegexExpression(
 
 // ___________________________________________________________________________
 string RegexExpression::getCacheKey(
-    const sparqlExpression::VariableToColumnMap& varColMap) const {
+    const VariableToColumnMap& varColMap) const {
   return "REGEX expression " + child_->getCacheKey(varColMap) + " with " +
          regexAsString_;
 }

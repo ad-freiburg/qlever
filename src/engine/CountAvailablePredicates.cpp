@@ -61,8 +61,8 @@ vector<size_t> CountAvailablePredicates::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-Operation::VariableToColumnMap
-CountAvailablePredicates::computeVariableToColumnMap() const {
+VariableToColumnMap CountAvailablePredicates::computeVariableToColumnMap()
+    const {
   VariableToColumnMap varCols;
   varCols[_predicateVariable] = 0;
   varCols[_countVariable] = 1;

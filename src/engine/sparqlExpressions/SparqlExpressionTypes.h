@@ -92,12 +92,6 @@ namespace sparqlExpression {
 /// A list of StrongIds that all have the same datatype.
 using StrongIdsWithResultType = VectorWithMemoryLimit<ValueId>;
 
-/// Typedef for a map from variable names to the corresponding column in the
-/// input of a SparqlExpression.
-/// TODO<joka921> extract the currently `three` definitions of
-/// `VariableToColumnMap` to a separate header.
-using VariableToColumnMap = ad_utility::HashMap<Variable, size_t>;
-
 /// Typedef for a map from variables names to (input column, type of input
 /// column.
 using VariableToColumnAndResultTypeMap =

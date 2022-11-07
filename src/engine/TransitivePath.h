@@ -138,5 +138,5 @@ class TransitivePath : public Operation {
  private:
   virtual void computeResult(ResultTable* result) override;
 
-  Operation::VariableToColumnMap computeVariableToColumnMap() const override;
+  VariableToColumnMap computeVariableToColumnMap() const override;
 };

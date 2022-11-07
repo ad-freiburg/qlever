@@ -108,8 +108,7 @@ vector<size_t> HasPredicateScan::resultSortedOn() const {
   return {};
 }
 
-Operation::VariableToColumnMap HasPredicateScan::computeVariableToColumnMap()
-    const {
+VariableToColumnMap HasPredicateScan::computeVariableToColumnMap() const {
   VariableToColumnMap varCols;
   using V = Variable;
   switch (_type) {

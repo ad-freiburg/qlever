@@ -64,7 +64,7 @@ string Bind::asStringImpl(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-Operation::VariableToColumnMap Bind::computeVariableToColumnMap() const {
+VariableToColumnMap Bind::computeVariableToColumnMap() const {
   auto res = _subtree->getVariableColumns();
   // The new variable is always appended at the end.
   res[_bind._target] = getResultWidth() - 1;

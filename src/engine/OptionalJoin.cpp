@@ -122,8 +122,7 @@ void OptionalJoin::computeResult(ResultTable* result) {
 }
 
 // _____________________________________________________________________________
-Operation::VariableToColumnMap OptionalJoin::computeVariableToColumnMap()
-    const {
+VariableToColumnMap OptionalJoin::computeVariableToColumnMap() const {
   VariableToColumnMap retVal(_left->getVariableColumns());
   size_t leftSize = _left->getResultWidth();
   for (const auto& [variable, columnIndexRight] :

@@ -47,7 +47,7 @@ class Values : public Operation {
  private:
   virtual void computeResult(ResultTable* result) override;
 
-  Operation::VariableToColumnMap computeVariableToColumnMap() const override;
+  VariableToColumnMap computeVariableToColumnMap() const override;
 
   template <size_t I>
   void writeValues(IdTable* res, const Index& index,
