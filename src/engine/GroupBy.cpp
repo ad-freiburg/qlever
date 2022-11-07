@@ -40,7 +40,6 @@ string GroupBy::asStringImpl(size_t indent) const {
     os << " ";
   }
   os << "GROUP_BY ";
-  // TODO<joka921> The `_groupByVariables` should have type `Variable`
   for (const auto& var : _groupByVariables) {
     os << varMap.at(var) << ", ";
   }

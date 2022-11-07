@@ -286,7 +286,6 @@ bool QueryExecutionTree::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
-// TODO<joka921> This should take a `Variable` as an argument.
 bool QueryExecutionTree::isVariableCovered(Variable variable) const {
   AD_CHECK(_rootOperation);
   return getVariableColumns().contains(variable);

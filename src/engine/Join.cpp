@@ -60,7 +60,6 @@ string Join::asStringImpl(size_t indent) const {
 // _____________________________________________________________________________
 string Join::getDescriptor() const {
   std::string joinVar = "";
-  // TODO<joka921> This can be some kind of `ranges::find_if`.
   for (auto p : _left->getVariableColumns()) {
     if (p.second == _leftJoinCol) {
       joinVar = p.first.name();

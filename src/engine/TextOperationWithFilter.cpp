@@ -37,7 +37,6 @@ VariableToColumnMap TextOperationWithFilter::computeVariableToColumnMap()
   // Subtract one because the entity that we filtered on
   // is provided by the filter table and still has the same place there.
   vcmap[_cvar] = 0;
-  // TODO<joka921> Make this a function.
   vcmap[_cvar.getTextscoreVariable()] = 1;
   size_t colN = 2;
   const auto& filterColumns = _filterResult.get()->getVariableColumns();
