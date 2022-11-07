@@ -95,15 +95,6 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
 
   antlrcpp::Any visitMediaRange(
       AcceptHeaderParser::MediaRangeContext* ctx) override {
-    using V = std::optional<ad_utility::MediaTypeWithQuality::Variant>;
-    if (!ctx->subtype()) {
-      if (!ctx->type()) {
-        return V{ad_utility::MediaTypeWithQuality::Wildcard{}};
-      } else {
-        return V{ad_utility::MediaTypeWithQuality::TypeWithWildcard{
-            ctx->type()->getText()}};
-      }
-    }
     // TODO<joka921> Implement proper parsing of parameters. For now we just
     // ignore them which is more graceful than always throwing, because a lot
     // of agents (especially web browsers) automatically add some default
@@ -117,7 +108,20 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
           "Media type parameters, e.g.  \"charset=...\""};
       */
     }
-    return V{ad_utility::toMediaType(ctx->getText())};
+    using V = std::optional<ad_utility::MediaTypeWithQuality::Variant>;
+    if (!ctx->subtype()) {
+      if (!ctx->type()) {
+        return V{ad_utility::MediaTypeWithQuality::Wildcard{}};
+      } else {
+        return V{ad_utility::MediaTypeWithQuality::TypeWithWildcard{
+            ctx->type()->getText()}};
+      }
+    } else {
+      AD_CHECK(ctx->type() && ctx->subtype());
+      return V{ad_utility::toMediaType(absl::StrCat(
+          ctx->type()->getText(), "/", ctx->subtype()->getText()))};
+    }
+    AD_FAIL();
   }
 
   antlrcpp::Any visitType(AcceptHeaderParser::TypeContext* ctx) override {

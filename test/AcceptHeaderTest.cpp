@@ -102,8 +102,13 @@ TEST(AcceptHeaderParser, QualityValues) {
 }
 
 TEST(AcceptHeaderParser, CharsetParametersNotSupported) {
+  // Currently the `charset=UTF-8` is simply ignored.
   auto p = std::string{"application/json;charset=UTF-8, text/Html"};
-  ASSERT_THROW(parse(p), AcceptHeaderQleverVisitor::NotSupportedException);
+  // auto p = std::string{"application/json, text/Html"};
+  auto c = parse(p);
+  ASSERT_EQ(c.size(), 2u);
+  ASSERT_EQ(c[0], MediaType::json);
+  ASSERT_EQ(c[1], MediaType::html);
 }
 
 TEST(AcceptHeaderParser, WildcardSubtype) {
