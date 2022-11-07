@@ -54,3 +54,8 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
   }
   return std::nullopt;
 }
+
+// _____________________________________________________________________________
+Variable Variable::getTextscoreVariable() const {
+  return Variable{absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, name().substr(1))};
+}

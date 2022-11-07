@@ -77,16 +77,15 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
 }
 
 // _____________________________________________________________________________
-// TODO<joka921> Refactor this to take a `Variable`
-size_t QueryExecutionTree::getVariableColumn(const string& variable) const {
+size_t QueryExecutionTree::getVariableColumn(const Variable& variable) const {
   AD_CHECK(_rootOperation);
-  auto var = Variable{variable};
   const auto& varCols = getVariableColumns();
-  if (!varCols.contains(var)) {
+  if (!varCols.contains(variable)) {
     AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-             "Variable could not be mapped to result column. Var: " + variable);
+             "Variable could not be mapped to result column. Var: " +
+                 variable.name());
   }
-  return varCols.at(var);
+  return varCols.at(variable);
 }
 
 // ___________________________________________________________________________
@@ -288,9 +287,9 @@ bool QueryExecutionTree::knownEmptyResult() {
 
 // _____________________________________________________________________________
 // TODO<joka921> This should take a `Variable` as an argument.
-bool QueryExecutionTree::varCovered(string var) const {
+bool QueryExecutionTree::isVariableCovered(Variable variable) const {
   AD_CHECK(_rootOperation);
-  return getVariableColumns().contains(Variable{var});
+  return getVariableColumns().contains(variable);
 }
 
 // _______________________________________________________________________

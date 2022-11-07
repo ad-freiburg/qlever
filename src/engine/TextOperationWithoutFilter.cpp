@@ -33,9 +33,7 @@ VariableToColumnMap TextOperationWithoutFilter::computeVariableToColumnMap()
   VariableToColumnMap vcmap;
   size_t index = 0;
   vcmap[_cvar] = index++;
-  // TODO<joka921> make this a function, probably in the `Variable` header.
-  vcmap[Variable{absl::StrCat(TEXTSCORE_VARIABLE_PREFIX,
-                              _cvar.name().substr(1))}] = index++;
+  vcmap[_cvar.getTextscoreVariable()] = index++;
   // TODO<joka921> The order of the variables is not deterministic, check
   // whether this is correct.
   for (const auto& var : _variables) {

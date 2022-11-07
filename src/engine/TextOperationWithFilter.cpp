@@ -38,8 +38,7 @@ VariableToColumnMap TextOperationWithFilter::computeVariableToColumnMap()
   // is provided by the filter table and still has the same place there.
   vcmap[_cvar] = 0;
   // TODO<joka921> Make this a function.
-  vcmap[Variable{
-      absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, _cvar.name().substr(1))}] = 1;
+  vcmap[_cvar.getTextscoreVariable()] = 1;
   size_t colN = 2;
   const auto& filterColumns = _filterResult.get()->getVariableColumns();
   // TODO<joka921> The order of the `_variables` is not deterministic,

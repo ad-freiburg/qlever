@@ -35,6 +35,9 @@ class Variable {
   // Needed for consistency with the `Alias` class.
   [[nodiscard]] const std::string& targetVariable() const { return _name; }
 
+  // Convert `?someVariable` into `?ql_textscore_someVariable`
+  Variable getTextscoreVariable() const;
+
   bool operator==(const Variable&) const = default;
 
   // Make the type hashable for absl, see
