@@ -179,11 +179,16 @@ ad_utility::UrlParser::UrlPathAndParameters Server::getUrlPathAndParameters(
     // format as if it came from a GET request. The second argument to
     // `parseGetRequestTarget` says whether the function should apply URL
     // decoding.
-    if (contentType == contentTypeUrlEncoded) {
+    // Note: For simplicity we only check via `starts_with`. This ignores
+    // additional parameters like `application/sparql-query;charset=utf8`. We
+    // currently always expect UTF-8.
+    // TODO<joka921> Implement more complete parsing that allows the checking of
+    // these parameters.
+    if (contentType.starts_with(contentTypeUrlEncoded)) {
       return ad_utility::UrlParser::parseGetRequestTarget(
           absl::StrCat(request.target(), "?", request.body()), true);
     }
-    if (contentType == contentTypeSparqlQuery) {
+    if (contentType.starts_with(contentTypeSparqlQuery)) {
       return ad_utility::UrlParser::parseGetRequestTarget(
           absl::StrCat(request.target(), "?query=", request.body()), false);
     }
