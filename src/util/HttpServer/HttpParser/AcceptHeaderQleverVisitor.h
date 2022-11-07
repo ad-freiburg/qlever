@@ -103,10 +103,6 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
       LOG(WARN) << "Ignoring unsupported media type parameters, the first of "
                    "which is \""
                 << ctx->parameter()[0]->getText() << std::endl;
-      /*
-      throw NotSupportedException{
-          "Media type parameters, e.g.  \"charset=...\""};
-      */
     }
     using V = std::optional<ad_utility::MediaTypeWithQuality::Variant>;
     if (!ctx->subtype()) {
