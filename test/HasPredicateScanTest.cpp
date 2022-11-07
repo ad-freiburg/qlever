@@ -65,9 +65,10 @@ class DummyOperation : public Operation {
 
  private:
   virtual VariableToColumnMap computeVariableToColumnMap() const override {
-    ad_utility::HashMap<string, size_t> m;
-    m["?a"] = 0;
-    m["?b"] = 1;
+    VariableToColumnMap m;
+    using V = Variable;
+    m[V{"?a"}] = 0;
+    m[V{"?b"}] = 1;
     return m;
   }
 };

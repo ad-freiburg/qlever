@@ -24,7 +24,7 @@ class QueryExecutionTree;
 
 class Operation {
  public:
-  using VariableToColumnMap = ad_utility::HashMap<std::string, size_t>;
+  using VariableToColumnMap = ad_utility::HashMap<Variable, size_t>;
   // Default Constructor.
   Operation() : _executionContext(nullptr) {}
 

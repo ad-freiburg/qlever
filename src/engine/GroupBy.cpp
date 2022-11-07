@@ -42,12 +42,13 @@ string GroupBy::asStringImpl(size_t indent) const {
     os << " ";
   }
   os << "GROUP_BY ";
+  // TODO<joka921> The `_groupByVariables` should have type `Variable`
   for (const std::string& var : _groupByVariables) {
-    os << varMap.at(var) << ", ";
+    os << varMap.at(Variable{var}) << ", ";
   }
   for (const auto& alias : _aliases) {
     os << alias._expression.getCacheKey(varMapInput) << " AS "
-       << varMap.at(alias._target.name());
+       << varMap.at(alias._target);
   }
   os << std::endl;
   os << _subtree->asString(indent);
@@ -67,7 +68,7 @@ vector<size_t> GroupBy::resultSortedOn() const {
   vector<size_t> sortedOn;
   sortedOn.reserve(_groupByVariables.size());
   for (const std::string& var : _groupByVariables) {
-    sortedOn.push_back(varCols[var]);
+    sortedOn.push_back(varCols[Variable{var}]);
   }
   return sortedOn;
 }
@@ -79,13 +80,12 @@ vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
     return cols;
   }
 
-  ad_utility::HashMap<string, size_t> inVarColMap =
-      subtree->getVariableColumns();
+  const auto& inVarColMap = subtree->getVariableColumns();
 
   std::unordered_set<size_t> sortColSet;
 
   for (const auto& var : _groupByVariables) {
-    size_t col = inVarColMap[var];
+    size_t col = inVarColMap.at(Variable{var});
     // avoid sorting by a column twice
     if (sortColSet.find(col) == sortColSet.end()) {
       sortColSet.insert(col);
@@ -100,11 +100,11 @@ Operation::VariableToColumnMap GroupBy::computeVariableToColumnMap() const {
   // The returned columns are all groupByVariables followed by aggregrates.
   size_t colIndex = 0;
   for (const std::string& var : _groupByVariables) {
-    result[var] = colIndex;
+    result[Variable{var}] = colIndex;
     colIndex++;
   }
   for (const Alias& a : _aliases) {
-    result[a._target.name()] = colIndex;
+    result[a._target] = colIndex;
     colIndex++;
   }
   return result;
@@ -282,10 +282,9 @@ void GroupBy::computeResult(ResultTable* result) {
   aggregates.reserve(_aliases.size() + _groupByVariables.size());
 
   // parse the group by columns
-  ad_utility::HashMap<string, size_t> subtreeVarCols =
-      _subtree->getVariableColumns();
+  const auto& subtreeVarCols = _subtree->getVariableColumns();
   for (const string& var : _groupByVariables) {
-    auto it = subtreeVarCols.find(var);
+    auto it = subtreeVarCols.find(Variable{var});
     if (it == subtreeVarCols.end()) {
       LOG(WARN) << "Group by variable " << var << " is not groupable."
                 << std::endl;
@@ -300,7 +299,7 @@ void GroupBy::computeResult(ResultTable* result) {
   const auto& varColMap = getInternallyVisibleVariableColumns();
   for (const Alias& alias : _aliases) {
     aggregates.push_back(
-        Aggregate{alias._expression, varColMap.at(alias._target.name())});
+        Aggregate{alias._expression, varColMap.at(alias._target)});
   }
 
   // populate the result type vector
@@ -310,14 +309,15 @@ void GroupBy::computeResult(ResultTable* result) {
   // also copied. The result type of the other columns is set when the
   // values are computed.
   for (const string& var : _groupByVariables) {
-    result->_resultTypes[varColMap.at(var)] =
-        subresult->getResultType(subtreeVarCols[var]);
+    auto v = Variable{var};
+    result->_resultTypes[varColMap.at(v)] =
+        subresult->getResultType(subtreeVarCols.at(v));
   }
 
   std::vector<size_t> groupByCols;
   groupByCols.reserve(_groupByVariables.size());
   for (const string& var : _groupByVariables) {
-    groupByCols.push_back(subtreeVarCols[var]);
+    groupByCols.push_back(subtreeVarCols.at(Variable{var}));
   }
 
   std::vector<ResultTable::ResultType> inputResultTypes;

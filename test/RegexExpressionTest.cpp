@@ -192,8 +192,8 @@ TEST(RegexExpression, getCacheKey) {
   auto exp2 = makeRegexExpression("?first", "alp");
 
   VariableToColumnMap map;
-  map["?first"] = 0;
-  map["?second"] = 1;
+  map[Variable{"?first"}] = 0;
+  map[Variable{"?second"}] = 1;
   ASSERT_EQ(exp1.getCacheKey(map), exp2.getCacheKey(map));
 
   // Different regex, different cache key.
@@ -211,7 +211,7 @@ TEST(RegexExpression, getCacheKey) {
   // Different variable name, but the variable is stored in the same column ->
   // same cache key.
   auto map2 = map;
-  map2["?otherFirst"] = 0;
+  map2[Variable{"?otherFirst"}] = 0;
   auto exp6 = makeRegexExpression("?otherFirst", "alp");
   ASSERT_EQ(exp1.getCacheKey(map), exp6.getCacheKey(map2));
 }

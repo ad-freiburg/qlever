@@ -19,8 +19,7 @@ Union::Union(QueryExecutionContext* qec,
   _subtrees[1] = t2;
 
   // compute the column origins
-  ad_utility::HashMap<string, size_t> variableColumns =
-      getInternallyVisibleVariableColumns();
+  VariableToColumnMap variableColumns = getInternallyVisibleVariableColumns();
   _columnOrigins.resize(variableColumns.size(), {NO_COLUMN, NO_COLUMN});
   const auto& t1VarCols = t1->getVariableColumns();
   const auto& t2VarCols = t2->getVariableColumns();
@@ -67,8 +66,10 @@ vector<size_t> Union::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
 Operation::VariableToColumnMap Union::computeVariableToColumnMap() const {
-  using VarAndIndex = std::pair<std::string, size_t>;
+  using VarAndIndex = std::pair<Variable, size_t>;
 
+  // TODO<joka921> The "sorting by index" or "sorting by keys" should
+  // be a separate function, it is duplicated at least in the MultiColumnJoin.
   auto getVarsSortedByIndex = [](const auto& subtree) {
     const auto& subtreeVariableColumns = subtree->getVariableColumns();
     std::vector<VarAndIndex> varsAsPairs(subtreeVariableColumns.begin(),

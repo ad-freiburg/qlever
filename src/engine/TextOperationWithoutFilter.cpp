@@ -30,14 +30,17 @@ TextOperationWithoutFilter::TextOperationWithoutFilter(
 // _____________________________________________________________________________
 Operation::VariableToColumnMap
 TextOperationWithoutFilter::computeVariableToColumnMap() const {
-  ad_utility::HashMap<string, size_t> vcmap;
+  VariableToColumnMap vcmap;
   size_t index = 0;
-  vcmap[_cvar.name()] = index++;
-  vcmap[absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, _cvar.name().substr(1))] =
-      index++;
+  vcmap[_cvar] = index++;
+  // TODO<joka921> make this a function, probably in the `Variable` header.
+  vcmap[Variable{absl::StrCat(TEXTSCORE_VARIABLE_PREFIX,
+                              _cvar.name().substr(1))}] = index++;
+  // TODO<joka921> The order of the variables is not deterministic, check
+  // whether this is correct.
   for (const auto& var : _variables) {
     if (var != _cvar) {
-      vcmap[var.name()] = index++;
+      vcmap[var] = index++;
     }
   }
   return vcmap;

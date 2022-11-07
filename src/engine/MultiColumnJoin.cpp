@@ -63,7 +63,7 @@ string MultiColumnJoin::getDescriptor() const {
       // If the left join column matches the index of a variable in the left
       // subresult.
       if (jc[0] == p.second) {
-        joinVars += p.first + " ";
+        joinVars += p.first.name() + " ";
       }
     }
   }
@@ -118,11 +118,11 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
 // _____________________________________________________________________________
 Operation::VariableToColumnMap MultiColumnJoin::computeVariableToColumnMap()
     const {
-  ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumns());
+  VariableToColumnMap retVal(_left->getVariableColumns());
   size_t columnIndex = retVal.size();
   const auto variableColumnsRightSorted = [&] {
     const auto& r = _right->getVariableColumns();
-    using P = std::pair<string, size_t>;
+    using P = std::pair<Variable, size_t>;
     std::vector<P> v(r.begin(), r.end());
     std::sort(v.begin(), v.end(),
               [](const auto& a, const auto& b) { return a.second < b.second; });

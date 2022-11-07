@@ -34,8 +34,8 @@ TransitivePath::TransitivePath(
       _rightColName(rightColName.name()),
       _minDist(minDist),
       _maxDist(maxDist) {
-  _variableColumns[_leftColName] = 0;
-  _variableColumns[_rightColName] = 1;
+  _variableColumns[leftColName] = 0;
+  _variableColumns[rightColName] = 1;
 }
 
 // _____________________________________________________________________________
@@ -729,7 +729,7 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
   std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(*this);
   p->_leftSideTree = leftop;
   p->_leftSideCol = inputCol;
-  const ad_utility::HashMap<string, size_t>& var = leftop->getVariableColumns();
+  const auto& var = leftop->getVariableColumns();
   for (auto col : var) {
     if (col.second != inputCol) {
       if (col.second > inputCol) {
@@ -753,8 +753,8 @@ std::shared_ptr<TransitivePath> TransitivePath::bindRightSide(
   std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(*this);
   p->_rightSideTree = rightop;
   p->_rightSideCol = inputCol;
-  const ad_utility::HashMap<string, size_t>& var =
-      rightop->getVariableColumns();
+  const auto& var = rightop->getVariableColumns();
+  // TODO<joka921> Use structured binding to make this more readable.
   for (auto col : var) {
     if (col.second != inputCol) {
       if (col.second > inputCol) {

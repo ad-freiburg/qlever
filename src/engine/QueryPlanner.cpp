@@ -518,7 +518,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
     vector<size_t> keepIndices;
     ad_utility::HashSet<size_t> indDone;
     const auto& colMap = parent._qet->getVariableColumns();
-    for (const auto& var : selectClause.getSelectedVariablesAsStrings()) {
+    for (const auto& var : selectClause.getSelectedVariables()) {
       // There used to be a special treatment for `?ql_textscore_` variables
       // which was considered a bug.
       if (auto it = colMap.find(var); it != colMap.end()) {
@@ -1523,9 +1523,9 @@ string QueryPlanner::getPruningKey(
   std::ostringstream os;
   const auto& varCols = plan._qet->getVariableColumns();
   for (size_t orderedOnCol : orderedOnColumns) {
-    for (const auto& varCol : varCols) {
-      if (varCol.second == orderedOnCol) {
-        os << varCol.first << ", ";
+    for (const auto& [variable, columnIndex] : varCols) {
+      if (columnIndex == orderedOnCol) {
+        os << variable.name() << ", ";
         break;
       }
     }

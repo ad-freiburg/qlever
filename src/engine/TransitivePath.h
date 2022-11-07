@@ -23,7 +23,7 @@ class TransitivePath : public Operation {
   size_t _rightSideCol;
 
   size_t _resultWidth;
-  ad_utility::HashMap<std::string, size_t> _variableColumns;
+  VariableToColumnMap _variableColumns;
 
   std::shared_ptr<QueryExecutionTree> _subtree;
   bool _leftIsVar;

@@ -19,7 +19,8 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
 struct ContextWrapper {
   Index _index{};
   ResultTable _resultTable{allocator()};
-  ad_utility::HashMap<std::string, size_t> _hashMap{};
+  // TODO<joka921> `VariableToColumnMap`
+  ad_utility::HashMap<Variable, size_t> _hashMap{};
 
   Context createContextForRow(size_t row) const {
     return {row, _resultTable, _hashMap, _index};
@@ -205,7 +206,7 @@ TEST(SparqlDataTypesTest, VariableInvalidNamesThrowException) {
 TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
   auto wrapper = prepareContext();
 
-  wrapper._hashMap["?var"] = 0;
+  wrapper._hashMap[Variable{"?var"}] = 0;
   wrapper._resultTable._resultTypes.push_back(qlever::ResultType::VERBATIM);
   wrapper._resultTable._idTable.setCols(1);
   Id value1 = Id::makeFromInt(69);
@@ -247,7 +248,7 @@ TEST(SparqlDataTypesTest, VariableEvaluatesNothingForUnusedName) {
 TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
-  wrapper._hashMap["?var"] = 0;
+  wrapper._hashMap[Variable{"?var"}] = 0;
   wrapper._resultTable._resultTypes.push_back(qlever::ResultType::VERBATIM);
   wrapper._resultTable._idTable.setCols(1);
   Id value = Id::makeFromInt(69);

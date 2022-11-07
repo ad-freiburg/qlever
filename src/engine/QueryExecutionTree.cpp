@@ -77,14 +77,16 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
 }
 
 // _____________________________________________________________________________
+// TODO<joka921> Refactor this to take a `Variable`
 size_t QueryExecutionTree::getVariableColumn(const string& variable) const {
   AD_CHECK(_rootOperation);
+  auto var = Variable{variable};
   const auto& varCols = getVariableColumns();
-  if (!varCols.contains(variable)) {
+  if (!varCols.contains(var)) {
     AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
              "Variable could not be mapped to result column. Var: " + variable);
   }
-  return varCols.find(variable)->second;
+  return varCols.at(var);
 }
 
 // ___________________________________________________________________________
@@ -96,8 +98,8 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
 
   for (const auto& var : selectClause.getSelectedVariables()) {
     std::string varString = var.name();
-    if (getVariableColumns().contains(varString)) {
-      auto columnIndex = getVariableColumns().at(varString);
+    if (getVariableColumns().contains(var)) {
+      auto columnIndex = getVariableColumns().at(var);
       // Remove the question mark from the variable name if requested.
       if (!includeQuestionMark && varString.starts_with('?')) {
         varString = varString.substr(1);
@@ -285,9 +287,10 @@ bool QueryExecutionTree::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
+// TODO<joka921> This should take a `Variable` as an argument.
 bool QueryExecutionTree::varCovered(string var) const {
   AD_CHECK(_rootOperation);
-  return getVariableColumns().contains(var);
+  return getVariableColumns().contains(Variable{var});
 }
 
 // _______________________________________________________________________

@@ -48,9 +48,9 @@ string OrderBy::getDescriptor() const {
     for (auto oc : _sortIndices) {
       if (oc.first == p.second) {
         if (oc.second) {
-          orderByVars += "DESC(" + p.first + ") ";
+          orderByVars += "DESC(" + p.first.name() + ") ";
         } else {
-          orderByVars += "ASC(" + p.first + ") ";
+          orderByVars += "ASC(" + p.first.name() + ") ";
         }
       }
     }

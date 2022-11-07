@@ -308,9 +308,8 @@ void Operation::setSelectedVariablesForSubquery(
   externallyVisibleVariableToColumnMap_.emplace();
   auto& externalVariables = externallyVisibleVariableToColumnMap_.value();
   for (const Variable& variable : selectedVariables) {
-    if (internalVariables.contains(variable.name())) {
-      externalVariables[variable.name()] =
-          internalVariables.at(variable.name());
+    if (internalVariables.contains(variable)) {
+      externalVariables[variable] = internalVariables.at(variable);
     }
   }
 }

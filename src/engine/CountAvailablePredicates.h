@@ -28,8 +28,8 @@ class CountAvailablePredicates : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   size_t _subjectColumnIndex;
-  Variable _predicateVarName;
-  Variable _countVarName;
+  Variable _predicateVariable;
+  Variable _countVariable;
 
  public:
   /**

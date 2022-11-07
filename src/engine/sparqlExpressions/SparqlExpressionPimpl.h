@@ -14,7 +14,7 @@
 
 namespace sparqlExpression {
 
-using VariableColumnMap = ad_utility::HashMap<std::string, size_t>;
+using VariableColumnMap = ad_utility::HashMap<Variable, size_t>;
 
 class SparqlExpression;
 struct EvaluationContext;
