@@ -520,15 +520,13 @@ ad_utility::streams::stream_generator QueryExecutionTree::writeRdfGraphTurtle(
     co_yield ' ';
     co_yield triple._predicate;
     co_yield ' ';
-    // NOTE: It's tempting to co_yield an expression using a ternary operator
-    // here, but that's wrong because function argument is a std::string_view,
-    // which depends on the std::string `triple._object`, which might have
-    // changed when the function is executed.
-    //
+    // NOTE: It's tempting to co_yield an expression using a ternary operator:
     // co_yield triple._object.starts_with('"')
     //     ? RdfEscaping::validRDFLiteralFromNormalized(triple._object)
     //     : triple._object;
-    //
+    // but this leads to 1. segfaults in GCC (probably a compiler bug) and 2.
+    // to unnecessary copies of `triple._object` in the `else` case because
+    // the ternary always has to create a new prvalue.
     if (triple._object.starts_with('"')) {
       std::string objectAsValidRdfLiteral =
           RdfEscaping::validRDFLiteralFromNormalized(triple._object);

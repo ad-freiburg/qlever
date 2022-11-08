@@ -145,6 +145,7 @@ void unescapeStringAndNumericEscapes(InputIterator beginIterator,
   }
 }
 
+// _____________________________________________________________________________
 std::string replaceAll(std::string str, const std::string_view from,
                        const std::string_view to) {
   size_t start_pos = 0;
@@ -224,15 +225,17 @@ std::string validRDFLiteralFromNormalized(std::string_view normLiteral) {
   // If there are onyl two quotes (the first and the last, which every
   // normalized literal has), there is nothing to do.
   if (posSecondQuote == posLastQuote &&
-      normLiteral.find('\\') == std::string::npos) {
+      normLiteral.find_first_of("\\\n\r") == std::string::npos) {
     return std::string{normLiteral};
   }
   // Otherwise escape first all backlashes then all quotes (the order is
   // important) in the part between the first and the last quote and leave the
   // rest unchanged.
   std::string content = std::string(normLiteral.substr(1, posLastQuote - 1));
-  content = detail::replaceAll(content, "\\", "\\\\");
-  content = detail::replaceAll(content, "\"", "\\\"");
+  content = detail::replaceAll(std::move(content), "\\", "\\\\");
+  content = detail::replaceAll(std::move(content), "\n", "\\n");
+  content = detail::replaceAll(std::move(content), "\r", "\\r");
+  content = detail::replaceAll(std::move(content), "\"", "\\\"");
   return absl::StrCat("\"", content, normLiteral.substr(posLastQuote));
 }
 
