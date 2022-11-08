@@ -19,8 +19,7 @@ Union::Union(QueryExecutionContext* qec,
   _subtrees[1] = t2;
 
   // compute the column origins
-  ad_utility::HashMap<string, size_t> variableColumns =
-      getInternallyVisibleVariableColumns();
+  VariableToColumnMap variableColumns = getInternallyVisibleVariableColumns();
   _columnOrigins.resize(variableColumns.size(), {NO_COLUMN, NO_COLUMN});
   const auto& t1VarCols = t1->getVariableColumns();
   const auto& t2VarCols = t2->getVariableColumns();
@@ -66,16 +65,8 @@ size_t Union::getResultWidth() const {
 vector<size_t> Union::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
-Operation::VariableToColumnMap Union::computeVariableToColumnMap() const {
-  using VarAndIndex = std::pair<std::string, size_t>;
-
-  auto getVarsSortedByIndex = [](const auto& subtree) {
-    const auto& subtreeVariableColumns = subtree->getVariableColumns();
-    std::vector<VarAndIndex> varsAsPairs(subtreeVariableColumns.begin(),
-                                         subtreeVariableColumns.end());
-    std::ranges::sort(varsAsPairs, {}, ad_utility::second);
-    return varsAsPairs;
-  };
+VariableToColumnMap Union::computeVariableToColumnMap() const {
+  using VarAndIndex = std::pair<Variable, size_t>;
 
   VariableToColumnMap variableColumns;
   size_t column = 0;
@@ -89,10 +80,10 @@ Operation::VariableToColumnMap Union::computeVariableToColumnMap() const {
       };
 
   auto addVariablesForSubtree =
-      [&getVarsSortedByIndex,
-       &addVariableColumnIfNotExists](const auto& subtree) {
-        std::ranges::for_each(getVarsSortedByIndex(subtree),
-                              addVariableColumnIfNotExists);
+      [&addVariableColumnIfNotExists](const auto& subtree) {
+        std::ranges::for_each(
+            copySortedByColumnIndex(subtree->getVariableColumns()),
+            addVariableColumnIfNotExists);
       };
 
   std::ranges::for_each(_subtrees, addVariablesForSubtree);

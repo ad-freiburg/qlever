@@ -25,7 +25,7 @@ using std::vector;
 class GroupBy : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
-  vector<string> _groupByVariables;
+  vector<Variable> _groupByVariables;
   std::vector<Alias> _aliases;
 
  public:

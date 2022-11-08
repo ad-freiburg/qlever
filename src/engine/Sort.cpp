@@ -41,7 +41,7 @@ string Sort::getDescriptor() const {
   std::string orderByVars;
   for (const auto& p : _subtree->getVariableColumns()) {
     if (p.second == _sortCol) {
-      orderByVars = "ASC(" + p.first + ") ";
+      orderByVars = "ASC(" + p.first.name() + ") ";
       break;
     }
   }

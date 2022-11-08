@@ -62,7 +62,7 @@ string Join::getDescriptor() const {
   std::string joinVar = "";
   for (auto p : _left->getVariableColumns()) {
     if (p.second == _leftJoinCol) {
-      joinVar = p.first;
+      joinVar = p.first.name();
       break;
     }
   }
@@ -148,8 +148,8 @@ void Join::computeResult(ResultTable* result) {
 }
 
 // _____________________________________________________________________________
-Operation::VariableToColumnMap Join::computeVariableToColumnMap() const {
-  ad_utility::HashMap<string, size_t> retVal;
+VariableToColumnMap Join::computeVariableToColumnMap() const {
+  VariableToColumnMap retVal;
   if (!isFullScanDummy(_left) && !isFullScanDummy(_right)) {
     retVal = _left->getVariableColumns();
     size_t leftSize = _left->getResultWidth();

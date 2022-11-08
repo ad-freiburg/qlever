@@ -108,23 +108,24 @@ vector<size_t> HasPredicateScan::resultSortedOn() const {
   return {};
 }
 
-Operation::VariableToColumnMap HasPredicateScan::computeVariableToColumnMap()
-    const {
-  ad_utility::HashMap<string, size_t> varCols;
+VariableToColumnMap HasPredicateScan::computeVariableToColumnMap() const {
+  VariableToColumnMap varCols;
+  using V = Variable;
   switch (_type) {
     case ScanType::FREE_S:
-      varCols.insert(std::make_pair(_subject, 0));
+      // TODO<joka921> Better types for `_subject` and `_object`.
+      varCols.insert(std::make_pair(V{_subject}, 0));
       break;
     case ScanType::FREE_O:
-      varCols.insert(std::make_pair(_object, 0));
+      varCols.insert(std::make_pair(V{_object}, 0));
       break;
     case ScanType::FULL_SCAN:
-      varCols.insert(std::make_pair(_subject, 0));
-      varCols.insert(std::make_pair(_object, 1));
+      varCols.insert(std::make_pair(V{_subject}, 0));
+      varCols.insert(std::make_pair(V{_object}, 1));
       break;
     case ScanType::SUBQUERY_S:
       varCols = _subtree->getVariableColumns();
-      varCols.insert(std::make_pair(_object, getResultWidth() - 1));
+      varCols.insert(std::make_pair(V{_object}, getResultWidth() - 1));
       break;
   }
   return varCols;

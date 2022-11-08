@@ -31,21 +31,23 @@ TextOperationWithFilter::TextOperationWithFilter(
 }
 
 // _____________________________________________________________________________
-Operation::VariableToColumnMap
-TextOperationWithFilter::computeVariableToColumnMap() const {
-  ad_utility::HashMap<string, size_t> vcmap;
+VariableToColumnMap TextOperationWithFilter::computeVariableToColumnMap()
+    const {
+  VariableToColumnMap vcmap;
   // Subtract one because the entity that we filtered on
   // is provided by the filter table and still has the same place there.
-  vcmap[_cvar.name()] = 0;
-  vcmap[absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, _cvar.name().substr(1))] = 1;
+  vcmap[_cvar] = 0;
+  vcmap[_cvar.getTextScoreVariable()] = 1;
   size_t colN = 2;
   const auto& filterColumns = _filterResult.get()->getVariableColumns();
+  // TODO<joka921> The order of the `_variables` is not deterministic,
+  // check whether this is correct (especially in the presence of caching).
   for (const auto& var : _variables) {
     if (var == _cvar) {
       continue;
     }
-    if (filterColumns.count(var.name()) == 0) {
-      vcmap[var.name()] = colN++;
+    if (!filterColumns.contains(var)) {
+      vcmap[var] = colN++;
     }
   }
   for (const auto& varcol : filterColumns) {

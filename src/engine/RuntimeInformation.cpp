@@ -82,8 +82,7 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
 }
 
 // ________________________________________________________________________________________________________________
-void RuntimeInformation::setColumnNames(
-    const ad_utility::HashMap<std::string, size_t>& columnMap) {
+void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
   if (columnMap.empty()) {
     return;
   }
@@ -95,7 +94,7 @@ void RuntimeInformation::setColumnNames(
   // Now copy the (variable, index) pairs to the vector.
   for (const auto& [variable, columnIndex] : columnMap) {
     AD_CHECK(columnIndex < columnNames_.size());
-    columnNames_[columnIndex] = variable;
+    columnNames_[columnIndex] = variable.name();
   }
 }
 

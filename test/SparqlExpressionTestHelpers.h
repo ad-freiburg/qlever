@@ -126,18 +126,19 @@ struct TestContext {
     context._beginIndex = 0;
     context._endIndex = table.size();
     // Define the mapping from variable names to column indices.
-    varToColMap["?ints"] = {0, qlever::ResultType::KB};
-    varToColMap["?doubles"] = {1, qlever::ResultType::KB};
-    varToColMap["?numeric"] = {2, qlever::ResultType::KB};
-    varToColMap["?vocab"] = {3, qlever::ResultType::KB};
-    varToColMap["?mixed"] = {4, qlever::ResultType::KB};
+    using V = Variable;
+    varToColMap[V{"?ints"}] = {0, qlever::ResultType::KB};
+    varToColMap[V{"?doubles"}] = {1, qlever::ResultType::KB};
+    varToColMap[V{"?numeric"}] = {2, qlever::ResultType::KB};
+    varToColMap[V{"?vocab"}] = {3, qlever::ResultType::KB};
+    varToColMap[V{"?mixed"}] = {4, qlever::ResultType::KB};
   }
 
   // Get a test context where the rows are the same as by default, but sorted by
   // `variable`
   static TestContext sortedBy(const Variable& variable) {
     TestContext result;
-    auto columnIndex = result.varToColMap.at(variable.name()).first;
+    auto columnIndex = result.varToColMap.at(variable).first;
     std::sort(result.table.begin(), result.table.end(),
               [columnIndex](const auto& a, const auto& b) {
                 return valueIdComparators::compareByBits(a[columnIndex],

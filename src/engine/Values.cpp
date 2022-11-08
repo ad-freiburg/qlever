@@ -77,10 +77,11 @@ size_t Values::getResultWidth() const { return _values._variables.size(); }
 
 vector<size_t> Values::resultSortedOn() const { return {}; }
 
-Operation::VariableToColumnMap Values::computeVariableToColumnMap() const {
-  ad_utility::HashMap<string, size_t> map;
+VariableToColumnMap Values::computeVariableToColumnMap() const {
+  VariableToColumnMap map;
   for (size_t i = 0; i < _values._variables.size(); i++) {
-    map[_values._variables[i]] = i;
+    // TODO<joka921> Make the `_variables` also `Variable`s
+    map[Variable{_values._variables[i]}] = i;
   }
   return map;
 }

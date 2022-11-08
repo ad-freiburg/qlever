@@ -944,10 +944,10 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
         "      qet-width: 2 \n    } join-column: [0]\n    qet-width: 2 \n"
         "  }\n   filtered on column 1\n  qet-width: 4 \n}",
         qet.asString());
-    ASSERT_EQ(0u, qet.getVariableColumn("?c"));
-    ASSERT_EQ(1u, qet.getVariableColumn(
-                      absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, "c")));
-    ASSERT_EQ(2u, qet.getVariableColumn("?y"));
+    auto c = Variable{"?c"};
+    ASSERT_EQ(0u, qet.getVariableColumn(c));
+    ASSERT_EQ(1u, qet.getVariableColumn(c.getTextScoreVariable()));
+    ASSERT_EQ(2u, qet.getVariableColumn(Variable{"?y"}));
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -1160,8 +1160,8 @@ TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
         "} LIMIT 300");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_TRUE(qet.varCovered("?1"));
-    ASSERT_TRUE(qet.varCovered("?0"));
+    ASSERT_TRUE(qet.isVariableCovered(Variable{"?1"}));
+    ASSERT_TRUE(qet.isVariableCovered(Variable{"?0"}));
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
