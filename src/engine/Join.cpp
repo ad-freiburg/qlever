@@ -7,11 +7,16 @@
 #include <engine/CallFixedSize.h>
 #include <engine/IndexScan.h>
 #include <engine/Join.h>
+#include <global/Constants.h>
+#include <util/HashMap.h>
+#include <engine/IdTable.h> // Needed for hashJoin.
+#include <global/Id.h> // Needed for hashJoin.
 
 #include <functional>
 #include <sstream>
 #include <type_traits>
 #include <unordered_set>
+#include <vector> // Needed for hashJoin.
 
 using std::string;
 
@@ -729,3 +734,103 @@ void Join::doGallopInnerJoin(const TagType, const IdTableView<L_WIDTH>& l1,
     }
   }
 }
+
+// ______________________________________________________________________________
+template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
+                size_t jc2, IdTable* dynRes) {
+  const IdTableView<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
+  const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
+
+  LOG(DEBUG) << "Performing hashJoin between two tables.\n";
+  LOG(DEBUG) << "A: width = " << a.cols() << ", size = " << a.size() << "\n";
+  LOG(DEBUG) << "B: width = " << b.cols() << ", size = " << b.size() << "\n";
+
+  // Check trivial case.
+  if (a.size() == 0 || b.size() == 0) {
+    return;
+  }
+
+  IdTableStatic<OUT_WIDTH> result = dynRes->moveToStatic<OUT_WIDTH>();
+
+  // Cannot just switch l1 and l2 around because the order of
+  // items in the result tuples is important.
+  if (a.size() / b.size() > GALLOP_THRESHOLD) {
+    doGallopInnerJoin(LeftLargerTag{}, a, jc1, b, jc2, &result);
+  } else if (b.size() / a.size() > GALLOP_THRESHOLD) {
+    doGallopInnerJoin(RightLargerTag{}, a, jc1, b, jc2, &result);
+  // Procceding with the actual hash join depended on which IdTableView
+  // is bigger.
+  } else if (a.size() / b.size() >= 1) {
+    // a is bigger, or the same size as b. b gets put into the hash table.
+    ad_utility::HashMap<Id, std::vector<detail::ConstRow>> map;
+    for ( size_t j = 0; j < b.size(); j++) {
+      map[b(j, jc2)].push_back(b[j]);
+    }
+
+    // Create cross product by going through a.
+    for (size_t i = 0; i < a.size(); i++) {
+      // Skip, if there is no matching entry in the join column.
+      if (map.find(a(i, jc1)) == map.end()) {
+        continue;
+      }
+
+      for (const auto& bRow: map[a(i, jc1)]) {
+        const size_t backIndex = result.size();
+        result.push_back();
+        for (size_t h = 0; h < a.cols(); h++) {
+          result(backIndex, h) = a(i, h);
+        }
+
+        // Copy bs columns before the join column
+        for (size_t h = 0; h < jc2; h++) {
+          result(backIndex, h + a.cols()) = bRow[h];
+        }
+
+        // Copy bs columns after the join column
+        for (size_t h = jc2 + 1; h < b.cols(); h++) {
+          result(backIndex, h + a.cols() - 1) = bRow[h];
+        }
+      }
+    }
+
+  } else {
+    // b is bigger. a gets put into the hash table.
+    ad_utility::HashMap<Id, std::vector<detail::ConstRow>> map;
+    for ( size_t i = 0; i < a.size(); i++) {
+      map[a(i, jc1)].push_back(a[i]);
+    }
+
+    // Create cross product by going through b.
+    for (size_t j = 0; j < b.size(); j++) {
+      // Skip, if there is no matching entry in the join column.
+      if (map.find(b(j, jc2)) == map.end()) {
+        continue;
+      }
+
+      for (const auto& aRow: map[b(j, jc2)]) {
+        const size_t backIndex = result.size();
+        result.push_back();
+        for (size_t h = 0; h < a.cols(); h++) {
+          result(backIndex, h) = aRow[h];
+        }
+
+        // Copy bs columns before the join column
+        for (size_t h = 0; h < jc2; h++) {
+          result(backIndex, h + a.cols()) = b(j,h);
+        }
+
+        // Copy bs columns after the join column
+        for (size_t h = jc2 + 1; h < b.cols(); h++) {
+          result(backIndex, h + a.cols() - 1) = b(j,h);
+        }
+      }
+    } 
+  }
+  *dynRes = result.moveToDynamic();
+
+  LOG(DEBUG) << "HashJoin done.\n";
+  LOG(DEBUG) << "Result: width = " << dynRes->cols()
+             << ", size = " << dynRes->size() << "\n";
+}
+

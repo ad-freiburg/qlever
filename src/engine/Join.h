@@ -91,6 +91,17 @@ class Join : public Operation {
                                 size_t jc1, const IdTableView<R_WIDTH>& l2,
                                 size_t jc2, IdTableStatic<OUT_WIDTH>* result);
 
+  /**
+   * @brief Joins IdTables dynA and dynB on join column jc2, returning
+   * the result in dynRes. Creates a cross product for matching rows by putting
+   * the smaller IdTable in a hash map and using that, to faster find the
+   * matching rows.
+   **/
+  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+  void hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB, size_t jc2,
+            IdTable* dynRes);
+
+
   static bool isFullScanDummy(std::shared_ptr<QueryExecutionTree> tree) {
     return tree->getType() == QueryExecutionTree::SCAN &&
            tree->getResultWidth() == 3;
