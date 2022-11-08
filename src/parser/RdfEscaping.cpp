@@ -2,16 +2,17 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
+#include <absl/strings/str_cat.h>
+#include <ctre/ctre.h>
 #include <unicode/ustream.h>
 
 #include <sstream>
 #include <string>
 
-#include "../util/Exception.h"
-#include "../util/HashSet.h"
-#include "../util/Log.h"
-#include "../util/StringUtils.h"
-#include "ctre/ctre.h"
+#include "util/Exception.h"
+#include "util/HashSet.h"
+#include "util/Log.h"
+#include "util/StringUtils.h"
 
 namespace RdfEscaping {
 using namespace std::string_literals;
@@ -143,6 +144,17 @@ void unescapeStringAndNumericEscapes(InputIterator beginIterator,
     beginIterator = nextBackslashIterator + numCharactersFromInput;
   }
 }
+
+// _____________________________________________________________________________
+std::string replaceAll(std::string str, const std::string_view from,
+                       const std::string_view to) {
+  size_t start_pos = 0;
+  while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
+    str.replace(start_pos, from.length(), to);
+    start_pos += to.length();
+  }
+  return str;
+}
 }  // namespace detail
 
 // _____________________________________________________________________________
@@ -204,6 +216,29 @@ std::string normalizeRDFLiteral(const std::string_view origLiteral) {
   return res;
 }
 
+// ____________________________________________________________________________
+std::string validRDFLiteralFromNormalized(std::string_view normLiteral) {
+  AD_CHECK(normLiteral.starts_with('"'));
+  size_t posSecondQuote = normLiteral.find('"', 1);
+  AD_CHECK(posSecondQuote != std::string::npos);
+  size_t posLastQuote = normLiteral.rfind('"');
+  // If there are onyl two quotes (the first and the last, which every
+  // normalized literal has), there is nothing to do.
+  if (posSecondQuote == posLastQuote &&
+      normLiteral.find_first_of("\\\n\r") == std::string::npos) {
+    return std::string{normLiteral};
+  }
+  // Otherwise escape first all backlashes then all quotes (the order is
+  // important) in the part between the first and the last quote and leave the
+  // rest unchanged.
+  std::string content = std::string(normLiteral.substr(1, posLastQuote - 1));
+  content = detail::replaceAll(std::move(content), "\\", "\\\\");
+  content = detail::replaceAll(std::move(content), "\n", "\\n");
+  content = detail::replaceAll(std::move(content), "\r", "\\r");
+  content = detail::replaceAll(std::move(content), "\"", "\\\"");
+  return absl::StrCat("\"", content, normLiteral.substr(posLastQuote));
+}
+
 /**
  * In an Iriref, the only allowed escapes are \uXXXX and '\UXXXXXXXX' ,where X
  * is hexadecimal ([0-9a-fA-F]). This function replaces these escapes by the
@@ -252,28 +287,18 @@ std::string unescapePrefixedIri(std::string_view literal) {
   return res;
 }
 
-std::string replaceAll(std::string str, const std::string_view from,
-                       const std::string_view to) {
-  size_t start_pos = 0;
-  while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
-    str.replace(start_pos, from.length(), to);
-    start_pos += to.length();
-  }
-  return str;
-}
-
 std::string escapeForCsv(std::string input) {
   if (!ctre::search<"[\r\n\",]">(input)) [[likely]] {
     return input;
   }
-  return '"' + replaceAll(std::move(input), "\"", "\"\"") + '"';
+  return '"' + detail::replaceAll(std::move(input), "\"", "\"\"") + '"';
 }
 
 std::string escapeForTsv(std::string input) {
   if (!ctre::search<"[\n\t]">(input)) [[likely]] {
     return input;
   }
-  auto stage1 = replaceAll(std::move(input), "\t", " ");
-  return replaceAll(std::move(stage1), "\n", "\\n");
+  auto stage1 = detail::replaceAll(std::move(input), "\t", " ");
+  return detail::replaceAll(std::move(stage1), "\n", "\\n");
 }
 }  // namespace RdfEscaping

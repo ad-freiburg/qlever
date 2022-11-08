@@ -33,7 +33,7 @@ std::string unescapeNewlinesAndBackslashes(std::string_view literal);
  * RDFLiterals in Turtle or Sparql can have several forms: They may either
  * be surrounded with one (" or ') quotation mark and contain all special
  * characters in escaped form, like "\\\t". Alternatively literals may be
- * surroounded by three (""" or ''') quotation marks. Then escapes are still
+ * surrounded by three (""" or ''') quotation marks. Then escapes are still
  * allowed, but several special characters (e.g. '\n' or '\t' may be contained
  * directly in the string (For details, see the Turtle or Sparql standard).
  *
@@ -45,6 +45,18 @@ std::string unescapeNewlinesAndBackslashes(std::string_view literal);
  * inside QLever.
  */
 std::string normalizeRDFLiteral(std::string_view origLiteral);
+
+/**
+ * Convert a literal in the form produced by `normalizeRDFLiteral` into a form
+ * that is a valid literal in Turtle. For example, "al"pah" becomes "al\"pha"
+ * and "be"ta"@en becomes "be\"ta"@en.
+ *
+ * If the `normLiteral` is not a literal, an AD_CHECK will fail.
+ *
+ * TODO: This function currently only handles the escaping of " inside the
+ * literal, no other characters. Is that enough?
+ */
+std::string validRDFLiteralFromNormalized(std::string_view normLiteral);
 
 /**
  * In an Iriref, the only allowed escapes are \uXXXX and '\UXXXXXXXX' ,where X
