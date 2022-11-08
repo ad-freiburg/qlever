@@ -10,10 +10,10 @@
 
 // A hash map from variables to the column index of that variable in a table,
 // used in several places (e.g. the `Operation` class, the `SparqlExpression`
-// module, etc.
+// module, etc.).
 using VariableToColumnMap = ad_utility::HashMap<Variable, size_t>;
 
 // Return a vector that contains the contents of the `VariableToColumnMap` in
 // ascending order of the column indices.
-std::vector<std::pair<Variable, size_t>> sortedByColumnIndex(
+std::vector<std::pair<Variable, size_t>> copySortedByColumnIndex(
     VariableToColumnMap map);

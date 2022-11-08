@@ -120,7 +120,7 @@ VariableToColumnMap MultiColumnJoin::computeVariableToColumnMap() const {
   VariableToColumnMap retVal(_left->getVariableColumns());
   size_t columnIndex = retVal.size();
   const auto variableColumnsRightSorted =
-      sortedByColumnIndex(_right->getVariableColumns());
+      copySortedByColumnIndex(_right->getVariableColumns());
   for (const auto& it : variableColumnsRightSorted) {
     bool isJoinColumn = false;
     for (const std::array<ColumnIndex, 2>& a : _joinColumns) {

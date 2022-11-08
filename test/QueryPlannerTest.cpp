@@ -946,7 +946,7 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
         qet.asString());
     auto c = Variable{"?c"};
     ASSERT_EQ(0u, qet.getVariableColumn(c));
-    ASSERT_EQ(1u, qet.getVariableColumn(c.getTextscoreVariable()));
+    ASSERT_EQ(1u, qet.getVariableColumn(c.getTextScoreVariable()));
     ASSERT_EQ(2u, qet.getVariableColumn(Variable{"?y"}));
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;

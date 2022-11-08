@@ -22,10 +22,10 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
       _aliases{std::move(aliases)} {
   // sort the aliases and groupByVariables to ensure the cache key is order
   // invariant.
-  std::ranges::sort(_aliases, {},
+  std::ranges::sort(_aliases, std::less<>{},
                     [](const Alias& a) { return a._target.name(); });
 
-  std::ranges::sort(_groupByVariables, {}, &Variable::name);
+  std::ranges::sort(_groupByVariables, std::less<>{}, &Variable::name);
 
   auto sortColumns = computeSortColumns(subtree.get());
   _subtree =
@@ -55,11 +55,10 @@ string GroupBy::asStringImpl(size_t indent) const {
 string GroupBy::getDescriptor() const {
   // TODO<C++20 Views (clang16): Do this lazily using std::views::transform.
   // TODO<C++23>:: Use std::views::join_with.
-  std::vector<std::string> vars;
-  std::transform(_groupByVariables.begin(), _groupByVariables.end(),
-                 std::back_inserter(vars),
-                 [](const Variable& v) { return v.name(); });
-  return "GroupBy on " + absl::StrJoin(vars, " ");
+  return "GroupBy on " + absl::StrJoin(_groupByVariables, " ",
+                                       [](std::string* out, const Variable& v) {
+                                         absl::StrAppend(out, v.name());
+                                       });
 }
 
 size_t GroupBy::getResultWidth() const {
@@ -88,7 +87,7 @@ vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
   std::unordered_set<size_t> sortColSet;
 
   for (const auto& var : _groupByVariables) {
-    size_t col = inVarColMap.at(Variable{var});
+    size_t col = inVarColMap.at(var);
     // avoid sorting by a column twice
     if (sortColSet.find(col) == sortColSet.end()) {
       sortColSet.insert(col);

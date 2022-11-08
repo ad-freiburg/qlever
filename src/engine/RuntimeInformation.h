@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "absl/strings/str_join.h"
+#include "engine/VariableToColumnMap.h"
 #include "parser/data/Variable.h"
 #include "util/HashMap.h"
 #include "util/json.h"
@@ -81,7 +82,7 @@ class RuntimeInformation {
 
   /// Set the names of the columns from the HashMap format that is used in the
   /// rest of the Qlever code.
-  void setColumnNames(const ad_utility::HashMap<Variable, size_t>& columnMap);
+  void setColumnNames(const VariableToColumnMap& columnMap);
 
   /// Get the time spent computing the operation. This is the total time minus
   /// the time spent computing the children.

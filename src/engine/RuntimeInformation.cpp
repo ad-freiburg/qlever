@@ -82,8 +82,7 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
 }
 
 // ________________________________________________________________________________________________________________
-void RuntimeInformation::setColumnNames(
-    const ad_utility::HashMap<Variable, size_t>& columnMap) {
+void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
   if (columnMap.empty()) {
     return;
   }

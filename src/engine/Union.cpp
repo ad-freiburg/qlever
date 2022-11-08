@@ -79,11 +79,12 @@ VariableToColumnMap Union::computeVariableToColumnMap() const {
         }
       };
 
-  auto addVariablesForSubtree = [&addVariableColumnIfNotExists](
-                                    const auto& subtree) {
-    std::ranges::for_each(sortedByColumnIndex(subtree->getVariableColumns()),
-                          addVariableColumnIfNotExists);
-  };
+  auto addVariablesForSubtree =
+      [&addVariableColumnIfNotExists](const auto& subtree) {
+        std::ranges::for_each(
+            copySortedByColumnIndex(subtree->getVariableColumns()),
+            addVariableColumnIfNotExists);
+      };
 
   std::ranges::for_each(_subtrees, addVariablesForSubtree);
   return variableColumns;

@@ -66,9 +66,8 @@ class DummyOperation : public Operation {
  private:
   virtual VariableToColumnMap computeVariableToColumnMap() const override {
     VariableToColumnMap m;
-    using V = Variable;
-    m[V{"?a"}] = 0;
-    m[V{"?b"}] = 1;
+    m[Variable{"?a"}] = 0;
+    m[Variable{"?b"}] = 1;
     return m;
   }
 };

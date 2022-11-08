@@ -4,10 +4,11 @@
 
 #include "./VariableToColumnMap.h"
 
-std::vector<std::pair<Variable, size_t>> sortedByColumnIndex(
+// _____________________________________________________________________________
+std::vector<std::pair<Variable, size_t>> copySortedByColumnIndex(
     VariableToColumnMap map) {
   std::vector<std::pair<Variable, size_t>> result{
       std::make_move_iterator(map.begin()), std::make_move_iterator(map.end())};
-  std::ranges::sort(result, {}, ad_utility::second);
+  std::ranges::sort(result, std::less<>{}, ad_utility::second);
   return result;
 }

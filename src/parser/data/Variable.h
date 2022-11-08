@@ -36,7 +36,7 @@ class Variable {
   [[nodiscard]] const std::string& targetVariable() const { return _name; }
 
   // Convert `?someVariable` into `?ql_textscore_someVariable`
-  Variable getTextscoreVariable() const;
+  Variable getTextScoreVariable() const;
 
   bool operator==(const Variable&) const = default;
 

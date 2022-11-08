@@ -7,6 +7,7 @@
 #include <string>
 
 #include "engine/ResultTable.h"
+#include "engine/VariableToColumnMap.h"
 #include "parser/data/Variable.h"
 #include "util/HashMap.h"
 
@@ -17,8 +18,6 @@ enum ContextRole : int { SUBJECT, PREDICATE, OBJECT };
 struct Context {
   const size_t _row;
   const ResultTable& _res;
-  // TODO<joka921> Should be `VariableToColumnMap` once this is in a separate
-  // header.
-  const ad_utility::HashMap<Variable, size_t>& _variableColumns;
+  const VariableToColumnMap& _variableColumns;
   const Index& _qecIndex;
 };
