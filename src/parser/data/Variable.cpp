@@ -45,7 +45,7 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
       case Datatype::VocabIndex:
         return qecIndex.idToOptionalString(id).value_or("");
       case Datatype::LocalVocabIndex:
-        return res.indexToOptionalString(id.getLocalVocabIndex()).value_or("");
+        return res._localVocab->getWord(id.getLocalVocabIndex());
       case Datatype::TextRecordIndex:
         return qecIndex.getTextExcerpt(id.getTextRecordIndex());
     }

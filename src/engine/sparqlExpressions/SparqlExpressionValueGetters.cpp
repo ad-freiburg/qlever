@@ -50,9 +50,7 @@ bool EffectiveBooleanValueGetter::operator()(ValueId id,
                   .empty();
     }
     case Datatype::LocalVocabIndex: {
-      auto index = id.getLocalVocabIndex();
-      AD_CHECK(index.get() < context->_localVocab.size());
-      return !(context->_localVocab[index.get()].empty());
+      return !(context->_localVocab.getWord(id.getLocalVocabIndex()).empty());
     }
     case Datatype::TextRecordIndex:
       return true;
@@ -75,9 +73,7 @@ string StringValueGetter::operator()(Id id, EvaluationContext* context) const {
           .indexToOptionalString(id.getVocabIndex())
           .value_or("");
     case Datatype::LocalVocabIndex: {
-      auto index = id.getLocalVocabIndex().get();
-      AD_CHECK(index < context->_localVocab.size());
-      return context->_localVocab[index];
+      return context->_localVocab.getWord(id.getLocalVocabIndex());
     }
     case Datatype::TextRecordIndex:
       return context->_qec.getIndex().getTextExcerpt(id.getTextRecordIndex());

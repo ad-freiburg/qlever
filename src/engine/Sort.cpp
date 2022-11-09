@@ -77,7 +77,6 @@ void Sort::computeResult(ResultTable* result) {
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
-  // TODO: Shouldn't we use std::move here?
   result->_localVocab = subRes->_localVocab;
   result->_idTable.insert(result->_idTable.end(), subRes->_idTable.begin(),
                           subRes->_idTable.end());

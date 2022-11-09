@@ -13,16 +13,12 @@ TEST(LocalVocab, construction) {
   };
   LocalVocab localVocab;
   ASSERT_TRUE(localVocab.empty());
-  localVocab.startConstructionPhase();
   checkId(localVocab.getIdAndAddIfNotContained("bla"), 0);
   checkId(localVocab.getIdAndAddIfNotContained("blu"), 1);
   checkId(localVocab.getIdAndAddIfNotContained("bli"), 2);
   checkId(localVocab.getIdAndAddIfNotContained("bla"), 0);
-  localVocab.endConstructionPhase();
   ASSERT_EQ(localVocab.size(), 3);
-  ASSERT_EQ(localVocab[0], "bla");
-  ASSERT_EQ(localVocab[1], "blu");
-  ASSERT_EQ(localVocab[2], "bli");
-  ASSERT_THROW(localVocab.getIdAndAddIfNotContained("one more"),
-               std::runtime_error);
+  ASSERT_EQ(localVocab.getWord(LocalVocabIndex::make(0)), "bla");
+  ASSERT_EQ(localVocab.getWord(LocalVocabIndex::make(1)), "blu");
+  ASSERT_EQ(localVocab.getWord(LocalVocabIndex::make(2)), "bli");
 }

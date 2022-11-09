@@ -10,6 +10,7 @@ add_library(engine
         ../util/Socket.h
         Comparators.h
         ResultTable.h ResultTable.cpp
+        LocalVocab.h LocalVocab.cpp
         QueryExecutionContext.h
         IndexScan.h IndexScan.cpp
         Join.h Join.cpp

@@ -171,7 +171,7 @@ void GroupBy::processGroup(
       *resultType =
           sparqlExpression::detail::expressionResultTypeToQleverResultType<T>();
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
-          singleResult, *(outTable->_localVocab), false);
+          singleResult, *(outTable->_localVocab));
     } else {
       // This should never happen since aggregates always return constants.
       AD_FAIL()
@@ -235,9 +235,9 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
 
   if (groupByCols.empty()) {
     // The entire input is a single group
-    outTable->_localVocab->startConstructionPhase();
+    // outTable->_localVocab->startConstructionPhase();
     processNextBlock(0, input.size());
-    outTable->_localVocab->endConstructionPhase();
+    // outTable->_localVocab->endConstructionPhase();
     *dynResult = result.moveToDynamic();
     return;
   }
@@ -251,7 +251,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   size_t blockStart = 0;
   auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory(32000);
 
-  outTable->_localVocab->startConstructionPhase();
+  // outTable->_localVocab->startConstructionPhase();
   for (size_t pos = 1; pos < input.size(); pos++) {
     checkTimeoutAfterNCalls(currentGroupBlock.size());
     bool rowMatchesCurrentBlock =
@@ -269,7 +269,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
     }
   }
   processNextBlock(blockStart, input.size());
-  outTable->_localVocab->endConstructionPhase();
+  // outTable->_localVocab->endConstructionPhase();
   *dynResult = result.moveToDynamic();
 }
 

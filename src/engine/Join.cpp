@@ -145,21 +145,10 @@ void Join::computeResult(ResultTable* result) {
                     &result->_idTable);
 
   // If only one of the two operands has a local vocab, pass it on.
-  bool leftLocalVocabEmpty = leftRes->_localVocab->empty();
-  bool rightLocalVocabEmpty = rightRes->_localVocab->empty();
-  if (!leftLocalVocabEmpty || !rightLocalVocabEmpty) {
-    if (!leftLocalVocabEmpty && rightLocalVocabEmpty) {
-      result->_localVocab = std::move(leftRes->_localVocab);
-    } else if (leftLocalVocabEmpty && !rightLocalVocabEmpty) {
-      result->_localVocab = std::move(rightRes->_localVocab);
-    } else {
-      throw std::runtime_error(
-          "JOIN of two results, where both have a non-empty vocabulary, is "
-          "currently not supported");
-    }
-  }
+  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
+      leftRes->_localVocab, rightRes->_localVocab);
 
-  LOG(DEBUG) << "Join result computation done." << endl;
+  LOG(DEBUG) << "Join result computation done" << endl;
 }
 
 // _____________________________________________________________________________

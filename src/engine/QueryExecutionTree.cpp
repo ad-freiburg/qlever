@@ -333,12 +333,8 @@ QueryExecutionTree::idToStringAndType(Id id,
       return std::pair{std::move(entity.value()), nullptr};
     }
     case Datatype::LocalVocabIndex: {
-      auto optionalString =
-          resultTable.indexToOptionalString(id.getLocalVocabIndex());
-      if (!optionalString.has_value()) {
-        return std::nullopt;
-      }
-      return std::pair{optionalString.value(), nullptr};
+      return std::pair{
+          resultTable._localVocab->getWord(id.getLocalVocabIndex()), nullptr};
     }
     case Datatype::TextRecordIndex:
       return std::pair{_qec->getIndex().getTextExcerpt(id.getTextRecordIndex()),
@@ -453,8 +449,7 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
             break;
           case Datatype::LocalVocabIndex:
             co_yield escapeFunction(
-                resultTable->indexToOptionalString(id.getLocalVocabIndex())
-                    .value_or(""));
+                resultTable->_localVocab->getWord(id.getLocalVocabIndex()));
             break;
           case Datatype::TextRecordIndex:
             co_yield escapeFunction(

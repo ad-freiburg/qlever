@@ -238,19 +238,10 @@ constexpr static qlever::ResultType expressionResultTypeToQleverResultType() {
 
 /// Get Id of constant result of type T.
 template <SingleExpressionResult T, typename LocalVocabT>
-Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab,
-                                [[maybe_unused]] bool isRepetitionOfConstant) {
+Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   static_assert(isConstantResult<T>);
   if constexpr (ad_utility::isSimilar<T, string>) {
-    // TODO: Should we make this more efficient by profiting from the
-    // knowledge in `isRepetitionOfConstant`? The previous code did this (out of
-    // neccessity because it just appended words to the local vocab vector).
     return localVocab.getIdAndAddIfNotContained(std::forward<T>(result));
-    // if (!isRepetitionOfConstant) {
-    //   localVocab.addWordNoMatterWhat(std::forward<T>(result));
-    // }
-    // return Id::makeFromLocalVocabIndex(
-    //     LocalVocabIndex::make(localVocab.size() - 1));
   } else if constexpr (ad_utility::isSimilar<double, T>) {
     return Id::makeFromDouble(result);
   } else if constexpr (ad_utility::isSimilar<T, Id>) {
