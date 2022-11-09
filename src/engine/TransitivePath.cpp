@@ -34,8 +34,8 @@ TransitivePath::TransitivePath(
       _rightColName(rightColName.name()),
       _minDist(minDist),
       _maxDist(maxDist) {
-  _variableColumns[_leftColName] = 0;
-  _variableColumns[_rightColName] = 1;
+  _variableColumns[leftColName] = 0;
+  _variableColumns[rightColName] = 1;
 }
 
 // _____________________________________________________________________________
@@ -133,8 +133,7 @@ vector<size_t> TransitivePath::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-Operation::VariableToColumnMap TransitivePath::computeVariableToColumnMap()
-    const {
+VariableToColumnMap TransitivePath::computeVariableToColumnMap() const {
   return _variableColumns;
 }
 
@@ -729,13 +728,13 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
   std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(*this);
   p->_leftSideTree = leftop;
   p->_leftSideCol = inputCol;
-  const ad_utility::HashMap<string, size_t>& var = leftop->getVariableColumns();
-  for (auto col : var) {
-    if (col.second != inputCol) {
-      if (col.second > inputCol) {
-        p->_variableColumns[col.first] = col.second + 1;
+  const auto& var = leftop->getVariableColumns();
+  for (const auto& [variable, columnIndex] : var) {
+    if (columnIndex != inputCol) {
+      if (columnIndex > inputCol) {
+        p->_variableColumns[variable] = columnIndex + 1;
       } else {
-        p->_variableColumns[col.first] = col.second + 2;
+        p->_variableColumns[variable] = columnIndex + 2;
       }
       p->_resultWidth++;
     }
@@ -746,6 +745,9 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePath> TransitivePath::bindRightSide(
     std::shared_ptr<QueryExecutionTree> rightop, size_t inputCol) const {
+  // TODO<joka921> `bindRightSide` and `bindLeftSide` are almost the same,
+  // could and should this be made generic? It probably requires refactoring
+  // quite a lot of this class though.
   // Enforce required sorting of `rightop`.
   rightop =
       QueryExecutionTree::createSortedTree(std::move(rightop), {inputCol});
@@ -753,14 +755,13 @@ std::shared_ptr<TransitivePath> TransitivePath::bindRightSide(
   std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(*this);
   p->_rightSideTree = rightop;
   p->_rightSideCol = inputCol;
-  const ad_utility::HashMap<string, size_t>& var =
-      rightop->getVariableColumns();
-  for (auto col : var) {
-    if (col.second != inputCol) {
-      if (col.second > inputCol) {
-        p->_variableColumns[col.first] = col.second + 1;
+  const auto& var = rightop->getVariableColumns();
+  for (const auto& [variable, columnIndex] : var) {
+    if (columnIndex != inputCol) {
+      if (columnIndex > inputCol) {
+        p->_variableColumns[variable] = columnIndex + 1;
       } else {
-        p->_variableColumns[col.first] = col.second + 2;
+        p->_variableColumns[variable] = columnIndex + 2;
       }
       p->_resultWidth++;
     }

@@ -407,14 +407,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           bool leftVar, rightVar;
           if (isVariable(arg._left)) {
             leftVar = true;
-            leftCol = sub._qet->getVariableColumn(
-                arg._innerLeft.getVariable().name());
+            leftCol = sub._qet->getVariableColumn(arg._innerLeft.getVariable());
             leftColName = Variable{arg._left.getVariable()};
           } else {
             leftVar = false;
             leftColName = generateUniqueVarName();
-            leftCol = sub._qet->getVariableColumn(
-                arg._innerLeft.getVariable().name());
+            leftCol = sub._qet->getVariableColumn(arg._innerLeft.getVariable());
             if (auto opt = arg._left.toValueId(_qec->getIndex().getVocab());
                 opt.has_value()) {
               leftValue = opt.value();
@@ -426,13 +424,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           // TODO<joka921> This is really much code duplication, get rid of it!
           if (isVariable(arg._right)) {
             rightVar = true;
-            rightCol = sub._qet->getVariableColumn(
-                arg._innerRight.getVariable().name());
+            rightCol =
+                sub._qet->getVariableColumn(arg._innerRight.getVariable());
             rightColName = Variable{arg._right.getVariable()};
           } else {
             rightVar = false;
-            rightCol = sub._qet->getVariableColumn(
-                arg._innerRight.getVariable().name());
+            rightCol =
+                sub._qet->getVariableColumn(arg._innerRight.getVariable());
             rightColName = generateUniqueVarName();
             if (auto opt = arg._right.toValueId(_qec->getIndex().getVocab());
                 opt.has_value()) {
@@ -518,7 +516,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
     vector<size_t> keepIndices;
     ad_utility::HashSet<size_t> indDone;
     const auto& colMap = parent._qet->getVariableColumns();
-    for (const auto& var : selectClause.getSelectedVariablesAsStrings()) {
+    for (const auto& var : selectClause.getSelectedVariables()) {
       // There used to be a special treatment for `?ql_textscore_` variables
       // which was considered a bug.
       if (auto it = colMap.find(var); it != colMap.end()) {
@@ -581,7 +579,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
       // Determine the column containing the subjects for which we are
       // interested in their predicates.
       auto subjectColumn =
-          parent._qet->getVariableColumn(patternTrickTuple.subject_.name());
+          parent._qet->getVariableColumn(patternTrickTuple.subject_);
       auto patternTrickPlan = makeSubtreePlan<CountAvailablePredicates>(
           _qec, parent._qet, subjectColumn, predicateVariable, countVariable);
       added.push_back(std::move(patternTrickPlan));
@@ -650,8 +648,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     plan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
     plan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
     if (pq._orderBy.size() == 1 && !pq._orderBy[0].isDescending_) {
-      size_t col =
-          parent._qet->getVariableColumn(pq._orderBy[0].variable_.name());
+      size_t col = parent._qet->getVariableColumn(pq._orderBy[0].variable_);
       const std::vector<size_t>& previousSortedOn =
           parent._qet->resultSortedOn();
       if (!previousSortedOn.empty() && col == previousSortedOn[0]) {
@@ -664,9 +661,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     } else {
       vector<pair<size_t, bool>> sortIndices;
       for (auto& ord : pq._orderBy) {
-        sortIndices.emplace_back(
-            parent._qet->getVariableColumn(ord.variable_.name()),
-            ord.isDescending_);
+        sortIndices.emplace_back(parent._qet->getVariableColumn(ord.variable_),
+                                 ord.isDescending_);
       }
       const std::vector<size_t>& previousSortedOn =
           parent._qet->resultSortedOn();
@@ -1523,9 +1519,9 @@ string QueryPlanner::getPruningKey(
   std::ostringstream os;
   const auto& varCols = plan._qet->getVariableColumns();
   for (size_t orderedOnCol : orderedOnColumns) {
-    for (const auto& varCol : varCols) {
-      if (varCol.second == orderedOnCol) {
-        os << varCol.first << ", ";
+    for (const auto& [variable, columnIndex] : varCols) {
+      if (columnIndex == orderedOnCol) {
+        os << variable.name() << ", ";
         break;
       }
     }
@@ -1579,7 +1575,7 @@ void QueryPlanner::applyFiltersIfPossible(
 
       if (std::ranges::all_of(filters[i].expression_.containedVariables(),
                               [&plan](const auto& variable) {
-                                return plan._qet->varCovered(variable->name());
+                                return plan._qet->isVariableCovered(*variable);
                               })) {
         // Apply this filter.
         SubtreePlan newPlan =

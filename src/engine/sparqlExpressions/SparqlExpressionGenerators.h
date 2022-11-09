@@ -25,14 +25,14 @@ void getIdsFromVariableImpl(VectorWithMemoryLimit<ValueId>& result,
   const size_t beginIndex = context->_beginIndex;
   const size_t endIndex = context->_endIndex;
 
-  if (!context->_variableToColumnAndResultTypeMap.contains(variable.name())) {
+  if (!context->_variableToColumnAndResultTypeMap.contains(variable)) {
     throw std::runtime_error(
         "Variable " + variable.name() +
         " could not be mapped to context column of expression evaluation");
   }
 
   const size_t columnIndex =
-      context->_variableToColumnAndResultTypeMap.at(variable.name()).first;
+      context->_variableToColumnAndResultTypeMap.at(variable).first;
 
   result.reserve(endIndex - endIndex);
   for (size_t i = beginIndex; i < endIndex; ++i) {

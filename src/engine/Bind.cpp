@@ -64,10 +64,10 @@ string Bind::asStringImpl(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-Operation::VariableToColumnMap Bind::computeVariableToColumnMap() const {
+VariableToColumnMap Bind::computeVariableToColumnMap() const {
   auto res = _subtree->getVariableColumns();
   // The new variable is always appended at the end.
-  res[_bind._target.name()] = getResultWidth() - 1;
+  res[_bind._target] = getResultWidth() - 1;
   return res;
 }
 
@@ -140,14 +140,13 @@ void Bind::computeExpressionBind(
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
     if constexpr (isVariable) {
-      auto column =
-          getInternallyVisibleVariableColumns().at(singleResult.name());
+      auto column = getInternallyVisibleVariableColumns().at(singleResult);
       for (size_t i = 0; i < inSize; ++i) {
         output(i, inCols) = output(i, column);
       }
-      *resultType = evaluationContext._variableToColumnAndResultTypeMap
-                        .at(singleResult.name())
-                        .second;
+      *resultType =
+          evaluationContext._variableToColumnAndResultTypeMap.at(singleResult)
+              .second;
     } else if constexpr (isStrongId) {
       for (size_t i = 0; i < inSize; ++i) {
         output(i, inCols) = singleResult;

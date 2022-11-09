@@ -28,16 +28,17 @@ TextOperationWithoutFilter::TextOperationWithoutFilter(
       _sizeEstimate(std::numeric_limits<size_t>::max()) {}
 
 // _____________________________________________________________________________
-Operation::VariableToColumnMap
-TextOperationWithoutFilter::computeVariableToColumnMap() const {
-  ad_utility::HashMap<string, size_t> vcmap;
+VariableToColumnMap TextOperationWithoutFilter::computeVariableToColumnMap()
+    const {
+  VariableToColumnMap vcmap;
   size_t index = 0;
-  vcmap[_cvar.name()] = index++;
-  vcmap[absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, _cvar.name().substr(1))] =
-      index++;
+  vcmap[_cvar] = index++;
+  vcmap[_cvar.getTextScoreVariable()] = index++;
+  // TODO<joka921> The order of the variables is not deterministic, check
+  // whether this is correct.
   for (const auto& var : _variables) {
     if (var != _cvar) {
-      vcmap[var.name()] = index++;
+      vcmap[var] = index++;
     }
   }
   return vcmap;

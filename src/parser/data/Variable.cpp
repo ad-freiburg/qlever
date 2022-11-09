@@ -6,6 +6,7 @@
 
 #include "ctre/ctre.h"
 #include "index/Index.h"
+#include "parser/data/Context.h"
 
 // ___________________________________________________________________________
 Variable::Variable(std::string name) : _name{std::move(name)} {
@@ -22,12 +23,11 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
     const Context& context, [[maybe_unused]] ContextRole role) const {
   size_t row = context._row;
   const ResultTable& res = context._res;
-  const ad_utility::HashMap<string, size_t>& variableColumns =
-      context._variableColumns;
+  const auto& variableColumns = context._variableColumns;
   const Index& qecIndex = context._qecIndex;
   const auto& idTable = res._idTable;
-  if (variableColumns.contains(_name)) {
-    size_t index = variableColumns.at(_name);
+  if (variableColumns.contains(*this)) {
+    size_t index = variableColumns.at(*this);
     auto id = idTable(row, index);
     switch (id.getDatatype()) {
       case Datatype::Undefined:
@@ -53,4 +53,9 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
     AD_FAIL();
   }
   return std::nullopt;
+}
+
+// _____________________________________________________________________________
+Variable Variable::getTextScoreVariable() const {
+  return Variable{absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, name().substr(1))};
 }

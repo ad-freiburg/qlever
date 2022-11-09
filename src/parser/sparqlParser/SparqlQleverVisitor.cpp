@@ -947,8 +947,7 @@ vector<TripleWithPropertyPath> Visitor::visit(
       if (auto* propertyPath = std::get_if<PropertyPath>(&predicate)) {
         if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE ||
             propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
-          addVisibleVariable(
-              absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, var->name().substr(1)));
+          addVisibleVariable(var->getTextScoreVariable());
         }
       }
     }

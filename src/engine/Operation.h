@@ -14,6 +14,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/ResultTable.h"
 #include "engine/RuntimeInformation.h"
+#include "engine/VariableToColumnMap.h"
 #include "parser/data/Variable.h"
 #include "util/Exception.h"
 #include "util/Log.h"
@@ -24,7 +25,6 @@ class QueryExecutionTree;
 
 class Operation {
  public:
-  using VariableToColumnMap = ad_utility::HashMap<std::string, size_t>;
   // Default Constructor.
   Operation() : _executionContext(nullptr) {}
 

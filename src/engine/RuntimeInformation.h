@@ -6,13 +6,15 @@
 
 #pragma once
 
-#include <absl/strings/str_join.h>
-#include <util/HashMap.h>
-#include <util/json.h>
-
 #include <iostream>
 #include <string>
 #include <vector>
+
+#include "absl/strings/str_join.h"
+#include "engine/VariableToColumnMap.h"
+#include "parser/data/Variable.h"
+#include "util/HashMap.h"
+#include "util/json.h"
 
 /// A class to store information about the status of an operation (result size,
 /// time to compute, status, etc.). Also contains the functionality to print
@@ -80,8 +82,7 @@ class RuntimeInformation {
 
   /// Set the names of the columns from the HashMap format that is used in the
   /// rest of the Qlever code.
-  void setColumnNames(
-      const ad_utility::HashMap<std::string, size_t>& columnMap);
+  void setColumnNames(const VariableToColumnMap& columnMap);
 
   /// Get the time spent computing the operation. This is the total time minus
   /// the time spent computing the children.

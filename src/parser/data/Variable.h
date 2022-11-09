@@ -4,10 +4,15 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 #include <utility>
 
-#include "Context.h"
+// Forward declaration because of cyclic dependencies
+// TODO<joka921> The coupling of the `Variable` with its `evaluate` methods
+// is not very clean and should be refactored.
+struct Context;
+enum ContextRole : int;
 
 class Variable {
  public:
@@ -17,9 +22,6 @@ class Variable {
 
   // TODO<joka921> There are several similar variants of this function across
   // the codebase. Unify them!
-  // TODO<joka921> This function can also be in the .cpp file, but we first
-  // have to figure out the link order.
-
   // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> evaluate(
       const Context& context, [[maybe_unused]] ContextRole role) const;
@@ -32,6 +34,9 @@ class Variable {
 
   // Needed for consistency with the `Alias` class.
   [[nodiscard]] const std::string& targetVariable() const { return _name; }
+
+  // Convert `?someVariable` into `?ql_textscore_someVariable`
+  Variable getTextScoreVariable() const;
 
   bool operator==(const Variable&) const = default;
 

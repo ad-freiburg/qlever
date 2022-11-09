@@ -8,13 +8,12 @@
 #include <optional>
 #include <vector>
 
+#include "engine/VariableToColumnMap.h"
 #include "parser/data/Variable.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 
 namespace sparqlExpression {
-
-using VariableColumnMap = ad_utility::HashMap<std::string, size_t>;
 
 class SparqlExpression;
 struct EvaluationContext;
@@ -67,7 +66,7 @@ class SparqlExpressionPimpl {
   // has to be in the .cpp file because `SparqlExpression` is only forward
   // declared.
   [[nodiscard]] std::string getCacheKey(
-      const VariableColumnMap& variableColumnMap) const;
+      const VariableToColumnMap& variableToColumnMap) const;
   SparqlExpressionPimpl(std::shared_ptr<SparqlExpression>&& pimpl,
                         std::string descriptor);
   ~SparqlExpressionPimpl();

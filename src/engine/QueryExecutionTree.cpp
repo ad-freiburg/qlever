@@ -77,14 +77,15 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
 }
 
 // _____________________________________________________________________________
-size_t QueryExecutionTree::getVariableColumn(const string& variable) const {
+size_t QueryExecutionTree::getVariableColumn(const Variable& variable) const {
   AD_CHECK(_rootOperation);
   const auto& varCols = getVariableColumns();
   if (!varCols.contains(variable)) {
     AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-             "Variable could not be mapped to result column. Var: " + variable);
+             "Variable could not be mapped to result column. Var: " +
+                 variable.name());
   }
-  return varCols.find(variable)->second;
+  return varCols.at(variable);
 }
 
 // ___________________________________________________________________________
@@ -96,8 +97,8 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
 
   for (const auto& var : selectClause.getSelectedVariables()) {
     std::string varString = var.name();
-    if (getVariableColumns().contains(varString)) {
-      auto columnIndex = getVariableColumns().at(varString);
+    if (getVariableColumns().contains(var)) {
+      auto columnIndex = getVariableColumns().at(var);
       // Remove the question mark from the variable name if requested.
       if (!includeQuestionMark && varString.starts_with('?')) {
         varString = varString.substr(1);
@@ -285,9 +286,9 @@ bool QueryExecutionTree::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
-bool QueryExecutionTree::varCovered(string var) const {
+bool QueryExecutionTree::isVariableCovered(Variable variable) const {
   AD_CHECK(_rootOperation);
-  return getVariableColumns().contains(var);
+  return getVariableColumns().contains(variable);
 }
 
 // _______________________________________________________________________
@@ -520,7 +521,20 @@ ad_utility::streams::stream_generator QueryExecutionTree::writeRdfGraphTurtle(
     co_yield ' ';
     co_yield triple._predicate;
     co_yield ' ';
-    co_yield triple._object;
+    // NOTE: It's tempting to co_yield an expression using a ternary operator:
+    // co_yield triple._object.starts_with('"')
+    //     ? RdfEscaping::validRDFLiteralFromNormalized(triple._object)
+    //     : triple._object;
+    // but this leads to 1. segfaults in GCC (probably a compiler bug) and 2.
+    // to unnecessary copies of `triple._object` in the `else` case because
+    // the ternary always has to create a new prvalue.
+    if (triple._object.starts_with('"')) {
+      std::string objectAsValidRdfLiteral =
+          RdfEscaping::validRDFLiteralFromNormalized(triple._object);
+      co_yield objectAsValidRdfLiteral;
+    } else {
+      co_yield triple._object;
+    }
     co_yield " .\n";
   }
 }

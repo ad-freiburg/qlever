@@ -67,7 +67,7 @@ string OptionalJoin::getDescriptor() const {
       // If the left join column matches the index of a variable in the left
       // subresult.
       if (jc[0] == p.second) {
-        joinVars += p.first + " ";
+        joinVars += p.first.name() + " ";
       }
     }
   }
@@ -122,9 +122,8 @@ void OptionalJoin::computeResult(ResultTable* result) {
 }
 
 // _____________________________________________________________________________
-Operation::VariableToColumnMap OptionalJoin::computeVariableToColumnMap()
-    const {
-  ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumns());
+VariableToColumnMap OptionalJoin::computeVariableToColumnMap() const {
+  VariableToColumnMap retVal(_left->getVariableColumns());
   size_t leftSize = _left->getResultWidth();
   for (const auto& [variable, columnIndexRight] :
        _right->getVariableColumns()) {

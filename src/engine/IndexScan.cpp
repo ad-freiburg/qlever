@@ -141,24 +141,26 @@ vector<size_t> IndexScan::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-Operation::VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
-  ad_utility::HashMap<string, size_t> res;
+VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
+  VariableToColumnMap res;
   size_t col = 0;
 
   // Helper lambdas that add the respective triple component as the next column.
   auto addSubject = [&]() {
     if (_subject.isVariable()) {
-      res[_subject.getVariable().name()] = col++;
+      res[_subject.getVariable()] = col++;
     }
   };
+  // TODO<joka921> Refactor the `PropertyPath` class s.t. it also has
+  //`isVariable` and `getVariable`, then those three lambdas can become one.
   auto addPredicate = [&]() {
     if (_predicate[0] == '?') {
-      res[_predicate] = col++;
+      res[Variable{_predicate}] = col++;
     }
   };
   auto addObject = [&]() {
     if (_object.isVariable()) {
-      res[_object.getVariable().name()] = col++;
+      res[_object.getVariable()] = col++;
     }
   };
 

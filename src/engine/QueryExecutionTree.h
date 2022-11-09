@@ -69,7 +69,7 @@ class QueryExecutionTree {
 
   const QueryExecutionContext* getQec() const { return _qec; }
 
-  const Operation::VariableToColumnMap& getVariableColumns() const {
+  const VariableToColumnMap& getVariableColumns() const {
     AD_CHECK(_rootOperation);
     return _rootOperation->getExternallyVisibleVariableColumns();
   }
@@ -86,7 +86,7 @@ class QueryExecutionTree {
     return _type == OperationType::UNDEFINED || !_rootOperation;
   }
 
-  size_t getVariableColumn(const string& var) const;
+  size_t getVariableColumn(const Variable& variable) const;
 
   size_t getResultWidth() const { return _rootOperation->getResultWidth(); }
 
@@ -164,7 +164,7 @@ class QueryExecutionTree {
                                _rootOperation->getMultiplicity(col));
   }
 
-  bool varCovered(string var) const;
+  bool isVariableCovered(Variable variable) const;
 
   bool knownEmptyResult();
 

@@ -92,15 +92,10 @@ namespace sparqlExpression {
 /// A list of StrongIds that all have the same datatype.
 using StrongIdsWithResultType = VectorWithMemoryLimit<ValueId>;
 
-/// Typedef for a map from variable names to the corresponding column in the
-/// input of a SparqlExpression.
-using VariableToColumnMap = ad_utility::HashMap<std::string, size_t>;
-
 /// Typedef for a map from variables names to (input column, type of input
 /// column.
 using VariableToColumnAndResultTypeMap =
-    ad_utility::HashMap<std::string,
-                        std::pair<size_t, ResultTable::ResultType>>;
+    ad_utility::HashMap<Variable, std::pair<size_t, ResultTable::ResultType>>;
 
 /// All the additional information which is needed to evaluate a Sparql
 /// expression.
@@ -162,7 +157,7 @@ struct EvaluationContext {
     if (_columnsByWhichResultIsSorted.empty()) {
       return false;
     }
-    if (!_variableToColumnAndResultTypeMap.contains(variable.name())) {
+    if (!_variableToColumnAndResultTypeMap.contains(variable)) {
       return false;
     }
 
@@ -175,11 +170,11 @@ struct EvaluationContext {
   // ____________________________________________________________________________
   [[nodiscard]] size_t getColumnIndexForVariable(const Variable& var) const {
     const auto& map = _variableToColumnAndResultTypeMap;
-    if (!map.contains(var._name)) {
+    if (!map.contains(var)) {
       throw std::runtime_error(absl::StrCat(
-          "Variable ", var._name, " was not found in input to expression."));
+          "Variable ", var.name(), " was not found in input to expression."));
     }
-    return map.at(var._name).first;
+    return map.at(var).first;
   }
 };
 

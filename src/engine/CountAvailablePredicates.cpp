@@ -13,8 +13,8 @@ CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
     : Operation(qec),
       _subtree(nullptr),
       _subjectColumnIndex(0),
-      _predicateVarName(std::move(predicateVariable)),
-      _countVarName(std::move(countVariable)) {}
+      _predicateVariable(std::move(predicateVariable)),
+      _countVariable(std::move(countVariable)) {}
 
 // _____________________________________________________________________________
 CountAvailablePredicates::CountAvailablePredicates(
@@ -25,8 +25,8 @@ CountAvailablePredicates::CountAvailablePredicates(
       _subtree(QueryExecutionTree::createSortedTree(std::move(subtree),
                                                     {subjectColumnIndex})),
       _subjectColumnIndex(subjectColumnIndex),
-      _predicateVarName(std::move(predicateVariable)),
-      _countVarName(std::move(countVariable)) {}
+      _predicateVariable(std::move(predicateVariable)),
+      _countVariable(std::move(countVariable)) {}
 
 // _____________________________________________________________________________
 string CountAvailablePredicates::asStringImpl(size_t indent) const {
@@ -61,11 +61,11 @@ vector<size_t> CountAvailablePredicates::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-Operation::VariableToColumnMap
-CountAvailablePredicates::computeVariableToColumnMap() const {
-  ad_utility::HashMap<string, size_t> varCols;
-  varCols[_predicateVarName.name()] = 0;
-  varCols[_countVarName.name()] = 1;
+VariableToColumnMap CountAvailablePredicates::computeVariableToColumnMap()
+    const {
+  VariableToColumnMap varCols;
+  varCols[_predicateVariable] = 0;
+  varCols[_countVariable] = 1;
   return varCols;
 }
 
