@@ -96,6 +96,8 @@ class Join : public Operation {
    * the result in dynRes. Creates a cross product for matching rows by putting
    * the smaller IdTable in a hash map and using that, to faster find the
    * matching rows.
+   * @return The result is only sorted, if the bigger table is sorted.
+   * Otherwise it is not sorted.
    **/
   template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
   void hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB, size_t jc2,

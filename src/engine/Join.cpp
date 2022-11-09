@@ -148,7 +148,10 @@ void Join::computeResult(ResultTable* result) {
   CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, join, leftRes->_idTable,
                     _leftJoinCol, rightRes->_idTable, _rightJoinCol,
                     &result->_idTable);
-  // TODO This for debugging.
+  /* TODO This is needed for the pre-compilation of the template hashJoin.
+   * Because the compiler doesn't know, that rand() < 0 can never be true,
+   * it compiles the used templates without breaking the actual join operation.
+  */
   if (rand() < 0) {
     CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, hashJoin, leftRes->_idTable,
                      _leftJoinCol, rightRes->_idTable, _rightJoinCol,
