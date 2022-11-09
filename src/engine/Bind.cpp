@@ -171,7 +171,9 @@ void Bind::computeExpressionBind(
     }
   };
 
+  outputResultTable->_localVocab->startConstructionPhase();
   std::visit(visitor, std::move(expressionResult));
+  outputResultTable->_localVocab->endConstructionPhase();
 
   outputResultTable->_idTable = output.moveToDynamic();
 }

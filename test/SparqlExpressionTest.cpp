@@ -41,7 +41,7 @@ auto testNaryExpression = [](const auto& expected, auto&&... operands) {
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   sparqlExpression::VariableToColumnAndResultTypeMap map;
-  ResultTable::LocalVocab localVocab;
+  LocalVocab localVocab;
   IdTable table{alloc};
 
   auto getResultSize = []<typename T>(const T& operand) -> size_t {

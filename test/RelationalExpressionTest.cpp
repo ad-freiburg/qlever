@@ -402,7 +402,7 @@ auto testNotComparableHelper(T leftValue, U rightValue,
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   sparqlExpression::VariableToColumnAndResultTypeMap map;
-  ResultTable::LocalVocab localVocab;
+  LocalVocab localVocab;
   IdTable table{alloc};
   sparqlExpression::EvaluationContext context{*getQec(), map, table, alloc,
                                               localVocab};

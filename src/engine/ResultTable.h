@@ -1,6 +1,8 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2015 - 2022, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <b.buchhold@gmail.com>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
+
 #pragma once
 
 #include <array>
@@ -9,10 +11,12 @@
 #include <optional>
 #include <vector>
 
-#include "../global/Id.h"
-#include "../util/Exception.h"
-#include "IdTable.h"
-#include "ResultType.h"
+#include "engine/IdTable.h"
+#include "engine/ResultType.h"
+#include "global/Id.h"
+#include "global/ValueId.h"
+#include "util/Exception.h"
+#include "util/HashMap.h"
 
 using std::array;
 using std::condition_variable;
@@ -20,6 +24,59 @@ using std::lock_guard;
 using std::mutex;
 using std::unique_lock;
 using std::vector;
+
+// The local vocabulary for a particular result table. It maps the IDs that are
+// not part of the normal vocabulary
+//
+//
+// It contains a map from
+// (local vocab) ids
+class LocalVocab {
+ public:
+  // Create a new, empty local vocabulary.
+  LocalVocab() {}
+
+  // Prevent accidental copying of a local vocabulary.
+  // TODO: Needed in SparqlExpressionTestHelpers.h:91.
+  // LocalVocab(const LocalVocab&) = delete;
+
+  // Get ID of a word in the local vocabulary. If the word was already
+  // contained, return the already existing ID. If the word was not yet
+  // contained, add it, and return the new ID.
+  [[maybe_unused]] Id getIdAndAddIfNotContained(const std::string& word);
+
+  // Start the construction of a local vocabulary. This is currently allowed
+  // only once, when the vocabulary is still empty.
+  void startConstructionPhase();
+
+  // Signal that the construction of the local vocabulary is done. This call
+  // will clear the `wordsToIdsMap_` (to save space) and afterwards,
+  // `getIdAndAddIfNotContained` can no longer be called.
+  void endConstructionPhase();
+
+  // The number of words in the vocabulary.
+  size_t size() const { return words_.size(); }
+
+  // Return true if and only if the local vocabulary is empty.
+  bool empty() const { return words_.empty(); }
+
+  // Return a const reference to the i-th word.
+  const std::string& operator[](size_t i) const { return words_[i]; }
+
+ private:
+  // The words of the local vocabulary. The index of a word in the `std::vector`
+  // corresponds to its ID in the local vocabulary.
+  std::vector<string> words_;
+
+  // Remember which words are already in the vocabulary and with which ID. This
+  // map is only used during the construction of a local vocabulary and can (and
+  // should) be cleared when the construction is done (to save space).
+  ad_utility::HashMap<std::string, Id> wordsToIdsMap_;
+
+  // Indicator whether the vocabulary is still under construction (only then can
+  // `getIdAndAddIfNotContained` be called) or done.
+  bool constructionHasFinished_ = false;
+};
 
 class ResultTable {
  public:
@@ -38,18 +95,6 @@ class ResultTable {
 
   vector<ResultType> _resultTypes;
 
-  // This vector is used to store generated strings (such as the GROUP_CONCAT
-  // results) which are used in the output with the ResultType::STRING type.
-  // A std::shared_ptr is used to allow for quickly passing the vocabulary
-  // from one result to the next, as any operation that occurs after one
-  // having added entries to the _localVocab needs to ensure its ResultTable
-  // has the same _localVocab. As currently entries in the _localVocab are not
-  // being moved or deleted having a single copy used by several operations
-  // should not lead to any references to the _localVocab being invalidated
-  // due to later use.
-  // WARNING: Currently only operations that can run after a GroupBy copy
-  //          the _localVocab of a subresult.
-  using LocalVocab = vector<string>;
   std::shared_ptr<LocalVocab> _localVocab;
 
   explicit ResultTable(ad_utility::AllocatorWithLimit<Id> allocator);

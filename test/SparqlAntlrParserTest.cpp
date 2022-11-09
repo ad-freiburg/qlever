@@ -179,7 +179,7 @@ TEST(SparqlExpressionParser, First) {
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   IdTable table{alloc};
-  ResultTable::LocalVocab localVocab;
+  LocalVocab localVocab;
   sparqlExpression::EvaluationContext input{*qec, map, table, alloc,
                                             localVocab};
   auto result = resultAsExpression->evaluate(&input);
