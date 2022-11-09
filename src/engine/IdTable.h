@@ -281,7 +281,7 @@ class IdTableImpl {
   IdTableImpl(Allocator allocator) : _data{allocator} {};
 
   using const_row_type = const std::array<Id, COLS>;
-  using row_type = const std::array<Id, COLS>;
+  using row_type = std::array<Id, COLS>;
   using const_row_reference = const_row_type&;
   using row_reference = row_type&;
   using iterator = IdTableIterator<COLS, false>;
@@ -301,6 +301,9 @@ class IdTableImpl {
  protected:
   // Access to the storage as raw pointers
   const Id* data() const { return _data.data(); }
+
+  // Access to the storage as raw pointers
+  Id* data() { return _data.data(); }
 
   // This ensures the name _cols is always defined within the IdTableImpl
   // and allows for uniform usage.

@@ -148,6 +148,12 @@ void Join::computeResult(ResultTable* result) {
   CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, join, leftRes->_idTable,
                     _leftJoinCol, rightRes->_idTable, _rightJoinCol,
                     &result->_idTable);
+  // TODO This for debugging.
+  if (rand() < 0) {
+    CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, hashJoin, leftRes->_idTable,
+                     _leftJoinCol, rightRes->_idTable, _rightJoinCol,
+                     &result->_idTable);
+  }
 
   LOG(DEBUG) << "Join result computation done." << endl;
 }
@@ -763,7 +769,7 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   // is bigger.
   } else if (a.size() / b.size() >= 1) {
     // a is bigger, or the same size as b. b gets put into the hash table.
-    ad_utility::HashMap<Id, std::vector<detail::ConstRow>> map;
+    ad_utility::HashMap<Id, std::vector<std::decay_t<typename IdTableStatic<R_WIDTH>::const_row_type>>> map;
     for ( size_t j = 0; j < b.size(); j++) {
       map[b(j, jc2)].push_back(b[j]);
     }
@@ -796,7 +802,7 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
 
   } else {
     // b is bigger. a gets put into the hash table.
-    ad_utility::HashMap<Id, std::vector<detail::ConstRow>> map;
+    ad_utility::HashMap<Id, std::vector<std::decay_t<typename IdTableStatic<L_WIDTH>::const_row_type>>> map;
     for ( size_t i = 0; i < a.size(); i++) {
       map[a(i, jc1)].push_back(a[i]);
     }
