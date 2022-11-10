@@ -762,15 +762,11 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
 
   IdTableStatic<OUT_WIDTH> result = dynRes->moveToStatic<OUT_WIDTH>();
 
-  // Cannot just switch l1 and l2 around because the order of
+  // Cannot just switch a and b around because the order of
   // items in the result tuples is important.
-  if (a.size() / b.size() > GALLOP_THRESHOLD) {
-    doGallopInnerJoin(LeftLargerTag{}, a, jc1, b, jc2, &result);
-  } else if (b.size() / a.size() > GALLOP_THRESHOLD) {
-    doGallopInnerJoin(RightLargerTag{}, a, jc1, b, jc2, &result);
   // Procceding with the actual hash join depended on which IdTableView
   // is bigger.
-  } else if (a.size() / b.size() >= 1) {
+  if (a.size() / b.size() >= 1) {
     // a is bigger, or the same size as b. b gets put into the hash table.
     ad_utility::HashMap<Id, std::vector<std::decay_t<typename IdTableStatic<R_WIDTH>::const_row_type>>> map;
     for ( size_t j = 0; j < b.size(); j++) {
