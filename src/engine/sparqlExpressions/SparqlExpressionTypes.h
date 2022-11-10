@@ -122,7 +122,7 @@ struct EvaluationContext {
   ad_utility::AllocatorWithLimit<Id> _allocator;
 
   /// The local vocabulary of the input.
-  const ResultTable::LocalVocab& _localVocab;
+  const LocalVocab& _localVocab;
 
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(
@@ -130,7 +130,7 @@ struct EvaluationContext {
       const VariableToColumnAndResultTypeMap& variableToColumnAndResultTypeMap,
       const IdTable& inputTable,
       const ad_utility::AllocatorWithLimit<Id>& allocator,
-      const ResultTable::LocalVocab& localVocab)
+      const LocalVocab& localVocab)
       : _qec{qec},
         _variableToColumnAndResultTypeMap{variableToColumnAndResultTypeMap},
         _inputTable{inputTable},
@@ -144,7 +144,7 @@ struct EvaluationContext {
                     const IdTable& inputTable, size_t beginIndex,
                     size_t endIndex,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    const ResultTable::LocalVocab& localVocab)
+                    const LocalVocab& localVocab)
       : _qec{qec},
         _variableToColumnAndResultTypeMap{map},
         _inputTable{inputTable},
@@ -237,17 +237,12 @@ constexpr static qlever::ResultType expressionResultTypeToQleverResultType() {
 }
 
 /// Get Id of constant result of type T.
-template <SingleExpressionResult T, typename LocalVocab>
-Id constantExpressionResultToId(T&& result, LocalVocab& localVocab,
-                                bool isRepetitionOfConstant) {
+template <SingleExpressionResult T, typename LocalVocabT>
+Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   static_assert(isConstantResult<T>);
   if constexpr (ad_utility::isSimilar<T, string>) {
-    // Return the index in the local vocabulary.
-    if (!isRepetitionOfConstant) {
-      localVocab.push_back(std::forward<T>(result));
-    }
     return Id::makeFromLocalVocabIndex(
-        LocalVocabIndex::make(localVocab.size() - 1));
+        localVocab.getIndexAndAddIfNotContained(std::forward<T>(result)));
   } else if constexpr (ad_utility::isSimilar<double, T>) {
     return Id::makeFromDouble(result);
   } else if constexpr (ad_utility::isSimilar<T, Id>) {

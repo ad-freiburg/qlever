@@ -160,13 +160,24 @@ void Bind::computeExpressionBind(
       *resultType =
           sparqlExpression::detail::expressionResultTypeToQleverResultType<T>();
 
-      size_t i = 0;
-      for (auto&& resultValue : resultGenerator) {
-        output(i, inCols) =
-            sparqlExpression::detail::constantExpressionResultToId(
-                resultValue, *(outputResultTable->_localVocab),
-                isConstant && i > 0);
-        i++;
+      if (isConstant) {
+        auto it = resultGenerator.begin();
+        if (it != resultGenerator.end()) {
+          Id constantId =
+              sparqlExpression::detail::constantExpressionResultToId(
+                  std::move(*it), *(outputResultTable->_localVocab));
+          for (size_t i = 0; i < inSize; ++i) {
+            output(i, inCols) = constantId;
+          }
+        }
+      } else {
+        size_t i = 0;
+        for (auto&& resultValue : resultGenerator) {
+          output(i, inCols) =
+              sparqlExpression::detail::constantExpressionResultToId(
+                  std::move(resultValue), *(outputResultTable->_localVocab));
+          i++;
+        }
       }
     }
   };

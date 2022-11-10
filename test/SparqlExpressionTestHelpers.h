@@ -91,7 +91,7 @@ static QueryExecutionContext* getQec() {
 struct TestContext {
   QueryExecutionContext* qec = getQec();
   sparqlExpression::VariableToColumnAndResultTypeMap varToColMap;
-  ResultTable::LocalVocab localVocab;
+  LocalVocab localVocab;
   IdTable table{qec->getAllocator()};
   sparqlExpression::EvaluationContext context{*getQec(), varToColMap, table,
                                               qec->getAllocator(), localVocab};

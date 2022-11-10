@@ -171,7 +171,7 @@ void GroupBy::processGroup(
       *resultType =
           sparqlExpression::detail::expressionResultTypeToQleverResultType<T>();
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
-          singleResult, *(outTable->_localVocab), false);
+          singleResult, *(outTable->_localVocab));
     } else {
       // This should never happen since aggregates always return constants.
       AD_FAIL()

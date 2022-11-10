@@ -1,17 +1,22 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2015 -2022, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <b.buchhold@gmail.com>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "./ResultTable.h"
+#include "engine/ResultTable.h"
 
 #include <cassert>
+
+#include "engine/LocalVocab.h"
 
 // _____________________________________________________________________________
 ResultTable::ResultTable(ad_utility::AllocatorWithLimit<Id> allocator)
     : _sortedBy(),
       _idTable(std::move(allocator)),
       _resultTypes(),
-      _localVocab(std::make_shared<std::vector<std::string>>()) {}
+      // TODO: Why initialize with a pointer to an empty local vocabulary
+      // instead of with nullptr?
+      _localVocab(std::make_shared<LocalVocab>()) {}
 
 // _____________________________________________________________________________
 void ResultTable::clear() {

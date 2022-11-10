@@ -61,7 +61,7 @@ endfunction()
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest)
 
-addLinkAndDiscoverTest(SparqlParserTest parser sparqlExpressions ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(StringUtilsTest ${ICU_LIBRARIES})
 
@@ -139,7 +139,7 @@ addLinkAndDiscoverTest(MinusTest engine)
 addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 #addLinkAndDiscoverTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 
-addLinkAndDiscoverTest(SparqlAntlrParserTest parser sparqlExpressions)
+addLinkAndDiscoverTest(SparqlAntlrParserTest parser sparqlExpressions engine)
 
 # The SerializerTest uses temporary files. The tests fail when multiple test
 # cases are run in parallel. This should be fixed by using distinct filenames
@@ -157,7 +157,7 @@ addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
 addLinkAndDiscoverTest(TypeTraitsTest)
 
-addLinkAndDiscoverTest(SparqlExpressionTest sparqlExpressions index)
+addLinkAndDiscoverTest(SparqlExpressionTest sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(StreamableBodyTest)
 
@@ -226,14 +226,16 @@ addLinkAndDiscoverTest(ValueIdTest absl::flat_hash_set)
 
 addLinkAndDiscoverTest(LambdaHelpersTest)
 
-addLinkAndDiscoverTest(ParseExceptionTest parser)
+addLinkAndDiscoverTest(ParseExceptionTest parser engine)
 
 addLinkAndDiscoverTest(TransparentFunctorsTest)
 
-addLinkAndDiscoverTest(SelectClauseTest parser)
+addLinkAndDiscoverTest(SelectClauseTest parser engine)
 
 addLinkAndDiscoverTestSerial(RelationalExpressionTest sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(CheckUsePatternTrickTest parser engine)
 
 addLinkAndDiscoverTestSerial(RegexExpressionTest sparqlExpressions index engine)
+
+addLinkAndDiscoverTest(LocalVocabTest engine)

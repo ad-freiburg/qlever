@@ -1,6 +1,8 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2015 - 2022, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <b.buchhold@gmail.com>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
+
 #pragma once
 
 #include <array>
@@ -9,10 +11,13 @@
 #include <optional>
 #include <vector>
 
-#include "../global/Id.h"
-#include "../util/Exception.h"
-#include "IdTable.h"
-#include "ResultType.h"
+#include "engine/IdTable.h"
+#include "engine/LocalVocab.h"
+#include "engine/ResultType.h"
+#include "global/Id.h"
+#include "global/ValueId.h"
+#include "util/Exception.h"
+#include "util/HashMap.h"
 
 using std::array;
 using std::condition_variable;
@@ -38,18 +43,6 @@ class ResultTable {
 
   vector<ResultType> _resultTypes;
 
-  // This vector is used to store generated strings (such as the GROUP_CONCAT
-  // results) which are used in the output with the ResultType::STRING type.
-  // A std::shared_ptr is used to allow for quickly passing the vocabulary
-  // from one result to the next, as any operation that occurs after one
-  // having added entries to the _localVocab needs to ensure its ResultTable
-  // has the same _localVocab. As currently entries in the _localVocab are not
-  // being moved or deleted having a single copy used by several operations
-  // should not lead to any references to the _localVocab being invalidated
-  // due to later use.
-  // WARNING: Currently only operations that can run after a GroupBy copy
-  //          the _localVocab of a subresult.
-  using LocalVocab = vector<string>;
   std::shared_ptr<LocalVocab> _localVocab;
 
   explicit ResultTable(ad_utility::AllocatorWithLimit<Id> allocator);
@@ -63,13 +56,6 @@ class ResultTable {
   ResultTable& operator=(ResultTable&& other) = default;
 
   virtual ~ResultTable();
-
-  std::optional<std::string> indexToOptionalString(LocalVocabIndex idx) const {
-    if (idx.get() < _localVocab->size()) {
-      return (*_localVocab)[idx.get()];
-    }
-    return std::nullopt;
-  }
 
   size_t size() const;
   size_t width() const { return _idTable.cols(); }

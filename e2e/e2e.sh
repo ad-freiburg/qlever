@@ -102,7 +102,7 @@ if [ ${REBUILD_THE_INDEX} == "YES" ] || ! [ -f "${INDEX}.vocabulary" ]; then
 	rm -f "$INDEX.*"
 	pushd "$BINARY_DIR"
 	echo "Building index $INDEX"
-	./IndexBuilderMain -l -i "$INDEX" \
+	./IndexBuilderMain -i "$INDEX" \
 	    -F ttl \
 	    -f "$INPUT.nt" \
 	    -s "$PROJECT_DIR/e2e/e2e-build-settings.json" \
