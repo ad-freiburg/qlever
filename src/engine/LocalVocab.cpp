@@ -9,22 +9,36 @@
 #include "global/ValueId.h"
 
 // _____________________________________________________________________________
-LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(
-    const std::string& word) {
-  // The following code avoids computing the hash for `word` twice in case we
-  // see it for the first time (note that hashing a string is not cheap). The
-  // return value of the `insert` operation is a pair, where `result.first` is
-  // an iterator to the (already existing or newly inserted) key-value pair, and
-  // `result.second` is a `bool`, which is `true` if and only if the value was
-  // newly inserted.
+template <typename WordT>
+LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
+  // The following code contains two subtle, but important optimizations:
+  //
+  // 1. The variant of `insert` used covers the case that `word` was already
+  // contained in the map as well as the case that it is newly inserted. This
+  // avoids computing the hash for `word` twice in case we see it for the first
+  // time (note that hashing a string is not cheap).
+  //
+  // 2. The fact that we have a member variable `nextFreeIndex_` avoids that we
+  // tentatively have to compute the next free ID every time this function is
+  // called (even when the ID is not actually needed because the word is already
+  // contained in the map).
+  //
   auto [wordInMapAndIndex, isNewWord] =
-      wordsToIdsMap_.insert({word, nextFreeIndex_});
+      wordsToIdsMap_.insert({std::forward<WordT>(word), nextFreeIndex_});
   const auto& [wordInMap, index] = *wordInMapAndIndex;
   if (isNewWord) {
     idsToWordsMap_.push_back(&wordInMap);
     nextFreeIndex_ = LocalVocabIndex::make(idsToWordsMap_.size());
   }
   return index;
+}
+
+LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(
+    const std::string& word) {
+  return getIndexAndAddIfNotContainedImpl(word);
+}
+LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(std::string&& word) {
+  return getIndexAndAddIfNotContainedImpl(std::move(word));
 }
 
 // _____________________________________________________________________________
