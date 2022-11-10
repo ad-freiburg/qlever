@@ -766,7 +766,7 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   // items in the result tuples is important.
   // Procceding with the actual hash join depended on which IdTableView
   // is bigger.
-  if (a.size() / b.size() >= 1) {
+  if (a.size() >= b.size()) {
     // a is bigger, or the same size as b. b gets put into the hash table.
     ad_utility::HashMap<Id, std::vector<std::decay_t<typename IdTableStatic<R_WIDTH>::const_row_type>>> map;
     for ( size_t j = 0; j < b.size(); j++) {
