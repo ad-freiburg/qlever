@@ -776,11 +776,12 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     // Create cross product by going through a.
     for (size_t i = 0; i < a.size(); i++) {
       // Skip, if there is no matching entry in the join column.
-      if (map.find(a(i, jc1)) == map.end()) {
+      auto entry = map.find(a(i, jc1));
+      if (entry == map.end()) {
         continue;
       }
 
-      for (const auto& bRow: map[a(i, jc1)]) {
+      for (const auto& bRow: entry->second) {
         const size_t backIndex = result.size();
         result.push_back();
         for (size_t h = 0; h < a.cols(); h++) {
@@ -809,11 +810,12 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     // Create cross product by going through b.
     for (size_t j = 0; j < b.size(); j++) {
       // Skip, if there is no matching entry in the join column.
-      if (map.find(b(j, jc2)) == map.end()) {
+      auto entry = map.find(b(j, jc2));
+      if (entry == map.end()) {
         continue;
       }
 
-      for (const auto& aRow: map[b(j, jc2)]) {
+      for (const auto& aRow: entry->second) {
         const size_t backIndex = result.size();
         result.push_back();
         for (size_t h = 0; h < a.cols(); h++) {
