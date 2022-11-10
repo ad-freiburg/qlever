@@ -33,10 +33,13 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
   return index;
 }
 
+// _____________________________________________________________________________
 LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(
     const std::string& word) {
   return getIndexAndAddIfNotContainedImpl(word);
 }
+
+// _____________________________________________________________________________
 LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(std::string&& word) {
   return getIndexAndAddIfNotContainedImpl(std::move(word));
 }
