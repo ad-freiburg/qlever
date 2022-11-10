@@ -8,15 +8,13 @@
 #include "global/Id.h"
 
 TEST(LocalVocab, construction) {
-  auto checkId = [](Id id, size_t i) {
-    ASSERT_EQ(id, Id::makeFromLocalVocabIndex(LocalVocabIndex::make(i)));
-  };
+  auto makeIndex = [](size_t i) { return LocalVocabIndex::make(i); };
   LocalVocab localVocab;
   ASSERT_TRUE(localVocab.empty());
-  checkId(localVocab.getIdAndAddIfNotContained("bla"), 0);
-  checkId(localVocab.getIdAndAddIfNotContained("blu"), 1);
-  checkId(localVocab.getIdAndAddIfNotContained("bli"), 2);
-  checkId(localVocab.getIdAndAddIfNotContained("bla"), 0);
+  ASSERT_EQ(localVocab.getIndexAndAddIfNotContained("bla"), makeIndex(0));
+  ASSERT_EQ(localVocab.getIndexAndAddIfNotContained("blu"), makeIndex(1));
+  ASSERT_EQ(localVocab.getIndexAndAddIfNotContained("bli"), makeIndex(2));
+  ASSERT_EQ(localVocab.getIndexAndAddIfNotContained("bla"), makeIndex(0));
   ASSERT_EQ(localVocab.size(), 3);
   ASSERT_EQ(localVocab.getWord(LocalVocabIndex::make(0)), "bla");
   ASSERT_EQ(localVocab.getWord(LocalVocabIndex::make(1)), "blu");

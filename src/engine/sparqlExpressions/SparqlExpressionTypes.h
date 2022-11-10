@@ -241,7 +241,8 @@ template <SingleExpressionResult T, typename LocalVocabT>
 Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   static_assert(isConstantResult<T>);
   if constexpr (ad_utility::isSimilar<T, string>) {
-    return localVocab.getIdAndAddIfNotContained(std::forward<T>(result));
+    return Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(std::forward<T>(result)));
   } else if constexpr (ad_utility::isSimilar<double, T>) {
     return Id::makeFromDouble(result);
   } else if constexpr (ad_utility::isSimilar<T, Id>) {

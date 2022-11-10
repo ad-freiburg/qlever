@@ -20,16 +20,15 @@ class LocalVocab {
 
   // Prevent accidental copying of a local vocabulary (it can be quite large),
   // but moving it is OK.
-  //
-  // TODO: does the default move do the "right" thing, that is, move the hash
-  // map instead of copying it?
   LocalVocab(const LocalVocab&) = delete;
+  LocalVocab& operator=(const LocalVocab&) = delete;
   LocalVocab(LocalVocab&&) = default;
+  LocalVocab& operator=(LocalVocab&&) = default;
 
-  // Get ID of a word in the local vocabulary. If the word was already
-  // contained, return the already existing ID. If the word was not yet
-  // contained, add it, and return the new ID.
-  Id getIdAndAddIfNotContained(const std::string& word);
+  // Get the index of a word in the local vocabulary. If the word was already
+  // contained, return the already existing index. If the word was not yet
+  // contained, add it, and return the new index.
+  LocalVocabIndex getIndexAndAddIfNotContained(const std::string& word);
 
   // The number of words in the vocabulary.
   size_t size() const { return idsToWordsMap_.size(); }
@@ -41,21 +40,21 @@ class LocalVocab {
   const std::string& getWord(LocalVocabIndex localVocabIndex) const;
 
   // Merge two local vocabularies if at least one of them is empty. If both are
-  // non-empty, throws an exception.
+  // non-empty, throws an exception. Assumes that both vocabularies exist.
   //
   // TODO: Eventually, we want to have one local vocab for the whole query to
   // which each operation writes (one after the other). Then we don't need a
   // merge function anymore.
   static std::shared_ptr<LocalVocab> mergeLocalVocabsIfOneIsEmpty(
-      std::shared_ptr<LocalVocab> localVocab1,
-      std::shared_ptr<LocalVocab> localVocab2);
+      const std::shared_ptr<LocalVocab>& localVocab1,
+      const std::shared_ptr<LocalVocab>& localVocab2);
 
  private:
   // A map of the words in the local vocabulary to their local IDs. This is a
   // node hash map because we need the addresses of the words (which are of type
   // `std::string`) to remain stable over their lifetime in the hash map because
   // we refer to them in `wordsToIdsMap_` below.
-  absl::node_hash_map<std::string, Id> wordsToIdsMap_;
+  absl::node_hash_map<std::string, LocalVocabIndex> wordsToIdsMap_;
 
   // A map of the local IDs to the words. Since the IDs are contiguous, we can
   // use a `std::vector`. We store pointers to the actual words in
@@ -65,5 +64,5 @@ class LocalVocab {
 
   // The next free local ID (will be incremented by one each time we add a new
   // word).
-  Id nextFreeId_ = Id::makeFromLocalVocabIndex(LocalVocabIndex::make(0));
+  LocalVocabIndex nextFreeIndex_ = LocalVocabIndex::make(0);
 };
