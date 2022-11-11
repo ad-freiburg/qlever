@@ -782,21 +782,7 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
       }
 
       for (const auto& bRow: entry->second) {
-        const size_t backIndex = result.size();
-        result.push_back();
-        for (size_t h = 0; h < a.cols(); h++) {
-          result(backIndex, h) = a(i, h);
-        }
-
-        // Copy bs columns before the join column
-        for (size_t h = 0; h < jc2; h++) {
-          result(backIndex, h + a.cols()) = bRow[h];
-        }
-
-        // Copy bs columns after the join column
-        for (size_t h = jc2 + 1; h < b.cols(); h++) {
-          result(backIndex, h + a.cols() - 1) = bRow[h];
-        }
+        addCombinedRowToIdTable<L_WIDTH, R_WIDTH, OUT_WIDTH>(a[i], bRow, jc2, &result); 
       }
     }
 
@@ -816,21 +802,7 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
       }
 
       for (const auto& aRow: entry->second) {
-        const size_t backIndex = result.size();
-        result.push_back();
-        for (size_t h = 0; h < a.cols(); h++) {
-          result(backIndex, h) = aRow[h];
-        }
-
-        // Copy bs columns before the join column
-        for (size_t h = 0; h < jc2; h++) {
-          result(backIndex, h + a.cols()) = b(j,h);
-        }
-
-        // Copy bs columns after the join column
-        for (size_t h = jc2 + 1; h < b.cols(); h++) {
-          result(backIndex, h + a.cols() - 1) = b(j,h);
-        }
+        addCombinedRowToIdTable<L_WIDTH, R_WIDTH, OUT_WIDTH>(aRow, b[j], jc2, &result);
       }
     } 
   }
@@ -841,3 +813,29 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
              << ", size = " << dynRes->size() << "\n";
 }
 
+// ___________________________________________________________________________ 
+template <int A_WIDTH, int B_WIDTH, int TABLE_WIDTH>
+void Join::addCombinedRowToIdTable(
+  const std::decay_t<typename IdTableStatic<A_WIDTH>::const_row_type>& rowA,
+  const std::decay_t<typename IdTableStatic<B_WIDTH>::const_row_type>& rowB,
+  const size_t jcRowB,
+  IdTableStatic<TABLE_WIDTH>* table) const {
+  // Add a new, empty row.
+  const size_t backIndex = table->size();
+  table->push_back();
+  
+  // Copy the entire rowA in the table.
+  for (size_t h = 0; h < rowA.size(); h++) {
+    (*table)(backIndex, h) = rowA[h];
+  }
+
+  // Copy rowB columns before the join column.
+  for (size_t h = 0; h < jcRowB; h++) {
+    (*table)(backIndex, h + rowA.size()) = rowB[h];
+  }
+
+  // Copy rowB columns after the join column.
+  for (size_t h = jcRowB + 1; h < rowB.size(); h++) {
+    (*table)(backIndex, h + rowA.size() - 1) = rowB[h];
+  }
+}

@@ -133,4 +133,22 @@ class Join : public Operation {
                           const IdTable::const_iterator& rightBegin,
                           const IdTable::const_iterator& rightEnd,
                           IdTable* res) const;
+  /*
+   * @brief Combines 2 rows like in a join and inserts the result in the
+   * given table. 
+   *
+   *@tparam The amount of columns in the rows and the table.
+   *
+   * @param[in] The left row of the join.
+   * @param[in] The right row of the join.
+   * @param[in] The numerical position of the join column of row b.
+   * @param[in] The table, in which the new combined row should be insterted.
+   * Must be static.
+  */
+  template <int A_WIDTH, int B_WIDTH, int TABLE_WIDTH>
+  void addCombinedRowToIdTable(
+      const std::decay_t<typename IdTableStatic<A_WIDTH>::const_row_type>& rowA,
+      const std::decay_t<typename IdTableStatic<B_WIDTH>::const_row_type>& rowB,
+      const size_t jcRowB,
+      IdTableStatic<TABLE_WIDTH>* table) const;
 };
