@@ -44,14 +44,16 @@ class Values : public Operation {
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
- private:
+ public:
+  // These two are also used by class `Service`, hence public.
   virtual void computeResult(ResultTable* result) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+ private:
   template <size_t I>
-  void writeValues(IdTable* res, const Index& index,
-                   const SparqlValues& values);
+  void writeValues(IdTable* res, const Index& index, const SparqlValues& values,
+                   std::shared_ptr<LocalVocab> localVocab);
 
   /// remove all completely undefined values and variables
   /// throw if nothing remains

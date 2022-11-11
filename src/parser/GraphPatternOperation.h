@@ -31,7 +31,7 @@ class SparqlValues {
   // The variables to which the values will be bound
   std::vector<std::string> _variables;
   // A table storing the values in their string form
-  std::vector<std::vector<std::string>> _values;
+  std::vector<std::vector<TripleComponent>> _values;
 };
 
 /// A `BasicGraphPattern` represents a consecutive block of triples.

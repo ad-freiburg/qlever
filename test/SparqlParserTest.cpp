@@ -248,7 +248,7 @@ TEST(ParserTest, testParse) {
 
       vector<string> vvars = {"?a"};
       ASSERT_EQ(vvars, values1._variables);
-      vector<vector<string>> vvals = {{"<1>"}, {"\"2\""}};
+      vector<vector<TripleComponent>> vvals = {{"<1>"}, {"\"2\""}};
       ASSERT_EQ(vvals, values1._values);
 
       vvars = {"?b", "?c"};
@@ -273,7 +273,7 @@ TEST(ParserTest, testParse) {
 
       vector<string> vvars = {"?a"};
       ASSERT_EQ(vvars, values1._variables);
-      vector<vector<string>> vvals = {{"<Albert_Einstein>"}};
+      vector<vector<TripleComponent>> vvals = {{"<Albert_Einstein>"}};
       ASSERT_EQ(vvals, values1._values);
 
       vvars = {"?b", "?c"};
@@ -306,7 +306,7 @@ TEST(ParserTest, testParse) {
       const auto& values1 = std::get<p::Values>(pq.children()[0])._inlineValues;
       vector<string> vvars = {"?citytype"};
       ASSERT_EQ(vvars, values1._variables);
-      vector<vector<string>> vvals = {
+      vector<vector<TripleComponent>> vvals = {
           {"<http://www.wikidata.org/entity/Q515>"},
           {"<http://www.wikidata.org/entity/Q262166>"}};
       ASSERT_EQ(vvals, values1._values);

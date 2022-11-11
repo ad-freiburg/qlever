@@ -12,6 +12,7 @@
 #include "parser/Alias.h"
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParserHelpers.h"
+#include "parser/TripleComponent.h"
 #include "parser/data/OrderKey.h"
 #include "parser/data/VarOrTerm.h"
 #include "util/GTestHelpers.h"
@@ -423,9 +424,9 @@ auto GroupByVariables =
                   testing::UnorderedElementsAreArray(vars));
 };
 
-auto Values =
-    [](const vector<string>& vars,
-       const vector<vector<string>>& values) -> Matcher<const p::Values&> {
+auto Values = [](const vector<string>& vars,
+                 const vector<vector<TripleComponent>>& values)
+    -> Matcher<const p::Values&> {
   // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
   //  becomes a trivial Eq matcher.
   using SparqlValues = p::SparqlValues;
@@ -436,7 +437,7 @@ auto Values =
 };
 
 auto InlineData = [](const vector<string>& vars,
-                     const vector<vector<string>>& values)
+                     const vector<vector<TripleComponent>>& values)
     -> Matcher<const p::GraphPatternOperation&> {
   // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
   //  becomes a trivial Eq matcher.

@@ -84,6 +84,12 @@ class TripleComponent {
   /// Equality comparison between two `TripleComponent`s.
   bool operator==(const TripleComponent&) const = default;
 
+  /// Hash value for `TripleComponent` object.
+  template <typename H>
+  friend H AbslHashValue(H h, const TripleComponent& tc) {
+    return H::combine(std::move(h), tc._variant);
+  }
+
   /// Check which type the underlying variants hold.
   [[nodiscard]] bool isString() const {
     return std::holds_alternative<std::string>(_variant);

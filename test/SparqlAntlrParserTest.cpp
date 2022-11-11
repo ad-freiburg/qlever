@@ -550,18 +550,16 @@ TEST(SparqlParser, SolutionModifier) {
 TEST(SparqlParser, DataBlock) {
   auto expectDataBlock = ExpectCompleteParse<&Parser::dataBlock>{};
   auto expectDataBlockFails = ExpectParseFails<&Parser::dataBlock>();
-  expectDataBlock(
-      "?test { \"foo\" }",
-      m::Values(vector<string>{"?test"}, vector<vector<string>>{{"\"foo\""}}));
-  // These are not implemented yet in dataBlockValue
+  expectDataBlock("?test { \"foo\" }", m::Values({"?test"}, {{"\"foo\""}}));
+  expectDataBlock("?test { 10.0 }", m::Values({"?test"}, {{10.0}}));
+  // Booleans and UNDEF are not yet parsed as `dataBlockValue`.
   // (numericLiteral/booleanLiteral)
-  // TODO<joka921/qup42> implement
+  // TODO<joka921/qup42> implement.
   expectDataBlockFails("?test { true }");
-  expectDataBlockFails("?test { 10.0 }");
   expectDataBlockFails("?test { UNDEF }");
   expectDataBlock(R"(?foo { "baz" "bar" })",
                   m::Values({"?foo"}, {{"\"baz\""}, {"\"bar\""}}));
-  // TODO<joka921/qup42> implement
+  // TODO<joka921/qup42> implement.
   expectDataBlockFails(R"(( ) { })");
   expectDataBlockFails(R"(?foo { })");
   expectDataBlockFails(R"(( ?foo ) { })");

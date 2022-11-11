@@ -16,6 +16,7 @@
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
+#include "util/StringUtils.h"
 
 using namespace ad_utility::sparql_types;
 using namespace sparqlExpression;
@@ -716,7 +717,7 @@ SparqlValues Visitor::visit(Parser::InlineDataFullContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-vector<std::string> Visitor::visit(Parser::DataBlockSingleContext* ctx) {
+vector<TripleComponent> Visitor::visit(Parser::DataBlockSingleContext* ctx) {
   if (ctx->NIL())
     reportError(ctx,
                 "No values were specified in DataBlock."
@@ -725,16 +726,17 @@ vector<std::string> Visitor::visit(Parser::DataBlockSingleContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-std::string Visitor::visit(Parser::DataBlockValueContext* ctx) {
+TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
   // Return a string
   if (ctx->iri()) {
     return visit(ctx->iri());
   } else if (ctx->rdfLiteral()) {
-    // TODO<joka921> This is still wrong for XSD literals
-    return visit(ctx->rdfLiteral());
+    return TurtleStringParser<TokenizerCtre>::parseTripleObject(
+        visit(ctx->rdfLiteral()));
   } else if (ctx->numericLiteral()) {
-    // TODO implement
-    reportError(ctx, "Numbers in values clauses are not supported.");
+    return std::visit(
+        [](auto intOrDouble) { return TripleComponent{intOrDouble}; },
+        visit(ctx->numericLiteral()));
   } else if (ctx->booleanLiteral()) {
     // TODO implement
     reportError(ctx, "Booleans in values clauses are not supported.");
