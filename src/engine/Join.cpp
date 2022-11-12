@@ -17,6 +17,7 @@
 #include <type_traits>
 #include <unordered_set>
 #include <vector> // Needed for hashJoin.
+#include <type_traits> // Needed for giving compile time variables to lambdas.
 
 using std::string;
 
@@ -762,16 +763,28 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
 
   IdTableStatic<OUT_WIDTH> result = dynRes->moveToStatic<OUT_WIDTH>();
 
+  // Puts the rows of the given table into a hash map, with the value of
+  // the join column of a row as the key, and returns the hash map.
+  auto putIntoHashMap = [] (const auto table, const size_t jc, const auto WIDTH) {
+    // This declaration works, because generic lambdas are just syntactic sugar
+    // for templates. So, if the parameter value of WIDTH is avaible at
+    // compilet ime (and marked as such with std::integral_constant), we can
+    // use WIDTH for a template parameter.
+    ad_utility::HashMap<Id, std::vector<std::decay_t<typename IdTableStatic<WIDTH>::const_row_type>>> map;
+    for ( size_t j = 0; j < table.size(); j++) {
+      map[table(j, jc)].push_back(table[j]);
+    }
+    return map;
+  };
+
   // Cannot just switch a and b around because the order of
   // items in the result tuples is important.
   // Procceding with the actual hash join depended on which IdTableView
   // is bigger.
   if (a.size() >= b.size()) {
     // a is bigger, or the same size as b. b gets put into the hash table.
-    ad_utility::HashMap<Id, std::vector<std::decay_t<typename IdTableStatic<R_WIDTH>::const_row_type>>> map;
-    for ( size_t j = 0; j < b.size(); j++) {
-      map[b(j, jc2)].push_back(b[j]);
-    }
+    auto map = putIntoHashMap(b, jc2, std::integral_constant<int, R_WIDTH>{});
+
 
     // Create cross product by going through a.
     for (size_t i = 0; i < a.size(); i++) {
@@ -788,10 +801,7 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
 
   } else {
     // b is bigger. a gets put into the hash table.
-    ad_utility::HashMap<Id, std::vector<std::decay_t<typename IdTableStatic<L_WIDTH>::const_row_type>>> map;
-    for ( size_t i = 0; i < a.size(); i++) {
-      map[a(i, jc1)].push_back(a[i]);
-    }
+    auto map = putIntoHashMap(a, jc1, std::integral_constant<int, L_WIDTH>{});
 
     // Create cross product by going through b.
     for (size_t j = 0; j < b.size(); j++) {
