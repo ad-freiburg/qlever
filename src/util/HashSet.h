@@ -1,14 +1,15 @@
-// Copyright 2011, University of Freiburg, Chair of Algorithms and Data
-// Structures.
-// Author: Björn Buchhold <buchholb>
+// Copyright 2011 - 2022, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <b.buchholb@gmail.com>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 
-#include <absl/container/flat_hash_set.h>
-
 #include <string>
 
-#include "./AllocatorWithLimit.h"
+#include "absl/container/flat_hash_set.h"
+#include "util/AllocatorWithLimit.h"
 
 using std::string;
 

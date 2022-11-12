@@ -220,7 +220,7 @@ addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
 addLinkAndDiscoverTest(DateTest)
 
-addLinkAndDiscoverTest(TripleObjectTest absl::strings)
+addLinkAndDiscoverTest(TripleObjectTest absl::strings parser)
 
 addLinkAndDiscoverTest(ValueIdTest absl::flat_hash_set)
 

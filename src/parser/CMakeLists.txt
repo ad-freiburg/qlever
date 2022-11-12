@@ -16,7 +16,7 @@ add_library(parser
         TokenizerCtre.h TurtleTokenId.h
         ParallelBuffer.cpp
         SparqlParserHelpers.h SparqlParserHelpers.cpp
-        TripleComponent.h
+        TripleComponent.h TripleComponent.cpp
         GraphPatternOperation.cpp
         PropertyPath.h PropertyPath.cpp Alias.h data/SolutionModifiers.h
         data/LimitOffsetClause.h data/SparqlFilter.h data/SparqlFilter.cpp

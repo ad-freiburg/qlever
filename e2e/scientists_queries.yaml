@@ -846,18 +846,21 @@ queries:
       - selected: ["?a", "?b", "?c"]
 
 
+  # In the following query, <Zwulm> and <Albert_Zweistein> don't occur in the
+  # input data and are hence added to the local vocabulary when processing the
+  # query.
   - query: new-values
     type: no-text
     sparql: |
       SELECT ?x ?y ?z WHERE {
-        VALUES (?x ?y ?z) { (<Albert_Einstein> <Ulm> 1879) (<Albert_Zweistein> <Zwulm> 2001) }
+        VALUES (?x ?y ?z) { (<Albert_Einstein> <Zwulm> 1879) (<Albert_Zweistein> <Ulm> 2001) }
         VALUES ?x { <Albert_Einstein> }
       }
     checks:
       - num_cols: 3
       - num_rows: 1
       - selected: ["?x", "?y", "?z"]
-      - contains_row: ["<Albert_Einstein>", "<Ulm>", 1879]
+      - contains_row: ["<Albert_Einstein>", "<Zwulm>", 1879]
 
 
   - query: values-empty-join

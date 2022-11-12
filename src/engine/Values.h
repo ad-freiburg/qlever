@@ -1,6 +1,8 @@
-// Copyright 2019, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
+// Copyright 2019 - 2022, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Florian Kramer <kramerf@cs.uni-freiburg.de>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 

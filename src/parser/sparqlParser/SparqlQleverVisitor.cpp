@@ -16,6 +16,7 @@
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
+#include "parser/data/Variable.h"
 #include "util/StringUtils.h"
 
 using namespace ad_utility::sparql_types;
@@ -679,7 +680,7 @@ uint64_t Visitor::visit(Parser::TextLimitClauseContext* ctx) {
 SparqlValues Visitor::visit(Parser::InlineDataOneVarContext* ctx) {
   SparqlValues values;
   auto var = visit(ctx->var());
-  values._variables.push_back(var.name());
+  values._variables.push_back(Variable{var.name()});
   if (ctx->dataBlockValue().empty())
     reportError(ctx,
                 "No values were specified in Values "
@@ -702,7 +703,7 @@ SparqlValues Visitor::visit(Parser::InlineDataFullContext* ctx) {
                 "No variables were specified in Values "
                 "clause. This is not supported by QLever.");
   for (auto& var : ctx->var()) {
-    values._variables.push_back(visit(var).name());
+    values._variables.push_back(Variable{visit(var).name()});
   }
   values._values = visitVector(ctx->dataBlockSingle());
   if (std::any_of(values._values.begin(), values._values.end(),
@@ -718,10 +719,9 @@ SparqlValues Visitor::visit(Parser::InlineDataFullContext* ctx) {
 
 // ____________________________________________________________________________________
 vector<TripleComponent> Visitor::visit(Parser::DataBlockSingleContext* ctx) {
-  if (ctx->NIL())
-    reportError(ctx,
-                "No values were specified in DataBlock."
-                "This is not supported by QLever.");
+  if (ctx->NIL()) {
+    reportNotSupported(ctx, "Empty VALUES clauses are");
+  }
   return visitVector(ctx->dataBlockValue());
 }
 
