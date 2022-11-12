@@ -91,9 +91,6 @@ void GraphPatternOperation::toString(std::ostringstream& os,
       // TODO<joka921> make the subquery a value-semantics type.
       os << arg.get().asString();
     } else if constexpr (std::is_same_v<T, Values>) {
-      // TODO: Why is there indentation in some of these strings, but not in
-      // others? And why do we have three different places that convert a SPARQL
-      // operation to a string?
       os << "VALUES (" << arg._inlineValues.variablesToString() << ") "
          << arg._inlineValues.valuesToString();
     } else if constexpr (std::is_same_v<T, BasicGraphPattern>) {

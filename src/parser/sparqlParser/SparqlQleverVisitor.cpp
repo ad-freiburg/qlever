@@ -679,8 +679,7 @@ uint64_t Visitor::visit(Parser::TextLimitClauseContext* ctx) {
 // ____________________________________________________________________________________
 SparqlValues Visitor::visit(Parser::InlineDataOneVarContext* ctx) {
   SparqlValues values;
-  auto var = visit(ctx->var());
-  values._variables.push_back(Variable{var.name()});
+  values._variables.push_back(visit(ctx->var()));
   if (ctx->dataBlockValue().empty())
     reportError(ctx,
                 "No values were specified in Values "
@@ -702,9 +701,7 @@ SparqlValues Visitor::visit(Parser::InlineDataFullContext* ctx) {
     reportError(ctx,
                 "No variables were specified in Values "
                 "clause. This is not supported by QLever.");
-  for (auto& var : ctx->var()) {
-    values._variables.push_back(Variable{visit(var).name()});
-  }
+  values._variables = visitVector(ctx->var());
   values._values = visitVector(ctx->dataBlockSingle());
   if (std::any_of(values._values.begin(), values._values.end(),
                   [numVars = values._variables.size()](const auto& inner) {
