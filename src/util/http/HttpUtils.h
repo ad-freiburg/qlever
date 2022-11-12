@@ -1,20 +1,27 @@
-//  Copyright 2021, University of Freiburg,
+//  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//  Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//           Hannah Bast <bast@cs.uni-freiburg.de>
 
 #ifndef QLEVER_HTTPUTILS_H
 #define QLEVER_HTTPUTILS_H
 
-#include "../AsyncStream.h"
-#include "../CompressorStream.h"
-#include "../StringUtils.h"
-#include "../TypeTraits.h"
-#include "../stream_generator.h"
-#include "./MediaTypes.h"
-#include "./UrlParser.h"
-#include "./beast.h"
-#include "./streamable_body.h"
+#include <absl/strings/str_cat.h>
+#include <ctre/ctre.h>
+
+#include <string>
+#include <string_view>
+
 #include "nlohmann/json.hpp"
+#include "util/AsyncStream.h"
+#include "util/CompressorStream.h"
+#include "util/StringUtils.h"
+#include "util/TypeTraits.h"
+#include "util/http/MediaTypes.h"
+#include "util/http/UrlParser.h"
+#include "util/http/beast.h"
+#include "util/http/streamable_body.h"
+#include "util/stream_generator.h"
 
 /// Several utilities for using/customizing the HttpServer template from
 /// HttpServer.h
@@ -26,6 +33,47 @@ namespace net = boost::asio;       // from <boost/asio.hpp>
 using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
 namespace streams = ad_utility::streams;
 using ad_utility::httpUtils::httpStreams::streamable_body;
+
+// TODO: How to create regex from string? The string is needed for the error
+// message below. I looked at ctre.h, not exactly pretty code and very cryptic.
+static constexpr auto urlRegexString =
+    "^(http|https)://([^:/]+)(:([0-9]+))?(/.*)?$";
+static constexpr auto urlRegex =
+    ctll::fixed_string("^(http|https)://([^:/]+)(:([0-9]+))?(/.*)?$");
+
+/// Given a URL, extract the host name (the part after the http:// or https://
+/// and before the next /), the target (the part starting with the / after the
+/// host), and the port (if not port is specified, it's implicitly 80 for http
+/// and 443 for https). Throws an exception if the URL is malformed.
+///
+/// For example, for http://qlever.cs.uni-freiburg.de/api/wikidata, the port is
+/// 443 (implicit), the host is qlever.cs.uni-freiburg.de, and the target is
+/// /api/wikidata .
+///
+/// TODO: Probably this function shouldn't return four strings, but a `struct`
+/// with four members with proper names. Or is there such a `struct` somewhere
+/// in Beast already?
+inline std::tuple<std::string, std::string, std::string, std::string>
+getProtocolHostPortTargetFromUrl(const std::string_view url) {
+  std::tuple<std::string, std::string, std::string, std::string> result;
+  std::string& protocol = get<0>(result);
+  std::string& host = get<1>(result);
+  std::string& port = get<2>(result);
+  std::string& target = get<3>(result);
+  auto match = ctre::search<urlRegex>(url);
+  if (!match) {
+    throw std::runtime_error(
+        absl::StrCat("URL malformed, must match regex ", urlRegexString));
+  }
+  protocol = match.get<1>().to_string();
+  host = match.get<2>().to_string();
+  port = match.get<4>().to_string();
+  if (port.empty()) {
+    port = protocol == "http" ? "80" : "443";
+  }
+  target = match.get<5>().to_string();
+  return result;
+}
 
 /// Concatenate base and path. Path must start with a '/', base may end with a
 /// slash. For example, path_cat("base", "/file.txt"), path_cat("base/" ,
@@ -79,8 +127,8 @@ static auto createOkResponse(std::string text, const HttpRequest auto& request,
 }
 
 /// Assign the generator to the body of the response. If a supported
-/// compression is specified in the request, this method is applied to the body
-/// and the corresponding response headers are set.
+/// compression is specified in the request, this method is applied to the
+/// body and the corresponding response headers are set.
 static void setBody(http::response<streamable_body>& response,
                     const HttpRequest auto& request,
                     streams::stream_generator&& generator) {
@@ -133,8 +181,8 @@ static auto createJsonResponse(const nlohmann::json& j, const auto& request,
 }
 
 /// Create a HttpResponse with status 404 Not Found. The string body will be a
-/// default message including the name of the file that was not found, which can
-/// be read from the request directly.
+/// default message including the name of the file that was not found, which
+/// can be read from the request directly.
 static auto createNotFoundResponse(const std::string& errorMsg,
                                    const HttpRequest auto& request) {
   return createHttpResponseFromString(errorMsg, http::status::not_found,
@@ -192,13 +240,13 @@ inline void logBeastError(beast::error_code ec, char const* what) {
 namespace detail {
 
 // This coroutine is  part of the implementation of `makeFileServer` (see
-// below). It is the actual coroutine that performs the serving of a file. Note:
-// Because of the coroutine lifetime rules, the coroutine has to get the
+// below). It is the actual coroutine that performs the serving of a file.
+// Note: Because of the coroutine lifetime rules, the coroutine has to get the
 // `documentRoot`,`whitelist`, `request` by value. According to the signature,
-// the `send` action might be dangling, but when using this coroutine inside the
-// `HttpServer` class template, it never is. The parameters `documentRoot` and
-// `whitelist` are currently copied for every http request, if this becomes a
-// performance problem, they might also become `shared_ptr`s.
+// the `send` action might be dangling, but when using this coroutine inside
+// the `HttpServer` class template, it never is. The parameters `documentRoot`
+// and `whitelist` are currently copied for every http request, if this
+// becomes a performance problem, they might also become `shared_ptr`s.
 boost::asio::awaitable<void> makeFileServerImpl(
     std::string documentRoot,
     std::optional<ad_utility::HashSet<std::string>> whitelist,
@@ -267,8 +315,8 @@ boost::asio::awaitable<void> makeFileServerImpl(
  * argument in the `HttpServer` class and serves files from a specified
  * documentRoot. A typical use is `HttpServer
  * httpServer{httpUtils::makeFileServer("path_to_some_directory")};`
- * @param documentRoot The path from which files are served. May be absolute or
- * relative.
+ * @param documentRoot The path from which files are served. May be absolute
+ * or relative.
  * @param whitelist Specify a whitelist of allowed filenames (e.g.
  * `{"index.html", "style.css"}`). The default value std::nullopt means, that
  *         all files from the documentRoot may be served.

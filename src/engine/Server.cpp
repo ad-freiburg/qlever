@@ -1,8 +1,8 @@
-// Copyright 2011, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author:
-//   2011-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Copyright 2011 - 2022, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <b.buchhold@gmail.com>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include "engine/Server.h"
 
@@ -13,6 +13,7 @@
 
 #include "engine/QueryPlanner.h"
 #include "util/BoostHelpers/AsyncWaitForFuture.h"
+
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
 
@@ -398,7 +399,7 @@ Awaitable<void> Server::process(
   // TODO: The file server currently does not LOG much. For example, when a file
   // is not found, a corresponding response is returned to the requestion
   // client, but the log says nothing about it. The place to change this would
-  // be in `src/util/HttpServer/HttpUtils.h`.
+  // be in `src/util/http/HttpUtils.h`.
   LOG(INFO) << "Treating request target \"" << request.target() << "\""
             << " as a request for a file with that name" << std::endl;
   auto serveFileRequest = makeFileServer(

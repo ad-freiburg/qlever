@@ -40,4 +40,4 @@ add_library(engine
         VariableToColumnMap.cpp)
 
 
-target_link_libraries(engine index parser sparqlExpressions httpServer SortPerformanceEstimator absl::flat_hash_set ${ICU_LIBRARIES} boost_iostreams)
+target_link_libraries(engine index parser sparqlExpressions http SortPerformanceEstimator absl::flat_hash_set ${ICU_LIBRARIES} boost_iostreams)

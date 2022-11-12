@@ -1,7 +1,7 @@
-// Copyright 2021, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold <buchholb>
-// Author: Johannes Kalmbach<kalmbach@cs.uni-freiburg.de>
+// Copyright 2021 - 2022, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach<kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -17,9 +17,9 @@
 #include "parser/ParseException.h"
 #include "parser/SparqlParser.h"
 #include "util/AllocatorWithLimit.h"
-#include "util/HttpServer/HttpServer.h"
-#include "util/HttpServer/streamable_body.h"
 #include "util/Timer.h"
+#include "util/http/HttpServer.h"
+#include "util/http/streamable_body.h"
 
 using nlohmann::json;
 using std::string;

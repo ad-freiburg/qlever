@@ -7,8 +7,8 @@
 
 #include <string>
 
-#include "../src/util/HttpServer/HttpParser/AcceptHeaderQleverVisitor.h"
-#include "../src/util/HttpServer/HttpParser/generated/AcceptHeaderLexer.h"
+#include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
+#include "util/http/HttpParser/generated/AcceptHeaderLexer.h"
 
 using namespace antlr4;
 using std::string;

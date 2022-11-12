@@ -5,14 +5,15 @@
 #ifndef QLEVER_HTTPSERVER_H
 #define QLEVER_HTTPSERVER_H
 
+#include <util/http/beast.h>
+
 #include <cstdlib>
 #include <semaphore>
 
-#include "../Exception.h"
-#include "../Log.h"
-#include "../jthread.h"
-#include "./HttpUtils.h"
-#include "./beast.h"
+#include "util/Exception.h"
+#include "util/Log.h"
+#include "util/http/HttpUtils.h"
+#include "util/jthread.h"
 
 namespace beast = boost::beast;    // from <boost/beast.hpp>
 namespace http = beast::http;      // from <boost/beast/http.hpp>
@@ -49,6 +50,7 @@ class HttpServer {
   int _numServerThreads;
   net::io_context _ioContext;
   tcp::acceptor _acceptor;
+  std::atomic<bool> _exitServerLoopAfterNextRequest = false;
 
  public:
   /// Construct from the port and ip address, on which this server will listen,
@@ -105,6 +107,11 @@ class HttpServer {
     // listener contains an infinite loop.
   }
 
+  // Exit server loop after next request.
+  void exitServerLoopAfterNextRequest() {
+    _exitServerLoopAfterNextRequest = true;
+  }
+
   // _____________________________________________________________________
   net::io_context& getIoContext() { return _ioContext; };
 
@@ -127,17 +134,23 @@ class HttpServer {
     // `acceptor` is now listening on the port, start accepting connections in
     // an infinite, asynchronous, but conceptually single-threaded loop.
     while (true) {
+      // Check if server loop should be exited.
+      if (_exitServerLoopAfterNextRequest) {
+        LOG(INFO) << "Exit of server loop triggered ..." << std::endl;
+        break;
+      }
+      LOG(DEBUG) << "HttpServer accept loop: ready for next request ..."
+                 << std::endl;
       try {
         auto socket =
             co_await _acceptor.async_accept(boost::asio::use_awaitable);
         // Schedule the session such that it may run in parallel to this loop.
         // the `strand` makes each session conceptually single-threaded.
         // TODO<joka921> is this even needed, to my understanding,
-        // nothing may happen in parallel within an Http session, but
+        // nothing may happen in parallel within an HTTP session, but
         // then again this does no harm.
         net::co_spawn(net::make_strand(_ioContext), session(std::move(socket)),
                       net::detached);
-
       } catch (const boost::system::system_error& b) {
         logBeastError(b.code(), "Error in the accept loop");
       }
@@ -192,8 +205,8 @@ class HttpServer {
         // by QLever's timeout mechanism.
         stream.expires_never();
 
-        // Handle the http request. Note that `_httpHandler` is also responsible
-        // for sending the message via the `sendMessage` lambda.
+        // Handle the http request. Note that `_httpHandler` is also
+        // responsible for sending the message via the `sendMessage` lambda.
         co_await _httpHandler(std::move(req), sendMessage);
 
         // The closing of the stream is done in the exception handler.

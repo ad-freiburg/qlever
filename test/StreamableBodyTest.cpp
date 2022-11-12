@@ -4,8 +4,8 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/util/HttpServer/beast.h"
-#include "../src/util/HttpServer/streamable_body.h"
+#include "util/http/beast.h"
+#include "util/http/streamable_body.h"
 
 using namespace ad_utility::httpUtils::httpStreams;
 using ad_utility::streams::basic_stream_generator;
