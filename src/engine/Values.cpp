@@ -1,82 +1,44 @@
-// Copyright 2019, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
+// Copyright 2019 - 2022, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Florian Kramer <kramerf@cs.uni-freiburg.de>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include "Values.h"
 
 #include <sstream>
 
-#include "../util/Exception.h"
-#include "../util/HashSet.h"
-#include "./CallFixedSize.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
+#include "engine/CallFixedSize.h"
+#include "util/Exception.h"
+#include "util/HashSet.h"
 
+// ____________________________________________________________________________
 Values::Values(QueryExecutionContext* qec, SparqlValues values)
     : Operation(qec) {
   _values = sanitizeValues(std::move(values));
 }
 
+// ____________________________________________________________________________
 string Values::asStringImpl(size_t indent) const {
-  std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "VALUES (";
-  for (size_t i = 0; i < _values._variables.size(); i++) {
-    os << _values._variables[i];
-    if (i + 1 < _values._variables.size()) {
-      os << " ";
-    }
-  }
-  os << ") {";
-  for (size_t i = 0; i < _values._values.size(); i++) {
-    const vector<string>& v = _values._values[i];
-    os << "(";
-    for (size_t j = 0; j < v.size(); j++) {
-      os << v[j];
-      if (j + 1 < v.size()) {
-        os << " ";
-      }
-    }
-    os << ")";
-    if (i + 1 < _values._variables.size()) {
-      os << " ";
-    }
-  }
-  os << "}";
-  return std::move(os).str();
+  return absl::StrCat(std::string(indent, ' '), "VALUES (",
+                      _values.variablesToString(), ") { ",
+                      _values.valuesToString(), " }");
 }
 
+// ____________________________________________________________________________
 string Values::getDescriptor() const {
-  std::ostringstream os;
-  os << "Values with variables ";
-  for (size_t i = 0; i < _values._variables.size(); i++) {
-    os << _values._variables[i];
-    if (i + 1 < _values._variables.size()) {
-      os << " ";
-    }
-  }
-  os << " and values ";
-  for (size_t i = 0; i < _values._values.size(); i++) {
-    const vector<string>& v = _values._values[i];
-    os << "(";
-    for (size_t j = 0; j < v.size(); j++) {
-      os << v[j];
-      if (j + 1 < v.size()) {
-        os << " ";
-      }
-    }
-    os << ")";
-    if (i + 1 < _values._variables.size()) {
-      os << " ";
-    }
-  }
-  return std::move(os).str();
+  return absl::StrCat("Values with variables ", _values.variablesToString());
 }
 
+// ____________________________________________________________________________
 size_t Values::getResultWidth() const { return _values._variables.size(); }
 
+// ____________________________________________________________________________
 vector<size_t> Values::resultSortedOn() const { return {}; }
 
+// ____________________________________________________________________________
 VariableToColumnMap Values::computeVariableToColumnMap() const {
   VariableToColumnMap map;
   for (size_t i = 0; i < _values._variables.size(); i++) {
@@ -86,6 +48,7 @@ VariableToColumnMap Values::computeVariableToColumnMap() const {
   return map;
 }
 
+// ____________________________________________________________________________
 float Values::getMultiplicity(size_t col) {
   if (_multiplicities.empty()) {
     computeMultiplicities();
@@ -96,10 +59,13 @@ float Values::getMultiplicity(size_t col) {
   return 1;
 }
 
+// ____________________________________________________________________________
 size_t Values::getSizeEstimate() { return _values._values.size(); }
 
+// ____________________________________________________________________________
 size_t Values::getCostEstimate() { return _values._values.size(); }
 
+// ____________________________________________________________________________
 void Values::computeMultiplicities() {
   if (_values._variables.empty()) {
     // If the result is empty we still add a column to the multiplicities to
@@ -108,23 +74,19 @@ void Values::computeMultiplicities() {
     return;
   }
   _multiplicities.resize(_values._variables.size());
-  ad_utility::HashSet<string> values;
+  ad_utility::HashSet<TripleComponent> distinctValues;
+  size_t numValues = _values._values.size();
   for (size_t col = 0; col < _values._variables.size(); col++) {
-    values.clear();
-    size_t count = 0;
-    size_t distinct = 0;
-    for (size_t j = 0; j < _values._values.size(); j++) {
-      const std::string& v = _values._values[j][col];
-      count++;
-      if (values.count(v) == 0) {
-        distinct++;
-        values.insert(v);
-      }
+    distinctValues.clear();
+    for (const auto& valuesTuple : _values._values) {
+      distinctValues.insert(valuesTuple[col]);
     }
-    _multiplicities[col] = double(count) / distinct;
+    size_t numDistinctValues = distinctValues.size();
+    _multiplicities[col] = float(numValues) / float(numDistinctValues);
   }
 }
 
+// ____________________________________________________________________________
 void Values::computeResult(ResultTable* result) {
   const Index& index = getIndex();
 
@@ -134,9 +96,11 @@ void Values::computeResult(ResultTable* result) {
                               ResultTable::ResultType::KB);
 
   size_t resWidth = getResultWidth();
-  CALL_FIXED_SIZE_1(resWidth, writeValues, &result->_idTable, index, _values);
+  CALL_FIXED_SIZE_1(resWidth, writeValues, &result->_idTable, index, _values,
+                    result->_localVocab);
 }
 
+// ____________________________________________________________________________
 auto Values::sanitizeValues(SparqlValues&& values) -> SparqlValues {
   std::vector<std::pair<std::size_t, std::size_t>> variableBound;
   for (size_t i = 0; i < values._variables.size(); ++i) {
@@ -186,36 +150,34 @@ auto Values::sanitizeValues(SparqlValues&& values) -> SparqlValues {
   return std::move(values);
 }
 
+// ____________________________________________________________________________
 template <size_t I>
 void Values::writeValues(IdTable* res, const Index& index,
-                         const SparqlValues& values) {
+                         const SparqlValues& values,
+                         std::shared_ptr<LocalVocab> localVocab) {
   IdTableStatic<I> result = res->moveToStatic<I>();
   result.resize(values._values.size());
-  size_t numActuallyWritten = 0;
-  size_t numSkipped = 0;
+  size_t numTuples = 0;
+  std::vector<size_t> numLocalVocabPerColumn(result.cols());
   for (const auto& row : values._values) {
     for (size_t colIdx = 0; colIdx < result.cols(); colIdx++) {
-      Id id;
-      if (!index.getId(row[colIdx], &id)) {
-        getWarnings().push_back("The word " + row[colIdx] +
-                                " is not part of the vocabulary.");
-        numSkipped++;
-        // this goto is a continue in the outer loop. The current row was not
-        // sucessfully written, so the numActuallyWritten index is not advanced
-        goto skipRow;
+      const TripleComponent& tc = row[colIdx];
+      std::optional<Id> id = tc.toValueId(index.getVocab());
+      if (!id) {
+        AD_CHECK(tc.isString());
+        auto& newWord = tc.getString();
+        ++numLocalVocabPerColumn[colIdx];
+        id = Id::makeFromLocalVocabIndex(
+            localVocab->getIndexAndAddIfNotContained(std::move(newWord)));
       }
-      result(numActuallyWritten, colIdx) = id;
+      result(numTuples, colIdx) = id.value();
     }
-    numActuallyWritten++;
-  skipRow:;  // the label for the goto. Jumping to this label is basically
-             // "continue" and can be also called from the inner loop
+    numTuples++;
   }
-  AD_CHECK(numActuallyWritten + numSkipped == values._values.size());
-  if (numSkipped) {
-    getWarnings().push_back("Ignored " + std::to_string(numSkipped) +
-                            " rows of a value clause because they contained "
-                            "entries that are not part of the vocabulary");
-  }
-  result.resize(numActuallyWritten);
+  AD_CHECK(numTuples == values._values.size());
+  LOG(INFO) << "Number of tuples in VALUES clause: " << numTuples << std::endl;
+  LOG(DEBUG) << "Number of entries in local vocabulary per column: "
+             << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
+  result.resize(numTuples);
   *res = result.moveToDynamic();
 }

@@ -550,30 +550,29 @@ TEST(SparqlParser, SolutionModifier) {
 TEST(SparqlParser, DataBlock) {
   auto expectDataBlock = ExpectCompleteParse<&Parser::dataBlock>{};
   auto expectDataBlockFails = ExpectParseFails<&Parser::dataBlock>();
-  expectDataBlock(
-      "?test { \"foo\" }",
-      m::Values(vector<string>{"?test"}, vector<vector<string>>{{"\"foo\""}}));
-  // These are not implemented yet in dataBlockValue
+  expectDataBlock("?test { \"foo\" }",
+                  m::Values({Var{"?test"}}, {{"\"foo\""}}));
+  expectDataBlock("?test { 10.0 }", m::Values({Var{"?test"}}, {{10.0}}));
+  // Booleans and UNDEF are not yet parsed as `dataBlockValue`.
   // (numericLiteral/booleanLiteral)
-  // TODO<joka921/qup42> implement
+  // TODO<joka921/qup42> implement.
   expectDataBlockFails("?test { true }");
-  expectDataBlockFails("?test { 10.0 }");
   expectDataBlockFails("?test { UNDEF }");
   expectDataBlock(R"(?foo { "baz" "bar" })",
-                  m::Values({"?foo"}, {{"\"baz\""}, {"\"bar\""}}));
-  // TODO<joka921/qup42> implement
+                  m::Values({Var{"?foo"}}, {{"\"baz\""}, {"\"bar\""}}));
+  // TODO<joka921/qup42> implement.
   expectDataBlockFails(R"(( ) { })");
   expectDataBlockFails(R"(?foo { })");
   expectDataBlockFails(R"(( ?foo ) { })");
   expectDataBlockFails(R"(( ?foo ?bar ) { (<foo>) (<bar>) })");
   expectDataBlock(R"(( ?foo ?bar ) { (<foo> <bar>) })",
-                  m::Values({"?foo", "?bar"}, {{"<foo>", "<bar>"}}));
-  expectDataBlock(
-      R"(( ?foo ?bar ) { (<foo> "m") ("1" <bar>) })",
-      m::Values({"?foo", "?bar"}, {{"<foo>", "\"m\""}, {"\"1\"", "<bar>"}}));
+                  m::Values({Var{"?foo"}, Var{"?bar"}}, {{"<foo>", "<bar>"}}));
+  expectDataBlock(R"(( ?foo ?bar ) { (<foo> "m") ("1" <bar>) })",
+                  m::Values({Var{"?foo"}, Var{"?bar"}},
+                            {{"<foo>", "\"m\""}, {"\"1\"", "<bar>"}}));
   expectDataBlock(
       R"(( ?foo ?bar ) { (<foo> "m") (<bar> <e>) ("1" "f") })",
-      m::Values({"?foo", "?bar"},
+      m::Values({Var{"?foo"}, Var{"?bar"}},
                 {{"<foo>", "\"m\""}, {"<bar>", "<e>"}, {"\"1\"", "\"f\""}}));
   // TODO<joka921/qup42> implement
   expectDataBlockFails(R"(( ) { (<foo>) })");
@@ -583,7 +582,7 @@ TEST(SparqlParser, InlineData) {
   auto expectInlineData = ExpectCompleteParse<&Parser::inlineData>{};
   auto expectInlineDataFails = ExpectParseFails<&Parser::inlineData>();
   expectInlineData("VALUES ?test { \"foo\" }",
-                   m::InlineData({"?test"}, {{"\"foo\""}}));
+                   m::InlineData({Var{"?test"}}, {{"\"foo\""}}));
   // There must always be a block present for InlineData
   expectInlineDataFails("");
 }
@@ -785,9 +784,10 @@ TEST(SparqlParser, GroupGraphPattern) {
                      m::GraphPattern(false, {"(?a=10)"}, DummyTriplesMatcher));
   expectGraphPattern("{ BIND (?f - ?b as ?c) }",
                      m::GraphPattern(m::Bind(Var{"?c"}, "?f-?b")));
-  expectGraphPattern("{ VALUES (?a ?b) { (<foo> <bar>) (<a> <b>) } }",
-                     m::GraphPattern(m::InlineData(
-                         {"?a", "?b"}, {{"<foo>", "<bar>"}, {"<a>", "<b>"}})));
+  expectGraphPattern(
+      "{ VALUES (?a ?b) { (<foo> <bar>) (<a> <b>) } }",
+      m::GraphPattern(m::InlineData({Var{"?a"}, Var{"?b"}},
+                                    {{"<foo>", "<bar>"}, {"<a>", "<b>"}})));
   expectGraphPattern("{ ?x ?y ?z }", m::GraphPattern(DummyTriplesMatcher));
   expectGraphPattern(
       "{ SELECT *  WHERE { ?x ?y ?z } }",
@@ -833,7 +833,7 @@ TEST(SparqlParser, GroupGraphPattern) {
       "{ SELECT *  WHERE { ?x ?y ?z } VALUES ?a { <a> <b> } }",
       m::GraphPattern(m::SubSelect(m::AsteriskSelect(false, false),
                                    m::GraphPattern(DummyTriplesMatcher)),
-                      m::InlineData({"?a"}, {{"<a>"}, {"<b>"}})));
+                      m::InlineData({Var{"?a"}}, {{"<a>"}, {"<b>"}})));
   // graphGraphPattern and serviceGraphPattern are not supported.
   expectGroupGraphPatternFails("{ GRAPH ?a { } }");
   expectGroupGraphPatternFails("{ GRAPH <foo> { } }");

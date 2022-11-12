@@ -1,5 +1,7 @@
-//  Copyright 2022, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -9,6 +11,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/GraphPattern.h"
 #include "parser/TripleComponent.h"
+#include "parser/data/Variable.h"
 #include "util/Algorithm.h"
 #include "util/VisitMixin.h"
 
@@ -29,9 +32,14 @@ class GraphPattern;
 class SparqlValues {
  public:
   // The variables to which the values will be bound
-  std::vector<std::string> _variables;
+  std::vector<Variable> _variables;
   // A table storing the values in their string form
-  std::vector<std::vector<std::string>> _values;
+  std::vector<std::vector<TripleComponent>> _values;
+  // The `_variable` as a string, in the format like so: "?x ?y ?z".
+  std::string variablesToString() const;
+  // The `_values` as a string, in the format like so: "(<v12> <v12> <v13>)
+  // (<v21> <v22> <v23>)".
+  std::string valuesToString() const;
 };
 
 /// A `BasicGraphPattern` represents a consecutive block of triples.
@@ -152,6 +160,12 @@ struct GraphPatternOperation
     return std::get<BasicGraphPattern>(*this);
   }
 
+  // A string representation of the operation.
+  //
+  // TODO: The implementation of this method duplicates code found in the
+  // implementations of `asStringImpl` for the individual operations in
+  // `src/engine`. This function is therefore probably redundant (but currently
+  // used in some of our unit tests).
   void toString(std::ostringstream& os, int indentation = 0) const;
 };
 }  // namespace parsedQuery

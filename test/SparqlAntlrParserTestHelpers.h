@@ -8,12 +8,18 @@
 
 #include <gmock/gmock.h>
 
+#include <iostream>
+#include <string>
+#include <vector>
+
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/Alias.h"
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParserHelpers.h"
+#include "parser/TripleComponent.h"
 #include "parser/data/OrderKey.h"
 #include "parser/data/VarOrTerm.h"
+#include "parser/data/Variable.h"
 #include "util/GTestHelpers.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
@@ -423,9 +429,9 @@ auto GroupByVariables =
                   testing::UnorderedElementsAreArray(vars));
 };
 
-auto Values =
-    [](const vector<string>& vars,
-       const vector<vector<string>>& values) -> Matcher<const p::Values&> {
+auto Values = [](const std::vector<::Variable>& vars,
+                 const std::vector<vector<TripleComponent>>& values)
+    -> Matcher<const p::Values&> {
   // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
   //  becomes a trivial Eq matcher.
   using SparqlValues = p::SparqlValues;
@@ -435,8 +441,8 @@ auto Values =
                      AD_FIELD(SparqlValues, _values, testing::Eq(values)))));
 };
 
-auto InlineData = [](const vector<string>& vars,
-                     const vector<vector<string>>& values)
+auto InlineData = [](const std::vector<::Variable>& vars,
+                     const vector<vector<TripleComponent>>& values)
     -> Matcher<const p::GraphPatternOperation&> {
   // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
   //  becomes a trivial Eq matcher.
