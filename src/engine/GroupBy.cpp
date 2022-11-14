@@ -4,14 +4,19 @@
 //   2018      Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 //   2020-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include <absl/strings/str_join.h>
-#include <engine/CallFixedSize.h>
-#include <engine/GroupBy.h>
-#include <engine/sparqlExpressions/SparqlExpression.h>
-#include <index/Index.h>
-#include <parser/Alias.h>
-#include <util/Conversions.h>
-#include <util/HashSet.h>
+#include "engine/GroupBy.h"
+
+#include "absl/strings/str_join.h"
+#include "engine/CallFixedSize.h"
+#include "engine/IndexScan.h"
+#include "engine/Join.h"
+#include "engine/Sort.h"
+#include "engine/Values.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
+#include "index/Index.h"
+#include "parser/Alias.h"
+#include "util/Conversions.h"
+#include "util/HashSet.h"
 
 // _______________________________________________________________________________________________
 GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
@@ -272,6 +277,10 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
 void GroupBy::computeResult(ResultTable* result) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
+  if (computeOptimizedAggregatesIfPossible(result)) {
+    return;
+  }
+
   std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
   LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
 
@@ -334,4 +343,128 @@ void GroupBy::computeResult(ResultTable* result) {
                     groupByCols, aggregates, &result->_idTable, subresult.get(),
                     result);
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
+}
+
+// _____________________________________________________________________________
+bool GroupBy::computeOptimizedAggregatesIfPossible(ResultTable* result) {
+  if (auto ptr =
+          dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get())) {
+    if (_subtree->getResultWidth() > 1 && _groupByVariables.empty() &&
+        _aliases.size() == 1) {
+      auto optVariableAndDistinctness =
+          _aliases[0]._expression.getVariableForCount();
+      if (optVariableAndDistinctness &&
+          !optVariableAndDistinctness->isDistinct_) {
+        result->_idTable.setCols(1);
+        result->_idTable.emplace_back();
+        result->_idTable(0, 0) = Id::makeFromInt(_subtree->getSizeEstimate());
+        return true;
+      }
+    }
+  } else if (auto joinPtr = dynamic_cast<const Join*>(
+                 _subtree->getRootOperation().get())) {
+    if (_groupByVariables.size() != 1 || _aliases.size() != 1) {
+      return false;
+    }
+    auto optionalVariableAndDistinctness =
+        _aliases.front()._expression.getVariableForCount();
+    if (!optionalVariableAndDistinctness ||
+        optionalVariableAndDistinctness->isDistinct_) {
+      return false;
+    }
+    if (optionalVariableAndDistinctness->variable_ !=
+        _groupByVariables.front()) {
+      return false;
+    }
+    auto firstAsValuesSecondAsScan = [](const Operation* fst,
+                                        const Operation* snd)
+        -> std::optional<std::pair<const Values*, const IndexScan*>> {
+      auto valuesPtr = dynamic_cast<const Values*>(fst);
+      // TODO<joka921> Technically this is only correct if the values in the
+      // `VALUES` clause are distinct. We should probably account for this
+      // TODO<joka921> If we make the values distinct (they are sorted anyway)
+      // we can also optimize this for arbitrary subtrees.
+      auto scanPtr = dynamic_cast<const IndexScan*>(snd);
+
+      if (!valuesPtr) {
+        auto sortPtr = dynamic_cast<const Sort*>(fst);
+        if (!sortPtr) {
+          return std::nullopt;
+        }
+        valuesPtr =
+            dynamic_cast<const Values*>(static_cast<const Operation*>(sortPtr)
+                                            ->getChildren()
+                                            .at(0)
+                                            ->getRootOperation()
+                                            .get());
+      }
+      if (!valuesPtr || !scanPtr) {
+        return std::nullopt;
+      }
+      if (valuesPtr->values()._variables.size() != 1) {
+        return std::nullopt;
+      }
+      if (scanPtr->getResultWidth() != 3) {
+        return std::nullopt;
+      }
+      return std::pair{valuesPtr, scanPtr};
+    };
+    auto fst = static_cast<const Operation*>(joinPtr)
+                   ->getChildren()
+                   .at(0)
+                   ->getRootOperation()
+                   .get();
+    auto snd = static_cast<const Operation*>(joinPtr)
+                   ->getChildren()
+                   .at(1)
+                   ->getRootOperation()
+                   .get();
+    auto optValuesAndScan = firstAsValuesSecondAsScan(fst, snd);
+    if (!optValuesAndScan.has_value()) {
+      optValuesAndScan = firstAsValuesSecondAsScan(snd, fst);
+    }
+    if (!optValuesAndScan.has_value()) {
+      return false;
+    }
+    auto computeOnValuesAndJoin = [&](const Values& valuesClause,
+                                      const IndexScan& scan) {
+      const auto& values = valuesClause.values();
+      AD_CHECK(scan.getResultWidth() == 3 && values._variables.size() == 1);
+      const Index::Permutation permutation = [&]() {
+        auto var = values._variables[0];
+        if (var == scan.getSubject()) {
+          return Index::Permutation::SOP;
+          // TODO<joka921> make `scan.getPredicate()` also return a
+          // `TripleComponent`.
+        } else if (var.name() == scan.getPredicate()) {
+          return Index::Permutation::POS;
+        } else {
+          AD_CHECK(var == scan.getObject()) { return Index::Permutation::OSP; }
+        }
+      }();
+      result->_idTable.setCols(2);
+      result->_idTable.reserve(values._values.size());
+      const auto& index = getExecutionContext()->getIndex();
+      for (const auto& vector : values._values) {
+        AD_CHECK(vector.size() == 1);
+        auto optionalId = vector.front().toValueId(index.getVocab());
+        if (!optionalId.has_value()) {
+          continue;
+        }
+        auto cardinality = index.getCardinality(vector.front(), permutation);
+        // Handle the case that the value doesn't exist in the given
+        // permutation.
+        if (cardinality == 0) {
+          continue;
+        }
+        result->_idTable.emplace_back();
+        result->_idTable.back()[0] = optionalId.value();
+        result->_idTable.back()[1] = Id::makeFromInt(cardinality);
+      }
+      // TODO<joka921> actually write the results in here.
+    };
+    computeOnValuesAndJoin(*optValuesAndScan->first, *optValuesAndScan->second);
+    return true;
+  }
+  return false;
 }

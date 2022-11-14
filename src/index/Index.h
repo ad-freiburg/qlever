@@ -101,6 +101,10 @@ class Index {
 
   [[nodiscard]] size_t objectCardinality(const TripleComponent& obj) const;
 
+  [[nodiscard]] size_t getCardinality(const TripleComponent& comp,
+                                      Permutation permutation) const;
+  [[nodiscard]] size_t getCardinality(Id id, Permutation permutation) const;
+
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
   [[nodiscard]] std::optional<std::string> idToOptionalString(Id id) const;

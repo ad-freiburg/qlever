@@ -82,6 +82,21 @@ size_t Index::objectCardinality(const TripleComponent& obj) const {
   return pimpl_->objectCardinality(obj);
 }
 
+// _____________________________________________________________________________
+size_t Index::getCardinality(const TripleComponent& comp,
+                             Index::Permutation p) const {
+  return pimpl_->applyToPermutation(p, [&](const auto& permutation) {
+    return pimpl_->getCardinality(comp, permutation);
+  });
+}
+
+// _____________________________________________________________________________
+size_t Index::getCardinality(Id id, Index::Permutation p) const {
+  return pimpl_->applyToPermutation(p, [&](const auto& permutation) {
+    return pimpl_->getCardinality(id, permutation);
+  });
+}
+
 // _______________________________________________
 std::optional<std::string> Index::idToOptionalString(Id id) const {
   return pimpl_->idToOptionalString(id);

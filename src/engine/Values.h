@@ -26,6 +26,9 @@ class Values : public Operation {
   virtual string asStringImpl(size_t indent = 0) const override;
 
  public:
+  // Return the contents of the VALUES clause
+  const SparqlValues& values() const { return _values; }
+
   virtual string getDescriptor() const override;
 
   virtual size_t getResultWidth() const override;

@@ -97,4 +97,17 @@ class GroupBy : public Operation {
                  ResultTable* outTable) const;
 
   FRIEND_TEST(GroupByTest, doGroupBy);
+
+  // For certain combinations of `_groupByColumns`, `_aliases` and `_subtree`,
+  // it is not necessary to fully materialize the `_subtree`'s result to compute
+  // the GROUP BY, but the result can simply be read from the index meta data.
+  // An example for such a combination is the query
+  //  SELECT ((COUNT ?x) as ?cnt) WHERE {
+  //  ?x <somePredicate> ?y
+  //  }
+  // This function checks, if such a case applies. In this case the result is
+  // computed and stored in `result` and `true` is returned. If no such case
+  // applies, `false` is returned and the `result` is untouched. Precondition:
+  // The `result` must be empty.
+  bool computeOptimizedAggregatesIfPossible(ResultTable* result);
 };

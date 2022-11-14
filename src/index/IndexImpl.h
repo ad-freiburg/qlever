@@ -193,6 +193,25 @@ class IndexImpl {
 
   size_t objectCardinality(const TripleComponent& obj) const;
 
+  template <typename Permutation>
+  size_t getCardinality(Id id, const Permutation& permutation) const {
+    if (permutation.metaData().col0IdExists(id)) {
+      return permutation.metaData().getMetaData(id).getNofElements();
+    }
+    return 0;
+  }
+
+  // ___________________________________________________________________________
+  template <typename Permutation>
+  size_t getCardinality(const TripleComponent& comp,
+                        const Permutation& permutation) const {
+    std::optional<Id> relId = comp.toValueId(getVocab());
+    if (relId.has_value()) {
+      return getCardinality(relId.value(), permutation);
+    }
+    return 0;
+  }
+
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
   std::optional<string> idToOptionalString(Id id) const {
