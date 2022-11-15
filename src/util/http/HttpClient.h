@@ -15,22 +15,26 @@
 // order of the includes should not matter, and it should certainly not cause
 // segmentation faults.
 
-#include <util/http/beast.h>
-
 #include <sstream>
 #include <string>
+
+#include "util/http/beast.h"
 
 // A class for basic communication with a remote server via HTTP or HTTPS. For
 // now, contains functionality for setting up a connection, sending one or
 // several GET or POST requests (and getting the response), and closing the
 // connection.
+//
+// The `StreamType` determines whether the protocol used will be HTTP or HTTPS,
+// see the two instantiations `HttpCLient` and `HttpsClient` below.
 template <typename StreamType>
 class HttpClientImpl {
  public:
-  // Set up the connection to the client. The `StreamType` determines whether it
-  // is a HTTP or an HTTPS connection, see the two instantiations `HttpCLient`
-  // and `HttpsClient` below.
-  void openStream(const std::string& host, const std::string& port);
+  // The constructor sets up the connection to the client.
+  HttpClientImpl(const std::string& host, const std::string& port);
+
+  // The destructor closes the connection.
+  ~HttpClientImpl() noexcept(false);
 
   // Send a request (the first argument must be either `http::verb::get` or
   // `http::verb::post`) and return the body of the reponse (possibly very
@@ -44,9 +48,6 @@ class HttpClientImpl {
       const std::string& target, const std::string& requestBody = "",
       const std::string& contentTypeHeader = "text/plain",
       const std::string& acceptHeader = "text/plain");
-
-  // Close the stream.
-  void closeStream();
 
  private:
   // The connection stream and associated objects. See the implementation of

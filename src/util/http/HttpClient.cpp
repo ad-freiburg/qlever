@@ -22,8 +22,8 @@ using tcp = boost::asio::ip::tcp;
 
 // ____________________________________________________________________________
 template <typename StreamType>
-void HttpClientImpl<StreamType>::openStream(const std::string& host,
-                                            const std::string& port) {
+HttpClientImpl<StreamType>::HttpClientImpl(const std::string& host,
+                                           const std::string& port) {
   // IMPORTANT implementation note: Although we need only `stream_` later, it
   // is important that we also keep `io_context_` and `ssl_context_` alive.
   // Otherwise, we get a nasty and non-deterministic segmentation fault when
@@ -32,7 +32,7 @@ void HttpClientImpl<StreamType>::openStream(const std::string& host,
   if constexpr (std::is_same_v<StreamType, beast::tcp_stream>) {
     tcp::resolver resolver{io_context_};
     stream_ = std::make_unique<StreamType>(io_context_);
-    auto const results = resolver.resolve(host.c_str(), port.c_str());
+    auto const results = resolver.resolve(host, port);
     stream_->connect(results);
   } else {
     static_assert(std::is_same_v<StreamType, ssl::stream<tcp::socket>>,
@@ -47,9 +47,39 @@ void HttpClientImpl<StreamType>::openStream(const std::string& host,
                                    boost::asio::error::get_ssl_category()};
       throw boost::system::system_error{ec};
     }
-    auto const results = resolver.resolve(host.c_str(), port.c_str());
+    auto const results = resolver.resolve(host, port);
     boost::asio::connect(stream_->next_layer(), results.begin(), results.end());
     stream_->handshake(ssl::stream_base::client);
+  }
+}
+
+// ____________________________________________________________________________
+template <typename StreamType>
+HttpClientImpl<StreamType>::~HttpClientImpl() noexcept(false) {
+  boost::system::error_code ec;
+  if constexpr (std::is_same_v<StreamType, beast::tcp_stream>) {
+    stream_->socket().shutdown(tcp::socket::shutdown_both, ec);
+    // `not_connected happens sometimes, so don't bother reporting it.
+    if (ec && ec != beast::errc::not_connected) {
+      if (std::uncaught_exceptions() == 0) {
+        throw beast::system_error{ec};
+      }
+    }
+  } else {
+    static_assert(std::is_same_v<StreamType, ssl::stream<tcp::socket>>,
+                  "StreamType must be either boost::beast::tcp_stream or "
+                  "boost::asio::ssl::stream<boost::asio::ip::tcp::socket>");
+    stream_->shutdown(ec);
+    // Gracefully close the stream. The `if` part is explained on
+    // http://stackoverflow.com/questions/25587403/boost-asio-ssl-async-shutdown-always-finishes-with-an-error
+    if (ec == boost::asio::error::eof) {
+      ec.assign(0, ec.category());
+    }
+    if (ec) {
+      if (std::uncaught_exceptions() == 0) {
+        throw boost::system::system_error{ec};
+      }
+    }
   }
 }
 
@@ -68,10 +98,10 @@ std::istringstream HttpClientImpl<StreamType>::sendRequest(
   http::request<http::string_body> request;
   request.method(method);
   request.target(target);
-  request.set(http::field::host, host.c_str());
+  request.set(http::field::host, host);
   request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
-  request.set(http::field::accept, acceptHeader.c_str());
-  request.set(http::field::content_type, contentTypeHeader.c_str());
+  request.set(http::field::accept, acceptHeader);
+  request.set(http::field::content_type, contentTypeHeader);
   request.set(http::field::content_length, std::to_string(requestBody.size()));
   request.body() = requestBody;
 
@@ -85,30 +115,6 @@ std::istringstream HttpClientImpl<StreamType>::sendRequest(
   std::istringstream responseBody(
       beast::buffers_to_string(response_parser.get().body().data()));
   return responseBody;
-}
-
-// ____________________________________________________________________________
-template <typename StreamType>
-void HttpClientImpl<StreamType>::closeStream() {
-  boost::system::error_code ec;
-  if constexpr (std::is_same_v<StreamType, beast::tcp_stream>) {
-    stream_->socket().shutdown(tcp::socket::shutdown_both, ec);
-    // `not_connected happens sometimes, so don't bother reporting it.
-    if (ec && ec != beast::errc::not_connected) throw beast::system_error{ec};
-  } else {
-    static_assert(std::is_same_v<StreamType, ssl::stream<tcp::socket>>,
-                  "StreamType must be either boost::beast::tcp_stream or "
-                  "boost::asio::ssl::stream<boost::asio::ip::tcp::socket>");
-    stream_->shutdown(ec);
-    // Gracefully close the stream. The `if` part is explained on
-    // http://stackoverflow.com/questions/25587403/boost-asio-ssl-async-shutdown-always-finishes-with-an-error
-    if (ec == boost::asio::error::eof) {
-      ec.assign(0, ec.category());
-    }
-    if (ec) throw boost::system::system_error{ec};
-    stream_.reset();
-    ssl_context_.reset();
-  }
 }
 
 // Explicit instantiations for HTTP and HTTPS, see the bottom of `HttpClient.h`.

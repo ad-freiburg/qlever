@@ -10,6 +10,8 @@
 // (TODO<joka921> Figure out, why Boost currently is not able, to deduce
 // these automatically.
 
+#include <utility>
+
 #include "util/Coroutines.h"
 
 // libc++ needs <experimental/coroutine>, libstdc++ needs <coroutine>

@@ -8,33 +8,32 @@
 
 #include "util/http/HttpUtils.h"
 
-using ad_utility::httpUtils::getProtocolHostPortTargetFromUrl;
+using ad_utility::httpUtils::UrlComponents;
 
-TEST(HttpUtils, getProtocolHostPortTargetFromUrl) {
-  auto check = [](const std::string& url, const std::string& protocol,
+TEST(HttpUtils, constructFromUrl) {
+  const auto& HTTP = UrlComponents::Protocol::HTTP;
+  const auto& HTTPS = UrlComponents::Protocol::HTTPS;
+  auto check = [](const std::string& url,
+                  const UrlComponents::Protocol& protocol,
                   const std::string& host, const std::string& port,
                   const std::string& target) {
-    auto protocolHostPortTarget = getProtocolHostPortTargetFromUrl(url);
-    ASSERT_EQ(std::get<0>(protocolHostPortTarget), protocol);
-    ASSERT_EQ(std::get<1>(protocolHostPortTarget), host);
-    ASSERT_EQ(std::get<2>(protocolHostPortTarget), port);
-    ASSERT_EQ(std::get<3>(protocolHostPortTarget), target);
+    UrlComponents uc(url);
+    ASSERT_EQ(uc.protocol, protocol);
+    ASSERT_EQ(uc.host, host);
+    ASSERT_EQ(uc.port, port);
+    ASSERT_EQ(uc.target, target);
   };
-  check("http://host.name/tar/get", "http", "host.name", "80", "/tar/get");
-  check("https://host.name/tar/get", "https", "host.name", "443", "/tar/get");
-  check("http://host.name:81/tar/get", "http", "host.name", "81", "/tar/get");
-  check("https://host.name:442/tar/get", "https", "host.name", "442",
-        "/tar/get");
-  check("http://host.name", "http", "host.name", "80", "");
-  check("http://host.name:81", "http", "host.name", "81", "");
-  check("https://host.name", "https", "host.name", "443", "");
-  check("https://host.name:442", "https", "host.name", "442", "");
+  check("http://host.name/tar/get", HTTP, "host.name", "80", "/tar/get");
+  check("https://host.name/tar/get", HTTPS, "host.name", "443", "/tar/get");
+  check("http://host.name:81/tar/get", HTTP, "host.name", "81", "/tar/get");
+  check("https://host.name:442/tar/get", HTTPS, "host.name", "442", "/tar/get");
+  check("http://host.name", HTTP, "host.name", "80", "");
+  check("http://host.name:81", HTTP, "host.name", "81", "");
+  check("https://host.name", HTTPS, "host.name", "443", "");
+  check("https://host.name:442", HTTPS, "host.name", "442", "");
 
-  auto assertThrow = [](const std::string& url) {
-    ASSERT_THROW(getProtocolHostPortTargetFromUrl(url), std::runtime_error)
-        << "url = " << url;
-  };
-  assertThrow("htt://host.name/tar/get");
-  assertThrow("http://host.name:8x/tar/get");
-  assertThrow("http://host.name:8x");
+  using Error = std::runtime_error;
+  ASSERT_THROW(UrlComponents("htt://host.name/tar/get"), Error);
+  ASSERT_THROW(UrlComponents("http://host.name:8x/tar/get"), Error);
+  ASSERT_THROW(UrlComponents("http://host.name:8x"), Error);
 }

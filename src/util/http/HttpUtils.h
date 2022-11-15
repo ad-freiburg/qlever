@@ -6,12 +6,10 @@
 #ifndef QLEVER_HTTPUTILS_H
 #define QLEVER_HTTPUTILS_H
 
-#include <absl/strings/str_cat.h>
-#include <ctre/ctre.h>
-
 #include <string>
 #include <string_view>
 
+#include "absl/strings/str_cat.h"
 #include "nlohmann/json.hpp"
 #include "util/AsyncStream.h"
 #include "util/CompressorStream.h"
@@ -34,46 +32,36 @@ using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
 namespace streams = ad_utility::streams;
 using ad_utility::httpUtils::httpStreams::streamable_body;
 
-// TODO: How to create regex from string? The string is needed for the error
-// message below. I looked at ctre.h, not exactly pretty code and very cryptic.
-static constexpr auto urlRegexString =
-    "^(http|https)://([^:/]+)(:([0-9]+))?(/.*)?$";
-static constexpr auto urlRegex =
-    ctll::fixed_string("^(http|https)://([^:/]+)(:([0-9]+))?(/.*)?$");
-
-/// Given a URL, extract the host name (the part after the http:// or https://
-/// and before the next /), the target (the part starting with the / after the
-/// host), and the port (if not port is specified, it's implicitly 80 for http
-/// and 443 for https). Throws an exception if the URL is malformed.
+/// The components of a URL. Returned by `parseUrlComponents` below. For
+/// example, for https://qlever.cs.uni-freiburg.de/api/wikidata, the components
+/// are:
 ///
-/// For example, for http://qlever.cs.uni-freiburg.de/api/wikidata, the port is
-/// 443 (implicit), the host is qlever.cs.uni-freiburg.de, and the target is
-/// /api/wikidata .
+/// protocol: HTTPS
+/// host:     qlever.cs.uni-freiburg.de
+/// port:     443 (implicit)
+/// target:   /api/wikidata .
 ///
-/// TODO: Probably this function shouldn't return four strings, but a `struct`
-/// with four members with proper names. Or is there such a `struct` somewhere
-/// in Beast already?
-inline std::tuple<std::string, std::string, std::string, std::string>
-getProtocolHostPortTargetFromUrl(const std::string_view url) {
-  std::tuple<std::string, std::string, std::string, std::string> result;
-  std::string& protocol = get<0>(result);
-  std::string& host = get<1>(result);
-  std::string& port = get<2>(result);
-  std::string& target = get<3>(result);
-  auto match = ctre::search<urlRegex>(url);
-  if (!match) {
-    throw std::runtime_error(
-        absl::StrCat("URL malformed, must match regex ", urlRegexString));
+/// NOTE: `host` and `target` could be `std::string_view` because they are parts
+/// of a given URL. However, `port` can be implicit, so we need a `std::string`
+/// here (and it's not an `int` because the Beast functions ask for the port as
+/// a string). Since URLs are short and we do not handle large numbers of URLs,
+/// the overhead of the string copies are negligible.
+struct UrlComponents {
+  // Construct from given URL.
+  UrlComponents(const std::string_view url);
+  // Members.
+  enum Protocol { HTTP, HTTPS } protocol;
+  std::string host;
+  std::string port;
+  std::string target;
+  bool operator==(const UrlComponents& uc) const = default;
+  // For testing.
+  friend std::ostream& operator<<(std::ostream& os, const UrlComponents& uc) {
+    return os << "UrlComponents("
+              << (uc.protocol == Protocol::HTTP ? "http" : "https") << ", "
+              << uc.host << ", " << uc.port << ", " << uc.target << ")";
   }
-  protocol = match.get<1>().to_string();
-  host = match.get<2>().to_string();
-  port = match.get<4>().to_string();
-  if (port.empty()) {
-    port = protocol == "http" ? "80" : "443";
-  }
-  target = match.get<5>().to_string();
-  return result;
-}
+};
 
 /// Concatenate base and path. Path must start with a '/', base may end with a
 /// slash. For example, path_cat("base", "/file.txt"), path_cat("base/" ,

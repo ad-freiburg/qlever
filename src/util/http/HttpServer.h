@@ -5,14 +5,13 @@
 #ifndef QLEVER_HTTPSERVER_H
 #define QLEVER_HTTPSERVER_H
 
-#include <util/http/beast.h>
-
 #include <cstdlib>
 #include <semaphore>
 
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/beast.h"
 #include "util/jthread.h"
 
 namespace beast = boost::beast;    // from <boost/beast.hpp>
@@ -50,7 +49,6 @@ class HttpServer {
   int _numServerThreads;
   net::io_context _ioContext;
   tcp::acceptor _acceptor;
-  std::atomic<bool> _exitServerLoopAfterNextRequest = false;
 
  public:
   /// Construct from the port and ip address, on which this server will listen,
@@ -107,10 +105,13 @@ class HttpServer {
     // listener contains an infinite loop.
   }
 
-  // Exit server loop after next request.
-  void exitServerLoopAfterNextRequest() {
-    _exitServerLoopAfterNextRequest = true;
-  }
+  // Get the server port.
+  short unsigned int getPort() const { return _port; }
+
+  // Close the acceptor and leave the server loop. This is currently only needed
+  // for our unit test in `test/HttpClient` (for shutting down the server thread
+  // in a cooperative manner).
+  void shutDown() { _acceptor.close(); }
 
   // _____________________________________________________________________
   net::io_context& getIoContext() { return _ioContext; };
@@ -131,16 +132,11 @@ class HttpServer {
       co_return;
     }
 
-    // `acceptor` is now listening on the port, start accepting connections in
-    // an infinite, asynchronous, but conceptually single-threaded loop.
-    while (true) {
-      // Check if server loop should be exited.
-      if (_exitServerLoopAfterNextRequest) {
-        LOG(INFO) << "Exit of server loop triggered ..." << std::endl;
-        break;
-      }
-      LOG(DEBUG) << "HttpServer accept loop: ready for next request ..."
-                 << std::endl;
+    // While the `_acceptor` is open (only `shutDown()` will close it, which
+    // currently only happens in `test/HttpTest.cpp`), accept connections and
+    // handle each connection asynchronously (so that we are ready to accept the
+    // next connection right away).
+    while (_acceptor.is_open()) {
       try {
         auto socket =
             co_await _acceptor.async_accept(boost::asio::use_awaitable);

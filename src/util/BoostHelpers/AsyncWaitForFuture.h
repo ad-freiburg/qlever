@@ -6,9 +6,9 @@
 #define QLEVER_ASYNCWAITFORFUTURE_H
 // Inspired by https://gist.github.com/inetic/dc9081baf45ec4b60037
 
-#include <util/http/beast.h>
-
 #include <future>
+
+#include "util/http/beast.h"
 
 namespace ad_utility::asio_helpers {
 

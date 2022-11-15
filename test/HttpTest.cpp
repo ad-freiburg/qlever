@@ -8,6 +8,7 @@
 #include <thread>
 
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "util/http/HttpClient.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
@@ -37,44 +38,69 @@ TEST(HttpServer, HttpTest) {
     co_return co_await send(
         createOkResponse(response, request, ad_utility::MediaType::textPlain));
   };
-  // Set up a HTTP server and run it.
-  // TODO: Try out random ports until we find a free one.
-  short unsigned int port = 37654;
-  const std::string& ipAdress = "0.0.0.0";
-  int numServerThreads = 1;
-  auto httpServer = HttpServer{port, ipAdress, numServerThreads,
-                               std::move(mirroringHttpSessionHandler)};
+  // Set up a HTTP server and run it. Try out 10 different ports, if connection
+  // to all of them fail, the test fails.
+  //
+  // TODO: Is there a more robust way to do this? Should we try out more ports?
+  auto httpServer = [&mirroringHttpSessionHandler]() {
+    std::vector<short unsigned int> ports(10);
+    std::generate(ports.begin(), ports.end(),
+                  []() { return 1024 + std::rand() % (65535 - 1024); });
+    LOG(INFO)
+        << "Trying to start a test HTTP server on one of the following ports: "
+        << absl::StrJoin(ports, ", ") << std::endl;
+    const std::string& ipAddress = "0.0.0.0";
+    int numServerThreads = 1;
+    for (const short unsigned int port : ports) {
+      try {
+        return HttpServer{port, ipAddress, numServerThreads,
+                          std::move(mirroringHttpSessionHandler)};
+      } catch (const boost::system::system_error& b) {
+        LOG(INFO) << "Starting test HTTP server on port " << port
+                  << " failed, trying next port ..." << std::endl;
+      }
+    }
+    throw std::runtime_error(
+        "Could not start test HTTP server on any of the ports");
+  }();
+
+  // Run the server in its own thread.
   std::jthread httpServerThread([&]() { httpServer.run(); });
 
-  // TODO: Without the `sleep_for (1ms is also enough on my machine)`, the
-  // listener exits its loop before waiting for the first request, and the
-  // following request hangs.  What would be a more robust way of closing down
-  // the server?
-  std::this_thread::sleep_for(50ms);
-  httpServer.exitServerLoopAfterNextRequest();
-  HttpClient httpClient;
-
   // Helper lambdas for testing GET and POST requests.
-  auto testGetRequest = [&httpClient](const std::string& target) {
-    std::istringstream response = httpClient.sendRequest(
+  auto testGetRequest = [](HttpClient* httpClient, const std::string& target) {
+    std::istringstream response = httpClient->sendRequest(
         boost::beast::http::verb::get, "localhost", target);
     ASSERT_EQ(response.str(), absl::StrCat("GET\n", target, "\n"));
   };
-  auto testPostRequest = [&httpClient](const std::string& target,
-                                       const std::string& body) {
-    std::istringstream response = httpClient.sendRequest(
+  auto testPostRequest = [](HttpClient* httpClient, const std::string& target,
+                            const std::string& body) {
+    std::istringstream response = httpClient->sendRequest(
         boost::beast::http::verb::post, "localhost", target, body);
     ASSERT_EQ(response.str(), absl::StrCat("POST\n", target, "\n", body));
   };
 
-  // Send a GET request and a POST request via the same connection (one after
-  // the other).
-  httpClient.openStream("localhost", std::to_string(port));
-  testGetRequest("target");
-  testPostRequest("target", "body");
-  httpClient.closeStream();
+  // First session (checks whether client and server can communicate as they
+  // should).
+  {
+    HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
+    testGetRequest(&httpClient, "target1");
+    testPostRequest(&httpClient, "target1", "body1");
+  }
 
-  // Sending a request after the connection is closed should fail.
-  ASSERT_THROW(testGetRequest("target"), std::exception);
-  ASSERT_THROW(testPostRequest("target", "body"), std::exception);
+  // Second session (checks if everything is still fine with the server after we
+  // have communicated with it for one session).
+  {
+    HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
+    testGetRequest(&httpClient, "target2");
+    testPostRequest(&httpClient, "target2", "body2");
+  }
+
+  // Third session (check that we communication fails after shutting down the
+  // server).
+  httpServer.shutDown();
+  {
+    ASSERT_THROW(HttpClient("localhost", std::to_string(httpServer.getPort())),
+                 std::exception);
+  }
 }

@@ -6,7 +6,8 @@
 
 #include <absl/strings/ascii.h>
 #include <absl/strings/str_split.h>
-#include <util/http/beast.h>
+
+#include "util/http/beast.h"
 
 namespace ad_utility::content_encoding {
 
