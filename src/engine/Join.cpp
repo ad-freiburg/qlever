@@ -240,8 +240,15 @@ size_t Join::getCostEstimate() {
     // Normal case:
     costJoin = _left->getSizeEstimate() + _right->getSizeEstimate();
   }
-  return getSizeEstimate() + _left->getCostEstimate() +
-         _right->getCostEstimate() + costJoin;
+
+  if (!isFullScanDummy(_left)) {
+    costJoin += _left->getCostEstimate();
+  }
+  if (!isFullScanDummy(_right)) {
+    costJoin += _right->getCostEstimate();
+  }
+  auto sizeEstimate = getSizeEstimate();
+  return sizeEstimate + costJoin;
 }
 
 // _____________________________________________________________________________

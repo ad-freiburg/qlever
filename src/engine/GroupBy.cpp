@@ -372,53 +372,35 @@ bool GroupBy::computeOptimizedAggregatesIfPossible(ResultTable* result) {
         optionalVariableAndDistinctness->isDistinct_) {
       return false;
     }
-    if (optionalVariableAndDistinctness->variable_ !=
-        _groupByVariables.front()) {
-      return false;
-    }
-    auto firstAsValuesSecondAsScan = [](const Operation* fst,
-                                        const Operation* snd)
-        -> std::optional<std::pair<const Values*, const IndexScan*>> {
-      auto valuesPtr = dynamic_cast<const Values*>(fst);
-      // TODO<joka921> Technically this is only correct if the values in the
-      // `VALUES` clause are distinct. We should probably account for this
-      // TODO<joka921> If we make the values distinct (they are sorted anyway)
-      // we can also optimize this for arbitrary subtrees.
-      auto scanPtr = dynamic_cast<const IndexScan*>(snd);
+    const auto& countedVar = optionalVariableAndDistinctness->variable_;
+    const Variable& groupedVariable = _groupByVariables.front();
+    auto firstAsValuesSecondAsScan = [&groupedVariable, &countedVar](
+                                         const QueryExecutionTree* fst,
+                                         const QueryExecutionTree* snd)
+        -> std::optional<
+            std::pair<const QueryExecutionTree*, const IndexScan*>> {
+      auto scanPtr =
+          dynamic_cast<const IndexScan*>(snd->getRootOperation().get());
 
-      if (!valuesPtr) {
-        auto sortPtr = dynamic_cast<const Sort*>(fst);
-        if (!sortPtr) {
-          return std::nullopt;
-        }
-        valuesPtr =
-            dynamic_cast<const Values*>(static_cast<const Operation*>(sortPtr)
-                                            ->getChildren()
-                                            .at(0)
-                                            ->getRootOperation()
-                                            .get());
-      }
-      if (!valuesPtr || !scanPtr) {
+      auto sorted = fst->getPrimarySortKeyVariable();
+      if (!sorted.has_value() || sorted != groupedVariable) {
         return std::nullopt;
       }
-      if (valuesPtr->values()._variables.size() != 1) {
+
+      if (!scanPtr || scanPtr->getResultWidth() != 3) {
         return std::nullopt;
       }
-      if (scanPtr->getResultWidth() != 3) {
+
+      if (countedVar != scanPtr->getSubject() &&
+          countedVar.name() != scanPtr->getPredicate() &&
+          countedVar != scanPtr->getObject()) {
         return std::nullopt;
       }
-      return std::pair{valuesPtr, scanPtr};
+
+      return std::pair{fst, scanPtr};
     };
-    auto fst = static_cast<const Operation*>(joinPtr)
-                   ->getChildren()
-                   .at(0)
-                   ->getRootOperation()
-                   .get();
-    auto snd = static_cast<const Operation*>(joinPtr)
-                   ->getChildren()
-                   .at(1)
-                   ->getRootOperation()
-                   .get();
+    auto* fst = static_cast<const Operation*>(joinPtr)->getChildren().at(0);
+    auto snd = static_cast<const Operation*>(joinPtr)->getChildren().at(1);
     auto optValuesAndScan = firstAsValuesSecondAsScan(fst, snd);
     if (!optValuesAndScan.has_value()) {
       optValuesAndScan = firstAsValuesSecondAsScan(snd, fst);
@@ -426,12 +408,13 @@ bool GroupBy::computeOptimizedAggregatesIfPossible(ResultTable* result) {
     if (!optValuesAndScan.has_value()) {
       return false;
     }
-    auto computeOnValuesAndJoin = [&](const Values& valuesClause,
+    auto computeOnValuesAndJoin = [&](const QueryExecutionTree& subtree,
                                       const IndexScan& scan) {
-      const auto& values = valuesClause.values();
-      AD_CHECK(scan.getResultWidth() == 3 && values._variables.size() == 1);
+      auto var = _groupByVariables.front();
+      AD_CHECK(subtree.getPrimarySortKeyVariable().value() == var);
+      auto subresult = subtree.getResult();
+      AD_CHECK(scan.getResultWidth() == 3);
       const Index::Permutation permutation = [&]() {
-        auto var = values._variables[0];
         if (var == scan.getSubject()) {
           return Index::Permutation::SOP;
           // TODO<joka921> make `scan.getPredicate()` also return a
@@ -443,22 +426,20 @@ bool GroupBy::computeOptimizedAggregatesIfPossible(ResultTable* result) {
         }
       }();
       result->_idTable.setCols(2);
-      result->_idTable.reserve(values._values.size());
       const auto& index = getExecutionContext()->getIndex();
-      for (const auto& vector : values._values) {
-        AD_CHECK(vector.size() == 1);
-        auto optionalId = vector.front().toValueId(index.getVocab());
-        if (!optionalId.has_value()) {
-          continue;
-        }
-        auto cardinality = index.getCardinality(vector.front(), permutation);
+      // TODO<joka921> Solve this using CALL_FIXED_SIZE.
+      auto columnIndex = subtree.getVariableColumn(var);
+      for (size_t i = 0; i < subresult->_idTable.size(); ++i) {
+        // TODO<joka921> This not yet correct for duplicates.
+        auto id = subresult->_idTable(i, columnIndex);
+        auto cardinality = index.getCardinality(id, permutation);
         // Handle the case that the value doesn't exist in the given
         // permutation.
         if (cardinality == 0) {
           continue;
         }
         result->_idTable.emplace_back();
-        result->_idTable.back()[0] = optionalId.value();
+        result->_idTable.back()[0] = id;
         result->_idTable.back()[1] = Id::makeFromInt(cardinality);
       }
       // TODO<joka921> actually write the results in here.

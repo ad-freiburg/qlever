@@ -130,7 +130,7 @@ class Operation {
   }
 
   // If the result of this `Operation` is sorted (either because this
-  // `Operation` enforces this sorting, or because it preserve the sorting of
+  // `Operation` enforces this sorting, or because it preserves the sorting of
   // its children), return the variable that is the primary sort key. Else
   // return nullopt.
   virtual std::optional<Variable> getPrimarySortKeyVariable() const final;

@@ -344,6 +344,24 @@ size_t IndexScan::computeSizeEstimate() {
 }
 
 // _____________________________________________________________________________
+size_t IndexScan::getCostEstimate() {
+  if (getResultWidth() != 3) {
+    return getSizeEstimate();
+  } else {
+    // The computation of the `full scan` estimate must be consistent with the
+    // full scan dummy joins in `Join.cpp` for correct query planning.
+    // TODO<joka921> Factor out the common code to keep it in sync.
+    float diskRandomAccessCost =
+        _executionContext
+            ? _executionContext->getCostFactor("DISK_RANDOM_ACCESS_COST")
+            : 200000;
+    auto numScans = getSizeEstimate() / getMultiplicity(0);
+    auto averageScanSize = getMultiplicity(0);
+    return numScans * (diskRandomAccessCost + averageScanSize);
+  }
+}
+
+// _____________________________________________________________________________
 void IndexScan::computeSPOfreeP(ResultTable* result) const {
   result->_idTable.setCols(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);

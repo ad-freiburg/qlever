@@ -66,7 +66,7 @@ class IndexScan : public Operation {
     return _sizeEstimate;
   }
 
-  virtual size_t getCostEstimate() override { return getSizeEstimate(); }
+  virtual size_t getCostEstimate() override;
 
   void determineMultiplicities();
 
