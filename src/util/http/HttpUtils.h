@@ -32,9 +32,8 @@ using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
 namespace streams = ad_utility::streams;
 using ad_utility::httpUtils::httpStreams::streamable_body;
 
-/// The components of a URL. Returned by `parseUrlComponents` below. For
-/// example, for https://qlever.cs.uni-freiburg.de/api/wikidata, the components
-/// are:
+/// The components of a URL. For example, the components of the URL
+/// https://qlever.cs.uni-freiburg.de/api/wikidata are:
 ///
 /// protocol: HTTPS
 /// host:     qlever.cs.uni-freiburg.de
@@ -42,10 +41,10 @@ using ad_utility::httpUtils::httpStreams::streamable_body;
 /// target:   /api/wikidata .
 ///
 /// NOTE: `host` and `target` could be `std::string_view` because they are parts
-/// of a given URL. However, `port` can be implicit, so we need a `std::string`
-/// here (and it's not an `int` because the Beast functions ask for the port as
-/// a string). Since URLs are short and we do not handle large numbers of URLs,
-/// the overhead of the string copies are negligible.
+/// of the given URL. However, `port` can be implicit, so we need a
+/// `std::string` here (and it's not an `int` because the Beast functions ask
+/// for the port as a string). Since URLs are short and we do not handle large
+/// numbers of URLs, the overhead of the string copies are negligible.
 struct UrlComponents {
   // Construct from given URL.
   UrlComponents(const std::string_view url);
@@ -54,7 +53,6 @@ struct UrlComponents {
   std::string host;
   std::string port;
   std::string target;
-  bool operator==(const UrlComponents& uc) const = default;
   // For testing.
   friend std::ostream& operator<<(std::ostream& os, const UrlComponents& uc) {
     return os << "UrlComponents("

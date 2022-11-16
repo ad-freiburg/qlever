@@ -20,6 +20,9 @@ TEST(HttpServer, HttpTest) {
   // A simple HTTP session handler, which replies with three lines: the request
   // method (GET, POST, or OTHER), a copy of the request target (might be
   // empty), and a copy of the request body (might be empty).
+  //
+  // Note: We default construct such a handler from its type below. Hence this
+  // concrete handler is not used, hence the [[maybe_unused]].
   auto mirroringHttpSessionHandler =
       [](auto request, auto&& send) -> boost::asio::awaitable<void> {
     std::string methodName;
@@ -54,7 +57,7 @@ TEST(HttpServer, HttpTest) {
     for (const short unsigned int port : ports) {
       try {
         return HttpServer{port, ipAddress, numServerThreads,
-                          std::move(mirroringHttpSessionHandler)};
+                          mirroringHttpSessionHandler};
       } catch (const boost::system::system_error& b) {
         LOG(INFO) << "Starting test HTTP server on port " << port
                   << " failed, trying next port ..." << std::endl;
@@ -96,11 +99,15 @@ TEST(HttpServer, HttpTest) {
     testPostRequest(&httpClient, "target2", "body2");
   }
 
-  // Third session (check that we communication fails after shutting down the
-  // server).
-  httpServer.shutDown();
+  // Third session (check that after shutting down the server, we can still
+  // connect once more, but then the connection fails; see the documentation of
+  // `HttpServer::shutDownAfterNextConnectionIsAccepted` for the resasons for
+  // this behaviour).
+  httpServer.shutDownAfterNextConnectionIsAccepted();
   {
-    ASSERT_THROW(HttpClient("localhost", std::to_string(httpServer.getPort())),
+    HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
+    ASSERT_THROW(testGetRequest(&httpClient, "target3"), std::exception);
+    ASSERT_THROW(testPostRequest(&httpClient, "target3", "body3"),
                  std::exception);
   }
 }

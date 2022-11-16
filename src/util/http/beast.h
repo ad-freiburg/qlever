@@ -10,6 +10,9 @@
 // (TODO<joka921> Figure out, why Boost currently is not able, to deduce
 // these automatically.
 
+// Without explicitly including the `<utility>` header, an error occurs when
+// compiling the `boost::asio` code included below with gcc 12. We hope and
+// expect that this will go away with future version of `boost::asio`.
 #include <utility>
 
 #include "util/Coroutines.h"

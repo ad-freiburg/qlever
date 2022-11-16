@@ -49,6 +49,8 @@ class HttpServer {
   int _numServerThreads;
   net::io_context _ioContext;
   tcp::acceptor _acceptor;
+  std::atomic<bool> _serverIsReady = false;
+  std::atomic<bool> _shutDownAfterNextConnectionIsAccepted = false;
 
  public:
   /// Construct from the port and ip address, on which this server will listen,
@@ -108,10 +110,23 @@ class HttpServer {
   // Get the server port.
   short unsigned int getPort() const { return _port; }
 
-  // Close the acceptor and leave the server loop. This is currently only needed
-  // for our unit test in `test/HttpClient` (for shutting down the server thread
-  // in a cooperative manner).
-  void shutDown() { _acceptor.close(); }
+  // Is the server ready yet? We need this in `test/HttpTest.cpp` so that our
+  // test can wait for the server to be ready and continue with its test
+  // queries.
+  bool serverIsReady() const { return _serverIsReady; }
+
+  // Shut down the server. After this, one more connection to the server will be
+  // accepted (because the `listener()` delegates the handling of a connection
+  // to a separate co-routine and waits for the next request right away), but
+  // any communication via that connection will fail (with an exception
+  // "connection reset by peer").
+  //
+  // NOTE: We first had a simpler behaviour, where this method was called
+  // `shutDown()` and calls `_acceptor.close()`. However, calls to `_acceptor`
+  // are not threadsafe, so we landed at this more unintuitive interface.
+  void shutDownAfterNextConnectionIsAccepted() {
+    _shutDownAfterNextConnectionIsAccepted = true;
+  }
 
   // _____________________________________________________________________
   net::io_context& getIoContext() { return _ioContext; };
@@ -131,15 +146,31 @@ class HttpServer {
       logBeastError(b.code(), "Listening on the socket failed");
       co_return;
     }
+    _serverIsReady = true;
 
-    // While the `_acceptor` is open (only `shutDown()` will close it, which
-    // currently only happens in `test/HttpTest.cpp`), accept connections and
-    // handle each connection asynchronously (so that we are ready to accept the
-    // next connection right away).
+    // While the `_acceptor` is open, accept connections and handle each
+    // connection asynchronously (so that we are ready to accept the next
+    // connection right away). The `_acceptor` will be closed when
+    // `_shutDownAfterNextSession` is set to false (which can be done by calling
+    // `shutDownAfterNextSession`).
     while (_acceptor.is_open()) {
       try {
+        // Wait for a request (the code only continues after we have received
+        // and accepted a request).
         auto socket =
             co_await _acceptor.async_accept(boost::asio::use_awaitable);
+        // Check if we should shut down the server. Note: it's important to
+        // close the `_acceptor`. Otherwise we end up with a zombie server that
+        // is still bound to a port, but not responding to requests. Afterwards,
+        // we throw an exception, so that the requesting client knows that this
+        // connection is not going to work.
+        if (_shutDownAfterNextConnectionIsAccepted) {
+          _acceptor.close();
+          break;
+          // throw std::runtime_error(
+          //     "Connection refused because the server has been told to shut "
+          //     "down.");
+        }
         // Schedule the session such that it may run in parallel to this loop.
         // the `strand` makes each session conceptually single-threaded.
         // TODO<joka921> is this even needed, to my understanding,
