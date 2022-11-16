@@ -387,17 +387,18 @@ struct GroupBySpecialCount : ::testing::Test {
   }
 };
 
-TEST_F(GroupBySpecialCount, isThreeVariableTripleThatContainsVariable) {
+// TODO<joka921> Comment the tests, clean up, and complete them.
+TEST_F(GroupBySpecialCount, getPermutationForThreeVariableTriple) {
   using enum Index::Permutation;
-  ASSERT_EQ(SPO, GroupBy::isThreeVariableTripleThatContainsVariable(
-                     xyzScan.get(), Variable{"?x"}));
-  ASSERT_EQ(POS, GroupBy::isThreeVariableTripleThatContainsVariable(
-                     xyzScan.get(), Variable{"?y"}));
-  ASSERT_EQ(OSP, GroupBy::isThreeVariableTripleThatContainsVariable(
-                     xyzScan.get(), Variable{"?z"}));
-  ASSERT_EQ(std::nullopt, GroupBy::isThreeVariableTripleThatContainsVariable(
+  ASSERT_EQ(SPO, GroupBy::getPermutationForThreeVariableTriple(xyzScan.get(),
+                                                               Variable{"?x"}));
+  ASSERT_EQ(POS, GroupBy::getPermutationForThreeVariableTriple(xyzScan.get(),
+                                                               Variable{"?y"}));
+  ASSERT_EQ(OSP, GroupBy::getPermutationForThreeVariableTriple(xyzScan.get(),
+                                                               Variable{"?z"}));
+  ASSERT_EQ(std::nullopt, GroupBy::getPermutationForThreeVariableTriple(
                               xyzScan.get(), Variable{"?a"}));
-  ASSERT_EQ(std::nullopt, GroupBy::isThreeVariableTripleThatContainsVariable(
+  ASSERT_EQ(std::nullopt, GroupBy::getPermutationForThreeVariableTriple(
                               xScan.get(), Variable{"?x"}));
 }
 TEST_F(GroupBySpecialCount, checkIfOptimizedAggregateOnJoinChildIsPossible) {
@@ -433,11 +434,21 @@ TEST_F(GroupBySpecialCount, computeOptimizedAggregatesOnJoinChild) {
 
   auto join = makeExecutionTree<Join>(qec, values, xyzScanSortedByY, 0, 0);
 
-  GroupBy validForOptimization{qec, validVariables, validAliases, join};
+  // TODO<joka921> we found out, that the AD_CHECK is not correct inside the
+  // computeOptimized... function. It has to be a simple `if`.
+  GroupBy validForOptimization{qec, std::vector<Variable>{varY}, validAliases,
+                               join};
   ASSERT_TRUE(validForOptimization.computeOptimizedAggregatesOnJoinChild(
       &result, getJoinPtr(join)));
 
   // TODO<joka921> Check the contents of `result`
+
+  // The following is also invalid, because the JOIN before the GROUP BY is
+  // on the wrong variable
+  GroupBy invalidForOptimization2{qec, std::vector<Variable>{varX},
+                                  validAliases, join};
+  ASSERT_FALSE(invalidForOptimization2.computeOptimizedAggregatesOnJoinChild(
+      &result, getJoinPtr(join)));
 }
 
 }  // namespace

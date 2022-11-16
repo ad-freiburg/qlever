@@ -345,9 +345,9 @@ void GroupBy::computeResult(ResultTable* result) {
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
 }
 
-bool GroupBy::computeOptimizedAggregatesOnIndexScanChild(ResultTable* result,
-                                                         const IndexScan* ptr) {
-  if (ptr->getResultWidth() > 1 && _groupByVariables.empty() &&
+bool GroupBy::computeOptimizedAggregatesOnIndexScanChild(
+    ResultTable* result, const IndexScan* indexScan) {
+  if (indexScan->getResultWidth() > 1 && _groupByVariables.empty() &&
       _aliases.size() == 1) {
     auto optVariableAndDistinctness =
         _aliases[0]._expression.getVariableForCount();
@@ -355,7 +355,9 @@ bool GroupBy::computeOptimizedAggregatesOnIndexScanChild(ResultTable* result,
         !optVariableAndDistinctness->isDistinct_) {
       result->_idTable.setCols(1);
       result->_idTable.emplace_back();
-      result->_idTable(0, 0) = Id::makeFromInt(ptr->getSizeEstimate());
+      // For `IndexScans` with at least two variables the size estimates are
+      // exact as they are read directly from the index meta data.
+      result->_idTable(0, 0) = Id::makeFromInt(indexScan->getSizeEstimate());
       return true;
     }
   }
@@ -363,22 +365,19 @@ bool GroupBy::computeOptimizedAggregatesOnIndexScanChild(ResultTable* result,
 }
 
 // _____________________________________________________________________________
-std::optional<Index::Permutation>
-GroupBy::isThreeVariableTripleThatContainsVariable(
-    const QueryExecutionTree* tree, const Variable& countedVariable) {
-  // TODO<joka921> Factor this out as a function
-  //  `isThreeVariableIndexScanThatContainsVariable`
+std::optional<Index::Permutation> GroupBy::getPermutationForThreeVariableTriple(
+    const QueryExecutionTree* tree, const Variable& variableByWhichToSort) {
   auto scanPtr = dynamic_cast<const IndexScan*>(tree->getRootOperation().get());
 
   if (!scanPtr || scanPtr->getResultWidth() != 3) {
     return std::nullopt;
   }
 
-  if (countedVariable == scanPtr->getSubject()) {
+  if (variableByWhichToSort == scanPtr->getSubject()) {
     return Index::Permutation::SPO;
-  } else if (countedVariable.name() == scanPtr->getPredicate()) {
+  } else if (variableByWhichToSort.name() == scanPtr->getPredicate()) {
     return Index::Permutation::POS;
-  } else if (countedVariable == scanPtr->getObject()) {
+  } else if (variableByWhichToSort == scanPtr->getObject()) {
     return Index::Permutation::OSP;
   } else {
     return std::nullopt;
@@ -386,9 +385,11 @@ GroupBy::isThreeVariableTripleThatContainsVariable(
 };
 
 // _____________________________________________________________________________
-std::optional<GroupBy::JoinChildAggregateData>
-GroupBy::checkIfOptimizedAggregateOnJoinChildIsPossible(const Join* joinPtr) {
+std::optional<GroupBy::OptimizedAggregateData>
+GroupBy::checkIfOptimizedAggregateOnJoinChildIsPossible(const Join* join) {
   // Exactly one grouped variable and one alias
+  // TODO<joka921> The pattern "There is exactly one alias, and it is  a
+  // non-distinct count" can also be put in a separate function.
   if (_groupByVariables.size() != 1 || _aliases.size() != 1) {
     return std::nullopt;
   }
@@ -406,16 +407,16 @@ GroupBy::checkIfOptimizedAggregateOnJoinChildIsPossible(const Join* joinPtr) {
 
   // Determine if any of the two children of the join operation is a
   // triple with three variables that fulfills the condition.
-  auto* fst = static_cast<const Operation*>(joinPtr)->getChildren().at(0);
-  auto* snd = static_cast<const Operation*>(joinPtr)->getChildren().at(1);
+  auto* child1 = static_cast<const Operation*>(join)->getChildren().at(0);
+  auto* child2 = static_cast<const Operation*>(join)->getChildren().at(1);
 
   // TODO<joka921, C++23> Use `optional::or_else`
   auto scanAndPermutation =
-      isThreeVariableTripleThatContainsVariable(fst, countedVar);
+      getPermutationForThreeVariableTriple(child1, countedVar);
   if (!scanAndPermutation.has_value()) {
-    std::swap(fst, snd);
+    std::swap(child1, child2);
     scanAndPermutation =
-        isThreeVariableTripleThatContainsVariable(fst, countedVar);
+        getPermutationForThreeVariableTriple(child1, countedVar);
   }
   if (!scanAndPermutation.has_value()) {
     return std::nullopt;
@@ -424,20 +425,25 @@ GroupBy::checkIfOptimizedAggregateOnJoinChildIsPossible(const Join* joinPtr) {
   // This check fails if we ever decide to not eagerly sort the children of
   // a GROUP BY. We can detect this case and change something here then.
 
-  AD_CHECK(snd->getPrimarySortKeyVariable().value() == groupedVariable);
-  auto columnIndex = snd->getVariableColumn(groupedVariable);
+  if (child2->getPrimarySortKeyVariable().value() != groupedVariable) {
+    return std::nullopt;
+  }
+  auto columnIndex = child2->getVariableColumn(groupedVariable);
 
-  return JoinChildAggregateData{*snd, scanAndPermutation.value(), columnIndex};
+  return OptimizedAggregateData{*child2, scanAndPermutation.value(),
+                                columnIndex};
 }
 
 // _____________________________________________________________________________
 bool GroupBy::computeOptimizedAggregatesOnJoinChild(ResultTable* result,
                                                     const Join* joinPtr) {
-  auto optionalData = checkIfOptimizedAggregateOnJoinChildIsPossible(joinPtr);
-  if (!optionalData.has_value()) {
+  auto optimizedAggregateData =
+      checkIfOptimizedAggregateOnJoinChildIsPossible(joinPtr);
+  if (!optimizedAggregateData.has_value()) {
     return false;
   }
-  const auto& [subtree, permutation, columnIndex] = optionalData.value();
+  const auto& [subtree, permutation, columnIndex] =
+      optimizedAggregateData.value();
 
   auto subresult = subtree.getResult();
   result->_idTable.setCols(2);
@@ -452,12 +458,15 @@ bool GroupBy::computeOptimizedAggregatesOnJoinChild(ResultTable* result,
   // `std::views::chunk_by` and implement a lazy version of this view for input
   // iterators.
 
+  // TODO<joka921> If we directly add a new row when a new group starts,
+  // and add directly to this group, then the code gets simpler.
   // Take care of duplicate values in the input.
   Id currentId = subresult->_idTable(0, columnIndex);
   size_t currentCount = 0;
   size_t currentCardinality = index.getCardinality(currentId, permutation);
 
   auto pushRow = [&]() {
+    // TODO<joka921> Document this `if`
     if (currentCount > 0) {
       // TODO<C++20, as soon as Clang supports it>: use `emplace_back(id1, id2)`
       // (requires parenthesized initialization of aggregates.
@@ -481,12 +490,12 @@ bool GroupBy::computeOptimizedAggregatesOnJoinChild(ResultTable* result,
 
 // _____________________________________________________________________________
 bool GroupBy::computeOptimizedAggregatesIfPossible(ResultTable* result) {
-  if (auto ptr =
+  if (auto indexScan =
           dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get())) {
-    return computeOptimizedAggregatesOnIndexScanChild(result, ptr);
-  } else if (auto joinPtr = dynamic_cast<const Join*>(
+    return computeOptimizedAggregatesOnIndexScanChild(result, indexScan);
+  } else if (auto join = dynamic_cast<const Join*>(
                  _subtree->getRootOperation().get())) {
-    return computeOptimizedAggregatesOnJoinChild(result, joinPtr);
+    return computeOptimizedAggregatesOnJoinChild(result, join);
   } else {
     return false;
   }

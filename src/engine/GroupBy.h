@@ -111,32 +111,43 @@ class GroupBy : public Operation {
   // the GROUP BY, but the result can simply be read from the index meta data.
   // An example for such a combination is the query
   //  SELECT ((COUNT ?x) as ?cnt) WHERE {
-  //  ?x <somePredicate> ?y
+  //    ?x <somePredicate> ?y
   //  }
-  // This function checks, if such a case applies. In this case the result is
-  // computed and stored in `result` and `true` is returned. If no such case
+  // This function checks whether such a case applies. In this case the result
+  // is computed and stored in `result` and `true` is returned. If no such case
   // applies, `false` is returned and the `result` is untouched. Precondition:
   // The `result` must be empty.
+  // TODO<joka921> Check whether we can simply return
+  // `std::optional<ResultTable>` (Also for all the other functions).
   bool computeOptimizedAggregatesIfPossible(ResultTable* result);
-  // TODO<joka921> Comment
+  // TODO<joka921> Comment all the other functions.
 
   bool computeOptimizedAggregatesOnIndexScanChild(ResultTable* result,
-                                                  const IndexScan* ptr);
-  struct JoinChildAggregateData {
+                                                  const IndexScan* indexScan);
+  struct OptimizedAggregateData {
     const QueryExecutionTree& otherSubtree_;
     Index::Permutation permutation_;
     size_t subtreeColumnIndex_;
   };
-  std::optional<JoinChildAggregateData>
-  checkIfOptimizedAggregateOnJoinChildIsPossible(const Join* joinPtr);
+  std::optional<OptimizedAggregateData>
+  checkIfOptimizedAggregateOnJoinChildIsPossible(const Join* join);
   bool computeOptimizedAggregatesOnJoinChild(ResultTable* result,
                                              const Join* ptr);
-  // TODO<joka921> Get a good name.
-  // Check whether `fst` is valid as the <Arbitrary other result> from
-  // the example and that `snd` is a valid triple with three variables.
-  // Note: this is in a lambda because the two children of the join might be
-  // switched and we need to check both ways.
-  static std::optional<Index::Permutation>
-  isThreeVariableTripleThatContainsVariable(const QueryExecutionTree* tree,
-                                            const Variable& countedVariable);
+
+  static std::optional<Index::Permutation> getPermutationForThreeVariableTriple(
+      const QueryExecutionTree* tree, const Variable& variableByWhichToSort);
+
+  // TODO<joka921> check and resolve Hannah's engine crashes when using the
+  // optimized aggregates
+
+  // TODO<joka921> implement optimization when *additional* Variables are
+  // grouped.
+  // TODO<joka921> implement optimization when there are additional aggregates
+  // that work on the variables that are NOT part of the three-variable-triple.
+
+  // TODO<joka921> Also inform the query planner (via the cost estimate)
+  // that the optimization can be done.
+
+  // TODO<joka921> Throw out `subjectCardinality` etc. functions in
+  // `Index(Impl)`, they are only used in one place.
 };
