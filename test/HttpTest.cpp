@@ -67,8 +67,19 @@ TEST(HttpServer, HttpTest) {
         "Could not start test HTTP server on any of the ports");
   }();
 
-  // Run the server in its own thread.
+  // Run the server in its own thread. Wait for 100ms until the server is
+  // up (it should be up immediately).
   std::jthread httpServerThread([&]() { httpServer.run(); });
+  auto waitTimeUntilServerIsUp = 100ms;
+  std::this_thread::sleep_for(waitTimeUntilServerIsUp);
+  if (!httpServer.serverIsReady()) {
+    // Detach the server thread (the `run()` above never terminates), so that we
+    // can exit this test.
+    httpServerThread.detach();
+    throw std::runtime_error(absl::StrCat("HttpServer was not up after ",
+                                          waitTimeUntilServerIsUp.count(),
+                                          "ms, this should not happen"));
+  }
 
   // Helper lambdas for testing GET and POST requests.
   auto testGetRequest = [](HttpClient* httpClient, const std::string& target) {
