@@ -120,6 +120,13 @@ class GroupBy : public Operation {
   // `getSizeEstimate` method is const (which it should be).
   bool computeOptimizedAggregatesOnIndexScanChild(ResultTable* result,
                                                   IndexScan* ptr);
+  struct JoinChildAggregateData {
+    const QueryExecutionTree& otherSubtree_;
+    Index::Permutation permutation_;
+    size_t subtreeColumnIndex_;
+  };
+  std::optional<JoinChildAggregateData>
+  checkIfOptimizedAggregateOnJoinChildIsPossible(const Join* joinPtr);
   bool computeOptimizedAggregatesOnJoinChild(ResultTable* result,
                                              const Join* ptr);
 };

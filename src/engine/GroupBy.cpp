@@ -362,90 +362,109 @@ bool GroupBy::computeOptimizedAggregatesOnIndexScanChild(ResultTable* result,
   return false;
 }
 
-bool GroupBy::computeOptimizedAggregatesOnJoinChild(ResultTable* result,
-                                                    const Join* joinPtr) {
-  if (_groupByVariables.size() != 1 || _aliases.size() != 1) {
-    return false;
+// TODO<joka921> Get a good name.
+// Check whether `fst` is valid as the <Arbitrary other result> from
+// the example and that `snd` is a valid triple with three variables.
+// Note: this is in a lambda because the two children of the join might be
+// switched and we need to check both ways.
+std::optional<Index::Permutation> isThreeVariableTripleThatContainsVariable(
+    const QueryExecutionTree* tree, const Variable& countedVariable) {
+  // TODO<joka921> Factor this out as a function
+  //  `isThreeVariableIndexScanThatContainsVariable`
+  auto scanPtr = dynamic_cast<const IndexScan*>(tree->getRootOperation().get());
+
+  if (!scanPtr || scanPtr->getResultWidth() != 3) {
+    return std::nullopt;
   }
+
+  if (countedVariable == scanPtr->getSubject()) {
+    return Index::Permutation::SPO;
+  } else if (countedVariable.name() == scanPtr->getPredicate()) {
+    return Index::Permutation::POS;
+  } else if (countedVariable == scanPtr->getObject()) {
+    return Index::Permutation::OSP;
+  } else {
+    return std::nullopt;
+  }
+};
+
+// _____________________________________________________________________________
+std::optional<GroupBy::JoinChildAggregateData>
+GroupBy::checkIfOptimizedAggregateOnJoinChildIsPossible(const Join* joinPtr) {
+  // Exactly one grouped variable and one alias
+  if (_groupByVariables.size() != 1 || _aliases.size() != 1) {
+    return std::nullopt;
+  }
+  const Variable& groupedVariable = _groupByVariables.front();
+
+  // The single alias must be a non-distinct COUNT. The variable is stored
+  // for later checking.
   auto optionalVariableAndDistinctness =
       _aliases.front()._expression.getVariableForCount();
   if (!optionalVariableAndDistinctness ||
       optionalVariableAndDistinctness->isDistinct_) {
-    return false;
+    return std::nullopt;
   }
   const auto& countedVar = optionalVariableAndDistinctness->variable_;
-  const Variable& groupedVariable = _groupByVariables.front();
-  auto firstAsValuesSecondAsScan = [&groupedVariable, &countedVar](
-                                       const QueryExecutionTree* fst,
-                                       const QueryExecutionTree* snd)
-      -> std::optional<std::pair<const QueryExecutionTree*, const IndexScan*>> {
-    auto scanPtr =
-        dynamic_cast<const IndexScan*>(snd->getRootOperation().get());
 
-    if (fst->getPrimarySortKeyVariable() != groupedVariable) {
-      return std::nullopt;
-    }
-
-    if (!scanPtr || scanPtr->getResultWidth() != 3) {
-      return std::nullopt;
-    }
-
-    if (countedVar != scanPtr->getSubject() &&
-        countedVar.name() != scanPtr->getPredicate() &&
-        countedVar != scanPtr->getObject()) {
-      return std::nullopt;
-    }
-
-    return std::pair{fst, scanPtr};
-  };
+  // Determine if any of the two children of the join operation is a
+  // triple with three variables that fulfills the condition.
   auto* fst = static_cast<const Operation*>(joinPtr)->getChildren().at(0);
-  auto snd = static_cast<const Operation*>(joinPtr)->getChildren().at(1);
-  auto optValuesAndScan = firstAsValuesSecondAsScan(fst, snd);
-  if (!optValuesAndScan.has_value()) {
-    optValuesAndScan = firstAsValuesSecondAsScan(snd, fst);
+  auto* snd = static_cast<const Operation*>(joinPtr)->getChildren().at(1);
+  // TODO<joka921, C++23> Use `optional::or_else`
+
+  auto scanAndPermutation =
+      isThreeVariableTripleThatContainsVariable(fst, countedVar);
+  if (!scanAndPermutation.has_value()) {
+    std::swap(fst, snd);
+    scanAndPermutation =
+        isThreeVariableTripleThatContainsVariable(fst, countedVar);
   }
-  if (!optValuesAndScan.has_value()) {
+  if (!scanAndPermutation.has_value()) {
+    return std::nullopt;
+  }
+
+  // This check fails if we ever decide to not eagerly sort the children of
+  // a GROUP BY. We can detect this case and change something here then.
+
+  AD_CHECK(snd->getPrimarySortKeyVariable().value() == groupedVariable);
+  auto columnIndex = snd->getVariableColumn(groupedVariable);
+
+  return JoinChildAggregateData{*snd, scanAndPermutation.value(), columnIndex};
+}
+
+// _____________________________________________________________________________
+bool GroupBy::computeOptimizedAggregatesOnJoinChild(ResultTable* result,
+                                                    const Join* joinPtr) {
+  auto optionalData = checkIfOptimizedAggregateOnJoinChildIsPossible(joinPtr);
+  if (!optionalData.has_value()) {
     return false;
   }
-  const QueryExecutionTree& subtree = *optValuesAndScan->first;
-  const IndexScan& scan = *optValuesAndScan->second;
-  auto var = _groupByVariables.front();
-  AD_CHECK(subtree.getPrimarySortKeyVariable().value() == var);
-  auto subresult = subtree.getResult();
-  AD_CHECK(scan.getResultWidth() == 3);
-  const Index::Permutation permutation = [&]() {
-    if (var == scan.getSubject()) {
-      return Index::Permutation::SOP;
-      // TODO<joka921> make `scan.getPredicate()` also return a
-      // `TripleComponent`.
-    } else if (var.name() == scan.getPredicate()) {
-      return Index::Permutation::POS;
-    } else {
-      AD_CHECK(var == scan.getObject()) { return Index::Permutation::OSP; }
-    }
-  }();
-  result->_idTable.setCols(2);
-  const auto& index = getExecutionContext()->getIndex();
-  // TODO<joka921> Solve this using CALL_FIXED_SIZE.
-  auto columnIndex = subtree.getVariableColumn(var);
+  const auto& [subtree, permutation, columnIndex] = optionalData.value();
 
+  auto subresult = subtree.getResult();
+  result->_idTable.setCols(2);
   if (subresult->_idTable.size() == 0) {
     return true;
   }
-  // TODO<joka921, C++23> This (and some other similar patterns in the
-  // group by and index building would benefit greatly from an abstraction
-  // like `views::chunk_by` and a possible lazy version of this view, that
-  // works on input iterators and is not yet standardized.
 
-  // Take care of duplicate values in the input
+  auto idTable = result->_idTable.moveToStatic<2>();
+  const auto& index = getExecutionContext()->getIndex();
+
+  // TODO<joka921, C++23> Simplify the following pattern by using
+  // `std::views::chunk_by` and implement a lazy version of this view for input
+  // iterators.
+
+  // Take care of duplicate values in the input.
   Id currentId = subresult->_idTable(0, columnIndex);
   size_t currentCount = 0;
+  size_t currentCardinality = index.getCardinality(currentId, permutation);
 
   auto pushRow = [&]() {
     if (currentCount > 0) {
-      result->_idTable.emplace_back();
-      result->_idTable.back()[0] = currentId;
-      result->_idTable.back()[1] = Id::makeFromInt(currentCount);
+      // TODO<C++20, as soon as Clang supports it>: use `emplace_back(id1, id2)`
+      // (requires parenthesized initialization of aggregates.
+      idTable.push_back({currentId, Id::makeFromInt(currentCount)});
     }
   };
   for (size_t i = 0; i < subresult->_idTable.size(); ++i) {
@@ -454,10 +473,12 @@ bool GroupBy::computeOptimizedAggregatesOnJoinChild(ResultTable* result,
       pushRow();
       currentId = id;
       currentCount = 0;
+      currentCardinality = index.getCardinality(id, permutation);
     }
-    currentCount += index.getCardinality(id, permutation);
+    currentCount += currentCardinality;
   }
   pushRow();
+  result->_idTable = idTable.moveToDynamic();
   return true;
 }
 
