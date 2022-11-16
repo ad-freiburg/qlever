@@ -22,6 +22,10 @@
 using std::string;
 using std::vector;
 
+// Forward declarations for internal member function
+class IndexScan;
+class Join;
+
 class GroupBy : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
@@ -110,4 +114,12 @@ class GroupBy : public Operation {
   // applies, `false` is returned and the `result` is untouched. Precondition:
   // The `result` must be empty.
   bool computeOptimizedAggregatesIfPossible(ResultTable* result);
+  // TODO<joka921> Comment
+
+  // TODO<joka921> The argument `ptr` might be const as soon as the
+  // `getSizeEstimate` method is const (which it should be).
+  bool computeOptimizedAggregatesOnIndexScanChild(ResultTable* result,
+                                                  IndexScan* ptr);
+  bool computeOptimizedAggregatesOnJoinChild(ResultTable* result,
+                                             const Join* ptr);
 };
