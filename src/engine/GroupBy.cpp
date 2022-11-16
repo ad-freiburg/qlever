@@ -362,12 +362,9 @@ bool GroupBy::computeOptimizedAggregatesOnIndexScanChild(ResultTable* result,
   return false;
 }
 
-// TODO<joka921> Get a good name.
-// Check whether `fst` is valid as the <Arbitrary other result> from
-// the example and that `snd` is a valid triple with three variables.
-// Note: this is in a lambda because the two children of the join might be
-// switched and we need to check both ways.
-std::optional<Index::Permutation> isThreeVariableTripleThatContainsVariable(
+// _____________________________________________________________________________
+std::optional<Index::Permutation>
+GroupBy::isThreeVariableTripleThatContainsVariable(
     const QueryExecutionTree* tree, const Variable& countedVariable) {
   // TODO<joka921> Factor this out as a function
   //  `isThreeVariableIndexScanThatContainsVariable`

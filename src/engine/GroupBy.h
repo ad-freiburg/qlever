@@ -131,4 +131,12 @@ class GroupBy : public Operation {
   checkIfOptimizedAggregateOnJoinChildIsPossible(const Join* joinPtr);
   bool computeOptimizedAggregatesOnJoinChild(ResultTable* result,
                                              const Join* ptr);
+  // TODO<joka921> Get a good name.
+  // Check whether `fst` is valid as the <Arbitrary other result> from
+  // the example and that `snd` is a valid triple with three variables.
+  // Note: this is in a lambda because the two children of the join might be
+  // switched and we need to check both ways.
+  static std::optional<Index::Permutation>
+  isThreeVariableTripleThatContainsVariable(const QueryExecutionTree* tree,
+                                            const Variable& countedVariable);
 };

@@ -334,28 +334,46 @@ std::shared_ptr<QueryExecutionTree> makeExecutionTree(
       qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
 }
 
-TEST(GroupBy, checkIfOptimizedAggregateOnJoinChildIsPossible) {
-  using namespace sparqlExpression;
-  auto qec = sparqlExpression::getQec();
-  auto scan1 = makeExecutionTree<IndexScan>(
-      qec, IndexScan::PSO_BOUND_S,
-      SparqlTriple{{"<x>"}, {"<label"}, Variable{"?x"}});
-  auto scan2 = scan1;
-
+struct GroupBySpecialCount : ::testing::Test {
+  using Tree = std::shared_ptr<QueryExecutionTree>;
   Variable varX{"?x"};
   Variable varY{"?y"};
   Variable varZ{"?z"};
+  QueryExecutionContext* qec = sparqlExpression::getQec();
   SparqlTriple xyzTriple{Variable{"?x"}, "?y", Variable{"?z"}};
-  auto xyzScan = makeExecutionTree<IndexScan>(
+  Tree xyzScan = makeExecutionTree<IndexScan>(
       qec, IndexScan::FULL_INDEX_SCAN_SOP, xyzTriple);
+  Tree xScan = makeExecutionTree<IndexScan>(
+      qec, IndexScan::PSO_BOUND_S,
+      SparqlTriple{{"<x>"}, {"<label"}, Variable{"?x"}});
 
-  auto invalidJoin = makeExecutionTree<Join>(qec, scan1, scan2, 0, 0);
-  auto* invalidJoinPtr =
-      dynamic_cast<const Join*>(invalidJoin->getRootOperation().get());
+  const Join* getJoinPtr(const Tree& tree) {
+    auto joinPtr = dynamic_cast<const Join*>(tree->getRootOperation().get());
+    AD_CHECK(joinPtr);
+    return joinPtr;
+  }
+};
 
-  auto validJoin = makeExecutionTree<Join>(qec, scan1, xyzScan, 0, 0);
-  auto* validJoinPtr =
-      dynamic_cast<const Join*>(validJoin->getRootOperation().get());
+TEST_F(GroupBySpecialCount, isThreeVariableTripleThatContainsVariable) {
+  using enum Index::Permutation;
+  ASSERT_EQ(SPO, GroupBy::isThreeVariableTripleThatContainsVariable(
+                     xyzScan.get(), Variable{"?x"}));
+  ASSERT_EQ(POS, GroupBy::isThreeVariableTripleThatContainsVariable(
+                     xyzScan.get(), Variable{"?y"}));
+  ASSERT_EQ(OSP, GroupBy::isThreeVariableTripleThatContainsVariable(
+                     xyzScan.get(), Variable{"?z"}));
+  ASSERT_EQ(std::nullopt, GroupBy::isThreeVariableTripleThatContainsVariable(
+                              xyzScan.get(), Variable{"?a"}));
+  ASSERT_EQ(std::nullopt, GroupBy::isThreeVariableTripleThatContainsVariable(
+                              xScan.get(), Variable{"?x"}));
+}
+TEST_F(GroupBySpecialCount, checkIfOptimizedAggregateOnJoinChildIsPossible) {
+  using namespace sparqlExpression;
+  auto qec = sparqlExpression::getQec();
+
+  auto invalidJoin = makeExecutionTree<Join>(qec, xScan, xScan, 0, 0);
+
+  auto validJoin = makeExecutionTree<Join>(qec, xScan, xyzScan, 0, 0);
 
   std::vector<Variable> emptyVariables{};
   std::vector<Variable> validVariables{varX};
@@ -379,24 +397,21 @@ TEST(GroupBy, checkIfOptimizedAggregateOnJoinChildIsPossible) {
       Alias{countDistinctXPimpl, Variable{"?count"}}};
   std::vector<Alias> validAliases{Alias{countXPimpl, Variable{"?count"}}};
 
-  std::optional<GroupBy> grpBy =
-      GroupBy{qec, emptyVariables, validAliases, validJoin};
-  // Wrong number of group by variables
-  // TODO<joka921> setup a valid `JOIN`, s.t. we really identify the case of
-  // failure.
-  ASSERT_FALSE(
-      grpBy->checkIfOptimizedAggregateOnJoinChildIsPossible(validJoinPtr));
+  auto testFailure = [this, &qec](const auto& groupByVariables,
+                                  const auto& aliases, const auto& join) {
+    auto groupBy = GroupBy{qec, groupByVariables, aliases, join};
+    ASSERT_FALSE(groupBy.checkIfOptimizedAggregateOnJoinChildIsPossible(
+        getJoinPtr(join)));
+  };
 
-  grpBy.emplace(qec, validVariables, invalidAliases, validJoin);
-  ASSERT_FALSE(
-      grpBy->checkIfOptimizedAggregateOnJoinChildIsPossible(validJoinPtr));
+  testFailure(emptyVariables, validAliases, validJoin);
+  testFailure(validVariables, invalidAliases, validJoin);
+  testFailure(validVariables, invalidAliases2, validJoin);
+  testFailure(validVariables, validAliases, invalidJoin);
 
-  grpBy.emplace(qec, validVariables, invalidAliases2, validJoin);
-  ASSERT_FALSE(
-      grpBy->checkIfOptimizedAggregateOnJoinChildIsPossible(validJoinPtr));
-
-  grpBy.emplace(qec, validVariables, validAliases, validJoin);
-  ASSERT_TRUE(
-      grpBy->checkIfOptimizedAggregateOnJoinChildIsPossible(validJoinPtr));
+  GroupBy groupBy{qec, validVariables, validAliases, validJoin};
+  // TODO<joka921> Actually check the return value.
+  ASSERT_TRUE(groupBy.checkIfOptimizedAggregateOnJoinChildIsPossible(
+      getJoinPtr(validJoin)));
 }
 }  // namespace
