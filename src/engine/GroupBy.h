@@ -116,10 +116,8 @@ class GroupBy : public Operation {
   bool computeOptimizedAggregatesIfPossible(ResultTable* result);
   // TODO<joka921> Comment
 
-  // TODO<joka921> The argument `ptr` might be const as soon as the
-  // `getSizeEstimate` method is const (which it should be).
   bool computeOptimizedAggregatesOnIndexScanChild(ResultTable* result,
-                                                  IndexScan* ptr);
+                                                  const IndexScan* ptr);
   struct JoinChildAggregateData {
     const QueryExecutionTree& otherSubtree_;
     Index::Permutation permutation_;

@@ -346,7 +346,7 @@ void GroupBy::computeResult(ResultTable* result) {
 }
 
 bool GroupBy::computeOptimizedAggregatesOnIndexScanChild(ResultTable* result,
-                                                         IndexScan* ptr) {
+                                                         const IndexScan* ptr) {
   if (ptr->getResultWidth() > 1 && _groupByVariables.empty() &&
       _aliases.size() == 1) {
     auto optVariableAndDistinctness =
@@ -411,8 +411,8 @@ GroupBy::checkIfOptimizedAggregateOnJoinChildIsPossible(const Join* joinPtr) {
   // triple with three variables that fulfills the condition.
   auto* fst = static_cast<const Operation*>(joinPtr)->getChildren().at(0);
   auto* snd = static_cast<const Operation*>(joinPtr)->getChildren().at(1);
-  // TODO<joka921, C++23> Use `optional::or_else`
 
+  // TODO<joka921, C++23> Use `optional::or_else`
   auto scanAndPermutation =
       isThreeVariableTripleThatContainsVariable(fst, countedVar);
   if (!scanAndPermutation.has_value()) {
@@ -484,7 +484,8 @@ bool GroupBy::computeOptimizedAggregatesOnJoinChild(ResultTable* result,
 
 // _____________________________________________________________________________
 bool GroupBy::computeOptimizedAggregatesIfPossible(ResultTable* result) {
-  if (auto ptr = dynamic_cast<IndexScan*>(_subtree->getRootOperation().get())) {
+  if (auto ptr =
+          dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get())) {
     return computeOptimizedAggregatesOnIndexScanChild(result, ptr);
   } else if (auto joinPtr = dynamic_cast<const Join*>(
                  _subtree->getRootOperation().get())) {
