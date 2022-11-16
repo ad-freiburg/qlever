@@ -102,6 +102,10 @@ class GroupBy : public Operation {
 
   FRIEND_TEST(GroupByTest, doGroupBy);
 
+ public:
+  // TODO<joka921> use `FRIEND_TEST` here once we have converged on the set
+  // of tests to write.
+
   // For certain combinations of `_groupByColumns`, `_aliases` and `_subtree`,
   // it is not necessary to fully materialize the `_subtree`'s result to compute
   // the GROUP BY, but the result can simply be read from the index meta data.

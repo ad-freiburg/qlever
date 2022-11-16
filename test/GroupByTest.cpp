@@ -5,7 +5,12 @@
 #include <cstdio>
 
 #include "./IndexTestHelpers.h"
+#include "./SparqlExpressionTestHelpers.h"
 #include "engine/GroupBy.h"
+#include "engine/IndexScan.h"
+#include "engine/Join.h"
+#include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "gtest/gtest.h"
 #include "index/ConstantsIndexBuilding.h"
 
@@ -318,3 +323,80 @@ TEST_F(GroupByTest, doGroupBy) {
   ASSERT_FLOAT_EQ(616.5, buffer);
    */
 }
+
+namespace {
+// All the operations take a `QueryExecutionContext` as a first argument.
+// Todo: Continue the comment.
+template <typename Operation>
+std::shared_ptr<QueryExecutionTree> makeExecutionTree(
+    QueryExecutionContext* qec, auto&&... args) {
+  return std::make_shared<QueryExecutionTree>(
+      qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
+}
+
+TEST(GroupBy, checkIfOptimizedAggregateOnJoinChildIsPossible) {
+  using namespace sparqlExpression;
+  auto qec = sparqlExpression::getQec();
+  auto scan1 = makeExecutionTree<IndexScan>(
+      qec, IndexScan::PSO_BOUND_S,
+      SparqlTriple{{"<x>"}, {"<label"}, Variable{"?x"}});
+  auto scan2 = scan1;
+
+  Variable varX{"?x"};
+  Variable varY{"?y"};
+  Variable varZ{"?z"};
+  SparqlTriple xyzTriple{Variable{"?x"}, "?y", Variable{"?z"}};
+  auto xyzScan = makeExecutionTree<IndexScan>(
+      qec, IndexScan::FULL_INDEX_SCAN_SOP, xyzTriple);
+
+  auto invalidJoin = makeExecutionTree<Join>(qec, scan1, scan2, 0, 0);
+  auto* invalidJoinPtr =
+      dynamic_cast<const Join*>(invalidJoin->getRootOperation().get());
+
+  auto validJoin = makeExecutionTree<Join>(qec, scan1, xyzScan, 0, 0);
+  auto* validJoinPtr =
+      dynamic_cast<const Join*>(validJoin->getRootOperation().get());
+
+  std::vector<Variable> emptyVariables{};
+  std::vector<Variable> validVariables{varX};
+
+  std::vector<Alias> emptyAliases{};
+
+  auto varXExpression = std::make_unique<DummyExpression>(varX);
+  auto varxExpressionPimpl =
+      SparqlExpressionPimpl{std::move(varXExpression), "?x"};
+  auto varXExpression2 = std::make_unique<VariableExpression>(varX);
+  auto countXPimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(false, std::move(varXExpression2)),
+      "COUNT(?x)"};
+  auto varXExpression3 = std::make_unique<VariableExpression>(varX);
+  auto countDistinctXPimpl = SparqlExpressionPimpl{
+      std::make_unique<CountExpression>(true, std::move(varXExpression3)),
+      "COUNT(?x)"};
+  std::vector<Alias> invalidAliases{
+      Alias{varxExpressionPimpl, Variable{"?count"}}};
+  std::vector<Alias> invalidAliases2{
+      Alias{countDistinctXPimpl, Variable{"?count"}}};
+  std::vector<Alias> validAliases{Alias{countXPimpl, Variable{"?count"}}};
+
+  std::optional<GroupBy> grpBy =
+      GroupBy{qec, emptyVariables, validAliases, validJoin};
+  // Wrong number of group by variables
+  // TODO<joka921> setup a valid `JOIN`, s.t. we really identify the case of
+  // failure.
+  ASSERT_FALSE(
+      grpBy->checkIfOptimizedAggregateOnJoinChildIsPossible(validJoinPtr));
+
+  grpBy.emplace(qec, validVariables, invalidAliases, validJoin);
+  ASSERT_FALSE(
+      grpBy->checkIfOptimizedAggregateOnJoinChildIsPossible(validJoinPtr));
+
+  grpBy.emplace(qec, validVariables, invalidAliases2, validJoin);
+  ASSERT_FALSE(
+      grpBy->checkIfOptimizedAggregateOnJoinChildIsPossible(validJoinPtr));
+
+  grpBy.emplace(qec, validVariables, validAliases, validJoin);
+  ASSERT_TRUE(
+      grpBy->checkIfOptimizedAggregateOnJoinChildIsPossible(validJoinPtr));
+}
+}  // namespace
