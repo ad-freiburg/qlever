@@ -7,10 +7,14 @@
 #include <cstdio>
 #include <fstream>
 
+#include <algorithm>
+
 #include "../src/engine/CallFixedSize.h"
 #include "../src/engine/Engine.h"
 #include "../src/engine/Join.h"
 #include "../src/engine/OptionalJoin.h"
+#include "../src/util/Random.h"
+#include "../src/engine/QueryExecutionTree.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
@@ -41,6 +45,18 @@ IdTable makeIdTableFromVector(std::vector<std::array<size_t, TABLE_WIDTH>> table
   }
 
   return result;
+}
+
+/*
+ * Tests, if the given IdTable has the same content as the vector.
+*/
+template<size_t TABLE_WIDTH>
+void compareIdTableWithVector(IdTable& table, std::vector<std::array<size_t, TABLE_WIDTH>> tableContent) {
+  for (size_t row = 0; row < tableContent.size(); row++) {
+    for (size_t column = 0; column < TABLE_WIDTH; column++) {
+      ASSERT_EQ(I(tableContent[row][column]), table(row, column));
+    }
+  }
 }
 
 TEST(EngineTest, joinTest) {
@@ -230,16 +246,17 @@ TEST(EngineTest, distinctTest) {
 }
 
 TEST(EngineTest, hashJoinTest) {
-  // Create two IdTables, that are sorted.
- std::vector<std::array<size_t, 2>> ids {{1, 1}, {1, 3}, {2, 1}, {2, 2}, {4, 1}};
+  std::vector<std::array<size_t, 2>> ids {{1, 1}, {1, 3}, {2, 1}, {2, 2}, {4, 1}};
   IdTable a = makeIdTableFromVector(ids);
   ids = {{1, 3}, {1, 8}, {3, 1}, {4, 2}};
   IdTable b = makeIdTableFromVector(ids);
+  
   IdTable res(3, allocator());
   int lwidth = a.cols();
   int rwidth = b.cols();
   int reswidth = a.cols() + b.cols() - 1;
   Join J{Join::InvalidOnlyForTestingJoinTag{}};
+  
   CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.hashJoin, a, 0, b, 0, &res);
 
   ASSERT_EQ(I(1), res(0, 0));
@@ -311,4 +328,74 @@ TEST(EngineTest, hashJoinTest) {
 
   ASSERT_EQ(I(0), res(1, 0));
   ASSERT_EQ(I(2), res(1, 1));
+
+  /*
+   * Create two sorted IdTables. Join them using the normal join and the
+   * hashed join. Compare.
+  */
+  a = makeIdTableFromVector(std::vector<std::array<size_t, 5>>{
+          {
+            {34, 73, 92, 61, 18},
+            {11, 80, 20, 43, 75},
+            {96, 51, 40, 67, 23}
+          }
+        }
+      );
+  b = makeIdTableFromVector(std::vector<std::array<size_t, 5>>{
+          {
+            {34, 73, 92, 61, 18},
+            {96, 2, 76, 87, 38},
+            {96, 16, 27, 22, 38},
+            {7, 51, 40, 67, 23}
+          }
+        }
+      );
+
+  lwidth = a.cols();
+  rwidth = b.cols();
+  reswidth = a.cols() + b.cols() - 1;
+  
+  // Saving the results and comparing them.
+  IdTable result1(reswidth, allocator()); // Normal.
+  IdTable result2(reswidth, allocator()); // Hash.
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, a, 0, b, 0, &result1);
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.hashJoin, a, 0, b, 0, &result2);
+  ASSERT_EQ(result1, result2);
+
+  // Checking if result1 and result2 are correct.
+  compareIdTableWithVector(result1, std::vector<std::array<size_t, 9>>{
+      {
+        {34, 73, 92, 61, 18, 73, 92, 61, 18},
+        {96, 51, 40, 67, 23, 2, 76, 87, 38},
+        {96, 51, 40, 67, 23, 16, 27, 22, 38}
+      }
+    }
+  );
+
+  // Random shuffle the tables, hash join them, sort the result and check,
+  // if the result is still correct.
+  randomShuffle(a.begin(), a.end());
+  randomShuffle(b.begin(), b.end());
+  result2.clear();
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.hashJoin, a, 0, b, 0, &result2);
+  
+  std::sort(result2.begin(), result2.end(), [](
+          const detail::Row& element1,
+          const detail::Row& element2)
+      {
+        size_t i = 0;
+        while (element1[i] == element2[i]) {
+          i++;
+        }
+        return element1[i] < element2[i];
+      });
+  
+  compareIdTableWithVector(result2, std::vector<std::array<size_t, 9>>{
+      {
+        {34, 73, 92, 61, 18, 73, 92, 61, 18},
+        {96, 51, 40, 67, 23, 2, 76, 87, 38},
+        {96, 51, 40, 67, 23, 16, 27, 22, 38}
+      }
+    }
+  );
 };
