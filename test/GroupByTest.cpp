@@ -475,10 +475,9 @@ TEST_F(GroupBySpecialCount, computeOptimizedAggregatesOnJoinChild) {
     // No optimization was applied, so the result is untouched.
     AD_CHECK(result._idTable.size() == 0);
 
-    // The child of the GROUP BY is not an index scan, so this is also
+    // The child of the GROUP BY is not a join, so this is also
     // invalid.
-    GroupBy invalidGroupBy2{qec, variablesOnlyX, emptyAliases,
-                            validJoinWhenGroupingByX};
+    GroupBy invalidGroupBy2{qec, variablesOnlyX, emptyAliases, xScan};
     ASSERT_FALSE(
         invalidGroupBy2.computeOptimizedAggregatesOnJoinChild(&result));
     AD_CHECK(result._idTable.size() == 0);
