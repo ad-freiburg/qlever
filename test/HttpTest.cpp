@@ -42,19 +42,16 @@ TEST(HttpServer, HttpTest) {
   // to all of them fail, the test fails.
   //
   // TODO: Is there a more robust way to do this? Should we try out more ports?
-  auto httpServerPtr = [&mirroringHttpSessionHandler]() {
+  auto httpServer = [&mirroringHttpSessionHandler]() {
     std::vector<short unsigned int> ports(10);
     std::generate(ports.begin(), ports.end(),
                   []() { return 1024 + std::rand() % (65535 - 1024); });
-    LOG(INFO)
-        << "Trying to start a test HTTP server on one of the following ports: "
-        << absl::StrJoin(ports, ", ") << std::endl;
     const std::string& ipAddress = "0.0.0.0";
     int numServerThreads = 1;
     for (const short unsigned int port : ports) {
       try {
         using Server = HttpServer<decltype(mirroringHttpSessionHandler)>;
-        return std::make_unique<Server>(port, ipAddress, numServerThreads,
+        return std::make_shared<Server>(port, ipAddress, numServerThreads,
                                         mirroringHttpSessionHandler);
       } catch (const boost::system::system_error& b) {
         LOG(INFO) << "Starting test HTTP server on port " << port
@@ -62,20 +59,20 @@ TEST(HttpServer, HttpTest) {
       }
     }
     throw std::runtime_error(
-        "Could not start test HTTP server on any of the ports");
+        absl::StrCat("Could not start test HTTP server on any of these ports: ",
+                     absl::StrJoin(ports, ", ")));
   }();
 
-  auto& httpServer = *httpServerPtr;
-
   // Run the server in its own thread. Wait for 100ms until the server is
-  // up (it should be up immediately). We have to move the server into the
-  // thread because it might have to outlive the current thread if we detach the
-  // thread in the unlikely case of not being able to start the server.
-  std::jthread httpServerThread(
-      [httpServerPtr = std::move(httpServerPtr)]() { httpServerPtr->run(); });
+  // up (it should be up immediately).
+  //
+  // NOTE: It is important to *copy* the `httpServer` pointer into the thread.
+  // That way, whoever dies first (this thread or the `httpServerThread`), the
+  // pointer is still valid in the other thread.
+  std::jthread httpServerThread([httpServer]() { httpServer->run(); });
   auto waitTimeUntilServerIsUp = 100ms;
   std::this_thread::sleep_for(waitTimeUntilServerIsUp);
-  if (!httpServer.serverIsReady()) {
+  if (!httpServer->serverIsReady()) {
     // Detach the server thread (the `run()` above never terminates), so that we
     // can exit this test.
     httpServerThread.detach();
@@ -100,7 +97,7 @@ TEST(HttpServer, HttpTest) {
   // First session (checks whether client and server can communicate as they
   // should).
   {
-    HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
+    HttpClient httpClient("localhost", std::to_string(httpServer->getPort()));
     testGetRequest(&httpClient, "target1");
     testPostRequest(&httpClient, "target1", "body1");
   }
@@ -108,14 +105,14 @@ TEST(HttpServer, HttpTest) {
   // Second session (checks if everything is still fine with the server after we
   // have communicated with it for one session).
   {
-    HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
+    HttpClient httpClient("localhost", std::to_string(httpServer->getPort()));
     testGetRequest(&httpClient, "target2");
     testPostRequest(&httpClient, "target2", "body2");
   }
 
-  // Third session (check that after shutting down, no more new
-  // connections are being accepted.
-  httpServer.shutDown();
-  ASSERT_THROW(HttpClient("localhost", std::to_string(httpServer.getPort())),
+  // Third session (check that after shutting down, no more new connections are
+  // being accepted.
+  httpServer->shutDown();
+  ASSERT_THROW(HttpClient("localhost", std::to_string(httpServer->getPort())),
                std::exception);
 }

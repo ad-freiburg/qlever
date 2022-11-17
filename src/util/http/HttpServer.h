@@ -121,16 +121,15 @@ class HttpServer {
   bool serverIsReady() const { return _serverIsReady; }
 
   // Shut down the server. Http sessions that are still active are still allowed
-  // to finish, even after this call, but all outstanding new connections
-  // will fail.
-  // This interface is currently only used for testing, in general this
-  // `HttpServer` should run forever.
+  // to finish, even after this call, but all outstanding new connections will
+  // fail. This interface is currently only used for testing. In the typical use
+  // case, the server runs forever.
   void shutDown() {
     std::atomic_flag shutdownWasSuccesful;
     shutdownWasSuccesful.clear();
-    // The actual code to close the shutdown is being handled by the same
-    // `strand` than the `listener`, so there will be no concurrent access to
-    // the `_acceptor`.
+    // The actual code for the shutdown is being executed on the same `strand`
+    // as the `listener`. By the way strands work, there will then be no
+    // concurrent access to `_acceptor`.
     net::post(_acceptorStrand, [&shutdownWasSuccesful, this]() {
       _acceptor.close();
       shutdownWasSuccesful.test_and_set();
@@ -139,6 +138,11 @@ class HttpServer {
 
     // Wait until the posted task has succesfully executed and notified us via
     // the flag.
+    //
+    // NOTE: The while loop is needed because notifications can also occur
+    // spuriously (without being triggered explicitly by our code). The argument
+    // of the `wait` is `false` because the semantics is to wait for a change in
+    // the specified value.
     while (!shutdownWasSuccesful.test()) {
       shutdownWasSuccesful.wait(false);
     }
