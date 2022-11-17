@@ -373,7 +373,7 @@ size_t IndexScan::getCostEstimate() {
     // optimized JOIN operation where one child is a full scan is always cheaper
     // than a full scan + a possible sort.
 
-    static constexpr size_t fullScanPenalty = 1'000'000'000;
+    static constexpr size_t fullScanPenalty = 10'000;
     auto totalCost = fullScanPenalty * numScans *
            (diskRandomAccessCost + averageScanSize);
     LOG(WARN) << "Total cost is" << totalCost << std::endl;
