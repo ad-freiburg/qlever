@@ -374,8 +374,8 @@ size_t IndexScan::getCostEstimate() {
     // than a full scan + a possible sort.
 
     static constexpr size_t fullScanPenalty = 10'000;
-    auto totalCost = fullScanPenalty * numScans *
-           (diskRandomAccessCost + averageScanSize);
+    auto totalCost =
+        fullScanPenalty * numScans * (diskRandomAccessCost + averageScanSize);
     LOG(WARN) << "Total cost is" << totalCost << std::endl;
     return totalCost;
   }

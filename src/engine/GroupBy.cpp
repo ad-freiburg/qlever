@@ -126,8 +126,18 @@ float GroupBy::getMultiplicity(size_t col) {
 }
 
 size_t GroupBy::getSizeEstimate() {
-  // TODO: stub implementation of getSizeEstimate()
-  return _subtree->getSizeEstimate();
+  if (_groupByVariables.empty()) {
+    return 1;
+  }
+  // Assume that the number of groups in total is the input size divided
+  // by the minimal multiplicity of one of the grouped variables.
+  std::vector<float> multiplicities;
+  for (const auto& var : _groupByVariables) {
+    multiplicities.push_back(
+        _subtree->getMultiplicity(_subtree->getVariableColumn(var)));
+  }
+  return _subtree->getSizeEstimate() /
+         *std::ranges::min_element(multiplicities);
 }
 
 size_t GroupBy::getCostEstimate() {
