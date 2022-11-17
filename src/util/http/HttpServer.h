@@ -50,8 +50,8 @@ class HttpServer {
   net::io_context _ioContext;
   tcp::acceptor _acceptor;
   // All code that uses the `_acceptor` must run within this strand.
-  // Note that the strand might be concurrently accessed by the `listener` and
-  // the `shutdown` function which is currently only used in unit tests.
+  // Note that the `_acceptor` might be concurrently accessed by the `listener` and
+  // the `shutdown` function, the latter of which is currently only used in unit tests.
   net::strand<net::io_context::executor_type> _acceptorStrand =
       net::make_strand(_ioContext);
   std::atomic<bool> _serverIsReady = false;

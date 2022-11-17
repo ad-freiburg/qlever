@@ -20,9 +20,6 @@ TEST(HttpServer, HttpTest) {
   // A simple HTTP session handler, which replies with three lines: the request
   // method (GET, POST, or OTHER), a copy of the request target (might be
   // empty), and a copy of the request body (might be empty).
-  //
-  // Note: We default construct such a handler from its type below. Hence this
-  // concrete handler is not used, hence the [[maybe_unused]].
   auto mirroringHttpSessionHandler =
       [](auto request, auto&& send) -> boost::asio::awaitable<void> {
     std::string methodName;
@@ -71,7 +68,7 @@ TEST(HttpServer, HttpTest) {
   auto& httpServer = *httpServerPtr;
 
   // Run the server in its own thread. Wait for 100ms until the server is
-  // up (it should be up immediately).
+  // up (it should be up immediately). We have to move the server into the thread because it might have to outlive the current thread if we detach the thread in the unlikely case of not being able to start the server.
   std::jthread httpServerThread(
       [httpServerPtr = std::move(httpServerPtr)]() { httpServerPtr->run(); });
   auto waitTimeUntilServerIsUp = 100ms;
