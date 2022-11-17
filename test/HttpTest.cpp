@@ -45,7 +45,7 @@ TEST(HttpServer, HttpTest) {
   // to all of them fail, the test fails.
   //
   // TODO: Is there a more robust way to do this? Should we try out more ports?
-  auto httpServer = [&mirroringHttpSessionHandler]() {
+  auto httpServerPtr = [&mirroringHttpSessionHandler]() {
     std::vector<short unsigned int> ports(10);
     std::generate(ports.begin(), ports.end(),
                   []() { return 1024 + std::rand() % (65535 - 1024); });
@@ -56,8 +56,9 @@ TEST(HttpServer, HttpTest) {
     int numServerThreads = 1;
     for (const short unsigned int port : ports) {
       try {
-        return HttpServer{port, ipAddress, numServerThreads,
-                          mirroringHttpSessionHandler};
+        using Server = HttpServer<decltype(mirroringHttpSessionHandler)>;
+        return std::make_unique<Server>(port, ipAddress, numServerThreads,
+                                        mirroringHttpSessionHandler);
       } catch (const boost::system::system_error& b) {
         LOG(INFO) << "Starting test HTTP server on port " << port
                   << " failed, trying next port ..." << std::endl;
@@ -67,9 +68,12 @@ TEST(HttpServer, HttpTest) {
         "Could not start test HTTP server on any of the ports");
   }();
 
+  auto& httpServer = *httpServerPtr;
+
   // Run the server in its own thread. Wait for 100ms until the server is
   // up (it should be up immediately).
-  std::jthread httpServerThread([&]() { httpServer.run(); });
+  std::jthread httpServerThread(
+      [httpServerPtr = std::move(httpServerPtr)]() { httpServerPtr->run(); });
   auto waitTimeUntilServerIsUp = 100ms;
   std::this_thread::sleep_for(waitTimeUntilServerIsUp);
   if (!httpServer.serverIsReady()) {
@@ -110,15 +114,9 @@ TEST(HttpServer, HttpTest) {
     testPostRequest(&httpClient, "target2", "body2");
   }
 
-  // Third session (check that after shutting down the server, we can still
-  // connect once more, but then the connection fails; see the documentation of
-  // `HttpServer::shutDownAfterNextConnectionIsAccepted` for the resasons for
-  // this behaviour).
-  httpServer.shutDownAfterNextConnectionIsAccepted();
-  {
-    HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
-    ASSERT_THROW(testGetRequest(&httpClient, "target3"), std::exception);
-    ASSERT_THROW(testPostRequest(&httpClient, "target3", "body3"),
-                 std::exception);
-  }
+  // Third session (check that after shutting down, no more new
+  // connections are being accepted.
+  httpServer.shutDown();
+  ASSERT_THROW(HttpClient("localhost", std::to_string(httpServer.getPort())),
+               std::exception);
 }

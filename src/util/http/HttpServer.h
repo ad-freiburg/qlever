@@ -49,6 +49,11 @@ class HttpServer {
   int _numServerThreads;
   net::io_context _ioContext;
   tcp::acceptor _acceptor;
+  // All code that uses the `_acceptor` must run within this strand.
+  // Note that the strand might be concurrently accessed by the `listener` and
+  // the `shutdown` function which is currently only used in unit tests.
+  net::strand<net::io_context::executor_type> _acceptorStrand =
+      net::make_strand(_ioContext);
   std::atomic<bool> _serverIsReady = false;
   std::atomic<bool> _shutDownAfterNextConnectionIsAccepted = false;
 
@@ -91,8 +96,8 @@ class HttpServer {
     // Create the listener coroutine.
     auto listenerCoro = listener();
 
-    // Schedule the listener onto the io context.
-    net::co_spawn(_ioContext, std::move(listenerCoro), net::detached);
+    // Schedule the listener onto the `_acceptorStrand`.
+    net::co_spawn(_acceptorStrand, std::move(listenerCoro), net::detached);
 
     // Add some threads to the io context, s.t. the work can actually be
     // scheduled.
@@ -115,17 +120,28 @@ class HttpServer {
   // queries.
   bool serverIsReady() const { return _serverIsReady; }
 
-  // Shut down the server. After this, one more connection to the server will be
-  // accepted (because the `listener()` delegates the handling of a connection
-  // to a separate co-routine and waits for the next request right away), but
-  // any communication via that connection will fail (with an exception
-  // "connection reset by peer").
-  //
-  // NOTE: We first had a simpler behaviour, where this method was called
-  // `shutDown()` and calls `_acceptor.close()`. However, calls to `_acceptor`
-  // are not threadsafe, so we landed at this more unintuitive interface.
-  void shutDownAfterNextConnectionIsAccepted() {
-    _shutDownAfterNextConnectionIsAccepted = true;
+  // Shut down the server. Http sessions that are still active are still allowed
+  // to finish, even after this call, but all outstanding new connections
+  // will fail.
+  // This interface is currently only used for testing, in general this
+  // `HttpServer` should run forever.
+  void shutDown() {
+    std::atomic_flag shutdownWasSuccesful;
+    shutdownWasSuccesful.clear();
+    // The actual code to close the shutdown is being handled by the same
+    // `strand` than the `listener`, so there will be no concurrent access to
+    // the `_acceptor`.
+    net::post(_acceptorStrand, [&shutdownWasSuccesful, this]() {
+      _acceptor.close();
+      shutdownWasSuccesful.test_and_set();
+      shutdownWasSuccesful.notify_all();
+    });
+
+    // Wait until the posted task has succesfully executed and notified us via
+    // the flag.
+    while (!shutdownWasSuccesful.test()) {
+      shutdownWasSuccesful.wait(false);
+    }
   }
 
   // _____________________________________________________________________
@@ -150,27 +166,14 @@ class HttpServer {
 
     // While the `_acceptor` is open, accept connections and handle each
     // connection asynchronously (so that we are ready to accept the next
-    // connection right away). The `_acceptor` will be closed when
-    // `_shutDownAfterNextSession` is set to false (which can be done by calling
-    // `shutDownAfterNextSession`).
+    // connection right away). The `_acceptor` will be closed via the
+    // `shutdown` method.
     while (_acceptor.is_open()) {
       try {
         // Wait for a request (the code only continues after we have received
         // and accepted a request).
         auto socket =
             co_await _acceptor.async_accept(boost::asio::use_awaitable);
-        // Check if we should shut down the server. Note: it's important to
-        // close the `_acceptor`. Otherwise we end up with a zombie server that
-        // is still bound to a port, but not responding to requests. Afterwards,
-        // we throw an exception, so that the requesting client knows that this
-        // connection is not going to work.
-        if (_shutDownAfterNextConnectionIsAccepted) {
-          _acceptor.close();
-          break;
-          // throw std::runtime_error(
-          //     "Connection refused because the server has been told to shut "
-          //     "down.");
-        }
         // Schedule the session such that it may run in parallel to this loop.
         // the `strand` makes each session conceptually single-threaded.
         // TODO<joka921> is this even needed, to my understanding,
