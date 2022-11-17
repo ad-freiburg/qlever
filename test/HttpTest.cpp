@@ -68,7 +68,9 @@ TEST(HttpServer, HttpTest) {
   auto& httpServer = *httpServerPtr;
 
   // Run the server in its own thread. Wait for 100ms until the server is
-  // up (it should be up immediately). We have to move the server into the thread because it might have to outlive the current thread if we detach the thread in the unlikely case of not being able to start the server.
+  // up (it should be up immediately). We have to move the server into the
+  // thread because it might have to outlive the current thread if we detach the
+  // thread in the unlikely case of not being able to start the server.
   std::jthread httpServerThread(
       [httpServerPtr = std::move(httpServerPtr)]() { httpServerPtr->run(); });
   auto waitTimeUntilServerIsUp = 100ms;
