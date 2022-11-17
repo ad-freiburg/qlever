@@ -345,23 +345,33 @@ void GroupBy::computeResult(ResultTable* result) {
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
 }
 
-bool GroupBy::computeOptimizedAggregatesOnIndexScanChild(
-    ResultTable* result, const IndexScan* indexScan) {
-  if (indexScan->getResultWidth() > 1 && _groupByVariables.empty() &&
-      _aliases.size() == 1) {
-    auto optVariableAndDistinctness =
-        _aliases[0]._expression.getVariableForCount();
-    if (optVariableAndDistinctness &&
-        !optVariableAndDistinctness->isDistinct_) {
-      result->_idTable.setCols(1);
-      result->_idTable.emplace_back();
-      // For `IndexScans` with at least two variables the size estimates are
-      // exact as they are read directly from the index meta data.
-      result->_idTable(0, 0) = Id::makeFromInt(indexScan->getSizeEstimate());
-      return true;
-    }
+// _____________________________________________________________________________
+bool GroupBy::computeOptimizedAggregatesOnIndexScanChild(ResultTable* result) {
+  // The child must be an `IndexScan` for this optimization.
+  auto* indexScan =
+      dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get());
+
+  if (!indexScan) {
+    return false;
   }
-  return false;
+
+  if (indexScan->getResultWidth() <= 1 || !_groupByVariables.empty()) {
+    return false;
+  }
+
+  if (!getVariableForNonDistinctCountOfSingleAlias().has_value()) {
+    return false;
+  }
+
+  result->_idTable.setCols(1);
+  // TODO<joka921> Those are not really in use, but some other operations
+  // still rely on one value being present.
+  result->_resultTypes.push_back(qlever::ResultType::VERBATIM);
+  result->_idTable.emplace_back();
+  // For `IndexScans` with at least two variables the size estimates are
+  // exact as they are read directly from the index metadata.
+  result->_idTable(0, 0) = Id::makeFromInt(indexScan->getSizeEstimate());
+  return true;
 }
 
 // _____________________________________________________________________________
@@ -395,20 +405,15 @@ std::optional<Index::Permutation> GroupBy::getPermutationForThreeVariableTriple(
 // _____________________________________________________________________________
 std::optional<GroupBy::OptimizedAggregateData>
 GroupBy::checkIfOptimizedAggregateOnJoinChildIsPossible(const Join* join) {
-  if (_groupByVariables.size() != 1 || _aliases.size() != 1) {
+  if (_groupByVariables.size() != 1) {
     return std::nullopt;
   }
   const Variable& groupedVariable = _groupByVariables.front();
 
-  // The single alias must be a non-distinct COUNT. The variable is stored
-  // for later checking.
-  auto optionalVariableAndDistinctness =
-      _aliases.front()._expression.getVariableForCount();
-  if (!optionalVariableAndDistinctness ||
-      optionalVariableAndDistinctness->isDistinct_) {
+  auto countedVariable = getVariableForNonDistinctCountOfSingleAlias();
+  if (!countedVariable.has_value()) {
     return std::nullopt;
   }
-  const auto& countedVar = optionalVariableAndDistinctness->variable_;
 
   // Determine if any of the two children of the join operation is a
   // triple with three variables that fulfills the condition.
@@ -416,12 +421,12 @@ GroupBy::checkIfOptimizedAggregateOnJoinChildIsPossible(const Join* join) {
   auto* child2 = static_cast<const Operation*>(join)->getChildren().at(1);
 
   // TODO<joka921, C++23> Use `optional::or_else`
-  auto permutation =
-      getPermutationForThreeVariableTriple(child1, groupedVariable, countedVar);
+  auto permutation = getPermutationForThreeVariableTriple(
+      child1, groupedVariable, countedVariable.value());
   if (!permutation.has_value()) {
     std::swap(child1, child2);
     permutation = getPermutationForThreeVariableTriple(child1, groupedVariable,
-                                                       countedVar);
+                                                       countedVariable.value());
   }
   if (!permutation.has_value()) {
     return std::nullopt;
@@ -441,10 +446,14 @@ GroupBy::checkIfOptimizedAggregateOnJoinChildIsPossible(const Join* join) {
 }
 
 // _____________________________________________________________________________
-bool GroupBy::computeOptimizedAggregatesOnJoinChild(ResultTable* result,
-                                                    const Join* joinPtr) {
+bool GroupBy::computeOptimizedAggregatesOnJoinChild(ResultTable* result) {
+  auto join = dynamic_cast<const Join*>(_subtree->getRootOperation().get());
+  if (!join) {
+    return false;
+  }
+
   auto optimizedAggregateData =
-      checkIfOptimizedAggregateOnJoinChildIsPossible(joinPtr);
+      checkIfOptimizedAggregateOnJoinChildIsPossible(join);
   if (!optimizedAggregateData.has_value()) {
     return false;
   }
@@ -453,6 +462,10 @@ bool GroupBy::computeOptimizedAggregatesOnJoinChild(ResultTable* result,
 
   auto subresult = subtree.getResult();
   result->_idTable.setCols(2);
+  // TODO<joka921> Those are not really in use, but some other operations
+  // still rely on at least two values being present.
+  result->_resultTypes.push_back(qlever::ResultType::KB);
+  result->_resultTypes.push_back(qlever::ResultType::VERBATIM);
   if (subresult->_idTable.size() == 0) {
     return true;
   }
@@ -470,7 +483,10 @@ bool GroupBy::computeOptimizedAggregatesOnJoinChild(ResultTable* result,
   size_t currentCardinality = index.getCardinality(currentId, permutation);
 
   auto pushRow = [&]() {
-    // TODO<joka921> Document this `if`
+    // If the count is 0 this means that element with the `currentId` doesn't
+    // exist in the knowledge graph. Thus, the join with a three variable triple
+    // would have filtered it out and we don't include it in the final
+    // result.
     if (currentCount > 0) {
       // TODO<C++20, as soon as Clang supports it>: use `emplace_back(id1, id2)`
       // (requires parenthesized initialization of aggregates.
@@ -494,13 +510,24 @@ bool GroupBy::computeOptimizedAggregatesOnJoinChild(ResultTable* result,
 
 // _____________________________________________________________________________
 bool GroupBy::computeOptimizedAggregatesIfPossible(ResultTable* result) {
-  if (auto indexScan =
-          dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get())) {
-    return computeOptimizedAggregatesOnIndexScanChild(result, indexScan);
-  } else if (auto join = dynamic_cast<const Join*>(
-                 _subtree->getRootOperation().get())) {
-    return computeOptimizedAggregatesOnJoinChild(result, join);
+  if (computeOptimizedAggregatesOnIndexScanChild(result)) {
+    return true;
   } else {
-    return false;
+    return computeOptimizedAggregatesOnJoinChild(result);
   }
+}
+
+// _____________________________________________________________________________
+std::optional<Variable> GroupBy::getVariableForNonDistinctCountOfSingleAlias()
+    const {
+  if (_aliases.size() != 1) {
+    return std::nullopt;
+  }
+  auto optionalVariableAndDistinctness =
+      _aliases.front()._expression.getVariableForCount();
+  if (!optionalVariableAndDistinctness ||
+      optionalVariableAndDistinctness->isDistinct_) {
+    return std::nullopt;
+  }
+  return std::move(optionalVariableAndDistinctness->variable_);
 }

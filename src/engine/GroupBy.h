@@ -120,23 +120,65 @@ class GroupBy : public Operation {
   // TODO<joka921> Check whether we can simply return
   // `std::optional<ResultTable>` (Also for all the other functions).
   bool computeOptimizedAggregatesIfPossible(ResultTable* result);
-  // TODO<joka921> Comment all the other functions.
 
-  bool computeOptimizedAggregatesOnIndexScanChild(ResultTable* result,
-                                                  const IndexScan* indexScan);
+  // First, check if the query represented by this GROUP BY is of the following
+  // form:
+  //  SELECT ((COUNT ?x) as ?cnt) WHERE {
+  //    ?x <somePredicate> ?y
+  //  }
+  // (The single triple must contain two or three variables, and the fixed value
+  // in the two variable case might also be the subject or object of the triple.
+  // The COUNT may be computed on any of the variables in the triple. If the
+  // query has that form, the result of the query (which consists of one line)
+  // is computed and stored in the `result` and `true` is returned. If not, the
+  // `result` is left untouched, and `false` is returned.
+  bool computeOptimizedAggregatesOnIndexScanChild(ResultTable* result);
+
+  // First, check if the query represented by this GROUP BY is of the following
+  // form:
+  //  SELECT ?x ((COUNT ?x) as ?cnt) WHERE {
+  //    %arbitrary subresult that contains `?x`, but neither `?y`, nor `?z`.
+  //    ?x ?y ?z
+  //  } GROUP BY ?x
+  // Note that `?x` can also be the predicate or object of the three variable
+  // triple, and that the COUNT may be by any of the variables `?x`, `?y`, or
+  // `?z`.
+  bool computeOptimizedAggregatesOnJoinChild(ResultTable* result);
+
+  // The check whether the optimization just described can be applied and its
+  // actual computation are split up in two functions. This struct contains
+  // information that has to be passed between the check and the computation.
   struct OptimizedAggregateData {
+    // The subtree of the `JOIN` operation that is *not* the three variable
+    // triple.
     const QueryExecutionTree& otherSubtree_;
+    // The permutation in which the three variable triple has to be sorted for
+    // the JOIN, etc. `SPO` if the variable that joins the three variable triple
+    // and the rest of the query body is the subject of the three variable
+    // triple, or `PSO` if it is the predicate.
     Index::Permutation permutation_;
+    // The column index wrt the `otherSubtree_` of the variable that joins the
+    // three variable triple and the rest of the query body.
     size_t subtreeColumnIndex_;
   };
+
+  // Check if the previously described optimization can be applied. The argument
+  // Must be the single subtree of this GROUP BY, properly cast to a `const
+  // Join*`.
   std::optional<OptimizedAggregateData>
   checkIfOptimizedAggregateOnJoinChildIsPossible(const Join* join);
-  bool computeOptimizedAggregatesOnJoinChild(ResultTable* result,
-                                             const Join* ptr);
 
+  // Check if the following is true: the `tree` represents a three variable
+  // triple, that contains both `variableByWhichToSort` and
+  // `variableThatMustBeContained`. (They might be the same). If this check
+  // fails, `std::nullopt` is returned. Else the permutation corresponding to
+  // `variableByWhichToSort` is returned, for example `SPO` if the
+  // `variableByWhichToSort` is the subject of the triple.
   static std::optional<Index::Permutation> getPermutationForThreeVariableTriple(
       const QueryExecutionTree* tree, const Variable& variableByWhichToSort,
       const Variable& variableThatMustBeContained);
+
+  std::optional<Variable> getVariableForNonDistinctCountOfSingleAlias() const;
 
   // TODO<joka921> check and resolve Hannah's engine crashes when using the
   // optimized aggregates

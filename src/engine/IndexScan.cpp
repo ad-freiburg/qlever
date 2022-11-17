@@ -357,7 +357,14 @@ size_t IndexScan::getCostEstimate() {
             : 200000;
     auto numScans = getSizeEstimate() / getMultiplicity(0);
     auto averageScanSize = getMultiplicity(0);
-    return numScans * (diskRandomAccessCost + averageScanSize);
+
+    // We need to make the full scan's estimate super expensive, s.t. the
+    // optimized JOIN operation where one child is a full scan is always cheaper
+    // than a full scan + a possible sort.
+
+    static constexpr size_t fullScanPenalty = 1'000'000'000;
+    return fullScanPenalty * numScans *
+           (diskRandomAccessCost + averageScanSize);
   }
 }
 

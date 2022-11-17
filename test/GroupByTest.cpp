@@ -350,7 +350,10 @@ struct GroupBySpecialCount : ::testing::Test {
       qec, IndexScan::FULL_INDEX_SCAN_POS, xyzTriple);
   Tree xScan = makeExecutionTree<IndexScan>(
       qec, IndexScan::PSO_BOUND_S,
-      SparqlTriple{{"<x>"}, {"<label"}, Variable{"?x"}});
+      SparqlTriple{{"<x>"}, {"<label>"}, Variable{"?x"}});
+  Tree xyScan = makeExecutionTree<IndexScan>(
+      qec, IndexScan::PSO_FREE_S,
+      SparqlTriple{Variable{"?x"}, {"<label>"}, Variable{"?y"}});
 
   Tree invalidJoin = makeExecutionTree<Join>(qec, xScan, xScan, 0, 0);
   Tree validJoinWhenGroupingByX =
@@ -459,45 +462,72 @@ TEST_F(GroupBySpecialCount, checkIfOptimizedAggregateOnJoinChildIsPossible) {
 }
 
 TEST_F(GroupBySpecialCount, computeOptimizedAggregatesOnJoinChild) {
-  GroupBy invalidForOptimization{qec, emptyVariables, aliasesCountX,
-                                 validJoinWhenGroupingByX};
-  ResultTable result{qec->getAllocator()};
-  ASSERT_FALSE(invalidForOptimization.computeOptimizedAggregatesOnJoinChild(
-      &result, getJoinPtr(validJoinWhenGroupingByX)));
-  // No optimization was applied, so the result is untouched.
-  AD_CHECK(result._idTable.size() == 0);
+  {
+    GroupBy invalidForOptimization{qec, emptyVariables, aliasesCountX,
+                                   validJoinWhenGroupingByX};
+    ResultTable result{qec->getAllocator()};
+    ASSERT_FALSE(
+        invalidForOptimization.computeOptimizedAggregatesOnJoinChild(&result));
+    // No optimization was applied, so the result is untouched.
+    AD_CHECK(result._idTable.size() == 0);
+  }
 
-  // Set up a `VALUES` clause with three values for `?x`, two of which (`<x>`
-  // and `<y>`) actually appear in the test knowledge graph.
-  parsedQuery::SparqlValues sparqlValues;
-  sparqlValues._variables.push_back(varX);
-  sparqlValues._values.emplace_back(std::vector{TripleComponent{"<x>"}});
-  sparqlValues._values.emplace_back(std::vector{TripleComponent{"<xa>"}});
-  sparqlValues._values.emplace_back(std::vector{TripleComponent{"<y>"}});
-  auto values = makeExecutionTree<Values>(qec, sparqlValues);
+  // Run the following test for the specialized function and from the
+  // general dispatching interface.
+  auto testWithBothInterfaces = [&](bool chooseInterface) {
+    // Set up a `VALUES` clause with three values for `?x`, two of which (`<x>`
+    // and `<y>`) actually appear in the test knowledge graph.
+    parsedQuery::SparqlValues sparqlValues;
+    sparqlValues._variables.push_back(varX);
+    sparqlValues._values.emplace_back(std::vector{TripleComponent{"<x>"}});
+    sparqlValues._values.emplace_back(std::vector{TripleComponent{"<xa>"}});
+    sparqlValues._values.emplace_back(std::vector{TripleComponent{"<y>"}});
+    auto values = makeExecutionTree<Values>(qec, sparqlValues);
+    // Set up a GROUP BY operation for which the optimization can be applied.
+    // The last two arguments of the `Join` constructor are the indices of the
+    // join columns.
+    ResultTable result(qec->getAllocator());
+    auto join = makeExecutionTree<Join>(qec, values, xyzScanSortedByX, 0, 0);
+    GroupBy validForOptimization{qec, variablesOnlyX, aliasesCountX, join};
+    if (chooseInterface) {
+      ASSERT_TRUE(
+          validForOptimization.computeOptimizedAggregatesOnJoinChild(&result));
+    } else {
+      ASSERT_TRUE(
+          validForOptimization.computeOptimizedAggregatesIfPossible(&result));
+    }
 
-  // Set up a GROUP BY operation for which the optimization can be applied.
-  // The last two arguments of the `Join` constructor are the indices of the
-  // join columns.
-  auto join = makeExecutionTree<Join>(qec, values, xyzScanSortedByX, 0, 0);
-  GroupBy validForOptimization{qec, variablesOnlyX, aliasesCountX, join};
-  ASSERT_TRUE(validForOptimization.computeOptimizedAggregatesOnJoinChild(
-      &result, getJoinPtr(join)));
+    // There are 5 triples with `<x>` as a subject, 0 triples with `<xa>` as a
+    // subject, and 1 triple with `y` as a subject.
+    const auto& table = result._idTable;
+    ASSERT_EQ(table.cols(), 2u);
+    ASSERT_EQ(table.size(), 2u);
+    Id idOfX;
+    Id idOfY;
+    qec->getIndex().getId("<x>", &idOfX);
+    qec->getIndex().getId("<y>", &idOfY);
 
-  // There are 5 triples with `<x>` as a subject, 0 triples with `<xa>` as a
-  // subject, and 1 triple with `y` as a subject.
-  const auto& table = result._idTable;
-  ASSERT_EQ(table.cols(), 2u);
-  ASSERT_EQ(table.size(), 2u);
-  Id idOfX;
-  Id idOfY;
-  qec->getIndex().getId("<x>", &idOfX);
-  qec->getIndex().getId("<y>", &idOfY);
+    ASSERT_EQ(table(0, 0), idOfX);
+    ASSERT_EQ(table(0, 1), Id::makeFromInt(5));
+    ASSERT_EQ(table(1, 0), idOfY);
+    ASSERT_EQ(table(1, 1), Id::makeFromInt(1));
+  };
+  testWithBothInterfaces(true);
+  testWithBothInterfaces(false);
 
-  ASSERT_EQ(table(0, 0), idOfX);
-  ASSERT_EQ(table(0, 1), Id::makeFromInt(5));
-  ASSERT_EQ(table(1, 0), idOfY);
-  ASSERT_EQ(table(1, 1), Id::makeFromInt(1));
+  // Test the case that the input is empty.
+  {
+    parsedQuery::SparqlValues nonExisting;
+    nonExisting._variables.emplace_back("?x");
+    nonExisting._values.emplace_back(1, "<notInKg>");
+    auto values = makeExecutionTree<Values>(qec, nonExisting);
+    auto join = makeExecutionTree<Join>(qec, values, xyzScanSortedByX, 0, 0);
+    ResultTable result{qec->getAllocator()};
+    GroupBy groupBy{qec, variablesOnlyX, aliasesCountX, join};
+    ASSERT_TRUE(groupBy.computeOptimizedAggregatesOnJoinChild(&result));
+    ASSERT_EQ(result._idTable.cols(), 2u);
+    ASSERT_EQ(result._idTable.size(), 0u);
+  }
 }
 
 TEST_F(GroupBySpecialCount, computeOptimizedAggregatesOnIndexScanChild) {
@@ -507,8 +537,7 @@ TEST_F(GroupBySpecialCount, computeOptimizedAggregatesOnIndexScanChild) {
                             const auto& indexScan) {
     auto groupBy = GroupBy{qec, groupByVariables, aliases, indexScan};
     ResultTable result{qec->getAllocator()};
-    ASSERT_FALSE(groupBy.computeOptimizedAggregatesOnIndexScanChild(
-        &result, getScanPtr(indexScan)));
+    ASSERT_FALSE(groupBy.computeOptimizedAggregatesOnIndexScanChild(&result));
     ASSERT_EQ(result._idTable.size(), 0u);
   };
   // The IndexScan has only one variable, this is currently not supported.
@@ -522,11 +551,36 @@ TEST_F(GroupBySpecialCount, computeOptimizedAggregatesOnIndexScanChild) {
   testFailure(emptyVariables, aliasesCountDistinctX, xyzScanSortedByX);
   testFailure(emptyVariables, aliasesXAsV, xyzScanSortedByX);
 
-  ResultTable result{qec->getAllocator()};
-  auto groupBy1 = GroupBy{qec, emptyVariables, aliasesCountX, xyzScanSortedByX};
-  ASSERT_TRUE(groupBy1.computeOptimizedAggregatesOnIndexScanChild(
-      &result, getScanPtr(xyzScanSortedByX)));
-  // TODO<check the results>
+  // Run the following test for the specialized function and from the
+  // general dispatching interface.
+  auto testWithBothInterfaces = [&](bool chooseInterface) {
+    ResultTable result{qec->getAllocator()};
+    auto groupBy =
+        GroupBy{qec, emptyVariables, aliasesCountX, xyzScanSortedByX};
+    if (chooseInterface) {
+      ASSERT_TRUE(groupBy.computeOptimizedAggregatesOnIndexScanChild(&result));
+    } else {
+      ASSERT_TRUE(groupBy.computeOptimizedAggregatesIfPossible(&result));
+    }
+
+    ASSERT_EQ(result._idTable.size(), 1);
+    ASSERT_EQ(result._idTable.cols(), 1);
+    // The test index currently consists of 6 triples.
+    ASSERT_EQ(result._idTable(0, 0), Id::makeFromInt(6));
+  };
+  testWithBothInterfaces(true);
+  testWithBothInterfaces(false);
+
+  {
+    ResultTable result{qec->getAllocator()};
+    auto groupBy = GroupBy{qec, emptyVariables, aliasesCountX, xyScan};
+    ASSERT_TRUE(groupBy.computeOptimizedAggregatesOnIndexScanChild(&result));
+    ASSERT_EQ(result._idTable.size(), 1);
+    ASSERT_EQ(result._idTable.cols(), 1);
+    // The test index currently consists of 4 triples that have the predicate
+    // `<label>`
+    ASSERT_EQ(result._idTable(0, 0), Id::makeFromInt(4));
+  }
 }
 
 }  // namespace
