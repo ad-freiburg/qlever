@@ -135,7 +135,8 @@ class GroupBy : public Operation {
                                              const Join* ptr);
 
   static std::optional<Index::Permutation> getPermutationForThreeVariableTriple(
-      const QueryExecutionTree* tree, const Variable& variableByWhichToSort);
+      const QueryExecutionTree* tree, const Variable& variableByWhichToSort,
+      const Variable& variableThatMustBeContained);
 
   // TODO<joka921> check and resolve Hannah's engine crashes when using the
   // optimized aggregates
@@ -147,7 +148,4 @@ class GroupBy : public Operation {
 
   // TODO<joka921> Also inform the query planner (via the cost estimate)
   // that the optimization can be done.
-
-  // TODO<joka921> Throw out `subjectCardinality` etc. functions in
-  // `Index(Impl)`, they are only used in one place.
 };

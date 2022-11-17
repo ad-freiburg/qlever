@@ -741,26 +741,6 @@ size_t IndexImpl::getNumDistinctSubjectPredicatePairs() const {
 }
 
 // _____________________________________________________________________________
-size_t IndexImpl::relationCardinality(const string& relationName) const {
-  if (relationName == INTERNAL_TEXT_MATCH_PREDICATE) {
-    return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
-  }
-  return getCardinality(relationName, _PSO);
-}
-
-// TODO<joka921> There is a lot of duplication in the three cardinality
-// functions, remove it.
-// _____________________________________________________________________________
-size_t IndexImpl::subjectCardinality(const TripleComponent& sub) const {
-  return getCardinality(sub, _SPO);
-}
-
-// _____________________________________________________________________________
-size_t IndexImpl::objectCardinality(const TripleComponent& obj) const {
-  return getCardinality(obj, _OSP);
-}
-
-// _____________________________________________________________________________
 template <class T>
 void IndexImpl::writeAsciiListFile(const string& filename, const T& ids) const {
   std::ofstream f(filename);

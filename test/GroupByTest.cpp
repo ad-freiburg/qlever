@@ -341,9 +341,10 @@ struct GroupBySpecialCount : ::testing::Test {
   Variable varX{"?x"};
   Variable varY{"?y"};
   Variable varZ{"?z"};
+  Variable varA{"?a"};
   QueryExecutionContext* qec = sparqlExpression::getQec();
   SparqlTriple xyzTriple{Variable{"?x"}, "?y", Variable{"?z"}};
-  Tree xyzScan = makeExecutionTree<IndexScan>(
+  Tree xyzScanSortedByX = makeExecutionTree<IndexScan>(
       qec, IndexScan::FULL_INDEX_SCAN_SOP, xyzTriple);
   Tree xyzScanSortedByY = makeExecutionTree<IndexScan>(
       qec, IndexScan::FULL_INDEX_SCAN_POS, xyzTriple);
@@ -352,56 +353,78 @@ struct GroupBySpecialCount : ::testing::Test {
       SparqlTriple{{"<x>"}, {"<label"}, Variable{"?x"}});
 
   Tree invalidJoin = makeExecutionTree<Join>(qec, xScan, xScan, 0, 0);
-
-  Tree validJoin = makeExecutionTree<Join>(qec, xScan, xyzScan, 0, 0);
+  Tree validJoinWhenGroupingByX =
+      makeExecutionTree<Join>(qec, xScan, xyzScanSortedByX, 0, 0);
 
   std::vector<Variable> emptyVariables{};
-  std::vector<Variable> validVariables{varX};
+  std::vector<Variable> variablesOnlyX{varX};
+  std::vector<Variable> variablesOnlyY{varY};
 
   std::vector<Alias> emptyAliases{};
 
-  SparqlExpression::Ptr varXExpression =
-      std::make_unique<DummyExpression>(varX);
-  SparqlExpressionPimpl varxExpressionPimpl =
-      SparqlExpressionPimpl{std::move(varXExpression), "?x"};
+  static SparqlExpression::Ptr makeVariableExpression(const Variable& var) {
+    return std::make_unique<VariableExpression>(var);
+  }
+  static SparqlExpressionPimpl makeVariablePimpl(const Variable& var) {
+    return SparqlExpressionPimpl{makeVariableExpression(var), var.name()};
+  }
+
+  static SparqlExpressionPimpl makeCountPimpl(const Variable& var,
+                                              bool distinct = false) {
+    return SparqlExpressionPimpl{std::make_unique<CountExpression>(
+                                     distinct, makeVariableExpression(var)),
+                                 "COUNT(?someVariable}"};
+  }
+
+  SparqlExpressionPimpl varxExpressionPimpl = makeVariablePimpl(varX);
   SparqlExpression::Ptr varXExpression2 =
       std::make_unique<VariableExpression>(varX);
-  SparqlExpressionPimpl countXPimpl = SparqlExpressionPimpl{
-      std::make_unique<CountExpression>(false, std::move(varXExpression2)),
-      "COUNT(?x)"};
-  SparqlExpression::Ptr varXExpression3 =
-      std::make_unique<VariableExpression>(varX);
-  SparqlExpressionPimpl countDistinctXPimpl = SparqlExpressionPimpl{
-      std::make_unique<CountExpression>(true, std::move(varXExpression3)),
-      "COUNT(?x)"};
-  std::vector<Alias> invalidAliases{
-      Alias{varxExpressionPimpl, Variable{"?count"}}};
-  std::vector<Alias> invalidAliases2{
+  SparqlExpressionPimpl countXPimpl = makeCountPimpl(varX, false);
+  SparqlExpressionPimpl countDistinctXPimpl = makeCountPimpl(varX, true);
+  std::vector<Alias> aliasesXAsV{Alias{varxExpressionPimpl, Variable{"?v"}}};
+  std::vector<Alias> aliasesCountDistinctX{
       Alias{countDistinctXPimpl, Variable{"?count"}}};
-  std::vector<Alias> validAliases{Alias{countXPimpl, Variable{"?count"}}};
+  std::vector<Alias> aliasesCountX{Alias{countXPimpl, Variable{"?count"}}};
 
   const Join* getJoinPtr(const Tree& tree) {
-    auto joinPtr = dynamic_cast<const Join*>(tree->getRootOperation().get());
-    AD_CHECK(joinPtr);
-    return joinPtr;
+    auto join = dynamic_cast<const Join*>(tree->getRootOperation().get());
+    AD_CHECK(join);
+    return join;
+  }
+  const IndexScan* getScanPtr(const Tree& tree) {
+    auto scan = dynamic_cast<const IndexScan*>(tree->getRootOperation().get());
+    AD_CHECK(scan);
+    return scan;
   }
 };
 
-// TODO<joka921> Comment the tests, clean up, and complete them.
+// _____________________________________________________________________________
 TEST_F(GroupBySpecialCount, getPermutationForThreeVariableTriple) {
   using enum Index::Permutation;
-  ASSERT_EQ(SPO, GroupBy::getPermutationForThreeVariableTriple(xyzScan.get(),
-                                                               Variable{"?x"}));
-  ASSERT_EQ(POS, GroupBy::getPermutationForThreeVariableTriple(xyzScan.get(),
-                                                               Variable{"?y"}));
-  ASSERT_EQ(OSP, GroupBy::getPermutationForThreeVariableTriple(xyzScan.get(),
-                                                               Variable{"?z"}));
+  const QueryExecutionTree* xyzScan = xyzScanSortedByX.get();
+  ASSERT_EQ(SPO,
+            GroupBy::getPermutationForThreeVariableTriple(xyzScan, varX, varX));
+  ASSERT_EQ(POS,
+            GroupBy::getPermutationForThreeVariableTriple(xyzScan, varY, varZ));
+  ASSERT_EQ(OSP,
+            GroupBy::getPermutationForThreeVariableTriple(xyzScan, varZ, varY));
+
+  // First variable not contained in triple.
+  ASSERT_EQ(std::nullopt,
+            GroupBy::getPermutationForThreeVariableTriple(xyzScan, varA, varX));
+  // Second variable not contained in triple.
+  ASSERT_EQ(std::nullopt,
+            GroupBy::getPermutationForThreeVariableTriple(xyzScan, varX, varA));
+
+  // Not a three variable triple.
   ASSERT_EQ(std::nullopt, GroupBy::getPermutationForThreeVariableTriple(
-                              xyzScan.get(), Variable{"?a"}));
-  ASSERT_EQ(std::nullopt, GroupBy::getPermutationForThreeVariableTriple(
-                              xScan.get(), Variable{"?x"}));
+                              xScan.get(), varX, varX));
 }
+
+// _____________________________________________________________________________
 TEST_F(GroupBySpecialCount, checkIfOptimizedAggregateOnJoinChildIsPossible) {
+  // Assert that a Group by, that is constructed from the given arguments,
+  // can not perform the `OptimizedAggregateOnJoinChild` optimization.
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
                             const auto& join) {
     auto groupBy = GroupBy{qec, groupByVariables, aliases, join};
@@ -409,46 +432,101 @@ TEST_F(GroupBySpecialCount, checkIfOptimizedAggregateOnJoinChildIsPossible) {
         getJoinPtr(join)));
   };
 
-  testFailure(emptyVariables, validAliases, validJoin);
-  testFailure(validVariables, invalidAliases, validJoin);
-  testFailure(validVariables, invalidAliases2, validJoin);
-  testFailure(validVariables, validAliases, invalidJoin);
+  // Must have exactly one variable to group by.
+  testFailure(emptyVariables, aliasesCountX, validJoinWhenGroupingByX);
+  // Must have exactly one alias.
+  testFailure(variablesOnlyX, emptyAliases, validJoinWhenGroupingByX);
+  // The single alias must be a `COUNT`.
+  testFailure(variablesOnlyX, aliasesXAsV, validJoinWhenGroupingByX);
+  // The count must not be distinct.
+  testFailure(variablesOnlyX, aliasesCountDistinctX, validJoinWhenGroupingByX);
 
-  GroupBy groupBy{qec, validVariables, validAliases, validJoin};
-  // TODO<joka921> Actually check the return value.
-  ASSERT_TRUE(groupBy.checkIfOptimizedAggregateOnJoinChildIsPossible(
-      getJoinPtr(validJoin)));
+  // Neither of the join children is a three variable triple
+  testFailure(variablesOnlyX, aliasesCountX, invalidJoin);
+
+  // The join is not on the GROUPED Variable.
+  testFailure(variablesOnlyY, aliasesCountX, validJoinWhenGroupingByX);
+
+  // Everything is valid for the following example.
+  GroupBy groupBy{qec, variablesOnlyX, aliasesCountX, validJoinWhenGroupingByX};
+  auto optimizedAggregateData =
+      groupBy.checkIfOptimizedAggregateOnJoinChildIsPossible(
+          getJoinPtr(validJoinWhenGroupingByX));
+  ASSERT_TRUE(optimizedAggregateData.has_value());
+  ASSERT_EQ(&optimizedAggregateData->otherSubtree_, xScan.get());
+  ASSERT_EQ(optimizedAggregateData->permutation_, Index::Permutation::SPO);
+  ASSERT_EQ(optimizedAggregateData->subtreeColumnIndex_, 0);
 }
 
 TEST_F(GroupBySpecialCount, computeOptimizedAggregatesOnJoinChild) {
-  GroupBy invalidForOptimization{qec, emptyVariables, validAliases, validJoin};
+  GroupBy invalidForOptimization{qec, emptyVariables, aliasesCountX,
+                                 validJoinWhenGroupingByX};
   ResultTable result{qec->getAllocator()};
   ASSERT_FALSE(invalidForOptimization.computeOptimizedAggregatesOnJoinChild(
-      &result, getJoinPtr(validJoin)));
+      &result, getJoinPtr(validJoinWhenGroupingByX)));
+  // No optimization was applied, so the result is untouched.
+  AD_CHECK(result._idTable.size() == 0);
 
+  // Set up a `VALUES` clause with three values for `?x`, two of which (`<x>`
+  // and `<y>`) actually appear in the test knowledge graph.
   parsedQuery::SparqlValues sparqlValues;
-  sparqlValues._variables.push_back(varY);
+  sparqlValues._variables.push_back(varX);
   sparqlValues._values.emplace_back(std::vector{TripleComponent{"<x>"}});
-
+  sparqlValues._values.emplace_back(std::vector{TripleComponent{"<xa>"}});
+  sparqlValues._values.emplace_back(std::vector{TripleComponent{"<y>"}});
   auto values = makeExecutionTree<Values>(qec, sparqlValues);
 
-  auto join = makeExecutionTree<Join>(qec, values, xyzScanSortedByY, 0, 0);
-
-  // TODO<joka921> we found out, that the AD_CHECK is not correct inside the
-  // computeOptimized... function. It has to be a simple `if`.
-  GroupBy validForOptimization{qec, std::vector<Variable>{varY}, validAliases,
-                               join};
+  // Set up a GROUP BY operation for which the optimization can be applied.
+  // The last two arguments of the `Join` constructor are the indices of the
+  // join columns.
+  auto join = makeExecutionTree<Join>(qec, values, xyzScanSortedByX, 0, 0);
+  GroupBy validForOptimization{qec, variablesOnlyX, aliasesCountX, join};
   ASSERT_TRUE(validForOptimization.computeOptimizedAggregatesOnJoinChild(
       &result, getJoinPtr(join)));
 
-  // TODO<joka921> Check the contents of `result`
+  // There are 5 triples with `<x>` as a subject, 0 triples with `<xa>` as a
+  // subject, and 1 triple with `y` as a subject.
+  const auto& table = result._idTable;
+  ASSERT_EQ(table.cols(), 2u);
+  ASSERT_EQ(table.size(), 2u);
+  Id idOfX;
+  Id idOfY;
+  qec->getIndex().getId("<x>", &idOfX);
+  qec->getIndex().getId("<y>", &idOfY);
 
-  // The following is also invalid, because the JOIN before the GROUP BY is
-  // on the wrong variable
-  GroupBy invalidForOptimization2{qec, std::vector<Variable>{varX},
-                                  validAliases, join};
-  ASSERT_FALSE(invalidForOptimization2.computeOptimizedAggregatesOnJoinChild(
-      &result, getJoinPtr(join)));
+  ASSERT_EQ(table(0, 0), idOfX);
+  ASSERT_EQ(table(0, 1), Id::makeFromInt(5));
+  ASSERT_EQ(table(1, 0), idOfY);
+  ASSERT_EQ(table(1, 1), Id::makeFromInt(1));
+}
+
+TEST_F(GroupBySpecialCount, computeOptimizedAggregatesOnIndexScanChild) {
+  // Assert that a Group by, that is constructed from the given arguments,
+  // can not perform the `OptimizedAggregateOnIndexScanChild` optimization.
+  auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
+                            const auto& indexScan) {
+    auto groupBy = GroupBy{qec, groupByVariables, aliases, indexScan};
+    ResultTable result{qec->getAllocator()};
+    ASSERT_FALSE(groupBy.computeOptimizedAggregatesOnIndexScanChild(
+        &result, getScanPtr(indexScan)));
+    ASSERT_EQ(result._idTable.size(), 0u);
+  };
+  // The IndexScan has only one variable, this is currently not supported.
+  testFailure(emptyVariables, aliasesCountX, xScan);
+
+  // Must have zero groupByVariables.
+  testFailure(variablesOnlyX, aliasesCountX, xyzScanSortedByX);
+
+  // Must (currently) have exactly one alias that is a non-distinct count.
+  testFailure(emptyVariables, emptyAliases, xyzScanSortedByX);
+  testFailure(emptyVariables, aliasesCountDistinctX, xyzScanSortedByX);
+  testFailure(emptyVariables, aliasesXAsV, xyzScanSortedByX);
+
+  ResultTable result{qec->getAllocator()};
+  auto groupBy1 = GroupBy{qec, emptyVariables, aliasesCountX, xyzScanSortedByX};
+  ASSERT_TRUE(groupBy1.computeOptimizedAggregatesOnIndexScanChild(
+      &result, getScanPtr(xyzScanSortedByX)));
+  // TODO<check the results>
 }
 
 }  // namespace

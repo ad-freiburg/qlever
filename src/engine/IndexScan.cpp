@@ -323,11 +323,11 @@ size_t IndexScan::computeSizeEstimate() {
     // TODO<joka921> Should be a oneliner
     // getIndex().cardinality(getPermutation(), getFirstKey());
     if (_type == SPO_FREE_P || _type == SOP_FREE_O) {
-      return getIndex().subjectCardinality(_subject);
+      return getIndex().getCardinality(_subject, Index::Permutation::SPO);
     } else if (_type == POS_FREE_O || _type == PSO_FREE_S) {
-      return getIndex().relationCardinality(_predicate);
+      return getIndex().getCardinality(_predicate, Index::Permutation::PSO);
     } else if (_type == OPS_FREE_P || _type == OSP_FREE_S) {
-      return getIndex().objectCardinality(_object);
+      return getIndex().getCardinality(_object, Index::Permutation::OSP);
     }
     // The triple consists of three variables.
     return getIndex().getNofTriples();

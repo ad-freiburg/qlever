@@ -187,12 +187,6 @@ class IndexImpl {
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------
-  size_t relationCardinality(const string& relationName) const;
-
-  size_t subjectCardinality(const TripleComponent& sub) const;
-
-  size_t objectCardinality(const TripleComponent& obj) const;
-
   template <typename Permutation>
   size_t getCardinality(Id id, const Permutation& permutation) const {
     if (permutation.metaData().col0IdExists(id)) {
@@ -205,6 +199,12 @@ class IndexImpl {
   template <typename Permutation>
   size_t getCardinality(const TripleComponent& comp,
                         const Permutation& permutation) const {
+    // TODO<joka921> This special case is only relevant for the `PSO` and `POS`
+    // permutations, but this internal predicate should never appear in subjects
+    // or objects anyway.
+    if (comp == INTERNAL_TEXT_MATCH_PREDICATE) {
+      return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
+    }
     std::optional<Id> relId = comp.toValueId(getVocab());
     if (relId.has_value()) {
       return getCardinality(relId.value(), permutation);

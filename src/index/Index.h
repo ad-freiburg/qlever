@@ -94,13 +94,6 @@ class Index {
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------
-  [[nodiscard]] size_t relationCardinality(
-      const std::string& relationName) const;
-
-  [[nodiscard]] size_t subjectCardinality(const TripleComponent& sub) const;
-
-  [[nodiscard]] size_t objectCardinality(const TripleComponent& obj) const;
-
   [[nodiscard]] size_t getCardinality(const TripleComponent& comp,
                                       Permutation permutation) const;
   [[nodiscard]] size_t getCardinality(Id id, Permutation permutation) const;

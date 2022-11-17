@@ -46,7 +46,7 @@ Index makeTestIndex() {
   std::string filename = "relationalExpressionTestIndex.ttl";
   std::string dummyKb =
       "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . <x> "
-      "<label> \"Beta\".";
+      "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. ";
 
   FILE_BUFFER_SIZE() = 1000;
   std::fstream f(filename, std::ios_base::out);
