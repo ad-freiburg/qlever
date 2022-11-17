@@ -357,24 +357,27 @@ size_t IndexScan::getCostEstimate() {
     // The computation of the `full scan` estimate must be consistent with the
     // full scan dummy joins in `Join.cpp` for correct query planning.
     // TODO<joka921> Factor out the common code to keep it in sync.
-    float diskRandomAccessCost =
+    size_t diskRandomAccessCost =
         _executionContext
             ? _executionContext->getCostFactor("DISK_RANDOM_ACCESS_COST")
             : 200000;
-    LOG(WARN) << "Disk random Access  Cost" << diskRandomAccessCost << std::endl;
+    LOG(WARN) << "Disk random Access  Cost" << diskRandomAccessCost
+              << std::endl;
     LOG(WARN) << "Size estimate" << getSizeEstimate() << std::endl;
     LOG(WARN) << "Multiplicity column 0 " << getMultiplicity(0) << std::endl;
 
-    auto numScans = getSizeEstimate() / getMultiplicity(0);
-    auto averageScanSize = getMultiplicity(0);
+    size_t numScans = getSizeEstimate() / getMultiplicity(0);
+    size_t averageScanSize = getMultiplicity(0);
 
     // We need to make the full scan's estimate super expensive, s.t. the
     // optimized JOIN operation where one child is a full scan is always cheaper
     // than a full scan + a possible sort.
 
     static constexpr size_t fullScanPenalty = 1'000'000'000;
-    return fullScanPenalty * numScans *
+    auto totalCost = fullScanPenalty * numScans *
            (diskRandomAccessCost + averageScanSize);
+    LOG(WARN) << "Total cost is" << totalCost << std::endl;
+    return totalCost;
   }
 }
 
