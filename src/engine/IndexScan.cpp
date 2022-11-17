@@ -368,18 +368,16 @@ size_t IndexScan::getCostEstimate() {
     // Note that we cannot set the cost to `infinity` or `max`, because this
     // might lead to overflows in upstream operations when the cost estimate is
     // an integer (this currently is the case). When implementing them as
-    // floating point numbers, `infinity` would lead to saturating. This would
+    // floating point numbers, a cost estimate of `infinity` would
     // remove the ability to distinguish the costs of plans that perform full
-    // scans but still have different overall costs.0
+    // scans but still have different overall costs.
     // TODO<joka921> The conceptually right way to do this is to make the cost
-    // estimate a tuple of
-    // `(numFullIndexScans, costEstimateForRemainder)`. Implement this
-    // functionality.
+    // estimate a tuple `(numFullIndexScans, costEstimateForRemainder)`.
+    // Implement this functionality.
     size_t diskRandomAccessCost =
         _executionContext->getCostFactor("DISK_RANDOM_ACCESS_COST");
     size_t numScans = getSizeEstimate() / getMultiplicity(0);
     size_t averageScanSize = getMultiplicity(0);
-
     static constexpr size_t fullScanPenalty = 1'000;
     auto totalCost =
         fullScanPenalty * numScans * (diskRandomAccessCost + averageScanSize);
