@@ -485,7 +485,7 @@ TEST_F(GroupBySpecialCount, computeGroupByForJoinWithFullScan) {
   }
 
   // `chooseInterface == true` means "use the dedicated
-  // `computeGroupByForJoinWithFullScan` method", `chooseInterface == true`
+  // `computeGroupByForJoinWithFullScan` method", `chooseInterface == false`
   // means use the general `computeOptimizedGroupByIfPossible` function.
   auto testWithBothInterfaces = [&](bool chooseInterface) {
     // Set up a `VALUES` clause with three values for `?x`, two of which (`<x>`
@@ -562,7 +562,7 @@ TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan) {
   testFailure(emptyVariables, aliasesXAsV, xyzScanSortedByX);
 
   // `chooseInterface == true` means "use the dedicated
-  // `computeGroupByForJoinWithFullScan` method", `chooseInterface == true`
+  // `computeGroupByForJoinWithFullScan` method", `chooseInterface == false`
   // means use the general `computeOptimizedGroupByIfPossible` function.
   auto testWithBothInterfaces = [&](bool chooseInterface) {
     ResultTable result{qec->getAllocator()};

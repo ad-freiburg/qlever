@@ -135,10 +135,12 @@ size_t GroupBy::getSizeEstimate() {
     return _subtree->getMultiplicity(_subtree->getVariableColumn(var));
   };
 
-  auto varWithMinMultiplicity = *std::ranges::min_element(
-      _groupByVariables, std::less<>{}, varToMultiplicity);
-  return _subtree->getSizeEstimate() /
-         varToMultiplicity(varWithMinMultiplicity);
+  // TODO<joka921> Once we can use `std::views` this can be solved
+  // more elegantly.
+  std::vector<float> multiplicites;
+  std::ranges::transform(_groupByVariables, std::back_inserter(multiplicites),
+                         varToMultiplicity);
+  return _subtree->getSizeEstimate() / std::ranges::min(multiplicites);
 }
 
 size_t GroupBy::getCostEstimate() {
@@ -147,19 +149,6 @@ size_t GroupBy::getCostEstimate() {
   // and its cost should not affect the optimizers results.
   return _subtree->getCostEstimate();
 }
-
-template <typename T, typename C>
-struct resizeIfVec {
-  static void resize(T& t, int size) {
-    (void)t;
-    (void)size;
-  }
-};
-
-template <typename C>
-struct resizeIfVec<vector<C>, C> {
-  static void resize(vector<C>& t, int size) { t.resize(size); }
-};
 
 template <int OUT_WIDTH>
 void GroupBy::processGroup(

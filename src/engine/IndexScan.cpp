@@ -359,19 +359,27 @@ size_t IndexScan::getCostEstimate() {
 
     // The following calculation is done in a way that makes materializing a
     // full index scan always more expensive than implicitly computing it in the
-    // so-called `DummyJoins` (see `Join.h/.cpp`). The estimate here is thus
-    // computed in a similar manner to the estimates of the `DummyJoins`, but
-    // with an additional penalty factor. The overall goal is to make the query
-    // planner only materialize a full index scan if there is no other way to
-    // to compute the query.
+    // so-called "dummy joins" (see `Join.h` and `Join.cpp`). To achieve this,
+    // the estimate here is computed analogously to the estimates of the dummy
+    // joins, but with an additional penalty factor. The overall goal is to make
+    // the query planner only materialize a full index scan if there is no other
+    // way to compute the query.
+
+    // Note that we cannot set the cost to `infinity` or `max`, because this
+    // might lead to overflows in upstream operations when the cost estimate is
+    // an integer (this currently is the case). When implementing them as
+    // floating point numbers, `infinity` would lead to saturating. This would
+    // remove the ability to distinguish the costs of plans that perform full
+    // scans but still have different overall costs.0
+    // TODO<joka921> The conceptually right way to do this is to make the cost
+    // estimate a tuple of
+    // `(numFullIndexScans, costEstimateForRemainder)`. Implement this
+    // functionality.
     size_t diskRandomAccessCost =
         _executionContext->getCostFactor("DISK_RANDOM_ACCESS_COST");
     size_t numScans = getSizeEstimate() / getMultiplicity(0);
     size_t averageScanSize = getMultiplicity(0);
 
-    // We need to make the full scan's estimate super expensive, s.t. the
-    // optimized JOIN operation where one child is a full scan is always cheaper
-    // than a full scan + a possible sort.
     static constexpr size_t fullScanPenalty = 1'000;
     auto totalCost =
         fullScanPenalty * numScans * (diskRandomAccessCost + averageScanSize);
