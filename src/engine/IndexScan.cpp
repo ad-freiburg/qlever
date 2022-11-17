@@ -348,6 +348,7 @@ size_t IndexScan::getCostEstimate() {
   if (getResultWidth() != 3) {
     return getSizeEstimate();
   } else {
+    LOG(WARN) << "Computing cost estimate for 3VarTriple" << std::endl;
     // This is to make unit tests pass that have no explicit execution context.
     // TODO<joka921> get rid of these unit tests!
     if (!_executionContext) {
@@ -360,6 +361,10 @@ size_t IndexScan::getCostEstimate() {
         _executionContext
             ? _executionContext->getCostFactor("DISK_RANDOM_ACCESS_COST")
             : 200000;
+    LOG(WARN) << "Disk random Access  Cost" << diskRandomAccessCost << std::endl;
+    LOG(WARN) << "Size estimate" << getSizeEstimate() << std::endl;
+    LOG(WARN) << "Multiplicity column 0 " << getMultiplicity(0) << std::endl;
+
     auto numScans = getSizeEstimate() / getMultiplicity(0);
     auto averageScanSize = getMultiplicity(0);
 
