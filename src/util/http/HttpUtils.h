@@ -1,20 +1,25 @@
-//  Copyright 2021, University of Freiburg,
+//  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//  Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//           Hannah Bast <bast@cs.uni-freiburg.de>
 
 #ifndef QLEVER_HTTPUTILS_H
 #define QLEVER_HTTPUTILS_H
 
-#include "../AsyncStream.h"
-#include "../CompressorStream.h"
-#include "../StringUtils.h"
-#include "../TypeTraits.h"
-#include "../stream_generator.h"
-#include "./MediaTypes.h"
-#include "./UrlParser.h"
-#include "./beast.h"
-#include "./streamable_body.h"
+#include <string>
+#include <string_view>
+
+#include "absl/strings/str_cat.h"
 #include "nlohmann/json.hpp"
+#include "util/AsyncStream.h"
+#include "util/CompressorStream.h"
+#include "util/StringUtils.h"
+#include "util/TypeTraits.h"
+#include "util/http/MediaTypes.h"
+#include "util/http/UrlParser.h"
+#include "util/http/beast.h"
+#include "util/http/streamable_body.h"
+#include "util/stream_generator.h"
 
 /// Several utilities for using/customizing the HttpServer template from
 /// HttpServer.h
@@ -26,6 +31,35 @@ namespace net = boost::asio;       // from <boost/asio.hpp>
 using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
 namespace streams = ad_utility::streams;
 using ad_utility::httpUtils::httpStreams::streamable_body;
+
+/// The components of a URL. For example, the components of the URL
+/// https://qlever.cs.uni-freiburg.de/api/wikidata are:
+///
+/// protocol: HTTPS
+/// host:     qlever.cs.uni-freiburg.de
+/// port:     443 (implicit)
+/// target:   /api/wikidata .
+///
+/// NOTE: `host` and `target` could be `std::string_view` because they are parts
+/// of the given URL. However, `port` can be implicit, so we need a
+/// `std::string` here (and it's not an `int` because the Beast functions ask
+/// for the port as a string). Since URLs are short and we do not handle large
+/// numbers of URLs, the overhead of the string copies are negligible.
+struct UrlComponents {
+  // Construct from given URL.
+  UrlComponents(const std::string_view url);
+  // Members.
+  enum Protocol { HTTP, HTTPS } protocol;
+  std::string host;
+  std::string port;
+  std::string target;
+  // For testing.
+  friend std::ostream& operator<<(std::ostream& os, const UrlComponents& uc) {
+    return os << "UrlComponents("
+              << (uc.protocol == Protocol::HTTP ? "http" : "https") << ", "
+              << uc.host << ", " << uc.port << ", " << uc.target << ")";
+  }
+};
 
 /// Concatenate base and path. Path must start with a '/', base may end with a
 /// slash. For example, path_cat("base", "/file.txt"), path_cat("base/" ,
@@ -79,8 +113,8 @@ static auto createOkResponse(std::string text, const HttpRequest auto& request,
 }
 
 /// Assign the generator to the body of the response. If a supported
-/// compression is specified in the request, this method is applied to the body
-/// and the corresponding response headers are set.
+/// compression is specified in the request, this method is applied to the
+/// body and the corresponding response headers are set.
 static void setBody(http::response<streamable_body>& response,
                     const HttpRequest auto& request,
                     streams::stream_generator&& generator) {
@@ -133,8 +167,8 @@ static auto createJsonResponse(const nlohmann::json& j, const auto& request,
 }
 
 /// Create a HttpResponse with status 404 Not Found. The string body will be a
-/// default message including the name of the file that was not found, which can
-/// be read from the request directly.
+/// default message including the name of the file that was not found, which
+/// can be read from the request directly.
 static auto createNotFoundResponse(const std::string& errorMsg,
                                    const HttpRequest auto& request) {
   return createHttpResponseFromString(errorMsg, http::status::not_found,
@@ -192,13 +226,13 @@ inline void logBeastError(beast::error_code ec, char const* what) {
 namespace detail {
 
 // This coroutine is  part of the implementation of `makeFileServer` (see
-// below). It is the actual coroutine that performs the serving of a file. Note:
-// Because of the coroutine lifetime rules, the coroutine has to get the
+// below). It is the actual coroutine that performs the serving of a file.
+// Note: Because of the coroutine lifetime rules, the coroutine has to get the
 // `documentRoot`,`whitelist`, `request` by value. According to the signature,
-// the `send` action might be dangling, but when using this coroutine inside the
-// `HttpServer` class template, it never is. The parameters `documentRoot` and
-// `whitelist` are currently copied for every http request, if this becomes a
-// performance problem, they might also become `shared_ptr`s.
+// the `send` action might be dangling, but when using this coroutine inside
+// the `HttpServer` class template, it never is. The parameters `documentRoot`
+// and `whitelist` are currently copied for every http request, if this
+// becomes a performance problem, they might also become `shared_ptr`s.
 boost::asio::awaitable<void> makeFileServerImpl(
     std::string documentRoot,
     std::optional<ad_utility::HashSet<std::string>> whitelist,
@@ -267,8 +301,8 @@ boost::asio::awaitable<void> makeFileServerImpl(
  * argument in the `HttpServer` class and serves files from a specified
  * documentRoot. A typical use is `HttpServer
  * httpServer{httpUtils::makeFileServer("path_to_some_directory")};`
- * @param documentRoot The path from which files are served. May be absolute or
- * relative.
+ * @param documentRoot The path from which files are served. May be absolute
+ * or relative.
  * @param whitelist Specify a whitelist of allowed filenames (e.g.
  * `{"index.html", "style.css"}`). The default value std::nullopt means, that
  *         all files from the documentRoot may be served.

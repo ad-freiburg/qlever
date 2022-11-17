@@ -1,5 +1,5 @@
-//  Copyright 2021, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
+//  Copyright 2021, University of Freiburg
+//  Chair of Algorithms and Data Structures
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #ifndef QLEVER_ACCEPTHEADERQLEVERVISITOR_H
@@ -9,9 +9,9 @@
 
 #include "antlr4-runtime.h"
 #include "util/Exception.h"
-#include "util/HttpServer/HttpParser/generated/AcceptHeaderVisitor.h"
-#include "util/HttpServer/MediaTypes.h"
 #include "util/Log.h"
+#include "util/http/HttpParser/generated/AcceptHeaderVisitor.h"
+#include "util/http/MediaTypes.h"
 
 /**
  * /brief Visitor class for the ANTLR-based Accept header parser. Main

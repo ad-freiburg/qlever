@@ -8,11 +8,11 @@
 #include <cstdlib>
 #include <semaphore>
 
-#include "../Exception.h"
-#include "../Log.h"
-#include "../jthread.h"
-#include "./HttpUtils.h"
-#include "./beast.h"
+#include "util/Exception.h"
+#include "util/Log.h"
+#include "util/http/HttpUtils.h"
+#include "util/http/beast.h"
+#include "util/jthread.h"
 
 namespace beast = boost::beast;    // from <boost/beast.hpp>
 namespace http = beast::http;      // from <boost/beast/http.hpp>
@@ -49,6 +49,13 @@ class HttpServer {
   int _numServerThreads;
   net::io_context _ioContext;
   tcp::acceptor _acceptor;
+  // All code that uses the `_acceptor` must run within this strand.
+  // Note that the `_acceptor` might be concurrently accessed by the `listener`
+  // and the `shutdown` function, the latter of which is currently only used in
+  // unit tests.
+  net::strand<net::io_context::executor_type> _acceptorStrand =
+      net::make_strand(_ioContext);
+  std::atomic<bool> _serverIsReady = false;
 
  public:
   /// Construct from the port and ip address, on which this server will listen,
@@ -89,8 +96,8 @@ class HttpServer {
     // Create the listener coroutine.
     auto listenerCoro = listener();
 
-    // Schedule the listener onto the io context.
-    net::co_spawn(_ioContext, std::move(listenerCoro), net::detached);
+    // Schedule the listener onto the `_acceptorStrand`.
+    net::co_spawn(_acceptorStrand, std::move(listenerCoro), net::detached);
 
     // Add some threads to the io context, s.t. the work can actually be
     // scheduled.
@@ -103,6 +110,42 @@ class HttpServer {
     // This will run forever, because the destructor of the JThreads blocks
     // until ioContext.run() completes, which should never happen, because the
     // listener contains an infinite loop.
+  }
+
+  // Get the server port.
+  short unsigned int getPort() const { return _port; }
+
+  // Is the server ready yet? We need this in `test/HttpTest.cpp` so that our
+  // test can wait for the server to be ready and continue with its test
+  // queries.
+  bool serverIsReady() const { return _serverIsReady; }
+
+  // Shut down the server. Http sessions that are still active are still allowed
+  // to finish, even after this call, but all outstanding new connections will
+  // fail. This interface is currently only used for testing. In the typical use
+  // case, the server runs forever.
+  void shutDown() {
+    std::atomic_flag shutdownWasSuccesful;
+    shutdownWasSuccesful.clear();
+    // The actual code for the shutdown is being executed on the same `strand`
+    // as the `listener`. By the way strands work, there will then be no
+    // concurrent access to `_acceptor`.
+    net::post(_acceptorStrand, [&shutdownWasSuccesful, this]() {
+      _acceptor.close();
+      shutdownWasSuccesful.test_and_set();
+      shutdownWasSuccesful.notify_all();
+    });
+
+    // Wait until the posted task has succesfully executed and notified us via
+    // the flag.
+    //
+    // NOTE: The while loop is needed because notifications can also occur
+    // spuriously (without being triggered explicitly by our code). The argument
+    // of the `wait` is `false` because the semantics is to wait for a change in
+    // the specified value.
+    while (!shutdownWasSuccesful.test()) {
+      shutdownWasSuccesful.wait(false);
+    }
   }
 
   // _____________________________________________________________________
@@ -123,21 +166,25 @@ class HttpServer {
       logBeastError(b.code(), "Listening on the socket failed");
       co_return;
     }
+    _serverIsReady = true;
 
-    // `acceptor` is now listening on the port, start accepting connections in
-    // an infinite, asynchronous, but conceptually single-threaded loop.
-    while (true) {
+    // While the `_acceptor` is open, accept connections and handle each
+    // connection asynchronously (so that we are ready to accept the next
+    // connection right away). The `_acceptor` will be closed via the
+    // `shutdown` method.
+    while (_acceptor.is_open()) {
       try {
+        // Wait for a request (the code only continues after we have received
+        // and accepted a request).
         auto socket =
             co_await _acceptor.async_accept(boost::asio::use_awaitable);
         // Schedule the session such that it may run in parallel to this loop.
         // the `strand` makes each session conceptually single-threaded.
         // TODO<joka921> is this even needed, to my understanding,
-        // nothing may happen in parallel within an Http session, but
+        // nothing may happen in parallel within an HTTP session, but
         // then again this does no harm.
         net::co_spawn(net::make_strand(_ioContext), session(std::move(socket)),
                       net::detached);
-
       } catch (const boost::system::system_error& b) {
         logBeastError(b.code(), "Error in the accept loop");
       }
@@ -192,8 +239,8 @@ class HttpServer {
         // by QLever's timeout mechanism.
         stream.expires_never();
 
-        // Handle the http request. Note that `_httpHandler` is also responsible
-        // for sending the message via the `sendMessage` lambda.
+        // Handle the http request. Note that `_httpHandler` is also
+        // responsible for sending the message via the `sendMessage` lambda.
         co_await _httpHandler(std::move(req), sendMessage);
 
         // The closing of the stream is done in the exception handler.

@@ -159,7 +159,7 @@ addLinkAndDiscoverTest(TypeTraitsTest)
 
 addLinkAndDiscoverTest(SparqlExpressionTest sparqlExpressions index engine)
 
-addLinkAndDiscoverTest(StreamableBodyTest)
+addLinkAndDiscoverTest(StreamableBodyTest http)
 
 addLinkAndDiscoverTest(StreamableGeneratorTest)
 
@@ -171,7 +171,7 @@ addLinkAndDiscoverTest(CompactStringVectorTest)
 
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
-addLinkAndDiscoverTest(ContentEncodingHelperTest absl::strings)
+addLinkAndDiscoverTest(ContentEncodingHelperTest absl::strings http)
 
 addLinkAndDiscoverTest(VocabularyInMemoryTest vocabulary)
 
@@ -218,6 +218,8 @@ addLinkAndDiscoverTest(NBitIntegerTest)
 
 addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
+addLinkAndDiscoverTest(HttpUtilsTest util http)
+
 addLinkAndDiscoverTest(DateTest)
 
 addLinkAndDiscoverTest(TripleObjectTest absl::strings parser)
@@ -239,3 +241,5 @@ addLinkAndDiscoverTest(CheckUsePatternTrickTest parser engine)
 addLinkAndDiscoverTestSerial(RegexExpressionTest sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(LocalVocabTest engine)
+
+addLinkAndDiscoverTest(HttpTest boost_iostreams http)
