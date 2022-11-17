@@ -354,6 +354,9 @@ struct GroupBySpecialCount : ::testing::Test {
   Tree xyScan = makeExecutionTree<IndexScan>(
       qec, IndexScan::PSO_FREE_S,
       SparqlTriple{Variable{"?x"}, {"<label>"}, Variable{"?y"}});
+  Tree xScanEmptyResult = makeExecutionTree<IndexScan>(
+      qec, IndexScan::PSO_BOUND_S,
+      SparqlTriple{{"<x>"}, {"<notInKg>"}, Variable{"?x"}});
 
   Tree invalidJoin = makeExecutionTree<Join>(qec, xScan, xScan, 0, 0);
   Tree validJoinWhenGroupingByX =
@@ -463,6 +466,7 @@ TEST_F(GroupBySpecialCount, checkIfOptimizedAggregateOnJoinChildIsPossible) {
 
 TEST_F(GroupBySpecialCount, computeOptimizedAggregatesOnJoinChild) {
   {
+    // One of the invalid cases from the previous test.
     GroupBy invalidForOptimization{qec, emptyVariables, aliasesCountX,
                                    validJoinWhenGroupingByX};
     ResultTable result{qec->getAllocator()};
@@ -470,6 +474,15 @@ TEST_F(GroupBySpecialCount, computeOptimizedAggregatesOnJoinChild) {
         invalidForOptimization.computeOptimizedAggregatesOnJoinChild(&result));
     // No optimization was applied, so the result is untouched.
     AD_CHECK(result._idTable.size() == 0);
+
+    // The child of the GROUP BY is not an index scan, so this is also
+    // invalid.
+    GroupBy invalidGroupBy2{qec, variablesOnlyX, emptyAliases,
+                            validJoinWhenGroupingByX};
+    ASSERT_FALSE(
+        invalidGroupBy2.computeOptimizedAggregatesOnJoinChild(&result));
+    AD_CHECK(result._idTable.size() == 0);
+    ;
   }
 
   // Run the following test for the specialized function and from the
@@ -517,11 +530,8 @@ TEST_F(GroupBySpecialCount, computeOptimizedAggregatesOnJoinChild) {
 
   // Test the case that the input is empty.
   {
-    parsedQuery::SparqlValues nonExisting;
-    nonExisting._variables.emplace_back("?x");
-    nonExisting._values.emplace_back(1, "<notInKg>");
-    auto values = makeExecutionTree<Values>(qec, nonExisting);
-    auto join = makeExecutionTree<Join>(qec, values, xyzScanSortedByX, 0, 0);
+    auto join =
+        makeExecutionTree<Join>(qec, xScanEmptyResult, xyzScanSortedByX, 0, 0);
     ResultTable result{qec->getAllocator()};
     GroupBy groupBy{qec, variablesOnlyX, aliasesCountX, join};
     ASSERT_TRUE(groupBy.computeOptimizedAggregatesOnJoinChild(&result));
