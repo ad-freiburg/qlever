@@ -348,6 +348,11 @@ size_t IndexScan::getCostEstimate() {
   if (getResultWidth() != 3) {
     return getSizeEstimate();
   } else {
+    // This is to make unit tests pass that have no explicit execution context.
+    // TODO<joka921> get rid of these unit tests!
+    if (!_executionContext) {
+      return getSizeEstimate();
+    }
     // The computation of the `full scan` estimate must be consistent with the
     // full scan dummy joins in `Join.cpp` for correct query planning.
     // TODO<joka921> Factor out the common code to keep it in sync.
