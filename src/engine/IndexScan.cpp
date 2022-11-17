@@ -348,7 +348,6 @@ size_t IndexScan::getCostEstimate() {
   if (getResultWidth() != 3) {
     return getSizeEstimate();
   } else {
-    LOG(WARN) << "Computing cost estimate for 3VarTriple" << std::endl;
     // This is to make unit tests pass that have no explicit execution context.
     // TODO<joka921> get rid of these unit tests!
     if (!_executionContext) {
@@ -357,26 +356,25 @@ size_t IndexScan::getCostEstimate() {
     // The computation of the `full scan` estimate must be consistent with the
     // full scan dummy joins in `Join.cpp` for correct query planning.
     // TODO<joka921> Factor out the common code to keep it in sync.
-    size_t diskRandomAccessCost =
-        _executionContext
-            ? _executionContext->getCostFactor("DISK_RANDOM_ACCESS_COST")
-            : 200000;
-    LOG(WARN) << "Disk random Access  Cost" << diskRandomAccessCost
-              << std::endl;
-    LOG(WARN) << "Size estimate" << getSizeEstimate() << std::endl;
-    LOG(WARN) << "Multiplicity column 0 " << getMultiplicity(0) << std::endl;
 
+    // The following calculation is done in a way that makes materializing a
+    // full index scan always more expensive than implicitly computing it in the
+    // so-called `DummyJoins` (see `Join.h/.cpp`). The estimate here is thus
+    // computed in a similar manner to the estimates of the `DummyJoins`, but
+    // with an additional penalty factor. The overall goal is to make the query
+    // planner only materialize a full index scan if there is no other way to
+    // to compute the query.
+    size_t diskRandomAccessCost =
+        _executionContext->getCostFactor("DISK_RANDOM_ACCESS_COST");
     size_t numScans = getSizeEstimate() / getMultiplicity(0);
     size_t averageScanSize = getMultiplicity(0);
 
     // We need to make the full scan's estimate super expensive, s.t. the
     // optimized JOIN operation where one child is a full scan is always cheaper
     // than a full scan + a possible sort.
-
-    static constexpr size_t fullScanPenalty = 10'000;
+    static constexpr size_t fullScanPenalty = 1'000;
     auto totalCost =
         fullScanPenalty * numScans * (diskRandomAccessCost + averageScanSize);
-    LOG(WARN) << "Total cost is" << totalCost << std::endl;
     return totalCost;
   }
 }

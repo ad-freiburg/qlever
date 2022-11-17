@@ -408,6 +408,8 @@ struct GroupBySpecialCount : ::testing::Test {
 TEST_F(GroupBySpecialCount, getPermutationForThreeVariableTriple) {
   using enum Index::Permutation;
   const QueryExecutionTree* xyzScan = xyzScanSortedByX.get();
+
+  // Valid inputs.
   ASSERT_EQ(SPO,
             GroupBy::getPermutationForThreeVariableTriple(xyzScan, varX, varX));
   ASSERT_EQ(POS,
@@ -418,6 +420,7 @@ TEST_F(GroupBySpecialCount, getPermutationForThreeVariableTriple) {
   // First variable not contained in triple.
   ASSERT_EQ(std::nullopt,
             GroupBy::getPermutationForThreeVariableTriple(xyzScan, varA, varX));
+
   // Second variable not contained in triple.
   ASSERT_EQ(std::nullopt,
             GroupBy::getPermutationForThreeVariableTriple(xyzScan, varX, varA));
@@ -428,14 +431,13 @@ TEST_F(GroupBySpecialCount, getPermutationForThreeVariableTriple) {
 }
 
 // _____________________________________________________________________________
-TEST_F(GroupBySpecialCount, checkIfOptimizedAggregateOnJoinChildIsPossible) {
+TEST_F(GroupBySpecialCount, checkIfJoinWithFullScan) {
   // Assert that a Group by, that is constructed from the given arguments,
   // can not perform the `OptimizedAggregateOnJoinChild` optimization.
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
                             const auto& join) {
     auto groupBy = GroupBy{qec, groupByVariables, aliases, join};
-    ASSERT_FALSE(groupBy.checkIfOptimizedAggregateOnJoinChildIsPossible(
-        getJoinPtr(join)));
+    ASSERT_FALSE(groupBy.checkIfJoinWithFullScan(getJoinPtr(join)));
   };
 
   // Must have exactly one variable to group by.
@@ -456,36 +458,35 @@ TEST_F(GroupBySpecialCount, checkIfOptimizedAggregateOnJoinChildIsPossible) {
   // Everything is valid for the following example.
   GroupBy groupBy{qec, variablesOnlyX, aliasesCountX, validJoinWhenGroupingByX};
   auto optimizedAggregateData =
-      groupBy.checkIfOptimizedAggregateOnJoinChildIsPossible(
-          getJoinPtr(validJoinWhenGroupingByX));
+      groupBy.checkIfJoinWithFullScan(getJoinPtr(validJoinWhenGroupingByX));
   ASSERT_TRUE(optimizedAggregateData.has_value());
   ASSERT_EQ(&optimizedAggregateData->otherSubtree_, xScan.get());
   ASSERT_EQ(optimizedAggregateData->permutation_, Index::Permutation::SPO);
   ASSERT_EQ(optimizedAggregateData->subtreeColumnIndex_, 0);
 }
 
-TEST_F(GroupBySpecialCount, computeOptimizedAggregatesOnJoinChild) {
+TEST_F(GroupBySpecialCount, computeGroupByForJoinWithFullScan) {
   {
     // One of the invalid cases from the previous test.
     GroupBy invalidForOptimization{qec, emptyVariables, aliasesCountX,
                                    validJoinWhenGroupingByX};
     ResultTable result{qec->getAllocator()};
     ASSERT_FALSE(
-        invalidForOptimization.computeOptimizedAggregatesOnJoinChild(&result));
+        invalidForOptimization.computeGroupByForJoinWithFullScan(&result));
     // No optimization was applied, so the result is untouched.
     AD_CHECK(result._idTable.size() == 0);
 
     // The child of the GROUP BY is not a join, so this is also
     // invalid.
     GroupBy invalidGroupBy2{qec, variablesOnlyX, emptyAliases, xScan};
-    ASSERT_FALSE(
-        invalidGroupBy2.computeOptimizedAggregatesOnJoinChild(&result));
+    ASSERT_FALSE(invalidGroupBy2.computeGroupByForJoinWithFullScan(&result));
     AD_CHECK(result._idTable.size() == 0);
     ;
   }
 
-  // Run the following test for the specialized function and from the
-  // general dispatching interface.
+  // `chooseInterface == true` means "use the dedicated
+  // `computeGroupByForJoinWithFullScan` method", `chooseInterface == true`
+  // means use the general `computeOptimizedGroupByIfPossible` function.
   auto testWithBothInterfaces = [&](bool chooseInterface) {
     // Set up a `VALUES` clause with three values for `?x`, two of which (`<x>`
     // and `<y>`) actually appear in the test knowledge graph.
@@ -503,10 +504,10 @@ TEST_F(GroupBySpecialCount, computeOptimizedAggregatesOnJoinChild) {
     GroupBy validForOptimization{qec, variablesOnlyX, aliasesCountX, join};
     if (chooseInterface) {
       ASSERT_TRUE(
-          validForOptimization.computeOptimizedAggregatesOnJoinChild(&result));
+          validForOptimization.computeGroupByForJoinWithFullScan(&result));
     } else {
       ASSERT_TRUE(
-          validForOptimization.computeOptimizedAggregatesIfPossible(&result));
+          validForOptimization.computeOptimizedGroupByIfPossible(&result));
     }
 
     // There are 5 triples with `<x>` as a subject, 0 triples with `<xa>` as a
@@ -533,20 +534,20 @@ TEST_F(GroupBySpecialCount, computeOptimizedAggregatesOnJoinChild) {
         makeExecutionTree<Join>(qec, xScanEmptyResult, xyzScanSortedByX, 0, 0);
     ResultTable result{qec->getAllocator()};
     GroupBy groupBy{qec, variablesOnlyX, aliasesCountX, join};
-    ASSERT_TRUE(groupBy.computeOptimizedAggregatesOnJoinChild(&result));
+    ASSERT_TRUE(groupBy.computeGroupByForJoinWithFullScan(&result));
     ASSERT_EQ(result._idTable.cols(), 2u);
     ASSERT_EQ(result._idTable.size(), 0u);
   }
 }
 
-TEST_F(GroupBySpecialCount, computeOptimizedAggregatesOnIndexScanChild) {
-  // Assert that a Group by, that is constructed from the given arguments,
+TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan) {
+  // Assert that a GROUP BY, that is constructed from the given arguments,
   // can not perform the `OptimizedAggregateOnIndexScanChild` optimization.
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
                             const auto& indexScan) {
     auto groupBy = GroupBy{qec, groupByVariables, aliases, indexScan};
     ResultTable result{qec->getAllocator()};
-    ASSERT_FALSE(groupBy.computeOptimizedAggregatesOnIndexScanChild(&result));
+    ASSERT_FALSE(groupBy.computeGroupByForSingleIndexScan(&result));
     ASSERT_EQ(result._idTable.size(), 0u);
   };
   // The IndexScan has only one variable, this is currently not supported.
@@ -560,16 +561,17 @@ TEST_F(GroupBySpecialCount, computeOptimizedAggregatesOnIndexScanChild) {
   testFailure(emptyVariables, aliasesCountDistinctX, xyzScanSortedByX);
   testFailure(emptyVariables, aliasesXAsV, xyzScanSortedByX);
 
-  // Run the following test for the specialized function and from the
-  // general dispatching interface.
+  // `chooseInterface == true` means "use the dedicated
+  // `computeGroupByForJoinWithFullScan` method", `chooseInterface == true`
+  // means use the general `computeOptimizedGroupByIfPossible` function.
   auto testWithBothInterfaces = [&](bool chooseInterface) {
     ResultTable result{qec->getAllocator()};
     auto groupBy =
         GroupBy{qec, emptyVariables, aliasesCountX, xyzScanSortedByX};
     if (chooseInterface) {
-      ASSERT_TRUE(groupBy.computeOptimizedAggregatesOnIndexScanChild(&result));
+      ASSERT_TRUE(groupBy.computeGroupByForSingleIndexScan(&result));
     } else {
-      ASSERT_TRUE(groupBy.computeOptimizedAggregatesIfPossible(&result));
+      ASSERT_TRUE(groupBy.computeOptimizedGroupByIfPossible(&result));
     }
 
     ASSERT_EQ(result._idTable.size(), 1);
@@ -583,7 +585,7 @@ TEST_F(GroupBySpecialCount, computeOptimizedAggregatesOnIndexScanChild) {
   {
     ResultTable result{qec->getAllocator()};
     auto groupBy = GroupBy{qec, emptyVariables, aliasesCountX, xyScan};
-    ASSERT_TRUE(groupBy.computeOptimizedAggregatesOnIndexScanChild(&result));
+    ASSERT_TRUE(groupBy.computeGroupByForSingleIndexScan(&result));
     ASSERT_EQ(result._idTable.size(), 1);
     ASSERT_EQ(result._idTable.cols(), 1);
     // The test index currently consists of 4 triples that have the predicate

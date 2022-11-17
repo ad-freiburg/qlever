@@ -202,6 +202,8 @@ class IndexImpl {
     // TODO<joka921> This special case is only relevant for the `PSO` and `POS`
     // permutations, but this internal predicate should never appear in subjects
     // or objects anyway.
+    // TODO<joka921> Find out what the effect of this special case is for the
+    // query planning.
     if (comp == INTERNAL_TEXT_MATCH_PREDICATE) {
       return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
     }
