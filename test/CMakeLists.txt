@@ -95,7 +95,7 @@ addLinkAndDiscoverTest(HashMapTest absl::flat_hash_map)
 
 addLinkAndDiscoverTest(HashSetTest absl::flat_hash_set)
 
-addLinkAndDiscoverTest(GroupByTest engine)
+addLinkAndDiscoverTestSerial(GroupByTest engine)
 
 addLinkAndDiscoverTest(VocabularyGeneratorTest index)
 

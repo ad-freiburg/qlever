@@ -4,14 +4,19 @@
 //   2018      Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 //   2020-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include <absl/strings/str_join.h>
-#include <engine/CallFixedSize.h>
-#include <engine/GroupBy.h>
-#include <engine/sparqlExpressions/SparqlExpression.h>
-#include <index/Index.h>
-#include <parser/Alias.h>
-#include <util/Conversions.h>
-#include <util/HashSet.h>
+#include "engine/GroupBy.h"
+
+#include "absl/strings/str_join.h"
+#include "engine/CallFixedSize.h"
+#include "engine/IndexScan.h"
+#include "engine/Join.h"
+#include "engine/Sort.h"
+#include "engine/Values.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
+#include "index/Index.h"
+#include "parser/Alias.h"
+#include "util/Conversions.h"
+#include "util/HashSet.h"
 
 // _______________________________________________________________________________________________
 GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
@@ -121,8 +126,21 @@ float GroupBy::getMultiplicity(size_t col) {
 }
 
 size_t GroupBy::getSizeEstimate() {
-  // TODO: stub implementation of getSizeEstimate()
-  return _subtree->getSizeEstimate();
+  if (_groupByVariables.empty()) {
+    return 1;
+  }
+  // Assume that the total number of groups is the input size divided
+  // by the minimal multiplicity of one of the grouped variables.
+  auto varToMultiplicity = [this](const Variable& var) -> float {
+    return _subtree->getMultiplicity(_subtree->getVariableColumn(var));
+  };
+
+  // TODO<joka921> Once we can use `std::views` this can be solved
+  // more elegantly.
+  std::vector<float> multiplicites;
+  std::ranges::transform(_groupByVariables, std::back_inserter(multiplicites),
+                         varToMultiplicity);
+  return _subtree->getSizeEstimate() / std::ranges::min(multiplicites);
 }
 
 size_t GroupBy::getCostEstimate() {
@@ -131,19 +149,6 @@ size_t GroupBy::getCostEstimate() {
   // and its cost should not affect the optimizers results.
   return _subtree->getCostEstimate();
 }
-
-template <typename T, typename C>
-struct resizeIfVec {
-  static void resize(T& t, int size) {
-    (void)t;
-    (void)size;
-  }
-};
-
-template <typename C>
-struct resizeIfVec<vector<C>, C> {
-  static void resize(vector<C>& t, int size) { t.resize(size); }
-};
 
 template <int OUT_WIDTH>
 void GroupBy::processGroup(
@@ -272,6 +277,10 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
 void GroupBy::computeResult(ResultTable* result) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
+  if (computeOptimizedGroupByIfPossible(result)) {
+    return;
+  }
+
   std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
   LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
 
@@ -334,4 +343,191 @@ void GroupBy::computeResult(ResultTable* result) {
                     groupByCols, aggregates, &result->_idTable, subresult.get(),
                     result);
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
+}
+
+// _____________________________________________________________________________
+bool GroupBy::computeGroupByForSingleIndexScan(ResultTable* result) {
+  // The child must be an `IndexScan` for this optimization.
+  auto* indexScan =
+      dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get());
+
+  if (!indexScan) {
+    return false;
+  }
+
+  if (indexScan->getResultWidth() <= 1 || !_groupByVariables.empty()) {
+    return false;
+  }
+
+  if (!getVariableForNonDistinctCountOfSingleAlias().has_value()) {
+    return false;
+  }
+
+  result->_idTable.setCols(1);
+  // TODO<joka921> The `resultTypes` are not really in use, but if they are
+  // not present, segfaults might occur in upstream `Operation`s.
+  result->_resultTypes.push_back(qlever::ResultType::VERBATIM);
+  result->_idTable.emplace_back();
+  // For `IndexScan`s with at least two variables the size estimates are
+  // exact as they are read directly from the index metadata.
+  result->_idTable(0, 0) = Id::makeFromInt(indexScan->getSizeEstimate());
+  return true;
+}
+
+// _____________________________________________________________________________
+std::optional<Index::Permutation> GroupBy::getPermutationForThreeVariableTriple(
+    const QueryExecutionTree* tree, const Variable& variableByWhichToSort,
+    const Variable& variableThatMustBeContained) {
+  auto indexScan =
+      dynamic_cast<const IndexScan*>(tree->getRootOperation().get());
+
+  if (!indexScan || indexScan->getResultWidth() != 3) {
+    return std::nullopt;
+  }
+  {
+    auto v = variableThatMustBeContained;
+    if (v != indexScan->getSubject() && v.name() != indexScan->getPredicate() &&
+        v != indexScan->getObject()) {
+      return std::nullopt;
+    }
+  }
+
+  if (variableByWhichToSort == indexScan->getSubject()) {
+    return Index::Permutation::SPO;
+  } else if (variableByWhichToSort.name() == indexScan->getPredicate()) {
+    return Index::Permutation::POS;
+  } else if (variableByWhichToSort == indexScan->getObject()) {
+    return Index::Permutation::OSP;
+  } else {
+    return std::nullopt;
+  }
+};
+
+// _____________________________________________________________________________
+std::optional<GroupBy::OptimizedGroupByData> GroupBy::checkIfJoinWithFullScan(
+    const Join* join) {
+  if (_groupByVariables.size() != 1) {
+    return std::nullopt;
+  }
+  const Variable& groupByVariable = _groupByVariables.front();
+
+  auto countedVariable = getVariableForNonDistinctCountOfSingleAlias();
+  if (!countedVariable.has_value()) {
+    return std::nullopt;
+  }
+
+  // Determine if any of the two children of the join operation is a
+  // triple with three variables that fulfills the condition.
+  auto* child1 = static_cast<const Operation*>(join)->getChildren().at(0);
+  auto* child2 = static_cast<const Operation*>(join)->getChildren().at(1);
+
+  // TODO<joka921, C++23> Use `optional::or_else`
+  auto permutation = getPermutationForThreeVariableTriple(
+      child1, groupByVariable, countedVariable.value());
+  if (!permutation.has_value()) {
+    std::swap(child1, child2);
+    permutation = getPermutationForThreeVariableTriple(child1, groupByVariable,
+                                                       countedVariable.value());
+  }
+  if (!permutation.has_value()) {
+    return std::nullopt;
+  }
+
+  // TODO<joka921> This  is rather implicit. We should have a (soft) check,
+  // that the join column is correct, and a HARD check, that the result is
+  // sorted.
+  // This check fails if we ever decide to not eagerly sort the children of
+  // a JOIN. We can detect this case and change something here then.
+  if (child2->getPrimarySortKeyVariable() != groupByVariable) {
+    return std::nullopt;
+  }
+  auto columnIndex = child2->getVariableColumn(groupByVariable);
+
+  return OptimizedGroupByData{*child2, permutation.value(), columnIndex};
+}
+
+// _____________________________________________________________________________
+bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
+  auto join = dynamic_cast<const Join*>(_subtree->getRootOperation().get());
+  if (!join) {
+    return false;
+  }
+
+  auto optimizedAggregateData = checkIfJoinWithFullScan(join);
+  if (!optimizedAggregateData.has_value()) {
+    return false;
+  }
+  const auto& [subtree, permutation, columnIndex] =
+      optimizedAggregateData.value();
+
+  auto subresult = subtree.getResult();
+  result->_idTable.setCols(2);
+  // TODO<joka921> The `resultTypes` are not really in use, but if they are
+  // not present, segfaults might occur in upstream `Operation`s.
+  result->_resultTypes.push_back(qlever::ResultType::KB);
+  result->_resultTypes.push_back(qlever::ResultType::VERBATIM);
+  if (subresult->_idTable.size() == 0) {
+    return true;
+  }
+
+  auto idTable = result->_idTable.moveToStatic<2>();
+  const auto& index = getExecutionContext()->getIndex();
+
+  // TODO<joka921, C++23> Simplify the following pattern by using
+  // `std::views::chunk_by` and implement a lazy version of this view for input
+  // iterators.
+
+  // Take care of duplicate values in the input.
+  Id currentId = subresult->_idTable(0, columnIndex);
+  size_t currentCount = 0;
+  size_t currentCardinality = index.getCardinality(currentId, permutation);
+
+  auto pushRow = [&]() {
+    // If the count is 0 this means that the element with the `currentId`
+    // doesn't exist in the knowledge graph. Thus, the join with a three
+    // variable triple would have filtered it out and we don't include it in the
+    // final result.
+    if (currentCount > 0) {
+      // TODO<C++20, as soon as Clang supports it>: use `emplace_back(id1, id2)`
+      // (requires parenthesized initialization of aggregates.
+      idTable.push_back({currentId, Id::makeFromInt(currentCount)});
+    }
+  };
+  for (size_t i = 0; i < subresult->_idTable.size(); ++i) {
+    auto id = subresult->_idTable(i, columnIndex);
+    if (id != currentId) {
+      pushRow();
+      currentId = id;
+      currentCount = 0;
+      currentCardinality = index.getCardinality(id, permutation);
+    }
+    currentCount += currentCardinality;
+  }
+  pushRow();
+  result->_idTable = idTable.moveToDynamic();
+  return true;
+}
+
+// _____________________________________________________________________________
+bool GroupBy::computeOptimizedGroupByIfPossible(ResultTable* result) {
+  if (computeGroupByForSingleIndexScan(result)) {
+    return true;
+  } else {
+    return computeGroupByForJoinWithFullScan(result);
+  }
+}
+
+// _____________________________________________________________________________
+std::optional<Variable> GroupBy::getVariableForNonDistinctCountOfSingleAlias()
+    const {
+  if (_aliases.size() != 1) {
+    return std::nullopt;
+  }
+  auto optionalVariableAndDistinctness =
+      _aliases.front()._expression.getVariableForCount();
+  if (!optionalVariableAndDistinctness ||
+      optionalVariableAndDistinctness->isDistinct_) {
+    return std::nullopt;
+  }
+  return std::move(optionalVariableAndDistinctness->variable_);
 }

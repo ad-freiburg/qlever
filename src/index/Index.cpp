@@ -67,19 +67,19 @@ auto Index::getTextVocab() const -> const TextVocab& {
   return pimpl_->getTextVocab();
 }
 
-// __________________________________________________
-size_t Index::relationCardinality(const std::string& relationName) const {
-  return pimpl_->relationCardinality(relationName);
+// _____________________________________________________________________________
+size_t Index::getCardinality(const TripleComponent& comp,
+                             Index::Permutation p) const {
+  return pimpl_->applyToPermutation(p, [&](const auto& permutation) {
+    return pimpl_->getCardinality(comp, permutation);
+  });
 }
 
-// _________________________________________________
-size_t Index::subjectCardinality(const TripleComponent& sub) const {
-  return pimpl_->subjectCardinality(sub);
-}
-
-// ________________________________________________
-size_t Index::objectCardinality(const TripleComponent& obj) const {
-  return pimpl_->objectCardinality(obj);
+// _____________________________________________________________________________
+size_t Index::getCardinality(Id id, Index::Permutation p) const {
+  return pimpl_->applyToPermutation(p, [&](const auto& permutation) {
+    return pimpl_->getCardinality(id, permutation);
+  });
 }
 
 // _______________________________________________

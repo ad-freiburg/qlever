@@ -741,44 +741,6 @@ size_t IndexImpl::getNumDistinctSubjectPredicatePairs() const {
 }
 
 // _____________________________________________________________________________
-size_t IndexImpl::relationCardinality(const string& relationName) const {
-  if (relationName == INTERNAL_TEXT_MATCH_PREDICATE) {
-    return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
-  }
-  Id relId;
-  if (getId(relationName, &relId)) {
-    if (this->_PSO.metaData().col0IdExists(relId)) {
-      return this->_PSO.metaData().getMetaData(relId).getNofElements();
-    }
-  }
-  return 0;
-}
-
-// TODO<joka921> There is a lot of duplication in the three cardinality
-// functions, remove it.
-// _____________________________________________________________________________
-size_t IndexImpl::subjectCardinality(const TripleComponent& sub) const {
-  std::optional<Id> relId = sub.toValueId(getVocab());
-  if (relId.has_value()) {
-    if (this->_SPO.metaData().col0IdExists(relId.value())) {
-      return this->_SPO.metaData().getMetaData(relId.value()).getNofElements();
-    }
-  }
-  return 0;
-}
-
-// _____________________________________________________________________________
-size_t IndexImpl::objectCardinality(const TripleComponent& obj) const {
-  std::optional<Id> relId = obj.toValueId(getVocab());
-  if (relId.has_value()) {
-    if (this->_OSP.metaData().col0IdExists(relId.value())) {
-      return this->_OSP.metaData().getMetaData(relId.value()).getNofElements();
-    }
-  }
-  return 0;
-}
-
-// _____________________________________________________________________________
 template <class T>
 void IndexImpl::writeAsciiListFile(const string& filename, const T& ids) const {
   std::ofstream f(filename);

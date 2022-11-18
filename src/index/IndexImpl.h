@@ -187,11 +187,32 @@ class IndexImpl {
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------
-  size_t relationCardinality(const string& relationName) const;
+  template <typename Permutation>
+  size_t getCardinality(Id id, const Permutation& permutation) const {
+    if (permutation.metaData().col0IdExists(id)) {
+      return permutation.metaData().getMetaData(id).getNofElements();
+    }
+    return 0;
+  }
 
-  size_t subjectCardinality(const TripleComponent& sub) const;
-
-  size_t objectCardinality(const TripleComponent& obj) const;
+  // ___________________________________________________________________________
+  template <typename Permutation>
+  size_t getCardinality(const TripleComponent& comp,
+                        const Permutation& permutation) const {
+    // TODO<joka921> This special case is only relevant for the `PSO` and `POS`
+    // permutations, but this internal predicate should never appear in subjects
+    // or objects anyway.
+    // TODO<joka921> Find out what the effect of this special case is for the
+    // query planning.
+    if (comp == INTERNAL_TEXT_MATCH_PREDICATE) {
+      return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
+    }
+    std::optional<Id> relId = comp.toValueId(getVocab());
+    if (relId.has_value()) {
+      return getCardinality(relId.value(), permutation);
+    }
+    return 0;
+  }
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.

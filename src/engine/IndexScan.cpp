@@ -323,11 +323,11 @@ size_t IndexScan::computeSizeEstimate() {
     // TODO<joka921> Should be a oneliner
     // getIndex().cardinality(getPermutation(), getFirstKey());
     if (_type == SPO_FREE_P || _type == SOP_FREE_O) {
-      return getIndex().subjectCardinality(_subject);
+      return getIndex().getCardinality(_subject, Index::Permutation::SPO);
     } else if (_type == POS_FREE_O || _type == PSO_FREE_S) {
-      return getIndex().relationCardinality(_predicate);
+      return getIndex().getCardinality(_predicate, Index::Permutation::PSO);
     } else if (_type == OPS_FREE_P || _type == OSP_FREE_S) {
-      return getIndex().objectCardinality(_object);
+      return getIndex().getCardinality(_object, Index::Permutation::OSP);
     }
     // The triple consists of three variables.
     return getIndex().getNofTriples();
@@ -340,6 +340,48 @@ size_t IndexScan::computeSizeEstimate() {
     std::string subjectStr =
         _subject.isString() ? _subject.getString() : _subject.toString();
     return 1000 + subjectStr.size() + _predicate.size() + objectStr.size();
+  }
+}
+
+// _____________________________________________________________________________
+size_t IndexScan::getCostEstimate() {
+  if (getResultWidth() != 3) {
+    return getSizeEstimate();
+  } else {
+    // This is to make unit tests pass that have no explicit execution context.
+    // TODO<joka921> get rid of these unit tests!
+    if (!_executionContext) {
+      return getSizeEstimate();
+    }
+    // The computation of the `full scan` estimate must be consistent with the
+    // full scan dummy joins in `Join.cpp` for correct query planning.
+    // TODO<joka921> Factor out the common code to keep it in sync.
+
+    // The following calculation is done in a way that makes materializing a
+    // full index scan always more expensive than implicitly computing it in the
+    // so-called "dummy joins" (see `Join.h` and `Join.cpp`). To achieve this,
+    // the estimate here is computed analogously to the estimates of the dummy
+    // joins, but with an additional penalty factor. The overall goal is to make
+    // the query planner only materialize a full index scan if there is no other
+    // way to compute the query.
+
+    // Note that we cannot set the cost to `infinity` or `max`, because this
+    // might lead to overflows in upstream operations when the cost estimate is
+    // an integer (this currently is the case). When implementing them as
+    // floating point numbers, a cost estimate of `infinity` would
+    // remove the ability to distinguish the costs of plans that perform full
+    // scans but still have different overall costs.
+    // TODO<joka921> The conceptually right way to do this is to make the cost
+    // estimate a tuple `(numFullIndexScans, costEstimateForRemainder)`.
+    // Implement this functionality.
+    size_t diskRandomAccessCost =
+        _executionContext->getCostFactor("DISK_RANDOM_ACCESS_COST");
+    size_t numScans = getSizeEstimate() / getMultiplicity(0);
+    size_t averageScanSize = getMultiplicity(0);
+    static constexpr size_t fullScanPenalty = 1'000;
+    auto totalCost =
+        fullScanPenalty * numScans * (diskRandomAccessCost + averageScanSize);
+    return totalCost;
   }
 }
 

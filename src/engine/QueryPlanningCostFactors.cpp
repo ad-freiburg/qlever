@@ -20,8 +20,11 @@ QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {
   _factors["FILTER_SELECTIVITY"] = 0.1;
   _factors["HASH_MAP_OPERATION_COST"] = 50.0;
   _factors["JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR"] = 0.7;
-  _factors["DUMMY_JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR"] = 1000.0;
-  _factors["DISK_RANDOM_ACCESS_COST"] = 1000;
+  _factors["DUMMY_JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR"] = 0.7;
+
+  // Assume that a random disk seek is 100 times more expensive than an
+  // average `O(1)` access to a single ID.
+  _factors["DISK_RANDOM_ACCESS_COST"] = 100;
 }
 
 // _____________________________________________________________________________

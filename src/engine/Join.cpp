@@ -240,8 +240,15 @@ size_t Join::getCostEstimate() {
     // Normal case:
     costJoin = _left->getSizeEstimate() + _right->getSizeEstimate();
   }
-  return getSizeEstimate() + _left->getCostEstimate() +
-         _right->getCostEstimate() + costJoin;
+
+  // TODO<joka921> once the `getCostEstimate` functions are `const`,
+  // the argument can also be `const auto`
+  auto costIfNotFullScan = [](auto& subtree) {
+    return isFullScanDummy(subtree) ? size_t{0} : subtree->getCostEstimate();
+  };
+
+  return getSizeEstimate() + costJoin + costIfNotFullScan(_left) +
+         costIfNotFullScan(_right);
 }
 
 // _____________________________________________________________________________
