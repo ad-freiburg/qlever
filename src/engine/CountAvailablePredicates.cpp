@@ -140,10 +140,12 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
                << std::endl;
 
     int width = subresult->_idTable.cols();
-    CALL_FIXED_SIZE_1(width, CountAvailablePredicates::computePatternTrick,
-                      subresult->_idTable, &result->_idTable, hasPattern,
-                      hasPredicate, patterns, _subjectColumnIndex,
-                      &runtimeInfo);
+    auto countLambda = [&, this](auto WIDTH) {
+      return CountAvailablePredicates::computePatternTrick<WIDTH>(
+          subresult->_idTable, &result->_idTable, hasPattern, hasPredicate,
+          patterns, _subjectColumnIndex, &runtimeInfo);
+    };
+    return ad_utility::callFixedSize1(width, countLambda);
   }
   LOG(DEBUG) << "CountAvailablePredicates result computation done."
              << std::endl;

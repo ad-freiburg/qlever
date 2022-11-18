@@ -691,11 +691,14 @@ void TransitivePath::computeResult(ResultTable* result) {
       }
     }
     int leftWidth = leftRes->_idTable.cols();
-    CALL_FIXED_SIZE_3(subWidth, leftWidth, _resultWidth,
-                      computeTransitivePathLeftBound, &result->_idTable,
-                      subRes->_idTable, leftRes->_idTable, _leftSideCol,
-                      _rightIsVar, _leftSubCol, _rightSubCol, _rightValue,
-                      _minDist, _maxDist, _resultWidth);
+    auto transPathLambda = [&, this](auto I, auto J, auto K) {
+      return computeTransitivePathLeftBound<I, J, K>(
+          &result->_idTable, subRes->_idTable, leftRes->_idTable, _leftSideCol,
+          _rightIsVar, _leftSubCol, _rightSubCol, _rightValue, _minDist,
+          _maxDist, _resultWidth);
+    };
+    ad_utility::callFixedSize3(subWidth, leftWidth, _resultWidth,
+                               transPathLambda);
   } else if (_rightSideTree != nullptr) {
     shared_ptr<const ResultTable> rightRes = _rightSideTree->getResult();
     for (size_t c = 0; c < rightRes->_idTable.cols(); c++) {
@@ -704,16 +707,22 @@ void TransitivePath::computeResult(ResultTable* result) {
       }
     }
     int rightWidth = rightRes->_idTable.cols();
-    CALL_FIXED_SIZE_3(subWidth, rightWidth, _resultWidth,
-                      computeTransitivePathRightBound, &result->_idTable,
-                      subRes->_idTable, rightRes->_idTable, _rightSideCol,
-                      _leftIsVar, _leftSubCol, _rightSubCol, _leftValue,
-                      _minDist, _maxDist, _resultWidth);
+    auto transPathLambda = [&, this](auto I, auto J, auto K) {
+      return computeTransitivePathRightBound<I, J, K>(
+          &result->_idTable, subRes->_idTable, rightRes->_idTable,
+          _rightSideCol, _leftIsVar, _leftSubCol, _rightSubCol, _leftValue,
+          _minDist, _maxDist, _resultWidth);
+    };
+    ad_utility::callFixedSize3(subWidth, rightWidth, _resultWidth,
+                               transPathLambda);
   } else {
-    CALL_FIXED_SIZE_1(subWidth, computeTransitivePath, &result->_idTable,
-                      subRes->_idTable, _leftIsVar, _rightIsVar, _leftSubCol,
-                      _rightSubCol, _leftValue, _rightValue, _minDist,
-                      _maxDist);
+    auto transPathLambda = [&, this](auto SUB_WIDTH) {
+      return computeTransitivePath<SUB_WIDTH>(
+          &result->_idTable, subRes->_idTable, _leftIsVar, _rightIsVar,
+          _leftSubCol, _rightSubCol, _leftValue, _rightValue, _minDist,
+          _maxDist);
+    };
+    ad_utility::callFixedSize1(subWidth, transPathLambda);
   }
 
   LOG(DEBUG) << "TransitivePath result computation done." << std::endl;

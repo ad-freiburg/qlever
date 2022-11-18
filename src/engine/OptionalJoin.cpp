@@ -115,9 +115,12 @@ void OptionalJoin::computeResult(ResultTable* result) {
   int leftWidth = leftResult->_idTable.cols();
   int rightWidth = rightResult->_idTable.cols();
   int resWidth = result->_idTable.cols();
-  CALL_FIXED_SIZE_3(leftWidth, rightWidth, resWidth, optionalJoin,
-                    leftResult->_idTable, rightResult->_idTable, _leftOptional,
-                    _rightOptional, _joinColumns, &result->_idTable);
+  auto joinLambda = [&, this](auto I, auto J, auto K) {
+    return optionalJoin<I, J, K>(leftResult->_idTable, rightResult->_idTable,
+                                 _leftOptional, _rightOptional, _joinColumns,
+                                 &result->_idTable);
+  };
+  ad_utility::callFixedSize3(leftWidth, rightWidth, resWidth, joinLambda);
   LOG(DEBUG) << "OptionalJoin result computation done." << endl;
 }
 

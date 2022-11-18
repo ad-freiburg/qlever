@@ -109,9 +109,12 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
   int leftWidth = leftResult->_idTable.cols();
   int rightWidth = rightResult->_idTable.cols();
   int resWidth = result->_idTable.cols();
-  CALL_FIXED_SIZE_3(leftWidth, rightWidth, resWidth, computeMultiColumnJoin,
-                    leftResult->_idTable, rightResult->_idTable, _joinColumns,
-                    &result->_idTable);
+  auto joinLambda = [&, this](auto I, auto J, auto K) {
+    return computeMultiColumnJoin<I, J, K>(leftResult->_idTable,
+                                           rightResult->_idTable, _joinColumns,
+                                           &result->_idTable);
+  };
+  ad_utility::callFixedSize3(leftWidth, rightWidth, resWidth, joinLambda);
   LOG(DEBUG) << "MultiColumnJoin result computation done." << endl;
 }
 

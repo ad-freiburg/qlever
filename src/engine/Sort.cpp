@@ -81,7 +81,10 @@ void Sort::computeResult(ResultTable* result) {
   result->_idTable.insert(result->_idTable.end(), subRes->_idTable.begin(),
                           subRes->_idTable.end());
   int width = result->_idTable.cols();
-  CALL_FIXED_SIZE_1(width, Engine::sort, &result->_idTable, _sortCol);
+  auto sortLambda = [&, this](auto WIDTH) {
+    return Engine::sort<WIDTH>(&result->_idTable, _sortCol);
+  };
+  ad_utility::callFixedSize1(width, sortLambda);
   result->_sortedBy = resultSortedOn();
 
   LOG(DEBUG) << "Sort result computation done." << endl;

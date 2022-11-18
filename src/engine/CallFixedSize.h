@@ -22,31 +22,6 @@
 // =============================================================================
 // One Variable
 // =============================================================================
-#define CALL_FIXED_SIZE_1(i, func, ...) \
-  if (i == 1) {                         \
-    func<1>(__VA_ARGS__);               \
-  } else if (i == 2) {                  \
-    func<2>(__VA_ARGS__);               \
-  } else if (i == 3) {                  \
-    func<3>(__VA_ARGS__);               \
-  } else if (i == 4) {                  \
-    func<4>(__VA_ARGS__);               \
-  } else if (i == 5) {                  \
-    func<5>(__VA_ARGS__);               \
-  } else if (i == 6) {                  \
-    func<6>(__VA_ARGS__);               \
-  } else if (i == 7) {                  \
-    func<7>(__VA_ARGS__);               \
-  } else if (i == 8) {                  \
-    func<8>(__VA_ARGS__);               \
-  } else if (i == 9) {                  \
-    func<9>(__VA_ARGS__);               \
-  } else if (i == 10) {                 \
-    func<10>(__VA_ARGS__);              \
-  } else {                              \
-    func<0>(__VA_ARGS__);               \
-  }
-
 // =============================================================================
 // Two Variables
 // =============================================================================
@@ -83,51 +58,6 @@
 // =============================================================================
 // Three Variables
 // =============================================================================
-#define _CALL_FIXED_SIZE_3_i_j(i, j, k, func, ...) \
-  if (k == 1) {                                    \
-    func<i, j, 1>(__VA_ARGS__);                    \
-  } else if (k == 2) {                             \
-    func<i, j, 2>(__VA_ARGS__);                    \
-  } else if (k == 3) {                             \
-    func<i, j, 3>(__VA_ARGS__);                    \
-  } else if (k == 4) {                             \
-    func<i, j, 4>(__VA_ARGS__);                    \
-  } else if (k == 5) {                             \
-    func<i, j, 5>(__VA_ARGS__);                    \
-  } else {                                         \
-    func<i, j, 0>(__VA_ARGS__);                    \
-  }
-
-#define _CALL_FIXED_SIZE_3_i(i, j, k, func, ...)       \
-  if (j == 1) {                                        \
-    _CALL_FIXED_SIZE_3_i_j(i, 1, k, func, __VA_ARGS__) \
-  } else if (j == 2) {                                 \
-    _CALL_FIXED_SIZE_3_i_j(i, 2, k, func, __VA_ARGS__) \
-  } else if (j == 3) {                                 \
-    _CALL_FIXED_SIZE_3_i_j(i, 3, k, func, __VA_ARGS__) \
-  } else if (j == 4) {                                 \
-    _CALL_FIXED_SIZE_3_i_j(i, 4, k, func, __VA_ARGS__) \
-  } else if (j == 5) {                                 \
-    _CALL_FIXED_SIZE_3_i_j(i, 5, k, func, __VA_ARGS__) \
-  } else {                                             \
-    _CALL_FIXED_SIZE_3_i_j(i, 0, k, func, __VA_ARGS__) \
-  }
-
-#define CALL_FIXED_SIZE_3(i, j, k, func, ...)        \
-  if (i == 1) {                                      \
-    _CALL_FIXED_SIZE_3_i(1, j, k, func, __VA_ARGS__) \
-  } else if (i == 2) {                               \
-    _CALL_FIXED_SIZE_3_i(2, j, k, func, __VA_ARGS__) \
-  } else if (i == 3) {                               \
-    _CALL_FIXED_SIZE_3_i(3, j, k, func, __VA_ARGS__) \
-  } else if (i == 4) {                               \
-    _CALL_FIXED_SIZE_3_i(4, j, k, func, __VA_ARGS__) \
-  } else if (i == 5) {                               \
-    _CALL_FIXED_SIZE_3_i(5, j, k, func, __VA_ARGS__) \
-  } else {                                           \
-    _CALL_FIXED_SIZE_3_i(0, j, k, func, __VA_ARGS__) \
-  }
-
 namespace ad_utility {
 template <int i>
 static constexpr auto INT = std::integral_constant<int, i>{};
@@ -146,6 +76,28 @@ decltype(auto) callLambdaWithStaticInt(int i, auto&& lambda) {
   } else {
     return lambda.template operator()<0>();
   }
+}
+
+decltype(auto) callFixedSize1(int i, auto&& functor, auto&&... args) {
+  auto lambda = [&]<int I>() -> decltype(auto) {
+    return std::invoke(AD_FWD(functor), INT<I>, AD_FWD(args)...);
+  };
+  return callLambdaWithStaticInt(i, lambda);
+};
+
+template <int i>
+decltype(auto) callFixedSize2I(int j, auto&& functor, auto&&... args) {
+  auto lambda = [&]<int J>() -> decltype(auto) {
+    return std::invoke(AD_FWD(functor), INT<i>, INT<J>, AD_FWD(args)...);
+  };
+  return callLambdaWithStaticInt(j, lambda);
+}
+
+decltype(auto) callFixedSize2(int i, int j, auto&& functor, auto&&... args) {
+  auto lambda = [&]<int I>() -> decltype(auto) {
+    return callFixedSize2I<i>(j, AD_FWD(functor), AD_FWD(args)...);
+  };
+  return callLambdaWithStaticInt(i, lambda);
 }
 
 template <int i, int j>

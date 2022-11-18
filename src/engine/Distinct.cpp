@@ -50,7 +50,10 @@ void Distinct::computeResult(ResultTable* result) {
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
   int width = subRes->_idTable.cols();
-  CALL_FIXED_SIZE_1(width, getEngine().distinct, subRes->_idTable, _keepIndices,
-                    &result->_idTable);
+  auto distinctLambda = [&, this](const auto WIDTH) {
+    return getEngine().distinct<WIDTH>(subRes->_idTable, _keepIndices,
+                                       &result->_idTable);
+  };
+  ad_utility::callFixedSize1(width, distinctLambda);
   LOG(DEBUG) << "Distinct result computation done." << endl;
 }
