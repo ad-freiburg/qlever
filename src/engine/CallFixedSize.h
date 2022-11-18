@@ -4,6 +4,10 @@
 
 #pragma once
 
+#include <functional>
+
+#include "util/Forward.h"
+
 // The macros in this file provide automatic generation of if clauses that
 // enable transformation of runtime variables to a limited range of compile
 // time values and a default case. Currently this means that
@@ -123,3 +127,49 @@
   } else {                                           \
     _CALL_FIXED_SIZE_3_i(0, j, k, func, __VA_ARGS__) \
   }
+
+namespace ad_utility {
+template <int i>
+static constexpr auto INT = std::integral_constant<int, i>{};
+
+decltype(auto) callLambdaWithStaticInt(int i, auto&& lambda) {
+  if (i == 1) {
+    return lambda.template operator()<1>();
+  } else if (i == 2) {
+    return lambda.template operator()<2>();
+  } else if (i == 3) {
+    return lambda.template operator()<3>();
+  } else if (i == 4) {
+    return lambda.template operator()<4>();
+  } else if (i == 5) {
+    return lambda.template operator()<5>();
+  } else {
+    return lambda.template operator()<0>();
+  }
+}
+
+template <int i, int j>
+decltype(auto) callFixedSize3IJ(int k, auto&& functor, auto&&... args) {
+  auto lambda = [&]<int K>() -> decltype(auto) {
+    return std::invoke(AD_FWD(functor), INT<i>, INT<j>, INT<K>,
+                       AD_FWD(args)...);
+  };
+  return callLambdaWithStaticInt(k, lambda);
+};
+
+template <int i>
+decltype(auto) callFixedSize3I(int j, int k, auto&& functor, auto&&... args) {
+  auto lambda = [&]<int J>() -> decltype(auto) {
+    return callFixedSize3IJ<i, J>(k, AD_FWD(functor), AD_FWD(args)...);
+  };
+  return callLambdaWithStaticInt(j, lambda);
+}
+
+decltype(auto) callFixedSize3(int i, int j, int k, auto&& functor,
+                              auto&&... args) {
+  auto lambda = [&]<int I>() -> decltype(auto) {
+    return callFixedSize3I<I>(j, k, AD_FWD(functor), AD_FWD(args)...);
+  };
+  return callLambdaWithStaticInt(i, lambda);
+}
+}  // namespace ad_utility
