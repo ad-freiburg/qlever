@@ -127,6 +127,8 @@ std::string_view RuntimeInformation::toString(Status status) {
       return "completed";
     case notStarted:
       return "not started";
+    case optimizedOut:
+      return "optimized out";
     case failed:
       return "failed";
     case failedBecauseChildFailed:

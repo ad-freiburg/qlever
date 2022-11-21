@@ -149,6 +149,8 @@ class GroupBy : public Operation {
   // actual computation are split up in two functions. This struct contains
   // information that has to be passed between the check and the computation.
   struct OptimizedGroupByData {
+    // The three variable triple subtree
+    const QueryExecutionTree& threeVariableTripleSubtree_;
     // The subtree of the `JOIN` operation that is *not* the three variable
     // triple.
     const QueryExecutionTree& otherSubtree_;
