@@ -4,8 +4,16 @@
 
 #pragma once
 
-#include <functional>
+// TODO<joka921, clang> Clang 13 issues a lot of strange and false positive
+// warnings (this bug was fixed in clang 14 and newer. This suppresses all
+// warnings for this file. Remove this pragma as soon as we no longer support
+// clang 13.
+#pragma clang system_header
 
+#include <functional>
+#include <optional>
+
+#include "util/Exception.h"
 #include "util/Forward.h"
 
 // The macros in this file provide automatic generation of if clauses that
@@ -31,45 +39,37 @@ namespace ad_utility {
 namespace detail {
 template <int i>
 static constexpr auto INT = std::integral_constant<int, i>{};
-// Internal helper function that calls the `lambda` with `i'`(see above)
-// as an explicit template parameter.
-decltype(auto) callLambdaWithStaticInt(int i, auto&& lambda) {
-  if (i == 1) {
-    return lambda.template operator()<1>();
-  } else if (i == 2) {
-    return lambda.template operator()<2>();
-  } else if (i == 3) {
-    return lambda.template operator()<3>();
-  } else if (i == 4) {
-    return lambda.template operator()<4>();
-  } else if (i == 5) {
-    return lambda.template operator()<5>();
-  } else {
-    return lambda.template operator()<0>();
+// Internal helper function that calls the `lambda` with `i`(see above)
+// as an explicit template parameter. Requires that `i <= maxValue`.
+template <int maxValue>
+decltype(auto) callLambdaWithStaticInt2(int i, auto&& lambda, auto&&... args) {
+  AD_CHECK(i <= maxValue);
+  using Result = decltype(lambda.template operator()<1>());
+  using Storage = std::conditional_t<std::is_void_v<Result>, int, std::optional<Result>>;
+
+  Storage result;
+  auto applyIf = [&result, lambda = AD_FWD(lambda),
+                  &... args = AD_FWD(args)]<int I>(int i) mutable {
+    if (i == I) {
+      if constexpr (std::is_void_v<Result>) {
+        lambda.template operator()<I>(AD_FWD(args)...);
+      } else {
+        result = lambda.template operator()<I>(AD_FWD(args)...);
+      }
+    }
+  };
+
+  auto f = [&applyIf, i ]<int... Is>(std::integer_sequence<int, Is...>) {
+    (..., applyIf.template operator()<Is>(i));
+  };
+  f(std::make_integer_sequence<int, maxValue>{});
+
+  if constexpr (!std::is_void_v<Result>) {
+    return std::move(result.value());
   }
 }
-template<int maxValue>
-decltype(auto) callLambdaWithStaticInt2(int i, auto&& lambda, auto&&...args) {
-  using Result = decltype(lambda.template operator()<1>);
 
-  using Storage = std::conditional_t<std::is_void<Result>, void, std::optional<Result>>;
-
-  auto applyIf =
-
-  if (i == 1) {
-    return lambda.template operator()<1>();
-  } else if (i == 2) {
-    return lambda.template operator()<2>();
-  } else if (i == 3) {
-    return lambda.template operator()<3>();
-  } else if (i == 4) {
-    return lambda.template operator()<4>();
-  } else if (i == 5) {
-    return lambda.template operator()<5>();
-  } else {
-    return lambda.template operator()<0>();
-  }
-}
+constexpr int prime(int x, int maxValue) { return x < maxValue ? x : 0; }
 }
 
 // =============================================================================
@@ -82,116 +82,53 @@ decltype(auto) callFixedSize1(int i, auto&& functor, auto&&... args) {
   auto lambda = [&]<int I>() -> decltype(auto) {
     return std::invoke(AD_FWD(functor), detail::INT<I>, AD_FWD(args)...);
   };
-  return callLambdaWithStaticInt(i, std::move(lambda));
+  return callLambdaWithStaticInt2<6>(prime(i, 6), std::move(lambda));
 };
-
-// =============================================================================
-// Two Variables
-// =============================================================================
-namespace detail {
-// Helper function for the two parameter case when we have
-// already lifted the first runtime parameter i to a compile
-// time constant with value i'.
-template <int i>
-decltype(auto) callFixedSize2I(int j, auto&& functor, auto&&... args) {
-  using namespace detail;
-  auto lambda = [&]<int J>() -> decltype(auto) {
-    return std::invoke(AD_FWD(functor), INT<i>, INT<J>, AD_FWD(args)...);
-  };
-  return callLambdaWithStaticInt(j, lambda);
-}
-}
 
 // Main implementation for the two variable case.
 decltype(auto) callFixedSize2(int i, int j, auto&& functor, auto&&... args) {
   using namespace detail;
-  auto lambda = [&]<int I>() -> decltype(auto) {
-    return callFixedSize2I<I>(j, AD_FWD(functor), AD_FWD(args)...);
+  static constexpr int numValues = 6;
+  auto p = [](int x) { return prime(x, numValues); };
+  int value = p(i) * numValues + p(j);
+  auto lambda = [functor = AD_FWD(functor), &args...]<int I>() mutable -> decltype(auto) {
+    return AD_FWD(functor)(INT<I / numValues>, INT<I % numValues>, AD_FWD(args)...);
   };
-  return callLambdaWithStaticInt(i, std::move(lambda));
+  return callLambdaWithStaticInt2<numValues * numValues>(value, std::move(lambda));
 }
 
-// =============================================================================
-// Three Variables
-// =============================================================================
-
-namespace detail {
-// Helper function for the three variable case where the first two parameters
-// `i` and `j` have already been lifted to compile time parameters `i'` and `j'`.
-template <int i, int j>
-decltype(auto) callFixedSize3IJ(int k, auto&& functor, auto&&... args) {
-  auto lambda = [&]<int K>() -> decltype(auto) {
-    return std::invoke(AD_FWD(functor), INT<i>, INT<j>, INT<K>,
-                       AD_FWD(args)...);
-  };
-  return callLambdaWithStaticInt(k, lambda);
-};
-
-// Helper function for the three variable case where the first parameter
-// `i` has already been lifted to a compile time parameters `i'`.
-template <int i>
-decltype(auto) callFixedSize3I(int j, int k, auto&& functor, auto&&... args) {
-  auto lambda = [&]<int J>() -> decltype(auto) {
-    return callFixedSize3IJ<i, J>(k, AD_FWD(functor), AD_FWD(args)...);
-  };
-  return callLambdaWithStaticInt(j, lambda);
-}
-}
-
-namespace detail {
-
-decltype(auto) lift(auto nextInt, auto&& lambda) {
-  return [&]() {
-    if (nextInt == 1) {
-      return lambda(INT<1>);
-    } else {
-      return lambda(INT<0>);
-    }
-  };
-
-
-
-}
-
-}
-
-
-// The main implementation for the three variable case.
-decltype(auto) callFixedSize3(int i, int j, int k, auto&& functor,
-                              auto&&... args) {
+// Three variables.
+decltype(auto) callFixedSize3(int i, int j, int k, auto&& functor, auto&&... args) {
   using namespace detail;
-  auto lambda = [&]<int I>() -> decltype(auto) {
-    return callFixedSize3I<I>(j, k, AD_FWD(functor), AD_FWD(args)...);
+  static constexpr int numValues = 6;
+  auto p = [](int x) { return prime(x, numValues); };
+  int value = p(i) * numValues * numValues + p(j) * numValues + p(k);
+  auto lambda = [functor = AD_FWD(functor), &args...]<int I>() mutable -> decltype(auto) {
+    return AD_FWD(functor)(INT<I / numValues / numValues>, INT<(I / numValues) % numValues>,
+                           INT<I % numValues>, AD_FWD(args)...);
   };
-  return callLambdaWithStaticInt(i, lambda);
-
-  /*
-   return lift(i, lift(j, lift(k, someLambda)));
-   */
+  return callLambdaWithStaticInt2<numValues * numValues * numValues>(value, std::move(lambda));
 }
 }  // namespace ad_utility
 
 // The definitions of the lambdas.
-#define CALL_FIXED_SIZE_1(i, func, ...)                      \
-  ad_utility::callFixedSize1(                                \
-      i,                                                     \
-      []<>(auto I, auto&&... args) -> decltype(auto) { \
-        return std::invoke(func<I>, AD_FWD(args)...);       \
+#define CALL_FIXED_SIZE_1(i, func, ...)                                                     \
+  ad_utility::callFixedSize1(                                                               \
+      i, [](auto I, auto&&... args) -> decltype(auto) { return func<I>(AD_FWD(args)...); }, \
+      __VA_ARGS__)
+
+#define CALL_FIXED_SIZE_2(i, j, func, ...)                   \
+  ad_utility::callFixedSize2(                                \
+      i, j,                                                  \
+      [](auto I, auto J, auto&&... args) -> decltype(auto) { \
+        return std::invoke(func<I, J>, AD_FWD(args)...);     \
       },                                                     \
       __VA_ARGS__)
 
-#define CALL_FIXED_SIZE_2(i, j, func, ...)                          \
-  ad_utility::callFixedSize2(                                       \
-      i,                                                            \
-      j, [](auto I, auto J, auto&&... args) ->decltype(auto) { \
-        return std::invoke(func<I, J>,AD_FWD(args)...);                         \
-      },                                                            \
-      __VA_ARGS__)
-
-#define CALL_FIXED_SIZE_3(i, j, k, func, ...)                        \
-  ad_utility::callFixedSize3(                                        \
-      i, j, k,                                                       \
+#define CALL_FIXED_SIZE_3(i, j, k, func, ...)                         \
+  ad_utility::callFixedSize3(                                         \
+      i, j, k,                                                        \
       [&](auto I, auto J, auto K, auto&&... args) -> decltype(auto) { \
-        return std::invoke(func<I, J, K>,AD_FWD(args)...);                       \
-      },                                                             \
+        return std::invoke(func<I, J, K>, AD_FWD(args)...);           \
+      },                                                              \
       __VA_ARGS__)

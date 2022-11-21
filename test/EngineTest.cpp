@@ -40,7 +40,7 @@ TEST(EngineTest, joinTest) {
   int rwidth = b.cols();
   int reswidth = a.cols() + b.cols() - 1;
   Join J{Join::InvalidOnlyForTestingJoinTag{}};
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, a, 0, b, 0, &res);
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, &Join::join, J, a, 0, b, 0, &res);
 
   ASSERT_EQ(I(1), res(0, 0));
   ASSERT_EQ(I(1), res(0, 1));
@@ -66,7 +66,7 @@ TEST(EngineTest, joinTest) {
   a.push_back({I(400000), I(200000)});
   b.push_back({I(400000), I(200000)});
 
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, a, 0, b, 0, &res);
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, &Join::join, J, a, 0, b, 0, &res);
   ASSERT_EQ(6u, res.size());
 
   a.clear();
@@ -84,7 +84,8 @@ TEST(EngineTest, joinTest) {
   }
   a.push_back({I(4000001), I(200000)});
   b.push_back({I(4000001), I(200000)});
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, a, 0, b, 0, &res);
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, &Join::join, &J, a, 0, b, 0,
+                    &res);
   ASSERT_EQ(2u, res.size());
 
   a.clear();
@@ -104,7 +105,7 @@ TEST(EngineTest, joinTest) {
   reswidth = b.cols() + c.cols() - 1;
   // reset the IdTable.
   res = IdTable(reswidth, allocator());
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, b, 0, c, 0, &res);
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, &Join::join, J, b, 0, c, 0, &res);
 
   ASSERT_EQ(2u, res.size());
 

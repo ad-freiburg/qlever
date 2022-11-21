@@ -1029,7 +1029,8 @@ void IndexImpl::getFilteredECListForWordsWidthOne(const string& words,
     FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
         cids, eids, scores, fSet, limit, result);
   } else {
-    CALL_FIXED_SIZE_1(width, FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,
+    CALL_FIXED_SIZE_1(width,
+                      FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,
                       cids, eids, scores, fSet, nofVars, limit, result);
   }
   LOG(DEBUG) << "Done with getFilteredECListForWords. Result size: "
