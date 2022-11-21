@@ -8,7 +8,9 @@
 // warnings (this bug was fixed in clang 14 and newer. This suppresses all
 // warnings for this file. Remove this pragma as soon as we no longer support
 // clang 13.
+#ifdef __clang__
 #pragma clang system_header
+#endif
 
 #include <functional>
 #include <optional>
