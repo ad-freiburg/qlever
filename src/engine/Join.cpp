@@ -148,7 +148,7 @@ void Join::computeResult(ResultTable* result) {
   };
   ad_utility::callFixedSize3(lwidth, rwidth, reswidth, joinLambda);
    */
-  CALL_FIXED_SIZE_MEMBER_3(lwidth, rwidth, reswidth, join, leftRes->_idTable, _leftJoinCol, rightRes->_idTable,
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, &Join::join, this, leftRes->_idTable, _leftJoinCol, rightRes->_idTable,
                          _rightJoinCol, &result->_idTable);
 
   // If only one of the two operands has a local vocab, pass it on.

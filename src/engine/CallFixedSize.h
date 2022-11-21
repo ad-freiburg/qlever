@@ -13,25 +13,20 @@
 // time values and a default case. There are currently two possibilities to use this interface:
 // 1. Using the macros CALL_FIXED_SIZE_1, CALL_FIXED_SIZE_2 and CALL_FIXED_SIZE_3.
 //    `CALL_FIXED_SIZE_1(i, func, additionalArguments...)` calls
-//     `func<i'>(additionalArguments...)` where `i' = i <=5? i : 0`
-//    `i` must be an integer. If the macro is inside a member function of a class,
-//    and `func` is the name of a member function of the same class, then the
-//    `CALL_FIXED_SIZE_MEMBER_1` macro has to be used.
+//     `std::invoke(func<i'>, additionalArguments...)` where `i' = i <=5? i : 0`
+//    `i` must be an integer.
 //   `CALL_FIXED_SIZE_2` and `CALL_FIXED_SIZE_3` work similarly, but with 2 or 3
 //   integer arguments that are converted to template parameters.
 // 2. Using the templated functions `callFixedSize1`, `callFixedSize2` and `callFixedSize3`,
 //    that all live inside the `ad_utility` namespace.
 //    `callFixedSize1(i, lambda, args...)` calls
 //    `lambda(std::integer_constant<int, i'>, args...)`
-// The first version allows a convenient syntax for member functions that are
-// templated on several integers (typically the width of IdTables, where `0` means
-// "dynamic" (see `IdTable.h`). The second version allows to work with lambda
-// objects that can be passed across function boundaries.
-// For example usages, see `test/CallFixedSizeTest.cpp`
+// The first version allows a convenient syntax for most cases.
+// The second version provides a macro-free typesafe interface that can be also
+// used in the corner cases where the first version fails. It also is easier
+// to maintain (e.g. to set the maximal value the template arguments to more
+// than 5.
 
-// =============================================================================
-// Three Variables
-// =============================================================================
 namespace ad_utility {
 namespace detail {
 template <int i>
@@ -39,6 +34,28 @@ static constexpr auto INT = std::integral_constant<int, i>{};
 // Internal helper function that calls the `lambda` with `i'`(see above)
 // as an explicit template parameter.
 decltype(auto) callLambdaWithStaticInt(int i, auto&& lambda) {
+  if (i == 1) {
+    return lambda.template operator()<1>();
+  } else if (i == 2) {
+    return lambda.template operator()<2>();
+  } else if (i == 3) {
+    return lambda.template operator()<3>();
+  } else if (i == 4) {
+    return lambda.template operator()<4>();
+  } else if (i == 5) {
+    return lambda.template operator()<5>();
+  } else {
+    return lambda.template operator()<0>();
+  }
+}
+template<int maxValue>
+decltype(auto) callLambdaWithStaticInt2(int i, auto&& lambda, auto&&...args) {
+  using Result = decltype(lambda.template operator()<1>);
+
+  using Storage = std::conditional_t<std::is_void<Result>, void, std::optional<Result>>;
+
+  auto applyIf =
+
   if (i == 1) {
     return lambda.template operator()<1>();
   } else if (i == 2) {
@@ -94,6 +111,10 @@ decltype(auto) callFixedSize2(int i, int j, auto&& functor, auto&&... args) {
   return callLambdaWithStaticInt(i, std::move(lambda));
 }
 
+// =============================================================================
+// Three Variables
+// =============================================================================
+
 namespace detail {
 // Helper function for the three variable case where the first two parameters
 // `i` and `j` have already been lifted to compile time parameters `i'` and `j'`.
@@ -117,6 +138,24 @@ decltype(auto) callFixedSize3I(int j, int k, auto&& functor, auto&&... args) {
 }
 }
 
+namespace detail {
+
+decltype(auto) lift(auto nextInt, auto&& lambda) {
+  return [&]() {
+    if (nextInt == 1) {
+      return lambda(INT<1>);
+    } else {
+      return lambda(INT<0>);
+    }
+  };
+
+
+
+}
+
+}
+
+
 // The main implementation for the three variable case.
 decltype(auto) callFixedSize3(int i, int j, int k, auto&& functor,
                               auto&&... args) {
@@ -125,6 +164,10 @@ decltype(auto) callFixedSize3(int i, int j, int k, auto&& functor,
     return callFixedSize3I<I>(j, k, AD_FWD(functor), AD_FWD(args)...);
   };
   return callLambdaWithStaticInt(i, lambda);
+
+  /*
+   return lift(i, lift(j, lift(k, someLambda)));
+   */
 }
 }  // namespace ad_utility
 
@@ -132,16 +175,8 @@ decltype(auto) callFixedSize3(int i, int j, int k, auto&& functor,
 #define CALL_FIXED_SIZE_1(i, func, ...)                      \
   ad_utility::callFixedSize1(                                \
       i,                                                     \
-      [](auto I, auto&&... args) -> decltype(auto) { \
-        return func<I>(AD_FWD(args)...);                     \
-      },                                                     \
-      __VA_ARGS__)
-
-#define CALL_FIXED_SIZE_MEMBER_1(i, func, ...)                      \
-  ad_utility::callFixedSize1(                                \
-      i,                                                     \
-      [this](auto I, auto&&... args) -> decltype(auto) { \
-        return func<I>(AD_FWD(args)...);                     \
+      []<>(auto I, auto&&... args) -> decltype(auto) { \
+        return std::invoke(func<I>, AD_FWD(args)...);       \
       },                                                     \
       __VA_ARGS__)
 
@@ -149,15 +184,7 @@ decltype(auto) callFixedSize3(int i, int j, int k, auto&& functor,
   ad_utility::callFixedSize2(                                       \
       i,                                                            \
       j, [](auto I, auto J, auto&&... args) ->decltype(auto) { \
-        return func<I, J>(AD_FWD(args)...);                         \
-      },                                                            \
-      __VA_ARGS__)
-
-#define CALL_FIXED_SIZE_MEMBER_2(i, j, func, ...)                          \
-  ad_utility::callFixedSize2(                                       \
-      i,                                                            \
-      j, [&](auto I, auto J, auto&&... args) ->decltype(auto) { \
-        return func<I, J>(AD_FWD(args)...);                         \
+        return std::invoke(func<I, J>,AD_FWD(args)...);                         \
       },                                                            \
       __VA_ARGS__)
 
@@ -165,14 +192,6 @@ decltype(auto) callFixedSize3(int i, int j, int k, auto&& functor,
   ad_utility::callFixedSize3(                                        \
       i, j, k,                                                       \
       [&](auto I, auto J, auto K, auto&&... args) -> decltype(auto) { \
-        return func<I, J, K>(AD_FWD(args)...);                       \
-      },                                                             \
-      __VA_ARGS__)
-
-#define CALL_FIXED_SIZE_MEMBER_3(i, j, k, func, ...)                        \
-  ad_utility::callFixedSize3(                                        \
-      i, j, k,                                                       \
-      [this](auto I, auto J, auto K, auto&&... args) -> decltype(auto) { \
-        return func<I, J, K>(AD_FWD(args)...);                       \
+        return std::invoke(func<I, J, K>,AD_FWD(args)...);                       \
       },                                                             \
       __VA_ARGS__)
