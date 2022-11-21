@@ -443,12 +443,13 @@ std::optional<GroupBy::OptimizedGroupByData> GroupBy::checkIfJoinWithFullScan(
   }
   auto columnIndex = child2->getVariableColumn(groupByVariable);
 
-  return OptimizedGroupByData{*child2, permutation.value(), columnIndex};
+  return OptimizedGroupByData{*child1, *child2, permutation.value(),
+                              columnIndex};
 }
 
 // _____________________________________________________________________________
 bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
-  auto join = dynamic_cast<const Join*>(_subtree->getRootOperation().get());
+  auto join = dynamic_cast<Join*>(_subtree->getRootOperation().get());
   if (!join) {
     return false;
   }
@@ -457,10 +458,16 @@ bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
   if (!optimizedAggregateData.has_value()) {
     return false;
   }
-  const auto& [subtree, permutation, columnIndex] =
+  const auto& [threeVarSubtree, subtree, permutation, columnIndex] =
       optimizedAggregateData.value();
 
   auto subresult = subtree.getResult();
+  threeVarSubtree.getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+      {});
+
+  join->updateRuntimeInformationWhenOptimizedOut(
+      {subtree.getRootOperation()->getRuntimeInfo(),
+       threeVarSubtree.getRootOperation()->getRuntimeInfo()});
   result->_idTable.setCols(2);
   // TODO<joka921> The `resultTypes` are not really in use, but if they are
   // not present, segfaults might occur in upstream `Operation`s.

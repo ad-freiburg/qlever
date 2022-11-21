@@ -256,6 +256,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
   LOG(DEBUG) << "Join by making multiple scans..." << endl;
   if (isFullScanDummy(_left)) {
     AD_CHECK(!isFullScanDummy(_right))
+    _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
     result->_idTable.setCols(_right->getResultWidth() + 2);
     result->_sortedBy = {2 + _rightJoinCol};
     shared_ptr<const ResultTable> nonDummyRes = _right->getResult();
@@ -269,6 +270,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
                                        &result->_idTable);
   } else {
     AD_CHECK(!isFullScanDummy(_left))
+    _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
     result->_idTable.setCols(_left->getResultWidth() + 2);
     result->_sortedBy = {_leftJoinCol};
 

@@ -224,6 +224,21 @@ void Operation::updateRuntimeInformationOnSuccess(
       resultAndCacheStatus._resultPointer->_runtimeInfo);
 }
 
+// _____________________________________________________________________________
+void Operation::updateRuntimeInformationWhenOptimizedOut(
+    std::vector<RuntimeInformation> children) {
+  _runtimeInfo.status_ = RuntimeInformation::Status::optimizedOut;
+  _runtimeInfo.children_ = std::move(children);
+  // The operation time is computed as
+  // `totalTime_ - #sum of childrens' total time#` in `getOperationTime()`.
+  // To set it to zero we thus have to set the `totalTime_` to this sum.
+  _runtimeInfo.totalTime_ = 0;
+  std::ranges::for_each(
+      _runtimeInfo.children_,
+      [this](double time) { _runtimeInfo.totalTime_ += time; },
+      &RuntimeInformation::totalTime_);
+}
+
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
   _runtimeInfo.children_.clear();

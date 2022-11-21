@@ -217,6 +217,19 @@ class Operation {
       const ResultTable& resultTable, bool wasCached, size_t timeInMilliseconds,
       std::optional<RuntimeInformation> runtimeInfo) final;
 
+ public:
+  // This function has to be called when this `Operation` was not executed,
+  // because one of its ancestors used a special implementation that did not
+  // evaluate the full query execution tree. Calling this function sets the
+  // actual operation time to zero and the status to `optimizedOut`. The
+  // runtime information of the children is set to the argument `children`.
+  // This is useful in case this operation was optimized out, but some of the
+  // children were evaluated nevertheless. For an example usage of this feature
+  // see `GroupBy.cpp`
+  virtual void updateRuntimeInformationWhenOptimizedOut(
+      std::vector<RuntimeInformation> children);
+
+ private:
   // Create the runtime information in case the evaluation of this operation has
   // failed.
   void updateRuntimeInformationOnFailure(size_t timeInMilliseconds);
