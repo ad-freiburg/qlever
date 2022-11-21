@@ -65,7 +65,7 @@ void Minus::computeResult(ResultTable* result) {
 
   int leftWidth = leftResult->_idTable.cols();
   int rightWidth = rightResult->_idTable.cols();
-  CALL_FIXED_SIZE_2(leftWidth, rightWidth, computeMinus, leftResult->_idTable,
+  CALL_FIXED_SIZE_MEMBER_2(leftWidth, rightWidth, computeMinus, leftResult->_idTable,
                     rightResult->_idTable, _matchedColumns, &result->_idTable);
   LOG(DEBUG) << "Minus result computation done." << endl;
 }

@@ -141,11 +141,15 @@ void Join::computeResult(ResultTable* result) {
   int rwidth = rightRes->_idTable.cols();
   int reswidth = result->_idTable.cols();
 
+  /*
   auto joinLambda = [&, this](auto I, auto J, auto K) {
     return join<I, J, K>(leftRes->_idTable, _leftJoinCol, rightRes->_idTable,
                          _rightJoinCol, &result->_idTable);
   };
   ad_utility::callFixedSize3(lwidth, rwidth, reswidth, joinLambda);
+   */
+  CALL_FIXED_SIZE_MEMBER_3(lwidth, rwidth, reswidth, join, leftRes->_idTable, _leftJoinCol, rightRes->_idTable,
+                         _rightJoinCol, &result->_idTable);
 
   // If only one of the two operands has a local vocab, pass it on.
   result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
