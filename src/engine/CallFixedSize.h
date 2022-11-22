@@ -57,7 +57,7 @@ namespace detail {
 // `lambda.template operator()<i>(args...)`.
 // Requires that `i <= maxValue`, else an `AD_CHECK` fails.
 template <int maxValue>
-decltype(auto) callLambdaWithStaticInt(int i, auto&& lambda, auto&&... args) {
+auto callLambdaWithStaticInt(int i, auto&& lambda, auto&&... args) {
   AD_CHECK(i <= maxValue);
 
   // We store the result of the actual computation in a `std::optional`.

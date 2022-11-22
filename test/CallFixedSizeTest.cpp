@@ -65,8 +65,7 @@ TEST(CallFixedSize, CallFixedSize1) {
     ASSERT_EQ(callFixedSize1(i, explicitIntConstant), i);
     ASSERT_EQ(callFixedSize1(i, explicitIntConstant, 2, 3), i + 5);
     ASSERT_EQ(callFixedSize1(i, autoIntConstant, 2, 3), i + 5);
-    auto result = CALL_FIXED_SIZE_1(i, templatedFunction, 2, 3);
-    ASSERT_EQ(result, i + 5);
+    ASSERT_EQ(CALL_FIXED_SIZE_1(i, templatedFunction, 2, 3), i + 5);
   }
 
   // Values that are greater than `m` will be mapped to zero before being
@@ -75,8 +74,7 @@ TEST(CallFixedSize, CallFixedSize1) {
     ASSERT_EQ(callFixedSize1(i, explicitIntConstant), 0);
     ASSERT_EQ(callFixedSize1(i, explicitIntConstant, 2, 3), 5);
     ASSERT_EQ(callFixedSize1(i, autoIntConstant, 2, 3), 5);
-    auto result = CALL_FIXED_SIZE_1(i, templatedFunction, 2, 3);
-    ASSERT_EQ(result, 5);
+    ASSERT_EQ(CALL_FIXED_SIZE_1(i, templatedFunction, 2, 3), 5);
   }
 
   // The `callFixedSize1` function also allows to explicitly set the upper
@@ -144,12 +142,8 @@ TEST(CallFixedSize, CallFixedSize2) {
                   i - j + 5);
         ASSERT_EQ(callFixedSize2<m>(i, j, autoIntConstant, 2, 3), i - j + 5);
         if (useMacro) {
-          // TODO<joka921> If those calls are directly inside the
-          // `ASSERT_EQ` macro, then the address sanitizer complains.
-          // Is this a bug in GTESt or (more likely) is some
-          // decltype(auto) stuff wrong.
-          auto result = CALL_FIXED_SIZE_2(i, j, templatedFunction, 2, 3);
-          ASSERT_EQ(result, i - j + 5);
+          ASSERT_EQ(CALL_FIXED_SIZE_2(i, j, templatedFunction, 2, 3),
+                    i - j + 5);
         }
       }
     }
@@ -164,8 +158,7 @@ TEST(CallFixedSize, CallFixedSize2) {
         ASSERT_EQ(callFixedSize2<m>(i, j, explicitIntConstant, 2, 3), i + 5);
         ASSERT_EQ(callFixedSize2<m>(i, j, autoIntConstant, 2, 3), i + 5);
         if (useMacro) {
-          auto result = CALL_FIXED_SIZE_2(i, j, templatedFunction, 2, 3);
-          ASSERT_EQ(result, i + 5);
+          ASSERT_EQ(CALL_FIXED_SIZE_2(i, j, templatedFunction, 2, 3), i + 5);
         }
       }
     }
@@ -176,8 +169,7 @@ TEST(CallFixedSize, CallFixedSize2) {
         ASSERT_EQ(callFixedSize2<m>(i, j, explicitIntConstant, 2, 3), -j + 5);
         ASSERT_EQ(callFixedSize2<m>(i, j, autoIntConstant, 2, 3), -j + 5);
         if (useMacro) {
-          auto result = CALL_FIXED_SIZE_2(i, j, templatedFunction, 2, 3);
-          ASSERT_EQ(result, -j + 5);
+          ASSERT_EQ(CALL_FIXED_SIZE_2(i, j, templatedFunction, 2, 3), -j + 5);
         }
       }
     }
@@ -188,8 +180,7 @@ TEST(CallFixedSize, CallFixedSize2) {
         ASSERT_EQ(callFixedSize2<m>(i, j, explicitIntConstant, 2, 3), 5);
         ASSERT_EQ(callFixedSize2<m>(i, j, autoIntConstant, 2, 3), 5);
         if (useMacro) {
-          auto result = CALL_FIXED_SIZE_2(i, j, templatedFunction, 2, 3);
-          ASSERT_EQ(result, 5);
+          ASSERT_EQ(CALL_FIXED_SIZE_2(i, j, templatedFunction, 2, 3), 5);
         }
       }
     }
