@@ -245,3 +245,5 @@ addLinkAndDiscoverTest(LocalVocabTest engine)
 addLinkAndDiscoverTest(HttpTest boost_iostreams http)
 
 addLinkAndDiscoverTest(CallFixedSizeTest)
+
+addLinkAndDiscoverTest(MetaprogramminTest)

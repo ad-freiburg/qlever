@@ -16,8 +16,9 @@
 #include <optional>
 
 #include "util/Exception.h"
-#include "util/Log.h"
 #include "util/Forward.h"
+#include "util/Log.h"
+#include "util/Metaprogramming.h"
 
 // The macros in this file provide automatic generation of if clauses that
 // enable transformation of runtime variables to a limited range of compile
@@ -42,19 +43,28 @@ namespace ad_utility {
 namespace detail {
 template <int i>
 static constexpr auto INT = std::integral_constant<int, i>{};
-// Internal helper function that calls the `lambda` with `i`(see above)
-// as an explicit template parameter. Requires that `i <= maxValue`.
+// Internal helper function that calls
+// `lambda.template operator()<i>(args...)`.
+// Requires that `i <= maxValue`, else an `AD_CHECK` fails.
 template <int maxValue>
 decltype(auto) callLambdaWithStaticInt(int i, auto&& lambda, auto&&... args) {
   AD_CHECK(i <= maxValue);
-  using Result = decltype(lambda.template operator()<1>());
-  using Storage = std::conditional_t<std::is_void_v<Result>, int, std::optional<Result>>;
 
+  // We store the result of the actual computation in a `std::optional`.
+  // If the `lambda` returns void we don't store anything, but we still need
+  // a type for the `result` variable. We choose `int` as a dummy for this case.
+
+  using Result = decltype(lambda.template operator()<1>());
+  static constexpr bool resultIsVoid = std::is_void_v<Result>;
+  using Storage = std::conditional_t<std::is_void_v<Result>, int, std::optional<Result>>;
   Storage result;
+  // Lambda: If the compile time parameter `I` and the runtime parameter `i`
+  // are equal, then call the `lambda` with `I` as a template parameter and
+  // store the result in `result` (unless it is `void`).
   auto applyIf = [&result, lambda = AD_FWD(lambda),
                   &... args = AD_FWD(args)]<int I>(int i) mutable {
     if (i == I) {
-      if constexpr (std::is_void_v<Result>) {
+      if constexpr (resultIsVoid) {
         lambda.template operator()<I>(AD_FWD(args)...);
       } else {
         result = lambda.template operator()<I>(AD_FWD(args)...);
@@ -62,33 +72,33 @@ decltype(auto) callLambdaWithStaticInt(int i, auto&& lambda, auto&&... args) {
     }
   };
 
+  // Lambda: call `applyIf` for all the compile-time integers `Is...`. The
+  // runtime parameter always is `i`.
   auto f = [&applyIf, i ]<int... Is>(std::integer_sequence<int, Is...>) {
     (..., applyIf.template operator()<Is>(i));
   };
+
+  // Call f for all compile-time integers in `[0, ..., maxValue]`.
+  // Exactly one of them is equal to `i`, and so the lambda will be executed
+  // exactly once.
   f(std::make_integer_sequence<int, maxValue + 1>{});
 
-  if constexpr (!std::is_void_v<Result>) {
+  if constexpr (!resultIsVoid) {
     return std::move(result.value());
   }
 }
 
+// TODO<joka921> Better name.
 constexpr int prime(int x, int maxValue) { return x <= maxValue ? x : 0; }
 }
 
+// TODO<joka921> This should probably be in `Constants.h` and should maybe
+// have different values for different numbers of parameters due to compile
+// times.
 static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 
-template <const auto Arr, typename Seq = std::make_index_sequence<std::size(Arr)>>
-struct make_seq;
-
-template <typename T, std::size_t N, const std::array<T, N> Arr, std::size_t ... Is>
-struct make_seq<Arr, std::index_sequence<Is...>>
-{
-  using type = std::integer_sequence<T, Arr[Is]...>;
-};
-
-
 template <size_t NumIntegers>
-constexpr std::array<int, NumIntegers> mapBack (int value, int numValues) {
+constexpr std::array<int, NumIntegers> mapBack(int value, int numValues) {
   std::array<int, NumIntegers> res;
   // TODO<joka921, clang16> use views for reversion.
   for (size_t i = 0; i < res.size(); ++i) {
@@ -111,42 +121,32 @@ decltype(auto) callFixedSizeN(std::array<int, NumIntegers> ints, auto&& functor,
     value += p(ints[i]);
   }
 
-
-  constexpr auto pow = [](int value) {
-    int result = 1;
-    for (size_t i = 0; i < NumIntegers; ++i) {
-      result *= value;
-    }
-    return result;
-  };
-
-  auto applyOnIndexSequence = [&args...,functor = AD_FWD(functor) ]<int... ints>(std::integer_sequence<int, ints...>) mutable {
+  auto applyOnIndexSequence = [&args..., functor = AD_FWD(functor) ]<int... ints>(
+      std::integer_sequence<int, ints...>) mutable {
     return AD_FWD(functor)(INT<ints>..., AD_FWD(args)...);
   };
 
   auto lambda = [&applyOnIndexSequence]<int I>() mutable -> decltype(auto) {
     constexpr static std::array<int, NumIntegers> arr = mapBack<NumIntegers>(I, numValues);
-    for (auto el : arr) {
-    }
-    return applyOnIndexSequence(typename make_seq<mapBack<NumIntegers>(I, numValues)>::type{});
+    return applyOnIndexSequence(ad_utility::toIntegerSequence<arr>());
   };
-  return callLambdaWithStaticInt<pow(numValues)>(value, std::move(lambda));
+  return callLambdaWithStaticInt<ad_utility::pow(numValues, NumIntegers)>(value, std::move(lambda));
 }
 
 // Main implementation for the two variable case.
 template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>
 decltype(auto) callFixedSize2(int i, int j, auto&& functor, auto&&... args) {
-  return callFixedSizeN(std::array{i, j}, AD_FWD(functor), AD_FWD(args)...);
+  return callFixedSizeN<2, MaxValue>(std::array{i, j}, AD_FWD(functor), AD_FWD(args)...);
 }
 
 template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>
 decltype(auto) callFixedSize1(int i, auto&& functor, auto&&... args) {
-  return callFixedSizeN(std::array{i}, AD_FWD(functor), AD_FWD(args)...);
+  return callFixedSizeN<1, MaxValue>(std::array{i}, AD_FWD(functor), AD_FWD(args)...);
 };
 
 template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>
 decltype(auto) callFixedSize3(int i, int j, int k, auto&& functor, auto&&... args) {
-  return callFixedSizeN(std::array{i, j, k}, AD_FWD(functor), AD_FWD(args)...);
+  return callFixedSizeN<3, MaxValue>(std::array{i, j, k}, AD_FWD(functor), AD_FWD(args)...);
 }
 }  // namespace ad_utility
 
