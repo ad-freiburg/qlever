@@ -1130,3 +1130,23 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
 
   return std::async(std::launch::async, std::move(lambda));
 }
+
+// ____________________________________________________________________________
+std::pair<size_t, size_t> IndexImpl::getNumTriplesActuallyAndAdded() const {
+  auto ignoredRanges = getIgnoredIdRanges(Index::Permutation::PSO).first;
+  size_t addedTriples = 0;
+  size_t actualTriples = 0;
+  // Use the PSO index to get the number of triples for each predicate and add
+  // to the respective counter.
+  for (const auto& [key, value] : PSO()._meta.data()) {
+    auto numTriples = value.getNofElements();
+    if (std::ranges::any_of(ignoredRanges, [key = key](const auto& p) {
+          return p.first <= key && key < p.second;
+        })) {
+      addedTriples += numTriples;
+    } else {
+      actualTriples += numTriples;
+    }
+  }
+  return std::pair{actualTriples, addedTriples};
+}

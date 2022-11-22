@@ -8,17 +8,12 @@
 #include <cstdio>
 #include <fstream>
 
-#include "../src/global/Pattern.h"
-#include "../src/index/Index.h"
 #include "./IndexTestHelpers.h"
+#include "global/Pattern.h"
+#include "index/Index.h"
 #include "index/IndexImpl.h"
 
-ad_utility::AllocatorWithLimit<Id>& allocator() {
-  static ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<size_t>::max())};
-  return a;
-}
+using namespace ad_utility::testing;
 
 auto I = [](auto id) { return Id::makeFromVocabIndex(VocabIndex::make(id)); };
 
@@ -123,7 +118,7 @@ TEST(IndexTest, createFromTurtleTest) {
       // contain the combination of the ids. In this example <b2> is the largest
       // predicate that occurs and <c2> is larger than the largest subject that
       // appears with <b2>.
-      IdTable oneColBuffer{allocator()};
+      IdTable oneColBuffer{makeAllocator()};
       oneColBuffer.setCols(1);
       index.scan("<b2>", "<c2>", &oneColBuffer, index.PSO());
       ASSERT_EQ(oneColBuffer.size(), 0u);
@@ -389,8 +384,8 @@ TEST(IndexTest, scanTest) {
     IndexImpl index;
     index.createFromOnDiskIndex("_testindex");
 
-    IdTable wol(1, allocator());
-    IdTable wtl(2, allocator());
+    IdTable wol(1, makeAllocator());
+    IdTable wtl(2, makeAllocator());
 
     index.scan("<b>", &wtl, index._PSO);
     ASSERT_EQ(2u, wtl.size());
@@ -473,8 +468,8 @@ TEST(IndexTest, scanTest) {
     IndexImpl index;
     index.createFromOnDiskIndex("_testindex");
 
-    IdTable wol(1, allocator());
-    IdTable wtl(2, allocator());
+    IdTable wol(1, makeAllocator());
+    IdTable wtl(2, makeAllocator());
 
     index.scan("<is-a>", &wtl, index._PSO);
     ASSERT_EQ(7u, wtl.size());
@@ -600,4 +595,62 @@ TEST(IndexTest, TripleToInternalRepresentation) {
         index.tripleToInternalRepresentation(std::move(turtleTriple));
     ASSERT_EQ(Id::makeFromDouble(42.0), std::get<Id>(res._triple[2]));
   }
+}
+
+TEST(IndexTest, getIgnoredIdRanges) {
+  const IndexImpl& impl = getQec()->getIndex().getImpl();
+
+  // First manually get the IDs of the vocabulary elements that might appear
+  // in added triples.
+  auto getId = [&impl](const std::string& s) {
+    Id id;
+    bool success = impl.getId(s, &id);
+    AD_CHECK(success);
+    return id;
+  };
+
+  Id langtagPredicate = getId("<QLever-internal-function/langtag>");
+  Id languageEntity = getId("<QLever-internal-function/@en>");
+  Id taggedLabel = getId("@en@<label>");
+  Id firstLiteral = getId("\"A\"");
+  Id lastLiteral = getId("\"zz\"@en");
+
+  auto increment = [](Id id) {
+    return Id::makeFromVocabIndex(id.getVocabIndex().incremented());
+  };
+
+  // The range of all entities that start with "<QLever-internal-function/"
+  auto internalEntities =
+      std::pair{languageEntity, increment(langtagPredicate)};
+  // The range of all entities that start with @ (like `@en@<label>`)
+  auto predicatesWithLangtag = std::pair{taggedLabel, increment(taggedLabel)};
+  // The range of all literals;
+  auto literals = std::pair{firstLiteral, increment(lastLiteral)};
+
+  {
+    auto [ranges, lambda] = impl.getIgnoredIdRanges(Index::Permutation::POS);
+    (void)lambda;
+    ASSERT_EQ(2u, ranges.size());
+
+    ASSERT_EQ(ranges[0], internalEntities);
+    ASSERT_EQ(ranges[1], predicatesWithLangtag);
+  }
+  {
+    auto [ranges, lambda] = impl.getIgnoredIdRanges(Index::Permutation::SOP);
+    (void)lambda;
+    ASSERT_EQ(2u, ranges.size());
+
+    ASSERT_EQ(ranges[0], internalEntities);
+    ASSERT_EQ(ranges[1], literals);
+  }
+  {
+    auto [ranges, lambda] = impl.getIgnoredIdRanges(Index::Permutation::OSP);
+    (void)lambda;
+    ASSERT_EQ(1u, ranges.size());
+    ASSERT_EQ(ranges[0], internalEntities);
+  }
+
+  // TODO<joka921>  Also test the functionality of the lambda,
+  // possibly by exhaustively checking all combinations of IDs in the test
+  // index, as well as some
 }

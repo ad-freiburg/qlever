@@ -591,12 +591,12 @@ string convertNumericToIndexWord(const string& val) {
 
 // _________________________________________________________
 string convertLangtagToEntityUri(const string& tag) {
-  return URI_PREFIX + "@" + tag + ">";
+  return INTERNAL_ENTITIES_URI_PREFIX + "@" + tag + ">";
 }
 
 // _________________________________________________________
 std::optional<string> convertEntityUriToLangtag(const string& word) {
-  static const string prefix = URI_PREFIX + "@";
+  static const string prefix = INTERNAL_ENTITIES_URI_PREFIX + "@";
   if (word.starts_with(prefix)) {
     return word.substr(prefix.size(), word.size() - prefix.size() - 1);
   } else {

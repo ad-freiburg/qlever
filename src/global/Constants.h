@@ -50,9 +50,11 @@ static constexpr std::string_view TEXTSCORE_VARIABLE_PREFIX = "?ql_textscore_";
 // For anonymous nodes in Turtle.
 static const std::string ANON_NODE_PREFIX = "QLever-Anon-Node";
 
-static const std::string URI_PREFIX = "<QLever-internal-function/";
+static const std::string INTERNAL_ENTITIES_URI_PREFIX =
+    "<QLever-internal-function/";
 
-static const std::string LANGUAGE_PREDICATE = URI_PREFIX + "langtag>";
+static const std::string LANGUAGE_PREDICATE =
+    INTERNAL_ENTITIES_URI_PREFIX + "langtag>";
 
 static const char VALUE_PREFIX[] = ":v:";
 static const char VALUE_DATE_PREFIX[] = ":v:date:";
