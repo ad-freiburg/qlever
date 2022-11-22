@@ -186,10 +186,12 @@ TEST(CallFixedSize, CallFixedSize2) {
     }
   };
 
-  testWithGivenUpperBound(INT<DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>, true);
+  testWithGivenUpperBound(
+      std::integral_constant<int, DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>{},
+      true);
   // Custom upper bounds cannot be tested with the macros, as the macros don't
   // allow redefining the upper bound.
-  testWithGivenUpperBound(INT<12>, false);
+  testWithGivenUpperBound(std::integral_constant<int, 12>{}, false);
 }
 
 // TODO<joka921> Tests for three variables, but first make the implementation
