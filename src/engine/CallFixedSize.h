@@ -104,6 +104,9 @@ decltype(auto) callFixedSize2(int i, int j, auto&& functor, auto&&... args) {
 }
 
 // Three variables.
+// TODO<joka921> This can be made even more generic using something like
+// `callFixedSize<NumArguments, MaxValue>` instead of
+// `callFixedSize3<MaxValue>`
 template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>
 decltype(auto) callFixedSize3(int i, int j, int k, auto&& functor, auto&&... args) {
   using namespace detail;
@@ -121,7 +124,7 @@ decltype(auto) callFixedSize3(int i, int j, int k, auto&& functor, auto&&... arg
 // The definitions of the lambdas.
 #define CALL_FIXED_SIZE_1(i, func, ...)                                        \
   ad_utility::callFixedSize1(i, [](auto I, auto&&... args) -> decltype(auto) { \
-    return func<I>(AD_FWD(args)...);                                           \
+    return std::invoke(func<I>, AD_FWD(args)...);                              \
   } __VA_OPT__(, ) __VA_ARGS__)
 
 #define CALL_FIXED_SIZE_2(i, j, func, ...)                                                \

@@ -682,17 +682,26 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
 
     size_t nofVars = 2;
     int width = resW4.cols();
-    CALL_FIXED_SIZE_1(width,
-                      FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,
-                      cids, eids, scores, fMap1, nofVars, k, &resW4);
+
+    // The `multVarsFilterAggScoresAndTakeTopKContexts` function is overloaded,
+    // so it doesn't work with the `CALL_FIXED_SIZE_1` macro and we need
+    // to use an explicit lambda to pass to `callFixedSize1`.
+
+    auto test = [&](int width, auto&&... args) {
+      ad_utility::callFixedSize1(width, [&args...](auto I) {
+        FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<I>(
+            AD_FWD(args)...);
+      });
+    };
+    test(width, cids, eids, scores, fMap1, nofVars, k, &resW4);
     ASSERT_EQ(0u, resW4.size());
 
     auto [it, suc] = fMap1.emplace(I(1), IdTable{1, allocator()});
     it->second.push_back({I(1)});
 
-    CALL_FIXED_SIZE_1(width,
-                      FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,
-                      cids, eids, scores, fMap1, nofVars, k, &resW4);
+    test(width,
+
+         cids, eids, scores, fMap1, nofVars, k, &resW4);
 
     ASSERT_EQ(3u, resW4.size());  // 1-1 1-0 1-2
 
@@ -720,9 +729,9 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
     ASSERT_EQ(I(1), resW4(2, 3));
 
     resW4.clear();
-    CALL_FIXED_SIZE_1(width,
-                      FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,
-                      cids, eids, scores, fMap1, nofVars, 2, &resW4);
+    test(width,
+
+         cids, eids, scores, fMap1, nofVars, 2, &resW4);
     ASSERT_EQ(5u, resW4.size());  // 2x 1-1  2x 1-0   1x 1-2
 
     std::sort(std::begin(resW4), std::end(resW4),

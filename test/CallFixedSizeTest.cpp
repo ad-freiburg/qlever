@@ -2,6 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
+#include <ranges>
+
 #include "engine/CallFixedSize.h"
 #include "gtest/gtest.h"
 
@@ -48,7 +50,7 @@ auto autoIntConstant = [](auto I, auto arg1, auto arg2) {
 
 // A plain function templated on integer arguments to demonstrate the usage
 // of the `CALL_FIXED_SIZE_1` macro. Note that here we have to state all the
-// types of the arguments explicitly.
+// types of the arguments explicitly and default values do not work.
 template <int I>
 auto templatedFunction(int arg1 = 0, int arg2 = 0) {
   return I + arg1 + arg2;
@@ -63,7 +65,6 @@ TEST(CallFixedSize, CallFixedSize1) {
     ASSERT_EQ(callFixedSize1(i, explicitIntConstant), i);
     ASSERT_EQ(callFixedSize1(i, explicitIntConstant, 2, 3), i + 5);
     ASSERT_EQ(callFixedSize1(i, autoIntConstant, 2, 3), i + 5);
-    ASSERT_EQ(CALL_FIXED_SIZE_1(i, templatedFunction), i);
     ASSERT_EQ(CALL_FIXED_SIZE_1(i, templatedFunction, 2, 3), i + 5);
   }
 
@@ -73,7 +74,6 @@ TEST(CallFixedSize, CallFixedSize1) {
     ASSERT_EQ(callFixedSize1(i, explicitIntConstant), 0);
     ASSERT_EQ(callFixedSize1(i, explicitIntConstant, 2, 3), 5);
     ASSERT_EQ(callFixedSize1(i, autoIntConstant, 2, 3), 5);
-    ASSERT_EQ(CALL_FIXED_SIZE_1(i, templatedFunction), 0);
     ASSERT_EQ(CALL_FIXED_SIZE_1(i, templatedFunction, 2, 3), 5);
   }
 
@@ -119,9 +119,9 @@ auto autoIntConstant = [](auto I, auto J, auto arg1 = 0, auto arg2 = 0) {
 
 // A plain function templated on integer arguments to demonstrate the usage
 // of the `CALL_FIXED_SIZE_1` macro. Note that here we have to state all the
-// types of the arguments explicitly.
+// types of the arguments explicitly and default arguments do not work.
 template <int I, int J>
-auto templatedFunction(int arg1 = 0, int arg2 = 0) {
+auto templatedFunction(int arg1, int arg2) {
   return I - J + arg1 + arg2;
 }
 }  // namespace twoVars
@@ -129,47 +129,67 @@ auto templatedFunction(int arg1 = 0, int arg2 = 0) {
 // ____________________________________________________________________________
 TEST(CallFixedSize, CallFixedSize2) {
   using namespace twoVars;
-  static constexpr int m = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE;
-  for (int i = 0; i <= m; ++i) {
-    for (int j = 0; j <= m; ++j) {
-      ASSERT_EQ(callFixedSize2(i, j, explicitIntConstant), i - j)
-          << i << ", " << j;
-      ASSERT_EQ(callFixedSize2(i, j, explicitIntConstant, 2, 3), i - j + 5);
-      ASSERT_EQ(callFixedSize2(i, j, autoIntConstant, 2, 3), i - j + 5);
-      // ASSERT_EQ(CALL_FIXED_SIZE_2(i, j, templatedFunction), i);
-      ASSERT_EQ(CALL_FIXED_SIZE_2(i, j, templatedFunction, 2, 3), i - j + 5);
+  using namespace ad_utility::detail;
+
+  auto testWithGivenUpperBound = [](auto m, bool useMacro) {
+    // TODO<joka921, Clang16> the ranges of the loop can be greatly simplified
+    // using `std::views::iota`, but views don't work yet on clang.
+    for (int i = 0; i <= m; ++i) {
+      for (int j = 0; j <= m; ++j) {
+        ASSERT_EQ(callFixedSize2<m>(i, j, explicitIntConstant), i - j);
+        ASSERT_EQ(callFixedSize2<m>(i, j, explicitIntConstant, 2, 3),
+                  i - j + 5);
+        ASSERT_EQ(callFixedSize2<m>(i, j, autoIntConstant, 2, 3), i - j + 5);
+        if (useMacro) {
+          ASSERT_EQ(CALL_FIXED_SIZE_2(i, j, templatedFunction, 2, 3),
+                    i - j + 5);
+        }
+      }
     }
-  }
 
-  /*
+    // Values that are greater than `m` will be mapped to zero before being
+    // passed to the actual function.
+    // Test all three possibilities: `i` becoming 0, `j` becoming 0, both
+    // becoming zero.
+    for (int i = 0; i <= m; ++i) {
+      for (int j = m + 1; j <= m + m + 1; ++j) {
+        ASSERT_EQ(callFixedSize2<m>(i, j, explicitIntConstant), i);
+        ASSERT_EQ(callFixedSize2<m>(i, j, explicitIntConstant, 2, 3), i + 5);
+        ASSERT_EQ(callFixedSize2<m>(i, j, autoIntConstant, 2, 3), i + 5);
+        if (useMacro) {
+          ASSERT_EQ(CALL_FIXED_SIZE_2(i, j, templatedFunction, 2, 3), i + 5);
+        }
+      }
+    }
 
-  // Values that are greater than `m` will be mapped to zero before being
-  // passed to the actual function.
-  for (int i = m + 1; i <= m + m + 1; ++i) {
-    ASSERT_EQ(callFixedSize1(i, explicitIntConstant), 0);
-    ASSERT_EQ(callFixedSize1(i, explicitIntConstant, 2, 3), 5);
-    ASSERT_EQ(callFixedSize1(i, autoIntConstant, 2, 3), 5);
-    ASSERT_EQ(CALL_FIXED_SIZE_1(i, templatedFunction), 0);
-    ASSERT_EQ(CALL_FIXED_SIZE_1(i, templatedFunction, 2, 3), 5);
-  }
+    for (int i = m + 1; i <= m + m + 1; ++i) {
+      for (int j = 0; j <= m; ++j) {
+        ASSERT_EQ(callFixedSize2<m>(i, j, explicitIntConstant), -j);
+        ASSERT_EQ(callFixedSize2<m>(i, j, explicitIntConstant, 2, 3), -j + 5);
+        ASSERT_EQ(callFixedSize2<m>(i, j, autoIntConstant, 2, 3), -j + 5);
+        if (useMacro) {
+          ASSERT_EQ(CALL_FIXED_SIZE_2(i, j, templatedFunction, 2, 3), -j + 5);
+        }
+      }
+    }
 
-  // The `callFixedSize1` function also allows to explicitly set the upper
-  // bound, also test this case. It cannot be used with the `CALL_FIXED_SIZE_N`
-  // macros that will always use the default value.
+    for (int i = m + 1; i <= m + m + 1; ++i) {
+      for (int j = m + 1; j <= m + m + 1; ++j) {
+        ASSERT_EQ(callFixedSize2<m>(i, j, explicitIntConstant), 0);
+        ASSERT_EQ(callFixedSize2<m>(i, j, explicitIntConstant, 2, 3), 5);
+        ASSERT_EQ(callFixedSize2<m>(i, j, autoIntConstant, 2, 3), 5);
+        if (useMacro) {
+          ASSERT_EQ(CALL_FIXED_SIZE_2(i, j, templatedFunction, 2, 3), 5);
+        }
+      }
+    }
+  };
 
-  static constexpr int o = 42;
-  for (int i = 0; i <= o; ++i) {
-    ASSERT_EQ(callFixedSize1<o>(i, explicitIntConstant), i);
-    ASSERT_EQ(callFixedSize1<o>(i, explicitIntConstant, 2, 3), i + 5);
-    ASSERT_EQ(callFixedSize1<o>(i, autoIntConstant, 2, 3), i + 5);
-  }
-
-  // Values that are greater than `m` will be mapped to zero before being
-  // passed to the actual function.
-  for (int i = o + 1 ; i <= o + o + 1; ++i) {
-    ASSERT_EQ(callFixedSize1<o>(i, explicitIntConstant), 0);
-    ASSERT_EQ(callFixedSize1<o>(i, explicitIntConstant, 2, 3), 5);
-    ASSERT_EQ(callFixedSize1<o>(i, autoIntConstant, 2, 3), 5);
-  }
-   */
+  testWithGivenUpperBound(INT<DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>, true);
+  // Custom upper bounds cannot be tested with the macros, as the macros don't
+  // allow redefining the upper bound.
+  testWithGivenUpperBound(INT<12>, false);
 }
+
+// TODO<joka921> Tests for three variables, but first make the implementation
+// generic.
