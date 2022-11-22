@@ -71,8 +71,7 @@ decltype(auto) callLambdaWithStaticInt(int i, auto&& lambda, auto&&... args) {
   // Lambda: If the compile time parameter `I` and the runtime parameter `i`
   // are equal, then call the `lambda` with `I` as a template parameter and
   // store the result in `result` (unless it is `void`).
-  auto applyIf = [&result, lambda = AD_FWD(lambda),
-                  &... args = AD_FWD(args)]<int I>(int i) mutable {
+  auto applyIf = [&result, lambda = AD_FWD(lambda), ... args = AD_FWD(args)]<int I>(int i) mutable {
     if (i == I) {
       if constexpr (resultIsVoid) {
         lambda.template operator()<I>(AD_FWD(args)...);
