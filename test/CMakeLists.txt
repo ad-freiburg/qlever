@@ -243,3 +243,5 @@ addLinkAndDiscoverTestSerial(RegexExpressionTest sparqlExpressions index engine)
 addLinkAndDiscoverTest(LocalVocabTest engine)
 
 addLinkAndDiscoverTest(HttpTest boost_iostreams http)
+
+addLinkAndDiscoverTest(CallFixedSizeTest)

@@ -44,7 +44,7 @@ static constexpr auto INT = std::integral_constant<int, i>{};
 // Internal helper function that calls the `lambda` with `i`(see above)
 // as an explicit template parameter. Requires that `i <= maxValue`.
 template <int maxValue>
-decltype(auto) callLambdaWithStaticInt2(int i, auto&& lambda, auto&&... args) {
+decltype(auto) callLambdaWithStaticInt(int i, auto&& lambda, auto&&... args) {
   AD_CHECK(i <= maxValue);
   using Result = decltype(lambda.template operator()<1>());
   using Storage = std::conditional_t<std::is_void_v<Result>, int, std::optional<Result>>;
@@ -64,73 +64,73 @@ decltype(auto) callLambdaWithStaticInt2(int i, auto&& lambda, auto&&... args) {
   auto f = [&applyIf, i ]<int... Is>(std::integer_sequence<int, Is...>) {
     (..., applyIf.template operator()<Is>(i));
   };
-  f(std::make_integer_sequence<int, maxValue>{});
+  f(std::make_integer_sequence<int, maxValue + 1>{});
 
   if constexpr (!std::is_void_v<Result>) {
     return std::move(result.value());
   }
 }
 
-constexpr int prime(int x, int maxValue) { return x < maxValue ? x : 0; }
+constexpr int prime(int x, int maxValue) { return x <= maxValue ? x : 0; }
 }
+
+static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 
 // =============================================================================
 // One Variable
 // =============================================================================
 // The main implementation for the case of one template variable.
 // A good starting point for understanding the mechanisms.
+template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>
 decltype(auto) callFixedSize1(int i, auto&& functor, auto&&... args) {
   using namespace detail;
   auto lambda = [&]<int I>() -> decltype(auto) {
     return std::invoke(AD_FWD(functor), detail::INT<I>, AD_FWD(args)...);
   };
-  return callLambdaWithStaticInt2<6>(prime(i, 6), std::move(lambda));
+  return callLambdaWithStaticInt<MaxValue>(prime(i, MaxValue), std::move(lambda));
 };
 
 // Main implementation for the two variable case.
+template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>
 decltype(auto) callFixedSize2(int i, int j, auto&& functor, auto&&... args) {
   using namespace detail;
-  static constexpr int numValues = 6;
-  auto p = [](int x) { return prime(x, numValues); };
+  auto p = [](int x) { return prime(x, MaxValue); };
+  static constexpr int numValues = MaxValue + 1;
   int value = p(i) * numValues + p(j);
   auto lambda = [functor = AD_FWD(functor), &args...]<int I>() mutable -> decltype(auto) {
     return AD_FWD(functor)(INT<I / numValues>, INT<I % numValues>, AD_FWD(args)...);
   };
-  return callLambdaWithStaticInt2<numValues * numValues>(value, std::move(lambda));
+  return callLambdaWithStaticInt<numValues * numValues>(value, std::move(lambda));
 }
 
 // Three variables.
+template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>
 decltype(auto) callFixedSize3(int i, int j, int k, auto&& functor, auto&&... args) {
   using namespace detail;
-  static constexpr int numValues = 6;
-  auto p = [](int x) { return prime(x, numValues); };
+  static constexpr int numValues = MaxValue + 1;
+  auto p = [](int x) { return prime(x, MaxValue); };
   int value = p(i) * numValues * numValues + p(j) * numValues + p(k);
   auto lambda = [functor = AD_FWD(functor), &args...]<int I>() mutable -> decltype(auto) {
     return AD_FWD(functor)(INT<I / numValues / numValues>, INT<(I / numValues) % numValues>,
                            INT<I % numValues>, AD_FWD(args)...);
   };
-  return callLambdaWithStaticInt2<numValues * numValues * numValues>(value, std::move(lambda));
+  return callLambdaWithStaticInt<numValues * numValues * numValues>(value, std::move(lambda));
 }
 }  // namespace ad_utility
 
 // The definitions of the lambdas.
-#define CALL_FIXED_SIZE_1(i, func, ...)                                                     \
-  ad_utility::callFixedSize1(                                                               \
-      i, [](auto I, auto&&... args) -> decltype(auto) { return func<I>(AD_FWD(args)...); }, \
-      __VA_ARGS__)
+#define CALL_FIXED_SIZE_1(i, func, ...)                                        \
+  ad_utility::callFixedSize1(i, [](auto I, auto&&... args) -> decltype(auto) { \
+    return func<I>(AD_FWD(args)...);                                           \
+  } __VA_OPT__(, ) __VA_ARGS__)
 
-#define CALL_FIXED_SIZE_2(i, j, func, ...)                   \
-  ad_utility::callFixedSize2(                                \
-      i, j,                                                  \
-      [](auto I, auto J, auto&&... args) -> decltype(auto) { \
-        return std::invoke(func<I, J>, AD_FWD(args)...);     \
-      },                                                     \
-      __VA_ARGS__)
+#define CALL_FIXED_SIZE_2(i, j, func, ...)                                                \
+  ad_utility::callFixedSize2(i, j, [](auto I, auto J, auto&&... args) -> decltype(auto) { \
+    return std::invoke(func<I, J>, AD_FWD(args)...);                                      \
+  } __VA_OPT__(, ) __VA_ARGS__)
 
-#define CALL_FIXED_SIZE_3(i, j, k, func, ...)                         \
-  ad_utility::callFixedSize3(                                         \
-      i, j, k,                                                        \
-      [&](auto I, auto J, auto K, auto&&... args) -> decltype(auto) { \
-        return std::invoke(func<I, J, K>, AD_FWD(args)...);           \
-      },                                                              \
-      __VA_ARGS__)
+#define CALL_FIXED_SIZE_3(i, j, k, func, ...)                                                \
+  ad_utility::callFixedSize3(i, j, k,                                                        \
+                             [&](auto I, auto J, auto K, auto&&... args) -> decltype(auto) { \
+                               return std::invoke(func<I, J, K>, AD_FWD(args)...);           \
+                             } __VA_OPT__(, ) __VA_ARGS__)
