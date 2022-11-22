@@ -16,6 +16,7 @@
 #include <optional>
 
 #include "util/Exception.h"
+#include "util/Log.h"
 #include "util/Forward.h"
 
 // The macros in this file provide automatic generation of if clauses that
@@ -76,48 +77,76 @@ constexpr int prime(int x, int maxValue) { return x <= maxValue ? x : 0; }
 
 static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 
-// =============================================================================
-// One Variable
-// =============================================================================
-// The main implementation for the case of one template variable.
-// A good starting point for understanding the mechanisms.
-template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>
-decltype(auto) callFixedSize1(int i, auto&& functor, auto&&... args) {
-  using namespace detail;
-  auto lambda = [&]<int I>() -> decltype(auto) {
-    return std::invoke(AD_FWD(functor), detail::INT<I>, AD_FWD(args)...);
-  };
-  return callLambdaWithStaticInt<MaxValue>(prime(i, MaxValue), std::move(lambda));
+template <const auto Arr, typename Seq = std::make_index_sequence<std::size(Arr)>>
+struct make_seq;
+
+template <typename T, std::size_t N, const std::array<T, N> Arr, std::size_t ... Is>
+struct make_seq<Arr, std::index_sequence<Is...>>
+{
+  using type = std::integer_sequence<T, Arr[Is]...>;
 };
+
+
+template <size_t NumIntegers>
+constexpr std::array<int, NumIntegers> mapBack (int value, int numValues) {
+  std::array<int, NumIntegers> res;
+  // TODO<joka921, clang16> use views for reversion.
+  for (size_t i = 0; i < res.size(); ++i) {
+    res[res.size() - 1 - i] = value % numValues;
+    value /= numValues;
+  }
+  return res;
+};
+
+template <size_t NumIntegers, int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>
+decltype(auto) callFixedSizeN(std::array<int, NumIntegers> ints, auto&& functor, auto&&... args) {
+  static_assert(NumIntegers > 0);
+  using namespace detail;
+  static constexpr int numValues = MaxValue + 1;
+  auto p = [](int x) { return prime(x, MaxValue); };
+  int value = p(std::get<0>(ints));
+  // TODO<joka921, clang16> use `std::views`.
+  for (size_t i = 1; i < ints.size(); ++i) {
+    value *= numValues;
+    value += p(ints[i]);
+  }
+
+
+  constexpr auto pow = [](int value) {
+    int result = 1;
+    for (size_t i = 0; i < NumIntegers; ++i) {
+      result *= value;
+    }
+    return result;
+  };
+
+  auto applyOnIndexSequence = [&args...,functor = AD_FWD(functor) ]<int... ints>(std::integer_sequence<int, ints...>) mutable {
+    return AD_FWD(functor)(INT<ints>..., AD_FWD(args)...);
+  };
+
+  auto lambda = [&applyOnIndexSequence]<int I>() mutable -> decltype(auto) {
+    constexpr static std::array<int, NumIntegers> arr = mapBack<NumIntegers>(I, numValues);
+    for (auto el : arr) {
+    }
+    return applyOnIndexSequence(typename make_seq<mapBack<NumIntegers>(I, numValues)>::type{});
+  };
+  return callLambdaWithStaticInt<pow(numValues)>(value, std::move(lambda));
+}
 
 // Main implementation for the two variable case.
 template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>
 decltype(auto) callFixedSize2(int i, int j, auto&& functor, auto&&... args) {
-  using namespace detail;
-  auto p = [](int x) { return prime(x, MaxValue); };
-  static constexpr int numValues = MaxValue + 1;
-  int value = p(i) * numValues + p(j);
-  auto lambda = [functor = AD_FWD(functor), &args...]<int I>() mutable -> decltype(auto) {
-    return AD_FWD(functor)(INT<I / numValues>, INT<I % numValues>, AD_FWD(args)...);
-  };
-  return callLambdaWithStaticInt<numValues * numValues>(value, std::move(lambda));
+  return callFixedSizeN(std::array{i, j}, AD_FWD(functor), AD_FWD(args)...);
 }
 
-// Three variables.
-// TODO<joka921> This can be made even more generic using something like
-// `callFixedSize<NumArguments, MaxValue>` instead of
-// `callFixedSize3<MaxValue>`
+template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>
+decltype(auto) callFixedSize1(int i, auto&& functor, auto&&... args) {
+  return callFixedSizeN(std::array{i}, AD_FWD(functor), AD_FWD(args)...);
+};
+
 template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>
 decltype(auto) callFixedSize3(int i, int j, int k, auto&& functor, auto&&... args) {
-  using namespace detail;
-  static constexpr int numValues = MaxValue + 1;
-  auto p = [](int x) { return prime(x, MaxValue); };
-  int value = p(i) * numValues * numValues + p(j) * numValues + p(k);
-  auto lambda = [functor = AD_FWD(functor), &args...]<int I>() mutable -> decltype(auto) {
-    return AD_FWD(functor)(INT<I / numValues / numValues>, INT<(I / numValues) % numValues>,
-                           INT<I % numValues>, AD_FWD(args)...);
-  };
-  return callLambdaWithStaticInt<numValues * numValues * numValues>(value, std::move(lambda));
+  return callFixedSizeN(std::array{i, j, k}, AD_FWD(functor), AD_FWD(args)...);
 }
 }  // namespace ad_utility
 
