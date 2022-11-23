@@ -109,12 +109,10 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
   int leftWidth = leftResult->_idTable.cols();
   int rightWidth = rightResult->_idTable.cols();
   int resWidth = result->_idTable.cols();
-  auto joinLambda = [&, this](auto I, auto J, auto K) {
-    return computeMultiColumnJoin<I, J, K>(leftResult->_idTable,
-                                           rightResult->_idTable, _joinColumns,
-                                           &result->_idTable);
-  };
-  ad_utility::callFixedSize3(leftWidth, rightWidth, resWidth, joinLambda);
+  CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, resWidth}),
+                  &MultiColumnJoin::computeMultiColumnJoin,
+                  leftResult->_idTable, rightResult->_idTable, _joinColumns,
+                  &result->_idTable);
   LOG(DEBUG) << "MultiColumnJoin result computation done." << endl;
 }
 

@@ -56,10 +56,8 @@ void Filter::computeResult(ResultTable* result) {
   result->_localVocab = subRes->_localVocab;
 
   int width = result->_idTable.cols();
-  auto filterLambda = [&, this](auto WIDTH) {
-    return computeFilterImpl<WIDTH>(result, *subRes);
-  };
-  ad_utility::callFixedSize1(width, filterLambda);
+  CALL_FIXED_SIZE((std::array{width}), &Filter::computeFilterImpl, this, result,
+                  *subRes);
   LOG(DEBUG) << "Filter result computation done." << endl;
 }
 

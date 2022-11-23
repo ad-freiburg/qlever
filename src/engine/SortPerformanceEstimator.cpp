@@ -45,10 +45,7 @@ double SortPerformanceEstimator::measureSortingTimeInSeconds(
   ad_utility::Timer timer;
   timer.start();
   // Always sort on the first column for simplicity;
-  auto sortLambda = [&](auto NUM_COLUMNS) {
-    return Engine::sort<NUM_COLUMNS>(&randomTable, 0ull);
-  };
-  ad_utility::callFixedSize1(numColumns, sortLambda);
+  CALL_FIXED_SIZE((std::array{numColumns}), &Engine::sort, &randomTable, 0ull);
   timer.stop();
   return timer.secs();
 }

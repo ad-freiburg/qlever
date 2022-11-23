@@ -4,25 +4,18 @@
 
 #pragma once
 
-// TODO<joka921, clang> Clang 13 issues a lot of strange and false positive
-// warnings (this bug was fixed in clang 14 and newer. This suppresses all
-// warnings for this file. Remove this pragma as soon as we no longer support
-// clang 13.
-#ifdef __clang__
-#pragma clang system_header
-#endif
-
 #include <functional>
 #include <optional>
 
 #include "global/Constants.h"
+#include "util/ConstexprUtils.h"
+#include "util/DisableWarningsClang13.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
-#include "util/Metaprogramming.h"
 
 // The functions and macros are able to call functions that take a set of integers as
 // template parameters with integers that are only known at runtime. To make this
-// work the possible compile time integers have to be in a range [0, ..., MAX] where
+// work, the possible compile time integers have to be in a range [0, ..., MAX] where
 // MAX is a compile-time constant. For runtime integers that are > MAX, the function
 // is called with 0 as a compile-time parameter. This behavior is useful for the
 // `IdTables` (see `IdTable.h`) where `0` is a special value that menas "the number of columns is
@@ -49,7 +42,7 @@
 // for a higher number of parameters.
 
 // For simple examples that illustrate the possibilities and limitations of both
-// the macro and the template function interface see `CallFixedSizeTest.cpp`.
+// the macro and the template function interface, see `CallFixedSizeTest.cpp`.
 
 namespace ad_utility {
 namespace detail {
@@ -66,12 +59,14 @@ auto callLambdaWithStaticInt(int i, auto&& lambda, auto&&... args) {
 
   using Result = decltype(lambda.template operator()<1>());
   static constexpr bool resultIsVoid = std::is_void_v<Result>;
-  using Storage = std::conditional_t<std::is_void_v<Result>, int, std::optional<Result>>;
+  using Storage = std::conditional_t<resultIsVoid, int, std::optional<Result>>;
   Storage result;
   // Lambda: If the compile time parameter `I` and the runtime parameter `i`
   // are equal, then call the `lambda` with `I` as a template parameter and
   // store the result in `result` (unless it is `void`).
+  DISABLE_WARNINGS_CLANG_13
   auto applyIf = [&result, lambda = AD_FWD(lambda), ... args = AD_FWD(args)]<int I>(int i) mutable {
+    ENABLE_WARNINGS_CLANG_13
     if (i == I) {
       if constexpr (resultIsVoid) {
         lambda.template operator()<I>(AD_FWD(args)...);
@@ -104,9 +99,9 @@ constexpr int mapToZeroIfTooLarge(int x, int maxValue) { return x <= maxValue ? 
 // in the range `[0,...,(maxValue + 1) ^ NumIntegers - 1]` where `^` denotes
 // exponentiation. Requires that all elements in the `array` are `<= maxValue`,
 // else a runtime check fails.
-template <size_t NumIntegers>
+template <std::integral Int, size_t NumIntegers>
 requires requires { NumIntegers > 0; }
-int arrayToSingleInteger(const std::array<int, NumIntegers>& array, const int maxValue) {
+int arrayToSingleInteger(const std::array<Int, NumIntegers>& array, const int maxValue) {
   AD_CHECK(std::ranges::all_of(array, [maxValue](int i) { return i <= maxValue; }));
   int value = 0;
   // TODO<joka921, clang16> use `std::views`.
@@ -121,10 +116,10 @@ int arrayToSingleInteger(const std::array<int, NumIntegers>& array, const int ma
 // `value` that is in the range `[0, ..., (maxValue + 1) ^ NumIntegers - 1
 // back to an array of `NumIntegers` many integers that are each in the range
 // `[0, ..., (maxValue)]`
-template <size_t NumIntegers>
-constexpr std::array<int, NumIntegers> integerToArray(int value, int maxValue) {
-  std::array<int, NumIntegers> res;
-  int numValues = maxValue + 1;
+template <std::integral Int, size_t NumIntegers>
+constexpr std::array<Int, NumIntegers> integerToArray(Int value, Int maxValue) {
+  std::array<Int, NumIntegers> res;
+  Int numValues = maxValue + 1;
   // TODO<joka921, clang16> use views for reversion.
   for (size_t i = 0; i < res.size(); ++i) {
     res[res.size() - 1 - i] = value % numValues;
@@ -137,8 +132,9 @@ constexpr std::array<int, NumIntegers> integerToArray(int value, int maxValue) {
 // This function implements the main functionality.
 // It calls `functor(INT<f(ints[0])>, INT<f(ints[1])>, ..., args...)`
 // where `INT<N>` is `std::integral_constant<int, N>` and `f` is `mapToZeroIfTooLarge`.
-template <size_t NumIntegers, int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>
-decltype(auto) callFixedSizeN(std::array<int, NumIntegers> ints, auto&& functor, auto&&... args) {
+template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE, size_t NumIntegers,
+          std::integral Int>
+decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, auto&& functor, auto&&... args) {
   static_assert(NumIntegers > 0);
   using namespace detail;
   // TODO<joka921, C++23> Use `std::bind_back`
@@ -150,13 +146,15 @@ decltype(auto) callFixedSizeN(std::array<int, NumIntegers> ints, auto&& functor,
   // specified via a `std::integer_sequence`.
   auto applyOnIndexSequence = [&args..., functor = AD_FWD(functor) ]<int... ints>(
       std::integer_sequence<int, ints...>) mutable {
-    return AD_FWD(functor)(std::integral_constant<int, ints>{}..., AD_FWD(args)...);
+    return AD_FWD(functor).template operator()<ints...>(AD_FWD(args)...);
   };
 
   // Lambda: Apply the `functor` when the `ints` are given as a single compile
   // time integer `I` that was obtained via `arrayToSingleInteger`.
+  DISABLE_WARNINGS_CLANG_13
   auto applyOnSingleInteger = [&applyOnIndexSequence]<int I>() mutable -> decltype(auto) {
-    constexpr static auto arr = integerToArray<NumIntegers>(I, MaxValue);
+    ENABLE_WARNINGS_CLANG_13
+    constexpr static auto arr = integerToArray<Int, NumIntegers>(I, MaxValue);
     return applyOnIndexSequence(ad_utility::toIntegerSequence<arr>());
   };
 
@@ -168,38 +166,11 @@ decltype(auto) callFixedSizeN(std::array<int, NumIntegers> ints, auto&& functor,
       value, std::move(applyOnSingleInteger));
 }
 
-// Simpler named function for the case of 1 compile time integer.
-template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>
-decltype(auto) callFixedSize1(int i, auto&& functor, auto&&... args) {
-  return callFixedSizeN<1, MaxValue>(std::array{i}, AD_FWD(functor), AD_FWD(args)...);
-};
-
-// Simpler named function for the case of 2 compile time integers.
-template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>
-decltype(auto) callFixedSize2(int i, int j, auto&& functor, auto&&... args) {
-  return callFixedSizeN<2, MaxValue>(std::array{i, j}, AD_FWD(functor), AD_FWD(args)...);
-}
-
-// Simpler named function for the case of 3 compile time integers.
-template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE>
-decltype(auto) callFixedSize3(int i, int j, int k, auto&& functor, auto&&... args) {
-  return callFixedSizeN<3, MaxValue>(std::array{i, j, k}, AD_FWD(functor), AD_FWD(args)...);
-}
 }  // namespace ad_utility
 
-// The definitions of the macros for an easier syntax.
-#define CALL_FIXED_SIZE_1(i, func, ...)                                        \
-  ad_utility::callFixedSize1(i, [](auto I, auto&&... args) -> decltype(auto) { \
-    return std::invoke(func<I>, AD_FWD(args)...);                              \
-  } __VA_OPT__(, ) __VA_ARGS__)
-
-#define CALL_FIXED_SIZE_2(i, j, func, ...)                                                \
-  ad_utility::callFixedSize2(i, j, [](auto I, auto J, auto&&... args) -> decltype(auto) { \
-    return std::invoke(func<I, J>, AD_FWD(args)...);                                      \
-  } __VA_OPT__(, ) __VA_ARGS__)
-
-#define CALL_FIXED_SIZE_3(i, j, k, func, ...)                                                \
-  ad_utility::callFixedSize3(i, j, k,                                                        \
-                             [&](auto I, auto J, auto K, auto&&... args) -> decltype(auto) { \
-                               return std::invoke(func<I, J, K>, AD_FWD(args)...);           \
-                             } __VA_OPT__(, ) __VA_ARGS__)
+// The definitions of the macro for an easier syntax.
+#define CALL_FIXED_SIZE(integers, func, ...)                    \
+  ad_utility::callFixedSize(                                    \
+      integers, []<int... Is>(auto&&... args)->decltype(auto) { \
+        return std::invoke(func<Is...>, AD_FWD(args)...);       \
+      } __VA_OPT__(, ) __VA_ARGS__)

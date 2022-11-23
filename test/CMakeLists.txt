@@ -246,4 +246,4 @@ addLinkAndDiscoverTest(HttpTest boost_iostreams http)
 
 addLinkAndDiscoverTest(CallFixedSizeTest)
 
-addLinkAndDiscoverTest(MetaprogramminTest)
+addLinkAndDiscoverTest(ConstexprUtilsTest)

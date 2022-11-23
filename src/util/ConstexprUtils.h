@@ -31,7 +31,7 @@ namespace detail {
 // https://stackoverflow.com/questions/56799396/
 template <auto Array, size_t... indexes>
 constexpr auto toIntegerSequenceHelper(std::index_sequence<indexes...>) {
-  return std::integer_sequence<int, std::get<indexes>(Array)...>{};
+  return std::integer_sequence<typename decltype(Array)::value_type, std::get<indexes>(Array)...>{};
 }
 }  // namespace detail
 

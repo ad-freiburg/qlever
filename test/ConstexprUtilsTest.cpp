@@ -3,7 +3,7 @@
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "gtest/gtest.h"
-#include "util/Metaprogramming.h"
+#include "util/ConstexprUtils.h"
 
 using namespace ad_utility;
 
@@ -55,8 +55,8 @@ TEST(Metaprogramming, toIntegerSequence) {
                       (toIntegerSequence<std::array{3, 2}>())));
   ASSERT_TRUE(compare(std::integer_sequence<int, -12>{},
                       (toIntegerSequence<std::array{-12}>())));
-  ASSERT_TRUE(compare(std::integer_sequence<int, 5, 4, 3, 2, 1>{},
-                      (toIntegerSequence<std::array{5, 4, 3, 2, 1}>())));
+  ASSERT_TRUE(compare(std::integer_sequence<int, 5, 3, 3, 4, -1>{},
+                      (toIntegerSequence<std::array{5, 3, 3, 4, -1}>())));
 
   // Mismatching types.
   ASSERT_FALSE(compare(std::integer_sequence<float>{},

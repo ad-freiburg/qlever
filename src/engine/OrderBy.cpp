@@ -105,22 +105,27 @@ void OrderBy::computeResult(ResultTable* result) {
                           subRes->_idTable.end());
 
   int width = result->_idTable.cols();
-  auto sortLambda = [&, this](auto WIDTH) {
-    // TODO(florian): Check if the lambda is a performance problem
-    return getEngine().sort<WIDTH>(&result->_idTable,
-                                   [this](const auto& a, const auto& b) {
-                                     for (auto& entry : _sortIndices) {
-                                       if (a[entry.first] < b[entry.first]) {
-                                         return !entry.second;
-                                       }
-                                       if (a[entry.first] > b[entry.first]) {
-                                         return entry.second;
-                                       }
-                                     }
-                                     return a[0] < b[0];
-                                   });
+
+  // TODO(florian): Check if the lambda is a performance problem
+  auto comparison = [this](const auto& a, const auto& b) {
+    for (auto& entry : _sortIndices) {
+      if (a[entry.first] < b[entry.first]) {
+        return !entry.second;
+      }
+      if (a[entry.first] > b[entry.first]) {
+        return entry.second;
+      }
+    }
+    return a[0] < b[0];
   };
-  ad_utility::callFixedSize1(width, sortLambda);
+
+  // We cannot use the `CALL_FIXED_SIZE` macro here because the `sort` function
+  // is templated.
+  DISABLE_WARNINGS_CLANG_13
+  ad_utility::callFixedSize(std::array{width}, [&result, &comparison]<int I>() {
+    Engine::sort<I>(&result->_idTable, comparison);
+  });
+  ENABLE_WARNINGS_CLANG_13
   result->_sortedBy = resultSortedOn();
 
   LOG(DEBUG) << "OrderBy result computation done." << endl;
