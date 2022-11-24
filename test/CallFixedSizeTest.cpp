@@ -18,17 +18,24 @@ TEST(CallFixedSize, callLambdaWithStaticInt) {
 
   static constexpr int maxValue = 242;
   for (int i = 0; i <= maxValue; ++i) {
-    ASSERT_EQ(callLambdaWithStaticInt<maxValue>(i, returnIPlusArgs), i);
-    ASSERT_EQ(callLambdaWithStaticInt<maxValue>(i, returnIPlusArgs, 2, 4),
+    ASSERT_EQ(
+        callLambdaWithStaticInt2<maxValue>(std::array{i}, returnIPlusArgs), i);
+    ASSERT_EQ(callLambdaWithStaticInt2<maxValue>(std::array{i}, returnIPlusArgs,
+                                                 2, 4),
               i + 6);
   }
 
   for (int i = maxValue + 1; i < maxValue + 5; ++i) {
-    ASSERT_THROW(callLambdaWithStaticInt<maxValue>(i, returnIPlusArgs),
-                 std::exception);
-    ASSERT_THROW(callLambdaWithStaticInt<maxValue>(i, returnIPlusArgs, 2, 4),
+    ASSERT_THROW(
+        callLambdaWithStaticInt2<maxValue>(std::array{i}, returnIPlusArgs),
+        std::exception);
+    ASSERT_THROW(callLambdaWithStaticInt2<maxValue>(std::array{i},
+                                                    returnIPlusArgs, 2, 4),
                  std::exception);
   }
+
+  // TODO<joka921> Write tests for the case that there is more than one
+  // entry.
 }
 
 namespace oneVar {

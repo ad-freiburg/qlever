@@ -701,7 +701,8 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
 
     auto test = [&](int width, auto&&... args) {
       ad_utility::callFixedSize(
-          (std::array{width}), [... args = AD_FWD(args)]<int I>() mutable {
+          DISABLE_WARNINGS_CLANG_13(std::array{width}), [&]<int I>() mutable {
+            ENABLE_WARNINGS_CLANG_13
             FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<I>(
                 AD_FWD(args)...);
           });

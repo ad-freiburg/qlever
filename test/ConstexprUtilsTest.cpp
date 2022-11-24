@@ -7,7 +7,7 @@
 
 using namespace ad_utility;
 
-TEST(Metaprogramming, pow) {
+TEST(ConstexprUtils, pow) {
   static_assert(pow(0, 0) == 1);
   static_assert(pow(0.0, 0) == 1);
   static_assert(pow(0, 1) == 0);
@@ -48,7 +48,7 @@ bool compare(const std::integer_sequence<T, Ts...>&,
   }
 }
 
-TEST(Metaprogramming, toIntegerSequence) {
+TEST(ConstexprUtils, toIntegerSequence) {
   ASSERT_TRUE(compare(std::integer_sequence<int>{},
                       (toIntegerSequence<std::array<int, 0>{}>())));
   ASSERT_TRUE(compare(std::integer_sequence<int, 3, 2>{},
@@ -71,4 +71,39 @@ TEST(Metaprogramming, toIntegerSequence) {
                        (toIntegerSequence<std::array{-12, 4}>())));
   ASSERT_FALSE(compare(std::integer_sequence<int, -12, 4>{},
                        (toIntegerSequence<std::array{-12}>())));
+}
+
+TEST(ConstexprUtils, toArrayCartesianProductEtc) {
+  std::array<std::array<int, 1>, 4> a{std::array{0}, std::array{1},
+                                      std::array{2}, std::array{3}};
+  ASSERT_EQ(a, (toArrayCartesianProductEtc<4, 1>()));
+
+  std::array<std::array<int, 2>, 4> b{std::array{0, 0}, std::array{0, 1},
+                                      std::array{1, 0}, std::array{1, 1}};
+  ASSERT_EQ(b, (toArrayCartesianProductEtc<2, 2>()));
+
+  std::array<std::array<int, 3>, 8> c{std::array{0, 0, 0}, std::array{0, 0, 1},
+                                      std::array{0, 1, 0}, std::array{0, 1, 1},
+                                      std::array{1, 0, 0}, std::array{1, 0, 1},
+                                      std::array{1, 1, 0}, std::array{1, 1, 1}};
+  ASSERT_EQ(c, (toArrayCartesianProductEtc<2, 3>()));
+}
+
+TEST(ConstexprUtils, toIntegerSequenceCartesianProductEtc) {
+  std::integer_sequence<std::array<int, 1>, std::array{0}, std::array{1},
+                        std::array{2}, std::array{3}>
+      a;
+  ASSERT_TRUE(compare(a, (toIntegerSequenceCartesianProductEtc<4, 1>())));
+
+  std::integer_sequence<std::array<int, 2>, std::array{0, 0}, std::array{0, 1},
+                        std::array{1, 0}, std::array{1, 1}>
+      b;
+  ASSERT_TRUE(compare(b, (toIntegerSequenceCartesianProductEtc<2, 2>())));
+
+  std::integer_sequence<
+      std::array<int, 3>, std::array{0, 0, 0}, std::array{0, 0, 1},
+      std::array{0, 1, 0}, std::array{0, 1, 1}, std::array{1, 0, 0},
+      std::array{1, 0, 1}, std::array{1, 1, 0}, std::array{1, 1, 1}>
+      c;
+  ASSERT_TRUE(compare(c, (toIntegerSequenceCartesianProductEtc<2, 3>())));
 }

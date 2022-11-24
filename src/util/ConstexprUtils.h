@@ -66,17 +66,26 @@ constexpr std::array<Int, NumIntegers> integerToArray(Int value,
   return res;
 };
 
-template <int Upper, size_t Num>
+// Return a `std::array<std::array<Int, Num>, pow(Upper, Num)>` (where `Int` is
+// the type of `Upper`) that contains each
+// value from `[0, ..., Upper - 1] X Num` exactly once. `X` denotes the
+// cartesian product of sets.
+template <std::integral auto Upper, size_t Num>
 constexpr auto toArrayCartesianProductEtc() {
+  using Int = decltype(Upper);
   constexpr auto numValues = pow(Upper, Num);
-  std::array<std::array<int, Num>, numValues> arr;
-  for (int i = 0; i < numValues; ++i) {
-    arr[i] = integerToArray<int, Num>(i, Upper);
+  std::array<std::array<Int, Num>, numValues> arr;
+  for (Int i = 0; i < numValues; ++i) {
+    arr[i] = integerToArray<Int, Num>(i, Upper);
   }
   return arr;
 }
 
-template <int Upper, size_t Num>
+// Return a `std::integer_sequence<Int,...>` that contains each
+// value from `[0, ..., Upper - 1] X Num` exactly once. `X` denotes the
+// cartesian product of sets. The elements of the `integer_sequence` are
+// of type `std::array<Int, Num>` where `Int` is the type of `Upper`.
+template <std::integral auto Upper, size_t Num>
 auto toIntegerSequenceCartesianProductEtc() {
   return toIntegerSequence<toArrayCartesianProductEtc<Upper, Num>()>();
 }

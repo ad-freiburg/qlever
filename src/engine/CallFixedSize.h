@@ -46,86 +46,38 @@
 
 namespace ad_utility {
 namespace detail {
-// Internal helper function that calls
-// `lambda.template operator()<i>(args...)`.
-// Requires that `i <= maxValue`, else an `AD_CHECK` fails.
-template <int maxValue>
-auto callLambdaWithStaticInt(int i, auto&& lambda, auto&&... args) {
-  AD_CHECK(i <= maxValue);
 
-  // We store the result of the actual computation in a `std::optional`.
-  // If the `lambda` returns void we don't store anything, but we still need
-  // a type for the `result` variable. We choose `int` as a dummy for this case.
-
-  using Result = decltype(lambda.template operator()<1>());
-  static constexpr bool resultIsVoid = std::is_void_v<Result>;
-  using Storage = std::conditional_t<resultIsVoid, int, std::optional<Result>>;
-  Storage result;
-  // Lambda: If the compile time parameter `I` and the runtime parameter `i`
-  // are equal, then call the `lambda` with `I` as a template parameter and
-  // store the result in `result` (unless it is `void`).
-  DISABLE_WARNINGS_CLANG_13
-  auto applyIf = [&result, lambda = AD_FWD(lambda), ... args = AD_FWD(args)]<int I>(int i) mutable {
-    ENABLE_WARNINGS_CLANG_13
-    if (i == I) {
-      if constexpr (resultIsVoid) {
-        lambda.template operator()<I>(AD_FWD(args)...);
-      } else {
-        result = lambda.template operator()<I>(AD_FWD(args)...);
-      }
-    }
-  };
-
-  // Lambda: call `applyIf` for all the compile-time integers `Is...`. The
-  // runtime parameter always is `i`.
-  auto f = [&applyIf, i ]<int... Is>(std::integer_sequence<int, Is...>) {
-    (..., applyIf.template operator()<Is>(i));
-  };
-
-  // Call f for all compile-time integers in `[0, ..., maxValue]`.
-  // Exactly one of them is equal to `i`, and so the lambda will be executed
-  // exactly once.
-  f(std::make_integer_sequence<int, maxValue + 1>{});
-
-  if constexpr (!resultIsVoid) {
-    return std::move(result.value());
-  }
-}
-
-template <int maxValue, size_t NumValues>
-auto callLambdaWithStaticInt2(std::array<int, NumValues> i, auto&& lambda, auto&&... args) {
+template <int maxValue, size_t NumValues, std::integral Int>
+auto callLambdaWithStaticInt2(std::array<Int, NumValues> i, auto&& lambda, auto&&... args) {
   AD_CHECK(std::ranges::all_of(i, [](auto el) { return el <= maxValue; }));
-  using Arr = std::array<int, NumValues>;
+  using Arr = std::array<Int, NumValues>;
+
+  // Call the `lambda` when the correct compile-time `Int`s are given as a
+  // `std::integer_sequence`.
+  auto applyOnIntegerSequence = [&]<Int... Is>(std::integer_sequence<Int, Is...>) {
+    return lambda.template operator()<Is...>(AD_FWD(args)...);
+  };
 
   // We store the result of the actual computation in a `std::optional`.
   // If the `lambda` returns void we don't store anything, but we still need
   // a type for the `result` variable. We choose `int` as a dummy for this case.
-
-  // TODO<joka921> Here we have to
-  // using Result = decltype(lambda.template operator()<1>(AD_FWD(args)...));
-  using Result = decltype([&]<int... Is>(std::integer_sequence<int, Is...>) {
-    return lambda.template operator()<Is...>(AD_FWD(args)...);
-  }(ad_utility::toIntegerSequence<Arr{}>()));
+  using Result = decltype(applyOnIntegerSequence(ad_utility::toIntegerSequence<Arr{}>()));
   static constexpr bool resultIsVoid = std::is_void_v<Result>;
   using Storage = std::conditional_t<resultIsVoid, int, std::optional<Result>>;
   Storage result;
+
   // Lambda: If the compile time parameter `I` and the runtime parameter `i`
   // are equal, then call the `lambda` with `I` as a template parameter and
   // store the result in `result` (unless it is `void`).
   DISABLE_WARNINGS_CLANG_13
-  auto applyIf = [&i, &result, lambda = AD_FWD(lambda), ... args = AD_FWD(args)]<Arr I>() mutable {
+  auto applyIf = [&applyOnIntegerSequence, &i, &result, lambda = AD_FWD(lambda),
+                  &args...]<Arr I>() mutable {
     ENABLE_WARNINGS_CLANG_13
     if (i == I) {
       if constexpr (resultIsVoid) {
-        [&]<int... Is>(std::integer_sequence<int, Is...>) {
-          lambda.template operator()<Is...>(AD_FWD(args)...);
-        }
-        (ad_utility::toIntegerSequence<I>());
+        applyOnIntegerSequence(ad_utility::toIntegerSequence<I>());
       } else {
-        [&]<int... Is>(std::integer_sequence<int, Is...>) {
-          result = lambda.template operator()<Is...>(AD_FWD(args)...);
-        }
-        (ad_utility::toIntegerSequence<I>());
+        result = applyOnIntegerSequence(ad_utility::toIntegerSequence<I>());
       }
     }
   };
@@ -136,10 +88,11 @@ auto callLambdaWithStaticInt2(std::array<int, NumValues> i, auto&& lambda, auto&
     (..., applyIf.template operator()<Is>());
   };
 
-  // Call f for all compile-time integers in `[0, ..., maxValue]`.
-  // Exactly one of them is equal to `i`, and so the lambda will be executed
-  // exactly once.
-  f(ad_utility::toIntegerSequenceCartesianProductEtc<maxValue + 1, NumValues>());
+  // Call f for all combinations of compileTimeIntegers in `M x NumValues` where
+  // `M` is `[0, ..., maxValue]` and `x` denotes the cartesian product of sets.
+  // Exactly one of these combinations is equal to `i`, and so the lambda will
+  // be executed exactly once.
+  f(ad_utility::toIntegerSequenceCartesianProductEtc<static_cast<Int>(maxValue + 1), NumValues>());
 
   if constexpr (!resultIsVoid) {
     return std::move(result.value());
@@ -148,39 +101,6 @@ auto callLambdaWithStaticInt2(std::array<int, NumValues> i, auto&& lambda, auto&
 
 // The default function that maps `x` to the range `[0, ..., maxValue]`
 constexpr int mapToZeroIfTooLarge(int x, int maxValue) { return x <= maxValue ? x : 0; }
-
-// Uniquely encode the `array` into a single integer
-// in the range `[0,...,(maxValue + 1) ^ NumIntegers - 1]` where `^` denotes
-// exponentiation. Requires that all elements in the `array` are `<= maxValue`,
-// else a runtime check fails.
-template <std::integral Int, size_t NumIntegers>
-requires requires { NumIntegers > 0; }
-int arrayToSingleInteger(const std::array<Int, NumIntegers>& array, const int maxValue) {
-  AD_CHECK(std::ranges::all_of(array, [maxValue](int i) { return i <= maxValue; }));
-  int value = 0;
-  // TODO<joka921, clang16> use `std::views`.
-  for (size_t i = 0; i < array.size(); ++i) {
-    value *= maxValue + 1;
-    value += array[i];
-  }
-  return value;
-}
-
-// The inverse function of `arrayToSingleInteger`. Maps a single integer
-// `value` that is in the range `[0, ..., (maxValue + 1) ^ NumIntegers - 1
-// back to an array of `NumIntegers` many integers that are each in the range
-// `[0, ..., (maxValue)]`
-template <std::integral Int, size_t NumIntegers>
-constexpr std::array<Int, NumIntegers> integerToArray(Int value, Int maxValue) {
-  std::array<Int, NumIntegers> res;
-  Int numValues = maxValue + 1;
-  // TODO<joka921, clang16> use views for reversion.
-  for (size_t i = 0; i < res.size(); ++i) {
-    res[res.size() - 1 - i] = value % numValues;
-    value /= numValues;
-  }
-  return res;
-};
 }
 
 // This function implements the main functionality.
@@ -190,37 +110,15 @@ template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE, size_t NumInte
           std::integral Int>
 decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, auto&& functor, auto&&... args) {
   static_assert(NumIntegers > 0);
-  using namespace detail;
   // TODO<joka921, C++23> Use `std::bind_back`
-  auto p = [](int i) { return mapToZeroIfTooLarge(i, MaxValue); };
+  auto p = [](int i) { return detail::mapToZeroIfTooLarge(i, MaxValue); };
   std::ranges::transform(ints, ints.begin(), p);
-  // int value = arrayToSingleInteger(ints, MaxValue);
-
-  // Lambda: Apply the `functor` when the `ints` are given as template arguments
-  // specified via a `std::integer_sequence`.
-  /*
-  auto applyOnIndexSequence = [&args..., functor = AD_FWD(functor) ]<int... ints>(
-      std::integer_sequence<int, ints...>) mutable {
-    return AD_FWD(functor).template operator()<ints...>(AD_FWD(args)...);
-  };
-   */
-
-  /*
-  // Lambda: Apply the `functor` when the `ints` are given as a single compile
-  // time integer `I` that was obtained via `arrayToSingleInteger`.
-  DISABLE_WARNINGS_CLANG_13
-  auto applyOnSingleInteger = [&applyOnIndexSequence]<int I>() mutable -> decltype(auto) {
-    ENABLE_WARNINGS_CLANG_13
-    constexpr static auto arr = integerToArray<Int, NumIntegers>(I, MaxValue);
-    return applyOnIndexSequence(ad_utility::toIntegerSequence<arr>());
-  };
-   */
 
   // The only step that remains is to lift our single runtime `value` which
   // is in the range `[0, (MaxValue +1)^ NumIntegers]` to a compile-time
   // value and to use this compile time constant on `applyOnSingleInteger`.
   // This can be done via a single call to `callLambdaWithStaticInt`.
-  return callLambdaWithStaticInt2<MaxValue + 1>(ints, AD_FWD(functor), AD_FWD(args)...);
+  return detail::callLambdaWithStaticInt2<MaxValue>(ints, AD_FWD(functor), AD_FWD(args)...);
 }
 
 }  // namespace ad_utility
