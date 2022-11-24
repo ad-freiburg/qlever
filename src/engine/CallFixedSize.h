@@ -18,7 +18,7 @@
 // work, the possible compile time integers have to be in a range [0, ..., MAX] where
 // MAX is a compile-time constant. For runtime integers that are > MAX, the function
 // is called with 0 as a compile-time parameter. This behavior is useful for the
-// `IdTables` (see `IdTable.h`) where `0` is a special value that menas "the number of columns is
+// `IdTables` (see `IdTable.h`) where `0` is a special value that means "the number of columns is
 // only known at runtime". Note that it is relatively easy to customize this behavior such that for
 // example integers that are > MAX lead to a runtime-error. This would make it possible to use these
 // facilities also for a "static switch"
@@ -47,10 +47,12 @@
 namespace ad_utility {
 namespace detail {
 
+// Internal helper functions that calls `lambda.template operator()<I, J,...)(args)`
+// where `I, J, ...` are the elements in the `array`
 template <int maxValue, size_t NumValues, std::integral Int>
-auto callLambdaWithStaticInt2(std::array<Int, NumValues> i, auto&& lambda, auto&&... args) {
-  AD_CHECK(std::ranges::all_of(i, [](auto el) { return el <= maxValue; }));
-  using Arr = std::array<Int, NumValues>;
+auto callLambdaWithStaticInt(std::array<Int, NumValues> array, auto&& lambda, auto&&... args) {
+  AD_CHECK(std::ranges::all_of(array, [](auto el) { return el <= maxValue; }));
+  using ArrayType = std::array<Int, NumValues>;
 
   // Call the `lambda` when the correct compile-time `Int`s are given as a
   // `std::integer_sequence`.
@@ -61,36 +63,35 @@ auto callLambdaWithStaticInt2(std::array<Int, NumValues> i, auto&& lambda, auto&
   // We store the result of the actual computation in a `std::optional`.
   // If the `lambda` returns void we don't store anything, but we still need
   // a type for the `result` variable. We choose `int` as a dummy for this case.
-  using Result = decltype(applyOnIntegerSequence(ad_utility::toIntegerSequence<Arr{}>()));
+  using Result = decltype(applyOnIntegerSequence(ad_utility::toIntegerSequence<ArrayType{}>()));
   static constexpr bool resultIsVoid = std::is_void_v<Result>;
   using Storage = std::conditional_t<resultIsVoid, int, std::optional<Result>>;
   Storage result;
 
-  // Lambda: If the compile time parameter `I` and the runtime parameter `i`
+  // Lambda: If the compile time parameter `I` and the runtime parameter `array`
   // are equal, then call the `lambda` with `I` as a template parameter and
   // store the result in `result` (unless it is `void`).
   DISABLE_WARNINGS_CLANG_13
-  auto applyIf = [&applyOnIntegerSequence, &i, &result, lambda = AD_FWD(lambda),
-                  &args...]<Arr I>() mutable {
+  auto applyIf = [&]<ArrayType Array>() mutable {
     ENABLE_WARNINGS_CLANG_13
-    if (i == I) {
+    if (array == Array) {
       if constexpr (resultIsVoid) {
-        applyOnIntegerSequence(ad_utility::toIntegerSequence<I>());
+        applyOnIntegerSequence(ad_utility::toIntegerSequence<Array>());
       } else {
-        result = applyOnIntegerSequence(ad_utility::toIntegerSequence<I>());
+        result = applyOnIntegerSequence(ad_utility::toIntegerSequence<Array>());
       }
     }
   };
 
   // Lambda: call `applyIf` for all the compile-time integers `Is...`. The
-  // runtime parameter always is `i`.
-  auto f = [&applyIf]<Arr... Is>(std::integer_sequence<Arr, Is...>) {
+  // runtime parameter always is `array`.
+  auto f = [&applyIf]<ArrayType... Is>(std::integer_sequence<ArrayType, Is...>) {
     (..., applyIf.template operator()<Is>());
   };
 
   // Call f for all combinations of compileTimeIntegers in `M x NumValues` where
   // `M` is `[0, ..., maxValue]` and `x` denotes the cartesian product of sets.
-  // Exactly one of these combinations is equal to `i`, and so the lambda will
+  // Exactly one of these combinations is equal to `array`, and so the lambda will
   // be executed exactly once.
   f(ad_utility::toIntegerSequenceCartesianProductEtc<static_cast<Int>(maxValue + 1), NumValues>());
 
@@ -118,12 +119,19 @@ decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, auto&& functor, 
   // is in the range `[0, (MaxValue +1)^ NumIntegers]` to a compile-time
   // value and to use this compile time constant on `applyOnSingleInteger`.
   // This can be done via a single call to `callLambdaWithStaticInt`.
-  return detail::callLambdaWithStaticInt2<MaxValue>(ints, AD_FWD(functor), AD_FWD(args)...);
+  return detail::callLambdaWithStaticInt<MaxValue>(ints, AD_FWD(functor), AD_FWD(args)...);
 }
 
 }  // namespace ad_utility
 
 // The definitions of the macro for an easier syntax.
+// The first argument (an array of integers) has to be put in parentheses if
+// it is directly instantiated in the call, for example
+// `CALL_FIXED_SIZE((std::array{1, 2}), &funcThatTakesTwoIntegers, argument);`
+// This is necessary because macros do not correctly parse the curly braces.
+// TODO<joka921, C++23> In C++23 `std::array` and other aggregates can be
+// initialized with parentheses such that we can write
+// `CALL_FIXED_SIZE(std::array(1, 2), ...`.
 #define CALL_FIXED_SIZE(integers, func, ...)                    \
   ad_utility::callFixedSize(                                    \
       integers, []<int... Is>(auto&&... args)->decltype(auto) { \

@@ -360,11 +360,10 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   eids.push_back(I(0));
   scores.push_back(10);
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Weverything"
+  DISABLE_WARNINGS_CLANG_13
   ad_utility::callFixedSize(
       std::array{width}, [&cids, &eids, &scores, &result]<int WIDTH>() mutable {
-#pragma GCC diagnostic pop
+        ENABLE_WARNINGS_CLANG_13
         FTSAlgorithms::aggScoresAndTakeTopContext<WIDTH>(cids, eids, scores,
                                                          &result);
       });
