@@ -101,6 +101,12 @@ auto callLambdaForIntArray(std::array<Int, NumValues> array, auto&& lambda, auto
   }
 }
 
+// Overload for a single int.
+template <int maxValue, std::integral Int>
+auto callLambdaForIntArray(Int i, auto&& lambda, auto&&... args) {
+  return callLambdaForIntArray<maxValue>(std::array{i}, AD_FWD(lambda), AD_FWD(args)...);
+}
+
 // The default function that maps `x` to the range `[0, ..., maxValue]`
 constexpr int mapToZeroIfTooLarge(int x, int maxValue) { return x <= maxValue ? x : 0; }
 }
@@ -126,7 +132,7 @@ decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, auto&& functor, 
 // Overload for a single integer.
 template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE, std::integral Int>
 decltype(auto) callFixedSize(Int i, auto&& functor, auto&&... args) {
-  return callFixedSize(std::array{i}, AD_FWD(functor), AD_FWD(args)...);
+  return callFixedSize<MaxValue>(std::array{i}, AD_FWD(functor), AD_FWD(args)...);
 }
 
 }  // namespace ad_utility
