@@ -126,7 +126,7 @@ decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, auto&& functor, 
 // Overload for a single integer.
 template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE, std::integral Int>
 decltype(auto) callFixedSize(Int i, auto&& functor, auto&&... args) {
-  return callFixedSize(i, AD_FWD(functor), AD_FWD(args)...);
+  return callFixedSize(std::array{i}, AD_FWD(functor), AD_FWD(args)...);
 }
 
 }  // namespace ad_utility
