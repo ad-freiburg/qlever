@@ -48,8 +48,7 @@ inline VectorWithMemoryLimit<ValueId> getIdsFromVariable(
     const ::Variable& variable, EvaluationContext* context) {
   auto cols = context->_inputTable.cols();
   VectorWithMemoryLimit<ValueId> result{context->_allocator};
-  CALL_FIXED_SIZE(std::array{cols}, &getIdsFromVariableImpl, result, variable,
-                  context);
+  CALL_FIXED_SIZE(cols, &getIdsFromVariableImpl, result, variable, context);
   return result;
 }
 

@@ -50,9 +50,9 @@ auto toIntegerSequence() {
   // return typename detail::ToIntegerSequenceImpl<Array>::type{};
 }
 
-// The inverse function of `arrayToSingleInteger`. Maps a single integer
-// `value` that is in the range `[0, ..., (maxValue + 1) ^ NumIntegers - 1
-// back to an array of `NumIntegers` many integers that are each in the range
+// Map a single integer `value` that is in the range `[0, ..., (maxValue + 1) ^
+// NumIntegers - 1 to an array of `NumIntegers` many integers that are each in
+// the range
 // `[0, ..., (maxValue)]`
 template <std::integral Int, size_t NumIntegers>
 constexpr std::array<Int, NumIntegers> integerToArray(Int value,
@@ -68,10 +68,10 @@ constexpr std::array<Int, NumIntegers> integerToArray(Int value,
 
 // Return a `std::array<std::array<Int, Num>, pow(Upper, Num)>` (where `Int` is
 // the type of `Upper`) that contains each
-// value from `[0, ..., Upper - 1] X Num` exactly once. `X` denotes the
-// cartesian product of sets.
+// value from `[0, ..., Upper - 1] ^ Num` exactly once. `^` denotes the
+// cartesian power.
 template <std::integral auto Upper, size_t Num>
-constexpr auto toArrayCartesianProductEtc() {
+constexpr auto cartesianPowerAsArray() {
   using Int = decltype(Upper);
   constexpr auto numValues = pow(Upper, Num);
   std::array<std::array<Int, Num>, numValues> arr;
@@ -86,8 +86,8 @@ constexpr auto toArrayCartesianProductEtc() {
 // cartesian product of sets. The elements of the `integer_sequence` are
 // of type `std::array<Int, Num>` where `Int` is the type of `Upper`.
 template <std::integral auto Upper, size_t Num>
-auto toIntegerSequenceCartesianProductEtc() {
-  return toIntegerSequence<toArrayCartesianProductEtc<Upper, Num>()>();
+auto cartesianPowerAsIntegerArray() {
+  return toIntegerSequence<cartesianPowerAsArray<Upper, Num>()>();
 }
 
 }  // namespace ad_utility

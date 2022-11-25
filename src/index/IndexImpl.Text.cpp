@@ -961,9 +961,8 @@ void IndexImpl::getECListForWords(const string& words, size_t nofVars,
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
   int width = result->cols();
-  CALL_FIXED_SIZE((std::array{width}),
-                  FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts, cids,
-                  eids, scores, nofVars, limit, result);
+  CALL_FIXED_SIZE(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
+                  cids, eids, scores, nofVars, limit, result);
   LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
              << "\n";
 }
@@ -995,12 +994,12 @@ void IndexImpl::getFilteredECListForWords(const string& words,
     getContextEntityScoreListsForWords(words, cids, eids, scores);
     int width = result->cols();
     if (nofVars == 1) {
-      CALL_FIXED_SIZE((std::array{width}),
+      CALL_FIXED_SIZE(width,
                       FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
                       cids, eids, scores, fMap, limit, result);
     } else {
       ad_utility::callFixedSize(
-          std::array{width},
+          width,
           []<int I>(auto&&... args) {
             FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<I>(
                 AD_FWD(args)...);
@@ -1035,7 +1034,7 @@ void IndexImpl::getFilteredECListForWordsWidthOne(const string& words,
         cids, eids, scores, fSet, limit, result);
   } else {
     ad_utility::callFixedSize(
-        std::array{width},
+        width,
         []<int I>(auto&&... args) {
           FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<I>(
               AD_FWD(args)...);

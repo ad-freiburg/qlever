@@ -712,10 +712,10 @@ void TransitivePath::computeResult(ResultTable* result) {
         _leftIsVar, _leftSubCol, _rightSubCol, _leftValue, _minDist, _maxDist,
         _resultWidth);
   } else {
-    CALL_FIXED_SIZE(
-        (std::array{subWidth}), &TransitivePath::computeTransitivePath, this,
-        &result->_idTable, subRes->_idTable, _leftIsVar, _rightIsVar,
-        _leftSubCol, _rightSubCol, _leftValue, _rightValue, _minDist, _maxDist);
+    CALL_FIXED_SIZE(subWidth, &TransitivePath::computeTransitivePath, this,
+                    &result->_idTable, subRes->_idTable, _leftIsVar,
+                    _rightIsVar, _leftSubCol, _rightSubCol, _leftValue,
+                    _rightValue, _minDist, _maxDist);
   }
 
   LOG(DEBUG) << "TransitivePath result computation done." << std::endl;

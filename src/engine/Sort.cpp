@@ -81,8 +81,7 @@ void Sort::computeResult(ResultTable* result) {
   result->_idTable.insert(result->_idTable.end(), subRes->_idTable.begin(),
                           subRes->_idTable.end());
   int width = result->_idTable.cols();
-  CALL_FIXED_SIZE((std::array{width}), &Engine::sort, &result->_idTable,
-                  _sortCol);
+  CALL_FIXED_SIZE(width, &Engine::sort, &result->_idTable, _sortCol);
   result->_sortedBy = resultSortedOn();
 
   LOG(DEBUG) << "Sort result computation done." << endl;

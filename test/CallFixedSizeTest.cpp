@@ -9,7 +9,7 @@
 
 using namespace ad_utility;
 
-TEST(CallFixedSize, callLambdaWithStaticInt) {
+TEST(CallFixedSize, callLambdaForIntArray) {
   using namespace ad_utility::detail;
 
   auto returnIPlusArgs = []<int I>(int arg1 = 0, int arg2 = 0) {
@@ -18,20 +18,15 @@ TEST(CallFixedSize, callLambdaWithStaticInt) {
 
   static constexpr int maxValue = 242;
   for (int i = 0; i <= maxValue; ++i) {
-    ASSERT_EQ(callLambdaWithStaticInt<maxValue>(std::array{i}, returnIPlusArgs),
-              i);
-    ASSERT_EQ(
-        callLambdaWithStaticInt<maxValue>(std::array{i}, returnIPlusArgs, 2, 4),
-        i + 6);
+    ASSERT_EQ(callLambdaForIntArray<maxValue>(i, returnIPlusArgs), i);
+    ASSERT_EQ(callLambdaForIntArray<maxValue>(i, returnIPlusArgs, 2, 4), i + 6);
   }
 
   for (int i = maxValue + 1; i < maxValue + 5; ++i) {
-    ASSERT_THROW(
-        callLambdaWithStaticInt<maxValue>(std::array{i}, returnIPlusArgs),
-        std::exception);
-    ASSERT_THROW(
-        callLambdaWithStaticInt<maxValue>(std::array{i}, returnIPlusArgs, 2, 4),
-        std::exception);
+    ASSERT_THROW(callLambdaForIntArray<maxValue>(i, returnIPlusArgs),
+                 std::exception);
+    ASSERT_THROW(callLambdaForIntArray<maxValue>(i, returnIPlusArgs, 2, 4),
+                 std::exception);
   }
 
   // Check for an array of size > 1
@@ -42,25 +37,25 @@ TEST(CallFixedSize, callLambdaWithStaticInt) {
   for (int i = 0; i <= maxValue3; ++i) {
     for (int j = 0; j <= maxValue3; ++j) {
       for (int k = 0; k <= maxValue3; ++k) {
-        ASSERT_EQ(callLambdaWithStaticInt<maxValue3>(std::array{i, j, k},
-                                                     returnIJKPlusArgs),
+        ASSERT_EQ(callLambdaForIntArray<maxValue3>(std::array{i, j, k},
+                                                   returnIJKPlusArgs),
                   i + j + k);
-        ASSERT_EQ(callLambdaWithStaticInt<maxValue3>(std::array{i, j, k},
-                                                     returnIJKPlusArgs, 2, 4),
+        ASSERT_EQ(callLambdaForIntArray<maxValue3>(std::array{i, j, k},
+                                                   returnIJKPlusArgs, 2, 4),
                   i + j + k + 6);
       }
     }
   }
 
-  ASSERT_THROW(callLambdaWithStaticInt<maxValue3>(
-                   std::array{maxValue3 + 1, 0, 0}, returnIJKPlusArgs),
+  ASSERT_THROW(callLambdaForIntArray<maxValue3>(std::array{maxValue3 + 1, 0, 0},
+                                                returnIJKPlusArgs),
                std::exception);
 
-  ASSERT_THROW(callLambdaWithStaticInt<maxValue3>(
-                   std::array{0, maxValue3 + 1, 0}, returnIJKPlusArgs),
+  ASSERT_THROW(callLambdaForIntArray<maxValue3>(std::array{0, maxValue3 + 1, 0},
+                                                returnIJKPlusArgs),
                std::exception);
-  ASSERT_THROW(callLambdaWithStaticInt<maxValue3>(
-                   std::array{0, 0, maxValue3 + 1}, returnIJKPlusArgs),
+  ASSERT_THROW(callLambdaForIntArray<maxValue3>(std::array{0, 0, maxValue3 + 1},
+                                                returnIJKPlusArgs),
                std::exception);
 }
 
@@ -99,31 +94,26 @@ TEST(CallFixedSize, CallFixedSize1) {
   // static constexpr int m = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE;
   auto testWithGivenUpperBound = [](auto m, bool useMacro) {
     for (int i = 0; i <= m; ++i) {
-      ASSERT_EQ(callFixedSize<m>(std::array{i}, lambda), i);
-      ASSERT_EQ(callFixedSize<m>(std::array{i}, lambda, 2, 3), i + 5);
+      ASSERT_EQ(callFixedSize<m>(i, lambda), i);
+      ASSERT_EQ(callFixedSize<m>(i, lambda, 2, 3), i + 5);
       if (useMacro) {
-        ASSERT_EQ(CALL_FIXED_SIZE((std::array{i}), freeFunction, 2, 3), i + 5);
+        ASSERT_EQ(CALL_FIXED_SIZE(i, freeFunction, 2, 3), i + 5);
         S s;
-        ASSERT_EQ(
-            CALL_FIXED_SIZE((std::array{i}), &S::memberFunction, &s, 2, 3),
-            i + 5);
-        ASSERT_EQ(CALL_FIXED_SIZE((std::array{i}), &S::staticFunction, 2, 3),
-                  i + 5);
+        ASSERT_EQ(CALL_FIXED_SIZE(i, &S::memberFunction, &s, 2, 3), i + 5);
+        ASSERT_EQ(CALL_FIXED_SIZE(i, &S::staticFunction, 2, 3), i + 5);
       }
     }
 
     // Values that are greater than `m` will be mapped to zero before being
     // passed to the actual function.
     for (int i = m + 1; i <= m + m + 1; ++i) {
-      ASSERT_EQ(callFixedSize<m>(std::array{i}, lambda), 0);
-      ASSERT_EQ(callFixedSize<m>(std::array{i}, lambda, 2, 3), 5);
+      ASSERT_EQ(callFixedSize<m>(i, lambda), 0);
+      ASSERT_EQ(callFixedSize<m>(i, lambda, 2, 3), 5);
       if (useMacro) {
-        ASSERT_EQ(CALL_FIXED_SIZE((std::array{i}), freeFunction, 2, 3), 5);
+        ASSERT_EQ(CALL_FIXED_SIZE(i, freeFunction, 2, 3), 5);
         S s;
-        ASSERT_EQ(
-            CALL_FIXED_SIZE((std::array{i}), &S::memberFunction, &s, 2, 3), 5);
-        ASSERT_EQ(CALL_FIXED_SIZE((std::array{i}), &S::staticFunction, 2, 3),
-                  5);
+        ASSERT_EQ(CALL_FIXED_SIZE(i, &S::memberFunction, &s, 2, 3), 5);
+        ASSERT_EQ(CALL_FIXED_SIZE(i, &S::staticFunction, 2, 3), 5);
       }
     }
   };

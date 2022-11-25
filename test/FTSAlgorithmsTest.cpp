@@ -305,13 +305,18 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   vector<Id> eids;
   vector<Score> scores;
   int width = result.cols();
+
+  // In the following there are many similar calls to `callFixedSize`.
+  // We use a lambda to reduce code duplication.
   DISABLE_WARNINGS_CLANG_13
-  ad_utility::callFixedSize(std::array{width},
-                            [&cids, &eids, &scores, &result]<int WIDTH>() {
-                              FTSAlgorithms::aggScoresAndTakeTopContext<WIDTH>(
-                                  cids, eids, scores, &result);
-                            });
+  auto callFixed = [](int width, auto&&... args) {
+    ad_utility::callFixedSize(width, [&]<int WIDTH>() {
+      FTSAlgorithms::aggScoresAndTakeTopContext<WIDTH>(AD_FWD(args)...);
+    });
+  };
   ENABLE_WARNINGS_CLANG_13
+
+  callFixed(width, cids, eids, scores, &result);
 
   ASSERT_EQ(0u, result.size());
 
@@ -326,14 +331,6 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   scores.push_back(0);
   scores.push_back(1);
   scores.push_back(2);
-
-  DISABLE_WARNINGS_CLANG_13
-  auto callFixed = [](int width, auto&&... args) {
-    ad_utility::callFixedSize(std::array{width}, [&]<int WIDTH>() {
-      FTSAlgorithms::aggScoresAndTakeTopContext<WIDTH>(AD_FWD(args)...);
-    });
-  };
-  ENABLE_WARNINGS_CLANG_13
 
   callFixed(width, cids, eids, scores, &result);
   ASSERT_EQ(1u, result.size());
@@ -362,7 +359,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
 
   DISABLE_WARNINGS_CLANG_13
   ad_utility::callFixedSize(
-      std::array{width}, [&cids, &eids, &scores, &result]<int WIDTH>() mutable {
+      width, [&cids, &eids, &scores, &result]<int WIDTH>() mutable {
         ENABLE_WARNINGS_CLANG_13
         FTSAlgorithms::aggScoresAndTakeTopContext<WIDTH>(cids, eids, scores,
                                                          &result);
@@ -474,7 +471,7 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithTwoW1Test) {
 TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
   auto callFixed = [](int width, auto&&... args) {
     ad_utility::callFixedSize(
-        DISABLE_WARNINGS_CLANG_13 std::array{width}, [&]<int WIDTH>() mutable {
+        DISABLE_WARNINGS_CLANG_13 width, [&]<int WIDTH>() mutable {
           ENABLE_WARNINGS_CLANG_13
           FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<WIDTH>(
               AD_FWD(args)...);
@@ -575,7 +572,7 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
   ad_utility::HashMap<Id, IdTable> fMap1;
 
   int width = resW3.cols();
-  CALL_FIXED_SIZE((std::array{width}),
+  CALL_FIXED_SIZE(width,
                   FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts, cids,
                   eids, scores, fMap1, k, &resW3);
   ASSERT_EQ(0u, resW3.size());
@@ -601,7 +598,7 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
   scores.push_back(1);
   scores.push_back(1);
 
-  CALL_FIXED_SIZE((std::array{width}),
+  CALL_FIXED_SIZE(width,
                   FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts, cids,
                   eids, scores, fMap1, k, &resW3);
   ASSERT_EQ(0u, resW3.size());
@@ -610,13 +607,13 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
   ASSERT_TRUE(success);
   it->second.push_back({I(1)});
 
-  CALL_FIXED_SIZE((std::array{width}),
+  CALL_FIXED_SIZE(width,
                   FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts, cids,
                   eids, scores, fMap1, k, &resW3);
   ASSERT_EQ(1u, resW3.size());
   resW3.clear();
   k = 10;
-  CALL_FIXED_SIZE((std::array{width}),
+  CALL_FIXED_SIZE(width,
                   FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts, cids,
                   eids, scores, fMap1, k, &resW3);
   ASSERT_EQ(2u, resW3.size());
@@ -627,7 +624,7 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
     it->second.push_back({I(0)});
   }
   resW3.clear();
-  CALL_FIXED_SIZE((std::array{width}),
+  CALL_FIXED_SIZE(width,
                   FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts, cids,
                   eids, scores, fMap1, k, &resW3);
   ASSERT_EQ(5u, resW3.size());
@@ -644,7 +641,7 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
   IdTable resVar{7, allocator()};
   k = 1;
   width = 7;
-  CALL_FIXED_SIZE((std::array{width}),
+  CALL_FIXED_SIZE(width,
                   FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts, cids,
                   eids, scores, fMap4, k, &resVar);
   ASSERT_EQ(3u, resVar.size());
@@ -655,7 +652,7 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
     it->second.push_back({I(2), I(2), I(2), I(2)});
   }
   resVar.clear();
-  CALL_FIXED_SIZE((std::array{width}),
+  CALL_FIXED_SIZE(width,
                   FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts, cids,
                   eids, scores, fMap4, k, &resVar);
   ASSERT_EQ(4u, resVar.size());
@@ -700,7 +697,7 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
 
     auto test = [&](int width, auto&&... args) {
       ad_utility::callFixedSize(
-          DISABLE_WARNINGS_CLANG_13(std::array{width}), [&]<int I>() mutable {
+          DISABLE_WARNINGS_CLANG_13 width, [&]<int I>() mutable {
             ENABLE_WARNINGS_CLANG_13
             FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<I>(
                 AD_FWD(args)...);

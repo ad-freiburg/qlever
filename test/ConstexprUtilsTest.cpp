@@ -73,37 +73,37 @@ TEST(ConstexprUtils, toIntegerSequence) {
                        (toIntegerSequence<std::array{-12}>())));
 }
 
-TEST(ConstexprUtils, toArrayCartesianProductEtc) {
+TEST(ConstexprUtils, cartesianPowerAsArray) {
   std::array<std::array<int, 1>, 4> a{std::array{0}, std::array{1},
                                       std::array{2}, std::array{3}};
-  ASSERT_EQ(a, (toArrayCartesianProductEtc<4, 1>()));
+  ASSERT_EQ(a, (cartesianPowerAsArray<4, 1>()));
 
   std::array<std::array<int, 2>, 4> b{std::array{0, 0}, std::array{0, 1},
                                       std::array{1, 0}, std::array{1, 1}};
-  ASSERT_EQ(b, (toArrayCartesianProductEtc<2, 2>()));
+  ASSERT_EQ(b, (cartesianPowerAsArray<2, 2>()));
 
   std::array<std::array<int, 3>, 8> c{std::array{0, 0, 0}, std::array{0, 0, 1},
                                       std::array{0, 1, 0}, std::array{0, 1, 1},
                                       std::array{1, 0, 0}, std::array{1, 0, 1},
                                       std::array{1, 1, 0}, std::array{1, 1, 1}};
-  ASSERT_EQ(c, (toArrayCartesianProductEtc<2, 3>()));
+  ASSERT_EQ(c, (cartesianPowerAsArray<2, 3>()));
 }
 
-TEST(ConstexprUtils, toIntegerSequenceCartesianProductEtc) {
+TEST(ConstexprUtils, cartesianPowerAsIntegerArray) {
   std::integer_sequence<std::array<int, 1>, std::array{0}, std::array{1},
                         std::array{2}, std::array{3}>
       a;
-  ASSERT_TRUE(compare(a, (toIntegerSequenceCartesianProductEtc<4, 1>())));
+  ASSERT_TRUE(compare(a, (cartesianPowerAsIntegerArray<4, 1>())));
 
   std::integer_sequence<std::array<int, 2>, std::array{0, 0}, std::array{0, 1},
                         std::array{1, 0}, std::array{1, 1}>
       b;
-  ASSERT_TRUE(compare(b, (toIntegerSequenceCartesianProductEtc<2, 2>())));
+  ASSERT_TRUE(compare(b, (cartesianPowerAsIntegerArray<2, 2>())));
 
   std::integer_sequence<
       std::array<int, 3>, std::array{0, 0, 0}, std::array{0, 0, 1},
       std::array{0, 1, 0}, std::array{0, 1, 1}, std::array{1, 0, 0},
       std::array{1, 0, 1}, std::array{1, 1, 0}, std::array{1, 1, 1}>
       c;
-  ASSERT_TRUE(compare(c, (toIntegerSequenceCartesianProductEtc<2, 3>())));
+  ASSERT_TRUE(compare(c, (cartesianPowerAsIntegerArray<2, 3>())));
 }

@@ -229,7 +229,7 @@ TEST(EngineTest, distinctTest) {
   inp.push_back({I(1), I(6), I(5), I(1)});
 
   std::vector<size_t> keepIndices = {1, 2};
-  CALL_FIXED_SIZE((std::array{4}), Engine::distinct, inp, keepIndices, &res);
+  CALL_FIXED_SIZE(4, Engine::distinct, inp, keepIndices, &res);
 
   ASSERT_EQ(3u, res.size());
   ASSERT_EQ(inp[0], res[0]);

@@ -48,9 +48,10 @@ namespace ad_utility {
 namespace detail {
 
 // Internal helper functions that calls `lambda.template operator()<I, J,...)(args)`
-// where `I, J, ...` are the elements in the `array`
+// where `I, J, ...` are the elements in the `array`. Requires that each element in
+// the `array` is `<= maxValue`.
 template <int maxValue, size_t NumValues, std::integral Int>
-auto callLambdaWithStaticInt(std::array<Int, NumValues> array, auto&& lambda, auto&&... args) {
+auto callLambdaForIntArray(std::array<Int, NumValues> array, auto&& lambda, auto&&... args) {
   AD_CHECK(std::ranges::all_of(array, [](auto el) { return el <= maxValue; }));
   using ArrayType = std::array<Int, NumValues>;
 
@@ -93,7 +94,7 @@ auto callLambdaWithStaticInt(std::array<Int, NumValues> array, auto&& lambda, au
   // `M` is `[0, ..., maxValue]` and `x` denotes the cartesian product of sets.
   // Exactly one of these combinations is equal to `array`, and so the lambda will
   // be executed exactly once.
-  f(ad_utility::toIntegerSequenceCartesianProductEtc<static_cast<Int>(maxValue + 1), NumValues>());
+  f(ad_utility::cartesianPowerAsIntegerArray<static_cast<Int>(maxValue + 1), NumValues>());
 
   if constexpr (!resultIsVoid) {
     return std::move(result.value());
@@ -118,8 +119,14 @@ decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, auto&& functor, 
   // The only step that remains is to lift our single runtime `value` which
   // is in the range `[0, (MaxValue +1)^ NumIntegers]` to a compile-time
   // value and to use this compile time constant on `applyOnSingleInteger`.
-  // This can be done via a single call to `callLambdaWithStaticInt`.
-  return detail::callLambdaWithStaticInt<MaxValue>(ints, AD_FWD(functor), AD_FWD(args)...);
+  // This can be done via a single call to `callLambdaForIntArray`.
+  return detail::callLambdaForIntArray<MaxValue>(ints, AD_FWD(functor), AD_FWD(args)...);
+}
+
+// Overload for a single integer.
+template <int MaxValue = DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE, std::integral Int>
+decltype(auto) callFixedSize(Int i, auto&& functor, auto&&... args) {
+  return callFixedSize(i, AD_FWD(functor), AD_FWD(args)...);
 }
 
 }  // namespace ad_utility
@@ -131,7 +138,9 @@ decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, auto&& functor, 
 // This is necessary because macros do not correctly parse the curly braces.
 // TODO<joka921, C++23> In C++23 `std::array` and other aggregates can be
 // initialized with parentheses such that we can write
-// `CALL_FIXED_SIZE(std::array(1, 2), ...`.
+// `CALL_FIXED_SIZE(std::array(1, 2), ...`. For a single integer you can also
+// simply write `CALL_FIXED_SIZE(1, function, params)`, this is handled by
+// the corresponding overload of `ad_utility::callFixedSize`.
 #define CALL_FIXED_SIZE(integers, func, ...)                    \
   ad_utility::callFixedSize(                                    \
       integers, []<int... Is>(auto&&... args)->decltype(auto) { \
