@@ -40,7 +40,8 @@ TEST(EngineTest, joinTest) {
   int rwidth = b.cols();
   int reswidth = a.cols() + b.cols() - 1;
   Join J{Join::InvalidOnlyForTestingJoinTag{}};
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, a, 0, b, 0, &res);
+  CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::join, J, a, 0,
+                  b, 0, &res);
 
   ASSERT_EQ(I(1), res(0, 0));
   ASSERT_EQ(I(1), res(0, 1));
@@ -66,7 +67,8 @@ TEST(EngineTest, joinTest) {
   a.push_back({I(400000), I(200000)});
   b.push_back({I(400000), I(200000)});
 
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, a, 0, b, 0, &res);
+  CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::join, J, a, 0,
+                  b, 0, &res);
   ASSERT_EQ(6u, res.size());
 
   a.clear();
@@ -84,7 +86,8 @@ TEST(EngineTest, joinTest) {
   }
   a.push_back({I(4000001), I(200000)});
   b.push_back({I(4000001), I(200000)});
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, a, 0, b, 0, &res);
+  CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::join, &J, a, 0,
+                  b, 0, &res);
   ASSERT_EQ(2u, res.size());
 
   a.clear();
@@ -104,7 +107,8 @@ TEST(EngineTest, joinTest) {
   reswidth = b.cols() + c.cols() - 1;
   // reset the IdTable.
   res = IdTable(reswidth, allocator());
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, b, 0, c, 0, &res);
+  CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::join, J, b, 0,
+                  c, 0, &res);
 
   ASSERT_EQ(2u, res.size());
 
@@ -137,8 +141,8 @@ TEST(EngineTest, optionalJoinTest) {
   int aWidth = a.cols();
   int bWidth = b.cols();
   int resWidth = res.cols();
-  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth, OptionalJoin::optionalJoin, a, b,
-                    false, true, jcls, &res);
+  CALL_FIXED_SIZE((std::array{aWidth, bWidth, resWidth}),
+                  OptionalJoin::optionalJoin, a, b, false, true, jcls, &res);
 
   ASSERT_EQ(5u, res.size());
 
@@ -186,8 +190,8 @@ TEST(EngineTest, optionalJoinTest) {
   aWidth = va.cols();
   bWidth = vb.cols();
   resWidth = vres.cols();
-  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth, OptionalJoin::optionalJoin, va,
-                    vb, true, false, jcls, &vres);
+  CALL_FIXED_SIZE((std::array{aWidth, bWidth, resWidth}),
+                  OptionalJoin::optionalJoin, va, vb, true, false, jcls, &vres);
 
   ASSERT_EQ(5u, vres.size());
   ASSERT_EQ(7u, vres.cols());
@@ -225,7 +229,7 @@ TEST(EngineTest, distinctTest) {
   inp.push_back({I(1), I(6), I(5), I(1)});
 
   std::vector<size_t> keepIndices = {1, 2};
-  CALL_FIXED_SIZE_1(4, Engine::distinct, inp, keepIndices, &res);
+  CALL_FIXED_SIZE(4, Engine::distinct, inp, keepIndices, &res);
 
   ASSERT_EQ(3u, res.size());
   ASSERT_EQ(inp[0], res[0]);

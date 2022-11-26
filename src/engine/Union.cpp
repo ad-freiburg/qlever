@@ -161,10 +161,10 @@ void Union::computeResult(ResultTable* result) {
   int leftWidth = subRes1->_idTable.cols();
   int rightWidth = subRes2->_idTable.cols();
   int outWidth = result->_idTable.cols();
-  CALL_FIXED_SIZE_3(leftWidth, rightWidth, outWidth, computeUnion,
-                    &result->_idTable, subRes1->_idTable, subRes2->_idTable,
-                    _columnOrigins);
 
+  CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, outWidth}),
+                  &Union::computeUnion, this, &result->_idTable,
+                  subRes1->_idTable, subRes2->_idTable, _columnOrigins);
   LOG(DEBUG) << "Union result computation done." << std::endl;
 }
 

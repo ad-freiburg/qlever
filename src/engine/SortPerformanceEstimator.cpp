@@ -45,7 +45,7 @@ double SortPerformanceEstimator::measureSortingTimeInSeconds(
   ad_utility::Timer timer;
   timer.start();
   // Always sort on the first column for simplicity;
-  CALL_FIXED_SIZE_1(numColumns, Engine::sort, &randomTable, 0ull);
+  CALL_FIXED_SIZE(numColumns, &Engine::sort, &randomTable, 0ull);
   timer.stop();
   return timer.secs();
 }

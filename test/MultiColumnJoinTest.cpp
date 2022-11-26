@@ -44,8 +44,8 @@ TEST(EngineTest, multiColumnJoinTest) {
   int aWidth = a.cols();
   int bWidth = b.cols();
   int resWidth = res.cols();
-  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth,
-                    MultiColumnJoin::computeMultiColumnJoin, a, b, jcls, &res);
+  CALL_FIXED_SIZE((std::array{aWidth, bWidth, resWidth}),
+                  MultiColumnJoin::computeMultiColumnJoin, a, b, jcls, &res);
 
   ASSERT_EQ(2u, res.size());
 
@@ -80,9 +80,8 @@ TEST(EngineTest, multiColumnJoinTest) {
   aWidth = va.cols();
   bWidth = vb.cols();
   resWidth = vres.cols();
-  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth,
-                    MultiColumnJoin::computeMultiColumnJoin, va, vb, jcls,
-                    &vres);
+  CALL_FIXED_SIZE((std::array{aWidth, bWidth, resWidth}),
+                  MultiColumnJoin::computeMultiColumnJoin, va, vb, jcls, &vres);
 
   ASSERT_EQ(4u, vres.size());
   ASSERT_EQ(7u, vres.cols());

@@ -339,9 +339,9 @@ void GroupBy::computeResult(ResultTable* result) {
   int inWidth = subresult->_idTable.cols();
   int outWidth = result->_idTable.cols();
 
-  CALL_FIXED_SIZE_2(inWidth, outWidth, doGroupBy, subresult->_idTable,
-                    groupByCols, aggregates, &result->_idTable, subresult.get(),
-                    result);
+  CALL_FIXED_SIZE((std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
+                  subresult->_idTable, groupByCols, aggregates,
+                  &result->_idTable, subresult.get(), result);
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
 }
 

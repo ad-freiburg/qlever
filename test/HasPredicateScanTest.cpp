@@ -260,9 +260,9 @@ TEST(HasPredicateScan, subtreeS) {
   std::shared_ptr<const ResultTable> subresult = subtree->getResult();
   int in_width = 2;
   int out_width = 3;
-  CALL_FIXED_SIZE_2(in_width, out_width, HasPredicateScan::computeSubqueryS,
-                    &resultTable._idTable, subresult->_idTable, 1, hasPattern,
-                    hasRelation, patterns);
+  CALL_FIXED_SIZE((std::array{in_width, out_width}),
+                  HasPredicateScan::computeSubqueryS, &resultTable._idTable,
+                  subresult->_idTable, 1, hasPattern, hasRelation, patterns);
 
   IdTable& result = resultTable._idTable;
 
@@ -335,9 +335,9 @@ TEST(CountAvailablePredicates, patternTrickTest) {
 
   RuntimeInformation runtimeInfo;
   try {
-    CALL_FIXED_SIZE_1(
-        input.cols(), CountAvailablePredicates::computePatternTrick, input,
-        &result, hasPattern, hasRelation, patterns, 0, &runtimeInfo);
+    CALL_FIXED_SIZE(input.cols(), CountAvailablePredicates::computePatternTrick,
+                    input, &result, hasPattern, hasRelation, patterns, 0,
+                    &runtimeInfo);
   } catch (const std::runtime_error& e) {
     // More verbose output in the case of an exception occuring.
     std::cout << e.what() << std::endl;

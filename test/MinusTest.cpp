@@ -51,7 +51,8 @@ TEST(EngineTest, minusTest) {
   int aWidth = a.cols();
   int bWidth = b.cols();
   Minus m{Minus::OnlyForTestingTag{}};
-  CALL_FIXED_SIZE_2(aWidth, bWidth, m.computeMinus, a, b, jcls, &res);
+  CALL_FIXED_SIZE((std::array{aWidth, bWidth}), &Minus::computeMinus, m, a, b,
+                  jcls, &res);
 
   ASSERT_EQ(wantedRes.size(), res.size());
 
@@ -62,7 +63,8 @@ TEST(EngineTest, minusTest) {
   // Test subtracting without matching columns
   res.clear();
   jcls.clear();
-  CALL_FIXED_SIZE_2(aWidth, bWidth, m.computeMinus, a, b, jcls, &res);
+  CALL_FIXED_SIZE((std::array{aWidth, bWidth}), &Minus::computeMinus, m, a, b,
+                  jcls, &res);
   ASSERT_EQ(a.size(), res.size());
   for (size_t i = 0; i < a.size(); ++i) {
     ASSERT_EQ(a[i], res[i]);
@@ -88,7 +90,8 @@ TEST(EngineTest, minusTest) {
   // of fixed size columns plus one).
   aWidth = va.cols();
   bWidth = vb.cols();
-  CALL_FIXED_SIZE_2(aWidth, bWidth, m.computeMinus, va, vb, jcls, &vres);
+  CALL_FIXED_SIZE((std::array{aWidth, bWidth}), &Minus::computeMinus, m, va, vb,
+                  jcls, &vres);
 
   wantedRes = table(6);
   wantedRes.push_back({I(7), I(6), I(5), I(4), I(3), I(2)});

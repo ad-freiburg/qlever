@@ -92,9 +92,9 @@ void Bind::computeResult(ResultTable* result) {
   int outwidth = getResultWidth();
 
   result->_resultTypes.emplace_back();
-  CALL_FIXED_SIZE_2(inwidth, outwidth, computeExpressionBind, result,
-                    &(result->_resultTypes.back()), *subRes,
-                    _bind._expression.getPimpl());
+  CALL_FIXED_SIZE((std::array{inwidth, outwidth}), &Bind::computeExpressionBind,
+                  this, result, &(result->_resultTypes.back()), *subRes,
+                  _bind._expression.getPimpl());
 
   result->_sortedBy = resultSortedOn();
 

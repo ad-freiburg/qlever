@@ -961,8 +961,8 @@ void IndexImpl::getECListForWords(const string& words, size_t nofVars,
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
   int width = result->cols();
-  CALL_FIXED_SIZE_1(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
-                    cids, eids, scores, nofVars, limit, result);
+  CALL_FIXED_SIZE(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
+                  cids, eids, scores, nofVars, limit, result);
   LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
              << "\n";
 }
@@ -994,12 +994,16 @@ void IndexImpl::getFilteredECListForWords(const string& words,
     getContextEntityScoreListsForWords(words, cids, eids, scores);
     int width = result->cols();
     if (nofVars == 1) {
-      CALL_FIXED_SIZE_1(width,
-                        FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
-                        cids, eids, scores, fMap, limit, result);
+      CALL_FIXED_SIZE(width,
+                      FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
+                      cids, eids, scores, fMap, limit, result);
     } else {
-      CALL_FIXED_SIZE_1(
-          width, FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,
+      ad_utility::callFixedSize(
+          width,
+          []<int I>(auto&&... args) {
+            FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<I>(
+                AD_FWD(args)...);
+          },
           cids, eids, scores, fMap, nofVars, limit, result);
     }
   }
@@ -1029,9 +1033,13 @@ void IndexImpl::getFilteredECListForWordsWidthOne(const string& words,
     FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
         cids, eids, scores, fSet, limit, result);
   } else {
-    CALL_FIXED_SIZE_1(width,
-                      FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,
-                      cids, eids, scores, fSet, nofVars, limit, result);
+    ad_utility::callFixedSize(
+        width,
+        []<int I>(auto&&... args) {
+          FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<I>(
+              AD_FWD(args)...);
+        },
+        cids, eids, scores, fSet, nofVars, limit, result);
   }
   LOG(DEBUG) << "Done with getFilteredECListForWords. Result size: "
              << result->size() << "\n";

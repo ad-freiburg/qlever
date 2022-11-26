@@ -50,7 +50,7 @@ void Distinct::computeResult(ResultTable* result) {
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
   int width = subRes->_idTable.cols();
-  CALL_FIXED_SIZE_1(width, getEngine().distinct, subRes->_idTable, _keepIndices,
-                    &result->_idTable);
+  CALL_FIXED_SIZE(width, &Engine::distinct, subRes->_idTable, _keepIndices,
+                  &result->_idTable);
   LOG(DEBUG) << "Distinct result computation done." << endl;
 }

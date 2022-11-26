@@ -251,9 +251,10 @@ void HasPredicateScan::computeResult(ResultTable* result) {
       result->_resultTypes.push_back(ResultTable::ResultType::KB);
       int inWidth = subresult->_idTable.cols();
       int outWidth = result->_idTable.cols();
-      CALL_FIXED_SIZE_2(inWidth, outWidth, HasPredicateScan::computeSubqueryS,
-                        &result->_idTable, subresult->_idTable,
-                        _subtreeJoinColumn, hasPattern, hasPredicate, patterns);
+      CALL_FIXED_SIZE((std::array{inWidth, outWidth}),
+                      HasPredicateScan::computeSubqueryS, &result->_idTable,
+                      subresult->_idTable, _subtreeJoinColumn, hasPattern,
+                      hasPredicate, patterns);
       break;
   }
 

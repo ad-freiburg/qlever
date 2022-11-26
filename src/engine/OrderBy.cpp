@@ -105,19 +105,28 @@ void OrderBy::computeResult(ResultTable* result) {
                           subRes->_idTable.end());
 
   int width = result->_idTable.cols();
+
   // TODO(florian): Check if the lambda is a performance problem
-  CALL_FIXED_SIZE_1(width, getEngine().sort, &result->_idTable,
-                    [this](const auto& a, const auto& b) {
-                      for (auto& entry : _sortIndices) {
-                        if (a[entry.first] < b[entry.first]) {
-                          return !entry.second;
-                        }
-                        if (a[entry.first] > b[entry.first]) {
-                          return entry.second;
-                        }
-                      }
-                      return a[0] < b[0];
-                    });
+  auto comparison = [this](const auto& a, const auto& b) {
+    for (auto& entry : _sortIndices) {
+      if (a[entry.first] < b[entry.first]) {
+        return !entry.second;
+      }
+      if (a[entry.first] > b[entry.first]) {
+        return entry.second;
+      }
+    }
+    return a[0] < b[0];
+  };
+
+  // We cannot use the `CALL_FIXED_SIZE` macro here because the `sort` function
+  // is templated not only on the integer `I` (which the `callFixedSize`
+  // function deals with) but also on the `comparison`.
+  DISABLE_WARNINGS_CLANG_13
+  ad_utility::callFixedSize(width, [&result, &comparison]<int I>() {
+    Engine::sort<I>(&result->_idTable, comparison);
+  });
+  ENABLE_WARNINGS_CLANG_13
   result->_sortedBy = resultSortedOn();
 
   LOG(DEBUG) << "OrderBy result computation done." << endl;

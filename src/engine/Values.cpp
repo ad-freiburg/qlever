@@ -96,8 +96,8 @@ void Values::computeResult(ResultTable* result) {
                               ResultTable::ResultType::KB);
 
   size_t resWidth = getResultWidth();
-  CALL_FIXED_SIZE_1(resWidth, writeValues, &result->_idTable, index, _values,
-                    result->_localVocab);
+  CALL_FIXED_SIZE(resWidth, &Values::writeValues, this, &result->_idTable,
+                  index, _values, result->_localVocab);
 }
 
 // ____________________________________________________________________________

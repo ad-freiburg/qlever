@@ -57,7 +57,8 @@ class IteratorForAccessOperator {
   Accessor _accessor{};
 
  public:
-  IteratorForAccessOperator() = default;
+  IteratorForAccessOperator() requires std::is_default_constructible_v<Accessor>
+  = default;
   IteratorForAccessOperator(RandomAccessContainerPtr vec, index_type index,
                             Accessor accessor = Accessor{})
       : _vector{vec}, _index{index}, _accessor{std::move(accessor)} {}

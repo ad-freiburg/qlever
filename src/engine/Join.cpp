@@ -140,9 +140,10 @@ void Join::computeResult(ResultTable* result) {
   int lwidth = leftRes->_idTable.cols();
   int rwidth = rightRes->_idTable.cols();
   int reswidth = result->_idTable.cols();
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, join, leftRes->_idTable,
-                    _leftJoinCol, rightRes->_idTable, _rightJoinCol,
-                    &result->_idTable);
+
+  CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::join, this,
+                  leftRes->_idTable, _leftJoinCol, rightRes->_idTable,
+                  _rightJoinCol, &result->_idTable);
 
   // If only one of the two operands has a local vocab, pass it on.
   result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(

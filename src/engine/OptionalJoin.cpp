@@ -115,9 +115,10 @@ void OptionalJoin::computeResult(ResultTable* result) {
   int leftWidth = leftResult->_idTable.cols();
   int rightWidth = rightResult->_idTable.cols();
   int resWidth = result->_idTable.cols();
-  CALL_FIXED_SIZE_3(leftWidth, rightWidth, resWidth, optionalJoin,
-                    leftResult->_idTable, rightResult->_idTable, _leftOptional,
-                    _rightOptional, _joinColumns, &result->_idTable);
+  CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, resWidth}),
+                  &OptionalJoin::optionalJoin, leftResult->_idTable,
+                  rightResult->_idTable, _leftOptional, _rightOptional,
+                  _joinColumns, &result->_idTable);
   LOG(DEBUG) << "OptionalJoin result computation done." << endl;
 }
 
