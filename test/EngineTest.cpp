@@ -308,10 +308,8 @@ TEST(EngineTest, joinTest) {
 };
 
 TEST(EngineTest, optionalJoinTest) {
-  std::vector<std::array<size_t, 3>> ids {{4, 1, 2}, {2, 1, 3}, {1, 1, 4}, {2, 2, 1}, {1, 3, 1}};
-  IdTable a = makeIdTableFromVector(ids);
-  ids = {{3, 3, 1}, {1, 8, 1}, {4, 2, 2}, {1, 1, 3}};
-  IdTable b = makeIdTableFromVector(ids);
+  IdTable a = makeIdTableFromVector(std::vector<std::array<size_t, 3>>{{{4, 1, 2}, {2, 1, 3}, {1, 1, 4}, {2, 2, 1}, {1, 3, 1}}});
+  IdTable b = makeIdTableFromVector(std::vector<std::array<size_t, 3>>{{{3, 3, 1}, {1, 8, 1}, {4, 2, 2}, {1, 1, 3}}});
   IdTable res(4, allocator());
   vector<array<ColumnIndex, 2>> jcls;
   jcls.push_back(array<ColumnIndex, 2>{{1, 2}});
@@ -324,40 +322,27 @@ TEST(EngineTest, optionalJoinTest) {
   int resWidth = res.cols();
   CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth, OptionalJoin::optionalJoin, a, b,
                     false, true, jcls, &res);
+  
+  // For easier checking of the result.
+  IdTable sampleSolution = makeIdTableFromVector(std::vector<std::array<size_t, 4>>{
+          {4, 1, 2, 0},
+          {2, 1, 3, 3},
+          {1, 1, 4, 0},
+          {2, 2, 1, 0},
+          {1, 3, 1, 1}
+        }
+      );
+  sampleSolution(0, 3) = ID_NO_VALUE;
+  sampleSolution(2, 3) = ID_NO_VALUE;
+  sampleSolution(3, 3) = ID_NO_VALUE;
 
-  ASSERT_EQ(5u, res.size());
-
-  ASSERT_EQ(I(4), res(0, 0));
-  ASSERT_EQ(I(1), res(0, 1));
-  ASSERT_EQ(I(2), res(0, 2));
-  ASSERT_EQ(ID_NO_VALUE, res(0, 3));
-
-  ASSERT_EQ(I(2), res(1, 0));
-  ASSERT_EQ(I(1), res(1, 1));
-  ASSERT_EQ(I(3), res(1, 2));
-  ASSERT_EQ(I(3), res(1, 3));
-
-  ASSERT_EQ(I(1), res(2, 0));
-  ASSERT_EQ(I(1), res(2, 1));
-  ASSERT_EQ(I(4), res(2, 2));
-  ASSERT_EQ(ID_NO_VALUE, res(2, 3));
-
-  ASSERT_EQ(I(2), res(3, 0));
-  ASSERT_EQ(I(2), res(3, 1));
-  ASSERT_EQ(I(1), res(3, 2));
-  ASSERT_EQ(ID_NO_VALUE, res(3, 3));
-
-  ASSERT_EQ(I(1), res(4, 0));
-  ASSERT_EQ(I(3), res(4, 1));
-  ASSERT_EQ(I(1), res(4, 2));
-  ASSERT_EQ(I(1), res(4, 3));
+  ASSERT_EQ(sampleSolution.size(), res.size());
+  ASSERT_EQ(sampleSolution, res);
 
   // Test the optional join with variable sized data.
-  std::vector<std::array<size_t, 6>> vaId {{1, 2, 3, 4, 5, 6}, {1, 2, 3, 7, 5 ,6}, {7, 6, 5, 4, 3, 2}};
-  IdTable va = makeIdTableFromVector(vaId);
+  IdTable va = makeIdTableFromVector(std::vector<std::array<size_t, 6>>{{{1, 2, 3, 4, 5, 6}, {1, 2, 3, 7, 5 ,6}, {7, 6, 5, 4, 3, 2}}});
 
-  std::vector<std::array<size_t, 3>> vbId {{2, 3, 4}, {2, 3, 5}, {6, 7, 4}};
-  IdTable vb = makeIdTableFromVector(vbId);
+  IdTable vb = makeIdTableFromVector(std::vector<std::array<size_t, 3>>{{{2, 3, 4}, {2, 3, 5}, {6, 7, 4}}});
 
   IdTable vres(7, allocator());
   jcls.clear();
@@ -369,45 +354,38 @@ TEST(EngineTest, optionalJoinTest) {
   resWidth = vres.cols();
   CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth, OptionalJoin::optionalJoin, va,
                     vb, true, false, jcls, &vres);
+  
+  // For easier checking.
+  sampleSolution = makeIdTableFromVector(std::vector<std::array<size_t, 7>>{
+          {1, 2, 3, 4, 5, 6, 4},
+          {1, 2, 3, 4, 5, 6, 5},
+          {1, 2, 3, 7, 5, 6, 4},
+          {1, 2, 3, 7, 5, 6, 5},
+          {0, 6, 7, 0, 0, 0, 4}
+        }
+      );
+  sampleSolution(4, 0) = ID_NO_VALUE;
+  sampleSolution(4, 3) = ID_NO_VALUE;
+  sampleSolution(4, 4) = ID_NO_VALUE;
+  sampleSolution(4, 5) = ID_NO_VALUE;
 
-  ASSERT_EQ(5u, vres.size());
-  ASSERT_EQ(7u, vres.cols());
-
-  vector<Id> r{I(1), I(2), I(3), I(4), I(5), I(6), I(4)};
-  for (size_t i = 0; i < 7; i++) {
-    ASSERT_EQ(r[i], vres[0][i]);
-  }
-  r = {I(1), I(2), I(3), I(4), I(5), I(6), I(5)};
-  for (size_t i = 0; i < 7; i++) {
-    ASSERT_EQ(r[i], vres[1][i]);
-  }
-  r = {I(1), I(2), I(3), I(7), I(5), I(6), I(4)};
-  for (size_t i = 0; i < 7; i++) {
-    ASSERT_EQ(r[i], vres(2, i));
-  }
-  r = {I(1), I(2), I(3), I(7), I(5), I(6), I(5)};
-  for (size_t i = 0; i < 7; i++) {
-    ASSERT_EQ(r[i], vres(3, i));
-  }
-  r = {ID_NO_VALUE, I(6), I(7), ID_NO_VALUE, ID_NO_VALUE, ID_NO_VALUE, I(4)};
-  for (size_t i = 0; i < 7; i++) {
-    ASSERT_EQ(r[i], vres(4, i));
-  }
+  ASSERT_EQ(sampleSolution.size(), vres.size());
+  ASSERT_EQ(sampleSolution.cols(), vres.cols());
+  ASSERT_EQ(sampleSolution, vres);
 }
 
 TEST(EngineTest, distinctTest) {
-  std::vector<std::array<size_t, 4>> ids {{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}};
-  IdTable inp = makeIdTableFromVector(ids);
+  IdTable inp = makeIdTableFromVector(std::vector<std::array<size_t, 4>>{{{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}}});
 
   IdTable res(4, allocator());
 
   std::vector<size_t> keepIndices = {1, 2};
   CALL_FIXED_SIZE_1(4, Engine::distinct, inp, keepIndices, &res);
-
-  ASSERT_EQ(3u, res.size());
-  ASSERT_EQ(inp[0], res[0]);
-  ASSERT_EQ(inp[2], res[1]);
-  ASSERT_EQ(inp[3], res[2]);
+  
+  // For easier checking.
+  IdTable sampleSolution = makeIdTableFromVector(std::vector<std::array<size_t, 4>>{{{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}}});
+  ASSERT_EQ(sampleSolution.size(), res.size());
+  ASSERT_EQ(sampleSolution, res);
 }
 
 TEST(EngineTest, hashJoinTest) {
