@@ -93,7 +93,8 @@ template <size_t N>
 void addition(int64_t a, int64_t b) {
   using I = ad_utility::NBitInteger<N>;
   auto resultNBit = I::fromNBit(I::toNBit(I::toNBit(a) + I::toNBit(b)));
-  auto resultInt64 = I::fromNBit(I::toNBit(a + b));
+  auto resultInt64 = I::fromNBit(I::toNBit(static_cast<int64_t>(
+      static_cast<uint64_t>(a) + static_cast<uint64_t>(b))));
   ASSERT_EQ(resultNBit, resultInt64);
 }
 
@@ -101,7 +102,8 @@ template <size_t N>
 void subtraction(int64_t a, int64_t b) {
   using I = ad_utility::NBitInteger<N>;
   auto resultNBit = I::fromNBit(I::toNBit(I::toNBit(a) - I::toNBit(b)));
-  auto resultInt64 = I::fromNBit(I::toNBit(a - b));
+  auto resultInt64 = I::fromNBit(I::toNBit(static_cast<int64_t>(
+      static_cast<uint64_t>(a) - static_cast<uint64_t>(b))));
   ASSERT_EQ(resultNBit, resultInt64);
 }
 
@@ -109,7 +111,8 @@ template <size_t N>
 void multiplication(int64_t a, int64_t b) {
   using I = ad_utility::NBitInteger<N>;
   auto resultNBit = I::fromNBit(I::toNBit(I::toNBit(a) * I::toNBit(b)));
-  auto resultInt64 = I::fromNBit(I::toNBit(a * b));
+  auto resultInt64 = I::fromNBit(I::toNBit(static_cast<int64_t>(
+      static_cast<uint64_t>(a) * static_cast<uint64_t>(b))));
   ASSERT_EQ(resultNBit, resultInt64);
 }
 
@@ -117,7 +120,8 @@ auto testNumeric = []<size_t N>(int64_t a, int64_t b) {
   addition<N>(a, b);
   subtraction<N>(a, b);
   multiplication<N>(a, b);
-  // Division in general does not have an easily predictabel behaviors in the
+
+  // Division in general does not have an easily predictable behaviors in the
   // presence of overflows.
 };
 

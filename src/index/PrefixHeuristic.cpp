@@ -223,10 +223,11 @@ std::vector<string> calculatePrefixes(const string& filename,
   // if we always add an encoding we have calculated with a codelength of 0 so
   // far, so the actual encoding length has to be added here
   if (alwaysAddCode) {
-    totalSavings -= codelength * numWords;
+    auto added = codelength * numWords;
+    totalSavings = totalSavings < added ? 0 : totalSavings - added;
   }
   int reductionInPercent =
-      static_cast<int>(0.5 + 100.0 * totalSavings / totalChars);
+      static_cast<size_t>(0.5 + 100.0 * totalSavings / totalChars);
   LOG(DEBUG) << "Total number of bytes : " << totalChars << std::endl;
   LOG(DEBUG) << "Total chars compressed : " << totalSavings << '\n';
   LOG(INFO) << "Reduction of size of internal vocabulary: "

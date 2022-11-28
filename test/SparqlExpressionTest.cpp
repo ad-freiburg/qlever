@@ -37,7 +37,6 @@ auto checkResultsEqual = [](const auto& a, const auto& b) {
 
 template <typename NaryExpression>
 auto testNaryExpression = [](const auto& expected, auto&&... operands) {
-  QueryExecutionContext* qec = nullptr;
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   sparqlExpression::VariableToColumnAndResultTypeMap map;
@@ -53,7 +52,7 @@ auto testNaryExpression = [](const auto& expected, auto&&... operands) {
 
   auto resultSize = std::max({getResultSize(operands)...});
 
-  sparqlExpression::EvaluationContext context{*qec, map, table, alloc,
+  sparqlExpression::EvaluationContext context{*getQec(), map, table, alloc,
                                               localVocab};
   context._endIndex = resultSize;
 

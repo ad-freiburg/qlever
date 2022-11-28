@@ -269,8 +269,12 @@ class BatchedPipeline {
   template <typename It>
   static std::pair<It, It> getBatchRange(It beg, It end, size_t batchSize,
                                          const size_t idx) {
-    batchSize = std::max(size_t(1), size_t((end - beg) / Parallelism));
+    size_t size = end - beg;
+    batchSize = std::max(size_t(1), size / Parallelism);
     std::pair<It, It> res;
+    if (size < Parallelism) {
+      return idx == 0 ? std::pair{beg, end} : std::pair{end, end};
+    }
     res.first = std::min(beg + idx * batchSize, end);
     res.second = idx < Parallelism - 1
                      ? std::min(beg + (idx + 1) * batchSize, end)

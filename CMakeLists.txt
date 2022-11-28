@@ -153,7 +153,7 @@ include_directories(third_party/ctre/include)
 ################################
 set(BUILD_TESTING OFF CACHE BOOL "Don't build tests for abseil" FORCE)
 add_subdirectory(third_party/abseil-cpp EXCLUDE_FROM_ALL)
-include_directories(third_party/abseil-cpp/)
+include_directories(SYSTEM third_party/abseil-cpp/)
 
 
 
