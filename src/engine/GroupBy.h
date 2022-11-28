@@ -141,10 +141,10 @@ class GroupBy : public Operation {
   //  } GROUP BY ?x
   // The single triple must contain three variables. The grouped variable and
   // the selected variable must be the same, but may be either one of `?x, `?y`,
-  // or
-  // `?z`. In the select clause, both of the elements may be omitted, so in the
-  // example it is possible to only select `?x` or to only select the `COUNT`.
-  bool computeGroupByForSingleIndexScan2(ResultTable* result);
+  // or `?z`. In the SELECT clause, both of the elements may be omitted, so in
+  // the example it is possible to only select `?x` or to only select the
+  // `COUNT`.
+  bool computeGroupByForFullIndexScan(ResultTable* result);
 
   // First, check if the query represented by this GROUP BY is of the following
   // form:

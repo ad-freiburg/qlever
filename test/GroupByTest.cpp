@@ -599,7 +599,7 @@ TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan2) {
                             const auto& indexScan) {
     auto groupBy = GroupBy{qec, groupByVariables, aliases, indexScan};
     ResultTable result{qec->getAllocator()};
-    ASSERT_FALSE(groupBy.computeGroupByForSingleIndexScan2(&result));
+    ASSERT_FALSE(groupBy.computeGroupByForFullIndexScan(&result));
     ASSERT_EQ(result._idTable.size(), 0u);
   };
   // The IndexScan doesn't have three variables.
@@ -628,7 +628,7 @@ TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan2) {
             ? GroupBy{qec, variablesOnlyX, aliasesCountX, xyzScanSortedByX}
             : GroupBy{qec, variablesOnlyX, emptyAliases, xyzScanSortedByX};
     if (chooseInterface) {
-      ASSERT_TRUE(groupBy.computeGroupByForSingleIndexScan2(&result));
+      ASSERT_TRUE(groupBy.computeGroupByForFullIndexScan(&result));
     } else {
       ASSERT_TRUE(groupBy.computeOptimizedGroupByIfPossible(&result));
     }

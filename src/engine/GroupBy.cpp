@@ -383,7 +383,7 @@ bool GroupBy::computeGroupByForSingleIndexScan(ResultTable* result) {
 }
 
 // _____________________________________________________________________________
-bool GroupBy::computeGroupByForSingleIndexScan2(ResultTable* result) {
+bool GroupBy::computeGroupByForFullIndexScan(ResultTable* result) {
   if (_groupByVariables.size() != 1) {
     return false;
   }
@@ -398,6 +398,10 @@ bool GroupBy::computeGroupByForSingleIndexScan2(ResultTable* result) {
     return false;
   }
 
+  // Check that all the aliases are non-distinct counts. We currently support
+  // only 0 or 1 such count. Redundant additional counts will lead to an
+  // exception (it is easy to reformulate the query to trigger this
+  // optimization.
   size_t numCounts = 0;
   for (size_t i = 0; i < _aliases.size(); ++i) {
     const auto& alias = _aliases[i];
@@ -412,23 +416,23 @@ bool GroupBy::computeGroupByForSingleIndexScan2(ResultTable* result) {
   }
 
   if (numCounts > 1) {
-    // Throw, because this is redundant and supporting it would make this
-    // optimization much more difficult.
     throw std::runtime_error{
         "This query contains two or more COUNT expressions in the same GROUP "
         "BY that would lead"
         " to identical values. This redundancy is currently not supported."};
   }
 
-  // TODO<joka921> Should we use static `IdTables` ?  We probably need to merge
-  // the new `CALL_FIXED_SIZE` first s.t. we can use this mechanism with a
-  // lambda (we might have 1 or two columns here).
+  // Prepare the `result`
   size_t numCols = numCounts + 1;
   result->_idTable.setCols(numCols);
   for (size_t i = 0; i < numCols; ++i) {
     result->_resultTypes.push_back(qlever::ResultType::VERBATIM);
   }
   _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
+
+  // A nested lambda that computes the actual result. The outer lambda is
+  // templated on the number of columns (1 or 2) and will be passed to
+  // `callFixedSize`.
   DISABLE_WARNINGS_CLANG_13
   auto doComputationForNumberOfColumns =
       [&]<int NUM_COLS>(IdTable* idTable) mutable {
@@ -437,6 +441,9 @@ bool GroupBy::computeGroupByForSingleIndexScan2(ResultTable* result) {
         // are not present, segfaults might occur in upstream `Operation`s.
         auto ignoredRanges =
             getIndex().getImpl().getIgnoredIdRanges(permutation.value()).first;
+        // The permutations in the `Index` class have different types, so we
+        // also have to write a generic lambda here that will be passed to
+        // `IndexImpl::applyToPermutation`.
         auto applyForPermutation = [&](const auto& permutation) mutable {
           IdTableStatic<NUM_COLS> table = idTable->moveToStatic<NUM_COLS>();
           const auto& metaData = permutation._meta.data();
@@ -489,7 +496,7 @@ bool GroupBy::computeGroupByForSingleIndexScan2(ResultTable* result) {
 
   // TODO<joka921> This optimization should probably also apply if
   // the query is `SELECT DISTINCT ?s WHERE {?s ?p ?o} ` without a
-  // GROUP BY, but that needs to be implemented in the `DISTINCT` optimization.
+  // GROUP BY, but that needs to be implemented in the `DISTINCT` operation.
   return true;
 }
 
@@ -641,7 +648,7 @@ bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
 bool GroupBy::computeOptimizedGroupByIfPossible(ResultTable* result) {
   if (computeGroupByForSingleIndexScan(result)) {
     return true;
-  } else if (computeGroupByForSingleIndexScan2(result)) {
+  } else if (computeGroupByForFullIndexScan(result)) {
     return true;
   } else {
     return computeGroupByForJoinWithFullScan(result);

@@ -519,47 +519,42 @@ class IndexImpl {
                                      timer);
   }
 
-  // Apply the function `F` to the permutation that corresponds to the
-  // `permutation` argument.
-  auto applyToPermutation(Index::Permutation permutation, auto&& F) {
+  // Internal implementation for `applyToPermutation` (see below).
+  // TODO<C++23> : Use "deducing this"
+ private:
+  static decltype(auto) applyToPermutationImpl(auto&& self,
+                                               Index::Permutation permutation,
+                                               auto&& F) {
     using enum Index::Permutation;
     switch (permutation) {
       case POS:
-        return AD_FWD(F)(_POS);
+        return AD_FWD(F)(self._POS);
       case PSO:
-        return AD_FWD(F)(_PSO);
+        return AD_FWD(F)(self._PSO);
       case SPO:
-        return AD_FWD(F)(_SPO);
+        return AD_FWD(F)(self._SPO);
       case SOP:
-        return AD_FWD(F)(_SOP);
+        return AD_FWD(F)(self._SOP);
       case OSP:
-        return AD_FWD(F)(_OSP);
+        return AD_FWD(F)(self._OSP);
       case OPS:
-        return AD_FWD(F)(_OPS);
+        return AD_FWD(F)(self._OPS);
       default:
         AD_FAIL();
     }
   }
 
-  // TODO<joka921, C++23> reduce code duplication here using `deducint this`.
-  auto applyToPermutation(Index::Permutation permutation, auto&& F) const {
-    using enum Index::Permutation;
-    switch (permutation) {
-      case POS:
-        return AD_FWD(F)(_POS);
-      case PSO:
-        return AD_FWD(F)(_PSO);
-      case SPO:
-        return AD_FWD(F)(_SPO);
-      case SOP:
-        return AD_FWD(F)(_SOP);
-      case OSP:
-        return AD_FWD(F)(_OSP);
-      case OPS:
-        return AD_FWD(F)(_OPS);
-      default:
-        AD_FAIL();
-    }
+ public:
+  // Apply the function `F` to the permutation that corresponds to the
+  // `permutation` argument.
+  decltype(auto) applyToPermutation(Index::Permutation permutation, auto&& F) {
+    return applyToPermutationImpl(*this, permutation, AD_FWD(F));
+  }
+
+  // TODO<joka921, C++23> reduce code duplication here using `deducing this`.
+  decltype(auto) applyToPermutation(Index::Permutation permutation,
+                                    auto&& F) const {
+    return applyToPermutationImpl(*this, permutation, AD_FWD(F));
   }
 
  private:
