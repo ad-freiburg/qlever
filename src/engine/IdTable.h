@@ -281,7 +281,7 @@ class IdTableImpl {
   IdTableImpl(Allocator allocator) : _data{allocator} {};
 
   using const_row_type = const std::array<Id, COLS>;
-  using row_type = const std::array<Id, COLS>;
+  using row_type = std::array<Id, COLS>;
   using const_row_reference = const_row_type&;
   using row_reference = row_type&;
   using iterator = IdTableIterator<COLS, false>;

@@ -609,11 +609,13 @@ TEST(IndexTest, getIgnoredIdRanges) {
     return id;
   };
 
-  Id langtagPredicate = getId("<QLever-internal-function/langtag>");
-  Id languageEntity = getId("<QLever-internal-function/@en>");
-  Id taggedLabel = getId("@en@<label>");
+  Id qlLangtag = getId("<QLever-internal-function/langtag>");
+  Id en = getId("<QLever-internal-function/@en>");
+  Id enLabel = getId("@en@<label>");
+  Id label = getId("<label>");
   Id firstLiteral = getId("\"A\"");
   Id lastLiteral = getId("\"zz\"@en");
+  Id x = getId("<x>");
 
   auto increment = [](Id id) {
     return Id::makeFromVocabIndex(id.getVocabIndex().incremented());
@@ -621,15 +623,33 @@ TEST(IndexTest, getIgnoredIdRanges) {
 
   // The range of all entities that start with "<QLever-internal-function/"
   auto internalEntities =
-      std::pair{languageEntity, increment(langtagPredicate)};
+      std::pair{en, increment(qlLangtag)};
   // The range of all entities that start with @ (like `@en@<label>`)
-  auto predicatesWithLangtag = std::pair{taggedLabel, increment(taggedLabel)};
+  auto predicatesWithLangtag = std::pair{enLabel, increment(enLabel)};
   // The range of all literals;
   auto literals = std::pair{firstLiteral, increment(lastLiteral)};
 
   {
     auto [ranges, lambda] = impl.getIgnoredIdRanges(Index::Permutation::POS);
-    (void)lambda;
+    ASSERT_FALSE(lambda(std::array{label, firstLiteral, x}));
+    // This triple is actually added, but it should be filtered out via the
+    // ranges and not via the lambda, because it can be retrieved using the
+    // `ranges`.
+    ASSERT_FALSE(lambda(std::array{enLabel, firstLiteral, x}));
+    ASSERT_FALSE(lambda(std::array{x, x, x}));
+    ASSERT_EQ(2u, ranges.size());
+
+    ASSERT_EQ(ranges[0], internalEntities);
+    ASSERT_EQ(ranges[1], predicatesWithLangtag);
+  }
+  {
+    auto [ranges, lambda] = impl.getIgnoredIdRanges(Index::Permutation::PSO);
+    ASSERT_FALSE(lambda(std::array{label, x, firstLiteral}));
+    // This triple is actually added, but it should be filtered out via the
+    // ranges and not via the lambda, because it can be retrieved using the
+    // `ranges`.
+    ASSERT_FALSE(lambda(std::array{enLabel,x, firstLiteral}));
+    ASSERT_FALSE(lambda(std::array{x, x, x}));
     ASSERT_EQ(2u, ranges.size());
 
     ASSERT_EQ(ranges[0], internalEntities);
@@ -637,7 +657,19 @@ TEST(IndexTest, getIgnoredIdRanges) {
   }
   {
     auto [ranges, lambda] = impl.getIgnoredIdRanges(Index::Permutation::SOP);
-    (void)lambda;
+    ASSERT_TRUE(lambda(std::array{x, firstLiteral, enLabel}));
+    ASSERT_FALSE(lambda(std::array{x, firstLiteral, label}));
+    ASSERT_FALSE(lambda(std::array{x, x, label}));
+    ASSERT_EQ(2u, ranges.size());
+
+    ASSERT_EQ(ranges[0], internalEntities);
+    ASSERT_EQ(ranges[1], literals);
+  }
+  {
+    auto [ranges, lambda] = impl.getIgnoredIdRanges(Index::Permutation::SPO);
+    ASSERT_TRUE(lambda(std::array{x, enLabel, firstLiteral}));
+    ASSERT_FALSE(lambda(std::array{x, label, firstLiteral}));
+    ASSERT_FALSE(lambda(std::array{x, label, x}));
     ASSERT_EQ(2u, ranges.size());
 
     ASSERT_EQ(ranges[0], internalEntities);
@@ -645,12 +677,18 @@ TEST(IndexTest, getIgnoredIdRanges) {
   }
   {
     auto [ranges, lambda] = impl.getIgnoredIdRanges(Index::Permutation::OSP);
-    (void)lambda;
+    ASSERT_TRUE(lambda(std::array{firstLiteral, x, enLabel}));
+    ASSERT_FALSE(lambda(std::array{firstLiteral, x, label}));
+    ASSERT_FALSE(lambda(std::array{x, x, label}));
     ASSERT_EQ(1u, ranges.size());
     ASSERT_EQ(ranges[0], internalEntities);
   }
-
-  // TODO<joka921>  Also test the functionality of the lambda,
-  // possibly by exhaustively checking all combinations of IDs in the test
-  // index, as well as some
+  {
+    auto [ranges, lambda] = impl.getIgnoredIdRanges(Index::Permutation::OPS);
+    ASSERT_TRUE(lambda(std::array{firstLiteral, enLabel, x}));
+    ASSERT_FALSE(lambda(std::array{firstLiteral, label, x}));
+    ASSERT_FALSE(lambda(std::array{x, label, x}));
+    ASSERT_EQ(1u, ranges.size());
+    ASSERT_EQ(ranges[0], internalEntities);
+  }
 }

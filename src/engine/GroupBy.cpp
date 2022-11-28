@@ -425,58 +425,67 @@ bool GroupBy::computeGroupByForSingleIndexScan2(ResultTable* result) {
   // lambda (we might have 1 or two columns here).
   size_t numCols = numCounts + 1;
   result->_idTable.setCols(numCols);
-  // TODO<joka921> The `resultTypes` are not really in use, but if they are
-  // not present, segfaults might occur in upstream `Operation`s.
   for (size_t i = 0; i < numCols; ++i) {
     result->_resultTypes.push_back(qlever::ResultType::VERBATIM);
   }
   _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
+  DISABLE_WARNINGS_CLANG_13
+  auto doComputationForNumberOfColumns =
+      [&]<int NUM_COLS>(IdTable* idTable) mutable {
+        ENABLE_WARNINGS_CLANG_13
+        // TODO<joka921> The `resultTypes` are not really in use, but if they
+        // are not present, segfaults might occur in upstream `Operation`s.
+        auto ignoredRanges =
+            getIndex().getImpl().getIgnoredIdRanges(permutation.value()).first;
+        auto applyForPermutation = [&](const auto& permutation) mutable {
+          IdTableStatic<NUM_COLS> table = idTable->moveToStatic<NUM_COLS>();
+          const auto& metaData = permutation._meta.data();
+          // TODO<joka921> the reserve is too large because of the ignored
+          // triples. We would need to incorporate the information how many
+          // added relations are in each permutation during index building.
+          table.reserve(metaData.size());
+          for (auto it = metaData.ordered_begin(); it != metaData.ordered_end();
+               ++it) {
+            Id id = decltype(metaData.ordered_begin())::getIdFromElement(*it);
 
-  auto ignoredRanges =
-      getIndex().getImpl().getIgnoredIdRanges(permutation.value()).first;
-  auto applyForPermutation = [&](const auto& permutation) {
-    const auto& metaData = permutation._meta.data();
-    auto& table = result->_idTable;
-    // TODO<joka921> the reserve is too large because of the ignored triples.
-    // We would need to incorporate the information how many added relations are
-    // in each permutation during index building.
-    table.reserve(metaData.size());
-    for (auto it = metaData.ordered_begin(); it != metaData.ordered_end();
-         ++it) {
-      Id id = decltype(metaData.ordered_begin())::getIdFromElement(*it);
+            // Check whether this is an `@en@...` predicate in a `Pxx` relation,
+            // a literal in a `Sxx` relation or some other entity that was added
+            // only for internal reasons.
+            if (std::ranges::any_of(ignoredRanges, [&id](const auto& pair) {
+                  return id >= pair.first && id < pair.second;
+                })) {
+              continue;
+            }
+            Id count = Id::makeFromInt(
+                decltype(metaData.ordered_begin())::getNumRowsFromElement(*it));
+            // TODO<joka921> The count is actually not accurate at least for the
+            // `Sxx` and `Oxx` permutations because it contains the triples with
+            // predicate
+            // `@en@rdfs:label` etc. The probably easiest way to fix this is to
+            // exclude these triples from those permutations (they are only
+            // relevant for queries with a fixed subject), but then we would
+            // need to make sure, that we don't accidentally break the language
+            // filters for queries like
+            // `<fixedSubject> @en@rdfs:label ?labels`, for which the best
+            // query plan potentially goes through the `SPO` relation.
+            // Alternatively we would have to write an additional number
+            // `numNonAddedTriples` to the `IndexMetaData` which would further
+            // increase their size.
+            // TODO<joka921> Discuss this with Hannah.
+            table.emplace_back();
+            table(table.size() - 1, 0) = id;
+            if (numCounts == 1) {
+              table(table.size() - 1, 1) = count;
+            }
+          }
+          *idTable = table.moveToDynamic();
+        };
 
-      // Check whether this is an `@en@...` predicate in a `Pxx` relation,
-      // a literal in a `Sxx` relation or some other entity that was added only
-      // for internal reasons.
-      if (std::ranges::any_of(ignoredRanges, [&id](const auto& pair) {
-            return id >= pair.first && id < pair.second;
-          })) {
-        continue;
-      }
-      Id count = Id::makeFromInt(
-          decltype(metaData.ordered_begin())::getNumRowsFromElement(*it));
-      // TODO<joka921> The count is actually not accurate at least for the `Sxx`
-      // and `Oxx` permutations because it contains the triples with predicate
-      // `@en@rdfs:label` etc. The probably easiest way to fix this is to
-      // exclude these triples from those permutations (they are only relevant
-      // for queries with a fixed subject), but then we would need to make sure,
-      // that we don't accidentally break the language filters for queries like
-      // `<fixedSubject> @en@rdfs:label ?labels`, for which the best
-      // query plan potentially goes through the `SPO` relation.
-      // Alternatively we would have to write an additional number
-      // `numNonAddedTriples` to the `IndexMetaData` which would further
-      // increase their size.
-      // TODO<joka921> Discuss this with Hannah.
-      table.emplace_back();
-      table.back()[0] = id;
-      if (numCounts == 1) {
-        table.back()[1] = count;
-      }
-    }
-  };
-
-  getExecutionContext()->getIndex().getPimpl().applyToPermutation(
-      permutation.value(), applyForPermutation);
+        getExecutionContext()->getIndex().getPimpl().applyToPermutation(
+            permutation.value(), applyForPermutation);
+      };
+  ad_utility::callFixedSize(numCols, doComputationForNumberOfColumns,
+                            &result->_idTable);
 
   // TODO<joka921> This optimization should probably also apply if
   // the query is `SELECT DISTINCT ?s WHERE {?s ?p ?o} ` without a

@@ -521,42 +521,42 @@ class IndexImpl {
 
   // Apply the function `F` to the permutation that corresponds to the
   // `permutation` argument.
-  auto applyToPermutation(Index::Permutation permutation, const auto& F) {
+  auto applyToPermutation(Index::Permutation permutation, auto&& F) {
     using enum Index::Permutation;
     switch (permutation) {
       case POS:
-        return F(_POS);
+        return AD_FWD(F)(_POS);
       case PSO:
-        return F(_PSO);
+        return AD_FWD(F)(_PSO);
       case SPO:
-        return F(_SPO);
+        return AD_FWD(F)(_SPO);
       case SOP:
-        return F(_SOP);
+        return AD_FWD(F)(_SOP);
       case OSP:
-        return F(_OSP);
+        return AD_FWD(F)(_OSP);
       case OPS:
-        return F(_OPS);
+        return AD_FWD(F)(_OPS);
       default:
         AD_FAIL();
     }
   }
 
-  // TODO<joka921> reduce code duplication here
-  auto applyToPermutation(Index::Permutation permutation, const auto& F) const {
+  // TODO<joka921, C++23> reduce code duplication here using `deducint this`.
+  auto applyToPermutation(Index::Permutation permutation, auto&& F) const {
     using enum Index::Permutation;
     switch (permutation) {
       case POS:
-        return F(_POS);
+        return AD_FWD(F)(_POS);
       case PSO:
-        return F(_PSO);
+        return AD_FWD(F)(_PSO);
       case SPO:
-        return F(_SPO);
+        return AD_FWD(F)(_SPO);
       case SOP:
-        return F(_SOP);
+        return AD_FWD(F)(_SOP);
       case OSP:
-        return F(_OSP);
+        return AD_FWD(F)(_OSP);
       case OPS:
-        return F(_OPS);
+        return AD_FWD(F)(_OPS);
       default:
         AD_FAIL();
     }
