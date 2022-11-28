@@ -593,7 +593,7 @@ TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan) {
 }
 
 TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan2) {
-  // Assert that a GROUP BY, that is constructed from the given arguments,
+  // Assert that a GROUP BY which is constructed from the given arguments
   // can not perform the `GroupByForSingleIndexScan2` optimization.
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
                             const auto& indexScan) {

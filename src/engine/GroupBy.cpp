@@ -449,15 +449,15 @@ bool GroupBy::computeGroupByForFullIndexScan(ResultTable* result) {
           const auto& metaData = permutation._meta.data();
           // TODO<joka921> the reserve is too large because of the ignored
           // triples. We would need to incorporate the information how many
-          // added relations are in each permutation during index building.
+          // added "relations" are in each permutation during index building.
           table.reserve(metaData.size());
           for (auto it = metaData.ordered_begin(); it != metaData.ordered_end();
                ++it) {
             Id id = decltype(metaData.ordered_begin())::getIdFromElement(*it);
 
-            // Check whether this is an `@en@...` predicate in a `Pxx` relation,
-            // a literal in a `Sxx` relation or some other entity that was added
-            // only for internal reasons.
+            // Check whether this is an `@en@...` predicate in a `Pxx`
+            // permutation, a literal in a `Sxx` permutation or some other
+            // entity that was added only for internal reasons.
             if (std::ranges::any_of(ignoredRanges, [&id](const auto& pair) {
                   return id >= pair.first && id < pair.second;
                 })) {

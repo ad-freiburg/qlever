@@ -353,7 +353,7 @@ size_t IndexScan::getCostEstimate() {
     // The following calculation is done in a way that makes materializing a
     // full index scan always more expensive than implicitly computing it in the
     // so-called "dummy joins" (see `Join.h` and `Join.cpp`). The assumption is,
-    // that materializing a single triple via a Full Index Scan is 10'000 more
+    // that materializing a single triple via a full index scan is 10'000 more
     // expensive than materializing it via some other means.
 
     // Note that we cannot set the cost to `infinity` or `max`, because this

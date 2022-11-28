@@ -852,7 +852,7 @@ class IndexImpl {
   // knowledge graph, but are added by QLever for internal reasons (e.g. for an
   // efficient implementation of language filters). For a given `Permutation`,
   // returns the following `std::pair`:
-  // First: a `vector<pair<Id, Id>>` that denotes ranges in the first column
+  // First: A `vector<pair<Id, Id>>` that denotes ranges in the first column
   //        of the permutation that imply that a triple is added. For example
   //        in the `SPO` and `SOP` permutation a literal subject means that the
   //        triple was added (literals are not legal subjects in RDF), so the
@@ -867,7 +867,7 @@ class IndexImpl {
   //       it's first column is contained in any of the ranges from `first` OR
   //       the lambda `second` returns true for that triple.
   // For example usages see `IndexScan.cpp` (the implementation of the full
-  // index scan and `GroupBy.cpp`.
+  // index scan) and `GroupBy.cpp`.
   auto getIgnoredIdRanges(const Index::Permutation permutation) const {
     std::vector<std::pair<Id, Id>> ignoredRanges;
 
@@ -905,7 +905,7 @@ class IndexImpl {
       // and `POS` permutations, meaning that it suffices to check the
       // `ignoredRanges` for them. Should this ever change (which means that we
       // add internal triples that use predicates that are actually contained in
-      // the knowledge graph),then all the code that uses this function has to
+      // the knowledge graph), then all the code that uses this function has to
       // be thoroughly reviewed.
       if (permutation == SPO || permutation == OPS) {
         // Predicates are always entities from the vocabulary.
