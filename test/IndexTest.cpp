@@ -622,8 +622,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
   };
 
   // The range of all entities that start with "<QLever-internal-function/"
-  auto internalEntities =
-      std::pair{en, increment(qlLangtag)};
+  auto internalEntities = std::pair{en, increment(qlLangtag)};
   // The range of all entities that start with @ (like `@en@<label>`)
   auto predicatesWithLangtag = std::pair{enLabel, increment(enLabel)};
   // The range of all literals;
@@ -648,7 +647,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     // This triple is actually added, but it should be filtered out via the
     // ranges and not via the lambda, because it can be retrieved using the
     // `ranges`.
-    ASSERT_FALSE(lambda(std::array{enLabel,x, firstLiteral}));
+    ASSERT_FALSE(lambda(std::array{enLabel, x, firstLiteral}));
     ASSERT_FALSE(lambda(std::array{x, x, x}));
     ASSERT_EQ(2u, ranges.size());
 
