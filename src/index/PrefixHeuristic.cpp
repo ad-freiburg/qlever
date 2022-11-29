@@ -179,7 +179,10 @@ std::vector<string> calculatePrefixes(const string& filename,
   ad_utility::Tree t;
   ad_utility::TreeNode* lastPos{nullptr};
   string nextWord;
-  size_t totalSavings = 0;
+  // The total amount of saved characters. For very few input words (e.g. in
+  // unit tests) this might become negative, so we need a signed integer to
+  // make the UB sanitizer happy.
+  int64_t totalSavings = 0;
   size_t numWords = 0;
 
   LOG(INFO) << "Building prefix tree from internal vocabulary ..." << std::endl;
@@ -223,8 +226,7 @@ std::vector<string> calculatePrefixes(const string& filename,
   // if we always add an encoding we have calculated with a codelength of 0 so
   // far, so the actual encoding length has to be added here
   if (alwaysAddCode) {
-    auto added = codelength * numWords;
-    totalSavings = totalSavings < added ? 0 : totalSavings - added;
+    totalSavings -= codelength * numWords;
   }
   int reductionInPercent =
       static_cast<size_t>(0.5 + 100.0 * totalSavings / totalChars);

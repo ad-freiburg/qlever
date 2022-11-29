@@ -89,31 +89,69 @@ auto testTranslationNearLimits = []<size_t N>() {
   testUnaryFunctionNearLimits.operator()<N>(testFromTo);
 };
 
+template <size_t N, auto f, auto wouldOverflow>
+auto testTwoNumbers = [](int64_t a, int64_t b) {
+  using I = ad_utility::NBitInteger<N>;
+  auto aU = static_cast<uint64_t>(a);
+  auto bU = static_cast<uint64_t>(b);
+  auto resultNBit = I::fromNBit(I::toNBit(f(I::toNBit(a), I::toNBit(b))));
+  auto resultInt64 =
+      wouldOverflow(a, b)
+          ? I::fromNBit(I::toNBit(static_cast<int64_t>(f(aU, bU))))
+          : I::fromNBit(I::toNBit(f(a, b)));
+  ASSERT_EQ(resultNBit, resultInt64);
+};
+
+bool additionWouldOverflow(int64_t a, int64_t b) {
+  if (a < 0 != b < 0) {
+    return false;
+  }
+  if (a == 0 || b == 0) {
+    return false;
+  }
+  auto intMin = std::numeric_limits<int64_t>::min();
+  if (a == intMin || b == intMin) {
+    return true;
+  }
+  auto abs = [](int64_t x) { return static_cast<uint64_t>(x < 0 ? -x : x); };
+  // TODO<joka921> This has currently one false positive for the case
+  // that the numbers add up to -min<int64_t> but this is not too important
+  // for the sake of these unit tests.
+  auto unsignedSum = abs(a) + abs(b);
+  return unsignedSum <= std::max(abs(a), abs(b)) ||
+         unsignedSum > std::numeric_limits<int64_t>::max();
+}
+
+bool subtractionWouldOverflow(int64_t a, int64_t b) {
+  auto intMin = std::numeric_limits<int64_t>::min();
+  if (a == intMin) {
+    return b > 0;
+  } else if (a == 0) {
+    return b == intMin;
+  } else {
+    return additionWouldOverflow(-a, b);
+  }
+}
+
 template <size_t N>
 void addition(int64_t a, int64_t b) {
-  using I = ad_utility::NBitInteger<N>;
-  auto resultNBit = I::fromNBit(I::toNBit(I::toNBit(a) + I::toNBit(b)));
-  auto resultInt64 = I::fromNBit(I::toNBit(static_cast<int64_t>(
-      static_cast<uint64_t>(a) + static_cast<uint64_t>(b))));
-  ASSERT_EQ(resultNBit, resultInt64);
+  return testTwoNumbers<N, std::plus<>{}, &additionWouldOverflow>(a, b);
 }
 
 template <size_t N>
 void subtraction(int64_t a, int64_t b) {
-  using I = ad_utility::NBitInteger<N>;
-  auto resultNBit = I::fromNBit(I::toNBit(I::toNBit(a) - I::toNBit(b)));
-  auto resultInt64 = I::fromNBit(I::toNBit(static_cast<int64_t>(
-      static_cast<uint64_t>(a) - static_cast<uint64_t>(b))));
-  ASSERT_EQ(resultNBit, resultInt64);
+  return testTwoNumbers<N, std::minus<>{}, &subtractionWouldOverflow>(a, b);
+}
+
+bool multiplicationWouldOverflow(int64_t a, int64_t b) {
+  // TODO<joka921> Do something more meaningful;
+  return true;
 }
 
 template <size_t N>
 void multiplication(int64_t a, int64_t b) {
-  using I = ad_utility::NBitInteger<N>;
-  auto resultNBit = I::fromNBit(I::toNBit(I::toNBit(a) * I::toNBit(b)));
-  auto resultInt64 = I::fromNBit(I::toNBit(static_cast<int64_t>(
-      static_cast<uint64_t>(a) * static_cast<uint64_t>(b))));
-  ASSERT_EQ(resultNBit, resultInt64);
+  return testTwoNumbers<N, std::multiplies<>{}, &multiplicationWouldOverflow>(
+      a, b);
 }
 
 auto testNumeric = []<size_t N>(int64_t a, int64_t b) {
@@ -121,6 +159,8 @@ auto testNumeric = []<size_t N>(int64_t a, int64_t b) {
   subtraction<N>(a, b);
   multiplication<N>(a, b);
 
+  // TODO<joka921> We can do tests for all `a` and `b` that actually fit
+  // into the NBit integer.
   // Division in general does not have an easily predictable behaviors in the
   // presence of overflows.
 };
