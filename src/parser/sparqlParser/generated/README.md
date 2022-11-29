@@ -10,11 +10,11 @@ the workflow is as follows:
   
 * Inside this directory, Download the ANTLR parser generator
 ```
-wget http://www.antlr.org/download/antlr-4.9.2-complete.jar
+wget http://www.antlr.org/download/antlr-4.11.1-complete.jar
 ```
 * Inside this directory, Run ANTLR
 ```
-java -Xmx500M -cp "./antlr-4.9.2-complete.jar:$CLASSPATH" org.antlr.v4.Tool -Dlanguage=Cpp SparqlAutomatic.g4 -visitor
+java -Xmx500M -cp "./antlr-4.11.1-complete.jar:$CLASSPATH" org.antlr.v4.Tool -Dlanguage=Cpp SparqlAutomatic.g4 -visitor
 ```
 
 * If necessary, adapt the `SparqlQleverVisitor.h/.cpp` (one folder above)

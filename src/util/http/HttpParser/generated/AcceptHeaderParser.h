@@ -1,5 +1,5 @@
 
-// Generated from AcceptHeader.g4 by ANTLR 4.9.2
+// Generated from AcceptHeader.g4 by ANTLR 4.11.1
 
 #pragma once
 
@@ -63,15 +63,21 @@ class AcceptHeaderParser : public antlr4::Parser {
   };
 
   explicit AcceptHeaderParser(antlr4::TokenStream* input);
-  ~AcceptHeaderParser();
 
-  virtual std::string getGrammarFileName() const override;
-  virtual const antlr4::atn::ATN& getATN() const override { return _atn; };
-  virtual const std::vector<std::string>& getTokenNames() const override {
-    return _tokenNames;
-  };  // deprecated: use vocabulary instead.
-  virtual const std::vector<std::string>& getRuleNames() const override;
-  virtual antlr4::dfa::Vocabulary& getVocabulary() const override;
+  AcceptHeaderParser(antlr4::TokenStream* input,
+                     const antlr4::atn::ParserATNSimulatorOptions& options);
+
+  ~AcceptHeaderParser() override;
+
+  std::string getGrammarFileName() const override;
+
+  const antlr4::atn::ATN& getATN() const override;
+
+  const std::vector<std::string>& getRuleNames() const override;
+
+  const antlr4::dfa::Vocabulary& getVocabulary() const override;
+
+  antlr4::atn::SerializedATNView getSerializedATN() const override;
 
   class AcceptContext;
   class AcceptWithEofContext;
@@ -101,8 +107,7 @@ class AcceptHeaderParser : public antlr4::Parser {
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
 
-    virtual antlrcpp::Any accept(
-        antlr4::tree::ParseTreeVisitor* visitor) override;
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   AcceptContext* accept();
@@ -118,8 +123,7 @@ class AcceptHeaderParser : public antlr4::Parser {
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
 
-    virtual antlrcpp::Any accept(
-        antlr4::tree::ParseTreeVisitor* visitor) override;
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   AcceptWithEofContext* acceptWithEof();
@@ -135,8 +139,7 @@ class AcceptHeaderParser : public antlr4::Parser {
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
 
-    virtual antlrcpp::Any accept(
-        antlr4::tree::ParseTreeVisitor* visitor) override;
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   RangeAndParamsContext* rangeAndParams();
@@ -158,8 +161,7 @@ class AcceptHeaderParser : public antlr4::Parser {
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
 
-    virtual antlrcpp::Any accept(
-        antlr4::tree::ParseTreeVisitor* visitor) override;
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   MediaRangeContext* mediaRange();
@@ -173,8 +175,7 @@ class AcceptHeaderParser : public antlr4::Parser {
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
 
-    virtual antlrcpp::Any accept(
-        antlr4::tree::ParseTreeVisitor* visitor) override;
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   TypeContext* type();
@@ -188,8 +189,7 @@ class AcceptHeaderParser : public antlr4::Parser {
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
 
-    virtual antlrcpp::Any accept(
-        antlr4::tree::ParseTreeVisitor* visitor) override;
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   SubtypeContext* subtype();
@@ -206,8 +206,7 @@ class AcceptHeaderParser : public antlr4::Parser {
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
 
-    virtual antlrcpp::Any accept(
-        antlr4::tree::ParseTreeVisitor* visitor) override;
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   AcceptParamsContext* acceptParams();
@@ -224,8 +223,7 @@ class AcceptHeaderParser : public antlr4::Parser {
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
 
-    virtual antlrcpp::Any accept(
-        antlr4::tree::ParseTreeVisitor* visitor) override;
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   WeightContext* weight();
@@ -241,8 +239,7 @@ class AcceptHeaderParser : public antlr4::Parser {
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
 
-    virtual antlrcpp::Any accept(
-        antlr4::tree::ParseTreeVisitor* visitor) override;
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   QvalueContext* qvalue();
@@ -260,8 +257,7 @@ class AcceptHeaderParser : public antlr4::Parser {
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
 
-    virtual antlrcpp::Any accept(
-        antlr4::tree::ParseTreeVisitor* visitor) override;
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   AcceptExtContext* acceptExt();
@@ -277,8 +273,7 @@ class AcceptHeaderParser : public antlr4::Parser {
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
 
-    virtual antlrcpp::Any accept(
-        antlr4::tree::ParseTreeVisitor* visitor) override;
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   ParameterContext* parameter();
@@ -293,8 +288,7 @@ class AcceptHeaderParser : public antlr4::Parser {
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
 
-    virtual antlrcpp::Any accept(
-        antlr4::tree::ParseTreeVisitor* visitor) override;
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   TokenContext* token();
@@ -324,8 +318,7 @@ class AcceptHeaderParser : public antlr4::Parser {
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
 
-    virtual antlrcpp::Any accept(
-        antlr4::tree::ParseTreeVisitor* visitor) override;
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   TcharContext* tchar();
@@ -345,8 +338,7 @@ class AcceptHeaderParser : public antlr4::Parser {
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
 
-    virtual antlrcpp::Any accept(
-        antlr4::tree::ParseTreeVisitor* visitor) override;
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   QuotedStringContext* quotedString();
@@ -363,26 +355,15 @@ class AcceptHeaderParser : public antlr4::Parser {
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
 
-    virtual antlrcpp::Any accept(
-        antlr4::tree::ParseTreeVisitor* visitor) override;
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
   Quoted_pairContext* quoted_pair();
 
+  // By default the static state used to implement the parser is lazily
+  // initialized during the first call to the constructor. You can call this
+  // function if you wish to initialize the static state ahead of time.
+  static void initialize();
+
  private:
-  static std::vector<antlr4::dfa::DFA> _decisionToDFA;
-  static antlr4::atn::PredictionContextCache _sharedContextCache;
-  static std::vector<std::string> _ruleNames;
-  static std::vector<std::string> _tokenNames;
-
-  static std::vector<std::string> _literalNames;
-  static std::vector<std::string> _symbolicNames;
-  static antlr4::dfa::Vocabulary _vocabulary;
-  static antlr4::atn::ATN _atn;
-  static std::vector<uint16_t> _serializedATN;
-
-  struct Initializer {
-    Initializer();
-  };
-  static Initializer _init;
 };
