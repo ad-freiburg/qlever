@@ -53,7 +53,7 @@ endif ()
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
 ###############################
 add_subdirectory(third_party/antlr4/runtime/Cpp EXCLUDE_FROM_ALL )
-target_compile_options(antlr4_static PRIVATE -Wno-implicit-fallthrough -Wno-attributes -Wno-ambiguous-reversed-operator)
+target_compile_options(antlr4_static PRIVATE -Wno-implicit-fallthrough -Wno-attributes -Wno-ambiguous-reversed-operator -Wno-error)
 include_directories(SYSTEM third_party/antlr4/runtime/Cpp/runtime/src )
 
 ################################
