@@ -52,9 +52,9 @@ endif ()
 ###############################
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
 ###############################
-add_subdirectory(third_party/antlr4/runtime/Cpp EXCLUDE_FROM_ALL)
+add_subdirectory(third_party/antlr4/runtime/Cpp EXCLUDE_FROM_ALL SYSTEM)
 target_compile_options(antlr4_static PRIVATE -Wno-implicit-fallthrough -Wno-attributes -Wno-ambiguous-reversed-operator)
-include_directories(third_party/antlr4/runtime/Cpp/runtime/src SYSTEM)
+include_directories(SYSTEM third_party/antlr4/runtime/Cpp/runtime/src )
 
 ################################
 # Threading
@@ -152,7 +152,7 @@ include_directories(third_party/ctre/include)
 # ABSEIL
 ################################
 set(BUILD_TESTING OFF CACHE BOOL "Don't build tests for abseil" FORCE)
-add_subdirectory(third_party/abseil-cpp EXCLUDE_FROM_ALL)
+add_subdirectory(third_party/abseil-cpp EXCLUDE_FROM_ALL SYSTEM)
 include_directories(SYSTEM third_party/abseil-cpp/)
 
 
@@ -193,18 +193,10 @@ include_directories(SYSTEM ${STXXL_INCLUDE_DIRS})
 # RE2
 ################################
 
-# RE2 has a lot of unused-parameter warnings, we will deactivate
-# these for the subproject
-set(LOCAL_CXX_BACKUP_FLAGS "${CMAKE_CXX_FLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
-
 set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
-add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL)
+add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL SYSTEM)
 target_compile_options(re2 PRIVATE -Wno-unused-but-set-variable)
 include_directories(SYSTEM third_party/re2)
-
-# reinstate original flags including all warnings
-set(CMAKE_CXX_FLAGS "${LOCAL_CXX_BACKUP_FLAGS}")
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})

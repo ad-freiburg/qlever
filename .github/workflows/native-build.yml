@@ -20,19 +20,8 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [ gcc11, gcc12, clang13, clang14, clang15-ubsan ]
-        os: [ ubuntu-20.04, ubuntu-22.04 ]
+        os: [ ubuntu-22.04 ]
         warnings: [  "-Wall -Wextra -Werror -fsanitize=address -fno-omit-frame-pointer" ]
-        exclude:
-          - compiler: gcc11
-            os: ubuntu-22.04
-          - compiler: gcc12
-            os: ubuntu-20.04
-          - compiler: clang13
-            os: ubuntu-20.04
-          - compiler: clang14
-            os: ubuntu-20.04
-          - compiler: clang15-ubsan
-            os: ubuntu-20.04
     runs-on: ${{ matrix.os }}
 
 
