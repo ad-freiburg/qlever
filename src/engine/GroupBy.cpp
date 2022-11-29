@@ -399,9 +399,9 @@ bool GroupBy::computeGroupByForFullIndexScan(ResultTable* result) {
   }
 
   // Check that all the aliases are non-distinct counts. We currently support
-  // only 0 or 1 such count. Redundant additional counts will lead to an
+  // only one or no such count. Redundant additional counts will lead to an
   // exception (it is easy to reformulate the query to trigger this
-  // optimization.
+  // optimization).
   size_t numCounts = 0;
   for (size_t i = 0; i < _aliases.size(); ++i) {
     const auto& alias = _aliases[i];
@@ -418,8 +418,8 @@ bool GroupBy::computeGroupByForFullIndexScan(ResultTable* result) {
   if (numCounts > 1) {
     throw std::runtime_error{
         "This query contains two or more COUNT expressions in the same GROUP "
-        "BY that would lead"
-        " to identical values. This redundancy is currently not supported."};
+        "BY that would lead to identical values. This redundancy is currently "
+        "not supported."};
   }
 
   // Prepare the `result`

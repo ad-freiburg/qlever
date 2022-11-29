@@ -9,7 +9,7 @@
 #include "index/Index.h"
 
 // Several useful functions to quickly set up an `Index` and a
-// `QueryExecutionContext` that store a small example knowledge graph. Thos can
+// `QueryExecutionContext` that store a small example knowledge graph. Those can
 // be used for unit tests.
 
 namespace ad_utility::testing {

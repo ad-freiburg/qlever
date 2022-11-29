@@ -598,13 +598,13 @@ TEST(IndexTest, TripleToInternalRepresentation) {
 }
 
 TEST(IndexTest, getIgnoredIdRanges) {
-  const IndexImpl& impl = getQec()->getIndex().getImpl();
+  const IndexImpl& index = getQec()->getIndex().getImpl();
 
   // First manually get the IDs of the vocabulary elements that might appear
   // in added triples.
-  auto getId = [&impl](const std::string& s) {
+  auto getId = [&index](const std::string& s) {
     Id id;
-    bool success = impl.getId(s, &id);
+    bool success = index.getId(s, &id);
     AD_CHECK(success);
     return id;
   };
@@ -629,10 +629,11 @@ TEST(IndexTest, getIgnoredIdRanges) {
   auto literals = std::pair{firstLiteral, increment(lastLiteral)};
 
   {
-    auto [ranges, lambda] = impl.getIgnoredIdRanges(Index::Permutation::POS);
+    auto [ranges, lambda] = index.getIgnoredIdRanges(Index::Permutation::POS);
     ASSERT_FALSE(lambda(std::array{label, firstLiteral, x}));
-    // This triple is actually added, but it should be filtered out via the
-    // ranges and not via the lambda, because it can be retrieved using the
+
+    // Note: The following triple is added, but it should be filtered out via
+    // the ranges and not via the lambda, because it can be retrieved using the
     // `ranges`.
     ASSERT_FALSE(lambda(std::array{enLabel, firstLiteral, x}));
     ASSERT_FALSE(lambda(std::array{x, x, x}));
@@ -642,10 +643,11 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_EQ(ranges[1], predicatesWithLangtag);
   }
   {
-    auto [ranges, lambda] = impl.getIgnoredIdRanges(Index::Permutation::PSO);
+    auto [ranges, lambda] = index.getIgnoredIdRanges(Index::Permutation::PSO);
     ASSERT_FALSE(lambda(std::array{label, x, firstLiteral}));
-    // This triple is actually added, but it should be filtered out via the
-    // ranges and not via the lambda, because it can be retrieved using the
+
+    // Note: The following triple is added, but it should be filtered out via
+    // the ranges and not via the lambda, because it can be retrieved using the
     // `ranges`.
     ASSERT_FALSE(lambda(std::array{enLabel, x, firstLiteral}));
     ASSERT_FALSE(lambda(std::array{x, x, x}));
@@ -655,7 +657,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_EQ(ranges[1], predicatesWithLangtag);
   }
   {
-    auto [ranges, lambda] = impl.getIgnoredIdRanges(Index::Permutation::SOP);
+    auto [ranges, lambda] = index.getIgnoredIdRanges(Index::Permutation::SOP);
     ASSERT_TRUE(lambda(std::array{x, firstLiteral, enLabel}));
     ASSERT_FALSE(lambda(std::array{x, firstLiteral, label}));
     ASSERT_FALSE(lambda(std::array{x, x, label}));
@@ -665,7 +667,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_EQ(ranges[1], literals);
   }
   {
-    auto [ranges, lambda] = impl.getIgnoredIdRanges(Index::Permutation::SPO);
+    auto [ranges, lambda] = index.getIgnoredIdRanges(Index::Permutation::SPO);
     ASSERT_TRUE(lambda(std::array{x, enLabel, firstLiteral}));
     ASSERT_FALSE(lambda(std::array{x, label, firstLiteral}));
     ASSERT_FALSE(lambda(std::array{x, label, x}));
@@ -675,7 +677,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_EQ(ranges[1], literals);
   }
   {
-    auto [ranges, lambda] = impl.getIgnoredIdRanges(Index::Permutation::OSP);
+    auto [ranges, lambda] = index.getIgnoredIdRanges(Index::Permutation::OSP);
     ASSERT_TRUE(lambda(std::array{firstLiteral, x, enLabel}));
     ASSERT_FALSE(lambda(std::array{firstLiteral, x, label}));
     ASSERT_FALSE(lambda(std::array{x, x, label}));
@@ -683,7 +685,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_EQ(ranges[0], internalEntities);
   }
   {
-    auto [ranges, lambda] = impl.getIgnoredIdRanges(Index::Permutation::OPS);
+    auto [ranges, lambda] = index.getIgnoredIdRanges(Index::Permutation::OPS);
     ASSERT_TRUE(lambda(std::array{firstLiteral, enLabel, x}));
     ASSERT_FALSE(lambda(std::array{firstLiteral, label, x}));
     ASSERT_FALSE(lambda(std::array{x, label, x}));
