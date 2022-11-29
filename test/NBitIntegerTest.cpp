@@ -89,6 +89,16 @@ auto testTranslationNearLimits = []<size_t N>() {
   testUnaryFunctionNearLimits.operator()<N>(testFromTo);
 };
 
+// Test that the result of `from(to(f(a, b)))` is equal to `from(to(f(to(a),
+// to(b))))`, when `to` is `NBitInteger<N>::toNBit` and `from` is the
+// corresponding `fromNBit`. This tests the (well-defined) behavior of the
+// `NBitInteger`s in the presence of overflows. The `wouldOverflow(a, b)`
+// function must return `true` if `f(a, b)` would overlow, leading to undefined
+// behavior. In those cases, the result `i(f(u(a), u(b))` is evaluated instead
+// of `f(a, b)`, where `i` is a cast to int64_t and `u` is a cast to `uint64_t`.
+// The behavior of this operation is well-defined because unsigned integer
+// overflow is defined and signed-unsigned conversions are defined (signed
+// integers are 2s complement).
 template <size_t N, auto f, auto wouldOverflow>
 auto testTwoNumbers = [](int64_t a, int64_t b) {
   using I = ad_utility::NBitInteger<N>;
@@ -102,8 +112,9 @@ auto testTwoNumbers = [](int64_t a, int64_t b) {
   ASSERT_EQ(resultNBit, resultInt64);
 };
 
+// Return true if `a + b` would overflow.
 bool additionWouldOverflow(int64_t a, int64_t b) {
-  if (a < 0 != b < 0) {
+  if ((a < 0) != (b < 0)) {
     return false;
   }
   if (a == 0 || b == 0) {
@@ -122,6 +133,7 @@ bool additionWouldOverflow(int64_t a, int64_t b) {
          unsignedSum > std::numeric_limits<int64_t>::max();
 }
 
+// Return true if `a - b` would overflow.
 bool subtractionWouldOverflow(int64_t a, int64_t b) {
   auto intMin = std::numeric_limits<int64_t>::min();
   if (a == intMin) {
@@ -131,6 +143,31 @@ bool subtractionWouldOverflow(int64_t a, int64_t b) {
   } else {
     return additionWouldOverflow(-a, b);
   }
+}
+
+// Return true if `a * b` would overflow.
+bool multiplicationWouldOverflow(int64_t a, int64_t b) {
+  auto intMin = std::numeric_limits<int64_t>::min();
+  if (a == 1 || b == 1) {
+    return false;
+  }
+  if (a == intMin) {
+    return (b != 0) && (b != 1);
+  }
+  if (b == intMin) {
+    return (a != 0) && (a != 1);
+  }
+  auto abs = [](int64_t x) { return static_cast<uint64_t>(x < 0 ? -x : x); };
+  auto productOfAbs = abs(a) * abs(b);
+  if (static_cast<double>(productOfAbs) * 2 <
+      static_cast<double>(abs(a)) * static_cast<double>(abs(b))) {
+    return true;
+  }
+  return productOfAbs > std::numeric_limits<int64_t>::max();
+  // TODO<joka921> Again the (non-overflowing) case of a positive and a negative
+  // number the product of which ist `numeric_limits<int64_t>::min()` is
+  // (wrongly) reported as overflowing.
+  return true;
 }
 
 template <size_t N>
@@ -143,11 +180,6 @@ void subtraction(int64_t a, int64_t b) {
   return testTwoNumbers<N, std::minus<>{}, &subtractionWouldOverflow>(a, b);
 }
 
-bool multiplicationWouldOverflow(int64_t a, int64_t b) {
-  // TODO<joka921> Do something more meaningful;
-  return true;
-}
-
 template <size_t N>
 void multiplication(int64_t a, int64_t b) {
   return testTwoNumbers<N, std::multiplies<>{}, &multiplicationWouldOverflow>(
@@ -158,11 +190,6 @@ auto testNumeric = []<size_t N>(int64_t a, int64_t b) {
   addition<N>(a, b);
   subtraction<N>(a, b);
   multiplication<N>(a, b);
-
-  // TODO<joka921> We can do tests for all `a` and `b` that actually fit
-  // into the NBit integer.
-  // Division in general does not have an easily predictable behaviors in the
-  // presence of overflows.
 };
 
 auto testNumericNearLimits = []<size_t N>() {

@@ -145,6 +145,9 @@ inline auto multiply = [](const auto& a, const auto& b) -> double {
 using MultiplyExpression = NARY<2, FV<decltype(multiply), NumericValueGetter>>;
 
 /// Division.
+// TODO<joka921> If `b == 0` this is technically undefined behavior and
+// should lead to an expression error in SPARQL. Fix this as soon as we
+// introduce the proper semantics for expression errors.
 inline auto divide = [](const auto& a, const auto& b) -> double {
   return static_cast<double>(a) / b;
 };

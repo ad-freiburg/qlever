@@ -54,7 +54,7 @@ endif ()
 ###############################
 add_subdirectory(third_party/antlr4/runtime/Cpp EXCLUDE_FROM_ALL)
 target_compile_options(antlr4_static PRIVATE -Wno-implicit-fallthrough -Wno-attributes -Wno-ambiguous-reversed-operator)
-include_directories(third_party/antlr4/runtime/Cpp/runtime/src)
+include_directories(third_party/antlr4/runtime/Cpp/runtime/src SYSTEM)
 
 ################################
 # Threading
