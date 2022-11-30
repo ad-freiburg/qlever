@@ -56,13 +56,12 @@ add_subdirectory(third_party/googletest EXCLUDE_FROM_ALL)
 include_directories(third_party/googletest/googletest/include)
 include_directories(third_party/googletest/googlemock/include)
 
-message(STATUS "including ANTLR")
 ###############################
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
 ###############################
 set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
 add_subdirectory(third_party/antlr4/runtime/Cpp EXCLUDE_FROM_ALL )
-target_compile_options(antlr4_static PRIVATE -Wno-implicit-fallthrough -Wno-attributes -Wno-ambiguous-reversed-operator -Wno-error)
+target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error)
 include_directories(SYSTEM third_party/antlr4/runtime/Cpp/runtime/src )
 
 ################################
@@ -70,7 +69,6 @@ include_directories(SYSTEM third_party/antlr4/runtime/Cpp/runtime/src )
 ################################
 find_package(Threads REQUIRED)
 
-message(STATUS "including ICU")
 #################################
 # ICU (for proper collation
 ################################
@@ -152,17 +150,12 @@ include_directories(third_party/json/)
 # Header only, nothing to include
 include_directories(third_party/ctre/include)
 
-message(STATUS "including ABSL")
 ################################
 # ABSEIL
 ################################
 set(BUILD_TESTING OFF CACHE BOOL "Don't build tests for abseil" FORCE)
-set(ABSL_USE_EXTERNAL_GOOGLETEST ON CACHE BOOL "don't try to build googletest twice")
 add_subdirectory(third_party/abseil-cpp  EXCLUDE_FROM_ALL)
 include_directories(SYSTEM third_party/abseil-cpp/)
-
-message(STATUS "finished ABSL")
-
 
 if (USE_PARALLEL)
     include(FindOpenMP)
