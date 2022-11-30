@@ -21,7 +21,7 @@ jobs:
       matrix:
         compiler: [ gcc11, gcc12, clang13, clang14, clang15-ubsan ]
         os: [ ubuntu-22.04 ]
-        warnings: [  "-Wall -Wextra -Werror -fsanitize=address -fno-omit-frame-pointer" ]
+        warnings: [  "-Wall -Wextra -Werror" ]
     runs-on: ${{ matrix.os }}
 
 

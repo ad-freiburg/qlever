@@ -114,60 +114,49 @@ auto testTwoNumbers = [](int64_t a, int64_t b) {
 
 // Return true if `a + b` would overflow.
 bool additionWouldOverflow(int64_t a, int64_t b) {
-  if ((a < 0) != (b < 0)) {
-    return false;
+  auto max = std::numeric_limits<int64_t>::max();
+  auto min = std::numeric_limits<int64_t>::min();
+  if (b > 0) {
+    return a > max - b;
+  } else {
+    return a < min - b;
   }
-  if (a == 0 || b == 0) {
-    return false;
-  }
-  auto intMin = std::numeric_limits<int64_t>::min();
-  if (a == intMin || b == intMin) {
-    return true;
-  }
-  auto abs = [](int64_t x) { return static_cast<uint64_t>(x < 0 ? -x : x); };
-  // TODO<joka921> This has currently one false positive for the case
-  // that the numbers add up to -min<int64_t> but this is not too important
-  // for the sake of these unit tests.
-  auto unsignedSum = abs(a) + abs(b);
-  return unsignedSum <= std::max(abs(a), abs(b)) ||
-         unsignedSum > std::numeric_limits<int64_t>::max();
 }
 
 // Return true if `a - b` would overflow.
 bool subtractionWouldOverflow(int64_t a, int64_t b) {
-  auto intMin = std::numeric_limits<int64_t>::min();
-  if (a == intMin) {
-    return b > 0;
-  } else if (a == 0) {
-    return b == intMin;
+  auto max = std::numeric_limits<int64_t>::max();
+  auto min = std::numeric_limits<int64_t>::min();
+  if (b > 0) {
+    return a < min + b;
   } else {
-    return additionWouldOverflow(-a, b);
+    return a > max + b;
   }
 }
 
 // Return true if `a * b` would overflow.
 bool multiplicationWouldOverflow(int64_t a, int64_t b) {
-  auto intMin = std::numeric_limits<int64_t>::min();
-  if (a == 1 || b == 1) {
+  auto max = std::numeric_limits<int64_t>::max();
+  auto min = std::numeric_limits<int64_t>::min();
+
+  if (a == 0 || b == 0) {
     return false;
   }
-  if (a == intMin) {
-    return (b != 0) && (b != 1);
+
+  if (a > 0 && b > 0) {
+    return b > max / a;
   }
-  if (b == intMin) {
-    return (a != 0) && (a != 1);
+
+  if (a < 0 && b < 0) {
+    return b < max / a;
   }
-  auto abs = [](int64_t x) { return static_cast<uint64_t>(x < 0 ? -x : x); };
-  auto productOfAbs = abs(a) * abs(b);
-  if (static_cast<double>(productOfAbs) * 2 <
-      static_cast<double>(abs(a)) * static_cast<double>(abs(b))) {
-    return true;
+
+  if (a < 0 && b > 0) {
+    return b > min / a;
   }
-  return productOfAbs > std::numeric_limits<int64_t>::max();
-  // TODO<joka921> Again the (non-overflowing) case of a positive and a negative
-  // number the product of which ist `numeric_limits<int64_t>::min()` is
-  // (wrongly) reported as overflowing.
-  return true;
+
+  // a > 0 && b < 0
+  return a > min / b;
 }
 
 template <size_t N>
