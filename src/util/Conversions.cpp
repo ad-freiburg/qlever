@@ -377,6 +377,9 @@ float convertIndexWordToFloat(const string& indexWord) {
         indexWord + ". The mantissa " + substr +
         " could not be parsed via stod");
   }
+  if (absMantissa == 0) {
+    return 0.0f;
+  }
   unsigned int mantissaLog = std::log10(absMantissa);
   if (negaMantissa) {
     if (negaExponent) {

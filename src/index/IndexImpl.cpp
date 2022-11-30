@@ -489,7 +489,6 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
       THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.mmap-buffer");
   bool functional = true;
   size_t distinctCol1 = 0;
-  size_t sizeOfRelation = 0;
   Id lastLhs = ID_NO_VALUE;
   uint64_t totalNumTriples = 0;
   for (auto triple : sortedTriples) {
@@ -513,7 +512,6 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
       currentRel = triple[c0];
       functional = true;
     } else {
-      sizeOfRelation++;
       if (triple[c1] == lastLhs) {
         functional = false;
       } else {

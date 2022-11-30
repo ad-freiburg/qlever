@@ -61,8 +61,8 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
     std::vector<ad_utility::MediaTypeWithQuality> acceptedMediaTypes;
     for (const auto& child : ctx->rangeAndParams()) {
       auto mediaType =
-          child->accept(this)
-              .as<std::optional<ad_utility::MediaTypeWithQuality>>();
+          std::any_cast<std::optional<ad_utility::MediaTypeWithQuality>>(
+              child->accept(this));
       if (mediaType.has_value()) {
         acceptedMediaTypes.push_back(mediaType.value());
       }
@@ -82,10 +82,10 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
     std::optional<ad_utility::MediaTypeWithQuality> result = std::nullopt;
     float quality = 1.0;
     if (ctx->acceptParams()) {
-      quality = ctx->acceptParams()->accept(this).as<float>();
+      quality = std::any_cast<float>(ctx->acceptParams()->accept(this));
     }
     using V = std::optional<ad_utility::MediaTypeWithQuality::Variant>;
-    auto mediaRange = ctx->mediaRange()->accept(this).as<V>();
+    auto mediaRange = std::any_cast<V>(ctx->mediaRange()->accept(this));
     if (mediaRange.has_value()) {
       result.emplace(ad_utility::MediaTypeWithQuality{
           quality, std::move(mediaRange.value())});

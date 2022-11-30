@@ -9,7 +9,7 @@
 #include "../src/index/vocabulary/VocabularyInMemory.h"
 #include "./VocabularyTestHelpers.h"
 
-// A stateless "compressor" that applies a trivial transormation to a string
+// A stateless "compressor" that applies a trivial transformation to a string
 struct DummyCompressor {
   static std::string compress(std::string_view uncompressed) {
     std::string result{uncompressed};

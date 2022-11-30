@@ -1,5 +1,5 @@
 
-// Generated from SparqlAutomatic.g4 by ANTLR 4.9.2
+// Generated from SparqlAutomatic.g4 by ANTLR 4.11.1
 
 #pragma once
 
@@ -15,406 +15,399 @@ class SparqlAutomaticVisitor : public antlr4::tree::AbstractParseTreeVisitor {
   /**
    * Visit parse trees produced by SparqlAutomaticParser.
    */
-  virtual antlrcpp::Any visitQuery(
-      SparqlAutomaticParser::QueryContext* context) = 0;
+  virtual std::any visitQuery(SparqlAutomaticParser::QueryContext* context) = 0;
 
-  virtual antlrcpp::Any visitPrologue(
+  virtual std::any visitPrologue(
       SparqlAutomaticParser::PrologueContext* context) = 0;
 
-  virtual antlrcpp::Any visitBaseDecl(
+  virtual std::any visitBaseDecl(
       SparqlAutomaticParser::BaseDeclContext* context) = 0;
 
-  virtual antlrcpp::Any visitPrefixDecl(
+  virtual std::any visitPrefixDecl(
       SparqlAutomaticParser::PrefixDeclContext* context) = 0;
 
-  virtual antlrcpp::Any visitSelectQuery(
+  virtual std::any visitSelectQuery(
       SparqlAutomaticParser::SelectQueryContext* context) = 0;
 
-  virtual antlrcpp::Any visitSubSelect(
+  virtual std::any visitSubSelect(
       SparqlAutomaticParser::SubSelectContext* context) = 0;
 
-  virtual antlrcpp::Any visitSelectClause(
+  virtual std::any visitSelectClause(
       SparqlAutomaticParser::SelectClauseContext* context) = 0;
 
-  virtual antlrcpp::Any visitVarOrAlias(
+  virtual std::any visitVarOrAlias(
       SparqlAutomaticParser::VarOrAliasContext* context) = 0;
 
-  virtual antlrcpp::Any visitAlias(
-      SparqlAutomaticParser::AliasContext* context) = 0;
+  virtual std::any visitAlias(SparqlAutomaticParser::AliasContext* context) = 0;
 
-  virtual antlrcpp::Any visitAliasWithoutBrackets(
+  virtual std::any visitAliasWithoutBrackets(
       SparqlAutomaticParser::AliasWithoutBracketsContext* context) = 0;
 
-  virtual antlrcpp::Any visitConstructQuery(
+  virtual std::any visitConstructQuery(
       SparqlAutomaticParser::ConstructQueryContext* context) = 0;
 
-  virtual antlrcpp::Any visitDescribeQuery(
+  virtual std::any visitDescribeQuery(
       SparqlAutomaticParser::DescribeQueryContext* context) = 0;
 
-  virtual antlrcpp::Any visitAskQuery(
+  virtual std::any visitAskQuery(
       SparqlAutomaticParser::AskQueryContext* context) = 0;
 
-  virtual antlrcpp::Any visitDatasetClause(
+  virtual std::any visitDatasetClause(
       SparqlAutomaticParser::DatasetClauseContext* context) = 0;
 
-  virtual antlrcpp::Any visitDefaultGraphClause(
+  virtual std::any visitDefaultGraphClause(
       SparqlAutomaticParser::DefaultGraphClauseContext* context) = 0;
 
-  virtual antlrcpp::Any visitNamedGraphClause(
+  virtual std::any visitNamedGraphClause(
       SparqlAutomaticParser::NamedGraphClauseContext* context) = 0;
 
-  virtual antlrcpp::Any visitSourceSelector(
+  virtual std::any visitSourceSelector(
       SparqlAutomaticParser::SourceSelectorContext* context) = 0;
 
-  virtual antlrcpp::Any visitWhereClause(
+  virtual std::any visitWhereClause(
       SparqlAutomaticParser::WhereClauseContext* context) = 0;
 
-  virtual antlrcpp::Any visitSolutionModifier(
+  virtual std::any visitSolutionModifier(
       SparqlAutomaticParser::SolutionModifierContext* context) = 0;
 
-  virtual antlrcpp::Any visitGroupClause(
+  virtual std::any visitGroupClause(
       SparqlAutomaticParser::GroupClauseContext* context) = 0;
 
-  virtual antlrcpp::Any visitGroupCondition(
+  virtual std::any visitGroupCondition(
       SparqlAutomaticParser::GroupConditionContext* context) = 0;
 
-  virtual antlrcpp::Any visitHavingClause(
+  virtual std::any visitHavingClause(
       SparqlAutomaticParser::HavingClauseContext* context) = 0;
 
-  virtual antlrcpp::Any visitHavingCondition(
+  virtual std::any visitHavingCondition(
       SparqlAutomaticParser::HavingConditionContext* context) = 0;
 
-  virtual antlrcpp::Any visitOrderClause(
+  virtual std::any visitOrderClause(
       SparqlAutomaticParser::OrderClauseContext* context) = 0;
 
-  virtual antlrcpp::Any visitOrderCondition(
+  virtual std::any visitOrderCondition(
       SparqlAutomaticParser::OrderConditionContext* context) = 0;
 
-  virtual antlrcpp::Any visitLimitOffsetClauses(
+  virtual std::any visitLimitOffsetClauses(
       SparqlAutomaticParser::LimitOffsetClausesContext* context) = 0;
 
-  virtual antlrcpp::Any visitLimitClause(
+  virtual std::any visitLimitClause(
       SparqlAutomaticParser::LimitClauseContext* context) = 0;
 
-  virtual antlrcpp::Any visitOffsetClause(
+  virtual std::any visitOffsetClause(
       SparqlAutomaticParser::OffsetClauseContext* context) = 0;
 
-  virtual antlrcpp::Any visitTextLimitClause(
+  virtual std::any visitTextLimitClause(
       SparqlAutomaticParser::TextLimitClauseContext* context) = 0;
 
-  virtual antlrcpp::Any visitValuesClause(
+  virtual std::any visitValuesClause(
       SparqlAutomaticParser::ValuesClauseContext* context) = 0;
 
-  virtual antlrcpp::Any visitTriplesTemplate(
+  virtual std::any visitTriplesTemplate(
       SparqlAutomaticParser::TriplesTemplateContext* context) = 0;
 
-  virtual antlrcpp::Any visitGroupGraphPattern(
+  virtual std::any visitGroupGraphPattern(
       SparqlAutomaticParser::GroupGraphPatternContext* context) = 0;
 
-  virtual antlrcpp::Any visitGroupGraphPatternSub(
+  virtual std::any visitGroupGraphPatternSub(
       SparqlAutomaticParser::GroupGraphPatternSubContext* context) = 0;
 
-  virtual antlrcpp::Any visitGraphPatternNotTriplesAndMaybeTriples(
+  virtual std::any visitGraphPatternNotTriplesAndMaybeTriples(
       SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext*
           context) = 0;
 
-  virtual antlrcpp::Any visitTriplesBlock(
+  virtual std::any visitTriplesBlock(
       SparqlAutomaticParser::TriplesBlockContext* context) = 0;
 
-  virtual antlrcpp::Any visitGraphPatternNotTriples(
+  virtual std::any visitGraphPatternNotTriples(
       SparqlAutomaticParser::GraphPatternNotTriplesContext* context) = 0;
 
-  virtual antlrcpp::Any visitOptionalGraphPattern(
+  virtual std::any visitOptionalGraphPattern(
       SparqlAutomaticParser::OptionalGraphPatternContext* context) = 0;
 
-  virtual antlrcpp::Any visitGraphGraphPattern(
+  virtual std::any visitGraphGraphPattern(
       SparqlAutomaticParser::GraphGraphPatternContext* context) = 0;
 
-  virtual antlrcpp::Any visitServiceGraphPattern(
+  virtual std::any visitServiceGraphPattern(
       SparqlAutomaticParser::ServiceGraphPatternContext* context) = 0;
 
-  virtual antlrcpp::Any visitBind(
-      SparqlAutomaticParser::BindContext* context) = 0;
+  virtual std::any visitBind(SparqlAutomaticParser::BindContext* context) = 0;
 
-  virtual antlrcpp::Any visitInlineData(
+  virtual std::any visitInlineData(
       SparqlAutomaticParser::InlineDataContext* context) = 0;
 
-  virtual antlrcpp::Any visitDataBlock(
+  virtual std::any visitDataBlock(
       SparqlAutomaticParser::DataBlockContext* context) = 0;
 
-  virtual antlrcpp::Any visitInlineDataOneVar(
+  virtual std::any visitInlineDataOneVar(
       SparqlAutomaticParser::InlineDataOneVarContext* context) = 0;
 
-  virtual antlrcpp::Any visitInlineDataFull(
+  virtual std::any visitInlineDataFull(
       SparqlAutomaticParser::InlineDataFullContext* context) = 0;
 
-  virtual antlrcpp::Any visitDataBlockSingle(
+  virtual std::any visitDataBlockSingle(
       SparqlAutomaticParser::DataBlockSingleContext* context) = 0;
 
-  virtual antlrcpp::Any visitDataBlockValue(
+  virtual std::any visitDataBlockValue(
       SparqlAutomaticParser::DataBlockValueContext* context) = 0;
 
-  virtual antlrcpp::Any visitMinusGraphPattern(
+  virtual std::any visitMinusGraphPattern(
       SparqlAutomaticParser::MinusGraphPatternContext* context) = 0;
 
-  virtual antlrcpp::Any visitGroupOrUnionGraphPattern(
+  virtual std::any visitGroupOrUnionGraphPattern(
       SparqlAutomaticParser::GroupOrUnionGraphPatternContext* context) = 0;
 
-  virtual antlrcpp::Any visitFilterR(
+  virtual std::any visitFilterR(
       SparqlAutomaticParser::FilterRContext* context) = 0;
 
-  virtual antlrcpp::Any visitConstraint(
+  virtual std::any visitConstraint(
       SparqlAutomaticParser::ConstraintContext* context) = 0;
 
-  virtual antlrcpp::Any visitFunctionCall(
+  virtual std::any visitFunctionCall(
       SparqlAutomaticParser::FunctionCallContext* context) = 0;
 
-  virtual antlrcpp::Any visitArgList(
+  virtual std::any visitArgList(
       SparqlAutomaticParser::ArgListContext* context) = 0;
 
-  virtual antlrcpp::Any visitExpressionList(
+  virtual std::any visitExpressionList(
       SparqlAutomaticParser::ExpressionListContext* context) = 0;
 
-  virtual antlrcpp::Any visitConstructTemplate(
+  virtual std::any visitConstructTemplate(
       SparqlAutomaticParser::ConstructTemplateContext* context) = 0;
 
-  virtual antlrcpp::Any visitConstructTriples(
+  virtual std::any visitConstructTriples(
       SparqlAutomaticParser::ConstructTriplesContext* context) = 0;
 
-  virtual antlrcpp::Any visitTriplesSameSubject(
+  virtual std::any visitTriplesSameSubject(
       SparqlAutomaticParser::TriplesSameSubjectContext* context) = 0;
 
-  virtual antlrcpp::Any visitPropertyList(
+  virtual std::any visitPropertyList(
       SparqlAutomaticParser::PropertyListContext* context) = 0;
 
-  virtual antlrcpp::Any visitPropertyListNotEmpty(
+  virtual std::any visitPropertyListNotEmpty(
       SparqlAutomaticParser::PropertyListNotEmptyContext* context) = 0;
 
-  virtual antlrcpp::Any visitVerb(
-      SparqlAutomaticParser::VerbContext* context) = 0;
+  virtual std::any visitVerb(SparqlAutomaticParser::VerbContext* context) = 0;
 
-  virtual antlrcpp::Any visitObjectList(
+  virtual std::any visitObjectList(
       SparqlAutomaticParser::ObjectListContext* context) = 0;
 
-  virtual antlrcpp::Any visitObjectR(
+  virtual std::any visitObjectR(
       SparqlAutomaticParser::ObjectRContext* context) = 0;
 
-  virtual antlrcpp::Any visitTriplesSameSubjectPath(
+  virtual std::any visitTriplesSameSubjectPath(
       SparqlAutomaticParser::TriplesSameSubjectPathContext* context) = 0;
 
-  virtual antlrcpp::Any visitPropertyListPath(
+  virtual std::any visitPropertyListPath(
       SparqlAutomaticParser::PropertyListPathContext* context) = 0;
 
-  virtual antlrcpp::Any visitPropertyListPathNotEmpty(
+  virtual std::any visitPropertyListPathNotEmpty(
       SparqlAutomaticParser::PropertyListPathNotEmptyContext* context) = 0;
 
-  virtual antlrcpp::Any visitVerbPath(
+  virtual std::any visitVerbPath(
       SparqlAutomaticParser::VerbPathContext* context) = 0;
 
-  virtual antlrcpp::Any visitVerbSimple(
+  virtual std::any visitVerbSimple(
       SparqlAutomaticParser::VerbSimpleContext* context) = 0;
 
-  virtual antlrcpp::Any visitTupleWithoutPath(
+  virtual std::any visitTupleWithoutPath(
       SparqlAutomaticParser::TupleWithoutPathContext* context) = 0;
 
-  virtual antlrcpp::Any visitTupleWithPath(
+  virtual std::any visitTupleWithPath(
       SparqlAutomaticParser::TupleWithPathContext* context) = 0;
 
-  virtual antlrcpp::Any visitVerbPathOrSimple(
+  virtual std::any visitVerbPathOrSimple(
       SparqlAutomaticParser::VerbPathOrSimpleContext* context) = 0;
 
-  virtual antlrcpp::Any visitObjectListPath(
+  virtual std::any visitObjectListPath(
       SparqlAutomaticParser::ObjectListPathContext* context) = 0;
 
-  virtual antlrcpp::Any visitObjectPath(
+  virtual std::any visitObjectPath(
       SparqlAutomaticParser::ObjectPathContext* context) = 0;
 
-  virtual antlrcpp::Any visitPath(
-      SparqlAutomaticParser::PathContext* context) = 0;
+  virtual std::any visitPath(SparqlAutomaticParser::PathContext* context) = 0;
 
-  virtual antlrcpp::Any visitPathAlternative(
+  virtual std::any visitPathAlternative(
       SparqlAutomaticParser::PathAlternativeContext* context) = 0;
 
-  virtual antlrcpp::Any visitPathSequence(
+  virtual std::any visitPathSequence(
       SparqlAutomaticParser::PathSequenceContext* context) = 0;
 
-  virtual antlrcpp::Any visitPathElt(
+  virtual std::any visitPathElt(
       SparqlAutomaticParser::PathEltContext* context) = 0;
 
-  virtual antlrcpp::Any visitPathEltOrInverse(
+  virtual std::any visitPathEltOrInverse(
       SparqlAutomaticParser::PathEltOrInverseContext* context) = 0;
 
-  virtual antlrcpp::Any visitPathMod(
+  virtual std::any visitPathMod(
       SparqlAutomaticParser::PathModContext* context) = 0;
 
-  virtual antlrcpp::Any visitPathPrimary(
+  virtual std::any visitPathPrimary(
       SparqlAutomaticParser::PathPrimaryContext* context) = 0;
 
-  virtual antlrcpp::Any visitPathNegatedPropertySet(
+  virtual std::any visitPathNegatedPropertySet(
       SparqlAutomaticParser::PathNegatedPropertySetContext* context) = 0;
 
-  virtual antlrcpp::Any visitPathOneInPropertySet(
+  virtual std::any visitPathOneInPropertySet(
       SparqlAutomaticParser::PathOneInPropertySetContext* context) = 0;
 
-  virtual antlrcpp::Any visitInteger(
+  virtual std::any visitInteger(
       SparqlAutomaticParser::IntegerContext* context) = 0;
 
-  virtual antlrcpp::Any visitTriplesNode(
+  virtual std::any visitTriplesNode(
       SparqlAutomaticParser::TriplesNodeContext* context) = 0;
 
-  virtual antlrcpp::Any visitBlankNodePropertyList(
+  virtual std::any visitBlankNodePropertyList(
       SparqlAutomaticParser::BlankNodePropertyListContext* context) = 0;
 
-  virtual antlrcpp::Any visitTriplesNodePath(
+  virtual std::any visitTriplesNodePath(
       SparqlAutomaticParser::TriplesNodePathContext* context) = 0;
 
-  virtual antlrcpp::Any visitBlankNodePropertyListPath(
+  virtual std::any visitBlankNodePropertyListPath(
       SparqlAutomaticParser::BlankNodePropertyListPathContext* context) = 0;
 
-  virtual antlrcpp::Any visitCollection(
+  virtual std::any visitCollection(
       SparqlAutomaticParser::CollectionContext* context) = 0;
 
-  virtual antlrcpp::Any visitCollectionPath(
+  virtual std::any visitCollectionPath(
       SparqlAutomaticParser::CollectionPathContext* context) = 0;
 
-  virtual antlrcpp::Any visitGraphNode(
+  virtual std::any visitGraphNode(
       SparqlAutomaticParser::GraphNodeContext* context) = 0;
 
-  virtual antlrcpp::Any visitGraphNodePath(
+  virtual std::any visitGraphNodePath(
       SparqlAutomaticParser::GraphNodePathContext* context) = 0;
 
-  virtual antlrcpp::Any visitVarOrTerm(
+  virtual std::any visitVarOrTerm(
       SparqlAutomaticParser::VarOrTermContext* context) = 0;
 
-  virtual antlrcpp::Any visitVarOrIri(
+  virtual std::any visitVarOrIri(
       SparqlAutomaticParser::VarOrIriContext* context) = 0;
 
-  virtual antlrcpp::Any visitVar(
-      SparqlAutomaticParser::VarContext* context) = 0;
+  virtual std::any visitVar(SparqlAutomaticParser::VarContext* context) = 0;
 
-  virtual antlrcpp::Any visitGraphTerm(
+  virtual std::any visitGraphTerm(
       SparqlAutomaticParser::GraphTermContext* context) = 0;
 
-  virtual antlrcpp::Any visitExpression(
+  virtual std::any visitExpression(
       SparqlAutomaticParser::ExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitConditionalOrExpression(
+  virtual std::any visitConditionalOrExpression(
       SparqlAutomaticParser::ConditionalOrExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitConditionalAndExpression(
+  virtual std::any visitConditionalAndExpression(
       SparqlAutomaticParser::ConditionalAndExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitValueLogical(
+  virtual std::any visitValueLogical(
       SparqlAutomaticParser::ValueLogicalContext* context) = 0;
 
-  virtual antlrcpp::Any visitRelationalExpression(
+  virtual std::any visitRelationalExpression(
       SparqlAutomaticParser::RelationalExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitNumericExpression(
+  virtual std::any visitNumericExpression(
       SparqlAutomaticParser::NumericExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitAdditiveExpression(
+  virtual std::any visitAdditiveExpression(
       SparqlAutomaticParser::AdditiveExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitMultiplicativeExpressionWithSign(
+  virtual std::any visitMultiplicativeExpressionWithSign(
       SparqlAutomaticParser::MultiplicativeExpressionWithSignContext*
           context) = 0;
 
-  virtual antlrcpp::Any visitPlusSubexpression(
+  virtual std::any visitPlusSubexpression(
       SparqlAutomaticParser::PlusSubexpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitMinusSubexpression(
+  virtual std::any visitMinusSubexpression(
       SparqlAutomaticParser::MinusSubexpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitMultiplicativeExpressionWithLeadingSignButNoSpace(
+  virtual std::any visitMultiplicativeExpressionWithLeadingSignButNoSpace(
       SparqlAutomaticParser::
           MultiplicativeExpressionWithLeadingSignButNoSpaceContext*
               context) = 0;
 
-  virtual antlrcpp::Any visitMultiplicativeExpression(
+  virtual std::any visitMultiplicativeExpression(
       SparqlAutomaticParser::MultiplicativeExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitMultiplyOrDivideExpression(
+  virtual std::any visitMultiplyOrDivideExpression(
       SparqlAutomaticParser::MultiplyOrDivideExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitMultiplyExpression(
+  virtual std::any visitMultiplyExpression(
       SparqlAutomaticParser::MultiplyExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitDivideExpression(
+  virtual std::any visitDivideExpression(
       SparqlAutomaticParser::DivideExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitUnaryExpression(
+  virtual std::any visitUnaryExpression(
       SparqlAutomaticParser::UnaryExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitPrimaryExpression(
+  virtual std::any visitPrimaryExpression(
       SparqlAutomaticParser::PrimaryExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitBrackettedExpression(
+  virtual std::any visitBrackettedExpression(
       SparqlAutomaticParser::BrackettedExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitBuiltInCall(
+  virtual std::any visitBuiltInCall(
       SparqlAutomaticParser::BuiltInCallContext* context) = 0;
 
-  virtual antlrcpp::Any visitRegexExpression(
+  virtual std::any visitRegexExpression(
       SparqlAutomaticParser::RegexExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitLangExpression(
+  virtual std::any visitLangExpression(
       SparqlAutomaticParser::LangExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitSubstringExpression(
+  virtual std::any visitSubstringExpression(
       SparqlAutomaticParser::SubstringExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitStrReplaceExpression(
+  virtual std::any visitStrReplaceExpression(
       SparqlAutomaticParser::StrReplaceExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitExistsFunc(
+  virtual std::any visitExistsFunc(
       SparqlAutomaticParser::ExistsFuncContext* context) = 0;
 
-  virtual antlrcpp::Any visitNotExistsFunc(
+  virtual std::any visitNotExistsFunc(
       SparqlAutomaticParser::NotExistsFuncContext* context) = 0;
 
-  virtual antlrcpp::Any visitAggregate(
+  virtual std::any visitAggregate(
       SparqlAutomaticParser::AggregateContext* context) = 0;
 
-  virtual antlrcpp::Any visitIriOrFunction(
+  virtual std::any visitIriOrFunction(
       SparqlAutomaticParser::IriOrFunctionContext* context) = 0;
 
-  virtual antlrcpp::Any visitRdfLiteral(
+  virtual std::any visitRdfLiteral(
       SparqlAutomaticParser::RdfLiteralContext* context) = 0;
 
-  virtual antlrcpp::Any visitNumericLiteral(
+  virtual std::any visitNumericLiteral(
       SparqlAutomaticParser::NumericLiteralContext* context) = 0;
 
-  virtual antlrcpp::Any visitNumericLiteralUnsigned(
+  virtual std::any visitNumericLiteralUnsigned(
       SparqlAutomaticParser::NumericLiteralUnsignedContext* context) = 0;
 
-  virtual antlrcpp::Any visitNumericLiteralPositive(
+  virtual std::any visitNumericLiteralPositive(
       SparqlAutomaticParser::NumericLiteralPositiveContext* context) = 0;
 
-  virtual antlrcpp::Any visitNumericLiteralNegative(
+  virtual std::any visitNumericLiteralNegative(
       SparqlAutomaticParser::NumericLiteralNegativeContext* context) = 0;
 
-  virtual antlrcpp::Any visitBooleanLiteral(
+  virtual std::any visitBooleanLiteral(
       SparqlAutomaticParser::BooleanLiteralContext* context) = 0;
 
-  virtual antlrcpp::Any visitString(
+  virtual std::any visitString(
       SparqlAutomaticParser::StringContext* context) = 0;
 
-  virtual antlrcpp::Any visitIri(
-      SparqlAutomaticParser::IriContext* context) = 0;
+  virtual std::any visitIri(SparqlAutomaticParser::IriContext* context) = 0;
 
-  virtual antlrcpp::Any visitPrefixedName(
+  virtual std::any visitPrefixedName(
       SparqlAutomaticParser::PrefixedNameContext* context) = 0;
 
-  virtual antlrcpp::Any visitBlankNode(
+  virtual std::any visitBlankNode(
       SparqlAutomaticParser::BlankNodeContext* context) = 0;
 
-  virtual antlrcpp::Any visitIriref(
+  virtual std::any visitIriref(
       SparqlAutomaticParser::IrirefContext* context) = 0;
 
-  virtual antlrcpp::Any visitPnameLn(
+  virtual std::any visitPnameLn(
       SparqlAutomaticParser::PnameLnContext* context) = 0;
 
-  virtual antlrcpp::Any visitPnameNs(
+  virtual std::any visitPnameNs(
       SparqlAutomaticParser::PnameNsContext* context) = 0;
 };

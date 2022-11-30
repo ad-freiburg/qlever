@@ -1,5 +1,5 @@
 
-// Generated from AcceptHeader.g4 by ANTLR 4.9.2
+// Generated from AcceptHeader.g4 by ANTLR 4.11.1
 
 #include "AcceptHeaderParser.h"
 
@@ -7,25 +7,241 @@
 #include "AcceptHeaderVisitor.h"
 
 using namespace antlrcpp;
+
 using namespace antlr4;
 
-AcceptHeaderParser::AcceptHeaderParser(TokenStream* input) : Parser(input) {
-  _interpreter = new atn::ParserATNSimulator(this, _atn, _decisionToDFA,
-                                             _sharedContextCache);
+namespace {
+
+struct AcceptHeaderParserStaticData final {
+  AcceptHeaderParserStaticData(std::vector<std::string> ruleNames,
+                               std::vector<std::string> literalNames,
+                               std::vector<std::string> symbolicNames)
+      : ruleNames(std::move(ruleNames)),
+        literalNames(std::move(literalNames)),
+        symbolicNames(std::move(symbolicNames)),
+        vocabulary(this->literalNames, this->symbolicNames) {}
+
+  AcceptHeaderParserStaticData(const AcceptHeaderParserStaticData&) = delete;
+  AcceptHeaderParserStaticData(AcceptHeaderParserStaticData&&) = delete;
+  AcceptHeaderParserStaticData& operator=(const AcceptHeaderParserStaticData&) =
+      delete;
+  AcceptHeaderParserStaticData& operator=(AcceptHeaderParserStaticData&&) =
+      delete;
+
+  std::vector<antlr4::dfa::DFA> decisionToDFA;
+  antlr4::atn::PredictionContextCache sharedContextCache;
+  const std::vector<std::string> ruleNames;
+  const std::vector<std::string> literalNames;
+  const std::vector<std::string> symbolicNames;
+  const antlr4::dfa::Vocabulary vocabulary;
+  antlr4::atn::SerializedATNView serializedATN;
+  std::unique_ptr<antlr4::atn::ATN> atn;
+};
+
+::antlr4::internal::OnceFlag acceptheaderParserOnceFlag;
+AcceptHeaderParserStaticData* acceptheaderParserStaticData = nullptr;
+
+void acceptheaderParserInitialize() {
+  assert(acceptheaderParserStaticData == nullptr);
+  auto staticData = std::make_unique<AcceptHeaderParserStaticData>(
+      std::vector<std::string>{"accept", "acceptWithEof", "rangeAndParams",
+                               "mediaRange", "type", "subtype", "acceptParams",
+                               "weight", "qvalue", "acceptExt", "parameter",
+                               "token", "tchar", "quotedString", "quoted_pair"},
+      std::vector<std::string>{
+          "",          "','", "';'", "'='",  "'\\'",      "",         "",
+          "",          "",    "",    "'-'",  "'.'",       "'_'",      "'~'",
+          "'\\u003F'", "'/'", "'!'", "':'",  "'@'",       "'$'",      "'#'",
+          "'&'",       "'%'", "'''", "'*'",  "'+'",       "'^'",      "'`'",
+          "'|'",       "",    "",    "'\"'", "'\\u0020'", "'\\u0009'"},
+      std::vector<std::string>{"",
+                               "",
+                               "",
+                               "",
+                               "",
+                               "MediaRangeAll",
+                               "QandEqual",
+                               "DIGIT",
+                               "ALPHA",
+                               "OWS",
+                               "Minus",
+                               "Dot",
+                               "Underscore",
+                               "Tilde",
+                               "QuestionMark",
+                               "Slash",
+                               "ExclamationMark",
+                               "Colon",
+                               "At",
+                               "DollarSign",
+                               "Hashtag",
+                               "Ampersand",
+                               "Percent",
+                               "SQuote",
+                               "Star",
+                               "Plus",
+                               "Caret",
+                               "BackQuote",
+                               "VBar",
+                               "QDTEXT",
+                               "OBS_TEXT",
+                               "DQUOTE",
+                               "SP",
+                               "HTAB",
+                               "VCHAR"});
+  static const int32_t serializedATNSegment[] = {
+      4,   1,   34,  172, 2,   0,   7,   0,   2,   1,   7,   1,   2,   2,   7,
+      2,   2,   3,   7,   3,   2,   4,   7,   4,   2,   5,   7,   5,   2,   6,
+      7,   6,   2,   7,   7,   7,   2,   8,   7,   8,   2,   9,   7,   9,   2,
+      10,  7,   10,  2,   11,  7,   11,  2,   12,  7,   12,  2,   13,  7,   13,
+      2,   14,  7,   14,  1,   0,   1,   0,   5,   0,   33,  8,   0,   10,  0,
+      12,  0,   36,  9,   0,   1,   0,   1,   0,   5,   0,   40,  8,   0,   10,
+      0,   12,  0,   43,  9,   0,   1,   0,   5,   0,   46,  8,   0,   10,  0,
+      12,  0,   49,  9,   0,   1,   1,   1,   1,   1,   1,   1,   2,   1,   2,
+      3,   2,   56,  8,   2,   1,   3,   1,   3,   1,   3,   1,   3,   1,   3,
+      1,   3,   1,   3,   1,   3,   1,   3,   3,   3,   67,  8,   3,   1,   3,
+      5,   3,   70,  8,   3,   10,  3,   12,  3,   73,  9,   3,   1,   3,   1,
+      3,   5,   3,   77,  8,   3,   10,  3,   12,  3,   80,  9,   3,   1,   3,
+      5,   3,   83,  8,   3,   10,  3,   12,  3,   86,  9,   3,   1,   4,   1,
+      4,   1,   5,   1,   5,   1,   6,   1,   6,   5,   6,   94,  8,   6,   10,
+      6,   12,  6,   97,  9,   6,   1,   7,   5,   7,   100, 8,   7,   10,  7,
+      12,  7,   103, 9,   7,   1,   7,   1,   7,   5,   7,   107, 8,   7,   10,
+      7,   12,  7,   110, 9,   7,   1,   7,   1,   7,   1,   7,   1,   8,   1,
+      8,   1,   8,   5,   8,   118, 8,   8,   10,  8,   12,  8,   121, 9,   8,
+      3,   8,   123, 8,   8,   1,   9,   5,   9,   126, 8,   9,   10,  9,   12,
+      9,   129, 9,   9,   1,   9,   1,   9,   5,   9,   133, 8,   9,   10,  9,
+      12,  9,   136, 9,   9,   1,   9,   1,   9,   1,   9,   1,   9,   3,   9,
+      142, 8,   9,   3,   9,   144, 8,   9,   1,   10,  1,   10,  1,   10,  1,
+      10,  3,   10,  150, 8,   10,  1,   11,  4,   11,  153, 8,   11,  11,  11,
+      12,  11,  154, 1,   12,  1,   12,  1,   13,  1,   13,  1,   13,  5,   13,
+      162, 8,   13,  10,  13,  12,  13,  165, 9,   13,  1,   13,  1,   13,  1,
+      14,  1,   14,  1,   14,  1,   14,  0,   0,   15,  0,   2,   4,   6,   8,
+      10,  12,  14,  16,  18,  20,  22,  24,  26,  28,  0,   2,   4,   0,   7,
+      8,   10,  13,  16,  16,  19,  28,  2,   0,   30,  30,  32,  34,  178, 0,
+      30,  1,   0,   0,   0,   2,   50,  1,   0,   0,   0,   4,   53,  1,   0,
+      0,   0,   6,   66,  1,   0,   0,   0,   8,   87,  1,   0,   0,   0,   10,
+      89,  1,   0,   0,   0,   12,  91,  1,   0,   0,   0,   14,  101, 1,   0,
+      0,   0,   16,  114, 1,   0,   0,   0,   18,  127, 1,   0,   0,   0,   20,
+      145, 1,   0,   0,   0,   22,  152, 1,   0,   0,   0,   24,  156, 1,   0,
+      0,   0,   26,  158, 1,   0,   0,   0,   28,  168, 1,   0,   0,   0,   30,
+      47,  3,   4,   2,   0,   31,  33,  5,   9,   0,   0,   32,  31,  1,   0,
+      0,   0,   33,  36,  1,   0,   0,   0,   34,  32,  1,   0,   0,   0,   34,
+      35,  1,   0,   0,   0,   35,  37,  1,   0,   0,   0,   36,  34,  1,   0,
+      0,   0,   37,  41,  5,   1,   0,   0,   38,  40,  5,   9,   0,   0,   39,
+      38,  1,   0,   0,   0,   40,  43,  1,   0,   0,   0,   41,  39,  1,   0,
+      0,   0,   41,  42,  1,   0,   0,   0,   42,  44,  1,   0,   0,   0,   43,
+      41,  1,   0,   0,   0,   44,  46,  3,   4,   2,   0,   45,  34,  1,   0,
+      0,   0,   46,  49,  1,   0,   0,   0,   47,  45,  1,   0,   0,   0,   47,
+      48,  1,   0,   0,   0,   48,  1,   1,   0,   0,   0,   49,  47,  1,   0,
+      0,   0,   50,  51,  3,   0,   0,   0,   51,  52,  5,   0,   0,   1,   52,
+      3,   1,   0,   0,   0,   53,  55,  3,   6,   3,   0,   54,  56,  3,   12,
+      6,   0,   55,  54,  1,   0,   0,   0,   55,  56,  1,   0,   0,   0,   56,
+      5,   1,   0,   0,   0,   57,  67,  5,   5,   0,   0,   58,  59,  3,   8,
+      4,   0,   59,  60,  5,   15,  0,   0,   60,  61,  5,   24,  0,   0,   61,
+      67,  1,   0,   0,   0,   62,  63,  3,   8,   4,   0,   63,  64,  5,   15,
+      0,   0,   64,  65,  3,   10,  5,   0,   65,  67,  1,   0,   0,   0,   66,
+      57,  1,   0,   0,   0,   66,  58,  1,   0,   0,   0,   66,  62,  1,   0,
+      0,   0,   67,  84,  1,   0,   0,   0,   68,  70,  5,   9,   0,   0,   69,
+      68,  1,   0,   0,   0,   70,  73,  1,   0,   0,   0,   71,  69,  1,   0,
+      0,   0,   71,  72,  1,   0,   0,   0,   72,  74,  1,   0,   0,   0,   73,
+      71,  1,   0,   0,   0,   74,  78,  5,   2,   0,   0,   75,  77,  5,   9,
+      0,   0,   76,  75,  1,   0,   0,   0,   77,  80,  1,   0,   0,   0,   78,
+      76,  1,   0,   0,   0,   78,  79,  1,   0,   0,   0,   79,  81,  1,   0,
+      0,   0,   80,  78,  1,   0,   0,   0,   81,  83,  3,   20,  10,  0,   82,
+      71,  1,   0,   0,   0,   83,  86,  1,   0,   0,   0,   84,  82,  1,   0,
+      0,   0,   84,  85,  1,   0,   0,   0,   85,  7,   1,   0,   0,   0,   86,
+      84,  1,   0,   0,   0,   87,  88,  3,   22,  11,  0,   88,  9,   1,   0,
+      0,   0,   89,  90,  3,   22,  11,  0,   90,  11,  1,   0,   0,   0,   91,
+      95,  3,   14,  7,   0,   92,  94,  3,   18,  9,   0,   93,  92,  1,   0,
+      0,   0,   94,  97,  1,   0,   0,   0,   95,  93,  1,   0,   0,   0,   95,
+      96,  1,   0,   0,   0,   96,  13,  1,   0,   0,   0,   97,  95,  1,   0,
+      0,   0,   98,  100, 5,   9,   0,   0,   99,  98,  1,   0,   0,   0,   100,
+      103, 1,   0,   0,   0,   101, 99,  1,   0,   0,   0,   101, 102, 1,   0,
+      0,   0,   102, 104, 1,   0,   0,   0,   103, 101, 1,   0,   0,   0,   104,
+      108, 5,   2,   0,   0,   105, 107, 5,   9,   0,   0,   106, 105, 1,   0,
+      0,   0,   107, 110, 1,   0,   0,   0,   108, 106, 1,   0,   0,   0,   108,
+      109, 1,   0,   0,   0,   109, 111, 1,   0,   0,   0,   110, 108, 1,   0,
+      0,   0,   111, 112, 5,   6,   0,   0,   112, 113, 3,   16,  8,   0,   113,
+      15,  1,   0,   0,   0,   114, 122, 5,   7,   0,   0,   115, 119, 5,   11,
+      0,   0,   116, 118, 5,   7,   0,   0,   117, 116, 1,   0,   0,   0,   118,
+      121, 1,   0,   0,   0,   119, 117, 1,   0,   0,   0,   119, 120, 1,   0,
+      0,   0,   120, 123, 1,   0,   0,   0,   121, 119, 1,   0,   0,   0,   122,
+      115, 1,   0,   0,   0,   122, 123, 1,   0,   0,   0,   123, 17,  1,   0,
+      0,   0,   124, 126, 5,   9,   0,   0,   125, 124, 1,   0,   0,   0,   126,
+      129, 1,   0,   0,   0,   127, 125, 1,   0,   0,   0,   127, 128, 1,   0,
+      0,   0,   128, 130, 1,   0,   0,   0,   129, 127, 1,   0,   0,   0,   130,
+      134, 5,   2,   0,   0,   131, 133, 5,   9,   0,   0,   132, 131, 1,   0,
+      0,   0,   133, 136, 1,   0,   0,   0,   134, 132, 1,   0,   0,   0,   134,
+      135, 1,   0,   0,   0,   135, 137, 1,   0,   0,   0,   136, 134, 1,   0,
+      0,   0,   137, 143, 3,   22,  11,  0,   138, 141, 5,   3,   0,   0,   139,
+      142, 3,   22,  11,  0,   140, 142, 3,   26,  13,  0,   141, 139, 1,   0,
+      0,   0,   141, 140, 1,   0,   0,   0,   142, 144, 1,   0,   0,   0,   143,
+      138, 1,   0,   0,   0,   143, 144, 1,   0,   0,   0,   144, 19,  1,   0,
+      0,   0,   145, 146, 3,   22,  11,  0,   146, 149, 5,   3,   0,   0,   147,
+      150, 3,   22,  11,  0,   148, 150, 3,   26,  13,  0,   149, 147, 1,   0,
+      0,   0,   149, 148, 1,   0,   0,   0,   150, 21,  1,   0,   0,   0,   151,
+      153, 3,   24,  12,  0,   152, 151, 1,   0,   0,   0,   153, 154, 1,   0,
+      0,   0,   154, 152, 1,   0,   0,   0,   154, 155, 1,   0,   0,   0,   155,
+      23,  1,   0,   0,   0,   156, 157, 7,   0,   0,   0,   157, 25,  1,   0,
+      0,   0,   158, 163, 5,   31,  0,   0,   159, 162, 5,   29,  0,   0,   160,
+      162, 3,   28,  14,  0,   161, 159, 1,   0,   0,   0,   161, 160, 1,   0,
+      0,   0,   162, 165, 1,   0,   0,   0,   163, 161, 1,   0,   0,   0,   163,
+      164, 1,   0,   0,   0,   164, 166, 1,   0,   0,   0,   165, 163, 1,   0,
+      0,   0,   166, 167, 5,   31,  0,   0,   167, 27,  1,   0,   0,   0,   168,
+      169, 5,   4,   0,   0,   169, 170, 7,   1,   0,   0,   170, 29,  1,   0,
+      0,   0,   21,  34,  41,  47,  55,  66,  71,  78,  84,  95,  101, 108, 119,
+      122, 127, 134, 141, 143, 149, 154, 161, 163};
+  staticData->serializedATN = antlr4::atn::SerializedATNView(
+      serializedATNSegment,
+      sizeof(serializedATNSegment) / sizeof(serializedATNSegment[0]));
+
+  antlr4::atn::ATNDeserializer deserializer;
+  staticData->atn = deserializer.deserialize(staticData->serializedATN);
+
+  const size_t count = staticData->atn->getNumberOfDecisions();
+  staticData->decisionToDFA.reserve(count);
+  for (size_t i = 0; i < count; i++) {
+    staticData->decisionToDFA.emplace_back(staticData->atn->getDecisionState(i),
+                                           i);
+  }
+  acceptheaderParserStaticData = staticData.release();
+}
+
+}  // namespace
+
+AcceptHeaderParser::AcceptHeaderParser(TokenStream* input)
+    : AcceptHeaderParser(input, antlr4::atn::ParserATNSimulatorOptions()) {}
+
+AcceptHeaderParser::AcceptHeaderParser(
+    TokenStream* input, const antlr4::atn::ParserATNSimulatorOptions& options)
+    : Parser(input) {
+  AcceptHeaderParser::initialize();
+  _interpreter = new atn::ParserATNSimulator(
+      this, *acceptheaderParserStaticData->atn,
+      acceptheaderParserStaticData->decisionToDFA,
+      acceptheaderParserStaticData->sharedContextCache, options);
 }
 
 AcceptHeaderParser::~AcceptHeaderParser() { delete _interpreter; }
+
+const atn::ATN& AcceptHeaderParser::getATN() const {
+  return *acceptheaderParserStaticData->atn;
+}
 
 std::string AcceptHeaderParser::getGrammarFileName() const {
   return "AcceptHeader.g4";
 }
 
 const std::vector<std::string>& AcceptHeaderParser::getRuleNames() const {
-  return _ruleNames;
+  return acceptheaderParserStaticData->ruleNames;
 }
 
-dfa::Vocabulary& AcceptHeaderParser::getVocabulary() const {
-  return _vocabulary;
+const dfa::Vocabulary& AcceptHeaderParser::getVocabulary() const {
+  return acceptheaderParserStaticData->vocabulary;
+}
+
+antlr4::atn::SerializedATNView AcceptHeaderParser::getSerializedATN() const {
+  return acceptheaderParserStaticData->serializedATN;
 }
 
 //----------------- AcceptContext
@@ -69,7 +285,7 @@ void AcceptHeaderParser::AcceptContext::exitRule(
   if (parserListener != nullptr) parserListener->exitAccept(this);
 }
 
-antlrcpp::Any AcceptHeaderParser::AcceptContext::accept(
+std::any AcceptHeaderParser::AcceptContext::accept(
     tree::ParseTreeVisitor* visitor) {
   if (auto parserVisitor = dynamic_cast<AcceptHeaderVisitor*>(visitor))
     return parserVisitor->visitAccept(this);
@@ -170,7 +386,7 @@ void AcceptHeaderParser::AcceptWithEofContext::exitRule(
   if (parserListener != nullptr) parserListener->exitAcceptWithEof(this);
 }
 
-antlrcpp::Any AcceptHeaderParser::AcceptWithEofContext::accept(
+std::any AcceptHeaderParser::AcceptWithEofContext::accept(
     tree::ParseTreeVisitor* visitor) {
   if (auto parserVisitor = dynamic_cast<AcceptHeaderVisitor*>(visitor))
     return parserVisitor->visitAcceptWithEof(this);
@@ -239,7 +455,7 @@ void AcceptHeaderParser::RangeAndParamsContext::exitRule(
   if (parserListener != nullptr) parserListener->exitRangeAndParams(this);
 }
 
-antlrcpp::Any AcceptHeaderParser::RangeAndParamsContext::accept(
+std::any AcceptHeaderParser::RangeAndParamsContext::accept(
     tree::ParseTreeVisitor* visitor) {
   if (auto parserVisitor = dynamic_cast<AcceptHeaderVisitor*>(visitor))
     return parserVisitor->visitRangeAndParams(this);
@@ -350,7 +566,7 @@ void AcceptHeaderParser::MediaRangeContext::exitRule(
   if (parserListener != nullptr) parserListener->exitMediaRange(this);
 }
 
-antlrcpp::Any AcceptHeaderParser::MediaRangeContext::accept(
+std::any AcceptHeaderParser::MediaRangeContext::accept(
     tree::ParseTreeVisitor* visitor) {
   if (auto parserVisitor = dynamic_cast<AcceptHeaderVisitor*>(visitor))
     return parserVisitor->visitMediaRange(this);
@@ -480,7 +696,7 @@ void AcceptHeaderParser::TypeContext::exitRule(
   if (parserListener != nullptr) parserListener->exitType(this);
 }
 
-antlrcpp::Any AcceptHeaderParser::TypeContext::accept(
+std::any AcceptHeaderParser::TypeContext::accept(
     tree::ParseTreeVisitor* visitor) {
   if (auto parserVisitor = dynamic_cast<AcceptHeaderVisitor*>(visitor))
     return parserVisitor->visitType(this);
@@ -541,7 +757,7 @@ void AcceptHeaderParser::SubtypeContext::exitRule(
   if (parserListener != nullptr) parserListener->exitSubtype(this);
 }
 
-antlrcpp::Any AcceptHeaderParser::SubtypeContext::accept(
+std::any AcceptHeaderParser::SubtypeContext::accept(
     tree::ParseTreeVisitor* visitor) {
   if (auto parserVisitor = dynamic_cast<AcceptHeaderVisitor*>(visitor))
     return parserVisitor->visitSubtype(this);
@@ -613,7 +829,7 @@ void AcceptHeaderParser::AcceptParamsContext::exitRule(
   if (parserListener != nullptr) parserListener->exitAcceptParams(this);
 }
 
-antlrcpp::Any AcceptHeaderParser::AcceptParamsContext::accept(
+std::any AcceptHeaderParser::AcceptParamsContext::accept(
     tree::ParseTreeVisitor* visitor) {
   if (auto parserVisitor = dynamic_cast<AcceptHeaderVisitor*>(visitor))
     return parserVisitor->visitAcceptParams(this);
@@ -701,7 +917,7 @@ void AcceptHeaderParser::WeightContext::exitRule(
   if (parserListener != nullptr) parserListener->exitWeight(this);
 }
 
-antlrcpp::Any AcceptHeaderParser::WeightContext::accept(
+std::any AcceptHeaderParser::WeightContext::accept(
     tree::ParseTreeVisitor* visitor) {
   if (auto parserVisitor = dynamic_cast<AcceptHeaderVisitor*>(visitor))
     return parserVisitor->visitWeight(this);
@@ -795,7 +1011,7 @@ void AcceptHeaderParser::QvalueContext::exitRule(
   if (parserListener != nullptr) parserListener->exitQvalue(this);
 }
 
-antlrcpp::Any AcceptHeaderParser::QvalueContext::accept(
+std::any AcceptHeaderParser::QvalueContext::accept(
     tree::ParseTreeVisitor* visitor) {
   if (auto parserVisitor = dynamic_cast<AcceptHeaderVisitor*>(visitor))
     return parserVisitor->visitQvalue(this);
@@ -894,7 +1110,7 @@ void AcceptHeaderParser::AcceptExtContext::exitRule(
   if (parserListener != nullptr) parserListener->exitAcceptExt(this);
 }
 
-antlrcpp::Any AcceptHeaderParser::AcceptExtContext::accept(
+std::any AcceptHeaderParser::AcceptExtContext::accept(
     tree::ParseTreeVisitor* visitor) {
   if (auto parserVisitor = dynamic_cast<AcceptHeaderVisitor*>(visitor))
     return parserVisitor->visitAcceptExt(this);
@@ -1031,7 +1247,7 @@ void AcceptHeaderParser::ParameterContext::exitRule(
   if (parserListener != nullptr) parserListener->exitParameter(this);
 }
 
-antlrcpp::Any AcceptHeaderParser::ParameterContext::accept(
+std::any AcceptHeaderParser::ParameterContext::accept(
     tree::ParseTreeVisitor* visitor) {
   if (auto parserVisitor = dynamic_cast<AcceptHeaderVisitor*>(visitor))
     return parserVisitor->visitParameter(this);
@@ -1134,7 +1350,7 @@ void AcceptHeaderParser::TokenContext::exitRule(
   if (parserListener != nullptr) parserListener->exitToken(this);
 }
 
-antlrcpp::Any AcceptHeaderParser::TokenContext::accept(
+std::any AcceptHeaderParser::TokenContext::accept(
     tree::ParseTreeVisitor* visitor) {
   if (auto parserVisitor = dynamic_cast<AcceptHeaderVisitor*>(visitor))
     return parserVisitor->visitToken(this);
@@ -1166,24 +1382,7 @@ AcceptHeaderParser::TokenContext* AcceptHeaderParser::token() {
       setState(154);
       _errHandler->sync(this);
       _la = _input->LA(1);
-    } while ((((_la & ~0x3fULL) == 0) &&
-              ((1ULL << _la) & ((1ULL << AcceptHeaderParser::DIGIT) |
-                                (1ULL << AcceptHeaderParser::ALPHA) |
-                                (1ULL << AcceptHeaderParser::Minus) |
-                                (1ULL << AcceptHeaderParser::Dot) |
-                                (1ULL << AcceptHeaderParser::Underscore) |
-                                (1ULL << AcceptHeaderParser::Tilde) |
-                                (1ULL << AcceptHeaderParser::ExclamationMark) |
-                                (1ULL << AcceptHeaderParser::DollarSign) |
-                                (1ULL << AcceptHeaderParser::Hashtag) |
-                                (1ULL << AcceptHeaderParser::Ampersand) |
-                                (1ULL << AcceptHeaderParser::Percent) |
-                                (1ULL << AcceptHeaderParser::SQuote) |
-                                (1ULL << AcceptHeaderParser::Star) |
-                                (1ULL << AcceptHeaderParser::Plus) |
-                                (1ULL << AcceptHeaderParser::Caret) |
-                                (1ULL << AcceptHeaderParser::BackQuote) |
-                                (1ULL << AcceptHeaderParser::VBar))) != 0));
+    } while (((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 536427904) != 0);
 
   } catch (RecognitionException& e) {
     _errHandler->reportError(this, e);
@@ -1285,7 +1484,7 @@ void AcceptHeaderParser::TcharContext::exitRule(
   if (parserListener != nullptr) parserListener->exitTchar(this);
 }
 
-antlrcpp::Any AcceptHeaderParser::TcharContext::accept(
+std::any AcceptHeaderParser::TcharContext::accept(
     tree::ParseTreeVisitor* visitor) {
   if (auto parserVisitor = dynamic_cast<AcceptHeaderVisitor*>(visitor))
     return parserVisitor->visitTchar(this);
@@ -1310,24 +1509,7 @@ AcceptHeaderParser::TcharContext* AcceptHeaderParser::tchar() {
     enterOuterAlt(_localctx, 1);
     setState(156);
     _la = _input->LA(1);
-    if (!((((_la & ~0x3fULL) == 0) &&
-           ((1ULL << _la) & ((1ULL << AcceptHeaderParser::DIGIT) |
-                             (1ULL << AcceptHeaderParser::ALPHA) |
-                             (1ULL << AcceptHeaderParser::Minus) |
-                             (1ULL << AcceptHeaderParser::Dot) |
-                             (1ULL << AcceptHeaderParser::Underscore) |
-                             (1ULL << AcceptHeaderParser::Tilde) |
-                             (1ULL << AcceptHeaderParser::ExclamationMark) |
-                             (1ULL << AcceptHeaderParser::DollarSign) |
-                             (1ULL << AcceptHeaderParser::Hashtag) |
-                             (1ULL << AcceptHeaderParser::Ampersand) |
-                             (1ULL << AcceptHeaderParser::Percent) |
-                             (1ULL << AcceptHeaderParser::SQuote) |
-                             (1ULL << AcceptHeaderParser::Star) |
-                             (1ULL << AcceptHeaderParser::Plus) |
-                             (1ULL << AcceptHeaderParser::Caret) |
-                             (1ULL << AcceptHeaderParser::BackQuote) |
-                             (1ULL << AcceptHeaderParser::VBar))) != 0))) {
+    if (!(((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 536427904) != 0)) {
       _errHandler->recoverInline(this);
     } else {
       _errHandler->reportMatch(this);
@@ -1394,7 +1576,7 @@ void AcceptHeaderParser::QuotedStringContext::exitRule(
   if (parserListener != nullptr) parserListener->exitQuotedString(this);
 }
 
-antlrcpp::Any AcceptHeaderParser::QuotedStringContext::accept(
+std::any AcceptHeaderParser::QuotedStringContext::accept(
     tree::ParseTreeVisitor* visitor) {
   if (auto parserVisitor = dynamic_cast<AcceptHeaderVisitor*>(visitor))
     return parserVisitor->visitQuotedString(this);
@@ -1498,7 +1680,7 @@ void AcceptHeaderParser::Quoted_pairContext::exitRule(
   if (parserListener != nullptr) parserListener->exitQuoted_pair(this);
 }
 
-antlrcpp::Any AcceptHeaderParser::Quoted_pairContext::accept(
+std::any AcceptHeaderParser::Quoted_pairContext::accept(
     tree::ParseTreeVisitor* visitor) {
   if (auto parserVisitor = dynamic_cast<AcceptHeaderVisitor*>(visitor))
     return parserVisitor->visitQuoted_pair(this);
@@ -1525,11 +1707,7 @@ AcceptHeaderParser::Quoted_pairContext* AcceptHeaderParser::quoted_pair() {
     match(AcceptHeaderParser::T__3);
     setState(169);
     _la = _input->LA(1);
-    if (!((((_la & ~0x3fULL) == 0) &&
-           ((1ULL << _la) & ((1ULL << AcceptHeaderParser::OBS_TEXT) |
-                             (1ULL << AcceptHeaderParser::SP) |
-                             (1ULL << AcceptHeaderParser::HTAB) |
-                             (1ULL << AcceptHeaderParser::VCHAR))) != 0))) {
+    if (!(((_la & ~0x3fULL) == 0) && ((1ULL << _la) & 31138512896) != 0)) {
       _errHandler->recoverInline(this);
     } else {
       _errHandler->reportMatch(this);
@@ -1545,266 +1723,7 @@ AcceptHeaderParser::Quoted_pairContext* AcceptHeaderParser::quoted_pair() {
   return _localctx;
 }
 
-// Static vars and initialization.
-std::vector<dfa::DFA> AcceptHeaderParser::_decisionToDFA;
-atn::PredictionContextCache AcceptHeaderParser::_sharedContextCache;
-
-// We own the ATN which in turn owns the ATN states.
-atn::ATN AcceptHeaderParser::_atn;
-std::vector<uint16_t> AcceptHeaderParser::_serializedATN;
-
-std::vector<std::string> AcceptHeaderParser::_ruleNames = {
-    "accept", "acceptWithEof", "rangeAndParams", "mediaRange",
-    "type",   "subtype",       "acceptParams",   "weight",
-    "qvalue", "acceptExt",     "parameter",      "token",
-    "tchar",  "quotedString",  "quoted_pair"};
-
-std::vector<std::string> AcceptHeaderParser::_literalNames = {
-    "",    "','", "';'", "'='", "'\\'", "",         "",        "",    "",
-    "",    "'-'", "'.'", "'_'", "'~'",  "'\u003F'", "'/'",     "'!'", "':'",
-    "'@'", "'$'", "'#'", "'&'", "'%'",  "'''",      "'*'",     "'+'", "'^'",
-    "'`'", "'|'", "",    "",    "'\"'", "'\u0020'", "'\u0009'"};
-
-std::vector<std::string> AcceptHeaderParser::_symbolicNames = {
-    "",
-    "",
-    "",
-    "",
-    "",
-    "MediaRangeAll",
-    "QandEqual",
-    "DIGIT",
-    "ALPHA",
-    "OWS",
-    "Minus",
-    "Dot",
-    "Underscore",
-    "Tilde",
-    "QuestionMark",
-    "Slash",
-    "ExclamationMark",
-    "Colon",
-    "At",
-    "DollarSign",
-    "Hashtag",
-    "Ampersand",
-    "Percent",
-    "SQuote",
-    "Star",
-    "Plus",
-    "Caret",
-    "BackQuote",
-    "VBar",
-    "QDTEXT",
-    "OBS_TEXT",
-    "DQUOTE",
-    "SP",
-    "HTAB",
-    "VCHAR"};
-
-dfa::Vocabulary AcceptHeaderParser::_vocabulary(_literalNames, _symbolicNames);
-
-std::vector<std::string> AcceptHeaderParser::_tokenNames;
-
-AcceptHeaderParser::Initializer::Initializer() {
-  for (size_t i = 0; i < _symbolicNames.size(); ++i) {
-    std::string name = _vocabulary.getLiteralName(i);
-    if (name.empty()) {
-      name = _vocabulary.getSymbolicName(i);
-    }
-
-    if (name.empty()) {
-      _tokenNames.push_back("<INVALID>");
-    } else {
-      _tokenNames.push_back(name);
-    }
-  }
-
-  static const uint16_t serializedATNSegment0[] = {
-      0x3,  0x608b, 0xa72a, 0x8133, 0xb9ed, 0x417c, 0x3be7, 0x7786, 0x5964,
-      0x3,  0x24,   0xae,   0x4,    0x2,    0x9,    0x2,    0x4,    0x3,
-      0x9,  0x3,    0x4,    0x4,    0x9,    0x4,    0x4,    0x5,    0x9,
-      0x5,  0x4,    0x6,    0x9,    0x6,    0x4,    0x7,    0x9,    0x7,
-      0x4,  0x8,    0x9,    0x8,    0x4,    0x9,    0x9,    0x9,    0x4,
-      0xa,  0x9,    0xa,    0x4,    0xb,    0x9,    0xb,    0x4,    0xc,
-      0x9,  0xc,    0x4,    0xd,    0x9,    0xd,    0x4,    0xe,    0x9,
-      0xe,  0x4,    0xf,    0x9,    0xf,    0x4,    0x10,   0x9,    0x10,
-      0x3,  0x2,    0x3,    0x2,    0x7,    0x2,    0x23,   0xa,    0x2,
-      0xc,  0x2,    0xe,    0x2,    0x26,   0xb,    0x2,    0x3,    0x2,
-      0x3,  0x2,    0x7,    0x2,    0x2a,   0xa,    0x2,    0xc,    0x2,
-      0xe,  0x2,    0x2d,   0xb,    0x2,    0x3,    0x2,    0x7,    0x2,
-      0x30, 0xa,    0x2,    0xc,    0x2,    0xe,    0x2,    0x33,   0xb,
-      0x2,  0x3,    0x3,    0x3,    0x3,    0x3,    0x3,    0x3,    0x4,
-      0x3,  0x4,    0x5,    0x4,    0x3a,   0xa,    0x4,    0x3,    0x5,
-      0x3,  0x5,    0x3,    0x5,    0x3,    0x5,    0x3,    0x5,    0x3,
-      0x5,  0x3,    0x5,    0x3,    0x5,    0x3,    0x5,    0x5,    0x5,
-      0x45, 0xa,    0x5,    0x3,    0x5,    0x7,    0x5,    0x48,   0xa,
-      0x5,  0xc,    0x5,    0xe,    0x5,    0x4b,   0xb,    0x5,    0x3,
-      0x5,  0x3,    0x5,    0x7,    0x5,    0x4f,   0xa,    0x5,    0xc,
-      0x5,  0xe,    0x5,    0x52,   0xb,    0x5,    0x3,    0x5,    0x7,
-      0x5,  0x55,   0xa,    0x5,    0xc,    0x5,    0xe,    0x5,    0x58,
-      0xb,  0x5,    0x3,    0x6,    0x3,    0x6,    0x3,    0x7,    0x3,
-      0x7,  0x3,    0x8,    0x3,    0x8,    0x7,    0x8,    0x60,   0xa,
-      0x8,  0xc,    0x8,    0xe,    0x8,    0x63,   0xb,    0x8,    0x3,
-      0x9,  0x7,    0x9,    0x66,   0xa,    0x9,    0xc,    0x9,    0xe,
-      0x9,  0x69,   0xb,    0x9,    0x3,    0x9,    0x3,    0x9,    0x7,
-      0x9,  0x6d,   0xa,    0x9,    0xc,    0x9,    0xe,    0x9,    0x70,
-      0xb,  0x9,    0x3,    0x9,    0x3,    0x9,    0x3,    0x9,    0x3,
-      0xa,  0x3,    0xa,    0x3,    0xa,    0x7,    0xa,    0x78,   0xa,
-      0xa,  0xc,    0xa,    0xe,    0xa,    0x7b,   0xb,    0xa,    0x5,
-      0xa,  0x7d,   0xa,    0xa,    0x3,    0xb,    0x7,    0xb,    0x80,
-      0xa,  0xb,    0xc,    0xb,    0xe,    0xb,    0x83,   0xb,    0xb,
-      0x3,  0xb,    0x3,    0xb,    0x7,    0xb,    0x87,   0xa,    0xb,
-      0xc,  0xb,    0xe,    0xb,    0x8a,   0xb,    0xb,    0x3,    0xb,
-      0x3,  0xb,    0x3,    0xb,    0x3,    0xb,    0x5,    0xb,    0x90,
-      0xa,  0xb,    0x5,    0xb,    0x92,   0xa,    0xb,    0x3,    0xc,
-      0x3,  0xc,    0x3,    0xc,    0x3,    0xc,    0x5,    0xc,    0x98,
-      0xa,  0xc,    0x3,    0xd,    0x6,    0xd,    0x9b,   0xa,    0xd,
-      0xd,  0xd,    0xe,    0xd,    0x9c,   0x3,    0xe,    0x3,    0xe,
-      0x3,  0xf,    0x3,    0xf,    0x3,    0xf,    0x7,    0xf,    0xa4,
-      0xa,  0xf,    0xc,    0xf,    0xe,    0xf,    0xa7,   0xb,    0xf,
-      0x3,  0xf,    0x3,    0xf,    0x3,    0x10,   0x3,    0x10,   0x3,
-      0x10, 0x3,    0x10,   0x2,    0x2,    0x11,   0x2,    0x4,    0x6,
-      0x8,  0xa,    0xc,    0xe,    0x10,   0x12,   0x14,   0x16,   0x18,
-      0x1a, 0x1c,   0x1e,   0x2,    0x4,    0x6,    0x2,    0x9,    0xa,
-      0xc,  0xf,    0x12,   0x12,   0x15,   0x1e,   0x4,    0x2,    0x20,
-      0x20, 0x22,   0x24,   0x2,    0xb4,   0x2,    0x20,   0x3,    0x2,
-      0x2,  0x2,    0x4,    0x34,   0x3,    0x2,    0x2,    0x2,    0x6,
-      0x37, 0x3,    0x2,    0x2,    0x2,    0x8,    0x44,   0x3,    0x2,
-      0x2,  0x2,    0xa,    0x59,   0x3,    0x2,    0x2,    0x2,    0xc,
-      0x5b, 0x3,    0x2,    0x2,    0x2,    0xe,    0x5d,   0x3,    0x2,
-      0x2,  0x2,    0x10,   0x67,   0x3,    0x2,    0x2,    0x2,    0x12,
-      0x74, 0x3,    0x2,    0x2,    0x2,    0x14,   0x81,   0x3,    0x2,
-      0x2,  0x2,    0x16,   0x93,   0x3,    0x2,    0x2,    0x2,    0x18,
-      0x9a, 0x3,    0x2,    0x2,    0x2,    0x1a,   0x9e,   0x3,    0x2,
-      0x2,  0x2,    0x1c,   0xa0,   0x3,    0x2,    0x2,    0x2,    0x1e,
-      0xaa, 0x3,    0x2,    0x2,    0x2,    0x20,   0x31,   0x5,    0x6,
-      0x4,  0x2,    0x21,   0x23,   0x7,    0xb,    0x2,    0x2,    0x22,
-      0x21, 0x3,    0x2,    0x2,    0x2,    0x23,   0x26,   0x3,    0x2,
-      0x2,  0x2,    0x24,   0x22,   0x3,    0x2,    0x2,    0x2,    0x24,
-      0x25, 0x3,    0x2,    0x2,    0x2,    0x25,   0x27,   0x3,    0x2,
-      0x2,  0x2,    0x26,   0x24,   0x3,    0x2,    0x2,    0x2,    0x27,
-      0x2b, 0x7,    0x3,    0x2,    0x2,    0x28,   0x2a,   0x7,    0xb,
-      0x2,  0x2,    0x29,   0x28,   0x3,    0x2,    0x2,    0x2,    0x2a,
-      0x2d, 0x3,    0x2,    0x2,    0x2,    0x2b,   0x29,   0x3,    0x2,
-      0x2,  0x2,    0x2b,   0x2c,   0x3,    0x2,    0x2,    0x2,    0x2c,
-      0x2e, 0x3,    0x2,    0x2,    0x2,    0x2d,   0x2b,   0x3,    0x2,
-      0x2,  0x2,    0x2e,   0x30,   0x5,    0x6,    0x4,    0x2,    0x2f,
-      0x24, 0x3,    0x2,    0x2,    0x2,    0x30,   0x33,   0x3,    0x2,
-      0x2,  0x2,    0x31,   0x2f,   0x3,    0x2,    0x2,    0x2,    0x31,
-      0x32, 0x3,    0x2,    0x2,    0x2,    0x32,   0x3,    0x3,    0x2,
-      0x2,  0x2,    0x33,   0x31,   0x3,    0x2,    0x2,    0x2,    0x34,
-      0x35, 0x5,    0x2,    0x2,    0x2,    0x35,   0x36,   0x7,    0x2,
-      0x2,  0x3,    0x36,   0x5,    0x3,    0x2,    0x2,    0x2,    0x37,
-      0x39, 0x5,    0x8,    0x5,    0x2,    0x38,   0x3a,   0x5,    0xe,
-      0x8,  0x2,    0x39,   0x38,   0x3,    0x2,    0x2,    0x2,    0x39,
-      0x3a, 0x3,    0x2,    0x2,    0x2,    0x3a,   0x7,    0x3,    0x2,
-      0x2,  0x2,    0x3b,   0x45,   0x7,    0x7,    0x2,    0x2,    0x3c,
-      0x3d, 0x5,    0xa,    0x6,    0x2,    0x3d,   0x3e,   0x7,    0x11,
-      0x2,  0x2,    0x3e,   0x3f,   0x7,    0x1a,   0x2,    0x2,    0x3f,
-      0x45, 0x3,    0x2,    0x2,    0x2,    0x40,   0x41,   0x5,    0xa,
-      0x6,  0x2,    0x41,   0x42,   0x7,    0x11,   0x2,    0x2,    0x42,
-      0x43, 0x5,    0xc,    0x7,    0x2,    0x43,   0x45,   0x3,    0x2,
-      0x2,  0x2,    0x44,   0x3b,   0x3,    0x2,    0x2,    0x2,    0x44,
-      0x3c, 0x3,    0x2,    0x2,    0x2,    0x44,   0x40,   0x3,    0x2,
-      0x2,  0x2,    0x45,   0x56,   0x3,    0x2,    0x2,    0x2,    0x46,
-      0x48, 0x7,    0xb,    0x2,    0x2,    0x47,   0x46,   0x3,    0x2,
-      0x2,  0x2,    0x48,   0x4b,   0x3,    0x2,    0x2,    0x2,    0x49,
-      0x47, 0x3,    0x2,    0x2,    0x2,    0x49,   0x4a,   0x3,    0x2,
-      0x2,  0x2,    0x4a,   0x4c,   0x3,    0x2,    0x2,    0x2,    0x4b,
-      0x49, 0x3,    0x2,    0x2,    0x2,    0x4c,   0x50,   0x7,    0x4,
-      0x2,  0x2,    0x4d,   0x4f,   0x7,    0xb,    0x2,    0x2,    0x4e,
-      0x4d, 0x3,    0x2,    0x2,    0x2,    0x4f,   0x52,   0x3,    0x2,
-      0x2,  0x2,    0x50,   0x4e,   0x3,    0x2,    0x2,    0x2,    0x50,
-      0x51, 0x3,    0x2,    0x2,    0x2,    0x51,   0x53,   0x3,    0x2,
-      0x2,  0x2,    0x52,   0x50,   0x3,    0x2,    0x2,    0x2,    0x53,
-      0x55, 0x5,    0x16,   0xc,    0x2,    0x54,   0x49,   0x3,    0x2,
-      0x2,  0x2,    0x55,   0x58,   0x3,    0x2,    0x2,    0x2,    0x56,
-      0x54, 0x3,    0x2,    0x2,    0x2,    0x56,   0x57,   0x3,    0x2,
-      0x2,  0x2,    0x57,   0x9,    0x3,    0x2,    0x2,    0x2,    0x58,
-      0x56, 0x3,    0x2,    0x2,    0x2,    0x59,   0x5a,   0x5,    0x18,
-      0xd,  0x2,    0x5a,   0xb,    0x3,    0x2,    0x2,    0x2,    0x5b,
-      0x5c, 0x5,    0x18,   0xd,    0x2,    0x5c,   0xd,    0x3,    0x2,
-      0x2,  0x2,    0x5d,   0x61,   0x5,    0x10,   0x9,    0x2,    0x5e,
-      0x60, 0x5,    0x14,   0xb,    0x2,    0x5f,   0x5e,   0x3,    0x2,
-      0x2,  0x2,    0x60,   0x63,   0x3,    0x2,    0x2,    0x2,    0x61,
-      0x5f, 0x3,    0x2,    0x2,    0x2,    0x61,   0x62,   0x3,    0x2,
-      0x2,  0x2,    0x62,   0xf,    0x3,    0x2,    0x2,    0x2,    0x63,
-      0x61, 0x3,    0x2,    0x2,    0x2,    0x64,   0x66,   0x7,    0xb,
-      0x2,  0x2,    0x65,   0x64,   0x3,    0x2,    0x2,    0x2,    0x66,
-      0x69, 0x3,    0x2,    0x2,    0x2,    0x67,   0x65,   0x3,    0x2,
-      0x2,  0x2,    0x67,   0x68,   0x3,    0x2,    0x2,    0x2,    0x68,
-      0x6a, 0x3,    0x2,    0x2,    0x2,    0x69,   0x67,   0x3,    0x2,
-      0x2,  0x2,    0x6a,   0x6e,   0x7,    0x4,    0x2,    0x2,    0x6b,
-      0x6d, 0x7,    0xb,    0x2,    0x2,    0x6c,   0x6b,   0x3,    0x2,
-      0x2,  0x2,    0x6d,   0x70,   0x3,    0x2,    0x2,    0x2,    0x6e,
-      0x6c, 0x3,    0x2,    0x2,    0x2,    0x6e,   0x6f,   0x3,    0x2,
-      0x2,  0x2,    0x6f,   0x71,   0x3,    0x2,    0x2,    0x2,    0x70,
-      0x6e, 0x3,    0x2,    0x2,    0x2,    0x71,   0x72,   0x7,    0x8,
-      0x2,  0x2,    0x72,   0x73,   0x5,    0x12,   0xa,    0x2,    0x73,
-      0x11, 0x3,    0x2,    0x2,    0x2,    0x74,   0x7c,   0x7,    0x9,
-      0x2,  0x2,    0x75,   0x79,   0x7,    0xd,    0x2,    0x2,    0x76,
-      0x78, 0x7,    0x9,    0x2,    0x2,    0x77,   0x76,   0x3,    0x2,
-      0x2,  0x2,    0x78,   0x7b,   0x3,    0x2,    0x2,    0x2,    0x79,
-      0x77, 0x3,    0x2,    0x2,    0x2,    0x79,   0x7a,   0x3,    0x2,
-      0x2,  0x2,    0x7a,   0x7d,   0x3,    0x2,    0x2,    0x2,    0x7b,
-      0x79, 0x3,    0x2,    0x2,    0x2,    0x7c,   0x75,   0x3,    0x2,
-      0x2,  0x2,    0x7c,   0x7d,   0x3,    0x2,    0x2,    0x2,    0x7d,
-      0x13, 0x3,    0x2,    0x2,    0x2,    0x7e,   0x80,   0x7,    0xb,
-      0x2,  0x2,    0x7f,   0x7e,   0x3,    0x2,    0x2,    0x2,    0x80,
-      0x83, 0x3,    0x2,    0x2,    0x2,    0x81,   0x7f,   0x3,    0x2,
-      0x2,  0x2,    0x81,   0x82,   0x3,    0x2,    0x2,    0x2,    0x82,
-      0x84, 0x3,    0x2,    0x2,    0x2,    0x83,   0x81,   0x3,    0x2,
-      0x2,  0x2,    0x84,   0x88,   0x7,    0x4,    0x2,    0x2,    0x85,
-      0x87, 0x7,    0xb,    0x2,    0x2,    0x86,   0x85,   0x3,    0x2,
-      0x2,  0x2,    0x87,   0x8a,   0x3,    0x2,    0x2,    0x2,    0x88,
-      0x86, 0x3,    0x2,    0x2,    0x2,    0x88,   0x89,   0x3,    0x2,
-      0x2,  0x2,    0x89,   0x8b,   0x3,    0x2,    0x2,    0x2,    0x8a,
-      0x88, 0x3,    0x2,    0x2,    0x2,    0x8b,   0x91,   0x5,    0x18,
-      0xd,  0x2,    0x8c,   0x8f,   0x7,    0x5,    0x2,    0x2,    0x8d,
-      0x90, 0x5,    0x18,   0xd,    0x2,    0x8e,   0x90,   0x5,    0x1c,
-      0xf,  0x2,    0x8f,   0x8d,   0x3,    0x2,    0x2,    0x2,    0x8f,
-      0x8e, 0x3,    0x2,    0x2,    0x2,    0x90,   0x92,   0x3,    0x2,
-      0x2,  0x2,    0x91,   0x8c,   0x3,    0x2,    0x2,    0x2,    0x91,
-      0x92, 0x3,    0x2,    0x2,    0x2,    0x92,   0x15,   0x3,    0x2,
-      0x2,  0x2,    0x93,   0x94,   0x5,    0x18,   0xd,    0x2,    0x94,
-      0x97, 0x7,    0x5,    0x2,    0x2,    0x95,   0x98,   0x5,    0x18,
-      0xd,  0x2,    0x96,   0x98,   0x5,    0x1c,   0xf,    0x2,    0x97,
-      0x95, 0x3,    0x2,    0x2,    0x2,    0x97,   0x96,   0x3,    0x2,
-      0x2,  0x2,    0x98,   0x17,   0x3,    0x2,    0x2,    0x2,    0x99,
-      0x9b, 0x5,    0x1a,   0xe,    0x2,    0x9a,   0x99,   0x3,    0x2,
-      0x2,  0x2,    0x9b,   0x9c,   0x3,    0x2,    0x2,    0x2,    0x9c,
-      0x9a, 0x3,    0x2,    0x2,    0x2,    0x9c,   0x9d,   0x3,    0x2,
-      0x2,  0x2,    0x9d,   0x19,   0x3,    0x2,    0x2,    0x2,    0x9e,
-      0x9f, 0x9,    0x2,    0x2,    0x2,    0x9f,   0x1b,   0x3,    0x2,
-      0x2,  0x2,    0xa0,   0xa5,   0x7,    0x21,   0x2,    0x2,    0xa1,
-      0xa4, 0x7,    0x1f,   0x2,    0x2,    0xa2,   0xa4,   0x5,    0x1e,
-      0x10, 0x2,    0xa3,   0xa1,   0x3,    0x2,    0x2,    0x2,    0xa3,
-      0xa2, 0x3,    0x2,    0x2,    0x2,    0xa4,   0xa7,   0x3,    0x2,
-      0x2,  0x2,    0xa5,   0xa3,   0x3,    0x2,    0x2,    0x2,    0xa5,
-      0xa6, 0x3,    0x2,    0x2,    0x2,    0xa6,   0xa8,   0x3,    0x2,
-      0x2,  0x2,    0xa7,   0xa5,   0x3,    0x2,    0x2,    0x2,    0xa8,
-      0xa9, 0x7,    0x21,   0x2,    0x2,    0xa9,   0x1d,   0x3,    0x2,
-      0x2,  0x2,    0xaa,   0xab,   0x7,    0x6,    0x2,    0x2,    0xab,
-      0xac, 0x9,    0x3,    0x2,    0x2,    0xac,   0x1f,   0x3,    0x2,
-      0x2,  0x2,    0x17,   0x24,   0x2b,   0x31,   0x39,   0x44,   0x49,
-      0x50, 0x56,   0x61,   0x67,   0x6e,   0x79,   0x7c,   0x81,   0x88,
-      0x8f, 0x91,   0x97,   0x9c,   0xa3,   0xa5,
-  };
-
-  _serializedATN.insert(
-      _serializedATN.end(), serializedATNSegment0,
-      serializedATNSegment0 +
-          sizeof(serializedATNSegment0) / sizeof(serializedATNSegment0[0]));
-
-  atn::ATNDeserializer deserializer;
-  _atn = deserializer.deserialize(_serializedATN);
-
-  size_t count = _atn.getNumberOfDecisions();
-  _decisionToDFA.reserve(count);
-  for (size_t i = 0; i < count; i++) {
-    _decisionToDFA.emplace_back(_atn.getDecisionState(i), i);
-  }
+void AcceptHeaderParser::initialize() {
+  ::antlr4::internal::call_once(acceptheaderParserOnceFlag,
+                                acceptheaderParserInitialize);
 }
-
-AcceptHeaderParser::Initializer AcceptHeaderParser::_init;

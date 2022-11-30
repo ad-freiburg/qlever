@@ -10,6 +10,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "./SparqlExpressionTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
@@ -174,14 +175,13 @@ TEST(SparqlExpressionParser, First) {
   EXPECT_EQ(resultofParse.remainingText_.length(), 6);
   auto resultAsExpression = std::move(resultofParse.resultOfParse_);
 
-  QueryExecutionContext* qec = nullptr;
   sparqlExpression::VariableToColumnAndResultTypeMap map;
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   IdTable table{alloc};
   LocalVocab localVocab;
-  sparqlExpression::EvaluationContext input{*qec, map, table, alloc,
-                                            localVocab};
+  sparqlExpression::EvaluationContext input{*ad_utility::testing::getQec(), map,
+                                            table, alloc, localVocab};
   auto result = resultAsExpression->evaluate(&input);
   AD_CHECK(std::holds_alternative<double>(result));
   ASSERT_FLOAT_EQ(25.0, std::get<double>(result));

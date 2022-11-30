@@ -1,5 +1,5 @@
 
-// Generated from AcceptHeader.g4 by ANTLR 4.9.2
+// Generated from AcceptHeader.g4 by ANTLR 4.11.1
 
 #pragma once
 
@@ -13,77 +13,74 @@
  */
 class AcceptHeaderBaseVisitor : public AcceptHeaderVisitor {
  public:
-  virtual antlrcpp::Any visitAccept(
+  virtual std::any visitAccept(
       AcceptHeaderParser::AcceptContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual antlrcpp::Any visitAcceptWithEof(
+  virtual std::any visitAcceptWithEof(
       AcceptHeaderParser::AcceptWithEofContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual antlrcpp::Any visitRangeAndParams(
+  virtual std::any visitRangeAndParams(
       AcceptHeaderParser::RangeAndParamsContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual antlrcpp::Any visitMediaRange(
+  virtual std::any visitMediaRange(
       AcceptHeaderParser::MediaRangeContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual antlrcpp::Any visitType(
-      AcceptHeaderParser::TypeContext* ctx) override {
+  virtual std::any visitType(AcceptHeaderParser::TypeContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual antlrcpp::Any visitSubtype(
+  virtual std::any visitSubtype(
       AcceptHeaderParser::SubtypeContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual antlrcpp::Any visitAcceptParams(
+  virtual std::any visitAcceptParams(
       AcceptHeaderParser::AcceptParamsContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual antlrcpp::Any visitWeight(
+  virtual std::any visitWeight(
       AcceptHeaderParser::WeightContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual antlrcpp::Any visitQvalue(
+  virtual std::any visitQvalue(
       AcceptHeaderParser::QvalueContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual antlrcpp::Any visitAcceptExt(
+  virtual std::any visitAcceptExt(
       AcceptHeaderParser::AcceptExtContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual antlrcpp::Any visitParameter(
+  virtual std::any visitParameter(
       AcceptHeaderParser::ParameterContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual antlrcpp::Any visitToken(
-      AcceptHeaderParser::TokenContext* ctx) override {
+  virtual std::any visitToken(AcceptHeaderParser::TokenContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual antlrcpp::Any visitTchar(
-      AcceptHeaderParser::TcharContext* ctx) override {
+  virtual std::any visitTchar(AcceptHeaderParser::TcharContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual antlrcpp::Any visitQuotedString(
+  virtual std::any visitQuotedString(
       AcceptHeaderParser::QuotedStringContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual antlrcpp::Any visitQuoted_pair(
+  virtual std::any visitQuoted_pair(
       AcceptHeaderParser::Quoted_pairContext* ctx) override {
     return visitChildren(ctx);
   }

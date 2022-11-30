@@ -239,7 +239,6 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
   size_t nofEntityPostings = 0;
   size_t entityNotFoundErrorMsgCount = 0;
 
-  size_t numLines = 0;
   for (auto line : wordsInTextRecords(contextFile, addWordsFromLiterals)) {
     if (line._contextId != currentContext) {
       ++nofContexts;
@@ -282,7 +281,6 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
       }
       wordsInContext[wid] += line._score;
     }
-    ++numLines;
   }
   if (entityNotFoundErrorMsgCount > 0) {
     LOG(WARN) << "Number of mentions of entities not found in the vocabulary: "

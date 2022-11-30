@@ -160,8 +160,8 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
   try {
     auto context = p.parser.acceptWithEof();
     auto resultAsAny = p.visitor.visitAcceptWithEof(context);
-    auto result =
-        std::move(resultAsAny.as<std::vector<MediaTypeWithQuality>>());
+    auto result = std::any_cast<std::vector<MediaTypeWithQuality>>(
+        std::move(resultAsAny));
     std::sort(result.begin(), result.end(), std::greater<>{});
     return result;
   } catch (const antlr4::ParseCancellationException& p) {

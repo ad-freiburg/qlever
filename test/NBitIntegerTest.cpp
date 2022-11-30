@@ -89,36 +89,96 @@ auto testTranslationNearLimits = []<size_t N>() {
   testUnaryFunctionNearLimits.operator()<N>(testFromTo);
 };
 
+// Test that the result of `from(to(f(a, b)))` is equal to `from(to(f(to(a),
+// to(b))))`, when `to` is `NBitInteger<N>::toNBit` and `from` is the
+// corresponding `fromNBit`. This tests the (well-defined) behavior of the
+// `NBitInteger`s in the presence of overflows. The `wouldOverflow(a, b)`
+// function must return `true` if `f(a, b)` would overlow, leading to undefined
+// behavior. In those cases, the result `i(f(u(a), u(b))` is evaluated instead
+// of `f(a, b)`, where `i` is a cast to int64_t and `u` is a cast to `uint64_t`.
+// The behavior of this operation is well-defined because unsigned integer
+// overflow is defined and signed-unsigned conversions are defined (signed
+// integers are 2s complement).
+template <size_t N, auto f, auto wouldOverflow>
+auto testTwoNumbers = [](int64_t a, int64_t b) {
+  using I = ad_utility::NBitInteger<N>;
+  auto aU = static_cast<uint64_t>(a);
+  auto bU = static_cast<uint64_t>(b);
+  auto resultNBit = I::fromNBit(I::toNBit(f(I::toNBit(a), I::toNBit(b))));
+  auto resultInt64 =
+      wouldOverflow(a, b)
+          ? I::fromNBit(I::toNBit(static_cast<int64_t>(f(aU, bU))))
+          : I::fromNBit(I::toNBit(f(a, b)));
+  ASSERT_EQ(resultNBit, resultInt64);
+};
+
+// Return true if `a + b` would overflow.
+bool additionWouldOverflow(int64_t a, int64_t b) {
+  if (b > 0) {
+    return a > std::numeric_limits<int64_t>::max() - b;
+  } else {
+    return a < std::numeric_limits<int64_t>::min() - b;
+  }
+}
+
+// Return true if `a - b` would overflow.
+bool subtractionWouldOverflow(int64_t a, int64_t b) {
+  if (b > 0) {
+    return a < std::numeric_limits<int64_t>::min() + b;
+  } else {
+    return a > std::numeric_limits<int64_t>::max() + b;
+  }
+}
+
+// Return true if `a * b` would overflow.
+bool multiplicationWouldOverflow(int64_t a, int64_t b) {
+  auto max = std::numeric_limits<int64_t>::max();
+  auto min = std::numeric_limits<int64_t>::min();
+
+  if (a == 0 || b == 0) {
+    return false;
+  }
+
+  if (a > 0 && b > 0) {
+    return b > max / a;
+  }
+
+  if (a < 0 && b < 0) {
+    return b < max / a;
+  }
+
+  // The following checks assume that max + min = -1 (2s complement arithmetic)
+  // Which is enforced by C++20 and has been true in practice for ages.
+  AD_CHECK(max + min == -1);
+
+  if (a < 0 && b > 0) {
+    return a == -1 ? false : b > min / a;
+  }
+
+  // a > 0 && b < 0
+  return b == -1 ? false : a > min / b;
+}
+
 template <size_t N>
 void addition(int64_t a, int64_t b) {
-  using I = ad_utility::NBitInteger<N>;
-  auto resultNBit = I::fromNBit(I::toNBit(I::toNBit(a) + I::toNBit(b)));
-  auto resultInt64 = I::fromNBit(I::toNBit(a + b));
-  ASSERT_EQ(resultNBit, resultInt64);
+  return testTwoNumbers<N, std::plus<>{}, &additionWouldOverflow>(a, b);
 }
 
 template <size_t N>
 void subtraction(int64_t a, int64_t b) {
-  using I = ad_utility::NBitInteger<N>;
-  auto resultNBit = I::fromNBit(I::toNBit(I::toNBit(a) - I::toNBit(b)));
-  auto resultInt64 = I::fromNBit(I::toNBit(a - b));
-  ASSERT_EQ(resultNBit, resultInt64);
+  return testTwoNumbers<N, std::minus<>{}, &subtractionWouldOverflow>(a, b);
 }
 
 template <size_t N>
 void multiplication(int64_t a, int64_t b) {
-  using I = ad_utility::NBitInteger<N>;
-  auto resultNBit = I::fromNBit(I::toNBit(I::toNBit(a) * I::toNBit(b)));
-  auto resultInt64 = I::fromNBit(I::toNBit(a * b));
-  ASSERT_EQ(resultNBit, resultInt64);
+  return testTwoNumbers<N, std::multiplies<>{}, &multiplicationWouldOverflow>(
+      a, b);
 }
 
 auto testNumeric = []<size_t N>(int64_t a, int64_t b) {
   addition<N>(a, b);
   subtraction<N>(a, b);
   multiplication<N>(a, b);
-  // Division in general does not have an easily predictabel behaviors in the
-  // presence of overflows.
 };
 
 auto testNumericNearLimits = []<size_t N>() {

@@ -157,7 +157,7 @@ addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
 addLinkAndDiscoverTest(TypeTraitsTest)
 
-addLinkAndDiscoverTest(SparqlExpressionTest sparqlExpressions index engine)
+addLinkAndDiscoverTestSerial(SparqlExpressionTest sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(StreamableBodyTest http)
 
