@@ -114,23 +114,19 @@ auto testTwoNumbers = [](int64_t a, int64_t b) {
 
 // Return true if `a + b` would overflow.
 bool additionWouldOverflow(int64_t a, int64_t b) {
-  auto max = std::numeric_limits<int64_t>::max();
-  auto min = std::numeric_limits<int64_t>::min();
   if (b > 0) {
-    return a > max - b;
+    return a > std::numeric_limits<int64_t>::max() - b;
   } else {
-    return a < min - b;
+    return a < std::numeric_limits<int64_t>::min() - b;
   }
 }
 
 // Return true if `a - b` would overflow.
 bool subtractionWouldOverflow(int64_t a, int64_t b) {
-  auto max = std::numeric_limits<int64_t>::max();
-  auto min = std::numeric_limits<int64_t>::min();
   if (b > 0) {
-    return a < min + b;
+    return a < std::numeric_limits<int64_t>::min() + b;
   } else {
-    return a > max + b;
+    return a > std::numeric_limits<int64_t>::max() + b;
   }
 }
 
@@ -152,11 +148,11 @@ bool multiplicationWouldOverflow(int64_t a, int64_t b) {
   }
 
   if (a < 0 && b > 0) {
-    return b > min / a;
+    return a == -1 ? false : b > min / a;
   }
 
   // a > 0 && b < 0
-  return a > min / b;
+  return b == -1 ? false : a > min / b;
 }
 
 template <size_t N>

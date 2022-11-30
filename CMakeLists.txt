@@ -61,7 +61,7 @@ include_directories(third_party/googletest/googlemock/include)
 ###############################
 set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
 add_subdirectory(third_party/antlr4/runtime/Cpp EXCLUDE_FROM_ALL )
-target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-unqualified-std-cast-call -Wno-error)
+target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-unqualified-std-cast-call -Wno-error -Wno-deprecated-declarations)
 include_directories(SYSTEM third_party/antlr4/runtime/Cpp/runtime/src )
 
 ################################
