@@ -18,6 +18,7 @@
 #include <index/StxxlSortFunctors.h>
 #include <index/TextMetaData.h>
 #include <index/Vocabulary.h>
+#include <index/VocabularyGenerator.h>
 #include <parser/ContextFileParser.h>
 #include <parser/TripleComponent.h>
 #include <parser/TurtleParser.h>
@@ -61,11 +62,7 @@ using PsoSorter = StxxlSorter<SortByPSO>;
 // Several data that are passed along between different phases of the
 // index builder.
 struct IndexBuilderDataBase {
-  // The total number of distinct words in the complete Vocabulary
-  size_t nofWords;
-  // Id lower and upper bound of @lang@<predicate> predicates
-  Id langPredLowerBound;
-  Id langPredUpperBound;
+  VocabularyMerger::VocabularyMetaData vocabularyMetaData_;
 };
 
 // All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
@@ -98,15 +95,6 @@ class IndexImpl {
       tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex, Score, bool>>;
   using Posting = std::tuple<TextRecordIndex, WordIndex, Score>;
 
-  /// Forbid copy and assignment.
-  IndexImpl& operator=(const IndexImpl&) = delete;
-  IndexImpl(const IndexImpl&) = delete;
-
-  /// Allow move construction, which is mostly used in unit tests.
-  IndexImpl(IndexImpl&&) noexcept = default;
-
-  IndexImpl();
-
   struct IndexMetaDataMmapDispatcher {
     using WriteType = IndexMetaDataMmap;
     using ReadType = IndexMetaDataMmapView;
@@ -120,6 +108,62 @@ class IndexImpl {
   template <class A, class B>
   using PermutationImpl = Permutation::PermutationImpl<A, B>;
 
+  using NumNormalAndInternal = Index::NumNormalAndInternal;
+
+  // Private data members.
+ private:
+  string _onDiskBase;
+  string _settingsFileName;
+  bool _onlyAsciiTurtlePrefixes = false;
+  TurtleParserIntegerOverflowBehavior _turtleParserIntegerOverflowBehavior =
+      TurtleParserIntegerOverflowBehavior::Error;
+  bool _turtleParserSkipIllegalLiterals = false;
+  bool _keepTempFiles = false;
+  uint64_t _stxxlMemoryInBytes = DEFAULT_STXXL_MEMORY_IN_BYTES;
+  json _configurationJson;
+  Vocabulary<CompressedString, TripleComponentComparator> _vocab;
+  size_t _totalVocabularySize = 0;
+  bool _vocabPrefixCompressed = true;
+  Vocabulary<std::string, SimpleStringComparator> _textVocab;
+
+  TextMetaData _textMeta;
+  DocsDB _docsDB;
+  vector<WordIndex> _blockBoundaries;
+  off_t _currentoff_t;
+  mutable ad_utility::File _textIndexFile;
+
+  // If false, only PSO and POS permutations are loaded and expected.
+  bool _loadAllPermutations = true;
+
+  // Pattern trick data
+  bool _usePatterns;
+  double _avgNumDistinctPredicatesPerSubject;
+  double _avgNumDistinctSubjectsPerPredicate;
+  size_t _numDistinctSubjectPredicatePairs;
+
+  size_t _parserBatchSize = PARSER_BATCH_SIZE;
+  size_t _numTriplesPerBatch = NUM_TRIPLES_PER_PARTIAL_VOCAB;
+
+  // These statistics all do *not* include the triples that are added by
+  // QLever for more efficient query processing.
+  size_t _numSubjectsNormal = 0;
+  size_t _numPredicatesNormal = 0;
+  size_t _numObjectsNormal = 0;
+  size_t _numTriplesNormal = 0;
+  /**
+   * @brief Maps pattern ids to sets of predicate ids.
+   */
+  CompactVectorOfStrings<Id> _patterns;
+  /**
+   * @brief Maps entity ids to pattern ids.
+   */
+  std::vector<PatternID> _hasPattern;
+  /**
+   * @brief Maps entity ids to sets of predicate ids
+   */
+  CompactVectorOfStrings<Id> _hasPredicate;
+
+ public:
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
@@ -129,6 +173,16 @@ class IndexImpl {
   Permutation::SPO_T _SPO{SortBySPO(), "SPO", ".spo", {0, 1, 2}};
   Permutation::OPS_T _OPS{SortByOPS(), "OPS", ".ops", {2, 1, 0}};
   Permutation::OSP_T _OSP{SortByOSP(), "OSP", ".osp", {2, 0, 1}};
+
+ public:
+  IndexImpl();
+
+  /// Forbid copy and assignment.
+  IndexImpl& operator=(const IndexImpl&) = delete;
+  IndexImpl(const IndexImpl&) = delete;
+
+  /// Allow move construction, which is mostly used in unit tests.
+  IndexImpl(IndexImpl&&) noexcept = default;
 
   const auto& POS() const { return _POS; }
   auto& POS() { return _POS; }
@@ -187,6 +241,56 @@ class IndexImpl {
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------
+
+  // __________________________________________________________________________
+  NumNormalAndInternal numDistinctSubjects() const {
+    if (hasAllPermutations()) {
+      auto numActually = _numSubjectsNormal;
+      return {numActually, _SPO.metaData().getNofDistinctC1() - numActually};
+    } else {
+      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+               "Can only get # distinct subjects if all 6 permutations "
+               "have been registered on sever start (and index build time) "
+               "with the -a option.")
+    }
+  }
+
+  // __________________________________________________________________________
+  NumNormalAndInternal numDistinctObjects() const {
+    if (hasAllPermutations()) {
+      auto numActually = _numObjectsNormal;
+      return {numActually, _OSP.metaData().getNofDistinctC1() - numActually};
+    } else {
+      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+               "Can only get # distinct objects if all 6 permutations "
+               "have been registered on sever start (and index build time) "
+               "with the -a option.")
+    }
+  }
+
+  // __________________________________________________________________________
+  NumNormalAndInternal numDistinctPredicates() const {
+    auto numActually = _numPredicatesNormal;
+    return {numActually, _PSO.metaData().getNofDistinctC1() - numActually};
+  }
+
+  // __________________________________________________________________________
+  NumNormalAndInternal numDistinctCol0(Index::Permutation permutation) const {
+    switch (permutation) {
+      case Index::Permutation::SOP:
+      case Index::Permutation::SPO:
+        return numDistinctSubjects();
+      case Index::Permutation::OPS:
+      case Index::Permutation::OSP:
+        return numDistinctObjects();
+      case Index::Permutation::POS:
+      case Index::Permutation::PSO:
+        return numDistinctPredicates();
+      default:
+        AD_FAIL();
+    }
+  }
+
   template <typename Permutation>
   size_t getCardinality(Id id, const Permutation& permutation) const {
     if (permutation.metaData().col0IdExists(id)) {
@@ -379,37 +483,11 @@ class IndexImpl {
 
   const string& getKbName() const { return _PSO.metaData().getName(); }
 
-  size_t getNofTriples() const { return _PSO.metaData().getNofTriples(); }
-
   size_t getNofTextRecords() const { return _textMeta.getNofTextRecords(); }
   size_t getNofWordPostings() const { return _textMeta.getNofWordPostings(); }
   size_t getNofEntityPostings() const {
     return _textMeta.getNofEntityPostings();
   }
-
-  size_t getNofSubjects() const {
-    if (hasAllPermutations()) {
-      return _SPO.metaData().getNofDistinctC1();
-    } else {
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-               "Can only get # distinct subjects if all 6 permutations "
-               "have been registered on sever start (and index build time) "
-               "with the -a option.")
-    }
-  }
-
-  size_t getNofObjects() const {
-    if (hasAllPermutations()) {
-      return _OSP.metaData().getNofDistinctC1();
-    } else {
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-               "Can only get # distinct subjects if all 6 permutations "
-               "have been registered on sever start (and index build time) "
-               "with the -a option.")
-    }
-  }
-
-  size_t getNofPredicates() const { return _PSO.metaData().getNofDistinctC1(); }
 
   bool hasAllPermutations() const { return SPO()._isLoaded; }
 
@@ -433,11 +511,12 @@ class IndexImpl {
   // ___________________________________________________________________
   template <class PermutationImpl>
   vector<float> getMultiplicities(const PermutationImpl& p) const {
+    auto numTriples =
+        static_cast<float>(this->numTriples().normalAndInternal_());
     std::array<float, 3> m{
-        static_cast<float>(getNofTriples() / getNofSubjects()),
-        static_cast<float>(getNofTriples() / getNofPredicates()),
-        static_cast<float>(getNofTriples() / getNofObjects())};
-
+        numTriples / numDistinctSubjects().normalAndInternal_(),
+        numTriples / numDistinctPredicates().normalAndInternal_(),
+        numTriples / numDistinctObjects().normalAndInternal_()};
     return {m[p._keyOrder[0]], m[p._keyOrder[1]], m[p._keyOrder[2]]};
   }
 
@@ -558,49 +637,7 @@ class IndexImpl {
   }
 
  private:
-  string _onDiskBase;
-  string _settingsFileName;
-  bool _onlyAsciiTurtlePrefixes = false;
-  TurtleParserIntegerOverflowBehavior _turtleParserIntegerOverflowBehavior =
-      TurtleParserIntegerOverflowBehavior::Error;
-  bool _turtleParserSkipIllegalLiterals = false;
-  bool _keepTempFiles = false;
-  uint64_t _stxxlMemoryInBytes = DEFAULT_STXXL_MEMORY_IN_BYTES;
-  json _configurationJson;
-  Vocabulary<CompressedString, TripleComponentComparator> _vocab;
-  size_t _totalVocabularySize = 0;
-  bool _vocabPrefixCompressed = true;
-  Vocabulary<std::string, SimpleStringComparator> _textVocab;
-
-  TextMetaData _textMeta;
-  DocsDB _docsDB;
-  vector<WordIndex> _blockBoundaries;
-  off_t _currentoff_t;
-  mutable ad_utility::File _textIndexFile;
-
-  // If false, only PSO and POS permutations are loaded and expected.
-  bool _loadAllPermutations = true;
-
-  // Pattern trick data
-  bool _usePatterns;
-  double _avgNumDistinctPredicatesPerSubject;
-  double _avgNumDistinctSubjectsPerPredicate;
-  size_t _numDistinctSubjectPredicatePairs;
-
-  size_t _parserBatchSize = PARSER_BATCH_SIZE;
-  size_t _numTriplesPerBatch = NUM_TRIPLES_PER_PARTIAL_VOCAB;
-  /**
-   * @brief Maps pattern ids to sets of predicate ids.
-   */
-  CompactVectorOfStrings<Id> _patterns;
-  /**
-   * @brief Maps entity ids to pattern ids.
-   */
-  std::vector<PatternID> _hasPattern;
-  /**
-   * @brief Maps entity ids to sets of predicate ids
-   */
-  CompactVectorOfStrings<Id> _hasPredicate;
+  // Private member functions
 
   // Create Vocabulary and directly write it to disk. Create TripleVec with all
   // the triples converted to id space. This Vec can be used for creating
@@ -846,7 +883,7 @@ class IndexImpl {
   // Count the number of "QLever-internal" triples (predicate ql:langtag or
   // predicate starts with @) and all other triples (that were actually part of
   // the input).
-  std::pair<size_t, size_t> getNumTriplesActuallyAndAdded() const;
+  NumNormalAndInternal numTriples() const;
 
   // The index contains several triples that are not part of the "actual"
   // knowledge graph, but are added by QLever for internal reasons (e.g. for an

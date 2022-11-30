@@ -360,7 +360,15 @@ bool GroupBy::computeGroupByForSingleIndexScan(ResultTable* result) {
     return false;
   }
 
-  if (!getVariableForNonDistinctCountOfSingleAlias().has_value()) {
+  // Alias must be a single count of a variable
+  auto varAndDistinctness = getVariableForCountOfSingleAlias();
+  if (!varAndDistinctness.has_value()) {
+    return false;
+  }
+
+  // Distinct counts are only supported for triples with three variables.
+  bool countIsDistinct = varAndDistinctness.value().isDistinct_;
+  if (countIsDistinct && indexScan->getResultWidth() != 3) {
     return false;
   }
 
@@ -372,8 +380,16 @@ bool GroupBy::computeGroupByForSingleIndexScan(ResultTable* result) {
   // For `IndexScan`s with at least two variables the size estimates are
   // exact as they are read directly from the index metadata.
   if (indexScan->getResultWidth() == 3) {
-    result->_idTable(0, 0) =
-        Id::makeFromInt(getIndex().getNumTriplesActuallyAndAdded().first);
+    if (countIsDistinct) {
+      const auto& var = varAndDistinctness.value().variable_;
+      auto permutation =
+          getPermutationForThreeVariableTriple(*_subtree, var, var);
+      AD_CHECK(permutation.has_value());
+      result->_idTable(0, 0) = Id::makeFromInt(
+          getIndex().getImpl().numDistinctCol0(permutation.value()).normal_);
+    } else {
+      result->_idTable(0, 0) = Id::makeFromInt(getIndex().numTriples().normal_);
+    }
   } else {
     // TODO<joka921> The two variables IndexScans should also account for the
     // additionally added triples.
@@ -658,14 +674,18 @@ bool GroupBy::computeOptimizedGroupByIfPossible(ResultTable* result) {
 // _____________________________________________________________________________
 std::optional<Variable> GroupBy::getVariableForNonDistinctCountOfSingleAlias()
     const {
-  if (_aliases.size() != 1) {
+  auto varAndDistinctness = getVariableForCountOfSingleAlias();
+  if (!varAndDistinctness.has_value() ||
+      varAndDistinctness.value().isDistinct_) {
     return std::nullopt;
   }
-  auto optionalVariableAndDistinctness =
-      _aliases.front()._expression.getVariableForCount();
-  if (!optionalVariableAndDistinctness ||
-      optionalVariableAndDistinctness->isDistinct_) {
-    return std::nullopt;
-  }
-  return std::move(optionalVariableAndDistinctness->variable_);
+  return std::move(varAndDistinctness.value().variable_);
+}
+
+// _____________________________________________________________________________
+std::optional<sparqlExpression::SparqlExpressionPimpl::VariableAndDistinctness>
+GroupBy::getVariableForCountOfSingleAlias() const {
+  return _aliases.size() == 1
+             ? _aliases.front()._expression.getVariableForCount()
+             : std::nullopt;
 }

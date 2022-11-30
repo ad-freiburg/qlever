@@ -26,7 +26,7 @@
 
 // ___________________________________________________________________
 template <typename Comparator, typename InternalVocabularyAction>
-VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
+VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
     const std::string& basename, size_t numFiles, Comparator comparator,
     InternalVocabularyAction& internalVocabularyAction) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
@@ -46,7 +46,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
   std::vector<uint64_t> numWordsLeftInPartialVocabulary;
 
   if (!_noIdMapsAndIgnoreExternalVocab) {
-    _outfileExternal =
+    outfileExternal_ =
         ad_utility::makeOfstream(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
   }
   std::vector<bool> endOfFile(numFiles, false);
@@ -73,7 +73,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     // Read the number of words in the partial vocabulary.
     infiles.back() >> numWordsLeftInPartialVocabulary.back();
     if (!_noIdMapsAndIgnoreExternalVocab) {
-      _idVecs.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
+      idVecs_.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
     }
     // Read the first entry of the vocabulary and add it to the queue.
     pushWordFromPartialVocabularyToQueue(i);
@@ -130,14 +130,11 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
   if (!sortedBuffer.empty()) {
     writeQueueWordsToIdVec(sortedBuffer, internalVocabularyAction);
   }
-  VocMergeRes result;
-  result._numWordsTotal = _totalWritten;
-  result._langPredLowerBound = _langPredLowerBound;
-  result._langPredUpperBound = _langPredUpperBound;
 
+  auto metaData = std::move(metaData_);
   // completely reset all the inner state
   clear();
-  return result;
+  return metaData;
 }
 
 // ________________________________________________________________________________
@@ -154,46 +151,39 @@ void VocabularyMerger::writeQueueWordsToIdVec(
   writeBuf.reserve(bufSize);
   // avoid duplicates
   for (auto& top : buffer) {
-    if (!_lastTripleComponent.has_value() ||
-        top.iriOrLiteral() != _lastTripleComponent.value().iriOrLiteral()) {
+    if (!lastTripleComponent_.has_value() ||
+        top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
       // TODO<joka921> Once we have interleaved IDs using the MilestoneIdManager
       // we have to compute the correct Ids here.
-      _lastTripleComponent = TripleComponentWithIndex{
-          top.iriOrLiteral(), top.isExternal(), _totalWritten};
+      lastTripleComponent_ = TripleComponentWithIndex{
+          top.iriOrLiteral(), top.isExternal(), metaData_.numWordsTotal_};
 
       // TODO<optimization> If we aim to further speed this up, we could
       // order all the write requests to _outfile _externalOutfile and all the
       // idVecs to have a more useful external access pattern.
 
       // write the new word to the vocabulary
-      if (!_lastTripleComponent.value().isExternal()) {
-        internalVocabularyAction(_lastTripleComponent.value().iriOrLiteral());
+      if (!lastTripleComponent_.value().isExternal()) {
+        internalVocabularyAction(lastTripleComponent_.value().iriOrLiteral());
       } else {
-        _outfileExternal << RdfEscaping::escapeNewlinesAndBackslashes(
-                                _lastTripleComponent.value().iriOrLiteral())
+        outfileExternal_ << RdfEscaping::escapeNewlinesAndBackslashes(
+                                lastTripleComponent_.value().iriOrLiteral())
                          << '\n';
       }
 
-      if (top.iriOrLiteral().starts_with('@')) {
-        if (!_firstLangPredSeen) {
-          // inclusive
-          _langPredLowerBound = Id::makeFromVocabIndex(
-              VocabIndex::make(_lastTripleComponent.value()._index));
-          _firstLangPredSeen = true;
-        }
-        // exclusive
-        _langPredUpperBound = Id::makeFromVocabIndex(
-            VocabIndex::make(_lastTripleComponent.value()._index + 1));
-      }
-      _totalWritten++;
-      if (_totalWritten % 100'000'000 == 0) {
-        LOG(INFO) << "Words merged: " << _totalWritten << std::endl;
+      metaData_.internalEntities_.addIfWordMatches(
+          top.iriOrLiteral(), lastTripleComponent_.value()._index);
+      metaData_.langTaggedPredicates_.addIfWordMatches(
+          top.iriOrLiteral(), lastTripleComponent_.value()._index);
+      metaData_.numWordsTotal_++;
+      if (metaData_.numWordsTotal_ % 100'000'000 == 0) {
+        LOG(INFO) << "Words merged: " << metaData_.numWordsTotal_ << std::endl;
       }
     }
     // Write pair of local and global ID to buffer.
     writeBuf.emplace_back(
         top._partialFileId,
-        std::pair{top.id(), _lastTripleComponent.value()._index});
+        std::pair{top.id(), lastTripleComponent_.value()._index});
 
     if (writeBuf.size() >= bufSize) {
       auto task = [this, buf = std::move(writeBuf)]() {
@@ -220,20 +210,21 @@ void VocabularyMerger::writeQueueWordsToIdVec(
 }
 
 // ____________________________________________________________________________________________________________
-void VocabularyMerger::doActualWrite(
+inline void VocabularyMerger::doActualWrite(
     const std::vector<std::pair<size_t, std::pair<size_t, size_t>>>& buffer) {
   if (_noIdMapsAndIgnoreExternalVocab) {
     return;
   }
   for (const auto& [id, value] : buffer) {
-    _idVecs[id].push_back(
+    idVecs_[id].push_back(
         {Id::makeFromVocabIndex(VocabIndex::make(value.first)),
          Id::makeFromVocabIndex(VocabIndex::make(value.second))});
   }
 }
 
 // ____________________________________________________________________________________________________________
-ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec* elsPtr) {
+inline ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(
+    ItemVec* elsPtr) {
   auto& els = *elsPtr;
   ad_utility::HashMap<uint64_t, uint64_t> res;
   bool first = true;
@@ -253,9 +244,9 @@ ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec* elsPtr) {
 }
 
 // ________________________________________________________________________________________________________
-void writeMappedIdsToExtVec(const auto& input,
-                            const ad_utility::HashMap<uint64_t, uint64_t>& map,
-                            TripleVec::bufwriter_type* writePtr) {
+inline void writeMappedIdsToExtVec(
+    const auto& input, const ad_utility::HashMap<uint64_t, uint64_t>& map,
+    TripleVec::bufwriter_type* writePtr) {
   auto& writer = *writePtr;
   for (const auto& curTriple : input) {
     std::array<Id, 3> mappedTriple;
@@ -279,7 +270,8 @@ void writeMappedIdsToExtVec(const auto& input,
 }
 
 // _________________________________________________________________________________________________________
-void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
+inline void writePartialVocabularyToFile(const ItemVec& els,
+                                         const string& fileName) {
   LOG(DEBUG) << "Writing partial vocabulary to: " << fileName << "\n";
   ad_utility::serialization::FileWriteSerializer serializer{fileName};
   uint64_t size = els.size();  // really make sure that this has 64bits;
@@ -320,7 +312,7 @@ void writePartialIdMapToBinaryFileForMerging(
 }
 
 // __________________________________________________________________________________________________
-ItemVec vocabMapsToVector(std::unique_ptr<ItemMapArray> map) {
+inline ItemVec vocabMapsToVector(std::unique_ptr<ItemMapArray> map) {
   ItemVec els;
   size_t totalEls = std::accumulate(
       map->begin(), map->end(), 0,
@@ -352,7 +344,7 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 }
 
 // _____________________________________________________________________
-ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
+inline ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
     const string& mmapFilename) {
   ad_utility::HashMap<Id, Id> res;
   IdPairMMapVecView vec(mmapFilename);

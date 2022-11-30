@@ -37,6 +37,16 @@ class Index {
   /// Identifiers for the six possible permutations.
   enum struct Permutation { PSO, POS, SPO, SOP, OPS, OSP };
 
+  // Alongside the actual knowledge graph QLever stores additional triples
+  // for optimized query processing. This struct is used to report various
+  // statistics (number of triples, distinct number of subjects, etc.) for which
+  // the value differs when you also consider the added triples.
+  struct NumNormalAndInternal {
+    size_t normal_;
+    size_t internal_;
+    size_t normalAndInternal_() const { return normal_ + internal_; }
+  };
+
   /// Forbid copy and assignment.
   Index& operator=(const Index&) = delete;
   Index(const Index&) = delete;
@@ -225,17 +235,15 @@ class Index {
 
   const std::string& getKbName() const;
 
-  size_t getNofTriples() const;
+  NumNormalAndInternal numTriples() const;
 
   size_t getNofTextRecords() const;
   size_t getNofWordPostings() const;
   size_t getNofEntityPostings() const;
 
-  size_t getNofSubjects() const;
-
-  size_t getNofObjects() const;
-
-  size_t getNofPredicates() const;
+  NumNormalAndInternal numDistinctSubjects() const;
+  NumNormalAndInternal numDistinctObjects() const;
+  NumNormalAndInternal numDistinctPredicates() const;
 
   bool hasAllPermutations() const;
 
@@ -291,12 +299,7 @@ class Index {
             const TripleComponent& col1String, IdTable* result, Permutation p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
-  // Count the number of "QLever-internal" triples (predicate ql:langtag or
-  // predicate starts with @) and all other triples (that were actually part of
-  // the input).
-  std::pair<size_t, size_t> getNumTriplesActuallyAndAdded() const;
-
-  // Get access to the implementation. This should be used rarerly as it
+  // Get access to the implementation. This should be used rarely as it
   // requires including the rather expensive `IndexImpl.h` header
   IndexImpl& getImpl() { return *pimpl_; }
   [[nodiscard]] const IndexImpl& getImpl() const { return *pimpl_; }

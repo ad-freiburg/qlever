@@ -330,7 +330,12 @@ size_t IndexScan::computeSizeEstimate() {
       return getIndex().getCardinality(_object, Index::Permutation::OSP);
     }
     // The triple consists of three variables.
-    return getIndex().getNofTriples();
+    // TODO<joka921> As soon as all implementations of a full index scan
+    // (Including the "dummy joins" in Join.cpp) consistently exclude the
+    // internal triples, this estimate should be changed to only return
+    // the number of triples in the actual knowledge graph (excluding the
+    // internal triples).
+    return getIndex().numTriples().normalAndInternal_();
   } else {
     // Only for test cases. The handling of the objects is to make the
     // strange query planner tests pass.
@@ -497,7 +502,9 @@ void IndexScan::computeFullScan(ResultTable* result,
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1, 2};
 
-  uint64_t resultSize = getIndex().getNofTriples();
+  // This implementation computes the complete knowledge graph, except the
+  // internal triples.
+  uint64_t resultSize = getIndex().numTriples().normal_;
   if (getLimit().has_value() && getLimit() < resultSize) {
     resultSize = getLimit().value();
   }

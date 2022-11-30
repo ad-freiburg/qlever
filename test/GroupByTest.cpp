@@ -554,9 +554,10 @@ TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan) {
   // Must have zero groupByVariables.
   testFailure(variablesOnlyX, aliasesCountX, xyzScanSortedByX);
 
-  // Must (currently) have exactly one alias that is a non-distinct count.
+  // Must (currently) have exactly one alias that is a count.
+  // A distinct count is only supporte if the triple has three variables.
   testFailure(emptyVariables, emptyAliases, xyzScanSortedByX);
-  testFailure(emptyVariables, aliasesCountDistinctX, xyzScanSortedByX);
+  testFailure(emptyVariables, aliasesCountDistinctX, xyScan);
   testFailure(emptyVariables, aliasesXAsV, xyzScanSortedByX);
 
   // `chooseInterface == true` means "use the dedicated
@@ -590,9 +591,20 @@ TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan) {
     // `<label>`
     ASSERT_EQ(result._idTable(0, 0), Id::makeFromInt(5));
   }
+  {
+    ResultTable result{qec->getAllocator()};
+    auto groupBy =
+        GroupBy{qec, emptyVariables, aliasesCountDistinctX, xyzScanSortedByX};
+    ASSERT_TRUE(groupBy.computeGroupByForSingleIndexScan(&result));
+    ASSERT_EQ(result._idTable.size(), 1);
+    ASSERT_EQ(result._idTable.cols(), 1);
+    // The test index currently consists of three distinct subjects:
+    // <x>, <y>, and <z>.
+    ASSERT_EQ(result._idTable(0, 0), Id::makeFromInt(3));
+  }
 }
 
-TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan2) {
+TEST_F(GroupBySpecialCount, computeGroupByForFullIndexScan) {
   // Assert that a GROUP BY which is constructed from the given arguments
   // can not perform the `GroupByForSingleIndexScan2` optimization.
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
