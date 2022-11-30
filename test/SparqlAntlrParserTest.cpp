@@ -180,7 +180,7 @@ TEST(SparqlExpressionParser, First) {
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   IdTable table{alloc};
   LocalVocab localVocab;
-  sparqlExpression::EvaluationContext input{*sparqlExpression::getQec(), map,
+  sparqlExpression::EvaluationContext input{*ad_utility::testing::getQec(), map,
                                             table, alloc, localVocab};
   auto result = resultAsExpression->evaluate(&input);
   AD_CHECK(std::holds_alternative<double>(result));
