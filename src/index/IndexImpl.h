@@ -519,47 +519,42 @@ class IndexImpl {
                                      timer);
   }
 
-  // Apply the function `F` to the permutation that corresponds to the
-  // `permutation` argument.
-  auto applyToPermutation(Index::Permutation permutation, const auto& F) {
+  // Internal implementation for `applyToPermutation` (see below).
+  // TODO<C++23> : Use "deducing this"
+ private:
+  static decltype(auto) applyToPermutationImpl(auto&& self,
+                                               Index::Permutation permutation,
+                                               auto&& F) {
     using enum Index::Permutation;
     switch (permutation) {
       case POS:
-        return F(_POS);
+        return AD_FWD(F)(self._POS);
       case PSO:
-        return F(_PSO);
+        return AD_FWD(F)(self._PSO);
       case SPO:
-        return F(_SPO);
+        return AD_FWD(F)(self._SPO);
       case SOP:
-        return F(_SOP);
+        return AD_FWD(F)(self._SOP);
       case OSP:
-        return F(_OSP);
+        return AD_FWD(F)(self._OSP);
       case OPS:
-        return F(_OPS);
+        return AD_FWD(F)(self._OPS);
       default:
         AD_FAIL();
     }
   }
 
-  // TODO<joka921> reduce code duplication here
-  auto applyToPermutation(Index::Permutation permutation, const auto& F) const {
-    using enum Index::Permutation;
-    switch (permutation) {
-      case POS:
-        return F(_POS);
-      case PSO:
-        return F(_PSO);
-      case SPO:
-        return F(_SPO);
-      case SOP:
-        return F(_SOP);
-      case OSP:
-        return F(_OSP);
-      case OPS:
-        return F(_OPS);
-      default:
-        AD_FAIL();
-    }
+ public:
+  // Apply the function `F` to the permutation that corresponds to the
+  // `permutation` argument.
+  decltype(auto) applyToPermutation(Index::Permutation permutation, auto&& F) {
+    return applyToPermutationImpl(*this, permutation, AD_FWD(F));
+  }
+
+  // TODO<joka921, C++23> reduce code duplication here using `deducing this`.
+  decltype(auto) applyToPermutation(Index::Permutation permutation,
+                                    auto&& F) const {
+    return applyToPermutationImpl(*this, permutation, AD_FWD(F));
   }
 
  private:
@@ -851,23 +846,76 @@ class IndexImpl {
   // Count the number of "QLever-internal" triples (predicate ql:langtag or
   // predicate starts with @) and all other triples (that were actually part of
   // the input).
-  std::pair<size_t, size_t> getNumTriplesActuallyAndAdded() const {
-    auto [begin, end] = prefix_range("@");
-    Id qleverLangtag;
-    auto actualTriples = 0ul;
-    auto addedTriples = 0ul;
-    bool foundQleverLangtag = getId(LANGUAGE_PREDICATE, &qleverLangtag);
-    AD_CHECK(foundQleverLangtag);
-    // Use the PSO index to get the number of triples for each predicate and add
-    // to the respective counter.
-    for (const auto& [key, value] : PSO()._meta.data()) {
-      auto numTriples = value.getNofElements();
-      if (key == qleverLangtag || (begin <= key && key < end)) {
-        addedTriples += numTriples;
-      } else {
-        actualTriples += numTriples;
-      }
+  std::pair<size_t, size_t> getNumTriplesActuallyAndAdded() const;
+
+  // The index contains several triples that are not part of the "actual"
+  // knowledge graph, but are added by QLever for internal reasons (e.g. for an
+  // efficient implementation of language filters). For a given `Permutation`,
+  // returns the following `std::pair`:
+  // First: A `vector<pair<Id, Id>>` that denotes ranges in the first column
+  //        of the permutation that imply that a triple is added. For example
+  //        in the `SPO` and `SOP` permutation a literal subject means that the
+  //        triple was added (literals are not legal subjects in RDF), so the
+  //        pair `(idOfFirstLiteral, idOfLastLiteral + 1)` will be contained
+  //        in the vector.
+  // Second: A lambda that checks for a triple *that is not already excluded
+  //         by the ignored ranges from the first argument* whether it still
+  //         is an added triple. For example in the `Sxx` and `Oxx` permutation
+  //         a triple where the predicate starts with '@' (instead of the usual
+  //         '<' is an added triple from the language filter implementation.
+  // Note: A triple from a given permutation is an added triple if and only if
+  //       it's first column is contained in any of the ranges from `first` OR
+  //       the lambda `second` returns true for that triple.
+  // For example usages see `IndexScan.cpp` (the implementation of the full
+  // index scan) and `GroupBy.cpp`.
+  auto getIgnoredIdRanges(const Index::Permutation permutation) const {
+    std::vector<std::pair<Id, Id>> ignoredRanges;
+
+    auto literalRange = getVocab().prefix_range("\"");
+    auto taggedPredicatesRange = getVocab().prefix_range("@");
+    auto internalEntitiesRange =
+        getVocab().prefix_range(INTERNAL_ENTITIES_URI_PREFIX);
+    ignoredRanges.emplace_back(
+        Id::makeFromVocabIndex(internalEntitiesRange.first),
+        Id::makeFromVocabIndex(internalEntitiesRange.second));
+
+    using enum Index::Permutation;
+    if (permutation == SPO || permutation == SOP) {
+      ignoredRanges.push_back({Id::makeFromVocabIndex(literalRange.first),
+                               Id::makeFromVocabIndex(literalRange.second)});
+    } else if (permutation == PSO || permutation == POS) {
+      ignoredRanges.push_back(
+          {Id::makeFromVocabIndex(taggedPredicatesRange.first),
+           Id::makeFromVocabIndex(taggedPredicatesRange.second)});
     }
-    return std::pair{actualTriples, addedTriples};
+
+    auto isIllegalPredicateId = [=](Id predicateId) {
+      auto idx = predicateId.getVocabIndex();
+      return (idx >= internalEntitiesRange.first &&
+              idx < internalEntitiesRange.second) ||
+             (idx >= taggedPredicatesRange.first &&
+              idx < taggedPredicatesRange.second);
+    };
+
+    auto isTripleIgnored = [permutation,
+                            isIllegalPredicateId](const auto& triple) {
+      // TODO<joka921, everybody in the future>:
+      // A lot of code (especially for statistical queries in `GroupBy.cpp` and
+      // the pattern trick) relies on this function being a noop for the `PSO`
+      // and `POS` permutations, meaning that it suffices to check the
+      // `ignoredRanges` for them. Should this ever change (which means that we
+      // add internal triples that use predicates that are actually contained in
+      // the knowledge graph), then all the code that uses this function has to
+      // be thoroughly reviewed.
+      if (permutation == SPO || permutation == OPS) {
+        // Predicates are always entities from the vocabulary.
+        return isIllegalPredicateId(triple[1]);
+      } else if (permutation == SOP || permutation == OSP) {
+        return isIllegalPredicateId(triple[2]);
+      }
+      return false;
+    };
+
+    return std::pair{std::move(ignoredRanges), std::move(isTripleIgnored)};
   }
 };

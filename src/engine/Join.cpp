@@ -219,24 +219,23 @@ float Join::getMultiplicity(size_t col) {
 
 // _____________________________________________________________________________
 size_t Join::getCostEstimate() {
-  float diskRandomAccessCost =
-      _executionContext
-          ? _executionContext->getCostFactor("DISK_RANDOM_ACCESS_COST")
-          : 200000;
   size_t costJoin;
+
+  // The cost estimates of the "Join with full scan" case must be consistent
+  // with the estimates for the materialization of a full scan. For a detailed
+  // discussion see the comments in `IndexScan::getCostEstimate()` (in
+  // `IndexScan.cpp`)
   if (isFullScanDummy(_left)) {
     size_t nofDistinctTabJc = static_cast<size_t>(
         _right->getSizeEstimate() / _right->getMultiplicity(_rightJoinCol));
     float averageScanSize = _left->getMultiplicity(_leftJoinCol);
 
-    costJoin = nofDistinctTabJc *
-               static_cast<size_t>(diskRandomAccessCost + averageScanSize);
+    costJoin = nofDistinctTabJc * averageScanSize * 10'000;
   } else if (isFullScanDummy(_right)) {
     size_t nofDistinctTabJc = static_cast<size_t>(
         _left->getSizeEstimate() / _left->getMultiplicity(_leftJoinCol));
     float averageScanSize = _right->getMultiplicity(_rightJoinCol);
-    costJoin = nofDistinctTabJc *
-               static_cast<size_t>(diskRandomAccessCost + averageScanSize);
+    costJoin = nofDistinctTabJc * averageScanSize * 10'000;
   } else {
     // Normal case:
     costJoin = _left->getSizeEstimate() + _right->getSizeEstimate();

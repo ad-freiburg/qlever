@@ -136,6 +136,18 @@ class GroupBy : public Operation {
 
   // First, check if the query represented by this GROUP BY is of the following
   // form:
+  //  SELECT ?x (COUNT(?x) as ?cnt) WHERE {
+  //    ?x ?y ?z
+  //  } GROUP BY ?x
+  // The single triple must contain three variables. The grouped variable and
+  // the selected variable must be the same, but may be either one of `?x, `?y`,
+  // or `?z`. In the SELECT clause, both of the elements may be omitted, so in
+  // the example it is possible to only select `?x` or to only select the
+  // `COUNT`.
+  bool computeGroupByForFullIndexScan(ResultTable* result);
+
+  // First, check if the query represented by this GROUP BY is of the following
+  // form:
   //  SELECT ?x (COUNT (?x) as ?cnt) WHERE {
   //    %arbitrary graph pattern that contains `?x`, but neither `?y`, nor `?z`.
   //    ?x ?y ?z
@@ -176,7 +188,7 @@ class GroupBy : public Operation {
   // `variableByWhichToSort` is returned, for example `SPO` if the
   // `variableByWhichToSort` is the subject of the triple.
   static std::optional<Index::Permutation> getPermutationForThreeVariableTriple(
-      const QueryExecutionTree* tree, const Variable& variableByWhichToSort,
+      const QueryExecutionTree& tree, const Variable& variableByWhichToSort,
       const Variable& variableThatMustBeContained);
 
   // If this GROUP BY has exactly one alias, and that alias is a non-distinct

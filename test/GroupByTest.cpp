@@ -5,7 +5,6 @@
 #include <cstdio>
 
 #include "./IndexTestHelpers.h"
-#include "./SparqlExpressionTestHelpers.h"
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -15,12 +14,7 @@
 #include "gtest/gtest.h"
 #include "index/ConstantsIndexBuilding.h"
 
-ad_utility::AllocatorWithLimit<Id>& allocator() {
-  static ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<size_t>::max())};
-  return a;
-}
+using namespace ad_utility::testing;
 
 auto I = [](const auto& id) { return Id::makeFromInt(id); };
 
@@ -109,12 +103,12 @@ TEST_F(GroupByTest, doGroupBy) {
   vocab.createFromSet(s);
 
   // create an input result table with a local vocabulary
-  ResultTable inTable{allocator()};
+  ResultTable inTable{makeAllocator()};
   inTable._localVocab->getIndexAndAddIfNotContained("<local1>");
   inTable._localVocab->getIndexAndAddIfNotContained("<local2>");
   inTable._localVocab->getIndexAndAddIfNotContained("<local3>");
 
-  IdTable inputData(6, allocator());
+  IdTable inputData(6, makeAllocator());
   // The input data types are
   //                   KB, KB, VERBATIM, TEXT, FLOAT,           STRING
   inputData.push_back({I(1), I(4), I(123), I(0), floatBuffers[0], I(0)});
@@ -342,7 +336,7 @@ struct GroupBySpecialCount : ::testing::Test {
   Variable varY{"?y"};
   Variable varZ{"?z"};
   Variable varA{"?a"};
-  QueryExecutionContext* qec = sparqlExpression::getQec();
+  QueryExecutionContext* qec = getQec();
   SparqlTriple xyzTriple{Variable{"?x"}, "?y", Variable{"?z"}};
   Tree xyzScanSortedByX = makeExecutionTree<IndexScan>(
       qec, IndexScan::FULL_INDEX_SCAN_SOP, xyzTriple);
@@ -392,6 +386,10 @@ struct GroupBySpecialCount : ::testing::Test {
       Alias{countDistinctXPimpl, Variable{"?count"}}};
   std::vector<Alias> aliasesCountX{Alias{countXPimpl, Variable{"?count"}}};
 
+  std::vector<Alias> aliasesCountXTwice{
+      Alias{makeCountPimpl(varX, false), Variable{"?count"}},
+      Alias{makeCountPimpl(varX, false), Variable{"?count2"}}};
+
   const Join* getJoinPtr(const Tree& tree) {
     auto join = dynamic_cast<const Join*>(tree->getRootOperation().get());
     AD_CHECK(join);
@@ -407,7 +405,7 @@ struct GroupBySpecialCount : ::testing::Test {
 // _____________________________________________________________________________
 TEST_F(GroupBySpecialCount, getPermutationForThreeVariableTriple) {
   using enum Index::Permutation;
-  const QueryExecutionTree* xyzScan = xyzScanSortedByX.get();
+  const QueryExecutionTree& xyzScan = *xyzScanSortedByX;
 
   // Valid inputs.
   ASSERT_EQ(SPO,
@@ -426,8 +424,8 @@ TEST_F(GroupBySpecialCount, getPermutationForThreeVariableTriple) {
             GroupBy::getPermutationForThreeVariableTriple(xyzScan, varX, varA));
 
   // Not a three variable triple.
-  ASSERT_EQ(std::nullopt, GroupBy::getPermutationForThreeVariableTriple(
-                              xScan.get(), varX, varX));
+  ASSERT_EQ(std::nullopt,
+            GroupBy::getPermutationForThreeVariableTriple(*xScan, varX, varX));
 }
 
 // _____________________________________________________________________________
@@ -576,8 +574,8 @@ TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan) {
 
     ASSERT_EQ(result._idTable.size(), 1);
     ASSERT_EQ(result._idTable.cols(), 1);
-    // The test index currently consists of 6 triples.
-    ASSERT_EQ(result._idTable(0, 0), Id::makeFromInt(6));
+    // The test index currently consists of 7 triples.
+    ASSERT_EQ(result._idTable(0, 0), Id::makeFromInt(7));
   };
   testWithBothInterfaces(true);
   testWithBothInterfaces(false);
@@ -588,10 +586,85 @@ TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan) {
     ASSERT_TRUE(groupBy.computeGroupByForSingleIndexScan(&result));
     ASSERT_EQ(result._idTable.size(), 1);
     ASSERT_EQ(result._idTable.cols(), 1);
-    // The test index currently consists of 4 triples that have the predicate
+    // The test index currently consists of 5 triples that have the predicate
     // `<label>`
-    ASSERT_EQ(result._idTable(0, 0), Id::makeFromInt(4));
+    ASSERT_EQ(result._idTable(0, 0), Id::makeFromInt(5));
   }
+}
+
+TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan2) {
+  // Assert that a GROUP BY which is constructed from the given arguments
+  // can not perform the `GroupByForSingleIndexScan2` optimization.
+  auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
+                            const auto& indexScan) {
+    auto groupBy = GroupBy{qec, groupByVariables, aliases, indexScan};
+    ResultTable result{qec->getAllocator()};
+    ASSERT_FALSE(groupBy.computeGroupByForFullIndexScan(&result));
+    ASSERT_EQ(result._idTable.size(), 0u);
+  };
+  // The IndexScan doesn't have three variables.
+  testFailure(variablesOnlyX, aliasesCountX, xScan);
+
+  // Must have one groupByVariables.
+  testFailure(emptyVariables, aliasesCountX, xyzScanSortedByX);
+
+  // Must (currently) have zero aliases or one alias that is a non-distinct
+  // count.
+  testFailure(variablesOnlyX, aliasesCountDistinctX, xyzScanSortedByX);
+  testFailure(variablesOnlyX, aliasesXAsV, xyzScanSortedByX);
+
+  // This is the case that throws, because it can almost be optimized.
+  ASSERT_THROW(
+      testFailure(variablesOnlyX, aliasesCountXTwice, xyzScanSortedByX),
+      std::runtime_error);
+
+  // `chooseInterface == true` means "use the dedicated
+  // `computeGroupByForJoinWithFullScan` method", `chooseInterface == false`
+  // means use the general `computeOptimizedGroupByIfPossible` function.
+  auto testWithBothInterfaces = [&](bool chooseInterface, bool includeCount) {
+    ResultTable result{qec->getAllocator()};
+    auto groupBy =
+        includeCount
+            ? GroupBy{qec, variablesOnlyX, aliasesCountX, xyzScanSortedByX}
+            : GroupBy{qec, variablesOnlyX, emptyAliases, xyzScanSortedByX};
+    if (chooseInterface) {
+      ASSERT_TRUE(groupBy.computeGroupByForFullIndexScan(&result));
+    } else {
+      ASSERT_TRUE(groupBy.computeOptimizedGroupByIfPossible(&result));
+    }
+    Id idOfX;
+    Id idOfY;
+    Id idOfZ;
+    qec->getIndex().getId("<x>", &idOfX);
+    qec->getIndex().getId("<y>", &idOfY);
+    qec->getIndex().getId("<z>", &idOfZ);
+
+    // Three distinct subjects.
+    ASSERT_EQ(result._idTable.size(), 3);
+    if (includeCount) {
+      ASSERT_EQ(result._idTable.cols(), 2);
+    } else {
+      ASSERT_EQ(result._idTable.cols(), 1);
+    }
+    // The test index currently consists of 6 triples.
+    EXPECT_EQ(result._idTable(0, 0), idOfX);
+    EXPECT_EQ(result._idTable(1, 0), idOfY);
+    EXPECT_EQ(result._idTable(2, 0), idOfZ);
+
+    if (includeCount) {
+      EXPECT_EQ(result._idTable(0, 1), Id::makeFromInt(5));
+      EXPECT_EQ(result._idTable(1, 1), Id::makeFromInt(1));
+      // TODO<joka921> This should be 1.
+      // There is one triple added <z> @en@<label> "zz"@en which is
+      // currently not filtered out.
+      EXPECT_EQ(result._idTable(2, 1), Id::makeFromInt(2));
+    }
+  };
+  testWithBothInterfaces(true, true);
+  testWithBothInterfaces(true, false);
+  testWithBothInterfaces(false, true);
+
+  // TODO<joka921> Add a test with only one column
 }
 
 }  // namespace

@@ -47,6 +47,9 @@ class Index {
   Index();
   ~Index();
 
+  // Get underlying access to the Pimpl where necessary.
+  const IndexImpl& getPimpl() const { return *pimpl_; }
+
   // Create an index from a file. Will write vocabulary and on-disk index data.
   // NOTE: The index can not directly be used after this call, but has to be
   // setup by `createFromOnDiskIndex` after this call.

@@ -348,22 +348,13 @@ size_t IndexScan::getCostEstimate() {
   if (getResultWidth() != 3) {
     return getSizeEstimate();
   } else {
-    // This is to make unit tests pass that have no explicit execution context.
-    // TODO<joka921> get rid of these unit tests!
-    if (!_executionContext) {
-      return getSizeEstimate();
-    }
     // The computation of the `full scan` estimate must be consistent with the
     // full scan dummy joins in `Join.cpp` for correct query planning.
-    // TODO<joka921> Factor out the common code to keep it in sync.
-
     // The following calculation is done in a way that makes materializing a
     // full index scan always more expensive than implicitly computing it in the
-    // so-called "dummy joins" (see `Join.h` and `Join.cpp`). To achieve this,
-    // the estimate here is computed analogously to the estimates of the dummy
-    // joins, but with an additional penalty factor. The overall goal is to make
-    // the query planner only materialize a full index scan if there is no other
-    // way to compute the query.
+    // so-called "dummy joins" (see `Join.h` and `Join.cpp`). The assumption is,
+    // that materializing a single triple via a full index scan is 10'000 more
+    // expensive than materializing it via some other means.
 
     // Note that we cannot set the cost to `infinity` or `max`, because this
     // might lead to overflows in upstream operations when the cost estimate is
@@ -374,14 +365,8 @@ size_t IndexScan::getCostEstimate() {
     // TODO<joka921> The conceptually right way to do this is to make the cost
     // estimate a tuple `(numFullIndexScans, costEstimateForRemainder)`.
     // Implement this functionality.
-    size_t diskRandomAccessCost =
-        _executionContext->getCostFactor("DISK_RANDOM_ACCESS_COST");
-    size_t numScans = getSizeEstimate() / getMultiplicity(0);
-    size_t averageScanSize = getMultiplicity(0);
-    static constexpr size_t fullScanPenalty = 1'000;
-    auto totalCost =
-        fullScanPenalty * numScans * (diskRandomAccessCost + averageScanSize);
-    return totalCost;
+
+    return getSizeEstimate() * 10'000;
   }
 }
 
@@ -503,45 +488,8 @@ void IndexScan::determineMultiplicities() {
 
 void IndexScan::computeFullScan(ResultTable* result,
                                 const Index::Permutation permutation) const {
-  std::vector<std::pair<Id, Id>> ignoredRanges;
-
-  auto literalRange = getIndex().getVocab().prefix_range("\"");
-  auto taggedPredicatesRange = getIndex().getVocab().prefix_range("@");
-  VocabIndex languagePredicateIndex;
-  bool success =
-      getIndex().getVocab().getId(LANGUAGE_PREDICATE, &languagePredicateIndex);
-  AD_CHECK(success);
-
-  using enum Index::Permutation;
-  // TODO<joka921> lift `prefixRange` to Index and ID
-  if (permutation == SPO || permutation == SOP) {
-    ignoredRanges.push_back({Id::makeFromVocabIndex(literalRange.first),
-                             Id::makeFromVocabIndex(literalRange.second)});
-  } else if (permutation == PSO || permutation == POS) {
-    ignoredRanges.push_back(
-        {Id::makeFromVocabIndex(taggedPredicatesRange.first),
-         Id::makeFromVocabIndex(taggedPredicatesRange.second)});
-    ignoredRanges.emplace_back(
-        Id::makeFromVocabIndex(languagePredicateIndex),
-        Id::makeFromVocabIndex(languagePredicateIndex.incremented()));
-  }
-
-  auto isTripleIgnored = [&](const auto& triple) {
-    if (permutation == SPO || permutation == OPS) {
-      // Predicates are always entities from the vocabulary.
-      auto id = triple[1].getVocabIndex();
-      return id == languagePredicateIndex ||
-             (id >= taggedPredicatesRange.first &&
-              id < taggedPredicatesRange.second);
-    } else if (permutation == SOP || permutation == OSP) {
-      // Predicates are always entities from the vocabulary.
-      auto id = triple[2].getVocabIndex();
-      return id == languagePredicateIndex ||
-             (id >= taggedPredicatesRange.first &&
-              id < taggedPredicatesRange.second);
-    }
-    return false;
-  };
+  auto [ignoredRanges, isTripleIgnored] =
+      getIndex().getImpl().getIgnoredIdRanges(permutation);
 
   result->_idTable.setCols(3);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
@@ -558,7 +506,8 @@ void IndexScan::computeFullScan(ResultTable* result,
   size_t i = 0;
   auto triplesView =
       getExecutionContext()->getIndex().getImpl().applyToPermutation(
-          permutation, [&](const auto& p) {
+          permutation, [&, ignoredRanges = ignoredRanges,
+                        isTripleIgnored = isTripleIgnored](const auto& p) {
             return TriplesView(p, getExecutionContext()->getAllocator(),
                                ignoredRanges, isTripleIgnored);
           });

@@ -27,6 +27,10 @@ class MetaDataWrapperDense {
     static Id getIdFromElement(const typename BaseIterator::value_type& v) {
       return v._col0Id;
     }
+    static auto getNumRowsFromElement(
+        const typename BaseIterator::value_type& v) {
+      return v._numRows;
+    }
   };
 
   using Iterator = AddGetIdIterator<typename M::iterator>;
@@ -143,6 +147,10 @@ class MetaDataWrapperHashMap {
     [[nodiscard]] Id getId() const { return (*this)->second._col0Id; }
     static Id getIdFromElement(const typename BaseIterator::value_type& v) {
       return v.second._col0Id;
+    }
+    static auto getNumRowsFromElement(
+        const typename BaseIterator::value_type& v) {
+      return v.second._numRows;
     }
   };
   using Iterator = AddGetIdIterator<typename hashMap::iterator>;

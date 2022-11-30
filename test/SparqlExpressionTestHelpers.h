@@ -35,65 +35,17 @@ ValueId IntId(int64_t i) { return ValueId::makeFromInt(i); }
 // Make a `ValueId` from a double. Shorter name, as it will be used often.
 ValueId DoubleId(double d) { return ValueId::makeFromDouble(d); }
 
-// Create an `Index`, the vocabulary of which contains the literals `"alpha",
-// "älpha", "A", "Beta"`. The subjects and predicates of the triples are not
-// important for these unit tests.
-Index makeTestIndex() {
-  // Ignore the (irrelevant) log output of the index building and loading during
-  // these tests.
-  static std::ostringstream ignoreLogStream;
-  ad_utility::setGlobalLoggingStream(&ignoreLogStream);
-  std::string filename = "relationalExpressionTestIndex.ttl";
-  std::string dummyKb =
-      "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . <x> "
-      "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. ";
-
-  FILE_BUFFER_SIZE() = 1000;
-  std::fstream f(filename, std::ios_base::out);
-  f << dummyKb;
-  f.close();
-  std::string indexBasename = "_relationalExpressionTestIndex";
-  {
-    Index index = makeIndexWithTestSettings();
-    index.setOnDiskBase(indexBasename);
-    index.createFromFile<TurtleParserAuto>(filename);
-  }
-  Index index;
-  index.createFromOnDiskIndex(indexBasename);
-  return index;
-}
-
-// Return a static  `QueryExecutionContext` that refers to an index that was
-// build using `makeTestIndex()` (see above). The index (most notably its
-// vocabulary) is the only part of the `QueryExecutionContext` that is actually
-// relevant for these tests, so the other members are defaultet.
-static QueryExecutionContext* getQec() {
-  static ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
-  static const Index index = makeTestIndex();
-  static const Engine engine{};
-  static QueryResultCache cache{};
-  static QueryExecutionContext qec{
-      index,
-      engine,
-      &cache,
-      ad_utility::AllocatorWithLimit<Id>{
-          ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)},
-      {}};
-  return &qec;
-}
-
 // Struct that stores a `sparqlExpression::EvaluationContext` and all the data
 // structures that this context refers to. Most importantly it uses the
 // `QueryExecutionContext` from `getQec()` (see above), and  has an `inputTable`
 // that refers to a previous partial query result with multiple columns of
 // various types. For details see the constructor.
 struct TestContext {
-  QueryExecutionContext* qec = getQec();
+  QueryExecutionContext* qec = ad_utility::testing::getQec();
   sparqlExpression::VariableToColumnAndResultTypeMap varToColMap;
   LocalVocab localVocab;
   IdTable table{qec->getAllocator()};
-  sparqlExpression::EvaluationContext context{*getQec(), varToColMap, table,
+  sparqlExpression::EvaluationContext context{*qec, varToColMap, table,
                                               qec->getAllocator(), localVocab};
   TestContext() {
     // First get some IDs for strings from the vocabulary to later reuse them
