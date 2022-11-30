@@ -14,6 +14,7 @@
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "index/Index.h"
+#include "index/IndexImpl.h"
 #include "parser/Alias.h"
 #include "util/Conversions.h"
 #include "util/HashSet.h"
@@ -370,16 +371,141 @@ bool GroupBy::computeGroupByForSingleIndexScan(ResultTable* result) {
   result->_idTable.emplace_back();
   // For `IndexScan`s with at least two variables the size estimates are
   // exact as they are read directly from the index metadata.
-  result->_idTable(0, 0) = Id::makeFromInt(indexScan->getSizeEstimate());
+  if (indexScan->getResultWidth() == 3) {
+    result->_idTable(0, 0) =
+        Id::makeFromInt(getIndex().getNumTriplesActuallyAndAdded().first);
+  } else {
+    // TODO<joka921> The two variables IndexScans should also account for the
+    // additionally added triples.
+    result->_idTable(0, 0) = Id::makeFromInt(indexScan->getSizeEstimate());
+  }
+  return true;
+}
+
+// _____________________________________________________________________________
+bool GroupBy::computeGroupByForFullIndexScan(ResultTable* result) {
+  if (_groupByVariables.size() != 1) {
+    return false;
+  }
+  const auto& groupByVariable = _groupByVariables.at(0);
+
+  // The child must be an `IndexScan` with three variables that contains
+  // the grouped variable.
+  auto permutation = getPermutationForThreeVariableTriple(
+      *_subtree, groupByVariable, groupByVariable);
+
+  if (!permutation.has_value()) {
+    return false;
+  }
+
+  // Check that all the aliases are non-distinct counts. We currently support
+  // only one or no such count. Redundant additional counts will lead to an
+  // exception (it is easy to reformulate the query to trigger this
+  // optimization).
+  size_t numCounts = 0;
+  for (size_t i = 0; i < _aliases.size(); ++i) {
+    const auto& alias = _aliases[i];
+    if (auto count = alias._expression.getVariableForCount()) {
+      if (count.value().isDistinct_) {
+        return false;
+      }
+      numCounts++;
+    } else {
+      return false;
+    }
+  }
+
+  if (numCounts > 1) {
+    throw std::runtime_error{
+        "This query contains two or more COUNT expressions in the same GROUP "
+        "BY that would lead to identical values. This redundancy is currently "
+        "not supported."};
+  }
+
+  // Prepare the `result`
+  size_t numCols = numCounts + 1;
+  result->_idTable.setCols(numCols);
+  for (size_t i = 0; i < numCols; ++i) {
+    result->_resultTypes.push_back(qlever::ResultType::VERBATIM);
+  }
+  _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
+
+  // A nested lambda that computes the actual result. The outer lambda is
+  // templated on the number of columns (1 or 2) and will be passed to
+  // `callFixedSize`.
+  DISABLE_WARNINGS_CLANG_13
+  auto doComputationForNumberOfColumns =
+      [&]<int NUM_COLS>(IdTable* idTable) mutable {
+        ENABLE_WARNINGS_CLANG_13
+        // TODO<joka921> The `resultTypes` are not really in use, but if they
+        // are not present, segfaults might occur in upstream `Operation`s.
+        auto ignoredRanges =
+            getIndex().getImpl().getIgnoredIdRanges(permutation.value()).first;
+        // The permutations in the `Index` class have different types, so we
+        // also have to write a generic lambda here that will be passed to
+        // `IndexImpl::applyToPermutation`.
+        auto applyForPermutation = [&](const auto& permutation) mutable {
+          IdTableStatic<NUM_COLS> table = idTable->moveToStatic<NUM_COLS>();
+          const auto& metaData = permutation._meta.data();
+          // TODO<joka921> the reserve is too large because of the ignored
+          // triples. We would need to incorporate the information how many
+          // added "relations" are in each permutation during index building.
+          table.reserve(metaData.size());
+          for (auto it = metaData.ordered_begin(); it != metaData.ordered_end();
+               ++it) {
+            Id id = decltype(metaData.ordered_begin())::getIdFromElement(*it);
+
+            // Check whether this is an `@en@...` predicate in a `Pxx`
+            // permutation, a literal in a `Sxx` permutation or some other
+            // entity that was added only for internal reasons.
+            if (std::ranges::any_of(ignoredRanges, [&id](const auto& pair) {
+                  return id >= pair.first && id < pair.second;
+                })) {
+              continue;
+            }
+            Id count = Id::makeFromInt(
+                decltype(metaData.ordered_begin())::getNumRowsFromElement(*it));
+            // TODO<joka921> The count is actually not accurate at least for the
+            // `Sxx` and `Oxx` permutations because it contains the triples with
+            // predicate
+            // `@en@rdfs:label` etc. The probably easiest way to fix this is to
+            // exclude these triples from those permutations (they are only
+            // relevant for queries with a fixed subject), but then we would
+            // need to make sure, that we don't accidentally break the language
+            // filters for queries like
+            // `<fixedSubject> @en@rdfs:label ?labels`, for which the best
+            // query plan potentially goes through the `SPO` relation.
+            // Alternatively we would have to write an additional number
+            // `numNonAddedTriples` to the `IndexMetaData` which would further
+            // increase their size.
+            // TODO<joka921> Discuss this with Hannah.
+            table.emplace_back();
+            table(table.size() - 1, 0) = id;
+            if (numCounts == 1) {
+              table(table.size() - 1, 1) = count;
+            }
+          }
+          *idTable = table.moveToDynamic();
+        };
+
+        getExecutionContext()->getIndex().getPimpl().applyToPermutation(
+            permutation.value(), applyForPermutation);
+      };
+  ad_utility::callFixedSize(numCols, doComputationForNumberOfColumns,
+                            &result->_idTable);
+
+  // TODO<joka921> This optimization should probably also apply if
+  // the query is `SELECT DISTINCT ?s WHERE {?s ?p ?o} ` without a
+  // GROUP BY, but that needs to be implemented in the `DISTINCT` operation.
   return true;
 }
 
 // _____________________________________________________________________________
 std::optional<Index::Permutation> GroupBy::getPermutationForThreeVariableTriple(
-    const QueryExecutionTree* tree, const Variable& variableByWhichToSort,
+    const QueryExecutionTree& tree, const Variable& variableByWhichToSort,
     const Variable& variableThatMustBeContained) {
   auto indexScan =
-      dynamic_cast<const IndexScan*>(tree->getRootOperation().get());
+      dynamic_cast<const IndexScan*>(tree.getRootOperation().get());
 
   if (!indexScan || indexScan->getResultWidth() != 3) {
     return std::nullopt;
@@ -423,10 +549,10 @@ std::optional<GroupBy::OptimizedGroupByData> GroupBy::checkIfJoinWithFullScan(
 
   // TODO<joka921, C++23> Use `optional::or_else`
   auto permutation = getPermutationForThreeVariableTriple(
-      child1, groupByVariable, countedVariable.value());
+      *child1, groupByVariable, countedVariable.value());
   if (!permutation.has_value()) {
     std::swap(child1, child2);
-    permutation = getPermutationForThreeVariableTriple(child1, groupByVariable,
+    permutation = getPermutationForThreeVariableTriple(*child1, groupByVariable,
                                                        countedVariable.value());
   }
   if (!permutation.has_value()) {
@@ -506,6 +632,9 @@ bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
       pushRow();
       currentId = id;
       currentCount = 0;
+      // TODO<joka921> This is also not quite correct, we want the cardinality
+      // without the internally added triples, but that is not easy to
+      // retrieve right now.
       currentCardinality = index.getCardinality(id, permutation);
     }
     currentCount += currentCardinality;
@@ -518,6 +647,8 @@ bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
 // _____________________________________________________________________________
 bool GroupBy::computeOptimizedGroupByIfPossible(ResultTable* result) {
   if (computeGroupByForSingleIndexScan(result)) {
+    return true;
+  } else if (computeGroupByForFullIndexScan(result)) {
     return true;
   } else {
     return computeGroupByForJoinWithFullScan(result);
