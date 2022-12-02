@@ -285,6 +285,9 @@ void GroupBy::computeResult(ResultTable* result) {
   std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
   LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
 
+  // Add to the local vocabulary from the sub-result.
+  result->_localVocab = subresult->_localVocab;
+
   std::vector<size_t> groupByColumns;
 
   result->_sortedBy = resultSortedOn();
@@ -343,6 +346,7 @@ void GroupBy::computeResult(ResultTable* result) {
   CALL_FIXED_SIZE((std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
                   subresult->_idTable, groupByCols, aggregates,
                   &result->_idTable, subresult.get(), result);
+
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
 }
 

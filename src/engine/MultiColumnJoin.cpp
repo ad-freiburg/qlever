@@ -113,6 +113,11 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
                   &MultiColumnJoin::computeMultiColumnJoin,
                   leftResult->_idTable, rightResult->_idTable, _joinColumns,
                   &result->_idTable);
+
+  // If only one of the two operands has a local vocab, pass it on.
+  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
+      leftResult->_localVocab, rightResult->_localVocab);
+
   LOG(DEBUG) << "MultiColumnJoin result computation done." << endl;
 }
 

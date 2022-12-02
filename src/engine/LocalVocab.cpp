@@ -46,7 +46,7 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(std::string&& word) {
 
 // _____________________________________________________________________________
 const std::string& LocalVocab::getWord(LocalVocabIndex localVocabIndex) const {
-  if (localVocabIndex.get() > idsToWordsMap_.size()) {
+  if (localVocabIndex.get() >= idsToWordsMap_.size()) {
     throw std::runtime_error(absl::StrCat(
         "LocalVocab error: request for word with local vocab index ",
         localVocabIndex.get(), ", but size of local vocab is only ",
