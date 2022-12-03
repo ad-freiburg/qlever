@@ -11,10 +11,10 @@
 #include <initializer_list>
 #include <ostream>
 
-#include "../global/Id.h"
-#include "../util/AllocatorWithLimit.h"
-#include "../util/Log.h"
-#include "../util/UninitializedAllocator.h"
+#include "global/Id.h"
+#include "util/AllocatorWithLimit.h"
+#include "util/Log.h"
+#include "util/UninitializedAllocator.h"
 
 namespace detail {
 // The actual data storage of the Id Tables, basically a wrapper around a
@@ -244,8 +244,8 @@ class IdTableIterator {
  *
  * @tparam COLS The number of columns (> 0 for this implementation)
  * @tparam DATA IdTableVectorWrapper or IdTableViewWrapper (data storage that
+ *              allows access to an (const) Id*)
  * @tparam Allocator The Allocator used
- *allows access to an (const) Id* )
  **/
 template <int COLS, typename DATA, typename Allocator>
 class IdTableImpl {
