@@ -41,7 +41,7 @@ inline Index makeTestIndex() {
   std::fstream f(filename, std::ios_base::out);
   f << dummyKb;
   f.close();
-  std::string indexBasename = "_relationalExpressionTestIndex";
+  std::string indexBasename = "_staticGlobalTestIndex";
   {
     Index index = makeIndexWithTestSettings();
     index.setOnDiskBase(indexBasename);

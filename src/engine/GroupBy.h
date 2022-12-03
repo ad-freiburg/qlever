@@ -196,6 +196,13 @@ class GroupBy : public Operation {
   // `std::nullopt`.
   std::optional<Variable> getVariableForNonDistinctCountOfSingleAlias() const;
 
+  // If this GROUP BY has exactly one alias, and that alias is a
+  // count (can be distinct or not) of a single variable, return that variable
+  // and the distinctness of the count. Else return `std::nullopt`.
+  std::optional<
+      sparqlExpression::SparqlExpressionPimpl::VariableAndDistinctness>
+  getVariableForCountOfSingleAlias() const;
+
   // TODO<joka921> implement optimization when *additional* Variables are
   // grouped.
 

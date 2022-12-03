@@ -693,3 +693,32 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_EQ(ranges[0], internalEntities);
   }
 }
+
+TEST(IndexTest, NumDistinctEntities) {
+  const IndexImpl& index = getQec()->getIndex().getImpl();
+  // Note: Those numbers might change as the triples of the test index in
+  // `IndexTestHelpers.cpp` change.
+  // TODO<joka921> Also check the number of triples and the number of
+  // added things.
+  auto subjects = index.numDistinctSubjects();
+  EXPECT_EQ(subjects.normal_, 3);
+  // All literals with language tags are added subjects.
+  EXPECT_EQ(subjects.internal_, 1);
+
+  auto predicates = index.numDistinctPredicates();
+  EXPECT_EQ(predicates.normal_, 2);
+  // One added predicate is `ql:langtag` and one added predicate for
+  // each combination of predicate+language that is actually used (e.g.
+  // `@en@label`).
+  EXPECT_EQ(predicates.internal_, 2);
+
+  auto objects = index.numDistinctObjects();
+  EXPECT_EQ(objects.normal_, 7);
+  // One added object for each language that is used
+  EXPECT_EQ(objects.internal_, 1);
+
+  auto numTriples = index.numTriples();
+  EXPECT_EQ(numTriples.normal_, 7);
+  // Two added triples for each triple that has an object with a language tag.
+  EXPECT_EQ(numTriples.internal_, 2);
+}

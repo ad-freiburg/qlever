@@ -156,7 +156,7 @@ class MergeVocabularyTest : public ::testing::Test {
 // Test for merge Vocabulary
 TEST_F(MergeVocabularyTest, mergeVocabulary) {
   // mergeVocabulary only gets name of directory and number of files.
-  VocabularyMerger::VocMergeRes res;
+  VocabularyMerger::VocabularyMetaData res;
   {
     VocabularyMerger m;
     auto file = ad_utility::makeOfstream(_basePath + INTERNAL_VOCAB_SUFFIX);
@@ -168,8 +168,11 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   }
 
   // No language tags in text file
-  ASSERT_EQ(res._langPredLowerBound, Id::makeUndefined());
-  ASSERT_EQ(res._langPredUpperBound, Id::makeUndefined());
+  ASSERT_EQ(res.langTaggedPredicates_.begin(), Id::makeUndefined());
+  ASSERT_EQ(res.langTaggedPredicates_.end(), Id::makeUndefined());
+  // Also no internal entities there.
+  ASSERT_EQ(res.internalEntities_.begin(), Id::makeUndefined());
+  ASSERT_EQ(res.internalEntities_.end(), Id::makeUndefined());
   // check that (external) vocabulary has the right form.
   ASSERT_TRUE(
       areBinaryFilesEqual(_pathVocabExp, _basePath + INTERNAL_VOCAB_SUFFIX));
