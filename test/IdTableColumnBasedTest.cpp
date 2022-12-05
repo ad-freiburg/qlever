@@ -2,18 +2,14 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-
-#include "gtest/gtest.h"
-
 #include "engine/IdTableColumnBased.h"
+#include "gtest/gtest.h"
 
 using namespace columnBasedIdTable;
 
-Id I(int i) {
-  return Id::makeFromInt(i);
-}
+Id I(int i) { return Id::makeFromInt(i); }
 
-TEST(IdTableColumnBase, Row) {
+TEST(IdTableColumnBased, Row) {
   Id id1 = Id::makeFromInt(1);
   Id id2 = Id::makeFromInt(2);
   Id id3 = Id::makeFromInt(3);
@@ -32,4 +28,23 @@ TEST(IdTableColumnBase, Row) {
   ASSERT_EQ(I(3), row[2]);
   ASSERT_EQ(I(3), id3);
 
+  // TODO<joka921> Also add tests for static rows and for const rows and for all
+  // member functions.
+}
+
+TEST(IdTableColumnBased, IdTable) {
+  IdTable table;
+  table.setCols(2);
+  table.resize(4);
+  for (size_t i = 0; i < 4; ++i) {
+    table(i, 0) = I(4 - i);
+    table(i, 1) = I(i);
+  }
+
+  std::sort(table.begin(), table.end(),
+            [](const auto& r1, const auto& r2) { return r1[0] < r2[0]; });
+  // Does not yet fulfill the requirements of a random_access_range, but
+  // hopefully we'll get there.
+  // std::ranges::sort(table, [](const auto& r1, const auto& r2) {return r1[0] <
+  // r2[0];});
 }
