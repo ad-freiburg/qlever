@@ -117,6 +117,8 @@ addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
 addLinkAndDiscoverTest(IdTableTest)
 
+addLinkAndDiscoverTest(IdTableColumnBasedTest)
+
 addLinkAndDiscoverTest(TransitivePathTest engine)
 
 addLinkAndDiscoverTest(BatchedPipelineTest)
