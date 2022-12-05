@@ -208,7 +208,7 @@ function processQuery(query) {
 }
 
 function tsep(str) {
-    var spl = str.split('.');
+    var spl = str.toString().split('.');
     var intP = spl[0];
     var frac = spl.length > 1 ? '.' + spl[1] : '';
     var regex = /(\d+)(\d{3})/;
@@ -220,23 +220,23 @@ function tsep(str) {
 
 function handleStatsDisplay() {
     $.getJSON(urlPrefix + "?cmd=stats", function (result) {
-        $("#kbname").html("KB index: <b>" + tsep(result.kbindex) + "</b> ");
-        $("#textname").html("Text index: <b>" + tsep(result.textindex) + "</b> ");
-        $("#ntriples").html("Number of triples: <b>" + tsep(result.noftriples) + "</b> ");
-        $("#nrecords").html("Number of text records: <b>" + tsep(result.nofrecords) + "</b> ");
-        $("#nwo").html("Number of word occurrences: <b>" + tsep(result.nofwordpostings) + "</b> ");
-        $("#neo").html("Number of entity occurrences: <b>" + tsep(result.nofentitypostings) + "</b> ");
+        $("#kbname").html("KB index: <b>" + result["name-index"] + "</b> ");
+        $("#textname").html("Text index: <b>" + result["name-text-index"] + "</b> ");
+        $("#ntriples").html("Number of triples: <b>" + tsep(result["num-triples-normal"]) + "</b> ");
+        $("#nrecords").html("Number of text records: <b>" + tsep(result["num-text-records"]) + "</b> ");
+        $("#nwo").html("Number of word occurrences: <b>" + tsep(result["num-word-occurrences"]) + "</b> ");
+        $("#neo").html("Number of entity occurrences: <b>" + tsep(result["num-entity-occurrences"]) + "</b> ");
 
-        if (result.permutations == "6") {
-            $("#permstats").html("Registered <b>" + result.permutations
+        if (result["num-permutations"] == "6") {
+            $("#permstats").html("Registered <b>" + result["num-permutations"]
                 + "</b> permutations of the KB index."
                 + " &nbsp; #subjects: <b>"
-                + tsep(result.nofsubjects) + "</b>"
+                + tsep(result["num-subjects-normal"]) + "</b>"
                 + " &nbsp; #predicates: <b>"
-                + tsep(result.nofpredicates) + "</b>"
-                + " &nbsp; #objects: <b>" + tsep(result.nofobjects) + "</b>");
+                + tsep(result["num-predicates-normal"]) + "</b>"
+                + " &nbsp; #objects: <b>" + tsep(result["num-objects-normal"]) + "</b>");
         } else {
-            $("#permstats").html("Registered <b>" + result.permutations + "</b> permutations of the KB index.")
+            $("#permstats").html("Registered <b>" + result["num-permutations"] + "</b> permutations of the KB index.")
         }
     });
 }

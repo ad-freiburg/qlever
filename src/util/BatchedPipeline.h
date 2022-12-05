@@ -8,9 +8,10 @@
 #include <future>
 #include <utility>
 
-#include "./Log.h"
-#include "./Timer.h"
-#include "./TupleHelpers.h"
+#include "util/Exception.h"
+#include "util/Log.h"
+#include "util/Timer.h"
+#include "util/TupleHelpers.h"
 
 namespace ad_pipeline {
 
@@ -269,7 +270,12 @@ class BatchedPipeline {
   template <typename It>
   static std::pair<It, It> getBatchRange(It beg, It end, size_t batchSize,
                                          const size_t idx) {
-    batchSize = std::max(size_t(1), size_t((end - beg) / Parallelism));
+    size_t size = end - beg;
+    if (size < Parallelism) {
+      return idx == 0 ? std::pair{beg, end} : std::pair{end, end};
+    }
+    batchSize = size / Parallelism;
+    AD_CHECK(batchSize > 0);
     std::pair<It, It> res;
     res.first = std::min(beg + idx * batchSize, end);
     res.second = idx < Parallelism - 1

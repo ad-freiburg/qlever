@@ -19,18 +19,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [ gcc11, gcc12, clang13, clang14 ]
-        os: [ ubuntu-20.04, ubuntu-22.04 ]
-        warnings: [  "-Wall -Wextra -Werror -fsanitize=address -fno-omit-frame-pointer" ]
-        exclude:
-          - compiler: gcc11
-            os: ubuntu-22.04
-          - compiler: gcc12
-            os: ubuntu-20.04
-          - compiler: clang13
-            os: ubuntu-20.04
-          - compiler: clang14
-            os: ubuntu-20.04
+        compiler: [ gcc11, gcc12, clang13, clang14, clang15-ubsan ]
+        os: [ ubuntu-22.04 ]
+        warnings: [  "-Wall -Wextra -Werror" ]
     runs-on: ${{ matrix.os }}
 
 
@@ -61,6 +52,9 @@ jobs:
     - name: Install clang 14
       run:  sudo apt install clang-14
       if:  matrix.compiler == 'clang14'
+    - name: Install clang 15
+      run:  wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 15 && sudo apt install clang-15
+      if:  matrix.compiler == 'clang15-ubsan'
 
     - name: Python dependencies
       run: sudo apt-get install python3-yaml unzip pkg-config python3-icu

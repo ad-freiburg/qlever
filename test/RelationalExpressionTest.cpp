@@ -12,6 +12,7 @@
 #include "index/Index.h"
 
 using namespace sparqlExpression;
+using namespace ad_utility::testing;
 using ad_utility::source_location;
 using namespace std::literals;
 using enum valueIdComparators::Comparison;

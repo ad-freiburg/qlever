@@ -1,5 +1,5 @@
 
-// Generated from AcceptHeader.g4 by ANTLR 4.9.2
+// Generated from AcceptHeader.g4 by ANTLR 4.11.1
 
 #pragma once
 
@@ -15,47 +15,42 @@ class AcceptHeaderVisitor : public antlr4::tree::AbstractParseTreeVisitor {
   /**
    * Visit parse trees produced by AcceptHeaderParser.
    */
-  virtual antlrcpp::Any visitAccept(
-      AcceptHeaderParser::AcceptContext* context) = 0;
+  virtual std::any visitAccept(AcceptHeaderParser::AcceptContext* context) = 0;
 
-  virtual antlrcpp::Any visitAcceptWithEof(
+  virtual std::any visitAcceptWithEof(
       AcceptHeaderParser::AcceptWithEofContext* context) = 0;
 
-  virtual antlrcpp::Any visitRangeAndParams(
+  virtual std::any visitRangeAndParams(
       AcceptHeaderParser::RangeAndParamsContext* context) = 0;
 
-  virtual antlrcpp::Any visitMediaRange(
+  virtual std::any visitMediaRange(
       AcceptHeaderParser::MediaRangeContext* context) = 0;
 
-  virtual antlrcpp::Any visitType(AcceptHeaderParser::TypeContext* context) = 0;
+  virtual std::any visitType(AcceptHeaderParser::TypeContext* context) = 0;
 
-  virtual antlrcpp::Any visitSubtype(
+  virtual std::any visitSubtype(
       AcceptHeaderParser::SubtypeContext* context) = 0;
 
-  virtual antlrcpp::Any visitAcceptParams(
+  virtual std::any visitAcceptParams(
       AcceptHeaderParser::AcceptParamsContext* context) = 0;
 
-  virtual antlrcpp::Any visitWeight(
-      AcceptHeaderParser::WeightContext* context) = 0;
+  virtual std::any visitWeight(AcceptHeaderParser::WeightContext* context) = 0;
 
-  virtual antlrcpp::Any visitQvalue(
-      AcceptHeaderParser::QvalueContext* context) = 0;
+  virtual std::any visitQvalue(AcceptHeaderParser::QvalueContext* context) = 0;
 
-  virtual antlrcpp::Any visitAcceptExt(
+  virtual std::any visitAcceptExt(
       AcceptHeaderParser::AcceptExtContext* context) = 0;
 
-  virtual antlrcpp::Any visitParameter(
+  virtual std::any visitParameter(
       AcceptHeaderParser::ParameterContext* context) = 0;
 
-  virtual antlrcpp::Any visitToken(
-      AcceptHeaderParser::TokenContext* context) = 0;
+  virtual std::any visitToken(AcceptHeaderParser::TokenContext* context) = 0;
 
-  virtual antlrcpp::Any visitTchar(
-      AcceptHeaderParser::TcharContext* context) = 0;
+  virtual std::any visitTchar(AcceptHeaderParser::TcharContext* context) = 0;
 
-  virtual antlrcpp::Any visitQuotedString(
+  virtual std::any visitQuotedString(
       AcceptHeaderParser::QuotedStringContext* context) = 0;
 
-  virtual antlrcpp::Any visitQuoted_pair(
+  virtual std::any visitQuoted_pair(
       AcceptHeaderParser::Quoted_pairContext* context) = 0;
 };

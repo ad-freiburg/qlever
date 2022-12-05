@@ -308,7 +308,9 @@ const std::string& Index::getTextName() const { return pimpl_->getTextName(); }
 const std::string& Index::getKbName() const { return pimpl_->getKbName(); }
 
 // __________________________________________________________
-size_t Index::getNofTriples() const { return pimpl_->getNofTriples(); }
+Index::NumNormalAndInternal Index::numTriples() const {
+  return pimpl_->numTriples();
+}
 
 // _________________________________________________________
 size_t Index::getNofTextRecords() const { return pimpl_->getNofTextRecords(); }
@@ -324,13 +326,19 @@ size_t Index::getNofEntityPostings() const {
 }
 
 // ______________________________________________________
-size_t Index::getNofSubjects() const { return pimpl_->getNofSubjects(); }
+Index::NumNormalAndInternal Index::numDistinctSubjects() const {
+  return pimpl_->numDistinctSubjects();
+}
 
 // _____________________________________________________
-size_t Index::getNofObjects() const { return pimpl_->getNofObjects(); }
+Index::NumNormalAndInternal Index::numDistinctObjects() const {
+  return pimpl_->numDistinctObjects();
+}
 
 // _____________________________________________________
-size_t Index::getNofPredicates() const { return pimpl_->getNofPredicates(); }
+Index::NumNormalAndInternal Index::numDistinctPredicates() const {
+  return pimpl_->numDistinctPredicates();
+}
 
 // _____________________________________________________
 bool Index::hasAllPermutations() const { return pimpl_->hasAllPermutations(); }
@@ -375,9 +383,4 @@ void Index::scan(const TripleComponent& col0String,
   return pimpl_->applyToPermutation(p, [&](const auto& perm) {
     return pimpl_->scan(col0String, col1String, result, perm, std::move(timer));
   });
-}
-
-// _____________________________________________________
-std::pair<size_t, size_t> Index::getNumTriplesActuallyAndAdded() const {
-  return pimpl_->getNumTriplesActuallyAndAdded();
 }

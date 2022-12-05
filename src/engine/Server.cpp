@@ -75,8 +75,8 @@ void Server::initialize(const string& indexBaseName, bool useText,
   }
 
   _sortPerformanceEstimator.computeEstimatesExpensively(
-      _allocator,
-      _index.getNofTriples() * PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
+      _allocator, _index.numTriples().normalAndInternal_() *
+                      PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
 
   // Set flag.
   _initialized = true;
@@ -574,22 +574,24 @@ json Server::composeErrorResponseJson(
 // _____________________________________________________________________________
 json Server::composeStatsJson() const {
   json result;
-  result["kbindex"] = _index.getKbName();
-  result["permutations"] = (_index.hasAllPermutations() ? 6 : 2);
+  result["name-index"] = _index.getKbName();
+  result["num-permutations"] = (_index.hasAllPermutations() ? 6 : 2);
+  result["num-predicates-normal"] = _index.numDistinctPredicates().normal_;
+  result["num-predicates-internal"] = _index.numDistinctPredicates().internal_;
   if (_index.hasAllPermutations()) {
-    result["nofsubjects"] = _index.getNofSubjects();
-    result["nofpredicates"] = _index.getNofPredicates();
-    result["nofobjects"] = _index.getNofObjects();
+    result["num-subjects-normal"] = _index.numDistinctSubjects().normal_;
+    result["num-subjects-internal"] = _index.numDistinctSubjects().internal_;
+    result["num-objects-normal"] = _index.numDistinctObjects().normal_;
+    result["num-objects-internal"] = _index.numDistinctObjects().internal_;
   }
 
-  auto [actualTriples, addedTriples] = _index.getNumTriplesActuallyAndAdded();
-  result["noftriples"] = _index.getNofTriples();
-  result["nofActualTriples"] = actualTriples;
-  result["nofAddedTriples"] = addedTriples;
-  result["textindex"] = _index.getTextName();
-  result["nofrecords"] = _index.getNofTextRecords();
-  result["nofwordpostings"] = _index.getNofWordPostings();
-  result["nofentitypostings"] = _index.getNofEntityPostings();
+  auto numTriples = _index.numTriples();
+  result["num-triples-normal"] = numTriples.normal_;
+  result["num-triples-internal"] = numTriples.internal_;
+  result["name-text-index"] = _index.getTextName();
+  result["num-text-records"] = _index.getNofTextRecords();
+  result["num-word-occurrences"] = _index.getNofWordPostings();
+  result["num-entity-occurrences"] = _index.getNofEntityPostings();
   return result;
 }
 
