@@ -37,14 +37,36 @@ TEST(IdTableColumnBased, IdTable) {
   table.setCols(2);
   table.resize(4);
   for (size_t i = 0; i < 4; ++i) {
-    table(i, 0) = I(4 - i);
+    table(i, 0) = I(3 - i);
     table(i, 1) = I(i);
   }
 
+  /*
+  auto it = table.begin();
+
+  auto it2 = it;
+
+  (*it2)[0] = I(42);
+  ASSERT_EQ(table(0, 0), I(42));
+
+  ++it2;
+  swap(*it, *it2);
+  ASSERT_EQ(table(1, 0), I(42));
+   */
+
+  /*
   std::sort(table.begin(), table.end(),
             [](const auto& r1, const auto& r2) { return r1[0] < r2[0]; });
+            */
+
+  std::reverse(table.begin(), table.end());
   // Does not yet fulfill the requirements of a random_access_range, but
   // hopefully we'll get there.
   // std::ranges::sort(table, [](const auto& r1, const auto& r2) {return r1[0] <
   // r2[0];});
+
+  for (size_t i = 0; i < 4; ++i) {
+    EXPECT_EQ(table(i, 0), I(i)) << i;
+    EXPECT_EQ(table(i, 1), I(3 - i)) << i;
+  }
 }

@@ -15,7 +15,9 @@
 #include "../util/AllocatorWithLimit.h"
 #include "../util/Log.h"
 #include "../util/UninitializedAllocator.h"
+#include "engine/IdTableColumnBased.h"
 
+#if false
 namespace detail {
 // The actual data storage of the Id Tables, basically a wrapper around a
 // std::vector<Id>
@@ -1095,7 +1097,6 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA, Allocator> {
 };
 
 }  // namespace detail
-
 /// The general IdTable class. Can be modified and owns its data. If COLS > 0,
 /// COLS specifies the compile-time number of columns COLS == 0 means "runtime
 /// number of cols"
@@ -1133,3 +1134,40 @@ template <int COLS, typename Allocator = ad_utility::AllocatorWithLimit<Id>>
 using IdTableView =
     detail::IdTableTemplated<COLS, detail::IdTableViewWrapper<Allocator>,
                              Allocator>;
+}
+
+#endif
+
+/// The general IdTable class. Can be modified and owns its data. If COLS > 0,
+/// COLS specifies the compile-time number of columns COLS == 0 means "runtime
+/// number of cols"
+template <int COLS, typename Allocator = ad_utility::AllocatorWithLimit<Id>>
+using IdTableStatic = columnBasedIdTable::IdTable<COLS, Allocator>;
+
+// This was previously implemented as an alias (`using IdTable =
+// IdTableStatic<0, ...>`). However this did not allow forward declarations, so
+// we now implement `IdTable` as a subclass of `IdTableStatic<0, ...>` that can
+// be implicitly converted to and from `IdTableStatic<0, ...>`.
+class IdTable : public IdTableStatic<0, ad_utility::AllocatorWithLimit<Id>> {
+ public:
+  using Base = IdTableStatic<0, ad_utility::AllocatorWithLimit<Id>>;
+  // Inherit the constructors.
+  using Base::Base;
+
+  IdTable(Base&& b) : Base(std::move(b)) {}
+  IdTable(const Base& b) : Base(b) {}
+
+  IdTable& operator=(const Base& b) {
+    *(static_cast<Base*>(this)) = b;
+    return *this;
+  }
+
+  IdTable& operator=(Base&& b) {
+    *(static_cast<Base*>(this)) = std::move(b);
+    return *this;
+  }
+};
+
+/// A constant view into an IdTable that does not own its data
+template <int COLS, typename Allocator = ad_utility::AllocatorWithLimit<Id>>
+using IdTableView = columnBasedIdTable::IdTable<COLS, Allocator, true>;

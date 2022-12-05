@@ -143,9 +143,7 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
    * @brief A function to copy a row from a to the end of result.
    * @param ia The index of the row in a.
    */
-  auto writeResult = [&result, &a](size_t ia) {
-    result.template push_back(a[ia]);
-  };
+  auto writeResult = [&result, &a](size_t ia) { result.push_back(a[ia]); };
 
   auto checkTimeout = checkTimeoutAfterNCallsFactory();
 
