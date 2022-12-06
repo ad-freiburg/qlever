@@ -21,12 +21,15 @@
 
 namespace columnBasedIdTable {
 
+// TODO<joka921> The NumCols should be `size_t` but that requires several
+// additional changes in the rest of the code.
 template <int NumCols = 0, typename Allocator = std::allocator<Id>,
           bool isView = false>
 class IdTable {
  public:
-  using Column = std::vector<Id, Allocator>;
-  using Columns = std::vector<Column>;
+  static constexpr bool isDynamic = NumCols == 0;
+  // using Column = std::vector<Id, Allocator>;
+  using Columns = std::vector<Id, Allocator>;
 
   using Data = std::conditional_t<isView, const Columns*, Columns>;
 
@@ -35,7 +38,30 @@ class IdTable {
 
  private:
   Data data_;
-  Allocator allocator_{};
+  size_t numCols_ = NumCols;
+  size_t size_ = 0;
+  size_t capacity_ = 0;
+  static constexpr size_t growthFactor = 2;
+
+  void grow(size_t newCapacity) {
+    Columns newData{getAllocator()};
+    newData.resize(newCapacity * cols());
+    size_t sz = std::min(capacity_, newCapacity);
+    for (size_t i = 0; i < cols(); ++i) {
+      std::copy(data().begin() + i * sz, data().begin() + (i + 1) * sz,
+                newData.begin() + i * newCapacity);
+    }
+    capacity_ = newCapacity;
+    data() = std::move(newData);
+  }
+
+  void grow() { grow(std::max(1ul, capacity_ * growthFactor)); }
+
+  void growIfNecessary() {
+    if (size_ == capacity_) {
+      grow();
+    }
+  }
 
  public:
   Columns& data() requires(!isView) { return data_; }
@@ -48,48 +74,61 @@ class IdTable {
     }
   }
 
-  IdTable(int numCols, Allocator allocator) requires(!isView)
-      : allocator_{std::move(allocator)} {
-    if (NumCols != 0) {
+  IdTable(size_t numCols, Allocator allocator) requires(!isView)
+      : data_(Columns(std::move(allocator))), numCols_{numCols} {
+    if constexpr (!isDynamic) {
       AD_CHECK(NumCols == numCols);
-    }
-    data().reserve(numCols);
-    for (int i = 0; i < numCols; ++i) {
-      data().emplace_back(allocator_);
     }
   }
   IdTable(Allocator allocator = {}) requires(!isView)
       : IdTable{NumCols, std::move(allocator)} {};
 
-  IdTable(Data data, Allocator allocator)
-      : data_{std::move(data)}, allocator_{std::move(allocator)} {}
-  size_t size() const { return data().empty() ? 0 : data().at(0).size(); }
-  size_t rows() const { return size(); }
-  size_t cols() const { return data().size(); }
-  // TODO<joka921, C++23> Use the multidimensional subscript operator.
-
-  Id& operator()(size_t row, size_t col) requires(!isView) {
-    return data()[col][row];
+  IdTable(Data data, size_t numCols, size_t size, size_t capacity)
+      : data_{std::move(data)},
+        numCols_{numCols},
+        size_{size},
+        capacity_{capacity} {
+    if constexpr (!isDynamic) {
+      AD_CHECK(numCols == NumCols);
+    }
   }
+
+  // TODO<joka921> Should we keep track of the size manually for better
+  // performance?
+  size_t size() const { return size_; }
+
+  size_t rows() const { return size(); }
+  size_t cols() const {
+    if constexpr (isDynamic) {
+      return numCols_;
+    } else {
+      return NumCols;
+    }
+  }
+
+  // TODO<joka921, C++23> Use the multidimensional subscript operator.
+  Id& operator()(size_t row, size_t col) requires(!isView) {
+    return data()[col * capacity_ + row];
+  }
+
   const Id& operator()(size_t row, size_t col) const {
-    return data()[col][row];
+    return data()[col * capacity_ + row];
   }
 
   void setCols(size_t cols) requires(NumCols == 0) {
     AD_CHECK(size() == 0);
-    data().clear();
-    data().reserve(cols);
-    for (size_t i = 0; i < cols; ++i) {
-      data().emplace_back(allocator_);
+    numCols_ = cols;
+  }
+
+  void resize(size_t numRows) requires(!isView) {
+    grow(numRows);
+    size_ = numRows;
+  }
+
+  void reserve(size_t numRows) requires(!isView) {
+    if (numRows > capacity_) {
+      grow(numRows);
     }
-  }
-
-  void resize(size_t numRows) {
-    std::ranges::for_each(data(), [&](auto& vec) { vec.resize(numRows); });
-  }
-
-  void reserve(size_t numRows) {
-    std::ranges::for_each(data(), [&](auto& vec) { vec.reserve(numRows); });
   }
 
   template <bool isConst>
@@ -130,7 +169,7 @@ class IdTable {
       row.resize(cols());
     }
     for (size_t i = 0; i < cols(); ++i) {
-      row[i] = data()[i].data();
+      row[i] = &operator()(0, i);
     }
     return Row<NumCols, false>{std::move(row)};
   }
@@ -141,7 +180,7 @@ class IdTable {
       row.resize(cols());
     }
     for (size_t i = 0; i < cols(); ++i) {
-      row[i] = data()[i].data();
+      row[i] = &operator()(0, i);
     }
     return Row<NumCols, true>{std::move(row)};
   }
@@ -163,6 +202,8 @@ class IdTable {
   const_iterator cbegin() const { return begin(); }
   const_iterator cend() const { return end(); }
 
+  // TODO<joka921> Should those following function be implemented direcly
+  // via a single templated constructor?
   template <int NewCols>
   requires(NumCols == 0 && !isView) IdTable<NewCols, Allocator> moveToStatic() {
     // TODO<joka921> Some parts of the code currently assume that
@@ -173,34 +214,37 @@ class IdTable {
       setCols(NewCols);
     }
     AD_CHECK(cols() == NewCols || NewCols == 0);
-    return IdTable<NewCols, Allocator>{std::move(data()),
-                                       std::move(allocator_)};
+    return IdTable<NewCols, Allocator>{std::move(data()), cols(), size(),
+                                       capacity_};
   }
 
   IdTable<0, Allocator> moveToDynamic() requires(!isView) {
-    return IdTable<0, Allocator>{std::move(data()), std::move(allocator_)};
+    return IdTable<0, Allocator>{std::move(data()), numCols_, size(),
+                                 capacity_};
   }
 
-  template <int NewCols>
+  template <size_t NewCols>
   requires(NumCols == 0 &&
            !isView) IdTable<NewCols, Allocator, true> asStaticView()
   const {
     // TODO<joka921> It shouldn't be necessary to store an allocator in a view.
-    return IdTable<NewCols, Allocator, true>{&data(), allocator_};
+    return IdTable<NewCols, Allocator, true>{&data(), numCols_, size_,
+                                             capacity_};
   }
 
   void emplace_back() requires(!isView) { push_back(); }
 
   void push_back() requires(!isView) {
-    for (auto& col : data()) {
-      col.emplace_back();
-    }
+    growIfNecessary();
+    ++size_;
   }
 
   void push_back(const std::initializer_list<Id>& init) requires(!isView) {
     assert(init.size() == cols());
+    emplace_back();
+    auto sz = size();
     for (size_t i = 0; i < cols(); ++i) {
-      data()[i].push_back(*(init.begin() + i));
+      operator()(sz - 1, i) = *(init.begin() + i);
     }
   }
   template <size_t N>
@@ -210,8 +254,10 @@ class IdTable {
     if constexpr (NumCols == 0) {
       assert(init.size() == cols());
     }
+    emplace_back();
+    auto sz = size();
     for (size_t i = 0; i < cols(); ++i) {
-      data()[i].push_back(*(init.begin() + i));
+      operator()(sz - 1, i) = *(init.begin() + i);
     }
   }
 
@@ -219,7 +265,8 @@ class IdTable {
     emplace_back();
     *(end() - 1) = el;
   }
-  // TODO<joka921> Is this efficient, what else should we use?
+  // TODO<joka921> Is this efficient, should other functions be used, or should
+  //  this be implemented differently? Let the `Row` class converge first.
   void push_back(const const_row_type& el) requires(!isView) {
     emplace_back();
     *(end() - 1) = el;
@@ -231,30 +278,45 @@ class IdTable {
 
   auto operator[](size_t index) const { return *(begin() + index); }
 
+  // TODO<joka921> This operator is rather inefficient, possibly the
+  // tests should use something different.
   bool operator==(const IdTable& other) const requires(!isView) {
-    return data() == other.data();
+    if (cols() != other.cols()) {
+      return false;
+    }
+    for (size_t i = 0; i < rows(); ++i) {
+      for (size_t j = 0; j < cols(); ++j) {
+        if ((*this)(i, j) != other(i, j)) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   void clear() requires(!isView) {
-    // Note: It is important to only clear the columns and to keep the empty
-    // columns, s.t. the number of columns stays the same.
-    std::ranges::for_each(data(), &Column::clear);
+    // Actually keep the memory.
+    // TODO<joka921> Should we implement and use `shrink_to_fit`?
+    size_ = 0;
   }
 
-  Allocator& getAllocator() requires(!isView) { return allocator_; }
-
-  const Allocator& getAllocator() const { return allocator_; }
+  Allocator getAllocator() const { return data().get_allocator(); }
 
   IdTable<NumCols, Allocator, false> clone() const {
-    return IdTable<NumCols, Allocator, false>{data(), getAllocator()};
+    return IdTable<NumCols, Allocator, false>{data(), numCols_, size_,
+                                              capacity_};
   }
 
   void erase(const iterator& beginIt, const iterator& endIt) requires(!isView) {
     auto startIndex = beginIt - begin();
     auto endIndex = endIt - begin();
-    for (auto& column : data()) {
-      column.erase(column.begin() + startIndex, column.begin() + endIndex);
+    // TODO<joka921> Factor out variables, comment and test.
+    for (size_t i = 0; i < cols(); ++i) {
+      std::shift_left(data().begin() + i * capacity_ + startIndex,
+                      data().begin() + (i + 1) * capacity_,
+                      endIndex - startIndex);
     }
+    size_ -= endIndex - startIndex;
   }
 
   void erase(const iterator& it) requires(!isView) { erase(it, it + 1); }

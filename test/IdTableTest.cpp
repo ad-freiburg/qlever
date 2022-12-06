@@ -27,10 +27,6 @@ TEST(IdTableTest, push_back_and_assign) {
   constexpr size_t NUM_ROWS = 30;
   constexpr size_t NUM_COLS = 4;
 
-  /*
-  IdTable t1(allocator());
-  t1.setCols(NUM_COLS);
-   */
   IdTable t1{NUM_COLS, allocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
