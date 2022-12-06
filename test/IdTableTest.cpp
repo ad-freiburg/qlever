@@ -364,7 +364,7 @@ TEST(IdTableStaticTest, insert) {
     for (size_t j = 0; j < init.cols(); j++) {
       EXPECT_EQ(init(i, j), t2(i, j)) << i << ", " << j;
     }
-    EXPECT_EQ(init[i], t2[i]);
+    EXPECT_EQ(init[i], t2[i]) << i << "th row was a mismatch";
   }
   for (size_t i = 0; i < t1.size(); i++) {
     ASSERT_EQ(t1[i], t2[i + init.size()]);

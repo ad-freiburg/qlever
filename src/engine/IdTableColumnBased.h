@@ -81,7 +81,7 @@ class Row {
 
   template <typename T>
   Row& copyAssignImpl(const T& other) requires(!isConst) {
-    auto applyOnVectors = [this](auto& target, const auto& src) {
+    auto applyOnVectors = [this, &other](auto& target, const auto& src) {
       (void)this;
       // TODO<joka921> This loses information if `this` points to references.
       // But this would anyway be a bug.
@@ -91,7 +91,7 @@ class Row {
         target.resize(src.size());
       }
       for (size_t i = 0; i < src.size(); ++i) {
-        get(target[i]) = get(src[i]);
+        get(target[i]) = other.get(src[i]);
       }
     };
     std::visit(applyOnVectors, data_, other.data_);
@@ -112,13 +112,13 @@ class Row {
   struct CopyConstructTag {};
   template <typename T>
   Row(const T& other, CopyConstructTag) : Row(other.cols()) {
-    auto applyOnVectors = [this](auto& target, const auto& src) {
+    auto applyOnVectors = [this, &other](auto& target, const auto& src) {
       void(this);
       for (size_t i = 0; i < src.size(); ++i) {
         if constexpr (!std::is_same_v<
                           std::remove_reference_t<decltype(target[i])>,
                           const Id*>) {
-          get(target[i]) = get(src[i]);
+          get(target[i]) = other.get(src[i]);
         }
         // TODO<joka921> Else AD_FAIL()
       }
@@ -175,7 +175,8 @@ template <int NumCols = 0,
           bool isView = false>
 class IdTable {
  public:
-  using Columns = std::vector<std::vector<Id, ActualAllocator>>;
+  using Column = std::vector<Id, ActualAllocator>;
+  using Columns = std::vector<Column>;
 
   using Data = std::conditional_t<isView, const Columns*, Columns>;
 
@@ -225,7 +226,8 @@ class IdTable {
   }
 
   void setCols(size_t cols) requires(NumCols == 0) {
-    AD_CHECK(data().empty());
+    AD_CHECK(size() == 0);
+    data().clear();
     data().reserve(cols);
     for (size_t i = 0; i < cols; ++i) {
       data().emplace_back(allocator_);
@@ -309,6 +311,14 @@ class IdTable {
   template <int NewCols>
   requires(NumCols == 0 &&
            !isView) IdTable<NewCols, ActualAllocator> moveToStatic() {
+    // TODO<joka921> Some parts of the code currently assume that
+    // calling `moveToStatic<K>` for `K != 0` and an empty input is fine
+    // without explicitly specifying the number of columns in a previous call
+    // to `setCols`.
+    if (size() == 0 && NewCols != 0) {
+      setCols(NewCols);
+    }
+    AD_CHECK(cols() == NewCols || NewCols == 0);
     return IdTable<NewCols, ActualAllocator>{std::move(data()),
                                              std::move(allocator_)};
   }
@@ -372,7 +382,12 @@ class IdTable {
     return data() == other.data();
   }
 
-  void clear() requires(!isView) { data().clear(); }
+  void clear() requires(!isView)
+  {
+    // Note: It is important to only clear the columns and to keep the empty
+    // columns, s.t. the number of columns stays the same.
+    std::ranges::for_each(data(), &Column::clear);
+  }
 
   ActualAllocator& getAllocator() requires(!isView) { return allocator_; }
 
