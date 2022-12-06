@@ -33,8 +33,9 @@ class IdTable {
 
   using Data = std::conditional_t<isView, const Columns*, Columns>;
 
-  using row_type = Row<NumCols, false>;
-  using const_row_type = Row<NumCols, true>;
+  // TODO<joka921> Make clear that there are value rows and reference rows.
+  // using row_type = Row2<IdTable>;
+  using row_type = RowO<NumCols>;
 
  private:
   Data data_;
@@ -133,36 +134,28 @@ class IdTable {
 
   template <bool isConst>
   struct IteratorHelper {
-    using R = Row<NumCols, isConst>;
-    R baseRow_;
+    using R = Row2<IdTable, isConst>;
+    using Ptr = std::conditional_t<isConst, const IdTable*, IdTable*>;
+    Ptr table_;
 
     // The default constructor constructs an invalid iterator that may not
     // be dereferenced. It is however required by several algorithms in the
     // STL.
-    IteratorHelper() : baseRow_{NumCols} {}
+    IteratorHelper() = default;
 
-    explicit IteratorHelper(R baseRow)
-        : baseRow_(baseRow, typename R::CloneTag{}, 0) {}
-    auto operator()(auto&&, size_t idx) const {
-      return R{baseRow_, typename R::CloneTag{}, idx};
-    }
-
-    IteratorHelper(const IteratorHelper& other)
-        : baseRow_{other.baseRow_, typename R::CloneTag{}, 0} {}
-    IteratorHelper& operator=(const IteratorHelper& other) {
-      baseRow_.cloneAssign(other.baseRow_);
-      return *this;
-    }
+    explicit IteratorHelper(Ptr table) : table_{table} {}
+    auto operator()(auto&&, size_t idx) const { return R{table_, idx}; }
   };
 
   using iterator =
       ad_utility::IteratorForAccessOperator<IdTable, IteratorHelper<false>,
-                                            false>;
-
+                                            false, RowO<NumCols>,
+                                            Row2<IdTable, false>>;
   using const_iterator =
-      ad_utility::IteratorForAccessOperator<IdTable, IteratorHelper<true>,
-                                            true>;
+      ad_utility::IteratorForAccessOperator<IdTable, IteratorHelper<true>, true,
+                                            RowO<NumCols>, Row2<IdTable, true>>;
 
+  /*
   auto getBaseRow() requires(!isView) {
     typename Row<NumCols, false>::Ref row;
     if constexpr (NumCols == 0) {
@@ -184,19 +177,17 @@ class IdTable {
     }
     return Row<NumCols, true>{std::move(row)};
   }
+   */
 
   iterator begin() requires(!isView) {
-    return {this, 0, IteratorHelper<false>{getBaseRow()}};
+    return {this, 0, IteratorHelper<false>{this}};
   }
   iterator end() requires(!isView) {
-    return {this, size(), IteratorHelper<false>{getBaseRow()}};
+    return {this, size(), IteratorHelper<false>{this}};
   }
-
-  const_iterator begin() const {
-    return {this, 0, IteratorHelper<true>{getBaseRow()}};
-  }
+  const_iterator begin() const { return {this, 0, IteratorHelper<true>{this}}; }
   const_iterator end() const {
-    return {this, size(), IteratorHelper<true>{getBaseRow()}};
+    return {this, size(), IteratorHelper<true>{this}};
   }
 
   const_iterator cbegin() const { return begin(); }
@@ -261,16 +252,22 @@ class IdTable {
     }
   }
 
-  void push_back(const row_type& el) requires(!isView) {
+  template <typename T, bool isConst>
+  void push_back(const Row2<T, isConst>& el) requires(!isView) {
+    // TODO<joka921> Assert that there is the right number of columns.
     emplace_back();
-    *(end() - 1) = el;
+    for (size_t i = 0; i < cols(); ++i) {
+      (*this)(size() - 1, i) = el[i];
+    }
   }
+  /*
   // TODO<joka921> Is this efficient, should other functions be used, or should
   //  this be implemented differently? Let the `Row` class converge first.
   void push_back(const const_row_type& el) requires(!isView) {
     emplace_back();
     *(end() - 1) = el;
   }
+   */
 
   // TODO<joka921> Should we keep those interfaces? Are they efficient?
   // Or just used in unit tests for convenience?

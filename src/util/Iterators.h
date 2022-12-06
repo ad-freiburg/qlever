@@ -37,16 +37,20 @@ using AccessViaBracketOperator = decltype(accessViaBracketOperator);
  * `LambdaHelpers.h`.
  */
 template <typename RandomAccessContainer,
-          typename Accessor = AccessViaBracketOperator, bool IsConst = true>
+          typename Accessor = AccessViaBracketOperator, bool IsConst = true,
+          typename ValueType = void, typename Reference = void>
 class IteratorForAccessOperator {
  public:
   using iterator_category = std::random_access_iterator_tag;
   using difference_type = int64_t;
   using index_type = uint64_t;
-  using value_type = std::remove_reference_t<
-      std::invoke_result_t<Accessor, const RandomAccessContainer&, index_type>>;
+  using value_type = std::conditional_t<
+      !std::is_void_v<ValueType>, ValueType,
+      std::remove_reference_t<std::invoke_result_t<
+          Accessor, const RandomAccessContainer&, index_type>>>;
   using pointer = value_type*;
-  using reference = value_type&;
+  using reference =
+      std::conditional_t<!std::is_void_v<Reference>, Reference, value_type&>;
 
  private:
   using RandomAccessContainerPtr =
