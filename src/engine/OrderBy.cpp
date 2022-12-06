@@ -96,13 +96,17 @@ void OrderBy::computeResult(ResultTable* result) {
   }
 
   LOG(DEBUG) << "OrderBy result computation..." << endl;
-  result->_idTable.setCols(subRes->_idTable.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
+
+  result->_idTable = subRes->_idTable.clone();
+  /*
+  result->_idTable.setCols(subRes->_idTable.cols());
   result->_idTable.insert(result->_idTable.end(), subRes->_idTable.begin(),
                           subRes->_idTable.end());
+                          */
 
   int width = result->_idTable.cols();
 

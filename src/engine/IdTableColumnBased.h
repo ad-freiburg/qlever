@@ -154,6 +154,7 @@ class Row {
   bool operator==(const Row other) const {
     auto applyOnVectors = [this, &other](auto& a, auto& b) {
       // TODO<joka921> not needed for the dynamic case.
+      (void)this;
       if (a.size() != b.size()) {
         return false;
       }
@@ -164,7 +165,7 @@ class Row {
       }
       return true;
     };
-    std::visit(applyOnVectors, data_, other.data_);
+    return std::visit(applyOnVectors, data_, other.data_);
   }
 };
 
@@ -173,9 +174,13 @@ template <int NumCols = 0,
               ad_utility::default_init_allocator<Id, std::allocator<Id>>,
           bool isView = false>
 class IdTable {
+ public:
   using Columns = std::vector<std::vector<Id, ActualAllocator>>;
 
   using Data = std::conditional_t<isView, const Columns*, Columns>;
+
+  using row_type = Row<NumCols, false>;
+  using const_row_type = Row<NumCols, true>;
 
  private:
   Data data_;
@@ -192,19 +197,23 @@ class IdTable {
     }
   }
 
-  IdTable(ActualAllocator allocator = {}) requires(!isView)
-      : allocator_{std::move(allocator)} {};
   IdTable(int numCols, ActualAllocator allocator) requires(!isView)
       : allocator_{std::move(allocator)} {
+    if (NumCols != 0) {
+      AD_CHECK(NumCols == numCols);
+    }
     data().reserve(numCols);
     for (int i = 0; i < numCols; ++i) {
-      data().emplace_back(allocator);
+      data().emplace_back(allocator_);
     }
   }
+  IdTable(ActualAllocator allocator = {}) requires(!isView)
+      : IdTable{NumCols, std::move(allocator)} {};
 
   IdTable(Data data, ActualAllocator allocator)
       : data_{std::move(data)}, allocator_{std::move(allocator)} {}
   size_t size() const { return data().empty() ? 0 : data().at(0).size(); }
+  size_t rows() const { return size(); }
   size_t cols() const { return data().size(); }
   // TODO<joka921, C++23> Use the multidimensional subscript operator.
 
@@ -258,7 +267,7 @@ class IdTable {
       ad_utility::IteratorForAccessOperator<IdTable, IteratorHelper<true>,
                                             true>;
 
-  auto getBaseRow() {
+  auto getBaseRow() requires(!isView) {
     typename Row<NumCols, false>::Ref row;
     if constexpr (NumCols == 0) {
       row.resize(cols());
@@ -280,8 +289,12 @@ class IdTable {
     return Row<NumCols, true>{std::move(row)};
   }
 
-  iterator begin() { return {this, 0, IteratorHelper<false>{getBaseRow()}}; }
-  iterator end() { return {this, size(), IteratorHelper<false>{getBaseRow()}}; }
+  iterator begin() requires(!isView) {
+    return {this, 0, IteratorHelper<false>{getBaseRow()}};
+  }
+  iterator end() requires(!isView) {
+    return {this, size(), IteratorHelper<false>{getBaseRow()}};
+  }
 
   const_iterator begin() const {
     return {this, 0, IteratorHelper<true>{getBaseRow()}};
@@ -294,18 +307,20 @@ class IdTable {
   const_iterator cend() const { return cend(); }
 
   template <int NewCols>
-  requires(NumCols == 0) IdTable<NewCols, ActualAllocator> moveToStatic() {
+  requires(NumCols == 0 &&
+           !isView) IdTable<NewCols, ActualAllocator> moveToStatic() {
     return IdTable<NewCols, ActualAllocator>{std::move(data()),
                                              std::move(allocator_)};
   }
 
-  IdTable<0, ActualAllocator> moveToDynamic() {
+  IdTable<0, ActualAllocator> moveToDynamic() requires(!isView) {
     return IdTable<0, ActualAllocator>{std::move(data()),
                                        std::move(allocator_)};
   }
 
   template <int NewCols>
-  requires(NumCols == 0) IdTable<NewCols, ActualAllocator, true> asStaticView()
+  requires(NumCols == 0 &&
+           !isView) IdTable<NewCols, ActualAllocator, true> asStaticView()
   const {
     // TODO<joka921> It shouldn't be necessary to store an allocator in a view.
     return IdTable<NewCols, ActualAllocator, true>{&data(), allocator_};
@@ -325,21 +340,68 @@ class IdTable {
       data()[i].push_back(*(init.begin() + i));
     }
   }
+  template <size_t N>
+  void push_back(const std::array<Id, N>& init) requires(!isView &&
+                                                         (NumCols == 0 ||
+                                                          NumCols == N)) {
+    if constexpr (NumCols == 0) {
+      assert(init.size() == cols());
+    }
+    for (size_t i = 0; i < cols(); ++i) {
+      data()[i].push_back(*(init.begin() + i));
+    }
+  }
 
+  void push_back(const row_type& el) requires(!isView) {
+    emplace_back();
+    *(end() - 1) = el;
+  }
   // TODO<joka921> Is this efficient, what else should we use?
-  void push_back(const Row<NumCols, false>& el) {
+  void push_back(const const_row_type& el) requires(!isView) {
     emplace_back();
     *(end() - 1) = el;
   }
 
   // TODO<joka921> Should we keep those interfaces? Are they efficient?
   // Or just used in unit tests for convenience?
-  auto operator[](size_t index) { return *(begin() + index); }
+  auto operator[](size_t index) requires(!isView) { return *(begin() + index); }
 
   auto operator[](size_t index) const { return *(begin() + index); }
 
   bool operator==(const IdTable& other) const requires(!isView) {
     return data() == other.data();
+  }
+
+  void clear() requires(!isView) { data().clear(); }
+
+  ActualAllocator& getAllocator() requires(!isView) { return allocator_; }
+
+  const ActualAllocator& getAllocator() const { return allocator_; }
+
+  IdTable<NumCols, ActualAllocator, false> clone() const {
+    return IdTable<NumCols, ActualAllocator, false>{data(), getAllocator()};
+  }
+
+  void erase(const iterator& beginIt, const iterator& endIt) requires(!isView) {
+    auto startIndex = beginIt - begin();
+    auto endIndex = endIt - begin();
+    for (auto& column : data()) {
+      column.erase(column.begin() + startIndex, column.begin() + endIndex);
+    }
+  }
+
+  void erase(const iterator& it) requires(!isView) { erase(it, it + 1); }
+
+  // TODO<joka921> Insert can be done much more efficient when handled
+  // columnwise (also with arbitrary iterators). But that probably needs more
+  // cooperation from the iterators.
+  // TODO<joka921> The parameters are currently `auto` because the iterators
+  // of views and materialized tables have different types. This should
+  // be constrained to an efficient implementation.
+  void insertAtEnd(auto begin, auto end) {
+    for (; begin != end; ++begin) {
+      push_back(*begin);
+    }
   }
 };
 

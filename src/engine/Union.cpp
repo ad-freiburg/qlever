@@ -192,12 +192,12 @@ void Union::computeUnion(
     // always copy chunkSize results at once and then check for a timeout
     size_t numChunks = inputTable.size() / chunkSize;
     for (size_t i = 0; i < numChunks; ++i) {
-      res.insert(res.end(), inputTable.begin() + i * chunkSize,
-                 inputTable.begin() + (i + 1) * chunkSize);
+      res.insertAtEnd(inputTable.begin() + i * chunkSize,
+                      inputTable.begin() + (i + 1) * chunkSize);
       checkTimeout();
     }
-    res.insert(res.end(), inputTable.begin() + numChunks * chunkSize,
-               inputTable.end());
+    res.insertAtEnd(inputTable.begin() + numChunks * chunkSize,
+                    inputTable.end());
   };
 
   auto columnsMatch = [&columnOrigins](const auto& inputTable,

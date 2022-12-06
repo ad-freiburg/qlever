@@ -152,6 +152,8 @@ class Engine {
     IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
     if (input.size() > 0) {
       AD_CHECK_LE(keepIndices.size(), input.cols());
+      // TODO<joka921> Should we delete copy operations of the new IDtable as
+      // well.
       result = input.clone();
 
       auto last = std::unique(result.begin(), result.end(),

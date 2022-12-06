@@ -86,53 +86,54 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
   const auto input = inputResultTable._idTable.asStaticView<WIDTH>();
   auto output = outputResultTable->_idTable.moveToStatic<WIDTH>();
 
-  auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
-                     T&& singleResult) {
-    if constexpr (std::is_same_v<T, sparqlExpression::VectorWithMemoryLimit<
-                                        sparqlExpression::Bool>>) {
-      AD_CHECK(singleResult.size() == input.size());
-      auto totalSize =
-          std::accumulate(singleResult.begin(), singleResult.end(), 0ul);
-      output.reserve(totalSize);
-      for (size_t i = 0; i < singleResult.size(); ++i) {
-        if (singleResult[i]) {
-          output.push_back(input[i]);
-        }
-      }
-      AD_CHECK_EQ(output.size(), totalSize);
-    } else if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
-      auto totalSize = std::accumulate(
-          singleResult._intervals.begin(), singleResult._intervals.end(), 0ul,
-          [](const auto& sum, const auto& interval) {
-            return sum + (interval.second - interval.first);
-          });
-      output.reserve(totalSize);
-      for (auto [beg, end] : singleResult._intervals) {
-        AD_CHECK(end <= input.size());
-        output.insert(output.end(), input.begin() + beg, input.begin() + end);
-      }
-      AD_CHECK_EQ(output.size(), totalSize);
-    } else {
-      // Default case for all other types. We currently implicitly convert all
-      // kinds of results (strings, doubles, ints) to bools inside a FILTER.
-      // TODO<joka921> Read up in the standard what is correct here, and then
-      // rewrite the expression module with the correct semantics.
-      // TODO<joka921> Check whether it's feasible to precompute and reserve the
-      // total size. This depends on the expensiveness of the
-      // `EffectiveBooleanValueGetter`.
-      auto resultGenerator = sparqlExpression::detail::makeGenerator(
-          std::forward<T>(singleResult), input.size(), &evaluationContext);
-      size_t i = 0;
+  auto visitor =
+      [&]<sparqlExpression::SingleExpressionResult T>(T&& singleResult) {
+        if constexpr (std::is_same_v<T, sparqlExpression::VectorWithMemoryLimit<
+                                            sparqlExpression::Bool>>) {
+          AD_CHECK(singleResult.size() == input.size());
+          auto totalSize =
+              std::accumulate(singleResult.begin(), singleResult.end(), 0ul);
+          output.reserve(totalSize);
+          for (size_t i = 0; i < singleResult.size(); ++i) {
+            if (singleResult[i]) {
+              output.push_back(input[i]);
+            }
+          }
+          AD_CHECK_EQ(output.size(), totalSize);
+        } else if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
+          auto totalSize = std::accumulate(
+              singleResult._intervals.begin(), singleResult._intervals.end(),
+              0ul, [](const auto& sum, const auto& interval) {
+                return sum + (interval.second - interval.first);
+              });
+          output.reserve(totalSize);
+          for (auto [beg, end] : singleResult._intervals) {
+            AD_CHECK(end <= input.size());
+            output.insertAtEnd(input.cbegin() + beg, input.cbegin() + end);
+          }
+          AD_CHECK_EQ(output.size(), totalSize);
+        } else {
+          // Default case for all other types. We currently implicitly convert
+          // all kinds of results (strings, doubles, ints) to bools inside a
+          // FILTER.
+          // TODO<joka921> Read up in the standard what is correct here, and
+          // then rewrite the expression module with the correct semantics.
+          // TODO<joka921> Check whether it's feasible to precompute and reserve
+          // the total size. This depends on the expensiveness of the
+          // `EffectiveBooleanValueGetter`.
+          auto resultGenerator = sparqlExpression::detail::makeGenerator(
+              std::forward<T>(singleResult), input.size(), &evaluationContext);
+          size_t i = 0;
 
-      for (auto&& resultValue : resultGenerator) {
-        if (sparqlExpression::detail::EffectiveBooleanValueGetter{}(
-                resultValue, &evaluationContext)) {
-          output.push_back(input[i]);
+          for (auto&& resultValue : resultGenerator) {
+            if (sparqlExpression::detail::EffectiveBooleanValueGetter{}(
+                    resultValue, &evaluationContext)) {
+              output.push_back(input[i]);
+            }
+            ++i;
+          }
         }
-        ++i;
-      }
-    }
-  };
+      };
 
   std::visit(visitor, std::move(expressionResult));
 

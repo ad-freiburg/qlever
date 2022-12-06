@@ -358,7 +358,8 @@ void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
       scan(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
-      appendCrossProduct(jr.begin(), jr.end(), joinItemFrom, joinItemEnd, res);
+      appendCrossProduct(jr.cbegin(), jr.cend(), joinItemFrom, joinItemEnd,
+                         res);
       // Reset
       currentJoinId = ndr(i, _rightJoinCol);
       joinItemFrom = joinItemEnd;
@@ -371,7 +372,7 @@ void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
   scan(currentJoinId, &jr);
   LOG(TRACE) << "Got #items: " << jr.size() << endl;
   // Build the cross product.
-  appendCrossProduct(jr.begin(), jr.end(), joinItemFrom, joinItemEnd, res);
+  appendCrossProduct(jr.cbegin(), jr.cend(), joinItemFrom, joinItemEnd, res);
 }
 
 // _____________________________________________________________________________
@@ -402,7 +403,8 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
       scan(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
-      appendCrossProduct(joinItemFrom, joinItemEnd, jr.begin(), jr.end(), res);
+      appendCrossProduct(joinItemFrom, joinItemEnd, jr.cbegin(), jr.cend(),
+                         res);
       // Reset
       currentJoinId = ndr[i][_leftJoinCol];
       joinItemFrom = joinItemEnd;
@@ -415,7 +417,7 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
   scan(currentJoinId, &jr);
   LOG(TRACE) << "Got #items: " << jr.size() << endl;
   // Build the cross product.
-  appendCrossProduct(joinItemFrom, joinItemEnd, jr.begin(), jr.end(), res);
+  appendCrossProduct(joinItemFrom, joinItemEnd, jr.cbegin(), jr.cend(), res);
 }
 
 // _____________________________________________________________________________
@@ -505,11 +507,11 @@ void Join::appendCrossProduct(const IdTable::const_iterator& leftBegin,
       const auto& r = *itr;
       res->push_back();
       size_t backIdx = res->size() - 1;
-      for (size_t i = 0; i < itl.cols(); i++) {
+      for (size_t i = 0; i < l.cols(); i++) {
         (*res)(backIdx, i) = l[i];
       }
-      for (size_t i = 0; i < itr.cols(); i++) {
-        (*res)(backIdx, itl.cols() + i) = r[i];
+      for (size_t i = 0; i < r.cols(); i++) {
+        (*res)(backIdx, l.cols() + i) = r[i];
       }
     }
   }
@@ -657,7 +659,7 @@ void Join::doGallopInnerJoin(const TagType, const IdTableView<L_WIDTH>& l1,
         // We stepped over the location where l1 and l2 may be equal.
         // Use binary search to locate that spot
         const Id needle = l1(i, jc1);
-        j = std::lower_bound(l2.begin() + last, l2.begin() + j, needle,
+        j = std::lower_bound(l2.cbegin() + last, l2.cbegin() + j, needle,
                              [jc2](const auto& l, const Id needle) -> bool {
                                return l[jc2] < needle;
                              }) -

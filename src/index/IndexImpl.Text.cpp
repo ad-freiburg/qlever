@@ -984,7 +984,7 @@ void IndexImpl::getFilteredECListForWords(const string& words,
                                                      filter.getAllocator())))
                  .first;
       }
-      it->second.push_back(filter, i);
+      it->second.push_back(filter[i]);
     }
     vector<TextRecordIndex> cids;
     vector<Id> eids;
