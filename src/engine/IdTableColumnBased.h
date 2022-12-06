@@ -7,175 +7,25 @@
 #include <array>
 #include <cassert>
 #include <cstdlib>
-#include <cstring>
 #include <functional>
 #include <initializer_list>
-#include <ostream>
 #include <variant>
+#include <vector>
 
-#include "../global/Id.h"
-#include "../util/AllocatorWithLimit.h"
-#include "../util/Log.h"
-#include "../util/UninitializedAllocator.h"
+#include "engine/idTable/ColumnBasedRow.h"
+#include "global/Id.h"
+#include "util/AllocatorWithLimit.h"
 #include "util/Iterators.h"
 #include "util/LambdaHelpers.h"
+#include "util/UninitializedAllocator.h"
 
 namespace columnBasedIdTable {
 
-template <int NumCols = 0, bool isConst = false>
-class Row {
- public:
-  static constexpr bool isDynamic() { return NumCols == 0; }
-  using Ptr = std::conditional_t<isConst, const Id*, Id*>;
-  using Storage =
-      std::conditional_t<isDynamic(), std::vector<Id>, std::array<Id, NumCols>>;
-  using Ref = std::conditional_t<isDynamic(), std::vector<Ptr>,
-                                 std::array<Ptr, NumCols>>;
-  using V = std::variant<Storage, Ref>;
-
- private:
-  V data_;
-  size_t offset_ = 0;
-  Id& get(Id& i) { return i; }
-  Id& get(Id* i) { return *(i + offset_); }
-  const Id& get(const Id& i) const { return i; }
-  const Id& get(const Id* i) const { return *(i + offset_); }
-
-  static Storage initStorage(size_t numCols) {
-    if constexpr (isDynamic()) {
-      return Storage(numCols);
-    } else {
-      return Storage{};
-    }
-  }
-
- public:
-  explicit Row(size_t numCols) : data_{initStorage(numCols)} {}
-  Row() requires(!isDynamic()) = default;
-  Row(Ref ids) : data_{std::move(ids)} {}
-  bool storesElements() const { return std::holds_alternative<Storage>(data_); }
-
-  void setOffset(size_t offset) { offset_ = offset; }
-  Id& operator[](size_t idx) requires(!isConst) {
-    return std::visit(
-        [idx, this](auto& vec) -> decltype(auto) {
-          void(this);
-          return get(vec[idx]);
-        },
-        data_);
-  }
-
-  const Id& operator[](size_t idx) const {
-    return std::visit(
-        [idx, this](const auto& vec) -> const Id& {
-          void(this);
-          return get(vec[idx]);
-        },
-        data_);
-  }
-
-  size_t size() const {
-    return std::visit([](const auto& vec) { return vec.size(); }, data_);
-  }
-  size_t cols() const { return size(); }
-
-  template <typename T>
-  Row& copyAssignImpl(const T& other) requires(!isConst) {
-    auto applyOnVectors = [this, &other](auto& target, const auto& src) {
-      (void)this;
-      // TODO<joka921> This loses information if `this` points to references.
-      // But this would anyway be a bug.
-      // TODO<joka921> is the resize really necessary? we should already have
-      // the correct amount of columns.
-      if constexpr (isDynamic()) {
-        target.resize(src.size());
-      }
-      for (size_t i = 0; i < src.size(); ++i) {
-        get(target[i]) = other.get(src[i]);
-      }
-    };
-    std::visit(applyOnVectors, data_, other.data_);
-    return *this;
-  }
-
-  template <bool otherIsConst>
-  Row& operator=(const Row<NumCols, otherIsConst>& other) requires(!isConst) {
-    return copyAssignImpl(other);
-  }
-  Row& operator=(const Row& other) requires(!isConst) {
-    return copyAssignImpl(other);
-  }
-
-  template <int otherCols, bool otherIsConst>
-  friend class Row;
-
-  struct CopyConstructTag {};
-  template <typename T>
-  Row(const T& other, CopyConstructTag) : Row(other.cols()) {
-    auto applyOnVectors = [this, &other](auto& target, const auto& src) {
-      void(this);
-      for (size_t i = 0; i < src.size(); ++i) {
-        if constexpr (!std::is_same_v<
-                          std::remove_reference_t<decltype(target[i])>,
-                          const Id*>) {
-          get(target[i]) = other.get(src[i]);
-        }
-        // TODO<joka921> Else AD_FAIL()
-      }
-    };
-    std::visit(applyOnVectors, data_, other.data_);
-  }
-
-  template <bool otherIsConst>
-  Row(const Row<NumCols, otherIsConst>& other)
-      : Row{other, CopyConstructTag{}} {}
-
-  Row(const Row& other) : Row{other, CopyConstructTag{}} {}
-
-  template <ad_utility::SimilarTo<Row> R>
-  friend void swap(R&& a, R&& b) requires(!isConst) {
-    auto applyOnVectors = [&a, &b](auto& target, auto& src) {
-      for (size_t i = 0; i < src.size(); ++i) {
-        std::swap(a.get(target[i]), b.get(src[i]));
-      }
-    };
-    std::visit(applyOnVectors, a.data_, b.data_);
-  }
-
-  struct CloneTag {};
-  Row(const Row& other, CloneTag, size_t offset)
-      : data_{other.data_}, offset_{offset} {}
-  Row& cloneAssign(const Row& other) {
-    data_ = other.data_;
-    offset_ = other.offset_;
-    return *this;
-  }
-
-  bool operator==(const Row other) const {
-    auto applyOnVectors = [this, &other](auto& a, auto& b) {
-      // TODO<joka921> not needed for the dynamic case.
-      (void)this;
-      if (a.size() != b.size()) {
-        return false;
-      }
-      for (size_t i = 0; i < a.size(); ++i) {
-        if (get(a[i]) != other.get(b[i])) {
-          return false;
-        }
-      }
-      return true;
-    };
-    return std::visit(applyOnVectors, data_, other.data_);
-  }
-};
-
-template <int NumCols = 0,
-          typename ActualAllocator =
-              ad_utility::default_init_allocator<Id, std::allocator<Id>>,
+template <int NumCols = 0, typename Allocator = std::allocator<Id>,
           bool isView = false>
 class IdTable {
  public:
-  using Column = std::vector<Id, ActualAllocator>;
+  using Column = std::vector<Id, Allocator>;
   using Columns = std::vector<Column>;
 
   using Data = std::conditional_t<isView, const Columns*, Columns>;
@@ -185,7 +35,7 @@ class IdTable {
 
  private:
   Data data_;
-  ActualAllocator allocator_{};
+  Allocator allocator_{};
 
  public:
   Columns& data() requires(!isView) { return data_; }
@@ -198,7 +48,7 @@ class IdTable {
     }
   }
 
-  IdTable(int numCols, ActualAllocator allocator) requires(!isView)
+  IdTable(int numCols, Allocator allocator) requires(!isView)
       : allocator_{std::move(allocator)} {
     if (NumCols != 0) {
       AD_CHECK(NumCols == numCols);
@@ -208,10 +58,10 @@ class IdTable {
       data().emplace_back(allocator_);
     }
   }
-  IdTable(ActualAllocator allocator = {}) requires(!isView)
+  IdTable(Allocator allocator = {}) requires(!isView)
       : IdTable{NumCols, std::move(allocator)} {};
 
-  IdTable(Data data, ActualAllocator allocator)
+  IdTable(Data data, Allocator allocator)
       : data_{std::move(data)}, allocator_{std::move(allocator)} {}
   size_t size() const { return data().empty() ? 0 : data().at(0).size(); }
   size_t rows() const { return size(); }
@@ -246,6 +96,11 @@ class IdTable {
   struct IteratorHelper {
     using R = Row<NumCols, isConst>;
     R baseRow_;
+
+    // The default constructor constructs an invalid iterator that may not
+    // be dereferenced. It is however required by several algorithms in the
+    // STL.
+    IteratorHelper() : baseRow_{NumCols} {}
 
     explicit IteratorHelper(R baseRow)
         : baseRow_(baseRow, typename R::CloneTag{}, 0) {}
@@ -306,11 +161,10 @@ class IdTable {
   }
 
   const_iterator cbegin() const { return begin(); }
-  const_iterator cend() const { return cend(); }
+  const_iterator cend() const { return end(); }
 
   template <int NewCols>
-  requires(NumCols == 0 &&
-           !isView) IdTable<NewCols, ActualAllocator> moveToStatic() {
+  requires(NumCols == 0 && !isView) IdTable<NewCols, Allocator> moveToStatic() {
     // TODO<joka921> Some parts of the code currently assume that
     // calling `moveToStatic<K>` for `K != 0` and an empty input is fine
     // without explicitly specifying the number of columns in a previous call
@@ -319,21 +173,20 @@ class IdTable {
       setCols(NewCols);
     }
     AD_CHECK(cols() == NewCols || NewCols == 0);
-    return IdTable<NewCols, ActualAllocator>{std::move(data()),
-                                             std::move(allocator_)};
+    return IdTable<NewCols, Allocator>{std::move(data()),
+                                       std::move(allocator_)};
   }
 
-  IdTable<0, ActualAllocator> moveToDynamic() requires(!isView) {
-    return IdTable<0, ActualAllocator>{std::move(data()),
-                                       std::move(allocator_)};
+  IdTable<0, Allocator> moveToDynamic() requires(!isView) {
+    return IdTable<0, Allocator>{std::move(data()), std::move(allocator_)};
   }
 
   template <int NewCols>
   requires(NumCols == 0 &&
-           !isView) IdTable<NewCols, ActualAllocator, true> asStaticView()
+           !isView) IdTable<NewCols, Allocator, true> asStaticView()
   const {
     // TODO<joka921> It shouldn't be necessary to store an allocator in a view.
-    return IdTable<NewCols, ActualAllocator, true>{&data(), allocator_};
+    return IdTable<NewCols, Allocator, true>{&data(), allocator_};
   }
 
   void emplace_back() requires(!isView) { push_back(); }
@@ -382,19 +235,18 @@ class IdTable {
     return data() == other.data();
   }
 
-  void clear() requires(!isView)
-  {
+  void clear() requires(!isView) {
     // Note: It is important to only clear the columns and to keep the empty
     // columns, s.t. the number of columns stays the same.
     std::ranges::for_each(data(), &Column::clear);
   }
 
-  ActualAllocator& getAllocator() requires(!isView) { return allocator_; }
+  Allocator& getAllocator() requires(!isView) { return allocator_; }
 
-  const ActualAllocator& getAllocator() const { return allocator_; }
+  const Allocator& getAllocator() const { return allocator_; }
 
-  IdTable<NumCols, ActualAllocator, false> clone() const {
-    return IdTable<NumCols, ActualAllocator, false>{data(), getAllocator()};
+  IdTable<NumCols, Allocator, false> clone() const {
+    return IdTable<NumCols, Allocator, false>{data(), getAllocator()};
   }
 
   void erase(const iterator& beginIt, const iterator& endIt) requires(!isView) {
