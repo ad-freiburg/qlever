@@ -161,4 +161,94 @@ class Row {
   }
 };
 
+// An identical copy to check, whether algorithms accept those differences.
+template <typename Table, bool isConst = false>
+class Row2 {
+ public:
+  using Ptr = std::conditional_t<isConst, const Table*, Table*>;
+ private:
+  Ptr table_ = nullptr;
+  size_t row_ = 0;
+ public:
+  explicit Row2(Ptr table, size_t row) : table_{table}, row_{row} {}
+  Row2() = default;
+  Id& operator[](size_t idx) requires(!isConst) {
+    return (*table_)(row_, idx);
+  }
+
+  const Id& operator[](size_t idx) const {
+    return (*table_)(row_, idx);
+  }
+
+  size_t size() const {
+    return table_->cols();
+  }
+  size_t cols() const { return size(); }
+
+  template <int otherCols, bool otherIsConst>
+  friend class Row2;
+
+  template <ad_utility::SimilarTo<Row2> R>
+  friend void swap(R&& a, R&& b) requires(!isConst) {
+    for (size_t i = 0; i < a.size(); ++i) {
+      std::swap(a[i], b[i]);
+    }
+  }
+
+  bool operator==(const Row2 other) const {
+    for (size_t i = 0; i < size(); ++i) {
+      if ((*this)[i] != other[i]) {
+        return false;
+      }
+      return true;
+    }
+  }
+};
+
+// The row that ALWAYS stores the memory.
+template <int NumCols = 0>
+class RowO {
+ public:
+  static constexpr bool isDynamic() { return NumCols == 0; }
+  using Storage =
+      std::conditional_t<isDynamic(), std::vector<Id>, std::array<Id, NumCols>>;
+
+ private:
+  Storage data_;
+
+  static Storage initStorage(size_t numCols) {
+    if constexpr (isDynamic()) {
+      return Storage(numCols);
+    } else {
+      return Storage{};
+    }
+  }
+
+ public:
+  explicit RowO(size_t numCols) : data_{initStorage(numCols)} {}
+  RowO() requires(!isDynamic()) = default;
+
+  Id& operator[](size_t idx)  {
+    return data_[idx];
+  }
+
+  const Id& operator[](size_t idx) const {
+    return data_[idx];
+  }
+
+  size_t size() const {
+    return data_.size();
+  }
+  size_t cols() const { return size(); }
+
+  template <ad_utility::SimilarTo<RowO> R>
+  friend void swap(R&& a, R&& b) {
+    std::swap(a.data_, b.data_);
+  }
+
+  bool operator==(const RowO other) const {
+    return data_ == other.data_;
+  }
+};
+
 }  // namespace columnBasedIdTable
