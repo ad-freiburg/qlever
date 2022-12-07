@@ -88,7 +88,7 @@ void Bind::computeResult(ResultTable* result) {
   result->_idTable.setCols(getResultWidth());
   result->_resultTypes = subRes->_resultTypes;
   result->_localVocab = subRes->_localVocab;
-  int inwidth = subRes->_idTable.cols();
+  int inwidth = subRes->_idTable.numColumns();
   int outwidth = getResultWidth();
 
   result->_resultTypes.emplace_back();
@@ -126,8 +126,8 @@ void Bind::computeExpressionBind(
   // first initialize the first columns (they remain identical)
   const auto inSize = input.size();
   output.reserve(inSize);
-  const auto inCols = input.cols();
-  // copy the input to the first cols;
+  const auto inCols = input.numColumns();
+  // copy the input to the first numColumns;
   for (size_t i = 0; i < inSize; ++i) {
     output.emplace_back();
     for (size_t j = 0; j < inCols; ++j) {

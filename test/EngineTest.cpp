@@ -36,9 +36,9 @@ TEST(EngineTest, joinTest) {
   b.push_back({I(3), I(1)});
   b.push_back({I(4), I(2)});
   IdTable res(3, allocator());
-  int lwidth = a.cols();
-  int rwidth = b.cols();
-  int reswidth = a.cols() + b.cols() - 1;
+  int lwidth = a.numColumns();
+  int rwidth = b.numColumns();
+  int reswidth = a.numColumns() + b.numColumns() - 1;
   Join J{Join::InvalidOnlyForTestingJoinTag{}};
   CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::join, J, a, 0,
                   b, 0, &res);
@@ -102,9 +102,9 @@ TEST(EngineTest, joinTest) {
   b.push_back({I(1), I(3)});
   b.push_back({I(1), I(4)});
 
-  lwidth = b.cols();
-  rwidth = c.cols();
-  reswidth = b.cols() + c.cols() - 1;
+  lwidth = b.numColumns();
+  rwidth = c.numColumns();
+  reswidth = b.numColumns() + c.numColumns() - 1;
   // reset the IdTable.
   res = IdTable(reswidth, allocator());
   CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::join, J, b, 0,
@@ -138,9 +138,9 @@ TEST(EngineTest, optionalJoinTest) {
 
   // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
   // a have to equal those of column 2 of b and vice versa).
-  int aWidth = a.cols();
-  int bWidth = b.cols();
-  int resWidth = res.cols();
+  int aWidth = a.numColumns();
+  int bWidth = b.numColumns();
+  int resWidth = res.numColumns();
   CALL_FIXED_SIZE((std::array{aWidth, bWidth, resWidth}),
                   OptionalJoin::optionalJoin, a, b, false, true, jcls, &res);
 
@@ -187,14 +187,14 @@ TEST(EngineTest, optionalJoinTest) {
   jcls.push_back(array<ColumnIndex, 2>{{1, 0}});
   jcls.push_back(array<ColumnIndex, 2>{{2, 1}});
 
-  aWidth = va.cols();
-  bWidth = vb.cols();
-  resWidth = vres.cols();
+  aWidth = va.numColumns();
+  bWidth = vb.numColumns();
+  resWidth = vres.numColumns();
   CALL_FIXED_SIZE((std::array{aWidth, bWidth, resWidth}),
                   OptionalJoin::optionalJoin, va, vb, true, false, jcls, &vres);
 
   ASSERT_EQ(5u, vres.size());
-  ASSERT_EQ(7u, vres.cols());
+  ASSERT_EQ(7u, vres.numColumns());
 
   vector<Id> r{I(1), I(2), I(3), I(4), I(5), I(6), I(4)};
   for (size_t i = 0; i < 7; i++) {

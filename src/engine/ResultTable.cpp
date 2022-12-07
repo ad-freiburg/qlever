@@ -32,7 +32,7 @@ string ResultTable::asDebugString() const {
   std::ostringstream os;
   os << "First (up to) 5 rows of result with size:\n";
   for (size_t i = 0; i < std::min<size_t>(5, _idTable.size()); ++i) {
-    for (size_t j = 0; j < _idTable.cols(); ++j) {
+    for (size_t j = 0; j < _idTable.numColumns(); ++j) {
       os << _idTable(i, j) << '\t';
     }
     os << '\n';

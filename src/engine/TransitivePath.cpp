@@ -682,15 +682,15 @@ void TransitivePath::computeResult(ResultTable* result) {
   }
   result->_idTable.setCols(getResultWidth());
 
-  int subWidth = subRes->_idTable.cols();
+  int subWidth = subRes->_idTable.numColumns();
   if (_leftSideTree != nullptr) {
     shared_ptr<const ResultTable> leftRes = _leftSideTree->getResult();
-    for (size_t c = 0; c < leftRes->_idTable.cols(); c++) {
+    for (size_t c = 0; c < leftRes->_idTable.numColumns(); c++) {
       if (c != _leftSideCol) {
         result->_resultTypes.push_back(leftRes->getResultType(c));
       }
     }
-    int leftWidth = leftRes->_idTable.cols();
+    int leftWidth = leftRes->_idTable.numColumns();
     CALL_FIXED_SIZE(
         (std::array{subWidth, leftWidth, static_cast<int>(_resultWidth)}),
         &TransitivePath::computeTransitivePathLeftBound, this,
@@ -699,12 +699,12 @@ void TransitivePath::computeResult(ResultTable* result) {
         _resultWidth);
   } else if (_rightSideTree != nullptr) {
     shared_ptr<const ResultTable> rightRes = _rightSideTree->getResult();
-    for (size_t c = 0; c < rightRes->_idTable.cols(); c++) {
+    for (size_t c = 0; c < rightRes->_idTable.numColumns(); c++) {
       if (c != _rightSideCol) {
         result->_resultTypes.push_back(rightRes->getResultType(c));
       }
     }
-    int rightWidth = rightRes->_idTable.cols();
+    int rightWidth = rightRes->_idTable.numColumns();
     CALL_FIXED_SIZE(
         (std::array{subWidth, rightWidth, static_cast<int>(_resultWidth)}),
         &TransitivePath::computeTransitivePathRightBound, this,

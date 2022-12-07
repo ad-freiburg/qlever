@@ -16,11 +16,11 @@
 namespace columnBasedIdTable {
 
 // A row of a table of IDs. It stores the IDs as a `std::array` or `std::vector`
-// depending on whether `NumCols` is 0 (which means that the number of columns
+// depending on whether `NumColumns` is 0 (which means that the number of columns
 // is specified at runtime). This class is used as the `value_type` of the
 // columns-based `IdTable` and must be used whenever a row (not a reference to a
 // row) has to be stored outside the IdTable. The implementation is a rather
-// thin wrapper around `std::vector<Id>` or `std::array<Id, NumCols>`
+// thin wrapper around `std::vector<Id>` or `std::array<Id, NumColumns>`
 // respectively (see above).
 template <int NumCols = 0>
 class Row {
@@ -122,7 +122,7 @@ class RowReferenceImpl {
   class DeducingRowReferenceViaAutoIsLikelyABug {
    public:
     using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
-    static constexpr int numStaticCols = Table::numStaticCols;
+    static constexpr int numStaticColumns = Table::numStaticColumns;
 
    private:
     // Make the long class type a little shorter where possible.
@@ -159,7 +159,7 @@ class RowReferenceImpl {
     const Id& operator[](size_t i) const&& { return getImpl(*this, i); }
 
     // The number of columns that this row contains.
-    size_t numColumns() const { return table_->cols(); }
+    size_t numColumns() const { return table_->numColumns(); }
 
    protected:
     // The implementation of swapping two `RowReference`s (passed either by
@@ -181,8 +181,8 @@ class RowReferenceImpl {
     // a `RowReference` and a `Row` if the number of columns match.
     template <typename T>
     bool operator==(const T& other) const
-        requires(numStaticCols == T::numStaticCols) {
-      if constexpr (numStaticCols == 0) {
+        requires(numStaticColumns == T::numStaticColumns) {
+      if constexpr (numStaticColumns == 0) {
         if (numColumns() != other.numColumns()) {
           return false;
         }
@@ -196,9 +196,9 @@ class RowReferenceImpl {
     }
 
     // Convert from a `RowReference` to a `Row`.
-    operator Row<numStaticCols>() const {
+    operator Row<numStaticColumns>() const {
       auto numCols = (std::move(*this)).numColumns();
-      Row<numStaticCols> result{numCols};
+      Row<numStaticColumns> result{numCols};
       for (size_t i = 0; i < numCols; ++i) {
         result[i] = std::move(*this)[i];
       }
@@ -209,7 +209,7 @@ class RowReferenceImpl {
     // Internal implementation of the assignment from a `Row` as well as a
     // `RowReference`. This assignment actually writes to the underlying table.
     static This& assignmentImpl(auto&& self, const auto& other) {
-      if constexpr (numStaticCols == 0) {
+      if constexpr (numStaticColumns == 0) {
         AD_CHECK(self.numColumns() == other.numColumns());
       }
       for (size_t i = 0; i < self.numColumns(); ++i) {
@@ -220,7 +220,7 @@ class RowReferenceImpl {
 
    public:
     // Assignment from a `Row` with the same number of columns.
-    This& operator=(const Row<numStaticCols>& other) && {
+    This& operator=(const Row<numStaticColumns>& other) && {
       return assignmentImpl(*this, other);
     }
 
@@ -256,7 +256,7 @@ class RowReference
  private:
   using Base =
       RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<Table, isConst>;
-  using Base::numStaticCols;
+  using Base::numStaticColumns;
   using TablePtr = typename Base::TablePtr;
 
   // Efficient access to the base class subobject to invoke its functions.
@@ -273,7 +273,7 @@ class RowReference
   Id& operator[](size_t i) requires(!isConst) {
     return Base::getImpl(base(), i);
   }
-  const Id& operator[](size_t i) const { Base::getImpl(base(), i); }
+  const Id& operator[](size_t i) const { return Base::getImpl(base(), i); }
 
   // __________________________________________________________________________
   template <ad_utility::SimilarTo<RowReference> R>
@@ -285,13 +285,13 @@ class RowReference
   // a `RowReference` and a `Row` if the number of columns match.
   template <typename T>
   bool operator==(const T& other) const
-      requires(numStaticCols == T::numStaticCols) {
+      requires(numStaticColumns == T::numStaticColumns) {
     return base() == other;
   }
 
  public:
   // Assignment from a `Row` with the same number of columns.
-  RowReference& operator=(const Row<numStaticCols>& other) {
+  RowReference& operator=(const Row<numStaticColumns>& other) {
     return this->assignmentImpl(base(), other);
   }
 

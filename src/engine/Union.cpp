@@ -158,9 +158,9 @@ void Union::computeResult(ResultTable* result) {
     }
   }
   result->_idTable.setCols(getResultWidth());
-  int leftWidth = subRes1->_idTable.cols();
-  int rightWidth = subRes2->_idTable.cols();
-  int outWidth = result->_idTable.cols();
+  int leftWidth = subRes1->_idTable.numColumns();
+  int rightWidth = subRes2->_idTable.numColumns();
+  int outWidth = result->_idTable.numColumns();
 
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, outWidth}),
                   &Union::computeUnion, this, &result->_idTable,
@@ -180,7 +180,8 @@ void Union::computeUnion(
 
   // TODO<joka921> insert global constant here
   const size_t chunkSize =
-      100000 / res.cols();  // after this many elements, check for timeouts
+      100000 /
+      res.numColumns();  // after this many elements, check for timeouts
   auto checkAfterChunkSize = checkTimeoutAfterNCallsFactory(chunkSize);
 
   // Append the contents of inputTable to the result. This requires previous
@@ -202,10 +203,10 @@ void Union::computeUnion(
 
   auto columnsMatch = [&columnOrigins](const auto& inputTable,
                                        const auto& getter) {
-    bool allColumnsAreUsed = inputTable.cols() == columnOrigins.size();
+    bool allColumnsAreUsed = inputTable.numColumns() == columnOrigins.size();
     bool columnsAreSorted = std::ranges::is_sorted(columnOrigins, {}, getter);
     bool noGapsInColumns =
-        getter(columnOrigins.back()) == inputTable.cols() - 1;
+        getter(columnOrigins.back()) == inputTable.numColumns() - 1;
     return allColumnsAreUsed && columnsAreSorted && noGapsInColumns;
   };
 

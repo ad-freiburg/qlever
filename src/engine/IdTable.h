@@ -15,7 +15,7 @@ using defaultAllocator =
 
 /// The general IdTable class. Can be modified and owns its data. If COLS > 0,
 /// COLS specifies the compile-time number of columns COLS == 0 means "runtime
-/// number of cols"
+/// number of numColumns"
 template <int COLS, typename Allocator = detail::defaultAllocator>
 using IdTableStatic = columnBasedIdTable::IdTable<COLS, Allocator>;
 

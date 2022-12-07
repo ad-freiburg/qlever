@@ -158,9 +158,9 @@ void Values::writeValues(IdTable* res, const Index& index,
   IdTableStatic<I> result = res->moveToStatic<I>();
   result.resize(values._values.size());
   size_t numTuples = 0;
-  std::vector<size_t> numLocalVocabPerColumn(result.cols());
+  std::vector<size_t> numLocalVocabPerColumn(result.numColumns());
   for (const auto& row : values._values) {
-    for (size_t colIdx = 0; colIdx < result.cols(); colIdx++) {
+    for (size_t colIdx = 0; colIdx < result.numColumns(); colIdx++) {
       const TripleComponent& tc = row[colIdx];
       std::optional<Id> id = tc.toValueId(index.getVocab());
       if (!id) {

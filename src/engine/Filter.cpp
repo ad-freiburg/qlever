@@ -49,13 +49,13 @@ void Filter::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Filter result computation..." << endl;
-  result->_idTable.setCols(subRes->_idTable.cols());
+  result->_idTable.setCols(subRes->_idTable.numColumns());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
 
-  int width = result->_idTable.cols();
+  int width = result->_idTable.numColumns();
   CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this, result, *subRes);
   LOG(DEBUG) << "Filter result computation done." << endl;
 }

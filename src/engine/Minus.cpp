@@ -63,8 +63,8 @@ void Minus::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Computing minus of results of size " << leftResult->size()
              << " and " << rightResult->size() << endl;
 
-  int leftWidth = leftResult->_idTable.cols();
-  int rightWidth = rightResult->_idTable.cols();
+  int leftWidth = leftResult->_idTable.numColumns();
+  int rightWidth = rightResult->_idTable.numColumns();
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth}), &Minus::computeMinus,
                   this, leftResult->_idTable, rightResult->_idTable,
                   _matchedColumns, &result->_idTable);
@@ -133,7 +133,7 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
   IdTableView<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
 
-  std::vector<size_t> rightToLeftCols(b.cols(),
+  std::vector<size_t> rightToLeftCols(b.numColumns(),
                                       std::numeric_limits<size_t>::max());
   for (const auto& jc : joinColumns) {
     rightToLeftCols[jc[1]] = jc[0];

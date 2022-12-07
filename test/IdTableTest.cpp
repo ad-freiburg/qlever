@@ -35,8 +35,8 @@ TEST(IdTableTest, push_back_and_assign) {
   }
 
   ASSERT_EQ(NUM_ROWS, t1.size());
-  ASSERT_EQ(NUM_ROWS, t1.rows());
-  ASSERT_EQ(NUM_COLS, t1.cols());
+  ASSERT_EQ(NUM_ROWS, t1.numRows());
+  ASSERT_EQ(NUM_COLS, t1.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
@@ -120,8 +120,8 @@ TEST(IdTableTest, reserve_and_resize) {
   }
 
   ASSERT_EQ(NUM_ROWS, t1.size());
-  ASSERT_EQ(NUM_ROWS, t1.rows());
-  ASSERT_EQ(NUM_COLS, t1.cols());
+  ASSERT_EQ(NUM_ROWS, t1.numRows());
+  ASSERT_EQ(NUM_COLS, t1.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
@@ -137,8 +137,8 @@ TEST(IdTableTest, reserve_and_resize) {
   }
 
   ASSERT_EQ(NUM_ROWS, t2.size());
-  ASSERT_EQ(NUM_ROWS, t2.rows());
-  ASSERT_EQ(NUM_COLS, t2.cols());
+  ASSERT_EQ(NUM_ROWS, t2.numRows());
+  ASSERT_EQ(NUM_COLS, t2.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(I(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
@@ -164,20 +164,20 @@ TEST(IdTableTest, copyAndMove) {
   IdTable t5 = std::move(tmp);
 
   ASSERT_EQ(NUM_ROWS, t2.size());
-  ASSERT_EQ(NUM_ROWS, t2.rows());
-  ASSERT_EQ(NUM_COLS, t2.cols());
+  ASSERT_EQ(NUM_ROWS, t2.numRows());
+  ASSERT_EQ(NUM_COLS, t2.numColumns());
 
   ASSERT_EQ(NUM_ROWS, t3.size());
-  ASSERT_EQ(NUM_ROWS, t3.rows());
-  ASSERT_EQ(NUM_COLS, t3.cols());
+  ASSERT_EQ(NUM_ROWS, t3.numRows());
+  ASSERT_EQ(NUM_COLS, t3.numColumns());
 
   ASSERT_EQ(NUM_ROWS, t4.size());
-  ASSERT_EQ(NUM_ROWS, t4.rows());
-  ASSERT_EQ(NUM_COLS, t4.cols());
+  ASSERT_EQ(NUM_ROWS, t4.numRows());
+  ASSERT_EQ(NUM_COLS, t4.numColumns());
 
   ASSERT_EQ(NUM_ROWS, t5.size());
-  ASSERT_EQ(NUM_ROWS, t5.rows());
-  ASSERT_EQ(NUM_COLS, t5.cols());
+  ASSERT_EQ(NUM_ROWS, t5.numRows());
+  ASSERT_EQ(NUM_COLS, t5.numColumns());
 
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
@@ -205,8 +205,8 @@ TEST(IdTableTest, erase) {
   }
 
   ASSERT_EQ(NUM_ROWS, t1.size());
-  ASSERT_EQ(NUM_ROWS, t1.rows());
-  ASSERT_EQ(NUM_COLS, t1.cols());
+  ASSERT_EQ(NUM_ROWS, t1.numRows());
+  ASSERT_EQ(NUM_COLS, t1.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
@@ -311,8 +311,8 @@ TEST(IdTableStaticTest, push_back_and_assign) {
   }
 
   ASSERT_EQ(NUM_ROWS, t1.size());
-  ASSERT_EQ(NUM_ROWS, t1.rows());
-  ASSERT_EQ(NUM_COLS, t1.cols());
+  ASSERT_EQ(NUM_ROWS, t1.numRows());
+  ASSERT_EQ(NUM_COLS, t1.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
@@ -357,7 +357,7 @@ TEST(IdTableStaticTest, insert) {
   t2 = init;
   t2.insertAtEnd(t1.begin(), t1.end());
   for (size_t i = 0; i < init.size(); i++) {
-    for (size_t j = 0; j < init.cols(); j++) {
+    for (size_t j = 0; j < init.numColumns(); j++) {
       EXPECT_EQ(init(i, j), t2(i, j)) << i << ", " << j;
     }
     EXPECT_EQ(init[i], t2[i]) << i << "th row was a mismatch";
@@ -401,8 +401,8 @@ TEST(IdTableStaticTest, reserve_and_resize) {
   }
 
   ASSERT_EQ(NUM_ROWS, t1.size());
-  ASSERT_EQ(NUM_ROWS, t1.rows());
-  ASSERT_EQ(NUM_COLS, t1.cols());
+  ASSERT_EQ(NUM_ROWS, t1.numRows());
+  ASSERT_EQ(NUM_COLS, t1.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
@@ -418,8 +418,8 @@ TEST(IdTableStaticTest, reserve_and_resize) {
   }
 
   ASSERT_EQ(NUM_ROWS, t2.size());
-  ASSERT_EQ(NUM_ROWS, t2.rows());
-  ASSERT_EQ(NUM_COLS, t2.cols());
+  ASSERT_EQ(NUM_ROWS, t2.numRows());
+  ASSERT_EQ(NUM_COLS, t2.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(I(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
@@ -445,20 +445,20 @@ TEST(IdTableStaticTest, copyAndMove) {
   IdTableStatic<NUM_COLS> t5 = std::move(tmp);
 
   ASSERT_EQ(NUM_ROWS, t2.size());
-  ASSERT_EQ(NUM_ROWS, t2.rows());
-  ASSERT_EQ(NUM_COLS, t2.cols());
+  ASSERT_EQ(NUM_ROWS, t2.numRows());
+  ASSERT_EQ(NUM_COLS, t2.numColumns());
 
   ASSERT_EQ(NUM_ROWS, t3.size());
-  ASSERT_EQ(NUM_ROWS, t3.rows());
-  ASSERT_EQ(NUM_COLS, t3.cols());
+  ASSERT_EQ(NUM_ROWS, t3.numRows());
+  ASSERT_EQ(NUM_COLS, t3.numColumns());
 
   ASSERT_EQ(NUM_ROWS, t4.size());
-  ASSERT_EQ(NUM_ROWS, t4.rows());
-  ASSERT_EQ(NUM_COLS, t4.cols());
+  ASSERT_EQ(NUM_ROWS, t4.numRows());
+  ASSERT_EQ(NUM_COLS, t4.numColumns());
 
   ASSERT_EQ(NUM_ROWS, t5.size());
-  ASSERT_EQ(NUM_ROWS, t5.rows());
-  ASSERT_EQ(NUM_COLS, t5.cols());
+  ASSERT_EQ(NUM_ROWS, t5.numRows());
+  ASSERT_EQ(NUM_COLS, t5.numColumns());
 
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
@@ -486,8 +486,8 @@ TEST(IdTableStaticTest, erase) {
   }
 
   ASSERT_EQ(NUM_ROWS, t1.size());
-  ASSERT_EQ(NUM_ROWS, t1.rows());
-  ASSERT_EQ(NUM_COLS, t1.cols());
+  ASSERT_EQ(NUM_ROWS, t1.numRows());
+  ASSERT_EQ(NUM_COLS, t1.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
@@ -541,18 +541,18 @@ TEST(IdTableTest, conversion) {
 
   IdTableStatic<3> s = std::move(table).moveToStatic<3>();
   ASSERT_EQ(4u, s.size());
-  ASSERT_EQ(3u, s.cols());
+  ASSERT_EQ(3u, s.numColumns());
   for (size_t i = 0; i < s.size(); i++) {
-    for (size_t j = 0; j < s.cols(); j++) {
+    for (size_t j = 0; j < s.numColumns(); j++) {
       ASSERT_EQ(initial(i, j), s(i, j));
     }
   }
 
   table = std::move(s).moveToDynamic();
   ASSERT_EQ(4u, table.size());
-  ASSERT_EQ(3u, table.cols());
+  ASSERT_EQ(3u, table.numColumns());
   for (size_t i = 0; i < table.size(); i++) {
-    for (size_t j = 0; j < table.cols(); j++) {
+    for (size_t j = 0; j < table.numColumns(); j++) {
       ASSERT_EQ(initial(i, j), table(i, j));
     }
   }
@@ -560,9 +560,9 @@ TEST(IdTableTest, conversion) {
   auto view = table.asStaticView<3>();
   static_assert(std::is_same_v<decltype(view), IdTableView<3>>);
   ASSERT_EQ(4u, view.size());
-  ASSERT_EQ(3u, view.cols());
+  ASSERT_EQ(3u, view.numColumns());
   for (size_t i = 0; i < view.size(); i++) {
-    for (size_t j = 0; j < view.cols(); j++) {
+    for (size_t j = 0; j < view.numColumns(); j++) {
       ASSERT_EQ(initial(i, j), view(i, j));
     }
   }
@@ -578,18 +578,18 @@ TEST(IdTableTest, conversion) {
 
   IdTableStatic<6> staticVar = std::move(tableVar).moveToStatic<6>();
   ASSERT_EQ(initialVar.size(), staticVar.size());
-  ASSERT_EQ(initialVar.cols(), staticVar.cols());
+  ASSERT_EQ(initialVar.numColumns(), staticVar.numColumns());
   for (size_t i = 0; i < staticVar.size(); i++) {
-    for (size_t j = 0; j < staticVar.cols(); j++) {
+    for (size_t j = 0; j < staticVar.numColumns(); j++) {
       ASSERT_EQ(initialVar(i, j), staticVar(i, j));
     }
   }
 
   IdTable dynamicVar = std::move(staticVar).moveToDynamic();
   ASSERT_EQ(initialVar.size(), dynamicVar.size());
-  ASSERT_EQ(initialVar.cols(), dynamicVar.cols());
+  ASSERT_EQ(initialVar.numColumns(), dynamicVar.numColumns());
   for (size_t i = 0; i < dynamicVar.size(); i++) {
-    for (size_t j = 0; j < dynamicVar.cols(); j++) {
+    for (size_t j = 0; j < dynamicVar.numColumns(); j++) {
       ASSERT_EQ(initialVar(i, j), dynamicVar(i, j));
     }
   }
@@ -597,9 +597,9 @@ TEST(IdTableTest, conversion) {
   auto viewVar = std::move(dynamicVar).asStaticView<6>();
   static_assert(std::is_same_v<decltype(viewVar), IdTableView<6>>);
   ASSERT_EQ(initialVar.size(), viewVar.size());
-  ASSERT_EQ(initialVar.cols(), viewVar.cols());
+  ASSERT_EQ(initialVar.numColumns(), viewVar.numColumns());
   for (size_t i = 0; i < viewVar.size(); i++) {
-    for (size_t j = 0; j < viewVar.cols(); j++) {
+    for (size_t j = 0; j < viewVar.numColumns(); j++) {
       ASSERT_EQ(initialVar(i, j), viewVar(i, j));
     }
   }

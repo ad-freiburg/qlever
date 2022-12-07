@@ -46,7 +46,7 @@ void getIdsFromVariableImpl(VectorWithMemoryLimit<ValueId>& result,
 // become a noop;
 inline VectorWithMemoryLimit<ValueId> getIdsFromVariable(
     const ::Variable& variable, EvaluationContext* context) {
-  auto cols = context->_inputTable.cols();
+  auto cols = context->_inputTable.numColumns();
   VectorWithMemoryLimit<ValueId> result{context->_allocator};
   CALL_FIXED_SIZE(cols, &getIdsFromVariableImpl, result, variable, context);
   return result;

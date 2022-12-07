@@ -37,7 +37,7 @@ void CompressedRelationMetaData::scan(
                              ", which was not loaded");
   }
   if constexpr (!ad_utility::isVector<IdTableImpl>) {
-    AD_CHECK(result->cols() == 2);
+    AD_CHECK(result->numColumns() == 2);
   }
   if (!permutation._meta.col0IdExists(col0Id)) {
     return;
@@ -246,7 +246,7 @@ void CompressedRelationMetaData::scan(
     const Id col0Id, const Id& col1Id, IdTableImpl* result,
     const Permutation& permutation,
     ad_utility::SharedConcurrentTimeoutTimer timer) {
-  AD_CHECK(result->cols() == 1);
+  AD_CHECK(result->numColumns() == 1);
 
   if (!permutation._meta.col0IdExists(col0Id)) {
     return;

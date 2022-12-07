@@ -246,7 +246,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
     return;
   }
 
-  // This stores the values of the group by cols for the current block. A block
+  // This stores the values of the group by numColumns for the current block. A block
   // ends when one of these values changes.
   std::vector<std::pair<size_t, Id>> currentGroupBlock;
   for (size_t col : groupByCols) {
@@ -315,7 +315,7 @@ void GroupBy::computeResult(ResultTable* result) {
   }
 
   // populate the result type vector
-  result->_resultTypes.resize(result->_idTable.cols());
+  result->_resultTypes.resize(result->_idTable.numColumns());
 
   // The `_groupByVariables` are simply copied, so their result type is
   // also copied. The result type of the other columns is set when the
@@ -332,13 +332,13 @@ void GroupBy::computeResult(ResultTable* result) {
   }
 
   std::vector<ResultTable::ResultType> inputResultTypes;
-  inputResultTypes.reserve(subresult->_idTable.cols());
-  for (size_t i = 0; i < subresult->_idTable.cols(); i++) {
+  inputResultTypes.reserve(subresult->_idTable.numColumns());
+  for (size_t i = 0; i < subresult->_idTable.numColumns(); i++) {
     inputResultTypes.push_back(subresult->getResultType(i));
   }
 
-  int inWidth = subresult->_idTable.cols();
-  int outWidth = result->_idTable.cols();
+  int inWidth = subresult->_idTable.numColumns();
+  int outWidth = result->_idTable.numColumns();
 
   CALL_FIXED_SIZE((std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
                   subresult->_idTable, groupByCols, aggregates,

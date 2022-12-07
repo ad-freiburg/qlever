@@ -958,7 +958,7 @@ void IndexImpl::getECListForWords(const string& words, size_t nofVars,
   vector<Id> eids;
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
-  int width = result->cols();
+  int width = result->numColumns();
   CALL_FIXED_SIZE(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
                   cids, eids, scores, nofVars, limit, result);
   LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
@@ -980,7 +980,7 @@ void IndexImpl::getFilteredECListForWords(const string& words,
       Id eid = filter(i, filterColumn);
       auto it = fMap.find(eid);
       if (it == fMap.end()) {
-        it = fMap.insert(std::make_pair(eid, IdTable(filter.cols(),
+        it = fMap.insert(std::make_pair(eid, IdTable(filter.numColumns(),
                                                      filter.getAllocator())))
                  .first;
       }
@@ -990,7 +990,7 @@ void IndexImpl::getFilteredECListForWords(const string& words,
     vector<Id> eids;
     vector<Score> scores;
     getContextEntityScoreListsForWords(words, cids, eids, scores);
-    int width = result->cols();
+    int width = result->numColumns();
     if (nofVars == 1) {
       CALL_FIXED_SIZE(width,
                       FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
@@ -1026,7 +1026,7 @@ void IndexImpl::getFilteredECListForWordsWidthOne(const string& words,
   vector<Id> eids;
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
-  int width = result->cols();
+  int width = result->numColumns();
   if (nofVars == 1) {
     FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
         cids, eids, scores, fSet, limit, result);

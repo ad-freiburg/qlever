@@ -100,10 +100,10 @@ void TextOperationWithoutFilter::computeResultOneVar(
 void TextOperationWithoutFilter::computeResultMultVars(
     ResultTable* result) const {
   result->_idTable.setCols(getNofVars() + 2);
-  result->_resultTypes.reserve(result->_idTable.cols());
+  result->_resultTypes.reserve(result->_idTable.numColumns());
   result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-  for (size_t i = 2; i < result->_idTable.cols(); i++) {
+  for (size_t i = 2; i < result->_idTable.numColumns(); i++) {
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
   }
   getExecutionContext()->getIndex().getECListForWords(

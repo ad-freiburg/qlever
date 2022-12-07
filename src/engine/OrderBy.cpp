@@ -103,12 +103,12 @@ void OrderBy::computeResult(ResultTable* result) {
 
   result->_idTable = subRes->_idTable.clone();
   /*
-  result->_idTable.setCols(subRes->_idTable.cols());
+  result->_idTable.setCols(subRes->_idTable.numColumns());
   result->_idTable.insert(result->_idTable.end(), subRes->_idTable.begin(),
                           subRes->_idTable.end());
                           */
 
-  int width = result->_idTable.cols();
+  int width = result->_idTable.numColumns();
 
   // TODO(florian): Check if the lambda is a performance problem
   auto comparison = [this](const auto& a, const auto& b) {

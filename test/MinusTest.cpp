@@ -48,8 +48,8 @@ TEST(EngineTest, minusTest) {
 
   // Subtract b from a on the column pairs 1,2 and 2,1 (entries from columns 1
   // of a have to equal those of column 2 of b and vice versa).
-  int aWidth = a.cols();
-  int bWidth = b.cols();
+  int aWidth = a.numColumns();
+  int bWidth = b.numColumns();
   Minus m{Minus::OnlyForTestingTag{}};
   CALL_FIXED_SIZE((std::array{aWidth, bWidth}), &Minus::computeMinus, m, a, b,
                   jcls, &res);
@@ -88,15 +88,15 @@ TEST(EngineTest, minusTest) {
 
   // The template size parameter can be at most 6 (the maximum number
   // of fixed size columns plus one).
-  aWidth = va.cols();
-  bWidth = vb.cols();
+  aWidth = va.numColumns();
+  bWidth = vb.numColumns();
   CALL_FIXED_SIZE((std::array{aWidth, bWidth}), &Minus::computeMinus, m, va, vb,
                   jcls, &vres);
 
   wantedRes = table(6);
   wantedRes.push_back({I(7), I(6), I(5), I(4), I(3), I(2)});
   ASSERT_EQ(wantedRes.size(), vres.size());
-  ASSERT_EQ(wantedRes.cols(), vres.cols());
+  ASSERT_EQ(wantedRes.numColumns(), vres.numColumns());
 
   ASSERT_EQ(wantedRes[0], vres[0]);
 }

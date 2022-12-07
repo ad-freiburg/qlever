@@ -249,8 +249,8 @@ void HasPredicateScan::computeResult(ResultTable* result) {
                                   subresult->_resultTypes.begin(),
                                   subresult->_resultTypes.end());
       result->_resultTypes.push_back(ResultTable::ResultType::KB);
-      int inWidth = subresult->_idTable.cols();
-      int outWidth = result->_idTable.cols();
+      int inWidth = subresult->_idTable.numColumns();
+      int outWidth = result->_idTable.numColumns();
       CALL_FIXED_SIZE((std::array{inWidth, outWidth}),
                       HasPredicateScan::computeSubqueryS, &result->_idTable,
                       subresult->_idTable, _subtreeJoinColumn, hasPattern,
@@ -379,20 +379,20 @@ void HasPredicateScan::computeSubqueryS(
       for (const auto& predicate : patterns[hasPattern[subjectIndex]]) {
         result.push_back();
         size_t backIdx = result.size() - 1;
-        for (size_t k = 0; k < input.cols(); k++) {
+        for (size_t k = 0; k < input.numColumns(); k++) {
           result(backIdx, k) = input(i, k);
         }
-        result(backIdx, input.cols()) = predicate;
+        result(backIdx, input.numColumns()) = predicate;
       }
     } else if (subjectIndex < hasPredicate.size()) {
       // add the relations
       for (const auto& predicate : hasPredicate[subjectIndex]) {
         result.push_back();
         size_t backIdx = result.size() - 1;
-        for (size_t k = 0; k < input.cols(); k++) {
+        for (size_t k = 0; k < input.numColumns(); k++) {
           result(backIdx, k) = input(i, k);
         }
-        result(backIdx, input.cols()) = predicate;
+        result(backIdx, input.numColumns()) = predicate;
       }
     } else {
       break;

@@ -59,7 +59,7 @@ class ResultTable {
   virtual ~ResultTable();
 
   size_t size() const;
-  size_t width() const { return _idTable.cols(); }
+  size_t width() const { return _idTable.numColumns(); }
 
   // Log to INFO the size of this result.
   //

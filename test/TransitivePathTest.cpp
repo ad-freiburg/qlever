@@ -21,7 +21,7 @@ auto I = [](const auto& id) {
 void assertSameUnorderedContent(const IdTable& a, const IdTable& b) {
   auto aCpy = a;
   auto bCpy = b;
-  ASSERT_EQ(a.cols(), b.cols());
+  ASSERT_EQ(a.numColumns(), b.numColumns());
   auto sorter = [](const auto& rowFromA, const auto& rowFromB) {
     for (size_t i = 0; i < rowFromA.numColumns(); ++i) {
       if (rowFromA[i] != rowFromB[i]) {

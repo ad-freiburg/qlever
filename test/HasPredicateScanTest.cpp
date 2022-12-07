@@ -335,7 +335,8 @@ TEST(CountAvailablePredicates, patternTrickTest) {
 
   RuntimeInformation runtimeInfo;
   try {
-    CALL_FIXED_SIZE(input.cols(), CountAvailablePredicates::computePatternTrick,
+    CALL_FIXED_SIZE(
+        input.numColumns(), CountAvailablePredicates::computePatternTrick,
                     input, &result, hasPattern, hasRelation, patterns, 0,
                     &runtimeInfo);
   } catch (const std::runtime_error& e) {
