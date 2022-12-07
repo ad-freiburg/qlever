@@ -45,8 +45,7 @@ class IdTable {
   static constexpr bool isDynamic = NumColumns == 0;
   // Make the number of (statically known) columns accessible to the outside.
   static constexpr int numStaticColumns = NumColumns;
-  // The actual storage is a plain 1-D vector, the actual data layout is
-  // managed inside this class.
+  // The actual storage is a plain 1-D vector with the logical columns concatenated.
   using Columns = std::vector<Id, Allocator>;
   using Data = std::conditional_t<isView, const Columns*, Columns>;
 

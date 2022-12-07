@@ -22,11 +22,13 @@ namespace columnBasedIdTable {
 // row) has to be stored outside the IdTable. The implementation is a rather
 // thin wrapper around `std::vector<Id>` or `std::array<Id, NumColumns>`
 // respectively (see above).
-template <int NumCols = 0>
+template <int NumColumns = 0>
 class Row {
  public:
-  static constexpr bool isDynamic() { return NumCols == 0; }
-  static constexpr int numStaticCols = NumCols;
+  // Returns true iff the number of columns is only known at runtime and we
+  // therefore have to use `std::vector` instead of `std::array`.
+  static constexpr bool isDynamic() { return NumColumns == 0; }
+  static constexpr int numStaticColumns = NumColumns;
 
   // TODO<joka921> We could use a vector type with a small buffer optimization
   // for up to 20 or 30 columns, maybe this increases the performance for the
@@ -35,22 +37,13 @@ class Row {
       isDynamic(),
       std::vector<Id,
                   ad_utility::default_init_allocator<Id, std::allocator<Id>>>,
-      std::array<Id, NumCols>>;
+      std::array<Id, NumColumns>>;
 
  private:
   Data data_;
 
-  static Data initData(size_t numCols) {
-    if constexpr (isDynamic()) {
-      // The `std::vector` has to explicitly allocated
-      return Data(numCols);
-    } else {
-      return Data{};
-    }
-  }
-
  public:
-  // For the dynamic case the number of columns must always be specified.
+  // For the dynamic case the number of columns always has to be specified.
   explicit Row(size_t numCols) requires(isDynamic()) : data_(numCols) {}
 
   // When the number of columns is statically known, the row can be
@@ -62,8 +55,8 @@ class Row {
       : Row() {}
 
   // Access the i-th element.
-  Id& operator[](size_t idx) { return data_[idx]; }
-  const Id& operator[](size_t idx) const { return data_[idx]; }
+  Id& operator[](size_t i) { return data_[i]; }
+  const Id& operator[](size_t i) const { return data_[i]; }
 
   size_t numColumns() const { return data_.size(); }
 
@@ -75,7 +68,7 @@ class Row {
 // The following two classes store a reference to a row in the underlying
 // column-based `Table`. Note that this has to be its own class instead of
 // `Row&` because the rows are not materialized in the table but scattered
-// across memory due to the column-major order. This design of having to
+// across memory due to the column-major order. This design of having two
 // dedicated classes for the `value_type` and the `reference` of a container is
 // similar to the approach taken for `std::vector<bool>` in the STL. There are
 // two flavors of the `RowReference` class: One allows only const access and
@@ -102,7 +95,7 @@ class Row {
 // iterators of the `IdTable` class (for details, see the `IdTable class).
 
 // First the variation of the `RowReference` that can be created by `auto`
-// but has no mutabile access for lvalues.
+// but has no mutable access for lvalues.
 class RowReferenceImpl {
  private:
   // The actual implementation is in a private subclass and only the
@@ -110,7 +103,7 @@ class RowReferenceImpl {
   template <typename Table, bool isConst>
   friend class RowReference;
 
-  template <int NumCols, typename Allocator, bool isVies>
+  template <int NumCols, typename Allocator, bool isView>
   friend class IdTable;
 
   // The actual implementation of a reference to a row that allows mutable
@@ -166,7 +159,7 @@ class RowReferenceImpl {
     // value or by reference)
     static void swapImpl(auto&& a, auto&& b) requires(!isConst) {
       for (size_t i = 0; i < a.numColumns(); ++i) {
-        std::swap(std::move(a)[i], std::move(b)[i]);
+        std::swap(getImpl(a, i), getImpl(b, i));
       }
     }
 

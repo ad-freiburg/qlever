@@ -34,7 +34,7 @@ void getIdsFromVariableImpl(VectorWithMemoryLimit<ValueId>& result,
   const size_t columnIndex =
       context->_variableToColumnAndResultTypeMap.at(variable).first;
 
-  result.reserve(endIndex - endIndex);
+  result.reserve(endIndex - beginIndex);
   for (size_t i = beginIndex; i < endIndex; ++i) {
     result.push_back(ValueId{inputTable(i, columnIndex)});
   }
