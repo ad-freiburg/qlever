@@ -7,14 +7,11 @@
 #include <sstream>
 #include <string>
 
-// The `computeResult()` methods of the operations are all private, but we want
-// to test them.
-#define private public
-
 #include "./IndexTestHelpers.h"
 #include "engine/Distinct.h"
 #include "engine/GroupBy.h"
 #include "engine/Join.h"
+#include "engine/MultiColumnJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/ResultTable.h"
@@ -88,13 +85,15 @@ TEST(LocalVocab, propagation) {
   // operations on `values1`?
   auto checkLocalVocab = [&](auto* operation,
                              std::vector<std::string> expectedWords) -> void {
+    AD_CHECK(operation);
     operation->getExecutionContext()->getQueryTreeCache().clearAll();
-    ResultTable resultTable(testAllocator);
-    operation->computeResult(&resultTable);
+    std::shared_ptr<const ResultTable> resultTable = operation->getResult();
+    ASSERT_TRUE(resultTable)
+        << "Operation: " << operation->getDescriptor() << std::endl;
     std::vector<std::string> localVocabWords;
-    for (size_t i = 0; i < resultTable._localVocab->size(); ++i) {
+    for (size_t i = 0; i < resultTable->_localVocab->size(); ++i) {
       localVocabWords.emplace_back(
-          resultTable._localVocab->getWord(LocalVocabIndex::make(i)));
+          resultTable->_localVocab->getWord(LocalVocabIndex::make(i)));
     }
     ASSERT_EQ(localVocabWords, expectedWords)
         << "Operation: " << operation->getDescriptor() << std::endl;
@@ -102,8 +101,9 @@ TEST(LocalVocab, propagation) {
 
   // Lambda that checks that `computeResult` throws an exception.
   auto checkThrow = [&](auto* operation) -> void {
-    ResultTable resultTable(testAllocator);
-    ASSERT_THROW(operation->computeResult(&resultTable), std::runtime_error)
+    AD_CHECK(operation);
+    operation->getExecutionContext()->getQueryTreeCache().clearAll();
+    ASSERT_THROW(operation->getResult(), ad_semsearch::AbortException)
         << "Operation: " << operation->getDescriptor() << std::endl;
   };
 
@@ -115,35 +115,59 @@ TEST(LocalVocab, propagation) {
   };
 
   // VALUES operation with two variables and two rows. Adds four new literals.
+  //
+  // Note: For literals, the quotes are part of the name, so if we wanted the
+  // literal "x", we would have to write TripleComponent{"\"x\""}. For the
+  // purposes of this test, we just want something that's not yet in the index,
+  // so "x" etc. is just fine (and also different from the "<x>" below).
+  //
   Values values1(testQec, {{Variable{"?x"}, Variable{"?y"}},
                            {{TripleComponent{"x"}, TripleComponent{"y1"}},
                             {TripleComponent{"x"}, TripleComponent{"y2"}}}});
   checkLocalVocab(&values1, std::vector<std::string>{"x", "y1", "y2"});
 
-  // VALUES operation that uses an existing literal (from the test index). Note
-  // that the quotes are part of the name of the literals.
-  Values values2(testQec, {{Variable{"?x"}}, {{TripleComponent{"\"alpha\""}}}});
+  // VALUES operation that uses an existing literal (from the test index).
+  Values values2(testQec, {{Variable{"?x"}, Variable{"?y"}},
+                           {{TripleComponent{"<x>"}, TripleComponent{"<y>"}}}});
   checkLocalVocab(&values2, std::vector<std::string>{});
 
-  // JOIN operation with exactly one non-empty local vocab.
-  Join join1(testQec, qet(values1), qet(values2), 1, 1);
+  // JOIN operation with exactly one non-empty local vocab. The last arguments
+  // are the two join columns.
+  Join join1(testQec, qet(values1), qet(values2), 0, 0);
   checkLocalVocab(&join1, std::vector<std::string>{"x", "y1", "y2"});
 
   // JOIN operation with two non-empty local vocab.
-  Join join2(testQec, qet(values1), qet(values1), 1, 1);
+  Join join2(testQec, qet(values1), qet(values1), 0, 0);
   checkThrow(&join2);
 
+  // MULTI-COLUMN JOIN operation with exactly one non-empty local vocab. The
+  // last arguments are the two join columns in each of the two operands.
+  //
+  // Note: The multi-column join is actually a two-column join, so we have a
+  // bit of a misnomer here.
+  //
+  MultiColumnJoin multiJoin1(testQec, qet(values1), qet(values2),
+                             {{0, 1}, {0, 1}});
+  checkLocalVocab(&multiJoin1, std::vector<std::string>{"x", "y1", "y2"});
+
+  // MULTI-COLUMN JOIN operation with two non-empty local vocab.
+  MultiColumnJoin multiJoin2(testQec, qet(values1), qet(values1),
+                             {{0, 1}, {0, 1}});
+  checkThrow(&multiJoin2);
+
   // ORDER BY operation.
+  //
   // Note: the third argument ar the indices of the columns to be sorted, and
   // the sort order. It's not important for this test.
-  // TODO: Is the note correct? Unfortunately, `OrderBy.h` is not documented.
+  //
   OrderBy orderBy(testQec, qet(values1), {{0, true}, {1, true}});
   checkLocalVocab(&orderBy, std::vector<std::string>{"x", "y1", "y2"});
 
   // DISTINCT operation.
+  //
   // Note: the third argument are those indices of the input columns that are
   // considered for the output.
-  // TODO: Is the note correct? Unfortunately, `Distinct.h` is not documented.
+  //
   Distinct distinct(testQec, qet(values1), {0, 1});
   checkLocalVocab(&distinct, std::vector<std::string>{"x", "y1", "y2"});
 
@@ -166,12 +190,13 @@ TEST(LocalVocab, propagation) {
       qet(values1));
   checkLocalVocab(&groupBy, std::vector<std::string>{"x", "y1", "y2", "y1|y2"});
 
-  // DISTINCT again, but after something has been added to the local vocabulary.
+  // DISTINCT again, but after something has been added to the local
+  // vocabulary.
   //
-  // TODO: Without a clear cache (see `checkLocalVocab` above), the "y1|y2" from
-  // the previous GROUP BY operation remains in the local vocabulary. This is
-  // surprising behavior for me because I thought the local vocab is tied to the
-  // result table (which is created from scratch in each call to
+  // TODO: Without a clear cache (see `checkLocalVocab` above), the "y1|y2"
+  // from the previous GROUP BY operation remains in the local vocabulary.
+  // This is surprising behavior for me because I thought the local vocab is
+  // tied to the result table (which is created from scratch in each call to
   // `checkLocalVocab`) and not to the operation (`values1` in this case).
   // `
   Distinct distinct2(testQec, qet(values1), {0});
