@@ -9,15 +9,15 @@
 #include <engine/Join.h>
 #include <global/Constants.h>
 #include <util/HashMap.h>
-#include <engine/IdTable.h> // Needed for hashJoin.
-#include <global/Id.h> // Needed for hashJoin.
+#include <engine/IdTable.h>
+#include <global/Id.h>
 
 #include <functional>
 #include <sstream>
 #include <type_traits>
 #include <unordered_set>
-#include <vector> // Needed for hashJoin.
-#include <type_traits> // Needed for giving compile time variables to lambdas.
+#include <vector>
+#include <type_traits>
 
 using std::string;
 
