@@ -72,24 +72,65 @@ class Row {
   bool operator==(const Row& other) const = default;
 };
 
+// The following two classes store a reference to a row in the underlying
+// column-based `Table`. Note that this has to be its own class instead of
+// `Row&` because the rows are not materialized in the table but scattered
+// across memory due to the column-major order. This design of having to
+// dedicated classes for the `value_type` and the `reference` of a container is
+// similar to the approach taken for `std::vector<bool>` in the STL. There are
+// two flavors of the `RowReference` class: One allows only const access and
+// write access on rvalues, while the other one also allows mutable access for
+// lvalues. The rational behind this is to make the following code not compile:
+// auto row = someIdTable[0]; // `row` is a reference that points into the
+//                              // table, but looks like a value, dangerous.
+// row[0] = someNewValue; // This would change the table, very unexpected. But
+//                        // it doesn't compile.
+// std::move(row)[0] = someNewValue;  // This code compiles and changes the
+//                       // table, but no one should write that code and good
+//                       // static analysis should flag it. Unfortunately we
+//                       // have found no way to disable this creative
+//                       // misusage.
+//
+// To explicitly store a reference you have to use the proper `RowReference`
+// type:
+// IdTable::RowReference row = someIdTable[0];
+// row[0] = someNewValue; // The type is called `RowReference` so not that
+//                        // unexpected to change the table.
+// Note, that all STL algorithms handle this correctly as they explicitly use
+// `std::iterator_traits::value_type` and `std::iterator_traits::reference`
+// Which are set to the correct types (`Row` and `RowReference`) for the
+// iterators of the `IdTable` class (for details, see the `IdTable class).
+
+// First the variation of the `RowReference` that can be created by `auto`
+// but has no mutabile access for lvalues.
 class RowReferenceImpl {
  private:
+  // The actual implementation is in a private subclass and only the
+  // `RowReference` and the `IdTable` have direct access to it.
   template <typename Table, bool isConst>
   friend class RowReference;
 
   template <int NumCols, typename Allocator, bool isVies>
   friend class IdTable;
 
+  // The actual implementation of a reference to a row that allows mutable
+  // access only for rvalues. The strange name is chosen deliberately so that
+  // the most likely problem becomes visible from the compiler's error message.
+  // It is templated on the underlying table and on whether this is a const
+  // or a mutable reference.
   template <typename Table, bool isConst = false>
   class DeducingRowReferenceViaAutoIsLikelyABug {
    public:
     using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
     static constexpr int numStaticCols = Table::numStaticCols;
 
-   protected:
+   private:
+    // Make the long class type a little shorter where possible.
+    using This = DeducingRowReferenceViaAutoIsLikelyABug;
+
+   private:
     // The `Table` (as a pointer) and the row (as and index) that this reference
     // points to.
-
     // TODO<joka921> Only storing the row index makes the implementation easy,
     // but possibly harms the performance as every access to a reference
     // involves a multiplication. But this cannot be simply fixed inside the row
@@ -98,27 +139,42 @@ class RowReferenceImpl {
     TablePtr table_ = nullptr;
     size_t row_ = 0;
 
+    // The constructor is public, but the whole class is private. the
+    // constructor must be public, because `IdTable` must have access to it.
    public:
     explicit DeducingRowReferenceViaAutoIsLikelyABug(TablePtr table, size_t row)
         : table_{table}, row_{row} {}
-    // Access to the `i-th` columns of this row.
-    Id& operator[](size_t i) && requires(!isConst) {
-      return (*table_)(row_, i);
-    }
-    const Id& operator[](size_t i) const& { return (*table_)(row_, i); }
-    const Id& operator[](size_t i) const&& { return (*table_)(row_, i); }
 
+   protected:
+    // The actual implementation of operator[].
+    static decltype(auto) getImpl(auto&& self, size_t i) {
+      return (*self.table_)(self.row_, i);
+    }
+
+   public:
+    // Access to the `i-th` columns of this row. Only allowed for const values
+    // and for rvalues.
+    Id& operator[](size_t i) && requires(!isConst) { return getImpl(*this, i); }
+    const Id& operator[](size_t i) const& { return getImpl(*this, i); }
+    const Id& operator[](size_t i) const&& { return getImpl(*this, i); }
+
+    // The number of columns that this row contains.
     size_t numColumns() const { return table_->cols(); }
 
-    // The `const` and `mutable` variations are friends.
-    friend class DeducingRowReferenceViaAutoIsLikelyABug<Table, !isConst>;
-
-    using This = DeducingRowReferenceViaAutoIsLikelyABug;
-    // __________________________________________________________________________
-    friend void swap(This&& a, This&& b) requires(!isConst) {
+   protected:
+    // The implementation of swapping two `RowReference`s (passed either by
+    // value or by reference)
+    static void swapImpl(auto&& a, auto&& b) requires(!isConst) {
       for (size_t i = 0; i < a.numColumns(); ++i) {
         std::swap(std::move(a)[i], std::move(b)[i]);
       }
+    }
+
+   public:
+    // Swap two `RowReference`s, but only if they are temporaries (rvalues).
+    // This modifies the underlying table.
+    friend void swap(This&& a, This&& b) requires(!isConst) {
+      return swapImpl(a, b);
     }
 
     // Equality comparison. Works between two `RowReference`s, but also between
@@ -140,7 +196,7 @@ class RowReferenceImpl {
     }
 
     // Convert from a `RowReference` to a `Row`.
-    operator Row<numStaticCols>() const&& {
+    operator Row<numStaticCols>() const {
       auto numCols = (std::move(*this)).numColumns();
       Row<numStaticCols> result{numCols};
       for (size_t i = 0; i < numCols; ++i) {
@@ -149,58 +205,50 @@ class RowReferenceImpl {
       return result;
     }
 
-   private:
+   protected:
     // Internal implementation of the assignment from a `Row` as well as a
     // `RowReference`. This assignment actually writes to the underlying table.
-    DeducingRowReferenceViaAutoIsLikelyABug& assignmentImpl(const auto& other) {
+    static This& assignmentImpl(auto&& self, const auto& other) {
       if constexpr (numStaticCols == 0) {
-        AD_CHECK(numColumns() == other.numColumns());
+        AD_CHECK(self.numColumns() == other.numColumns());
       }
-      for (size_t i = 0; i < numColumns(); ++i) {
-        std::move(*this)[i] = other[i];
+      for (size_t i = 0; i < self.numColumns(); ++i) {
+        getImpl(self, i) = other[i];
       }
-      return *this;
+      return self;
     }
 
    public:
     // Assignment from a `Row` with the same number of columns.
-    DeducingRowReferenceViaAutoIsLikelyABug& operator=(
-        const Row<numStaticCols>& other) && {
-      return assignmentImpl(other);
+    This& operator=(const Row<numStaticCols>& other) && {
+      return assignmentImpl(*this, other);
     }
 
     // Assignment from a `RowReference` with the same number of columns.
-    DeducingRowReferenceViaAutoIsLikelyABug& operator=(
-        const DeducingRowReferenceViaAutoIsLikelyABug& other) && {
-      return assignmentImpl(other);
+    This& operator=(const DeducingRowReferenceViaAutoIsLikelyABug& other) && {
+      return assignmentImpl(*this, other);
     }
 
     // Assignment from a `const` RowReference to a `mutable` RowReference
-    DeducingRowReferenceViaAutoIsLikelyABug& operator=(
+    This& operator=(
         const DeducingRowReferenceViaAutoIsLikelyABug<Table, true>& other) &&
         requires(!isConst) {
-      return assignmentImpl(other);
+      return assignmentImpl(*this, other);
     }
 
    protected:
-    // No need to copy this internal type, but the implementation requires it,
-    // so the copy Constructor is private.
+    // No need to copy this internal type, but the implementation of the
+    // `RowReference` class below requiress it,
+    // so the copy Constructor is protected.
     DeducingRowReferenceViaAutoIsLikelyABug(
         const DeducingRowReferenceViaAutoIsLikelyABug&) = default;
   };
 };
 
-// This class stores a reference to a row in the underlying column-based
-// `Table`. Note that this has to be its own class instead of `SomeRowType&`
-// because the rows are not materialized in the table but scattered across
-// memory due to the column-major order. This design of having to dedicated
-// classes for the `value_type` and the `reference` of a container is similar to
-// the approach taken for `std::vector<bool>` in the STL. For the caveats of
-// this design carefully study the documentation of of the `IdTable` class.
-// Template arguments:
-//   Table - The `IdTable` type that this class references (Not that`IdTable`
-//           is templated on the number of columns)
-//   isConst - Is this semantically a const reference or a mutable reference.
+// The actual `RowReference` type that should be used externally when a
+// reference actually needs to be stored. Most of its implementation is
+// inherited from or delegated to the `DeducingRowReferenceViaAutoIsLikelyABug`
+// class above, but it also supports mutable access to lvalues.
 template <typename Table, bool isConst = false>
 class RowReference
     : public RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<
@@ -208,34 +256,29 @@ class RowReference
  private:
   using Base =
       RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<Table, isConst>;
-  using Base::row_;
-  using Base::table_;
+  using Base::numStaticCols;
+  using TablePtr = typename Base::TablePtr;
+
+  // Efficient access to the base class subobject to invoke its functions.
+  Base& base() { return static_cast<Base&>(*this); }
+  const Base& base() const { return static_cast<const Base&>(*this); }
 
  public:
-  using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
-  static constexpr int numStaticCols = Table::numStaticCols;
-
- public:
-  // ___________________________________________________________________________
-  explicit RowReference(TablePtr table, size_t row) : Base{table, row} {}
-  // This is deliberatly implicit! TODO<joka921> comment why.
+  // The constructor from the base class is deliberately implicit because we
+  // want the following code to work:
+  // `RowReference r = someFunctionThatReturnsABase();`
   RowReference(Base b) : Base{std::move(b)} {}
 
-  // Access to the `i-th` columns of this row.
-  Id& operator[](size_t i) requires(!isConst) { return (*table_)(row_, i); }
-  const Id& operator[](size_t i) const { return (*table_)(row_, i); }
-
-  size_t numColumns() const { return table_->cols(); }
-
-  // The `const` and `mutable` variations are friends.
-  friend class RowReference<Table, !isConst>;
+  // Access to the `i-th` column of this row.
+  Id& operator[](size_t i) requires(!isConst) {
+    return Base::getImpl(base(), i);
+  }
+  const Id& operator[](size_t i) const { Base::getImpl(base(), i); }
 
   // __________________________________________________________________________
   template <ad_utility::SimilarTo<RowReference> R>
   friend void swap(R&& a, R&& b) requires(!isConst) {
-    for (size_t i = 0; i < a.numColumns(); ++i) {
-      std::swap(a[i], b[i]);
-    }
+    return Base::swapImpl(AD_FWD(a), AD_FWD(b));
   }
 
   // Equality comparison. Works between two `RowReference`s, but also between
@@ -243,60 +286,29 @@ class RowReference
   template <typename T>
   bool operator==(const T& other) const
       requires(numStaticCols == T::numStaticCols) {
-    if constexpr (numStaticCols == 0) {
-      if (numColumns() != other.numColumns()) {
-        return false;
-      }
-    }
-    for (size_t i = 0; i < numColumns(); ++i) {
-      if ((*this)[i] != other[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  // Convert from a `RowReference` to a `Row`.
-  operator Row<numStaticCols>() {
-    Row<numStaticCols> result{numColumns()};
-    for (size_t i = 0; i < numColumns(); ++i) {
-      result[i] = (*this)[i];
-    }
-    return result;
-  }
-
- private:
-  // Internal implementation of the assignment from a `Row` as well as a
-  // `RowReference`. This assignment actually writes to the underlying table.
-  RowReference& assignmentImpl(const auto& other) {
-    if constexpr (numStaticCols == 0) {
-      AD_CHECK(numColumns() == other.numColumns());
-    }
-    for (size_t i = 0; i < numColumns(); ++i) {
-      (*this)[i] = other[i];
-    }
-    return *this;
+    return base() == other;
   }
 
  public:
   // Assignment from a `Row` with the same number of columns.
   RowReference& operator=(const Row<numStaticCols>& other) {
-    return assignmentImpl(other);
+    return this->assignmentImpl(base(), other);
   }
 
   // Assignment from a `RowReference` with the same number of columns.
   RowReference& operator=(const RowReference& other) {
-    return assignmentImpl(other);
+    return assignmentImpl(base(), other);
   }
 
   // Assignment from a `const` RowReference to a `mutable` RowReference
   RowReference& operator=(const RowReference<Table, true>& other) requires(
       !isConst) {
-    return assignmentImpl(other);
+    return assignmentImpl(base(), other);
   }
 
-  // No need to copy `RowReference`s, because that is most likely a bug.
-  // Unfortunately this still allows the pattern
+  // No need to copy `RowReference`s, because that is also most likely a bug.
+  // Currently none of our functions or of the STL-algorithms require it.
+  // If necessary, we can still enable it in the future.
   RowReference(const RowReference&) = delete;
 };
 

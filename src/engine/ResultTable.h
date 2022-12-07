@@ -18,6 +18,7 @@
 #include "global/ValueId.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
+#include "util/Log.h"
 
 using std::array;
 using std::condition_variable;
