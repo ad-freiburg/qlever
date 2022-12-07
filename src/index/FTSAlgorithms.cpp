@@ -955,7 +955,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
         result.push_back();
         result(n, 0) = Id::makeFromTextRecordIndex(itt->second);  // cid
         result(n, 1) = score;
-        for (size_t i = 0; i < fRow.size(); i++) {
+        for (size_t i = 0; i < fRow.numColumns(); i++) {
           result(n, 2 + i) = fRow[i];
         }
       }
@@ -1206,7 +1206,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
           result(n, off) = keyEids[i];
           off++;
         }
-        for (size_t i = 0; i < fRow.size(); i++) {
+        for (size_t i = 0; i < fRow.numColumns(); i++) {
           result(n, off) = fRow[i];
           off++;
         }

@@ -11,228 +11,222 @@
 #include <vector>
 
 #include "global/Id.h"
+#include "util/UninitializedAllocator.h"
 
 namespace columnBasedIdTable {
 
-// Represent a reference or a value of a row in a column-major array of `Ids`.
-template <int NumCols = 0, bool isConst = false>
+// A row of a table of IDs. It stores the IDs as a `std::array` or `std::vector`
+// depending on whether `NumCols` is 0 (which means that the number of columns
+// is specified at runtime). This class is used as the `value_type` of the columns-based
+// `IdTable` and must be used whenever a row (not a reference to a row) has
+// to be stored outside the IdTable.
+// The implementation is a rather thin wrapper around `std::vector<Id>` or
+// `std::array<Id, NumCols>` respectively (see above).
+template <int NumCols = 0>
 class Row {
  public:
   static constexpr bool isDynamic() { return NumCols == 0; }
-  using Ptr = std::conditional_t<isConst, const Id*, Id*>;
-  using Storage =
-      std::conditional_t<isDynamic(), std::vector<Id>, std::array<Id, NumCols>>;
-  using Ref = std::conditional_t<isDynamic(), std::vector<Ptr>,
-                                 std::array<Ptr, NumCols>>;
-  using V = std::variant<Storage, Ref>;
+  static constexpr int numStaticCols = NumCols;
+
+  // TODO<joka921> We could use a vector type with a small buffer optimization
+  // for up to 20 or 30 columns, maybe this increases the performance for the
+  // `isDynamic()` case.
+  using Data =
+      std::conditional_t<isDynamic(), std::vector<Id, ad_utility::default_init_allocator<Id, std::allocator<Id>>>, std::array<Id, NumCols>>;
 
  private:
-  V data_;
-  size_t offset_ = 0;
-  Id& get(Id& i) { return i; }
-  Id& get(Id* i) { return *(i + offset_); }
-  const Id& get(const Id& i) const { return i; }
-  const Id& get(const Id* i) const { return *(i + offset_); }
+  Data data_;
 
-  static Storage initStorage(size_t numCols) {
+  static Data initData(size_t numCols) {
     if constexpr (isDynamic()) {
-      return Storage(numCols);
+      // The `std::vector` has to explicitly allocated
+      return Data(numCols);
     } else {
-      return Storage{};
+      return Data{};
     }
   }
 
  public:
-  explicit Row(size_t numCols) : data_{initStorage(numCols)} {}
+  // For the dynamic case the number of columns must always be specified.
+  explicit Row(size_t numCols) requires(isDynamic()) : data_(numCols){}
+
+  // When the number of columns is statically known, the row can be default-constructed,
+  // but  we keep the constructor that has a `numCols` argument (which is ignored)
+  // for the easier implementation of generic code for both cases.
   Row() requires(!isDynamic()) = default;
-  Row(Ref ids) : data_{std::move(ids)} {}
-  bool storesElements() const { return std::holds_alternative<Storage>(data_); }
+  explicit Row([[maybe_unused]] size_t numCols) requires(!isDynamic()) : Row() {}
 
-  void setOffset(size_t offset) { offset_ = offset; }
-  Id& operator[](size_t idx) requires(!isConst) {
-    return std::visit(
-        [idx, this](auto& vec) -> decltype(auto) {
-          void(this);
-          return get(vec[idx]);
-        },
-        data_);
+  // Access the i-th element.
+  Id& operator[](size_t idx) { return data_[idx]; }
+  const Id& operator[](size_t idx) const { return data_[idx]; }
+
+  size_t numColumns() const { return data_.size(); }
+
+  friend void swap(Row& a, Row& b) {
+    std::swap(a.data_, b.data_);
   }
 
-  const Id& operator[](size_t idx) const {
-    return std::visit(
-        [idx, this](const auto& vec) -> const Id& {
-          void(this);
-          return get(vec[idx]);
-        },
-        data_);
-  }
+  bool operator==(const Row& other) const = default;
+};
 
-  size_t size() const {
-    return std::visit([](const auto& vec) { return vec.size(); }, data_);
-  }
-  size_t cols() const { return size(); }
+class RowReferenceImpl {
+ private:
+  template <typename Table, bool isConst>
+  friend class RowReference;
 
-  template <typename T>
-  Row& copyAssignImpl(const T& other) requires(!isConst) {
-    auto applyOnVectors = [this, &other](auto& target, const auto& src) {
-      (void)this;
-      // TODO<joka921> This loses information if `this` points to references.
-      // But this would anyway be a bug.
-      // TODO<joka921> is the resize really necessary? we should already have
-      // the correct amount of columns.
-      if constexpr (isDynamic()) {
-        target.resize(src.size());
+  template <int NumCols, typename Allocator, bool isVies>
+  friend class IdTable;
+
+  template <typename Table, bool isConst = false>
+  class DeducingRowReferenceViaAutoIsLikelyABug {
+   public:
+    using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
+    static constexpr int numStaticCols = Table::numStaticCols;
+
+   protected:
+    // The `Table` (as a pointer) and the row (as and index) that this reference
+    // points to.
+
+    // TODO<joka921> Only storing the row index makes the implementation easy,
+    // but possibly harms the performance as every access to a reference involves a multiplication. But this cannot be simply fixed inside the row reference, but needs iterators/references to single columns and special algorithms that are aware of the column based structure of the `IdTable`.
+    TablePtr table_ = nullptr;
+    size_t row_ = 0;
+   public:
+    explicit DeducingRowReferenceViaAutoIsLikelyABug(TablePtr table, size_t row) : table_{table}, row_{row} {}
+    // Access to the `i-th` columns of this row.
+    Id& operator[](size_t i) && requires(!isConst) { return (*table_)(row_, i); }
+    const Id& operator[](size_t i) const && { return (*table_)(row_, i); }
+
+    size_t numColumns() const && { return table_->cols(); }
+
+    // The `const` and `mutable` variations are friends.
+    friend class DeducingRowReferenceViaAutoIsLikelyABug<Table, !isConst>;
+
+    using This = DeducingRowReferenceViaAutoIsLikelyABug;
+    // __________________________________________________________________________
+    friend void swap(This&& a, This&& b) requires(!isConst) {
+      for (size_t i = 0; i < a.numColumns(); ++i) {
+        std::swap(a[i], b[i]);
       }
-      for (size_t i = 0; i < src.size(); ++i) {
-        get(target[i]) = other.get(src[i]);
-      }
-    };
-    std::visit(applyOnVectors, data_, other.data_);
-    return *this;
-  }
+    }
 
-  template <bool otherIsConst>
-  Row& operator=(const Row<NumCols, otherIsConst>& other) requires(!isConst) {
-    return copyAssignImpl(other);
-  }
-  Row& operator=(const Row& other) requires(!isConst) {
-    return copyAssignImpl(other);
-  }
-
-  template <int otherCols, bool otherIsConst>
-  friend class Row;
-
-  struct CopyConstructTag {};
-  template <typename T>
-  Row(const T& other, CopyConstructTag) : Row(other.cols()) {
-    auto applyOnVectors = [this, &other](auto& target, const auto& src) {
-      void(this);
-      for (size_t i = 0; i < src.size(); ++i) {
-        if constexpr (!std::is_same_v<
-                          std::remove_reference_t<decltype(target[i])>,
-                          const Id*>) {
-          get(target[i]) = other.get(src[i]);
+    // Equality comparison. Works between two `RowReference`s, but also between
+    // a `RowReference` and a `Row` if the number of columns match.
+    template <typename T>
+    bool operator==(const T& other) const && requires (numStaticCols == T::numStaticCols) {
+      if constexpr (numStaticCols == 0) {
+        if (numColumns() != other.numColumns()) {
+          return false;
         }
-        // TODO<joka921> Else AD_FAIL()
       }
-    };
-    std::visit(applyOnVectors, data_, other.data_);
-  }
-
-  template <bool otherIsConst>
-  Row(const Row<NumCols, otherIsConst>& other)
-      : Row{other, CopyConstructTag{}} {}
-
-  Row(const Row& other) : Row{other, CopyConstructTag{}} {}
-
-  template <ad_utility::SimilarTo<Row> R>
-  friend void swap(R&& a, R&& b) requires(!isConst) {
-    auto applyOnVectors = [&a, &b](auto& target, auto& src) {
-      for (size_t i = 0; i < src.size(); ++i) {
-        std::swap(a.get(target[i]), b.get(src[i]));
-      }
-    };
-    std::visit(applyOnVectors, a.data_, b.data_);
-  }
-
-  struct CloneTag {};
-  Row(const Row& other, CloneTag, size_t offset)
-      : data_{other.data_}, offset_{offset} {}
-  Row& cloneAssign(const Row& other) {
-    data_ = other.data_;
-    offset_ = other.offset_;
-    return *this;
-  }
-
-  bool operator==(const Row other) const {
-    auto applyOnVectors = [this, &other](auto& a, auto& b) {
-      // TODO<joka921> not needed for the dynamic case.
-      (void)this;
-      if (a.size() != b.size()) {
-        return false;
-      }
-      for (size_t i = 0; i < a.size(); ++i) {
-        if (get(a[i]) != other.get(b[i])) {
+      for (size_t i = 0; i < numColumns(); ++i) {
+        if ((*this)[i] != other[i]) {
           return false;
         }
       }
       return true;
-    };
-    return std::visit(applyOnVectors, data_, other.data_);
-  }
-};
-
-// The row that ALWAYS stores the memory.
-template <int NumCols = 0>
-class RowO {
- public:
-  static constexpr bool isDynamic() { return NumCols == 0; }
-  using Storage =
-      std::conditional_t<isDynamic(), std::vector<Id>, std::array<Id, NumCols>>;
-
- private:
-  Storage data_;
-
-  static Storage initStorage(size_t numCols) {
-    if constexpr (isDynamic()) {
-      return Storage(numCols);
-    } else {
-      return Storage{};
     }
-  }
 
- public:
-  explicit RowO(size_t numCols) : data_{initStorage(numCols)} {}
-  RowO() requires(!isDynamic()) = default;
+    // Convert from a `RowReference` to a `Row`.
+    operator Row<numStaticCols>() const && {
+      auto numCols = (std::move(*this)).numColumns();
+      Row<numStaticCols> result{numCols};
+      for (size_t i = 0; i < numCols; ++i) {
+        result[i] = std::move(*this)[i];
+      }
+      return result;
+    }
 
-  Id& operator[](size_t idx) { return data_[idx]; }
+   private:
+    // Internal implementation of the assignment from a `Row` as well as a
+    // `RowReference`. This assignment actually writes to the underlying table.
+    DeducingRowReferenceViaAutoIsLikelyABug& assignmentImpl(const auto& other) {
+      if constexpr (numStaticCols == 0) {
+        AD_CHECK(numColumns() == other.numColumns());
+      }
+      for (size_t i = 0; i < numColumns(); ++i) {
+        (*this)[i] = other[i];
+      }
+      return *this;
+    }
+   public:
 
-  const Id& operator[](size_t idx) const { return data_[idx]; }
+    // Assignment from a `Row` with the same number of columns.
+    DeducingRowReferenceViaAutoIsLikelyABug& operator=(const Row<numStaticCols>& other) && {
+      return assignmentImpl(other);
+    }
 
-  size_t size() const { return data_.size(); }
-  size_t cols() const { return size(); }
+    // Assignment from a `RowReference` with the same number of columns.
+    DeducingRowReferenceViaAutoIsLikelyABug& operator=(const DeducingRowReferenceViaAutoIsLikelyABug& other) && {
+      return assignmentImpl(other);
+    }
 
-  template <ad_utility::SimilarTo<RowO> R>
-  friend void swap(R&& a, R&& b) {
-    std::swap(a.data_, b.data_);
-  }
+    // Assignment from a `const` RowReference to a `mutable` RowReference
+    DeducingRowReferenceViaAutoIsLikelyABug& operator=(const DeducingRowReferenceViaAutoIsLikelyABug<Table, true>& other) && requires (!isConst) {
+      return assignmentImpl(other);
+    }
 
-  bool operator==(const RowO other) const { return data_ == other.data_; }
+    // No need to copy `RowReference`s, because that is most likely a bug.
+    // Unfortunately this still allows the pattern
+    DeducingRowReferenceViaAutoIsLikelyABug(const DeducingRowReferenceViaAutoIsLikelyABug&) = delete;
+  };
 };
 
-// An identical copy to check, whether algorithms accept those differences.
+// This class stores a reference to a row in the underlying column-based `Table`.
+// Note that this has to be its own class instead of `SomeRowType&` because
+// the rows are not materialized in the table but scattered across memory due
+// to the column-major order.
+// This design of having to dedicated  classes for the `value_type` and the `reference`
+// of a container is similar to the approach taken for `std::vector<bool>` in
+// the STL. For the caveats of this design carefully study the documentation of
+// of the `IdTable` class.
+// Template arguments:
+//   Table - The `IdTable` type that this class references (Not that`IdTable`
+//           is templated on the number of columns)
+//   isConst - Is this semantically a const reference or a mutable reference.
 template <typename Table, bool isConst = false>
-class Row2 {
- public:
-  using Ptr = std::conditional_t<isConst, const Table*, Table*>;
-
+class RowReference : public RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<Table, isConst> {
  private:
-  Ptr table_ = nullptr;
-  size_t row_ = 0;
-
+  using Base = RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<Table, isConst>;
+  using Base::table_;
+  using Base::row_;
  public:
-  explicit Row2(Ptr table, size_t row) : table_{table}, row_{row} {}
-  Row2() = default;
-  Id& operator[](size_t idx) requires(!isConst) { return (*table_)(row_, idx); }
+  using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
+  static constexpr int numStaticCols = Table::numStaticCols;
+ public:
 
-  const Id& operator[](size_t idx) const { return (*table_)(row_, idx); }
+  // ___________________________________________________________________________
+  explicit RowReference(TablePtr table, size_t row) : Base{table, row} {}
+  // This is deliberatly implicit! TODO<joka921> comment why.
+  RowReference(Base b) : Base{std::move(b)} {}
 
-  size_t size() const { return table_->cols(); }
-  size_t cols() const { return size(); }
+  // Access to the `i-th` columns of this row.
+  Id& operator[](size_t i) requires(!isConst) { return (*table_)(row_, i); }
+  const Id& operator[](size_t i) const { return (*table_)(row_, i); }
 
-  template <typename otherTable, bool otherIsConst>
-  friend class Row2;
+  size_t numColumns() const { return table_->cols(); }
 
-  template <ad_utility::SimilarTo<Row2> R>
+  // The `const` and `mutable` variations are friends.
+  friend class RowReference<Table, !isConst>;
+
+  // __________________________________________________________________________
+  template <ad_utility::SimilarTo<RowReference> R>
   friend void swap(R&& a, R&& b) requires(!isConst) {
-    for (size_t i = 0; i < a.size(); ++i) {
+    for (size_t i = 0; i < a.numColumns(); ++i) {
       std::swap(a[i], b[i]);
     }
   }
 
-  // TODO<joka921> Constrain this to reasonable types.
-  bool operator==(const auto& other) const {
-    for (size_t i = 0; i < size(); ++i) {
+  // Equality comparison. Works between two `RowReference`s, but also between
+  // a `RowReference` and a `Row` if the number of columns match.
+  template <typename T>
+  bool operator==(const T& other) const requires (numStaticCols == T::numStaticCols) {
+    if constexpr (numStaticCols == 0) {
+      if (numColumns() != other.numColumns()) {
+        return false;
+      }
+    }
+    for (size_t i = 0; i < numColumns(); ++i) {
       if ((*this)[i] != other[i]) {
         return false;
       }
@@ -240,31 +234,47 @@ class Row2 {
     return true;
   }
 
-  template <int NumCols>
-  operator RowO<NumCols>() {
-    RowO<NumCols> result{size()};
-    for (size_t i = 0; i < size(); ++i) {
+  // Convert from a `RowReference` to a `Row`.
+  operator Row<numStaticCols>() {
+    Row<numStaticCols> result{numColumns()};
+    for (size_t i = 0; i < numColumns(); ++i) {
       result[i] = (*this)[i];
     }
     return result;
   }
-  template <int NumCols>
-  Row2& operator=(const RowO<NumCols>& other) {
-    for (size_t i = 0; i < size(); ++i) {
+
+ private:
+  // Internal implementation of the assignment from a `Row` as well as a
+  // `RowReference`. This assignment actually writes to the underlying table.
+  RowReference& assignmentImpl(const auto& other) {
+    if constexpr (numStaticCols == 0) {
+      AD_CHECK(numColumns() == other.numColumns());
+    }
+    for (size_t i = 0; i < numColumns(); ++i) {
       (*this)[i] = other[i];
     }
     return *this;
   }
+ public:
 
-  Row2& operator=(const Row2& other) {
-    for (size_t i = 0; i < size(); ++i) {
-      (*this)[i] = other[i];
-    }
-    return *this;
+  // Assignment from a `Row` with the same number of columns.
+  RowReference& operator=(const Row<numStaticCols>& other) {
+    return assignmentImpl(other);
   }
 
-  // TODO<joka921> This seems to be needed by Gtest, but why?
-  Row2(const Row2&) = default;
+  // Assignment from a `RowReference` with the same number of columns.
+  RowReference& operator=(const RowReference& other) {
+    return assignmentImpl(other);
+  }
+
+  // Assignment from a `const` RowReference to a `mutable` RowReference
+  RowReference& operator=(const RowReference<Table, true>& other) requires (!isConst) {
+    return assignmentImpl(other);
+  }
+
+  // No need to copy `RowReference`s, because that is most likely a bug.
+  // Unfortunately this still allows the pattern
+  RowReference(const RowReference&) = delete;
 };
 
 }  // namespace columnBasedIdTable

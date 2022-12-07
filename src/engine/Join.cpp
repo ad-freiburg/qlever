@@ -507,11 +507,11 @@ void Join::appendCrossProduct(const IdTable::const_iterator& leftBegin,
       const auto& r = *itr;
       res->push_back();
       size_t backIdx = res->size() - 1;
-      for (size_t i = 0; i < l.cols(); i++) {
+      for (size_t i = 0; i < l.numColumns(); i++) {
         (*res)(backIdx, i) = l[i];
       }
-      for (size_t i = 0; i < r.cols(); i++) {
-        (*res)(backIdx, l.cols() + i) = r[i];
+      for (size_t i = 0; i < r.numColumns(); i++) {
+        (*res)(backIdx, l.numColumns() + i) = r[i];
       }
     }
   }

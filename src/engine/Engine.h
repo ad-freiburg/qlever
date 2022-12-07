@@ -108,9 +108,10 @@ class Engine {
           },
           ad_utility::parallel_tag(NUM_SORT_THREADS));
     } else {
+      using Ref = typename IdTableStatic<WIDTH>::row_reference;
       std::sort(stab.begin(), stab.end(),
-                [keyColumn](const auto& a, const auto& b) {
-                  return a[keyColumn] < b[keyColumn];
+                [keyColumn](auto&& a, auto&& b) {
+                  return AD_FWD(a)[keyColumn] < AD_FWD(b)[keyColumn];
                 });
     }
     *tab = stab.moveToDynamic();

@@ -23,7 +23,7 @@ void assertSameUnorderedContent(const IdTable& a, const IdTable& b) {
   auto bCpy = b;
   ASSERT_EQ(a.cols(), b.cols());
   auto sorter = [](const auto& rowFromA, const auto& rowFromB) {
-    for (size_t i = 0; i < rowFromA.cols(); ++i) {
+    for (size_t i = 0; i < rowFromA.numColumns(); ++i) {
       if (rowFromA[i] != rowFromB[i]) {
         return rowFromA[i] < rowFromB[i];
       }

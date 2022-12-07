@@ -28,14 +28,19 @@ template <int NumCols = 0, typename Allocator = std::allocator<Id>,
 class IdTable {
  public:
   static constexpr bool isDynamic = NumCols == 0;
+
+  // Make the number of (statically known) columns accesible to the outside.
+  static constexpr int numStaticCols = NumCols;
   // using Column = std::vector<Id, Allocator>;
   using Columns = std::vector<Id, Allocator>;
 
   using Data = std::conditional_t<isView, const Columns*, Columns>;
 
   // TODO<joka921> Make clear that there are value rows and reference rows.
-  // using row_type = Row2<IdTable>;
-  using row_type = RowO<NumCols>;
+  // using row_type = RowReference<IdTable>;
+  using row_type = Row<NumCols>;
+  using row_reference = RowReference<IdTable, false>;
+  using const_row_reference = RowReference<IdTable, true>;
 
  private:
   Data data_;
@@ -134,7 +139,7 @@ class IdTable {
 
   template <bool isConst>
   struct IteratorHelper {
-    using R = Row2<IdTable, isConst>;
+    using R = RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<IdTable, isConst>;
     using Ptr = std::conditional_t<isConst, const IdTable*, IdTable*>;
     Ptr table_;
 
@@ -149,35 +154,11 @@ class IdTable {
 
   using iterator =
       ad_utility::IteratorForAccessOperator<IdTable, IteratorHelper<false>,
-                                            false, RowO<NumCols>,
-                                            Row2<IdTable, false>>;
+                                            false, Row<NumCols>,
+                                            RowReference<IdTable, false>>;
   using const_iterator =
       ad_utility::IteratorForAccessOperator<IdTable, IteratorHelper<true>, true,
-                                            RowO<NumCols>, Row2<IdTable, true>>;
-
-  /*
-  auto getBaseRow() requires(!isView) {
-    typename Row<NumCols, false>::Ref row;
-    if constexpr (NumCols == 0) {
-      row.resize(cols());
-    }
-    for (size_t i = 0; i < cols(); ++i) {
-      row[i] = &operator()(0, i);
-    }
-    return Row<NumCols, false>{std::move(row)};
-  }
-
-  auto getBaseRow() const {
-    typename Row<NumCols, true>::Ref row;
-    if constexpr (NumCols == 0) {
-      row.resize(cols());
-    }
-    for (size_t i = 0; i < cols(); ++i) {
-      row[i] = &operator()(0, i);
-    }
-    return Row<NumCols, true>{std::move(row)};
-  }
-   */
+                                            Row<NumCols>, RowReference<IdTable, true>>;
 
   iterator begin() requires(!isView) {
     return {this, 0, IteratorHelper<false>{this}};
@@ -253,11 +234,19 @@ class IdTable {
   }
 
   template <typename T, bool isConst>
-  void push_back(const Row2<T, isConst>& el) requires(!isView) {
+  void push_back(const RowReference<T, isConst>& el) requires(!isView) {
     // TODO<joka921> Assert that there is the right number of columns.
     emplace_back();
     for (size_t i = 0; i < cols(); ++i) {
       (*this)(size() - 1, i) = el[i];
+    }
+  }
+  template <typename T, bool isConst>
+  void push_back(const RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<T, isConst>&& el) requires(!isView) {
+    // TODO<joka921> Assert that there is the right number of columns.
+    emplace_back();
+    for (size_t i = 0; i < cols(); ++i) {
+      (*this)(size() - 1, i) = std::move(el)[i];
     }
   }
   /*
