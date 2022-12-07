@@ -155,8 +155,8 @@ void CompressedRelationMetaData::scan(
           buffer.resize(block._numRows);
           decompressBlock(compressedBuffer, block._numRows, buffer.data());
           for (size_t i = 0; i < block._numRows; ++i) {
-            get(currentIndex + i, 0) = buffer[currentIndex + i][0];
-            get(currentIndex + i, 1) = buffer[currentIndex + i][1];
+            get(currentIndex + i, 0) = buffer[i][0];
+            get(currentIndex + i, 1) = buffer[i][1];
           }
         };
 
