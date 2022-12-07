@@ -139,7 +139,9 @@ class IdTable {
 
   template <bool isConst>
   struct IteratorHelper {
-    using R = RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<IdTable, isConst>;
+    using R =
+        RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<IdTable,
+                                                                  isConst>;
     using Ptr = std::conditional_t<isConst, const IdTable*, IdTable*>;
     Ptr table_;
 
@@ -158,7 +160,8 @@ class IdTable {
                                             RowReference<IdTable, false>>;
   using const_iterator =
       ad_utility::IteratorForAccessOperator<IdTable, IteratorHelper<true>, true,
-                                            Row<NumCols>, RowReference<IdTable, true>>;
+                                            Row<NumCols>,
+                                            RowReference<IdTable, true>>;
 
   iterator begin() requires(!isView) {
     return {this, 0, IteratorHelper<false>{this}};
@@ -242,7 +245,9 @@ class IdTable {
     }
   }
   template <typename T, bool isConst>
-  void push_back(const RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<T, isConst>&& el) requires(!isView) {
+  void push_back(
+      const RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<
+          T, isConst>&& el) requires(!isView) {
     // TODO<joka921> Assert that there is the right number of columns.
     emplace_back();
     for (size_t i = 0; i < cols(); ++i) {

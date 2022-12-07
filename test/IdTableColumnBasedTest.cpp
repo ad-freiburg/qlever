@@ -72,6 +72,14 @@ TEST(IdTableColumnBased, IdTable) {
     EXPECT_EQ(table(i, 1), I(3 - i)) << i;
   }
 
-  [[maybe_unused]] auto rowCopy = table[0];
-  ASSERT_EQ(rowCopy[0], table(0, 0));
+  // Note: The following lines would not compile, and that is on purpose!
+  // The reason is that the `rowCopy` was created via `auto`. It is unexpected,
+  // that this creates a `RowReference` and not a `RowCopy` and so we disallow
+  // non-const access for non-lvalues.
+  //[[maybe_unused]] auto rowCopy = table[0];
+  // rowCopy[0] = rowCopy[0];
+
+  // Note: to explicitly use a RowReference, you have to aks for it:
+  IdTable<0>::row_reference rowRef = table[0];
+  rowRef[0] = rowRef[0];
 }
