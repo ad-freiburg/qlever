@@ -34,8 +34,8 @@ namespace columnBasedIdTable {
 //            number of columns will be set at runtime (see above).
 //   Allocator: The allocator type that will be used for the underlying storage.
 //   isView : If true, then this is a const, and non-owning view of another
-//            `IdTable`. Such views are cheap to copy as they just store.
-//            A const pointer to another `IdTable`.
+//            `IdTable`. Such views are cheap to copy as they just store
+//            a const pointer to another `IdTable`.
 // TODO<joka921> The NumColumns should be `size_t` but that requires several
 // additional changes in the rest of the code.
 template <int NumColumns = 0, typename Allocator = std::allocator<Id>,

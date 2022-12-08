@@ -145,7 +145,7 @@ class RowReferenceImpl {
     }
 
    public:
-    // Access to the `i-th` columns of this row. Only allowed for const values
+    // Access to the `i`-th columns of this row. Only allowed for const values
     // and for rvalues.
     Id& operator[](size_t i) && requires(!isConst) { return getImpl(*this, i); }
     const Id& operator[](size_t i) const& { return getImpl(*this, i); }
@@ -156,7 +156,7 @@ class RowReferenceImpl {
 
    protected:
     // The implementation of swapping two `RowReference`s (passed either by
-    // value or by reference)
+    // value or by reference).
     static void swapImpl(auto&& a, auto&& b) requires(!isConst) {
       for (size_t i = 0; i < a.numColumns(); ++i) {
         std::swap(getImpl(a, i), getImpl(b, i));
@@ -262,7 +262,7 @@ class RowReference
   // `RowReference r = someFunctionThatReturnsABase();`
   RowReference(Base b) : Base{std::move(b)} {}
 
-  // Access to the `i-th` column of this row.
+  // Access to the `i`-th column of this row.
   Id& operator[](size_t i) requires(!isConst) {
     return Base::getImpl(base(), i);
   }
