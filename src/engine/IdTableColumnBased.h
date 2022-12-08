@@ -52,7 +52,7 @@ class IdTable {
 
   // Because of the column-major layout, the `row_type` (a value type that
   // stores the values of a  single row) and the `row_reference` (a type that
-  // refers to a specific row of a specific `IdTable` are different. Those are
+  // refers to a specific row of a specific `IdTable`) are different. Those are
   // implemented in a way that makes it hard to use them incorrectly, for
   // details see the definition of the `Row` and `RowReference` class.
   using row_type = Row<NumColumns>;
@@ -77,7 +77,7 @@ class IdTable {
  public:
   // Construct from the number of columns and an allocator. If `NumColumns != 0`
   // Then the argument `numColumns` and `NumColumns` (the static and the
-  // dynamic) number of columns) must be equal, else an assertion fails.
+  // dynamic number of columns) must be equal, else an assertion fails.
   IdTable(size_t numColumns,
           Allocator allocator = Allocator{}) requires(!isView)
       : data_(Columns(std::move(allocator))), numColumns_{numColumns} {
@@ -142,7 +142,7 @@ class IdTable {
 
   // Get access to the underlying `Allocator`.
   // Note: The allocator is always copied, because `std::vector`, which is
-  // used internally only gives access to its allocator by value.
+  // used internally, only gives access to its allocator by value.
   Allocator getAllocator() const { return data().get_allocator(); }
 
   // Get access to a single element specified by the row and the column.
@@ -269,7 +269,7 @@ class IdTable {
 
   // Create a deep copy of this `IdTable` that owns its memory. In most cases
   // this behaves exactly like the copy constructor with the following
-  // exception: If `this` is a views (because the `isView` template parameter is
+  // exception: If `this` is a view (because the `isView` template parameter is
   // `true`), then the copy constructor will also create a (const and
   // non-owning) view, but `clone` will create a mutable deep copy of the data
   // that the view points to
@@ -340,8 +340,8 @@ class IdTable {
   // `ad_utility::IteratorForAccessOperator` template.
   template <typename ReferenceType>
   struct IteratorHelper {
-    auto operator()(auto&& idTable, size_t idx) const {
-      return ReferenceType{&idTable, idx};
+    auto operator()(auto&& idTable, size_t rowIdx) const {
+      return ReferenceType{&idTable, rowIdx};
     }
   };
 
