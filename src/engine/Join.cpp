@@ -765,11 +765,11 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
 
   // Puts the rows of the given table into a hash map, with the value of
   // the join column of a row as the key, and returns the hash map.
-  auto putIntoHashMap = [] (const auto table, const size_t jc, const auto WIDTH) {
+  auto idTableToHashMap = []<int WIDTH>(const IdTableView<WIDTH>& table, const size_t jc) {
     // This declaration works, because generic lambdas are just syntactic sugar
     // for templates. So, if the parameter value of WIDTH is avaible at
     // compilet ime (and marked as such with std::integral_constant), we can
-    // use WIDTH for a template parameter.
+    // use WIDTH for a template parameter. std::integral_constant<int, R_WIDTH>{}, std::integral_constant<int, L_WIDTH>{}
     ad_utility::HashMap<Id, std::vector<std::decay_t<typename IdTableStatic<WIDTH>::const_row_type>>> map;
     for ( size_t j = 0; j < table.size(); j++) {
       map[table(j, jc)].push_back(table[j]);
@@ -783,7 +783,7 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   // is bigger.
   if (a.size() >= b.size()) {
     // a is bigger, or the same size as b. b gets put into the hash table.
-    auto map = putIntoHashMap(b, jc2, std::integral_constant<int, R_WIDTH>{});
+    auto map = idTableToHashMap(b, jc2);
 
 
     // Create cross product by going through a.
@@ -801,7 +801,7 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
 
   } else {
     // b is bigger. a gets put into the hash table.
-    auto map = putIntoHashMap(a, jc1, std::integral_constant<int, L_WIDTH>{});
+    auto map = idTableToHashMap(a, jc1);
 
     // Create cross product by going through b.
     for (size_t j = 0; j < b.size(); j++) {
