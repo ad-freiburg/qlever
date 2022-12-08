@@ -333,61 +333,51 @@ class IdTable {
                                                    capacity_};
   }
 
-  template <bool isConst>
+  // This struct stores a pointer to this table and has an `operator()` that
+  // can be called with a reference to an `IdTable` and the index of a row and
+  // then returns a `row_reference_proxy` to that row. This struct is used to
+  // automatically create random access iterators using the
+  // `ad_utility::IteratorForAccessOperator` template.
+  template <typename ReferenceType>
   struct IteratorHelper {
-    using R =
-        RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<IdTable,
-                                                                  isConst>;
-    using Ptr = std::conditional_t<isConst, const IdTable*, IdTable*>;
-    Ptr table_;
-
-    // The default constructor constructs an invalid iterator that may not
-    // be dereferenced. It is however required by several algorithms in the
-    // STL.
-    IteratorHelper() = default;
-
-    explicit IteratorHelper(Ptr table) : table_{table} {}
-    auto operator()(auto&&, size_t idx) const { return R{table_, idx}; }
+    auto operator()(auto&& idTable, size_t idx) const {
+      return ReferenceType{&idTable, idx};
+    }
   };
 
+  // Automatically setup iterators and const iterators. Note that we explicitly
+  // set the `value_type` of the iterators to `row_type` and the
+  // `reference_type` to `(const_)row_reference`, but dereferencing an iterator
+  // actually yields a
+  // `(const_)row_reference_proxy. The latter one can be implicitly converted
+  // to `row_type` as well as `row_reference`, but binding it to a variable via
+  // `auto` will lead to a `row_reference_proxy` on which only const access is
+  // allowed unless it's an rvalue. This makes it harder to use those types
+  // incorrectly. For more detailed information see the documentation of the
+  // `row_reference` and `row_reference_proxy` types.
+
+  // TODO<joka921> We should probably change the names of all those
+  // typedefs (`iterator` as well as `row_type` etc.) to `PascalCase` for
+  // consistency.
   using iterator =
-      ad_utility::IteratorForAccessOperator<IdTable, IteratorHelper<false>,
-                                            false, Row<NumColumns>,
-                                            RowReference<IdTable, false>>;
-  using const_iterator =
-      ad_utility::IteratorForAccessOperator<IdTable, IteratorHelper<true>, true,
-                                            Row<NumColumns>,
-                                            RowReference<IdTable, true>>;
+      ad_utility::IteratorForAccessOperator<IdTable,
+                                            IteratorHelper<row_reference_proxy>,
+                                            false, row_type, row_reference>;
+  using const_iterator = ad_utility::IteratorForAccessOperator<
+      IdTable, IteratorHelper<const_row_reference_proxy>, true, row_type,
+      const_row_reference>;
 
-  iterator begin() requires(!isView) {
-    return {this, 0, IteratorHelper<false>{this}};
-  }
-  iterator end() requires(!isView) {
-    return {this, size(), IteratorHelper<false>{this}};
-  }
-  const_iterator begin() const { return {this, 0, IteratorHelper<true>{this}}; }
-  const_iterator end() const {
-    return {this, size(), IteratorHelper<true>{this}};
-  }
+  // The usual overloads of `begin()` and `end()` for const and mutable
+  // `IdTable`s.
+  iterator begin() requires(!isView) { return {this, 0}; }
+  iterator end() requires(!isView) { return {this, size()}; }
+  const_iterator begin() const { return {this, 0}; }
+  const_iterator end() const { return {this, size()}; }
 
+  // `cbegin()` and `cend()` allow to explicitly obtain a const iterator from
+  // a mutable object.
   const_iterator cbegin() const { return begin(); }
   const_iterator cend() const { return end(); }
-
-  // TODO<joka921> This operator is rather inefficient, possibly the
-  // tests should use something different.
-  bool operator==(const IdTable& other) const requires(!isView) {
-    if (numColumns() != other.numColumns()) {
-      return false;
-    }
-    for (size_t i = 0; i < numRows(); ++i) {
-      for (size_t j = 0; j < numColumns(); ++j) {
-        if ((*this)(i, j) != other(i, j)) {
-          return false;
-        }
-      }
-    }
-    return true;
-  }
 
   // Erase the rows in the half open interval [beginIt, endIt) from this table.
   // `beginIt` and `endIt` must both be iterators pointing into this table and
@@ -426,6 +416,29 @@ class IdTable {
     for (; beginIt != endIt; ++beginIt) {
       push_back(*beginIt);
     }
+  }
+
+  // Check whether two `IdTables` have the same content. Mostly used for unit
+  // testing.
+  bool operator==(const IdTable& other) const requires(!isView) {
+    if (numColumns() != other.numColumns()) {
+      return false;
+    }
+    if (size() != other.numRows()) {
+      return false;
+    }
+    // TODO<joka921> This operator is rather inefficient, possibly the
+    // tests should use something different.
+    // TODO<joka921> implement the `columns()` interface and implement this
+    // efficiently by comparing all the columns.
+    for (size_t i = 0; i < numRows(); ++i) {
+      for (size_t j = 0; j < numColumns(); ++j) {
+        if ((*this)(i, j) != other(i, j)) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
  private:

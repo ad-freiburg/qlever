@@ -47,7 +47,10 @@ class IteratorForAccessOperator {
   using value_type = std::conditional_t<
       !std::is_void_v<ValueType>, ValueType,
       std::remove_reference_t<std::invoke_result_t<
-          Accessor, const RandomAccessContainer&, index_type>>>;
+          Accessor,
+          std::conditional_t<IsConst, const RandomAccessContainer&,
+                             RandomAccessContainer&>,
+          index_type>>>;
   using pointer = value_type*;
   using reference =
       std::conditional_t<!std::is_void_v<Reference>, Reference, value_type&>;
