@@ -569,22 +569,8 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
         // Always fix a and go through b.
         size_t keepJ = j;
         while (a(i, jc1) == b(j, jc2)) {
-          result.push_back();
-          const size_t backIndex = result.size() - 1;
-          for (size_t h = 0; h < a.cols(); h++) {
-            result(backIndex, h) = a(i, h);
-          }
-
-          // Copy bs columns before the join column
-          for (size_t h = 0; h < jc2; h++) {
-            result(backIndex, h + a.cols()) = b(j, h);
-          }
-
-          // Copy bs columns after the join column
-          for (size_t h = jc2 + 1; h < b.cols(); h++) {
-            result(backIndex, h + a.cols() - 1) = b(j, h);
-          }
-
+          addCombinedRowToIdTable<L_WIDTH, R_WIDTH, OUT_WIDTH>(a[i], b[j], jc2, &result);
+          
           ++j;
           checkTimeoutAfterNCalls();
           if (j >= b.size()) {
