@@ -45,4 +45,4 @@ class IdTable : public IdTableStatic<0, detail::defaultAllocator> {
 
 /// A constant view into an IdTable that does not own its data
 template <int COLS, typename Allocator = detail::defaultAllocator>
-using IdTableView = columnBasedIdTable::IdTable<COLS, Allocator, true>;
+using IdTableView = columnBasedIdTable::IdTable<COLS, Allocator, columnBasedIdTable::IsView::True>;

@@ -118,8 +118,6 @@ void CompressedRelationMetaData::scan(
       get(currentIndex + i, 0) = (*(begin + i))[0];
       get(currentIndex + i, 1) = (*(begin + i))[1];
     }
-    // std::copy(begin, end, position);
-    // position += (end - begin);
     currentIndex += numElements;
     spaceLeft -= numElements;
   };
@@ -172,7 +170,6 @@ void CompressedRelationMetaData::scan(
         // for the next block;
         spaceLeft -= block._numRows;
         currentIndex += block._numRows;
-        // position += block._numRows;
       }
       AD_CHECK(spaceLeft == 0);
     }  // End of omp parallel region, all the decompression was handled now.

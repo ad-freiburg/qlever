@@ -606,7 +606,6 @@ TEST(IdTableTest, conversion) {
 }
 
 TEST(IdTableTest, staticAsserts) {
-  // TODO<joka921> Can those be reinstated.
-  // static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::iterator>);
-  // static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
+   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::iterator>);
+   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
 }

@@ -15,6 +15,13 @@
 
 namespace columnBasedIdTable {
 
+// A simple tag enum to differentiate between "views" (non-owning data structures)
+// and "ordinary" data structures that own their storage (see below).
+enum struct IsView {
+  True, False
+};
+
+
 // A row of a table of IDs. It stores the IDs as a `std::array` or `std::vector`
 // depending on whether `NumColumns` is 0 (which means that the number of
 // columns is specified at runtime). This class is used as the `value_type` of
@@ -103,7 +110,7 @@ class RowReferenceImpl {
   template <typename Table, bool isConst>
   friend class RowReference;
 
-  template <int NumCols, typename Allocator, bool isView>
+  template <int NumCols, typename Allocator, IsView isView>
   friend class IdTable;
 
   // The actual implementation of a reference to a row that allows mutable
@@ -118,7 +125,7 @@ class RowReferenceImpl {
     static constexpr int numStaticColumns = Table::numStaticColumns;
 
     // Grant the `IdTable` class access to the internal details.
-    template <int NumCols, typename Allocator, bool isView>
+    template <int NumCols, typename Allocator, IsView isView>
     friend class IdTable;
 
    private:
