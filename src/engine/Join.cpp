@@ -765,14 +765,12 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
 
   // Puts the rows of the given table into a hash map, with the value of
   // the join column of a row as the key, and returns the hash map.
-  auto idTableToHashMap = []<int WIDTH>(const IdTableView<WIDTH>& table, const size_t jc) {
+  auto idTableToHashMap = []<typename Table>(const Table& table, const size_t jc) {
     // This declaration works, because generic lambdas are just syntactic sugar
-    // for templates. So, if the parameter value of WIDTH is avaible at
-    // compilet ime (and marked as such with std::integral_constant), we can
-    // use WIDTH for a template parameter. std::integral_constant<int, R_WIDTH>{}, std::integral_constant<int, L_WIDTH>{}
-    ad_utility::HashMap<Id, std::vector<std::decay_t<typename IdTableStatic<WIDTH>::const_row_type>>> map;
-    for ( size_t j = 0; j < table.size(); j++) {
-      map[table(j, jc)].push_back(table[j]);
+    // for templates. 
+    ad_utility::HashMap<Id, std::vector<std::decay_t<typename Table::const_row_type>>> map;
+    for (const auto& row : table) {
+      map[row[jc]].push_back(row);
     }
     return map;
   };
