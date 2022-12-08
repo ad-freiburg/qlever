@@ -15,12 +15,10 @@
 
 namespace columnBasedIdTable {
 
-// A simple tag enum to differentiate between "views" (non-owning data structures)
-// and "ordinary" data structures that own their storage (see below).
-enum struct IsView {
-  True, False
-};
-
+// A simple tag enum to differentiate between "views" (non-owning data
+// structures) and "ordinary" data structures that own their storage (see
+// below).
+enum struct IsView { True, False };
 
 // A row of a table of IDs. It stores the IDs as a `std::array` or `std::vector`
 // depending on whether `NumColumns` is 0 (which means that the number of

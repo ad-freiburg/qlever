@@ -9,9 +9,9 @@
 #include <cstdlib>
 #include <functional>
 #include <initializer_list>
+#include <span>
 #include <variant>
 #include <vector>
-#include <span>
 
 #include "engine/idTable/ColumnBasedRow.h"
 #include "global/Id.h"
@@ -131,7 +131,7 @@ class IdTable {
   // be used to write generic code that also works for e.g.
   // `std::vector<someRowType>`
   size_t numRows() const { return numRows_; }
-  size_t size() const { return numRows();}
+  size_t size() const { return numRows(); }
 
   // __________________________________________________________________________
   size_t numColumns() const {
@@ -170,10 +170,10 @@ class IdTable {
   // Resize the `IdTable` to exactly `numRows`. If `numRows < size()`, then the
   // last `size() - numRows` rows of the table will be deleted. If
   // `numRows > size()`, `numRows - size()` new, uninitialized rows are appended
-  // at the end. If `numRows > capacityRows_` then all iterators are invalidated,
-  // as the function has to allocated new memory.
-  // Note: the capacity can be set by the `reserve` function.
-  // Note: The semantics of this functions is similar to `std::vector::resize`.
+  // at the end. If `numRows > capacityRows_` then all iterators are
+  // invalidated, as the function has to allocated new memory. Note: the
+  // capacity can be set by the `reserve` function. Note: The semantics of this
+  // functions is similar to `std::vector::resize`.
   void resize(size_t numRows) requires(!isView) {
     if (numRows > capacityRows_) {
       setCapacity(numRows);
@@ -181,22 +181,22 @@ class IdTable {
     numRows_ = numRows;
   }
 
-  // Reserve space for `numRows` rows. If `numRows <= capacityRows_` then nothing happens. Else reserve enough memory
-  // for `numRows` rows without changing the actual `size()` of the IdTable.
-  // In this case all iterators are invalidated, but you obtain the guarantee,
-  // that the insertion of the next `numRows - size()` elements (via `insert`
-  // or `push_back` can be done in O(1) without dynamic allocations.
+  // Reserve space for `numRows` rows. If `numRows <= capacityRows_` then
+  // nothing happens. Else reserve enough memory for `numRows` rows without
+  // changing the actual `size()` of the IdTable. In this case all iterators are
+  // invalidated, but you obtain the guarantee, that the insertion of the next
+  // `numRows - size()` elements (via `insert` or `push_back` can be done in
+  // O(1) without dynamic allocations.
   void reserve(size_t numRows) requires(!isView) {
     if (numRows > capacityRows_) {
       setCapacity(numRows);
     }
   }
 
-  // Delete all the elements, but keep the allocated memory (`capacityRows_` stays
-  // the same). Runs in O(1). To also free the allocated memory, call
+  // Delete all the elements, but keep the allocated memory (`capacityRows_`
+  // stays the same). Runs in O(1). To also free the allocated memory, call
   // `shrinkToFit()` (see below) after calling `clear()` .
-  void clear() requires(!isView) {
-    numRows_ = 0; }
+  void clear() requires(!isView) { numRows_ = 0; }
 
   // Adjust the capacity to exactly match the size. This optimizes the memory
   // consumption of this table. This operation runs in O(size()), allocates
@@ -218,11 +218,11 @@ class IdTable {
   // Add the `newRow` add the end. Requires that `newRow.size() ==
   // numColumns()`, else the behavior is undefined (in Release mode) or an
   // assertion will fail (in Debug mode).
-  // Note: This behavior is the same for all the overloads of `push_back`. The correct size of `newRow` will be
-  // checked at compile time if possible (when both the size of `newRow` and
-  // `numColumns()` are known at compile-time. If this check cannot be
-  // performed, a wrong size of `newRow` will lead to undefined behavior which
-  // is caught by an `assert` in Debug builds.
+  // Note: This behavior is the same for all the overloads of `push_back`. The
+  // correct size of `newRow` will be checked at compile time if possible (when
+  // both the size of `newRow` and `numColumns()` are known at compile-time. If
+  // this check cannot be performed, a wrong size of `newRow` will lead to
+  // undefined behavior which is caught by an `assert` in Debug builds.
   void push_back(const std::initializer_list<Id>& newRow) requires(!isView) {
     assert(newRow.size() == numColumns());
     emplace_back();
@@ -251,9 +251,10 @@ class IdTable {
 
   // Overload of `push_back` for all kinds of `(const_)row_reference(_proxy)`
   // types that are compatible with this `IdTable`.
-  // Note: This currently excludes rows from `IdTables` with the correct number of columns, but with
-  // a different allocator. If this should ever be needed, we would have to
-  // reformulate the `requires()` clause here a little more complicated.
+  // Note: This currently excludes rows from `IdTables` with the correct number
+  // of columns, but with a different allocator. If this should ever be needed,
+  // we would have to reformulate the `requires()` clause here a little more
+  // complicated.
   template <typename T>
   requires ad_utility::isTypeContainedIn<
       T, std::tuple<row_reference, const_row_reference, row_reference_proxy,
@@ -275,8 +276,8 @@ class IdTable {
   // non-owning) view, but `clone` will create a mutable deep copy of the data
   // that the view points to
   IdTable<NumColumns, Allocator, IsView::False> clone() const {
-    return IdTable<NumColumns, Allocator, IsView::False>{data(), numColumns_, numRows_,
-                                                 capacityRows_};
+    return IdTable<NumColumns, Allocator, IsView::False>{
+        data(), numColumns_, numRows_, capacityRows_};
   }
 
   // From a dynamic (`NumColumns == 0`) IdTable, create a static (`NumColumns !=
@@ -326,12 +327,12 @@ class IdTable {
   //       creates a dynamic view from a dynamic table. This makes generic code
   //       that is templated on the number of columns easier to write.
   template <size_t NewNumColumns>
-  requires(NumColumns == 0 &&
-           !isView) IdTable<NewNumColumns, Allocator, IsView::True> asStaticView()
+  requires(NumColumns == 0 && !isView)
+      IdTable<NewNumColumns, Allocator, IsView::True> asStaticView()
   const {
     AD_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
-    return IdTable<NewNumColumns, Allocator, IsView::True>{&data(), numColumns_,
-                                                   numRows_, capacityRows_};
+    return IdTable<NewNumColumns, Allocator, IsView::True>{
+        &data(), numColumns_, numRows_, capacityRows_};
   }
 
   // This struct stores a pointer to this table and has an `operator()` that
@@ -398,7 +399,7 @@ class IdTable {
     auto startIndex = beginIt - begin();
     auto endIndex = endIt - begin();
     auto numErasedElements = endIndex - startIndex;
-    for (auto& column: getColumns()) {
+    for (auto& column : getColumns()) {
       std::shift_left(column.begin() + startIndex, column.end(),
                       numErasedElements);
     }
@@ -438,7 +439,7 @@ class IdTable {
     const auto& cols = getColumns();
     const auto& otherCols = other.getColumns();
     for (size_t i = 0; i < numColumns(); ++i) {
-      for (size_t j = 0; j < numRows(); ++i) {
+      for (size_t j = 0; j < numRows(); ++j) {
         if (cols[i][j] != otherCols[i][j]) {
           return false;
         }
@@ -498,6 +499,8 @@ class IdTable {
   static auto getColumnsImpl(auto&& self) {
     using Column = decltype(self.getColumn(0));
     if constexpr (isDynamic) {
+      // TODO<joka921, for the dynamic case we could maybe use a vector with
+      // a small buffer optimization or a fixed maximal size from folly etc.
       std::vector<Column> columns;
       columns.reserve(self.numColumns());
       for (size_t i = 0; i < self.numColumns(); ++i) {
@@ -513,19 +516,11 @@ class IdTable {
     }
   }
 
-  // Return all the columns as a `std::vector` (if `isDynamic`) or as a `std::array` (else).
-  // The elements of the vector/array are `std::span<Id>` or `std::span<const Id>`, depending
-  // on whether `this` is const.
-  auto getColumns() {
-    return getColumnsImpl(*this);
-  }
-auto getColumns() const {
-  return getColumnsImpl(*this);
-}
-
-
-
-
+  // Return all the columns as a `std::vector` (if `isDynamic`) or as a
+  // `std::array` (else). The elements of the vector/array are `std::span<Id>`
+  // or `std::span<const Id>`, depending on whether `this` is const.
+  auto getColumns() { return getColumnsImpl(*this); }
+  auto getColumns() const { return getColumnsImpl(*this); }
 };
 
 }  // namespace columnBasedIdTable
