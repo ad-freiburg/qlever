@@ -149,10 +149,10 @@ class IdTable {
   // TODO<joka921, C++23> Use the multidimensional subscript operator.
   // TODO<joka921, C++23> Use explicit object parameters ("deducing this").
   Id& operator()(size_t row, size_t col) requires(!isView) {
-    return data()[col * capacity_ + row];
+    return *(startOfColumn(col) + row);
   }
   const Id& operator()(size_t row, size_t col) const {
-    return data()[col * capacity_ + row];
+    return *(startOfColumn(col) + row);
   }
 
   // Get a reference to the `i`-th row. The returned proxy objects can be
@@ -280,39 +280,57 @@ class IdTable {
 
   // From a dynamic (`NumColumns == 0`) IdTable, create a static (`NumColumns !=
   // 0`) IdTable with `NumColumns == NewNumColumns`. The number of columns
-  // actually stored in the dynamic table must be equal to `NewNumColumns`, else
-  // a runtime check fails. This table will be moved from, meaning that it is
-  // empty after the call. Note: This function can also be used with
-  // `NewNumColumns == 0`, when it
-  //       in fact moves a dynamic table to a new dynamic table. This is useful
-  //       to make generic code that is templated on the number of columns
-  //       easier to write.
+  // actually stored in the dynamic table must be equal to `NewNumColumns`, or
+  // the dynamic table must be empty, else a runtime check fails. This table
+  // will be moved from, meaning that it is empty after the call. Therefore, it
+  // is only allowed to be called on rvalues. Note: This function can also be
+  // used with `NewNumColumns == 0`. Then it
+  //       in fact moves a dynamic table to a new dynamic table. This makes
+  //       generic code that is templated on the number of columns easier to
+  //       write.
   template <int NewNumColumns>
   requires(NumColumns == 0 &&
            !isView) IdTable<NewNumColumns, Allocator> toStatic() && {
-    // TODO<joka921> Some parts of the code currently assume that
-    // calling `toStatic<K>` for `K != 0` and an empty input is fine
-    // without explicitly specifying the number of columns in a previous call
-    // to `setNumColumns`.
     if (size() == 0 && NewNumColumns != 0) {
       setNumColumns(NewNumColumns);
     }
     AD_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
-    return IdTable<NewNumColumns, Allocator>{std::move(data()), numColumns(),
-                                             size(), capacity_};
+    auto result = IdTable<NewNumColumns, Allocator>{
+        std::move(data()), numColumns(), size(), capacity_};
+    size_ = 0;
+    capacity_ = 0;
+    return result;
   }
 
+  // Move this `IdTable` into a dynamic `IdTable` with `NumColumns == 0`. This
+  // function may only be called on rvalues, because the table will be moved
+  // from.
   IdTable<0, Allocator> toDynamic() && requires(!isView) {
-    return IdTable<0, Allocator>{std::move(data()), numColumns_, size(),
-                                 capacity_};
+    auto result = IdTable<0, Allocator>{std::move(data()), numColumns_, size(),
+                                        capacity_};
+    size_ = 0;
+    capacity_ = 0;
+    return result;
   }
 
-  template <size_t NewCols>
+  // From a dynamic (`NumColumns == 0`) IdTable, create a static (`NumColumns !=
+  // 0`) view of an `IdTable` with `NumColumns == NewNumColumns`. The number of
+  // columns actually stored in the dynamic table must be equal to
+  // `NewNumColumns`, or the dynamic table must be empty, else a runtime check
+  // fails. The created view is const and only contains a pointer to the table
+  // from which it was created. Therefore, calling this function is cheap
+  // (O(1)), but the created view is only valid as long as the original table is
+  // valid and unchanged. Note: This function can also be used with
+  // `NewNumColumns == 0`. Then it
+  //       creates a dynamic view from a dynamic table. This makes generic code
+  //       that is templated on the number of columns easier to write.
+  template <size_t NewNumColumns>
   requires(NumColumns == 0 &&
-           !isView) IdTable<NewCols, Allocator, true> asStaticView()
+           !isView) IdTable<NewNumColumns, Allocator, true> asStaticView()
   const {
-    return IdTable<NewCols, Allocator, true>{&data(), numColumns_, size_,
-                                             capacity_};
+    AD_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
+    return IdTable<NewNumColumns, Allocator, true>{&data(), numColumns_, size_,
+                                                   capacity_};
   }
 
   template <bool isConst>
@@ -371,38 +389,47 @@ class IdTable {
     return true;
   }
 
+  // Erase the rows in the half open interval [beginIt, endIt) from this table.
+  // `beginIt` and `endIt` must both be iterators pointing into this table and
+  // that `begin() <= beginIt <= endIt < end`, else
+  // the behavior is undefined.
+  // The order of the elements before and after the erased regions remains
+  // the same. This behavior is similar to `std::vector::erase`.
   void erase(const iterator& beginIt, const iterator& endIt) requires(!isView) {
+    assert(begin() <= beginIt && beginIt <= endIt && endIt <= end());
     auto startIndex = beginIt - begin();
     auto endIndex = endIt - begin();
-    // TODO<joka921> Factor out variables, comment and test.
+    auto numErasedElements = endIndex - startIndex;
+    // TODO<joka921> If we implement more such algorithms that work columnwise,
+    // it would be great to have an interface that lets us iterate over
+    // columns directly, s.t. the following block starts with:
+    // `for (auto& column: getColumns()) { ...}`
     for (size_t i = 0; i < numColumns(); ++i) {
-      std::shift_left(data().begin() + i * capacity_ + startIndex,
-                      data().begin() + (i + 1) * capacity_,
-                      endIndex - startIndex);
+      std::shift_left(startOfColumn(i) + startIndex, startOfColumn(i + 1),
+                      numErasedElements);
     }
-    size_ -= endIndex - startIndex;
+    size_ -= numErasedElements;
   }
 
+  // Erase the single row that `it` points to by shifting all the elements
+  // after `it` towards the beginning. Requires that `begin() <= it < end()`,
+  // else the behavior is undefined.
   void erase(const iterator& it) requires(!isView) { erase(it, it + 1); }
 
-  // TODO<joka921> Insert can be done much more efficient when handled
-  // columnwise (also with arbitrary iterators). But that probably needs more
-  // cooperation from the iterators.
-  // TODO<joka921> The parameters are currently `auto` because the iterators
-  // of views and materialized tables have different types. This should
-  // be constrained to an efficient implementation.
-  void insertAtEnd(auto begin, auto end) {
-    for (; begin != end; ++begin) {
-      push_back(*begin);
+  // Insert all the elements in the range `(beginIt, endIt]` at the end
+  // of this `IdTable`. `beginIt` and `endIt` must *not* point into this
+  // IdTable, else the behavior is undefined.
+  // TODO<joka921> Insert can be done much more efficiently when `beginIt` and
+  // `endIt` are iterators to a different column-major `IdTable`. Implement
+  // this case.
+  void insertAtEnd(auto beginIt, auto endIt) {
+    for (; beginIt != endIt; ++beginIt) {
+      push_back(*beginIt);
     }
   }
 
  private:
- private:
-  // Get direct access to the underlying data().
-  // TODO<joka921> This is public because it is needed by the IndexScan.
-  // But probably the IndexScan should fully create the data and then
-  // pass it to the `IdTable`.
+  // Get direct access to the underlying data() as a reference.
   Columns& data() requires(!isView) { return data_; }
   const Columns& data() const {
     if constexpr (isView) {
@@ -414,13 +441,13 @@ class IdTable {
 
   // Set the capacity to `newCapacity` and reinstate the memory layout.
   // If `newCapacity < size()` then the table will also be truncated at the end
-  // TODO<joka921> what was the use case for this again?
+  // (this functionality is used for exmple by the `shrinkToFit` function.
   void setCapacity(size_t newCapacity) {
     Columns newData{getAllocator()};
     newData.resize(newCapacity * numColumns());
     size_t sz = std::min(capacity_, newCapacity);
     for (size_t i = 0; i < numColumns(); ++i) {
-      std::copy(data().begin() + i * sz, data().begin() + (i + 1) * sz,
+      std::copy(startOfColumn(i), startOfColumn(i) + sz,
                 newData.begin() + i * newCapacity);
     }
     capacity_ = newCapacity;
@@ -435,6 +462,13 @@ class IdTable {
       setCapacity(std::max(1ul, capacity_ * growthFactor));
     }
   }
+
+  // Return an iterator into the underlying `data()` that points to the start
+  // of the `i`-th column. It is safe to call this function with `i ==
+  // numColumns()`, then the `end()` iterator of `data()` will be returned.
+  auto startOfColumn(size_t i) { return data().begin() + i * capacity_; }
+  // TODO<joka921, C++23> use `explicit object parameters` ("deducing this")
+  auto startOfColumn(size_t i) const { return data().begin() + i * capacity_; }
 };
 
 }  // namespace columnBasedIdTable
