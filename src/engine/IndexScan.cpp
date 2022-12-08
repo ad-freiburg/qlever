@@ -265,7 +265,7 @@ void IndexScan::computeResult(ResultTable* result) {
 
 // _____________________________________________________________________________
 void IndexScan::computePSOboundS(ResultTable* result) const {
-  result->_idTable.setCols(1);
+  result->_idTable.setNumColumns(1);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
@@ -275,7 +275,7 @@ void IndexScan::computePSOboundS(ResultTable* result) const {
 
 // _____________________________________________________________________________
 void IndexScan::computePSOfreeS(ResultTable* result) const {
-  result->_idTable.setCols(2);
+  result->_idTable.setNumColumns(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
@@ -286,7 +286,7 @@ void IndexScan::computePSOfreeS(ResultTable* result) const {
 
 // _____________________________________________________________________________
 void IndexScan::computePOSboundO(ResultTable* result) const {
-  result->_idTable.setCols(1);
+  result->_idTable.setNumColumns(1);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
@@ -296,7 +296,7 @@ void IndexScan::computePOSboundO(ResultTable* result) const {
 
 // _____________________________________________________________________________
 void IndexScan::computePOSfreeO(ResultTable* result) const {
-  result->_idTable.setCols(2);
+  result->_idTable.setNumColumns(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
@@ -377,7 +377,7 @@ size_t IndexScan::getCostEstimate() {
 
 // _____________________________________________________________________________
 void IndexScan::computeSPOfreeP(ResultTable* result) const {
-  result->_idTable.setCols(2);
+  result->_idTable.setNumColumns(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
@@ -387,7 +387,7 @@ void IndexScan::computeSPOfreeP(ResultTable* result) const {
 
 // _____________________________________________________________________________
 void IndexScan::computeSOPboundO(ResultTable* result) const {
-  result->_idTable.setCols(1);
+  result->_idTable.setNumColumns(1);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
@@ -397,7 +397,7 @@ void IndexScan::computeSOPboundO(ResultTable* result) const {
 
 // _____________________________________________________________________________
 void IndexScan::computeSOPfreeO(ResultTable* result) const {
-  result->_idTable.setCols(2);
+  result->_idTable.setNumColumns(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
@@ -407,7 +407,7 @@ void IndexScan::computeSOPfreeO(ResultTable* result) const {
 
 // _____________________________________________________________________________
 void IndexScan::computeOPSfreeP(ResultTable* result) const {
-  result->_idTable.setCols(2);
+  result->_idTable.setNumColumns(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
@@ -417,7 +417,7 @@ void IndexScan::computeOPSfreeP(ResultTable* result) const {
 
 // _____________________________________________________________________________
 void IndexScan::computeOSPfreeS(ResultTable* result) const {
-  result->_idTable.setCols(2);
+  result->_idTable.setNumColumns(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
@@ -496,7 +496,7 @@ void IndexScan::computeFullScan(ResultTable* result,
   auto [ignoredRanges, isTripleIgnored] =
       getIndex().getImpl().getIgnoredIdRanges(permutation);
 
-  result->_idTable.setCols(3);
+  result->_idTable.setNumColumns(3);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
@@ -509,7 +509,7 @@ void IndexScan::computeFullScan(ResultTable* result,
     resultSize = getLimit().value();
   }
   result->_idTable.reserve(resultSize);
-  auto table = result->_idTable.moveToStatic<3>();
+  auto table = std::move(result->_idTable).toStatic<3>();
   size_t i = 0;
   auto triplesView =
       getExecutionContext()->getIndex().getImpl().applyToPermutation(
@@ -525,5 +525,5 @@ void IndexScan::computeFullScan(ResultTable* result,
     table.push_back(triple);
     ++i;
   }
-  result->_idTable = table.moveToDynamic();
+  result->_idTable = std::move(table).toDynamic();
 }

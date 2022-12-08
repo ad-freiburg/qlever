@@ -76,7 +76,7 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
   LOG(DEBUG) << "MultiColumnJoin result computation..." << endl;
 
   result->_sortedBy = resultSortedOn();
-  result->_idTable.setCols(getResultWidth());
+  result->_idTable.setNumColumns(getResultWidth());
 
   AD_CHECK_GE(result->_idTable.numColumns(), _joinColumns.size());
 

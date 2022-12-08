@@ -798,13 +798,13 @@ void IndexImpl::getContextListForWords(const string& words,
   }
 
   LOG(DEBUG) << "Packing lists into a ResultTable\n...";
-  IdTableStatic<2> result = dynResult->moveToStatic<2>();
+  IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   result.resize(cids.size());
   for (size_t i = 0; i < cids.size(); ++i) {
     result(i, 0) = Id::makeFromTextRecordIndex(cids[i]);
     result(i, 1) = Id::makeFromInt(scores[i]);
   }
-  *dynResult = result.moveToDynamic();
+  *dynResult = std::move(result).toDynamic();
   LOG(DEBUG) << "Done with getContextListForWords.\n";
 }
 

@@ -37,7 +37,7 @@ TEST(IdTableColumnBased, Row) {
 
 TEST(IdTableColumnBased, IdTable) {
   IdTable table;
-  table.setCols(2);
+  table.setNumColumns(2);
   table.resize(4);
   for (size_t i = 0; i < 4; ++i) {
     table(i, 0) = I(3 - i);

@@ -85,7 +85,7 @@ void Bind::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Got input to Bind operation." << endl;
 
-  result->_idTable.setCols(getResultWidth());
+  result->_idTable.setNumColumns(getResultWidth());
   result->_resultTypes = subRes->_resultTypes;
   result->_localVocab = subRes->_localVocab;
   int inwidth = subRes->_idTable.numColumns();
@@ -121,7 +121,7 @@ void Bind::computeExpressionBind(
       expression->evaluate(&evaluationContext);
 
   const auto input = inputResultTable._idTable.asStaticView<IN_WIDTH>();
-  auto output = outputResultTable->_idTable.moveToStatic<OUT_WIDTH>();
+  auto output = std::move(outputResultTable->_idTable).toStatic<OUT_WIDTH>();
 
   // first initialize the first columns (they remain identical)
   const auto inSize = input.size();
@@ -184,5 +184,5 @@ void Bind::computeExpressionBind(
 
   std::visit(visitor, std::move(expressionResult));
 
-  outputResultTable->_idTable = output.moveToDynamic();
+  outputResultTable->_idTable = std::move(output).toDynamic();
 }

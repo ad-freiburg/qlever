@@ -80,7 +80,7 @@ void OptionalJoin::computeResult(ResultTable* result) {
   LOG(DEBUG) << "OptionalJoin result computation..." << endl;
 
   result->_sortedBy = resultSortedOn();
-  result->_idTable.setCols(getResultWidth());
+  result->_idTable.setNumColumns(getResultWidth());
 
   AD_CHECK_GE(result->_idTable.numColumns(), _joinColumns.size());
 
@@ -337,7 +337,7 @@ void OptionalJoin::optionalJoin(
 
   const IdTableView<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
   const IdTableView<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
-  IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
+  IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
 
   int joinColumnBitmapLeft = 0;
   int joinColumnBitmapRight = 0;
@@ -369,7 +369,7 @@ void OptionalJoin::optionalJoin(
                            joinColumnBitmapRight, joinColumnLeftToRight,
                            &result);
     }
-    *dynResult = result.moveToDynamic();
+    *dynResult = std::move(result).toDynamic();
     return;
   } else if (b.size() == 0 && bOptional) {
     for (size_t ia = 0; ia < a.size(); ia++) {
@@ -377,7 +377,7 @@ void OptionalJoin::optionalJoin(
                            joinColumnBitmapRight, joinColumnLeftToRight,
                            &result);
     }
-    *dynResult = result.moveToDynamic();
+    *dynResult = std::move(result).toDynamic();
     return;
   }
 
@@ -494,5 +494,5 @@ finish:
       ++ia;
     }
   }
-  *dynResult = result.moveToDynamic();
+  *dynResult = std::move(result).toDynamic();
 }

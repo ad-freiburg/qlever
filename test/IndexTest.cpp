@@ -119,7 +119,7 @@ TEST(IndexTest, createFromTurtleTest) {
       // predicate that occurs and <c2> is larger than the largest subject that
       // appears with <b2>.
       IdTable oneColBuffer{makeAllocator()};
-      oneColBuffer.setCols(1);
+      oneColBuffer.setNumColumns(1);
       index.scan("<b2>", "<c2>", &oneColBuffer, index.PSO());
       ASSERT_EQ(oneColBuffer.size(), 0u);
     }

@@ -44,7 +44,7 @@ void Distinct::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
 
   LOG(DEBUG) << "Distinct result computation..." << endl;
-  result->_idTable.setCols(subRes->_idTable.numColumns());
+  result->_idTable.setNumColumns(subRes->_idTable.numColumns());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());

@@ -248,7 +248,7 @@ TEST(FTSAlgorithmsTest, intersectKWayTest) {
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
   try {
     IdTable result{allocator()};
-    result.setCols(3);
+    result.setNumColumns(3);
     vector<TextRecordIndex> cids;
     vector<Id> eids;
     vector<Score> scores;
@@ -300,7 +300,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
 
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   IdTable result{allocator()};
-  result.setCols(3);
+  result.setNumColumns(3);
   vector<TextRecordIndex> cids;
   vector<Id> eids;
   vector<Score> scores;

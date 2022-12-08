@@ -92,7 +92,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
 
   IdTableView<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
   IdTableView<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
-  IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
+  IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
 
   bool matched = false;
   size_t ia = 0, ib = 0;
@@ -177,5 +177,5 @@ void MultiColumnJoin::computeMultiColumnJoin(
     }
   }
 finish:
-  *dynResult = result.moveToDynamic();
+  *dynResult = std::move(result).toDynamic();
 }

@@ -157,7 +157,7 @@ void Union::computeResult(ResultTable* result) {
       result->_resultTypes.push_back(ResultTable::ResultType::KB);
     }
   }
-  result->_idTable.setCols(getResultWidth());
+  result->_idTable.setNumColumns(getResultWidth());
   int leftWidth = subRes1->_idTable.numColumns();
   int rightWidth = subRes2->_idTable.numColumns();
   int outWidth = result->_idTable.numColumns();
@@ -174,7 +174,7 @@ void Union::computeUnion(
     const std::vector<std::array<size_t, 2>>& columnOrigins) {
   const IdTableView<LEFT_WIDTH> left = dynLeft.asStaticView<LEFT_WIDTH>();
   const IdTableView<RIGHT_WIDTH> right = dynRight.asStaticView<RIGHT_WIDTH>();
-  IdTableStatic<OUT_WIDTH> res = dynRes->moveToStatic<OUT_WIDTH>();
+  IdTableStatic<OUT_WIDTH> res = std::move(*dynRes).toStatic<OUT_WIDTH>();
 
   res.reserve(left.size() + right.size());
 
@@ -248,5 +248,5 @@ void Union::computeUnion(
   if (right.size() > 0) {
     appendResult.template operator()<RIGHT_WIDTH>(right, ad_utility::second);
   }
-  *dynRes = res.moveToDynamic();
+  *dynRes = std::move(res).toDynamic();
 }

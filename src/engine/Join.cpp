@@ -85,7 +85,7 @@ void Join::computeResult(ResultTable* result) {
     LOG(TRACE) << "Either side is empty thus join result is empty" << endl;
     runtimeInfo.addDetail("Either side was empty", "");
     size_t resWidth = leftWidth + rightWidth - 1;
-    result->_data.setCols(resWidth);
+    result->_data.setNumColumns(resWidth);
     result->_resultTypes.resize(result->_data.numColumns());
     result->_sortedBy = {_leftJoinCol};
     return;
@@ -111,7 +111,7 @@ void Join::computeResult(ResultTable* result) {
     LOG(TRACE) << "Left side empty thus join result is empty" << endl;
     runtimeInfo.addDetail("The left side was empty", "");
     size_t resWidth = leftWidth + rightWidth - 1;
-    result->_data.setCols(resWidth);
+    result->_data.setNumColumns(resWidth);
     result->_resultTypes.resize(result->_data.numColumns());
     result->_sortedBy = {_leftJoinCol};
     return;
@@ -125,7 +125,7 @@ void Join::computeResult(ResultTable* result) {
 
   AD_CHECK(result);
 
-  result->_idTable.setCols(leftWidth + rightWidth - 1);
+  result->_idTable.setNumColumns(leftWidth + rightWidth - 1);
   result->_resultTypes.reserve(result->_idTable.numColumns());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               leftRes->_resultTypes.begin(),
@@ -257,7 +257,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
   if (isFullScanDummy(_left)) {
     AD_CHECK(!isFullScanDummy(_right))
     _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
-    result->_idTable.setCols(_right->getResultWidth() + 2);
+    result->_idTable.setNumColumns(_right->getResultWidth() + 2);
     result->_sortedBy = {2 + _rightJoinCol};
     shared_ptr<const ResultTable> nonDummyRes = _right->getResult();
     result->_resultTypes.reserve(result->_idTable.numColumns());
@@ -271,7 +271,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
   } else {
     AD_CHECK(!isFullScanDummy(_left))
     _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
-    result->_idTable.setCols(_left->getResultWidth() + 2);
+    result->_idTable.setNumColumns(_left->getResultWidth() + 2);
     result->_sortedBy = {_leftJoinCol};
 
     shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
@@ -505,7 +505,7 @@ void Join::appendCrossProduct(const IdTable::const_iterator& leftBegin,
     for (auto itr = rightBegin; itr != rightEnd; ++itr) {
       const auto& l = *itl;
       const auto& r = *itr;
-      res->push_back();
+      res->emplace_back();
       size_t backIdx = res->size() - 1;
       for (size_t i = 0; i < l.numColumns(); i++) {
         (*res)(backIdx, i) = l[i];
@@ -526,15 +526,17 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
 
   LOG(DEBUG) << "Performing join between two tables.\n";
-  LOG(DEBUG) << "A: width = " << a.numColumns() << ", size = " << a.size() << "\n";
-  LOG(DEBUG) << "B: width = " << b.numColumns() << ", size = " << b.size() << "\n";
+  LOG(DEBUG) << "A: width = " << a.numColumns() << ", size = " << a.size()
+             << "\n";
+  LOG(DEBUG) << "B: width = " << b.numColumns() << ", size = " << b.size()
+             << "\n";
 
   // Check trivial case.
   if (a.size() == 0 || b.size() == 0) {
     return;
   }
 
-  IdTableStatic<OUT_WIDTH> result = dynRes->moveToStatic<OUT_WIDTH>();
+  IdTableStatic<OUT_WIDTH> result = std::move(*dynRes).toStatic<OUT_WIDTH>();
   // Cannot just switch l1 and l2 around because the order of
   // items in the result tuples is important.
   if (a.size() / b.size() > GALLOP_THRESHOLD) {
@@ -569,7 +571,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
         // Always fix a and go through b.
         size_t keepJ = j;
         while (a(i, jc1) == b(j, jc2)) {
-          result.push_back();
+          result.emplace_back();
           const size_t backIndex = result.size() - 1;
           for (size_t h = 0; h < a.numColumns(); h++) {
             result(backIndex, h) = a(i, h);
@@ -612,7 +614,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     }
   }
 finish:
-  *dynRes = result.moveToDynamic();
+  *dynRes = std::move(result).toDynamic();
 
   LOG(DEBUG) << "Join done.\n";
   LOG(DEBUG) << "Result: width = " << dynRes->numColumns()
@@ -708,7 +710,7 @@ void Join::doGallopInnerJoin(const TagType, const IdTableView<L_WIDTH>& l1,
       const size_t keepJ = j;
       while (l1(i, jc1) == l2(j, jc2)) {
         size_t rowIndex = result->size();
-        result->push_back();
+        result->emplace_back();
         for (size_t h = 0; h < l1.numColumns(); h++) {
           (*result)(rowIndex, h) = l1(i, h);
         }

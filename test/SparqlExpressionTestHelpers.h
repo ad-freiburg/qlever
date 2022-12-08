@@ -67,7 +67,7 @@ struct TestContext {
     // has five columns/variables: ?ints (only integers), ?doubles (only
     // doubles), ?numeric (int and double), ?vocab (only entries from the
     // vocabulary), ?mixed (all of the previous). None of the columns is sorted.
-    table.setCols(5);
+    table.setNumColumns(5);
     // Order of the columns:
     // ?ints ?doubles ?numeric ?vocab ?mixed
     table.push_back({IntId(1), DoubleId(0.1), IntId(1), Beta, IntId(1)});

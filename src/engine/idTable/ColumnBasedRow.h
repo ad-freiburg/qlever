@@ -16,11 +16,11 @@
 namespace columnBasedIdTable {
 
 // A row of a table of IDs. It stores the IDs as a `std::array` or `std::vector`
-// depending on whether `NumColumns` is 0 (which means that the number of columns
-// is specified at runtime). This class is used as the `value_type` of the
-// columns-based `IdTable` and must be used whenever a row (not a reference to a
-// row) has to be stored outside the IdTable. The implementation is a rather
-// thin wrapper around `std::vector<Id>` or `std::array<Id, NumColumns>`
+// depending on whether `NumColumns` is 0 (which means that the number of
+// columns is specified at runtime). This class is used as the `value_type` of
+// the columns-based `IdTable` and must be used whenever a row (not a reference
+// to a row) has to be stored outside the IdTable. The implementation is a
+// rather thin wrapper around `std::vector<Id>` or `std::array<Id, NumColumns>`
 // respectively (see above).
 template <int NumColumns = 0>
 class Row {
@@ -116,6 +116,10 @@ class RowReferenceImpl {
    public:
     using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
     static constexpr int numStaticColumns = Table::numStaticColumns;
+
+    // Grant the `IdTable` class access to the internal details.
+    template <int NumCols, typename Allocator, bool isView>
+    friend class IdTable;
 
    private:
     // Make the long class type a little shorter where possible.

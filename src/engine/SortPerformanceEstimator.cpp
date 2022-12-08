@@ -18,13 +18,13 @@ IdTable createRandomIdTable(
     size_t numRows, size_t numColumns,
     const ad_utility::AllocatorWithLimit<Id>& allocator) {
   IdTable result{allocator};
-  result.setCols(numColumns);
+  result.setNumColumns(numColumns);
   result.reserve(numRows);
 
   FastRandomIntGenerator<uint32_t> generator;
 
   for (size_t i = 0; i < numRows; ++i) {
-    result.push_back();
+    result.emplace_back();
     for (size_t j = 0; j < numColumns; ++j) {
       result(i, j) = Id::makeFromVocabIndex(VocabIndex::make(generator()));
     }

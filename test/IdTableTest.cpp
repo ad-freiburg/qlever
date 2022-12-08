@@ -113,7 +113,7 @@ TEST(IdTableTest, reserve_and_resize) {
 
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
-    t1.push_back();
+    t1.emplace_back();
     for (size_t j = 0; j < NUM_COLS; j++) {
       t1(i, j) = I(i * NUM_COLS + 1 + j);
     }
@@ -223,7 +223,7 @@ TEST(IdTableTest, iterating) {
   IdTable t1(NUM_COLS, allocator());
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
-    t1.push_back();
+    t1.emplace_back();
     for (size_t j = 0; j < NUM_COLS; j++) {
       t1(i, j) = I(i * NUM_COLS + 1 + j);
     }
@@ -394,7 +394,7 @@ TEST(IdTableStaticTest, reserve_and_resize) {
 
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
-    t1.push_back();
+    t1.emplace_back();
     for (size_t j = 0; j < NUM_COLS; j++) {
       t1(i, j) = I(i * NUM_COLS + 1 + j);
     }
@@ -504,7 +504,7 @@ TEST(IdTableStaticTest, iterating) {
   IdTableStatic<NUM_COLS> t1{allocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
-    t1.push_back();
+    t1.emplace_back();
     for (size_t j = 0; j < NUM_COLS; j++) {
       t1(i, j) = I(i * NUM_COLS + 1 + j);
     }
@@ -539,7 +539,7 @@ TEST(IdTableTest, conversion) {
 
   IdTable initial = table;
 
-  IdTableStatic<3> s = std::move(table).moveToStatic<3>();
+  IdTableStatic<3> s = std::move(table).toStatic<3>();
   ASSERT_EQ(4u, s.size());
   ASSERT_EQ(3u, s.numColumns());
   for (size_t i = 0; i < s.size(); i++) {
@@ -548,7 +548,7 @@ TEST(IdTableTest, conversion) {
     }
   }
 
-  table = std::move(s).moveToDynamic();
+  table = std::move(s).toDynamic();
   ASSERT_EQ(4u, table.size());
   ASSERT_EQ(3u, table.numColumns());
   for (size_t i = 0; i < table.size(); i++) {
@@ -576,7 +576,7 @@ TEST(IdTableTest, conversion) {
 
   IdTable initialVar = tableVar;
 
-  IdTableStatic<6> staticVar = std::move(tableVar).moveToStatic<6>();
+  IdTableStatic<6> staticVar = std::move(tableVar).toStatic<6>();
   ASSERT_EQ(initialVar.size(), staticVar.size());
   ASSERT_EQ(initialVar.numColumns(), staticVar.numColumns());
   for (size_t i = 0; i < staticVar.size(); i++) {
@@ -585,7 +585,7 @@ TEST(IdTableTest, conversion) {
     }
   }
 
-  IdTable dynamicVar = std::move(staticVar).moveToDynamic();
+  IdTable dynamicVar = std::move(staticVar).toDynamic();
   ASSERT_EQ(initialVar.size(), dynamicVar.size());
   ASSERT_EQ(initialVar.numColumns(), dynamicVar.numColumns());
   for (size_t i = 0; i < dynamicVar.size(); i++) {

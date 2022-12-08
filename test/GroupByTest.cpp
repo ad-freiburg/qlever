@@ -177,7 +177,7 @@ TEST_F(GroupByTest, doGroupBy) {
 
   // This is normally done when calling computeResult in the GroupBy
   // operation.
-  outTable._data.setCols(24);
+  outTable._data.setNumColumns(24);
 
   int inWidth = inputData.cols();
   int outWidth = outTable._data.cols();

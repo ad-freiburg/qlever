@@ -82,7 +82,7 @@ string TextOperationWithFilter::getDescriptor() const {
 void TextOperationWithFilter::computeResult(ResultTable* result) {
   LOG(DEBUG) << "TextOperationWithFilter result computation..." << endl;
   AD_CHECK_GE(getNofVars(), 1);
-  result->_idTable.setCols(getResultWidth());
+  result->_idTable.setNumColumns(getResultWidth());
   shared_ptr<const ResultTable> filterResult = _filterResult->getResult();
 
   result->_resultTypes.reserve(result->_idTable.numColumns());

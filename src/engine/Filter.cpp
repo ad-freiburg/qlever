@@ -49,7 +49,7 @@ void Filter::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Filter result computation..." << endl;
-  result->_idTable.setCols(subRes->_idTable.numColumns());
+  result->_idTable.setNumColumns(subRes->_idTable.numColumns());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
@@ -84,7 +84,7 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
       _expression.getPimpl()->evaluate(&evaluationContext);
 
   const auto input = inputResultTable._idTable.asStaticView<WIDTH>();
-  auto output = outputResultTable->_idTable.moveToStatic<WIDTH>();
+  auto output = std::move(outputResultTable->_idTable).toStatic<WIDTH>();
 
   auto visitor =
       [&]<sparqlExpression::SingleExpressionResult T>(T&& singleResult) {
@@ -137,7 +137,7 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
 
   std::visit(visitor, std::move(expressionResult));
 
-  outputResultTable->_idTable = output.moveToDynamic();
+  outputResultTable->_idTable = std::move(output).toDynamic();
 }
 
 // _____________________________________________________________________________

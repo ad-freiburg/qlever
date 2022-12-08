@@ -49,7 +49,7 @@ void Minus::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Minus result computation..." << endl;
 
   result->_sortedBy = resultSortedOn();
-  result->_idTable.setCols(getResultWidth());
+  result->_idTable.setNumColumns(getResultWidth());
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
@@ -131,7 +131,7 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
 
   IdTableView<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
   IdTableView<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
-  IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
+  IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
 
   std::vector<size_t> rightToLeftCols(b.numColumns(),
                                       std::numeric_limits<size_t>::max());
@@ -204,7 +204,7 @@ finish:
     writeResult(ia);
     ia++;
   }
-  *dynResult = result.moveToDynamic();
+  *dynResult = std::move(result).toDynamic();
 }
 
 template <int A_WIDTH, int B_WIDTH>
