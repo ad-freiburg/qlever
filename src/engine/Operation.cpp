@@ -130,11 +130,14 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       return val;
     };
 
-    // If this index scan was already computed during the query planning, then
-    // there is nothing left to do.
-    auto precomputedResult = getPrecomputedResultFromQueryPlanning();
-    if (precomputedResult.has_value()) {
-      return std::move(precomputedResult.value());
+    // If the result was already computed during the query planning, then
+    // we can simply return that result, but only if we don't have to pin
+    // it to the cache.
+    if (!pinResult) {
+      auto precomputedResult = getPrecomputedResultFromQueryPlanning();
+      if (precomputedResult.has_value()) {
+        return std::move(precomputedResult.value());
+      }
     }
 
     auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda)
