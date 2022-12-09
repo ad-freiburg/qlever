@@ -23,6 +23,117 @@ auto I = [](const auto& id) {
   return Id::makeFromVocabIndex(VocabIndex::make(id));
 };
 
+// This unit tests is part of the documentation of the `IdTable` class. It
+// demonstrates the correct usage of the proxy references that
+// are returned by the `IdTable` when calling `operator[]` or when dereferencing
+// an iterator.
+TEST(IdTableTest, DocumentationOfIteratorUsage) {
+  IdTable t{2, allocator()};
+  t.push_back({I(42), I(43)});
+
+  // The following read-only calls use the proxy object and do not copy
+  // the rows (The right hand side of the `ASSERT_EQ` calls has the type
+  // `IdTable::row_reference_proxy`. The table is not changed, as there is
+  // no write access.
+  ASSERT_EQ(I(42), t[0][0]);
+  ASSERT_EQ(I(42), t(0, 0));
+  ASSERT_EQ(I(42), (*t.begin())[0]);
+
+  // Writing to the table directly via a temporary proxy reference is ok, as
+  // the syntax of all the following calls indicates that the table should
+  // be changed.
+  t[0][0] = I(5);
+  ASSERT_EQ(I(5), t(0, 0));
+  t(0, 0) = I(6);
+  ASSERT_EQ(I(6), t(0, 0));
+  (*t.begin())[0] = I(4);
+  ASSERT_EQ(I(4), t(0, 0));
+
+  // The following examples also mutate the `IdTable` which is again expected,
+  // because we explicitly bind to a reference:
+  {
+    IdTable::row_reference ref = t[0];
+    ref[0] = I(12);
+    ASSERT_EQ(I(12), t(0, 0));
+  }
+  {
+    // This is the interface that all generic algorithms that work on iterators
+    // use. The type of `ref` is also `IdTable::row_reference`.
+    std::iterator_traits<IdTable::iterator>::reference ref = *(t.begin());
+    ref[0] = I(13);
+    ASSERT_EQ(I(13), t(0, 0));
+  }
+
+  // The following calls do not change the table, but are also not expected to
+  // do so because we explitly bind to a `value_type`.
+  {
+    IdTable::row_type row = t[0];  // Explitly copy/materialize the full row.
+    row[0] = I(50);
+    // We have changed the copied row, but not the table.
+    ASSERT_EQ(I(50), row[0]);
+    ASSERT_EQ(I(13), t[0][0]);
+  }
+  {
+    // Exactly the same example, but with `iterator`s and `iterator_traits`.
+    std::iterator_traits<IdTable::iterator>::value_type row =
+        *t.begin();  // Explitly copy/materialize the full row.
+    row[0] = I(51);
+    // We have changed the copied row, but not the table.
+    ASSERT_EQ(I(51), row[0]);
+    ASSERT_EQ(I(13), t[0][0]);
+  }
+
+  // The following examples show the cases where a syntax would lead to
+  // unexpected behavior and is therefore disabled.
+
+  {
+    auto rowProxy = t[0];
+    // x actually is a `row_reference_proxy`. This is unexpected because `auto`
+    // typically yields a value type.
+    // Reading from the proxy is fine, as read access never does any harm.
+    Id id = rowProxy[0];
+    ASSERT_EQ(I(13), id);
+    // The following syntax would change the table unexpectedly and therefore
+    // doesn't compile
+    // rowProxy[0] = I(32);  // Would change `t`, but the variable was created
+    // via auto!
+    // TODO<joka921> There is no easy way to write a test that checks that the
+    // above code wouldn't compile. The following requires also doesn't compile,
+    // because our implementation is not SFINAE-friendly.
+    // static_assert(!requires {rowProxy[0] = I(32);});
+  }
+  {
+    // Exactly the same example, but with an iterator.
+    auto rowProxy = *t.begin();
+    // `rowProxy` actually is a `row_reference_proxy`. This is unexpected
+    // because `auto` typically yields a value type. Reading from the proxy is
+    // fine, as read access never does any harm.
+    Id id = rowProxy[0];
+    ASSERT_EQ(I(13), id);
+    // The following syntax would change the table unexpectedly and therefore
+    // doesn't compile
+    // rowProxy[0] = I(32);  // Would change `t`, but the variable was created
+    // via auto!
+    // TODO<joka921> There is no easy way to write a test that checks that the
+    // above code wouldn't compile. The following requires also doesn't compile,
+    // because our implementation is not SFINAE-friendly.
+    // static_assert(!requires {rowProxy[0] = I(32);});
+  }
+
+  // The following example demonstrates the remaining loophole how a
+  // `row_reference_proxy` variable can still be used to modify the table,
+  // but it has a rather "creative" syntax that shouldn't pass any code review.
+  {
+    auto rowProxy = *t.begin();
+    // The write access to an rvalue of type `row_reference_proxy` is allowed.
+    // This is necessary to make the above examples like `t[0][0] = I(12)` work.
+    // However this syntax (explicitly moving, and then directly writing to
+    // the moved object) is not something that should ever be written.
+    std::move(rowProxy)[0] = I(4321);
+    ASSERT_EQ(I(4321), t(0, 0));
+  }
+}
+
 TEST(IdTableTest, push_back_and_assign) {
   constexpr size_t NUM_ROWS = 30;
   constexpr size_t NUM_COLS = 4;
@@ -53,7 +164,7 @@ TEST(IdTableTest, push_back_and_assign) {
   }
 }
 
-TEST(IdTableTest, insert) {
+TEST(IdTableTest, insertAtEnd) {
   IdTable t1{4, allocator()};
   t1.push_back({I(7), I(2), I(4), I(1)});
   t1.push_back({I(0), I(22), I(1), I(4)});
@@ -66,17 +177,6 @@ TEST(IdTableTest, insert) {
 
   IdTable t2(init);
 
-  /*
-  // Test inserting at the beginning
-  t2.insert(t2.begin(), t1.begin(), t1.end());
-  for (size_t i = 0; i < t1.size(); i++) {
-    ASSERT_EQ(t1[i], t2[i]);
-  }
-  for (size_t i = 0; i < init.size(); i++) {
-    ASSERT_EQ(init[i], t2[i + t1.size()]);
-  }
-   */
-
   // Test inserting at the end
   t2 = init;
   t2.insertAtEnd(t1.begin(), t1.end());
@@ -86,21 +186,6 @@ TEST(IdTableTest, insert) {
   for (size_t i = 0; i < t1.size(); i++) {
     ASSERT_EQ(t1[i], t2[i + init.size()]);
   }
-
-  /*
-  // Test inserting at the center
-  t2 = init;
-  t2.insert(t2.begin() + 3, t1.begin(), t1.end());
-  for (size_t i = 0; i < t2.size(); i++) {
-    if (i < 3) {
-      ASSERT_EQ(init[i], t2[i]);
-    } else if (i < 5) {
-      ASSERT_EQ(t1[i - 3], t2[i]);
-    } else {
-      ASSERT_EQ(init[i - 2], t2[i]);
-    }
-  }
-   */
 }
 
 TEST(IdTableTest, reserve_and_resize) {
@@ -342,17 +427,6 @@ TEST(IdTableStaticTest, insert) {
 
   IdTableStatic<4> t2(init);
 
-  /*
-  // Test inserting at the beginning
-  t2.insert(t2.begin(), t1.begin(), t1.end());
-  for (size_t i = 0; i < t1.size(); i++) {
-    ASSERT_EQ(t1[i], t2[i]);
-  }
-  for (size_t i = 0; i < init.size(); i++) {
-    ASSERT_EQ(init[i], t2[i + t1.size()]);
-  }
-   */
-
   // Test inserting at the end
   t2 = init;
   t2.insertAtEnd(t1.begin(), t1.end());
@@ -365,23 +439,6 @@ TEST(IdTableStaticTest, insert) {
   for (size_t i = 0; i < t1.size(); i++) {
     ASSERT_EQ(t1[i], t2[i + init.size()]);
   }
-
-  // Test inserting at the center
-  /*
-  t2 = init;
-  t2.insert(t2.begin() + 3, t1.begin(), t1.end());
-  for (size_t i = 0; i < t2.size(); i++) {
-    if (i < 3) {
-      ASSERT_EQ(init[i], t2[i]);
-
-    } else if (i < 5) {
-      ASSERT_EQ(t1[i - 3], t2[i]);
-
-    } else {
-      ASSERT_EQ(init[i - 2], t2[i]);
-    }
-  }
-   */
 }
 
 TEST(IdTableStaticTest, reserve_and_resize) {
