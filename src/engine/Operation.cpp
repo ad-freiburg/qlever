@@ -273,8 +273,6 @@ void Operation::createRuntimeInfoFromEstimates() {
       getPrecomputedResultFromQueryPlanning().has_value()
           ? std::optional{_runtimeInfo.status_}
           : std::nullopt;
-  // reset
-  _runtimeInfo = RuntimeInformation{};
   _runtimeInfo.setColumnNames(getInternallyVisibleVariableColumns());
   const auto numCols = getResultWidth();
   _runtimeInfo.numCols_ = numCols;
@@ -384,4 +382,17 @@ const vector<size_t>& Operation::getResultSortedOn() const {
     _resultSortedColumns = resultSortedOn();
   }
   return _resultSortedColumns.value();
+}
+
+// ___________________________________________________________________________
+size_t Operation::getTotalEvaluationTimeDuringQueryProcessing() const {
+  size_t totalTime = 0;
+  forAllDescendants([&totalTime](const QueryExecutionTree* tree) {
+    const auto& rt = tree->getRootOperation()->_runtimeInfo;
+    if (rt.status_ ==
+        RuntimeInformation::Status::completedDuringQueryPlanning) {
+      totalTime += rt.getOperationTime();
+    }
+  });
+  return totalTime;
 }

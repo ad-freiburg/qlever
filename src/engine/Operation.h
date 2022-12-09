@@ -244,6 +244,12 @@ class Operation {
   virtual void updateRuntimeInformationWhenOptimizedOut(
       std::vector<RuntimeInformation> children);
 
+  // Some operations (currently `IndexScans` with only one variable) are
+  // evaluated during query planning. Get the total time of these evaluation
+  // for this operation and all its descendants. This can be used to correct the
+  // time statistics for the query planning and processing.
+  size_t getTotalEvaluationTimeDuringQueryProcessing() const;
+
  private:
   // Create the runtime information in case the evaluation of this operation has
   // failed.
