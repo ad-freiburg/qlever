@@ -130,6 +130,13 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       return val;
     };
 
+    // If this index scan was already computed during the query planning, then
+    // there is nothing left to do.
+    auto precomputedResult = getPrecomputedResultFromQueryPlanning();
+    if (precomputedResult.has_value()) {
+      return std::move(precomputedResult.value());
+    }
+
     auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda)
                               : cache.computeOnce(cacheKey, computeLambda);
 
@@ -252,6 +259,17 @@ void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
 
 // __________________________________________________________________
 void Operation::createRuntimeInfoFromEstimates() {
+  // Handle the case that the result was already computed during the query
+  // planning. In this case, `getResult()` was already called on this object and
+  // the runtime information is already correct.
+  if (getPrecomputedResultFromQueryPlanning().has_value()) {
+    return;
+  }
+  // TODO<joka921> If the above stuff works, this can be removed.
+  std::optional<RuntimeInformation::Status> statusFromPrecomputedResult =
+      getPrecomputedResultFromQueryPlanning().has_value()
+          ? std::optional{_runtimeInfo.status_}
+          : std::nullopt;
   // reset
   _runtimeInfo = RuntimeInformation{};
   _runtimeInfo.setColumnNames(getInternallyVisibleVariableColumns());
@@ -285,6 +303,12 @@ void Operation::createRuntimeInfoFromEstimates() {
     _runtimeInfo.originalTotalTime_ = cachedResult->_runtimeInfo.totalTime_;
     _runtimeInfo.originalOperationTime_ =
         cachedResult->_runtimeInfo.getOperationTime();
+  }
+  if (statusFromPrecomputedResult ==
+      RuntimeInformation::Status::completedDuringQueryPlanning) {
+    _runtimeInfo.status_ =
+        RuntimeInformation::Status::completedDuringQueryPlanning;
+    _runtimeInfo.wasCached_ = false;
   }
 }
 

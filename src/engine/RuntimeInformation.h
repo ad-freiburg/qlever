@@ -25,6 +25,7 @@ class RuntimeInformation {
   enum struct Status {
     notStarted,
     completed,
+    completedDuringQueryPlanning,
     optimizedOut,
     failed,
     failedBecauseChildFailed

@@ -125,6 +125,8 @@ std::string_view RuntimeInformation::toString(Status status) {
   switch (status) {
     case completed:
       return "completed";
+    case completedDuringQueryPlanning:
+      return "completed during query planning";
     case notStarted:
       return "not started";
     case optimizedOut:
