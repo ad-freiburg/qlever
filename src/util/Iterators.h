@@ -8,6 +8,8 @@
 #include <iterator>
 #include <type_traits>
 
+#include "util/Enums.h"
+
 namespace ad_utility {
 
 /// A lambda that accesses the `i`-th element in a `randomAccessContainer`
@@ -37,10 +39,12 @@ using AccessViaBracketOperator = decltype(accessViaBracketOperator);
  * `LambdaHelpers.h`.
  */
 template <typename RandomAccessContainer,
-          typename Accessor = AccessViaBracketOperator, bool IsConst = true,
-          typename ValueType = void, typename Reference = void>
+          typename Accessor = AccessViaBracketOperator,
+          IsConst isConstTag = IsConst::True, typename ValueType = void,
+          typename Reference = void>
 class IteratorForAccessOperator {
  public:
+  static constexpr bool isConst = isConstTag == IsConst::True;
   using iterator_category = std::random_access_iterator_tag;
   using difference_type = int64_t;
   using index_type = uint64_t;
@@ -51,7 +55,7 @@ class IteratorForAccessOperator {
       !std::is_void_v<ValueType>, ValueType,
       std::remove_reference_t<std::invoke_result_t<
           Accessor,
-          std::conditional_t<IsConst, const RandomAccessContainer&,
+          std::conditional_t<isConst, const RandomAccessContainer&,
                              RandomAccessContainer&>,
           index_type>>>;
   using reference =
@@ -60,7 +64,7 @@ class IteratorForAccessOperator {
 
  private:
   using RandomAccessContainerPtr =
-      std::conditional_t<IsConst, const RandomAccessContainer*,
+      std::conditional_t<isConst, const RandomAccessContainer*,
                          RandomAccessContainer*>;
   RandomAccessContainerPtr _vector = nullptr;
   index_type _index{0};

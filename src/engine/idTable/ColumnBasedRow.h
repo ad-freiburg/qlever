@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "global/Id.h"
+#include "util/Enums.h"
 #include "util/UninitializedAllocator.h"
 
 namespace columnBasedIdTable {
@@ -105,7 +106,7 @@ class RowReferenceImpl {
  private:
   // The actual implementation is in a private subclass and only the
   // `RowReference` and the `IdTable` have direct access to it.
-  template <typename Table, bool isConst>
+  template <typename Table, ad_utility::IsConst isConst>
   friend class RowReference;
 
   template <int NumCols, typename Allocator, IsView isView>
@@ -116,9 +117,10 @@ class RowReferenceImpl {
   // the most likely problem becomes visible from the compiler's error message.
   // It is templated on the underlying table and on whether this is a const
   // or a mutable reference.
-  template <typename Table, bool isConst = false>
+  template <typename Table, ad_utility::IsConst isConstTag>
   class DeducingRowReferenceViaAutoIsLikelyABug {
    public:
+    static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
     using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
     static constexpr int numStaticColumns = Table::numStaticColumns;
 
@@ -232,8 +234,8 @@ class RowReferenceImpl {
     }
 
     // Assignment from a `const` RowReference to a `mutable` RowReference
-    This& operator=(
-        const DeducingRowReferenceViaAutoIsLikelyABug<Table, true>& other) &&
+    This& operator=(const DeducingRowReferenceViaAutoIsLikelyABug<
+                    Table, ad_utility::IsConst::True>& other) &&
         requires(!isConst) {
       return assignmentImpl(*this, other);
     }
@@ -251,15 +253,17 @@ class RowReferenceImpl {
 // reference actually needs to be stored. Most of its implementation is
 // inherited from or delegated to the `DeducingRowReferenceViaAutoIsLikelyABug`
 // class above, but it also supports mutable access to lvalues.
-template <typename Table, bool isConst = false>
+template <typename Table, ad_utility::IsConst isConstTag>
 class RowReference
     : public RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<
-          Table, isConst> {
+          Table, isConstTag> {
  private:
   using Base =
-      RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<Table, isConst>;
+      RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<Table,
+                                                                isConstTag>;
   using Base::numStaticColumns;
   using TablePtr = typename Base::TablePtr;
+  static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
 
   // Efficient access to the base class subobject to invoke its functions.
   Base& base() { return static_cast<Base&>(*this); }
@@ -303,8 +307,8 @@ class RowReference
   }
 
   // Assignment from a `const` RowReference to a `mutable` RowReference
-  RowReference& operator=(const RowReference<Table, true>& other) requires(
-      !isConst) {
+  RowReference& operator=(const RowReference<Table, ad_utility::IsConst::True>&
+                              other) requires(!isConst) {
     return assignmentImpl(base(), other);
   }
 

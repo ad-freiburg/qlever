@@ -58,16 +58,19 @@ class IdTable {
   // implemented in a way that makes it hard to use them incorrectly, for
   // details see the definition of the `Row` and `RowReference` class.
   using row_type = Row<NumColumns>;
-  using row_reference = RowReference<IdTable, false>;
-  using const_row_reference = RowReference<IdTable, true>;
+  using row_reference = RowReference<IdTable, ad_utility::IsConst::False>;
+  using const_row_reference = RowReference<IdTable, ad_utility::IsConst::True>;
   // TODO<joka921> Comment the proxies.
   using row_reference_proxy =
-      RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<IdTable, false>;
+      RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<
+          IdTable, ad_utility::IsConst::False>;
   using const_row_reference_proxy =
-      RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<IdTable, true>;
+      RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<
+          IdTable, ad_utility::IsConst::True>;
   using const_row_reference_view_proxy =
       RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<
-          IdTable<NumColumns, Allocator, IsView::True>, true>;
+          IdTable<NumColumns, Allocator, IsView::True>,
+          ad_utility::IsConst::True>;
 
  private:
   Data data_;
@@ -362,13 +365,12 @@ class IdTable {
   // TODO<joka921> We should probably change the names of all those
   // typedefs (`iterator` as well as `row_type` etc.) to `PascalCase` for
   // consistency.
-  using iterator =
-      ad_utility::IteratorForAccessOperator<IdTable,
-                                            IteratorHelper<row_reference_proxy>,
-                                            false, row_type, row_reference>;
+  using iterator = ad_utility::IteratorForAccessOperator<
+      IdTable, IteratorHelper<row_reference_proxy>, ad_utility::IsConst::False,
+      row_type, row_reference>;
   using const_iterator = ad_utility::IteratorForAccessOperator<
-      IdTable, IteratorHelper<const_row_reference_proxy>, true, row_type,
-      const_row_reference>;
+      IdTable, IteratorHelper<const_row_reference_proxy>,
+      ad_utility::IsConst::True, row_type, const_row_reference>;
 
   // The usual overloads of `begin()` and `end()` for const and mutable
   // `IdTable`s.
