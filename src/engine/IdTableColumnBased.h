@@ -21,15 +21,64 @@
 
 namespace columnBasedIdTable {
 
-// A 2D-Array with a fixed number of columns and a variable number of rows.
-// With respect to the number of rows it allows for dynamic resizing at runtime,
-// similar to `std::vector`. The number of columns can either be set at compile
-// time, then `NumColumns != 0` and `NumColumns` is the number of columns. When
+// The `IdTable` class is QLever's central data structure. It is used to store
+// all intermediate and final query results in the ID space.
+// The `IdTable` is a 2D-Array of `Id`s with a fixed number of columns and a
+// variable number of rows. With respect to the number of rows it allows for
+// dynamic resizing at runtime, similar to `std::vector`. The number of columns
+// can either be set at compile time, then the template parameter
+// `NumColumns != 0` and `NumColumns` is the number of columns. When
 // `NumColumns == 0` then the number of columns has to be specified at runtime
-// via the constructor or a call to the member function `setNumColumns()` before
-// any elements have been inserted.
+// via the constructor or an explicit call to the member function
+// `setNumColumns()` before inserting Ids into the `IdTable`.
 // The data layout is column-major, i.e. the elements of the same columns are
-// adjacent in memory.
+// adjacent in memory. This means that it is very cache-friendly to only work
+// on a single column (e.g. computing an expression that aggregates a single
+// variable) or to run algorithms that don't use all the columns similarly
+// intensive (e.g. a `Join` with large inputs but only a small output typically
+// has to access the join column(s) for almost all entries in the inputs, but
+// the other columns only have to be accessed for the (few) rows that become
+// part of the result.
+// In addition to various member functions that allow to directly access a
+// specific element, the `IdTable` also has a generic `iterator` interface with
+// `begin()` and `end()` member functions. These iterators are random-access
+// iterators with respect to the rows and can be passed to any STL algorithm,
+// e.g. `std::sort`. The iterator interface has the following catch: It has two
+// different types: `IdTable::row` (a fully materialized row as an array of
+// `IDs` that is independent of a specific `IdTable` and
+// `IdTable::row_reference` (a proxy type that points to a specific row in a
+// specific `IdTable`. We need such a proxy type because of the column-major
+// layout: A `row` is not stored in contiguous memory, so we cannot directly
+// reference it. The interface with the proxy type is similar to that of
+// `std::vector<bool>`, which also uses proxies instead of references. There the
+// reason is that it is not possible to form a reference to a single bit.
+// We have taken great care to make it hard to misuse the proxy type interface.
+// Most notably, the following examples work as expected:
+// IdTable table{1}; // one column.
+// IdTable.push_back(someId);
+// IdTable[0][0] = someOtherId; // changes the IdTable, expected.
+// IdTable::row_reference ref = IdTable[0][0];
+// ref = anotherId;  // changes the table, expected because a reference was
+//                   // explicitly requested.
+// IdTable::row = IdTable[0];
+// row[0] = someId; // Does not change the Id, but only the materialized row.
+//
+// auto strange = IdTable[0][0]; // This is a proxy type object, so logically
+//                               // a reference.
+// strange[0] = someId; // Would change the IdTable, but doesn't compile because
+//                      // it would be highly unexpected (type deductiion using
+//                      // `auto` typically yields values, not references.
+// For more detailed examples for the usage of this interface see the first
+// unit test in `IdTableTest.cpp`. For details on the implementation of the
+// reference types and the non-compilation of the `auto` example, see
+// `IdTableRow.h`. Fully understanding the internals there is however not
+// required to safely use the `IdTable` class.
+
+// Note: For `std::vector<bool>` the `auto` example above would have compiled
+//       and changed the vector. This is one of the many reasons why the design
+//       of `std::vector<bool>` is considered a bad idea in retrospective by
+//       many experts.
+//
 // Template parameters:
 //   NumColumns: The number of columns (when != 0) or the information, that the
 //            number of columns will be set at runtime (see above).
