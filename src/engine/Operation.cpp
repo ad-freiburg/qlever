@@ -123,8 +123,9 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       // correctly because the result was computed, so we can pass `nullopt` as
       // the last argument.
       timer.stop();
-      updateRuntimeInformationOnSuccess(*val._resultTable, false, timer.msecs(),
-                                        std::nullopt);
+      updateRuntimeInformationOnSuccess(*val._resultTable,
+                                        ad_utility::CacheStatus::computed,
+                                        timer.msecs(), std::nullopt);
       timer.cont();
       val._runtimeInfo = getRuntimeInfo();
       return val;
@@ -190,14 +191,15 @@ void Operation::checkTimeout() const {
 
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
-    const ResultTable& resultTable, bool wasCached, size_t timeInMilliseconds,
-    std::optional<RuntimeInformation> runtimeInfo) {
+    const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
+    size_t timeInMilliseconds, std::optional<RuntimeInformation> runtimeInfo) {
   _runtimeInfo.totalTime_ = timeInMilliseconds;
   _runtimeInfo.numRows_ = resultTable.size();
-  _runtimeInfo.wasCached_ = wasCached;
+  _runtimeInfo.cacheStatus_ = cacheStatus;
 
   _runtimeInfo.status_ = RuntimeInformation::Status::completed;
 
+  bool wasCached = cacheStatus != ad_utility::CacheStatus::computed;
   // If the result was read from the cache, then we need the additional
   // runtime info for the correct child information etc.
   AD_CHECK(!wasCached || runtimeInfo.has_value());
@@ -230,7 +232,7 @@ void Operation::updateRuntimeInformationOnSuccess(
     size_t timeInMilliseconds) {
   updateRuntimeInformationOnSuccess(
       *resultAndCacheStatus._resultPointer->_resultTable,
-      resultAndCacheStatus._wasCached, timeInMilliseconds,
+      resultAndCacheStatus._cacheStatus, timeInMilliseconds,
       resultAndCacheStatus._resultPointer->_runtimeInfo);
 }
 
@@ -298,7 +300,10 @@ void Operation::createRuntimeInfoFromEstimates() {
   auto cachedResult =
       _executionContext->getQueryTreeCache().resultAt(asString());
   if (cachedResult) {
-    _runtimeInfo.wasCached_ = true;
+    // TODO<joka921> When a query fails we currently lose the information
+    // whether one of the cached subresults was cachedPinned in the cache. This
+    // is a little inconvenient, but not a huge problem.
+    _runtimeInfo.cacheStatus_ = ad_utility::CacheStatus::cachedNotPinned;
 
     _runtimeInfo.numRows_ = cachedResult->_resultTable->size();
     _runtimeInfo.originalTotalTime_ = cachedResult->_runtimeInfo.totalTime_;
@@ -309,7 +314,7 @@ void Operation::createRuntimeInfoFromEstimates() {
       RuntimeInformation::Status::completedDuringQueryPlanning) {
     _runtimeInfo.status_ =
         RuntimeInformation::Status::completedDuringQueryPlanning;
-    _runtimeInfo.wasCached_ = false;
+    _runtimeInfo.cacheStatus_ = ad_utility::CacheStatus::computed;
   }
 }
 

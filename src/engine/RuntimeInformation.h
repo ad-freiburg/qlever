@@ -13,6 +13,7 @@
 #include "absl/strings/str_join.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/data/Variable.h"
+#include "util/ConcurrentCache.h"
 #include "util/HashMap.h"
 #include "util/json.h"
 
@@ -56,7 +57,7 @@ class RuntimeInformation {
   Status status_ = Status::notStarted;
 
   /// Was the result of the operation read from the cache or actually computed.
-  bool wasCached_ = false;
+  ad_utility::CacheStatus cacheStatus_ = ad_utility::CacheStatus::computed;
 
   /// A short human-readable string that identifies the operation.
   std::string descriptor_;

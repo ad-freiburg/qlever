@@ -27,6 +27,26 @@ class WaitedForResultWhichThenFailedException : public std::exception {
   }
 };
 
+// A strongly typed enum to differentiate the following cases:
+// a result was stored in the cache, but not cachedPinned. A result was stored
+// in the cache and cachedPinned, a result was not in the cache and therefore
+// had to be computed.
+enum struct CacheStatus { cachedNotPinned, cachedPinned, computed };
+
+constexpr std::string_view toString(CacheStatus status) {
+  switch (status) {
+    case CacheStatus::cachedNotPinned:
+      return "cached-not-pinned";
+    case CacheStatus::cachedPinned:
+      return "cached-pinned";
+    case CacheStatus::computed:
+      return "computed";
+    default:
+      throw std::runtime_error(
+          "Unknown enum value was encountered in `toString(CacheStatus)`");
+  }
+}
+
 // Implementation details, do not call them from outside this module.
 namespace ConcurrentCacheDetail {
 
@@ -116,7 +136,7 @@ class ConcurrentCache {
 
   struct ResultAndCacheStatus {
     shared_ptr<const Value> _resultPointer;
-    bool _wasCached;
+    CacheStatus _cacheStatus;
   };
 
  public:
@@ -257,13 +277,24 @@ class ConcurrentCache {
     // this is done atomically by locking the storage for the whole time
     {
       auto lockPtr = _cacheAndInProgressMap.wlock();
-      bool contained = pinned
-                           ? lockPtr->_cache.containsAndMakePinnedIfExists(key)
-                           : lockPtr->_cache.contains(key);
+      auto& cache = lockPtr->_cache;
+      const auto cacheStatus = [&]() -> CacheStatus {
+        if (cache.containsPinned(key)) {
+          return CacheStatus::cachedPinned;
+        } else if (cache.containsNonPinned(key)) {
+          return CacheStatus::cachedNotPinned;
+        } else {
+          return CacheStatus::computed;
+        }
+      }();
+      if (pinned) {
+        cache.containsAndMakePinnedIfExists(key);
+      }
+      bool contained = cacheStatus != CacheStatus::computed;
       if (contained) {
         // the result is in the cache, simply return it.
         return {static_cast<shared_ptr<const Value>>(lockPtr->_cache[key]),
-                true};
+                cacheStatus};
       } else if (lockPtr->_inProgress.contains(key)) {
         // the result is not cached, but someone else is computing it.
         // it is important, that we do not immediately call getResult() since
@@ -292,7 +323,7 @@ class ConcurrentCache {
         // Signal other threads who are waiting for the results.
         resultInProgress->finish(result);
         // result was not cached
-        return {std::move(result), false};
+        return {std::move(result), CacheStatus::computed};
       } catch (...) {
         // Other threads may try this computation again in the future
         _cacheAndInProgressMap.wlock()->_inProgress.erase(key);
@@ -304,7 +335,7 @@ class ConcurrentCache {
       // someone else is computing the result, wait till it is finished and
       // return the result, we do not count this case as "cached" as we had to
       // wait.
-      return {resultInProgress->getResult(), false};
+      return {resultInProgress->getResult(), CacheStatus::computed};
     }
   }
 

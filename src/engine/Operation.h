@@ -227,9 +227,11 @@ class Operation {
   // Similar to the function above, but the components are specified manually.
   // If nullopt is specified for the last argument, then the `_runtimeInfo` is
   // expected to already have the correct children information. This is only
-  // allowed when `wasCached` is false, otherwise a runtime check will fail.
+  // allowed when `cacheStatus` is `cachedPinned` or `cachedNotPinned`,
+  // otherwise a runtime check will fail.
   virtual void updateRuntimeInformationOnSuccess(
-      const ResultTable& resultTable, bool wasCached, size_t timeInMilliseconds,
+      const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
+      size_t timeInMilliseconds,
       std::optional<RuntimeInformation> runtimeInfo) final;
 
  public:

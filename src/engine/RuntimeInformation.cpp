@@ -45,9 +45,9 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
   out << indentStr(indent) << "total_time: " << totalTime_ << " ms" << '\n';
   out << indentStr(indent) << "operation_time: " << getOperationTime() << " ms"
       << '\n';
-  out << indentStr(indent) << "cached: " << ((wasCached_) ? "true" : "false")
-      << '\n';
-  if (wasCached_) {
+  out << indentStr(indent)
+      << "cache_status: " << ad_utility::toString(cacheStatus_) << '\n';
+  if (cacheStatus_ != ad_utility::CacheStatus::computed) {
     out << indentStr(indent) << "original_total_time: " << originalTotalTime_
         << " ms" << '\n';
     out << indentStr(indent)
@@ -100,7 +100,7 @@ void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
 
 // ________________________________________________________________________________________________________________
 double RuntimeInformation::getOperationTime() const {
-  if (wasCached_) {
+  if (cacheStatus_ != ad_utility::CacheStatus::computed) {
     return totalTime_;
   } else {
     auto result = totalTime_;
@@ -151,7 +151,7 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
       {"operation_time", rti.getOperationTime()},
       {"original_total_time", rti.originalTotalTime_},
       {"original_operation_time", rti.originalOperationTime_},
-      {"was_cached", rti.wasCached_},
+      {"was_cached", ad_utility::toString(rti.cacheStatus_)},
       {"details", rti.details_},
       {"estimated_total_cost", rti.costEstimate_},
       {"estimated_operation_cost", rti.getOperationCostEstimate()},
