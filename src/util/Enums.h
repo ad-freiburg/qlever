@@ -9,8 +9,8 @@
 
 namespace ad_utility {
 
-// Enum to distinguish between types that are conceptually const and such that
-// are mutable. For example usages see the `IteratorForAccessOperator` and
-// `IdTable` classes.
+// Enum to distinguish between types that are conceptually const and types that
+// are conceptually mutable. For example usages see the
+// `IteratorForAccessOperator` and `IdTable` classes.
 enum struct IsConst { True, False };
 }  // namespace ad_utility

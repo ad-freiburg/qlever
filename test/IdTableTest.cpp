@@ -33,7 +33,7 @@ TEST(IdTableTest, DocumentationOfIteratorUsage) {
 
   // The following read-only calls use the proxy object and do not copy
   // the rows (The right hand side of the `ASSERT_EQ` calls has the type
-  // `IdTable::row_reference_proxy`. The table is not changed, as there is
+  // `IdTable::row_reference_restricted`. The table is not changed, as there is
   // no write access.
   ASSERT_EQ(I(42), t[0][0]);
   ASSERT_EQ(I(42), t(0, 0));
@@ -56,16 +56,17 @@ TEST(IdTableTest, DocumentationOfIteratorUsage) {
     ref[0] = I(12);
     ASSERT_EQ(I(12), t(0, 0));
   }
+
+  // This is the interface that all generic algorithms that work on iterators
+  // use. The type of `ref` is also `IdTable::row_reference`.
   {
-    // This is the interface that all generic algorithms that work on iterators
-    // use. The type of `ref` is also `IdTable::row_reference`.
     std::iterator_traits<IdTable::iterator>::reference ref = *(t.begin());
     ref[0] = I(13);
     ASSERT_EQ(I(13), t(0, 0));
   }
 
   // The following calls do not change the table, but are also not expected to
-  // do so because we explitly bind to a `value_type`.
+  // do so because we explicitly bind to a `value_type`.
   {
     IdTable::row_type row = t[0];  // Explitly copy/materialize the full row.
     row[0] = I(50);
@@ -88,24 +89,23 @@ TEST(IdTableTest, DocumentationOfIteratorUsage) {
 
   {
     auto rowProxy = t[0];
-    // x actually is a `row_reference_proxy`. This is unexpected because `auto`
-    // typically yields a value type.
-    // Reading from the proxy is fine, as read access never does any harm.
+    // x actually is a `row_reference_restricted`. This is unexpected because
+    // `auto` typically yields a value type. Reading from the proxy is fine, as
+    // read access never does any harm.
     Id id = rowProxy[0];
     ASSERT_EQ(I(13), id);
     // The following syntax would change the table unexpectedly and therefore
     // doesn't compile
     // rowProxy[0] = I(32);  // Would change `t`, but the variable was created
     // via auto!
-    // TODO<joka921> There is no easy way to write a test that checks that the
-    // above code wouldn't compile. The following requires also doesn't compile,
-    // because our implementation is not SFINAE-friendly.
-    // static_assert(!requires {rowProxy[0] = I(32);});
+    // The technical reason is that the `operator[]` returns a `const Id&` even
+    // though the `rowProxy` object is not const:
+    static_assert(std::is_same_v<const Id&, decltype(rowProxy[0])>);
   }
   {
     // Exactly the same example, but with an iterator.
     auto rowProxy = *t.begin();
-    // `rowProxy` actually is a `row_reference_proxy`. This is unexpected
+    // `rowProxy` actually is a `row_reference_restricted`. This is unexpected
     // because `auto` typically yields a value type. Reading from the proxy is
     // fine, as read access never does any harm.
     Id id = rowProxy[0];
@@ -114,21 +114,21 @@ TEST(IdTableTest, DocumentationOfIteratorUsage) {
     // doesn't compile
     // rowProxy[0] = I(32);  // Would change `t`, but the variable was created
     // via auto!
-    // TODO<joka921> There is no easy way to write a test that checks that the
-    // above code wouldn't compile. The following requires also doesn't compile,
-    // because our implementation is not SFINAE-friendly.
-    // static_assert(!requires {rowProxy[0] = I(32);});
+    // The technical reason is that the `operator[]` returns a `const Id&` even
+    // though the `rowProxy` object is not const:
+    static_assert(std::is_same_v<const Id&, decltype(rowProxy[0])>);
   }
 
   // The following example demonstrates the remaining loophole how a
-  // `row_reference_proxy` variable can still be used to modify the table,
+  // `row_reference_restricted` variable can still be used to modify the table,
   // but it has a rather "creative" syntax that shouldn't pass any code review.
   {
     auto rowProxy = *t.begin();
-    // The write access to an rvalue of type `row_reference_proxy` is allowed.
-    // This is necessary to make the above examples like `t[0][0] = I(12)` work.
-    // However this syntax (explicitly moving, and then directly writing to
-    // the moved object) is not something that should ever be written.
+    // The write access to an rvalue of type `row_reference_restricted` is
+    // allowed. This is necessary to make the above examples like `*t.begin() =
+    // I(12)` work. However this syntax (explicitly moving, and then directly
+    // writing to the moved object) is not something that should ever be
+    // written.
     std::move(rowProxy)[0] = I(4321);
     ASSERT_EQ(I(4321), t(0, 0));
   }

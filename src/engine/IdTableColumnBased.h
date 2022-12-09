@@ -54,19 +54,19 @@ namespace columnBasedIdTable {
 // reason is that it is not possible to form a reference to a single bit.
 // We have taken great care to make it hard to misuse the proxy type interface.
 // Most notably, the following examples work as expected:
-// IdTable table{1}; // one column.
-// IdTable.push_back(someId);
-// IdTable[0][0] = someOtherId; // changes the IdTable, expected.
+// IdTable table{1}; // Create an `IdTable` with one column.
+// IdTable.push_back({someId});  // Add a single row to the table.
+// IdTable[0][0] = someOtherId; // Changes the IdTable, expected.
 // IdTable::row_reference ref = IdTable[0][0];
-// ref = anotherId;  // changes the table, expected because a reference was
+// ref = anotherId;  // changes the `IdTable`, expected because a reference was
 //                   // explicitly requested.
 // IdTable::row = IdTable[0];
 // row[0] = someId; // Does not change the Id, but only the materialized row.
 //
-// auto strange = IdTable[0][0]; // This is a proxy type object, so logically
-//                               // a reference.
+// auto strange = IdTable[0]; // `strange` is a proxy type object, so logically
+//                            // a reference.
 // strange[0] = someId; // Would change the IdTable, but doesn't compile because
-//                      // it would be highly unexpected (type deductiion using
+//                      // it would be highly unexpected (type deduction using
 //                      // `auto` typically yields values, not references.
 // For more detailed examples for the usage of this interface see the first
 // unit test in `IdTableTest.cpp`. For details on the implementation of the
@@ -109,15 +109,19 @@ class IdTable {
   using row_type = Row<NumColumns>;
   using row_reference = RowReference<IdTable, ad_utility::IsConst::False>;
   using const_row_reference = RowReference<IdTable, ad_utility::IsConst::True>;
-  // TODO<joka921> Comment the proxies.
-  using row_reference_proxy =
-      RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<
+
+ private:
+  // Assign shorter aliases for some types that are important for the correct
+  // handling of the proxy reference, but are not visible to the outside.
+  // For details see `IdTableRow.h`
+  using row_reference_restricted =
+      RowReferenceImpl::RowReferenceWithRestrictedAccess<
           IdTable, ad_utility::IsConst::False>;
-  using const_row_reference_proxy =
-      RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<
+  using const_row_reference_restricted =
+      RowReferenceImpl::RowReferenceWithRestrictedAccess<
           IdTable, ad_utility::IsConst::True>;
-  using const_row_reference_view_proxy =
-      RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<
+  using const_row_reference_view_restricted =
+      RowReferenceImpl::RowReferenceWithRestrictedAccess<
           IdTable<NumColumns, Allocator, IsView::True>,
           ad_utility::IsConst::True>;
 
@@ -212,10 +216,10 @@ class IdTable {
   // Get a reference to the `i`-th row. The returned proxy objects can be
   // implicitly and trivially converted to `row_reference`. For the design
   // rationale behind those proxy types see above for their definition.
-  row_reference_proxy operator[](size_t index) requires(!isView) {
+  row_reference_restricted operator[](size_t index) requires(!isView) {
     return *(begin() + index);
   }
-  const_row_reference_proxy operator[](size_t index) const {
+  const_row_reference_restricted operator[](size_t index) const {
     return *(begin() + index);
   }
 
@@ -309,8 +313,9 @@ class IdTable {
   // complicated.
   template <typename T>
   requires ad_utility::isTypeContainedIn<
-      T, std::tuple<row_reference, const_row_reference, row_reference_proxy,
-                    const_row_reference_proxy, const_row_reference_view_proxy>>
+      T, std::tuple<row_reference, const_row_reference,
+                    row_reference_restricted, const_row_reference_restricted,
+                    const_row_reference_view_restricted>>
   void push_back(const T& newRow) requires(!isView) {
     if constexpr (NumColumns == 0) {
       assert(newRow.numColumns() == numColumns());
@@ -389,8 +394,8 @@ class IdTable {
 
   // This struct stores a pointer to this table and has an `operator()` that
   // can be called with a reference to an `IdTable` and the index of a row and
-  // then returns a `row_reference_proxy` to that row. This struct is used to
-  // automatically create random access iterators using the
+  // then returns a `row_reference_restricted` to that row. This struct is used
+  // to automatically create random access iterators using the
   // `ad_utility::IteratorForAccessOperator` template.
 
   template <typename ReferenceType>
@@ -404,21 +409,21 @@ class IdTable {
   // set the `value_type` of the iterators to `row_type` and the
   // `reference_type` to `(const_)row_reference`, but dereferencing an iterator
   // actually yields a
-  // `(const_)row_reference_proxy. The latter one can be implicitly converted
-  // to `row_type` as well as `row_reference`, but binding it to a variable via
-  // `auto` will lead to a `row_reference_proxy` on which only const access is
-  // allowed unless it's an rvalue. This makes it harder to use those types
-  // incorrectly. For more detailed information see the documentation of the
-  // `row_reference` and `row_reference_proxy` types.
+  // `(const_)row_reference_restricted. The latter one can be implicitly
+  // converted to `row_type` as well as `row_reference`, but binding it to a
+  // variable via `auto` will lead to a `row_reference_restricted` on which only
+  // const access is allowed unless it's an rvalue. This makes it harder to use
+  // those types incorrectly. For more detailed information see the
+  // documentation of the `row_reference` and `row_reference_restricted` types.
 
   // TODO<joka921> We should probably change the names of all those
   // typedefs (`iterator` as well as `row_type` etc.) to `PascalCase` for
   // consistency.
   using iterator = ad_utility::IteratorForAccessOperator<
-      IdTable, IteratorHelper<row_reference_proxy>, ad_utility::IsConst::False,
-      row_type, row_reference>;
+      IdTable, IteratorHelper<row_reference_restricted>,
+      ad_utility::IsConst::False, row_type, row_reference>;
   using const_iterator = ad_utility::IteratorForAccessOperator<
-      IdTable, IteratorHelper<const_row_reference_proxy>,
+      IdTable, IteratorHelper<const_row_reference_restricted>,
       ad_utility::IsConst::True, row_type, const_row_reference>;
 
   // The usual overloads of `begin()` and `end()` for const and mutable
@@ -439,12 +444,11 @@ class IdTable {
   // the behavior is undefined.
   // The order of the elements before and after the erased regions remains
   // the same. This behavior is similar to `std::vector::erase`.
-  // TODO<joka921> Is this function actually used / useful in functions other
-  // than unit tests? if not, throw it out.
-  // TODO<joka921> It is currently used by the implmentation of DISTINCT,
-  // which is currently done via `std::unique` on a full IdTable.
-  // but this should be an out-of-place algorithm that doesn't need the final
-  // `erase`.
+  // TODO<joka921> It is currently used by the implementation of DISTINCT,
+  // which first copies the sorted input completely, and then calls
+  // `std::unique`, followed by `erase` at the end. `DISTINCT` should be
+  // implemented via an out-of-place algorithm that only writes the distinct
+  // elements. The the follwing two functions can be deleted.
   void erase(const iterator& beginIt, const iterator& endIt) requires(!isView) {
     assert(begin() <= beginIt && beginIt <= endIt && endIt <= end());
     auto startIndex = beginIt - begin();
@@ -537,7 +541,7 @@ class IdTable {
     }
   }
 
-  // Get the `i`-th column. It is stored contiguously in memory
+  // Get the `i`-th column. It is stored contiguously in memory.
   std::span<Id> getColumn(size_t i) {
     return {data().data() + i * capacityRows_, numRows_};
   }

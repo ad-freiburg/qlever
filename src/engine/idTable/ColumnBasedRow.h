@@ -118,7 +118,7 @@ class RowReferenceImpl {
   // It is templated on the underlying table and on whether this is a const
   // or a mutable reference.
   template <typename Table, ad_utility::IsConst isConstTag>
-  class DeducingRowReferenceViaAutoIsLikelyABug {
+  class RowReferenceWithRestrictedAccess {
    public:
     static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
     using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
@@ -130,7 +130,7 @@ class RowReferenceImpl {
 
    private:
     // Make the long class type a little shorter where possible.
-    using This = DeducingRowReferenceViaAutoIsLikelyABug;
+    using This = RowReferenceWithRestrictedAccess;
 
    private:
     // The `Table` (as a pointer) and the row (as and index) that this reference
@@ -146,7 +146,7 @@ class RowReferenceImpl {
     // The constructor is public, but the whole class is private. the
     // constructor must be public, because `IdTable` must have access to it.
    public:
-    explicit DeducingRowReferenceViaAutoIsLikelyABug(TablePtr table, size_t row)
+    explicit RowReferenceWithRestrictedAccess(TablePtr table, size_t row)
         : table_{table}, row_{row} {}
 
    protected:
@@ -229,12 +229,12 @@ class RowReferenceImpl {
     }
 
     // Assignment from a `RowReference` with the same number of columns.
-    This& operator=(const DeducingRowReferenceViaAutoIsLikelyABug& other) && {
+    This& operator=(const RowReferenceWithRestrictedAccess& other) && {
       return assignmentImpl(*this, other);
     }
 
     // Assignment from a `const` RowReference to a `mutable` RowReference
-    This& operator=(const DeducingRowReferenceViaAutoIsLikelyABug<
+    This& operator=(const RowReferenceWithRestrictedAccess<
                     Table, ad_utility::IsConst::True>& other) &&
         requires(!isConst) {
       return assignmentImpl(*this, other);
@@ -244,23 +244,22 @@ class RowReferenceImpl {
     // No need to copy this internal type, but the implementation of the
     // `RowReference` class below requiress it,
     // so the copy Constructor is protected.
-    DeducingRowReferenceViaAutoIsLikelyABug(
-        const DeducingRowReferenceViaAutoIsLikelyABug&) = default;
+    RowReferenceWithRestrictedAccess(const RowReferenceWithRestrictedAccess&) =
+        default;
   };
 };
 
 // The actual `RowReference` type that should be used externally when a
 // reference actually needs to be stored. Most of its implementation is
-// inherited from or delegated to the `DeducingRowReferenceViaAutoIsLikelyABug`
+// inherited from or delegated to the `RowReferenceWithRestrictedAccess`
 // class above, but it also supports mutable access to lvalues.
 template <typename Table, ad_utility::IsConst isConstTag>
 class RowReference
-    : public RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<
-          Table, isConstTag> {
+    : public RowReferenceImpl::RowReferenceWithRestrictedAccess<Table,
+                                                                isConstTag> {
  private:
   using Base =
-      RowReferenceImpl::DeducingRowReferenceViaAutoIsLikelyABug<Table,
-                                                                isConstTag>;
+      RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, isConstTag>;
   using Base::numStaticColumns;
   using TablePtr = typename Base::TablePtr;
   static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
