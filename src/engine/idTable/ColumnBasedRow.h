@@ -1,6 +1,6 @@
-//  Copyright 2022, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -24,10 +24,10 @@ enum struct IsView { True, False };
 // A row of a table of IDs. It stores the IDs as a `std::array` or `std::vector`
 // depending on whether `NumColumns` is 0 (which means that the number of
 // columns is specified at runtime). This class is used as the `value_type` of
-// the columns-based `IdTable` and must be used whenever a row (not a reference
-// to a row) has to be stored outside the IdTable. The implementation is a
-// rather thin wrapper around `std::vector<Id>` or `std::array<Id, NumColumns>`
-// respectively (see above).
+// the columns-ordered `IdTable` and must be used whenever a row (not a
+// reference to a row) has to be stored outside the IdTable. The implementation
+// is a rather thin wrapper around `std::vector<Id>` or `std::array<Id,
+// NumColumns>`, respectively (see above).
 template <int NumColumns = 0>
 class Row {
  public:
@@ -49,12 +49,13 @@ class Row {
   Data data_;
 
  public:
-  // For the dynamic case the number of columns always has to be specified.
+  // Construct a row for the dynamic case (then the number of columns has to be
+  // specified).
   explicit Row(size_t numCols) requires(isDynamic()) : data_(numCols) {}
 
-  // When the number of columns is statically known, the row can be
-  // default-constructed, but  we keep the constructor that has a `numCols`
-  // argument (which is ignored) for the easier implementation of generic code
+  // Construct a row when the number of columns is statically known. Besides the
+  // default constructor, we also keep the constructor that has a `numCols`
+  // argument (which is ignored), in order to facilitate generic code that works
   // for both cases.
   Row() requires(!isDynamic()) = default;
   explicit Row([[maybe_unused]] size_t numCols) requires(!isDynamic())
@@ -72,30 +73,12 @@ class Row {
 };
 
 // The following two classes store a reference to a row in the underlying
-// column-based `Table`. Note that this has to be its own class instead of
-// `Row&` because the rows are not materialized in the table but scattered
-// across memory due to the column-major order. This design of having two
-// dedicated classes for the `value_type` and the `reference` of a container is
-// similar to the approach taken for `std::vector<bool>` in the STL. There are
-// two flavors of the `RowReference` class: One allows only const access and
-// write access on rvalues, while the other one also allows mutable access for
-// lvalues. The rational behind this is to make the following code not compile:
-// auto row = someIdTable[0]; // `row` is a reference that points into the
-//                              // table, but looks like a value, dangerous.
-// row[0] = someNewValue; // This would change the table, very unexpected. But
-//                        // it doesn't compile.
-// std::move(row)[0] = someNewValue;  // This code compiles and changes the
-//                       // table, but no one should write that code and good
-//                       // static analysis should flag it. Unfortunately we
-//                       // have found no way to disable this creative
-//                       // misusage.
+// column-based `Table`. This has to be its own class instead of `Row&` because
+// the rows are not materialized in the table but scattered across memory due to
+// the column-major order. This is explained in detail (and with code examples)
+// in the comment before class `IdTable`.
 //
-// To explicitly store a reference you have to use the proper `RowReference`
-// type:
-// IdTable::RowReference row = someIdTable[0];
-// row[0] = someNewValue; // The type is called `RowReference` so not that
-//                        // unexpected to change the table.
-// Note, that all STL algorithms handle this correctly as they explicitly use
+// Note that all STL algorithms handle this correctly as they explicitly use
 // `std::iterator_traits::value_type` and `std::iterator_traits::reference`
 // Which are set to the correct types (`Row` and `RowReference`) for the
 // iterators of the `IdTable` class (for details, see the `IdTable class).
@@ -113,10 +96,10 @@ class RowReferenceImpl {
   friend class IdTable;
 
   // The actual implementation of a reference to a row that allows mutable
-  // access only for rvalues. The strange name is chosen deliberately so that
-  // the most likely problem becomes visible from the compiler's error message.
-  // It is templated on the underlying table and on whether this is a const
-  // or a mutable reference.
+  // access only for rvalues. The rather long name is chosen deliberately so
+  // that the most likely problem becomes visible from the compiler's error
+  // message. The class is templated on the underlying table and on whether this
+  // is a const or a mutable reference.
   template <typename Table, ad_utility::IsConst isConstTag>
   class RowReferenceWithRestrictedAccess {
    public:
@@ -133,13 +116,15 @@ class RowReferenceImpl {
     using This = RowReferenceWithRestrictedAccess;
 
    private:
-    // The `Table` (as a pointer) and the row (as and index) that this reference
-    // points to.
+    // The `Table` (as a pointer) and the row (as an index) to which this
+    // reference points.
+    //
     // TODO<joka921> Only storing the row index makes the implementation easy,
-    // but possibly harms the performance as every access to a reference
-    // involves a multiplication. But this cannot be simply fixed inside the row
-    // reference, but needs iterators/references to single columns and special
-    // algorithms that are aware of the column based structure of the `IdTable`.
+    // but possibly harms the performance because every access to a reference
+    // involves a multiplication. However, this cannot simply be fixed inside
+    // the row reference, but needs iterators/references to single columns and
+    // special algorithms that are aware of the column-based structure of the
+    // `IdTable`.
     TablePtr table_ = nullptr;
     size_t row_ = 0;
 
