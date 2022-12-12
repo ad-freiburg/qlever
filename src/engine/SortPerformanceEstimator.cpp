@@ -6,12 +6,12 @@
 
 #include <cstdlib>
 
-#include "../util/Log.h"
-#include "../util/Random.h"
-#include "../util/Timer.h"
 #include "CallFixedSize.h"
 #include "Engine.h"
-#include "IdTable.h"
+#include "engine/idTable/IdTable.h"
+#include "util/Log.h"
+#include "util/Random.h"
+#include "util/Timer.h"
 
 // ___________________________________________________________________
 IdTable createRandomIdTable(

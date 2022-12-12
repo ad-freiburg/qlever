@@ -11,9 +11,9 @@
 #include <optional>
 #include <vector>
 
-#include "engine/IdTable.h"
 #include "engine/LocalVocab.h"
 #include "engine/ResultType.h"
+#include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "global/ValueId.h"
 #include "util/Exception.h"

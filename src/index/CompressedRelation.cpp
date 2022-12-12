@@ -4,13 +4,13 @@
 
 #include "CompressedRelation.h"
 
-#include "../engine/IdTable.h"
-#include "../util/Cache.h"
-#include "../util/CompressionUsingZstd/ZstdWrapper.h"
-#include "../util/ConcurrentCache.h"
-#include "../util/TypeTraits.h"
-#include "./Permutations.h"
-#include "ConstantsIndexBuilding.h"
+#include "engine/idTable/IdTable.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/Permutations.h"
+#include "util/Cache.h"
+#include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/ConcurrentCache.h"
+#include "util/TypeTraits.h"
 
 using namespace std::chrono_literals;
 

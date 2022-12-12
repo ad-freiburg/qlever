@@ -8,12 +8,12 @@
 #include <type_traits>
 #include <vector>
 
-#include "../global/Constants.h"
-#include "../global/Id.h"
-#include "../util/Exception.h"
-#include "../util/Log.h"
-#include "./IndexSequence.h"
-#include "IdTable.h"
+#include "engine/IndexSequence.h"
+#include "engine/idTable/IdTable.h"
+#include "global/Constants.h"
+#include "global/Id.h"
+#include "util/Exception.h"
+#include "util/Log.h"
 
 class Engine {
  public:

@@ -8,8 +8,7 @@
 #include <array>
 #include <vector>
 
-#include "engine/IdTable.h"
-#include "engine/IdTableColumnBased.h"
+#include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
