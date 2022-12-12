@@ -298,17 +298,18 @@ void Operation::createRuntimeInfoFromEstimates() {
   _runtimeInfo.multiplicityEstimates_ = multiplicityEstimates;
 
   auto cachedResult =
-      _executionContext->getQueryTreeCache().resultAt(asString());
-  if (cachedResult) {
+      _executionContext->getQueryTreeCache().getIfContained(asString());
+  if (cachedResult.has_value()) {
+    const auto& [resultPointer, cacheStatus] = cachedResult.value();
     // TODO<joka921> When a query fails we currently lose the information
     // whether one of the cached subresults was cachedPinned in the cache. This
     // is a little inconvenient, but not a huge problem.
-    _runtimeInfo.cacheStatus_ = ad_utility::CacheStatus::cachedNotPinned;
+    _runtimeInfo.cacheStatus_ = cacheStatus;
+    const auto& rtiFromCache = resultPointer->_runtimeInfo;
 
-    _runtimeInfo.numRows_ = cachedResult->_resultTable->size();
-    _runtimeInfo.originalTotalTime_ = cachedResult->_runtimeInfo.totalTime_;
-    _runtimeInfo.originalOperationTime_ =
-        cachedResult->_runtimeInfo.getOperationTime();
+    _runtimeInfo.numRows_ = rtiFromCache.numRows_;
+    _runtimeInfo.originalTotalTime_ = rtiFromCache.totalTime_;
+    _runtimeInfo.originalOperationTime_ = rtiFromCache.getOperationTime();
   }
   if (statusFromPrecomputedResult ==
       RuntimeInformation::Status::completedDuringQueryPlanning) {
