@@ -105,3 +105,18 @@ class RuntimeInformation {
  private:
   static std::string_view toString(Status status);
 };
+
+// A class to store information about the execution of a complete query, e.g.
+// the time spent during query planning. Note: The information about the
+// `QueryExecutionTree` (e.g. how much time was spent in which operation) is
+// stored in the `RuntimeInformation` class above.
+struct RuntimeInformationRoot {
+  // The time spent during query planning (this does not include the time spent
+  // on `IndexScan`s that were executed during the query planning).
+  size_t timeQueryPlanning = 0;
+  size_t timeIndexScansQueryPlanning = 0;
+  /// Output as json. The signature of this function is mandated by the json
+  /// library to allow for implicit conversion.
+  friend void to_json(nlohmann::ordered_json& j,
+                      const RuntimeInformationRoot& rti);
+};

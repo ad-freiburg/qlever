@@ -432,7 +432,9 @@ Awaitable<json> Server::composeResponseQleverJson(
           std::vector<std::string>{"?subject", "?predicate", "?object"};
     }
 
-    j["runtimeInformation"] =
+    j["runtimeInformation"]["meta"] =
+        nlohmann::ordered_json(qet.getRootOperation()->getRuntimeInfoRoot());
+    j["runtimeInformation"]["query_execution_tree"] =
         nlohmann::ordered_json(qet.getRootOperation()->getRuntimeInfo());
 
     {
@@ -738,10 +740,10 @@ boost::asio::awaitable<void> Server::processQuery(
         qet.getRootOperation()->getTotalEvaluationTimeDuringQueryProcessing();
     size_t timeForQueryPlanning =
         requestTimer.msecs() - timeForIndexScansInQueryPlanning;
-    auto& runtimeInfo = qet.getRootOperation()->getRuntimeInfo();
-    runtimeInfo.addDetail("time-for-query-planning", timeForQueryPlanning);
-    runtimeInfo.addDetail("time-index-scans-in-query-planning",
-                          timeForIndexScansInQueryPlanning);
+    auto& runtimeInfoRoot = qet.getRootOperation()->getRuntimeInfoRoot();
+    runtimeInfoRoot.timeQueryPlanning = timeForQueryPlanning;
+    runtimeInfoRoot.timeIndexScansQueryPlanning =
+        timeForIndexScansInQueryPlanning;
     LOG(INFO)
         << "Query planning done in "
         << requestTimer.msecs() - timeForIndexScansInQueryPlanning << " ms"

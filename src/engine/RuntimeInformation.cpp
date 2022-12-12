@@ -160,3 +160,10 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
       {"status", RuntimeInformation::toString(rti.status_)},
       {"children", rti.children_}};
 }
+
+// ________________________________________________________________________________________________________________
+void to_json(nlohmann::ordered_json& j, const RuntimeInformationRoot& rti) {
+  j = nlohmann::ordered_json{
+      {"time_query_planning", rti.timeQueryPlanning},
+      {"time_index_scans_query_planning", rti.timeIndexScansQueryPlanning}};
+}
