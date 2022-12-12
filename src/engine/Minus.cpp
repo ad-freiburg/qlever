@@ -125,7 +125,7 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
     // B is the empty set of solution mappings, so the result is A
     // Copy a into the result, allowing for optimizations for small width by
     // using the templated width types.
-    *dynResult = dynA;
+    *dynResult = dynA.clone();
     return;
   }
 

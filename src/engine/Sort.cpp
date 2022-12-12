@@ -77,7 +77,7 @@ void Sort::computeResult(ResultTable* result) {
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
-  result->_idTable = subRes->_idTable;
+  result->_idTable = subRes->_idTable.clone();
   /*
   result->_idTable.setNumColumns(subRes->_idTable.numColumns());
   result->_idTable.insert(result->_idTable.end(), subRes->_idTable.begin(),

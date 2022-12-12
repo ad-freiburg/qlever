@@ -174,10 +174,9 @@ TEST(IdTableTest, insertAtEnd) {
   init.push_back({I(0), I(6), I(8), I(5)});
   init.push_back({I(9), I(2), I(6), I(8)});
 
-  IdTable t2(init);
+  IdTable t2 = init.clone();
 
   // Test inserting at the end
-  t2 = init;
   t2.insertAtEnd(t1.begin(), t1.end());
   for (size_t i = 0; i < init.size(); i++) {
     ASSERT_EQ(init[i], t2[i]) << i;
@@ -241,9 +240,9 @@ TEST(IdTableTest, copyAndMove) {
   }
 
   // Test all copy and move constructors and assignment operators
-  IdTable t2(t1);
-  IdTable t3 = t1;
-  IdTable tmp = t1;
+  IdTable t2 = t1.clone();
+  IdTable t3 = t1.clone();
+  IdTable tmp = t1.clone();
   IdTable t4(std::move(t1));
   IdTable t5 = std::move(tmp);
 
@@ -339,7 +338,7 @@ TEST(IdTableTest, sortTest) {
   test.push_back({I(5), I(8)});
   test.push_back({I(6), I(2)});
 
-  IdTable orig(test);
+  IdTable orig = test.clone();
 
   // First check for the requirements of the iterator:
   // Value Swappable : swap rows 0 and 2
@@ -365,7 +364,7 @@ TEST(IdTableTest, sortTest) {
   ASSERT_EQ(*i1, tmp2);
 
   // Now try the actual sort
-  test = orig;
+  test = orig.clone();
   std::sort(test.begin(), test.end(),
             [](const auto& v1, const auto& v2) { return v1[0] < v2[0]; });
 
@@ -424,10 +423,9 @@ TEST(IdTableStaticTest, insert) {
   init.push_back({I(0), I(6), I(8), I(5)});
   init.push_back({I(9), I(2), I(6), I(8)});
 
-  IdTableStatic<4> t2(init);
+  IdTableStatic<4> t2 = init.clone();
 
   // Test inserting at the end
-  t2 = init;
   t2.insertAtEnd(t1.begin(), t1.end());
   for (size_t i = 0; i < init.size(); i++) {
     for (size_t j = 0; j < init.numColumns(); j++) {
@@ -494,9 +492,9 @@ TEST(IdTableStaticTest, copyAndMove) {
   }
 
   // Test all copy and move constructors and assignment operators
-  IdTableStatic<NUM_COLS> t2(t1);
-  IdTableStatic<NUM_COLS> t3 = t1;
-  IdTableStatic<NUM_COLS> tmp = t1;
+  IdTableStatic<NUM_COLS> t2 = t1.clone();
+  IdTableStatic<NUM_COLS> t3 = t1.clone();
+  IdTableStatic<NUM_COLS> tmp = t1.clone();
   IdTableStatic<NUM_COLS> t4(std::move(t1));
   IdTableStatic<NUM_COLS> t5 = std::move(tmp);
 
@@ -593,7 +591,7 @@ TEST(IdTableTest, conversion) {
   table.push_back({I(7), I(12), I(2)});
   table.push_back({I(9), I(3), I(4)});
 
-  IdTable initial = table;
+  IdTable initial = table.clone();
 
   IdTableStatic<3> s = std::move(table).toStatic<3>();
   ASSERT_EQ(4u, s.size());
@@ -630,7 +628,7 @@ TEST(IdTableTest, conversion) {
   tableVar.push_back({I(3), I(2), I(3), I(2), I(5), I(6)});
   tableVar.push_back({I(5), I(5), I(9), I(4), I(7), I(0)});
 
-  IdTable initialVar = tableVar;
+  IdTable initialVar = tableVar.clone();
 
   IdTableStatic<6> staticVar = std::move(tableVar).toStatic<6>();
   ASSERT_EQ(initialVar.size(), staticVar.size());

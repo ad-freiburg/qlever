@@ -164,6 +164,34 @@ class IdTable {
   IdTable(Allocator allocator = {}) requires(!isView)
       : IdTable{NumColumns, std::move(allocator)} {};
 
+  // `IdTables` are expensive to copy, so we disable accidental copies as they
+  // are most likely bugs. To explicitly copy an `IdTable`, the `clone()` member
+  // function (see below) can be used.
+  IdTable(const IdTable&) requires(!isView) = delete;
+  IdTable& operator=(const IdTable&) requires(!isView) = delete;
+
+  // Views are copyable, as they are cheap to copy.
+  IdTable(const IdTable&) requires isView = default;
+  IdTable& operator=(const IdTable&) requires isView = default;
+
+  // `IdTable`s are movable
+  IdTable(IdTable&& other) requires(!isView)
+      : data_{std::move(other.data())},
+        numColumns_{other.numColumns_},
+        numRows_{std::exchange(other.numRows_, 0)},
+        capacityRows_{std::exchange(other.capacityRows_, 0)} {}
+
+  IdTable& operator=(IdTable&& other) requires(!isView) {
+    if (this == &other) {
+      return *this;
+    }
+    data_ = std::move(other.data_);
+    numColumns_ = other.numColumns_;
+    numRows_ = std::exchange(other.numRows_, 0);
+    capacityRows_ = std::exchange(other.capacityRows_, 0);
+    return *this;
+  }
+
  private:
   // Make the other instantiations of `IdTable` friends to allow for conversion
   // between them using a private interface.
@@ -617,12 +645,6 @@ class IdTable : public IdTableStatic<0, detail::defaultAllocator> {
   using Base::Base;
 
   IdTable(Base&& b) : Base(std::move(b)) {}
-  IdTable(const Base& b) : Base(b) {}
-
-  IdTable& operator=(const Base& b) {
-    *(static_cast<Base*>(this)) = b;
-    return *this;
-  }
 
   IdTable& operator=(Base&& b) {
     *(static_cast<Base*>(this)) = std::move(b);
