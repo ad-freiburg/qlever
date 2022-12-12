@@ -37,7 +37,7 @@ add_library(engine
         Minus.h Minus.cpp
         ResultType.h
         ../util/Parameters.h RuntimeInformation.cpp CheckUsePatternTrick.cpp CheckUsePatternTrick.h
-        VariableToColumnMap.cpp)
+        VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp )
 
 
 target_link_libraries(engine index parser sparqlExpressions http SortPerformanceEstimator absl::flat_hash_set ${ICU_LIBRARIES} boost_iostreams)

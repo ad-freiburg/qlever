@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "util/BoostHelpers/AsyncWaitForFuture.h"
 
@@ -443,8 +444,9 @@ Awaitable<json> Server::composeResponseQleverJson(
           query.hasSelectClause()
               ? qet.writeResultAsQLeverJson(query.selectClause(), limit, offset,
                                             std::move(resultTable))
-              : qet.writeRdfGraphJson(query.constructClause().triples_, limit,
-                                      offset, std::move(resultTable));
+              : ExportQueryExecutionTrees::writeRdfGraphJson(
+                    qet, query.constructClause().triples_, limit, offset,
+                    std::move(resultTable));
       requestTimer.stop();
     }
     j["resultsize"] = query.hasSelectClause() ? resultSize : j["res"].size();
@@ -477,8 +479,8 @@ Awaitable<json> Server::composeResponseSparqlJson(
     size_t limit = std::min(query._limitOffset._limit, maxSend);
     size_t offset = query._limitOffset._offset;
     requestTimer.cont();
-    j = qet.writeResultAsSparqlJson(query.selectClause(), limit, offset,
-                                    std::move(resultTable));
+    j = ExportQueryExecutionTrees::writeResultAsSparqlJson(
+        qet, query.selectClause(), limit, offset, std::move(resultTable));
 
     requestTimer.stop();
     return j;
@@ -536,8 +538,8 @@ ad_utility::streams::stream_generator Server::composeTurtleResponse(
   }
   size_t limit = query._limitOffset._limit;
   size_t offset = query._limitOffset._offset;
-  return qet.writeRdfGraphTurtle(query.constructClause().triples_, limit,
-                                 offset, qet.getResult());
+  return ExportQueryExecutionTrees::writeRdfGraphTurtle(
+      qet, query.constructClause().triples_, limit, offset, qet.getResult());
 }
 
 // _____________________________________________________________________________

@@ -1,0 +1,274 @@
+//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
+//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+
+#include "ExportQueryExecutionTrees.h"
+
+#include "parser/RdfEscaping.h"
+
+cppcoro::generator<QueryExecutionTree::StringTriple>
+ExportQueryExecutionTrees::generateRdfGraph(
+    const QueryExecutionTree& qet,
+    const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+    size_t offset, std::shared_ptr<const ResultTable> res) {
+  size_t upperBound = std::min<size_t>(offset + limit, res->_idTable.size());
+  auto variableColumns = qet.getVariableColumns();
+  for (size_t i = offset; i < upperBound; i++) {
+    Context context{i, *res, variableColumns, qet.getQec()->getIndex()};
+    for (const auto& triple : constructTriples) {
+      auto subject = triple[0].evaluate(context, SUBJECT);
+      auto predicate = triple[1].evaluate(context, PREDICATE);
+      auto object = triple[2].evaluate(context, OBJECT);
+      if (!subject.has_value() || !predicate.has_value() ||
+          !object.has_value()) {
+        continue;
+      }
+      co_yield {std::move(subject.value()), std::move(predicate.value()),
+                std::move(object.value())};
+    }
+  }
+}
+
+// _____________________________________________________________________________
+ad_utility::streams::stream_generator
+ExportQueryExecutionTrees::writeRdfGraphTurtle(
+    const QueryExecutionTree& qet,
+    const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+    size_t offset, std::shared_ptr<const ResultTable> resultTable) {
+  resultTable->logResultSize();
+  auto generator = ExportQueryExecutionTrees::generateRdfGraph(
+      qet, constructTriples, limit, offset, resultTable);
+  for (const auto& triple : generator) {
+    co_yield triple._subject;
+    co_yield ' ';
+    co_yield triple._predicate;
+    co_yield ' ';
+    // NOTE: It's tempting to co_yield an expression using a ternary operator:
+    // co_yield triple._object.starts_with('"')
+    //     ? RdfEscaping::validRDFLiteralFromNormalized(triple._object)
+    //     : triple._object;
+    // but this leads to 1. segfaults in GCC (probably a compiler bug) and 2.
+    // to unnecessary copies of `triple._object` in the `else` case because
+    // the ternary always has to create a new prvalue.
+    if (triple._object.starts_with('"')) {
+      std::string objectAsValidRdfLiteral =
+          RdfEscaping::validRDFLiteralFromNormalized(triple._object);
+      co_yield objectAsValidRdfLiteral;
+    } else {
+      co_yield triple._object;
+    }
+    co_yield " .\n";
+  }
+}
+
+// _____________________________________________________________________________
+nlohmann::json ExportQueryExecutionTrees::writeRdfGraphJson(
+    const QueryExecutionTree& qet,
+    const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+    size_t offset, std::shared_ptr<const ResultTable> res) {
+  auto generator =
+      generateRdfGraph(qet, constructTriples, limit, offset, std::move(res));
+  std::vector<std::array<std::string, 3>> jsonArray;
+  for (auto& triple : generator) {
+    jsonArray.push_back({std::move(triple._subject),
+                         std::move(triple._predicate),
+                         std::move(triple._object)});
+  }
+  return jsonArray;
+}
+
+// __________________________________________________________________________________________________________
+nlohmann::json ExportQueryExecutionTrees::writeQLeverJsonTable(
+    const QueryExecutionTree& qet, size_t from, size_t limit,
+    const QueryExecutionTree::ColumnIndicesAndTypes& columns,
+    shared_ptr<const ResultTable> resultTable) {
+  if (!resultTable) {
+    resultTable = qet.getResult();
+  }
+  const IdTable& data = resultTable->_idTable;
+  nlohmann::json json = nlohmann::json::array();
+
+  const auto upperBound = std::min(data.size(), limit + from);
+
+  for (size_t rowIndex = from; rowIndex < upperBound; ++rowIndex) {
+    json.emplace_back();
+    auto& row = json.back();
+    for (const auto& opt : columns) {
+      if (!opt) {
+        row.emplace_back(nullptr);
+        continue;
+      }
+      const auto& currentId = data(rowIndex, opt->_columnIndex);
+      const auto& optionalStringAndXsdType =
+          idToStringAndType(qet, currentId, *resultTable);
+      if (!optionalStringAndXsdType.has_value()) {
+        row.emplace_back(nullptr);
+        continue;
+      }
+      const auto& [stringValue, xsdType] = optionalStringAndXsdType.value();
+      if (xsdType) {
+        row.emplace_back('"' + stringValue + "\"^^<" + xsdType + '>');
+      } else {
+        row.emplace_back(stringValue);
+      }
+    }
+  }
+  return json;
+}
+
+// ___________________________________________________________________________
+std::optional<std::pair<std::string, const char*>>
+ExportQueryExecutionTrees::idToStringAndType(const QueryExecutionTree& qet,
+                                             Id id,
+                                             const ResultTable& resultTable) {
+  // TODO<joka921> This is one of the central methods which we have to rewrite
+  switch (id.getDatatype()) {
+    case Datatype::Undefined:
+      return std::nullopt;
+    case Datatype::Double: {
+      // Format as integer if fractional part is zero, let C++ decide otherwise.
+      std::stringstream ss;
+      double d = id.getDouble();
+      double dIntPart;
+      if (std::modf(d, &dIntPart) == 0.0) {
+        ss << std::fixed << std::setprecision(0) << id.getDouble();
+      } else {
+        ss << d;
+      }
+      return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
+    }
+    case Datatype::Int:
+      return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
+    case Datatype::VocabIndex: {
+      std::optional<string> entity =
+          qet.getQec()->getIndex().idToOptionalString(id);
+      if (!entity.has_value()) {
+        return std::nullopt;
+      }
+      return std::pair{std::move(entity.value()), nullptr};
+    }
+    case Datatype::LocalVocabIndex: {
+      return std::pair{
+          resultTable._localVocab->getWord(id.getLocalVocabIndex()), nullptr};
+    }
+    case Datatype::TextRecordIndex:
+      return std::pair{
+          qet.getQec()->getIndex().getTextExcerpt(id.getTextRecordIndex()),
+          nullptr};
+  }
+  AD_FAIL();
+}
+
+// _____________________________________________________________________________
+nlohmann::json ExportQueryExecutionTrees::writeResultAsSparqlJson(
+    const QueryExecutionTree& qet,
+    const parsedQuery::SelectClause& selectClause, size_t limit, size_t offset,
+    shared_ptr<const ResultTable> resultTable) {
+  using nlohmann::json;
+
+  // This might trigger the actual query processing.
+  if (!resultTable) {
+    resultTable = qet.getResult();
+  }
+  LOG(DEBUG) << "Finished computing the query result in the ID space. "
+                "Resolving strings in result...\n";
+
+  // Don't include the question mark in the variable names.
+  QueryExecutionTree::ColumnIndicesAndTypes columns =
+      qet.selectedVariablesToColumnIndices(selectClause, *resultTable, false);
+
+  std::erase(columns, std::nullopt);
+
+  if (columns.empty()) {
+    return {std::vector<std::string>()};
+  }
+
+  const IdTable& idTable = resultTable->_idTable;
+
+  json result;
+  std::vector<std::string> selectedVars =
+      selectClause.getSelectedVariablesAsStrings();
+  // Strip the leading '?' from the variables, it is not part of the SPARQL JSON
+  // output format.
+  for (auto& var : selectedVars) {
+    if (std::string_view{var}.starts_with('?')) {
+      var = var.substr(1);
+    }
+  }
+  result["head"]["vars"] = selectedVars;
+
+  json bindings = json::array();
+
+  const auto upperBound = std::min(idTable.size(), limit + offset);
+
+  // Take a string from the vocabulary, deduce the type and
+  // return a json dict that describes the binding
+  auto stringToBinding = [](std::string_view entitystr) -> nlohmann::json {
+    nlohmann::ordered_json b;
+    // The string is an IRI or literal.
+    if (entitystr.starts_with('<')) {
+      // Strip the <> surrounding the iri.
+      b["value"] = entitystr.substr(1, entitystr.size() - 2);
+      // Even if they are technically IRIs, the format needs the type to be
+      // "uri".
+      b["type"] = "uri";
+    } else if (entitystr.starts_with("_:")) {
+      b["value"] = entitystr.substr(2);
+      b["type"] = "bnode";
+    } else {
+      size_t quote_pos = entitystr.rfind('"');
+      if (quote_pos == std::string::npos) {
+        // TEXT entries are currently not surrounded by quotes
+        b["value"] = entitystr;
+        b["type"] = "literal";
+      } else {
+        b["value"] = entitystr.substr(1, quote_pos - 1);
+        b["type"] = "literal";
+        // Look for a language tag or type.
+        if (quote_pos < entitystr.size() - 1 &&
+            entitystr[quote_pos + 1] == '@') {
+          b["xml:lang"] = entitystr.substr(quote_pos + 2);
+        } else if (quote_pos < entitystr.size() - 2 &&
+                   entitystr[quote_pos + 1] == '^') {
+          AD_CHECK(entitystr[quote_pos + 2] == '^');
+          std::string_view datatype{entitystr};
+          // remove the < angledBrackets> around the datatype IRI
+          AD_CHECK(datatype.size() >= quote_pos + 5);
+          datatype.remove_prefix(quote_pos + 4);
+          datatype.remove_suffix(1);
+          b["datatype"] = datatype;
+          ;
+        }
+      }
+    }
+    return b;
+  };
+
+  for (size_t rowIndex = offset; rowIndex < upperBound; ++rowIndex) {
+    // TODO: ordered_json` entries are ordered alphabetically, but insertion
+    // order would be preferable.
+    nlohmann::ordered_json binding;
+    for (const auto& column : columns) {
+      const auto& currentId = idTable(rowIndex, column->_columnIndex);
+      const auto& optionalValue =
+          idToStringAndType(qet, currentId, *resultTable);
+      if (!optionalValue.has_value()) {
+        continue;
+      }
+      const auto& [stringValue, xsdType] = optionalValue.value();
+      nlohmann::ordered_json b;
+      if (!xsdType) {
+        // no xsdType, this means that `stringValue` is a plain string literal
+        // or entity
+        b = stringToBinding(stringValue);
+      } else {
+        b["value"] = stringValue;
+        b["type"] = "literal";
+        b["datatype"] = xsdType;
+      }
+      binding[column->_variable] = std::move(b);
+    }
+    bindings.emplace_back(std::move(binding));
+  }
+  result["results"]["bindings"] = std::move(bindings);
+  return result;
+}
