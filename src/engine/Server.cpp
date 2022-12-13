@@ -440,13 +440,13 @@ Awaitable<json> Server::composeResponseQleverJson(
       size_t limit = std::min(query._limitOffset._limit, maxSend);
       size_t offset = query._limitOffset._offset;
       requestTimer.cont();
-      j["res"] =
-          query.hasSelectClause()
-              ? qet.writeResultAsQLeverJson(query.selectClause(), limit, offset,
-                                            std::move(resultTable))
-              : ExportQueryExecutionTrees::writeRdfGraphJson(
-                    qet, query.constructClause().triples_, limit, offset,
-                    std::move(resultTable));
+      j["res"] = query.hasSelectClause()
+                     ? ExportQueryExecutionTrees::writeResultAsQLeverJson(
+                           qet, query.selectClause(), limit, offset,
+                           std::move(resultTable))
+                     : ExportQueryExecutionTrees::constructQueryToJSON(
+                           qet, query.constructClause().triples_, limit, offset,
+                           std::move(resultTable));
       requestTimer.stop();
     }
     j["resultsize"] = query.hasSelectClause() ? resultSize : j["res"].size();
@@ -479,7 +479,7 @@ Awaitable<json> Server::composeResponseSparqlJson(
     size_t limit = std::min(query._limitOffset._limit, maxSend);
     size_t offset = query._limitOffset._offset;
     requestTimer.cont();
-    j = ExportQueryExecutionTrees::writeResultAsSparqlJson(
+    j = ExportQueryExecutionTrees::selectQueryToSparqlJSON(
         qet, query.selectClause(), limit, offset, std::move(resultTable));
 
     requestTimer.stop();
@@ -518,11 +518,12 @@ Server::composeResponseSepValues(const ParsedQuery& query,
   auto compute = [&] {
     size_t limit = query._limitOffset._limit;
     size_t offset = query._limitOffset._offset;
-    return query.hasSelectClause() ? qet.generateResults<format>(
-                                         query.selectClause(), limit, offset)
-                                   : qet.writeRdfGraphSeparatedValues<format>(
-                                         query.constructClause().triples_,
-                                         limit, offset, qet.getResult());
+    return query.hasSelectClause()
+               ? ExportQueryExecutionTrees::generateResults<format>(
+                     qet, query.selectClause(), limit, offset)
+               : ExportQueryExecutionTrees::writeRdfGraphSeparatedValues<
+                     format>(qet, query.constructClause().triples_, limit,
+                             offset, qet.getResult());
   };
   return computeInNewThread(compute);
 }
@@ -538,7 +539,7 @@ ad_utility::streams::stream_generator Server::composeTurtleResponse(
   }
   size_t limit = query._limitOffset._limit;
   size_t offset = query._limitOffset._offset;
-  return ExportQueryExecutionTrees::writeRdfGraphTurtle(
+  return ExportQueryExecutionTrees::constructQueryToTurtle(
       qet, query.constructClause().triples_, limit, offset, qet.getResult());
 }
 

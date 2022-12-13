@@ -26,28 +26,48 @@ class ExportQueryExecutionTrees {
       std::shared_ptr<const ResultTable> resultTable = nullptr);
 
   // Generate an RDF graph for a CONSTRUCT query.
-  static cppcoro::generator<QueryExecutionTree::StringTriple> generateRdfGraph(
+  static cppcoro::generator<QueryExecutionTree::StringTriple>
+  constructQueryToTriples(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
       size_t offset, std::shared_ptr<const ResultTable> res);
 
   // _____________________________________________________________________________
-  static ad_utility::streams::stream_generator writeRdfGraphTurtle(
+  static ad_utility::streams::stream_generator constructQueryToTurtle(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
       size_t offset, std::shared_ptr<const ResultTable> resultTable);
 
   // _____________________________________________________________________________
-  static nlohmann::json writeRdfGraphJson(
+  static nlohmann::json constructQueryToJSON(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
       size_t offset, std::shared_ptr<const ResultTable> res);
 
   // _____________________________________________________________________________
-  static nlohmann::json writeResultAsSparqlJson(
+  static nlohmann::json selectQueryToSparqlJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause, size_t limit,
       size_t offset, shared_ptr<const ResultTable> resultTable);
+
+  // _____________________________________________________________________________
+  static nlohmann::json writeResultAsQLeverJson(
+      const QueryExecutionTree& qet,
+      const parsedQuery::SelectClause& selectClause, size_t limit,
+      size_t offset, shared_ptr<const ResultTable> resultTable);
+
+  template <QueryExecutionTree::ExportSubFormat format>
+  static ad_utility::streams::stream_generator writeRdfGraphSeparatedValues(
+      const QueryExecutionTree& qet,
+      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+      size_t offset, std::shared_ptr<const ResultTable> resultTable);
+
+  // _____________________________________________________________________________
+  template <QueryExecutionTree::ExportSubFormat format>
+  static ad_utility::streams::stream_generator generateResults(
+      const QueryExecutionTree& qet,
+      const parsedQuery::SelectClause& selectClause, size_t limit,
+      size_t offset);
 
  private:
   [[nodiscard]] static std::optional<std::pair<std::string, const char*>>

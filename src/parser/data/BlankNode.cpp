@@ -19,7 +19,8 @@ BlankNode::BlankNode(bool generated, std::string label)
 
 // ___________________________________________________________________________
 std::optional<std::string> BlankNode::evaluate(
-    const Context& context, [[maybe_unused]] ContextRole role) const {
+    const ConstructQueryEvaluationContext& context,
+    [[maybe_unused]] PositionInTriple role) const {
   std::ostringstream stream;
   stream << "_:";
   // generated or user-defined

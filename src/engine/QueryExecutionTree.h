@@ -10,7 +10,7 @@
 #include <unordered_set>
 
 #include "../parser/ParsedQuery.h"
-#include "../parser/data/Context.h"
+#include "../parser/data/ConstructQueryEvaluationContext.h"
 #include "../parser/data/Types.h"
 #include "../parser/data/VarOrTerm.h"
 #include "../util/Conversions.h"
@@ -109,21 +109,6 @@ class QueryExecutionTree {
   ColumnIndicesAndTypes selectedVariablesToColumnIndices(
       const parsedQuery::SelectClause& selectClause,
       const ResultTable& resultTable, bool includeQuestionMark = true) const;
-
-  template <ExportSubFormat format>
-  ad_utility::streams::stream_generator generateResults(
-      const parsedQuery::SelectClause& selectClause, size_t limit,
-      size_t offset) const;
-
-  // Generate an RDF graph in csv/tsv format for a CONSTRUCT query.
-  template <ExportSubFormat format>
-  ad_utility::streams::stream_generator writeRdfGraphSeparatedValues(
-      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-      size_t offset, std::shared_ptr<const ResultTable> res) const;
-
-  nlohmann::json writeResultAsQLeverJson(
-      const parsedQuery::SelectClause& selectClause, size_t limit,
-      size_t offset, shared_ptr<const ResultTable> resultTable = nullptr) const;
 
   const std::vector<size_t>& resultSortedOn() const {
     return _rootOperation->getResultSortedOn();

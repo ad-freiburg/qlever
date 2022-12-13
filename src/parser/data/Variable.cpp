@@ -6,7 +6,7 @@
 
 #include "ctre/ctre.h"
 #include "index/Index.h"
-#include "parser/data/Context.h"
+#include "parser/data/ConstructQueryEvaluationContext.h"
 
 // ___________________________________________________________________________
 Variable::Variable(std::string name) : _name{std::move(name)} {
@@ -20,7 +20,8 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
 
 // ___________________________________________________________________________
 [[nodiscard]] std::optional<std::string> Variable::evaluate(
-    const Context& context, [[maybe_unused]] ContextRole role) const {
+    const ConstructQueryEvaluationContext& context,
+    [[maybe_unused]] PositionInTriple role) const {
   size_t row = context._row;
   const ResultTable& res = context._res;
   const auto& variableColumns = context._variableColumns;

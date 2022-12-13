@@ -5,15 +5,17 @@
 
 #include "parser/RdfEscaping.h"
 
+// _____________________________________________________________________________
 cppcoro::generator<QueryExecutionTree::StringTriple>
-ExportQueryExecutionTrees::generateRdfGraph(
+ExportQueryExecutionTrees::constructQueryToTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
     size_t offset, std::shared_ptr<const ResultTable> res) {
   size_t upperBound = std::min<size_t>(offset + limit, res->_idTable.size());
   auto variableColumns = qet.getVariableColumns();
   for (size_t i = offset; i < upperBound; i++) {
-    Context context{i, *res, variableColumns, qet.getQec()->getIndex()};
+    ConstructQueryEvaluationContext context{i, *res, variableColumns,
+                                            qet.getQec()->getIndex()};
     for (const auto& triple : constructTriples) {
       auto subject = triple[0].evaluate(context, SUBJECT);
       auto predicate = triple[1].evaluate(context, PREDICATE);
@@ -30,12 +32,12 @@ ExportQueryExecutionTrees::generateRdfGraph(
 
 // _____________________________________________________________________________
 ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::writeRdfGraphTurtle(
+ExportQueryExecutionTrees::constructQueryToTurtle(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
     size_t offset, std::shared_ptr<const ResultTable> resultTable) {
   resultTable->logResultSize();
-  auto generator = ExportQueryExecutionTrees::generateRdfGraph(
+  auto generator = ExportQueryExecutionTrees::constructQueryToTriples(
       qet, constructTriples, limit, offset, resultTable);
   for (const auto& triple : generator) {
     co_yield triple._subject;
@@ -61,12 +63,12 @@ ExportQueryExecutionTrees::writeRdfGraphTurtle(
 }
 
 // _____________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::writeRdfGraphJson(
+nlohmann::json ExportQueryExecutionTrees::constructQueryToJSON(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
     size_t offset, std::shared_ptr<const ResultTable> res) {
-  auto generator =
-      generateRdfGraph(qet, constructTriples, limit, offset, std::move(res));
+  auto generator = constructQueryToTriples(qet, constructTriples, limit, offset,
+                                           std::move(res));
   std::vector<std::array<std::string, 3>> jsonArray;
   for (auto& triple : generator) {
     jsonArray.push_back({std::move(triple._subject),
@@ -120,7 +122,6 @@ std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType(const QueryExecutionTree& qet,
                                              Id id,
                                              const ResultTable& resultTable) {
-  // TODO<joka921> This is one of the central methods which we have to rewrite
   switch (id.getDatatype()) {
     case Datatype::Undefined:
       return std::nullopt;
@@ -159,7 +160,7 @@ ExportQueryExecutionTrees::idToStringAndType(const QueryExecutionTree& qet,
 }
 
 // _____________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::writeResultAsSparqlJson(
+nlohmann::json ExportQueryExecutionTrees::selectQueryToSparqlJSON(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause, size_t limit, size_t offset,
     shared_ptr<const ResultTable> resultTable) {
@@ -272,3 +273,189 @@ nlohmann::json ExportQueryExecutionTrees::writeResultAsSparqlJson(
   result["results"]["bindings"] = std::move(bindings);
   return result;
 }
+
+// _____________________________________________________________________________
+nlohmann::json ExportQueryExecutionTrees::writeResultAsQLeverJson(
+    const QueryExecutionTree& qet,
+    const parsedQuery::SelectClause& selectClause, size_t limit, size_t offset,
+    shared_ptr<const ResultTable> resultTable) {
+  // They may trigger computation (but does not have to).
+  if (!resultTable) {
+    resultTable = qet.getResult();
+  }
+  LOG(DEBUG) << "Resolving strings for finished binary result...\n";
+  QueryExecutionTree::ColumnIndicesAndTypes validIndices =
+      qet.selectedVariablesToColumnIndices(selectClause, *resultTable, true);
+  if (validIndices.empty()) {
+    return {std::vector<std::string>()};
+  }
+
+  return ExportQueryExecutionTrees::writeQLeverJsonTable(
+      qet, offset, limit, validIndices, std::move(resultTable));
+}
+
+using ExportSubFormat = QueryExecutionTree::ExportSubFormat;
+using parsedQuery::SelectClause;
+
+// _____________________________________________________________________________
+template <QueryExecutionTree::ExportSubFormat format>
+ad_utility::streams::stream_generator
+ExportQueryExecutionTrees::generateResults(const QueryExecutionTree& qet,
+                                           const SelectClause& selectClause,
+                                           size_t limit, size_t offset) {
+  static_assert(format == ExportSubFormat::BINARY ||
+                format == ExportSubFormat::CSV ||
+                format == ExportSubFormat::TSV);
+
+  // This call triggers the possibly expensive computation of the query result
+  // unless the result is already cached.
+  shared_ptr<const ResultTable> resultTable = qet.getResult();
+  resultTable->logResultSize();
+  LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
+             << std::endl;
+  auto selectedColumnIndices =
+      qet.selectedVariablesToColumnIndices(selectClause, *resultTable, true);
+
+  const auto& idTable = resultTable->_idTable;
+  size_t upperBound = std::min<size_t>(offset + limit, idTable.size());
+
+  // special case : binary export of IdTable
+  if constexpr (format == ExportSubFormat::BINARY) {
+    for (size_t i = offset; i < upperBound; ++i) {
+      for (const auto& columnIndex : selectedColumnIndices) {
+        if (columnIndex.has_value()) {
+          co_yield std::string_view{reinterpret_cast<const char*>(&idTable(
+                                        i, columnIndex.value()._columnIndex)),
+                                    sizeof(Id)};
+        }
+      }
+    }
+    co_return;
+  }
+
+  static constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
+  constexpr std::string_view sepView{&sep, 1};
+  // Print header line
+  const auto& variables = selectClause.getSelectedVariablesAsStrings();
+  co_yield absl::StrJoin(variables, sepView);
+  co_yield '\n';
+
+  constexpr auto& escapeFunction = format == ExportSubFormat::TSV
+                                       ? RdfEscaping::escapeForTsv
+                                       : RdfEscaping::escapeForCsv;
+
+  const auto& qec = qet.getQec();
+  for (size_t i = offset; i < upperBound; ++i) {
+    for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
+      if (selectedColumnIndices[j].has_value()) {
+        const auto& val = selectedColumnIndices[j].value();
+        Id id = idTable(i, val._columnIndex);
+        switch (id.getDatatype()) {
+          case Datatype::Undefined:
+            break;
+          case Datatype::Double:
+            co_yield id.getDouble();
+            break;
+          case Datatype::Int:
+            co_yield id.getInt();
+            break;
+          case Datatype::VocabIndex:
+            co_yield escapeFunction(
+                qec->getIndex()
+                    .getVocab()
+                    .indexToOptionalString(id.getVocabIndex())
+                    .value_or(""));
+            break;
+          case Datatype::LocalVocabIndex:
+            co_yield escapeFunction(
+                resultTable->_localVocab->getWord(id.getLocalVocabIndex()));
+            break;
+          case Datatype::TextRecordIndex:
+            co_yield escapeFunction(
+                qec->getIndex().getTextExcerpt(id.getTextRecordIndex()));
+            break;
+          default:
+            AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
+                     "Cannot deduce output type.");
+        }
+      }
+      co_yield j + 1 < selectedColumnIndices.size() ? sep : '\n';
+    }
+  }
+  LOG(DEBUG) << "Done creating readable result.\n";
+}
+
+// Instantiate template function for all enum types
+// TODO<joka921> Move the function that calls those instantiations also into
+// this file, then we can get rid of the explicit instantiations.
+template ad_utility::streams::stream_generator
+ExportQueryExecutionTrees::generateResults<
+    QueryExecutionTree::ExportSubFormat::CSV>(const QueryExecutionTree& qet,
+                                              const SelectClause& selectClause,
+                                              size_t limit, size_t offset);
+
+template ad_utility::streams::stream_generator
+ExportQueryExecutionTrees::generateResults<
+    QueryExecutionTree::ExportSubFormat::TSV>(const QueryExecutionTree& qet,
+                                              const SelectClause& selectClause,
+                                              size_t limit, size_t offset);
+
+template ad_utility::streams::stream_generator ExportQueryExecutionTrees::
+    generateResults<QueryExecutionTree::ExportSubFormat::BINARY>(
+        const QueryExecutionTree& qet, const SelectClause& selectClause,
+        size_t limit, size_t offset);
+
+// _____________________________________________________________________________
+
+// _____________________________________________________________________________
+template <QueryExecutionTree::ExportSubFormat format>
+ad_utility::streams::stream_generator
+ExportQueryExecutionTrees::writeRdfGraphSeparatedValues(
+    const QueryExecutionTree& qet,
+    const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+    size_t offset, std::shared_ptr<const ResultTable> resultTable) {
+  static_assert(format == ExportSubFormat::BINARY ||
+                format == ExportSubFormat::CSV ||
+                format == ExportSubFormat::TSV);
+  if constexpr (format == ExportSubFormat::BINARY) {
+    throw std::runtime_error{
+        "Binary export is not supported for CONSTRUCT queries"};
+  }
+  resultTable->logResultSize();
+  constexpr auto& escapeFunction = format == ExportSubFormat::TSV
+                                       ? RdfEscaping::escapeForTsv
+                                       : RdfEscaping::escapeForCsv;
+  constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
+  auto generator = ExportQueryExecutionTrees::constructQueryToTriples(
+      qet, constructTriples, limit, offset, resultTable);
+  for (auto& triple : generator) {
+    co_yield escapeFunction(std::move(triple._subject));
+    co_yield sep;
+    co_yield escapeFunction(std::move(triple._predicate));
+    co_yield sep;
+    co_yield escapeFunction(std::move(triple._object));
+    co_yield "\n";
+  }
+}
+
+// Instantiate template function for all enum types
+
+// TODO<joka921> Move the function that calls those instantiations also into
+// this file, then we can get rid of the explicit instantiations.
+template ad_utility::streams::stream_generator ExportQueryExecutionTrees::
+    writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::CSV>(
+        const QueryExecutionTree& qet,
+        const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+        size_t offset, std::shared_ptr<const ResultTable> res);
+
+template ad_utility::streams::stream_generator ExportQueryExecutionTrees::
+    writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::TSV>(
+        const QueryExecutionTree& qet,
+        const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+        size_t offset, std::shared_ptr<const ResultTable> res);
+
+template ad_utility::streams::stream_generator ExportQueryExecutionTrees::
+    writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::BINARY>(
+        const QueryExecutionTree& qet,
+        const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+        size_t offset, std::shared_ptr<const ResultTable> res);
