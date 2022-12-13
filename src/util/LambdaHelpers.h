@@ -17,14 +17,18 @@ struct AssignableLambdaImpl {
   Lambda _lambda;
 
  public:
-  explicit AssignableLambdaImpl(Lambda lambda) : _lambda{std::move(lambda)} {}
+  explicit constexpr AssignableLambdaImpl(Lambda lambda)
+      : _lambda{std::move(lambda)} {}
+  constexpr AssignableLambdaImpl() requires
+      std::is_default_constructible_v<Lambda>
+  = default;
 
   decltype(auto) operator()(auto&&... args) noexcept(
       noexcept(_lambda(AD_FWD(args)...))) {
     return _lambda(AD_FWD(args)...);
   }
 
-  decltype(auto) operator()(auto&&... args) const
+  decltype(auto) constexpr operator()(auto&&... args) const
       noexcept(noexcept(_lambda(AD_FWD(args)...))) {
     return _lambda(AD_FWD(args)...);
   }
@@ -55,7 +59,7 @@ struct AssignableLambdaImpl {
 /// iterator types that store lambda expressions (see Iterators.h), because many
 /// STL algorithms require iterators to be assignable. The assignment operators
 /// are implemented using `destroy_at` and `construct_at`.
-auto makeAssignableLambda(auto lambda) {
+constexpr auto makeAssignableLambda(auto lambda) {
   return detail::AssignableLambdaImpl{std::move(lambda)};
 }
 }  // namespace ad_utility

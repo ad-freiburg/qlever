@@ -36,7 +36,7 @@ class NeutralElementOperation : public Operation {
 
  private:
   void computeResult(ResultTable* result) override {
-    result->_idTable.setCols(0);
+    result->_idTable.setNumColumns(0);
     result->_idTable.resize(1);
   }
 

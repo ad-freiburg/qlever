@@ -29,7 +29,7 @@ class DummyOperation : public Operation {
   virtual void computeResult(ResultTable* result) override {
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
-    result->_idTable.setCols(2);
+    result->_idTable.setNumColumns(2);
     for (size_t i = 0; i < 10; i++) {
       result->_idTable.push_back({I(10 - i), I(2 * i)});
     }
@@ -75,7 +75,7 @@ class DummyOperation : public Operation {
 TEST(HasPredicateScan, freeS) {
   // Used to store the result.
   ResultTable resultTable{allocator()};
-  resultTable._idTable.setCols(1);
+  resultTable._idTable.setNumColumns(1);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
@@ -117,7 +117,7 @@ TEST(HasPredicateScan, freeS) {
 TEST(HasPredicateScan, freeO) {
   // Used to store the result.
   ResultTable resultTable{allocator()};
-  resultTable._idTable.setCols(1);
+  resultTable._idTable.setNumColumns(1);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
@@ -161,7 +161,7 @@ TEST(HasPredicateScan, freeO) {
 TEST(HasPredicateScan, fullScan) {
   // Used to store the result.
   ResultTable resultTable{allocator()};
-  resultTable._idTable.setCols(2);
+  resultTable._idTable.setNumColumns(2);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
@@ -225,7 +225,7 @@ TEST(HasPredicateScan, fullScan) {
 TEST(HasPredicateScan, subtreeS) {
   // Used to store the result.
   ResultTable resultTable{allocator()};
-  resultTable._idTable.setCols(3);
+  resultTable._idTable.setNumColumns(3);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
@@ -335,9 +335,9 @@ TEST(CountAvailablePredicates, patternTrickTest) {
 
   RuntimeInformation runtimeInfo;
   try {
-    CALL_FIXED_SIZE(input.cols(), CountAvailablePredicates::computePatternTrick,
-                    input, &result, hasPattern, hasRelation, patterns, 0,
-                    &runtimeInfo);
+    CALL_FIXED_SIZE(
+        input.numColumns(), CountAvailablePredicates::computePatternTrick,
+        input, &result, hasPattern, hasRelation, patterns, 0, &runtimeInfo);
   } catch (const std::runtime_error& e) {
     // More verbose output in the case of an exception occuring.
     std::cout << e.what() << std::endl;

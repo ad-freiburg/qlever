@@ -72,12 +72,10 @@ enum class AccessPattern { None, Random, Sequential };
 template <class T>
 class MmapVector {
  public:
-  using iterator =
-      ad_utility::IteratorForAccessOperator<MmapVector,
-                                            AccessViaBracketOperator, false>;
-  using const_iterator =
-      ad_utility::IteratorForAccessOperator<MmapVector,
-                                            AccessViaBracketOperator, true>;
+  using iterator = ad_utility::IteratorForAccessOperator<
+      MmapVector, AccessViaBracketOperator, IsConst::False>;
+  using const_iterator = ad_utility::IteratorForAccessOperator<
+      MmapVector, AccessViaBracketOperator, IsConst::True>;
   using value_type = T;
 
   // __________________________________________________________________

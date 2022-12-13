@@ -6,9 +6,9 @@
 
 #include <memory>
 
-#include "IdTable.h"
-#include "Operation.h"
-#include "QueryExecutionTree.h"
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
+#include "engine/idTable/IdTable.h"
 
 class TransitivePath : public Operation {
  private:

@@ -11,13 +11,14 @@
 #include <optional>
 #include <vector>
 
-#include "engine/IdTable.h"
 #include "engine/LocalVocab.h"
 #include "engine/ResultType.h"
+#include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "global/ValueId.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
+#include "util/Log.h"
 
 using std::array;
 using std::condition_variable;
@@ -58,7 +59,7 @@ class ResultTable {
   virtual ~ResultTable();
 
   size_t size() const;
-  size_t width() const { return _idTable.cols(); }
+  size_t width() const { return _idTable.numColumns(); }
 
   // Log to INFO the size of this result.
   //

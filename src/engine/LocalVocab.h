@@ -4,7 +4,13 @@
 
 #pragma once
 
+#include <cstdlib>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "absl/container/node_hash_map.h"
+#include "global/Id.h"
 
 // A class for maintaing a local vocabulary with contiguous (local) IDs. This is
 // meant for words that are not part of the normal vocabulary (constructed from

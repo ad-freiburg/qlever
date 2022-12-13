@@ -8,12 +8,12 @@
 #include <type_traits>
 #include <vector>
 
-#include "../global/Constants.h"
-#include "../global/Id.h"
-#include "../util/Exception.h"
-#include "../util/Log.h"
-#include "./IndexSequence.h"
-#include "IdTable.h"
+#include "engine/IndexSequence.h"
+#include "engine/idTable/IdTable.h"
+#include "global/Constants.h"
+#include "global/Id.h"
+#include "util/Exception.h"
+#include "util/Log.h"
 
 class Engine {
  public:
@@ -48,7 +48,7 @@ class Engine {
     const IdTableView<IN_WIDTH> v = dynV.asStaticView<IN_WIDTH>();
     const IdTableView<FILTER_WIDTH> filter =
         dynFilter.asStaticView<FILTER_WIDTH>();
-    IdTableStatic<IN_WIDTH> result = dynResult->moveToStatic<IN_WIDTH>();
+    IdTableStatic<IN_WIDTH> result = std::move(*dynResult).toStatic<IN_WIDTH>();
 
     // Intersect both lists.
     size_t i = 0;
@@ -90,7 +90,7 @@ class Engine {
       }
     }
   finish:
-    *dynResult = result.moveToDynamic();
+    *dynResult = std::move(result).toDynamic();
 
     LOG(DEBUG) << "Filter done, size now: " << dynResult->size()
                << " elements.\n";
@@ -99,7 +99,7 @@ class Engine {
   template <int WIDTH>
   static void sort(IdTable* tab, const size_t keyColumn) {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements ..." << std::endl;
-    IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
+    IdTableStatic<WIDTH> stab = std::move(*tab).toStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
       ad_utility::parallel_sort(
           stab.begin(), stab.end(),
@@ -113,7 +113,7 @@ class Engine {
                   return a[keyColumn] < b[keyColumn];
                 });
     }
-    *tab = stab.moveToDynamic();
+    *tab = std::move(stab).toDynamic();
     LOG(TRACE) << "Sort done.\n";
   }
   // The effect of the third template argument is that if C does not have
@@ -127,14 +127,14 @@ class Engine {
                                      typename IdTableStatic<WIDTH>::row_type>>>>
   static void sort(IdTable* tab, C comp) {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
-    IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
+    IdTableStatic<WIDTH> stab = std::move(*tab).toStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
       ad_utility::parallel_sort(stab.begin(), stab.end(), comp,
                                 ad_utility::parallel_tag(NUM_SORT_THREADS));
     } else {
       std::sort(stab.begin(), stab.end(), comp);
     }
-    *tab = stab.moveToDynamic();
+    *tab = std::move(stab).toDynamic();
     LOG(DEBUG) << "Sort done.\n";
   }
 
@@ -149,9 +149,11 @@ class Engine {
                        IdTable* dynResult) {
     LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
     const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
-    IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
+    IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
     if (input.size() > 0) {
-      AD_CHECK_LE(keepIndices.size(), input.cols());
+      AD_CHECK_LE(keepIndices.size(), input.numColumns());
+      // TODO<joka921> Should we delete copy operations of the new IDtable as
+      // well.
       result = input.clone();
 
       auto last = std::unique(result.begin(), result.end(),
@@ -164,7 +166,7 @@ class Engine {
                                 return true;
                               });
       result.erase(last, result.end());
-      *dynResult = result.moveToDynamic();
+      *dynResult = std::move(result).toDynamic();
       LOG(DEBUG) << "Distinct done.\n";
     }
   }
