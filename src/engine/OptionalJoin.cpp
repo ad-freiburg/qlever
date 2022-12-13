@@ -80,9 +80,9 @@ void OptionalJoin::computeResult(ResultTable* result) {
   LOG(DEBUG) << "OptionalJoin result computation..." << endl;
 
   result->_sortedBy = resultSortedOn();
-  result->_idTable.setCols(getResultWidth());
+  result->_idTable.setNumColumns(getResultWidth());
 
-  AD_CHECK_GE(result->_idTable.cols(), _joinColumns.size());
+  AD_CHECK_GE(result->_idTable.numColumns(), _joinColumns.size());
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
@@ -90,11 +90,11 @@ void OptionalJoin::computeResult(ResultTable* result) {
   LOG(DEBUG) << "OptionalJoin subresult computation done." << std::endl;
 
   // compute the result types
-  result->_resultTypes.reserve(result->_idTable.cols());
+  result->_resultTypes.reserve(result->_idTable.numColumns());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               leftResult->_resultTypes.begin(),
                               leftResult->_resultTypes.end());
-  for (size_t col = 0; col < rightResult->_idTable.cols(); col++) {
+  for (size_t col = 0; col < rightResult->_idTable.numColumns(); col++) {
     bool isJoinColumn = false;
     for (const std::array<ColumnIndex, 2>& a : _joinColumns) {
       if (a[1] == col) {
@@ -112,9 +112,9 @@ void OptionalJoin::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Left side optional: " << _leftOptional
              << " right side optional: " << _rightOptional << endl;
 
-  int leftWidth = leftResult->_idTable.cols();
-  int rightWidth = rightResult->_idTable.cols();
-  int resWidth = result->_idTable.cols();
+  int leftWidth = leftResult->_idTable.numColumns();
+  int rightWidth = rightResult->_idTable.numColumns();
+  int resWidth = result->_idTable.numColumns();
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, resWidth}),
                   &OptionalJoin::optionalJoin, leftResult->_idTable,
                   rightResult->_idTable, _leftOptional, _rightOptional,
@@ -285,7 +285,7 @@ void OptionalJoin::createOptionalResult(
   if (aEmpty) {
     // Fill the columns of a with ID_NO_VALUE and the rest with b.
     size_t i = 0;
-    for (size_t col = 0; col < a.cols(); col++) {
+    for (size_t col = 0; col < a.numColumns(); col++) {
       if ((joinColumnBitmap_a & (1 << col)) == 0) {
         (*res)(rIdx, col) = ID_NO_VALUE;
       } else {
@@ -294,7 +294,7 @@ void OptionalJoin::createOptionalResult(
       }
       i++;
     }
-    for (size_t col = 0; col < b.cols(); col++) {
+    for (size_t col = 0; col < b.numColumns(); col++) {
       if ((joinColumnBitmap_b & (1 << col)) == 0) {
         // only write the value if it is not one of the join columns in b
         (*res)(rIdx, i) = b(bIdx, col);
@@ -303,20 +303,20 @@ void OptionalJoin::createOptionalResult(
     }
   } else if (bEmpty) {
     // Fill the columns of b with ID_NO_VALUE and the rest with a
-    for (size_t col = 0; col < a.cols(); col++) {
+    for (size_t col = 0; col < a.numColumns(); col++) {
       (*res)(rIdx, col) = a(aIdx, col);
     }
-    for (size_t col = a.cols(); col < res->cols(); col++) {
+    for (size_t col = a.numColumns(); col < res->numColumns(); col++) {
       (*res)(rIdx, col) = ID_NO_VALUE;
     }
   } else {
     // Use the values from both a and b
     size_t i = 0;
-    for (size_t col = 0; col < a.cols(); col++) {
+    for (size_t col = 0; col < a.numColumns(); col++) {
       (*res)(rIdx, col) = a(aIdx, col);
       i++;
     }
-    for (size_t col = 0; col < b.cols(); col++) {
+    for (size_t col = 0; col < b.numColumns(); col++) {
       if ((joinColumnBitmap_b & (1 << col)) == 0) {
         (*res)(rIdx, i) = b(bIdx, col);
         i++;
@@ -337,7 +337,7 @@ void OptionalJoin::optionalJoin(
 
   const IdTableView<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
   const IdTableView<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
-  IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
+  IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
 
   int joinColumnBitmapLeft = 0;
   int joinColumnBitmapRight = 0;
@@ -369,7 +369,7 @@ void OptionalJoin::optionalJoin(
                            joinColumnBitmapRight, joinColumnLeftToRight,
                            &result);
     }
-    *dynResult = result.moveToDynamic();
+    *dynResult = std::move(result).toDynamic();
     return;
   } else if (b.size() == 0 && bOptional) {
     for (size_t ia = 0; ia < a.size(); ia++) {
@@ -377,7 +377,7 @@ void OptionalJoin::optionalJoin(
                            joinColumnBitmapRight, joinColumnLeftToRight,
                            &result);
     }
-    *dynResult = result.moveToDynamic();
+    *dynResult = std::move(result).toDynamic();
     return;
   }
 
@@ -494,5 +494,5 @@ finish:
       ++ia;
     }
   }
-  *dynResult = result.moveToDynamic();
+  *dynResult = std::move(result).toDynamic();
 }

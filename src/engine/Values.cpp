@@ -91,7 +91,7 @@ void Values::computeResult(ResultTable* result) {
   const Index& index = getIndex();
 
   result->_sortedBy = resultSortedOn();
-  result->_idTable.setCols(getResultWidth());
+  result->_idTable.setNumColumns(getResultWidth());
   result->_resultTypes.resize(_values._variables.size(),
                               ResultTable::ResultType::KB);
 
@@ -155,12 +155,12 @@ template <size_t I>
 void Values::writeValues(IdTable* res, const Index& index,
                          const SparqlValues& values,
                          std::shared_ptr<LocalVocab> localVocab) {
-  IdTableStatic<I> result = res->moveToStatic<I>();
+  IdTableStatic<I> result = std::move(*res).toStatic<I>();
   result.resize(values._values.size());
   size_t numTuples = 0;
-  std::vector<size_t> numLocalVocabPerColumn(result.cols());
+  std::vector<size_t> numLocalVocabPerColumn(result.numColumns());
   for (const auto& row : values._values) {
-    for (size_t colIdx = 0; colIdx < result.cols(); colIdx++) {
+    for (size_t colIdx = 0; colIdx < result.numColumns(); colIdx++) {
       const TripleComponent& tc = row[colIdx];
       std::optional<Id> id = tc.toValueId(index.getVocab());
       if (!id) {
@@ -179,5 +179,5 @@ void Values::writeValues(IdTable* res, const Index& index,
   LOG(DEBUG) << "Number of entries in local vocabulary per column: "
              << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
   result.resize(numTuples);
-  *res = result.moveToDynamic();
+  *res = std::move(result).toDynamic();
 }

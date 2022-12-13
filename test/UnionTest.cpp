@@ -37,9 +37,9 @@ TEST(UnionTest, computeUnion) {
   const std::vector<std::array<size_t, 2>> columnOrigins = {
       {0, 1}, {Union::NO_COLUMN, 0}};
 
-  int leftWidth = left.cols();
-  int rightWidth = right.cols();
-  int outWidth = result.cols();
+  int leftWidth = left.numColumns();
+  int rightWidth = right.numColumns();
+  int outWidth = result.numColumns();
   Union U{Union::InvalidUnionOnlyUseForTestinTag{}};
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, outWidth}),
                   &Union::computeUnion, &U, &result, left, right,
@@ -47,11 +47,11 @@ TEST(UnionTest, computeUnion) {
 
   ASSERT_EQ(5u, result.size());
   for (size_t i = 0; i < left.size(); i++) {
-    ASSERT_EQ(left[i][0], result(i, 0));
+    ASSERT_EQ(left(i, 0), result(i, 0));
     ASSERT_EQ(ID_NO_VALUE, result(i, 1));
   }
   for (size_t i = 0; i < right.size(); i++) {
-    ASSERT_EQ(right[i][0], result(i + left.size(), 1));
+    ASSERT_EQ(right(i, 0), result(i + left.size(), 1));
     ASSERT_EQ(right(i, 1), result(i + left.size(), 0));
   }
 }
@@ -70,9 +70,9 @@ TEST(UnionTest, computeUnionOptimized) {
   IdTable result(2, allocator());
 
   const std::vector<std::array<size_t, 2>> columnOrigins = {{0, 0}, {1, 1}};
-  int leftWidth = left.cols();
-  int rightWidth = right.cols();
-  int outWidth = result.cols();
+  int leftWidth = left.numColumns();
+  int rightWidth = right.numColumns();
+  int outWidth = result.numColumns();
   Union U{Union::InvalidUnionOnlyUseForTestinTag{}};
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, outWidth}),
                   &Union::computeUnion, &U, &result, left, right,
@@ -80,11 +80,11 @@ TEST(UnionTest, computeUnionOptimized) {
 
   ASSERT_EQ(5u, result.size());
   for (size_t i = 0; i < left.size(); i++) {
-    ASSERT_EQ(left[i][0], result(i, 0));
-    ASSERT_EQ(left[i][1], result(i, 1));
+    ASSERT_EQ(left(i, 0), result(i, 0));
+    ASSERT_EQ(left(i, 1), result(i, 1));
   }
   for (size_t i = 0; i < right.size(); i++) {
-    ASSERT_EQ(right[i][0], result(i + left.size(), 0));
+    ASSERT_EQ(right(i, 0), result(i + left.size(), 0));
     ASSERT_EQ(right(i, 1), result(i + left.size(), 1));
   }
 }

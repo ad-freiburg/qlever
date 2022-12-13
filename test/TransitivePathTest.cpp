@@ -19,11 +19,11 @@ auto I = [](const auto& id) {
 // results of the TransitivePath operations which have a non-deterministic order
 // because of the hash maps which are used internally.
 void assertSameUnorderedContent(const IdTable& a, const IdTable& b) {
-  auto aCpy = a;
-  auto bCpy = b;
-  ASSERT_EQ(a.cols(), b.cols());
+  auto aCpy = a.clone();
+  auto bCpy = b.clone();
+  ASSERT_EQ(a.numColumns(), b.numColumns());
   auto sorter = [](const auto& rowFromA, const auto& rowFromB) {
-    for (size_t i = 0; i < rowFromA.cols(); ++i) {
+    for (size_t i = 0; i < rowFromA.numColumns(); ++i) {
       if (rowFromA[i] != rowFromB[i]) {
         return rowFromA[i] < rowFromB[i];
       }

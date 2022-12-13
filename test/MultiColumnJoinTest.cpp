@@ -41,9 +41,9 @@ TEST(EngineTest, multiColumnJoinTest) {
 
   // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
   // a have to equal those of column 2 of b and vice versa).
-  int aWidth = a.cols();
-  int bWidth = b.cols();
-  int resWidth = res.cols();
+  int aWidth = a.numColumns();
+  int bWidth = b.numColumns();
+  int resWidth = res.numColumns();
   CALL_FIXED_SIZE((std::array{aWidth, bWidth, resWidth}),
                   MultiColumnJoin::computeMultiColumnJoin, a, b, jcls, &res);
 
@@ -77,14 +77,14 @@ TEST(EngineTest, multiColumnJoinTest) {
 
   // The template size parameter can be at most 6 (the maximum number
   // of fixed size columns plus one).
-  aWidth = va.cols();
-  bWidth = vb.cols();
-  resWidth = vres.cols();
+  aWidth = va.numColumns();
+  bWidth = vb.numColumns();
+  resWidth = vres.numColumns();
   CALL_FIXED_SIZE((std::array{aWidth, bWidth, resWidth}),
                   MultiColumnJoin::computeMultiColumnJoin, va, vb, jcls, &vres);
 
   ASSERT_EQ(4u, vres.size());
-  ASSERT_EQ(7u, vres.cols());
+  ASSERT_EQ(7u, vres.numColumns());
 
   IdTable wantedRes(7, allocator());
   wantedRes.push_back({I(1), I(2), I(3), I(4), I(5), I(6), I(4)});

@@ -248,7 +248,7 @@ TEST(FTSAlgorithmsTest, intersectKWayTest) {
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
   try {
     IdTable result{allocator()};
-    result.setCols(3);
+    result.setNumColumns(3);
     vector<TextRecordIndex> cids;
     vector<Id> eids;
     vector<Score> scores;
@@ -300,11 +300,11 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
 
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   IdTable result{allocator()};
-  result.setCols(3);
+  result.setNumColumns(3);
   vector<TextRecordIndex> cids;
   vector<Id> eids;
   vector<Score> scores;
-  int width = result.cols();
+  int width = result.numColumns();
 
   // In the following there are many similar calls to `callFixedSize`.
   // We use a lambda to reduce code duplication.
@@ -484,13 +484,13 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
   size_t nofVars = 2;
   size_t k = 1;
   IdTable resW4{4, allocator()};
-  int width = resW4.cols();
+  int width = resW4.numColumns();
   callFixed(width, cids, eids, scores, nofVars, k, &resW4);
   ASSERT_EQ(0u, resW4.size());
   nofVars = 5;
   k = 10;
   IdTable resWV{13, allocator()};
-  width = resWV.cols();
+  width = resWV.numColumns();
   callFixed(width, cids, eids, scores, nofVars, k, &resWV);
   ASSERT_EQ(0u, resWV.size());
 
@@ -517,7 +517,7 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
 
   nofVars = 2;
   k = 1;
-  width = resW4.cols();
+  width = resW4.numColumns();
   callFixed(width, cids, eids, scores, nofVars, k, &resW4);
 
   // Res 0-0-0 (3) | 0-1 1-0 1-1 (2) | 0-2 1-2 2-0 2-1 2-2 (1)
@@ -553,12 +553,12 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
   nofVars = 3;
   k = 1;
   IdTable resW5{5, allocator()};
-  width = resW5.cols();
+  width = resW5.numColumns();
   callFixed(width, cids, eids, scores, nofVars, k, &resW5);
   ASSERT_EQ(27u, resW5.size());  // Res size 3^3
 
   nofVars = 10;
-  width = resWV.cols();
+  width = resWV.numColumns();
   callFixed(width, cids, eids, scores, nofVars, k, &resWV);
   ASSERT_EQ(59049u, resWV.size());  // Res size: 3^10 = 59049
 }
@@ -571,7 +571,7 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
   IdTable resW3{3, allocator()};
   ad_utility::HashMap<Id, IdTable> fMap1;
 
-  int width = resW3.cols();
+  int width = resW3.numColumns();
   CALL_FIXED_SIZE(width,
                   FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts, cids,
                   eids, scores, fMap1, k, &resW3);
@@ -689,7 +689,7 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
     ad_utility::HashMap<Id, IdTable> fMap1;
 
     size_t nofVars = 2;
-    int width = resW4.cols();
+    int width = resW4.numColumns();
 
     // The `multVarsFilterAggScoresAndTakeTopKContexts` function is overloaded,
     // so it doesn't work with the `CALL_FIXED_SIZE` macro. We thus need

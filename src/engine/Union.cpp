@@ -157,10 +157,10 @@ void Union::computeResult(ResultTable* result) {
       result->_resultTypes.push_back(ResultTable::ResultType::KB);
     }
   }
-  result->_idTable.setCols(getResultWidth());
-  int leftWidth = subRes1->_idTable.cols();
-  int rightWidth = subRes2->_idTable.cols();
-  int outWidth = result->_idTable.cols();
+  result->_idTable.setNumColumns(getResultWidth());
+  int leftWidth = subRes1->_idTable.numColumns();
+  int rightWidth = subRes2->_idTable.numColumns();
+  int outWidth = result->_idTable.numColumns();
 
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, outWidth}),
                   &Union::computeUnion, this, &result->_idTable,
@@ -174,13 +174,14 @@ void Union::computeUnion(
     const std::vector<std::array<size_t, 2>>& columnOrigins) {
   const IdTableView<LEFT_WIDTH> left = dynLeft.asStaticView<LEFT_WIDTH>();
   const IdTableView<RIGHT_WIDTH> right = dynRight.asStaticView<RIGHT_WIDTH>();
-  IdTableStatic<OUT_WIDTH> res = dynRes->moveToStatic<OUT_WIDTH>();
+  IdTableStatic<OUT_WIDTH> res = std::move(*dynRes).toStatic<OUT_WIDTH>();
 
   res.reserve(left.size() + right.size());
 
   // TODO<joka921> insert global constant here
   const size_t chunkSize =
-      100000 / res.cols();  // after this many elements, check for timeouts
+      100000 /
+      res.numColumns();  // after this many elements, check for timeouts
   auto checkAfterChunkSize = checkTimeoutAfterNCallsFactory(chunkSize);
 
   // Append the contents of inputTable to the result. This requires previous
@@ -192,20 +193,20 @@ void Union::computeUnion(
     // always copy chunkSize results at once and then check for a timeout
     size_t numChunks = inputTable.size() / chunkSize;
     for (size_t i = 0; i < numChunks; ++i) {
-      res.insert(res.end(), inputTable.begin() + i * chunkSize,
-                 inputTable.begin() + (i + 1) * chunkSize);
+      res.insertAtEnd(inputTable.begin() + i * chunkSize,
+                      inputTable.begin() + (i + 1) * chunkSize);
       checkTimeout();
     }
-    res.insert(res.end(), inputTable.begin() + numChunks * chunkSize,
-               inputTable.end());
+    res.insertAtEnd(inputTable.begin() + numChunks * chunkSize,
+                    inputTable.end());
   };
 
   auto columnsMatch = [&columnOrigins](const auto& inputTable,
                                        const auto& getter) {
-    bool allColumnsAreUsed = inputTable.cols() == columnOrigins.size();
+    bool allColumnsAreUsed = inputTable.numColumns() == columnOrigins.size();
     bool columnsAreSorted = std::ranges::is_sorted(columnOrigins, {}, getter);
     bool noGapsInColumns =
-        getter(columnOrigins.back()) == inputTable.cols() - 1;
+        getter(columnOrigins.back()) == inputTable.numColumns() - 1;
     return allColumnsAreUsed && columnsAreSorted && noGapsInColumns;
   };
 
@@ -247,5 +248,5 @@ void Union::computeUnion(
   if (right.size() > 0) {
     appendResult.template operator()<RIGHT_WIDTH>(right, ad_utility::second);
   }
-  *dynRes = res.moveToDynamic();
+  *dynRes = std::move(res).toDynamic();
 }

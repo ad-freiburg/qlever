@@ -215,7 +215,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
     return;
   }
   const IdTableView<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
-  IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
+  IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
 
   sparqlExpression::VariableToColumnAndResultTypeMap columnMap;
   for (const auto& [variable, columnIndex] : _subtree->getVariableColumns()) {
@@ -242,12 +242,12 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   if (groupByCols.empty()) {
     // The entire input is a single group
     processNextBlock(0, input.size());
-    *dynResult = result.moveToDynamic();
+    *dynResult = std::move(result).toDynamic();
     return;
   }
 
-  // This stores the values of the group by cols for the current block. A block
-  // ends when one of these values changes.
+  // This stores the values of the group by numColumns for the current block. A
+  // block ends when one of these values changes.
   std::vector<std::pair<size_t, Id>> currentGroupBlock;
   for (size_t col : groupByCols) {
     currentGroupBlock.push_back(std::pair<size_t, Id>(col, input(0, col)));
@@ -272,7 +272,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
     }
   }
   processNextBlock(blockStart, input.size());
-  *dynResult = result.moveToDynamic();
+  *dynResult = std::move(result).toDynamic();
 }
 
 void GroupBy::computeResult(ResultTable* result) {
@@ -288,7 +288,7 @@ void GroupBy::computeResult(ResultTable* result) {
   std::vector<size_t> groupByColumns;
 
   result->_sortedBy = resultSortedOn();
-  result->_idTable.setCols(getResultWidth());
+  result->_idTable.setNumColumns(getResultWidth());
 
   std::vector<Aggregate> aggregates;
   aggregates.reserve(_aliases.size() + _groupByVariables.size());
@@ -315,7 +315,7 @@ void GroupBy::computeResult(ResultTable* result) {
   }
 
   // populate the result type vector
-  result->_resultTypes.resize(result->_idTable.cols());
+  result->_resultTypes.resize(result->_idTable.numColumns());
 
   // The `_groupByVariables` are simply copied, so their result type is
   // also copied. The result type of the other columns is set when the
@@ -332,13 +332,13 @@ void GroupBy::computeResult(ResultTable* result) {
   }
 
   std::vector<ResultTable::ResultType> inputResultTypes;
-  inputResultTypes.reserve(subresult->_idTable.cols());
-  for (size_t i = 0; i < subresult->_idTable.cols(); i++) {
+  inputResultTypes.reserve(subresult->_idTable.numColumns());
+  for (size_t i = 0; i < subresult->_idTable.numColumns(); i++) {
     inputResultTypes.push_back(subresult->getResultType(i));
   }
 
-  int inWidth = subresult->_idTable.cols();
-  int outWidth = result->_idTable.cols();
+  int inWidth = subresult->_idTable.numColumns();
+  int outWidth = result->_idTable.numColumns();
 
   CALL_FIXED_SIZE((std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
                   subresult->_idTable, groupByCols, aggregates,
@@ -372,7 +372,7 @@ bool GroupBy::computeGroupByForSingleIndexScan(ResultTable* result) {
     return false;
   }
 
-  result->_idTable.setCols(1);
+  result->_idTable.setNumColumns(1);
   // TODO<joka921> The `resultTypes` are not really in use, but if they are
   // not present, segfaults might occur in upstream `Operation`s.
   result->_resultTypes.push_back(qlever::ResultType::VERBATIM);
@@ -440,7 +440,7 @@ bool GroupBy::computeGroupByForFullIndexScan(ResultTable* result) {
 
   // Prepare the `result`
   size_t numCols = numCounts + 1;
-  result->_idTable.setCols(numCols);
+  result->_idTable.setNumColumns(numCols);
   for (size_t i = 0; i < numCols; ++i) {
     result->_resultTypes.push_back(qlever::ResultType::VERBATIM);
   }
@@ -450,63 +450,63 @@ bool GroupBy::computeGroupByForFullIndexScan(ResultTable* result) {
   // templated on the number of columns (1 or 2) and will be passed to
   // `callFixedSize`.
   DISABLE_WARNINGS_CLANG_13
-  auto doComputationForNumberOfColumns =
-      [&]<int NUM_COLS>(IdTable* idTable) mutable {
-        ENABLE_WARNINGS_CLANG_13
-        // TODO<joka921> The `resultTypes` are not really in use, but if they
-        // are not present, segfaults might occur in upstream `Operation`s.
-        auto ignoredRanges =
-            getIndex().getImpl().getIgnoredIdRanges(permutation.value()).first;
-        // The permutations in the `Index` class have different types, so we
-        // also have to write a generic lambda here that will be passed to
-        // `IndexImpl::applyToPermutation`.
-        auto applyForPermutation = [&](const auto& permutation) mutable {
-          IdTableStatic<NUM_COLS> table = idTable->moveToStatic<NUM_COLS>();
-          const auto& metaData = permutation._meta.data();
-          // TODO<joka921> the reserve is too large because of the ignored
-          // triples. We would need to incorporate the information how many
-          // added "relations" are in each permutation during index building.
-          table.reserve(metaData.size());
-          for (auto it = metaData.ordered_begin(); it != metaData.ordered_end();
-               ++it) {
-            Id id = decltype(metaData.ordered_begin())::getIdFromElement(*it);
+  auto doComputationForNumberOfColumns = [&]<int NUM_COLS>(
+                                             IdTable* idTable) mutable {
+    ENABLE_WARNINGS_CLANG_13
+    // TODO<joka921> The `resultTypes` are not really in use, but if they
+    // are not present, segfaults might occur in upstream `Operation`s.
+    auto ignoredRanges =
+        getIndex().getImpl().getIgnoredIdRanges(permutation.value()).first;
+    // The permutations in the `Index` class have different types, so we
+    // also have to write a generic lambda here that will be passed to
+    // `IndexImpl::applyToPermutation`.
+    auto applyForPermutation = [&](const auto& permutation) mutable {
+      IdTableStatic<NUM_COLS> table = std::move(*idTable).toStatic<NUM_COLS>();
+      const auto& metaData = permutation._meta.data();
+      // TODO<joka921> the reserve is too large because of the ignored
+      // triples. We would need to incorporate the information how many
+      // added "relations" are in each permutation during index building.
+      table.reserve(metaData.size());
+      for (auto it = metaData.ordered_begin(); it != metaData.ordered_end();
+           ++it) {
+        Id id = decltype(metaData.ordered_begin())::getIdFromElement(*it);
 
-            // Check whether this is an `@en@...` predicate in a `Pxx`
-            // permutation, a literal in a `Sxx` permutation or some other
-            // entity that was added only for internal reasons.
-            if (std::ranges::any_of(ignoredRanges, [&id](const auto& pair) {
-                  return id >= pair.first && id < pair.second;
-                })) {
-              continue;
-            }
-            Id count = Id::makeFromInt(
-                decltype(metaData.ordered_begin())::getNumRowsFromElement(*it));
-            // TODO<joka921> The count is actually not accurate at least for the
-            // `Sxx` and `Oxx` permutations because it contains the triples with
-            // predicate
-            // `@en@rdfs:label` etc. The probably easiest way to fix this is to
-            // exclude these triples from those permutations (they are only
-            // relevant for queries with a fixed subject), but then we would
-            // need to make sure, that we don't accidentally break the language
-            // filters for queries like
-            // `<fixedSubject> @en@rdfs:label ?labels`, for which the best
-            // query plan potentially goes through the `SPO` relation.
-            // Alternatively we would have to write an additional number
-            // `numNonAddedTriples` to the `IndexMetaData` which would further
-            // increase their size.
-            // TODO<joka921> Discuss this with Hannah.
-            table.emplace_back();
-            table(table.size() - 1, 0) = id;
-            if (numCounts == 1) {
-              table(table.size() - 1, 1) = count;
-            }
-          }
-          *idTable = table.moveToDynamic();
-        };
+        // Check whether this is an `@en@...` predicate in a `Pxx`
+        // permutation, a literal in a `Sxx` permutation or some other
+        // entity that was added only for internal reasons.
+        if (std::ranges::any_of(ignoredRanges, [&id](const auto& pair) {
+              return id >= pair.first && id < pair.second;
+            })) {
+          continue;
+        }
+        Id count = Id::makeFromInt(
+            decltype(metaData.ordered_begin())::getNumRowsFromElement(*it));
+        // TODO<joka921> The count is actually not accurate at least for the
+        // `Sxx` and `Oxx` permutations because it contains the triples with
+        // predicate
+        // `@en@rdfs:label` etc. The probably easiest way to fix this is to
+        // exclude these triples from those permutations (they are only
+        // relevant for queries with a fixed subject), but then we would
+        // need to make sure, that we don't accidentally break the language
+        // filters for queries like
+        // `<fixedSubject> @en@rdfs:label ?labels`, for which the best
+        // query plan potentially goes through the `SPO` relation.
+        // Alternatively we would have to write an additional number
+        // `numNonAddedTriples` to the `IndexMetaData` which would further
+        // increase their size.
+        // TODO<joka921> Discuss this with Hannah.
+        table.emplace_back();
+        table(table.size() - 1, 0) = id;
+        if (numCounts == 1) {
+          table(table.size() - 1, 1) = count;
+        }
+      }
+      *idTable = std::move(table).toDynamic();
+    };
 
-        getExecutionContext()->getIndex().getPimpl().applyToPermutation(
-            permutation.value(), applyForPermutation);
-      };
+    getExecutionContext()->getIndex().getPimpl().applyToPermutation(
+        permutation.value(), applyForPermutation);
+  };
   ad_utility::callFixedSize(numCols, doComputationForNumberOfColumns,
                             &result->_idTable);
 
@@ -610,7 +610,7 @@ bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
   join->updateRuntimeInformationWhenOptimizedOut(
       {subtree.getRootOperation()->getRuntimeInfo(),
        threeVarSubtree.getRootOperation()->getRuntimeInfo()});
-  result->_idTable.setCols(2);
+  result->_idTable.setNumColumns(2);
   // TODO<joka921> The `resultTypes` are not really in use, but if they are
   // not present, segfaults might occur in upstream `Operation`s.
   result->_resultTypes.push_back(qlever::ResultType::KB);
@@ -619,7 +619,7 @@ bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
     return true;
   }
 
-  auto idTable = result->_idTable.moveToStatic<2>();
+  auto idTable = std::move(result->_idTable).toStatic<2>();
   const auto& index = getExecutionContext()->getIndex();
 
   // TODO<joka921, C++23> Simplify the following pattern by using
@@ -656,7 +656,7 @@ bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
     currentCount += currentCardinality;
   }
   pushRow();
-  result->_idTable = idTable.moveToDynamic();
+  result->_idTable = std::move(idTable).toDynamic();
   return true;
 }
 
