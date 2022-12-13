@@ -72,6 +72,10 @@ class ExportQueryExecutionTrees {
   static ad_utility::streams::stream_generator composeTurtleResponse(
       const ParsedQuery& query, const QueryExecutionTree& qet);
 
+  static nlohmann::json composeResponseSparqlJson(
+      const ParsedQuery& query, const QueryExecutionTree& qet,
+      ad_utility::Timer& requestTimer, size_t maxSend);
+
  private:
   [[nodiscard]] static std::optional<std::pair<std::string, const char*>>
   idToStringAndType(const QueryExecutionTree& qet, Id id,

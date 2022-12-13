@@ -425,25 +425,7 @@ Awaitable<json> Server::composeResponseQleverJson(
 Awaitable<json> Server::composeResponseSparqlJson(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     ad_utility::Timer& requestTimer, size_t maxSend) const {
-  if (!query.hasSelectClause()) {
-    throw std::runtime_error{
-        "SPARQL-compliant JSON format is only supported for SELECT queries"};
-  }
-  auto compute = [&, maxSend] {
-    shared_ptr<const ResultTable> resultTable = qet.getResult();
-    resultTable->logResultSize();
-    requestTimer.stop();
-    nlohmann::json j;
-    size_t limit = std::min(query._limitOffset._limit, maxSend);
-    size_t offset = query._limitOffset._offset;
-    requestTimer.cont();
-    j = ExportQueryExecutionTrees::selectQueryToSparqlJSON(
-        qet, query.selectClause(), limit, offset, std::move(resultTable));
-
-    requestTimer.stop();
-    return j;
-  };
-  return computeInNewThread(compute);
+  return computeInNewThread([&, maxSend]{return ExportQueryExecutionTrees::composeResponseSparqlJson(query, qet, requestTimer, maxSend);});
 }
 
 // _______________________________________________________________________
