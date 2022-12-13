@@ -6,6 +6,7 @@
 
 #include "engine/QueryExecutionTree.h"
 #include "nlohmann/json.hpp"
+#include "util/http/MediaTypes.h"
 
 #pragma once
 
@@ -39,19 +40,7 @@ class ExportQueryExecutionTrees {
       size_t offset, std::shared_ptr<const ResultTable> resultTable);
 
   // _____________________________________________________________________________
-  static nlohmann::json constructQueryToJSON(
-      const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-      size_t offset, std::shared_ptr<const ResultTable> res);
-
-  // _____________________________________________________________________________
   static nlohmann::json selectQueryToSparqlJSON(
-      const QueryExecutionTree& qet,
-      const parsedQuery::SelectClause& selectClause, size_t limit,
-      size_t offset, shared_ptr<const ResultTable> resultTable);
-
-  // _____________________________________________________________________________
-  static nlohmann::json writeResultAsQLeverJson(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause, size_t limit,
       size_t offset, shared_ptr<const ResultTable> resultTable);
@@ -69,8 +58,34 @@ class ExportQueryExecutionTrees {
       const parsedQuery::SelectClause& selectClause, size_t limit,
       size_t offset);
 
+  // _____________________________________________________________________________
+  static nlohmann::json queryToQLeverJSON(const ParsedQuery& query,
+                                          const QueryExecutionTree& qet,
+                                          ad_utility::Timer& requestTimer,
+                                          size_t maxSend);
+
+  // _____________________________________________________________________________
+  static ad_utility::streams::stream_generator composeResponseSepValues(
+      const ParsedQuery& query, const QueryExecutionTree& qet,
+      ad_utility::MediaType type);
+
+  static ad_utility::streams::stream_generator composeTurtleResponse(
+      const ParsedQuery& query, const QueryExecutionTree& qet);
+
  private:
   [[nodiscard]] static std::optional<std::pair<std::string, const char*>>
   idToStringAndType(const QueryExecutionTree& qet, Id id,
                     const ResultTable& resultTable);
+
+  // _____________________________________________________________________________
+  static nlohmann::json selectQueryToQLeverJSONArray(
+      const QueryExecutionTree& qet,
+      const parsedQuery::SelectClause& selectClause, size_t limit,
+      size_t offset, shared_ptr<const ResultTable> resultTable);
+
+  // _____________________________________________________________________________
+  static nlohmann::json constructQueryToQLeverJSONArray(
+      const QueryExecutionTree& qet,
+      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+      size_t offset, std::shared_ptr<const ResultTable> res);
 };

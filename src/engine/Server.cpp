@@ -415,50 +415,8 @@ Awaitable<json> Server::composeResponseQleverJson(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     ad_utility::Timer& requestTimer, size_t maxSend) const {
   auto compute = [&, maxSend] {
-    shared_ptr<const ResultTable> resultTable = qet.getResult();
-    requestTimer.stop();
-    resultTable->logResultSize();
-    off_t compResultUsecs = requestTimer.usecs();
-    size_t resultSize = resultTable->size();
-
-    nlohmann::json j;
-
-    j["query"] = query._originalString;
-    j["status"] = "OK";
-    j["warnings"] = qet.collectWarnings();
-    if (query.hasSelectClause()) {
-      j["selected"] = query.selectClause().getSelectedVariablesAsStrings();
-    } else {
-      j["selected"] =
-          std::vector<std::string>{"?subject", "?predicate", "?object"};
-    }
-
-    j["runtimeInformation"] =
-        nlohmann::ordered_json(qet.getRootOperation()->getRuntimeInfo());
-
-    {
-      size_t limit = std::min(query._limitOffset._limit, maxSend);
-      size_t offset = query._limitOffset._offset;
-      requestTimer.cont();
-      j["res"] = query.hasSelectClause()
-                     ? ExportQueryExecutionTrees::writeResultAsQLeverJson(
-                           qet, query.selectClause(), limit, offset,
-                           std::move(resultTable))
-                     : ExportQueryExecutionTrees::constructQueryToJSON(
-                           qet, query.constructClause().triples_, limit, offset,
-                           std::move(resultTable));
-      requestTimer.stop();
-    }
-    j["resultsize"] = query.hasSelectClause() ? resultSize : j["res"].size();
-
-    requestTimer.stop();
-    j["time"]["total"] =
-        std::to_string(static_cast<double>(requestTimer.usecs()) / 1000.0) +
-        "ms";
-    j["time"]["computeResult"] =
-        std::to_string(static_cast<double>(compResultUsecs) / 1000.0) + "ms";
-
-    return j;
+    return ExportQueryExecutionTrees::queryToQLeverJSON(query, qet,
+                                                        requestTimer, maxSend);
   };
   return computeInNewThread(compute);
 }
@@ -493,54 +451,10 @@ Awaitable<ad_utility::streams::stream_generator>
 Server::composeStreamableResponse(ad_utility::MediaType type,
                                   const ParsedQuery& query,
                                   const QueryExecutionTree& qet) const {
-  // TODO<joka921> Clean this up by removing the (unused) `ExportSubFormat`
-  // enum, And maybe by a `switch-constexpr`-abstraction
-  if (type == ad_utility::MediaType::csv) {
-    co_return co_await composeResponseSepValues<
-        QueryExecutionTree::ExportSubFormat::CSV>(query, qet);
-  } else if (type == ad_utility::MediaType::tsv) {
-    co_return co_await composeResponseSepValues<
-        QueryExecutionTree::ExportSubFormat::TSV>(query, qet);
-  } else if (type == ad_utility::MediaType::octetStream) {
-    co_return co_await composeResponseSepValues<
-        QueryExecutionTree::ExportSubFormat::BINARY>(query, qet);
-  } else if (type == ad_utility::MediaType::turtle) {
-    co_return composeTurtleResponse(query, qet);
-  }
-  AD_FAIL();
-}
-
-// _____________________________________________________________________________
-template <QueryExecutionTree::ExportSubFormat format>
-Awaitable<ad_utility::streams::stream_generator>
-Server::composeResponseSepValues(const ParsedQuery& query,
-                                 const QueryExecutionTree& qet) const {
-  auto compute = [&] {
-    size_t limit = query._limitOffset._limit;
-    size_t offset = query._limitOffset._offset;
-    return query.hasSelectClause()
-               ? ExportQueryExecutionTrees::generateResults<format>(
-                     qet, query.selectClause(), limit, offset)
-               : ExportQueryExecutionTrees::writeRdfGraphSeparatedValues<
-                     format>(qet, query.constructClause().triples_, limit,
-                             offset, qet.getResult());
-  };
-  return computeInNewThread(compute);
-}
-
-// _____________________________________________________________________________
-
-ad_utility::streams::stream_generator Server::composeTurtleResponse(
-    const ParsedQuery& query, const QueryExecutionTree& qet) {
-  if (!query.hasConstructClause()) {
-    throw std::runtime_error{
-        "RDF Turtle as an export format is only supported for CONSTRUCT "
-        "queries"};
-  }
-  size_t limit = query._limitOffset._limit;
-  size_t offset = query._limitOffset._offset;
-  return ExportQueryExecutionTrees::constructQueryToTurtle(
-      qet, query.constructClause().triples_, limit, offset, qet.getResult());
+  return computeInNewThread([&] {
+    return ExportQueryExecutionTrees::composeResponseSepValues(query, qet,
+                                                               type);
+  });
 }
 
 // _____________________________________________________________________________
