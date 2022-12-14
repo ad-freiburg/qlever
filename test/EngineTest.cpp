@@ -7,9 +7,7 @@
 #include <cstdio>
 #include <fstream>
 #include <sstream>
-
 #include <algorithm>
-
 #include <tuple>
 
 #include "../src/engine/CallFixedSize.h"
