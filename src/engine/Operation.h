@@ -99,8 +99,8 @@ class Operation {
       const std::vector<Variable>& selectedVariables) final;
 
   RuntimeInformation& getRuntimeInfo() { return _runtimeInfo; }
-  RuntimeInformationWholeQuery& getRuntimeInfoRoot() {
-    return _runtimeInfoRoot;
+  RuntimeInformationWholeQuery& getRuntimeInfoWholeQuery() {
+    return _runtimeInfoWholeQuery;
   }
 
   // Get the result for the subtree rooted at this element.
@@ -273,7 +273,7 @@ class Operation {
   void forAllDescendants(F f) const;
 
   RuntimeInformation _runtimeInfo;
-  RuntimeInformationWholeQuery _runtimeInfoRoot;
+  RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
 
   // Collect all the warnings that were created during the creation or
   // execution of this operation.
