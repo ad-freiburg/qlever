@@ -693,20 +693,7 @@ void Join::doGallopInnerJoin(const TagType, const IdTableView<L_WIDTH>& l1,
       // Always fix l1 and go through l2.
       const size_t keepJ = j;
       while (l1(i, jc1) == l2(j, jc2)) {
-        size_t rowIndex = result->size();
-        result->push_back();
-        for (size_t h = 0; h < l1.cols(); h++) {
-          (*result)(rowIndex, h) = l1(i, h);
-        }
-        // Copy l2s columns before the join column
-        for (size_t h = 0; h < jc2; h++) {
-          (*result)(rowIndex, h + l1.cols()) = l2(j, h);
-        }
-
-        // Copy l2s columns after the join column
-        for (size_t h = jc2 + 1; h < l2.cols(); h++) {
-          (*result)(rowIndex, h + l1.cols() - 1) = l2(j, h);
-        }
+        addCombinedRowToIdTable<L_WIDTH, R_WIDTH, OUT_WIDTH>(l1[i], l2[j], jc2, result);
         ++j;
         if (j >= l2.size()) {
           break;
@@ -813,7 +800,7 @@ void Join::addCombinedRowToIdTable(
   const std::decay_t<typename IdTableStatic<A_WIDTH>::const_row_type>& rowA,
   const std::decay_t<typename IdTableStatic<B_WIDTH>::const_row_type>& rowB,
   const size_t jcRowB,
-  IdTableStatic<TABLE_WIDTH>* table) const {
+  IdTableStatic<TABLE_WIDTH>* table){
   // Add a new, empty row.
   const size_t backIndex = table->size();
   table->push_back();

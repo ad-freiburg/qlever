@@ -146,9 +146,9 @@ class Join : public Operation {
    * Must be static.
   */
   template <int A_WIDTH, int B_WIDTH, int TABLE_WIDTH>
-  void addCombinedRowToIdTable(
+  static void addCombinedRowToIdTable(
       const std::decay_t<typename IdTableStatic<A_WIDTH>::const_row_type>& rowA,
       const std::decay_t<typename IdTableStatic<B_WIDTH>::const_row_type>& rowB,
       const size_t jcRowB,
-      IdTableStatic<TABLE_WIDTH>* table) const;
+      IdTableStatic<TABLE_WIDTH>* table);
 };
