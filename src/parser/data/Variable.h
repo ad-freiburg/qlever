@@ -11,8 +11,8 @@
 // Forward declaration because of cyclic dependencies
 // TODO<joka921> The coupling of the `Variable` with its `evaluate` methods
 // is not very clean and should be refactored.
-struct ConstructQueryEvaluationContext;
-enum PositionInTriple : int;
+struct ConstructQueryExportContext;
+enum struct PositionInTriple : int;
 
 class Variable {
  public:
@@ -24,8 +24,8 @@ class Variable {
   // the codebase. Unify them!
   // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> evaluate(
-      const ConstructQueryEvaluationContext& context,
-      [[maybe_unused]] PositionInTriple role) const;
+      const ConstructQueryExportContext& context,
+      [[maybe_unused]] PositionInTriple positionInTriple) const;
 
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const { return _name; }

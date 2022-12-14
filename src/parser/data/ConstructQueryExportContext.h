@@ -13,10 +13,10 @@
 
 // Forward declarations to avoid cyclic dependencies
 class Index;
-enum PositionInTriple : int { SUBJECT, PREDICATE, OBJECT };
+enum struct PositionInTriple : int { SUBJECT, PREDICATE, OBJECT };
 
 // All the data that is needed to evaluate an element in a construct query.
-struct ConstructQueryEvaluationContext {
+struct ConstructQueryExportContext {
   const size_t _row;
   const ResultTable& _res;
   const VariableToColumnMap& _variableColumns;

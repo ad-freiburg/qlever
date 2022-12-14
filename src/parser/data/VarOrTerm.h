@@ -22,8 +22,7 @@ class VarOrTerm : public VarOrTermBase,
 
   // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> evaluate(
-      const ConstructQueryEvaluationContext& context,
-      PositionInTriple role) const {
+      const ConstructQueryExportContext& context, PositionInTriple role) const {
     // TODO<C++23>: Use std::visit when it is possible
     return visit([&context, &role](const auto& object) {
       return object.evaluate(context, role);

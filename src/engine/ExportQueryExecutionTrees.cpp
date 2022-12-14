@@ -16,8 +16,9 @@ ExportQueryExecutionTrees::constructQueryToTriples(
   size_t upperBound = std::min<size_t>(offset + limit, res->_idTable.size());
   auto variableColumns = qet.getVariableColumns();
   for (size_t i = offset; i < upperBound; i++) {
-    ConstructQueryEvaluationContext context{i, *res, variableColumns,
-                                            qet.getQec()->getIndex()};
+    ConstructQueryExportContext context{i, *res, variableColumns,
+                                        qet.getQec()->getIndex()};
+    using enum PositionInTriple;
     for (const auto& triple : constructTriples) {
       auto subject = triple[0].evaluate(context, SUBJECT);
       auto predicate = triple[1].evaluate(context, PREDICATE);

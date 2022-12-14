@@ -10,7 +10,7 @@
 #include <unordered_set>
 
 #include "../parser/ParsedQuery.h"
-#include "../parser/data/ConstructQueryEvaluationContext.h"
+#include "../parser/data/ConstructQueryExportContext.h"
 #include "../parser/data/Types.h"
 #include "../parser/data/VarOrTerm.h"
 #include "../util/Conversions.h"
