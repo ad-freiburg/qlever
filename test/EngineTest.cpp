@@ -10,16 +10,16 @@
 #include <algorithm>
 #include <tuple>
 
-#include "../src/engine/CallFixedSize.h"
-#include "../src/engine/Engine.h"
-#include "../src/engine/Join.h"
-#include "../src/engine/OptionalJoin.h"
-#include "../src/util/Random.h"
-#include "../src/engine/QueryExecutionTree.h"
-#include "../src/util/Forward.h"
-#include "../src/util/SourceLocation.h"
+#include "engine/CallFixedSize.h"
+#include "engine/Engine.h"
+#include "engine/Join.h"
+#include "engine/OptionalJoin.h"
+#include "util/Random.h"
+#include "engine/QueryExecutionTree.h"
+#include "util/Forward.h"
+#include "util/SourceLocation.h"
 #include "./util/GTestHelpers.h"
-#include "../src/engine/IdTable.h"
+#include "engine/IdTable.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
