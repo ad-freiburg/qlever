@@ -33,7 +33,7 @@ auto I = [](const auto& id) {
 };
 
 /*
- * Creates an IdTable for table described in talbeContent and returns it.
+ * Return an 'IdTable' with the given 'tableContent'.
 */
 template<size_t TABLE_WIDTH>
 IdTable makeIdTableFromVector(std::vector<std::array<size_t, TABLE_WIDTH>> tableContent) {
