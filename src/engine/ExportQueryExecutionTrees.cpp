@@ -80,7 +80,7 @@ nlohmann::json ExportQueryExecutionTrees::constructQueryToQLeverJSONArray(
 }
 
 // __________________________________________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::writeQLeverJsonTable(
+nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
     const QueryExecutionTree& qet, size_t from, size_t limit,
     const QueryExecutionTree::ColumnIndicesAndTypes& columns,
     shared_ptr<const ResultTable> resultTable) {
@@ -291,22 +291,20 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryToQLeverJSONArray(
     return {std::vector<std::string>()};
   }
 
-  return ExportQueryExecutionTrees::writeQLeverJsonTable(
+  return ExportQueryExecutionTrees::idTableToQLeverJSONArray(
       qet, offset, limit, validIndices, std::move(resultTable));
 }
 
-using ExportSubFormat = QueryExecutionTree::ExportSubFormat;
 using parsedQuery::SelectClause;
 
 // _____________________________________________________________________________
-template <QueryExecutionTree::ExportSubFormat format>
+template <ad_utility::MediaType format>
 ad_utility::streams::stream_generator
 ExportQueryExecutionTrees::generateResults(const QueryExecutionTree& qet,
                                            const SelectClause& selectClause,
                                            size_t limit, size_t offset) {
-  static_assert(format == ExportSubFormat::BINARY ||
-                format == ExportSubFormat::CSV ||
-                format == ExportSubFormat::TSV);
+  static_assert(format == MediaType::octetStream || format == MediaType::csv ||
+                format == MediaType::tsv);
 
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
@@ -321,7 +319,7 @@ ExportQueryExecutionTrees::generateResults(const QueryExecutionTree& qet,
   size_t upperBound = std::min<size_t>(offset + limit, idTable.size());
 
   // special case : binary export of IdTable
-  if constexpr (format == ExportSubFormat::BINARY) {
+  if constexpr (format == MediaType::octetStream) {
     for (size_t i = offset; i < upperBound; ++i) {
       for (const auto& columnIndex : selectedColumnIndices) {
         if (columnIndex.has_value()) {
@@ -334,14 +332,14 @@ ExportQueryExecutionTrees::generateResults(const QueryExecutionTree& qet,
     co_return;
   }
 
-  static constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
+  static constexpr char sep = format == MediaType::tsv ? '\t' : ',';
   constexpr std::string_view sepView{&sep, 1};
   // Print header line
   const auto& variables = selectClause.getSelectedVariablesAsStrings();
   co_yield absl::StrJoin(variables, sepView);
   co_yield '\n';
 
-  constexpr auto& escapeFunction = format == ExportSubFormat::TSV
+  constexpr auto& escapeFunction = format == MediaType::tsv
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
 
@@ -386,47 +384,26 @@ ExportQueryExecutionTrees::generateResults(const QueryExecutionTree& qet,
   LOG(DEBUG) << "Done creating readable result.\n";
 }
 
-// Instantiate template function for all enum types
-// TODO<joka921> Move the function that calls those instantiations also into
-// this file, then we can get rid of the explicit instantiations.
-template ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::generateResults<
-    QueryExecutionTree::ExportSubFormat::CSV>(const QueryExecutionTree& qet,
-                                              const SelectClause& selectClause,
-                                              size_t limit, size_t offset);
-
-template ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::generateResults<
-    QueryExecutionTree::ExportSubFormat::TSV>(const QueryExecutionTree& qet,
-                                              const SelectClause& selectClause,
-                                              size_t limit, size_t offset);
-
-template ad_utility::streams::stream_generator ExportQueryExecutionTrees::
-    generateResults<QueryExecutionTree::ExportSubFormat::BINARY>(
-        const QueryExecutionTree& qet, const SelectClause& selectClause,
-        size_t limit, size_t offset);
-
 // _____________________________________________________________________________
 
 // _____________________________________________________________________________
-template <QueryExecutionTree::ExportSubFormat format>
+template <ad_utility::MediaType format>
 ad_utility::streams::stream_generator
 ExportQueryExecutionTrees::writeRdfGraphSeparatedValues(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
     size_t offset, std::shared_ptr<const ResultTable> resultTable) {
-  static_assert(format == ExportSubFormat::BINARY ||
-                format == ExportSubFormat::CSV ||
-                format == ExportSubFormat::TSV);
-  if constexpr (format == ExportSubFormat::BINARY) {
+  static_assert(format == MediaType::octetStream || format == MediaType::csv ||
+                format == MediaType::tsv);
+  if constexpr (format == MediaType::octetStream) {
     throw std::runtime_error{
         "Binary export is not supported for CONSTRUCT queries"};
   }
   resultTable->logResultSize();
-  constexpr auto& escapeFunction = format == ExportSubFormat::TSV
+  constexpr auto& escapeFunction = format == MediaType::tsv
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
-  constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
+  constexpr char sep = format == MediaType::tsv ? '\t' : ',';
   auto generator = ExportQueryExecutionTrees::constructQueryToTriples(
       qet, constructTriples, limit, offset, resultTable);
   for (auto& triple : generator) {
@@ -438,28 +415,6 @@ ExportQueryExecutionTrees::writeRdfGraphSeparatedValues(
     co_yield "\n";
   }
 }
-
-// Instantiate template function for all enum types
-
-// TODO<joka921> Move the function that calls those instantiations also into
-// this file, then we can get rid of the explicit instantiations.
-template ad_utility::streams::stream_generator ExportQueryExecutionTrees::
-    writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::CSV>(
-        const QueryExecutionTree& qet,
-        const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-        size_t offset, std::shared_ptr<const ResultTable> res);
-
-template ad_utility::streams::stream_generator ExportQueryExecutionTrees::
-    writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::TSV>(
-        const QueryExecutionTree& qet,
-        const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-        size_t offset, std::shared_ptr<const ResultTable> res);
-
-template ad_utility::streams::stream_generator ExportQueryExecutionTrees::
-    writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::BINARY>(
-        const QueryExecutionTree& qet,
-        const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-        size_t offset, std::shared_ptr<const ResultTable> res);
 
 // _____________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::queryToQLeverJSON(
@@ -512,32 +467,29 @@ nlohmann::json ExportQueryExecutionTrees::queryToQLeverJSON(
 
 // _____________________________________________________________________________
 ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::composeResponseSepValues(
-    const ParsedQuery& query, const QueryExecutionTree& qet,
-    ad_utility::MediaType type) {
-  auto compute = [&]<QueryExecutionTree::ExportSubFormat format> {
-    size_t limit = query._limitOffset._limit;
-    size_t offset = query._limitOffset._offset;
-    return query.hasSelectClause()
+ExportQueryExecutionTrees::queryToStreamableGenerator(
+    const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
+    ad_utility::MediaType mediaType) {
+  auto compute = [&]<MediaType format> {
+    size_t limit = parsedQuery._limitOffset._limit;
+    size_t offset = parsedQuery._limitOffset._offset;
+    return parsedQuery.hasSelectClause()
                ? ExportQueryExecutionTrees::generateResults<format>(
-                     qet, query.selectClause(), limit, offset)
+                     qet, parsedQuery.selectClause(), limit, offset)
                : ExportQueryExecutionTrees::writeRdfGraphSeparatedValues<
-                     format>(qet, query.constructClause().triples_, limit,
+                     format>(qet, parsedQuery.constructClause().triples_, limit,
                              offset, qet.getResult());
   };
   // TODO<joka921> Clean this up by removing the (unused) `ExportSubFormat`
   // enum, And maybe by a `switch-constexpr`-abstraction
-  if (type == ad_utility::MediaType::csv) {
-    return compute
-        .template operator()<QueryExecutionTree::ExportSubFormat::CSV>();
-  } else if (type == ad_utility::MediaType::tsv) {
-    return compute
-        .template operator()<QueryExecutionTree::ExportSubFormat::TSV>();
-  } else if (type == ad_utility::MediaType::octetStream) {
-    return compute
-        .template operator()<QueryExecutionTree::ExportSubFormat::BINARY>();
-  } else if (type == ad_utility::MediaType::turtle) {
-    return composeTurtleResponse(query, qet);
+  if (mediaType == MediaType::csv) {
+    return compute.template operator()<MediaType::csv>();
+  } else if (mediaType == MediaType::tsv) {
+    return compute.template operator()<MediaType::tsv>();
+  } else if (mediaType == ad_utility::MediaType::octetStream) {
+    return compute.template operator()<MediaType::octetStream>();
+  } else if (mediaType == ad_utility::MediaType::turtle) {
+    return composeTurtleResponse(parsedQuery, qet);
   }
   AD_FAIL();
 }
@@ -557,7 +509,7 @@ ExportQueryExecutionTrees::composeTurtleResponse(
       qet, query.constructClause().triples_, limit, offset, qet.getResult());
 }
 // _____________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::composeResponseSparqlJson(
+nlohmann::json ExportQueryExecutionTrees::queryToSparqlJSON(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     ad_utility::Timer& requestTimer, size_t maxSend) {
   if (!query.hasSelectClause()) {
@@ -576,4 +528,19 @@ nlohmann::json ExportQueryExecutionTrees::composeResponseSparqlJson(
 
   requestTimer.stop();
   return j;
+}
+
+// _____________________________________________________________________________
+nlohmann::json ExportQueryExecutionTrees::queryToJSON(
+    const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
+    ad_utility::Timer& requestTimer, size_t maxSend,
+    ad_utility::MediaType mediaType) {
+  switch (mediaType) {
+    case ad_utility::MediaType::qleverJson:
+      return queryToQLeverJSON(parsedQuery, qet, requestTimer, maxSend);
+    case ad_utility::MediaType::sparqlJson:
+      return queryToSparqlJSON(parsedQuery, qet, requestTimer, maxSend);
+    default:
+      AD_FAIL();
+  }
 }

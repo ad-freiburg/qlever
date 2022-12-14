@@ -58,8 +58,6 @@ class QueryExecutionTree {
     NEUTRAL_ELEMENT
   };
 
-  enum class ExportSubFormat { CSV, TSV, BINARY };
-
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
 
   template <typename Op>

@@ -411,35 +411,6 @@ Awaitable<void> Server::process(
 }
 
 // _____________________________________________________________________________
-Awaitable<json> Server::composeResponseQleverJson(
-    const ParsedQuery& query, const QueryExecutionTree& qet,
-    ad_utility::Timer& requestTimer, size_t maxSend) const {
-  auto compute = [&, maxSend] {
-    return ExportQueryExecutionTrees::queryToQLeverJSON(query, qet,
-                                                        requestTimer, maxSend);
-  };
-  return computeInNewThread(compute);
-}
-
-// _____________________________________________________________________________
-Awaitable<json> Server::composeResponseSparqlJson(
-    const ParsedQuery& query, const QueryExecutionTree& qet,
-    ad_utility::Timer& requestTimer, size_t maxSend) const {
-  return computeInNewThread([&, maxSend]{return ExportQueryExecutionTrees::composeResponseSparqlJson(query, qet, requestTimer, maxSend);});
-}
-
-// _______________________________________________________________________
-Awaitable<ad_utility::streams::stream_generator>
-Server::composeStreamableResponse(ad_utility::MediaType type,
-                                  const ParsedQuery& query,
-                                  const QueryExecutionTree& qet) const {
-  return computeInNewThread([&] {
-    return ExportQueryExecutionTrees::composeResponseSepValues(query, qet,
-                                                               type);
-  });
-}
-
-// _____________________________________________________________________________
 json Server::composeErrorResponseJson(
     const string& query, const std::string& errorMsg,
     ad_utility::Timer& requestTimer,
@@ -642,8 +613,10 @@ boost::asio::awaitable<void> Server::processQuery(
     // (tsv, csv, octet-stream, turtle).
     auto sendStreamableResponse =
         [&](ad_utility::MediaType mediaType) -> Awaitable<void> {
-      auto responseGenerator =
-          co_await composeStreamableResponse(mediaType, pq, qet);
+      auto responseGenerator = co_await computeInNewThread([&] {
+        return ExportQueryExecutionTrees::queryToStreamableGenerator(pq, qet,
+                                                                     mediaType);
+      });
 
       // The `streamable_body` that is used internally turns all exceptions that
       // occur while generating the rults into "broken pipe". We store the
@@ -674,15 +647,13 @@ boost::asio::awaitable<void> Server::processQuery(
       case ad_utility::MediaType::turtle: {
         co_await sendStreamableResponse(mediaType.value());
       } break;
-      case ad_utility::MediaType::qleverJson: {
-        // Normal case: JSON response
-        auto responseString =
-            co_await composeResponseQleverJson(pq, qet, requestTimer, maxSend);
-        co_await sendJson(std::move(responseString));
-      } break;
+      case ad_utility::MediaType::qleverJson:
       case ad_utility::MediaType::sparqlJson: {
-        auto responseString =
-            co_await composeResponseSparqlJson(pq, qet, requestTimer, maxSend);
+        // Normal case: JSON response
+        auto responseString = co_await computeInNewThread([&, maxSend] {
+          return ExportQueryExecutionTrees::queryToJSON(
+              pq, qet, requestTimer, maxSend, mediaType.value());
+        });
         co_await sendJson(std::move(responseString));
       } break;
       default:
