@@ -38,10 +38,7 @@ auto I = [](const auto& id) {
  * Creates an IdTable for table described in talbeContent and returns it.
 */
 template<size_t TABLE_WIDTH>
-IdTable makeIdTableFromVector(std::vector<std::array<size_t, TABLE_WIDTH>> tableContent, ad_utility::source_location T = ad_utility::source_location::current()) {
-  // For generating better messages, when failing a test.
-  auto trace = generateLocationTrace(T, "madeIdTableFromVector");
-
+IdTable makeIdTableFromVector(std::vector<std::array<size_t, TABLE_WIDTH>> tableContent) {
   IdTable result(TABLE_WIDTH, allocator());
 
   // Copying the content into the table.
@@ -71,7 +68,7 @@ IdTable makeIdTableFromVector(std::vector<std::array<size_t, TABLE_WIDTH>> table
  * @param testForSorted If this is true, it will also be tested, if the table
  *  is sorted by the join column.
  * @param jc The join column of the table.
- * @param T Ignore it. It's only here for being able to make better messages,
+ * @param t Ignore it. It's only here for being able to make better messages,
  *  if a IdTable fails the comparison.
 */
 template<size_t TABLE_WIDTH>
@@ -79,7 +76,7 @@ void compareIdTableWithSolution(IdTable table,
     std::vector<std::array<size_t, TABLE_WIDTH>> sampleSolution,
     const bool testForSorted = false,
     const size_t jc = 0,
-    ad_utility::source_location T = ad_utility::source_location::current()
+    ad_utility::source_location t = ad_utility::source_location::current()
     ) {
   // For generating more informative messages, when failing the comparison.
   std::stringstream traceMessage;
@@ -97,7 +94,7 @@ void compareIdTableWithSolution(IdTable table,
     }
     traceMessage << "\n";
   }
-  auto trace = generateLocationTrace(T, traceMessage.str());
+  auto trace = generateLocationTrace(t, traceMessage.str());
   
   // Do the IdTable and sampleSolution have the same dimensions?
   ASSERT_EQ(table.size(), sampleSolution.size());
@@ -157,12 +154,8 @@ IdTable useJoinFunctionOnVectorsTables(
         const size_t jcA,
         const std::vector<std::array<size_t, TABLE_B_WIDTH>>& tableB,
         const size_t jcB,
-        JOIN_FUNCTION func,
-        ad_utility::source_location T = ad_utility::source_location::current()
-      ) {
-  // For generating better messages, when failing a test.
-  auto trace = generateLocationTrace(T, "useJoinFunctionOnVectorsTables");
-
+        JOIN_FUNCTION func
+        ) {
   IdTable a = makeIdTableFromVector(tableA);
   IdTable b = makeIdTableFromVector(tableB);
   
@@ -208,10 +201,10 @@ void goThroughSetOfTestsWithJoinFunction(
       const std::array<std::tuple< std::vector<std::array<size_t, TABLE_A_WIDTH>>, size_t, std::vector<std::array<size_t, TABLE_B_WIDTH>>, size_t, std::vector<std::array<size_t, TABLE_RESULT_WIDTH>>> , NUMBER_OF_TESTS> testSet,
       JOIN_FUNCTION func,
       const bool testForSorted = false,
-      ad_utility::source_location T = ad_utility::source_location::current()
+      ad_utility::source_location t = ad_utility::source_location::current()
     ) {
   // For generating better messages, when failing a test.
-  auto trace = generateLocationTrace(T, "goThroughSetOfTestsWithJoinFunction");
+  auto trace = generateLocationTrace(t, "goThroughSetOfTestsWithJoinFunction");
 
   for (size_t i = 0; i < NUMBER_OF_TESTS; i++) {
     // For easier reading.
@@ -298,6 +291,7 @@ std::array<std::tuple< std::vector<std::array<size_t, 2>>, size_t, std::vector<s
 
   return myTestSet;
 }
+
 TEST(EngineTest, joinTest) {
   Join J{Join::InvalidOnlyForTestingJoinTag{}};
   auto JoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
