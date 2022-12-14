@@ -331,10 +331,10 @@ size_t IndexScan::computeSizeEstimate() {
           getRuntimeInfo().status_ =
               RuntimeInformation::Status::completedDuringQueryPlanning;
         }
-        auto sizeEstimate = _precomputedResult->size();
+        auto sizeEstimate = _precomputedResult.value()->size();
         getRuntimeInfo().sizeEstimate_ = sizeEstimate;
         getRuntimeInfo().costEstimate_ = sizeEstimate;
-        return _precomputedResult->size();
+        return sizeEstimate;
       }
     }
     // TODO<joka921> Should be a oneliner

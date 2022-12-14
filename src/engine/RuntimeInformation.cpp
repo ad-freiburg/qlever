@@ -151,7 +151,7 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
       {"operation_time", rti.getOperationTime()},
       {"original_total_time", rti.originalTotalTime_},
       {"original_operation_time", rti.originalOperationTime_},
-      {"was_cached", ad_utility::toString(rti.cacheStatus_)},
+      {"cache_status", ad_utility::toString(rti.cacheStatus_)},
       {"details", rti.details_},
       {"estimated_total_cost", rti.costEstimate_},
       {"estimated_operation_cost", rti.getOperationCostEstimate()},
@@ -162,7 +162,8 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
 }
 
 // ________________________________________________________________________________________________________________
-void to_json(nlohmann::ordered_json& j, const RuntimeInformationRoot& rti) {
+void to_json(nlohmann::ordered_json& j,
+             const RuntimeInformationWholeQuery& rti) {
   j = nlohmann::ordered_json{
       {"time_query_planning", rti.timeQueryPlanning},
       {"time_index_scans_query_planning", rti.timeIndexScansQueryPlanning}};

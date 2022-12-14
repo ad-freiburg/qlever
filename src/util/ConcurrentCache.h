@@ -38,9 +38,9 @@ enum struct CacheStatus { cachedNotPinned, cachedPinned, computed };
 constexpr std::string_view toString(CacheStatus status) {
   switch (status) {
     case CacheStatus::cachedNotPinned:
-      return "cached-not-pinned";
+      return "cached_not_pinned";
     case CacheStatus::cachedPinned:
-      return "cached-pinned";
+      return "cached_pinned";
     case CacheStatus::computed:
       return "computed";
     default:
@@ -235,10 +235,7 @@ class ConcurrentCache {
     if (cacheStatus == CacheStatus::computed) {
       return std::nullopt;
     }
-    // the result is in the cache, simply return it.
-    // return ResultAndCacheStatus{static_cast<shared_ptr<const
-    // Value>>(cache[key]),
-    //        cacheStatus};
+    // The result is in the cache, simply return it.
     return ResultAndCacheStatus{cache[key], cacheStatus};
   }
 

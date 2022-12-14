@@ -737,7 +737,7 @@ boost::asio::awaitable<void> Server::processQuery(
     qet.getRootOperation()->createRuntimeInfoFromEstimates();
     requestTimer.stop();
     size_t timeForIndexScansInQueryPlanning =
-        qet.getRootOperation()->getTotalEvaluationTimeDuringQueryProcessing();
+        qet.getRootOperation()->getTotalExecutionTimeDuringQueryPlanning();
     size_t timeForQueryPlanning =
         requestTimer.msecs() - timeForIndexScansInQueryPlanning;
     auto& runtimeInfoRoot = qet.getRootOperation()->getRuntimeInfoRoot();
@@ -745,8 +745,7 @@ boost::asio::awaitable<void> Server::processQuery(
     runtimeInfoRoot.timeIndexScansQueryPlanning =
         timeForIndexScansInQueryPlanning;
     LOG(INFO)
-        << "Query planning done in "
-        << requestTimer.msecs() - timeForIndexScansInQueryPlanning << " ms"
+        << "Query planning done in " << timeForqueryPlanning << " ms"
         << ", additional time spend on index scans during query planning: "
         << timeForIndexScansInQueryPlanning << " ms" << std::endl;
     requestTimer.cont();

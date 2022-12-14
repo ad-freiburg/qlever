@@ -39,7 +39,8 @@ class IndexScan : public Operation {
   size_t _sizeEstimate;
   vector<float> _multiplicity;
 
-  std::shared_ptr<const ResultTable> _precomputedResult = nullptr;
+  std::optional<std::shared_ptr<const ResultTable>> _precomputedResult =
+      std::nullopt;
 
  public:
   virtual string getDescriptor() const override;
@@ -136,7 +137,6 @@ class IndexScan : public Operation {
 
   std::optional<std::shared_ptr<const ResultTable>>
   getPrecomputedResultFromQueryPlanning() override {
-    return _precomputedResult != nullptr ? std::optional{_precomputedResult}
-                                         : std::nullopt;
+    return _precomputedResult;
   }
 };

@@ -99,7 +99,9 @@ class Operation {
       const std::vector<Variable>& selectedVariables) final;
 
   RuntimeInformation& getRuntimeInfo() { return _runtimeInfo; }
-  RuntimeInformationRoot& getRuntimeInfoRoot() { return _runtimeInfoRoot; }
+  RuntimeInformationWholeQuery& getRuntimeInfoRoot() {
+    return _runtimeInfoRoot;
+  }
 
   // Get the result for the subtree rooted at this element.
   // Use existing results if they are already available, otherwise
@@ -248,10 +250,10 @@ class Operation {
       std::vector<RuntimeInformation> children);
 
   // Some operations (currently `IndexScans` with only one variable) are
-  // evaluated during query planning. Get the total time of these evaluation
-  // for this operation and all its descendants. This can be used to correct the
-  // time statistics for the query planning and processing.
-  size_t getTotalEvaluationTimeDuringQueryProcessing() const;
+  // computed during query planning. Get the total time spent in such
+  // computations for this operation and all its descendants. This can be used
+  // to correct the time statistics for the query planning and execution.
+  size_t getTotalExecutionTimeDuringQueryPlanning() const;
 
  private:
   // Create the runtime information in case the evaluation of this operation has
@@ -271,7 +273,7 @@ class Operation {
   void forAllDescendants(F f) const;
 
   RuntimeInformation _runtimeInfo;
-  RuntimeInformationRoot _runtimeInfoRoot;
+  RuntimeInformationWholeQuery _runtimeInfoRoot;
 
   // Collect all the warnings that were created during the creation or
   // execution of this operation.

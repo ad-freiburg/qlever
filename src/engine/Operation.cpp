@@ -301,9 +301,6 @@ void Operation::createRuntimeInfoFromEstimates() {
       _executionContext->getQueryTreeCache().getIfContained(asString());
   if (cachedResult.has_value()) {
     const auto& [resultPointer, cacheStatus] = cachedResult.value();
-    // TODO<joka921> When a query fails we currently lose the information
-    // whether one of the cached subresults was cachedPinned in the cache. This
-    // is a little inconvenient, but not a huge problem.
     _runtimeInfo.cacheStatus_ = cacheStatus;
     const auto& rtiFromCache = resultPointer->_runtimeInfo;
 
@@ -391,13 +388,13 @@ const vector<size_t>& Operation::getResultSortedOn() const {
 }
 
 // ___________________________________________________________________________
-size_t Operation::getTotalEvaluationTimeDuringQueryProcessing() const {
+size_t Operation::getTotalExecutionTimeDuringQueryPlanning() const {
   size_t totalTime = 0;
   forAllDescendants([&totalTime](const QueryExecutionTree* tree) {
-    const auto& rt = tree->getRootOperation()->_runtimeInfo;
-    if (rt.status_ ==
+    const auto& rti = tree->getRootOperation()->_runtimeInfo;
+    if (rti.status_ ==
         RuntimeInformation::Status::completedDuringQueryPlanning) {
-      totalTime += rt.getOperationTime();
+      totalTime += rti.getOperationTime();
     }
   });
   return totalTime;
