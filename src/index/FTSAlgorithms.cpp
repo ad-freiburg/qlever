@@ -352,7 +352,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
       };
     }
   }
-  IdTableStatic<3> result = dynResult->moveToStatic<3>();
+  IdTableStatic<3> result = std::move(*dynResult).toStatic<3>();
   result.reserve(map.size() * k + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     Id eid = it->first;
@@ -363,7 +363,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
           {Id::makeFromTextRecordIndex(itt->second), entityScore, eid});
     }
   }
-  *dynResult = result.moveToDynamic();
+  *dynResult = std::move(result).toDynamic();
 
   // The result is NOT sorted due to the usage of maps.
   // Resorting the result is a separate operation now.
@@ -467,7 +467,7 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
       };
     }
   }
-  IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
+  IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
   result.reserve(map.size() + 2);
   result.resize(map.size());
   size_t n = 0;
@@ -478,7 +478,7 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
     n++;
   }
   AD_CHECK_EQ(n, result.size());
-  *dynResult = result.moveToDynamic();
+  *dynResult = std::move(result).toDynamic();
   LOG(DEBUG) << "Done. There are " << dynResult->size()
              << " context-score-entity tuples now.\n";
 }
@@ -615,12 +615,12 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
       }
     }
     // Iterate over the map and populate the result.
-    IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
+    IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
     for (auto it = map.begin(); it != map.end(); ++it) {
       ScoreToContext& stc = it->second.second;
       for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
         size_t n = result.size();
-        result.push_back();
+        result.emplace_back();
         result(n, 0) = Id::makeFromTextRecordIndex(itt->second);
         result(n, 1) = Id::makeFromInt(it->second.first);
         for (size_t k = 0; k < nofVars; ++k) {
@@ -628,7 +628,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
         }
       }
     }
-    *dynResult = result.moveToDynamic();
+    *dynResult = std::move(result).toDynamic();
     LOG(DEBUG) << "Done. There are " << dynResult->size() << " tuples now.\n";
   }
 }
@@ -755,7 +755,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
       };
     }
   }
-  IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
+  IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
   result.reserve(map.size() + 2);
   result.resize(map.size());
   size_t n = 0;
@@ -770,7 +770,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
     n++;
   }
   AD_CHECK_EQ(n, result.size());
-  *dynResult = result.moveToDynamic();
+  *dynResult = std::move(result).toDynamic();
   LOG(DEBUG) << "Done. There are " << dynResult->size() << " tuples now.\n";
 }
 
@@ -943,7 +943,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
       }
     }
   }
-  IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
+  IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
   result.reserve(map.size() * k + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     Id eid = it->first;
@@ -952,16 +952,16 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
       for (auto fRow : fMap.find(eid)->second) {
         size_t n = result.size();
-        result.push_back();
+        result.emplace_back();
         result(n, 0) = Id::makeFromTextRecordIndex(itt->second);  // cid
         result(n, 1) = score;
-        for (size_t i = 0; i < fRow.size(); i++) {
+        for (size_t i = 0; i < fRow.numColumns(); i++) {
           result(n, 2 + i) = fRow[i];
         }
       }
     }
   }
-  *dynResult = result.moveToDynamic();
+  *dynResult = std::move(result).toDynamic();
   LOG(DEBUG) << "Done. There are " << dynResult->size() << " tuples now.\n";
 };
 
@@ -1061,7 +1061,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
       }
     }
   }
-  IdTableStatic<3> result = dynResult->moveToStatic<3>();
+  IdTableStatic<3> result = std::move(*dynResult).toStatic<3>();
   result.reserve(map.size() * k + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     Id eid = it->first;
@@ -1071,7 +1071,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
       result.push_back({Id::makeFromTextRecordIndex(itt->second), score, eid});
     }
   }
-  *dynResult = result.moveToDynamic();
+  *dynResult = std::move(result).toDynamic();
   LOG(DEBUG) << "Done. There are " << dynResult->size() << " tuples now.\n";
 };
 
@@ -1189,7 +1189,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   }
 
   // Iterate over the map and populate the result.
-  IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
+  IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
   for (auto it = map.begin(); it != map.end(); ++it) {
     ScoreToContext& stc = it->second.second;
     Id rscore = Id::makeFromInt(it->second.first);
@@ -1198,7 +1198,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
       const IdTable& filterRows = fMap.find(keyEids[0])->second;
       for (auto fRow : filterRows) {
         size_t n = result.size();
-        result.push_back();
+        result.emplace_back();
         result(n, 0) = Id::makeFromTextRecordIndex(itt->second);  // cid
         result(n, 1) = rscore;
         size_t off = 2;
@@ -1206,14 +1206,14 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
           result(n, off) = keyEids[i];
           off++;
         }
-        for (size_t i = 0; i < fRow.size(); i++) {
+        for (size_t i = 0; i < fRow.numColumns(); i++) {
           result(n, off) = fRow[i];
           off++;
         }
       }
     }
   }
-  *dynResult = result.moveToDynamic();
+  *dynResult = std::move(result).toDynamic();
   LOG(DEBUG) << "Done. There are " << dynResult->size() << " tuples now.\n";
 }
 
@@ -1381,14 +1381,14 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   }
 
   // Iterate over the map and populate the result.
-  IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
+  IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
   for (auto it = map.begin(); it != map.end(); ++it) {
     ScoreToContext& stc = it->second.second;
     Id rscore = Id::makeFromInt(it->second.first);
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
       const vector<Id>& keyEids = it->first;
       size_t n = result.size();
-      result.push_back();
+      result.emplace_back();
       result(n, 0) = Id::makeFromTextRecordIndex(itt->second);  // cid
       result(n, 1) = rscore;
       size_t off = 2;
@@ -1399,7 +1399,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
       result(n, off) = keyEids[0];
     }
   }
-  *dynResult = result.moveToDynamic();
+  *dynResult = std::move(result).toDynamic();
   LOG(DEBUG) << "Done. There are " << dynResult->size() << " tuples now.\n";
 }
 

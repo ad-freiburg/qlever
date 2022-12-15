@@ -49,7 +49,7 @@ void Minus::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Minus result computation..." << endl;
 
   result->_sortedBy = resultSortedOn();
-  result->_idTable.setCols(getResultWidth());
+  result->_idTable.setNumColumns(getResultWidth());
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
@@ -63,8 +63,8 @@ void Minus::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Computing minus of results of size " << leftResult->size()
              << " and " << rightResult->size() << endl;
 
-  int leftWidth = leftResult->_idTable.cols();
-  int rightWidth = rightResult->_idTable.cols();
+  int leftWidth = leftResult->_idTable.numColumns();
+  int rightWidth = rightResult->_idTable.numColumns();
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth}), &Minus::computeMinus,
                   this, leftResult->_idTable, rightResult->_idTable,
                   _matchedColumns, &result->_idTable);
@@ -125,15 +125,15 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
     // B is the empty set of solution mappings, so the result is A
     // Copy a into the result, allowing for optimizations for small width by
     // using the templated width types.
-    *dynResult = dynA;
+    *dynResult = dynA.clone();
     return;
   }
 
   IdTableView<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
   IdTableView<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
-  IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
+  IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
 
-  std::vector<size_t> rightToLeftCols(b.cols(),
+  std::vector<size_t> rightToLeftCols(b.numColumns(),
                                       std::numeric_limits<size_t>::max());
   for (const auto& jc : joinColumns) {
     rightToLeftCols[jc[1]] = jc[0];
@@ -143,9 +143,7 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
    * @brief A function to copy a row from a to the end of result.
    * @param ia The index of the row in a.
    */
-  auto writeResult = [&result, &a](size_t ia) {
-    result.template push_back(a[ia]);
-  };
+  auto writeResult = [&result, &a](size_t ia) { result.push_back(a[ia]); };
 
   auto checkTimeout = checkTimeoutAfterNCallsFactory();
 
@@ -206,7 +204,7 @@ finish:
     writeResult(ia);
     ia++;
   }
-  *dynResult = result.moveToDynamic();
+  *dynResult = std::move(result).toDynamic();
 }
 
 template <int A_WIDTH, int B_WIDTH>

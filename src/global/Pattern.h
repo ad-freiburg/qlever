@@ -41,7 +41,7 @@ struct Pattern {
   const_ref operator[](const size_t pos) const { return _data[pos]; }
 
   using const_iterator = ad_utility::IteratorForAccessOperator<
-      Pattern, ad_utility::AccessViaBracketOperator, true>;
+      Pattern, ad_utility::AccessViaBracketOperator, ad_utility::IsConst::True>;
 
   const_iterator begin() const { return {this, 0}; }
 
@@ -183,7 +183,8 @@ class CompactVectorOfStrings {
   static cppcoro::generator<vector_type> diskIterator(string filename);
 
   using Iterator = ad_utility::IteratorForAccessOperator<
-      CompactVectorOfStrings, ad_utility::AccessViaBracketOperator, true>;
+      CompactVectorOfStrings, ad_utility::AccessViaBracketOperator,
+      ad_utility::IsConst::True>;
 
   Iterator begin() const { return {this, 0}; }
   Iterator end() const { return {this, size()}; }

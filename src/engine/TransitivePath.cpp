@@ -262,7 +262,7 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
   }
 
   const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
-  IdTableStatic<2> res = dynRes->moveToStatic<2>();
+  IdTableStatic<2> res = std::move(*dynRes).toStatic<2>();
 
   // Used to map entries in the left column to entries they have connection with
   Map edges;
@@ -387,7 +387,7 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
     }
   }
 
-  *dynRes = res.moveToDynamic();
+  *dynRes = std::move(res).toDynamic();
 }
 
 template <int SUB_WIDTH, int LEFT_WIDTH, int RES_WIDTH>
@@ -400,7 +400,7 @@ void TransitivePath::computeTransitivePathLeftBound(
 
   const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
   const IdTableView<LEFT_WIDTH> left = dynLeft.asStaticView<LEFT_WIDTH>();
-  IdTableStatic<RES_WIDTH> res = dynRes->moveToStatic<RES_WIDTH>();
+  IdTableStatic<RES_WIDTH> res = std::move(*dynRes).toStatic<RES_WIDTH>();
 
   // Used to map entries in the left column to entries they have connection with
   Map edges;
@@ -522,7 +522,7 @@ void TransitivePath::computeTransitivePathLeftBound(
     last_result_end = res.size();
   }
 
-  *dynRes = res.moveToDynamic();
+  *dynRes = std::move(res).toDynamic();
 }
 
 // _____________________________________________________________________________
@@ -538,7 +538,7 @@ void TransitivePath::computeTransitivePathRightBound(
 
   const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
   const IdTableView<LEFT_WIDTH> right = dynRight.asStaticView<LEFT_WIDTH>();
-  IdTableStatic<RES_WIDTH> res = dynRes->moveToStatic<RES_WIDTH>();
+  IdTableStatic<RES_WIDTH> res = std::move(*dynRes).toStatic<RES_WIDTH>();
 
   // Used to map entries in the left column to entries they have connection with
   Map edges;
@@ -660,7 +660,7 @@ void TransitivePath::computeTransitivePathRightBound(
     last_result_end = res.size();
   }
 
-  *dynRes = res.moveToDynamic();
+  *dynRes = std::move(res).toDynamic();
 }
 
 // _____________________________________________________________________________
@@ -680,17 +680,17 @@ void TransitivePath::computeResult(ResultTable* result) {
   } else {
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
   }
-  result->_idTable.setCols(getResultWidth());
+  result->_idTable.setNumColumns(getResultWidth());
 
-  int subWidth = subRes->_idTable.cols();
+  int subWidth = subRes->_idTable.numColumns();
   if (_leftSideTree != nullptr) {
     shared_ptr<const ResultTable> leftRes = _leftSideTree->getResult();
-    for (size_t c = 0; c < leftRes->_idTable.cols(); c++) {
+    for (size_t c = 0; c < leftRes->_idTable.numColumns(); c++) {
       if (c != _leftSideCol) {
         result->_resultTypes.push_back(leftRes->getResultType(c));
       }
     }
-    int leftWidth = leftRes->_idTable.cols();
+    int leftWidth = leftRes->_idTable.numColumns();
     CALL_FIXED_SIZE(
         (std::array{subWidth, leftWidth, static_cast<int>(_resultWidth)}),
         &TransitivePath::computeTransitivePathLeftBound, this,
@@ -699,12 +699,12 @@ void TransitivePath::computeResult(ResultTable* result) {
         _resultWidth);
   } else if (_rightSideTree != nullptr) {
     shared_ptr<const ResultTable> rightRes = _rightSideTree->getResult();
-    for (size_t c = 0; c < rightRes->_idTable.cols(); c++) {
+    for (size_t c = 0; c < rightRes->_idTable.numColumns(); c++) {
       if (c != _rightSideCol) {
         result->_resultTypes.push_back(rightRes->getResultType(c));
       }
     }
-    int rightWidth = rightRes->_idTable.cols();
+    int rightWidth = rightRes->_idTable.numColumns();
     CALL_FIXED_SIZE(
         (std::array{subWidth, rightWidth, static_cast<int>(_resultWidth)}),
         &TransitivePath::computeTransitivePathRightBound, this,

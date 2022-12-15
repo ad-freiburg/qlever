@@ -177,7 +177,7 @@ TEST_F(GroupByTest, doGroupBy) {
 
   // This is normally done when calling computeResult in the GroupBy
   // operation.
-  outTable._data.setCols(24);
+  outTable._data.setNumColumns(24);
 
   int inWidth = inputData.cols();
   int outWidth = outTable._data.cols();
@@ -204,7 +204,7 @@ TEST_F(GroupByTest, doGroupBy) {
     ASSERT_EQ(0u + i + 5, outTable._data[1][2 + i]);
     ASSERT_EQ(0u + i + 10, outTable._data[2][2 + i]);
   }
-  // check for a local vocab entry for each of the 5 input cols
+  // check for a local vocab entry for each of the 5 input numColumns
   ASSERT_EQ(std::string("<entity1>, <entity2>"), (*outTable._localVocab)[0]);
   ASSERT_EQ(std::string("123, 0"), (*outTable._localVocab)[1]);
   ASSERT_EQ(std::string("Exert 1, Exert 2"), (*outTable._localVocab)[2]);
@@ -511,7 +511,7 @@ TEST_F(GroupBySpecialCount, computeGroupByForJoinWithFullScan) {
     // There are 5 triples with `<x>` as a subject, 0 triples with `<xa>` as a
     // subject, and 1 triple with `y` as a subject.
     const auto& table = result._idTable;
-    ASSERT_EQ(table.cols(), 2u);
+    ASSERT_EQ(table.numColumns(), 2u);
     ASSERT_EQ(table.size(), 2u);
     Id idOfX;
     Id idOfY;
@@ -533,7 +533,7 @@ TEST_F(GroupBySpecialCount, computeGroupByForJoinWithFullScan) {
     ResultTable result{qec->getAllocator()};
     GroupBy groupBy{qec, variablesOnlyX, aliasesCountX, join};
     ASSERT_TRUE(groupBy.computeGroupByForJoinWithFullScan(&result));
-    ASSERT_EQ(result._idTable.cols(), 2u);
+    ASSERT_EQ(result._idTable.numColumns(), 2u);
     ASSERT_EQ(result._idTable.size(), 0u);
   }
 }
@@ -574,7 +574,7 @@ TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan) {
     }
 
     ASSERT_EQ(result._idTable.size(), 1);
-    ASSERT_EQ(result._idTable.cols(), 1);
+    ASSERT_EQ(result._idTable.numColumns(), 1);
     // The test index currently consists of 7 triples.
     ASSERT_EQ(result._idTable(0, 0), Id::makeFromInt(7));
   };
@@ -586,7 +586,7 @@ TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan) {
     auto groupBy = GroupBy{qec, emptyVariables, aliasesCountX, xyScan};
     ASSERT_TRUE(groupBy.computeGroupByForSingleIndexScan(&result));
     ASSERT_EQ(result._idTable.size(), 1);
-    ASSERT_EQ(result._idTable.cols(), 1);
+    ASSERT_EQ(result._idTable.numColumns(), 1);
     // The test index currently consists of 5 triples that have the predicate
     // `<label>`
     ASSERT_EQ(result._idTable(0, 0), Id::makeFromInt(5));
@@ -597,7 +597,7 @@ TEST_F(GroupBySpecialCount, computeGroupByForSingleIndexScan) {
         GroupBy{qec, emptyVariables, aliasesCountDistinctX, xyzScanSortedByX};
     ASSERT_TRUE(groupBy.computeGroupByForSingleIndexScan(&result));
     ASSERT_EQ(result._idTable.size(), 1);
-    ASSERT_EQ(result._idTable.cols(), 1);
+    ASSERT_EQ(result._idTable.numColumns(), 1);
     // The test index currently consists of three distinct subjects:
     // <x>, <y>, and <z>.
     ASSERT_EQ(result._idTable(0, 0), Id::makeFromInt(3));
@@ -654,9 +654,9 @@ TEST_F(GroupBySpecialCount, computeGroupByForFullIndexScan) {
     // Three distinct subjects.
     ASSERT_EQ(result._idTable.size(), 3);
     if (includeCount) {
-      ASSERT_EQ(result._idTable.cols(), 2);
+      ASSERT_EQ(result._idTable.numColumns(), 2);
     } else {
-      ASSERT_EQ(result._idTable.cols(), 1);
+      ASSERT_EQ(result._idTable.numColumns(), 1);
     }
     // The test index currently consists of 6 triples.
     EXPECT_EQ(result._idTable(0, 0), idOfX);

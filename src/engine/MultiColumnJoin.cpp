@@ -76,9 +76,9 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
   LOG(DEBUG) << "MultiColumnJoin result computation..." << endl;
 
   result->_sortedBy = resultSortedOn();
-  result->_idTable.setCols(getResultWidth());
+  result->_idTable.setNumColumns(getResultWidth());
 
-  AD_CHECK_GE(result->_idTable.cols(), _joinColumns.size());
+  AD_CHECK_GE(result->_idTable.numColumns(), _joinColumns.size());
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
@@ -86,11 +86,11 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
   LOG(DEBUG) << "MultiColumnJoin subresult computation done." << std::endl;
 
   // compute the result types
-  result->_resultTypes.reserve(result->_idTable.cols());
+  result->_resultTypes.reserve(result->_idTable.numColumns());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               leftResult->_resultTypes.begin(),
                               leftResult->_resultTypes.end());
-  for (size_t col = 0; col < rightResult->_idTable.cols(); col++) {
+  for (size_t col = 0; col < rightResult->_idTable.numColumns(); col++) {
     bool isJoinColumn = false;
     for (const std::array<ColumnIndex, 2>& a : _joinColumns) {
       if (a[1] == col) {
@@ -106,9 +106,9 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Computing a multi column join between results of size "
              << leftResult->size() << " and " << rightResult->size() << endl;
 
-  int leftWidth = leftResult->_idTable.cols();
-  int rightWidth = rightResult->_idTable.cols();
-  int resWidth = result->_idTable.cols();
+  int leftWidth = leftResult->_idTable.numColumns();
+  int rightWidth = rightResult->_idTable.numColumns();
+  int resWidth = result->_idTable.numColumns();
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, resWidth}),
                   &MultiColumnJoin::computeMultiColumnJoin,
                   leftResult->_idTable, rightResult->_idTable, _joinColumns,

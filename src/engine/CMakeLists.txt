@@ -32,7 +32,7 @@ add_library(engine
         TransitivePath.cpp TransitivePath.h
         Values.cpp Values.h
         Bind.cpp Bind.h
-        IdTable.h
+        idTable/IdTable.h
         ../util/Random.h
         Minus.h Minus.cpp
         ResultType.h
