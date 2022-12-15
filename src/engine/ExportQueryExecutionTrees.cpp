@@ -104,7 +104,7 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
       }
       const auto& currentId = data(rowIndex, opt->_columnIndex);
       const auto& optionalStringAndXsdType =
-          idToStringAndType(qet, currentId, *resultTable);
+          idToStringAndType(qet.getQec()->getIndex(), currentId, *resultTable);
       if (!optionalStringAndXsdType.has_value()) {
         row.emplace_back(nullptr);
         continue;
@@ -121,10 +121,11 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
 }
 
 // ___________________________________________________________________________
+template <typename EscapeFunction>
 std::optional<std::pair<std::string, const char*>>
-ExportQueryExecutionTrees::idToStringAndType(const QueryExecutionTree& qet,
-                                             Id id,
-                                             const ResultTable& resultTable) {
+ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
+                                             const ResultTable& resultTable,
+                                             EscapeFunction&& escapeFunction) {
   switch (id.getDatatype()) {
     case Datatype::Undefined:
       return std::nullopt;
@@ -143,20 +144,21 @@ ExportQueryExecutionTrees::idToStringAndType(const QueryExecutionTree& qet,
     case Datatype::Int:
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
     case Datatype::VocabIndex: {
-      std::optional<string> entity =
-          qet.getQec()->getIndex().idToOptionalString(id);
+      std::optional<string> entity = index.idToOptionalString(id);
+      // TODO<joka921, C++23> This is `optional.transform`
       if (!entity.has_value()) {
         return std::nullopt;
       }
-      return std::pair{std::move(entity.value()), nullptr};
+      return std::pair{escapeFunction(std::move(entity.value())), nullptr};
     }
     case Datatype::LocalVocabIndex: {
-      return std::pair{
-          resultTable._localVocab->getWord(id.getLocalVocabIndex()), nullptr};
+      return std::pair{escapeFunction(resultTable._localVocab->getWord(
+                           id.getLocalVocabIndex())),
+                       nullptr};
     }
     case Datatype::TextRecordIndex:
       return std::pair{
-          qet.getQec()->getIndex().getTextExcerpt(id.getTextRecordIndex()),
+          escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
           nullptr};
   }
   AD_FAIL();
@@ -254,7 +256,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryToSparqlJSON(
     for (const auto& column : columns) {
       const auto& currentId = idTable(rowIndex, column->_columnIndex);
       const auto& optionalValue =
-          idToStringAndType(qet, currentId, *resultTable);
+          idToStringAndType(qet.getQec()->getIndex(), currentId, *resultTable);
       if (!optionalValue.has_value()) {
         continue;
       }
@@ -302,9 +304,9 @@ using parsedQuery::SelectClause;
 // _____________________________________________________________________________
 template <ad_utility::MediaType format>
 ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::generateResults(const QueryExecutionTree& qet,
-                                           const SelectClause& selectClause,
-                                           size_t limit, size_t offset) {
+ExportQueryExecutionTrees::selectQueryToCsvTsvOrBinary(
+    const QueryExecutionTree& qet, const SelectClause& selectClause,
+    size_t limit, size_t offset) {
   static_assert(format == MediaType::octetStream || format == MediaType::csv ||
                 format == MediaType::tsv);
 
@@ -334,53 +336,27 @@ ExportQueryExecutionTrees::generateResults(const QueryExecutionTree& qet,
     co_return;
   }
 
-  static constexpr char sep = format == MediaType::tsv ? '\t' : ',';
-  constexpr std::string_view sepView{&sep, 1};
+  static constexpr char separator = format == MediaType::tsv ? '\t' : ',';
   // Print header line
   const auto& variables = selectClause.getSelectedVariablesAsStrings();
-  co_yield absl::StrJoin(variables, sepView);
+  co_yield absl::StrJoin(variables, std::string_view{&separator, 1});
   co_yield '\n';
 
   constexpr auto& escapeFunction = format == MediaType::tsv
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
-
-  const auto& qec = qet.getQec();
   for (size_t i = offset; i < upperBound; ++i) {
     for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
       if (selectedColumnIndices[j].has_value()) {
         const auto& val = selectedColumnIndices[j].value();
         Id id = idTable(i, val._columnIndex);
-        switch (id.getDatatype()) {
-          case Datatype::Undefined:
-            break;
-          case Datatype::Double:
-            co_yield id.getDouble();
-            break;
-          case Datatype::Int:
-            co_yield id.getInt();
-            break;
-          case Datatype::VocabIndex:
-            co_yield escapeFunction(
-                qec->getIndex()
-                    .getVocab()
-                    .indexToOptionalString(id.getVocabIndex())
-                    .value_or(""));
-            break;
-          case Datatype::LocalVocabIndex:
-            co_yield escapeFunction(
-                resultTable->_localVocab->getWord(id.getLocalVocabIndex()));
-            break;
-          case Datatype::TextRecordIndex:
-            co_yield escapeFunction(
-                qec->getIndex().getTextExcerpt(id.getTextRecordIndex()));
-            break;
-          default:
-            AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
-                     "Cannot deduce output type.");
+        auto optionalStringAndType = idToStringAndType(
+            qet.getQec()->getIndex(), id, *resultTable, escapeFunction);
+        if (optionalStringAndType.has_value()) [[likely]] {
+          co_yield optionalStringAndType.value().first;
         }
       }
-      co_yield j + 1 < selectedColumnIndices.size() ? sep : '\n';
+      co_yield j + 1 < selectedColumnIndices.size() ? separator : '\n';
     }
   }
   LOG(DEBUG) << "Done creating readable result.\n";
@@ -391,7 +367,7 @@ ExportQueryExecutionTrees::generateResults(const QueryExecutionTree& qet,
 // _____________________________________________________________________________
 template <ad_utility::MediaType format>
 ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::writeRdfGraphSeparatedValues(
+ExportQueryExecutionTrees::constructQueryToTsvOrCsv(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
     size_t offset, std::shared_ptr<const ResultTable> resultTable) {
@@ -476,11 +452,11 @@ ExportQueryExecutionTrees::queryToStreamableGenerator(
     size_t limit = parsedQuery._limitOffset._limit;
     size_t offset = parsedQuery._limitOffset._offset;
     return parsedQuery.hasSelectClause()
-               ? ExportQueryExecutionTrees::generateResults<format>(
+               ? ExportQueryExecutionTrees::selectQueryToCsvTsvOrBinary<format>(
                      qet, parsedQuery.selectClause(), limit, offset)
-               : ExportQueryExecutionTrees::writeRdfGraphSeparatedValues<
-                     format>(qet, parsedQuery.constructClause().triples_, limit,
-                             offset, qet.getResult());
+               : ExportQueryExecutionTrees::constructQueryToTsvOrCsv<format>(
+                     qet, parsedQuery.constructClause().triples_, limit, offset,
+                     qet.getResult());
   };
   // TODO<joka921> Clean this up by removing the (unused) `ExportSubFormat`
   // enum, And maybe by a `switch-constexpr`-abstraction

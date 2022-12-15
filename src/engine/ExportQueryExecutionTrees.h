@@ -56,6 +56,16 @@ class ExportQueryExecutionTrees {
                                     ad_utility::Timer& requestTimer,
                                     size_t maxSend, MediaType mediaType);
 
+  // TODO<joka921> Comment this public function.
+  // It currently has to be public because the `Variable::evaluate` function
+  // calls it for evaluating CONSTRUCT queries..
+  // TODO<joka921> Make it private again as soon as the evaluation of construct
+  // queries is completely performed inside this module.
+  template <typename EscapeFunction = std::identity>
+  [[nodiscard]] static std::optional<std::pair<std::string, const char*>>
+  idToStringAndType(const Index& index, Id id, const ResultTable& resultTable,
+                    EscapeFunction&& escapeFunction = EscapeFunction{});
+
  private:
   // TODO<joka921> The following functions are all internally called by the
   // two public functions above. All the code has been inside QLever for a long
@@ -129,14 +139,14 @@ class ExportQueryExecutionTrees {
 
   // ___________________________________________________________________________
   template <MediaType format>
-  static ad_utility::streams::stream_generator writeRdfGraphSeparatedValues(
+  static ad_utility::streams::stream_generator constructQueryToTsvOrCsv(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
       size_t offset, std::shared_ptr<const ResultTable> resultTable);
 
   // _____________________________________________________________________________
   template <MediaType format>
-  static ad_utility::streams::stream_generator generateResults(
+  static ad_utility::streams::stream_generator selectQueryToCsvTsvOrBinary(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause, size_t limit,
       size_t offset);
@@ -144,9 +154,4 @@ class ExportQueryExecutionTrees {
   // ___________________________________________________________________________
   static ad_utility::streams::stream_generator composeTurtleResponse(
       const ParsedQuery& query, const QueryExecutionTree& qet);
-
-  // ___________________________________________________________________________
-  [[nodiscard]] static std::optional<std::pair<std::string, const char*>>
-  idToStringAndType(const QueryExecutionTree& qet, Id id,
-                    const ResultTable& resultTable);
 };
