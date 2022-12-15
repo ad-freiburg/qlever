@@ -224,6 +224,13 @@ void Operation::updateRuntimeInformationOnSuccess(
           child->getRootOperation()->getRuntimeInfo());
     }
   }
+
+  // TODO<joka921> comment on why this is correct.
+  if (_runtimeInfo.cacheStatus_ != ad_utility::CacheStatus::computed) {
+    _runtimeInfo.addTotalTimeOfChildrenComputedDuringQueryPlanningRecursively();
+  } else {
+    _runtimeInfo.addTotalTimeOfChildrenComputedDuringQueryPlanning();
+  }
 }
 
 // ____________________________________________________________________________________________________________________
@@ -260,6 +267,7 @@ void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
 
   _runtimeInfo.totalTime_ = timeInMilliseconds;
   _runtimeInfo.status_ = RuntimeInformation::Status::failed;
+  _runtimeInfo.addTotalTimeOfChildrenComputedDuringQueryPlanningRecursively();
 }
 
 // __________________________________________________________________

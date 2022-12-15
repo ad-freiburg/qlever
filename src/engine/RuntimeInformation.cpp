@@ -140,6 +140,37 @@ std::string_view RuntimeInformation::toString(Status status) {
   }
 }
 
+// _____________________________________________________________________________
+void RuntimeInformation::addTotalTimeOfChildrenComputedDuringQueryPlanning() {
+  // If the child was computed during the query planning, we haven't actually
+  // measured its time and manually have to account for it.
+  for (const RuntimeInformation& childRti : children_) {
+    if (childRti.status_ ==
+        RuntimeInformation::Status::completedDuringQueryPlanning) {
+      totalTime_ += childRti.totalTime_;
+    }
+  }
+}
+
+// _____________________________________________________________________________
+void RuntimeInformation::
+    addTotalTimeOfChildrenComputedDuringQueryPlanningRecursively() {
+  double sumOfComputedChildren = 0;
+
+  auto recursiveImpl = [&](const auto& recursiveCall,
+                           const RuntimeInformation& child) -> void {
+    if (child.status_ ==
+        RuntimeInformation::Status::completedDuringQueryPlanning) {
+      sumOfComputedChildren += child.totalTime_;
+    }
+    for (const auto& descendant : child.children_) {
+      recursiveCall(recursiveCall, descendant);
+    }
+  };
+  recursiveImpl(recursiveImpl, *this);
+  totalTime_ += sumOfComputedChildren;
+}
+
 // ________________________________________________________________________________________________________________
 void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
   j = nlohmann::ordered_json{

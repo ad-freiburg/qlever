@@ -102,6 +102,9 @@ class RuntimeInformation {
     details_[key] = value;
   }
 
+  void addTotalTimeOfChildrenComputedDuringQueryPlanning();
+  void addTotalTimeOfChildrenComputedDuringQueryPlanningRecursively();
+
  private:
   static std::string_view toString(Status status);
 };
