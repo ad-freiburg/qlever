@@ -42,7 +42,8 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
       << '\n';
   out << indentStr(indent) << "columns: " << absl::StrJoin(columnNames_, ", ")
       << '\n';
-  out << indentStr(indent) << "total_time: " << totalTime_ << " ms" << '\n';
+  out << indentStr(indent) << "total_time: " << getTotalTimeCorrected() << " ms"
+      << '\n';
   out << indentStr(indent) << "operation_time: " << getOperationTime() << " ms"
       << '\n';
   out << indentStr(indent)
@@ -105,7 +106,11 @@ double RuntimeInformation::getOperationTime() const {
   } else {
     auto result = totalTime_;
     for (const RuntimeInformation& child : children_) {
-      result -= child.totalTime_;
+      // The `totalTime_` does not account for the time spent during
+      // query planning.
+      if (child.status_ != completedDuringQueryPlanning) {
+        result -= child.totalTime_;
+      }
     }
     return result;
   }
@@ -141,20 +146,7 @@ std::string_view RuntimeInformation::toString(Status status) {
 }
 
 // _____________________________________________________________________________
-void RuntimeInformation::addTotalTimeOfChildrenComputedDuringQueryPlanning() {
-  // If the child was computed during the query planning, we haven't actually
-  // measured its time and manually have to account for it.
-  for (const RuntimeInformation& childRti : children_) {
-    if (childRti.status_ ==
-        RuntimeInformation::Status::completedDuringQueryPlanning) {
-      totalTime_ += childRti.totalTime_;
-    }
-  }
-}
-
-// _____________________________________________________________________________
-void RuntimeInformation::
-    addTotalTimeOfChildrenComputedDuringQueryPlanningRecursively() {
+double RuntimeInformation::getTotalTimeCorrected() const {
   double sumOfComputedChildren = 0;
 
   auto recursiveImpl = [&](const auto& recursiveCall,
@@ -168,7 +160,7 @@ void RuntimeInformation::
     }
   };
   recursiveImpl(recursiveImpl, *this);
-  totalTime_ += sumOfComputedChildren;
+  return totalTime_ + sumOfComputedChildren;
 }
 
 // ________________________________________________________________________________________________________________
@@ -178,7 +170,7 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
       {"result_rows", rti.numRows_},
       {"result_cols", rti.numCols_},
       {"column_names", rti.columnNames_},
-      {"total_time", rti.totalTime_},
+      {"total_time", rti.getTotalTimeCorrected()},
       {"operation_time", rti.getOperationTime()},
       {"original_total_time", rti.originalTotalTime_},
       {"original_operation_time", rti.originalOperationTime_},

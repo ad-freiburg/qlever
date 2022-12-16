@@ -91,6 +91,12 @@ class RuntimeInformation {
   /// the time spent computing the children.
   [[nodiscard]] double getOperationTime() const;
 
+  /// Get the total time including the time that this operation spent during
+  /// the query planning phase to compute itself or any of its children.
+  /// Note: This function has to traverse the whole tree recursively. Therefore,
+  ///       it should only be called once on a complete tree when exporting it.
+  [[nodiscard]] double getTotalTimeCorrected() const;
+
   /// Get the cost estimate for this operation. This is the total cost estimate
   /// minus the sum of the cost estimates of all children.
   [[nodiscard]] size_t getOperationCostEstimate() const;
@@ -101,9 +107,6 @@ class RuntimeInformation {
   void addDetail(const std::string& key, const T& value) {
     details_[key] = value;
   }
-
-  void addTotalTimeOfChildrenComputedDuringQueryPlanning();
-  void addTotalTimeOfChildrenComputedDuringQueryPlanningRecursively();
 
  private:
   static std::string_view toString(Status status);
