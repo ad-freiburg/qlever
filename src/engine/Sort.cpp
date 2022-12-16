@@ -73,15 +73,18 @@ void Sort::computeResult(ResultTable* result) {
   }
 
   LOG(DEBUG) << "Sort result computation..." << endl;
-  result->_idTable.setCols(subRes->_idTable.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
+  result->_idTable = subRes->_idTable.clone();
+  /*
+  result->_idTable.setNumColumns(subRes->_idTable.numColumns());
   result->_idTable.insert(result->_idTable.end(), subRes->_idTable.begin(),
                           subRes->_idTable.end());
-  int width = result->_idTable.cols();
-  CALL_FIXED_SIZE_1(width, Engine::sort, &result->_idTable, _sortCol);
+                          */
+  int width = result->_idTable.numColumns();
+  CALL_FIXED_SIZE(width, &Engine::sort, &result->_idTable, _sortCol);
   result->_sortedBy = resultSortedOn();
 
   LOG(DEBUG) << "Sort result computation done." << endl;

@@ -219,6 +219,14 @@ class QueryExecutionTree {
       std::shared_ptr<QueryExecutionTree> qet,
       const vector<size_t>& sortColumns);
 
+  // If the result of this `Operation` is sorted (either because this
+  // `Operation` enforces this sorting, or because it preserves the sorting of
+  // its children), return the variable that is the primary sort key. Else
+  // return nullopt.
+  std::optional<Variable> getPrimarySortKeyVariable() const {
+    return getRootOperation()->getPrimarySortKeyVariable();
+  }
+
  private:
   QueryExecutionContext* _qec;  // No ownership
   std::shared_ptr<Operation>

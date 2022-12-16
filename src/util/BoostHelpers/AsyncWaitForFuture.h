@@ -8,7 +8,7 @@
 
 #include <future>
 
-#include "../HttpServer/beast.h"
+#include "util/http/beast.h"
 
 namespace ad_utility::asio_helpers {
 

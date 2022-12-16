@@ -116,7 +116,7 @@ size_t CountAvailablePredicates::getCostEstimate() {
 // _____________________________________________________________________________
 void CountAvailablePredicates::computeResult(ResultTable* result) {
   LOG(DEBUG) << "CountAvailablePredicates result computation..." << std::endl;
-  result->_idTable.setCols(2);
+  result->_idTable.setNumColumns(2);
   result->_sortedBy = resultSortedOn();
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
@@ -139,11 +139,10 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
 
-    int width = subresult->_idTable.cols();
-    CALL_FIXED_SIZE_1(width, CountAvailablePredicates::computePatternTrick,
-                      subresult->_idTable, &result->_idTable, hasPattern,
-                      hasPredicate, patterns, _subjectColumnIndex,
-                      &runtimeInfo);
+    int width = subresult->_idTable.numColumns();
+    CALL_FIXED_SIZE(width, &computePatternTrick, subresult->_idTable,
+                    &result->_idTable, hasPattern, hasPredicate, patterns,
+                    _subjectColumnIndex, &runtimeInfo);
   }
   LOG(DEBUG) << "CountAvailablePredicates result computation done."
              << std::endl;
@@ -153,7 +152,7 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
     IdTable* dynResult, const vector<PatternID>& hasPattern,
     const CompactVectorOfStrings<Id>& hasPredicate,
     const CompactVectorOfStrings<Id>& patterns) {
-  IdTableStatic<2> result = dynResult->moveToStatic<2>();
+  IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   LOG(DEBUG) << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
@@ -186,7 +185,7 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   for (const auto& it : predicateCounts) {
     result.push_back({it.first, Id::makeFromInt(it.second)});
   }
-  *dynResult = result.moveToDynamic();
+  *dynResult = std::move(result).toDynamic();
 }
 
 /**
@@ -217,7 +216,7 @@ void CountAvailablePredicates::computePatternTrick(
     const CompactVectorOfStrings<Id>& patterns, const size_t subjectColumn,
     RuntimeInformation* runtimeInfo) {
   const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
-  IdTableStatic<2> result = dynResult->moveToStatic<2>();
+  IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   LOG(DEBUG) << "For " << input.size() << " entities in column "
              << subjectColumn << std::endl;
 
@@ -361,5 +360,5 @@ void CountAvailablePredicates::computePatternTrick(
   runtimeInfo->addDetail("costWithoutPatterns", costWithoutPatterns);
   runtimeInfo->addDetail("costWithPatterns", costWithPatterns);
   runtimeInfo->addDetail("costRatio", costRatio * 100);
-  *dynResult = result.moveToDynamic();
+  *dynResult = std::move(result).toDynamic();
 }

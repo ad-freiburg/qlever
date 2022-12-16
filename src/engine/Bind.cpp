@@ -85,16 +85,16 @@ void Bind::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Got input to Bind operation." << endl;
 
-  result->_idTable.setCols(getResultWidth());
+  result->_idTable.setNumColumns(getResultWidth());
   result->_resultTypes = subRes->_resultTypes;
   result->_localVocab = subRes->_localVocab;
-  int inwidth = subRes->_idTable.cols();
+  int inwidth = subRes->_idTable.numColumns();
   int outwidth = getResultWidth();
 
   result->_resultTypes.emplace_back();
-  CALL_FIXED_SIZE_2(inwidth, outwidth, computeExpressionBind, result,
-                    &(result->_resultTypes.back()), *subRes,
-                    _bind._expression.getPimpl());
+  CALL_FIXED_SIZE((std::array{inwidth, outwidth}), &Bind::computeExpressionBind,
+                  this, result, &(result->_resultTypes.back()), *subRes,
+                  _bind._expression.getPimpl());
 
   result->_sortedBy = resultSortedOn();
 
@@ -121,13 +121,13 @@ void Bind::computeExpressionBind(
       expression->evaluate(&evaluationContext);
 
   const auto input = inputResultTable._idTable.asStaticView<IN_WIDTH>();
-  auto output = outputResultTable->_idTable.moveToStatic<OUT_WIDTH>();
+  auto output = std::move(outputResultTable->_idTable).toStatic<OUT_WIDTH>();
 
   // first initialize the first columns (they remain identical)
   const auto inSize = input.size();
   output.reserve(inSize);
-  const auto inCols = input.cols();
-  // copy the input to the first cols;
+  const auto inCols = input.numColumns();
+  // copy the input to the first numColumns;
   for (size_t i = 0; i < inSize; ++i) {
     output.emplace_back();
     for (size_t j = 0; j < inCols; ++j) {
@@ -160,18 +160,29 @@ void Bind::computeExpressionBind(
       *resultType =
           sparqlExpression::detail::expressionResultTypeToQleverResultType<T>();
 
-      size_t i = 0;
-      for (auto&& resultValue : resultGenerator) {
-        output(i, inCols) =
-            sparqlExpression::detail::constantExpressionResultToId(
-                resultValue, *(outputResultTable->_localVocab),
-                isConstant && i > 0);
-        i++;
+      if (isConstant) {
+        auto it = resultGenerator.begin();
+        if (it != resultGenerator.end()) {
+          Id constantId =
+              sparqlExpression::detail::constantExpressionResultToId(
+                  std::move(*it), *(outputResultTable->_localVocab));
+          for (size_t i = 0; i < inSize; ++i) {
+            output(i, inCols) = constantId;
+          }
+        }
+      } else {
+        size_t i = 0;
+        for (auto&& resultValue : resultGenerator) {
+          output(i, inCols) =
+              sparqlExpression::detail::constantExpressionResultToId(
+                  std::move(resultValue), *(outputResultTable->_localVocab));
+          i++;
+        }
       }
     }
   };
 
   std::visit(visitor, std::move(expressionResult));
 
-  outputResultTable->_idTable = output.moveToDynamic();
+  outputResultTable->_idTable = std::move(output).toDynamic();
 }

@@ -1,6 +1,8 @@
-// Copyright 2014, University of Freiburg, Chair of Algorithms and Data
-// Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2014 - 2022, University of Freiburg
+// Chair of Algorithms and Data Structures.
+// Authors: Björn Buchhold <b.buchhold@gmail.com>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
 
@@ -246,12 +248,12 @@ TEST(ParserTest, testParse) {
       const auto& values1 = std::get<p::Values>(pq.children()[0])._inlineValues;
       const auto& values2 = std::get<p::Values>(pq.children()[1])._inlineValues;
 
-      vector<string> vvars = {"?a"};
+      vector<Variable> vvars = {Var{"?a"}};
       ASSERT_EQ(vvars, values1._variables);
-      vector<vector<string>> vvals = {{"<1>"}, {"\"2\""}};
+      vector<vector<TripleComponent>> vvals = {{"<1>"}, {"\"2\""}};
       ASSERT_EQ(vvals, values1._values);
 
-      vvars = {"?b", "?c"};
+      vvars = {Var{"?b"}, Var{"?c"}};
       ASSERT_EQ(vvars, values2._variables);
       vvals = {{"<1>", "<2>"}, {"\"1\"", "\"2\""}};
       ASSERT_EQ(vvals, values2._values);
@@ -271,12 +273,12 @@ TEST(ParserTest, testParse) {
       const auto& values1 = std::get<p::Values>(pq.children()[0])._inlineValues;
       const auto& values2 = std::get<p::Values>(pq.children()[1])._inlineValues;
 
-      vector<string> vvars = {"?a"};
+      vector<Variable> vvars = {Var{"?a"}};
       ASSERT_EQ(vvars, values1._variables);
-      vector<vector<string>> vvals = {{"<Albert_Einstein>"}};
+      vector<vector<TripleComponent>> vvals = {{"<Albert_Einstein>"}};
       ASSERT_EQ(vvals, values1._values);
 
-      vvars = {"?b", "?c"};
+      vvars = {Var{"?b"}, Var{"?c"}};
       ASSERT_EQ(vvars, values2._variables);
       vvals = {{"<Marie_Curie>", "<Joseph_Jacobson>"},
                {"<Freiherr>", "<Lord_of_the_Isles>"}};
@@ -304,9 +306,9 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(c._triples[0]._o, Var{"?citytype"});
 
       const auto& values1 = std::get<p::Values>(pq.children()[0])._inlineValues;
-      vector<string> vvars = {"?citytype"};
+      vector<Variable> vvars = {Var{"?citytype"}};
       ASSERT_EQ(vvars, values1._variables);
-      vector<vector<string>> vvals = {
+      vector<vector<TripleComponent>> vvals = {
           {"<http://www.wikidata.org/entity/Q515>"},
           {"<http://www.wikidata.org/entity/Q262166>"}};
       ASSERT_EQ(vvals, values1._values);

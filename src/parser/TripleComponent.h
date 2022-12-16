@@ -1,11 +1,9 @@
-// Copyright 2018, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
+// Copyright 2018 - 2022, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#ifndef QLEVER_TRIPLECOMPONENT_H
-#define QLEVER_TRIPLECOMPONENT_H
-
-#include <absl/strings/str_cat.h>
+#pragma once
 
 #include <cstdint>
 #include <string>
@@ -84,6 +82,12 @@ class TripleComponent {
   /// Equality comparison between two `TripleComponent`s.
   bool operator==(const TripleComponent&) const = default;
 
+  /// Hash value for `TripleComponent` object.
+  template <typename H>
+  friend H AbslHashValue(H h, const TripleComponent& tc) {
+    return H::combine(std::move(h), tc._variant);
+  }
+
   /// Check which type the underlying variants hold.
   [[nodiscard]] bool isString() const {
     return std::holds_alternative<std::string>(_variant);
@@ -106,6 +110,7 @@ class TripleComponent {
   [[nodiscard]] const std::string& getString() const {
     return std::get<std::string>(_variant);
   }
+
   // Non-const overload. TODO<C++23> Deducing this.
   std::string& getString() { return std::get<std::string>(_variant); }
 
@@ -177,24 +182,8 @@ class TripleComponent {
   /// Human readable output. Is used for debugging, testing, and for the
   /// creation of descriptors and cache keys.
   friend std::ostream& operator<<(std::ostream& stream,
-                                  const TripleComponent& obj) {
-    std::visit(
-        [&stream]<typename T>(const T& value) -> void {
-          if constexpr (std::is_same_v<T, Variable>) {
-            stream << value.name();
-          } else {
-            stream << value;
-          }
-        },
-        obj._variant);
-    return stream;
-  }
+                                  const TripleComponent& obj);
 
-  [[nodiscard]] std::string toString() const {
-    std::stringstream stream;
-    stream << *this;
-    return std::move(stream).str();
-  }
+  // Return as string.
+  [[nodiscard]] std::string toString() const;
 };
-
-#endif  // QLEVER_TRIPLECOMPONENT_H

@@ -67,19 +67,19 @@ auto Index::getTextVocab() const -> const TextVocab& {
   return pimpl_->getTextVocab();
 }
 
-// __________________________________________________
-size_t Index::relationCardinality(const std::string& relationName) const {
-  return pimpl_->relationCardinality(relationName);
+// _____________________________________________________________________________
+size_t Index::getCardinality(const TripleComponent& comp,
+                             Index::Permutation p) const {
+  return pimpl_->applyToPermutation(p, [&](const auto& permutation) {
+    return pimpl_->getCardinality(comp, permutation);
+  });
 }
 
-// _________________________________________________
-size_t Index::subjectCardinality(const TripleComponent& sub) const {
-  return pimpl_->subjectCardinality(sub);
-}
-
-// ________________________________________________
-size_t Index::objectCardinality(const TripleComponent& obj) const {
-  return pimpl_->objectCardinality(obj);
+// _____________________________________________________________________________
+size_t Index::getCardinality(Id id, Index::Permutation p) const {
+  return pimpl_->applyToPermutation(p, [&](const auto& permutation) {
+    return pimpl_->getCardinality(id, permutation);
+  });
 }
 
 // _______________________________________________
@@ -308,7 +308,9 @@ const std::string& Index::getTextName() const { return pimpl_->getTextName(); }
 const std::string& Index::getKbName() const { return pimpl_->getKbName(); }
 
 // __________________________________________________________
-size_t Index::getNofTriples() const { return pimpl_->getNofTriples(); }
+Index::NumNormalAndInternal Index::numTriples() const {
+  return pimpl_->numTriples();
+}
 
 // _________________________________________________________
 size_t Index::getNofTextRecords() const { return pimpl_->getNofTextRecords(); }
@@ -324,13 +326,19 @@ size_t Index::getNofEntityPostings() const {
 }
 
 // ______________________________________________________
-size_t Index::getNofSubjects() const { return pimpl_->getNofSubjects(); }
+Index::NumNormalAndInternal Index::numDistinctSubjects() const {
+  return pimpl_->numDistinctSubjects();
+}
 
 // _____________________________________________________
-size_t Index::getNofObjects() const { return pimpl_->getNofObjects(); }
+Index::NumNormalAndInternal Index::numDistinctObjects() const {
+  return pimpl_->numDistinctObjects();
+}
 
 // _____________________________________________________
-size_t Index::getNofPredicates() const { return pimpl_->getNofPredicates(); }
+Index::NumNormalAndInternal Index::numDistinctPredicates() const {
+  return pimpl_->numDistinctPredicates();
+}
 
 // _____________________________________________________
 bool Index::hasAllPermutations() const { return pimpl_->hasAllPermutations(); }
@@ -375,9 +383,4 @@ void Index::scan(const TripleComponent& col0String,
   return pimpl_->applyToPermutation(p, [&](const auto& perm) {
     return pimpl_->scan(col0String, col1String, result, perm, std::move(timer));
   });
-}
-
-// _____________________________________________________
-std::pair<size_t, size_t> Index::getNumTriplesActuallyAndAdded() const {
-  return pimpl_->getNumTriplesActuallyAndAdded();
 }

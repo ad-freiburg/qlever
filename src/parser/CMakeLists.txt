@@ -16,7 +16,7 @@ add_library(parser
         TokenizerCtre.h TurtleTokenId.h
         ParallelBuffer.cpp
         SparqlParserHelpers.h SparqlParserHelpers.cpp
-        TripleComponent.h
+        TripleComponent.h TripleComponent.cpp
         GraphPatternOperation.cpp
         PropertyPath.h PropertyPath.cpp Alias.h data/SolutionModifiers.h
         data/LimitOffsetClause.h data/SparqlFilter.h data/SparqlFilter.cpp
@@ -24,5 +24,5 @@ add_library(parser
         SelectClause.h GraphPatternOperation.cpp GraphPatternOperation.h
         # The `Variable.cpp` from the subdirectory is linked here because otherwise we get linking errors.
         GraphPattern.cpp GraphPattern.h ConstructClause.h data/Variable.cpp)
-target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2 absl::flat_hash_map util)
+target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2 absl::flat_hash_map util engine)
 

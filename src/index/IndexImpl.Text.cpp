@@ -239,7 +239,6 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
   size_t nofEntityPostings = 0;
   size_t entityNotFoundErrorMsgCount = 0;
 
-  size_t numLines = 0;
   for (auto line : wordsInTextRecords(contextFile, addWordsFromLiterals)) {
     if (line._contextId != currentContext) {
       ++nofContexts;
@@ -282,7 +281,6 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
       }
       wordsInContext[wid] += line._score;
     }
-    ++numLines;
   }
   if (entityNotFoundErrorMsgCount > 0) {
     LOG(WARN) << "Number of mentions of entities not found in the vocabulary: "
@@ -800,13 +798,13 @@ void IndexImpl::getContextListForWords(const string& words,
   }
 
   LOG(DEBUG) << "Packing lists into a ResultTable\n...";
-  IdTableStatic<2> result = dynResult->moveToStatic<2>();
+  IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
   result.resize(cids.size());
   for (size_t i = 0; i < cids.size(); ++i) {
     result(i, 0) = Id::makeFromTextRecordIndex(cids[i]);
     result(i, 1) = Id::makeFromInt(scores[i]);
   }
-  *dynResult = result.moveToDynamic();
+  *dynResult = std::move(result).toDynamic();
   LOG(DEBUG) << "Done with getContextListForWords.\n";
 }
 
@@ -960,9 +958,9 @@ void IndexImpl::getECListForWords(const string& words, size_t nofVars,
   vector<Id> eids;
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
-  int width = result->cols();
-  CALL_FIXED_SIZE_1(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
-                    cids, eids, scores, nofVars, limit, result);
+  int width = result->numColumns();
+  CALL_FIXED_SIZE(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
+                  cids, eids, scores, nofVars, limit, result);
   LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
              << "\n";
 }
@@ -982,24 +980,28 @@ void IndexImpl::getFilteredECListForWords(const string& words,
       Id eid = filter(i, filterColumn);
       auto it = fMap.find(eid);
       if (it == fMap.end()) {
-        it = fMap.insert(std::make_pair(eid, IdTable(filter.cols(),
+        it = fMap.insert(std::make_pair(eid, IdTable(filter.numColumns(),
                                                      filter.getAllocator())))
                  .first;
       }
-      it->second.push_back(filter, i);
+      it->second.push_back(filter[i]);
     }
     vector<TextRecordIndex> cids;
     vector<Id> eids;
     vector<Score> scores;
     getContextEntityScoreListsForWords(words, cids, eids, scores);
-    int width = result->cols();
+    int width = result->numColumns();
     if (nofVars == 1) {
-      CALL_FIXED_SIZE_1(width,
-                        FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
-                        cids, eids, scores, fMap, limit, result);
+      CALL_FIXED_SIZE(width,
+                      FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
+                      cids, eids, scores, fMap, limit, result);
     } else {
-      CALL_FIXED_SIZE_1(
-          width, FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,
+      ad_utility::callFixedSize(
+          width,
+          []<int I>(auto&&... args) {
+            FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<I>(
+                AD_FWD(args)...);
+          },
           cids, eids, scores, fMap, nofVars, limit, result);
     }
   }
@@ -1024,14 +1026,18 @@ void IndexImpl::getFilteredECListForWordsWidthOne(const string& words,
   vector<Id> eids;
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
-  int width = result->cols();
+  int width = result->numColumns();
   if (nofVars == 1) {
     FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
         cids, eids, scores, fSet, limit, result);
   } else {
-    CALL_FIXED_SIZE_1(width,
-                      FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,
-                      cids, eids, scores, fSet, nofVars, limit, result);
+    ad_utility::callFixedSize(
+        width,
+        []<int I>(auto&&... args) {
+          FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<I>(
+              AD_FWD(args)...);
+        },
+        cids, eids, scores, fSet, nofVars, limit, result);
   }
   LOG(DEBUG) << "Done with getFilteredECListForWords. Result size: "
              << result->size() << "\n";

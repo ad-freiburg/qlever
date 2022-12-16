@@ -4,13 +4,13 @@
 
 #include "CompressedRelation.h"
 
-#include "../engine/IdTable.h"
-#include "../util/Cache.h"
-#include "../util/CompressionUsingZstd/ZstdWrapper.h"
-#include "../util/ConcurrentCache.h"
-#include "../util/TypeTraits.h"
-#include "./Permutations.h"
-#include "ConstantsIndexBuilding.h"
+#include "engine/idTable/IdTable.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/Permutations.h"
+#include "util/Cache.h"
+#include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/ConcurrentCache.h"
+#include "util/TypeTraits.h"
 
 using namespace std::chrono_literals;
 
@@ -37,7 +37,7 @@ void CompressedRelationMetaData::scan(
                              ", which was not loaded");
   }
   if constexpr (!ad_utility::isVector<IdTableImpl>) {
-    AD_CHECK(result->cols() == 2);
+    AD_CHECK(result->numColumns() == 2);
   }
   if (!permutation._meta.col0IdExists(col0Id)) {
     return;
@@ -61,7 +61,8 @@ void CompressedRelationMetaData::scan(
 
   // The position in the result, to which the next block is being
   // decompressed.
-  auto* position = reinterpret_cast<std::array<Id, 2>*>(result->data());
+  size_t currentIndex = 0;
+  // auto* position = reinterpret_cast<std::array<Id, 2>*>(result->data());
 
   // The number of Id Pairs for which we still have space
   // in the result (only needed for checking of invariants).
@@ -86,6 +87,14 @@ void CompressedRelationMetaData::scan(
     AD_CHECK(metaData._offsetInBlock != std::numeric_limits<uint64_t>::max());
   }
 
+  auto get = [result](size_t row, size_t col) -> Id& {
+    if constexpr (requires { (*result)(0, 0); }) {
+      return (*result)(row, col);
+    } else {
+      return (*result)[row][col];
+    }
+  };
+
   // We have at most one block that is incomplete and thus requires trimming.
   // Set up a lambda, that reads this block and decompresses it to
   // the result.
@@ -103,10 +112,14 @@ void CompressedRelationMetaData::scan(
     // Extract the part of the block that actually belongs to the relation
     auto begin = uncompressedBuffer->begin() + metaData._offsetInBlock;
     auto end = begin + metaData._numRows;
-    AD_CHECK(static_cast<size_t>(end - begin) <= spaceLeft);
-    std::copy(begin, end, position);
-    position += (end - begin);
-    spaceLeft -= (end - begin);
+    auto numElements = static_cast<size_t>(end - begin);
+    AD_CHECK(numElements <= spaceLeft);
+    for (size_t i = 0; i < numElements; ++i) {
+      get(currentIndex + i, 0) = (*(begin + i))[0];
+      get(currentIndex + i, 1) = (*(begin + i))[1];
+    }
+    currentIndex += numElements;
+    spaceLeft -= numElements;
   };
 
   // Read the first block if it is incomplete
@@ -126,16 +139,23 @@ void CompressedRelationMetaData::scan(
       for (; beginBlock < endBlock; ++beginBlock) {
         const auto& block = *beginBlock;
         // Read a block from disk (serially).
+
         std::vector<char> compressedBuffer =
             readCompressedBlockFromFile(block, permutation);
 
         // This lambda decompresses the block that was just read to the
         // correct position in the result.
-        auto decompressLambda = [position, &block,
+        auto decompressLambda = [&get, currentIndex, &block,
                                  compressedBuffer =
                                      std::move(compressedBuffer)]() {
           ad_utility::TimeBlockAndLog("Decompressing a block");
-          decompressBlock(compressedBuffer, block._numRows, position);
+          std::vector<std::array<Id, 2>> buffer;
+          buffer.resize(block._numRows);
+          decompressBlock(compressedBuffer, block._numRows, buffer.data());
+          for (size_t i = 0; i < block._numRows; ++i) {
+            get(currentIndex + i, 0) = buffer[i][0];
+            get(currentIndex + i, 1) = buffer[i][1];
+          }
         };
 
         // The `decompressLambda` can now run in parallel
@@ -149,7 +169,7 @@ void CompressedRelationMetaData::scan(
         // this is again serial code, set up the correct pointers
         // for the next block;
         spaceLeft -= block._numRows;
-        position += block._numRows;
+        currentIndex += block._numRows;
       }
       AD_CHECK(spaceLeft == 0);
     }  // End of omp parallel region, all the decompression was handled now.
@@ -223,7 +243,7 @@ void CompressedRelationMetaData::scan(
     const Id col0Id, const Id& col1Id, IdTableImpl* result,
     const Permutation& permutation,
     ad_utility::SharedConcurrentTimeoutTimer timer) {
-  AD_CHECK(result->cols() == 1);
+  AD_CHECK(result->numColumns() == 1);
 
   if (!permutation._meta.col0IdExists(col0Id)) {
     return;
@@ -319,7 +339,8 @@ void CompressedRelationMetaData::scan(
   totalResultSize += firstBlockResult.size() + lastBlockResult.size();
 
   result->resize(totalResultSize);
-  Id* position = result->data();
+  // Only one column, so there is only one Vector
+  Id* position = &(*result)(0, 0);
   size_t spaceLeft = result->size();
 
   // Insert the first block into the result;

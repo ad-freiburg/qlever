@@ -204,9 +204,10 @@ class SparqlQleverVisitor {
   [[nodiscard]] parsedQuery::SparqlValues visit(
       Parser::InlineDataFullContext* ctx);
 
-  [[nodiscard]] vector<std::string> visit(Parser::DataBlockSingleContext* ctx);
+  [[nodiscard]] vector<TripleComponent> visit(
+      Parser::DataBlockSingleContext* ctx);
 
-  [[nodiscard]] std::string visit(Parser::DataBlockValueContext* ctx);
+  [[nodiscard]] TripleComponent visit(Parser::DataBlockValueContext* ctx);
 
   [[nodiscard]] GraphPatternOperation visit(
       Parser::MinusGraphPatternContext* ctx);

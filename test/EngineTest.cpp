@@ -19,7 +19,7 @@
 #include "util/Forward.h"
 #include "util/SourceLocation.h"
 #include "./util/GTestHelpers.h"
-#include "engine/IdTable.h"
+#include "engine/idTable/IdTable.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
@@ -42,7 +42,7 @@ IdTable makeIdTableFromVector(std::vector<std::array<size_t, TABLE_WIDTH>> table
   // Copying the content into the table.
   for (const auto& row: tableContent) {
     const size_t backIndex = result.size();
-    result.push_back();
+    result.emplace_back();
 
     for (size_t c = 0; c < TABLE_WIDTH; c++) {
       result(backIndex, c) = I(row[c]);
@@ -70,7 +70,7 @@ IdTable makeIdTableFromVector(std::vector<std::array<size_t, TABLE_WIDTH>> table
  *  if a IdTable fails the comparison.
 */
 template<size_t TABLE_WIDTH>
-void compareIdTableWithSolution(IdTable table, 
+void compareIdTableWithSolution(const IdTable& table, 
     std::vector<std::array<size_t, TABLE_WIDTH>> sampleSolution,
     const bool testForSorted = false,
     const size_t jc = 0,
@@ -80,7 +80,7 @@ void compareIdTableWithSolution(IdTable table,
   std::stringstream traceMessage;
   traceMessage << "compareIdTableWithSolution comparing IdTable\n";
   for (size_t row = 0; row < table.size(); row++) {
-    for (size_t column = 0; column < table.cols(); column++) {
+    for (size_t column = 0; column < table.numColumns(); column++) {
       traceMessage << table(row, column) << " ";
     }
     traceMessage << "\n";
@@ -93,17 +93,21 @@ void compareIdTableWithSolution(IdTable table,
     traceMessage << "\n";
   }
   auto trace = generateLocationTrace(t, traceMessage.str());
-  
+ 
+  // Because we compare tables later by sorting them, so that every table has
+  // one definit form, we need to create a local copy of the table.
+  IdTable localTable = table.clone();
+
   // Do the IdTable and sampleSolution have the same dimensions?
-  ASSERT_EQ(table.size(), sampleSolution.size());
-  ASSERT_EQ(table.cols(), TABLE_WIDTH);
+  ASSERT_EQ(localTable.size(), sampleSolution.size());
+  ASSERT_EQ(localTable.numColumns(), TABLE_WIDTH);
 
   if (testForSorted) {
     // Is the table sorted by join column?
-    auto oldEntry = table(0, jc);
-    for (size_t i = 1; i < table.size(); i++) {
-      ASSERT_TRUE(oldEntry <= table(i, jc));
-      oldEntry = table(i, jc);
+    auto oldEntry = localTable(0, jc);
+    for (size_t i = 1; i < localTable.size(); i++) {
+      ASSERT_TRUE(oldEntry <= localTable(i, jc));
+      oldEntry = localTable(i, jc);
     }
   }
 
@@ -119,12 +123,12 @@ void compareIdTableWithSolution(IdTable table,
       }
       return element1[i] < element2[i];
     };
-  std::sort(table.begin(), table.end(), sortFunction);
+  std::sort(localTable.begin(), localTable.end(), sortFunction);
   std::sort(sampleSolution.begin(), sampleSolution.end(), sortFunction);
 
   for (size_t row = 0; row < sampleSolution.size(); row++) {
     for (size_t column = 0; column < TABLE_WIDTH; column++) {
-      ASSERT_EQ(I(sampleSolution[row][column]), table(row, column));
+      ASSERT_EQ(I(sampleSolution[row][column]), localTable(row, column));
     }
   }
 }
@@ -159,8 +163,11 @@ IdTable useJoinFunctionOnVectorsTables(
   
   constexpr int reswidth = TABLE_A_WIDTH + TABLE_B_WIDTH - 1;
   IdTable res(reswidth, allocator());
-  
-  CALL_FIXED_SIZE_3(TABLE_A_WIDTH, TABLE_B_WIDTH, reswidth, func.template operator(), a, jcA, b, jcB, &res);
+ 
+  // You need to use this special function for executing lambdas. The normal
+  // function for functions won't work.
+  // Additionaly, we need to cast the two size_t, because callFixedSize only takes arrays of int.
+  ad_utility::callFixedSize((std::array{static_cast<int>(TABLE_A_WIDTH), static_cast<int>(TABLE_B_WIDTH), reswidth}), func, a, jcA, b, jcB, &res);
 
   return res;
 }
@@ -309,11 +316,12 @@ TEST(EngineTest, optionalJoinTest) {
 
   // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
   // a have to equal those of column 2 of b and vice versa).
-  int aWidth = a.cols();
-  int bWidth = b.cols();
-  int resWidth = res.cols();
-  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth, OptionalJoin::optionalJoin, a, b,
-                    false, true, jcls, &res);
+  int aWidth = a.numColumns();
+  int bWidth = b.numColumns();
+  int resWidth = res.numColumns();
+  CALL_FIXED_SIZE((std::array{aWidth, bWidth, resWidth}),
+                  OptionalJoin::optionalJoin, a, b, false, true, jcls, &res);
+  
   
   // For easier checking of the result.
   IdTable sampleSolution = makeIdTableFromVector(std::vector<std::array<size_t, 4>>{
@@ -341,11 +349,11 @@ TEST(EngineTest, optionalJoinTest) {
   jcls.push_back(array<ColumnIndex, 2>{{1, 0}});
   jcls.push_back(array<ColumnIndex, 2>{{2, 1}});
 
-  aWidth = va.cols();
-  bWidth = vb.cols();
-  resWidth = vres.cols();
-  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth, OptionalJoin::optionalJoin, va,
-                    vb, true, false, jcls, &vres);
+  aWidth = va.numColumns();
+  bWidth = vb.numColumns();
+  resWidth = vres.numColumns();
+  CALL_FIXED_SIZE((std::array{aWidth, bWidth, resWidth}),
+                  OptionalJoin::optionalJoin, va, vb, true, false, jcls, &vres);
   
   // For easier checking.
   sampleSolution = makeIdTableFromVector(std::vector<std::array<size_t, 7>>{
@@ -362,7 +370,7 @@ TEST(EngineTest, optionalJoinTest) {
   sampleSolution(4, 5) = ID_NO_VALUE;
 
   ASSERT_EQ(sampleSolution.size(), vres.size());
-  ASSERT_EQ(sampleSolution.cols(), vres.cols());
+  ASSERT_EQ(sampleSolution.numColumns(), vres.numColumns());
   ASSERT_EQ(sampleSolution, vres);
 }
 
@@ -372,7 +380,7 @@ TEST(EngineTest, distinctTest) {
   IdTable res(4, allocator());
 
   std::vector<size_t> keepIndices = {1, 2};
-  CALL_FIXED_SIZE_1(4, Engine::distinct, inp, keepIndices, &res);
+  CALL_FIXED_SIZE(4, Engine::distinct, inp, keepIndices, &res);
   
   // For easier checking.
   IdTable sampleSolution = makeIdTableFromVector(std::vector<std::array<size_t, 4>>{{{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}}});

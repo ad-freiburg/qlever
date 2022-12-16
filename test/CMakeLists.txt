@@ -61,7 +61,7 @@ endfunction()
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest)
 
-addLinkAndDiscoverTest(SparqlParserTest parser sparqlExpressions ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(StringUtilsTest ${ICU_LIBRARIES})
 
@@ -95,7 +95,7 @@ addLinkAndDiscoverTest(HashMapTest absl::flat_hash_map)
 
 addLinkAndDiscoverTest(HashSetTest absl::flat_hash_set)
 
-addLinkAndDiscoverTest(GroupByTest engine)
+addLinkAndDiscoverTestSerial(GroupByTest engine)
 
 addLinkAndDiscoverTest(VocabularyGeneratorTest index)
 
@@ -139,7 +139,7 @@ addLinkAndDiscoverTest(MinusTest engine)
 addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 #addLinkAndDiscoverTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 
-addLinkAndDiscoverTest(SparqlAntlrParserTest parser sparqlExpressions)
+addLinkAndDiscoverTest(SparqlAntlrParserTest parser sparqlExpressions engine)
 
 # The SerializerTest uses temporary files. The tests fail when multiple test
 # cases are run in parallel. This should be fixed by using distinct filenames
@@ -157,9 +157,9 @@ addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
 addLinkAndDiscoverTest(TypeTraitsTest)
 
-addLinkAndDiscoverTest(SparqlExpressionTest sparqlExpressions index)
+addLinkAndDiscoverTestSerial(SparqlExpressionTest sparqlExpressions index engine)
 
-addLinkAndDiscoverTest(StreamableBodyTest)
+addLinkAndDiscoverTest(StreamableBodyTest http)
 
 addLinkAndDiscoverTest(StreamableGeneratorTest)
 
@@ -171,7 +171,7 @@ addLinkAndDiscoverTest(CompactStringVectorTest)
 
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
-addLinkAndDiscoverTest(ContentEncodingHelperTest absl::strings)
+addLinkAndDiscoverTest(ContentEncodingHelperTest absl::strings http)
 
 addLinkAndDiscoverTest(VocabularyInMemoryTest vocabulary)
 
@@ -218,22 +218,32 @@ addLinkAndDiscoverTest(NBitIntegerTest)
 
 addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
+addLinkAndDiscoverTest(HttpUtilsTest util http)
+
 addLinkAndDiscoverTest(DateTest)
 
-addLinkAndDiscoverTest(TripleObjectTest absl::strings)
+addLinkAndDiscoverTest(TripleObjectTest absl::strings parser)
 
 addLinkAndDiscoverTest(ValueIdTest absl::flat_hash_set)
 
 addLinkAndDiscoverTest(LambdaHelpersTest)
 
-addLinkAndDiscoverTest(ParseExceptionTest parser)
+addLinkAndDiscoverTest(ParseExceptionTest parser engine)
 
 addLinkAndDiscoverTest(TransparentFunctorsTest)
 
-addLinkAndDiscoverTest(SelectClauseTest parser)
+addLinkAndDiscoverTest(SelectClauseTest parser engine)
 
 addLinkAndDiscoverTestSerial(RelationalExpressionTest sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(CheckUsePatternTrickTest parser engine)
 
 addLinkAndDiscoverTestSerial(RegexExpressionTest sparqlExpressions index engine)
+
+addLinkAndDiscoverTest(LocalVocabTest engine)
+
+addLinkAndDiscoverTest(HttpTest boost_iostreams http)
+
+addLinkAndDiscoverTest(CallFixedSizeTest)
+
+addLinkAndDiscoverTest(ConstexprUtilsTest)

@@ -40,7 +40,7 @@ IndexBuilderDataAsPsoSorter IndexImpl::createIdTriplesAndVocab(
       passFileForVocabulary<Parser>(ntFile, _numTriplesPerBatch);
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
-  _totalVocabularySize = indexBuilderData.nofWords;
+  _totalVocabularySize = indexBuilderData.vocabularyMetaData_.numWordsTotal_;
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << _totalVocabularySize << std::endl;
 
@@ -60,33 +60,21 @@ IndexBuilderDataAsPsoSorter IndexImpl::createIdTriplesAndVocab(
 
   return {indexBuilderData, std::move(psoSorter)};
 }
-namespace {
-// Return a lambda that takes a triple of IDs and returns true iff the predicate
-// `triple[1]` is in [langPredLowerBound, langPredUpperBound)
-auto predicateHasLanguage(Id langPredLowerBound, Id langPredUpperBound) {
-  return [langPredLowerBound, langPredUpperBound](const auto& triple) {
-    return triple[1] >= langPredLowerBound && triple[1] < langPredUpperBound;
-  };
-}
 
 // Compute patterns and write them to `filename`. Triples where the predicate is
 // in [langPredLowerBound, langPredUpperBound). `spoTriplesView` must be
 // input-spoTriplesView and yield SPO-sorted triples of IDs.
 void createPatternsFromSpoTriplesView(auto&& spoTriplesView,
                                       const std::string& filename,
-                                      Id langPredLowerBound,
-                                      Id langPredUpperBound) {
+                                      auto&& isInternalId) {
   PatternCreator patternCreator{filename};
-  auto hasLanguage =
-      predicateHasLanguage(langPredLowerBound, langPredUpperBound);
   for (const auto& triple : spoTriplesView) {
-    if (!hasLanguage(triple)) {
+    if (!std::ranges::any_of(triple, isInternalId)) {
       patternCreator.processTriple(triple);
     }
   }
   patternCreator.finish();
 }
-}  // namespace
 
 // _____________________________________________________________________________
 template <class Parser>
@@ -157,50 +145,86 @@ void IndexImpl::createFromFile(const string& filename) {
   // case any of the permutations fail.
   writeConfiguration();
 
+  auto isInternalId = [&](const auto& id) {
+    const auto& v = indexBuilderData.vocabularyMetaData_;
+    auto isInRange = [&](const auto& range) {
+      return range.begin() <= id && id < range.end();
+    };
+    return isInRange(v.internalEntities_) || isInRange(v.langTaggedPredicates_);
+  };
+
+  auto makeNumEntitiesCounter = [&isInternalId](size_t& numEntities,
+                                                size_t idx) {
+    // TODO<joka921> Make the `index` a template parameter.
+    return [lastEntity = std::optional<Id>{}, &numEntities, &isInternalId,
+            idx](const auto& triple) mutable {
+      const auto& id = triple[idx];
+      if (id != lastEntity && !std::ranges::any_of(triple, isInternalId)) {
+        numEntities++;
+      }
+      lastEntity = id;
+    };
+  };
+
+  size_t numTriplesNormal = 0;
+  auto countActualTriples = [&numTriplesNormal,
+                             &isInternalId](const auto& triple) mutable {
+    numTriplesNormal += !std::ranges::any_of(triple, isInternalId);
+  };
+
   StxxlSorter<SortBySPO> spoSorter{stxxlMemoryInBytes() / 5};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
   auto uniqueSorter = ad_utility::uniqueView(psoSorter.sortedView());
 
+  size_t numPredicatesNormal = 0;
   createPermutationPair<IndexMetaDataHmapDispatcher>(
-      std::move(uniqueSorter), _PSO, _POS, spoSorter.makePushCallback());
+      std::move(uniqueSorter), _PSO, _POS, spoSorter.makePushCallback(),
+      makeNumEntitiesCounter(numPredicatesNormal, 1), countActualTriples);
+  _configurationJson["num-predicates-normal"] = numPredicatesNormal;
+  _configurationJson["num-triples-normal"] = numTriplesNormal;
+  writeConfiguration();
   psoSorter.clear();
-
-  auto hasLanguagePredicate = predicateHasLanguage(
-      indexBuilderData.langPredLowerBound, indexBuilderData.langPredUpperBound);
 
   if (_loadAllPermutations) {
     // After the SPO permutation, create patterns if so desired.
     StxxlSorter<SortByOSP> ospSorter{stxxlMemoryInBytes() / 5};
+    size_t numSubjectsNormal = 0;
+    auto numSubjectCounter = makeNumEntitiesCounter(numSubjectsNormal, 0);
     if (_usePatterns) {
       PatternCreator patternCreator{_onDiskBase + ".index.patterns"};
       auto pushTripleToPatterns = [&patternCreator,
-                                   &hasLanguagePredicate](const auto& triple) {
-        if (!hasLanguagePredicate(triple)) {
+                                   &isInternalId](const auto& triple) {
+        if (!std::ranges::any_of(triple, isInternalId)) {
           patternCreator.processTriple(triple);
         }
       };
       createPermutationPair<IndexMetaDataMmapDispatcher>(
           spoSorter.sortedView(), _SPO, _SOP, ospSorter.makePushCallback(),
-          pushTripleToPatterns);
+          pushTripleToPatterns, numSubjectCounter);
       patternCreator.finish();
     } else {
       createPermutationPair<IndexMetaDataMmapDispatcher>(
-          spoSorter.sortedView(), _SPO, _SOP, ospSorter.makePushCallback());
+          spoSorter.sortedView(), _SPO, _SOP, ospSorter.makePushCallback(),
+          numSubjectCounter);
     }
     spoSorter.clear();
+    _configurationJson["num-subjects-normal"] = numSubjectsNormal;
+    writeConfiguration();
 
     // For the last pair of permutations we don't need a next sorter, so we have
     // no fourth argument.
-    createPermutationPair<IndexMetaDataMmapDispatcher>(ospSorter.sortedView(),
-                                                       _OSP, _OPS);
+    size_t numObjectsNormal = 0;
+    createPermutationPair<IndexMetaDataMmapDispatcher>(
+        ospSorter.sortedView(), _OSP, _OPS,
+        makeNumEntitiesCounter(numObjectsNormal, 2));
+    _configurationJson["num-objects-normal"] = numObjectsNormal;
     _configurationJson["has-all-permutations"] = true;
   } else {
     if (_usePatterns) {
       createPatternsFromSpoTriplesView(spoSorter.sortedView(),
                                        _onDiskBase + ".index.patterns",
-                                       indexBuilderData.langPredLowerBound,
-                                       indexBuilderData.langPredUpperBound);
+                                       isInternalId);
     }
     _configurationJson["has-all-permutations"] = false;
   }
@@ -356,14 +380,14 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     auto mergeResult =
         m.mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles,
                           std::less<>(), internalVocabularyActionCompression);
-    sizeInternalVocabulary = mergeResult._numWordsTotal;
+    sizeInternalVocabulary = mergeResult.numWordsTotal_;
     LOG(INFO) << "Number of words in internal vocabulary: "
               << sizeInternalVocabulary << std::endl;
   }
 
   LOG(INFO) << "Merging partial vocabularies in Unicode order "
             << "(internal and external) ..." << std::endl;
-  const VocabularyMerger::VocMergeRes mergeRes = [&]() {
+  const VocabularyMerger::VocabularyMetaData mergeRes = [&]() {
     VocabularyMerger v;
     auto sortPred = [cmp = &(_vocab.getCaseComparator())](std::string_view a,
                                                           std::string_view b) {
@@ -379,11 +403,10 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;
-  res.nofWords = mergeRes._numWordsTotal;
-  res.langPredLowerBound = mergeRes._langPredLowerBound;
-  res.langPredUpperBound = mergeRes._langPredUpperBound;
+  res.vocabularyMetaData_ = mergeRes;
   LOG(INFO) << "Number of words in external vocabulary: "
-            << res.nofWords - sizeInternalVocabulary << std::endl;
+            << res.vocabularyMetaData_.numWordsTotal_ - sizeInternalVocabulary
+            << std::endl;
 
   res.idTriples = std::move(idTriples);
   res.actualPartialSizes = std::move(actualPartialSizes);
@@ -489,7 +512,6 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
       THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.mmap-buffer");
   bool functional = true;
   size_t distinctCol1 = 0;
-  size_t sizeOfRelation = 0;
   Id lastLhs = ID_NO_VALUE;
   uint64_t totalNumTriples = 0;
   for (auto triple : sortedTriples) {
@@ -513,7 +535,6 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
       currentRel = triple[c0];
       functional = true;
     } else {
-      sizeOfRelation++;
       if (triple[c1] == lastLhs) {
         functional = false;
       } else {
@@ -650,10 +671,12 @@ void IndexImpl::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 
 // _____________________________________________________________________________
 void IndexImpl::addPatternsToExistingIndex() {
-  auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
-  // We only iterate over the SPO permutation which typically only has few
-  // triples per subject, so it should be safe to not apply a memory limit here.
+  // auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
+  //  We only iterate over the SPO permutation which typically only has few
+  //  triples per subject, so it should be safe to not apply a memory limit
+  //  here.
   AD_FAIL();
+  /*
   ad_utility::AllocatorWithLimit<Id> allocator{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
           std::numeric_limits<uint64_t>::max())};
@@ -661,6 +684,8 @@ void IndexImpl::addPatternsToExistingIndex() {
   createPatternsFromSpoTriplesView(iterator, _onDiskBase + ".index.patterns",
                                    Id::makeFromVocabIndex(langPredLowerBound),
                                    Id::makeFromVocabIndex(langPredUpperBound));
+                                   */
+  // TODO<joka921> Remove the AD_FAIL() again.
 }
 
 // _____________________________________________________________________________
@@ -738,44 +763,6 @@ double IndexImpl::getAvgNumDistinctSubjectsPerPredicate() const {
 size_t IndexImpl::getNumDistinctSubjectPredicatePairs() const {
   throwExceptionIfNoPatterns();
   return _numDistinctSubjectPredicatePairs;
-}
-
-// _____________________________________________________________________________
-size_t IndexImpl::relationCardinality(const string& relationName) const {
-  if (relationName == INTERNAL_TEXT_MATCH_PREDICATE) {
-    return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
-  }
-  Id relId;
-  if (getId(relationName, &relId)) {
-    if (this->_PSO.metaData().col0IdExists(relId)) {
-      return this->_PSO.metaData().getMetaData(relId).getNofElements();
-    }
-  }
-  return 0;
-}
-
-// TODO<joka921> There is a lot of duplication in the three cardinality
-// functions, remove it.
-// _____________________________________________________________________________
-size_t IndexImpl::subjectCardinality(const TripleComponent& sub) const {
-  std::optional<Id> relId = sub.toValueId(getVocab());
-  if (relId.has_value()) {
-    if (this->_SPO.metaData().col0IdExists(relId.value())) {
-      return this->_SPO.metaData().getMetaData(relId.value()).getNofElements();
-    }
-  }
-  return 0;
-}
-
-// _____________________________________________________________________________
-size_t IndexImpl::objectCardinality(const TripleComponent& obj) const {
-  std::optional<Id> relId = obj.toValueId(getVocab());
-  if (relId.has_value()) {
-    if (this->_OSP.metaData().col0IdExists(relId.value())) {
-      return this->_OSP.metaData().getMetaData(relId.value()).getNofElements();
-    }
-  }
-  return 0;
 }
 
 // _____________________________________________________________________________
@@ -916,6 +903,22 @@ void IndexImpl::readConfiguration() {
     // If the permutations simply don't exist, then we can never load them.
     _loadAllPermutations = false;
   }
+
+  auto loadRequestedDataMember = [this](std::string_view key, auto& target) {
+    auto it = _configurationJson.find(key);
+    if (it == _configurationJson.end()) {
+      throw std::runtime_error{absl::StrCat(
+          "The required key \"", key,
+          "\" was not found in the `meta-data.json`. Most likely this index "
+          "was built with an older version of QLever and should be rebuilt")};
+    }
+    target = std::decay_t<decltype(target)>{*it};
+  };
+
+  loadRequestedDataMember("num-predicates-normal", _numPredicatesNormal);
+  loadRequestedDataMember("num-subjects-normal", _numSubjectsNormal);
+  loadRequestedDataMember("num-objects-normal", _numObjectsNormal);
+  loadRequestedDataMember("num-triples-normal", _numTriplesNormal);
 }
 
 // ___________________________________________________________________________
@@ -1167,4 +1170,9 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
   };
 
   return std::async(std::launch::async, std::move(lambda));
+}
+
+// ____________________________________________________________________________
+IndexImpl::NumNormalAndInternal IndexImpl::numTriples() const {
+  return {_numTriplesNormal, PSO()._meta.getNofTriples() - _numTriplesNormal};
 }

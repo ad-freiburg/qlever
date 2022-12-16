@@ -9,7 +9,6 @@
 #include <engine/Join.h>
 #include <global/Constants.h>
 #include <util/HashMap.h>
-#include <engine/IdTable.h>
 #include <global/Id.h>
 
 #include <functional>
@@ -91,8 +90,8 @@ void Join::computeResult(ResultTable* result) {
     LOG(TRACE) << "Either side is empty thus join result is empty" << endl;
     runtimeInfo.addDetail("Either side was empty", "");
     size_t resWidth = leftWidth + rightWidth - 1;
-    result->_data.setCols(resWidth);
-    result->_resultTypes.resize(result->_data.cols());
+    result->_data.setNumColumns(resWidth);
+    result->_resultTypes.resize(result->_data.numColumns());
     result->_sortedBy = {_leftJoinCol};
     return;
   }
@@ -117,8 +116,8 @@ void Join::computeResult(ResultTable* result) {
     LOG(TRACE) << "Left side empty thus join result is empty" << endl;
     runtimeInfo.addDetail("The left side was empty", "");
     size_t resWidth = leftWidth + rightWidth - 1;
-    result->_data.setCols(resWidth);
-    result->_resultTypes.resize(result->_data.cols());
+    result->_data.setNumColumns(resWidth);
+    result->_resultTypes.resize(result->_data.numColumns());
     result->_sortedBy = {_leftJoinCol};
     return;
   }
@@ -131,35 +130,41 @@ void Join::computeResult(ResultTable* result) {
 
   AD_CHECK(result);
 
-  result->_idTable.setCols(leftWidth + rightWidth - 1);
-  result->_resultTypes.reserve(result->_idTable.cols());
+  result->_idTable.setNumColumns(leftWidth + rightWidth - 1);
+  result->_resultTypes.reserve(result->_idTable.numColumns());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               leftRes->_resultTypes.begin(),
                               leftRes->_resultTypes.end());
-  for (size_t i = 0; i < rightRes->_idTable.cols(); i++) {
+  for (size_t i = 0; i < rightRes->_idTable.numColumns(); i++) {
     if (i != _rightJoinCol) {
       result->_resultTypes.push_back(rightRes->_resultTypes[i]);
     }
   }
   result->_sortedBy = {_leftJoinCol};
 
-  int lwidth = leftRes->_idTable.cols();
-  int rwidth = rightRes->_idTable.cols();
-  int reswidth = result->_idTable.cols();
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, join, leftRes->_idTable,
-                    _leftJoinCol, rightRes->_idTable, _rightJoinCol,
-                    &result->_idTable);
+  int lwidth = leftRes->_idTable.numColumns();
+  int rwidth = rightRes->_idTable.numColumns();
+  int reswidth = result->_idTable.numColumns();
+
+  CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::join, this,
+                  leftRes->_idTable, _leftJoinCol, rightRes->_idTable,
+                  _rightJoinCol, &result->_idTable);
+
   /* TODO This is needed for the pre-compilation of the template hashJoin.
    * Because the compiler doesn't know, that rand() < 0 can never be true,
    * it compiles the used templates without breaking the actual join operation.
   */
   if (rand() < 0) {
-    CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, hashJoin, leftRes->_idTable,
-                     _leftJoinCol, rightRes->_idTable, _rightJoinCol,
-                     &result->_idTable);
+    CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::hashJoin, this,
+                    leftRes->_idTable, _leftJoinCol, rightRes->_idTable,
+                    _rightJoinCol, &result->_idTable);
   }
 
-  LOG(DEBUG) << "Join result computation done." << endl;
+  // If only one of the two operands has a local vocab, pass it on.
+  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
+      leftRes->_localVocab, rightRes->_localVocab);
+
+  LOG(DEBUG) << "Join result computation done" << endl;
 }
 
 // _____________________________________________________________________________
@@ -229,30 +234,36 @@ float Join::getMultiplicity(size_t col) {
 
 // _____________________________________________________________________________
 size_t Join::getCostEstimate() {
-  float diskRandomAccessCost =
-      _executionContext
-          ? _executionContext->getCostFactor("DISK_RANDOM_ACCESS_COST")
-          : 200000;
   size_t costJoin;
+
+  // The cost estimates of the "Join with full scan" case must be consistent
+  // with the estimates for the materialization of a full scan. For a detailed
+  // discussion see the comments in `IndexScan::getCostEstimate()` (in
+  // `IndexScan.cpp`)
   if (isFullScanDummy(_left)) {
     size_t nofDistinctTabJc = static_cast<size_t>(
         _right->getSizeEstimate() / _right->getMultiplicity(_rightJoinCol));
     float averageScanSize = _left->getMultiplicity(_leftJoinCol);
 
-    costJoin = nofDistinctTabJc *
-               static_cast<size_t>(diskRandomAccessCost + averageScanSize);
+    costJoin = nofDistinctTabJc * averageScanSize * 10'000;
   } else if (isFullScanDummy(_right)) {
     size_t nofDistinctTabJc = static_cast<size_t>(
         _left->getSizeEstimate() / _left->getMultiplicity(_leftJoinCol));
     float averageScanSize = _right->getMultiplicity(_rightJoinCol);
-    costJoin = nofDistinctTabJc *
-               static_cast<size_t>(diskRandomAccessCost + averageScanSize);
+    costJoin = nofDistinctTabJc * averageScanSize * 10'000;
   } else {
     // Normal case:
     costJoin = _left->getSizeEstimate() + _right->getSizeEstimate();
   }
-  return getSizeEstimate() + _left->getCostEstimate() +
-         _right->getCostEstimate() + costJoin;
+
+  // TODO<joka921> once the `getCostEstimate` functions are `const`,
+  // the argument can also be `const auto`
+  auto costIfNotFullScan = [](auto& subtree) {
+    return isFullScanDummy(subtree) ? size_t{0} : subtree->getCostEstimate();
+  };
+
+  return getSizeEstimate() + costJoin + costIfNotFullScan(_left) +
+         costIfNotFullScan(_right);
 }
 
 // _____________________________________________________________________________
@@ -260,10 +271,11 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
   LOG(DEBUG) << "Join by making multiple scans..." << endl;
   if (isFullScanDummy(_left)) {
     AD_CHECK(!isFullScanDummy(_right))
-    result->_idTable.setCols(_right->getResultWidth() + 2);
+    _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
+    result->_idTable.setNumColumns(_right->getResultWidth() + 2);
     result->_sortedBy = {2 + _rightJoinCol};
     shared_ptr<const ResultTable> nonDummyRes = _right->getResult();
-    result->_resultTypes.reserve(result->_idTable.cols());
+    result->_resultTypes.reserve(result->_idTable.numColumns());
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.insert(result->_resultTypes.end(),
@@ -273,11 +285,12 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
                                        &result->_idTable);
   } else {
     AD_CHECK(!isFullScanDummy(_left))
-    result->_idTable.setCols(_left->getResultWidth() + 2);
+    _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
+    result->_idTable.setNumColumns(_left->getResultWidth() + 2);
     result->_sortedBy = {_leftJoinCol};
 
     shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
-    result->_resultTypes.reserve(result->_idTable.cols());
+    result->_resultTypes.reserve(result->_idTable.numColumns());
     result->_resultTypes.insert(result->_resultTypes.end(),
                                 nonDummyRes->_resultTypes.begin(),
                                 nonDummyRes->_resultTypes.end());
@@ -360,7 +373,8 @@ void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
       scan(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
-      appendCrossProduct(jr.begin(), jr.end(), joinItemFrom, joinItemEnd, res);
+      appendCrossProduct(jr.cbegin(), jr.cend(), joinItemFrom, joinItemEnd,
+                         res);
       // Reset
       currentJoinId = ndr(i, _rightJoinCol);
       joinItemFrom = joinItemEnd;
@@ -373,7 +387,7 @@ void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
   scan(currentJoinId, &jr);
   LOG(TRACE) << "Got #items: " << jr.size() << endl;
   // Build the cross product.
-  appendCrossProduct(jr.begin(), jr.end(), joinItemFrom, joinItemEnd, res);
+  appendCrossProduct(jr.cbegin(), jr.cend(), joinItemFrom, joinItemEnd, res);
 }
 
 // _____________________________________________________________________________
@@ -404,7 +418,8 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
       scan(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
-      appendCrossProduct(joinItemFrom, joinItemEnd, jr.begin(), jr.end(), res);
+      appendCrossProduct(joinItemFrom, joinItemEnd, jr.cbegin(), jr.cend(),
+                         res);
       // Reset
       currentJoinId = ndr[i][_leftJoinCol];
       joinItemFrom = joinItemEnd;
@@ -417,7 +432,7 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
   scan(currentJoinId, &jr);
   LOG(TRACE) << "Got #items: " << jr.size() << endl;
   // Build the cross product.
-  appendCrossProduct(joinItemFrom, joinItemEnd, jr.begin(), jr.end(), res);
+  appendCrossProduct(joinItemFrom, joinItemEnd, jr.cbegin(), jr.cend(), res);
 }
 
 // _____________________________________________________________________________
@@ -505,13 +520,13 @@ void Join::appendCrossProduct(const IdTable::const_iterator& leftBegin,
     for (auto itr = rightBegin; itr != rightEnd; ++itr) {
       const auto& l = *itl;
       const auto& r = *itr;
-      res->push_back();
+      res->emplace_back();
       size_t backIdx = res->size() - 1;
-      for (size_t i = 0; i < itl.cols(); i++) {
+      for (size_t i = 0; i < l.numColumns(); i++) {
         (*res)(backIdx, i) = l[i];
       }
-      for (size_t i = 0; i < itr.cols(); i++) {
-        (*res)(backIdx, itl.cols() + i) = r[i];
+      for (size_t i = 0; i < r.numColumns(); i++) {
+        (*res)(backIdx, l.numColumns() + i) = r[i];
       }
     }
   }
@@ -526,15 +541,17 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
 
   LOG(DEBUG) << "Performing join between two tables.\n";
-  LOG(DEBUG) << "A: width = " << a.cols() << ", size = " << a.size() << "\n";
-  LOG(DEBUG) << "B: width = " << b.cols() << ", size = " << b.size() << "\n";
+  LOG(DEBUG) << "A: width = " << a.numColumns() << ", size = " << a.size()
+             << "\n";
+  LOG(DEBUG) << "B: width = " << b.numColumns() << ", size = " << b.size()
+             << "\n";
 
   // Check trivial case.
   if (a.size() == 0 || b.size() == 0) {
     return;
   }
 
-  IdTableStatic<OUT_WIDTH> result = dynRes->moveToStatic<OUT_WIDTH>();
+  IdTableStatic<OUT_WIDTH> result = std::move(*dynRes).toStatic<OUT_WIDTH>();
   // Cannot just switch l1 and l2 around because the order of
   // items in the result tuples is important.
   if (a.size() / b.size() > GALLOP_THRESHOLD) {
@@ -569,8 +586,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
         // Always fix a and go through b.
         size_t keepJ = j;
         while (a(i, jc1) == b(j, jc2)) {
-          addCombinedRowToIdTable<L_WIDTH, R_WIDTH, OUT_WIDTH>(a[i], b[j], jc2, &result);
-          
+          addCombinedRowToIdTable(a[i], b[j], jc2, &result);
           ++j;
           checkTimeoutAfterNCalls();
           if (j >= b.size()) {
@@ -598,10 +614,10 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     }
   }
 finish:
-  *dynRes = result.moveToDynamic();
+  *dynRes = std::move(result).toDynamic();
 
   LOG(DEBUG) << "Join done.\n";
-  LOG(DEBUG) << "Result: width = " << dynRes->cols()
+  LOG(DEBUG) << "Result: width = " << dynRes->numColumns()
              << ", size = " << dynRes->size() << "\n";
 }
 
@@ -645,7 +661,7 @@ void Join::doGallopInnerJoin(const TagType, const IdTableView<L_WIDTH>& l1,
         // We stepped over the location where l1 and l2 may be equal.
         // Use binary search to locate that spot
         const Id needle = l1(i, jc1);
-        j = std::lower_bound(l2.begin() + last, l2.begin() + j, needle,
+        j = std::lower_bound(l2.cbegin() + last, l2.cbegin() + j, needle,
                              [jc2](const auto& l, const Id needle) -> bool {
                                return l[jc2] < needle;
                              }) -
@@ -693,7 +709,7 @@ void Join::doGallopInnerJoin(const TagType, const IdTableView<L_WIDTH>& l1,
       // Always fix l1 and go through l2.
       const size_t keepJ = j;
       while (l1(i, jc1) == l2(j, jc2)) {
-        addCombinedRowToIdTable<L_WIDTH, R_WIDTH, OUT_WIDTH>(l1[i], l2[j], jc2, result);
+        addCombinedRowToIdTable(l1[i], l2[j], jc2, result);
         ++j;
         if (j >= l2.size()) {
           break;
@@ -726,22 +742,22 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
 
   LOG(DEBUG) << "Performing hashJoin between two tables.\n";
-  LOG(DEBUG) << "A: width = " << a.cols() << ", size = " << a.size() << "\n";
-  LOG(DEBUG) << "B: width = " << b.cols() << ", size = " << b.size() << "\n";
+  LOG(DEBUG) << "A: width = " << a.numColumns() << ", size = " << a.size() << "\n";
+  LOG(DEBUG) << "B: width = " << b.numColumns() << ", size = " << b.size() << "\n";
 
   // Check trivial case.
   if (a.size() == 0 || b.size() == 0) {
     return;
   }
 
-  IdTableStatic<OUT_WIDTH> result = dynRes->moveToStatic<OUT_WIDTH>();
-
+  IdTableStatic<OUT_WIDTH> result = std::move(*dynRes).toStatic<OUT_WIDTH>();
+  
   // Puts the rows of the given table into a hash map, with the value of
   // the join column of a row as the key, and returns the hash map.
   auto idTableToHashMap = []<typename Table>(const Table& table, const size_t jc) {
     // This declaration works, because generic lambdas are just syntactic sugar
     // for templates. 
-    ad_utility::HashMap<Id, std::vector<std::decay_t<typename Table::const_row_type>>> map;
+    ad_utility::HashMap<Id, std::vector<typename Table::row_type>> map;
     for (const auto& row : table) {
       map[row[jc]].push_back(row);
     }
@@ -766,7 +782,7 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
       }
 
       for (const auto& bRow: entry->second) {
-        addCombinedRowToIdTable<L_WIDTH, R_WIDTH, OUT_WIDTH>(a[i], bRow, jc2, &result); 
+        addCombinedRowToIdTable(a[i], bRow, jc2, &result); 
       }
     }
 
@@ -783,40 +799,41 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
       }
 
       for (const auto& aRow: entry->second) {
-        addCombinedRowToIdTable<L_WIDTH, R_WIDTH, OUT_WIDTH>(aRow, b[j], jc2, &result);
+        addCombinedRowToIdTable(aRow, b[j], jc2, &result);
       }
     } 
   }
-  *dynRes = result.moveToDynamic();
+  *dynRes = std::move(result).toDynamic();
 
   LOG(DEBUG) << "HashJoin done.\n";
-  LOG(DEBUG) << "Result: width = " << dynRes->cols()
+  LOG(DEBUG) << "Result: width = " << dynRes->numColumns()
              << ", size = " << dynRes->size() << "\n";
 }
 
 // ___________________________________________________________________________ 
-template <int A_WIDTH, int B_WIDTH, int TABLE_WIDTH>
+template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>
 void Join::addCombinedRowToIdTable(
-  const std::decay_t<typename IdTableStatic<A_WIDTH>::const_row_type>& rowA,
-  const std::decay_t<typename IdTableStatic<B_WIDTH>::const_row_type>& rowB,
+  const ROW_A& rowA,
+  const ROW_B& rowB,
   const size_t jcRowB,
   IdTableStatic<TABLE_WIDTH>* table){
   // Add a new, empty row.
   const size_t backIndex = table->size();
-  table->push_back();
+  table->emplace_back();
   
   // Copy the entire rowA in the table.
-  for (size_t h = 0; h < rowA.size(); h++) {
+  for (size_t h = 0; h < rowA.numColumns(); h++) {
     (*table)(backIndex, h) = rowA[h];
   }
 
   // Copy rowB columns before the join column.
   for (size_t h = 0; h < jcRowB; h++) {
-    (*table)(backIndex, h + rowA.size()) = rowB[h];
+    (*table)(backIndex, h + rowA.numColumns()) = rowB[h];
   }
 
   // Copy rowB columns after the join column.
-  for (size_t h = jcRowB + 1; h < rowB.size(); h++) {
-    (*table)(backIndex, h + rowA.size() - 1) = rowB[h];
+  for (size_t h = jcRowB + 1; h < rowB.numColumns(); h++) {
+    (*table)(backIndex, h + rowA.numColumns() - 1) = rowB[h];
   }
 }
+

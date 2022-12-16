@@ -265,7 +265,7 @@ void IndexScan::computeResult(ResultTable* result) {
 
 // _____________________________________________________________________________
 void IndexScan::computePSOboundS(ResultTable* result) const {
-  result->_idTable.setCols(1);
+  result->_idTable.setNumColumns(1);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
@@ -275,7 +275,7 @@ void IndexScan::computePSOboundS(ResultTable* result) const {
 
 // _____________________________________________________________________________
 void IndexScan::computePSOfreeS(ResultTable* result) const {
-  result->_idTable.setCols(2);
+  result->_idTable.setNumColumns(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
@@ -286,7 +286,7 @@ void IndexScan::computePSOfreeS(ResultTable* result) const {
 
 // _____________________________________________________________________________
 void IndexScan::computePOSboundO(ResultTable* result) const {
-  result->_idTable.setCols(1);
+  result->_idTable.setNumColumns(1);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
@@ -296,7 +296,7 @@ void IndexScan::computePOSboundO(ResultTable* result) const {
 
 // _____________________________________________________________________________
 void IndexScan::computePOSfreeO(ResultTable* result) const {
-  result->_idTable.setCols(2);
+  result->_idTable.setNumColumns(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
@@ -323,14 +323,19 @@ size_t IndexScan::computeSizeEstimate() {
     // TODO<joka921> Should be a oneliner
     // getIndex().cardinality(getPermutation(), getFirstKey());
     if (_type == SPO_FREE_P || _type == SOP_FREE_O) {
-      return getIndex().subjectCardinality(_subject);
+      return getIndex().getCardinality(_subject, Index::Permutation::SPO);
     } else if (_type == POS_FREE_O || _type == PSO_FREE_S) {
-      return getIndex().relationCardinality(_predicate);
+      return getIndex().getCardinality(_predicate, Index::Permutation::PSO);
     } else if (_type == OPS_FREE_P || _type == OSP_FREE_S) {
-      return getIndex().objectCardinality(_object);
+      return getIndex().getCardinality(_object, Index::Permutation::OSP);
     }
     // The triple consists of three variables.
-    return getIndex().getNofTriples();
+    // TODO<joka921> As soon as all implementations of a full index scan
+    // (Including the "dummy joins" in Join.cpp) consistently exclude the
+    // internal triples, this estimate should be changed to only return
+    // the number of triples in the actual knowledge graph (excluding the
+    // internal triples).
+    return getIndex().numTriples().normalAndInternal_();
   } else {
     // Only for test cases. The handling of the objects is to make the
     // strange query planner tests pass.
@@ -344,8 +349,35 @@ size_t IndexScan::computeSizeEstimate() {
 }
 
 // _____________________________________________________________________________
+size_t IndexScan::getCostEstimate() {
+  if (getResultWidth() != 3) {
+    return getSizeEstimate();
+  } else {
+    // The computation of the `full scan` estimate must be consistent with the
+    // full scan dummy joins in `Join.cpp` for correct query planning.
+    // The following calculation is done in a way that makes materializing a
+    // full index scan always more expensive than implicitly computing it in the
+    // so-called "dummy joins" (see `Join.h` and `Join.cpp`). The assumption is,
+    // that materializing a single triple via a full index scan is 10'000 more
+    // expensive than materializing it via some other means.
+
+    // Note that we cannot set the cost to `infinity` or `max`, because this
+    // might lead to overflows in upstream operations when the cost estimate is
+    // an integer (this currently is the case). When implementing them as
+    // floating point numbers, a cost estimate of `infinity` would
+    // remove the ability to distinguish the costs of plans that perform full
+    // scans but still have different overall costs.
+    // TODO<joka921> The conceptually right way to do this is to make the cost
+    // estimate a tuple `(numFullIndexScans, costEstimateForRemainder)`.
+    // Implement this functionality.
+
+    return getSizeEstimate() * 10'000;
+  }
+}
+
+// _____________________________________________________________________________
 void IndexScan::computeSPOfreeP(ResultTable* result) const {
-  result->_idTable.setCols(2);
+  result->_idTable.setNumColumns(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
@@ -355,7 +387,7 @@ void IndexScan::computeSPOfreeP(ResultTable* result) const {
 
 // _____________________________________________________________________________
 void IndexScan::computeSOPboundO(ResultTable* result) const {
-  result->_idTable.setCols(1);
+  result->_idTable.setNumColumns(1);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
@@ -365,7 +397,7 @@ void IndexScan::computeSOPboundO(ResultTable* result) const {
 
 // _____________________________________________________________________________
 void IndexScan::computeSOPfreeO(ResultTable* result) const {
-  result->_idTable.setCols(2);
+  result->_idTable.setNumColumns(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
@@ -375,7 +407,7 @@ void IndexScan::computeSOPfreeO(ResultTable* result) const {
 
 // _____________________________________________________________________________
 void IndexScan::computeOPSfreeP(ResultTable* result) const {
-  result->_idTable.setCols(2);
+  result->_idTable.setNumColumns(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
@@ -385,7 +417,7 @@ void IndexScan::computeOPSfreeP(ResultTable* result) const {
 
 // _____________________________________________________________________________
 void IndexScan::computeOSPfreeS(ResultTable* result) const {
-  result->_idTable.setCols(2);
+  result->_idTable.setNumColumns(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
@@ -461,62 +493,28 @@ void IndexScan::determineMultiplicities() {
 
 void IndexScan::computeFullScan(ResultTable* result,
                                 const Index::Permutation permutation) const {
-  std::vector<std::pair<Id, Id>> ignoredRanges;
+  auto [ignoredRanges, isTripleIgnored] =
+      getIndex().getImpl().getIgnoredIdRanges(permutation);
 
-  auto literalRange = getIndex().getVocab().prefix_range("\"");
-  auto taggedPredicatesRange = getIndex().getVocab().prefix_range("@");
-  VocabIndex languagePredicateIndex;
-  bool success =
-      getIndex().getVocab().getId(LANGUAGE_PREDICATE, &languagePredicateIndex);
-  AD_CHECK(success);
-
-  using enum Index::Permutation;
-  // TODO<joka921> lift `prefixRange` to Index and ID
-  if (permutation == SPO || permutation == SOP) {
-    ignoredRanges.push_back({Id::makeFromVocabIndex(literalRange.first),
-                             Id::makeFromVocabIndex(literalRange.second)});
-  } else if (permutation == PSO || permutation == POS) {
-    ignoredRanges.push_back(
-        {Id::makeFromVocabIndex(taggedPredicatesRange.first),
-         Id::makeFromVocabIndex(taggedPredicatesRange.second)});
-    ignoredRanges.emplace_back(
-        Id::makeFromVocabIndex(languagePredicateIndex),
-        Id::makeFromVocabIndex(languagePredicateIndex.incremented()));
-  }
-
-  auto isTripleIgnored = [&](const auto& triple) {
-    if (permutation == SPO || permutation == OPS) {
-      // Predicates are always entities from the vocabulary.
-      auto id = triple[1].getVocabIndex();
-      return id == languagePredicateIndex ||
-             (id >= taggedPredicatesRange.first &&
-              id < taggedPredicatesRange.second);
-    } else if (permutation == SOP || permutation == OSP) {
-      // Predicates are always entities from the vocabulary.
-      auto id = triple[2].getVocabIndex();
-      return id == languagePredicateIndex ||
-             (id >= taggedPredicatesRange.first &&
-              id < taggedPredicatesRange.second);
-    }
-    return false;
-  };
-
-  result->_idTable.setCols(3);
+  result->_idTable.setNumColumns(3);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1, 2};
 
-  uint64_t resultSize = getIndex().getNofTriples();
+  // This implementation computes the complete knowledge graph, except the
+  // internal triples.
+  uint64_t resultSize = getIndex().numTriples().normal_;
   if (getLimit().has_value() && getLimit() < resultSize) {
     resultSize = getLimit().value();
   }
   result->_idTable.reserve(resultSize);
-  auto table = result->_idTable.moveToStatic<3>();
+  auto table = std::move(result->_idTable).toStatic<3>();
   size_t i = 0;
   auto triplesView =
       getExecutionContext()->getIndex().getImpl().applyToPermutation(
-          permutation, [&](const auto& p) {
+          permutation, [&, ignoredRanges = ignoredRanges,
+                        isTripleIgnored = isTripleIgnored](const auto& p) {
             return TriplesView(p, getExecutionContext()->getAllocator(),
                                ignoredRanges, isTripleIgnored);
           });
@@ -527,5 +525,5 @@ void IndexScan::computeFullScan(ResultTable* result,
     table.push_back(triple);
     ++i;
   }
-  result->_idTable = table.moveToDynamic();
+  result->_idTable = std::move(table).toDynamic();
 }

@@ -10,6 +10,7 @@ add_library(engine
         ../util/Socket.h
         Comparators.h
         ResultTable.h ResultTable.cpp
+        LocalVocab.h LocalVocab.cpp
         QueryExecutionContext.h
         IndexScan.h IndexScan.cpp
         Join.h Join.cpp
@@ -31,7 +32,7 @@ add_library(engine
         TransitivePath.cpp TransitivePath.h
         Values.cpp Values.h
         Bind.cpp Bind.h
-        IdTable.h
+        idTable/IdTable.h
         ../util/Random.h
         Minus.h Minus.cpp
         ResultType.h
@@ -39,4 +40,4 @@ add_library(engine
         VariableToColumnMap.cpp)
 
 
-target_link_libraries(engine index parser sparqlExpressions httpServer SortPerformanceEstimator absl::flat_hash_set ${ICU_LIBRARIES} boost_iostreams)
+target_link_libraries(engine index parser sparqlExpressions http SortPerformanceEstimator absl::flat_hash_set ${ICU_LIBRARIES} boost_iostreams)

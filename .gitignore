@@ -41,5 +41,7 @@ e2e_data/*
 *.swp
 
 # ctags generated tag file
+tags
 src/tags
 /build/
+sourcelist

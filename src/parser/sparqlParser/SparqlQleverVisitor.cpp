@@ -16,6 +16,8 @@
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
+#include "parser/data/Variable.h"
+#include "util/StringUtils.h"
 
 using namespace ad_utility::sparql_types;
 using namespace sparqlExpression;
@@ -677,8 +679,7 @@ uint64_t Visitor::visit(Parser::TextLimitClauseContext* ctx) {
 // ____________________________________________________________________________________
 SparqlValues Visitor::visit(Parser::InlineDataOneVarContext* ctx) {
   SparqlValues values;
-  auto var = visit(ctx->var());
-  values._variables.push_back(var.name());
+  values._variables.push_back(visit(ctx->var()));
   if (ctx->dataBlockValue().empty())
     reportError(ctx,
                 "No values were specified in Values "
@@ -700,9 +701,7 @@ SparqlValues Visitor::visit(Parser::InlineDataFullContext* ctx) {
     reportError(ctx,
                 "No variables were specified in Values "
                 "clause. This is not supported by QLever.");
-  for (auto& var : ctx->var()) {
-    values._variables.push_back(visit(var).name());
-  }
+  values._variables = visitVector(ctx->var());
   values._values = visitVector(ctx->dataBlockSingle());
   if (std::any_of(values._values.begin(), values._values.end(),
                   [numVars = values._variables.size()](const auto& inner) {
@@ -716,25 +715,25 @@ SparqlValues Visitor::visit(Parser::InlineDataFullContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-vector<std::string> Visitor::visit(Parser::DataBlockSingleContext* ctx) {
-  if (ctx->NIL())
-    reportError(ctx,
-                "No values were specified in DataBlock."
-                "This is not supported by QLever.");
+vector<TripleComponent> Visitor::visit(Parser::DataBlockSingleContext* ctx) {
+  if (ctx->NIL()) {
+    reportNotSupported(ctx, "Empty VALUES clauses are");
+  }
   return visitVector(ctx->dataBlockValue());
 }
 
 // ____________________________________________________________________________________
-std::string Visitor::visit(Parser::DataBlockValueContext* ctx) {
+TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
   // Return a string
   if (ctx->iri()) {
     return visit(ctx->iri());
   } else if (ctx->rdfLiteral()) {
-    // TODO<joka921> This is still wrong for XSD literals
-    return visit(ctx->rdfLiteral());
+    return TurtleStringParser<TokenizerCtre>::parseTripleObject(
+        visit(ctx->rdfLiteral()));
   } else if (ctx->numericLiteral()) {
-    // TODO implement
-    reportError(ctx, "Numbers in values clauses are not supported.");
+    return std::visit(
+        [](auto intOrDouble) { return TripleComponent{intOrDouble}; },
+        visit(ctx->numericLiteral()));
   } else if (ctx->booleanLiteral()) {
     // TODO implement
     reportError(ctx, "Booleans in values clauses are not supported.");

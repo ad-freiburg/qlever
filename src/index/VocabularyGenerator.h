@@ -33,15 +33,59 @@ class VocabularyMerger {
   // external part of the vocabulary and the mapping from local to global IDs.
   bool _noIdMapsAndIgnoreExternalVocab = false;
   // result of a call to mergeVocabulary
-  struct VocMergeRes {
-    size_t _numWordsTotal;   // that many distinct words were found (size of the
-                             // vocabulary)
-    Id _langPredLowerBound;  // inclusive lower bound (as Id within the
-                             // vocabulary) for the added @en@rdfs:label style
-                             // predicates
-    Id _langPredUpperBound;  // exclusive upper bound ...
+  struct VocabularyMetaData {
+    // This struct is used to incrementally construct the range of IDs that
+    // correspond to a given prefix. To use it, all the words from the
+    // vocabulary must be passed to the member function `addIfWordMatches` in
+    // sorted order. After that, the range `[begin(), end())` is the range of
+    // all the words that start with the prefix.
+    struct IdRangeForPrefix {
+      IdRangeForPrefix(std::string prefix) : prefix_{std::move(prefix)} {}
+      // Check if `word` starts with the `prefix_`. If so, `wordIndex`
+      // will become part of the range that this struct represents.
+      // For this to work, all the words that start with the `prefix_` have to
+      // be passed in consecutively and their indices have to be consecutive
+      // and ascending.
+      void addIfWordMatches(std::string_view word, size_t wordIndex) {
+        if (!word.starts_with(prefix_)) {
+          return;
+        }
+        if (!beginWasSeen_) {
+          begin_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
+          beginWasSeen_ = true;
+        }
+        end_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex + 1));
+      }
+
+      Id begin() const { return begin_; }
+      Id end() const { return end_; }
+
+     private:
+      Id begin_ = ID_NO_VALUE;
+      Id end_ = ID_NO_VALUE;
+      std::string prefix_;
+      bool beginWasSeen_ = false;
+    };
+
+    size_t numWordsTotal_ = 0;  // that many distinct words were found (size of
+                                // the vocabulary)
+    IdRangeForPrefix langTaggedPredicates_{"@"};
+    IdRangeForPrefix internalEntities_{INTERNAL_ENTITIES_URI_PREFIX};
   };
 
+ private:
+  // private data members
+
+  // The result (mostly metadata) which we'll return.
+  VocabularyMetaData metaData_;
+  std::optional<TripleComponentWithIndex> lastTripleComponent_ = std::nullopt;
+  std::ofstream outfileExternal_;
+  // we will store pairs of <partialId, globalId>
+  std::vector<IdPairMMapVec> idVecs_;
+
+  const size_t _bufferSize = 10000000;
+
+ public:
   VocabularyMerger() = default;
 
   // _______________________________________________________________
@@ -58,9 +102,9 @@ class VocabularyMerger {
   // This automatically resets the inner members after finishing, to leave the
   // external interface stateless
   template <typename Comp, typename InternalVocabularyAction>
-  VocMergeRes mergeVocabulary(const std::string& basename, size_t numFiles,
-                              Comp comparator,
-                              InternalVocabularyAction& action);
+  VocabularyMetaData mergeVocabulary(const std::string& basename,
+                                     size_t numFiles, Comp comparator,
+                                     InternalVocabularyAction& action);
 
  private:
   // helper struct used in the priority queue for merging.
@@ -95,31 +139,11 @@ class VocabularyMerger {
 
   // close all associated files and MmapVectors and reset all internal variables
   void clear() {
-    _totalWritten = 0;
-    _lastTripleComponent = std::nullopt;
-    _outfileExternal = std::ofstream();
-    _idVecs.clear();
-    _firstLangPredSeen = false;
-    _langPredLowerBound = ID_NO_VALUE;
-    _langPredUpperBound = ID_NO_VALUE;
+    metaData_ = VocabularyMetaData{};
+    lastTripleComponent_ = std::nullopt;
+    outfileExternal_ = std::ofstream();
+    idVecs_.clear();
   }
-
-  // private data members
-
-  // the number of words we have written. This also is the global Id of the next
-  // word we see, unless it is is equal to the previous word
-  size_t _totalWritten = 0;
-  // keep track of the last seen word to correctly handle duplicates
-
-  std::optional<TripleComponentWithIndex> _lastTripleComponent = std::nullopt;
-  std::ofstream _outfileExternal;
-  // we will store pairs of <partialId, globalId>
-  std::vector<IdPairMMapVec> _idVecs;
-  bool _firstLangPredSeen = false;
-  Id _langPredLowerBound = ID_NO_VALUE;
-  Id _langPredUpperBound = ID_NO_VALUE;
-
-  const size_t _bufferSize = 10000000;
 
   // inner helper function for the parallel pipeline. perform the actual write
   // to the IdPairVecs. Format of argument is <vecToWriteTo<internalId,

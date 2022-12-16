@@ -96,28 +96,41 @@ void OrderBy::computeResult(ResultTable* result) {
   }
 
   LOG(DEBUG) << "OrderBy result computation..." << endl;
-  result->_idTable.setCols(subRes->_idTable.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
+
+  result->_idTable = subRes->_idTable.clone();
+  /*
+  result->_idTable.setNumColumns(subRes->_idTable.numColumns());
   result->_idTable.insert(result->_idTable.end(), subRes->_idTable.begin(),
                           subRes->_idTable.end());
+                          */
 
-  int width = result->_idTable.cols();
+  int width = result->_idTable.numColumns();
+
   // TODO(florian): Check if the lambda is a performance problem
-  CALL_FIXED_SIZE_1(width, getEngine().sort, &result->_idTable,
-                    [this](const auto& a, const auto& b) {
-                      for (auto& entry : _sortIndices) {
-                        if (a[entry.first] < b[entry.first]) {
-                          return !entry.second;
-                        }
-                        if (a[entry.first] > b[entry.first]) {
-                          return entry.second;
-                        }
-                      }
-                      return a[0] < b[0];
-                    });
+  auto comparison = [this](const auto& a, const auto& b) {
+    for (auto& entry : _sortIndices) {
+      if (a[entry.first] < b[entry.first]) {
+        return !entry.second;
+      }
+      if (a[entry.first] > b[entry.first]) {
+        return entry.second;
+      }
+    }
+    return a[0] < b[0];
+  };
+
+  // We cannot use the `CALL_FIXED_SIZE` macro here because the `sort` function
+  // is templated not only on the integer `I` (which the `callFixedSize`
+  // function deals with) but also on the `comparison`.
+  DISABLE_WARNINGS_CLANG_13
+  ad_utility::callFixedSize(width, [&result, &comparison]<int I>() {
+    Engine::sort<I>(&result->_idTable, comparison);
+  });
+  ENABLE_WARNINGS_CLANG_13
   result->_sortedBy = resultSortedOn();
 
   LOG(DEBUG) << "OrderBy result computation done." << endl;

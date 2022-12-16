@@ -50,9 +50,11 @@ static constexpr std::string_view TEXTSCORE_VARIABLE_PREFIX = "?ql_textscore_";
 // For anonymous nodes in Turtle.
 static const std::string ANON_NODE_PREFIX = "QLever-Anon-Node";
 
-static const std::string URI_PREFIX = "<QLever-internal-function/";
+static const std::string INTERNAL_ENTITIES_URI_PREFIX =
+    "<QLever-internal-function/";
 
-static const std::string LANGUAGE_PREDICATE = URI_PREFIX + "langtag>";
+static const std::string LANGUAGE_PREDICATE =
+    INTERNAL_ENTITIES_URI_PREFIX + "langtag>";
 
 static const char VALUE_PREFIX[] = ":v:";
 static const char VALUE_DATE_PREFIX[] = ":v:date:";
@@ -156,6 +158,16 @@ static constexpr double MAKE_ROOM_SLACK_FACTOR = 2;
 // The version of the binary format of the pattern files. Has to be increased,
 // when this format is changed.
 static constexpr uint32_t PATTERNS_FILE_VERSION = 1;
+
+// The maximal number of columns an `IdTable` (an intermediate result of
+// query evaluation) may have to be able to use the more efficient `static`
+// implementation (For details see `IdTable.h`, `CallFixedSize.h` and the
+// usage of `CALL_FIXED_SIZE` in the various subclasses of `Operation`.
+// Increasing this number improves the runtime for operations on tables with
+// more columns, but also increases compile times because more templates
+// have to be instantiated. It might also be necessary to increase some internal
+// compiler limits for the evaluation of constexpr functions and templates.
+static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 
 inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Double;

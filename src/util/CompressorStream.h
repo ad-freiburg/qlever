@@ -14,8 +14,8 @@
 #include <boost/iostreams/filtering_stream.hpp>
 #include <string>
 
-#include "./Generator.h"
-#include "./HttpServer/ContentEncodingHelper.h"
+#include "util/Generator.h"
+#include "util/http/ContentEncodingHelper.h"
 
 namespace ad_utility::streams {
 namespace io = boost::iostreams;

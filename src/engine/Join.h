@@ -145,10 +145,10 @@ class Join : public Operation {
    * @param[in] The table, in which the new combined row should be insterted.
    * Must be static.
   */
-  template <int A_WIDTH, int B_WIDTH, int TABLE_WIDTH>
+  template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>
   static void addCombinedRowToIdTable(
-      const std::decay_t<typename IdTableStatic<A_WIDTH>::const_row_type>& rowA,
-      const std::decay_t<typename IdTableStatic<B_WIDTH>::const_row_type>& rowB,
+      const ROW_A& rowA,
+      const ROW_B& rowB,
       const size_t jcRowB,
       IdTableStatic<TABLE_WIDTH>* table);
 };

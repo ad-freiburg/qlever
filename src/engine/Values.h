@@ -1,6 +1,8 @@
-// Copyright 2019, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
+// Copyright 2019 - 2022, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Florian Kramer <kramerf@cs.uni-freiburg.de>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -44,14 +46,16 @@ class Values : public Operation {
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
- private:
+ public:
+  // These two are also used by class `Service`, hence public.
   virtual void computeResult(ResultTable* result) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+ private:
   template <size_t I>
-  void writeValues(IdTable* res, const Index& index,
-                   const SparqlValues& values);
+  void writeValues(IdTable* res, const Index& index, const SparqlValues& values,
+                   std::shared_ptr<LocalVocab> localVocab);
 
   /// remove all completely undefined values and variables
   /// throw if nothing remains

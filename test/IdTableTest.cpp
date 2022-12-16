@@ -8,8 +8,8 @@
 #include <array>
 #include <vector>
 
-#include "../src/engine/IdTable.h"
-#include "../src/global/Id.h"
+#include "engine/idTable/IdTable.h"
+#include "global/Id.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
@@ -21,6 +21,117 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
 auto I = [](const auto& id) {
   return Id::makeFromVocabIndex(VocabIndex::make(id));
 };
+
+// This unit tests is part of the documentation of the `IdTable` class. It
+// demonstrates the correct usage of the proxy references that
+// are returned by the `IdTable` when calling `operator[]` or when dereferencing
+// an iterator.
+TEST(IdTableTest, DocumentationOfIteratorUsage) {
+  IdTable t{2, allocator()};
+  t.push_back({I(42), I(43)});
+
+  // The following read-only calls use the proxy object and do not copy
+  // the rows (The right hand side of the `ASSERT_EQ` calls has the type
+  // `IdTable::row_reference_restricted`. The table is not changed, as there is
+  // no write access.
+  ASSERT_EQ(I(42), t[0][0]);
+  ASSERT_EQ(I(42), t(0, 0));
+  ASSERT_EQ(I(42), (*t.begin())[0]);
+
+  // Writing to the table directly via a temporary proxy reference is ok, as
+  // the syntax of all the following calls indicates that the table should
+  // be changed.
+  t[0][0] = I(5);
+  ASSERT_EQ(I(5), t(0, 0));
+  t(0, 0) = I(6);
+  ASSERT_EQ(I(6), t(0, 0));
+  (*t.begin())[0] = I(4);
+  ASSERT_EQ(I(4), t(0, 0));
+
+  // The following examples also mutate the `IdTable` which is again expected,
+  // because we explicitly bind to a reference:
+  {
+    IdTable::row_reference ref = t[0];
+    ref[0] = I(12);
+    ASSERT_EQ(I(12), t(0, 0));
+  }
+
+  // This is the interface that all generic algorithms that work on iterators
+  // use. The type of `ref` is also `IdTable::row_reference`.
+  {
+    std::iterator_traits<IdTable::iterator>::reference ref = *(t.begin());
+    ref[0] = I(13);
+    ASSERT_EQ(I(13), t(0, 0));
+  }
+
+  // The following calls do not change the table, but are also not expected to
+  // do so because we explicitly bind to a `value_type`.
+  {
+    IdTable::row_type row = t[0];  // Explitly copy/materialize the full row.
+    row[0] = I(50);
+    // We have changed the copied row, but not the table.
+    ASSERT_EQ(I(50), row[0]);
+    ASSERT_EQ(I(13), t[0][0]);
+  }
+  {
+    // Exactly the same example, but with `iterator`s and `iterator_traits`.
+    std::iterator_traits<IdTable::iterator>::value_type row =
+        *t.begin();  // Explitly copy/materialize the full row.
+    row[0] = I(51);
+    // We have changed the copied row, but not the table.
+    ASSERT_EQ(I(51), row[0]);
+    ASSERT_EQ(I(13), t[0][0]);
+  }
+
+  // The following examples show the cases where a syntax would lead to
+  // unexpected behavior and is therefore disabled.
+
+  {
+    auto rowProxy = t[0];
+    // x actually is a `row_reference_restricted`. This is unexpected because
+    // `auto` typically yields a value type. Reading from the proxy is fine, as
+    // read access never does any harm.
+    Id id = rowProxy[0];
+    ASSERT_EQ(I(13), id);
+    // The following syntax would change the table unexpectedly and therefore
+    // doesn't compile
+    // rowProxy[0] = I(32);  // Would change `t`, but the variable was created
+    // via auto!
+    // The technical reason is that the `operator[]` returns a `const Id&` even
+    // though the `rowProxy` object is not const:
+    static_assert(std::is_same_v<const Id&, decltype(rowProxy[0])>);
+  }
+  {
+    // Exactly the same example, but with an iterator.
+    auto rowProxy = *t.begin();
+    // `rowProxy` actually is a `row_reference_restricted`. This is unexpected
+    // because `auto` typically yields a value type. Reading from the proxy is
+    // fine, as read access never does any harm.
+    Id id = rowProxy[0];
+    ASSERT_EQ(I(13), id);
+    // The following syntax would change the table unexpectedly and therefore
+    // doesn't compile
+    // rowProxy[0] = I(32);  // Would change `t`, but the variable was created
+    // via auto!
+    // The technical reason is that the `operator[]` returns a `const Id&` even
+    // though the `rowProxy` object is not const:
+    static_assert(std::is_same_v<const Id&, decltype(rowProxy[0])>);
+  }
+
+  // The following example demonstrates the remaining loophole how a
+  // `row_reference_restricted` variable can still be used to modify the table,
+  // but it has a rather "creative" syntax that shouldn't pass any code review.
+  {
+    auto rowProxy = *t.begin();
+    // The write access to an rvalue of type `row_reference_restricted` is
+    // allowed. This is necessary to make the above examples like `*t.begin() =
+    // I(12)` work. However this syntax (explicitly moving, and then directly
+    // writing to the moved object) is not something that should ever be
+    // written.
+    std::move(rowProxy)[0] = I(4321);
+    ASSERT_EQ(I(4321), t(0, 0));
+  }
+}
 
 TEST(IdTableTest, push_back_and_assign) {
   constexpr size_t NUM_ROWS = 30;
@@ -34,8 +145,8 @@ TEST(IdTableTest, push_back_and_assign) {
   }
 
   ASSERT_EQ(NUM_ROWS, t1.size());
-  ASSERT_EQ(NUM_ROWS, t1.rows());
-  ASSERT_EQ(NUM_COLS, t1.cols());
+  ASSERT_EQ(NUM_ROWS, t1.numRows());
+  ASSERT_EQ(NUM_COLS, t1.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
@@ -52,7 +163,7 @@ TEST(IdTableTest, push_back_and_assign) {
   }
 }
 
-TEST(IdTableTest, insert) {
+TEST(IdTableTest, insertAtEnd) {
   IdTable t1{4, allocator()};
   t1.push_back({I(7), I(2), I(4), I(1)});
   t1.push_back({I(0), I(22), I(1), I(4)});
@@ -63,38 +174,15 @@ TEST(IdTableTest, insert) {
   init.push_back({I(0), I(6), I(8), I(5)});
   init.push_back({I(9), I(2), I(6), I(8)});
 
-  IdTable t2(init);
-
-  // Test inserting at the beginning
-  t2.insert(t2.begin(), t1.begin(), t1.end());
-  for (size_t i = 0; i < t1.size(); i++) {
-    ASSERT_EQ(t1[i], t2[i]);
-  }
-  for (size_t i = 0; i < init.size(); i++) {
-    ASSERT_EQ(init[i], t2[i + t1.size()]);
-  }
+  IdTable t2 = init.clone();
 
   // Test inserting at the end
-  t2 = init;
-  t2.insert(t2.end(), t1.begin(), t1.end());
+  t2.insertAtEnd(t1.begin(), t1.end());
   for (size_t i = 0; i < init.size(); i++) {
-    ASSERT_EQ(init[i], t2[i]);
+    ASSERT_EQ(init[i], t2[i]) << i;
   }
   for (size_t i = 0; i < t1.size(); i++) {
     ASSERT_EQ(t1[i], t2[i + init.size()]);
-  }
-
-  // Test inserting at the center
-  t2 = init;
-  t2.insert(t2.begin() + 3, t1.begin(), t1.end());
-  for (size_t i = 0; i < t2.size(); i++) {
-    if (i < 3) {
-      ASSERT_EQ(init[i], t2[i]);
-    } else if (i < 5) {
-      ASSERT_EQ(t1[i - 3], t2[i]);
-    } else {
-      ASSERT_EQ(init[i - 2], t2[i]);
-    }
   }
 }
 
@@ -108,15 +196,15 @@ TEST(IdTableTest, reserve_and_resize) {
 
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
-    t1.push_back();
+    t1.emplace_back();
     for (size_t j = 0; j < NUM_COLS; j++) {
       t1(i, j) = I(i * NUM_COLS + 1 + j);
     }
   }
 
   ASSERT_EQ(NUM_ROWS, t1.size());
-  ASSERT_EQ(NUM_ROWS, t1.rows());
-  ASSERT_EQ(NUM_COLS, t1.cols());
+  ASSERT_EQ(NUM_ROWS, t1.numRows());
+  ASSERT_EQ(NUM_COLS, t1.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
@@ -132,8 +220,8 @@ TEST(IdTableTest, reserve_and_resize) {
   }
 
   ASSERT_EQ(NUM_ROWS, t2.size());
-  ASSERT_EQ(NUM_ROWS, t2.rows());
-  ASSERT_EQ(NUM_COLS, t2.cols());
+  ASSERT_EQ(NUM_ROWS, t2.numRows());
+  ASSERT_EQ(NUM_COLS, t2.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(I(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
@@ -152,27 +240,27 @@ TEST(IdTableTest, copyAndMove) {
   }
 
   // Test all copy and move constructors and assignment operators
-  IdTable t2(t1);
-  IdTable t3 = t1;
-  IdTable tmp = t1;
+  IdTable t2 = t1.clone();
+  IdTable t3 = t1.clone();
+  IdTable tmp = t1.clone();
   IdTable t4(std::move(t1));
   IdTable t5 = std::move(tmp);
 
   ASSERT_EQ(NUM_ROWS, t2.size());
-  ASSERT_EQ(NUM_ROWS, t2.rows());
-  ASSERT_EQ(NUM_COLS, t2.cols());
+  ASSERT_EQ(NUM_ROWS, t2.numRows());
+  ASSERT_EQ(NUM_COLS, t2.numColumns());
 
   ASSERT_EQ(NUM_ROWS, t3.size());
-  ASSERT_EQ(NUM_ROWS, t3.rows());
-  ASSERT_EQ(NUM_COLS, t3.cols());
+  ASSERT_EQ(NUM_ROWS, t3.numRows());
+  ASSERT_EQ(NUM_COLS, t3.numColumns());
 
   ASSERT_EQ(NUM_ROWS, t4.size());
-  ASSERT_EQ(NUM_ROWS, t4.rows());
-  ASSERT_EQ(NUM_COLS, t4.cols());
+  ASSERT_EQ(NUM_ROWS, t4.numRows());
+  ASSERT_EQ(NUM_COLS, t4.numColumns());
 
   ASSERT_EQ(NUM_ROWS, t5.size());
-  ASSERT_EQ(NUM_ROWS, t5.rows());
-  ASSERT_EQ(NUM_COLS, t5.cols());
+  ASSERT_EQ(NUM_ROWS, t5.numRows());
+  ASSERT_EQ(NUM_COLS, t5.numColumns());
 
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
@@ -200,8 +288,8 @@ TEST(IdTableTest, erase) {
   }
 
   ASSERT_EQ(NUM_ROWS, t1.size());
-  ASSERT_EQ(NUM_ROWS, t1.rows());
-  ASSERT_EQ(NUM_COLS, t1.cols());
+  ASSERT_EQ(NUM_ROWS, t1.numRows());
+  ASSERT_EQ(NUM_COLS, t1.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
@@ -218,7 +306,7 @@ TEST(IdTableTest, iterating) {
   IdTable t1(NUM_COLS, allocator());
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
-    t1.push_back();
+    t1.emplace_back();
     for (size_t j = 0; j < NUM_COLS; j++) {
       t1(i, j) = I(i * NUM_COLS + 1 + j);
     }
@@ -250,7 +338,7 @@ TEST(IdTableTest, sortTest) {
   test.push_back({I(5), I(8)});
   test.push_back({I(6), I(2)});
 
-  IdTable orig(test);
+  IdTable orig = test.clone();
 
   // First check for the requirements of the iterator:
   // Value Swappable : swap rows 0 and 2
@@ -276,7 +364,7 @@ TEST(IdTableTest, sortTest) {
   ASSERT_EQ(*i1, tmp2);
 
   // Now try the actual sort
-  test = orig;
+  test = orig.clone();
   std::sort(test.begin(), test.end(),
             [](const auto& v1, const auto& v2) { return v1[0] < v2[0]; });
 
@@ -306,8 +394,8 @@ TEST(IdTableStaticTest, push_back_and_assign) {
   }
 
   ASSERT_EQ(NUM_ROWS, t1.size());
-  ASSERT_EQ(NUM_ROWS, t1.rows());
-  ASSERT_EQ(NUM_COLS, t1.cols());
+  ASSERT_EQ(NUM_ROWS, t1.numRows());
+  ASSERT_EQ(NUM_COLS, t1.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
@@ -335,40 +423,18 @@ TEST(IdTableStaticTest, insert) {
   init.push_back({I(0), I(6), I(8), I(5)});
   init.push_back({I(9), I(2), I(6), I(8)});
 
-  IdTableStatic<4> t2(init);
-
-  // Test inserting at the beginning
-  t2.insert(t2.begin(), t1.begin(), t1.end());
-  for (size_t i = 0; i < t1.size(); i++) {
-    ASSERT_EQ(t1[i], t2[i]);
-  }
-  for (size_t i = 0; i < init.size(); i++) {
-    ASSERT_EQ(init[i], t2[i + t1.size()]);
-  }
+  IdTableStatic<4> t2 = init.clone();
 
   // Test inserting at the end
-  t2 = init;
-  t2.insert(t2.end(), t1.begin(), t1.end());
+  t2.insertAtEnd(t1.begin(), t1.end());
   for (size_t i = 0; i < init.size(); i++) {
-    ASSERT_EQ(init[i], t2[i]);
+    for (size_t j = 0; j < init.numColumns(); j++) {
+      EXPECT_EQ(init(i, j), t2(i, j)) << i << ", " << j;
+    }
+    EXPECT_EQ(init[i], t2[i]) << i << "th row was a mismatch";
   }
   for (size_t i = 0; i < t1.size(); i++) {
     ASSERT_EQ(t1[i], t2[i + init.size()]);
-  }
-
-  // Test inserting at the center
-  t2 = init;
-  t2.insert(t2.begin() + 3, t1.begin(), t1.end());
-  for (size_t i = 0; i < t2.size(); i++) {
-    if (i < 3) {
-      ASSERT_EQ(init[i], t2[i]);
-
-    } else if (i < 5) {
-      ASSERT_EQ(t1[i - 3], t2[i]);
-
-    } else {
-      ASSERT_EQ(init[i - 2], t2[i]);
-    }
   }
 }
 
@@ -382,15 +448,15 @@ TEST(IdTableStaticTest, reserve_and_resize) {
 
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
-    t1.push_back();
+    t1.emplace_back();
     for (size_t j = 0; j < NUM_COLS; j++) {
       t1(i, j) = I(i * NUM_COLS + 1 + j);
     }
   }
 
   ASSERT_EQ(NUM_ROWS, t1.size());
-  ASSERT_EQ(NUM_ROWS, t1.rows());
-  ASSERT_EQ(NUM_COLS, t1.cols());
+  ASSERT_EQ(NUM_ROWS, t1.numRows());
+  ASSERT_EQ(NUM_COLS, t1.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
@@ -406,8 +472,8 @@ TEST(IdTableStaticTest, reserve_and_resize) {
   }
 
   ASSERT_EQ(NUM_ROWS, t2.size());
-  ASSERT_EQ(NUM_ROWS, t2.rows());
-  ASSERT_EQ(NUM_COLS, t2.cols());
+  ASSERT_EQ(NUM_ROWS, t2.numRows());
+  ASSERT_EQ(NUM_COLS, t2.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(I(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
@@ -426,27 +492,27 @@ TEST(IdTableStaticTest, copyAndMove) {
   }
 
   // Test all copy and move constructors and assignment operators
-  IdTableStatic<NUM_COLS> t2(t1);
-  IdTableStatic<NUM_COLS> t3 = t1;
-  IdTableStatic<NUM_COLS> tmp = t1;
+  IdTableStatic<NUM_COLS> t2 = t1.clone();
+  IdTableStatic<NUM_COLS> t3 = t1.clone();
+  IdTableStatic<NUM_COLS> tmp = t1.clone();
   IdTableStatic<NUM_COLS> t4(std::move(t1));
   IdTableStatic<NUM_COLS> t5 = std::move(tmp);
 
   ASSERT_EQ(NUM_ROWS, t2.size());
-  ASSERT_EQ(NUM_ROWS, t2.rows());
-  ASSERT_EQ(NUM_COLS, t2.cols());
+  ASSERT_EQ(NUM_ROWS, t2.numRows());
+  ASSERT_EQ(NUM_COLS, t2.numColumns());
 
   ASSERT_EQ(NUM_ROWS, t3.size());
-  ASSERT_EQ(NUM_ROWS, t3.rows());
-  ASSERT_EQ(NUM_COLS, t3.cols());
+  ASSERT_EQ(NUM_ROWS, t3.numRows());
+  ASSERT_EQ(NUM_COLS, t3.numColumns());
 
   ASSERT_EQ(NUM_ROWS, t4.size());
-  ASSERT_EQ(NUM_ROWS, t4.rows());
-  ASSERT_EQ(NUM_COLS, t4.cols());
+  ASSERT_EQ(NUM_ROWS, t4.numRows());
+  ASSERT_EQ(NUM_COLS, t4.numColumns());
 
   ASSERT_EQ(NUM_ROWS, t5.size());
-  ASSERT_EQ(NUM_ROWS, t5.rows());
-  ASSERT_EQ(NUM_COLS, t5.cols());
+  ASSERT_EQ(NUM_ROWS, t5.numRows());
+  ASSERT_EQ(NUM_COLS, t5.numColumns());
 
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
@@ -474,8 +540,8 @@ TEST(IdTableStaticTest, erase) {
   }
 
   ASSERT_EQ(NUM_ROWS, t1.size());
-  ASSERT_EQ(NUM_ROWS, t1.rows());
-  ASSERT_EQ(NUM_COLS, t1.cols());
+  ASSERT_EQ(NUM_ROWS, t1.numRows());
+  ASSERT_EQ(NUM_COLS, t1.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
@@ -492,7 +558,7 @@ TEST(IdTableStaticTest, iterating) {
   IdTableStatic<NUM_COLS> t1{allocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
-    t1.push_back();
+    t1.emplace_back();
     for (size_t j = 0; j < NUM_COLS; j++) {
       t1(i, j) = I(i * NUM_COLS + 1 + j);
     }
@@ -525,22 +591,22 @@ TEST(IdTableTest, conversion) {
   table.push_back({I(7), I(12), I(2)});
   table.push_back({I(9), I(3), I(4)});
 
-  IdTable initial = table;
+  IdTable initial = table.clone();
 
-  IdTableStatic<3> s = std::move(table).moveToStatic<3>();
+  IdTableStatic<3> s = std::move(table).toStatic<3>();
   ASSERT_EQ(4u, s.size());
-  ASSERT_EQ(3u, s.cols());
+  ASSERT_EQ(3u, s.numColumns());
   for (size_t i = 0; i < s.size(); i++) {
-    for (size_t j = 0; j < s.cols(); j++) {
+    for (size_t j = 0; j < s.numColumns(); j++) {
       ASSERT_EQ(initial(i, j), s(i, j));
     }
   }
 
-  table = std::move(s).moveToDynamic();
+  table = std::move(s).toDynamic();
   ASSERT_EQ(4u, table.size());
-  ASSERT_EQ(3u, table.cols());
+  ASSERT_EQ(3u, table.numColumns());
   for (size_t i = 0; i < table.size(); i++) {
-    for (size_t j = 0; j < table.cols(); j++) {
+    for (size_t j = 0; j < table.numColumns(); j++) {
       ASSERT_EQ(initial(i, j), table(i, j));
     }
   }
@@ -548,9 +614,9 @@ TEST(IdTableTest, conversion) {
   auto view = table.asStaticView<3>();
   static_assert(std::is_same_v<decltype(view), IdTableView<3>>);
   ASSERT_EQ(4u, view.size());
-  ASSERT_EQ(3u, view.cols());
+  ASSERT_EQ(3u, view.numColumns());
   for (size_t i = 0; i < view.size(); i++) {
-    for (size_t j = 0; j < view.cols(); j++) {
+    for (size_t j = 0; j < view.numColumns(); j++) {
       ASSERT_EQ(initial(i, j), view(i, j));
     }
   }
@@ -562,22 +628,22 @@ TEST(IdTableTest, conversion) {
   tableVar.push_back({I(3), I(2), I(3), I(2), I(5), I(6)});
   tableVar.push_back({I(5), I(5), I(9), I(4), I(7), I(0)});
 
-  IdTable initialVar = tableVar;
+  IdTable initialVar = tableVar.clone();
 
-  IdTableStatic<6> staticVar = std::move(tableVar).moveToStatic<6>();
+  IdTableStatic<6> staticVar = std::move(tableVar).toStatic<6>();
   ASSERT_EQ(initialVar.size(), staticVar.size());
-  ASSERT_EQ(initialVar.cols(), staticVar.cols());
+  ASSERT_EQ(initialVar.numColumns(), staticVar.numColumns());
   for (size_t i = 0; i < staticVar.size(); i++) {
-    for (size_t j = 0; j < staticVar.cols(); j++) {
+    for (size_t j = 0; j < staticVar.numColumns(); j++) {
       ASSERT_EQ(initialVar(i, j), staticVar(i, j));
     }
   }
 
-  IdTable dynamicVar = std::move(staticVar).moveToDynamic();
+  IdTable dynamicVar = std::move(staticVar).toDynamic();
   ASSERT_EQ(initialVar.size(), dynamicVar.size());
-  ASSERT_EQ(initialVar.cols(), dynamicVar.cols());
+  ASSERT_EQ(initialVar.numColumns(), dynamicVar.numColumns());
   for (size_t i = 0; i < dynamicVar.size(); i++) {
-    for (size_t j = 0; j < dynamicVar.cols(); j++) {
+    for (size_t j = 0; j < dynamicVar.numColumns(); j++) {
       ASSERT_EQ(initialVar(i, j), dynamicVar(i, j));
     }
   }
@@ -585,9 +651,9 @@ TEST(IdTableTest, conversion) {
   auto viewVar = std::move(dynamicVar).asStaticView<6>();
   static_assert(std::is_same_v<decltype(viewVar), IdTableView<6>>);
   ASSERT_EQ(initialVar.size(), viewVar.size());
-  ASSERT_EQ(initialVar.cols(), viewVar.cols());
+  ASSERT_EQ(initialVar.numColumns(), viewVar.numColumns());
   for (size_t i = 0; i < viewVar.size(); i++) {
-    for (size_t j = 0; j < viewVar.cols(); j++) {
+    for (size_t j = 0; j < viewVar.numColumns(); j++) {
       ASSERT_EQ(initialVar(i, j), viewVar(i, j));
     }
   }

@@ -1,11 +1,43 @@
-//  Copyright 2022, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include "parser/GraphPatternOperation.h"
 
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "parser/ParsedQuery.h"
 #include "util/Forward.h"
+
 namespace parsedQuery {
+
+// _____________________________________________________________________________
+std::string SparqlValues::variablesToString() const {
+  return absl::StrJoin(_variables, " ",
+                       [](std::string* out, const Variable& variable) {
+                         out->append(variable.name());
+                       });
+}
+
+// _____________________________________________________________________________
+std::string SparqlValues::valuesToString() const {
+  auto tripleComponentVectorAsValueTuple =
+      [](const std::vector<TripleComponent>& v) -> std::string {
+    return absl::StrCat(
+        "(",
+        absl::StrJoin(v, " ",
+                      [](std::string* out, const TripleComponent& tc) {
+                        out->append(tc.toString());
+                      }),
+        ")");
+  };
+  return absl::StrJoin(
+      _values, " ",
+      [&](std::string* out, const std::vector<TripleComponent>& v) {
+        out->append(tripleComponentVectorAsValueTuple(v));
+      });
+}
 
 // Small anonymous helper function that is used in the definition of the member
 // functions of the `Subquery` class.
@@ -59,19 +91,8 @@ void GraphPatternOperation::toString(std::ostringstream& os,
       // TODO<joka921> make the subquery a value-semantics type.
       os << arg.get().asString();
     } else if constexpr (std::is_same_v<T, Values>) {
-      os << "VALUES (";
-      for (const auto& v : arg._inlineValues._variables) {
-        os << v << ' ';
-      }
-      os << ") ";
-
-      for (const auto& v : arg._inlineValues._values) {
-        os << "(";
-        for (const auto& val : v) {
-          os << val << ' ';
-        }
-        os << ')';
-      }
+      os << "VALUES (" << arg._inlineValues.variablesToString() << ") "
+         << arg._inlineValues.valuesToString();
     } else if constexpr (std::is_same_v<T, BasicGraphPattern>) {
       for (size_t i = 0; i + 1 < arg._triples.size(); ++i) {
         os << "\n";

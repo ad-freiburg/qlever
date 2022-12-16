@@ -59,14 +59,18 @@ class IndexScan : public Operation {
     // Do nothing.
   }
 
-  virtual size_t getSizeEstimate() override {
-    if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
-      _sizeEstimate = computeSizeEstimate();
-    }
+  size_t getSizeEstimate() const {
+    AD_CHECK(_sizeEstimate != std::numeric_limits<size_t>::max());
     return _sizeEstimate;
   }
 
-  virtual size_t getCostEstimate() override { return getSizeEstimate(); }
+  // TODO<joka921> Make the `getSizeEstimate()` function `const` for ALL the
+  // `Operations`.
+  size_t getSizeEstimate() override {
+    return const_cast<const IndexScan*>(this)->getSizeEstimate();
+  }
+
+  virtual size_t getCostEstimate() override;
 
   void determineMultiplicities();
 

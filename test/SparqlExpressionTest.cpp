@@ -37,11 +37,10 @@ auto checkResultsEqual = [](const auto& a, const auto& b) {
 
 template <typename NaryExpression>
 auto testNaryExpression = [](const auto& expected, auto&&... operands) {
-  QueryExecutionContext* qec = nullptr;
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   sparqlExpression::VariableToColumnAndResultTypeMap map;
-  ResultTable::LocalVocab localVocab;
+  LocalVocab localVocab;
   IdTable table{alloc};
 
   auto getResultSize = []<typename T>(const T& operand) -> size_t {
@@ -53,8 +52,8 @@ auto testNaryExpression = [](const auto& expected, auto&&... operands) {
 
   auto resultSize = std::max({getResultSize(operands)...});
 
-  sparqlExpression::EvaluationContext context{*qec, map, table, alloc,
-                                              localVocab};
+  sparqlExpression::EvaluationContext context{*ad_utility::testing::getQec(),
+                                              map, table, alloc, localVocab};
   context._endIndex = resultSize;
 
   auto clone = [](const auto& x) {
