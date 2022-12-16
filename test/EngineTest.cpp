@@ -53,6 +53,32 @@ IdTable makeIdTableFromVector(std::vector<std::array<size_t, TABLE_WIDTH>> table
 }
 
 /*
+ * A structure containing all information needed for a normal join test. A
+ * normal join test is defined as two IdTables being joined, the resulting
+ * IdTable tested, if it is sorted after the join column, or not, and this
+ * IdTable than compared with the sampleSolution.
+ */
+struct normalJoinTest {
+  IdTable leftIdTable;
+  size_t leftJC; // Join column for the left IdTable.
+  IdTable rightIdTable;
+  size_t rightJC; // Join column for the right IdTable.
+  bool testForSorted; // Should the result of the join be tested, if it is
+                      // orderd after leftJC? In other words, ordered after the join column?
+  IdTable sampleSolution;
+
+  normalJoinTest(const IdTable& LeftIdTable, const size_t LeftJC, const IdTable& RightIdTable,
+        const size_t RightJC, const IdTable& SampleSolution, const bool TestForSorted = false) {
+    leftIdTable = LeftIdTable.clone();
+    leftJC = LeftJC;
+    rightIdTable = RightIdTable.clone();
+    rightJC = RightJC;
+    sampleSolution = SampleSolution.clone();
+    testForSorted = TestForSorted;
+  }
+};
+
+/*
  * @brief Tests, if the given IdTable has the same content as the sample
  * solution and, if the option was choosen, if the IdTable is sorted by
  * the join column.
@@ -173,137 +199,90 @@ IdTable useJoinFunctionOnVectorsTables(
 }
 
 /*
- * @brief Goes through the sets of tests, converts the given vectors to
- * IdTables, joins them together with the given join function and
- * compares the results with the given sample solution.
- * However, because of technical limitations, all left/right/sample-solution
- * vectors MUST have the same amount of columns.
+ * @brief Goes through the sets of tests, joins them together with the given
+ * join function and compares the results with the given sample solution.
  *
- * @tparam TABLE_A_WIDTH is the width of the left tables.
- * @tparam TABLE_B_WIDTH is the width of the right tables.
- * @tparam TABLE_RESULT_WIDTH is the width of the sample solution tables.
- * @tparam How many test cases we have.
  * @tparam JOIN_FUNCTION is used to allow the transfer of any type of
  *  lambda function, that could contain a join function. You never have to
  *  actually specify this parameter, just let inference do its job.
  *
- * @param testSet is an array of tests, wrritten as tuples. The items in
- * the tuple have the following meaning:
- *  - First item: The left IdTable described through a vector of arrays.
- *  - Second item: The join column of the left IdTable.
- *  - Third item: The right IdTable described through a vector of arrays.
- *  - Fourth item: The join column of the right IdTable.
- *  - Fith item: The sample solution of the join function performed on both
- *    described IdTables. Once again, this IdTable is described through a
- *    vector of arrays.
+ * @param testSet is an array of normalJoinTests, that describe what tests to
+ *  do. For an explanation, how to read normalJoinTest, see the definition.
  * @param func the function, that will be used for joining the two tables
  *  together. Look into src/engine/Join.h, or this file, for how it should look like.
- * @param testForSorted If this is true, then the result of func on the entries
- *  of testSet will also be tested on if they are sorted by their join column.
  */
-template<size_t TABLE_A_WIDTH, size_t TABLE_B_WIDTH, size_t TABLE_RESULT_WIDTH, size_t NUMBER_OF_TESTS, typename JOIN_FUNCTION>
+template<typename JOIN_FUNCTION>
 void goThroughSetOfTestsWithJoinFunction(
-      const std::array<std::tuple< std::vector<std::array<size_t, TABLE_A_WIDTH>>, size_t, std::vector<std::array<size_t, TABLE_B_WIDTH>>, size_t, std::vector<std::array<size_t, TABLE_RESULT_WIDTH>>> , NUMBER_OF_TESTS> testSet,
+      std::vector<normalJoinTest> testSet,
       JOIN_FUNCTION func,
-      const bool testForSorted = false,
       ad_utility::source_location t = ad_utility::source_location::current()
     ) {
   // For generating better messages, when failing a test.
   auto trace = generateLocationTrace(t, "goThroughSetOfTestsWithJoinFunction");
 
-  for (size_t i = 0; i < NUMBER_OF_TESTS; i++) {
-    // For easier reading.
-    const std::vector<std::array<size_t, TABLE_A_WIDTH>>& tableAVector = std::get<0>(testSet[i]);
-    const size_t jcA = std::get<1>(testSet[i]);
-    const std::vector<std::array<size_t, TABLE_B_WIDTH>>& tableBVector = std::get<2>(testSet[i]);
-    const size_t jcB = std::get<3>(testSet[i]);
-    const std::vector<std::array<size_t, TABLE_RESULT_WIDTH>>& sampleSolutionTabletVector = std::get<4>(testSet[i]);
-    const size_t sampleSolutionSize = sampleSolutionTabletVector.size();
-    
-    IdTable resultTable = useJoinFunctionOnVectorsTables(tableAVector, jcA, tableBVector, jcB, func);
+  for (normalJoinTest const& test: testSet) {
+    IdTable resultTable = useJoinFunctionOnVectorsTables(test.leftIdTable, test.leftJC, test.rightIdTable, test.rightJC, func);
 
-    compareIdTableWithSolution(resultTable, sampleSolutionTabletVector, testForSorted, jcA);
-    ASSERT_EQ(sampleSolutionSize, resultTable.size());
+    compareIdTableWithSolution(resultTable, test.sampleSolution, test.testForSorted, test.leftIdTable);
   }
 }
 
 /* 
- * @brief Creates and returns a set of join tests for the normal join function
- * in the formate described for goThroughSetofTestsWithJoinFunction.
+ * @brief Return a vector of normalJoinTest for testing with the normal join function. 
  */
-std::array<std::tuple< std::vector<std::array<size_t, 2>>, size_t, std::vector<std::array<size_t, 2>>, size_t, std::vector<std::array<size_t, 3>>> , 3> createNormalJoinTestSet() {
-  std::array<std::tuple< std::vector<std::array<size_t, 2>>, size_t, std::vector<std::array<size_t, 2>>, size_t, std::vector<std::array<size_t, 3>>> , 3> myTestSet;
+std::vector<normalJoinTest> createNormalJoinTestSet() {
+  std::vector<normalJoinTest> myTestSet;
 
-  myTestSet[0] = std::make_tuple(
-      std::vector<std::array<size_t, 2>>{{{1, 1}, {1, 3}, {2, 1}, {2, 2}, {4, 1}}},
-      0,
-      std::vector<std::array<size_t, 2>>{{{1, 3}, {1, 8}, {3, 1}, {4, 2}}},
-      0,
-      std::vector<std::array<size_t, 3>>{{1, 1, 3}, {1, 1, 8}, {1, 3, 3}, {1, 3, 8}, {4, 1, 2}}
-  );
+  // For easier creation of IdTables and readability.
+  std::vector<std::vector<size_t>> leftIdTable = {{1, 1}, {1, 3}, {2, 1}, {2, 2}, {4, 1}};
+  std::vector<std::vector<size_t>> rightIdTable = {{1, 3}, {1, 8}, {3, 1}, {4, 2}};
+  std::vector<std::vector<size_t>> sampleSolution = {{1, 1, 3}, {1, 1, 8}, {1, 3, 3}, {1, 3, 8}, {4, 1, 2}};
+  myTestSet.append(normalJoinTest(makeIdTableFromVector(leftIdTable), 0,
+        makeIdTableFromVector(rightIdTable), 0, makeIdTableFromVector(sampleSolution), true));
 
-  myTestSet[1] = std::make_tuple(
-      std::vector<std::array<size_t, 2>>{{{1, 1}, {1, 3}, {2, 1}, {2, 2}, {4, 1}}},
-      0,
-      std::vector<std::array<size_t, 2>>{{{1, 3}, {1, 8}, {3, 1}, {4, 2}}},
-      0,
-      std::vector<std::array<size_t, 3>>{{1, 1, 3}, {1, 1, 8}, {1, 3, 3}, {1, 3, 8}, {4, 1, 2}, {400000, 200000, 200000}}
-  );
+  leftIdTable = {{1, 1}, {1, 3}, {2, 1}, {2, 2}, {4, 1}};
+  rightIdTable ={{1, 3}, {1, 8}, {3, 1}, {4, 2}};
+  sampleSolution = {{1, 1, 3}, {1, 1, 8}, {1, 3, 3}, {1, 3, 8}, {4, 1, 2}, {400000, 200000, 200000}};
   for (size_t i = 1; i <= 10000; ++i) {
-    std::get<2>(myTestSet[1]).push_back({4 + i, 2 + i});
+    rightIdTable.push_back({4 + i, 2 + i});
   }
-  std::get<0>(myTestSet[1]).push_back({400000, 200000});
-  std::get<2>(myTestSet[1]).push_back({400000, 200000});
-
-  myTestSet[2] = std::make_tuple(
-      std::vector<std::array<size_t, 2>>{},
-      0,
-      std::vector<std::array<size_t, 2>>{},
-      0,
-      std::vector<std::array<size_t, 3>>{{40000, 200000, 200000}, {4000001, 200000, 200000}}
-  );
+  leftIdTable.push_back({400000, 200000});
+  rightIdTable.push_back({400000, 200000});
+  myTestSet.append(normalJoinTest(makeIdTableFromVector(leftIdTable), 0,
+        makeIdTableFromVector(rightIdTable), 0, makeIdTableFromVector(sampleSolution), true));
+  
+  leftIdTable = {};
+  rightIdTable = {};
+  sampleSolution = {{40000, 200000, 200000}, {4000001, 200000, 200000}};
   for (size_t i = 1; i <= 10000; ++i) {
-    std::get<0>(myTestSet[2]).push_back({4 + i, 2 + i});
+    leftIdTable.push_back({4 + i, 2 + i});
   }
-  std::get<0>(myTestSet[2]).push_back({40000, 200000});
-  std::get<2>(myTestSet[2]).push_back({40000, 200000});
-
+  leftIdTable.push_back({40000, 200000});
+  rightIdTable.push_back({40000, 200000});
   for (size_t i = 1; i <= 10000; ++i) {
-    std::get<0>(myTestSet[2]).push_back({40000 + i, 2 + i});
+    leftIdTable.push_back({40000 + i, 2 + i});
   }
-  std::get<0>(myTestSet[2]).push_back({4000001, 200000});
-  std::get<2>(myTestSet[2]).push_back({4000001, 200000});
+  leftIdTable.push_back({4000001, 200000});
+  rightIdTable.push_back({4000001, 200000});
+  myTestSet.append(normalJoinTest(makeIdTableFromVector(leftIdTable), 0,
+        makeIdTableFromVector(rightIdTable), 0, makeIdTableFromVector(sampleSolution), true));
+  
+  leftIdTable = {{0, 1}, {0, 2}, {1, 3}, {1, 4}};
+  rightIdTable = {{0}};
+  sampleSolution = {{0, 1}, {0, 2}};
+  myTestSet.append(normalJoinTest(makeIdTableFromVector(leftIdTable), 0,
+        makeIdTableFromVector(rightIdTable), 0, makeIdTableFromVector(sampleSolution), true));
 
   return myTestSet;
 }
 
-/* 
- * @brief The set of join tests for the normal join function had one special
- * case with different column sizes than the rest, so I had to create another
- * function just for creating that one.
- * How to read the formate is described in goThroughSetofTestsWithJoinFunction.
- */
-std::array<std::tuple< std::vector<std::array<size_t, 2>>, size_t, std::vector<std::array<size_t, 1>>, size_t, std::vector<std::array<size_t, 2>>> , 1> createSpecialCaseOfNormalJoinTestSet() {
-  std::array<std::tuple< std::vector<std::array<size_t, 2>>, size_t, std::vector<std::array<size_t, 1>>, size_t, std::vector<std::array<size_t, 2>>>, 1> myTestSet;
-
-  myTestSet[0] = std::make_tuple(
-      std::vector<std::array<size_t, 2>>{{{0, 1}, {0, 2}, {1, 3}, {1, 4}}},
-      0,
-      std::vector<std::array<size_t, 1>>{{{0}}},
-      0,
-      std::vector<std::array<size_t, 2>>{{0, 1}, {0, 2}}
-  );
-
-  return myTestSet;
-}
 
 TEST(EngineTest, joinTest) {
   Join J{Join::InvalidOnlyForTestingJoinTag{}};
   auto JoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
     return J.join<A, B, C>(AD_FWD(args)...);
   };
-  goThroughSetOfTestsWithJoinFunction(createNormalJoinTestSet(), JoinLambda, true);
-  goThroughSetOfTestsWithJoinFunction(createSpecialCaseOfNormalJoinTestSet(), JoinLambda, true);
+  goThroughSetOfTestsWithJoinFunction(createNormalJoinTestSet(), JoinLambda);
 };
 
 TEST(EngineTest, optionalJoinTest) {
@@ -389,8 +368,9 @@ TEST(EngineTest, distinctTest) {
 }
 
 TEST(EngineTest, hashJoinTest) {
-  // Going through the tests of the normal lambda. Only possible, because
-  // the result for hashed join is sorted, if the input was also sorted.
+  // Going through the tests of the normal lambda. The result for hashed join
+  // is sorted, if the input was also sorted, so hashJoin can go through them,
+  // without modifying them first.
   Join J{Join::InvalidOnlyForTestingJoinTag{}};
   auto HashJoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
     return J.hashJoin<A, B, C>(AD_FWD(args)...);
@@ -399,8 +379,6 @@ TEST(EngineTest, hashJoinTest) {
     return J.join<A, B, C>(AD_FWD(args)...);
   };
   goThroughSetOfTestsWithJoinFunction(createNormalJoinTestSet(), HashJoinLambda);
-  goThroughSetOfTestsWithJoinFunction(createSpecialCaseOfNormalJoinTestSet(), HashJoinLambda);
-
 
   /*
    * Create two sorted IdTables. Join them using the normal join and the
