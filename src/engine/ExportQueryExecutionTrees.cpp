@@ -164,6 +164,15 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
   AD_FAIL();
 }
 
+// This explicit instantiation is necessary because the `Variable` class
+// currently still uses it.
+// TODO<joka921> Refactor the CONSTRUCT export, then this is no longer
+// needed
+template std::optional<std::pair<std::string, const char*>>
+ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
+                                             const ResultTable& resultTable,
+                                             std::identity&& escapeFunction);
+
 // _____________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::selectQueryToSparqlJSON(
     const QueryExecutionTree& qet,
