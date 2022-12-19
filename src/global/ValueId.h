@@ -9,11 +9,13 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <sstream>
 
 #include "../util/BitUtils.h"
 #include "../util/NBitInteger.h"
 #include "../util/Serializer/Serializer.h"
 #include "./IndexTypes.h"
+#include "../util/SourceLocation.h"
 
 /// The different Datatypes that a `ValueId` (see below) can encode.
 enum struct Datatype {
@@ -69,7 +71,26 @@ class ValueId {
   /// This exception is thrown if we try to store a value of an index type
   /// (VocabIndex, LocalVocabIndex, TextRecordIndex) that is larger than
   /// `maxIndex`.
-  struct IndexTooLargeException : public std::exception {};
+  struct IndexTooLargeException : public std::exception {
+    private:
+      
+      ad_utility::source_location _location;
+
+      T _tooBigValue;
+
+    public:
+
+      IndexTooLargeException(T tooBigValue,
+          ad_utility::source_location s = ad_utility::source_location::current()):
+          _location(s), _tooBigValue(tooBigValue) {}
+
+      const char* what() const noexcept override {
+        std::stringstream exceptionMessage;
+        exceptionMessage << _location.file_name() << ", line " << _location.line()
+          << ": The given value " << _tooBigValue << " is bigger than what the maxIndex of ValueId allows.";
+        return exceptionMessage.str().c_str();
+      }
+  };
 
   /// A struct that represents the single undefined value. This is required for
   /// generic code like in the `visit` method.
@@ -282,7 +303,7 @@ class ValueId {
   // Helper function for the implementation of the unsigned index types.
   static constexpr ValueId makeFromIndex(T id, Datatype type) {
     if (id > maxIndex) {
-      throw IndexTooLargeException();
+      throw IndexTooLargeException(id);
     }
     return addDatatypeBits(id, type);
   }
