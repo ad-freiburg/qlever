@@ -583,8 +583,8 @@ class IdTable {
   // full. Otherwise, do nothing.
   void growIfFull() {
     if (numRows_ == capacityRows_) {
-      setCapacity(
-          std::max(1ul, static_cast<size_t>(capacityRows_ * growthFactor)));
+      setCapacity(std::max(capacityRows_ + 1,
+                           static_cast<size_t>(capacityRows_ * growthFactor)));
     }
   }
 
