@@ -17,6 +17,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/Iterators.h"
 #include "util/LambdaHelpers.h"
+#include "util/ResetWhenMoved.h"
 #include "util/UninitializedAllocator.h"
 
 namespace columnBasedIdTable {
@@ -144,8 +145,8 @@ class IdTable {
  private:
   Data data_;
   size_t numColumns_ = NumColumns;
-  size_t numRows_ = 0;
-  size_t capacityRows_ = 0;
+  ad_utility::ResetWhenMoved<size_t, 0> numRows_ = 0;
+  ad_utility::ResetWhenMoved<size_t, 0> capacityRows_ = 0;
   static constexpr size_t growthFactor = 2;
 
  public:
@@ -179,22 +180,8 @@ class IdTable {
   IdTable& operator=(const IdTable&) requires isView = default;
 
   // `IdTable`s are movable
-  IdTable(IdTable&& other) requires(!isView)
-      : data_{std::move(other.data())},
-        numColumns_{other.numColumns_},
-        numRows_{std::exchange(other.numRows_, 0)},
-        capacityRows_{std::exchange(other.capacityRows_, 0)} {}
-
-  IdTable& operator=(IdTable&& other) requires(!isView) {
-    if (this == &other) {
-      return *this;
-    }
-    data_ = std::move(other.data_);
-    numColumns_ = other.numColumns_;
-    numRows_ = std::exchange(other.numRows_, 0);
-    capacityRows_ = std::exchange(other.capacityRows_, 0);
-    return *this;
-  }
+  IdTable(IdTable&& other) requires(!isView) = default;
+  IdTable& operator=(IdTable&& other) requires(!isView) = default;
 
  private:
   // Make the other instantiations of `IdTable` friends to allow for conversion
@@ -573,7 +560,7 @@ class IdTable {
     if constexpr (requires { Storage{getAllocator()}; }) {
       Storage newData{getAllocator()};
       newData.resize(newCapacity * numColumns());
-      size_t numRowsToCopy = std::min(capacityRows_, newCapacity);
+      size_t numRowsToCopy = std::min(capacityRows_.value_, newCapacity);
       const auto& columns = getColumns();
       // TODO<joka921, C++23> this should be an `enumerate` view.
       for (size_t i = 0; i < numColumns(); ++i) {
@@ -606,7 +593,7 @@ class IdTable {
       }
     }
     capacityRows_ = newCapacity;
-    numRows_ = std::min(numRows_, capacityRows_);
+    numRows_ = std::min(numRows_.value_, capacityRows_.value_);
   }
 
   // Increase the capacity by the `growthFactor` if the table is completely

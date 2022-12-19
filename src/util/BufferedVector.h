@@ -110,26 +110,31 @@ class BufferedVector {
     }
   }
 
-  // TODO<joka921> Get rid of the limitation that `oldSize < newSize` and also
-  // factor out the common code for changing the capacity or at least for
-  // chaning from the internal to the external vector.
+  // Change the size of the `BufferedVector` to `newSize`. This might move
+  // the data from the internal to the external vector or vice versa. If
+  // `newSize < size()` the `BufferedVector` will be truncated to the first
+  // `newSize` elements.
   void resize(size_t newSize) {
     auto oldSize = size();
-    AD_CHECK(oldSize < newSize);
-    if (!_isInternal) {
+    if (!_isInternal && newSize > _threshold) {
       _extVec.resize(newSize);
-    } else if (newSize < _threshold) {
+    } else if (_isInternal && newSize < _threshold) {
       _vec.resize(newSize);
-    } else {
+    } else if (_isInternal && newSize > _threshold) {
       _extVec.resize(newSize);
+      AD_CHECK(newSize > oldSize);
       std::copy(_vec.begin(), _vec.end(), _extVec.begin());
       _isInternal = false;
       _vec.clear();
+    } else {
+      AD_CHECK(!_isInternal && newSize < _threshold);
+      AD_CHECK(newSize < oldSize);
+      _vec.resize(newSize);
+      std::copy(_extVec.begin(), _extVec.begin() + newSize, _vec.begin());
     }
   }
 
   // Get the underlying allocator of the vector.
-  // TODO<joka921> This is currently not yet configurable.
   auto get_allocator() const { return _vec.get_allocator(); }
 
   // testing interface
