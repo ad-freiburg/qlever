@@ -391,9 +391,8 @@ class IdTable {
     }
     AD_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
     auto result = IdTable<T, NewNumColumns, Storage>{
-        std::move(data()), numColumns(), size(), capacityRows_};
-    numRows_ = 0;
-    capacityRows_ = 0;
+        std::move(data()), numColumns(), std::move(numRows_),
+        std::move(capacityRows_)};
     return result;
   }
 
@@ -401,10 +400,9 @@ class IdTable {
   // function may only be called on rvalues, because the table will be moved
   // from.
   IdTable<T, 0, Storage> toDynamic() && requires(!isView) {
-    auto result = IdTable<T, 0, Storage>{std::move(data()), numColumns_, size(),
-                                         capacityRows_};
-    numRows_ = 0;
-    capacityRows_ = 0;
+    auto result =
+        IdTable<T, 0, Storage>{std::move(data()), numColumns_,
+                               std::move(numRows_), std::move(capacityRows_)};
     return result;
   }
 

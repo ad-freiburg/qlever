@@ -164,7 +164,9 @@ void MmapVector<T>::adaptCapacity(size_t newCapacity) {
 template <class T>
 void MmapVector<T>::resize(size_t newSize) {
   _size = newSize;
-  adaptCapacity(newSize);
+  if (newSize > capacity()) {
+    adaptCapacity(newSize);
+  }
 }
 
 // _________________________________________________________________
