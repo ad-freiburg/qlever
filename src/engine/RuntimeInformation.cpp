@@ -106,8 +106,9 @@ double RuntimeInformation::getOperationTime() const {
   } else {
     auto result = totalTime_;
     for (const RuntimeInformation& child : children_) {
-      // The `totalTime_` does not account for the time spent during
-      // query planning.
+      // If a child was computed during the query planning, the time spent
+      // computing that child is *not* included in this operation's
+      // `totalTime_`, That's why we skip such children in the following loop.
       if (child.status_ != completedDuringQueryPlanning) {
         result -= child.totalTime_;
       }
@@ -147,20 +148,28 @@ std::string_view RuntimeInformation::toString(Status status) {
 
 // _____________________________________________________________________________
 double RuntimeInformation::getTotalTimeCorrected() const {
-  double sumOfComputedChildren = 0;
+  double timeOfChildrenComputedDuringQueryPlanning = 0;
 
+  // Recursively get the `totalTime_` of all descendants that were computed
+  // during the query planning and add it to
+  // `timeOfChildrenComputedDuringQueryPlanning`. The pattern of a lambda that
+  // is called with itself as an argument is required for requires lambdas up
+  // until C++20 (for a detailed read, see
+  // http://pedromelendez.com/blog/2015/07/16/recursive-lambdas-in-c14/
+  // TODO<joka921, C++23> Use `explicit object parameters` aka `deducing this`
+  // to simplify the recursive lambda.
   auto recursiveImpl = [&](const auto& recursiveCall,
                            const RuntimeInformation& child) -> void {
     if (child.status_ ==
         RuntimeInformation::Status::completedDuringQueryPlanning) {
-      sumOfComputedChildren += child.totalTime_;
+      timeOfChildrenComputedDuringQueryPlanning += child.totalTime_;
     }
     for (const auto& descendant : child.children_) {
       recursiveCall(recursiveCall, descendant);
     }
   };
   recursiveImpl(recursiveImpl, *this);
-  return totalTime_ + sumOfComputedChildren;
+  return totalTime_ + timeOfChildrenComputedDuringQueryPlanning;
 }
 
 // ________________________________________________________________________________________________________________
