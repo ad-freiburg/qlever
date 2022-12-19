@@ -104,11 +104,11 @@ double RuntimeInformation::getOperationTime() const {
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {
     return totalTime_;
   } else {
+    // If a child was computed during the query planning, the time spent
+    // computing that child is *not* included in this operation's
+    // `totalTime_`. That's why we skip such children in the following loop.
     auto result = totalTime_;
     for (const RuntimeInformation& child : children_) {
-      // If a child was computed during the query planning, the time spent
-      // computing that child is *not* included in this operation's
-      // `totalTime_`, That's why we skip such children in the following loop.
       if (child.status_ != completedDuringQueryPlanning) {
         result -= child.totalTime_;
       }
