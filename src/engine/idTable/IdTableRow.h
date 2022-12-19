@@ -22,13 +22,13 @@ namespace columnBasedIdTable {
 // below).
 enum struct IsView { True, False };
 
-// A row of a table of `T`s. It stores the IDs as a `std::array` or `std::vector`
-// depending on whether `NumColumns` is 0 (which means that the number of
-// columns is specified at runtime). This class is used as the `value_type` of
-// the columns-ordered `IdTable` and must be used whenever a row (not a
-// reference to a row) has to be stored outside the IdTable. The implementation
-// is a rather thin wrapper around `std::vector<T>` or `std::array<T,
-// NumColumns>`, respectively (see above).
+// A row of a table of `T`s. It stores the IDs as a `std::array` or
+// `std::vector` depending on whether `NumColumns` is 0 (which means that the
+// number of columns is specified at runtime). This class is used as the
+// `value_type` of the columns-ordered `IdTable` and must be used whenever a row
+// (not a reference to a row) has to be stored outside the IdTable. The
+// implementation is a rather thin wrapper around `std::vector<T>` or
+// `std::array<T, NumColumns>`, respectively (see above).
 template <typename T, int NumColumns = 0>
 class Row {
  public:
@@ -42,8 +42,7 @@ class Row {
   // `isDynamic()` case.
   using Data = std::conditional_t<
       isDynamic(),
-      std::vector<T,
-                  ad_utility::default_init_allocator<T, std::allocator<T>>>,
+      std::vector<T, ad_utility::default_init_allocator<T, std::allocator<T>>>,
       std::array<T, NumColumns>>;
 
  private:

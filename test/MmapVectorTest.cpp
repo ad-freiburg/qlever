@@ -295,7 +295,7 @@ TEST(MmapVectorTest, Reuse) {
 
 // ____________________________________________________________________
 TEST(MmapVectorTest, MoveConstructor) {
-  // make sure that we get a unsignned 5000 to prevent compiler warnings
+  // make sure that we get a unsigned 5000 to prevent compiler warnings
 
   size_t s = 5000;
   {

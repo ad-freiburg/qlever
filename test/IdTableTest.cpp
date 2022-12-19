@@ -10,6 +10,7 @@
 
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "util/BufferedVector.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
@@ -663,3 +664,8 @@ TEST(IdTableTest, staticAsserts) {
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::iterator>);
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
 }
+
+template class columnBasedIdTable::IdTable<char, 0>;
+static_assert(!std::is_copy_constructible_v<ad_utility::BufferedVector<char>>);
+template class columnBasedIdTable::IdTable<char, 0,
+                                           ad_utility::BufferedVector<char>>;

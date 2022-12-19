@@ -29,6 +29,7 @@ class BufferedVector {
 
   // __________________________________________________________________
   size_t size() const { return _isInternal ? _vec.size() : _extVec.size(); }
+  bool empty() const { return size() == 0; }
 
   // standard iterator functions, each in a const and non-const version
   // begin
@@ -109,13 +110,35 @@ class BufferedVector {
     }
   }
 
+  // TODO<joka921> Get rid of the limitation that `oldSize < newSize` and also
+  // factor out the common code for changing the capacity or at least for
+  // chaning from the internal to the external vector.
+  void resize(size_t newSize) {
+    auto oldSize = size();
+    AD_CHECK(oldSize < newSize);
+    if (!_isInternal) {
+      _extVec.resize(newSize);
+    } else if (newSize < _threshold) {
+      _vec.resize(newSize);
+    } else {
+      _extVec.resize(newSize);
+      std::copy(_vec.begin(), _vec.end(), _extVec.begin());
+      _isInternal = false;
+      _vec.clear();
+    }
+  }
+
+  // Get the underlying allocator of the vector.
+  // TODO<joka921> This is currently not yet configurable.
+  auto get_allocator() const { return _vec.get_allocator(); }
+
   // testing interface
   size_t threshold() const { return _threshold; }
   bool isInternal() const { return _isInternal; }
 
  private:
   // the externalization threshold
-  const size_t _threshold = 2 << 25;
+  size_t _threshold = 2 << 25;
   // keep track on which of our data stores we are currently using.
   bool _isInternal = true;
 

@@ -360,7 +360,7 @@ class MmapVectorTmp : public MmapVector<T> {
   }
 
   MmapVectorTmp<T>& operator=(MmapVectorTmp<T>&& rhs) noexcept {
-    MmapVector<T>::operator=(rhs);
+    MmapVector<T>::operator=(std::move(rhs));
     return *this;
   }
 
