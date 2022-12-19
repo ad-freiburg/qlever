@@ -12,6 +12,7 @@
 #include "engine/GroupBy.h"
 #include "engine/Join.h"
 #include "engine/MultiColumnJoin.h"
+#include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/ResultTable.h"
@@ -140,19 +141,26 @@ TEST(LocalVocab, propagation) {
   Join join2(testQec, qet(values1), qet(values1), 0, 0);
   checkThrow(&join2);
 
+  // OPTIONAL JOIN operation with exactly one non-empty local vocab. The last
+  // arguments are the two join columns.
+  OptionalJoin optJoin1(testQec, qet(values1), true, qet(values2), true,
+                        {{0, 0}});
+  checkLocalVocab(&optJoin1, std::vector<std::string>{"x", "y1", "y2"});
+
+  // OPTIONAL JOIN operation with two non-empty local vocab.
+  OptionalJoin optJoin2(testQec, qet(values1), true, qet(values1), true,
+                        {{0, 0}});
+  checkThrow(&optJoin2);
+
   // MULTI-COLUMN JOIN operation with exactly one non-empty local vocab. The
-  // last arguments are the two join columns in each of the two operands.
-  //
-  // Note: The multi-column join is actually a two-column join, so we have a
-  // bit of a misnomer here.
-  //
+  // last argument is a `std::vector` of join-column pairs.
   MultiColumnJoin multiJoin1(testQec, qet(values1), qet(values2),
-                             {{0, 1}, {0, 1}});
+                             {{0, 0}, {1, 1}});
   checkLocalVocab(&multiJoin1, std::vector<std::string>{"x", "y1", "y2"});
 
   // MULTI-COLUMN JOIN operation with two non-empty local vocab.
   MultiColumnJoin multiJoin2(testQec, qet(values1), qet(values1),
-                             {{0, 1}, {0, 1}});
+                             {{0, 0}, {1, 1}});
   checkThrow(&multiJoin2);
 
   // ORDER BY operation.

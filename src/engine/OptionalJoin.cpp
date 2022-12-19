@@ -119,6 +119,12 @@ void OptionalJoin::computeResult(ResultTable* result) {
                   &OptionalJoin::optionalJoin, leftResult->_idTable,
                   rightResult->_idTable, _leftOptional, _rightOptional,
                   _joinColumns, &result->_idTable);
+
+  // If only one of the two operands has a local vocab, pass it on.
+  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
+      leftResult->_localVocab, rightResult->_localVocab);
+
+  LOG(DEBUG) << "Join result computation done" << endl;
   LOG(DEBUG) << "OptionalJoin result computation done." << endl;
 }
 
