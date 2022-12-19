@@ -277,7 +277,7 @@ class IdTable {
       // Increase by at least the `growthFactor` to enforce the amortized O(1)
       // complexity also for patterns like `resize(numRows() + 1)`.
       size_t minimalGrowth = static_cast<size_t>(capacityRows_ * growthFactor);
-      setCapacity(std::max(numRows, minimalGrowth);
+      setCapacity(std::max(numRows, minimalGrowth));
     }
     numRows_ = numRows;
   }
