@@ -100,7 +100,7 @@ namespace columnBasedIdTable {
 // TODO<joka921> The NumColumns should be `size_t` but that requires several
 // additional changes in the rest of the code.
 //
-template <int NumColumns = 0, typename Allocator = std::allocator<Id>,
+template <typename T = Id, int NumColumns = 0, typename Allocator = ad_utility::default_init_allocator<T, std::allocator<T>>,
           IsView isViewTag = IsView::False>
 class IdTable {
  public:
@@ -110,16 +110,19 @@ class IdTable {
   static constexpr int numStaticColumns = NumColumns;
   // The actual storage is a plain 1D vector with the logical columns
   // concatenated.
-  using Columns = std::vector<Id, Allocator>;
+  using Columns = std::vector<T, Allocator>;
   using Data = std::conditional_t<isView, const Columns*, Columns>;
 
+
+  using value_type = T;
   // Because of the column-major layout, the `row_type` (a value type that
   // stores the values of a  single row) and the `row_reference` (a type that
   // refers to a specific row of a specific `IdTable`) are different. They are
   // implemented in a way that makes it hard to use them incorrectly. For
   // details, see the comment above and the definition of the `Row` and
   // `RowReference` class.
-  using row_type = Row<NumColumns>;
+  // TODO<joka921> Those also have to be templated on the `value_type`.
+  using row_type = Row<T, NumColumns>;
   using row_reference = RowReference<IdTable, ad_utility::IsConst::False>;
   using const_row_reference = RowReference<IdTable, ad_utility::IsConst::True>;
 
@@ -135,7 +138,7 @@ class IdTable {
           IdTable, ad_utility::IsConst::True>;
   using const_row_reference_view_restricted =
       RowReferenceImpl::RowReferenceWithRestrictedAccess<
-          IdTable<NumColumns, Allocator, IsView::True>,
+          IdTable<value_type, NumColumns, Allocator, IsView::True>,
           ad_utility::IsConst::True>;
 
  private:
@@ -195,7 +198,7 @@ class IdTable {
  private:
   // Make the other instantiations of `IdTable` friends to allow for conversion
   // between them using a private interface.
-  template <int, typename, IsView>
+  template <typename, int, typename, IsView>
   friend class IdTable;
 
   // Construct directly from the underlying storage. This is rather error-prone,
@@ -247,10 +250,10 @@ class IdTable {
   // Get access to a single element specified by the row and the column.
   // TODO<joka921, C++23> Use the multidimensional subscript operator.
   // TODO<joka921, C++23> Use explicit object parameters ("deducing this").
-  Id& operator()(size_t row, size_t column) requires(!isView) {
+  T& operator()(size_t row, size_t column) requires(!isView) {
     return getColumn(column)[row];
   }
-  const Id& operator()(size_t row, size_t column) const {
+  const T& operator()(size_t row, size_t column) const {
     return getColumn(column)[row];
   }
 
@@ -322,7 +325,7 @@ class IdTable {
   // both the size of `newRow` and `numColumns()` are known at compile time. If
   // this check cannot be performed, a wrong size of `newRow` will lead to
   // undefined behavior which is caught by an `assert` in Debug builds.
-  void push_back(const std::initializer_list<Id>& newRow) requires(!isView) {
+  void push_back(const std::initializer_list<T>& newRow) requires(!isView) {
     assert(newRow.size() == numColumns());
     emplace_back();
     auto sz = size();
@@ -335,7 +338,7 @@ class IdTable {
   // (`NumColumns != 0`), then this is a safe interface, as the correct size of
   // `newRow` can be statically checked.
   template <size_t N>
-  void push_back(const std::array<Id, N>& newRow) requires(!isView &&
+  void push_back(const std::array<T, N>& newRow) requires(!isView &&
                                                            (isDynamic ||
                                                             NumColumns == N)) {
     if constexpr (NumColumns == 0) {
@@ -354,12 +357,12 @@ class IdTable {
   // of columns, but with a different allocator. If this should ever be needed,
   // we would have to reformulate the `requires()` clause here a little more
   // complicated.
-  template <typename T>
+  template <typename RowLike>
   requires ad_utility::isTypeContainedIn<
-      T, std::tuple<row_reference, const_row_reference,
+      RowLike, std::tuple<row_reference, const_row_reference,
                     row_reference_restricted, const_row_reference_restricted,
                     const_row_reference_view_restricted>>
-  void push_back(const T& newRow) requires(!isView) {
+  void push_back(const RowLike& newRow) requires(!isView) {
     if constexpr (NumColumns == 0) {
       assert(newRow.numColumns() == numColumns());
     }
@@ -375,8 +378,8 @@ class IdTable {
   // `true`), then the copy constructor will also create a (const and
   // non-owning) view, but `clone` will create a mutable deep copy of the data
   // that the view points to
-  IdTable<NumColumns, Allocator, IsView::False> clone() const {
-    return IdTable<NumColumns, Allocator, IsView::False>{
+  IdTable<T, NumColumns, Allocator, IsView::False> clone() const {
+    return IdTable<T, NumColumns, Allocator, IsView::False>{
         data(), numColumns_, numRows_, capacityRows_};
   }
 
@@ -392,12 +395,12 @@ class IdTable {
   //       write.
   template <int NewNumColumns>
   requires(NumColumns == 0 &&
-           !isView) IdTable<NewNumColumns, Allocator> toStatic() && {
+           !isView) IdTable<T, NewNumColumns, Allocator> toStatic() && {
     if (size() == 0 && !isDynamic) {
       setNumColumns(NewNumColumns);
     }
     AD_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
-    auto result = IdTable<NewNumColumns, Allocator>{
+    auto result = IdTable<T, NewNumColumns, Allocator>{
         std::move(data()), numColumns(), size(), capacityRows_};
     numRows_ = 0;
     capacityRows_ = 0;
@@ -407,8 +410,8 @@ class IdTable {
   // Move this `IdTable` into a dynamic `IdTable` with `NumColumns == 0`. This
   // function may only be called on rvalues, because the table will be moved
   // from.
-  IdTable<0, Allocator> toDynamic() && requires(!isView) {
-    auto result = IdTable<0, Allocator>{std::move(data()), numColumns_, size(),
+  IdTable<T, 0, Allocator> toDynamic() && requires(!isView) {
+    auto result = IdTable<T, 0, Allocator>{std::move(data()), numColumns_, size(),
                                         capacityRows_};
     numRows_ = 0;
     capacityRows_ = 0;
@@ -429,10 +432,10 @@ class IdTable {
   // is templated on the number of columns easier to write.
   template <size_t NewNumColumns>
   requires(NumColumns == 0 && !isView)
-      IdTable<NewNumColumns, Allocator, IsView::True> asStaticView()
+      IdTable<T, NewNumColumns, Allocator, IsView::True> asStaticView()
   const {
     AD_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
-    return IdTable<NewNumColumns, Allocator, IsView::True>{
+    return IdTable<T, NewNumColumns, Allocator, IsView::True>{
         &data(), numColumns_, numRows_, capacityRows_};
   }
 
@@ -585,10 +588,10 @@ class IdTable {
   }
 
   // Get the `i`-th column. It is stored contiguously in memory.
-  std::span<Id> getColumn(size_t i) {
+  std::span<T> getColumn(size_t i) {
     return {data().data() + i * capacityRows_, numRows_};
   }
-  std::span<const Id> getColumn(size_t i) const {
+  std::span<const T> getColumn(size_t i) const {
     return {data().data() + i * capacityRows_, numRows_};
   }
 
@@ -615,8 +618,8 @@ class IdTable {
   }
 
   // Return all the columns as a `std::vector` (if `isDynamic`) or as a
-  // `std::array` (else). The elements of the vector/array are `std::span<Id>`
-  // or `std::span<const Id>`, depending on whether `this` is const.
+  // `std::array` (else). The elements of the vector/array are `std::span<T>`
+  // or `std::span<const T>`, depending on whether `this` is const.
   auto getColumns() { return getColumnsImpl(*this); }
   auto getColumns() const { return getColumnsImpl(*this); }
 };
@@ -632,7 +635,7 @@ using defaultAllocator =
 /// COLS specifies the compile-time number of columns COLS == 0 means "runtime
 /// number of numColumns"
 template <int COLS, typename Allocator = detail::defaultAllocator>
-using IdTableStatic = columnBasedIdTable::IdTable<COLS, Allocator>;
+using IdTableStatic = columnBasedIdTable::IdTable<Id, COLS, Allocator>;
 
 // This was previously implemented as an alias (`using IdTable =
 // IdTableStatic<0, ...>`). However this did not allow forward declarations, so
@@ -655,5 +658,5 @@ class IdTable : public IdTableStatic<0, detail::defaultAllocator> {
 /// A constant view into an IdTable that does not own its data
 template <int COLS, typename Allocator = detail::defaultAllocator>
 using IdTableView =
-    columnBasedIdTable::IdTable<COLS, Allocator,
+    columnBasedIdTable::IdTable<Id, COLS, Allocator,
                                 columnBasedIdTable::IsView::True>;
