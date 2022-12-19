@@ -317,7 +317,24 @@ size_t IndexScan::computeSizeEstimate() {
           size.has_value()) {
         return size.value();
       } else {
-        return getResult()->size();
+        // Explicitly store the result of the index scan. This make sure that
+        // 1. It is not evicted from the cache before this query needs it again.
+        // 2. We preserve the information whether this scan was computed during
+        // the query planning.
+        // TODO<joka921> We should only do this for small index scans. Even with
+        // only one variable, index scans can become arbitrary large (e.g.
+        // ?x rdf:type <someFixedType>. But this requires more information
+        // from the scanning, so I leave it open for another PR.
+        createRuntimeInfoFromEstimates();
+        _precomputedResult = getResult();
+        if (getRuntimeInfo().status_ == RuntimeInformation::Status::completed) {
+          getRuntimeInfo().status_ =
+              RuntimeInformation::Status::completedDuringQueryPlanning;
+        }
+        auto sizeEstimate = _precomputedResult.value()->size();
+        getRuntimeInfo().sizeEstimate_ = sizeEstimate;
+        getRuntimeInfo().costEstimate_ = sizeEstimate;
+        return sizeEstimate;
       }
     }
     // TODO<joka921> Should be a oneliner

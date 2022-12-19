@@ -250,11 +250,17 @@ class FlexibleCache {
 
   //! Checks if there is an entry with the given key.
   bool contains(const Key& key) const {
-    return _pinnedMap.count(key) > 0 || _accessMap.count(key) > 0;
+    return containsPinned(key) || containsNonPinned(key);
+  }
+
+  bool containsPinned(const Key& key) const { return _pinnedMap.contains(key); }
+
+  bool containsNonPinned(const Key& key) const {
+    return _accessMap.contains(key) && !containsPinned(key);
   }
 
   //! Checks if there is an entry with the given key. If the entry exists and
-  //! was not pinned, it is pinned after the call.
+  //! was not cachedPinned, it is cachedPinned after the call.
   bool containsAndMakePinnedIfExists(const Key& key) {
     if (_pinnedMap.contains(key)) {
       return true;
