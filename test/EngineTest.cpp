@@ -132,11 +132,7 @@ void compareIdTableWithExpectedContent(const IdTable& table,
 
   if (testForSorted) {
     // Is the table sorted by join column?
-    auto oldEntry{localTable(0, joinColumn)};
-    for (size_t i = 1; i < localTable.size(); i++) {
-      ASSERT_TRUE(oldEntry <= localTable(i, joinColumn));
-      oldEntry = localTable(i, joinColumn);
-    }
+    ASSERT_TRUE(std::ranges::is_sorted(localTable, {}, [joinColumn](const auto& row){return row[joinColumn];}));
   }
 
   // Sort both the table and the expectedContent, so that both have a definite
