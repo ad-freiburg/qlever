@@ -373,6 +373,18 @@ class IdTable {
         data(), numColumns_, numRows_, capacityRows_};
   }
 
+  // Overload of `clone` for `Storage` types that are not copy constructible.
+  // It requires a preconstructed but empty argument of type `Storage` that
+  // is then resized and filled with the appropriate contents.
+  IdTable<T, NumColumns, Storage, IsView::False> clone(Storage storage) const
+      requires(!std::is_copy_constructible_v<Storage>) {
+    AD_CHECK(storage.empty());
+    storage.resize(data().size());
+    std::copy(data().begin(), data().end(), storage.begin());
+    return IdTable<T, NumColumns, Storage, IsView::False>{
+        std::move(storage), numColumns_, numRows_, capacityRows_};
+  }
+
   // From a dynamic (`NumColumns == 0`) IdTable, create a static (`NumColumns !=
   // 0`) IdTable with `NumColumns == NewNumColumns`. The number of columns
   // actually stored in the dynamic table must be equal to `NewNumColumns`, or

@@ -1,7 +1,7 @@
-
-// Copyright 2018, University of Freiburg,
+// Copyright 2018 - 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+// Authors : 2018      Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//           2022-     Johannes Kalmbach(kalmbach@cs.uni-freiburg.de)
 
 #include <gtest/gtest.h>
 
@@ -135,33 +135,45 @@ TEST(IdTableTest, DocumentationOfIteratorUsage) {
 }
 
 TEST(IdTableTest, push_back_and_assign) {
-  constexpr size_t NUM_ROWS = 30;
-  constexpr size_t NUM_COLS = 4;
+  auto runTestForIdTable = []<typename Table>(auto make,
+                                              auto... additionalArgs) {
+    constexpr size_t NUM_ROWS = 30;
+    constexpr size_t NUM_COLS = 4;
 
-  IdTable t1{NUM_COLS, allocator()};
-  // Fill the rows with numbers counting up from 1
-  for (size_t i = 0; i < NUM_ROWS; i++) {
-    t1.push_back({I(i * NUM_COLS + 1), I(i * NUM_COLS + 2), I(i * NUM_COLS + 3),
-                  I(i * NUM_COLS + 4)});
-  }
+    Table t1{NUM_COLS, std::move(additionalArgs.at(0))...};
+    // Fill the rows with numbers counting up from 1
+    for (size_t i = 0; i < NUM_ROWS; i++) {
+      t1.push_back({make(i * NUM_COLS + 1), make(i * NUM_COLS + 2),
+                    make(i * NUM_COLS + 3), make(i * NUM_COLS + 4)});
+    }
 
-  ASSERT_EQ(NUM_ROWS, t1.size());
-  ASSERT_EQ(NUM_ROWS, t1.numRows());
-  ASSERT_EQ(NUM_COLS, t1.numColumns());
-  // check the entries
-  for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
-  }
+    ASSERT_EQ(NUM_ROWS, t1.size());
+    ASSERT_EQ(NUM_ROWS, t1.numRows());
+    ASSERT_EQ(NUM_COLS, t1.numColumns());
+    // check the entries
+    for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
+      ASSERT_EQ(make(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
+    }
 
-  // assign new values to the entries
-  for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    t1(i / NUM_COLS, i % NUM_COLS) = I((NUM_ROWS * NUM_COLS) - i);
-  }
+    // assign new values to the entries
+    for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
+      t1(i / NUM_COLS, i % NUM_COLS) = make((NUM_ROWS * NUM_COLS) - i);
+    }
 
-  // test for the new entries
-  for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(I((NUM_ROWS * NUM_COLS) - i), t1(i / NUM_COLS, i % NUM_COLS));
-  }
+    // test for the new entries
+    for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
+      ASSERT_EQ(make((NUM_ROWS * NUM_COLS) - i),
+                t1(i / NUM_COLS, i % NUM_COLS));
+    }
+  };
+  using Buffer = ad_utility::BufferedVector<Id>;
+  using BufferedTable = columnBasedIdTable::IdTable<Id, 0, Buffer>;
+  using intTable = columnBasedIdTable::IdTable<int, 0>;
+  auto makeInt = [](auto el) { return static_cast<int>(el); };
+  runTestForIdTable.operator()<IdTable>(I, std::array{allocator()});
+  runTestForIdTable.operator()<BufferedTable>(
+      I, std::array{Buffer{3, "_idTableTest.pushBackAssign.dat"}});
+  runTestForIdTable.operator()<intTable>(makeInt);
 }
 
 TEST(IdTableTest, insertAtEnd) {
