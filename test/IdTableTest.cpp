@@ -746,7 +746,16 @@ TEST(IdTableTest, staticAsserts) {
 
 // Check that we can completely instantiate `IdTable`s with a different value
 // type and a different underlying storage.
+
+// Note: Clang 13 and 14 don't handle the `requires` clauses in the `clone`
+// member function correctly, so we have to disable these checks for those
+// compiler versions.
+// TODO<joka921> throw these checks out as soon as we don't support these
+// compiler versions anymore.
+
+#if not(defined(__clang__)) || (__clang_major__ != 13 && __clang_major__ != 14)
 template class columnBasedIdTable::IdTable<char, 0>;
 static_assert(!std::is_copy_constructible_v<ad_utility::BufferedVector<char>>);
 template class columnBasedIdTable::IdTable<char, 0,
                                            ad_utility::BufferedVector<char>>;
+#endif
