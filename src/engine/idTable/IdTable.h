@@ -276,7 +276,7 @@ class IdTable {
     if (numRows > capacityRows_) {
       // Increase by at least the `growthFactor` to enforce the amortized O(1)
       // complexity also for patterns like `resize(numRows() + 1)`.
-      growWithMinimalGrowth(numRows);
+      reserveWithMinimalGrowth(numRows);
     }
     numRows_ = numRows;
   }
@@ -582,7 +582,7 @@ class IdTable {
   // by at least the `growthFactor`. This helper function is used inside
   // `growIfFull` and `resize` to enforce the amortized O(1) guarantee for
   // chains of operations.
-  void growWithMinimalGrowth(size_t newCapacity) {
+  void reserveWithMinimalGrowth(size_t newCapacity) {
     setCapacity(std::max(newCapacity,
                          static_cast<size_t>(capacityRows_ * growthFactor)));
   }
@@ -591,7 +591,7 @@ class IdTable {
   // full. Otherwise, do nothing.
   void growIfFull() {
     if (numRows_ == capacityRows_) {
-      growWithMinimalGrowth(capacityRows_ + 1);
+      reserveWithMinimalGrowth(capacityRows_ + 1);
     }
   }
 
