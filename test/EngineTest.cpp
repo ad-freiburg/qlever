@@ -56,7 +56,7 @@ IdTable makeIdTableFromVector(std::vector<std::vector<size_t>> tableContent) {
  * A structure containing all information needed for a normal join test. A
  * normal join test is defined as two IdTables being joined, the resulting
  * IdTable tested, if it is sorted after the join column, or not, and this
- * IdTable than compared with the sampleSolution.
+ * IdTable than compared with the expectedContent.
  */
 struct normalJoinTest {
   IdTable leftIdTable;
@@ -65,7 +65,7 @@ struct normalJoinTest {
   size_t rightJC; // Join column for the right IdTable.
   bool testForSorted; // Should the result of the join be tested, if it is
                       // orderd after leftJC? In other words, ordered after the join column?
-  IdTable sampleSolution;
+  IdTable expectedContent;
 
   // The initialization list is needed, because IdTables can't be constructed
   // without arguments.
@@ -73,42 +73,39 @@ struct normalJoinTest {
       const size_t LeftJC,
       const IdTable& RightIdTable,
       const size_t RightJC,
-      const IdTable& SampleSolution,
+      const IdTable& ExpectedContent,
       const bool TestForSorted = false): leftIdTable{LeftIdTable.clone()},
       leftJC{LeftJC},
       rightIdTable{RightIdTable.clone()},
       rightJC{RightJC},
       testForSorted{TestForSorted},
-      sampleSolution{SampleSolution.clone()}
+      expectedContent{ExpectedContent.clone()}
   {}
 };
 
 /*
- * @brief Tests, if the given IdTable has the same content as the sample
+ * @brief Tests, whether the given IdTable has the same content as the sample
  * solution and, if the option was choosen, if the IdTable is sorted by
  * the join column.
  *
- * @tparam TABLE_WIDTH Just ignore it. Made to be infered from the function
- *  paramters.
- *
  * @param table The IdTable that should be tested.
- * @param sampleSolution The sample solution. Doesn't need to be sorted,
+ * @param expectedContent The sample solution. Doesn't need to be sorted,
  *  or the same order of rows as the table.
  * @param testForSorted If this is true, it will also be tested, if the table
  *  is sorted by the join column.
- * @param jc The join column of the table.
- * @param t Ignore it. It's only here for being able to make better messages,
+ * @param joinColumn The join column of the table.
+ * @param l Ignore it. It's only here for being able to make better messages,
  *  if a IdTable fails the comparison.
 */
-void compareIdTableWithSolution(const IdTable& table, 
-    const IdTable& sampleSolution,
+void compareIdTableWithExpectedContent(const IdTable& table, 
+    const IdTable& expectedContent,
     const bool testForSorted = false,
-    const size_t jc = 0,
-    ad_utility::source_location t = ad_utility::source_location::current()
+    const size_t joinColumn = 0,
+    ad_utility::source_location l = ad_utility::source_location::current()
     ) {
   // For generating more informative messages, when failing the comparison.
   std::stringstream traceMessage{};
-  traceMessage << "compareIdTableWithSolution comparing IdTable\n";
+  traceMessage << "compareIdTableWithExpectedContent comparing IdTable\n";
   for (size_t row = 0; row < table.size(); row++) {
     for (size_t column = 0; column < table.numColumns(); column++) {
       traceMessage << table(row, column) << " ";
@@ -116,33 +113,33 @@ void compareIdTableWithSolution(const IdTable& table,
     traceMessage << "\n";
   }
   traceMessage << "with IdTable \n";
-  for (size_t row = 0; row < sampleSolution.size(); row++) {
-    for (size_t column = 0; column < sampleSolution.numColumns(); column++) {
-      traceMessage << sampleSolution(row, column) << " ";
+  for (size_t row = 0; row < expectedContent.size(); row++) {
+    for (size_t column = 0; column < expectedContent.numColumns(); column++) {
+      traceMessage << expectedContent(row, column) << " ";
     }
     traceMessage << "\n";
   }
-  auto trace{generateLocationTrace(t, traceMessage.str())};
+  auto trace{generateLocationTrace(l, traceMessage.str())};
  
   // Because we compare tables later by sorting them, so that every table has
   // one definit form, we need to create local copies.
   IdTable localTable{table.clone()};
-  IdTable localSampleSolution{sampleSolution.clone()};
+  IdTable localExpectedContent{expectedContent.clone()};
 
-  // Do the IdTable and sampleSolution have the same dimensions?
-  ASSERT_EQ(localTable.size(), localSampleSolution.size());
-  ASSERT_EQ(localTable.numColumns(), localSampleSolution.numColumns());
+  // Do the IdTable and expectedContent have the same dimensions?
+  ASSERT_EQ(localTable.size(), localExpectedContent.size());
+  ASSERT_EQ(localTable.numColumns(), localExpectedContent.numColumns());
 
   if (testForSorted) {
     // Is the table sorted by join column?
-    auto oldEntry{localTable(0, jc)};
+    auto oldEntry{localTable(0, joinColumn)};
     for (size_t i = 1; i < localTable.size(); i++) {
-      ASSERT_TRUE(oldEntry <= localTable(i, jc));
-      oldEntry = localTable(i, jc);
+      ASSERT_TRUE(oldEntry <= localTable(i, joinColumn));
+      oldEntry = localTable(i, joinColumn);
     }
   }
 
-  // Sort both the table and the sampleSolution, so that both have a definite
+  // Sort both the table and the expectedContent, so that both have a definite
   // form for comparison.
   auto sortFunction = [](
       const auto& element1,
@@ -155,9 +152,9 @@ void compareIdTableWithSolution(const IdTable& table,
       return element1[i] < element2[i];
     };
   std::sort(localTable.begin(), localTable.end(), sortFunction);
-  std::sort(localSampleSolution.begin(), localSampleSolution.end(), sortFunction);
+  std::sort(localExpectedContent.begin(), localExpectedContent.end(), sortFunction);
 
-  ASSERT_EQ(localTable, localSampleSolution);
+  ASSERT_EQ(localTable, localExpectedContent);
 }
 
 /*
@@ -197,7 +194,7 @@ IdTable useJoinFunctionOnIdTables(
 
 /*
  * @brief Goes through the sets of tests, joins them together with the given
- * join function and compares the results with the given sample solution.
+ * join function and compares the results with the given expected content.
  *
  * @tparam JOIN_FUNCTION is used to allow the transfer of any type of
  *  lambda function, that could contain a join function. You never have to
@@ -220,7 +217,7 @@ void goThroughSetOfTestsWithJoinFunction(
   for (normalJoinTest const& test: testSet) {
     IdTable resultTable{useJoinFunctionOnIdTables(test.leftIdTable, test.leftJC, test.rightIdTable, test.rightJC, func)};
 
-    compareIdTableWithSolution(resultTable, test.sampleSolution, test.testForSorted, test.leftJC);
+    compareIdTableWithExpectedContent(resultTable, test.expectedContent, test.testForSorted, test.leftJC);
   }
 }
 
@@ -400,7 +397,7 @@ TEST(EngineTest, hashJoinTest) {
   ASSERT_EQ(result1, result2);
 
   // Checking if result1 and result2 are correct.
-  compareIdTableWithSolution(result1, makeIdTableFromVector(std::vector<std::vector<size_t>>{
+  compareIdTableWithExpectedContent(result1, makeIdTableFromVector(std::vector<std::vector<size_t>>{
       {
         {34, 73, 92, 61, 18, 73, 92, 61, 18},
         {96, 51, 40, 67, 23, 2, 76, 87, 38},
@@ -410,7 +407,7 @@ TEST(EngineTest, hashJoinTest) {
     true,
     0
   );
-  compareIdTableWithSolution(result2, makeIdTableFromVector(std::vector<std::vector<size_t>>{
+  compareIdTableWithExpectedContent(result2, makeIdTableFromVector(std::vector<std::vector<size_t>>{
       {
         {34, 73, 92, 61, 18, 73, 92, 61, 18},
         {96, 51, 40, 67, 23, 2, 76, 87, 38},
@@ -428,7 +425,7 @@ TEST(EngineTest, hashJoinTest) {
   result2 = useJoinFunctionOnIdTables(makeIdTableFromVector(a), 0, makeIdTableFromVector(b), 0, HashJoinLambda);
 
   // Sorting is done inside this function.
-  compareIdTableWithSolution(result2, makeIdTableFromVector(std::vector<std::vector<size_t>>{
+  compareIdTableWithExpectedContent(result2, makeIdTableFromVector(std::vector<std::vector<size_t>>{
       {
         {34, 73, 92, 61, 18, 73, 92, 61, 18},
         {96, 51, 40, 67, 23, 2, 76, 87, 38},
