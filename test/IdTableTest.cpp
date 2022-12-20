@@ -134,7 +134,56 @@ TEST(IdTableTest, DocumentationOfIteratorUsage) {
   }
 }
 
+// Run a test case for the following different instantiations of the `IdTable`
+// template:
+// - The default IdTable (stores `Id`s in a `vector<Id, AllocatorWithLimit>`.
+// - An IdTable that stores plain `int`s in plain `std::vector`.
+// - An `IdTable` that stores `Id`s in a `BufferedVector`.
+// Arguments:
+// `NumIdTables` - the number of distinct `IdTable` objects that are used inside
+//                 the test case
+// `test case` -   A lambda that is templated on a specific `IdTable`
+// instantiation, and takes one or two arguments. The first argument is a
+// function that converts a `size_t` to the `value_type` of the `IdTable`, and
+// the second one (if present) is a `std::vector` with `NumIdTables` entries
+// that represent the additional arguments that are needed to instantiate an
+// `IdTable` (e.g. an allocator or a `BufferedVector`).
+template <size_t NumIdTables>
+void runTestForDifferentTypes(auto testCase, std::string testCaseName) {
+  using Buffer = ad_utility::BufferedVector<Id>;
+  using BufferedTable = columnBasedIdTable::IdTable<Id, 0, Buffer>;
+  using intTable = columnBasedIdTable::IdTable<int, 0>;
+  // Prepare the vectors of `allocators` and distinct `BufferedVector`s needed
+  // for the respective `IdTable` types.
+  std::vector<std::decay_t<decltype(allocator())>> allocators;
+  std::vector<Buffer> buffers;
+  for (size_t i = 0; i < NumIdTables; ++i) {
+    buffers.emplace_back(3, testCaseName + std::to_string(i) + ".dat");
+    allocators.emplace_back(allocator());
+  }
+  testCase.template operator()<IdTable>(I, std::move(allocators));
+  testCase.template operator()<BufferedTable>(I, std::move(buffers));
+  auto makeInt = [](auto el) { return static_cast<int>(el); };
+  testCase.template operator()<intTable>(makeInt);
+}
+
+// This helper function has to be used inside the `testCase` lambdas for the
+// `runTestForDifferenTypes` function above whenever a copy of an `IdTable` has
+// to be made. It is necessary because for some `IdTable` instantiations
+// (for example when the data is stored in a `BufferedVector`) the `clone`
+// member function needs additional arguments. For an example usage see the
+// test cases below.
+auto clone(const auto& table, auto... args) {
+  if constexpr (requires { table.clone(); }) {
+    return table.clone();
+  } else {
+    return table.clone(std::move(args)...);
+  }
+}
+
 TEST(IdTableTest, push_back_and_assign) {
+  // A lambda that is used as the `testCase` argument to the
+  // `runtTestForDifferenTypes` function (see above for details).
   auto runTestForIdTable = []<typename Table>(auto make,
                                               auto... additionalArgs) {
     constexpr size_t NUM_ROWS = 30;
@@ -166,122 +215,140 @@ TEST(IdTableTest, push_back_and_assign) {
                 t1(i / NUM_COLS, i % NUM_COLS));
     }
   };
-  using Buffer = ad_utility::BufferedVector<Id>;
-  using BufferedTable = columnBasedIdTable::IdTable<Id, 0, Buffer>;
-  using intTable = columnBasedIdTable::IdTable<int, 0>;
-  auto makeInt = [](auto el) { return static_cast<int>(el); };
-  runTestForIdTable.operator()<IdTable>(I, std::array{allocator()});
-  runTestForIdTable.operator()<BufferedTable>(
-      I, std::array{Buffer{3, "_idTableTest.pushBackAssign.dat"}});
-  runTestForIdTable.operator()<intTable>(makeInt);
+  runTestForDifferentTypes<1>(runTestForIdTable, "idTableTest.pushBackAssign");
 }
 
 TEST(IdTableTest, insertAtEnd) {
-  IdTable t1{4, allocator()};
-  t1.push_back({I(7), I(2), I(4), I(1)});
-  t1.push_back({I(0), I(22), I(1), I(4)});
+  // A lambda that is used as the `testCase` argument to the
+  // `runtTestForDifferenTypes` function (see above for details).
+  auto runTestForIdTable = []<typename Table>(auto make,
+                                              auto... additionalArgs) {
+    Table t1{4, std::move(additionalArgs.at(0))...};
+    t1.push_back({make(7), make(2), make(4), make(1)});
+    t1.push_back({make(0), make(22), make(1), make(4)});
 
-  IdTable init(4, allocator());
-  init.push_back({I(1), I(0), I(6), I(3)});
-  init.push_back({I(3), I(1), I(8), I(2)});
-  init.push_back({I(0), I(6), I(8), I(5)});
-  init.push_back({I(9), I(2), I(6), I(8)});
+    Table init{4, std::move(additionalArgs.at(1))...};
+    init.push_back({make(1), make(0), make(6), make(3)});
+    init.push_back({make(3), make(1), make(8), make(2)});
+    init.push_back({make(0), make(6), make(8), make(5)});
+    init.push_back({make(9), make(2), make(6), make(8)});
 
-  IdTable t2 = init.clone();
-
-  // Test inserting at the end
-  t2.insertAtEnd(t1.begin(), t1.end());
-  for (size_t i = 0; i < init.size(); i++) {
-    ASSERT_EQ(init[i], t2[i]) << i;
-  }
-  for (size_t i = 0; i < t1.size(); i++) {
-    ASSERT_EQ(t1[i], t2[i + init.size()]);
-  }
+    Table t2 = clone(init, std::move(additionalArgs.at(2))...);
+    // Test inserting at the end
+    t2.insertAtEnd(t1.begin(), t1.end());
+    for (size_t i = 0; i < init.size(); i++) {
+      ASSERT_EQ(init[i], t2[i]) << i;
+    }
+    for (size_t i = 0; i < t1.size(); i++) {
+      ASSERT_EQ(t1[i], t2[i + init.size()]);
+    }
+  };
+  runTestForDifferentTypes<3>(runTestForIdTable, "idTableTest.insertAtEnd");
 }
 
 TEST(IdTableTest, reserve_and_resize) {
-  constexpr size_t NUM_ROWS = 34;
-  constexpr size_t NUM_COLS = 20;
+  // A lambda that is used as the `testCase` argument to the
+  // `runtTestForDifferenTypes` function (see above for details).
+  auto runTestForIdTable = []<typename Table>(auto make,
+                                              auto... additionalArgs) {
+    constexpr size_t NUM_ROWS = 34;
+    constexpr size_t NUM_COLS = 20;
 
-  // Test a reserve call before insertions
-  IdTable t1(NUM_COLS, allocator());
-  t1.reserve(NUM_ROWS);
+    // Test a reserve call before insertions
+    Table t1(NUM_COLS, std::move(additionalArgs.at(0))...);
+    t1.reserve(NUM_ROWS);
 
-  // Fill the rows with numbers counting up from 1
-  for (size_t i = 0; i < NUM_ROWS; i++) {
-    t1.emplace_back();
-    for (size_t j = 0; j < NUM_COLS; j++) {
-      t1(i, j) = I(i * NUM_COLS + 1 + j);
+    // Fill the rows with numbers counting up from 1
+    for (size_t i = 0; i < NUM_ROWS; i++) {
+      t1.emplace_back();
+      for (size_t j = 0; j < NUM_COLS; j++) {
+        t1(i, j) = make(i * NUM_COLS + 1 + j);
+      }
     }
-  }
 
-  ASSERT_EQ(NUM_ROWS, t1.size());
-  ASSERT_EQ(NUM_ROWS, t1.numRows());
-  ASSERT_EQ(NUM_COLS, t1.numColumns());
-  // check the entries
-  for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
-  }
+    ASSERT_EQ(NUM_ROWS, t1.size());
+    ASSERT_EQ(NUM_ROWS, t1.numRows());
+    ASSERT_EQ(NUM_COLS, t1.numColumns());
+    // check the entries
+    for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
+      ASSERT_EQ(make(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
+    }
 
-  // Test a resize call instead of insertions
-  IdTable t2(NUM_COLS, allocator());
-  t2.resize(NUM_ROWS);
+    // Test a resize call instead of insertions
+    Table t2(NUM_COLS, std::move(additionalArgs.at(1))...);
+    t2.resize(NUM_ROWS);
 
-  // Fill the rows with numbers counting up from 1
-  for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    t2(i / NUM_COLS, i % NUM_COLS) = I(i + 1);
-  }
+    // Fill the rows with numbers counting up from 1
+    for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
+      t2(i / NUM_COLS, i % NUM_COLS) = make(i + 1);
+    }
 
-  ASSERT_EQ(NUM_ROWS, t2.size());
-  ASSERT_EQ(NUM_ROWS, t2.numRows());
-  ASSERT_EQ(NUM_COLS, t2.numColumns());
-  // check the entries
-  for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(I(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
-  }
+    ASSERT_EQ(NUM_ROWS, t2.size());
+    ASSERT_EQ(NUM_ROWS, t2.numRows());
+    ASSERT_EQ(NUM_COLS, t2.numColumns());
+    // check the entries
+    for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
+      ASSERT_EQ(make(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
+    }
+  };
+  runTestForDifferentTypes<2>(runTestForIdTable,
+                              "idTableTest.reserveAndResize");
 }
 
 TEST(IdTableTest, copyAndMove) {
-  constexpr size_t NUM_ROWS = 100;
-  constexpr size_t NUM_COLS = 4;
+  // A lambda that is used as the `testCase` argument to the
+  // `runtTestForDifferenTypes` function (see above for details).
+  auto runTestForIdTable = []<typename Table>(auto make,
+                                              auto... additionalArgs) {
+    constexpr size_t NUM_ROWS = 100;
+    constexpr size_t NUM_COLS = 4;
 
-  IdTable t1(NUM_COLS, allocator());
-  // Fill the rows with numbers counting up from 1
-  for (size_t i = 0; i < NUM_ROWS; i++) {
-    t1.push_back({I(i * NUM_COLS + 1), I(i * NUM_COLS + 2), I(i * NUM_COLS + 3),
-                  I(i * NUM_COLS + 4)});
-  }
+    Table t1(NUM_COLS, std::move(additionalArgs.at(0))...);
+    // Fill the rows with numbers counting up from 1
+    for (size_t i = 0; i < NUM_ROWS; i++) {
+      t1.push_back({make(i * NUM_COLS + 1), make(i * NUM_COLS + 2),
+                    make(i * NUM_COLS + 3), make(i * NUM_COLS + 4)});
+    }
 
-  // Test all copy and move constructors and assignment operators
-  IdTable t2 = t1.clone();
-  IdTable t3 = t1.clone();
-  IdTable tmp = t1.clone();
-  IdTable t4(std::move(t1));
-  IdTable t5 = std::move(tmp);
+    // Test all copy and move constructors and assignment operators
+    Table t2 = clone(t1, std::move(additionalArgs.at(1))...);
+    Table t3{NUM_COLS, std::move(additionalArgs.at(2))...};
+    t3 = clone(t1, std::move(additionalArgs.at(3))...);
+    Table tmp = clone(t1, std::move(additionalArgs.at(4))...);
+    Table t4(std::move(t1));
+    Table t5{NUM_COLS, std::move(additionalArgs.at(5))...};
+    t5 = std::move(tmp);
 
-  ASSERT_EQ(NUM_ROWS, t2.size());
-  ASSERT_EQ(NUM_ROWS, t2.numRows());
-  ASSERT_EQ(NUM_COLS, t2.numColumns());
+    // t1 and tmp have been moved from
+    ASSERT_EQ(0, t1.numRows());
+    ASSERT_EQ(0, tmp.numRows());
 
-  ASSERT_EQ(NUM_ROWS, t3.size());
-  ASSERT_EQ(NUM_ROWS, t3.numRows());
-  ASSERT_EQ(NUM_COLS, t3.numColumns());
+    ASSERT_EQ(NUM_ROWS, t2.size());
+    ASSERT_EQ(NUM_ROWS, t2.numRows());
+    ASSERT_EQ(NUM_COLS, t2.numColumns());
 
-  ASSERT_EQ(NUM_ROWS, t4.size());
-  ASSERT_EQ(NUM_ROWS, t4.numRows());
-  ASSERT_EQ(NUM_COLS, t4.numColumns());
+    ASSERT_EQ(NUM_ROWS, t3.size());
+    ASSERT_EQ(NUM_ROWS, t3.numRows());
+    ASSERT_EQ(NUM_COLS, t3.numColumns());
 
-  ASSERT_EQ(NUM_ROWS, t5.size());
-  ASSERT_EQ(NUM_ROWS, t5.numRows());
-  ASSERT_EQ(NUM_COLS, t5.numColumns());
+    ASSERT_EQ(NUM_ROWS, t4.size());
+    ASSERT_EQ(NUM_ROWS, t4.numRows());
+    ASSERT_EQ(NUM_COLS, t4.numColumns());
 
-  // check the entries
-  for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(I(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
-    ASSERT_EQ(I(i + 1), t3(i / NUM_COLS, i % NUM_COLS));
-    ASSERT_EQ(I(i + 1), t4(i / NUM_COLS, i % NUM_COLS));
-    ASSERT_EQ(I(i + 1), t5(i / NUM_COLS, i % NUM_COLS));
-  }
+    ASSERT_EQ(NUM_ROWS, t5.size());
+    ASSERT_EQ(NUM_ROWS, t5.numRows());
+    ASSERT_EQ(NUM_COLS, t5.numColumns());
+
+    // check the entries
+    for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
+      ASSERT_EQ(make(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
+      ASSERT_EQ(make(i + 1), t3(i / NUM_COLS, i % NUM_COLS));
+      ASSERT_EQ(make(i + 1), t4(i / NUM_COLS, i % NUM_COLS));
+      ASSERT_EQ(make(i + 1), t5(i / NUM_COLS, i % NUM_COLS));
+    }
+  };
+
+  runTestForDifferentTypes<6>(runTestForIdTable, "idTableTest.copyAndMove");
 }
 
 TEST(IdTableTest, erase) {
@@ -677,6 +744,8 @@ TEST(IdTableTest, staticAsserts) {
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
 }
 
+// Check that we can completely instantiate `IdTable`s with a different value
+// type and a different underlying storage.
 template class columnBasedIdTable::IdTable<char, 0>;
 static_assert(!std::is_copy_constructible_v<ad_utility::BufferedVector<char>>);
 template class columnBasedIdTable::IdTable<char, 0,
