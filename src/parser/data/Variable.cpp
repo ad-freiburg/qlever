@@ -34,8 +34,8 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
   if (variableColumns.contains(*this)) {
     size_t index = variableColumns.at(*this);
     auto id = idTable(row, index);
-    auto optionalStringAndType =
-        ExportQueryExecutionTrees::idToStringAndType(qecIndex, id, res);
+    auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType(
+        qecIndex, id, *res._localVocab);
     if (!optionalStringAndType.has_value()) {
       return std::nullopt;
     }

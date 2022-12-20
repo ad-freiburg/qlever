@@ -56,14 +56,24 @@ class ExportQueryExecutionTrees {
                                     ad_utility::Timer& requestTimer,
                                     size_t maxSend, MediaType mediaType);
 
-  // TODO<joka921> Comment this public function.
-  // It currently has to be public because the `Variable::evaluate` function
-  // calls it for evaluating CONSTRUCT queries..
+  // Convert the `id` to a human-readable string. The `index` is used to resolve
+  // `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is
+  // used to resolve `Id`s with datatype `LocalVocabIndex`. The `escapeFunction`
+  // is applied to the resulting string if it is not of a numeric type.
+  // Returns: If the `Id` encodes a numeric value (integer, double, etc.) then
+  // the `string` (first element of the pair) will be the number as a string
+  // without quotation marks, and the second element of the pair will contain
+  // the corresponding XSD-datatype as an URI. For all other values and
+  // datatypes, the second element of the pair will be empty and the first
+  // element will have the format `"stringContent"^^datatypeUri`. If the `id`
+  // holds the `Undefined` value, then `std::nullopt` is returned. Note: This
+  // function currently has to be public because the `Variable::evaluate`
+  // function calls it for evaluating CONSTRUCT queries.
   // TODO<joka921> Make it private again as soon as the evaluation of construct
   // queries is completely performed inside this module.
   template <typename EscapeFunction = std::identity>
   [[nodiscard]] static std::optional<std::pair<std::string, const char*>>
-  idToStringAndType(const Index& index, Id id, const ResultTable& resultTable,
+  idToStringAndType(const Index& index, Id id, const LocalVocab& localVocab,
                     EscapeFunction&& escapeFunction = EscapeFunction{});
 
  private:

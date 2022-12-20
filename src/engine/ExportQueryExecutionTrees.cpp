@@ -103,8 +103,8 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
         continue;
       }
       const auto& currentId = data(rowIndex, opt->_columnIndex);
-      const auto& optionalStringAndXsdType =
-          idToStringAndType(qet.getQec()->getIndex(), currentId, *resultTable);
+      const auto& optionalStringAndXsdType = idToStringAndType(
+          qet.getQec()->getIndex(), currentId, *resultTable->_localVocab);
       if (!optionalStringAndXsdType.has_value()) {
         row.emplace_back(nullptr);
         continue;
@@ -124,7 +124,7 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
 template <typename EscapeFunction>
 std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
-                                             const ResultTable& resultTable,
+                                             const LocalVocab& localVocab,
                                              EscapeFunction&& escapeFunction) {
   switch (id.getDatatype()) {
     case Datatype::Undefined:
@@ -144,17 +144,15 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     case Datatype::Int:
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
     case Datatype::VocabIndex: {
+      // TODO<joka921> As soon as we get rid of the special encoding of date
+      // values, we can use `index.getVocab().indexToOptionalString()` directly.
       std::optional<string> entity = index.idToOptionalString(id);
-      // TODO<joka921, C++23> This is `optional.transform`
-      if (!entity.has_value()) {
-        return std::nullopt;
-      }
+      AD_CHECK(entity.has_value());
       return std::pair{escapeFunction(std::move(entity.value())), nullptr};
     }
     case Datatype::LocalVocabIndex: {
-      return std::pair{escapeFunction(resultTable._localVocab->getWord(
-                           id.getLocalVocabIndex())),
-                       nullptr};
+      return std::pair{
+          escapeFunction(localVocab.getWord(id.getLocalVocabIndex())), nullptr};
     }
     case Datatype::TextRecordIndex:
       return std::pair{
@@ -170,7 +168,7 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
 // needed
 template std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
-                                             const ResultTable& resultTable,
+                                             const LocalVocab& localVocab,
                                              std::identity&& escapeFunction);
 
 // _____________________________________________________________________________
@@ -264,8 +262,8 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryToSparqlJSON(
     nlohmann::ordered_json binding;
     for (const auto& column : columns) {
       const auto& currentId = idTable(rowIndex, column->_columnIndex);
-      const auto& optionalValue =
-          idToStringAndType(qet.getQec()->getIndex(), currentId, *resultTable);
+      const auto& optionalValue = idToStringAndType(
+          qet.getQec()->getIndex(), currentId, *resultTable->_localVocab);
       if (!optionalValue.has_value()) {
         continue;
       }
@@ -359,8 +357,9 @@ ExportQueryExecutionTrees::selectQueryToCsvTsvOrBinary(
       if (selectedColumnIndices[j].has_value()) {
         const auto& val = selectedColumnIndices[j].value();
         Id id = idTable(i, val._columnIndex);
-        auto optionalStringAndType = idToStringAndType(
-            qet.getQec()->getIndex(), id, *resultTable, escapeFunction);
+        auto optionalStringAndType =
+            idToStringAndType(qet.getQec()->getIndex(), id,
+                              *resultTable->_localVocab, escapeFunction);
         if (optionalStringAndType.has_value()) [[likely]] {
           co_yield optionalStringAndType.value().first;
         }
