@@ -152,7 +152,7 @@ void compareIdTableWithExpectedContent(const IdTable& table,
 }
 
 /*
- * @brief Joins two IdTables togehter with the given join function and returns
+ * @brief Join two IdTables togehter with the given join function and return
  * the result.
  *
  * @tparam JOIN_FUNCTION is used to allow the transfer of any type of
@@ -203,10 +203,10 @@ template<typename JOIN_FUNCTION>
 void goThroughSetOfTestsWithJoinFunction(
       std::vector<normalJoinTest> testSet,
       JOIN_FUNCTION func,
-      ad_utility::source_location t = ad_utility::source_location::current()
+      ad_utility::source_location l = ad_utility::source_location::current()
     ) {
   // For generating better messages, when failing a test.
-  auto trace{generateLocationTrace(t, "goThroughSetOfTestsWithJoinFunction")};
+  auto trace{generateLocationTrace(l, "goThroughSetOfTestsWithJoinFunction")};
 
   for (normalJoinTest const& test: testSet) {
     IdTable resultTable{useJoinFunctionOnIdTables(test.leftIdTable, test.leftJC, test.rightIdTable, test.rightJC, func)};
