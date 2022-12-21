@@ -32,11 +32,15 @@ auto I = [](const auto& id) {
   return Id::makeFromVocabIndex(VocabIndex::make(id));
 };
 
+// For easier reading. We repeat that type combination so often, that this
+// will make things a lot easier in terms of reading and writing.
+using vectorTable = std::vector<std::vector<size_t>>;
+
 /*
  * Return an 'IdTable' with the given 'tableContent'. all rows must have the
  * same length.
 */
-IdTable makeIdTableFromVector(std::vector<std::vector<size_t>> tableContent) {
+IdTable makeIdTableFromVector(vectorTable tableContent) {
   IdTable result{tableContent[0].size(), allocator()};
 
   // Copying the content into the table.
@@ -222,9 +226,9 @@ std::vector<normalJoinTest> createNormalJoinTestSet() {
   std::vector<normalJoinTest> myTestSet{};
 
   // For easier creation of IdTables and readability.
-  std::vector<std::vector<size_t>> leftIdTable{{{1, 1}, {1, 3}, {2, 1}, {2, 2}, {4, 1}}};
-  std::vector<std::vector<size_t>> rightIdTable{{{1, 3}, {1, 8}, {3, 1}, {4, 2}}};
-  std::vector<std::vector<size_t>> sampleSolution{{{1, 1, 3}, {1, 1, 8}, {1, 3, 3}, {1, 3, 8}, {4, 1, 2}}};
+  vectorTable leftIdTable{{{1, 1}, {1, 3}, {2, 1}, {2, 2}, {4, 1}}};
+  vectorTable rightIdTable{{{1, 3}, {1, 8}, {3, 1}, {4, 2}}};
+  vectorTable sampleSolution{{{1, 1, 3}, {1, 1, 8}, {1, 3, 3}, {1, 3, 8}, {4, 1, 2}}};
   myTestSet.push_back(normalJoinTest(makeIdTableFromVector(leftIdTable), 0,
         makeIdTableFromVector(rightIdTable), 0, makeIdTableFromVector(sampleSolution), true));
 
@@ -274,8 +278,8 @@ TEST(EngineTest, joinTest) {
 };
 
 TEST(EngineTest, optionalJoinTest) {
-  IdTable a{makeIdTableFromVector(std::vector<std::vector<size_t>>{{{4, 1, 2}, {2, 1, 3}, {1, 1, 4}, {2, 2, 1}, {1, 3, 1}}})};
-  IdTable b{makeIdTableFromVector(std::vector<std::vector<size_t>>{{{3, 3, 1}, {1, 8, 1}, {4, 2, 2}, {1, 1, 3}}})};
+  IdTable a{makeIdTableFromVector(vectorTable{{{4, 1, 2}, {2, 1, 3}, {1, 1, 4}, {2, 2, 1}, {1, 3, 1}}})};
+  IdTable b{makeIdTableFromVector(vectorTable{{{3, 3, 1}, {1, 8, 1}, {4, 2, 2}, {1, 1, 3}}})};
   IdTable result{4, allocator()};
   vector<array<ColumnIndex, 2>> jcls{};
   jcls.push_back(array<ColumnIndex, 2>{{1, 2}});
@@ -291,7 +295,7 @@ TEST(EngineTest, optionalJoinTest) {
   
   
   // For easier checking of the result.
-  IdTable sampleSolution{makeIdTableFromVector(std::vector<std::vector<size_t>>{
+  IdTable sampleSolution{makeIdTableFromVector(vectorTable{
           {4, 1, 2, 0},
           {2, 1, 3, 3},
           {1, 1, 4, 0},
@@ -307,9 +311,9 @@ TEST(EngineTest, optionalJoinTest) {
   ASSERT_EQ(sampleSolution, result);
 
   // Test the optional join with variable sized data.
-  IdTable va{makeIdTableFromVector(std::vector<std::vector<size_t>>{{{1, 2, 3, 4, 5, 6}, {1, 2, 3, 7, 5 ,6}, {7, 6, 5, 4, 3, 2}}})};
+  IdTable va{makeIdTableFromVector(vectorTable{{{1, 2, 3, 4, 5, 6}, {1, 2, 3, 7, 5 ,6}, {7, 6, 5, 4, 3, 2}}})};
 
-  IdTable vb{makeIdTableFromVector(std::vector<std::vector<size_t>>{{{2, 3, 4}, {2, 3, 5}, {6, 7, 4}}})};
+  IdTable vb{makeIdTableFromVector(vectorTable{{{2, 3, 4}, {2, 3, 5}, {6, 7, 4}}})};
 
   IdTable vresult{7, allocator()};
   jcls.clear();
@@ -323,7 +327,7 @@ TEST(EngineTest, optionalJoinTest) {
                   OptionalJoin::optionalJoin, va, vb, true, false, jcls, &vresult);
   
   // For easier checking.
-  sampleSolution = makeIdTableFromVector(std::vector<std::vector<size_t>>{
+  sampleSolution = makeIdTableFromVector(vectorTable{
           {1, 2, 3, 4, 5, 6, 4},
           {1, 2, 3, 4, 5, 6, 5},
           {1, 2, 3, 7, 5, 6, 4},
@@ -342,7 +346,7 @@ TEST(EngineTest, optionalJoinTest) {
 }
 
 TEST(EngineTest, distinctTest) {
-  IdTable inp{makeIdTableFromVector(std::vector<std::vector<size_t>>{{{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}}})};
+  IdTable inp{makeIdTableFromVector(vectorTable{{{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}}})};
 
   IdTable result{4, allocator()};
 
@@ -350,7 +354,7 @@ TEST(EngineTest, distinctTest) {
   CALL_FIXED_SIZE(4, Engine::distinct, inp, keepIndices, &result);
   
   // For easier checking.
-  IdTable sampleSolution{makeIdTableFromVector(std::vector<std::vector<size_t>>{{{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}}})};
+  IdTable sampleSolution{makeIdTableFromVector(vectorTable{{{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}}})};
   ASSERT_EQ(sampleSolution.size(), result.size());
   ASSERT_EQ(sampleSolution, result);
 }
@@ -372,13 +376,13 @@ TEST(EngineTest, hashJoinTest) {
    * Create two sorted IdTables. Join them using the normal join and the
    * hashed join. Compare.
   */
-  std::vector<std::vector<size_t>> a{{
+  vectorTable a{{
       {34, 73, 92, 61, 18},
       {11, 80, 20, 43, 75},
       {96, 51, 40, 67, 23}
     }};
  
-  std::vector<std::vector<size_t>> b{{
+  vectorTable b{{
       {34, 73, 92, 61, 18},
       {96, 2, 76, 87, 38},
       {96, 16, 27, 22, 38},
@@ -391,7 +395,7 @@ TEST(EngineTest, hashJoinTest) {
   ASSERT_EQ(result1, result2);
 
   // Checking if result1 and result2 are correct.
-  compareIdTableWithExpectedContent(result1, makeIdTableFromVector(std::vector<std::vector<size_t>>{
+  compareIdTableWithExpectedContent(result1, makeIdTableFromVector(vectorTable{
       {
         {34, 73, 92, 61, 18, 73, 92, 61, 18},
         {96, 51, 40, 67, 23, 2, 76, 87, 38},
@@ -401,7 +405,7 @@ TEST(EngineTest, hashJoinTest) {
     true,
     0
   );
-  compareIdTableWithExpectedContent(result2, makeIdTableFromVector(std::vector<std::vector<size_t>>{
+  compareIdTableWithExpectedContent(result2, makeIdTableFromVector(vectorTable{
       {
         {34, 73, 92, 61, 18, 73, 92, 61, 18},
         {96, 51, 40, 67, 23, 2, 76, 87, 38},
@@ -419,7 +423,7 @@ TEST(EngineTest, hashJoinTest) {
   result2 = useJoinFunctionOnIdTables(makeIdTableFromVector(a), 0, makeIdTableFromVector(b), 0, HashJoinLambda);
 
   // Sorting is done inside this function.
-  compareIdTableWithExpectedContent(result2, makeIdTableFromVector(std::vector<std::vector<size_t>>{
+  compareIdTableWithExpectedContent(result2, makeIdTableFromVector(vectorTable{
       {
         {34, 73, 92, 61, 18, 73, 92, 61, 18},
         {96, 51, 40, 67, 23, 2, 76, 87, 38},
