@@ -41,14 +41,16 @@ using vectorTable = std::vector<std::vector<size_t>>;
  * same length.
 */
 IdTable makeIdTableFromVector(vectorTable tableContent) {
+  AD_CHECK(!tableContent.empty());
   IdTable result{tableContent[0].size(), allocator()};
 
   // Copying the content into the table.
   for (const auto& row: tableContent) {
+    AD_CHECK(row.size() == result.numColumns()); // All rows of an IdTable must have the same length.
     const size_t backIndex{result.size()};
     result.emplace_back();
 
-    for (size_t c = 0; c < tableContent[0].size(); c++) {
+    for (size_t c = 0; c < row.size(); c++) {
       result(backIndex, c) = I(row[c]);
     }
   }
@@ -229,8 +231,8 @@ std::vector<normalJoinTest> createNormalJoinTestSet() {
   vectorTable leftIdTable{{{1, 1}, {1, 3}, {2, 1}, {2, 2}, {4, 1}}};
   vectorTable rightIdTable{{{1, 3}, {1, 8}, {3, 1}, {4, 2}}};
   vectorTable sampleSolution{{{1, 1, 3}, {1, 1, 8}, {1, 3, 3}, {1, 3, 8}, {4, 1, 2}}};
-  myTestSet.push_back(normalJoinTest(makeIdTableFromVector(leftIdTable), 0,
-        makeIdTableFromVector(rightIdTable), 0, makeIdTableFromVector(sampleSolution), true));
+  myTestSet.push_back(normalJoinTest{makeIdTableFromVector(leftIdTable), 0,
+        makeIdTableFromVector(rightIdTable), 0, makeIdTableFromVector(sampleSolution), true});
 
   leftIdTable = {{1, 1}, {1, 3}, {2, 1}, {2, 2}, {4, 1}};
   rightIdTable ={{1, 3}, {1, 8}, {3, 1}, {4, 2}};
@@ -240,8 +242,8 @@ std::vector<normalJoinTest> createNormalJoinTestSet() {
   }
   leftIdTable.push_back({400000, 200000});
   rightIdTable.push_back({400000, 200000});
-  myTestSet.push_back(normalJoinTest(makeIdTableFromVector(leftIdTable), 0,
-        makeIdTableFromVector(rightIdTable), 0, makeIdTableFromVector(sampleSolution), true));
+  myTestSet.push_back(normalJoinTest{makeIdTableFromVector(leftIdTable), 0,
+        makeIdTableFromVector(rightIdTable), 0, makeIdTableFromVector(sampleSolution), true});
   
   leftIdTable = {};
   rightIdTable = {};
@@ -256,14 +258,14 @@ std::vector<normalJoinTest> createNormalJoinTestSet() {
   }
   leftIdTable.push_back({4000001, 200000});
   rightIdTable.push_back({4000001, 200000});
-  myTestSet.push_back(normalJoinTest(makeIdTableFromVector(leftIdTable), 0,
-        makeIdTableFromVector(rightIdTable), 0, makeIdTableFromVector(sampleSolution), true));
+  myTestSet.push_back(normalJoinTest{makeIdTableFromVector(leftIdTable), 0,
+        makeIdTableFromVector(rightIdTable), 0, makeIdTableFromVector(sampleSolution), true});
   
   leftIdTable = {{0, 1}, {0, 2}, {1, 3}, {1, 4}};
   rightIdTable = {{0}};
   sampleSolution = {{0, 1}, {0, 2}};
-  myTestSet.push_back(normalJoinTest(makeIdTableFromVector(leftIdTable), 0,
-        makeIdTableFromVector(rightIdTable), 0, makeIdTableFromVector(sampleSolution), true));
+  myTestSet.push_back(normalJoinTest{makeIdTableFromVector(leftIdTable), 0,
+        makeIdTableFromVector(rightIdTable), 0, makeIdTableFromVector(sampleSolution), true});
 
   return myTestSet;
 }
