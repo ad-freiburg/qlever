@@ -105,22 +105,20 @@ void compareIdTableWithExpectedContent(const IdTable& table,
     ) {
   // For generating more informative messages, when failing the comparison.
   std::stringstream traceMessage{};
+
+  auto insertRowIntoTraceMessage = [&traceMessage](const auto& row){
+    for (size_t i = 0; i < row.numColumns(); i++) {
+      traceMessage << row[i] << " ";
+    }
+    traceMessage << "\n";
+  };
+
   traceMessage << "compareIdTableWithExpectedContent comparing IdTable\n";
-  for (size_t row = 0; row < table.size(); row++) {
-    for (size_t column = 0; column < table.numColumns(); column++) {
-      traceMessage << table(row, column) << " ";
-    }
-    traceMessage << "\n";
-  }
+  std::ranges::for_each(table, insertRowIntoTraceMessage, {});
   traceMessage << "with IdTable \n";
-  for (size_t row = 0; row < expectedContent.size(); row++) {
-    for (size_t column = 0; column < expectedContent.numColumns(); column++) {
-      traceMessage << expectedContent(row, column) << " ";
-    }
-    traceMessage << "\n";
-  }
+  std::ranges::for_each(expectedContent, insertRowIntoTraceMessage, {});
   auto trace{generateLocationTrace(l, traceMessage.str())};
- 
+
   // Because we compare tables later by sorting them, so that every table has
   // one definit form, we need to create local copies.
   IdTable localTable{table.clone()};
