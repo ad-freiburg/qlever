@@ -175,15 +175,15 @@ IdTable useJoinFunctionOnIdTables(
         JOIN_FUNCTION func
         ) {
   
-  int reswidth{static_cast<int>(tableA.numColumns() + tableB.numColumns()  - 1)};
-  IdTable res{static_cast<size_t>(reswidth), allocator()};
+  int resultWidth{static_cast<int>(tableA.numColumns() + tableB.numColumns()  - 1)};
+  IdTable result{static_cast<size_t>(resultWidth), allocator()};
  
   // You need to use this special function for executing lambdas. The normal
   // function for functions won't work.
   // Additionaly, we need to cast the two size_t, because callFixedSize only takes arrays of int.
-  ad_utility::callFixedSize((std::array{static_cast<int>(tableA.numColumns()), static_cast<int>(tableB.numColumns()), reswidth}), func, tableA, jcA, tableB, jcB, &res);
+  ad_utility::callFixedSize((std::array{static_cast<int>(tableA.numColumns()), static_cast<int>(tableB.numColumns()), resultWidth}), func, tableA, jcA, tableB, jcB, &result);
 
-  return res;
+  return result;
 }
 
 /*
@@ -276,7 +276,7 @@ TEST(EngineTest, joinTest) {
 TEST(EngineTest, optionalJoinTest) {
   IdTable a{makeIdTableFromVector(std::vector<std::vector<size_t>>{{{4, 1, 2}, {2, 1, 3}, {1, 1, 4}, {2, 2, 1}, {1, 3, 1}}})};
   IdTable b{makeIdTableFromVector(std::vector<std::vector<size_t>>{{{3, 3, 1}, {1, 8, 1}, {4, 2, 2}, {1, 1, 3}}})};
-  IdTable res{4, allocator()};
+  IdTable result{4, allocator()};
   vector<array<ColumnIndex, 2>> jcls{};
   jcls.push_back(array<ColumnIndex, 2>{{1, 2}});
   jcls.push_back(array<ColumnIndex, 2>{{2, 1}});
@@ -285,9 +285,9 @@ TEST(EngineTest, optionalJoinTest) {
   // a have to equal those of column 2 of b and vice versa).
   int aWidth{static_cast<int>(a.numColumns())};
   int bWidth{static_cast<int>(b.numColumns())};
-  int resWidth{static_cast<int>(res.numColumns())};
-  CALL_FIXED_SIZE((std::array{aWidth, bWidth, resWidth}),
-                  OptionalJoin::optionalJoin, a, b, false, true, jcls, &res);
+  int resultWidth{static_cast<int>(result.numColumns())};
+  CALL_FIXED_SIZE((std::array{aWidth, bWidth, resultWidth}),
+                  OptionalJoin::optionalJoin, a, b, false, true, jcls, &result);
   
   
   // For easier checking of the result.
@@ -303,24 +303,24 @@ TEST(EngineTest, optionalJoinTest) {
   sampleSolution(2, 3) = ID_NO_VALUE;
   sampleSolution(3, 3) = ID_NO_VALUE;
 
-  ASSERT_EQ(sampleSolution.size(), res.size());
-  ASSERT_EQ(sampleSolution, res);
+  ASSERT_EQ(sampleSolution.size(), result.size());
+  ASSERT_EQ(sampleSolution, result);
 
   // Test the optional join with variable sized data.
   IdTable va{makeIdTableFromVector(std::vector<std::vector<size_t>>{{{1, 2, 3, 4, 5, 6}, {1, 2, 3, 7, 5 ,6}, {7, 6, 5, 4, 3, 2}}})};
 
   IdTable vb{makeIdTableFromVector(std::vector<std::vector<size_t>>{{{2, 3, 4}, {2, 3, 5}, {6, 7, 4}}})};
 
-  IdTable vres{7, allocator()};
+  IdTable vresult{7, allocator()};
   jcls.clear();
   jcls.push_back(array<ColumnIndex, 2>{{1, 0}});
   jcls.push_back(array<ColumnIndex, 2>{{2, 1}});
 
   aWidth = va.numColumns();
   bWidth = vb.numColumns();
-  resWidth = vres.numColumns();
-  CALL_FIXED_SIZE((std::array{aWidth, bWidth, resWidth}),
-                  OptionalJoin::optionalJoin, va, vb, true, false, jcls, &vres);
+  resultWidth = vresult.numColumns();
+  CALL_FIXED_SIZE((std::array{aWidth, bWidth, resultWidth}),
+                  OptionalJoin::optionalJoin, va, vb, true, false, jcls, &vresult);
   
   // For easier checking.
   sampleSolution = makeIdTableFromVector(std::vector<std::vector<size_t>>{
@@ -336,23 +336,23 @@ TEST(EngineTest, optionalJoinTest) {
   sampleSolution(4, 4) = ID_NO_VALUE;
   sampleSolution(4, 5) = ID_NO_VALUE;
 
-  ASSERT_EQ(sampleSolution.size(), vres.size());
-  ASSERT_EQ(sampleSolution.numColumns(), vres.numColumns());
-  ASSERT_EQ(sampleSolution, vres);
+  ASSERT_EQ(sampleSolution.size(), vresult.size());
+  ASSERT_EQ(sampleSolution.numColumns(), vresult.numColumns());
+  ASSERT_EQ(sampleSolution, vresult);
 }
 
 TEST(EngineTest, distinctTest) {
   IdTable inp{makeIdTableFromVector(std::vector<std::vector<size_t>>{{{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}}})};
 
-  IdTable res{4, allocator()};
+  IdTable result{4, allocator()};
 
   std::vector<size_t> keepIndices{{1, 2}};
-  CALL_FIXED_SIZE(4, Engine::distinct, inp, keepIndices, &res);
+  CALL_FIXED_SIZE(4, Engine::distinct, inp, keepIndices, &result);
   
   // For easier checking.
   IdTable sampleSolution{makeIdTableFromVector(std::vector<std::vector<size_t>>{{{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}}})};
-  ASSERT_EQ(sampleSolution.size(), res.size());
-  ASSERT_EQ(sampleSolution, res);
+  ASSERT_EQ(sampleSolution.size(), result.size());
+  ASSERT_EQ(sampleSolution, result);
 }
 
 TEST(EngineTest, hashJoinTest) {
