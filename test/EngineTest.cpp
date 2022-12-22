@@ -285,8 +285,8 @@ TEST(EngineTest, joinTest) {
 };
 
 TEST(EngineTest, optionalJoinTest) {
-  IdTable a{makeIdTableFromVector(vectorTable{{{4, 1, 2}, {2, 1, 3}, {1, 1, 4}, {2, 2, 1}, {1, 3, 1}}})};
-  IdTable b{makeIdTableFromVector(vectorTable{{{3, 3, 1}, {1, 8, 1}, {4, 2, 2}, {1, 1, 3}}})};
+  IdTable a{makeIdTableFromVector({{4, 1, 2}, {2, 1, 3}, {1, 1, 4}, {2, 2, 1}, {1, 3, 1}})};
+  IdTable b{makeIdTableFromVector({{3, 3, 1}, {1, 8, 1}, {4, 2, 2}, {1, 1, 3}})};
   IdTable result{4, allocator()};
   vector<array<ColumnIndex, 2>> jcls{};
   jcls.push_back(array<ColumnIndex, 2>{{1, 2}});
@@ -302,14 +302,13 @@ TEST(EngineTest, optionalJoinTest) {
   
   
   // For easier checking of the result.
-  IdTable sampleSolution{makeIdTableFromVector(vectorTable{
+  IdTable sampleSolution{makeIdTableFromVector({
           {4, 1, 2, 0},
           {2, 1, 3, 3},
           {1, 1, 4, 0},
           {2, 2, 1, 0},
-          {1, 3, 1, 1}
-        }
-      )};
+          {1, 3, 1, 1} 
+        })};
   sampleSolution(0, 3) = ID_NO_VALUE;
   sampleSolution(2, 3) = ID_NO_VALUE;
   sampleSolution(3, 3) = ID_NO_VALUE;
@@ -318,9 +317,9 @@ TEST(EngineTest, optionalJoinTest) {
   ASSERT_EQ(sampleSolution, result);
 
   // Test the optional join with variable sized data.
-  IdTable va{makeIdTableFromVector(vectorTable{{{1, 2, 3, 4, 5, 6}, {1, 2, 3, 7, 5 ,6}, {7, 6, 5, 4, 3, 2}}})};
+  IdTable va{makeIdTableFromVector({{1, 2, 3, 4, 5, 6}, {1, 2, 3, 7, 5 ,6}, {7, 6, 5, 4, 3, 2}})};
 
-  IdTable vb{makeIdTableFromVector(vectorTable{{{2, 3, 4}, {2, 3, 5}, {6, 7, 4}}})};
+  IdTable vb{makeIdTableFromVector({{2, 3, 4}, {2, 3, 5}, {6, 7, 4}})};
 
   IdTable vresult{7, allocator()};
   jcls.clear();
@@ -334,14 +333,13 @@ TEST(EngineTest, optionalJoinTest) {
                   OptionalJoin::optionalJoin, va, vb, true, false, jcls, &vresult);
   
   // For easier checking.
-  sampleSolution = makeIdTableFromVector(vectorTable{
+  sampleSolution = makeIdTableFromVector({
           {1, 2, 3, 4, 5, 6, 4},
           {1, 2, 3, 4, 5, 6, 5},
           {1, 2, 3, 7, 5, 6, 4},
           {1, 2, 3, 7, 5, 6, 5},
           {0, 6, 7, 0, 0, 0, 4}
-        }
-      );
+        });
   sampleSolution(4, 0) = ID_NO_VALUE;
   sampleSolution(4, 3) = ID_NO_VALUE;
   sampleSolution(4, 4) = ID_NO_VALUE;
@@ -353,7 +351,7 @@ TEST(EngineTest, optionalJoinTest) {
 }
 
 TEST(EngineTest, distinctTest) {
-  IdTable inp{makeIdTableFromVector(vectorTable{{{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}}})};
+  IdTable inp{makeIdTableFromVector({{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
 
   IdTable result{4, allocator()};
 
@@ -361,7 +359,7 @@ TEST(EngineTest, distinctTest) {
   CALL_FIXED_SIZE(4, Engine::distinct, inp, keepIndices, &result);
   
   // For easier checking.
-  IdTable sampleSolution{makeIdTableFromVector(vectorTable{{{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}}})};
+  IdTable sampleSolution{makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}})};
   ASSERT_EQ(sampleSolution.size(), result.size());
   ASSERT_EQ(sampleSolution, result);
 }
@@ -408,23 +406,23 @@ TEST(EngineTest, hashJoinTest) {
   ASSERT_EQ(result1, result2);
 
   // Checking if result1 and result2 are correct.
-  compareIdTableWithExpectedContent(result1, makeIdTableFromVector(vectorTable{
+  compareIdTableWithExpectedContent(result1, makeIdTableFromVector(
       {
         {34, 73, 92, 61, 18, 73, 92, 61, 18},
         {96, 51, 40, 67, 23, 2, 76, 87, 38},
         {96, 51, 40, 67, 23, 16, 27, 22, 38}
       }
-    }),
+    ),
     true,
     0
   );
-  compareIdTableWithExpectedContent(result2, makeIdTableFromVector(vectorTable{
+  compareIdTableWithExpectedContent(result2, makeIdTableFromVector(
       {
         {34, 73, 92, 61, 18, 73, 92, 61, 18},
         {96, 51, 40, 67, 23, 2, 76, 87, 38},
         {96, 51, 40, 67, 23, 16, 27, 22, 38}
       }
-    }),
+    ),
     true,
     0
   );
@@ -439,13 +437,13 @@ TEST(EngineTest, hashJoinTest) {
       HashJoinLambda);
 
   // Sorting is done inside this function.
-  compareIdTableWithExpectedContent(result2, makeIdTableFromVector(vectorTable{
+  compareIdTableWithExpectedContent(result2, makeIdTableFromVector(
       {
         {34, 73, 92, 61, 18, 73, 92, 61, 18},
         {96, 51, 40, 67, 23, 2, 76, 87, 38},
         {96, 51, 40, 67, 23, 16, 27, 22, 38}
       }
-    }),
+    ),
     false
   );
 };
