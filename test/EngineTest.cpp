@@ -96,17 +96,19 @@ void compareIdTableWithExpectedContent(const IdTable& table,
   // For generating more informative messages, when failing the comparison.
   std::stringstream traceMessage{};
 
-  auto insertRowIntoTraceMessage = [&traceMessage](const auto& row){
+  auto writeRowToStream = [&traceMessage](const auto& row){
     for (size_t i = 0; i < row.numColumns(); i++) {
       traceMessage << row[i] << " ";
     }
     traceMessage << "\n";
   };
+  auto writeIdTableToStream = [&traceMessage, &writeRowToStream](const IdTable& idTable){
+    std::ranges::for_each(idTable, writeRowToStream, {});};
 
   traceMessage << "compareIdTableWithExpectedContent comparing IdTable\n";
-  std::ranges::for_each(table, insertRowIntoTraceMessage, {});
+  writeIdTableToStream(table);
   traceMessage << "with IdTable \n";
-  std::ranges::for_each(expectedContent, insertRowIntoTraceMessage, {});
+  writeIdTableToStream(expectedContent);
   auto trace{generateLocationTrace(l, traceMessage.str())};
 
   // Because we compare tables later by sorting them, so that every table has
