@@ -62,30 +62,29 @@ IdTable makeIdTableFromVector(vectorTable tableContent) {
  * A structure containing all information needed for a normal join test. A
  * normal join test is defined as two IdTables being joined, the resulting
  * IdTable tested, if it is sorted after the join column, or not, and this
- * IdTable than compared with the expectedContent.
+ * IdTable is than compared with the expectedResult.
  */
 struct normalJoinTest {
-  IdTable leftIdTable;
-  size_t leftJC; // Join column for the left IdTable.
-  IdTable rightIdTable;
-  size_t rightJC; // Join column for the right IdTable.
-  bool testForSorted; // Should the result of the join be tested, if it is
-                      // orderd after leftJC? In other words, ordered after the join column?
-  IdTable expectedContent;
+  IdTable leftInput;
+  size_t leftJoinColumn;
+  IdTable rightInput;
+  size_t rightJoinColumn;
+  bool resultMustBeSortedByJoinColumn;
+  IdTable expectedResult;
 
   // The initialization list is needed, because IdTables can't be constructed
   // without arguments.
-  normalJoinTest(const IdTable& LeftIdTable,
-      const size_t LeftJC,
-      const IdTable& RightIdTable,
-      const size_t RightJC,
-      const IdTable& ExpectedContent,
-      const bool TestForSorted = false): leftIdTable{LeftIdTable.clone()},
-      leftJC{LeftJC},
-      rightIdTable{RightIdTable.clone()},
-      rightJC{RightJC},
-      testForSorted{TestForSorted},
-      expectedContent{ExpectedContent.clone()}
+  normalJoinTest(const IdTable& LeftInput,
+      const size_t LeftJoinColumn,
+      const IdTable& RightInput,
+      const size_t RightJoinColumn,
+      const IdTable& ExpectedResult,
+      const bool ResultMustBeSortedByJoinColumn = false): leftInput{LeftInput.clone()},
+      leftJoinColumn{LeftJoinColumn},
+      rightInput{RightInput.clone()},
+      rightJoinColumn{RightJoinColumn},
+      resultMustBeSortedByJoinColumn{ResultMustBeSortedByJoinColumn},
+      expectedResult{ExpectedResult.clone()}
   {}
 };
 
@@ -97,7 +96,7 @@ struct normalJoinTest {
  * @param table The IdTable that should be tested.
  * @param expectedContent The sample solution. Doesn't need to be sorted,
  *  or the same order of rows as the table.
- * @param testForSorted If this is true, it will also be tested, if the table
+ * @param resultMustBeSortedByJoinColumn If this is true, it will also be tested, if the table
  *  is sorted by the join column.
  * @param joinColumn The join column of the table.
  * @param l Ignore it. It's only here for being able to make better messages,
@@ -105,7 +104,7 @@ struct normalJoinTest {
 */
 void compareIdTableWithExpectedContent(const IdTable& table, 
     const IdTable& expectedContent,
-    const bool testForSorted = false,
+    const bool resultMustBeSortedByJoinColumn = false,
     const size_t joinColumn = 0,
     ad_utility::source_location l = ad_utility::source_location::current()
     ) {
@@ -134,7 +133,7 @@ void compareIdTableWithExpectedContent(const IdTable& table,
   ASSERT_EQ(localTable.size(), localExpectedContent.size());
   ASSERT_EQ(localTable.numColumns(), localExpectedContent.numColumns());
 
-  if (testForSorted) {
+  if (resultMustBeSortedByJoinColumn) {
     // Is the table sorted by join column?
     ASSERT_TRUE(std::ranges::is_sorted(localTable, {}, [joinColumn](const auto& row){return row[joinColumn];}));
   }
@@ -215,9 +214,9 @@ void goThroughSetOfTestsWithJoinFunction(
   auto trace{generateLocationTrace(l, "goThroughSetOfTestsWithJoinFunction")};
 
   for (normalJoinTest const& test: testSet) {
-    IdTable resultTable{useJoinFunctionOnIdTables(test.leftIdTable, test.leftJC, test.rightIdTable, test.rightJC, func)};
+    IdTable resultTable{useJoinFunctionOnIdTables(test.leftInput, test.leftJoinColumn, test.rightInput, test.rightJoinColumn, func)};
 
-    compareIdTableWithExpectedContent(resultTable, test.expectedContent, test.testForSorted, test.leftJC);
+    compareIdTableWithExpectedContent(resultTable, test.expectedResult, test.resultMustBeSortedByJoinColumn, test.leftJoinColumn);
   }
 }
 
