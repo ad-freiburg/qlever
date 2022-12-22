@@ -123,10 +123,6 @@ void compareIdTableWithExpectedContent(const IdTable& table,
   IdTable localTable{table.clone()};
   IdTable localExpectedContent{expectedContent.clone()};
 
-  // Do the IdTable and expectedContent have the same dimensions?
-  ASSERT_EQ(localTable.numRows(), localExpectedContent.numRows());
-  ASSERT_EQ(localTable.numColumns(), localExpectedContent.numColumns());
-
   if (resultMustBeSortedByJoinColumn) {
     // Is the table sorted by join column?
     ASSERT_TRUE(std::ranges::is_sorted(localTable, {}, [joinColumn](const auto& row){return row[joinColumn];}));
@@ -313,7 +309,6 @@ TEST(EngineTest, optionalJoinTest) {
   sampleSolution(2, 3) = ID_NO_VALUE;
   sampleSolution(3, 3) = ID_NO_VALUE;
 
-  ASSERT_EQ(sampleSolution.size(), result.size());
   ASSERT_EQ(sampleSolution, result);
 
   // Test the optional join with variable sized data.
@@ -345,8 +340,6 @@ TEST(EngineTest, optionalJoinTest) {
   sampleSolution(4, 4) = ID_NO_VALUE;
   sampleSolution(4, 5) = ID_NO_VALUE;
 
-  ASSERT_EQ(sampleSolution.size(), vresult.size());
-  ASSERT_EQ(sampleSolution.numColumns(), vresult.numColumns());
   ASSERT_EQ(sampleSolution, vresult);
 }
 
@@ -360,7 +353,6 @@ TEST(EngineTest, distinctTest) {
   
   // For easier checking.
   IdTable sampleSolution{makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}})};
-  ASSERT_EQ(sampleSolution.size(), result.size());
   ASSERT_EQ(sampleSolution, result);
 }
 
