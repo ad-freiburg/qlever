@@ -115,7 +115,7 @@ void compareIdTableWithExpectedContent(const IdTable& table,
   IdTable localExpectedContent{expectedContent.clone()};
 
   // Do the IdTable and expectedContent have the same dimensions?
-  ASSERT_EQ(localTable.size(), localExpectedContent.size());
+  ASSERT_EQ(localTable.numRows(), localExpectedContent.numRows());
   ASSERT_EQ(localTable.numColumns(), localExpectedContent.numColumns());
 
   if (resultMustBeSortedByJoinColumn) {
