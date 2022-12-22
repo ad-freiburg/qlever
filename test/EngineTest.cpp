@@ -126,14 +126,14 @@ void compareIdTableWithExpectedContent(const IdTable& table,
   // Sort both the table and the expectedContent, so that both have a definite
   // form for comparison.
   auto sortFunction = [](
-      const auto& element1,
-      const auto& element2)
+      const auto& row1,
+      const auto& row2)
     {
       size_t i{0};
-      while (i < (element1.numColumns() - 1) && element1[i] == element2[i]) {
+      while (i < (row1.numColumns() - 1) && row1[i] == row2[i]) {
         i++;
       }
-      return element1[i] < element2[i];
+      return row1[i] < row2[i];
     };
   std::sort(localTable.begin(), localTable.end(), sortFunction);
   std::sort(localExpectedContent.begin(), localExpectedContent.end(), sortFunction);
