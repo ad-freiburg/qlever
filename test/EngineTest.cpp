@@ -59,16 +59,23 @@ IdTable makeIdTableFromVector(vectorTable tableContent) {
 }
 
 /*
+ * Does what it says on the tin: Save an IdTable with the corresponding
+ * join column.
+ */
+struct IdTableAndJoinColumn {
+  IdTable idTable;
+  size_t joinColumn;
+};
+
+/*
  * A structure containing all information needed for a normal join test. A
  * normal join test is defined as two IdTables being joined, the resulting
  * IdTable tested, if it is sorted after the join column, or not, and this
  * IdTable is than compared with the expectedResult.
  */
 struct normalJoinTest {
-  IdTable leftInput;
-  size_t leftJoinColumn;
-  IdTable rightInput;
-  size_t rightJoinColumn;
+  IdTableAndJoinColumn leftInput;
+  IdTableAndJoinColumn rightInput;
   IdTable expectedResult;
   bool resultMustBeSortedByJoinColumn;
 };
@@ -151,8 +158,7 @@ void compareIdTableWithExpectedContent(const IdTable& table,
  *  lambda function, that could contain a join function. You never have to
  *  actually specify this parameter , just let inference do its job.
  *
- * @param tableA, tableB the tables. 
- * @param jcA, jcB are the join columns for the tables.
+ * @param tableA, tableB the tables with their join columns. 
  * @param func the function, that will be used for joining the two tables
  *  together. Look into src/engine/Join.h for how it should look like.
  *
@@ -160,20 +166,24 @@ void compareIdTableWithExpectedContent(const IdTable& table,
  */
 template<typename JOIN_FUNCTION>
 IdTable useJoinFunctionOnIdTables(
-        const IdTable& tableA,
-        const size_t jcA,
-        const IdTable& tableB,
-        const size_t jcB,
+        const IdTableAndJoinColumn& tableA,
+        const IdTableAndJoinColumn& tableB,
         JOIN_FUNCTION func
         ) {
   
-  int resultWidth{static_cast<int>(tableA.numColumns() + tableB.numColumns()  - 1)};
+  int resultWidth{static_cast<int>(tableA.idTable.numColumns() +
+      tableB.idTable.numColumns()  - 1)};
   IdTable result{static_cast<size_t>(resultWidth), allocator()};
  
   // You need to use this special function for executing lambdas. The normal
   // function for functions won't work.
   // Additionaly, we need to cast the two size_t, because callFixedSize only takes arrays of int.
-  ad_utility::callFixedSize((std::array{static_cast<int>(tableA.numColumns()), static_cast<int>(tableB.numColumns()), resultWidth}), func, tableA, jcA, tableB, jcB, &result);
+  ad_utility::callFixedSize((std::array{static_cast<int>(tableA.idTable.numColumns()),
+        static_cast<int>(tableB.idTable.numColumns()), resultWidth}),
+      func,
+      tableA.idTable, tableA.joinColumn,
+      tableB.idTable, tableB.joinColumn,
+      &result);
 
   return result;
 }
@@ -201,9 +211,10 @@ void goThroughSetOfTestsWithJoinFunction(
   auto trace{generateLocationTrace(l, "goThroughSetOfTestsWithJoinFunction")};
 
   for (normalJoinTest const& test: testSet) {
-    IdTable resultTable{useJoinFunctionOnIdTables(test.leftInput, test.leftJoinColumn, test.rightInput, test.rightJoinColumn, func)};
+    IdTable resultTable{useJoinFunctionOnIdTables(test.leftInput,
+        test.rightInput, func)};
 
-    compareIdTableWithExpectedContent(resultTable, test.expectedResult, test.resultMustBeSortedByJoinColumn, test.leftJoinColumn);
+    compareIdTableWithExpectedContent(resultTable, test.expectedResult, test.resultMustBeSortedByJoinColumn, test.leftInput.joinColumn);
   }
 }
 
@@ -217,8 +228,10 @@ std::vector<normalJoinTest> createNormalJoinTestSet() {
   vectorTable leftIdTable{{{1, 1}, {1, 3}, {2, 1}, {2, 2}, {4, 1}}};
   vectorTable rightIdTable{{{1, 3}, {1, 8}, {3, 1}, {4, 2}}};
   vectorTable sampleSolution{{{1, 1, 3}, {1, 1, 8}, {1, 3, 3}, {1, 3, 8}, {4, 1, 2}}};
-  myTestSet.push_back(normalJoinTest{makeIdTableFromVector(leftIdTable), 0,
-        makeIdTableFromVector(rightIdTable), 0, makeIdTableFromVector(sampleSolution), true});
+  myTestSet.push_back(normalJoinTest{
+      IdTableAndJoinColumn{makeIdTableFromVector(leftIdTable), 0},
+      IdTableAndJoinColumn{makeIdTableFromVector(rightIdTable), 0},
+      makeIdTableFromVector(sampleSolution), true});
 
   leftIdTable = {{1, 1}, {1, 3}, {2, 1}, {2, 2}, {4, 1}};
   rightIdTable ={{1, 3}, {1, 8}, {3, 1}, {4, 2}};
@@ -228,8 +241,10 @@ std::vector<normalJoinTest> createNormalJoinTestSet() {
   }
   leftIdTable.push_back({400000, 200000});
   rightIdTable.push_back({400000, 200000});
-  myTestSet.push_back(normalJoinTest{makeIdTableFromVector(leftIdTable), 0,
-        makeIdTableFromVector(rightIdTable), 0, makeIdTableFromVector(sampleSolution), true});
+  myTestSet.push_back(normalJoinTest{
+      IdTableAndJoinColumn{makeIdTableFromVector(leftIdTable), 0},
+      IdTableAndJoinColumn{makeIdTableFromVector(rightIdTable), 0},
+      makeIdTableFromVector(sampleSolution), true});
   
   leftIdTable = {};
   rightIdTable = {};
@@ -244,14 +259,18 @@ std::vector<normalJoinTest> createNormalJoinTestSet() {
   }
   leftIdTable.push_back({4000001, 200000});
   rightIdTable.push_back({4000001, 200000});
-  myTestSet.push_back(normalJoinTest{makeIdTableFromVector(leftIdTable), 0,
-        makeIdTableFromVector(rightIdTable), 0, makeIdTableFromVector(sampleSolution), true});
+  myTestSet.push_back(normalJoinTest{
+      IdTableAndJoinColumn{makeIdTableFromVector(leftIdTable), 0},
+      IdTableAndJoinColumn{makeIdTableFromVector(rightIdTable), 0},
+      makeIdTableFromVector(sampleSolution), true});
   
   leftIdTable = {{0, 1}, {0, 2}, {1, 3}, {1, 4}};
   rightIdTable = {{0}};
   sampleSolution = {{0, 1}, {0, 2}};
-  myTestSet.push_back(normalJoinTest{makeIdTableFromVector(leftIdTable), 0,
-        makeIdTableFromVector(rightIdTable), 0, makeIdTableFromVector(sampleSolution), true});
+  myTestSet.push_back(normalJoinTest{
+      IdTableAndJoinColumn{makeIdTableFromVector(leftIdTable), 0},
+      IdTableAndJoinColumn{makeIdTableFromVector(rightIdTable), 0},
+      makeIdTableFromVector(sampleSolution), true});
 
   return myTestSet;
 }
@@ -378,8 +397,14 @@ TEST(EngineTest, hashJoinTest) {
     }};
   
   // Saving the results and comparing them.
-  IdTable result1{useJoinFunctionOnIdTables(makeIdTableFromVector(a), 0, makeIdTableFromVector(b), 0, JoinLambda)}; // Normal.
-  IdTable result2{useJoinFunctionOnIdTables(makeIdTableFromVector(a), 0, makeIdTableFromVector(b), 0, HashJoinLambda)}; // Hash.
+  IdTable result1{useJoinFunctionOnIdTables(
+      IdTableAndJoinColumn{makeIdTableFromVector(a), 0},
+      IdTableAndJoinColumn{makeIdTableFromVector(b), 0},
+      JoinLambda)}; // Normal.
+  IdTable result2{useJoinFunctionOnIdTables(
+      IdTableAndJoinColumn{makeIdTableFromVector(a), 0},
+      IdTableAndJoinColumn{makeIdTableFromVector(b), 0},
+      HashJoinLambda)}; // Hash.
   ASSERT_EQ(result1, result2);
 
   // Checking if result1 and result2 are correct.
@@ -408,7 +433,10 @@ TEST(EngineTest, hashJoinTest) {
   // if the result is still correct.
   randomShuffle(a.begin(), a.end());
   randomShuffle(b.begin(), b.end());
-  result2 = useJoinFunctionOnIdTables(makeIdTableFromVector(a), 0, makeIdTableFromVector(b), 0, HashJoinLambda);
+  result2 = useJoinFunctionOnIdTables(
+      IdTableAndJoinColumn{makeIdTableFromVector(a), 0},
+      IdTableAndJoinColumn{makeIdTableFromVector(b), 0},
+      HashJoinLambda);
 
   // Sorting is done inside this function.
   compareIdTableWithExpectedContent(result2, makeIdTableFromVector(vectorTable{
