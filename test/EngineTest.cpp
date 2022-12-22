@@ -125,11 +125,16 @@ void compareIdTableWithExpectedContent(const IdTable& table,
 
   if (resultMustBeSortedByJoinColumn) {
     // Is the table sorted by join column?
+    // TODO Using std:.ranges::is_sorted(localTable.getColumn(joinColumn)) would
+    // be cleaner, but getColumn is currently private.
     ASSERT_TRUE(std::ranges::is_sorted(localTable, {}, [joinColumn](const auto& row){return row[joinColumn];}));
   }
 
   // Sort both the table and the expectedContent, so that both have a definite
   // form for comparison.
+  // TODO Instead of this, we could use std::ranges::lexicographical_compare
+  // for the body of the lambda, but that is currently not possible, because
+  // the rows of an IdTable are not iterable.
   auto sortFunction = [](
       const auto& row1,
       const auto& row2)
@@ -140,6 +145,11 @@ void compareIdTableWithExpectedContent(const IdTable& table,
       }
       return row1[i] < row2[i];
     };
+  /*
+   * TODO Introduce functionality to the IdTable-class, so that std::ranges::sort
+   * can be used instead of std::sort. Currently it seems like the iterators
+   * , produced by IdTable, aren't the right type.
+   */
   std::sort(localTable.begin(), localTable.end(), sortFunction);
   std::sort(localExpectedContent.begin(), localExpectedContent.end(), sortFunction);
 
