@@ -69,23 +69,8 @@ struct normalJoinTest {
   size_t leftJoinColumn;
   IdTable rightInput;
   size_t rightJoinColumn;
-  bool resultMustBeSortedByJoinColumn;
   IdTable expectedResult;
-
-  // The initialization list is needed, because IdTables can't be constructed
-  // without arguments.
-  normalJoinTest(const IdTable& LeftInput,
-      const size_t LeftJoinColumn,
-      const IdTable& RightInput,
-      const size_t RightJoinColumn,
-      const IdTable& ExpectedResult,
-      const bool ResultMustBeSortedByJoinColumn = false): leftInput{LeftInput.clone()},
-      leftJoinColumn{LeftJoinColumn},
-      rightInput{RightInput.clone()},
-      rightJoinColumn{RightJoinColumn},
-      resultMustBeSortedByJoinColumn{ResultMustBeSortedByJoinColumn},
-      expectedResult{ExpectedResult.clone()}
-  {}
+  bool resultMustBeSortedByJoinColumn;
 };
 
 /*
