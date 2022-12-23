@@ -18,9 +18,73 @@
 #include "engine/QueryExecutionTree.h"
 #include "util/Forward.h"
 #include "util/SourceLocation.h"
-#include "./util/GTestHelpers.h"
 #include "engine/idTable/IdTable.h"
-#include "./EngineTest.cpp" // Just copying all those helper function would be unecessary code duplication.
+
+ad_utility::AllocatorWithLimit<Id>& allocator() {
+  static ad_utility::AllocatorWithLimit<Id> a{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<size_t>::max())};
+  return a;
+}
+
+auto I = [](const auto& id) {
+  return Id::makeFromVocabIndex(VocabIndex::make(id));
+};
+
+/*
+ * Return an 'IdTable' with the given 'tableContent'. all rows must have the
+ * same length.
+*/
+IdTable makeIdTableFromVector(std::vector<std::vector<size_t>> tableContent) {
+  IdTable result(tableContent[0].size(), allocator());
+
+  // Copying the content into the table.
+  for (const auto& row: tableContent) {
+    const size_t backIndex = result.size();
+    result.emplace_back();
+
+    for (size_t c = 0; c < tableContent[0].size(); c++) {
+      result(backIndex, c) = I(row[c]);
+    }
+  }
+
+  return result;
+}
+
+/*
+ * @brief Joins two IdTables togehter with the given join function and returns
+ * the result.
+ *
+ * @tparam JOIN_FUNCTION is used to allow the transfer of any type of
+ *  lambda function, that could contain a join function. You never have to
+ *  actually specify this parameter , just let inference do its job.
+ *
+ * @param tableA, tableB the tables. 
+ * @param jcA, jcB are the join columns for the tables.
+ * @param func the function, that will be used for joining the two tables
+ *  together. Look into src/engine/Join.h for how it should look like.
+ *
+ * @returns tableA and tableB joined together in a IdTable.
+ */
+template<typename JOIN_FUNCTION>
+IdTable useJoinFunctionOnIdTables(
+        const IdTable& tableA,
+        const size_t jcA,
+        const IdTable& tableB,
+        const size_t jcB,
+        JOIN_FUNCTION func
+        ) {
+  
+  int reswidth = tableA.numColumns() + tableB.numColumns()  - 1;
+  IdTable res(reswidth, allocator());
+ 
+  // You need to use this special function for executing lambdas. The normal
+  // function for functions won't work.
+  // Additionaly, we need to cast the two size_t, because callFixedSize only takes arrays of int.
+  ad_utility::callFixedSize((std::array{static_cast<int>(tableA.numColumns()), static_cast<int>(tableB.numColumns()), reswidth}), func, tableA, jcA, tableB, jcB, &res);
+
+  return res;
+}
 
 /*
  * @brief Return a IdTable, that is randomly filled. The range of numbers
@@ -63,7 +127,7 @@ IdTable createRandomlyFilledIdTable(const size_t numberRows,
 // After this point you can find some hard coded benchmarks.
 
 // Do a normal join and measure the time.
-TEST(BasicJoinBenchmark, normalJoin) {
+int main() {
   ad_utility::Timer benchmarkTimer;
 
   Join J{Join::InvalidOnlyForTestingJoinTag{}};

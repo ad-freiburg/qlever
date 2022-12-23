@@ -87,8 +87,6 @@ addLinkAndDiscoverTest(FTSAlgorithmsTest index)
 
 addLinkAndDiscoverTest(EngineTest engine)
 
-addLinkAndDiscoverTest(BasicJoinBenchmark engine)
-
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
 addLinkAndDiscoverTest(ConversionsTest util absl::strings)
