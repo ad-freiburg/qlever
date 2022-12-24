@@ -30,6 +30,10 @@ class BenchmarkRecords {
 
   void measureTime(std::string descriptor, std::function<void(void)> functionToMeasure);
 
+  const std::vector<RecordEntry>& getRecords() const {
+    return _records;
+  }
+
 };
 
 std::vector<std::function<void(BenchmarkRecords*)>> registerdBenchmarks;
