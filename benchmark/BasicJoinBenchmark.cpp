@@ -1,6 +1,7 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author: Andre Schlegel (November of 2022, schlegea@informatik.uni-freiburg.de)
+// Author of the file this file is based on: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
 
@@ -19,6 +20,7 @@
 #include "util/Forward.h"
 #include "util/SourceLocation.h"
 #include "engine/idTable/IdTable.h"
+#include "../benchmark/Benchmark.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
