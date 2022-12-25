@@ -21,43 +21,49 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
 
+// Get test collection of words of a given size. The words are all distinct.
+std::vector<std::string> getTestCollectionOfWords(size_t size) {
+  std::vector<std::string> testCollectionOfWords(size);
+  for (size_t i = 0; i < testCollectionOfWords.size(); ++i) {
+    testCollectionOfWords[i] = std::to_string(i * 7635475567ULL);
+  }
+  return testCollectionOfWords;
+}
+
 // _____________________________________________________________________________
 TEST(LocalVocab, constructionAndAccess) {
-  // Generate a test collection of words. For the tests below to work, these
-  // must all be different.
-  std::vector<std::string> testVocab(10'000);
-  for (size_t i = 0; i < testVocab.size(); ++i) {
-    testVocab[i] = std::to_string(i * 7635475567ULL);
-  }
+  // Test collection of words.
+  std::vector<std::string> testWords = getTestCollectionOfWords(10'000);
+
   // Create empty local vocabulary.
   LocalVocab localVocab;
   ASSERT_TRUE(localVocab.empty());
 
   // Add the words from our test vocabulary and check that they get the expected
   // local IDs.
-  for (size_t i = 0; i < testVocab.size(); ++i) {
-    ASSERT_EQ(localVocab.getIndexAndAddIfNotContained(testVocab[i]),
+  for (size_t i = 0; i < testWords.size(); ++i) {
+    ASSERT_EQ(localVocab.getIndexAndAddIfNotContained(testWords[i]),
               LocalVocabIndex::make(i));
   }
-  ASSERT_EQ(localVocab.size(), testVocab.size());
+  ASSERT_EQ(localVocab.size(), testWords.size());
 
   // Check that we get the same IDs if we do this again, but that no new words
   // will be added.
-  for (size_t i = 0; i < testVocab.size(); ++i) {
-    ASSERT_EQ(localVocab.getIndexAndAddIfNotContained(testVocab[i]),
+  for (size_t i = 0; i < testWords.size(); ++i) {
+    ASSERT_EQ(localVocab.getIndexAndAddIfNotContained(testWords[i]),
               LocalVocabIndex::make(i));
   }
-  ASSERT_EQ(localVocab.size(), testVocab.size());
+  ASSERT_EQ(localVocab.size(), testWords.size());
 
   // Check that the lookup by ID gives the correct words.
-  for (size_t i = 0; i < testVocab.size(); ++i) {
-    ASSERT_EQ(localVocab.getWord(LocalVocabIndex::make(i)), testVocab[i]);
+  for (size_t i = 0; i < testWords.size(); ++i) {
+    ASSERT_EQ(localVocab.getWord(LocalVocabIndex::make(i)), testWords[i]);
   }
-  ASSERT_EQ(localVocab.size(), testVocab.size());
+  ASSERT_EQ(localVocab.size(), testWords.size());
 
   // Check that out-of-bound lookups are detected (this would have a caught the
   // one-off bug in #820, LocalVocab.cpp line 55).
-  ASSERT_THROW(localVocab.getWord(LocalVocabIndex::make(testVocab.size())),
+  ASSERT_THROW(localVocab.getWord(LocalVocabIndex::make(testWords.size())),
                std::runtime_error);
   ASSERT_THROW(localVocab.getWord(LocalVocabIndex::make(-1)),
                std::runtime_error);
@@ -65,10 +71,40 @@ TEST(LocalVocab, constructionAndAccess) {
   // Check that a move gives the expected result.
   auto localVocabMoved = std::move(localVocab);
   ASSERT_EQ(localVocab.size(), 0);
-  ASSERT_EQ(localVocabMoved.size(), testVocab.size());
-  for (size_t i = 0; i < testVocab.size(); ++i) {
-    ASSERT_EQ(localVocabMoved.getWord(LocalVocabIndex::make(i)), testVocab[i]);
+  ASSERT_EQ(localVocabMoved.size(), testWords.size());
+  for (size_t i = 0; i < testWords.size(); ++i) {
+    ASSERT_EQ(localVocabMoved.getWord(LocalVocabIndex::make(i)), testWords[i]);
   }
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, clone) {
+  // Create a small local vocabulary.
+  size_t localVocabSize = 100;
+  LocalVocab localVocabOriginal;
+  for (auto& word : getTestCollectionOfWords(localVocabSize)) {
+    localVocabOriginal.getIndexAndAddIfNotContained(word);
+  }
+  ASSERT_EQ(localVocabOriginal.size(), localVocabSize);
+
+  // Clone it and test that the clone contains the same words, but under
+  // different addresses (that is, the words were deeply copied).
+  LocalVocab localVocabClone = localVocabOriginal.clone();
+  ASSERT_EQ(localVocabOriginal.size(), localVocabSize);
+  ASSERT_EQ(localVocabClone.size(), localVocabSize);
+  for (size_t i = 0; i < localVocabSize; ++i) {
+    LocalVocabIndex idx = LocalVocabIndex::make(i);
+    const std::string& wordFromOriginal = localVocabOriginal.getWord(idx);
+    const std::string& wordFromClone = localVocabClone.getWord(idx);
+    ASSERT_EQ(wordFromOriginal, wordFromClone);
+    ASSERT_NE(&wordFromOriginal, &wordFromClone);
+  }
+
+  // Check that `nextFreeIndex_` of the clone is OK by adding another word to
+  // the clone.
+  localVocabClone.getIndexAndAddIfNotContained("blubb");
+  ASSERT_EQ(localVocabClone.getIndexAndAddIfNotContained("blubb"),
+            LocalVocabIndex::make(localVocabSize));
 }
 
 // _____________________________________________________________________________
@@ -81,13 +117,15 @@ TEST(LocalVocab, propagation) {
 
   // Lambda that checks the contents of the local vocabulary after the specified
   // operation.
-  // NOTE: Clear the cache before each check
-  // TODO: Does this solve the problem with the local vocab when doing several
-  // operations on `values1`?
+  //
+  // NOTE: We deliberately do not clear the cache to check for unexpected
+  // behavior with respect to the local vocabularies and caching. For example,
+  // see the comment in `GroupBy::computeResult`, where we have to make a copy
+  // of the local vocabulary of the subresult.
   auto checkLocalVocab = [&](auto* operation,
                              std::vector<std::string> expectedWords) -> void {
     AD_CHECK(operation);
-    operation->getExecutionContext()->getQueryTreeCache().clearAll();
+    // operation->getExecutionContext()->getQueryTreeCache().clearAll();
     std::shared_ptr<const ResultTable> resultTable = operation->getResult();
     ASSERT_TRUE(resultTable)
         << "Operation: " << operation->getDescriptor() << std::endl;

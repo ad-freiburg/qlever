@@ -9,6 +9,27 @@
 #include "global/ValueId.h"
 
 // _____________________________________________________________________________
+LocalVocab LocalVocab::clone() {
+  LocalVocab localVocabClone;
+  // First, make a deep copy of the `absl::node_hash_map` holding the actual
+  // map of strings to indexes.
+  localVocabClone.wordsToIdsMap_ = this->wordsToIdsMap_;
+  // The next free index should be the same.
+  localVocabClone.nextFreeIndex_ = this->nextFreeIndex_;
+  // The map from local ids to strings stores pointers to strings, so we cannot
+  // just copy these, but make sure to use the pointers from the keys of the new
+  // map, and not of the original map.
+  localVocabClone.idsToWordsMap_.reserve(this->size());
+  for (const std::string* wordPtr : this->idsToWordsMap_) {
+    auto it = localVocabClone.wordsToIdsMap_.find(*wordPtr);
+    AD_CHECK(it != localVocabClone.wordsToIdsMap_.end());
+    localVocabClone.idsToWordsMap_.push_back(std::addressof(it->first));
+  }
+  // Return the clone.
+  return localVocabClone;
+}
+
+// _____________________________________________________________________________
 template <typename WordT>
 LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
   // The following code contains two subtle, but important optimizations:

@@ -41,10 +41,15 @@ class LocalVocab {
   // Create a new, empty local vocabulary.
   LocalVocab() = default;
 
-  // Prevent accidental copying of a local vocabulary (it can be quite large),
-  // but moving it is OK.
+  // Prevent accidental copying of a local vocabulary.
   LocalVocab(const LocalVocab&) = delete;
   LocalVocab& operator=(const LocalVocab&) = delete;
+
+  // Make a deep copy explicitly.
+  LocalVocab clone();
+
+  // Moving a local vocabulary is not problematic (though the typical use case
+  // in our code is to copy shared pointers to local vocabularies).
   LocalVocab(LocalVocab&&) = default;
   LocalVocab& operator=(LocalVocab&&) = default;
 
