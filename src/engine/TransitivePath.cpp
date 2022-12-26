@@ -669,6 +669,12 @@ void TransitivePath::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "TransitivePath subresult computation done." << std::endl;
 
+  // NOTE: The only place, where the input to a transitive path operation is not
+  // an index scan (which have empty local vocabularies by default) is the
+  // `LocalVocabTest`. But it doesn't harm to propagate `_localVocab` here
+  // either.
+  result->_localVocab = subRes->_localVocab;
+
   result->_sortedBy = resultSortedOn();
   if (_leftIsVar || _leftSideTree != nullptr) {
     result->_resultTypes.push_back(subRes->getResultType(_leftSubCol));
