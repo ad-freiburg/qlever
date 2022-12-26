@@ -128,10 +128,7 @@ IdTable createRandomlyFilledIdTable(const size_t numberRows,
 
 // After this point you can find some hard coded benchmarks.
 
-// Do a normal join and measure the time.
-int main() {
-  ad_utility::Timer benchmarkTimer;
-
+void BM_RandomFillTable(BenchmarkRecords* records) {
   Join J{Join::InvalidOnlyForTestingJoinTag{}};
   auto JoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
     return J.join<A, B, C>(AD_FWD(args)...);
@@ -140,9 +137,10 @@ int main() {
   IdTable a = createRandomlyFilledIdTable(1000, 1000, 0, 0, 50);
   IdTable b = createRandomlyFilledIdTable(1000, 1000, 0, 0, 50);
   
-  benchmarkTimer.start();
-  useJoinFunctionOnIdTables(a, 0, b, 0, JoinLambda);
-  benchmarkTimer.stop();
+  records->measureTime(std::string{"Normal join with randomly filled IdTables"}, [&]() {
+        useJoinFunctionOnIdTables(a, 0, b, 0, JoinLambda);
+      }
+    );
+}
 
-  std::cout << "The join operation took " << benchmarkTimer.value() << " usecs. (Whatever that is.)" << std::endl;
-};
+BenchmarkRegister temp1{{&BM_RandomFillTable}};

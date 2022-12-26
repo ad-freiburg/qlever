@@ -28,16 +28,21 @@ class BenchmarkRecords {
 
   public:
 
-  void measureTime(std::string descriptor, std::function<void(void)> functionToMeasure);
+    void measureTime(std::string descriptor, std::function<void()> functionToMeasure);
 
-  const std::vector<RecordEntry>& getRecords() const {
-    return _records;
-  }
+    const std::vector<RecordEntry>& getRecords() const {
+      return _records;
+    }
 
 };
 
-std::vector<std::function<void(BenchmarkRecords*)>> registerdBenchmarks;
+class BenchmarkRegister {
+  
+    static std::vector<std::function<void(BenchmarkRecords*)>> _registerdBenchmarks;
 
-void REGISTER_BENCHMARK(std::function<void(BenchmarkRecords*)>& benchmark) {
-  registerdBenchmarks.push_back(benchmark);
-}
+  public:
+
+    BenchmarkRegister(const std::vector<std::function<void(BenchmarkRecords*)>>& benchmarks);
+
+    static const std::vector<std::function<void(BenchmarkRecords*)>>& getRegisterdBenchmarks();
+};
