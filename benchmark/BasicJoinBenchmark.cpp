@@ -137,7 +137,7 @@ void BM_RandomFillTable(BenchmarkRecords* records) {
   IdTable a = createRandomlyFilledIdTable(1000, 1000, 0, 0, 50);
   IdTable b = createRandomlyFilledIdTable(1000, 1000, 0, 0, 50);
   
-  records->measureTime(std::string{"Normal join with randomly filled IdTables"}, [&]() {
+  records->measureTime("Normal join with randomly filled IdTables", [&]() {
         useJoinFunctionOnIdTables(a, 0, b, 0, JoinLambda);
       }
     );
