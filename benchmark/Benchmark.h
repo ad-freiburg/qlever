@@ -19,7 +19,7 @@ class BenchmarkRecords {
 
     struct RecordEntry {
       std::string descriptor;
-      off_t measuredTime;
+      float measuredTime;
     };
 
   private:

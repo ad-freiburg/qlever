@@ -21,7 +21,7 @@ void BenchmarkRecords::measureTime(std::string descriptor, std::function<void()>
     functionToMeasure();
     benchmarkTimer.stop();
 
-    _records.push_back(RecordEntry{descriptor, benchmarkTimer.value()});
+    _records.push_back(RecordEntry{descriptor, benchmarkTimer.secs()});
 }
 
 // ____________________________________________________________________________

@@ -18,7 +18,7 @@ int main() {
   std::stringstream visualization;
   visualization << "##############\n# Benchmarks #\n##############\n";
   for (const BenchmarkRecords::RecordEntry& entry: benchmarksTime.getRecords()) {
-    visualization << "\nBenchmark '" << entry.descriptor << "' took " << entry.measuredTime << " usecs.";
+    visualization << "\nBenchmark '" << entry.descriptor << "' took " << entry.measuredTime << " seconds.";
   }
 
   std::cout << visualization.str() << "\n";
