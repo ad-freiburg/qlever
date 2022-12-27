@@ -22,6 +22,10 @@
 // Benchmarks for sorted tables, with and without overlapping values in
 // IdTables. Done with normal join and hash join.
 void BM_SortedIdTable(BenchmarkRecords* records) {
+  // For easier changing of the IdTables size.
+  const size_t NUMBER_ROWS = 1000;
+  const size_t NUMBER_COLUMNS = 1000; 
+  
   Join J{Join::InvalidOnlyForTestingJoinTag{}};
   auto JoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
     return J.join<A, B, C>(AD_FWD(args)...);
@@ -31,11 +35,11 @@ void BM_SortedIdTable(BenchmarkRecords* records) {
   };
 
   // Tables, that have overlapping values in their join columns.
-  IdTable a = createRandomlyFilledIdTable(10000, 10000, 0, 0, 10);
-  IdTable b = createRandomlyFilledIdTable(10000, 10000, 0, 5, 15);
+  IdTable a = createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 0, 10);
+  IdTable b = createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 5, 15);
   
   // Because overlap is not yet guaranteed, we put some in.
-  for (size_t i = 400; i < 700; i++) {
+  for (size_t i = 1; i*5+1 <= NUMBER_ROWS - 1; i++) {
     size_t row = i * 5;
     a(row - 3, 0) = I(10);
     b(row + 1, 0) = I(10);
@@ -59,8 +63,8 @@ void BM_SortedIdTable(BenchmarkRecords* records) {
     );
 
   // Same thing, but non overlapping.
-  a = createRandomlyFilledIdTable(10000, 10000, 0, 0, 10);
-  b = createRandomlyFilledIdTable(10000, 10000, 0, 20, 30);
+  a = createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 0, 10);
+  b = createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 20, 30);
   
   // Sorting the tables after the join column.
   std::sort(a.begin(), a.end(), sortFunction);
