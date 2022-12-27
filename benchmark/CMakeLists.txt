@@ -13,4 +13,6 @@ function(addAndLinkBenchmarkWithPrint basename)
 endfunction()
 
 # Add benchmarks after here.
-addAndLinkBenchmarkWithPrint(BasicJoinBenchmark engine)
+addAndLinkBenchmarkWithPrint(SortedJoinBenchmark engine)
+
+addAndLinkBenchmarkWithPrint(UnsortedJoinBenchmark engine)
