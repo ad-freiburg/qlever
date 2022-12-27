@@ -126,21 +126,123 @@ IdTable createRandomlyFilledIdTable(const size_t numberRows,
   return makeIdTableFromVector(tableContent); 
 }
 
-// After this point you can find some hard coded benchmarks.
 
-void BM_RandomFillTable(BenchmarkRecords* records) {
+// Benchmarks for sorted tables, with and without overlapping values in
+// IdTables. Done with normal join and hash join.
+void BM_SortedIdTable(BenchmarkRecords* records) {
   Join J{Join::InvalidOnlyForTestingJoinTag{}};
   auto JoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
     return J.join<A, B, C>(AD_FWD(args)...);
   };
+  auto HashJoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
+    return J.hashJoin<A, B, C>(AD_FWD(args)...);
+  };
 
-  IdTable a = createRandomlyFilledIdTable(1000, 1000, 0, 0, 50);
-  IdTable b = createRandomlyFilledIdTable(1000, 1000, 0, 0, 50);
+  // Tables, that have overlapping values in their join columns.
+  IdTable a = createRandomlyFilledIdTable(10000, 10000, 0, 0, 10);
+  IdTable b = createRandomlyFilledIdTable(10000, 10000, 0, 5, 15);
   
-  records->measureTime("Normal join with randomly filled IdTables", [&]() {
+  // Because overlap is not yet guaranteed, we put some in.
+  for (size_t i = 400; i < 700; i++) {
+    size_t row = i * 5;
+    a(row - 3, 0) = I(10);
+    b(row + 1, 0) = I(10);
+  }
+
+  // Sorting the tables after the join column.
+  auto sortFunction = [](const auto& row1, const auto& row2) {
+    return row1[0] < row2[0];
+  };
+  std::sort(a.begin(), a.end(), sortFunction);
+  std::sort(b.begin(), b.end(), sortFunction);
+
+
+  records->measureTime("Normal join with sorted, overlapping IdTables", [&]() {
+        useJoinFunctionOnIdTables(a, 0, b, 0, JoinLambda);
+      }
+    );
+  records->measureTime("Hashed join with sorted, overlapping IdTables", [&]() {
+        useJoinFunctionOnIdTables(a, 0, b, 0, HashJoinLambda);
+      }
+    );
+
+  // Same thing, but non overlapping.
+  a = createRandomlyFilledIdTable(10000, 10000, 0, 0, 10);
+  b = createRandomlyFilledIdTable(10000, 10000, 0, 20, 30);
+  
+  // Sorting the tables after the join column.
+  std::sort(a.begin(), a.end(), sortFunction);
+  std::sort(b.begin(), b.end(), sortFunction);
+  
+  records->measureTime("Normal join with sorted, non-overlapping IdTables", [&]() {
+        useJoinFunctionOnIdTables(a, 0, b, 0, JoinLambda);
+      }
+    );
+  records->measureTime("Hashed join with sorted, non-overlapping IdTables", [&]() {
+        useJoinFunctionOnIdTables(a, 0, b, 0, HashJoinLambda);
+      }
+    );
+}
+
+// Benchmarks for unsorted tables, with and without overlapping values in
+// IdTables. Done with normal join and hash join.
+void BM_UnsortedIdTable(BenchmarkRecords* records) {
+  Join J{Join::InvalidOnlyForTestingJoinTag{}};
+  auto JoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
+    return J.join<A, B, C>(AD_FWD(args)...);
+  };
+  auto HashJoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
+    return J.hashJoin<A, B, C>(AD_FWD(args)...);
+  };
+
+  // Tables, that have overlapping values in their join columns.
+  IdTable a = createRandomlyFilledIdTable(10000, 10000, 0, 0, 10);
+  IdTable b = createRandomlyFilledIdTable(10000, 10000, 0, 5, 15);
+  
+  // Because overlap is not yet guaranteed, we put some in.
+  for (size_t i = 400; i < 700; i++) {
+    size_t row = i * 5;
+    a(row - 3, 0) = I(10);
+    b(row + 1, 0) = I(10);
+  }
+
+  // We need to order the IdTables, before using the normal join function on
+  // them. This is the sort function for that.
+  auto sortFunction = [](const auto& row1, const auto& row2) {
+    return row1[0] < row2[0];
+  };
+
+   records->measureTime("Hashed join with unsorted, overlapping IdTables", [&]() {
+        useJoinFunctionOnIdTables(a, 0, b, 0, HashJoinLambda);
+      }
+    );
+  
+   records->measureTime("Normal join with unsorted, overlapping IdTables", [&]() {
+        // Sorting the tables after the join column.
+        std::sort(a.begin(), a.end(), sortFunction);
+        std::sort(b.begin(), b.end(), sortFunction);
+
+        useJoinFunctionOnIdTables(a, 0, b, 0, JoinLambda);
+      }
+    );
+
+  // Same thing, but non overlapping.
+  a = createRandomlyFilledIdTable(10000, 10000, 0, 0, 10);
+  b = createRandomlyFilledIdTable(10000, 10000, 0, 20, 30);
+  
+  records->measureTime("Hashed join with unsorted, non-overlapping IdTables", [&]() {
+        useJoinFunctionOnIdTables(a, 0, b, 0, HashJoinLambda);
+      }
+    );
+ 
+  records->measureTime("Normal join with unsorted, non-overlapping IdTables", [&]() {
+        // Sorting the tables after the join column.
+        std::sort(a.begin(), a.end(), sortFunction);
+        std::sort(b.begin(), b.end(), sortFunction);
+  
         useJoinFunctionOnIdTables(a, 0, b, 0, JoinLambda);
       }
     );
 }
 
-BenchmarkRegister temp1{{&BM_RandomFillTable}};
+BenchmarkRegister temp{{&BM_SortedIdTable, &BM_UnsortedIdTable}};
