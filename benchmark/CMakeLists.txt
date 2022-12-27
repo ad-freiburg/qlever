@@ -6,7 +6,7 @@ endfunction()
 
 # Compile the benchmark with BenchmarkMainPrint and link the benchmark, but
 # do not run it.
-# Usage: addAndLinkBenchmark(basename, [additionalLibraries...]
+# Usage: addAndLinkBenchmark(basename, [additionalLibraries...])
 function(addAndLinkBenchmarkWithPrint basename)
     add_executable(${basename}  Benchmark.cpp "${basename}.cpp" BenchmarkMainPrint.cpp)
     linkBenchmark(${basename} ${ARGN})

@@ -110,9 +110,9 @@ And that is everything needed for the standard part.
 After this part, you have all benchmark measured and can look their information up, by looking into the array returned by calling `getRecords()` on your `BenchmarkRecords`-object.  
 Now you can write you new processing behaviour with those information and do whatever you want. For an example, see `BenchmarkMainPrint.cpp`.  
 
-After writing your new benchmark processing behaviour, in order to use it, you will also have to write a new functions in `CMakeLists.txt`.  
+After writing your new benchmark processing behaviour, in order to use it, you will also have to write a new function in `CMakeLists.txt`.  
 I recommend looking at the declarations at the end of the file, in order to find an already existing function for compiling with a main function file, going to the definition of that function and copying it.  
-Then simply change the name, doc string and the file of the main function in `add_executable`, and everything should set.  
+Then simply change the name, doc string and the file of the main function in `add_executable`, and everything should be set.  
 For example:
 
 ```
@@ -126,3 +126,10 @@ endfunction()
 ```
 
 Then you can add benchmarks with it, like all the other benchmarks entry in the file and everything *should* run smoothly.
+
+# Compiling and running a benchmark
+
+Compile everything like normal. There are no additional steps for benchmarks required.  
+If everything compiled correctly, there should be a new `benchmark` directory in your build directory, containing the compiled benchmarks.  
+
+Simply start the compiled benchmark (with CLI), in order to run it. Visual output and similar things are the job of the corresponding main function.
