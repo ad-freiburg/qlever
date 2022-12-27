@@ -11,7 +11,7 @@
 #include "util/Timer.h"
 
 // ____________________________________________________________________________
-std::vector<std::function<void(BenchmarkRecords*)>> BenchmarkRegister::_registerdBenchmarks;
+std::vector<std::function<void(BenchmarkRecords*)>> BenchmarkRegister::_registerdBenchmarks(0);
 
 // ____________________________________________________________________________
 void BenchmarkRecords::measureTime(std::string descriptor, std::function<void()> functionToMeasure) {
