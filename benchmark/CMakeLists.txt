@@ -6,13 +6,15 @@ endfunction()
 
 # Compile the benchmark with MainPrintTimes and link the benchmark, but
 # do not run it.
-# Usage: addAndLinkBenchmarkWithPrintTimes(basename, [additionalLibraries...])
-function(addAndLinkBenchmarkWithPrintTimes basename)
-    add_executable(${basename}  Benchmark.cpp "${basename}.cpp" MainPrintTimes.cpp)
-    linkBenchmark(${basename} ${ARGN})
+# Usage: addAndLinkBenchmarkWithPrintTimes(compileName, cppFileName, [additionalLibraries...])
+#   - compileName : The name, that the compiled end product should have.
+#   - cppFileName : The .cpp file, that contains your benchmark without the file extension.
+function(addAndLinkBenchmarkWithPrintTimes compileName cppFileName)
+    add_executable(${compileName}  Benchmark.cpp "${cppFileName}.cpp" MainPrintTimes.cpp)
+    linkBenchmark(${compileName} ${ARGN})
 endfunction()
 
 # Add benchmarks after here.
-addAndLinkBenchmarkWithPrintTimes(SortedJoinBenchmark engine)
+addAndLinkBenchmarkWithPrintTimes(SortedJoinBenchmark SortedJoinBenchmark engine)
 
-addAndLinkBenchmarkWithPrintTimes(UnsortedJoinBenchmark engine)
+addAndLinkBenchmarkWithPrintTimes(UnsortedJoinBenchmark UnsortedJoinBenchmark engine)

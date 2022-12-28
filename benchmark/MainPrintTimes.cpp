@@ -5,26 +5,23 @@
 #include <iostream>
 #include <sstream>
 #include <algorithm>
+#include <vector>
 
 #include "../benchmark/Benchmark.h"
+#include "../benchmark/util/MainFunctionHelperFunction.h"
 
 /*
  * @brief Goes through the registerd benchmarks, measures their time and
  * prints their measured time.
  */
 int main() {
-  // For measuring and saving the times.
-  BenchmarkRecords benchmarksTime;
- 
-  // Goes through all registerd benchmarks and measures them.
-  for (const auto& benchmarkFunction: BenchmarkRegister::getRegisterdBenchmarks()) {
-    benchmarkFunction(&benchmarksTime);
-  }
+  // The descriptors and measured times of all the register benchmarks.
+  const std::vector<BenchmarkRecords::RecordEntry> records = measureTimeForAllBenchmarks(); 
  
   // Visualizes the measured times.
   std::stringstream visualization;
   visualization << "##############\n# Benchmarks #\n##############\n";
-  for (const BenchmarkRecords::RecordEntry& entry: benchmarksTime.getRecords()) {
+  for (const BenchmarkRecords::RecordEntry& entry: records) {
     visualization << "\nBenchmark '" << entry.descriptor << "' took " << entry.measuredTime << " seconds.";
   }
 
