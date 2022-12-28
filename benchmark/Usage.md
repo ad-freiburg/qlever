@@ -108,6 +108,9 @@ int main() {
 
 And that is everything needed for the standard part.  
 After this part, you have all benchmark measured and can look their information up, by looking into the array returned by calling `getRecords()` on your `BenchmarkRecords`-object.  
+
+**Important:** After considering code duplication, this standard part has been moved to `util/MainFunctionHelperFunction.h` as it's own function.
+
 Now you can write you new processing behaviour with those information and do whatever you want. For an example, see `MainPrintTimes.cpp`.  
 
 After writing your new benchmark processing behaviour, in order to use it, you will also have to write a new function in `CMakeLists.txt`.  
