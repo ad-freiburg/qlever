@@ -4,15 +4,15 @@ function (linkBenchmark basename)
     target_link_libraries(${basename} ${ARGN} ${CMAKE_THREAD_LIBS_INIT})
 endfunction()
 
-# Compile the benchmark with BenchmarkMainPrint and link the benchmark, but
+# Compile the benchmark with MainPrintTimes and link the benchmark, but
 # do not run it.
-# Usage: addAndLinkBenchmark(basename, [additionalLibraries...])
-function(addAndLinkBenchmarkWithPrint basename)
-    add_executable(${basename}  Benchmark.cpp "${basename}.cpp" BenchmarkMainPrint.cpp)
+# Usage: addAndLinkBenchmarkWithPrintTimes(basename, [additionalLibraries...])
+function(addAndLinkBenchmarkWithPrintTimes basename)
+    add_executable(${basename}  Benchmark.cpp "${basename}.cpp" MainPrintTimes.cpp)
     linkBenchmark(${basename} ${ARGN})
 endfunction()
 
 # Add benchmarks after here.
-addAndLinkBenchmarkWithPrint(SortedJoinBenchmark engine)
+addAndLinkBenchmarkWithPrintTimes(SortedJoinBenchmark engine)
 
-addAndLinkBenchmarkWithPrint(UnsortedJoinBenchmark engine)
+addAndLinkBenchmarkWithPrintTimes(UnsortedJoinBenchmark engine)

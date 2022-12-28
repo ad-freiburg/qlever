@@ -65,10 +65,10 @@ void BM_UnsortedIdTable(BenchmarkRecords* records) {
         std::sort(b.begin(), b.end(), sortFunction);
 
         useJoinFunctionOnIdTables(a, 0, b, 0, JoinLambda);
-    };
+  };
   auto hashJoinLambdaWrapper = [&]() {
         useJoinFunctionOnIdTables(a, 0, b, 0, HashJoinLambda);
-    };
+  };
 
   records->measureTime("Hashed join with overlapping IdTables", hashJoinLambdaWrapper);
   

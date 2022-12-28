@@ -108,7 +108,7 @@ int main() {
 
 And that is everything needed for the standard part.  
 After this part, you have all benchmark measured and can look their information up, by looking into the array returned by calling `getRecords()` on your `BenchmarkRecords`-object.  
-Now you can write you new processing behaviour with those information and do whatever you want. For an example, see `BenchmarkMainPrint.cpp`.  
+Now you can write you new processing behaviour with those information and do whatever you want. For an example, see `MainPrintTimes.cpp`.  
 
 After writing your new benchmark processing behaviour, in order to use it, you will also have to write a new function in `CMakeLists.txt`.  
 I recommend looking at the declarations at the end of the file, in order to find an already existing function for compiling with a main function file, going to the definition of that function and copying it.  
@@ -116,11 +116,11 @@ Then simply change the name, doc string and the file of the main function in `ad
 For example:
 
 ```
-# Compile the benchmark with BenchmarkMainPrint and link the benchmark, but
+# Compile the benchmark with MainPrintTimes and link the benchmark, but
 # do not run it.
 # Usage: addAndLinkBenchmark(basename, [additionalLibraries...]
 function(addAndLinkBenchmarkWithPrint basename)
-    add_executable(${basename}  Benchmark.cpp "${basename}.cpp" BenchmarkMainPrint.cpp)
+    add_executable(${basename}  Benchmark.cpp "${basename}.cpp" MainPrintTimes.cpp)
     linkBenchmark(${basename} ${ARGN})
 endfunction()
 ```
