@@ -99,6 +99,9 @@ class Operation {
       const std::vector<Variable>& selectedVariables) final;
 
   RuntimeInformation& getRuntimeInfo() { return _runtimeInfo; }
+  RuntimeInformationWholeQuery& getRuntimeInfoWholeQuery() {
+    return _runtimeInfoWholeQuery;
+  }
 
   // Get the result for the subtree rooted at this element.
   // Use existing results if they are already available, otherwise
@@ -134,6 +137,21 @@ class Operation {
   // its children), return the variable that is the primary sort key. Else
   // return nullopt.
   virtual std::optional<Variable> getPrimarySortKeyVariable() const final;
+
+  // `IndexScan`s with only one variable are often executed already during
+  // query planning. The result is stored in the cache as well as in the
+  // `IndexScan` object itself. This interface allows to ask an Operation
+  // explicitly whether it stores such a precomputed result. In this case we can
+  // call `computeResult` in O(1) to obtain the precomputed result. This has two
+  // advantages over implicitly reading the result from the cache:
+  // 1. The result might be not in the cache anymore, but the IndexScan still
+  //    stores it.
+  // 2. We can preserve the information, whether the computation was read from
+  //    the cache or actually computed during the query planning or processing.
+  virtual std::optional<std::shared_ptr<const ResultTable>>
+  getPrecomputedResultFromQueryPlanning() {
+    return std::nullopt;
+  }
 
  protected:
   // The QueryExecutionContext for this particular element.
@@ -212,9 +230,11 @@ class Operation {
   // Similar to the function above, but the components are specified manually.
   // If nullopt is specified for the last argument, then the `_runtimeInfo` is
   // expected to already have the correct children information. This is only
-  // allowed when `wasCached` is false, otherwise a runtime check will fail.
+  // allowed when `cacheStatus` is `cachedPinned` or `cachedNotPinned`,
+  // otherwise a runtime check will fail.
   virtual void updateRuntimeInformationOnSuccess(
-      const ResultTable& resultTable, bool wasCached, size_t timeInMilliseconds,
+      const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
+      size_t timeInMilliseconds,
       std::optional<RuntimeInformation> runtimeInfo) final;
 
  public:
@@ -228,6 +248,12 @@ class Operation {
   // see `GroupBy.cpp`
   virtual void updateRuntimeInformationWhenOptimizedOut(
       std::vector<RuntimeInformation> children);
+
+  // Some operations (currently `IndexScans` with only one variable) are
+  // computed during query planning. Get the total time spent in such
+  // computations for this operation and all its descendants. This can be used
+  // to correct the time statistics for the query planning and execution.
+  size_t getTotalExecutionTimeDuringQueryPlanning() const;
 
  private:
   // Create the runtime information in case the evaluation of this operation has
@@ -247,6 +273,7 @@ class Operation {
   void forAllDescendants(F f) const;
 
   RuntimeInformation _runtimeInfo;
+  RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
 
   // Collect all the warnings that were created during the creation or
   // execution of this operation.

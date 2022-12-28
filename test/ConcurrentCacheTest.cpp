@@ -87,7 +87,7 @@ TEST(ConcurrentCache, sequentialComputation) {
   auto result = a.computeOnce(3, waiting_function("3"s, 5));
   t.stop();
   ASSERT_EQ("3"s, *result._resultPointer);
-  ASSERT_FALSE(result._wasCached);
+  ASSERT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
   ASSERT_GE(t.msecs(), 5);
   ASSERT_EQ(1ul, a.numNonPinnedEntries());
   ASSERT_EQ(0ul, a.numPinnedEntries());
@@ -102,7 +102,7 @@ TEST(ConcurrentCache, sequentialComputation) {
   // computing result again: still yields "3", was cached and takes 0
   // milliseconds (result is read from cache)
   ASSERT_EQ("3"s, *result2._resultPointer);
-  ASSERT_TRUE(result2._wasCached);
+  ASSERT_EQ(result2._cacheStatus, ad_utility::CacheStatus::cachedNotPinned);
   ASSERT_EQ(result._resultPointer, result2._resultPointer);
   ASSERT_LE(t.msecs(), 5);
   ASSERT_EQ(1ul, a.numNonPinnedEntries());
@@ -119,7 +119,7 @@ TEST(ConcurrentCache, sequentialPinnedComputation) {
   auto result = a.computeOncePinned(3, waiting_function("3"s, 5));
   t.stop();
   ASSERT_EQ("3"s, *result._resultPointer);
-  ASSERT_FALSE(result._wasCached);
+  ASSERT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
   ASSERT_GE(t.msecs(), 5);
   ASSERT_EQ(1ul, a.numPinnedEntries());
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
@@ -135,7 +135,7 @@ TEST(ConcurrentCache, sequentialPinnedComputation) {
   // computing result again: still yields "3", was cached and takes 0
   // milliseconds (result is read from cache)
   ASSERT_EQ("3"s, *result2._resultPointer);
-  ASSERT_TRUE(result2._wasCached);
+  ASSERT_EQ(result2._cacheStatus, ad_utility::CacheStatus::cachedPinned);
   ASSERT_EQ(result._resultPointer, result2._resultPointer);
   ASSERT_LE(t.msecs(), 5);
   ASSERT_EQ(1ul, a.numPinnedEntries());
@@ -152,7 +152,7 @@ TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
   auto result = a.computeOnce(3, waiting_function("3"s, 5));
   t.stop();
   ASSERT_EQ("3"s, *result._resultPointer);
-  ASSERT_FALSE(result._wasCached);
+  ASSERT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
   ASSERT_GE(t.msecs(), 5);
   ASSERT_EQ(0ul, a.numPinnedEntries());
   ASSERT_EQ(1ul, a.numNonPinnedEntries());
@@ -169,7 +169,7 @@ TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
   // computing result again: still yields "3", was cached and takes 0
   // milliseconds (result is read from cache)
   ASSERT_EQ("3"s, *result2._resultPointer);
-  ASSERT_TRUE(result2._wasCached);
+  ASSERT_EQ(result2._cacheStatus, ad_utility::CacheStatus::cachedNotPinned);
   ASSERT_EQ(result._resultPointer, result2._resultPointer);
   ASSERT_LE(t.msecs(), 5);
   ASSERT_EQ(1ul, a.numPinnedEntries());
@@ -199,10 +199,10 @@ TEST(ConcurrentCache, concurrentComputation) {
   ASSERT_EQ(1ul, a.numNonPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
   ASSERT_EQ("3"s, *result._resultPointer);
-  ASSERT_FALSE(result._wasCached);
+  ASSERT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
   auto result2 = resultFuture.get();
   ASSERT_EQ(result._resultPointer, result2._resultPointer);
-  ASSERT_FALSE(result2._wasCached);
+  ASSERT_EQ(result2._cacheStatus, ad_utility::CacheStatus::computed);
 }
 
 TEST(ConcurrentCache, concurrentPinnedComputation) {
@@ -229,10 +229,10 @@ TEST(ConcurrentCache, concurrentPinnedComputation) {
   ASSERT_EQ(1ul, a.numPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
   ASSERT_EQ("3"s, *result._resultPointer);
-  ASSERT_FALSE(result._wasCached);
+  ASSERT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
   auto result2 = resultFuture.get();
   ASSERT_EQ(result._resultPointer, result2._resultPointer);
-  ASSERT_FALSE(result2._wasCached);
+  ASSERT_EQ(result2._cacheStatus, ad_utility::CacheStatus::computed);
 }
 
 TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
@@ -259,10 +259,10 @@ TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
   ASSERT_EQ(1ul, a.numPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
   ASSERT_EQ("3"s, *result._resultPointer);
-  ASSERT_FALSE(result._wasCached);
+  ASSERT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
   auto result2 = resultFuture.get();
   ASSERT_EQ(result._resultPointer, result2._resultPointer);
-  ASSERT_FALSE(result2._wasCached);
+  ASSERT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
 }
 
 TEST(ConcurrentCache, abort) {
