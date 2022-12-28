@@ -45,7 +45,7 @@ This can be done as many times as you want. Additionally variables of this type 
 An example registration:
 
 ```cpp
-BenchmarkRegister temp{{&BM_function}};
+BenchmarkRegister temp{{BM_function}};
 ```
 
 Now, this part is a bit of a hybrid with the CMake part and exist more for informationen, then for need. It can safely be skipped.  
