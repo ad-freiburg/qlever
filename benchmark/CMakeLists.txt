@@ -14,7 +14,21 @@ function(addAndLinkBenchmarkWithPrintTimes compileName cppFileName)
     linkBenchmark(${compileName} ${ARGN})
 endfunction()
 
-# Add benchmarks after here.
-addAndLinkBenchmarkWithPrintTimes(SortedJoinBenchmark SortedJoinBenchmark engine)
+# Compile the benchmark with MainPrintRelativeSpeedup and link the benchmark, but
+# do not run it.
+# Usage: addAndLinkBenchmarkWithPrintRelativSpeedup(compileName, cppFileName, [additionalLibraries...])
+#   - compileName : The name, that the compiled end product should have.
+#   - cppFileName : The .cpp file, that contains your benchmark without the file extension.
+function(addAndLinkBenchmarkWithPrintRelativeSpeedup compileName cppFileName)
+    add_executable(${compileName}  Benchmark.cpp "${cppFileName}.cpp" MainPrintRelativeSpeedup.cpp)
+    linkBenchmark(${compileName} ${ARGN})
+endfunction()
 
-addAndLinkBenchmarkWithPrintTimes(UnsortedJoinBenchmark UnsortedJoinBenchmark engine)
+# Add benchmarks after here.
+addAndLinkBenchmarkWithPrintTimes(SortedJoinBenchmarkPrintTimes SortedJoinBenchmark engine)
+
+addAndLinkBenchmarkWithPrintTimes(UnsortedJoinBenchmarkPrintTimes UnsortedJoinBenchmark engine)
+
+addAndLinkBenchmarkWithPrintRelativeSpeedup(SortedJoinBenchmarkPrintSpeedup SortedJoinBenchmark engine)
+
+addAndLinkBenchmarkWithPrintRelativeSpeedup(UnsortedJoinBenchmarkPrintSpeedup UnsortedJoinBenchmark engine)
