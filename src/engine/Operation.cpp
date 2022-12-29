@@ -123,12 +123,23 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       // correctly because the result was computed, so we can pass `nullopt` as
       // the last argument.
       timer.stop();
-      updateRuntimeInformationOnSuccess(*val._resultTable, false, timer.msecs(),
-                                        std::nullopt);
+      updateRuntimeInformationOnSuccess(*val._resultTable,
+                                        ad_utility::CacheStatus::computed,
+                                        timer.msecs(), std::nullopt);
       timer.cont();
       val._runtimeInfo = getRuntimeInfo();
       return val;
     };
+
+    // If the result was already computed during the query planning, then
+    // we can simply return that result, but only if we don't have to pin
+    // it to the cache.
+    if (!pinResult) {
+      auto precomputedResult = getPrecomputedResultFromQueryPlanning();
+      if (precomputedResult.has_value()) {
+        return std::move(precomputedResult.value());
+      }
+    }
 
     auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda)
                               : cache.computeOnce(cacheKey, computeLambda);
@@ -180,14 +191,15 @@ void Operation::checkTimeout() const {
 
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
-    const ResultTable& resultTable, bool wasCached, size_t timeInMilliseconds,
-    std::optional<RuntimeInformation> runtimeInfo) {
+    const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
+    size_t timeInMilliseconds, std::optional<RuntimeInformation> runtimeInfo) {
   _runtimeInfo.totalTime_ = timeInMilliseconds;
   _runtimeInfo.numRows_ = resultTable.size();
-  _runtimeInfo.wasCached_ = wasCached;
+  _runtimeInfo.cacheStatus_ = cacheStatus;
 
   _runtimeInfo.status_ = RuntimeInformation::Status::completed;
 
+  bool wasCached = cacheStatus != ad_utility::CacheStatus::computed;
   // If the result was read from the cache, then we need the additional
   // runtime info for the correct child information etc.
   AD_CHECK(!wasCached || runtimeInfo.has_value());
@@ -220,7 +232,7 @@ void Operation::updateRuntimeInformationOnSuccess(
     size_t timeInMilliseconds) {
   updateRuntimeInformationOnSuccess(
       *resultAndCacheStatus._resultPointer->_resultTable,
-      resultAndCacheStatus._wasCached, timeInMilliseconds,
+      resultAndCacheStatus._cacheStatus, timeInMilliseconds,
       resultAndCacheStatus._resultPointer->_runtimeInfo);
 }
 
@@ -229,14 +241,18 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
     std::vector<RuntimeInformation> children) {
   _runtimeInfo.status_ = RuntimeInformation::Status::optimizedOut;
   _runtimeInfo.children_ = std::move(children);
+  // This operation was optimized out, so its operation time is zero.
   // The operation time is computed as
   // `totalTime_ - #sum of childrens' total time#` in `getOperationTime()`.
-  // To set it to zero we thus have to set the `totalTime_` to this sum.
+  // To set it to zero we thus have to set the `totalTime_` to that sum.
   _runtimeInfo.totalTime_ = 0;
   std::ranges::for_each(
-      _runtimeInfo.children_,
-      [this](double time) { _runtimeInfo.totalTime_ += time; },
-      &RuntimeInformation::totalTime_);
+      _runtimeInfo.children_, [this](const RuntimeInformation& child) {
+        if (child.status_ !=
+            RuntimeInformation::Status::completedDuringQueryPlanning) {
+          _runtimeInfo.totalTime_ += child.totalTime_;
+        }
+      });
 }
 
 // _______________________________________________________________________
@@ -252,8 +268,17 @@ void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
 
 // __________________________________________________________________
 void Operation::createRuntimeInfoFromEstimates() {
-  // reset
-  _runtimeInfo = RuntimeInformation{};
+  // Handle the case that the result was already computed during the query
+  // planning. In this case, `getResult()` was already called on this object and
+  // the runtime information is already correct.
+  if (getPrecomputedResultFromQueryPlanning().has_value()) {
+    return;
+  }
+  // TODO<joka921> If the above stuff works, this can be removed.
+  std::optional<RuntimeInformation::Status> statusFromPrecomputedResult =
+      getPrecomputedResultFromQueryPlanning().has_value()
+          ? std::optional{_runtimeInfo.status_}
+          : std::nullopt;
   _runtimeInfo.setColumnNames(getInternallyVisibleVariableColumns());
   const auto numCols = getResultWidth();
   _runtimeInfo.numCols_ = numCols;
@@ -277,14 +302,21 @@ void Operation::createRuntimeInfoFromEstimates() {
   _runtimeInfo.multiplicityEstimates_ = multiplicityEstimates;
 
   auto cachedResult =
-      _executionContext->getQueryTreeCache().resultAt(asString());
-  if (cachedResult) {
-    _runtimeInfo.wasCached_ = true;
+      _executionContext->getQueryTreeCache().getIfContained(asString());
+  if (cachedResult.has_value()) {
+    const auto& [resultPointer, cacheStatus] = cachedResult.value();
+    _runtimeInfo.cacheStatus_ = cacheStatus;
+    const auto& rtiFromCache = resultPointer->_runtimeInfo;
 
-    _runtimeInfo.numRows_ = cachedResult->_resultTable->size();
-    _runtimeInfo.originalTotalTime_ = cachedResult->_runtimeInfo.totalTime_;
-    _runtimeInfo.originalOperationTime_ =
-        cachedResult->_runtimeInfo.getOperationTime();
+    _runtimeInfo.numRows_ = rtiFromCache.numRows_;
+    _runtimeInfo.originalTotalTime_ = rtiFromCache.totalTime_;
+    _runtimeInfo.originalOperationTime_ = rtiFromCache.getOperationTime();
+  }
+  if (statusFromPrecomputedResult ==
+      RuntimeInformation::Status::completedDuringQueryPlanning) {
+    _runtimeInfo.status_ =
+        RuntimeInformation::Status::completedDuringQueryPlanning;
+    _runtimeInfo.cacheStatus_ = ad_utility::CacheStatus::computed;
   }
 }
 
@@ -357,4 +389,17 @@ const vector<size_t>& Operation::getResultSortedOn() const {
     _resultSortedColumns = resultSortedOn();
   }
   return _resultSortedColumns.value();
+}
+
+// ___________________________________________________________________________
+size_t Operation::getTotalExecutionTimeDuringQueryPlanning() const {
+  size_t totalTime = 0;
+  forAllDescendants([&totalTime](const QueryExecutionTree* tree) {
+    const auto& rti = tree->getRootOperation()->_runtimeInfo;
+    if (rti.status_ ==
+        RuntimeInformation::Status::completedDuringQueryPlanning) {
+      totalTime += rti.getOperationTime();
+    }
+  });
+  return totalTime;
 }
