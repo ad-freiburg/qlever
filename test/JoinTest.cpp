@@ -106,6 +106,8 @@ void compareIdTableWithExpectedContent(const IdTable& table,
 
   auto writeIdTableToStream = [&traceMessage](const IdTable& idTable){
       std::ranges::for_each(idTable, [&traceMessage](const auto& row){
+            // TODO Could be done in one line, if row was iterable.
+            // Unfortunaly, it isn't.
             for (size_t i = 0; i < row.numColumns(); i++) {
               traceMessage << row[i] << " ";
             }
