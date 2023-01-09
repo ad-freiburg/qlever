@@ -410,10 +410,6 @@ Awaitable<void> Server::process(
   co_return co_await std::move(serveFileRequest);
 }
 
-    j["runtimeInformation"]["meta"] = nlohmann::ordered_json(
-        qet.getRootOperation()->getRuntimeInfoWholeQuery());
-    j["runtimeInformation"]["query_execution_tree"] =
-        nlohmann::ordered_json(qet.getRootOperation()->getRuntimeInfo());
 // _____________________________________________________________________________
 json Server::composeErrorResponseJson(
     const string& query, const std::string& errorMsg,

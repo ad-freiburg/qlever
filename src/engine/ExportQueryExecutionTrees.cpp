@@ -424,7 +424,9 @@ nlohmann::json ExportQueryExecutionTrees::queryToQLeverJSON(
         std::vector<std::string>{"?subject", "?predicate", "?object"};
   }
 
-  j["runtimeInformation"] =
+  j["runtimeInformation"]["meta"] = nlohmann::ordered_json(
+      qet.getRootOperation()->getRuntimeInfoWholeQuery());
+  j["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(qet.getRootOperation()->getRuntimeInfo());
 
   {
