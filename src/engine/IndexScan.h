@@ -39,6 +39,9 @@ class IndexScan : public Operation {
   size_t _sizeEstimate;
   vector<float> _multiplicity;
 
+  std::optional<std::shared_ptr<const ResultTable>> _precomputedResult =
+      std::nullopt;
+
  public:
   virtual string getDescriptor() const override;
 
@@ -59,10 +62,7 @@ class IndexScan : public Operation {
     // Do nothing.
   }
 
-  size_t getSizeEstimate() const {
-    AD_CHECK(_sizeEstimate != std::numeric_limits<size_t>::max());
-    return _sizeEstimate;
-  }
+  size_t getSizeEstimate() const { return _sizeEstimate; }
 
   // TODO<joka921> Make the `getSizeEstimate()` function `const` for ALL the
   // `Operations`.
@@ -134,4 +134,9 @@ class IndexScan : public Operation {
   virtual string asStringImpl(size_t indent = 0) const override;
 
   virtual VariableToColumnMap computeVariableToColumnMap() const override;
+
+  std::optional<std::shared_ptr<const ResultTable>>
+  getPrecomputedResultFromQueryPlanning() override {
+    return _precomputedResult;
+  }
 };

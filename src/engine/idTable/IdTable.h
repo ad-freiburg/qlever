@@ -143,7 +143,7 @@ class IdTable {
   size_t numColumns_ = NumColumns;
   size_t numRows_ = 0;
   size_t capacityRows_ = 0;
-  static constexpr size_t growthFactor = 2;
+  static constexpr double growthFactor = 1.5;
 
  public:
   // Construct from the number of columns and an allocator. If `NumColumns != 0`
@@ -274,7 +274,9 @@ class IdTable {
   // To set the capacity, use the `reserve` function.
   void resize(size_t numRows) requires(!isView) {
     if (numRows > capacityRows_) {
-      setCapacity(numRows);
+      // Increase by at least the `growthFactor` to enforce the amortized O(1)
+      // complexity also for patterns like `resize(numRows() + 1)`.
+      reserveWithMinimalGrowth(numRows);
     }
     numRows_ = numRows;
   }
@@ -576,11 +578,20 @@ class IdTable {
     data() = std::move(newData);
   }
 
+  // Change the capacity s.t. it is at least `newCapacity` but also increases
+  // by at least the `growthFactor`. This helper function is used inside
+  // `growIfFull` and `resize` to enforce the amortized O(1) guarantee for
+  // chains of operations.
+  void reserveWithMinimalGrowth(size_t newCapacity) {
+    setCapacity(std::max(newCapacity,
+                         static_cast<size_t>(capacityRows_ * growthFactor)));
+  }
+
   // Increase the capacity by the `growthFactor` if the table is completely
   // full. Otherwise, do nothing.
   void growIfFull() {
     if (numRows_ == capacityRows_) {
-      setCapacity(std::max(1ul, capacityRows_ * growthFactor));
+      reserveWithMinimalGrowth(capacityRows_ + 1);
     }
   }
 
