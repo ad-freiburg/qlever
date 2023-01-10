@@ -11,12 +11,14 @@
 cppcoro::generator<QueryExecutionTree::StringTriple>
 ExportQueryExecutionTrees::constructQueryToTriples(
     const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-    size_t offset, std::shared_ptr<const ResultTable> res) {
-  size_t upperBound = std::min<size_t>(offset + limit, res->_idTable.size());
-  auto variableColumns = qet.getVariableColumns();
-  for (size_t i = offset; i < upperBound; i++) {
-    ConstructQueryExportContext context{i, *res, variableColumns,
+    const ad_utility::sparql_types::Triples& constructTriples,
+    LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res) {
+  // TODO<C++20, Clang16> Use views to create an abstraction for the repeatet
+  // `upperBound` code.
+  size_t upperBound = std::min<size_t>(
+      limitAndOffset._limit + limitAndOffset._offset, res->_idTable.size());
+  for (size_t i = limitAndOffset._offset; i < upperBound; i++) {
+    ConstructQueryExportContext context{i, *res, qet.getVariableColumns(),
                                         qet.getQec()->getIndex()};
     using enum PositionInTriple;
     for (const auto& triple : constructTriples) {
@@ -37,11 +39,12 @@ ExportQueryExecutionTrees::constructQueryToTriples(
 ad_utility::streams::stream_generator
 ExportQueryExecutionTrees::constructQueryToTurtle(
     const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-    size_t offset, std::shared_ptr<const ResultTable> resultTable) {
+    const ad_utility::sparql_types::Triples& constructTriples,
+    LimitOffsetClause limitAndOffset,
+    std::shared_ptr<const ResultTable> resultTable) {
   resultTable->logResultSize();
   auto generator = ExportQueryExecutionTrees::constructQueryToTriples(
-      qet, constructTriples, limit, offset, resultTable);
+      qet, constructTriples, limitAndOffset, resultTable);
   for (const auto& triple : generator) {
     co_yield triple._subject;
     co_yield ' ';
@@ -68,10 +71,10 @@ ExportQueryExecutionTrees::constructQueryToTurtle(
 // _____________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::constructQueryToQLeverJSONArray(
     const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-    size_t offset, std::shared_ptr<const ResultTable> res) {
-  auto generator = constructQueryToTriples(qet, constructTriples, limit, offset,
-                                           std::move(res));
+    const ad_utility::sparql_types::Triples& constructTriples,
+    LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res) {
+  auto generator = constructQueryToTriples(qet, constructTriples,
+                                           limitAndOffset, std::move(res));
   std::vector<std::array<std::string, 3>> jsonArray;
   for (auto& triple : generator) {
     jsonArray.push_back({std::move(triple._subject),
@@ -83,18 +86,20 @@ nlohmann::json ExportQueryExecutionTrees::constructQueryToQLeverJSONArray(
 
 // __________________________________________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
-    const QueryExecutionTree& qet, size_t from, size_t limit,
+    const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
     const QueryExecutionTree::ColumnIndicesAndTypes& columns,
-    shared_ptr<const ResultTable> resultTable) {
+    std::shared_ptr<const ResultTable> resultTable) {
   if (!resultTable) {
     resultTable = qet.getResult();
   }
   const IdTable& data = resultTable->_idTable;
   nlohmann::json json = nlohmann::json::array();
 
-  const auto upperBound = std::min(data.size(), limit + from);
+  const auto limit = limitAndOffset._limit;
+  const auto offset = limitAndOffset._offset;
+  const auto upperBound = std::min(data.size(), limit + offset);
 
-  for (size_t rowIndex = from; rowIndex < upperBound; ++rowIndex) {
+  for (size_t rowIndex = offset; rowIndex < upperBound; ++rowIndex) {
     json.emplace_back();
     auto& row = json.back();
     for (const auto& opt : columns) {
@@ -174,7 +179,8 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
 // _____________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::selectQueryToSparqlJSON(
     const QueryExecutionTree& qet,
-    const parsedQuery::SelectClause& selectClause, size_t limit, size_t offset,
+    const parsedQuery::SelectClause& selectClause,
+    LimitOffsetClause limitAndOffset,
     shared_ptr<const ResultTable> resultTable) {
   using nlohmann::json;
 
@@ -210,8 +216,6 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryToSparqlJSON(
   result["head"]["vars"] = selectedVars;
 
   json bindings = json::array();
-
-  const auto upperBound = std::min(idTable.size(), limit + offset);
 
   // Take a string from the vocabulary, deduce the type and
   // return a json dict that describes the binding
@@ -256,7 +260,10 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryToSparqlJSON(
     return b;
   };
 
-  for (size_t rowIndex = offset; rowIndex < upperBound; ++rowIndex) {
+  const auto upperBound =
+      std::min(idTable.size(), limitAndOffset._limit + limitAndOffset._offset);
+  for (size_t rowIndex = limitAndOffset._offset; rowIndex < upperBound;
+       ++rowIndex) {
     // TODO: ordered_json` entries are ordered alphabetically, but insertion
     // order would be preferable.
     nlohmann::ordered_json binding;
@@ -289,7 +296,8 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryToSparqlJSON(
 // _____________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::selectQueryToQLeverJSONArray(
     const QueryExecutionTree& qet,
-    const parsedQuery::SelectClause& selectClause, size_t limit, size_t offset,
+    const parsedQuery::SelectClause& selectClause,
+    LimitOffsetClause limitAndOffset,
     shared_ptr<const ResultTable> resultTable) {
   // They may trigger computation (but does not have to).
   if (!resultTable) {
@@ -303,7 +311,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryToQLeverJSONArray(
   }
 
   return ExportQueryExecutionTrees::idTableToQLeverJSONArray(
-      qet, offset, limit, validIndices, std::move(resultTable));
+      qet, limitAndOffset, validIndices, std::move(resultTable));
 }
 
 using parsedQuery::SelectClause;
@@ -312,8 +320,9 @@ using parsedQuery::SelectClause;
 template <ad_utility::MediaType format>
 ad_utility::streams::stream_generator
 ExportQueryExecutionTrees::selectQueryToCsvTsvOrBinary(
-    const QueryExecutionTree& qet, const SelectClause& selectClause,
-    size_t limit, size_t offset) {
+    const QueryExecutionTree& qet,
+    const parsedQuery::SelectClause& selectClause,
+    LimitOffsetClause limitAndOffset) {
   static_assert(format == MediaType::octetStream || format == MediaType::csv ||
                 format == MediaType::tsv);
 
@@ -327,11 +336,15 @@ ExportQueryExecutionTrees::selectQueryToCsvTsvOrBinary(
       qet.selectedVariablesToColumnIndices(selectClause, *resultTable, true);
 
   const auto& idTable = resultTable->_idTable;
-  size_t upperBound = std::min<size_t>(offset + limit, idTable.size());
-
+  // TODO<C++20/Clang16> There are a lot of redundant computations of
+  // `upperBound` in this file. Those can be abstracted away using
+  // `std::views::iota`: `for (auto i : getRangeFromLimitOffset(limitAndOffset,
+  // idTable)` Or maybe even use a view that iterates over the idTable directly.
+  size_t upperBound = std::min<size_t>(
+      limitAndOffset._offset + limitAndOffset._limit, idTable.size());
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
-    for (size_t i = offset; i < upperBound; ++i) {
+    for (size_t i = limitAndOffset._offset; i < upperBound; ++i) {
       for (const auto& columnIndex : selectedColumnIndices) {
         if (columnIndex.has_value()) {
           co_yield std::string_view{reinterpret_cast<const char*>(&idTable(
@@ -352,7 +365,7 @@ ExportQueryExecutionTrees::selectQueryToCsvTsvOrBinary(
   constexpr auto& escapeFunction = format == MediaType::tsv
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
-  for (size_t i = offset; i < upperBound; ++i) {
+  for (size_t i = limitAndOffset._offset; i < upperBound; ++i) {
     for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
       if (selectedColumnIndices[j].has_value()) {
         const auto& val = selectedColumnIndices[j].value();
@@ -377,8 +390,9 @@ template <ad_utility::MediaType format>
 ad_utility::streams::stream_generator
 ExportQueryExecutionTrees::constructQueryToTsvOrCsv(
     const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-    size_t offset, std::shared_ptr<const ResultTable> resultTable) {
+    const ad_utility::sparql_types::Triples& constructTriples,
+    LimitOffsetClause limitAndOffset,
+    std::shared_ptr<const ResultTable> resultTable) {
   static_assert(format == MediaType::octetStream || format == MediaType::csv ||
                 format == MediaType::tsv);
   if constexpr (format == MediaType::octetStream) {
@@ -391,7 +405,7 @@ ExportQueryExecutionTrees::constructQueryToTsvOrCsv(
                                        : RdfEscaping::escapeForCsv;
   constexpr char sep = format == MediaType::tsv ? '\t' : ',';
   auto generator = ExportQueryExecutionTrees::constructQueryToTriples(
-      qet, constructTriples, limit, offset, resultTable);
+      qet, constructTriples, limitAndOffset, resultTable);
   for (auto& triple : generator) {
     co_yield escapeFunction(std::move(triple._subject));
     co_yield sep;
@@ -430,15 +444,15 @@ nlohmann::json ExportQueryExecutionTrees::queryToQLeverJSON(
       nlohmann::ordered_json(qet.getRootOperation()->getRuntimeInfo());
 
   {
-    size_t limit = std::min(query._limitOffset._limit, maxSend);
-    size_t offset = query._limitOffset._offset;
+    auto limitAndOffset = query._limitOffset;
+    limitAndOffset._limit = std::min(limitAndOffset._limit, maxSend);
     requestTimer.cont();
     j["res"] = query.hasSelectClause()
                    ? ExportQueryExecutionTrees::selectQueryToQLeverJSONArray(
-                         qet, query.selectClause(), limit, offset,
+                         qet, query.selectClause(), limitAndOffset,
                          std::move(resultTable))
                    : ExportQueryExecutionTrees::constructQueryToQLeverJSONArray(
-                         qet, query.constructClause().triples_, limit, offset,
+                         qet, query.constructClause().triples_, limitAndOffset,
                          std::move(resultTable));
     requestTimer.stop();
   }
@@ -459,17 +473,15 @@ ExportQueryExecutionTrees::queryToStreamableGenerator(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
     ad_utility::MediaType mediaType) {
   auto compute = [&]<MediaType format> {
-    size_t limit = parsedQuery._limitOffset._limit;
-    size_t offset = parsedQuery._limitOffset._offset;
+    auto limitAndOffset = parsedQuery._limitOffset;
     return parsedQuery.hasSelectClause()
                ? ExportQueryExecutionTrees::selectQueryToCsvTsvOrBinary<format>(
-                     qet, parsedQuery.selectClause(), limit, offset)
+                     qet, parsedQuery.selectClause(), limitAndOffset)
                : ExportQueryExecutionTrees::constructQueryToTsvOrCsv<format>(
-                     qet, parsedQuery.constructClause().triples_, limit, offset,
-                     qet.getResult());
+                     qet, parsedQuery.constructClause().triples_,
+                     limitAndOffset, qet.getResult());
   };
-  // TODO<joka921> Clean this up by removing the (unused) `ExportSubFormat`
-  // enum, And maybe by a `switch-constexpr`-abstraction
+  // TODO<joka921> Clean this up by a `switch-constexpr`-abstraction
   if (mediaType == MediaType::csv) {
     return compute.template operator()<MediaType::csv>();
   } else if (mediaType == MediaType::tsv) {
@@ -491,10 +503,9 @@ ExportQueryExecutionTrees::composeTurtleResponse(
         "RDF Turtle as an export format is only supported for CONSTRUCT "
         "queries"};
   }
-  size_t limit = query._limitOffset._limit;
-  size_t offset = query._limitOffset._offset;
   return ExportQueryExecutionTrees::constructQueryToTurtle(
-      qet, query.constructClause().triples_, limit, offset, qet.getResult());
+      qet, query.constructClause().triples_, query._limitOffset,
+      qet.getResult());
 }
 // _____________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::queryToSparqlJSON(
@@ -508,12 +519,11 @@ nlohmann::json ExportQueryExecutionTrees::queryToSparqlJSON(
   resultTable->logResultSize();
   requestTimer.stop();
   nlohmann::json j;
-  size_t limit = std::min(query._limitOffset._limit, maxSend);
-  size_t offset = query._limitOffset._offset;
+  auto limitAndOffset = query._limitOffset;
+  limitAndOffset._limit = std::min(limitAndOffset._limit, maxSend);
   requestTimer.cont();
   j = ExportQueryExecutionTrees::selectQueryToSparqlJSON(
-      qet, query.selectClause(), limit, offset, std::move(resultTable));
-
+      qet, query.selectClause(), limitAndOffset, std::move(resultTable));
   requestTimer.stop();
   return j;
 }

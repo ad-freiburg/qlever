@@ -6,6 +6,7 @@
 
 #include "engine/QueryExecutionTree.h"
 #include "nlohmann/json.hpp"
+#include "parser/data/LimitOffsetClause.h"
 #include "util/http/MediaTypes.h"
 
 #pragma once
@@ -94,17 +95,19 @@ class ExportQueryExecutionTrees {
   // ___________________________________________________________________________
   static nlohmann::json selectQueryToQLeverJSONArray(
       const QueryExecutionTree& qet,
-      const parsedQuery::SelectClause& selectClause, size_t limit,
-      size_t offset, shared_ptr<const ResultTable> resultTable);
+      const parsedQuery::SelectClause& selectClause,
+      LimitOffsetClause limitAndOffset,
+      shared_ptr<const ResultTable> resultTable);
 
   /**
-   * @brief Convert an `IdTable` (typically from a query result) to a json array
-   *        In the `QLeverJSON` format. This function is called by
-   * `queryToQLeverJSON` to obtain the "actual" query results (without the meta
-   * data)
+   * @brief Convert an `IdTable` (typically from a query result) to a JSON array
+   *   In the `QLeverJSON` format. This function is called by
+   *  `queryToQLeverJSON` to obtain the "actual" query results (without the meta
+   *   data)
    * @param qet The `QueryExecutionTree` of the query.
    * @param from the first <from> entries of the idTable are skipped
-   * @param limit at most <limit> entries are written, starting at <from>
+   * @param limitAndOffset at most <limit> entries are written, starting at
+   * <from>
    * @param columns each pair of <columnInIdTable, correspondingType> tells
    * us which columns are to be serialized in which order
    * @param resultTable The query result in the ID space. If it is `nullptr`,
@@ -112,15 +115,15 @@ class ExportQueryExecutionTrees {
    * @return a 2D-Json array corresponding to the IdTable given the arguments
    */
   static nlohmann::json idTableToQLeverJSONArray(
-      const QueryExecutionTree& qet, size_t from, size_t limit,
+      const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
       const QueryExecutionTree::ColumnIndicesAndTypes& columns,
       std::shared_ptr<const ResultTable> resultTable = nullptr);
 
   // ___________________________________________________________________________
   static nlohmann::json constructQueryToQLeverJSONArray(
       const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-      size_t offset, std::shared_ptr<const ResultTable> res);
+      const ad_utility::sparql_types::Triples& constructTriples,
+      LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res);
 
   // Similar to `queryToJSON`, but always returns the `SparqlJSON` format.
   static nlohmann::json queryToSparqlJSON(const ParsedQuery& query,
@@ -132,34 +135,37 @@ class ExportQueryExecutionTrees {
   static cppcoro::generator<QueryExecutionTree::StringTriple>
   constructQueryToTriples(
       const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-      size_t offset, std::shared_ptr<const ResultTable> res);
+      const ad_utility::sparql_types::Triples& constructTriples,
+      LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res);
 
   // ___________________________________________________________________________
   static ad_utility::streams::stream_generator constructQueryToTurtle(
       const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-      size_t offset, std::shared_ptr<const ResultTable> resultTable);
+      const ad_utility::sparql_types::Triples& constructTriples,
+      LimitOffsetClause limitAndOffset,
+      std::shared_ptr<const ResultTable> resultTable);
 
   // ___________________________________________________________________________
   static nlohmann::json selectQueryToSparqlJSON(
       const QueryExecutionTree& qet,
-      const parsedQuery::SelectClause& selectClause, size_t limit,
-      size_t offset, shared_ptr<const ResultTable> resultTable);
+      const parsedQuery::SelectClause& selectClause,
+      LimitOffsetClause limitAndOffset,
+      shared_ptr<const ResultTable> resultTable);
 
   // ___________________________________________________________________________
   template <MediaType format>
   static ad_utility::streams::stream_generator constructQueryToTsvOrCsv(
       const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-      size_t offset, std::shared_ptr<const ResultTable> resultTable);
+      const ad_utility::sparql_types::Triples& constructTriples,
+      LimitOffsetClause limitAndOffset,
+      std::shared_ptr<const ResultTable> resultTable);
 
   // _____________________________________________________________________________
   template <MediaType format>
   static ad_utility::streams::stream_generator selectQueryToCsvTsvOrBinary(
       const QueryExecutionTree& qet,
-      const parsedQuery::SelectClause& selectClause, size_t limit,
-      size_t offset);
+      const parsedQuery::SelectClause& selectClause,
+      LimitOffsetClause limitAndOffset);
 
   // ___________________________________________________________________________
   static ad_utility::streams::stream_generator composeTurtleResponse(
