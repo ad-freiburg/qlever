@@ -78,7 +78,18 @@ class Join : public Operation {
 
   /**
    * @brief Joins IdTables dynA and dynB on join column jc2, returning
-   * the result in dynRes. Creates a cross product for matching rows
+   * the result in dynRes. Creates a cross product for matching rows.
+   *
+   * This should be a switch, which shoud decide which algorithm to use for
+   * joining two IdTables.
+   * The possible algorithms should be:
+   * - The normal merge join.
+   * - The doGallopInnerJoin.
+   * - The hashJoin.
+   * Currently it only decides between doGallopInnerJoin and the standard merge
+   * join, with the merge join code directly written in the function.
+   * TODO Move the merge join into it's own function and make this function
+   * a proper switch.
    **/
   template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
   void join(const IdTable& dynA, size_t jc1, const IdTable& dynB, size_t jc2,
