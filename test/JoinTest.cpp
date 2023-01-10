@@ -210,7 +210,7 @@ IdTable useJoinFunctionOnIdTables(
  */
 template<typename JOIN_FUNCTION>
 void goThroughSetOfTestsWithJoinFunction(
-      std::vector<normalJoinTest> testSet,
+      const std::vector<normalJoinTest>& testSet,
       JOIN_FUNCTION func,
       ad_utility::source_location l = ad_utility::source_location::current()
     ) {
@@ -225,8 +225,65 @@ void goThroughSetOfTestsWithJoinFunction(
   }
 }
 
+void runTestCasesForAllJoinAlgorithm(std::vector<normalJoinTest> testSet,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  // For generating better messages, when failing a test.
+  auto trace{generateLocationTrace(l, "runTestCasesForAllJoinAlgorithm")};
+ 
+  // All normal join algorithm defined as lambda functions for easier handing
+  // over to helper functions.
+  Join J{Join::InvalidOnlyForTestingJoinTag{}};
+  auto HashJoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
+    return J.hashJoin<A, B, C>(AD_FWD(args)...);
+  };
+  auto JoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
+    return J.join<A, B, C>(AD_FWD(args)...);
+  };
+
+  // For sorting IdTables by their join column.
+  auto sortByJoinColumn = [](IdTable& idTable, size_t joinColumn) {
+    /*
+     * TODO Introduce functionality to the IdTable-class, so that std::ranges::sort
+     * can be used instead of std::sort. Currently it seems like the iterators
+     * , produced by IdTable, aren't the right type.
+     */
+    std::sort(idTable.begin(), idTable.end(), [&joinColumn](const auto& row1,
+          const auto& row2) {return row1[joinColumn] < row2[joinColumn];});
+  };
+
+  // Random shuffle both tables, run hashJoin, check result.
+  for (normalJoinTest& testCase: testSet) {
+    randomShuffle(testCase.leftInput.idTable.begin(), testCase.leftInput.idTable.end());
+    randomShuffle(testCase.rightInput.idTable.begin(), testCase.rightInput.idTable.end());
+    testCase.resultMustBeSortedByJoinColumn = false;
+  }
+  goThroughSetOfTestsWithJoinFunction(testSet, HashJoinLambda);
+
+  // Sort the larger table by join column, run hashJoin, check result (this time it's sorted).
+  for (normalJoinTest& testCase: testSet) {
+    if (testCase.leftInput.idTable.size() >=
+        testCase.rightInput.idTable.size()) {
+      sortByJoinColumn(testCase.leftInput.idTable, testCase.leftInput.joinColumn);
+    } else {
+      sortByJoinColumn(testCase.rightInput.idTable, testCase.rightInput.joinColumn);
+    }
+
+    testCase.resultMustBeSortedByJoinColumn = true;
+  }
+  goThroughSetOfTestsWithJoinFunction(testSet, HashJoinLambda);
+
+  // Sort both tables, run merge join and hash join, check result. (Which has to be sorted.)
+  for (normalJoinTest& testCase: testSet) {
+    sortByJoinColumn(testCase.leftInput.idTable, testCase.leftInput.joinColumn);
+    sortByJoinColumn(testCase.rightInput.idTable, testCase.rightInput.joinColumn);
+    testCase.resultMustBeSortedByJoinColumn = true;
+  }
+  goThroughSetOfTestsWithJoinFunction(testSet, JoinLambda);
+  goThroughSetOfTestsWithJoinFunction(testSet, HashJoinLambda);
+}
+
 /* 
- * @brief Return a vector of normalJoinTest for testing with the normal join function. 
+ * @brief Return a vector of normalJoinTest for testing with the join functions. 
  */
 std::vector<normalJoinTest> createNormalJoinTestSet() {
   std::vector<normalJoinTest> myTestSet{};
@@ -279,16 +336,33 @@ std::vector<normalJoinTest> createNormalJoinTestSet() {
       IdTableAndJoinColumn{makeIdTableFromVector(rightIdTable), 0},
       makeIdTableFromVector(sampleSolution), true});
 
+  leftIdTable = {
+      {34, 73, 92, 61, 18},
+      {11, 80, 20, 43, 75},
+      {96, 51, 40, 67, 23}
+    };
+  rightIdTable = {
+      {34, 73, 92, 61, 18},
+      {96, 2, 76, 87, 38},
+      {96, 16, 27, 22, 38},
+      {7, 51, 40, 67, 23}
+    };
+  sampleSolution = {
+        {34, 73, 92, 61, 18, 73, 92, 61, 18},
+        {96, 51, 40, 67, 23, 2, 76, 87, 38},
+        {96, 51, 40, 67, 23, 16, 27, 22, 38}
+      };
+  myTestSet.push_back(normalJoinTest{
+      IdTableAndJoinColumn{makeIdTableFromVector(leftIdTable), 0},
+      IdTableAndJoinColumn{makeIdTableFromVector(rightIdTable), 0},
+      makeIdTableFromVector(sampleSolution), true});
+
   return myTestSet;
 }
 
 
 TEST(JoinTest, joinTest) {
-  Join J{Join::InvalidOnlyForTestingJoinTag{}};
-  auto JoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
-    return J.join<A, B, C>(AD_FWD(args)...);
-  };
-  goThroughSetOfTestsWithJoinFunction(createNormalJoinTestSet(), JoinLambda);
+  runTestCasesForAllJoinAlgorithm(createNormalJoinTestSet());
 };
 
 TEST(JoinTest, optionalJoinTest) {
@@ -352,88 +426,4 @@ TEST(JoinTest, optionalJoinTest) {
   sampleSolution(4, 5) = ID_NO_VALUE;
 
   ASSERT_EQ(sampleSolution, vresult);
-}
-
-TEST(JoinTest, hashJoinTest) {
-  // Going through the tests of the normal lambda. The result for hashed join
-  // is sorted, if the input was also sorted, so hashJoin can go through them,
-  // without modifying them first.
-  Join J{Join::InvalidOnlyForTestingJoinTag{}};
-  auto HashJoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
-    return J.hashJoin<A, B, C>(AD_FWD(args)...);
-  };
-  auto JoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
-    return J.join<A, B, C>(AD_FWD(args)...);
-  };
-  goThroughSetOfTestsWithJoinFunction(createNormalJoinTestSet(), HashJoinLambda);
-
-  /*
-   * Create two sorted IdTables. Join them using the normal join and the
-   * hashed join. Compare.
-  */
-  vectorTable a{{
-      {34, 73, 92, 61, 18},
-      {11, 80, 20, 43, 75},
-      {96, 51, 40, 67, 23}
-    }};
- 
-  vectorTable b{{
-      {34, 73, 92, 61, 18},
-      {96, 2, 76, 87, 38},
-      {96, 16, 27, 22, 38},
-      {7, 51, 40, 67, 23}
-    }};
-  
-  // Saving the results and comparing them.
-  IdTable result1{useJoinFunctionOnIdTables(
-      IdTableAndJoinColumn{makeIdTableFromVector(a), 0},
-      IdTableAndJoinColumn{makeIdTableFromVector(b), 0},
-      JoinLambda)}; // Normal.
-  IdTable result2{useJoinFunctionOnIdTables(
-      IdTableAndJoinColumn{makeIdTableFromVector(a), 0},
-      IdTableAndJoinColumn{makeIdTableFromVector(b), 0},
-      HashJoinLambda)}; // Hash.
-  ASSERT_EQ(result1, result2);
-
-  // Checking if result1 and result2 are correct.
-  compareIdTableWithExpectedContent(result1, makeIdTableFromVector(
-      {
-        {34, 73, 92, 61, 18, 73, 92, 61, 18},
-        {96, 51, 40, 67, 23, 2, 76, 87, 38},
-        {96, 51, 40, 67, 23, 16, 27, 22, 38}
-      }
-    ),
-    true,
-    0
-  );
-  compareIdTableWithExpectedContent(result2, makeIdTableFromVector(
-      {
-        {34, 73, 92, 61, 18, 73, 92, 61, 18},
-        {96, 51, 40, 67, 23, 2, 76, 87, 38},
-        {96, 51, 40, 67, 23, 16, 27, 22, 38}
-      }
-    ),
-    true,
-    0
-  );
-
-  // Random shuffle the tables, hash join them, sort the result and check,
-  // if the result is still correct.
-  randomShuffle(a.begin(), a.end());
-  randomShuffle(b.begin(), b.end());
-  result2 = useJoinFunctionOnIdTables(
-      IdTableAndJoinColumn{makeIdTableFromVector(a), 0},
-      IdTableAndJoinColumn{makeIdTableFromVector(b), 0},
-      HashJoinLambda);
-
-  // Sorting is done inside this function.
-  compareIdTableWithExpectedContent(result2, makeIdTableFromVector(
-      {
-        {34, 73, 92, 61, 18, 73, 92, 61, 18},
-        {96, 51, 40, 67, 23, 2, 76, 87, 38},
-        {96, 51, 40, 67, 23, 16, 27, 22, 38}
-      }
-    ),
-    false
-  );
 }
