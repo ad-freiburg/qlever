@@ -546,6 +546,14 @@ class IdTable {
     return true;
   }
 
+  // Get the `i`-th column. It is stored contiguously in memory.
+  std::span<Id> getColumn(size_t i) {
+    return {data().data() + i * capacityRows_, numRows_};
+  }
+  std::span<const Id> getColumn(size_t i) const {
+    return {data().data() + i * capacityRows_, numRows_};
+  }
+
  private:
   // Get direct access to the underlying data() as a reference.
   Columns& data() requires(!isView) { return data_; }
@@ -582,14 +590,6 @@ class IdTable {
     if (numRows_ == capacityRows_) {
       setCapacity(std::max(1ul, capacityRows_ * growthFactor));
     }
-  }
-
-  // Get the `i`-th column. It is stored contiguously in memory.
-  std::span<Id> getColumn(size_t i) {
-    return {data().data() + i * capacityRows_, numRows_};
-  }
-  std::span<const Id> getColumn(size_t i) const {
-    return {data().data() + i * capacityRows_, numRows_};
   }
 
   // Common implementation for const and mutable overloads of `getColumns`

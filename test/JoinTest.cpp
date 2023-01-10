@@ -128,9 +128,7 @@ void compareIdTableWithExpectedContent(const IdTable& table,
 
   if (resultMustBeSortedByJoinColumn) {
     // Is the table sorted by join column?
-    // TODO Using std:.ranges::is_sorted(localTable.getColumn(joinColumn)) would
-    // be cleaner, but getColumn is currently private.
-    ASSERT_TRUE(std::ranges::is_sorted(localTable, {}, [joinColumn](const auto& row){return row[joinColumn];}));
+    ASSERT_TRUE(std::ranges::is_sorted(localTable.getColumn(joinColumn)));
   }
 
   // Sort both the table and the expectedContent, so that both have a definite
