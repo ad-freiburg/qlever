@@ -240,44 +240,47 @@ void runTestCasesForAllJoinAlgorithm(std::vector<normalJoinTest> testSet,
     return J.join<A, B, C>(AD_FWD(args)...);
   };
 
-  // For sorting IdTables by their join column.
-  auto sortByJoinColumn = [](IdTable& idTable, size_t joinColumn) {
+  // For sorting IdTableAndJoinColumn by their join column.
+  auto sortByJoinColumn = [](IdTableAndJoinColumn& idTableAndJC) {
     /*
      * TODO Introduce functionality to the IdTable-class, so that std::ranges::sort
      * can be used instead of std::sort. Currently it seems like the iterators
      * , produced by IdTable, aren't the right type.
      */
-    std::sort(idTable.begin(), idTable.end(), [&joinColumn](const auto& row1,
-          const auto& row2) {return row1[joinColumn] < row2[joinColumn];});
+    std::sort(idTableAndJC.idTable.begin(), idTableAndJC.idTable.end(),
+        [&idTableAndJC](const auto& row1, const auto& row2) {
+          return row1[idTableAndJC.joinColumn] < row2[idTableAndJC.joinColumn];
+        });
   };
 
   // Random shuffle both tables, run hashJoin, check result.
-  for (normalJoinTest& testCase: testSet) {
-    randomShuffle(testCase.leftInput.idTable.begin(), testCase.leftInput.idTable.end());
-    randomShuffle(testCase.rightInput.idTable.begin(), testCase.rightInput.idTable.end());
-    testCase.resultMustBeSortedByJoinColumn = false;
-  }
+  std::ranges::for_each(testSet, [](normalJoinTest& testCase) {
+        randomShuffle(testCase.leftInput.idTable.begin(),
+            testCase.leftInput.idTable.end());
+        randomShuffle(testCase.rightInput.idTable.begin(),
+            testCase.rightInput.idTable.end());
+        testCase.resultMustBeSortedByJoinColumn = false;
+      });
   goThroughSetOfTestsWithJoinFunction(testSet, HashJoinLambda);
 
   // Sort the larger table by join column, run hashJoin, check result (this time it's sorted).
-  for (normalJoinTest& testCase: testSet) {
-    if (testCase.leftInput.idTable.size() >=
-        testCase.rightInput.idTable.size()) {
-      sortByJoinColumn(testCase.leftInput.idTable, testCase.leftInput.joinColumn);
-    } else {
-      sortByJoinColumn(testCase.rightInput.idTable, testCase.rightInput.joinColumn);
-    }
-
-    testCase.resultMustBeSortedByJoinColumn = true;
-  }
+  std::ranges::for_each(testSet, [&sortByJoinColumn](normalJoinTest& testCase) {
+        if (testCase.leftInput.idTable.size() >=
+            testCase.rightInput.idTable.size()) {
+          sortByJoinColumn(testCase.leftInput);
+        } else {
+          sortByJoinColumn(testCase.rightInput);
+        }
+        testCase.resultMustBeSortedByJoinColumn = true;
+      });
   goThroughSetOfTestsWithJoinFunction(testSet, HashJoinLambda);
 
   // Sort both tables, run merge join and hash join, check result. (Which has to be sorted.)
-  for (normalJoinTest& testCase: testSet) {
-    sortByJoinColumn(testCase.leftInput.idTable, testCase.leftInput.joinColumn);
-    sortByJoinColumn(testCase.rightInput.idTable, testCase.rightInput.joinColumn);
-    testCase.resultMustBeSortedByJoinColumn = true;
-  }
+  std::ranges::for_each(testSet, [&sortByJoinColumn](normalJoinTest& testCase) {
+        sortByJoinColumn(testCase.leftInput);
+        sortByJoinColumn(testCase.rightInput);
+        testCase.resultMustBeSortedByJoinColumn = true;
+      });
   goThroughSetOfTestsWithJoinFunction(testSet, JoinLambda);
   goThroughSetOfTestsWithJoinFunction(testSet, HashJoinLambda);
 }
