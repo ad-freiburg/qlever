@@ -34,13 +34,13 @@ auto I = [](const auto& id) {
 
 // For easier reading. We repeat that type combination so often, that this
 // will make things a lot easier in terms of reading and writing.
-using vectorTable = std::vector<std::vector<size_t>>;
+using VectorTable = std::vector<std::vector<size_t>>;
 
 /*
  * Return an 'IdTable' with the given 'tableContent'. all rows must have the
  * same length.
 */
-IdTable makeIdTableFromVector(vectorTable tableContent) {
+IdTable makeIdTableFromVector(VectorTable tableContent) {
   AD_CHECK(!tableContent.empty());
   IdTable result{tableContent[0].size(), allocator()};
 

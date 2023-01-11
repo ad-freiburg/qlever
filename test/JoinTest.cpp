@@ -180,9 +180,9 @@ std::vector<normalJoinTest> createNormalJoinTestSet() {
   std::vector<normalJoinTest> myTestSet{};
 
   // For easier creation of IdTables and readability.
-  vectorTable leftIdTable{{{1, 1}, {1, 3}, {2, 1}, {2, 2}, {4, 1}}};
-  vectorTable rightIdTable{{{1, 3}, {1, 8}, {3, 1}, {4, 2}}};
-  vectorTable sampleSolution{{{1, 1, 3}, {1, 1, 8}, {1, 3, 3}, {1, 3, 8}, {4, 1, 2}}};
+  VectorTable leftIdTable{{{1, 1}, {1, 3}, {2, 1}, {2, 2}, {4, 1}}};
+  VectorTable rightIdTable{{{1, 3}, {1, 8}, {3, 1}, {4, 2}}};
+  VectorTable sampleSolution{{{1, 1, 3}, {1, 1, 8}, {1, 3, 3}, {1, 3, 8}, {4, 1, 2}}};
   myTestSet.push_back(normalJoinTest{
       IdTableAndJoinColumn{makeIdTableFromVector(leftIdTable), 0},
       IdTableAndJoinColumn{makeIdTableFromVector(rightIdTable), 0},
