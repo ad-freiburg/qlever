@@ -136,11 +136,11 @@ TEST(IdTableTest, DocumentationOfIteratorUsage) {
 
 // Run a test case for the following different instantiations of the `IdTable`
 // template:
-// - The default IdTable (stores `Id`s in a `vector<Id, AllocatorWithLimit>`.
-// - An IdTable that stores plain `int`s in plain `std::vector`.
+// - The default `IdTable` (stores `Id`s in a `vector<Id, AllocatorWithLimit>`.
+// - An `IdTable` that stores plain `int`s in a plain `std::vector`.
 // - An `IdTable` that stores `Id`s in a `BufferedVector`.
 // Arguments:
-// `NumIdTables` - the number of distinct `IdTable` objects that are used inside
+// `NumIdTables` - The number of distinct `IdTable` objects that are used inside
 //                 the test case
 // `test case` -   A lambda that is templated on a specific `IdTable`
 // instantiation, and takes one or two arguments. The first argument is a
@@ -152,7 +152,7 @@ template <size_t NumIdTables>
 void runTestForDifferentTypes(auto testCase, std::string testCaseName) {
   using Buffer = ad_utility::BufferedVector<Id>;
   using BufferedTable = columnBasedIdTable::IdTable<Id, 0, Buffer>;
-  using intTable = columnBasedIdTable::IdTable<int, 0>;
+  using IntTable = columnBasedIdTable::IdTable<int, 0>;
   // Prepare the vectors of `allocators` and distinct `BufferedVector`s needed
   // for the respective `IdTable` types.
   std::vector<std::decay_t<decltype(allocator())>> allocators;
@@ -164,15 +164,16 @@ void runTestForDifferentTypes(auto testCase, std::string testCaseName) {
   testCase.template operator()<IdTable>(I, std::move(allocators));
   testCase.template operator()<BufferedTable>(I, std::move(buffers));
   auto makeInt = [](auto el) { return static_cast<int>(el); };
-  testCase.template operator()<intTable>(makeInt);
+  testCase.template operator()<IntTable>(makeInt);
 }
 
 // This helper function has to be used inside the `testCase` lambdas for the
 // `runTestForDifferenTypes` function above whenever a copy of an `IdTable` has
 // to be made. It is necessary because for some `IdTable` instantiations
 // (for example when the data is stored in a `BufferedVector`) the `clone`
-// member function needs additional arguments. For an example usage see the
-// test cases below.
+// member function needs additional arguments. Currently, the only additional
+// argument is the filenmae for the copy for `IdTables` that store their data in
+// a `BufferedVector`. For an example usage see the test cases below.
 auto clone(const auto& table, auto... args) {
   if constexpr (requires { table.clone(); }) {
     return table.clone();
@@ -199,20 +200,20 @@ TEST(IdTableTest, push_back_and_assign) {
     ASSERT_EQ(NUM_ROWS, t1.size());
     ASSERT_EQ(NUM_ROWS, t1.numRows());
     ASSERT_EQ(NUM_COLS, t1.numColumns());
-    // check the entries
+    // Check the entries
     for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
       ASSERT_EQ(make(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
     }
 
-    // assign new values to the entries
+    // Assign new values to the entries
     for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
       t1(i / NUM_COLS, i % NUM_COLS) = make((NUM_ROWS * NUM_COLS) - i);
     }
 
-    // test for the new entries
+    // Test for the new entries
     for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-      ASSERT_EQ(make((NUM_ROWS * NUM_COLS) - i),
-                t1(i / NUM_COLS, i % NUM_COLS));
+      ASSERT_EQ(t1(i / NUM_COLS, i % NUM_COLS),
+                make((NUM_ROWS * NUM_COLS) - i));
     }
   };
   runTestForDifferentTypes<1>(runTestForIdTable, "idTableTest.pushBackAssign");
@@ -220,7 +221,7 @@ TEST(IdTableTest, push_back_and_assign) {
 
 TEST(IdTableTest, insertAtEnd) {
   // A lambda that is used as the `testCase` argument to the
-  // `runtTestForDifferenTypes` function (see above for details).
+  // `runTestForDifferentTypes` function (see above for details).
   auto runTestForIdTable = []<typename Table>(auto make,
                                               auto... additionalArgs) {
     Table t1{4, std::move(additionalArgs.at(0))...};

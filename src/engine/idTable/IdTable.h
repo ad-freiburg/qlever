@@ -567,8 +567,11 @@ class IdTable {
     if (newCapacity == capacityRows_) {
       return;
     }
-    // If the `Storage` can be easily constructed, we use an implementation
-    // that uses a new `Storage` object.
+    // If the `Storage` can be easily constructed (for example a `std::vector`),
+    // we use an implementation that uses a new `Storage` object. This is
+    // typically more efficient than resizing the old `Storage` object, because
+    // the `resize` operation is typically expensive because it also has to copy
+    // the contents.
     if constexpr (requires { Storage{getAllocator()}; }) {
       Storage newData{getAllocator()};
       newData.resize(newCapacity * numColumns());
@@ -582,8 +585,11 @@ class IdTable {
       }
       data() = std::move(newData);
     } else {
-      // It is complicated to create `Storage` objects, so we resize the current
-      // `Storage` object and move the contents in place.
+      // If it is complicated to create a`Storage` object (e.g. for file-based
+      // data structures like `BufferedVector`, we resize the current `Storage`
+      // object and move the contents in place. For file-based storage types the
+      // `resize` operation is cheap as only new blocks are appended to the file
+      // without copying any data.
       if (newCapacity > capacityRows_) {
         data().resize(newCapacity * numColumns());
         // TODO<joka921, C++23> Use views.
