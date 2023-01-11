@@ -32,8 +32,8 @@ TEST(EngineTest, distinctTest) {
   CALL_FIXED_SIZE(4, Engine::distinct, inp, keepIndices, &result);
   
   // For easier checking.
-  IdTable sampleSolution{makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}})};
-  ASSERT_EQ(sampleSolution, result);
+  IdTable expectedResult{makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}})};
+  ASSERT_EQ(expectedResult, result);
 }
 
 TEST(JoinTest, optionalJoinTest) {
@@ -54,18 +54,18 @@ TEST(JoinTest, optionalJoinTest) {
   
   
   // For easier checking of the result.
-  IdTable sampleSolution{makeIdTableFromVector({
+  IdTable expectedResult{makeIdTableFromVector({
           {4, 1, 2, 0},
           {2, 1, 3, 3},
           {1, 1, 4, 0},
           {2, 2, 1, 0},
           {1, 3, 1, 1} 
         })};
-  sampleSolution(0, 3) = ID_NO_VALUE;
-  sampleSolution(2, 3) = ID_NO_VALUE;
-  sampleSolution(3, 3) = ID_NO_VALUE;
+  expectedResult(0, 3) = ID_NO_VALUE;
+  expectedResult(2, 3) = ID_NO_VALUE;
+  expectedResult(3, 3) = ID_NO_VALUE;
 
-  ASSERT_EQ(sampleSolution, result);
+  ASSERT_EQ(expectedResult, result);
 
   // Test the optional join with variable sized data.
   IdTable va{makeIdTableFromVector({{1, 2, 3, 4, 5, 6}, {1, 2, 3, 7, 5 ,6}, {7, 6, 5, 4, 3, 2}})};
@@ -84,17 +84,17 @@ TEST(JoinTest, optionalJoinTest) {
                   OptionalJoin::optionalJoin, va, vb, true, false, jcls, &vresult);
   
   // For easier checking.
-  sampleSolution = makeIdTableFromVector({
+  expectedResult = makeIdTableFromVector({
           {1, 2, 3, 4, 5, 6, 4},
           {1, 2, 3, 4, 5, 6, 5},
           {1, 2, 3, 7, 5, 6, 4},
           {1, 2, 3, 7, 5, 6, 5},
           {0, 6, 7, 0, 0, 0, 4}
         });
-  sampleSolution(4, 0) = ID_NO_VALUE;
-  sampleSolution(4, 3) = ID_NO_VALUE;
-  sampleSolution(4, 4) = ID_NO_VALUE;
-  sampleSolution(4, 5) = ID_NO_VALUE;
+  expectedResult(4, 0) = ID_NO_VALUE;
+  expectedResult(4, 3) = ID_NO_VALUE;
+  expectedResult(4, 4) = ID_NO_VALUE;
+  expectedResult(4, 5) = ID_NO_VALUE;
 
-  ASSERT_EQ(sampleSolution, vresult);
+  ASSERT_EQ(expectedResult, vresult);
 }

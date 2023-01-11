@@ -175,21 +175,21 @@ void runTestCasesForAllJoinAlgorithms(std::vector<JoinTestCase> testSet,
 /* 
  * @brief Return a vector of JoinTestCase for testing with the join functions. 
  */
-std::vector<JoinTestCase> createNormalJoinTestSet() {
+std::vector<JoinTestCase> createJoinTestSet() {
   std::vector<JoinTestCase> myTestSet{};
 
   // For easier creation of IdTables and readability.
   VectorTable leftIdTable{{{1, 1}, {1, 3}, {2, 1}, {2, 2}, {4, 1}}};
   VectorTable rightIdTable{{{1, 3}, {1, 8}, {3, 1}, {4, 2}}};
-  VectorTable sampleSolution{{{1, 1, 3}, {1, 1, 8}, {1, 3, 3}, {1, 3, 8}, {4, 1, 2}}};
+  VectorTable expectedResult{{{1, 1, 3}, {1, 1, 8}, {1, 3, 3}, {1, 3, 8}, {4, 1, 2}}};
   myTestSet.push_back(JoinTestCase{
       IdTableAndJoinColumn{makeIdTableFromVector(leftIdTable), 0},
       IdTableAndJoinColumn{makeIdTableFromVector(rightIdTable), 0},
-      makeIdTableFromVector(sampleSolution), true});
+      makeIdTableFromVector(expectedResult), true});
 
   leftIdTable = {{1, 1}, {1, 3}, {2, 1}, {2, 2}, {4, 1}};
   rightIdTable ={{1, 3}, {1, 8}, {3, 1}, {4, 2}};
-  sampleSolution = {{1, 1, 3}, {1, 1, 8}, {1, 3, 3}, {1, 3, 8}, {4, 1, 2}, {400000, 200000, 200000}};
+  expectedResult = {{1, 1, 3}, {1, 1, 8}, {1, 3, 3}, {1, 3, 8}, {4, 1, 2}, {400000, 200000, 200000}};
   for (size_t i = 1; i <= 10000; ++i) {
     rightIdTable.push_back({4 + i, 2 + i});
   }
@@ -198,11 +198,11 @@ std::vector<JoinTestCase> createNormalJoinTestSet() {
   myTestSet.push_back(JoinTestCase{
       IdTableAndJoinColumn{makeIdTableFromVector(leftIdTable), 0},
       IdTableAndJoinColumn{makeIdTableFromVector(rightIdTable), 0},
-      makeIdTableFromVector(sampleSolution), true});
+      makeIdTableFromVector(expectedResult), true});
   
   leftIdTable = {};
   rightIdTable = {};
-  sampleSolution = {{40000, 200000, 200000}, {4000001, 200000, 200000}};
+  expectedResult = {{40000, 200000, 200000}, {4000001, 200000, 200000}};
   for (size_t i = 1; i <= 10000; ++i) {
     leftIdTable.push_back({4 + i, 2 + i});
   }
@@ -216,15 +216,15 @@ std::vector<JoinTestCase> createNormalJoinTestSet() {
   myTestSet.push_back(JoinTestCase{
       IdTableAndJoinColumn{makeIdTableFromVector(leftIdTable), 0},
       IdTableAndJoinColumn{makeIdTableFromVector(rightIdTable), 0},
-      makeIdTableFromVector(sampleSolution), true});
+      makeIdTableFromVector(expectedResult), true});
   
   leftIdTable = {{0, 1}, {0, 2}, {1, 3}, {1, 4}};
   rightIdTable = {{0}};
-  sampleSolution = {{0, 1}, {0, 2}};
+  expectedResult = {{0, 1}, {0, 2}};
   myTestSet.push_back(JoinTestCase{
       IdTableAndJoinColumn{makeIdTableFromVector(leftIdTable), 0},
       IdTableAndJoinColumn{makeIdTableFromVector(rightIdTable), 0},
-      makeIdTableFromVector(sampleSolution), true});
+      makeIdTableFromVector(expectedResult), true});
 
   leftIdTable = {
       {34, 73, 92, 61, 18},
@@ -237,7 +237,7 @@ std::vector<JoinTestCase> createNormalJoinTestSet() {
       {96, 16, 27, 22, 38},
       {7, 51, 40, 67, 23}
     };
-  sampleSolution = {
+  expectedResult = {
         {34, 73, 92, 61, 18, 73, 92, 61, 18},
         {96, 51, 40, 67, 23, 2, 76, 87, 38},
         {96, 51, 40, 67, 23, 16, 27, 22, 38}
@@ -245,12 +245,12 @@ std::vector<JoinTestCase> createNormalJoinTestSet() {
   myTestSet.push_back(JoinTestCase{
       IdTableAndJoinColumn{makeIdTableFromVector(leftIdTable), 0},
       IdTableAndJoinColumn{makeIdTableFromVector(rightIdTable), 0},
-      makeIdTableFromVector(sampleSolution), true});
+      makeIdTableFromVector(expectedResult), true});
 
   return myTestSet;
 }
 
 
 TEST(JoinTest, joinTest) {
-  runTestCasesForAllJoinAlgorithms(createNormalJoinTestSet());
+  runTestCasesForAllJoinAlgorithms(createJoinTestSet());
 };
