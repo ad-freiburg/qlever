@@ -150,16 +150,6 @@ void Join::computeResult(ResultTable* result) {
                   leftRes->_idTable, _leftJoinCol, rightRes->_idTable,
                   _rightJoinCol, &result->_idTable);
 
-  /* TODO This is needed for the pre-compilation of the template hashJoin.
-   * Because the compiler doesn't know, that rand() < 0 can never be true,
-   * it compiles the used templates without breaking the actual join operation.
-  */
-  if (rand() < 0) {
-    CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::hashJoin, this,
-                    leftRes->_idTable, _leftJoinCol, rightRes->_idTable,
-                    _rightJoinCol, &result->_idTable);
-  }
-
   // If only one of the two operands has a local vocab, pass it on.
   result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
       leftRes->_localVocab, rightRes->_localVocab);
@@ -736,7 +726,7 @@ void Join::doGallopInnerJoin(const TagType, const IdTableView<L_WIDTH>& l1,
 
 // ______________________________________________________________________________
 template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
+void Join::hashJoinImpl(const IdTable& dynA, size_t jc1, const IdTable& dynB,
                 size_t jc2, IdTable* dynRes) {
   const IdTableView<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
   const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
@@ -809,6 +799,15 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   LOG(DEBUG) << "Result: width = " << dynRes->numColumns()
              << ", size = " << dynRes->size() << "\n";
 }
+
+// ______________________________________________________________________________
+void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
+                size_t jc2, IdTable* dynRes) {
+  CALL_FIXED_SIZE(
+      (std::array{dynA.numColumns(), dynB.numColumns(), dynRes->numColumns()}),
+      &Join::hashJoinImpl, this, dynA, jc1, dynB, jc2, dynRes);
+}
+
 
 // ___________________________________________________________________________ 
 template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>

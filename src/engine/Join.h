@@ -85,7 +85,7 @@ class Join : public Operation {
    * The possible algorithms should be:
    * - The normal merge join.
    * - The doGallopInnerJoin.
-   * - The hashJoin.
+   * - The hashJoinImpl.
    * Currently it only decides between doGallopInnerJoin and the standard merge
    * join, with the merge join code directly written in the function.
    * TODO Move the merge join into it's own function and make this function
@@ -102,6 +102,13 @@ class Join : public Operation {
                                 size_t jc1, const IdTableView<R_WIDTH>& l2,
                                 size_t jc2, IdTableStatic<OUT_WIDTH>* result);
 
+  /*
+   * @brief The implementation of hashJoin.
+   */
+  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+  void hashJoinImpl(const IdTable& dynA, size_t jc1, const IdTable& dynB, size_t jc2,
+            IdTable* dynRes);
+
   /**
    * @brief Joins IdTables dynA and dynB on join column jc2, returning
    * the result in dynRes. Creates a cross product for matching rows by putting
@@ -110,7 +117,6 @@ class Join : public Operation {
    * @return The result is only sorted, if the bigger table is sorted.
    * Otherwise it is not sorted.
    **/
-  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
   void hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB, size_t jc2,
             IdTable* dynRes);
 

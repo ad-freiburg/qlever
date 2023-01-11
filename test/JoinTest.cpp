@@ -122,7 +122,7 @@ void runTestCasesForAllJoinAlgorithms(std::vector<JoinTestCase> testSet,
   // over to helper functions.
   Join J{Join::InvalidOnlyForTestingJoinTag{}};
   auto hashJoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
-    return J.hashJoin<A, B, C>(AD_FWD(args)...);
+    return J.hashJoin(AD_FWD(args)...);
   };
   auto joinLambda = [&J]<int A, int B, int C>(auto&&... args) {
     return J.join<A, B, C>(AD_FWD(args)...);
