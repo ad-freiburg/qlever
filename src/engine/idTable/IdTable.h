@@ -586,7 +586,7 @@ class IdTable {
       data() = std::move(newData);
     } else {
       // If it is complicated to create a`Storage` object (e.g. for file-based
-      // data structures like `BufferedVector`, we resize the current `Storage`
+      // data structures like `BufferedVector`), we resize the current `Storage`
       // object and move the contents in place. For file-based storage types the
       // `resize` operation is cheap as only new blocks are appended to the file
       // without copying any data.
