@@ -67,19 +67,20 @@ static inline QueryExecutionContext* getQec(std::string turtleInput = "") {
   static ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
   static ad_utility::HashMap<std::string, Index> turtleToIndexMap;
-  static ad_utility::HashMap<std::string, QueryExecutionContext>
-      turtleToContextMap;
+  static ad_utility::HashMap<std::string, QueryExecutionContext> turtleToContextMap;
+  static ad_utility::HashMap<std::string, std::unique_ptr<QueryResultCache>>
+      turtleToCacheMap;
   static const Engine engine{};
-  static QueryResultCache cache{};
   if (!turtleToIndexMap.contains(turtleInput)) {
     AD_CHECK(!turtleToContextMap.contains(turtleInput));
     turtleToIndexMap.emplace(turtleInput, makeTestIndex(turtleInput));
+    turtleToCacheMap.emplace(turtleInput, std::make_unique<QueryResultCache>());
     turtleToContextMap.emplace(
         turtleInput,
         QueryExecutionContext{
             turtleToIndexMap.at(turtleInput),
             engine,
-            &cache,
+            turtleToCacheMap.at(turtleInput).get(),
             ad_utility::AllocatorWithLimit<Id>{
                 ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)},
             {}});
