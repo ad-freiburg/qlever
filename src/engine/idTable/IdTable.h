@@ -122,7 +122,6 @@ class IdTable {
   // implemented in a way that makes it hard to use them incorrectly. For
   // details, see the comment above and the definition of the `Row` and
   // `RowReference` class.
-  // TODO<joka921> Those also have to be templated on the `value_type`.
   using row_type = Row<T, NumColumns>;
   using row_reference = RowReference<IdTable, ad_utility::IsConst::False>;
   using const_row_reference = RowReference<IdTable, ad_utility::IsConst::True>;
@@ -139,7 +138,7 @@ class IdTable {
           IdTable, ad_utility::IsConst::True>;
   using const_row_reference_view_restricted =
       RowReferenceImpl::RowReferenceWithRestrictedAccess<
-          IdTable<value_type, NumColumns, Storage, IsView::True>,
+          IdTable<T, NumColumns, Storage, IsView::True>,
           ad_utility::IsConst::True>;
 
  private:
@@ -230,7 +229,7 @@ class IdTable {
     }
   }
 
-  // Get access to the underlying `allocator`.
+  // Get access to the underlying allocator.
   // Note: The allocator is always copied, because `std::vector`, which is
   // used internally, only gives access to its allocator by value.
   auto getAllocator() const { return data().get_allocator(); }
@@ -347,13 +346,12 @@ class IdTable {
   // of columns, but with a different allocator. If this should ever be needed,
   // we would have to reformulate the `requires()` clause here a little more
   // complicated.
-  template <typename RowLike>
+  template <typename RowT>
   requires ad_utility::isTypeContainedIn<
-      RowLike,
-      std::tuple<row_reference, const_row_reference, row_reference_restricted,
-                 const_row_reference_restricted,
-                 const_row_reference_view_restricted>>
-  void push_back(const RowLike& newRow) requires(!isView) {
+      RowT, std::tuple<row_reference, const_row_reference,
+                       row_reference_restricted, const_row_reference_restricted,
+                       const_row_reference_view_restricted>>
+  void push_back(const RowT& newRow) requires(!isView) {
     if constexpr (NumColumns == 0) {
       assert(newRow.numColumns() == numColumns());
     }
@@ -569,6 +567,8 @@ class IdTable {
     if (newCapacity == capacityRows_) {
       return;
     }
+    // If the `Storage` can be easily constructed, we use an implementation
+    // that uses a new `Storage` object.
     if constexpr (requires { Storage{getAllocator()}; }) {
       Storage newData{getAllocator()};
       newData.resize(newCapacity * numColumns());
@@ -582,6 +582,8 @@ class IdTable {
       }
       data() = std::move(newData);
     } else {
+      // It is complicated to create `Storage` objects, so we resize the current
+      // `Storage` object and move the contents in place.
       if (newCapacity > capacityRows_) {
         data().resize(newCapacity * numColumns());
         // TODO<joka921, C++23> Use views.
@@ -593,6 +595,7 @@ class IdTable {
                            newBegin - oldBegin);
         }
       } else {
+        // newCapacity <= capacityRows_
         // TODO<joka921, C++23> Use views.
         for (size_t i = 0; i < numColumns(); ++i) {
           auto oldBegin = i * capacityRows_;
@@ -665,19 +668,22 @@ class IdTable {
 }  // namespace columnBasedIdTable
 
 namespace detail {
-using defaultAllocator =
+using DefaultAllocator =
     ad_utility::default_init_allocator<Id, ad_utility::AllocatorWithLimit<Id>>;
-using idVector = std::vector<Id, defaultAllocator>;
+using IdVector = std::vector<Id, DefaultAllocator>;
 }  // namespace detail
 
 /// The general IdTable class. Can be modified and owns its data. If COLS > 0,
 /// COLS specifies the compile-time number of columns COLS == 0 means "runtime
 /// number of numColumns"
+/// Note: This definition cannot be a simple `using` declaration because we add
+//        the constructor that takes an `allocator` because this constructor
+//        is widely used inside the QLever codebase.
 template <int COLS>
 class IdTableStatic
-    : public columnBasedIdTable::IdTable<Id, COLS, detail::idVector> {
+    : public columnBasedIdTable::IdTable<Id, COLS, detail::IdVector> {
  public:
-  using Base = columnBasedIdTable::IdTable<Id, COLS, detail::idVector>;
+  using Base = columnBasedIdTable::IdTable<Id, COLS, detail::IdVector>;
   // Inherit the constructors.
   using Base::Base;
 
@@ -688,10 +694,10 @@ class IdTableStatic
     return *this;
   }
 
-  IdTableStatic(detail::defaultAllocator allocator)
-      : Base{detail::idVector{allocator}} {}
-  IdTableStatic(size_t numColumns, detail::defaultAllocator allocator)
-      : Base{numColumns, detail::idVector{allocator}} {}
+  IdTableStatic(detail::DefaultAllocator allocator)
+      : Base{detail::IdVector{allocator}} {}
+  IdTableStatic(size_t numColumns, detail::DefaultAllocator allocator)
+      : Base{numColumns, detail::IdVector{allocator}} {}
 };
 
 // This was previously implemented as an alias (`using IdTable =
@@ -710,5 +716,5 @@ class IdTable : public IdTableStatic<0> {
 /// A constant view into an IdTable that does not own its data
 template <int COLS>
 using IdTableView =
-    columnBasedIdTable::IdTable<Id, COLS, detail::idVector,
+    columnBasedIdTable::IdTable<Id, COLS, detail::IdVector,
                                 columnBasedIdTable::IsView::True>;
