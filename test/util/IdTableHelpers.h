@@ -40,7 +40,7 @@ using VectorTable = std::vector<std::vector<size_t>>;
  * Return an 'IdTable' with the given 'tableContent'. all rows must have the
  * same length.
 */
-IdTable makeIdTableFromVector(VectorTable tableContent) {
+IdTable makeIdTableFromVector(const VectorTable& tableContent) {
   AD_CHECK(!tableContent.empty());
   IdTable result{tableContent[0].size(), allocator()};
 
