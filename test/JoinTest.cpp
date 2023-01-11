@@ -38,7 +38,7 @@ struct IdTableAndJoinColumn {
  * IdTable tested, if it is sorted after the join column, or not, and this
  * IdTable is than compared with the expectedResult.
  */
-struct normalJoinTest {
+struct JoinTestCase {
   IdTableAndJoinColumn leftInput;
   IdTableAndJoinColumn rightInput;
   IdTable expectedResult;
@@ -91,21 +91,21 @@ IdTable useJoinFunctionOnIdTables(
  *  lambda function, that could contain a join function. You never have to
  *  actually specify this parameter, just let inference do its job.
  *
- * @param testSet is an array of normalJoinTests, that describe what tests to
- *  do. For an explanation, how to read normalJoinTest, see the definition.
+ * @param testSet is an array of JoinTestCases, that describe what tests to
+ *  do. For an explanation, how to read JoinTestCase, see the definition.
  * @param func the function, that will be used for joining the two tables
  *  together. Look into src/engine/Join.h, or this file, for how it should look like.
  */
 template<typename JOIN_FUNCTION>
 void goThroughSetOfTestsWithJoinFunction(
-      const std::vector<normalJoinTest>& testSet,
+      const std::vector<JoinTestCase>& testSet,
       JOIN_FUNCTION func,
       ad_utility::source_location l = ad_utility::source_location::current()
     ) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "goThroughSetOfTestsWithJoinFunction")};
 
-  for (normalJoinTest const& test: testSet) {
+  for (JoinTestCase const& test: testSet) {
     IdTable resultTable{useJoinFunctionOnIdTables(test.leftInput,
         test.rightInput, func)};
 
@@ -113,7 +113,7 @@ void goThroughSetOfTestsWithJoinFunction(
   }
 }
 
-void runTestCasesForAllJoinAlgorithms(std::vector<normalJoinTest> testSet,
+void runTestCasesForAllJoinAlgorithms(std::vector<JoinTestCase> testSet,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "runTestCasesForAllJoinAlgorithms")};
@@ -142,7 +142,7 @@ void runTestCasesForAllJoinAlgorithms(std::vector<normalJoinTest> testSet,
   };
 
   // Random shuffle both tables, run hashJoin, check result.
-  std::ranges::for_each(testSet, [](normalJoinTest& testCase) {
+  std::ranges::for_each(testSet, [](JoinTestCase& testCase) {
         randomShuffle(testCase.leftInput.idTable.begin(),
             testCase.leftInput.idTable.end());
         randomShuffle(testCase.rightInput.idTable.begin(),
@@ -152,7 +152,7 @@ void runTestCasesForAllJoinAlgorithms(std::vector<normalJoinTest> testSet,
   goThroughSetOfTestsWithJoinFunction(testSet, hashJoinLambda);
 
   // Sort the larger table by join column, run hashJoin, check result (this time it's sorted).
-  std::ranges::for_each(testSet, [&sortByJoinColumn](normalJoinTest& testCase) {
+  std::ranges::for_each(testSet, [&sortByJoinColumn](JoinTestCase& testCase) {
         IdTableAndJoinColumn& largerInputTable =
           (testCase.leftInput.idTable.size() >=
            testCase.rightInput.idTable.size()) ? testCase.leftInput :
@@ -163,7 +163,7 @@ void runTestCasesForAllJoinAlgorithms(std::vector<normalJoinTest> testSet,
   goThroughSetOfTestsWithJoinFunction(testSet, hashJoinLambda);
 
   // Sort both tables, run merge join and hash join, check result. (Which has to be sorted.)
-  std::ranges::for_each(testSet, [&sortByJoinColumn](normalJoinTest& testCase) {
+  std::ranges::for_each(testSet, [&sortByJoinColumn](JoinTestCase& testCase) {
         sortByJoinColumn(testCase.leftInput);
         sortByJoinColumn(testCase.rightInput);
         testCase.resultMustBeSortedByJoinColumn = true;
@@ -173,16 +173,16 @@ void runTestCasesForAllJoinAlgorithms(std::vector<normalJoinTest> testSet,
 }
 
 /* 
- * @brief Return a vector of normalJoinTest for testing with the join functions. 
+ * @brief Return a vector of JoinTestCase for testing with the join functions. 
  */
-std::vector<normalJoinTest> createNormalJoinTestSet() {
-  std::vector<normalJoinTest> myTestSet{};
+std::vector<JoinTestCase> createNormalJoinTestSet() {
+  std::vector<JoinTestCase> myTestSet{};
 
   // For easier creation of IdTables and readability.
   VectorTable leftIdTable{{{1, 1}, {1, 3}, {2, 1}, {2, 2}, {4, 1}}};
   VectorTable rightIdTable{{{1, 3}, {1, 8}, {3, 1}, {4, 2}}};
   VectorTable sampleSolution{{{1, 1, 3}, {1, 1, 8}, {1, 3, 3}, {1, 3, 8}, {4, 1, 2}}};
-  myTestSet.push_back(normalJoinTest{
+  myTestSet.push_back(JoinTestCase{
       IdTableAndJoinColumn{makeIdTableFromVector(leftIdTable), 0},
       IdTableAndJoinColumn{makeIdTableFromVector(rightIdTable), 0},
       makeIdTableFromVector(sampleSolution), true});
@@ -195,7 +195,7 @@ std::vector<normalJoinTest> createNormalJoinTestSet() {
   }
   leftIdTable.push_back({400000, 200000});
   rightIdTable.push_back({400000, 200000});
-  myTestSet.push_back(normalJoinTest{
+  myTestSet.push_back(JoinTestCase{
       IdTableAndJoinColumn{makeIdTableFromVector(leftIdTable), 0},
       IdTableAndJoinColumn{makeIdTableFromVector(rightIdTable), 0},
       makeIdTableFromVector(sampleSolution), true});
@@ -213,7 +213,7 @@ std::vector<normalJoinTest> createNormalJoinTestSet() {
   }
   leftIdTable.push_back({4000001, 200000});
   rightIdTable.push_back({4000001, 200000});
-  myTestSet.push_back(normalJoinTest{
+  myTestSet.push_back(JoinTestCase{
       IdTableAndJoinColumn{makeIdTableFromVector(leftIdTable), 0},
       IdTableAndJoinColumn{makeIdTableFromVector(rightIdTable), 0},
       makeIdTableFromVector(sampleSolution), true});
@@ -221,7 +221,7 @@ std::vector<normalJoinTest> createNormalJoinTestSet() {
   leftIdTable = {{0, 1}, {0, 2}, {1, 3}, {1, 4}};
   rightIdTable = {{0}};
   sampleSolution = {{0, 1}, {0, 2}};
-  myTestSet.push_back(normalJoinTest{
+  myTestSet.push_back(JoinTestCase{
       IdTableAndJoinColumn{makeIdTableFromVector(leftIdTable), 0},
       IdTableAndJoinColumn{makeIdTableFromVector(rightIdTable), 0},
       makeIdTableFromVector(sampleSolution), true});
@@ -242,7 +242,7 @@ std::vector<normalJoinTest> createNormalJoinTestSet() {
         {96, 51, 40, 67, 23, 2, 76, 87, 38},
         {96, 51, 40, 67, 23, 16, 27, 22, 38}
       };
-  myTestSet.push_back(normalJoinTest{
+  myTestSet.push_back(JoinTestCase{
       IdTableAndJoinColumn{makeIdTableFromVector(leftIdTable), 0},
       IdTableAndJoinColumn{makeIdTableFromVector(rightIdTable), 0},
       makeIdTableFromVector(sampleSolution), true});
