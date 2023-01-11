@@ -121,10 +121,10 @@ void runTestCasesForAllJoinAlgorithms(std::vector<normalJoinTest> testSet,
   // All normal join algorithm defined as lambda functions for easier handing
   // over to helper functions.
   Join J{Join::InvalidOnlyForTestingJoinTag{}};
-  auto HashJoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
+  auto hashJoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
     return J.hashJoin<A, B, C>(AD_FWD(args)...);
   };
-  auto JoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
+  auto joinLambda = [&J]<int A, int B, int C>(auto&&... args) {
     return J.join<A, B, C>(AD_FWD(args)...);
   };
 
@@ -149,7 +149,7 @@ void runTestCasesForAllJoinAlgorithms(std::vector<normalJoinTest> testSet,
             testCase.rightInput.idTable.end());
         testCase.resultMustBeSortedByJoinColumn = false;
       });
-  goThroughSetOfTestsWithJoinFunction(testSet, HashJoinLambda);
+  goThroughSetOfTestsWithJoinFunction(testSet, hashJoinLambda);
 
   // Sort the larger table by join column, run hashJoin, check result (this time it's sorted).
   std::ranges::for_each(testSet, [&sortByJoinColumn](normalJoinTest& testCase) {
@@ -161,7 +161,7 @@ void runTestCasesForAllJoinAlgorithms(std::vector<normalJoinTest> testSet,
         }
         testCase.resultMustBeSortedByJoinColumn = true;
       });
-  goThroughSetOfTestsWithJoinFunction(testSet, HashJoinLambda);
+  goThroughSetOfTestsWithJoinFunction(testSet, hashJoinLambda);
 
   // Sort both tables, run merge join and hash join, check result. (Which has to be sorted.)
   std::ranges::for_each(testSet, [&sortByJoinColumn](normalJoinTest& testCase) {
@@ -169,8 +169,8 @@ void runTestCasesForAllJoinAlgorithms(std::vector<normalJoinTest> testSet,
         sortByJoinColumn(testCase.rightInput);
         testCase.resultMustBeSortedByJoinColumn = true;
       });
-  goThroughSetOfTestsWithJoinFunction(testSet, JoinLambda);
-  goThroughSetOfTestsWithJoinFunction(testSet, HashJoinLambda);
+  goThroughSetOfTestsWithJoinFunction(testSet, joinLambda);
+  goThroughSetOfTestsWithJoinFunction(testSet, hashJoinLambda);
 }
 
 /* 
