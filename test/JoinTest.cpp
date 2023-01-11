@@ -153,12 +153,11 @@ void runTestCasesForAllJoinAlgorithms(std::vector<normalJoinTest> testSet,
 
   // Sort the larger table by join column, run hashJoin, check result (this time it's sorted).
   std::ranges::for_each(testSet, [&sortByJoinColumn](normalJoinTest& testCase) {
-        if (testCase.leftInput.idTable.size() >=
-            testCase.rightInput.idTable.size()) {
-          sortByJoinColumn(testCase.leftInput);
-        } else {
-          sortByJoinColumn(testCase.rightInput);
-        }
+        IdTableAndJoinColumn& largerInputTable =
+          (testCase.leftInput.idTable.size() >=
+           testCase.rightInput.idTable.size()) ? testCase.leftInput :
+          testCase.rightInput;
+        sortByJoinColumn(largerInputTable);
         testCase.resultMustBeSortedByJoinColumn = true;
       });
   goThroughSetOfTestsWithJoinFunction(testSet, hashJoinLambda);
