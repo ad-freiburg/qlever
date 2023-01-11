@@ -46,7 +46,7 @@ struct normalJoinTest {
 };
 
 /*
- * @brief Join two IdTables togehter with the given join function and return
+ * @brief Join two IdTables using the given join function and return
  * the result.
  *
  * @tparam JOIN_FUNCTION is used to allow the transfer of any type of
@@ -113,10 +113,10 @@ void goThroughSetOfTestsWithJoinFunction(
   }
 }
 
-void runTestCasesForAllJoinAlgorithm(std::vector<normalJoinTest> testSet,
+void runTestCasesForAllJoinAlgorithms(std::vector<normalJoinTest> testSet,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating better messages, when failing a test.
-  auto trace{generateLocationTrace(l, "runTestCasesForAllJoinAlgorithm")};
+  auto trace{generateLocationTrace(l, "runTestCasesForAllJoinAlgorithms")};
  
   // All normal join algorithm defined as lambda functions for easier handing
   // over to helper functions.
@@ -253,5 +253,5 @@ std::vector<normalJoinTest> createNormalJoinTestSet() {
 
 
 TEST(JoinTest, joinTest) {
-  runTestCasesForAllJoinAlgorithm(createNormalJoinTestSet());
+  runTestCasesForAllJoinAlgorithms(createNormalJoinTestSet());
 };
