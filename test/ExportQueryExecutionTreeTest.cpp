@@ -228,14 +228,11 @@ TEST(ExportQueryExecutionTree, Dates) {
 }
 
 TEST(ExportQueryExecutionTree, Entities) {
-  // TODO<joka921> Also add a test for an entity that comes from the local
-  // vocab.
-  std::string kgEntity =
-      "PREFIX qlever: <http://qlever.com/> \n <s> <p> qlever:o";
-  std::string objectQuery = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
-  TestCaseSelectQuery testCaseFloat{
-      kgEntity,
-      objectQuery,
+  std::string kg = "PREFIX qlever: <http://qlever.com/> \n <s> <p> qlever:o";
+  std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
+  TestCaseSelectQuery testCase{
+      kg,
+      query,
       1,
       "?o\n<http://qlever.com/o>\n",
       "?o\n<http://qlever.com/o>\n",
@@ -254,17 +251,22 @@ TEST(ExportQueryExecutionTree, Entities) {
         return j;
       }(),
   };
-  runSelectQueryTestCase(testCaseFloat);
+  runSelectQueryTestCase(testCase);
+  testCase.kg = "<s> <x> <y>";
+  testCase.query =
+      "PREFIX qlever: <http://qlever.com/> \n SELECT ?o WHERE {VALUES ?o "
+      "{qlever:o}} ORDER BY ?o";
+  runSelectQueryTestCase(testCase);
 }
 
 TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
   // TODO<joka921> Also add a test for an entity that comes from the local
   // vocab.
-  std::string kgEntity = "<s> <p> \"\"\"Some\"Where\tOver,\"\"\"@en-ca.";
-  std::string objectQuery = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
-  TestCaseSelectQuery testCaseFloat{
-      kgEntity,
-      objectQuery,
+  std::string kg = "<s> <p> \"\"\"Some\"Where\tOver,\"\"\"@en-ca.";
+  std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
+  TestCaseSelectQuery testCase{
+      kg,
+      query,
       1,
       "?o\n\"Some\"Where Over,\"@en-ca\n",
       "?o\n\"\"\"Some\"\"Where\tOver,\"\"@en-ca\"\n",
@@ -283,12 +285,15 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
         return j;
       }(),
   };
-  runSelectQueryTestCase(testCaseFloat);
+  runSelectQueryTestCase(testCase);
+  testCase.kg = "<s> <x> <y>";
+  testCase.query =
+      "SELECT ?o WHERE { VALUES ?o {\"\"\"Some\"Where\tOver,\"\"\"@en-ca}} "
+      "ORDER BY ?o";
+  runSelectQueryTestCase(testCase);
 }
 
 TEST(ExportQueryExecutionTree, UndefinedValues) {
-  // TODO<joka921> Also add a test for an entity that comes from the local
-  // vocab.
   std::string kgEntity = "<s> <p> <o>";
   std::string objectQuery =
       "SELECT ?o WHERE {?s <p> <o> OPTIONAL {?s <p2> ?o}} ORDER BY ?o";
@@ -316,10 +321,10 @@ TEST(ExportQueryExecutionTree, UndefinedValues) {
 TEST(ExportQueryExecutionTree, BlankNode) {
   // TODO<joka921> Also add a test for an entity that comes from the local
   // vocab.
-  std::string kgEntity = "<s> <p> _:blank";
+  std::string kgBlankNode = "<s> <p> _:blank";
   std::string objectQuery = "SELECT ?o WHERE {?s ?p ?o } ORDER BY ?o";
-  TestCaseSelectQuery testCaseFloat{
-      kgEntity,
+  TestCaseSelectQuery testCaseBlankNode{
+      kgBlankNode,
       objectQuery,
       1,
       "?o\n_:u_blank\n",
@@ -338,14 +343,12 @@ TEST(ExportQueryExecutionTree, BlankNode) {
         return j;
       }(),
   };
-  runSelectQueryTestCase(testCaseFloat);
+  runSelectQueryTestCase(testCaseBlankNode);
+  // Note: Blank nodes cannot be introduced in a VALUES clause, so there is
+  // nothing to test here.
 }
 
 // TODO<joka921> Missing tests:
 /*
- * 3. Multiple variables (important for TSV/CSV test coverage.
  * 4. CONSTRUCT queries (especially for the Turtle export).
- * 5. Blank nodes -> TODO<joka921> What happens when the same blank node appears
- *                   in a VALUES clause?.
- * 6. All types when they come from a local vocab.
  */
