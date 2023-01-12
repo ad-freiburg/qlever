@@ -29,7 +29,7 @@ class GraphPattern;
 /// TODO<joka921> the two classes `SparqlValues` and `Values` (below) can be
 /// merged, but we first have to figure out and refactor the `id`-business in
 /// the query planner.
-class SparqlValues {
+struct SparqlValues {
  public:
   // The variables to which the values will be bound
   std::vector<Variable> _variables;
