@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "absl/cleanup/cleanup.h"
 #include "engine/QueryExecutionContext.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
@@ -21,6 +22,33 @@ inline Index makeIndexWithTestSettings() {
   index.setNumTriplesPerBatch(2);
   index.stxxlMemoryInBytes() = 1024ul * 1024ul * 50;
   return index;
+}
+
+// Get names of all index files for a given basename. Needed for cleaning up
+// after tests using a test index.
+//
+// TODO: A better approach would be if the `Index` class itself kept track of
+// the files it creates and provides a member function to obtain all their
+// names. But for now this is good enough (and better then what we had before
+// when the files were not deleted after the test).
+inline std::vector<std::string> getAllIndexFilenames(
+    const std::string indexBasename) {
+  return {indexBasename + ".index.pos",
+          indexBasename + ".index.pso",
+          indexBasename + ".index.sop",
+          indexBasename + ".index.sop.meta",
+          indexBasename + ".index.spo",
+          indexBasename + ".index.spo.meta",
+          indexBasename + ".index.ops",
+          indexBasename + ".index.ops.meta",
+          indexBasename + ".index.osp",
+          indexBasename + ".index.osp.meta",
+          indexBasename + ".index.patterns",
+          indexBasename + ".meta-data.json",
+          indexBasename + ".prefixes",
+          indexBasename + ".vocabulary.internal",
+          indexBasename + ".vocabulary.external",
+          indexBasename + ".vocabulary.external.idsAndOffsets.mmap"};
 }
 
 // Create an `Index`, the vocabulary of which contains the literals `"alpha",
@@ -45,9 +73,11 @@ inline Index makeTestIndex() {
   {
     Index index = makeIndexWithTestSettings();
     index.setOnDiskBase(indexBasename);
+    index.setUsePatterns(true);
     index.createFromFile<TurtleParserAuto>(filename);
   }
   Index index;
+  index.setUsePatterns(true);
   index.createFromOnDiskIndex(indexBasename);
   return index;
 }
@@ -59,6 +89,12 @@ inline Index makeTestIndex() {
 static inline QueryExecutionContext* getQec() {
   static ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
+  static const absl::Cleanup cleanup = []() {
+    for (const std::string& indexFilename :
+         getAllIndexFilenames("_staticGlobalTestIndex")) {
+      ad_utility::deleteFile(indexFilename);
+    }
+  };
   static const Index index = makeTestIndex();
   static const Engine engine{};
   static QueryResultCache cache{};

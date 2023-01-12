@@ -281,18 +281,18 @@ TEST(LocalVocab, propagation) {
   checkLocalVocab(transitivePath, std::vector<std::string>{"x", "y1", "y2"});
 
   // PATTERN TRICK operations.
-  //
-  // TODO: Requires an index with pattern. Maybe Johannes can tell me how to
-  // do this.
   HasPredicateScan hasPredicateScan(testQec, qet(values1), 0, "?z");
-  // checkLocalVocab(hasPredicateScan, std::vector<std::string>{"x", "y1",
-  // "y2"});
+  checkLocalVocab(hasPredicateScan, std::vector<std::string>{"x", "y1", "y2"});
   CountAvailablePredicates countAvailablePredictes(
       testQec, qet(values1), 0, Variable{"?x"}, Variable{"?y"});
-  // checkLocalVocab(countAvailablePredictes, std::vector<std::string>{"x",
-  // "y1", "y2"});
+  checkLocalVocab(countAvailablePredictes,
+                  std::vector<std::string>{"x", "y1", "y2"});
 
   // TEXT operations.
+  //
+  // NOTE: `TextOperationWithoutFilter` takes no arguments, so the local
+  // vocabulary of the operation remains empty (but it doesn't harm to check
+  // that that is indeed the case).
   TextOperationWithFilter text1(testQec, "", {}, Variable{"?x"}, qet(values1),
                                 0);
   checkLocalVocab(text1, std::vector<std::string>{"x", "y1", "y2"});
