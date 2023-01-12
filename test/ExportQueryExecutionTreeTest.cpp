@@ -19,6 +19,9 @@ std::string runQueryStreamableResult(const std::string& kg,
                                      const std::string& query,
                                      ad_utility::MediaType mediaType) {
   auto qec = ad_utility::testing::getQec(kg);
+  // TODO<joka921> There is a bug in the caching that we have yet to trace.
+  // This cache clearing should not be necessary.
+  qec->clearCacheUnpinnedOnly();
   QueryPlanner qp{qec};
   auto pq = SparqlParser::parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
@@ -36,6 +39,9 @@ std::string runQueryStreamableResult(const std::string& kg,
 nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
                             ad_utility::MediaType mediaType) {
   auto qec = ad_utility::testing::getQec(kg);
+  // TODO<joka921> There is a bug in the caching that we have yet to trace.
+  // This cache clearing should not be necessary.
+  qec->clearCacheUnpinnedOnly();
   QueryPlanner qp{qec};
   auto pq = SparqlParser::parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
@@ -280,9 +286,39 @@ TEST(ExportQueryExecutionTree, BlankNode) {
   // nothing to test here.
 }
 
-// TODO<joka921> Missing tests:
-/*
- * 1. Multiple VARIABLES.
- * 4. CONSTRUCT queries (especially for the Turtle export).
- *
- */
+TEST(ExportQueryExecutionTree, MultipleVariables) {
+  // TODO<joka921> When we use the "ususal" `<s> <p> <o>` knowledge graph, then
+  // it gets reused from the above `Undefined` unit test which currently leads
+  // to wrong results. I currently suspect that this is a bug inside the
+  // `getQec` function, but I have yet to track it. As soon as this is done, we
+  // can switch back here.
+  std::string kg = "<x> <y> <z>";
+  std::string objectQuery = "SELECT ?p ?o WHERE {<x> ?p ?o } ORDER BY ?p ?o";
+  TestCaseSelectQuery testCaseBlankNode{
+      kg,
+      objectQuery,
+      1,
+      "?p\t?o\n<y>\t<z>\n",
+      "?p,?o\n<y>,<z>\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{"<y>"s, "<z>"s});
+        return j;
+      }(),
+      []() {
+        nlohmann::json j;
+        j["head"]["vars"].push_back("p");
+        j["head"]["vars"].push_back("o");
+        auto& bindings = j["results"]["bindings"];
+        bindings.emplace_back();
+        bindings.back()["p"] = makeJSONBinding(std::nullopt, "uri", "y");
+        bindings.back()["o"] = makeJSONBinding(std::nullopt, "uri", "z");
+        return j;
+      }()};
+  runSelectQueryTestCase(testCaseBlankNode);
+  // Note: Blank nodes cannot be introduced in a VALUES clause, so there is
+  // nothing to test here.
+}
+
+// TODO<joka921> There are tests missing for the CONSTRUCT query export, but
+// that module has to be restructured anyway.

@@ -55,6 +55,7 @@ inline Index makeTestIndex(std::string turtleInput = "") {
     index.createFromFile<TurtleParserAuto>(filename);
   }
   Index index;
+  index.setLoadAllPermutations(true);
   index.createFromOnDiskIndex(indexBasename);
   return index;
 }
@@ -66,20 +67,24 @@ inline Index makeTestIndex(std::string turtleInput = "") {
 static inline QueryExecutionContext* getQec(std::string turtleInput = "") {
   static ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
-  static ad_utility::HashMap<std::string, Index> turtleToIndexMap;
-  static ad_utility::HashMap<std::string, QueryExecutionContext>
+  // Note: we cannot use `ad_utility::HashMap` because we need pointer
+  // stability.
+  static std::unordered_map<std::string, std::unique_ptr<Index>>
+      turtleToIndexMap;
+  static std::unordered_map<std::string, QueryExecutionContext>
       turtleToContextMap;
-  static ad_utility::HashMap<std::string, std::unique_ptr<QueryResultCache>>
+  static std::unordered_map<std::string, std::unique_ptr<QueryResultCache>>
       turtleToCacheMap;
   static const Engine engine{};
   if (!turtleToIndexMap.contains(turtleInput)) {
     AD_CHECK(!turtleToContextMap.contains(turtleInput));
-    turtleToIndexMap.emplace(turtleInput, makeTestIndex(turtleInput));
+    turtleToIndexMap.emplace(
+        turtleInput, std::make_unique<Index>(makeTestIndex(turtleInput)));
     turtleToCacheMap.emplace(turtleInput, std::make_unique<QueryResultCache>());
     turtleToContextMap.emplace(
         turtleInput,
         QueryExecutionContext{
-            turtleToIndexMap.at(turtleInput),
+            *turtleToIndexMap.at(turtleInput),
             engine,
             turtleToCacheMap.at(turtleInput).get(),
             ad_utility::AllocatorWithLimit<Id>{
