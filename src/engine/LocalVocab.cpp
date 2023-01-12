@@ -30,10 +30,9 @@ LocalVocab LocalVocab::clone() const {
   // better.
   const size_t localVocabSize = this->size();
   localVocabClone.indexesToWordsMap_.resize(localVocabSize);
-  for (const auto& wordInMapAndIndex : localVocabClone.wordsToIndexesMap_) {
-    AD_CHECK(wordInMapAndIndex.second.get() < localVocabSize);
-    localVocabClone.indexesToWordsMap_[wordInMapAndIndex.second.get()] =
-        std::addressof(wordInMapAndIndex.first);
+  for (const auto& [wordInMap, index] : localVocabClone.wordsToIndexesMap_) {
+    AD_CHECK(index.get() < localVocabSize);
+    localVocabClone.indexesToWordsMap_[index.get()] = std::addressof(wordInMap);
   }
   // Return the clone.
   return localVocabClone;
