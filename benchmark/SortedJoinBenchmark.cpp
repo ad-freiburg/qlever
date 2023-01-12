@@ -35,11 +35,15 @@ void BM_SortedIdTable(BenchmarkRecords* records) {
   const size_t NUMBER_COLUMNS = 500; 
   
   Join J{Join::InvalidOnlyForTestingJoinTag{}};
-  auto JoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
-    return J.join<A, B, C>(AD_FWD(args)...);
+  DISABLE_WARNINGS_CLANG_13
+  auto hashJoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
+    ENABLE_WARNINGS_CLANG_13
+    return J.hashJoin(AD_FWD(args)...);
   };
-  auto HashJoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
-    return J.hashJoin<A, B, C>(AD_FWD(args)...);
+  DISABLE_WARNINGS_CLANG_13
+  auto joinLambda = [&J]<int A, int B, int C>(auto&&... args) {
+    ENABLE_WARNINGS_CLANG_13
+    return J.join<A, B, C>(AD_FWD(args)...);
   };
 
   // Tables, that have overlapping values in their join columns.
@@ -64,10 +68,10 @@ void BM_SortedIdTable(BenchmarkRecords* records) {
   
   // Lambda wrapper for the functions, that I measure.
   auto joinLambdaWrapper = [&]() {
-    useJoinFunctionOnIdTables(a, 0, b, 0, JoinLambda);
+    useJoinFunctionOnIdTables(a, 0, b, 0, joinLambda);
   };
   auto hashJoinLambdaWrapper = [&]() {
-    useJoinFunctionOnIdTables(a, 0, b, 0, HashJoinLambda);
+    useJoinFunctionOnIdTables(a, 0, b, 0, hashJoinLambda);
   };
 
 

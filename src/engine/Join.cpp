@@ -149,16 +149,6 @@ void Join::computeResult(ResultTable* result) {
                   leftRes->_idTable, _leftJoinCol, rightRes->_idTable,
                   _rightJoinCol, &result->_idTable);
 
-  /* TODO This is needed for the pre-compilation of the template hashJoin.
-   * Because the compiler doesn't know, that rand() < 0 can never be true,
-   * it compiles the used templates without breaking the actual join operation.
-  */
-  if (rand() < 0) {
-    CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::hashJoin, this,
-                    leftRes->_idTable, _leftJoinCol, rightRes->_idTable,
-                    _rightJoinCol, &result->_idTable);
-  }
-
   // If only one of the two operands has a local vocab, pass it on.
   result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
       leftRes->_localVocab, rightRes->_localVocab);
