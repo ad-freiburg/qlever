@@ -102,18 +102,17 @@ class Join : public Operation {
                                 size_t jc1, const IdTableView<R_WIDTH>& l2,
                                 size_t jc2, IdTableStatic<OUT_WIDTH>* result);
 
-  /*
-   * @brief The implementation of hashJoin.
-   */
-  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-  void hashJoinImpl(const IdTable& dynA, size_t jc1, const IdTable& dynB, size_t jc2,
-            IdTable* dynRes);
-
+  
   /**
    * @brief Joins IdTables dynA and dynB on join column jc2, returning
    * the result in dynRes. Creates a cross product for matching rows by putting
    * the smaller IdTable in a hash map and using that, to faster find the
    * matching rows.
+   * Needed to be a seperate function from the actual implementation, because
+   * compiler optimization keept inlining it, which make testing impossible,
+   * because you couldn't call the function after linking and just got
+   * 'undefined reference' errors.
+   *
    * @return The result is only sorted, if the bigger table is sorted.
    * Otherwise it is not sorted.
    **/
@@ -168,4 +167,12 @@ class Join : public Operation {
       const ROW_B& rowB,
       const size_t jcRowB,
       IdTableStatic<TABLE_WIDTH>* table);
+
+  /*
+   * @brief The implementation of hashJoin.
+   */
+  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+  void hashJoinImpl(const IdTable& dynA, size_t jc1, const IdTable& dynB, size_t jc2,
+            IdTable* dynRes);
+
 };
