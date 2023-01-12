@@ -141,6 +141,7 @@ VecInfo MmapVector<T>::convertArraySizeToFileSize(size_t targetSize) const {
 // _________________________________________________________________
 template <class T>
 void MmapVector<T>::adaptCapacity(size_t newCapacity) {
+  throwIfUninitialized();
   auto oldBytesize = _bytesize;
   auto realSize = convertArraySizeToFileSize(newCapacity);
   _capacity = realSize._capacity;
@@ -163,7 +164,9 @@ void MmapVector<T>::adaptCapacity(size_t newCapacity) {
 template <class T>
 void MmapVector<T>::resize(size_t newSize) {
   _size = newSize;
-  adaptCapacity(newSize);
+  if (newSize > capacity()) {
+    adaptCapacity(newSize);
+  }
 }
 
 // _________________________________________________________________
@@ -276,17 +279,7 @@ void MmapVector<T>::unmap() {
 
 // ________________________________________________________________
 template <class T>
-MmapVector<T>::MmapVector(MmapVector<T>&& other) noexcept
-    : _ptr(other._ptr),
-      _size(other._size),
-      _capacity(other._capacity),
-      _bytesize(other._bytesize),
-      _filename(other._filename),
-      _pattern(other._pattern) {
-  // we take exclusive ownership of the arguments mapping, setting
-  other._ptr = nullptr;
-  other._filename = "";
-}
+MmapVector<T>::MmapVector(MmapVector<T>&& other) noexcept = default;
 
 // ________________________________________________________________
 template <class T>
@@ -296,15 +289,12 @@ MmapVector<T>& MmapVector<T>::operator=(MmapVector<T>&& other) noexcept {
   }
   // if this vector already has a mapping, close it correctly
   close();
-  _ptr = other._ptr;
-  _size = other._size;
-  _capacity = other._capacity;
-  _bytesize = other._bytesize;
-  _filename = other._filename;
-  _pattern = other._pattern;
-  // we take exclusive ownership of the arguments mapping, setting
-  other._ptr = nullptr;
-  other._filename = "";
+  _ptr = std::move(other._ptr);
+  _size = std::move(other._size);
+  _capacity = std::move(other._capacity);
+  _bytesize = std::move(other._bytesize);
+  _filename = std::move(other._filename);
+  _pattern = std::move(other._pattern);
   return *this;
 }
 
@@ -329,17 +319,7 @@ void MmapVector<T>::advise(AccessPattern pattern) {
 // MmapVector. But since we have chosen the "greedy" template constructors,
 // this is necessary.
 template <class T>
-MmapVectorView<T>::MmapVectorView(MmapVectorView<T>&& other) noexcept {
-  this->_ptr = std::move(other._ptr);
-  this->_size = std::move(other._size);
-  this->_capacity = std::move(other._capacity);
-  this->_bytesize = std::move(other._bytesize);
-  this->_filename = std::move(other._filename);
-  this->_pattern = std::move(other._pattern);
-  // we take exclusive ownership of the arguments mapping, setting
-  other._ptr = nullptr;
-  other._filename = "";
-}
+MmapVectorView<T>::MmapVectorView(MmapVectorView<T>&& other) noexcept = default;
 
 // ________________________________________________________________
 template <class T>
@@ -353,9 +333,6 @@ MmapVectorView<T>& MmapVectorView<T>::operator=(
   this->_bytesize = std::move(other._bytesize);
   this->_filename = std::move(other._filename);
   this->_pattern = std::move(other._pattern);
-  // we take exclusive ownership of the arguments mapping, setting
-  other._ptr = nullptr;
-  other._filename = "";
   return *this;
 }
 

@@ -9,9 +9,10 @@
 #include <sstream>
 #include <string>
 
-#include "../util/Exception.h"
-#include "../util/Iterators.h"
-#include "File.h"
+#include "util/Exception.h"
+#include "util/File.h"
+#include "util/Iterators.h"
+#include "util/ResetWhenMoved.h"
 
 using std::string;
 
@@ -49,7 +50,7 @@ class TruncateException : public std::exception {
   std::string _filename;
   size_t _bytesize;
   int _errno;
-  mutable std::string _msg;
+  std::string _msg;
 };
 
 // ________________________________________________________________
@@ -270,10 +271,10 @@ class MmapVector {
   // advise the kernel to use a certain access pattern
   void advise(AccessPattern pattern);
 
-  T* _ptr = nullptr;
-  size_t _size = 0;
-  size_t _capacity = 0;
-  size_t _bytesize = 0;
+  ResetWhenMoved<T*, nullptr> _ptr;
+  ResetWhenMoved<size_t, 0> _size;
+  ResetWhenMoved<size_t, 0> _capacity;
+  ResetWhenMoved<size_t, 0> _bytesize;
   std::string _filename = "";
   AccessPattern _pattern = AccessPattern::None;
   static constexpr float ResizeFactor = 1.5;
@@ -360,7 +361,7 @@ class MmapVectorTmp : public MmapVector<T> {
   }
 
   MmapVectorTmp<T>& operator=(MmapVectorTmp<T>&& rhs) noexcept {
-    MmapVector<T>::operator=(rhs);
+    MmapVector<T>::operator=(std::move(rhs));
     return *this;
   }
 
