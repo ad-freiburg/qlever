@@ -13,13 +13,17 @@
 
 using namespace std::string_literals;
 
-std::string runTSVQuery(const std::string& kg, const std::string& query) {
+// Run the given SPARQL `query` on the given Turtle `kg` and export the result
+// as the `mediaType`. `mediaType` must be TSV or CSV.
+std::string runQueryStreamableResult(const std::string& kg,
+                                     const std::string& query,
+                                     ad_utility::MediaType mediaType) {
   auto qec = ad_utility::testing::getQec(kg);
   QueryPlanner qp{qec};
   auto pq = SparqlParser::parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
-  auto tsvGenerator = ExportQueryExecutionTrees::queryToStreamableGenerator(
-      pq, qet, ad_utility::MediaType::tsv);
+  auto tsvGenerator =
+      ExportQueryExecutionTrees::queryToStreamableGenerator(pq, qet, mediaType);
   std::string result;
   for (const auto& block : tsvGenerator) {
     result += block;
@@ -27,55 +31,67 @@ std::string runTSVQuery(const std::string& kg, const std::string& query) {
   return result;
 }
 
-// TODO<joka921> This is a lot of duplication from the TSV function
-std::string runCSVQuery(const std::string& kg, const std::string& query) {
-  auto qec = ad_utility::testing::getQec(kg);
-  QueryPlanner qp{qec};
-  auto pq = SparqlParser::parseQuery(query);
-  auto qet = qp.createExecutionTree(pq);
-  auto generator = ExportQueryExecutionTrees::queryToStreamableGenerator(
-      pq, qet, ad_utility::MediaType::csv);
-  std::string result;
-  for (const auto& block : generator) {
-    result += block;
-  }
-  return result;
-}
-
-nlohmann::json runQLeverJSONQuery(const std::string& kg,
-                                  const std::string& query) {
+// Run the given SPARQL `query` on the given Turtle `kg` and export the result
+// as JSON. `mediaType` must be `sparqlJSON` or `qleverJSON`.
+nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
+                            ad_utility::MediaType mediaType) {
   auto qec = ad_utility::testing::getQec(kg);
   QueryPlanner qp{qec};
   auto pq = SparqlParser::parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer;
-  return ExportQueryExecutionTrees::queryToJSON(
-      pq, qet, timer, 200, ad_utility::MediaType::qleverJson);
+  return ExportQueryExecutionTrees::queryToJSON(pq, qet, timer, 200, mediaType);
 }
 
-// TODO<joka921> A lot of duplication from the QLeverJSON function above.
-nlohmann::json runSparqlJSONQuery(const std::string& kg,
-                                  const std::string& query) {
-  auto qec = ad_utility::testing::getQec(kg);
-  QueryPlanner qp{qec};
-  auto pq = SparqlParser::parseQuery(query);
-  auto qet = qp.createExecutionTree(pq);
-  ad_utility::Timer timer;
-  return ExportQueryExecutionTrees::queryToJSON(
-      pq, qet, timer, 200, ad_utility::MediaType::sparqlJson);
-}
-
+// A test case that tests the correct execution and exporting of a SELECT query
+// in various formats.
 struct TestCaseSelectQuery {
-  std::string kg;
-  std::string query;
-  size_t resultSize;
-  std::string resultTsv;
-  std::string resultCsv;
-  nlohmann::json resultQLeverJSON;
-  nlohmann::json resultSparqlJSON;
-  // TODO<joka921> Add the otherFormats.
+  std::string kg;                   // The knowledge graph (TURTLE)
+  std::string query;                // The query (SPARQL)
+  size_t resultSize;                // The expected number of results.
+  std::string resultTsv;            // The expected result in TSV format.
+  std::string resultCsv;            // The expected result in CSV format
+  nlohmann::json resultQLeverJSON;  // The expected result in QLeverJSOn format.
+                                    // Note: this member only contains the inner
+                                    // result array with the bindings and NOT
+                                    // the metadata.
+  nlohmann::json resultSparqlJSON;  // The expected result in SparqlJSON format.
 };
 
+// Run a single test case for a select query.
+void runSelectQueryTestCase(
+    const TestCaseSelectQuery& testCase,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  auto trace = generateLocationTrace(l, "runSelectQueryTestCase");
+  using enum ad_utility::MediaType;
+  EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, tsv),
+            testCase.resultTsv);
+  EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, csv),
+            testCase.resultCsv);
+  auto qleverJSONResult = runJSONQuery(testCase.kg, testCase.query, qleverJson);
+  ASSERT_EQ(qleverJSONResult["query"], testCase.query);
+  ASSERT_EQ(qleverJSONResult["resultsize"], testCase.resultSize);
+  EXPECT_EQ(qleverJSONResult["res"], testCase.resultQLeverJSON);
+
+  auto sparqlJSONResult = runJSONQuery(testCase.kg, testCase.query, sparqlJson);
+  EXPECT_EQ(sparqlJSONResult, testCase.resultSparqlJSON);
+}
+
+// Create a `json` that can be used as the `resultQLeverJSON` of a
+// `TestCaseSelectQuery`. This function can only be used when there is a single
+// variable in the result. The `values` then become the bindings of that
+// variable.
+nlohmann::json makeExpectedQLeverJSON(const std::vector<std::string>& values) {
+  nlohmann::json j;
+  for (const auto& value : values) {
+    j.push_back(std::vector{value});
+  }
+  return j;
+}
+
+// Create a single binding in the `SparqlJSON` format from the given `datatype`
+// `type`, `value` and `langtag`. `datatype` and `langtag` are not always
+// present, so those arguments are `optional`.
 nlohmann::json makeJSONBinding(
     const std::optional<std::string>& datatype, const std::string& type,
     const std::string& value,
@@ -92,139 +108,98 @@ nlohmann::json makeJSONBinding(
   return m;
 }
 
-void runSelectQueryTestCase(
-    const TestCaseSelectQuery& testCase,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
-  auto trace = generateLocationTrace(l, "runSelectQueryTestCase");
-  EXPECT_EQ(runTSVQuery(testCase.kg, testCase.query), testCase.resultTsv);
-  EXPECT_EQ(runCSVQuery(testCase.kg, testCase.query), testCase.resultCsv);
-  auto qleverJSONResult = runQLeverJSONQuery(testCase.kg, testCase.query);
-  ASSERT_EQ(qleverJSONResult["query"], testCase.query);
-  ASSERT_EQ(qleverJSONResult["resultsize"], testCase.resultSize);
-  EXPECT_EQ(qleverJSONResult["res"], testCase.resultQLeverJSON);
-
-  auto sparqlJSONResult = runSparqlJSONQuery(testCase.kg, testCase.query);
-  EXPECT_EQ(sparqlJSONResult, testCase.resultSparqlJSON);
+// Create a `json` that can be used as the `resultSparqlJSON` member of a
+// `TestCaseSelectQuery`. This function can only be used when there is a single
+// variable called `?o` in the result. The `bindings` then become the bindings
+// of that variable. These bindings typically are created via the
+// `makeJSONBinding` function.
+nlohmann::json makeExpectedSparqlJSON(
+    const std::vector<nlohmann::json>& bindings) {
+  nlohmann::json j;
+  j["head"]["vars"].push_back("o");
+  auto& res = j["results"]["bindings"];
+  for (const auto& binding : bindings) {
+    res.emplace_back();
+    res.back()["o"] = binding;
+  }
+  return j;
 }
 
 TEST(ExportQueryExecutionTree, Integers) {
-  std::string kgInt =
+  std::string kg =
       "<s> <p> 42 . <s> <p> -42019234865781 . <s> <p> 4012934858173560";
-  std::string objectQuery = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
-  TestCaseSelectQuery testCaseInt{
-      kgInt,
-      objectQuery,
+  std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
+  TestCaseSelectQuery testCase{
+      kg,
+      query,
       3,
       // TODO<joka921> the ORDER BY of negative numbers is incorrect.
       "?o\n42\n4012934858173560\n-42019234865781\n",
       "?o\n42\n4012934858173560\n-42019234865781\n",
-      []() {
-        nlohmann::json j;
-        j.push_back(
-            std::vector{"\"42\"^^<http://www.w3.org/2001/XMLSchema#int>"s});
-        j.push_back(std::vector{
-            "\"4012934858173560\"^^<http://www.w3.org/2001/XMLSchema#int>"s});
-        j.push_back(std::vector{
-            "\"-42019234865781\"^^<http://www.w3.org/2001/XMLSchema#int>"s});
-        return j;
-      }(),
-      []() {
-        nlohmann::json j;
-        j["head"]["vars"].push_back("o");
-        auto& res = j["results"]["bindings"];
-        res.emplace_back();
-        res.back()["o"] = (makeJSONBinding(
-            "http://www.w3.org/2001/XMLSchema#int", "literal", "42"));
-        res.emplace_back();
-        res.back()["o"] =
-            makeJSONBinding("http://www.w3.org/2001/XMLSchema#int", "literal",
-                            "4012934858173560");
-        res.emplace_back();
-        res.back()["o"] =
-            makeJSONBinding("http://www.w3.org/2001/XMLSchema#int", "literal",
-                            "-42019234865781");
-        return j;
-      }(),
+      makeExpectedQLeverJSON(
+          {"\"42\"^^<http://www.w3.org/2001/XMLSchema#int>"s,
+           "\"4012934858173560\"^^<http://www.w3.org/2001/XMLSchema#int>"s,
+           "\"-42019234865781\"^^<http://www.w3.org/2001/XMLSchema#int>"s}),
+      makeExpectedSparqlJSON(
+          {makeJSONBinding("http://www.w3.org/2001/XMLSchema#int", "literal",
+                           "42"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#int", "literal",
+                           "4012934858173560"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#int", "literal",
+                           "-42019234865781")}),
   };
-  runSelectQueryTestCase(testCaseInt);
+  runSelectQueryTestCase(testCase);
 }
 
 TEST(ExportQueryExecutionTree, Floats) {
-  std::string kgFloat =
+  std::string kg =
       "<s> <p> 42.2 . <s> <p> -42019234865.781e12 . <s> <p> "
       "4.012934858173560e-12";
-  std::string objectQuery = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
+  std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
   TestCaseSelectQuery testCaseFloat{
-      kgFloat,
-      objectQuery,
+      kg,
+      query,
       3,
       // TODO<joka921> The sorting is wrong, and the formatting of the negative
       // number is strange.
       "?o\n4.01293e-12\n42.2\n-42019234865780982022144\n",
       "?o\n4.01293e-12\n42.2\n-42019234865780982022144\n",
-      []() {
-        nlohmann::json j;
-        j.push_back(std::vector{
-            "\"4.01293e-12\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s});
-        j.push_back(std::vector{
-            "\"42.2\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s});
-        j.push_back(std::vector{
-            "\"-42019234865780982022144\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s});
-        return j;
-      }(),
-      []() {
-        nlohmann::json j;
-        j["head"]["vars"].push_back("o");
-        auto& res = j["results"]["bindings"];
-        res.emplace_back();
-        res.back()["o"] =
-            (makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
-                             "literal", "4.01293e-12"));
-        res.emplace_back();
-        res.back()["o"] = makeJSONBinding(
-            "http://www.w3.org/2001/XMLSchema#decimal", "literal", "42.2");
-        res.emplace_back();
-        res.back()["o"] =
-            makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
-                            "literal", "-42019234865780982022144");
-        return j;
-      }(),
+      makeExpectedQLeverJSON(
+          {"\"4.01293e-12\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
+           "\"42.2\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
+           "\"-42019234865780982022144\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s}),
+      makeExpectedSparqlJSON(
+          {makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
+                           "literal", "4.01293e-12"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
+                           "literal", "42.2"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
+                           "literal", "-42019234865780982022144")}),
   };
   runSelectQueryTestCase(testCaseFloat);
 }
 
 TEST(ExportQueryExecutionTree, Dates) {
-  std::string kgDate =
+  std::string kg =
       "<s> <p> "
       "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>.";
-  std::string objectQuery = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
-  TestCaseSelectQuery testCaseFloat{
-      kgDate,
-      objectQuery,
+  std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
+  TestCaseSelectQuery testCase{
+      kg,
+      query,
       1,
       "?o\n\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/"
       "XMLSchema#dateTime>\n",
       // Note: the duplicate quotes are due to the escaping for CSV.
       "?o\n\"\"\"1950-01-01T00:00:00\"\"^^<http://www.w3.org/2001/"
       "XMLSchema#dateTime>\"\n",
-      []() {
-        nlohmann::json j;
-        j.push_back(std::vector{
-            "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"s});
-        return j;
-      }(),
-      []() {
-        nlohmann::json j;
-        j["head"]["vars"].push_back("o");
-        auto& res = j["results"]["bindings"];
-        res.emplace_back();
-        res.back()["o"] =
-            (makeJSONBinding("http://www.w3.org/2001/XMLSchema#dateTime",
-                             "literal", "1950-01-01T00:00:00"));
-        return j;
-      }(),
+      makeExpectedQLeverJSON(
+          {"\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"s}),
+      makeExpectedSparqlJSON(
+          {makeJSONBinding("http://www.w3.org/2001/XMLSchema#dateTime",
+                           "literal", "1950-01-01T00:00:00")}),
   };
-  runSelectQueryTestCase(testCaseFloat);
+  runSelectQueryTestCase(testCase);
 }
 
 TEST(ExportQueryExecutionTree, Entities) {
@@ -236,20 +211,9 @@ TEST(ExportQueryExecutionTree, Entities) {
       1,
       "?o\n<http://qlever.com/o>\n",
       "?o\n<http://qlever.com/o>\n",
-      []() {
-        nlohmann::json j;
-        j.push_back(std::vector{"<http://qlever.com/o>"s});
-        return j;
-      }(),
-      []() {
-        nlohmann::json j;
-        j["head"]["vars"].push_back("o");
-        auto& res = j["results"]["bindings"];
-        res.emplace_back();
-        res.back()["o"] =
-            (makeJSONBinding(std::nullopt, "uri", "http://qlever.com/o"));
-        return j;
-      }(),
+      makeExpectedQLeverJSON({"<http://qlever.com/o>"s}),
+      makeExpectedSparqlJSON(
+          {makeJSONBinding(std::nullopt, "uri", "http://qlever.com/o")}),
   };
   runSelectQueryTestCase(testCase);
   testCase.kg = "<s> <x> <y>";
@@ -260,8 +224,6 @@ TEST(ExportQueryExecutionTree, Entities) {
 }
 
 TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
-  // TODO<joka921> Also add a test for an entity that comes from the local
-  // vocab.
   std::string kg = "<s> <p> \"\"\"Some\"Where\tOver,\"\"\"@en-ca.";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
   TestCaseSelectQuery testCase{
@@ -270,21 +232,9 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
       1,
       "?o\n\"Some\"Where Over,\"@en-ca\n",
       "?o\n\"\"\"Some\"\"Where\tOver,\"\"@en-ca\"\n",
-      []() {
-        nlohmann::json j;
-        j.push_back(std::vector{"\"Some\"Where\tOver,\"@en-ca"s});
-        return j;
-      }(),
-      []() {
-        nlohmann::json j;
-        j["head"]["vars"].push_back("o");
-        auto& res = j["results"]["bindings"];
-        res.emplace_back();
-        res.back()["o"] = (makeJSONBinding(std::nullopt, "literal",
-                                           "Some\"Where\tOver,", "en-ca"));
-        return j;
-      }(),
-  };
+      makeExpectedQLeverJSON({"\"Some\"Where\tOver,\"@en-ca"s}),
+      makeExpectedSparqlJSON({makeJSONBinding(std::nullopt, "literal",
+                                              "Some\"Where\tOver,", "en-ca")})};
   runSelectQueryTestCase(testCase);
   testCase.kg = "<s> <x> <y>";
   testCase.query =
@@ -294,55 +244,37 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
 }
 
 TEST(ExportQueryExecutionTree, UndefinedValues) {
-  std::string kgEntity = "<s> <p> <o>";
-  std::string objectQuery =
+  std::string kg = "<s> <p> <o>";
+  std::string query =
       "SELECT ?o WHERE {?s <p> <o> OPTIONAL {?s <p2> ?o}} ORDER BY ?o";
-  TestCaseSelectQuery testCaseFloat{
-      kgEntity,
-      objectQuery,
+  TestCaseSelectQuery testCase{
+      kg,
+      query,
       1,
       "?o\n\n",
       "?o\n\n",
-      []() {
-        nlohmann::json j;
-        j.push_back(std::vector{nullptr});
-        return j;
-      }(),
+      nlohmann::json{std::vector{std::vector{nullptr}}},
       []() {
         nlohmann::json j;
         j["head"]["vars"].push_back("o");
         j["results"]["bindings"].push_back(nullptr);
         return j;
-      }(),
-  };
-  runSelectQueryTestCase(testCaseFloat);
+      }()};
+  runSelectQueryTestCase(testCase);
 }
 
 TEST(ExportQueryExecutionTree, BlankNode) {
-  // TODO<joka921> Also add a test for an entity that comes from the local
-  // vocab.
-  std::string kgBlankNode = "<s> <p> _:blank";
+  std::string kg = "<s> <p> _:blank";
   std::string objectQuery = "SELECT ?o WHERE {?s ?p ?o } ORDER BY ?o";
   TestCaseSelectQuery testCaseBlankNode{
-      kgBlankNode,
+      kg,
       objectQuery,
       1,
       "?o\n_:u_blank\n",
       "?o\n_:u_blank\n",
-      []() {
-        nlohmann::json j;
-        j.push_back(std::vector{"_:u_blank"s});
-        return j;
-      }(),
-      []() {
-        nlohmann::json j;
-        j["head"]["vars"].push_back("o");
-        auto& res = j["results"]["bindings"];
-        res.emplace_back();
-        res.back()["o"] = (makeJSONBinding(std::nullopt, "bnode", "u_blank"));
-        return j;
-      }(),
-  };
+      makeExpectedQLeverJSON({"_:u_blank"s}),
+      makeExpectedSparqlJSON(
+          {makeJSONBinding(std::nullopt, "bnode", "u_blank")})};
   runSelectQueryTestCase(testCaseBlankNode);
   // Note: Blank nodes cannot be introduced in a VALUES clause, so there is
   // nothing to test here.
@@ -350,5 +282,7 @@ TEST(ExportQueryExecutionTree, BlankNode) {
 
 // TODO<joka921> Missing tests:
 /*
+ * 1. Multiple VARIABLES.
  * 4. CONSTRUCT queries (especially for the Turtle export).
+ *
  */
