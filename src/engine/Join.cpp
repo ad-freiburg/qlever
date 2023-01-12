@@ -8,15 +8,14 @@
 #include <engine/IndexScan.h>
 #include <engine/Join.h>
 #include <global/Constants.h>
-#include <util/HashMap.h>
 #include <global/Id.h>
+#include <util/HashMap.h>
 
 #include <functional>
 #include <sstream>
 #include <type_traits>
 #include <unordered_set>
 #include <vector>
-#include <type_traits>
 
 using std::string;
 
@@ -736,14 +735,16 @@ void Join::doGallopInnerJoin(const TagType, const IdTableView<L_WIDTH>& l1,
 
 // ______________________________________________________________________________
 template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
-                size_t jc2, IdTable* dynRes) {
+void Join::hashJoinImpl(const IdTable& dynA, size_t jc1, const IdTable& dynB,
+                        size_t jc2, IdTable* dynRes) {
   const IdTableView<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
   const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
 
   LOG(DEBUG) << "Performing hashJoin between two tables.\n";
-  LOG(DEBUG) << "A: width = " << a.numColumns() << ", size = " << a.size() << "\n";
-  LOG(DEBUG) << "B: width = " << b.numColumns() << ", size = " << b.size() << "\n";
+  LOG(DEBUG) << "A: width = " << a.numColumns() << ", size = " << a.size()
+             << "\n";
+  LOG(DEBUG) << "B: width = " << b.numColumns() << ", size = " << b.size()
+             << "\n";
 
   // Check trivial case.
   if (a.size() == 0 || b.size() == 0) {
@@ -751,12 +752,13 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   }
 
   IdTableStatic<OUT_WIDTH> result = std::move(*dynRes).toStatic<OUT_WIDTH>();
-  
+
   // Puts the rows of the given table into a hash map, with the value of
   // the join column of a row as the key, and returns the hash map.
-  auto idTableToHashMap = []<typename Table>(const Table& table, const size_t jc) {
+  auto idTableToHashMap = []<typename Table>(const Table& table,
+                                             const size_t jc) {
     // This declaration works, because generic lambdas are just syntactic sugar
-    // for templates. 
+    // for templates.
     ad_utility::HashMap<Id, std::vector<typename Table::row_type>> map;
     for (const auto& row : table) {
       map[row[jc]].push_back(row);
@@ -764,44 +766,63 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     return map;
   };
 
+  /*
+   * @brief Joins the two tables, putting the result in result. Creates a cross
+   *  product for matching rows by putting the smaller IdTable in a hash map and
+   *  using that, to faster find the matching rows.
+   *
+   * @tparam leftIsLarger If the left table in the join operation has more
+   *  rows, or the right. True, if he has. False, if he hasn't.
+   * @tparam LargerTableType, SmallerTableType The types of the tables given.
+   *  Can be easily done with type interference, so no need to write them out.
+   *
+   * @param largerTable, smallerTable The two tables of the join operation.
+   * @param largerTableJoinColumn, smallerTableJoinColumn The join columns
+   *  of the tables
+   */
+  auto performHashJoin = [&idTableToHashMap,
+                          &result]<bool leftIsLarger, typename LargerTableType,
+                                   typename SmallerTableType>(
+                             const LargerTableType& largerTable,
+                             const size_t largerTableJoinColumn,
+                             const SmallerTableType& smallerTable,
+                             const size_t smallerTableJoinColumn) {
+    // Put the smaller table into the hash table.
+    auto map = idTableToHashMap(smallerTable, smallerTableJoinColumn);
+
+    // Create cross product by going through the larger table.
+    for (size_t i = 0; i < largerTable.size(); i++) {
+      // Skip, if there is no matching entry for the join column.
+      auto entry = map.find(largerTable(i, largerTableJoinColumn));
+      if (entry == map.end()) {
+        continue;
+      }
+
+      for (const auto& row : entry->second) {
+        // Based on which table was larger, the arguments of
+        // addCombinedRowToIdTable are different.
+        // However this information is known at compile time, so the other
+        // branch gets discarded at compile time, which makes this
+        // condition have constant runtime.
+        if constexpr (leftIsLarger) {
+          addCombinedRowToIdTable(largerTable[i], row, smallerTableJoinColumn,
+                                  &result);
+        } else {
+          addCombinedRowToIdTable(row, largerTable[i], largerTableJoinColumn,
+                                  &result);
+        }
+      }
+    }
+  };
+
   // Cannot just switch a and b around because the order of
   // items in the result tuples is important.
   // Procceding with the actual hash join depended on which IdTableView
   // is bigger.
   if (a.size() >= b.size()) {
-    // a is bigger, or the same size as b. b gets put into the hash table.
-    auto map = idTableToHashMap(b, jc2);
-
-
-    // Create cross product by going through a.
-    for (size_t i = 0; i < a.size(); i++) {
-      // Skip, if there is no matching entry in the join column.
-      auto entry = map.find(a(i, jc1));
-      if (entry == map.end()) {
-        continue;
-      }
-
-      for (const auto& bRow: entry->second) {
-        addCombinedRowToIdTable(a[i], bRow, jc2, &result); 
-      }
-    }
-
+    performHashJoin.template operator()<true>(a, jc1, b, jc2);
   } else {
-    // b is bigger. a gets put into the hash table.
-    auto map = idTableToHashMap(a, jc1);
-
-    // Create cross product by going through b.
-    for (size_t j = 0; j < b.size(); j++) {
-      // Skip, if there is no matching entry in the join column.
-      auto entry = map.find(b(j, jc2));
-      if (entry == map.end()) {
-        continue;
-      }
-
-      for (const auto& aRow: entry->second) {
-        addCombinedRowToIdTable(aRow, b[j], jc2, &result);
-      }
-    } 
+    performHashJoin.template operator()<false>(b, jc2, a, jc1);
   }
   *dynRes = std::move(result).toDynamic();
 
@@ -810,17 +831,23 @@ void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
              << ", size = " << dynRes->size() << "\n";
 }
 
-// ___________________________________________________________________________ 
+// ______________________________________________________________________________
+void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
+                    size_t jc2, IdTable* dynRes) {
+  CALL_FIXED_SIZE(
+      (std::array{dynA.numColumns(), dynB.numColumns(), dynRes->numColumns()}),
+      &Join::hashJoinImpl, this, dynA, jc1, dynB, jc2, dynRes);
+}
+
+// ___________________________________________________________________________
 template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>
-void Join::addCombinedRowToIdTable(
-  const ROW_A& rowA,
-  const ROW_B& rowB,
-  const size_t jcRowB,
-  IdTableStatic<TABLE_WIDTH>* table){
+void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
+                                   const size_t jcRowB,
+                                   IdTableStatic<TABLE_WIDTH>* table) {
   // Add a new, empty row.
   const size_t backIndex = table->size();
   table->emplace_back();
-  
+
   // Copy the entire rowA in the table.
   for (size_t h = 0; h < rowA.numColumns(); h++) {
     (*table)(backIndex, h) = rowA[h];
@@ -836,4 +863,3 @@ void Join::addCombinedRowToIdTable(
     (*table)(backIndex, h + rowA.numColumns() - 1) = rowB[h];
   }
 }
-

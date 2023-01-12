@@ -78,7 +78,18 @@ class Join : public Operation {
 
   /**
    * @brief Joins IdTables dynA and dynB on join column jc2, returning
-   * the result in dynRes. Creates a cross product for matching rows
+   * the result in dynRes. Creates a cross product for matching rows.
+   *
+   * This should be a switch, which shoud decide which algorithm to use for
+   * joining two IdTables.
+   * The possible algorithms should be:
+   * - The normal merge join.
+   * - The doGallopInnerJoin.
+   * - The hashJoinImpl.
+   * Currently it only decides between doGallopInnerJoin and the standard merge
+   * join, with the merge join code directly written in the function.
+   * TODO Move the merge join into it's own function and make this function
+   * a proper switch.
    **/
   template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
   void join(const IdTable& dynA, size_t jc1, const IdTable& dynB, size_t jc2,
@@ -96,13 +107,16 @@ class Join : public Operation {
    * the result in dynRes. Creates a cross product for matching rows by putting
    * the smaller IdTable in a hash map and using that, to faster find the
    * matching rows.
+   * Needed to be a seperate function from the actual implementation, because
+   * compiler optimization keept inlining it, which make testing impossible,
+   * because you couldn't call the function after linking and just got
+   * 'undefined reference' errors.
+   *
    * @return The result is only sorted, if the bigger table is sorted.
    * Otherwise it is not sorted.
    **/
-  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-  void hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB, size_t jc2,
-            IdTable* dynRes);
-
+  void hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
+                size_t jc2, IdTable* dynRes);
 
   static bool isFullScanDummy(std::shared_ptr<QueryExecutionTree> tree) {
     return tree->getType() == QueryExecutionTree::SCAN &&
@@ -135,7 +149,7 @@ class Join : public Operation {
                           IdTable* res) const;
   /*
    * @brief Combines 2 rows like in a join and inserts the result in the
-   * given table. 
+   * given table.
    *
    *@tparam The amount of columns in the rows and the table.
    *
@@ -144,11 +158,16 @@ class Join : public Operation {
    * @param[in] The numerical position of the join column of row b.
    * @param[in] The table, in which the new combined row should be insterted.
    * Must be static.
-  */
+   */
   template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>
-  static void addCombinedRowToIdTable(
-      const ROW_A& rowA,
-      const ROW_B& rowB,
-      const size_t jcRowB,
-      IdTableStatic<TABLE_WIDTH>* table);
+  static void addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
+                                      const size_t jcRowB,
+                                      IdTableStatic<TABLE_WIDTH>* table);
+
+  /*
+   * @brief The implementation of hashJoin.
+   */
+  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+  void hashJoinImpl(const IdTable& dynA, size_t jc1, const IdTable& dynB,
+                    size_t jc2, IdTable* dynRes);
 };

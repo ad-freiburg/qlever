@@ -432,7 +432,9 @@ Awaitable<json> Server::composeResponseQleverJson(
           std::vector<std::string>{"?subject", "?predicate", "?object"};
     }
 
-    j["runtimeInformation"] =
+    j["runtimeInformation"]["meta"] = nlohmann::ordered_json(
+        qet.getRootOperation()->getRuntimeInfoWholeQuery());
+    j["runtimeInformation"]["query_execution_tree"] =
         nlohmann::ordered_json(qet.getRootOperation()->getRuntimeInfo());
 
     {
@@ -734,8 +736,19 @@ boost::asio::awaitable<void> Server::processQuery(
     qet.recursivelySetTimeoutTimer(timeoutTimer);
     qet.getRootOperation()->createRuntimeInfoFromEstimates();
     requestTimer.stop();
-    LOG(INFO) << "Query planning done in " << requestTimer.msecs() << " ms"
-              << " (can include index scans)" << std::endl;
+    size_t timeForIndexScansInQueryPlanning =
+        qet.getRootOperation()->getTotalExecutionTimeDuringQueryPlanning();
+    size_t timeForQueryPlanning =
+        requestTimer.msecs() - timeForIndexScansInQueryPlanning;
+    auto& runtimeInfoWholeQuery =
+        qet.getRootOperation()->getRuntimeInfoWholeQuery();
+    runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
+    runtimeInfoWholeQuery.timeIndexScansQueryPlanning =
+        timeForIndexScansInQueryPlanning;
+    LOG(INFO)
+        << "Query planning done in " << timeForQueryPlanning << " ms"
+        << ", additional time spend on index scans during query planning: "
+        << timeForIndexScansInQueryPlanning << " ms" << std::endl;
     requestTimer.cont();
     LOG(TRACE) << qet.asString() << std::endl;
 

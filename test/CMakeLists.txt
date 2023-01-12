@@ -87,6 +87,8 @@ addLinkAndDiscoverTest(FTSAlgorithmsTest index)
 
 addLinkAndDiscoverTest(EngineTest engine)
 
+addLinkAndDiscoverTest(JoinTest engine)
+
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
 addLinkAndDiscoverTest(ConversionsTest util absl::strings)
@@ -115,7 +117,7 @@ addLinkAndDiscoverTest(TurtleParserTest parser absl::flat_hash_map re2)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
-addLinkAndDiscoverTest(IdTableTest)
+addLinkAndDiscoverTest(IdTableTest absl::strings)
 
 addLinkAndDiscoverTest(TransitivePathTest engine)
 
@@ -247,3 +249,5 @@ addLinkAndDiscoverTest(HttpTest boost_iostreams http)
 addLinkAndDiscoverTest(CallFixedSizeTest)
 
 addLinkAndDiscoverTest(ConstexprUtilsTest)
+
+addLinkAndDiscoverTest(ResetWhenMovedTest)

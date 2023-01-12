@@ -669,6 +669,12 @@ void TransitivePath::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "TransitivePath subresult computation done." << std::endl;
 
+  // NOTE: The only place, where the input to a transitive path operation is not
+  // an index scan (which have empty local vocabularies by default) is the
+  // `LocalVocabTest`. But it doesn't harm to propagate `_localVocab` here
+  // either.
+  result->_localVocab = subRes->_localVocab;
+
   result->_sortedBy = resultSortedOn();
   if (_leftIsVar || _leftSideTree != nullptr) {
     result->_resultTypes.push_back(subRes->getResultType(_leftSubCol));
@@ -726,8 +732,17 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
     std::shared_ptr<QueryExecutionTree> leftop, size_t inputCol) const {
   // Enforce required sorting of `leftop`.
   leftop = QueryExecutionTree::createSortedTree(std::move(leftop), {inputCol});
-  // Create a copy of this
-  std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(*this);
+  // Create a copy of this.
+  //
+  // NOTE: The RHS used to be `std::make_shared<TransitivePath>()`, which is
+  // wrong because it first calls the copy constructor of the base class
+  // `Operation`, which  would then ignore the changes in `variableColumnMap_`
+  // made below (see `Operation::getInternallyVisibleVariableColumns` and
+  // `Operation::getExternallyVariableColumns`).
+  std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(
+      getExecutionContext(), _subtree, _leftIsVar, _rightIsVar, _leftSubCol,
+      _rightSubCol, _leftValue, _rightValue, Variable{_leftColName},
+      Variable{_rightColName}, _minDist, _maxDist);
   p->_leftSideTree = leftop;
   p->_leftSideCol = inputCol;
   const auto& var = leftop->getVariableColumns();
@@ -753,8 +768,12 @@ std::shared_ptr<TransitivePath> TransitivePath::bindRightSide(
   // Enforce required sorting of `rightop`.
   rightop =
       QueryExecutionTree::createSortedTree(std::move(rightop), {inputCol});
-  // Create a copy of this
-  std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(*this);
+  // Create a copy of this. For a detailed explanation, see the analogous
+  // comment in `bindLeftSide` above.
+  std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(
+      getExecutionContext(), _subtree, _leftIsVar, _rightIsVar, _leftSubCol,
+      _rightSubCol, _leftValue, _rightValue, Variable{_leftColName},
+      Variable{_rightColName}, _minDist, _maxDist);
   p->_rightSideTree = rightop;
   p->_rightSideCol = inputCol;
   const auto& var = rightop->getVariableColumns();

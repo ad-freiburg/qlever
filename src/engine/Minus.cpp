@@ -68,6 +68,11 @@ void Minus::computeResult(ResultTable* result) {
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth}), &Minus::computeMinus,
                   this, leftResult->_idTable, rightResult->_idTable,
                   _matchedColumns, &result->_idTable);
+
+  // If only one of the two operands has a local vocab, pass it on.
+  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
+      leftResult->_localVocab, rightResult->_localVocab);
+
   LOG(DEBUG) << "Minus result computation done." << endl;
 }
 

@@ -10,8 +10,9 @@
 #include <variant>
 #include <vector>
 
-#include "global/Id.h"
 #include "util/Enums.h"
+#include "util/Exception.h"
+#include "util/TypeTraits.h"
 #include "util/UninitializedAllocator.h"
 
 namespace columnBasedIdTable {
@@ -21,14 +22,14 @@ namespace columnBasedIdTable {
 // below).
 enum struct IsView { True, False };
 
-// A row of a table of IDs. It stores the IDs as a `std::array` or `std::vector`
-// depending on whether `NumColumns` is 0 (which means that the number of
-// columns is specified at runtime). This class is used as the `value_type` of
-// the columns-ordered `IdTable` and must be used whenever a row (not a
-// reference to a row) has to be stored outside the IdTable. The implementation
-// is a rather thin wrapper around `std::vector<Id>` or `std::array<Id,
-// NumColumns>`, respectively (see above).
-template <int NumColumns = 0>
+// A row of a table of `T`s. It stores the IDs as a `std::array` or
+// `std::vector` depending on whether `NumColumns` is 0 (which means that the
+// number of columns is specified at runtime). This class is used as the
+// `value_type` of the columns-ordered `IdTable` and must be used whenever a row
+// (not a reference to a row) has to be stored outside the IdTable. The
+// implementation is a rather thin wrapper around `std::vector<T>` or
+// `std::array<T, NumColumns>`, respectively (see above).
+template <typename T, int NumColumns = 0>
 class Row {
  public:
   // Returns true iff the number of columns is only known at runtime and we
@@ -41,9 +42,8 @@ class Row {
   // `isDynamic()` case.
   using Data = std::conditional_t<
       isDynamic(),
-      std::vector<Id,
-                  ad_utility::default_init_allocator<Id, std::allocator<Id>>>,
-      std::array<Id, NumColumns>>;
+      std::vector<T, ad_utility::default_init_allocator<T, std::allocator<T>>>,
+      std::array<T, NumColumns>>;
 
  private:
   Data data_;
@@ -62,8 +62,8 @@ class Row {
       : Row() {}
 
   // Access the i-th element.
-  Id& operator[](size_t i) { return data_[i]; }
-  const Id& operator[](size_t i) const { return data_[i]; }
+  T& operator[](size_t i) { return data_[i]; }
+  const T& operator[](size_t i) const { return data_[i]; }
 
   size_t numColumns() const { return data_.size(); }
 
@@ -92,7 +92,7 @@ class RowReferenceImpl {
   template <typename Table, ad_utility::IsConst isConst>
   friend class RowReference;
 
-  template <int NumCols, typename Allocator, IsView isView>
+  template <typename T, int NumCols, typename Allocator, IsView isView>
   friend class IdTable;
 
   // The actual implementation of a reference to a row that allows mutable
@@ -105,10 +105,11 @@ class RowReferenceImpl {
    public:
     static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
     using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
+    using T = typename Table::value_type;
     static constexpr int numStaticColumns = Table::numStaticColumns;
 
     // Grant the `IdTable` class access to the internal details.
-    template <int NumCols, typename Allocator, IsView isView>
+    template <typename T, int NumCols, typename Allocator, IsView isView>
     friend class IdTable;
 
    private:
@@ -143,9 +144,9 @@ class RowReferenceImpl {
    public:
     // Access to the `i`-th columns of this row. Only allowed for const values
     // and for rvalues.
-    Id& operator[](size_t i) && requires(!isConst) { return getImpl(*this, i); }
-    const Id& operator[](size_t i) const& { return getImpl(*this, i); }
-    const Id& operator[](size_t i) const&& { return getImpl(*this, i); }
+    T& operator[](size_t i) && requires(!isConst) { return getImpl(*this, i); }
+    const T& operator[](size_t i) const& { return getImpl(*this, i); }
+    const T& operator[](size_t i) const&& { return getImpl(*this, i); }
 
     // The number of columns that this row contains.
     size_t numColumns() const { return table_->numColumns(); }
@@ -168,9 +169,9 @@ class RowReferenceImpl {
 
     // Equality comparison. Works between two `RowReference`s, but also between
     // a `RowReference` and a `Row` if the number of columns match.
-    template <typename T>
-    bool operator==(const T& other) const
-        requires(numStaticColumns == T::numStaticColumns) {
+    template <typename U>
+    bool operator==(const U& other) const
+        requires(numStaticColumns == U::numStaticColumns) {
       if constexpr (numStaticColumns == 0) {
         if (numColumns() != other.numColumns()) {
           return false;
@@ -185,9 +186,9 @@ class RowReferenceImpl {
     }
 
     // Convert from a `RowReference` to a `Row`.
-    operator Row<numStaticColumns>() const {
+    operator Row<T, numStaticColumns>() const {
       auto numCols = (std::move(*this)).numColumns();
-      Row<numStaticColumns> result{numCols};
+      Row<T, numStaticColumns> result{numCols};
       for (size_t i = 0; i < numCols; ++i) {
         result[i] = std::move(*this)[i];
       }
@@ -209,7 +210,7 @@ class RowReferenceImpl {
 
    public:
     // Assignment from a `Row` with the same number of columns.
-    This& operator=(const Row<numStaticColumns>& other) && {
+    This& operator=(const Row<T, numStaticColumns>& other) && {
       return assignmentImpl(*this, other);
     }
 
@@ -247,6 +248,7 @@ class RowReference
       RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, isConstTag>;
   using Base::numStaticColumns;
   using TablePtr = typename Base::TablePtr;
+  using T = typename Base::T;
   static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
 
   // Efficient access to the base class subobject to invoke its functions.
@@ -260,10 +262,10 @@ class RowReference
   RowReference(Base b) : Base{std::move(b)} {}
 
   // Access to the `i`-th column of this row.
-  Id& operator[](size_t i) requires(!isConst) {
+  T& operator[](size_t i) requires(!isConst) {
     return Base::getImpl(base(), i);
   }
-  const Id& operator[](size_t i) const { return Base::getImpl(base(), i); }
+  const T& operator[](size_t i) const { return Base::getImpl(base(), i); }
 
   // __________________________________________________________________________
   template <ad_utility::SimilarTo<RowReference> R>
@@ -281,7 +283,7 @@ class RowReference
 
  public:
   // Assignment from a `Row` with the same number of columns.
-  RowReference& operator=(const Row<numStaticColumns>& other) {
+  RowReference& operator=(const Row<T, numStaticColumns>& other) {
     return this->assignmentImpl(base(), other);
   }
 

@@ -285,6 +285,16 @@ void GroupBy::computeResult(ResultTable* result) {
   std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
   LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
 
+  // Make a copy of the local vocab from the sub-result and then add to it (in
+  // case GROUP_CONCAT adds something).
+  //
+  // NOTE: If we did `result->_localVocab = subresult->_localVocab` here, only a
+  // shared pointer would be copied. The the additions made in this operation
+  // would also affect the `subresult`, which leads to all kinds of unexpected
+  // behavior.
+  result->_localVocab =
+      std::make_shared<LocalVocab>(subresult->_localVocab->clone());
+
   std::vector<size_t> groupByColumns;
 
   result->_sortedBy = resultSortedOn();
@@ -343,6 +353,7 @@ void GroupBy::computeResult(ResultTable* result) {
   CALL_FIXED_SIZE((std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
                   subresult->_idTable, groupByCols, aggregates,
                   &result->_idTable, subresult.get(), result);
+
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
 }
 

@@ -37,6 +37,7 @@ class HasPredicateScan : public Operation {
  public:
   HasPredicateScan() = delete;
 
+  // TODO: The last argument should be of type `Variable`.
   HasPredicateScan(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,
                    size_t subtreeJoinColumn, std::string objectVariable);
