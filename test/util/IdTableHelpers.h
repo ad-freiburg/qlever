@@ -4,22 +4,22 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdio>
 #include <fstream>
 #include <sstream>
-#include <algorithm>
 #include <tuple>
 
+#include "./GTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/Join.h"
 #include "engine/OptionalJoin.h"
-#include "util/Random.h"
 #include "engine/QueryExecutionTree.h"
-#include "util/Forward.h"
-#include "util/SourceLocation.h"
-#include "./GTestHelpers.h"
 #include "engine/idTable/IdTable.h"
+#include "util/Forward.h"
+#include "util/Random.h"
+#include "util/SourceLocation.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
@@ -39,14 +39,15 @@ using VectorTable = std::vector<std::vector<size_t>>;
 /*
  * Return an 'IdTable' with the given 'tableContent'. all rows must have the
  * same length.
-*/
+ */
 IdTable makeIdTableFromVector(const VectorTable& tableContent) {
   AD_CHECK(!tableContent.empty());
   IdTable result{tableContent[0].size(), allocator()};
 
   // Copying the content into the table.
-  for (const auto& row: tableContent) {
-    AD_CHECK(row.size() == result.numColumns()); // All rows of an IdTable must have the same length.
+  for (const auto& row : tableContent) {
+    AD_CHECK(row.size() == result.numColumns());  // All rows of an IdTable must
+                                                  // have the same length.
     const size_t backIndex{result.size()};
     // TODO This should be
     // std::ranges::copy(std::views::transform(row, I), result.back().begin());
@@ -69,30 +70,31 @@ IdTable makeIdTableFromVector(const VectorTable& tableContent) {
  * @param table The IdTable that should be tested.
  * @param expectedContent The sample solution. Doesn't need to be sorted,
  *  or the same order of rows as the table.
- * @param resultMustBeSortedByJoinColumn If this is true, it will also be tested, if the table
- *  is sorted by the join column.
+ * @param resultMustBeSortedByJoinColumn If this is true, it will also be
+ * tested, if the table is sorted by the join column.
  * @param joinColumn The join column of the table.
  * @param l Ignore it. It's only here for being able to make better messages,
  *  if a IdTable fails the comparison.
-*/
-void compareIdTableWithExpectedContent(const IdTable& table, 
-    const IdTable& expectedContent,
+ */
+void compareIdTableWithExpectedContent(
+    const IdTable& table, const IdTable& expectedContent,
     const bool resultMustBeSortedByJoinColumn = false,
     const size_t joinColumn = 0,
-    ad_utility::source_location l = ad_utility::source_location::current()
-    ) {
+    ad_utility::source_location l = ad_utility::source_location::current()) {
   // For generating more informative messages, when failing the comparison.
   std::stringstream traceMessage{};
 
-  auto writeIdTableToStream = [&traceMessage](const IdTable& idTable){
-      std::ranges::for_each(idTable, [&traceMessage](const auto& row){
-            // TODO Could be done in one line, if row was iterable.
-            // Unfortunaly, it isn't.
-            for (size_t i = 0; i < row.numColumns(); i++) {
-              traceMessage << row[i] << " ";
-            }
-            traceMessage << "\n";
-          }, {});
+  auto writeIdTableToStream = [&traceMessage](const IdTable& idTable) {
+    std::ranges::for_each(idTable,
+                          [&traceMessage](const auto& row) {
+                            // TODO Could be done in one line, if row was
+                            // iterable. Unfortunaly, it isn't.
+                            for (size_t i = 0; i < row.numColumns(); i++) {
+                              traceMessage << row[i] << " ";
+                            }
+                            traceMessage << "\n";
+                          },
+                          {});
   };
 
   traceMessage << "compareIdTableWithExpectedContent comparing IdTable\n";
@@ -116,23 +118,21 @@ void compareIdTableWithExpectedContent(const IdTable& table,
   // TODO Instead of this, we could use std::ranges::lexicographical_compare
   // for the body of the lambda, but that is currently not possible, because
   // the rows of an IdTable are not iterable.
-  auto sortFunction = [](
-      const auto& row1,
-      const auto& row2)
-    {
-      size_t i{0};
-      while (i < (row1.numColumns() - 1) && row1[i] == row2[i]) {
-        i++;
-      }
-      return row1[i] < row2[i];
-    };
+  auto sortFunction = [](const auto& row1, const auto& row2) {
+    size_t i{0};
+    while (i < (row1.numColumns() - 1) && row1[i] == row2[i]) {
+      i++;
+    }
+    return row1[i] < row2[i];
+  };
   /*
-   * TODO Introduce functionality to the IdTable-class, so that std::ranges::sort
-   * can be used instead of std::sort. Currently it seems like the iterators
-   * , produced by IdTable, aren't the right type.
+   * TODO Introduce functionality to the IdTable-class, so that
+   * std::ranges::sort can be used instead of std::sort. Currently it seems like
+   * the iterators , produced by IdTable, aren't the right type.
    */
   std::sort(localTable.begin(), localTable.end(), sortFunction);
-  std::sort(localExpectedContent.begin(), localExpectedContent.end(), sortFunction);
+  std::sort(localExpectedContent.begin(), localExpectedContent.end(),
+            sortFunction);
 
   ASSERT_EQ(localTable, localExpectedContent);
 }

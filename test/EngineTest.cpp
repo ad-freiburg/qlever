@@ -1,44 +1,49 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-// Co-Author: Andre Schlegel (November of 2022, schlegea@informatik.uni-freiburg.de)
+// Co-Author: Andre Schlegel (November of 2022,
+// schlegea@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <fstream>
 #include <sstream>
-#include <algorithm>
 #include <tuple>
 
+#include "./util/GTestHelpers.h"
+#include "./util/IdTableHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/Join.h"
 #include "engine/OptionalJoin.h"
-#include "util/Random.h"
 #include "engine/QueryExecutionTree.h"
-#include "util/Forward.h"
-#include "util/SourceLocation.h"
-#include "./util/GTestHelpers.h"
 #include "engine/idTable/IdTable.h"
-#include "./util/IdTableHelpers.h"
+#include "util/Forward.h"
+#include "util/Random.h"
+#include "util/SourceLocation.h"
 
 TEST(EngineTest, distinctTest) {
-  IdTable inp{makeIdTableFromVector({{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
+  IdTable inp{makeIdTableFromVector(
+      {{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
 
   IdTable result{4, allocator()};
 
   std::vector<size_t> keepIndices{{1, 2}};
   CALL_FIXED_SIZE(4, Engine::distinct, inp, keepIndices, &result);
-  
+
   // For easier checking.
-  IdTable expectedResult{makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}})};
+  IdTable expectedResult{
+      makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}})};
   ASSERT_EQ(expectedResult, result);
 }
 
 TEST(JoinTest, optionalJoinTest) {
-  IdTable a{makeIdTableFromVector({{4, 1, 2}, {2, 1, 3}, {1, 1, 4}, {2, 2, 1}, {1, 3, 1}})};
-  IdTable b{makeIdTableFromVector({{3, 3, 1}, {1, 8, 1}, {4, 2, 2}, {1, 1, 3}})};
+  IdTable a{makeIdTableFromVector(
+      {{4, 1, 2}, {2, 1, 3}, {1, 1, 4}, {2, 2, 1}, {1, 3, 1}})};
+  IdTable b{
+      makeIdTableFromVector({{3, 3, 1}, {1, 8, 1}, {4, 2, 2}, {1, 1, 3}})};
   IdTable result{4, allocator()};
   vector<array<ColumnIndex, 2>> jcls{};
   jcls.push_back(array<ColumnIndex, 2>{{1, 2}});
@@ -51,16 +56,10 @@ TEST(JoinTest, optionalJoinTest) {
   int resultWidth{static_cast<int>(result.numColumns())};
   CALL_FIXED_SIZE((std::array{aWidth, bWidth, resultWidth}),
                   OptionalJoin::optionalJoin, a, b, false, true, jcls, &result);
-  
-  
+
   // For easier checking of the result.
-  IdTable expectedResult{makeIdTableFromVector({
-          {4, 1, 2, 0},
-          {2, 1, 3, 3},
-          {1, 1, 4, 0},
-          {2, 2, 1, 0},
-          {1, 3, 1, 1} 
-        })};
+  IdTable expectedResult{makeIdTableFromVector(
+      {{4, 1, 2, 0}, {2, 1, 3, 3}, {1, 1, 4, 0}, {2, 2, 1, 0}, {1, 3, 1, 1}})};
   expectedResult(0, 3) = ID_NO_VALUE;
   expectedResult(2, 3) = ID_NO_VALUE;
   expectedResult(3, 3) = ID_NO_VALUE;
@@ -68,7 +67,8 @@ TEST(JoinTest, optionalJoinTest) {
   ASSERT_EQ(expectedResult, result);
 
   // Test the optional join with variable sized data.
-  IdTable va{makeIdTableFromVector({{1, 2, 3, 4, 5, 6}, {1, 2, 3, 7, 5 ,6}, {7, 6, 5, 4, 3, 2}})};
+  IdTable va{makeIdTableFromVector(
+      {{1, 2, 3, 4, 5, 6}, {1, 2, 3, 7, 5, 6}, {7, 6, 5, 4, 3, 2}})};
 
   IdTable vb{makeIdTableFromVector({{2, 3, 4}, {2, 3, 5}, {6, 7, 4}})};
 
@@ -81,16 +81,15 @@ TEST(JoinTest, optionalJoinTest) {
   bWidth = vb.numColumns();
   resultWidth = vresult.numColumns();
   CALL_FIXED_SIZE((std::array{aWidth, bWidth, resultWidth}),
-                  OptionalJoin::optionalJoin, va, vb, true, false, jcls, &vresult);
-  
+                  OptionalJoin::optionalJoin, va, vb, true, false, jcls,
+                  &vresult);
+
   // For easier checking.
-  expectedResult = makeIdTableFromVector({
-          {1, 2, 3, 4, 5, 6, 4},
-          {1, 2, 3, 4, 5, 6, 5},
-          {1, 2, 3, 7, 5, 6, 4},
-          {1, 2, 3, 7, 5, 6, 5},
-          {0, 6, 7, 0, 0, 0, 4}
-        });
+  expectedResult = makeIdTableFromVector({{1, 2, 3, 4, 5, 6, 4},
+                                          {1, 2, 3, 4, 5, 6, 5},
+                                          {1, 2, 3, 7, 5, 6, 4},
+                                          {1, 2, 3, 7, 5, 6, 5},
+                                          {0, 6, 7, 0, 0, 0, 4}});
   expectedResult(4, 0) = ID_NO_VALUE;
   expectedResult(4, 3) = ID_NO_VALUE;
   expectedResult(4, 4) = ID_NO_VALUE;
