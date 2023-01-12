@@ -754,44 +754,62 @@ void Join::hashJoinImpl(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     return map;
   };
 
+  /*
+   * @brief Joins the two tables, putting the result in result. Creates a cross
+   *  product for matching rows by putting the smaller IdTable in a hash map and
+   *  using that, to faster find the matching rows.
+   *
+   * @tparam leftIsLarger If the left table in the join operation has more
+   *  rows, or the right. True, if he has. False, if he hasn't.
+   * @tparam LargerTableType, SmallerTableType The types of the tables given.
+   *  Can be easily done with type interference, so no need to write them out.
+   *
+   * @param largerTable, smallerTable The two tables of the join operation.
+   * @param largerTableJoinColumn, smallerTableJoinColumn The join columns
+   *  of the tables
+   */
+  auto performHashJoin = [&idTableToHashMap, &result]<bool leftIsLarger,
+      typename LargerTableType, typename SmallerTableType>(
+          const LargerTableType& largerTable,
+          const size_t largerTableJoinColumn,
+          const SmallerTableType& smallerTable,
+          const size_t smallerTableJoinColumn){
+        // Put the smaller table into the hash table.
+        auto map = idTableToHashMap(smallerTable, smallerTableJoinColumn);
+
+        // Create cross product by going through the larger table.
+        for (size_t i = 0; i < largerTable.size(); i++) {
+          // Skip, if there is no matching entry for the join column.
+          auto entry = map.find(largerTable(i, largerTableJoinColumn));
+          if (entry == map.end()) {
+            continue;
+          }
+
+          for (const auto& row: entry->second) {
+            // Based on which table was larger, the arguments of
+            // addCombinedRowToIdTable are different.
+            // However this information is known at compile time, so the other
+            // branch gets discarded at compile time, which makes this
+            // condition have constant runtime.
+            if constexpr(leftIsLarger) {
+              addCombinedRowToIdTable(largerTable[i], row,
+                  smallerTableJoinColumn, &result);                
+            } else {
+              addCombinedRowToIdTable(row, largerTable[i],
+                  largerTableJoinColumn, &result);
+            }
+          }
+        }
+      };
+
   // Cannot just switch a and b around because the order of
   // items in the result tuples is important.
   // Procceding with the actual hash join depended on which IdTableView
   // is bigger.
   if (a.size() >= b.size()) {
-    // a is bigger, or the same size as b. b gets put into the hash table.
-    auto map = idTableToHashMap(b, jc2);
-
-
-    // Create cross product by going through a.
-    for (size_t i = 0; i < a.size(); i++) {
-      // Skip, if there is no matching entry in the join column.
-      auto entry = map.find(a(i, jc1));
-      if (entry == map.end()) {
-        continue;
-      }
-
-      for (const auto& bRow: entry->second) {
-        addCombinedRowToIdTable(a[i], bRow, jc2, &result); 
-      }
-    }
-
+    performHashJoin.template operator()<true>(a, jc1, b, jc2);  
   } else {
-    // b is bigger. a gets put into the hash table.
-    auto map = idTableToHashMap(a, jc1);
-
-    // Create cross product by going through b.
-    for (size_t j = 0; j < b.size(); j++) {
-      // Skip, if there is no matching entry in the join column.
-      auto entry = map.find(b(j, jc2));
-      if (entry == map.end()) {
-        continue;
-      }
-
-      for (const auto& aRow: entry->second) {
-        addCombinedRowToIdTable(aRow, b[j], jc2, &result);
-      }
-    } 
+    performHashJoin.template operator()<false>(b, jc2, a, jc1);
   }
   *dynRes = std::move(result).toDynamic();
 
