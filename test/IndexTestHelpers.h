@@ -55,7 +55,7 @@ inline std::vector<std::string> getAllIndexFilenames(
 // "älpha", "A", "Beta"`. These vocabulary entries are expected by the tests
 // for the subclasses of `SparqlExpression`.
 // The concrete triple contents are currently used in `GroupByTest.cpp`.
-inline Index makeTestIndex() {
+inline Index makeTestIndex(const std::string& indexBasename) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
@@ -69,7 +69,6 @@ inline Index makeTestIndex() {
   std::fstream f(filename, std::ios_base::out);
   f << dummyKb;
   f.close();
-  std::string indexBasename = "_staticGlobalTestIndex";
   {
     Index index = makeIndexWithTestSettings();
     index.setOnDiskBase(indexBasename);
@@ -83,19 +82,20 @@ inline Index makeTestIndex() {
 }
 
 // Return a static  `QueryExecutionContext` that refers to an index that was
-// build using `makeTestIndex()` (see above). The index (most notably its
+// build using `makeTestIndex` (see above). The index (most notably its
 // vocabulary) is the only part of the `QueryExecutionContext` that is actually
 // relevant for these tests, so the other members are defaultet.
 static inline QueryExecutionContext* getQec() {
   static ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
-  static const absl::Cleanup cleanup = []() {
+  std::string testIndexBasename = "_staticGlobalTestIndex";
+  static const absl::Cleanup cleanup = [testIndexBasename]() {
     for (const std::string& indexFilename :
-         getAllIndexFilenames("_staticGlobalTestIndex")) {
+         getAllIndexFilenames(testIndexBasename)) {
       ad_utility::deleteFile(indexFilename);
     }
   };
-  static const Index index = makeTestIndex();
+  static const Index index = makeTestIndex(testIndexBasename);
   static const Engine engine{};
   static QueryResultCache cache{};
   static QueryExecutionContext qec{
