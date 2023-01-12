@@ -84,7 +84,7 @@ inline Index makeTestIndex(const std::string& indexBasename) {
 // Return a static  `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above). The index (most notably its
 // vocabulary) is the only part of the `QueryExecutionContext` that is actually
-// relevant for these tests, so the other members are defaultet.
+// relevant for these tests, so the other members are defaulted.
 static inline QueryExecutionContext* getQec() {
   static ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
