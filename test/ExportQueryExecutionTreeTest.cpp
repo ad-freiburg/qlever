@@ -287,22 +287,17 @@ TEST(ExportQueryExecutionTree, BlankNode) {
 }
 
 TEST(ExportQueryExecutionTree, MultipleVariables) {
-  // TODO<joka921> When we use the "ususal" `<s> <p> <o>` knowledge graph, then
-  // it gets reused from the above `Undefined` unit test which currently leads
-  // to wrong results. I currently suspect that this is a bug inside the
-  // `getQec` function, but I have yet to track it. As soon as this is done, we
-  // can switch back here.
-  std::string kg = "<x> <y> <z>";
-  std::string objectQuery = "SELECT ?p ?o WHERE {<x> ?p ?o } ORDER BY ?p ?o";
+  std::string kg = "<s> <p> <o>";
+  std::string objectQuery = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
   TestCaseSelectQuery testCaseBlankNode{
       kg,
       objectQuery,
       1,
-      "?p\t?o\n<y>\t<z>\n",
-      "?p,?o\n<y>,<z>\n",
+      "?p\t?o\n<p>\t<o>\n",
+      "?p,?o\n<p>,<o>\n",
       []() {
         nlohmann::json j;
-        j.push_back(std::vector{"<y>"s, "<z>"s});
+        j.push_back(std::vector{"<p>"s, "<o>"s});
         return j;
       }(),
       []() {
@@ -311,8 +306,8 @@ TEST(ExportQueryExecutionTree, MultipleVariables) {
         j["head"]["vars"].push_back("o");
         auto& bindings = j["results"]["bindings"];
         bindings.emplace_back();
-        bindings.back()["p"] = makeJSONBinding(std::nullopt, "uri", "y");
-        bindings.back()["o"] = makeJSONBinding(std::nullopt, "uri", "z");
+        bindings.back()["p"] = makeJSONBinding(std::nullopt, "uri", "p");
+        bindings.back()["o"] = makeJSONBinding(std::nullopt, "uri", "o");
         return j;
       }()};
   runSelectQueryTestCase(testCaseBlankNode);

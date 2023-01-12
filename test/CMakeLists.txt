@@ -240,7 +240,7 @@ addLinkAndDiscoverTest(CheckUsePatternTrickTest parser engine)
 
 addLinkAndDiscoverTestSerial(RegexExpressionTest parser sparqlExpressions index engine parser)
 
-addLinkAndDiscoverTest(LocalVocabTest engine)
+addLinkAndDiscoverTestSerial(LocalVocabTest engine)
 
 addLinkAndDiscoverTest(HttpTest boost_iostreams http)
 
@@ -250,4 +250,4 @@ addLinkAndDiscoverTest(ConstexprUtilsTest)
 
 addLinkAndDiscoverTest(ResetWhenMovedTest)
 
-addLinkAndDiscoverTest(ExportQueryExecutionTreeTest index engine parser)
+addLinkAndDiscoverTestSerial(ExportQueryExecutionTreeTest index engine parser)

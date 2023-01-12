@@ -82,9 +82,7 @@ class ExportQueryExecutionTrees {
   // two public functions above. All the code has been inside QLever for a long
   // time (previously in the classes `QueryExecutionTree` and `Server`. Clean
   // up their interfaces (are all these functions needed, or can some of them
-  // be merged) and write unit tests for them, potentially based on the W3C
-  // tests for the output formats. But this needs further cleanups first and
-  // this encapsulation is a valuable first step.
+  // be merged).
 
   // Similar to `queryToJSON`, but always returns the `QLeverJSON` format.
   static nlohmann::json queryToQLeverJSON(const ParsedQuery& query,
