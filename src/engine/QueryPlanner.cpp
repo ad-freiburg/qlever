@@ -2189,11 +2189,12 @@ auto QueryPlanner::createJoinWithTransitivePath(
 
   const size_t otherCol = aIsTransPath ? jcs[0][1] : jcs[0][0];
   const size_t thisCol = aIsTransPath ? jcs[0][0] : jcs[0][1];
-  AD_CHECK(thisCol <= 1);
   // Do not bind the side of a path twice
   if (transPathOperation->isBound()) {
     return std::nullopt;
   }
+  // An unbound transitive path has at most two columns.
+  AD_CHECK(thisCol <= 1);
   // The left or right side is a TRANSITIVE_PATH and its join column
   // corresponds to the left side of its input.
   SubtreePlan plan = [&]() {
