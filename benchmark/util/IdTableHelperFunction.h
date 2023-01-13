@@ -11,37 +11,7 @@
 #include "util/Random.h"
 #include "util/Forward.h"
 #include "engine/idTable/IdTable.h"
-
-ad_utility::AllocatorWithLimit<Id>& allocator() {
-  static ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<size_t>::max())};
-  return a;
-}
-
-auto I = [](const auto& id) {
-  return Id::makeFromVocabIndex(VocabIndex::make(id));
-};
-
-/*
- * Return an 'IdTable' with the given 'tableContent'. all rows must have the
- * same length.
-*/
-IdTable makeIdTableFromVector(std::vector<std::vector<size_t>> tableContent) {
-  IdTable result(tableContent[0].size(), allocator());
-
-  // Copying the content into the table.
-  for (const auto& row: tableContent) {
-    const size_t backIndex = result.size();
-    result.emplace_back();
-
-    for (size_t c = 0; c < tableContent[0].size(); c++) {
-      result(backIndex, c) = I(row[c]);
-    }
-  }
-
-  return result;
-}
+#include "../test/util/IdTableHelpers.h"
 
 /*
  * @brief Return a IdTable, that is randomly filled. The range of numbers

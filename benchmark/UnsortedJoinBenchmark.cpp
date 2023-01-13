@@ -17,7 +17,10 @@
 
 // Local helper function.
 #include "../benchmark/util/IdTableHelperFunction.h"
-#include "../benchmark/util/JoinHelperFunction.h"
+
+// Non-local helper function.
+#include "../test/util/IdTableHelpers.h"
+#include "../test/util/JoinHelpers.h"
 
 // Benchmarks for unsorted tables, with and without overlapping values in
 // IdTables. Done with normal join and hash join.
@@ -47,13 +50,15 @@ void BM_UnsortedIdTable(BenchmarkRecords* records) {
   };
 
   // Tables, that have overlapping values in their join columns.
-  IdTable a = createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 0, 10);
-  IdTable b = createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 5, 15);
+  IdTableAndJoinColumn a{
+    createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 0, 10), 0};
+  IdTableAndJoinColumn b{
+    createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 5, 15), 0};
   
   // Because overlap is not yet guaranteed, we put some in.
   for (size_t i = 0; i*20 < NUMBER_ROWS; i++) {
-    a(i*10, 0) = I(10);
-    b(i*20, 0) = I(10);
+    a.idTable(i*10, 0) = I(10);
+    b.idTable(i*20, 0) = I(10);
   }
 
   // We need to order the IdTables, before using the normal join function on
@@ -65,13 +70,13 @@ void BM_UnsortedIdTable(BenchmarkRecords* records) {
   // Lambda wrapper for the functions, that I measure.
   auto joinLambdaWrapper = [&]() {
         // Sorting the tables after the join column.
-        std::sort(a.begin(), a.end(), sortFunction);
-        std::sort(b.begin(), b.end(), sortFunction);
+        std::sort(a.idTable.begin(), a.idTable.end(), sortFunction);
+        std::sort(b.idTable.begin(), b.idTable.end(), sortFunction);
 
-        useJoinFunctionOnIdTables(a, 0, b, 0, joinLambda);
+        useJoinFunctionOnIdTables(a, b, joinLambda);
   };
   auto hashJoinLambdaWrapper = [&]() {
-        useJoinFunctionOnIdTables(a, 0, b, 0, hashJoinLambda);
+        useJoinFunctionOnIdTables(a, b, hashJoinLambda);
   };
 
   records->measureTime("Hashed join with overlapping IdTables", hashJoinLambdaWrapper);
@@ -79,8 +84,8 @@ void BM_UnsortedIdTable(BenchmarkRecords* records) {
   records->measureTime("Normal join with overlapping IdTables", joinLambdaWrapper);
 
   // Same thing, but non overlapping.
-  a = createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 0, 10);
-  b = createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 20, 30);
+  a.idTable = createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 0, 10);
+  b.idTable = createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 20, 30);
   
   records->measureTime("Hashed join with non-overlapping IdTables", hashJoinLambdaWrapper);
  

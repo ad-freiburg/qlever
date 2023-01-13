@@ -14,6 +14,7 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/JoinHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/Join.h"
@@ -23,15 +24,6 @@
 #include "util/Forward.h"
 #include "util/Random.h"
 #include "util/SourceLocation.h"
-
-/*
- * Does what it says on the tin: Save an IdTable with the corresponding
- * join column.
- */
-struct IdTableAndJoinColumn {
-  IdTable idTable;
-  size_t joinColumn;
-};
 
 /*
  * A structure containing all information needed for a normal join test. A
@@ -47,38 +39,78 @@ struct JoinTestCase {
 };
 
 /*
- * @brief Join two IdTables using the given join function and return
- * the result.
+ * @brief Tests, whether the given IdTable has the same content as the sample
+ * solution and, if the option was choosen, if the IdTable is sorted by
+ * the join column.
  *
- * @tparam JOIN_FUNCTION is used to allow the transfer of any type of
- *  lambda function, that could contain a join function. You never have to
- *  actually specify this parameter , just let inference do its job.
- *
- * @param tableA, tableB the tables with their join columns.
- * @param func the function, that will be used for joining the two tables
- *  together. Look into src/engine/Join.h for how it should look like.
- *
- * @returns tableA and tableB joined together in a IdTable.
+ * @param table The IdTable that should be tested.
+ * @param expectedContent The sample solution. Doesn't need to be sorted,
+ *  or the same order of rows as the table.
+ * @param resultMustBeSortedByJoinColumn If this is true, it will also be
+ * tested, if the table is sorted by the join column.
+ * @param joinColumn The join column of the table.
+ * @param l Ignore it. It's only here for being able to make better messages,
+ *  if a IdTable fails the comparison.
  */
-template <typename JOIN_FUNCTION>
-IdTable useJoinFunctionOnIdTables(const IdTableAndJoinColumn& tableA,
-                                  const IdTableAndJoinColumn& tableB,
-                                  JOIN_FUNCTION func) {
-  int resultWidth{static_cast<int>(tableA.idTable.numColumns() +
-                                   tableB.idTable.numColumns() - 1)};
-  IdTable result{static_cast<size_t>(resultWidth), allocator()};
+void compareIdTableWithExpectedContent(
+    const IdTable& table, const IdTable& expectedContent,
+    const bool resultMustBeSortedByJoinColumn = false,
+    const size_t joinColumn = 0,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  // For generating more informative messages, when failing the comparison.
+  std::stringstream traceMessage{};
 
-  // You need to use this special function for executing lambdas. The normal
-  // function for functions won't work.
-  // Additionaly, we need to cast the two size_t, because callFixedSize only
-  // takes arrays of int.
-  ad_utility::callFixedSize(
-      (std::array{static_cast<int>(tableA.idTable.numColumns()),
-                  static_cast<int>(tableB.idTable.numColumns()), resultWidth}),
-      func, tableA.idTable, tableA.joinColumn, tableB.idTable,
-      tableB.joinColumn, &result);
+  auto writeIdTableToStream = [&traceMessage](const IdTable& idTable) {
+    std::ranges::for_each(idTable,
+                          [&traceMessage](const auto& row) {
+                            // TODO Could be done in one line, if row was
+                            // iterable. Unfortunaly, it isn't.
+                            for (size_t i = 0; i < row.numColumns(); i++) {
+                              traceMessage << row[i] << " ";
+                            }
+                            traceMessage << "\n";
+                          },
+                          {});
+  };
 
-  return result;
+  traceMessage << "compareIdTableWithExpectedContent comparing IdTable\n";
+  writeIdTableToStream(table);
+  traceMessage << "with IdTable \n";
+  writeIdTableToStream(expectedContent);
+  auto trace{generateLocationTrace(l, traceMessage.str())};
+
+  // Because we compare tables later by sorting them, so that every table has
+  // one definit form, we need to create local copies.
+  IdTable localTable{table.clone()};
+  IdTable localExpectedContent{expectedContent.clone()};
+
+  if (resultMustBeSortedByJoinColumn) {
+    // Is the table sorted by join column?
+    ASSERT_TRUE(std::ranges::is_sorted(localTable.getColumn(joinColumn)));
+  }
+
+  // Sort both the table and the expectedContent, so that both have a definite
+  // form for comparison.
+  // TODO Instead of this, we could use std::ranges::lexicographical_compare
+  // for the body of the lambda, but that is currently not possible, because
+  // the rows of an IdTable are not iterable.
+  auto sortFunction = [](const auto& row1, const auto& row2) {
+    size_t i{0};
+    while (i < (row1.numColumns() - 1) && row1[i] == row2[i]) {
+      i++;
+    }
+    return row1[i] < row2[i];
+  };
+  /*
+   * TODO Introduce functionality to the IdTable-class, so that
+   * std::ranges::sort can be used instead of std::sort. Currently it seems like
+   * the iterators , produced by IdTable, aren't the right type.
+   */
+  std::sort(localTable.begin(), localTable.end(), sortFunction);
+  std::sort(localExpectedContent.begin(), localExpectedContent.end(),
+            sortFunction);
+
+  ASSERT_EQ(localTable, localExpectedContent);
 }
 
 /*
