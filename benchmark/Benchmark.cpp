@@ -14,14 +14,8 @@
 std::vector<std::function<void(BenchmarkRecords*)>> BenchmarkRegister::_registerdBenchmarks(0);
 
 // ____________________________________________________________________________
-void BenchmarkRecords::measureTime(std::string descriptor, std::function<void()> functionToMeasure) {
-    ad_utility::Timer benchmarkTimer;
-     
-    benchmarkTimer.start();
-    functionToMeasure();
-    benchmarkTimer.stop();
-
-    _records.push_back(RecordEntry{descriptor, benchmarkTimer.secs()});
+const std::vector<std::function<void(BenchmarkRecords*)>>& BenchmarkRegister::getRegisterdBenchmarks() {
+  return _registerdBenchmarks;
 }
 
 // ____________________________________________________________________________
@@ -32,6 +26,18 @@ BenchmarkRegister::BenchmarkRegister(const std::vector<std::function<void(Benchm
 }
 
 // ____________________________________________________________________________
-const std::vector<std::function<void(BenchmarkRecords*)>>& BenchmarkRegister::getRegisterdBenchmarks() {
-  return _registerdBenchmarks;
+void BenchmarkRecords::addSingleMeasurment(std::string descriptor, std::function<void()> functionToMeasure) {
+    ad_utility::Timer benchmarkTimer;
+     
+    benchmarkTimer.start();
+    functionToMeasure();
+    benchmarkTimer.stop();
+
+    _singleMeasurments.push_back(RecordEntry{descriptor, benchmarkTimer.secs()});
+}
+
+// ____________________________________________________________________________
+const std::vector<BenchmarkRecords::RecordEntry>&
+   BenchmarkRecords::getSingleMeasurments() const{
+  return _singleMeasurments;
 }

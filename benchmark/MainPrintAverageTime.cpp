@@ -11,8 +11,9 @@
 #include "../benchmark/util/MainFunctionHelperFunction.h"
 
 /*
- * @brief Goes through the registerd benchmarks N, here 100, times, and prints
- *  the average execution time of every benchmark.
+ * @brief Goes through the registerd single measurments benchmarks
+ * N, here 100, times, and prints the average execution time of every
+ * benchmark.
  */
 int main() {
   const size_t N = 100;
@@ -20,11 +21,11 @@ int main() {
   // The first execution is copied, so that we can easier calculate the
   // average.
   std::vector<BenchmarkRecords::RecordEntry>
-    averageExecutionTime(measureTimeForAllBenchmarks());
+    averageExecutionTime(measureTimeForAllSingleMeasurments());
 
   for (size_t i = 0; i < N - 1; i++) {
     // The descriptors and measured times of all the register benchmarks.
-    const std::vector<BenchmarkRecords::RecordEntry> records = measureTimeForAllBenchmarks();
+    const std::vector<BenchmarkRecords::RecordEntry> records = measureTimeForAllSingleMeasurments();
 
     // The items in measureTimeForAllBenchmarks() always have the same order.
     // So we can just go by position.

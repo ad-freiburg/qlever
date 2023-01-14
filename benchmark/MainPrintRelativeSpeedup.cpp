@@ -11,13 +11,14 @@
 #include "../benchmark/util/MainFunctionHelperFunction.h"
 
 /*
- * @brief Goes through the registerd benchmarks, measures their time and
- * compares their times. Then it prints the relativ speedup of every possible
- * benchmark combination, with the exception of a benchmark with itself.
+ * @brief Goes through the registerd single measurment benchmarks,
+ * measures their time and compares their times. Then it prints the
+ * relativ speedup of every possible single measurment benchmark
+ * combination, with the exception of a benchmark with itself.
  */
 int main() {
-  // The descriptors and measured times of all the register benchmarks.
-  const std::vector<BenchmarkRecords::RecordEntry> records = measureTimeForAllBenchmarks(); 
+  // The descriptors and measured times of all the single measurment benchmarks.
+  const std::vector<BenchmarkRecords::RecordEntry> records = measureTimeForAllSingleMeasurments(); 
  
   std::stringstream visualization;
   visualization << "##############\n# Benchmarks #\n##############\n";

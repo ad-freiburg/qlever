@@ -28,14 +28,14 @@ class BenchmarkRecords {
 
   private:
 
-    // A vector of all functions measured.
-    std::vector<RecordEntry> _records;
+    // A vector of all single functions measured.
+    std::vector<RecordEntry> _singleMeasurments;
 
   public:
 
     /*
      * @brief Measures the time needed for the execution of the given function and
-     * saves it, together with a description, in a vector held by the object.
+     * saves it, together with a description, in a normal list.
      *
      * @param descriptor A description, of what kind of benchmark case is
      *  getting measured. Needed, because otherwise nobody would be able to
@@ -44,13 +44,10 @@ class BenchmarkRecords {
      *  Most of the time a lambda, that calls the actual function to benchmark
      *  with the needed parameters.
      */
-    void measureTime(std::string descriptor, std::function<void()> functionToMeasure);
+    void addSingleMeasurment(std::string descriptor, std::function<void()> functionToMeasure);
 
-    // Returns a const view of all recorded times.
-    const std::vector<RecordEntry>& getRecords() const {
-      return _records;
-    }
-
+    // Returns a const view of all single recorded times.
+    const std::vector<RecordEntry>& getSingleMeasurments() const;
 };
 
 /*

@@ -11,12 +11,12 @@
 #include "../benchmark/util/MainFunctionHelperFunction.h"
 
 /*
- * @brief Goes through the registerd benchmarks, measures their time and
+ * @brief Goes through the registerd single measurment benchmarks, measures their time and
  * prints their measured time.
  */
 int main() {
-  // The descriptors and measured times of all the register benchmarks.
-  const std::vector<BenchmarkRecords::RecordEntry> records = measureTimeForAllBenchmarks(); 
+  // The descriptors and measured times of all the single measurment benchmarks.
+  const std::vector<BenchmarkRecords::RecordEntry> records = measureTimeForAllSingleMeasurments(); 
  
   // Visualizes the measured times.
   std::stringstream visualization;
