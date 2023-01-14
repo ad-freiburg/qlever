@@ -42,6 +42,11 @@ class BenchmarkRecords {
     // The key for a RecordGroup is it's descriptor.
     ad_utility::HashMap<std::string, RecordGroup> _recordGroups;
 
+    /*
+     * @brief Return execution time of function in seconds.
+     */
+    float measureTimeOfFunction(const std::function<void()>& functionToMeasure) const;
+
   public:
 
     /*

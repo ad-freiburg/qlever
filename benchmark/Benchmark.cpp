@@ -28,15 +28,22 @@ BenchmarkRegister::BenchmarkRegister(const std::vector<std::function<void(Benchm
 }
 
 // ____________________________________________________________________________
+float BenchmarkRecords::measureTimeOfFunction(
+    const std::function<void()>& functionToMeasure) const {
+  ad_utility::Timer benchmarkTimer;
+     
+  benchmarkTimer.start();
+  functionToMeasure();
+  benchmarkTimer.stop();
+
+  return benchmarkTimer.secs();
+}
+
+// ____________________________________________________________________________
 void BenchmarkRecords::addSingleMeasurment(const std::string descriptor,
       const std::function<void()>& functionToMeasure) {
-    ad_utility::Timer benchmarkTimer;
-     
-    benchmarkTimer.start();
-    functionToMeasure();
-    benchmarkTimer.stop();
-
-    _singleMeasurments.push_back(RecordEntry{descriptor, benchmarkTimer.secs()});
+    _singleMeasurments.push_back(RecordEntry{descriptor,
+        measureTimeOfFunction(functionToMeasure)});
 }
 
 // ____________________________________________________________________________
@@ -62,16 +69,9 @@ void BenchmarkRecords::addToExistingGroup(const std::string descriptor,
   auto groupEntry = _recordGroups.find(descriptor);
   AD_CHECK(groupEntry != _recordGroups.end())
 
-  // Measuering the time.
-  ad_utility::Timer benchmarkTimer;
-   
-  benchmarkTimer.start();
-  functionToMeasure();
-  benchmarkTimer.stop();
-
   // Add the descriptor and measured time to the group.
   groupEntry->second.entries.push_back(
-      RecordEntry{descriptor, benchmarkTimer.secs()});
+      RecordEntry{descriptor, measureTimeOfFunction(functionToMeasure)});
 }
 
 // ____________________________________________________________________________
