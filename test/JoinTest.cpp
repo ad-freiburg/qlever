@@ -24,6 +24,7 @@
 #include "util/Forward.h"
 #include "util/Random.h"
 #include "util/SourceLocation.h"
+#include "../test/IndexTestHelpers.h"
 
 /*
  * A structure containing all information needed for a normal join test. A
@@ -152,7 +153,7 @@ void runTestCasesForAllJoinAlgorithms(
 
   // All normal join algorithm defined as lambda functions for easier handing
   // over to helper functions.
-  Join J{Join::InvalidOnlyForTestingJoinTag{}};
+  Join J{Join::InvalidOnlyForTestingJoinTag{}, ad_utility::testing::getQec()};
   DISABLE_WARNINGS_CLANG_13
   auto hashJoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
     ENABLE_WARNINGS_CLANG_13

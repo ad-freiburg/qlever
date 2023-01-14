@@ -46,6 +46,14 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
 }
 
 // _____________________________________________________________________________
+Join::Join(InvalidOnlyForTestingJoinTag, QueryExecutionContext* qec) : Operation(qec){
+  // Needed, so that the time out checker in Join::join doesn't create a seg
+  // fault, if it tries to create a message about the time out.
+  _left = std::make_shared<QueryExecutionTree>(qec);
+  _right = _left;
+}
+
+// _____________________________________________________________________________
 string Join::asStringImpl(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {

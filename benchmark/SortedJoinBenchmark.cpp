@@ -21,6 +21,7 @@
 // Non-local helper function.
 #include "../test/util/IdTableHelpers.h"
 #include "../test/util/JoinHelpers.h"
+#include "../test/IndexTestHelpers.h"
 
 // Benchmarks for sorted tables, with and without overlapping values in
 // IdTables. Done with normal join and hash join.
@@ -37,7 +38,7 @@ void BM_SortedIdTable(BenchmarkRecords* records) {
   const size_t NUMBER_ROWS = 500;
   const size_t NUMBER_COLUMNS = 500; 
   
-  Join J{Join::InvalidOnlyForTestingJoinTag{}};
+  Join J{Join::InvalidOnlyForTestingJoinTag{}, ad_utility::testing::getQec()};
   DISABLE_WARNINGS_CLANG_13
   auto hashJoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
     ENABLE_WARNINGS_CLANG_13
