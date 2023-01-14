@@ -9,6 +9,7 @@
 #include <string>
 
 #include "util/Timer.h"
+#include <util/HashMap.h>
 
 /*
  * Used for measuring the time needed for the execution of a function. It also
@@ -26,10 +27,20 @@ class BenchmarkRecords {
       float measuredTime; // The measured time in seconds.
     };
 
+    // Describes a group of measured functions.
+    struct RecordGroup {
+      std::string descriptor; // Needed for identifying groups.
+      std::vector<RecordEntry> entries;
+    };
+
   private:
 
     // A vector of all single functions measured.
     std::vector<RecordEntry> _singleMeasurments;
+
+    // A hash map of all the created RecordGroups. For faster access.
+    // The key for a RecordGroup is it's descriptor.
+    ad_utility::HashMap<std::string, RecordGroup> _recordGroups;
 
   public:
 
@@ -48,6 +59,12 @@ class BenchmarkRecords {
 
     // Returns a const view of all single recorded times.
     const std::vector<RecordEntry>& getSingleMeasurments() const;
+
+    void addGroup(const std::string descriptor);
+
+    void addToExistingGroup(const std::string descriptor, std::function<void()>& functionToMeasure);
+
+    const ad_utility::HashMap<std::string, RecordGroup>& getGroups() const;
 };
 
 /*

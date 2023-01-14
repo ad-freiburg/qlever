@@ -16,6 +16,7 @@
 #include <type_traits>
 #include <unordered_set>
 #include <vector>
+#include <util/Exception.h>
 
 using std::string;
 
