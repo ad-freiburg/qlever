@@ -63,10 +63,11 @@ void BenchmarkRecords::addGroup(const std::string descriptor) {
 }
 
 // ____________________________________________________________________________
-void BenchmarkRecords::addToExistingGroup(const std::string descriptor,
+void BenchmarkRecords::addToExistingGroup(const std::string& groupDescriptor,
+    const std::string descriptor,
     const std::function<void()>& functionToMeasure) {
-  // Does the group exis?
-  auto groupEntry = _recordGroups.find(descriptor);
+  // Does the group exist?
+  auto groupEntry = _recordGroups.find(groupDescriptor);
   AD_CHECK(groupEntry != _recordGroups.end())
 
   // Add the descriptor and measured time to the group.

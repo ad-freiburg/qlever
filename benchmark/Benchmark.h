@@ -66,11 +66,31 @@ class BenchmarkRecords {
     // Returns a const view of all single recorded times.
     const std::vector<RecordEntry>& getSingleMeasurments() const;
 
+    /*
+     * @brief Creates an empty groupd distinction, which can
+     *  be accesed/identified using the descriptor.
+     */
     void addGroup(const std::string descriptor);
 
-    void addToExistingGroup(const std::string descriptor,
+    /*
+     * @brief Measures the time needed for the execution of the given function and
+     * saves it, together with a description, as an item in a group.
+     *
+     * @param groupDescriptor The identification of the group.
+     * @param descriptor A description, of what kind of benchmark case is
+     *  getting measured. Needed, because otherwise nobody would be able to
+     *  tell, which time corresponds to which benchmark.
+     * @param functionToMeasure The function, that represents the benchmark.
+     *  Most of the time a lambda, that calls the actual function to benchmark
+     *  with the needed parameters.
+     */
+    void addToExistingGroup(const std::string& groupDescriptor,
+        const std::string descriptor,
         const std::function<void()>& functionToMeasure);
 
+    /*
+     * @brief Returns a const view of all the groups.
+     */
     const ad_utility::HashMap<std::string, RecordGroup>& getGroups() const;
 };
 
