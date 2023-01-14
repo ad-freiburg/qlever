@@ -28,7 +28,8 @@ BenchmarkRegister::BenchmarkRegister(const std::vector<std::function<void(Benchm
 }
 
 // ____________________________________________________________________________
-void BenchmarkRecords::addSingleMeasurment(std::string descriptor, std::function<void()> functionToMeasure) {
+void BenchmarkRecords::addSingleMeasurment(const std::string descriptor,
+      const std::function<void()>& functionToMeasure) {
     ad_utility::Timer benchmarkTimer;
      
     benchmarkTimer.start();
@@ -56,7 +57,7 @@ void BenchmarkRecords::addGroup(const std::string descriptor) {
 
 // ____________________________________________________________________________
 void BenchmarkRecords::addToExistingGroup(const std::string descriptor,
-    std::function<void()>& functionToMeasure) {
+    const std::function<void()>& functionToMeasure) {
   // Does the group exis?
   auto groupEntry = _recordGroups.find(descriptor);
   AD_CHECK(groupEntry != _recordGroups.end())

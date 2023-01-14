@@ -55,14 +55,16 @@ class BenchmarkRecords {
      *  Most of the time a lambda, that calls the actual function to benchmark
      *  with the needed parameters.
      */
-    void addSingleMeasurment(std::string descriptor, std::function<void()> functionToMeasure);
+    void addSingleMeasurment(const std::string descriptor,
+        const std::function<void()>& functionToMeasure);
 
     // Returns a const view of all single recorded times.
     const std::vector<RecordEntry>& getSingleMeasurments() const;
 
     void addGroup(const std::string descriptor);
 
-    void addToExistingGroup(const std::string descriptor, std::function<void()>& functionToMeasure);
+    void addToExistingGroup(const std::string descriptor,
+        const std::function<void()>& functionToMeasure);
 
     const ad_utility::HashMap<std::string, RecordGroup>& getGroups() const;
 };
