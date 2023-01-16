@@ -327,3 +327,38 @@ add_custom_target(
         COMMENT "Generating coverage report"
         VERBATIM
 )
+
+set(
+        COVERAGE_TRACE_COMMAND_LLVM
+        llvm-profdata merge --sparse "${PROJECT_BINARY_DIR}/coverage.info" -o "${PROJECT_BINARY_DIR}//coverage.profdata"
+        CACHE STRING
+        "; separated command to generate a trace for the 'coverage' target llvm"
+)
+
+set(
+        COVERAGE_TRACE_COMMAND_LLVM
+        llvm-profdata merge --sparse "${PROJECT_BINARY_DIR}/coverage.info" -o "${PROJECT_BINARY_DIR}//coverage.profdata"
+        CACHE STRING
+        "; separated command to generate a trace for the 'coverage' target llvm"
+)
+
+set(
+        COVERAGE_HTML_COMMAND
+
+        genhtml --legend -f -q
+        "${PROJECT_BINARY_DIR}/coverage.info"
+        -p "${PROJECT_SOURCE_DIR}"
+        -o "${PROJECT_BINARY_DIR}/coverage_html"
+        CACHE STRING
+        "; separated command to generate an HTML report for the 'coverage' target"
+)
+
+# ---- Coverage target ----
+
+add_custom_target(
+        qlever-coverage
+        COMMAND ${COVERAGE_TRACE_COMMAND}
+        COMMAND ${COVERAGE_HTML_COMMAND}
+        COMMENT "Generating coverage report"
+        VERBATIM
+)
