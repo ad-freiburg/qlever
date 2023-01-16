@@ -30,7 +30,7 @@ endfunction()
 #   - compileName : The name, that the compiled end product should have.
 #   - cppFileName : The .cpp file, that contains your benchmark without the file extension.
 function(addAndLinkBenchmarkWithPrintAverageTime compileName cppFileName)
-    add_executable(${compileName}  Benchmark.cpp "${cppFileName}.cpp" MainPrintAverageTime.cpp)
+  add_executable(${compileName}  Benchmark.cpp "${cppFileName}.cpp" MainPrintAverageTimeSingleMeasurment.cpp)
     linkBenchmark(${compileName} ${ARGN})
 endfunction()
 
