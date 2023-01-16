@@ -1,6 +1,6 @@
 name: Docker
 
-on:
+#on:
   push:
     #branches: [ master ]
   pull_request:
