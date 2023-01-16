@@ -151,25 +151,32 @@ class RowReferenceImpl {
 
    protected:
     // The actual implementation of operator[].
-    static T& getImpl(auto& self, size_t i) {
+    static T& operatorBracketImpl(auto& self, size_t i) {
       return (*self.table_)(self.row_, i);
     }
-    static const T& getImpl(const auto& self, size_t i) {
+    static const T& operatorBracketImpl(const auto& self, size_t i) {
       return (*self.table_)(self.row_, i);
     }
 
    public:
     // Access to the `i`-th columns of this row. Only allowed for const values
     // and for rvalues.
-    T& operator[](size_t i) && requires(!isConst) { return getImpl(*this, i); }
-    const T& operator[](size_t i) const& { return getImpl(*this, i); }
-    const T& operator[](size_t i) const&& { return getImpl(*this, i); }
+    T& operator[](size_t i) && requires(!isConst) {
+      return operatorBracketImpl(*this, i);
+    }
+    const T& operator[](size_t i) const& {
+      return operatorBracketImpl(*this, i);
+    }
+    const T& operator[](size_t i) const&& {
+      return operatorBracketImpl(*this, i);
+    }
 
     // Define iterators.
     template <typename RowT>
     struct IteratorHelper {
       decltype(auto) operator()(auto&& row, size_t colIdx) const {
-        return std::decay_t<decltype(row)>::getImpl(AD_FWD(row), colIdx);
+        return std::decay_t<decltype(row)>::operatorBracketImpl(AD_FWD(row),
+                                                                colIdx);
       }
     };
     using iterator = ad_utility::IteratorForAccessOperator<
@@ -200,7 +207,7 @@ class RowReferenceImpl {
     // value or by reference).
     static void swapImpl(auto&& a, auto&& b) requires(!isConst) {
       for (size_t i = 0; i < a.numColumns(); ++i) {
-        std::swap(getImpl(a, i), getImpl(b, i));
+        std::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
       }
     }
 
@@ -252,7 +259,7 @@ class RowReferenceImpl {
         AD_CHECK(self.numColumns() == other.numColumns());
       }
       for (size_t i = 0; i < self.numColumns(); ++i) {
-        getImpl(self, i) = other[i];
+        operatorBracketImpl(self, i) = other[i];
       }
       return self;
     }
@@ -277,12 +284,15 @@ class RowReferenceImpl {
 
     // This strange overload needs to be declared to make `Row` a
     // `std::random_access_range` that can be used e.g. with
-    // `std::ranges::sort`. There is no need to define it.
+    // `std::ranges::sort`. There is no need to define it, as it is only
+    // needed to fulfill the concept `std::indirectly_writable`. For more
+    // details on this "esoteric" overload see the notes at the end of
+    // `https://en.cppreference.com/w/cpp/iterator/indirectly_writable`
     This& operator=(const Row<T, numStaticColumns>& other) const&&;
 
    protected:
     // No need to copy this internal type, but the implementation of the
-    // `RowReference` class below requiress it,
+    // `RowReference` class below requires it,
     // so the copy Constructor is protected.
     RowReferenceWithRestrictedAccess(const RowReferenceWithRestrictedAccess&) =
         default;
@@ -317,9 +327,11 @@ class RowReference
 
   // Access to the `i`-th column of this row.
   T& operator[](size_t i) requires(!isConst) {
-    return Base::getImpl(base(), i);
+    return Base::operatorBracketImpl(base(), i);
   }
-  const T& operator[](size_t i) const { return Base::getImpl(base(), i); }
+  const T& operator[](size_t i) const {
+    return Base::operatorBracketImpl(base(), i);
+  }
 
   // The iterators are implemented in the base class and can simply be
   // forwarded.

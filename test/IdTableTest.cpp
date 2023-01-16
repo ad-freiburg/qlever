@@ -193,7 +193,7 @@ TEST(IdTableTest, rowIterators) {
     ASSERT_FALSE(
         std::is_sorted(std::as_const(row).begin(), std::as_const(row).end()));
 
-    // TODO<joka921> Sorting of the proxy type `row_reference_restricted` can
+    // Sorting the proxy type `row_reference_restricted` can
     // only be performed via `std::sort` as follows:
     std::sort(std::move(row).begin(), std::move(row).end());
     // The following calls all would not compile:
@@ -820,7 +820,7 @@ TEST(IdTableTest, empty) {
   ASSERT_FALSE(t.empty());
 }
 
-TEST(IdTableTest, fronAndBack) {
+TEST(IdTableTest, frontAndBack) {
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
   IntTable t{1};
   t.resize(3);
