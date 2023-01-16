@@ -35,7 +35,7 @@ jobs:
       run : sudo add-apt-repository -y ppa:mhier/libboost-latest && sudo apt update && sudo apt install -y libboost1.74-dev
       if : matrix.os == 'ubuntu-20.04'
     - name: Install Lcov
-      run : sudo apt-get update -q && sudo apt-get install install lcov -q -y
+      run : sudo apt-get update -q && sudo apt-get install lcov -q -y
       if: matrix.compiler == 'gcc12-coverage'
     - name: Install boost Ubuntu 22.04
       run : sudo apt update && sudo apt install -y libboost-all-dev
