@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8.4)
+cmake_minimum_required(VERSION 3.16)
 project(QLever C CXX)
 
 # C/C++ Versions
