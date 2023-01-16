@@ -28,7 +28,7 @@ set(
 # ---- Coverage target ----
 
 add_custom_target(
-        coverage
+        qlever-coverage
         COMMAND ${COVERAGE_TRACE_COMMAND}
         COMMAND ${COVERAGE_HTML_COMMAND}
         COMMENT "Generating coverage report"

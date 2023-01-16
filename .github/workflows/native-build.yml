@@ -82,7 +82,7 @@ jobs:
       run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{env.BUILD_TYPE}}
 
     - name: Process coverage info
-      run: cmake --build ${{github.workspace}}/build -t coverage
+      run: cmake --build ${{github.workspace}}/build -t qlever-coverage
       if: matrix.compiler == 'gcc12-coverage'
     - name: Submit to codecov.io
       uses: codecov/codecov-action@v3
