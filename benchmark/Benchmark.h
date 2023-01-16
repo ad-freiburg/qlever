@@ -32,6 +32,18 @@ class BenchmarkRecords {
       std::string descriptor; // Needed for identifying groups.
       std::vector<RecordEntry> entries;
     };
+    
+    // Describes a table of measured functions.
+    struct RecordTable {
+      // For identification.
+      std::string descriptor;
+      // The names of the columns and rows.
+      std::vector<std::string> rowNames;
+      std::vector<std::string> columnNames;
+      // The actual content of the fields. As in the seconds one function
+      // execution takes. Access is [row, column].
+      std::vector<std::vector<float>> entries;
+    };
 
   private:
 
@@ -41,7 +53,11 @@ class BenchmarkRecords {
     // A hash map of all the created RecordGroups. For faster access.
     // The key for a RecordGroup is it's descriptor.
     ad_utility::HashMap<std::string, RecordGroup> _recordGroups;
-
+  
+    // A hash map of all the created RecordTables. For faster access.
+    // The key for a RecordTable is it's descriptor.
+    ad_utility::HashMap<std::string, RecordTable> _recordTables;
+    
     /*
      * @brief Return execution time of function in seconds.
      */
@@ -67,7 +83,7 @@ class BenchmarkRecords {
     const std::vector<RecordEntry>& getSingleMeasurments() const;
 
     /*
-     * @brief Creates an empty groupd distinction, which can
+     * @brief Creates an empty group, which can
      *  be accesed/identified using the descriptor.
      */
     void addGroup(const std::string descriptor);
@@ -92,6 +108,36 @@ class BenchmarkRecords {
      * @brief Returns a const view of all the groups.
      */
     const ad_utility::HashMap<std::string, RecordGroup>& getGroups() const;
+
+    /*
+     * @brief Creates an empty table, which can be accesed/identified using the
+     *  descriptor.
+     *
+     * @param descriptor The name/identifier of the table.
+     * @param rowNames,columnNames The names for the rows/columns.
+     */
+    void addTable(const std::string descriptor,
+        const std::vector<std::string> rowNames,
+        const std::vector<std::string> columnNames);
+
+    /*
+     * @brief Measures the time needed for the execution of the given function and
+     * saves it as an entry in the table.
+     *
+     * @param tableDescriptor The identification of the table.
+     * @param row, column Where in the tables to write the measured time.
+     * @param functionToMeasure The function, that represents the benchmark.
+     *  Most of the time a lambda, that calls the actual function to benchmark
+     *  with the needed parameters.
+     */
+    void addToExistingTable(const std::string& tableDescriptor,
+        const size_t row, const size_t column,
+        const std::function<void()>& functionToMeasure);
+
+    /*
+     * @brief Returns a const view of all the tables.
+     */
+    const ad_utility::HashMap<std::string, RecordTable>& getTables() const;
 };
 
 /*
