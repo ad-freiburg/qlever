@@ -74,7 +74,7 @@ jobs:
 
     - name: Build
         # Build your program with the given configuration
-      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} -- -j $(nproc) -t ValueIdComparatorsTest
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} -t ValueIdComparatorsTest -- -j $(nproc)
     - name: Test
       working-directory: ${{github.workspace}}/build/test
       # Execute tests defined by the CMake configuration.
