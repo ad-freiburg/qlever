@@ -21,11 +21,11 @@ int main() {
   // The first execution is copied, so that we can easier calculate the
   // average.
   std::vector<BenchmarkRecords::RecordEntry>
-    averageExecutionTime(measureTimeForAllSingleMeasurments());
+    averageExecutionTime(measureTimeForAllBenchmarks().getSingleMeasurments());
 
   for (size_t i = 0; i < N - 1; i++) {
     // The descriptors and measured times of all the register benchmarks.
-    const std::vector<BenchmarkRecords::RecordEntry> records = measureTimeForAllSingleMeasurments();
+    const std::vector<BenchmarkRecords::RecordEntry> records = measureTimeForAllBenchmarks().getSingleMeasurments();
 
     // The items in measureTimeForAllBenchmarks() always have the same order.
     // So we can just go by position.

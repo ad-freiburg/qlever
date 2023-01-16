@@ -6,13 +6,9 @@
 
 /*
  * @brief Measure the time needed for the execution of every registerd
- *  single measurement benchmark and return the vector of corresponding
- *  RecordEntrys.
- *
- * @returns A vector of RecordEntrys. Every RecordEntry contains the descriptor
- *  of a benchmark and it's measured execution time.
+ *  benchmark and return a copy of the used BenchmarkRecords.
  */
-const std::vector<BenchmarkRecords::RecordEntry> measureTimeForAllSingleMeasurments() {
+const BenchmarkRecords measureTimeForAllBenchmarks() {
   // For measuring and saving the times.
   BenchmarkRecords benchmarksTime;
  
@@ -21,5 +17,5 @@ const std::vector<BenchmarkRecords::RecordEntry> measureTimeForAllSingleMeasurme
     benchmarkFunction(&benchmarksTime);
   }
 
-  return benchmarksTime.getSingleMeasurments();
+  return benchmarksTime;
 };

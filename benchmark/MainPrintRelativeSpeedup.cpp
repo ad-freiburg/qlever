@@ -18,7 +18,7 @@
  */
 int main() {
   // The descriptors and measured times of all the single measurment benchmarks.
-  const std::vector<BenchmarkRecords::RecordEntry> records = measureTimeForAllSingleMeasurments(); 
+  const std::vector<BenchmarkRecords::RecordEntry> records = measureTimeForAllBenchmarks().getSingleMeasurments(); 
  
   std::stringstream visualization;
   visualization << "##############\n# Benchmarks #\n##############\n";
