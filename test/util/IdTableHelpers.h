@@ -9,6 +9,7 @@
 #include <fstream>
 #include <sstream>
 #include <tuple>
+#include <ranges>
 
 #include "./GTestHelpers.h"
 #include "engine/CallFixedSize.h"
@@ -48,15 +49,12 @@ IdTable makeIdTableFromVector(const VectorTable& tableContent) {
   for (const auto& row : tableContent) {
     AD_CHECK(row.size() == result.numColumns());  // All rows of an IdTable must
                                                   // have the same length.
-    const size_t backIndex{result.size()};
-    // TODO This should be
-    // std::ranges::copy(std::views::transform(row, I), result.back().begin());
-    // as soon as our compilers and the IdTable support it.
+    // Create a new empty row at the bottom of the IdTable.
     result.emplace_back();
-
-    for (size_t c = 0; c < row.size(); c++) {
-      result(backIndex, c) = I(row[c]);
-    }
+    // transform() creates a view, which consits of the returned values of I
+    // , after calling it with each element of row. This view is then copied
+    // into the empty row at the bottom of IdTable.
+    std::ranges::copy(std::ranges::views::transform(row, I), result.back().begin());
   }
 
   return result;
@@ -87,11 +85,10 @@ void compareIdTableWithExpectedContent(
   auto writeIdTableToStream = [&traceMessage](const IdTable& idTable) {
     std::ranges::for_each(idTable,
                           [&traceMessage](const auto& row) {
-                            // TODO Could be done in one line, if row was
-                            // iterable. Unfortunaly, it isn't.
-                            for (size_t i = 0; i < row.numColumns(); i++) {
-                              traceMessage << row[i] << " ";
-                            }
+                            std::ranges::for_each(row,
+                                [&traceMessage](const auto& rowEntry){
+                                traceMessage << rowEntry << " ";
+                                });
                             traceMessage << "\n";
                           },
                           {});
@@ -115,24 +112,8 @@ void compareIdTableWithExpectedContent(
 
   // Sort both the table and the expectedContent, so that both have a definite
   // form for comparison.
-  // TODO Instead of this, we could use std::ranges::lexicographical_compare
-  // for the body of the lambda, but that is currently not possible, because
-  // the rows of an IdTable are not iterable.
-  auto sortFunction = [](const auto& row1, const auto& row2) {
-    size_t i{0};
-    while (i < (row1.numColumns() - 1) && row1[i] == row2[i]) {
-      i++;
-    }
-    return row1[i] < row2[i];
-  };
-  /*
-   * TODO Introduce functionality to the IdTable-class, so that
-   * std::ranges::sort can be used instead of std::sort. Currently it seems like
-   * the iterators , produced by IdTable, aren't the right type.
-   */
-  std::sort(localTable.begin(), localTable.end(), sortFunction);
-  std::sort(localExpectedContent.begin(), localExpectedContent.end(),
-            sortFunction);
+  std::ranges::sort(localTable, std::ranges::lexicographical_compare);
+  std::ranges::sort(localExpectedContent, std::ranges::lexicographical_compare);
 
   ASSERT_EQ(localTable, localExpectedContent);
 }
