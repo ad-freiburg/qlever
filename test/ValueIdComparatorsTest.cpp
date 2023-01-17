@@ -252,4 +252,5 @@ TEST(ValueIdComparators, IndexTypes) {
   testImpl.operator()<Datatype::VocabIndex>(&getVocabIndex);
   testImpl.operator()<Datatype::TextRecordIndex>(&getTextRecordIndex);
   testImpl.operator()<Datatype::LocalVocabIndex>(&getLocalVocabIndex);
+
 }
