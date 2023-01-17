@@ -49,12 +49,15 @@ void CompressedRelationMetaData::scan(
     Id _col0FirstId;
     Id _col0LastId;
   };
-  auto [beginBlock, endBlock] = std::equal_range(
+  auto [beginBlockI, endBlockI] = std::equal_range(
       permutation._meta.blockData().begin(),
       permutation._meta.blockData().end(), KeyLhs{col0Id, col0Id},
       [](const auto& a, const auto& b) {
         return a._col0FirstId < b._col0FirstId && a._col0LastId < b._col0LastId;
       });
+
+  auto beginBlock = beginBlockI;
+  auto endBlock = endBlockI;
 
   // The total size of the result is now known.
   result->resize(metaData.getNofElements());
