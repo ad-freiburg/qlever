@@ -42,7 +42,9 @@ using VectorTable = std::vector<std::vector<size_t>>;
  */
 IdTable makeIdTableFromVector(const VectorTable& tableContent,
                               auto transformation = I) {
-  AD_CHECK(!tableContent.empty());
+  if (tableContent.empty()) {
+    return IdTable{allocator()};
+  }
   IdTable result{tableContent[0].size(), allocator()};
 
   // Copying the content into the table.
@@ -65,7 +67,9 @@ IdTable makeIdTableFromVector(const VectorTable& tableContent,
 
 IdTable makeIdTableFromVector(
     const std::vector<std::vector<Id>>& tableContent) {
-  AD_CHECK(!tableContent.empty());
+  if (tableContent.empty()) {
+    return IdTable{allocator()};
+  }
   IdTable result{tableContent[0].size(), allocator()};
 
   // Copying the content into the table.

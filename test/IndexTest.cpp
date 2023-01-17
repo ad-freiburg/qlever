@@ -18,99 +18,75 @@ using namespace ad_utility::testing;
 
 auto V = [](auto id) { return Id::makeFromVocabIndex(VocabIndex::make(id)); };
 
-string getStxxlConfigFileName(const string& location) {
-  std::ostringstream os;
-  os << location << ".stxxl";
-  return std::move(os).str();
-}
+auto makeGetId = [](const IndexImpl& index) {
+  return [&index](const std::string& el) {
+    Id id;
+    bool success = index.getId(el, &id);
+    AD_CHECK(success);
+    return id;
+  };
+};
 
-string getStxxlDiskFileName(const string& location, const string& tail) {
-  std::ostringstream os;
-  os << location << tail << "-stxxl.disk";
-  return std::move(os).str();
-}
+auto makeTestWidthOne = [](const IndexImpl& index) {
+  return [&index](const std::string& c0, const std::string& c1,
+                  const auto& permutation,
+                  const std::vector<std::vector<Id>>& expected) {
+    IdTable wol(1, makeAllocator());
+    index.scan(c0, c1, &wol, permutation);
+    ASSERT_EQ(wol, makeIdTableFromVector(expected));
+  };
+};
 
-// Write a .stxxl config-file.
-// All we want is sufficient space somewhere with enough space.
-// We can use the location of input files and use a constant size for now.
-// The required size can only be estimated anyway, since index size
-// depends on the structure of words files rather than their size only,
-// because of the "multiplications" performed.
-void writeStxxlConfigFile(const string& location, const string& tail) {
-  string stxxlConfigFileName = getStxxlConfigFileName(location);
-  ad_utility::File stxxlConfig(stxxlConfigFileName, "w");
-  // Inform stxxl about .stxxl location
-  setenv("STXXLCFG", stxxlConfigFileName.c_str(), true);
-  std::ostringstream config;
-  config << "disk=" << getStxxlDiskFileName(location, tail) << ","
-         << STXXL_DISK_SIZE_INDEX_TEST << ",syscall";
-  stxxlConfig.writeLine(std::move(config).str());
-}
+auto makeTestWidthTwo = [](const IndexImpl& index) {
+  return [&index](const std::string& c0, const auto& permutation,
+                  const std::vector<std::vector<Id>>& expected) {
+    IdTable wol(2, makeAllocator());
+    index.scan(c0, &wol, permutation);
+    ASSERT_EQ(wol, makeIdTableFromVector(expected));
+  };
+};
 
 TEST(IndexTest, createFromTurtleTest) {
-  FILE_BUFFER_SIZE() = 1000;  // Increase performance in debug mode.
-  string location = "./";
-  string tail = "";
-  writeStxxlConfigFile(location, tail);
-  string stxxlFileName = getStxxlDiskFileName(location, tail);
-
-  std::string filename = "_testtmp2.ttl";
-
   {
-    std::fstream f(filename, std::ios_base::out);
+    std::string kb =
+        "<a> <b> <c> . \n"
+        "<a> <b> <c2> .\n"
+        "<a> <b2> <c> .\n"
+        "<a2> <b2> <c2> .";
+    const IndexImpl& index = getQec(kb)->getIndex().getImpl();
 
-    // Vocab:
-    // 0: a
-    // 1: a2
-    // 2: b
-    // 3: b2
-    // 4: c
-    // 5: c2
-    f << "<a>\t<b>\t<c>\t.\n"
-         "<a>\t<b>\t<c2>\t.\n"
-         "<a>\t<b2>\t<c>\t.\n"
-         "<a2>\t<b2>\t<c2>\t.";
-    f.close();
+    auto getId = makeGetId(index);
+    Id a = getId("<a>");
+    Id b = getId("<b>");
+    Id c = getId("<c>");
+    Id a2 = getId("<a2>");
+    Id b2 = getId("<b2>");
+    Id c2 = getId("<c2>");
 
-    {
-      Index index = makeIndexWithTestSettings();
-      index.setOnDiskBase("_testindex");
-      index.createFromFile<TurtleParserAuto>(filename);
-    }
-    IndexImpl index;
-    index.createFromOnDiskIndex("_testindex");
+    // TODO<joka921> We could also test the multiplicities here.
+    ASSERT_TRUE(index._PSO.metaData().col0IdExists(b));
+    ASSERT_TRUE(index._PSO.metaData().col0IdExists(b2));
+    ASSERT_FALSE(index._PSO.metaData().col0IdExists(a));
+    ASSERT_FALSE(index._PSO.metaData().col0IdExists(c));
+    ASSERT_FALSE(index._PSO.metaData().col0IdExists(V(735)));
+    ASSERT_FALSE(index._PSO.metaData().getMetaData(b).isFunctional());
+    ASSERT_TRUE(index._PSO.metaData().getMetaData(b2).isFunctional());
 
-    ASSERT_TRUE(index._PSO.metaData().col0IdExists(V(2)));
-    ASSERT_TRUE(index._PSO.metaData().col0IdExists(V(3)));
-    ASSERT_FALSE(index._PSO.metaData().col0IdExists(V(1)));
-    ASSERT_FALSE(index._PSO.metaData().col0IdExists(V(0)));
-    ASSERT_FALSE(index._PSO.metaData().getMetaData(V(2)).isFunctional());
-    ASSERT_TRUE(index._PSO.metaData().getMetaData(V(3)).isFunctional());
-
-    ASSERT_TRUE(index.POS().metaData().col0IdExists(V(2)));
-    ASSERT_TRUE(index.POS().metaData().col0IdExists(V(3)));
-    ASSERT_FALSE(index.POS().metaData().col0IdExists(V(1)));
-    ASSERT_FALSE(index.POS().metaData().col0IdExists(V(4)));
-    ASSERT_TRUE(index.POS().metaData().getMetaData(V(2)).isFunctional());
-    ASSERT_TRUE(index.POS().metaData().getMetaData(V(3)).isFunctional());
+    ASSERT_TRUE(index.POS().metaData().col0IdExists(b));
+    ASSERT_TRUE(index.POS().metaData().col0IdExists(b2));
+    ASSERT_FALSE(index.POS().metaData().col0IdExists(a));
+    ASSERT_FALSE(index.POS().metaData().col0IdExists(c));
+    ASSERT_TRUE(index.POS().metaData().getMetaData(b).isFunctional());
+    ASSERT_TRUE(index.POS().metaData().getMetaData(b2).isFunctional());
 
     // Relation b
     // Pair index
+    auto testTwo = makeTestWidthTwo(index);
+    testTwo("<b>", index.PSO(), {{a, c}, {a, c2}});
     std::vector<std::array<Id, 2>> buffer;
-    CompressedRelationMetaData::scan(V(2), &buffer, index.PSO());
-    ASSERT_EQ(2ul, buffer.size());
-    ASSERT_EQ(V(0), buffer[0][0]);
-    ASSERT_EQ(V(4), buffer[0][1]);
-    ASSERT_EQ(V(0u), buffer[1][0]);
-    ASSERT_EQ(V(5u), buffer[1][1]);
 
     // Relation b2
-    CompressedRelationMetaData::scan(V(3), &buffer, index.PSO());
-    ASSERT_EQ(2ul, buffer.size());
-    ASSERT_EQ(V(0), buffer[0][0]);
-    ASSERT_EQ(V(4u), buffer[0][1]);
-    ASSERT_EQ(V(1u), buffer[1][0]);
-    ASSERT_EQ(V(5u), buffer[1][1]);
+    testTwo("<b2>", index.PSO(), {{a, c}, {a2, c2}});
 
     {
       // Test for a previous bug in the scan of two fixed elements: An assertion
@@ -119,158 +95,75 @@ TEST(IndexTest, createFromTurtleTest) {
       // contain the combination of the ids. In this example <b2> is the largest
       // predicate that occurs and <c2> is larger than the largest subject that
       // appears with <b2>.
-      IdTable oneColBuffer{makeAllocator()};
-      oneColBuffer.setNumColumns(1);
-      index.scan("<b2>", "<c2>", &oneColBuffer, index.PSO());
-      ASSERT_EQ(oneColBuffer.size(), 0u);
+      auto testOne = makeTestWidthOne(index);
+      testOne("<b2>", "<c2>", index.PSO(), {});
     }
-
-    ad_utility::deleteFile(filename);
-    std::remove(stxxlFileName.c_str());
-    remove("_testindex.index.pso");
-    remove("_testindex.index.pos");
   }
   {
-    // a       is-a    1       .
-    // a       is-a    2       .
-    // a       is-a    0       .
-    // b       is-a    3       .
-    // b       is-a    0       .
-    // c       is-a    1       .
-    // c       is-a    2       .
-    std::fstream f(filename, std::ios_base::out);
+    std::string kb =
+        "<a>\t<is-a>\t<1>\t.\n"
+        "<a>\t<is-a>\t<2>\t.\n"
+        "<a>\t<is-a>\t<0>\t.\n"
+        "<b>\t<is-a>\t<3>\t.\n"
+        "<b>\t<is-a>\t<0>\t.\n"
+        "<c>\t<is-a>\t<1>\t.\n"
+        "<c>\t<is-a>\t<2>\t.\n";
 
-    // Vocab:
-    // 0: 0
-    // 1: 1
-    // 2: 2
-    // 3: 3
-    // 4: a
-    // 5: b
-    // 6: c
-    // 7: is-a
-    // 8: ql:langtag
-    f << "<a>\t<is-a>\t<1>\t.\n"
-         "<a>\t<is-a>\t<2>\t.\n"
-         "<a>\t<is-a>\t<0>\t.\n"
-         "<b>\t<is-a>\t<3>\t.\n"
-         "<b>\t<is-a>\t<0>\t.\n"
-         "<c>\t<is-a>\t<1>\t.\n"
-         "<c>\t<is-a>\t<2>\t.\n";
-    f.close();
+    const IndexImpl& index = getQec(kb)->getIndex().getImpl();
 
-    {
-      Index index = makeIndexWithTestSettings();
-      index.setOnDiskBase("_testindex");
-      index.createFromFile<TurtleParserAuto>(filename);
-    }
-    IndexImpl index;
-    index.createFromOnDiskIndex("_testindex");
+    auto getId = makeGetId(index);
+    Id zero = getId("<0>");
+    Id one = getId("<1>");
+    Id two = getId("<2>");
+    Id three = getId("<3>");
+    Id a = getId("<a>");
+    Id b = getId("<b>");
+    Id c = getId("<c>");
+    Id isA = getId("<is-a>");
 
-    ASSERT_TRUE(index._PSO.metaData().col0IdExists(V(7)));
-    ASSERT_FALSE(index._PSO.metaData().col0IdExists(V(1)));
+    ASSERT_TRUE(index._PSO.metaData().col0IdExists(isA));
+    ASSERT_FALSE(index._PSO.metaData().col0IdExists(a));
 
-    ASSERT_FALSE(index._PSO.metaData().getMetaData(V(7)).isFunctional());
+    ASSERT_FALSE(index._PSO.metaData().getMetaData(isA).isFunctional());
 
-    ASSERT_TRUE(index.POS().metaData().col0IdExists(V(7)));
-    ASSERT_FALSE(index.POS().metaData().getMetaData(V(7)).isFunctional());
+    ASSERT_TRUE(index.POS().metaData().col0IdExists(isA));
+    ASSERT_FALSE(index.POS().metaData().getMetaData(isA).isFunctional());
 
-    std::vector<std::array<Id, 2>> buffer;
-    // is-a
-    CompressedRelationMetaData::scan(V(7), &buffer, index.PSO());
-    ASSERT_EQ(7ul, buffer.size());
-    // Pair index
-    ASSERT_EQ(V(4u), buffer[0][0]);
-    ASSERT_EQ(V(0u), buffer[0][1]);
-    ASSERT_EQ(V(4u), buffer[1][0]);
-    ASSERT_EQ(V(1u), buffer[1][1]);
-    ASSERT_EQ(V(4u), buffer[2][0]);
-    ASSERT_EQ(V(2u), buffer[2][1]);
-    ASSERT_EQ(V(5u), buffer[3][0]);
-    ASSERT_EQ(V(0u), buffer[3][1]);
-    ASSERT_EQ(V(5u), buffer[4][0]);
-    ASSERT_EQ(V(3u), buffer[4][1]);
-    ASSERT_EQ(V(6u), buffer[5][0]);
-    ASSERT_EQ(V(1u), buffer[5][1]);
-    ASSERT_EQ(V(6u), buffer[6][0]);
-    ASSERT_EQ(V(2u), buffer[6][1]);
+    auto testTwo = makeTestWidthTwo(index);
+    testTwo("<is-a>", index.PSO(),
+            {{a, zero},
+             {a, one},
+             {a, two},
+             {b, zero},
+             {b, three},
+             {c, one},
+             {c, two}});
 
     // is-a for POS
-    CompressedRelationMetaData::scan(V(7), &buffer, index.POS());
-    ASSERT_EQ(7ul, buffer.size());
-    // Pair index
-    ASSERT_EQ(V(0u), buffer[0][0]);
-    ASSERT_EQ(V(4u), buffer[0][1]);
-    ASSERT_EQ(V(0u), buffer[1][0]);
-    ASSERT_EQ(V(5u), buffer[1][1]);
-    ASSERT_EQ(V(1u), buffer[2][0]);
-    ASSERT_EQ(V(4u), buffer[2][1]);
-    ASSERT_EQ(V(1u), buffer[3][0]);
-    ASSERT_EQ(V(6u), buffer[3][1]);
-    ASSERT_EQ(V(2u), buffer[4][0]);
-    ASSERT_EQ(V(4u), buffer[4][1]);
-    ASSERT_EQ(V(2u), buffer[5][0]);
-    ASSERT_EQ(V(6u), buffer[5][1]);
-    ASSERT_EQ(V(3u), buffer[6][0]);
-    ASSERT_EQ(V(5u), buffer[6][1]);
-
-    ad_utility::deleteFile(filename);
-    std::remove(stxxlFileName.c_str());
-    remove("_testindex.index.pso");
-    remove("_testindex.index.pos");
+    testTwo("<is-a>", index.POS(),
+            {{zero, a},
+             {zero, b},
+             {one, a},
+             {one, c},
+             {two, a},
+             {two, c},
+             {three, b}});
   }
 }
 
-// used to ensure all files will be deleted even if the test fails
-class CreatePatternsFixture : public testing::Test {
- public:
-  CreatePatternsFixture() {
-    string location = "./";
-    string tail = "";
-    stxxlFileName = getStxxlDiskFileName(location, tail);
-    writeStxxlConfigFile(location, tail);
-  }
-
-  virtual ~CreatePatternsFixture() {
-    ad_utility::deleteFile(inputFilename);
-    ad_utility::deleteFile(stxxlFileName);
-    ad_utility::deleteFile("_testindex.index.pso");
-    ad_utility::deleteFile("_testindex.index.pos");
-    ad_utility::deleteFile("_testindex.index.patterns");
-    ad_utility::deleteFile("stxxl.log");
-    ad_utility::deleteFile("stxxl.errorlog");
-  }
-
-  string stxxlFileName;
-  string inputFilename = "_testtmppatterns.ttl";
-};
-
-TEST_F(CreatePatternsFixture, createPatterns) {
-  FILE_BUFFER_SIZE() = 1000;  // Increase performance in debug mode.
+TEST(CreatePatterns, createPatterns) {
   {
-    LOG(DEBUG) << "Testing createPatterns with ttl file..." << std::endl;
-    std::ofstream f(inputFilename);
+    std::string kb =
+        "<a>\t<b>\t<c>\t.\n"
+        "<a>\t<b>\t<c2>\t.\n"
+        "<a>\t<b2>\t<c>\t.\n"
+        "<a2>\t<b2>\t<c2>\t.\n"
+        "<a2>\t<d>\t<c2>\t.";
 
-    f << "<a>\t<b>\t<c>\t.\n"
-         "<a>\t<b>\t<c2>\t.\n"
-         "<a>\t<b2>\t<c>\t.\n"
-         "<a2>\t<b2>\t<c2>\t.\n"
-         "<a2>\t<d>\t<c2>\t.";
-    f.close();
-
-    {
-      Index index = makeIndexWithTestSettings();
-      index.setUsePatterns(true);
-      index.setOnDiskBase("_testindex");
-      index.createFromFile<TurtleParserAuto>(inputFilename);
-    }
-    IndexImpl index;
-    index.setUsePatterns(true);
-    index.createFromOnDiskIndex("_testindex");
+    const IndexImpl& index = getQec(kb)->getIndex().getImpl();
 
     ASSERT_EQ(2u, index.getHasPattern().size());
     ASSERT_EQ(0u, index.getHasPredicate().size());
-    ASSERT_EQ(2u, index._patterns.size());
     std::vector<VocabIndex> p0;
     std::vector<VocabIndex> p1;
     VocabIndex idx;
@@ -303,114 +196,65 @@ TEST_F(CreatePatternsFixture, createPatterns) {
 }
 
 TEST(IndexTest, createFromOnDiskIndexTest) {
-  FILE_BUFFER_SIZE() = 1000;  // Increase performance in debug mode.
-  string location = "./";
-  string tail = "";
-  writeStxxlConfigFile(location, tail);
-  string stxxlFileName = getStxxlDiskFileName(location, tail);
-  string filename = "_testtmp3.ttl";
-
-  std::ofstream f(filename);
-
-  // Vocab:
-  // 0: a
-  // 1: a2
-  // 2: b
-  // 3: b2
-  // 4: c
-  // 5: c2
-  f << "<a>\t<b>\t<c>\t.\n"
-       "<a>\t<b>\t<c2>\t.\n"
-       "<a>\t<b2>\t<c>\t.\n"
-       "<a2>\t<b2>\t<c2>\t.";
-  f.close();
-
-  {
-    Index indexPrim = makeIndexWithTestSettings();
-    indexPrim.setOnDiskBase("_testindex2");
-    indexPrim.createFromFile<TurtleParserAuto>(filename);
-  }
-
-  IndexImpl index;
-  index.createFromOnDiskIndex("_testindex2");
-
-  ASSERT_TRUE(index.PSO().metaData().col0IdExists(V(2)));
-  ASSERT_TRUE(index.PSO().metaData().col0IdExists(V(3)));
-  ASSERT_FALSE(index.PSO().metaData().col0IdExists(V(1)));
-  ASSERT_FALSE(index.PSO().metaData().col0IdExists(V(4)));
-  ASSERT_FALSE(index.PSO().metaData().getMetaData(V(2)).isFunctional());
-  ASSERT_TRUE(index.PSO().metaData().getMetaData(V(3)).isFunctional());
-
-  ASSERT_TRUE(index.POS().metaData().col0IdExists(V(2)));
-  ASSERT_TRUE(index.POS().metaData().col0IdExists(V(3)));
-  ASSERT_FALSE(index.POS().metaData().col0IdExists(V(1)));
-  ASSERT_FALSE(index.POS().metaData().col0IdExists(V(4)));
-  ASSERT_TRUE(index.POS().metaData().getMetaData(V(2)).isFunctional());
-  ASSERT_TRUE(index.POS().metaData().getMetaData(V(3)).isFunctional());
-
-  ad_utility::deleteFile(filename);
-  ad_utility::deleteFile("_testindex2.index.pso");
-  ad_utility::deleteFile("_testindex2.index.pos");
-  ad_utility::deleteFile(stxxlFileName);
-};
-
-TEST(IndexTest, scanTest) {
-  FILE_BUFFER_SIZE() = 1000;  // Increase performance in debug mode.
-  // Vocab:
-  // 0: a
-  // 1: a2
-  // 2: b
-  // 3: b2
-  // 4: c
-  // 5: c2
   std::string kb =
       "<a>\t<b>\t<c>\t.\n"
       "<a>\t<b>\t<c2>\t.\n"
       "<a>\t<b2>\t<c>\t.\n"
       "<a2>\t<b2>\t<c2>\t.";
+  const IndexImpl& index = getQec(kb)->getIndex().getImpl();
+
+  auto getId = makeGetId(index);
+  Id b = getId("<b>");
+  Id b2 = getId("<b2>");
+  Id a = getId("<a>");
+  Id c = getId("<c>");
+
+  ASSERT_TRUE(index.PSO().metaData().col0IdExists(b));
+  ASSERT_TRUE(index.PSO().metaData().col0IdExists(b2));
+  ASSERT_FALSE(index.PSO().metaData().col0IdExists(a));
+  ASSERT_FALSE(index.PSO().metaData().col0IdExists(c));
+  ASSERT_FALSE(index.PSO().metaData().getMetaData(b).isFunctional());
+  ASSERT_TRUE(index.PSO().metaData().getMetaData(b2).isFunctional());
+
+  ASSERT_TRUE(index.POS().metaData().col0IdExists(b));
+  ASSERT_TRUE(index.POS().metaData().col0IdExists(b2));
+  ASSERT_FALSE(index.POS().metaData().col0IdExists(a));
+  ASSERT_FALSE(index.POS().metaData().col0IdExists(c));
+  ASSERT_TRUE(index.POS().metaData().getMetaData(b).isFunctional());
+  ASSERT_TRUE(index.POS().metaData().getMetaData(b2).isFunctional());
+};
+
+TEST(IndexTest, scanTest) {
+  std::string kb =
+      "<a>  <b>  <c>  . \n"
+      "<a>  <b>  <c2> . \n"
+      "<a>  <b2> <c>  . \n"
+      "<a2> <b2> <c2> .   ";
   {
     const IndexImpl& index = getQec(kb)->getIndex().getImpl();
 
     IdTable wol(1, makeAllocator());
     IdTable wtl(2, makeAllocator());
 
-    index.scan("<b>", &wtl, index._PSO);
-    ASSERT_EQ(2u, wtl.size());
-    ASSERT_EQ(V(0u), wtl[0][0]);
-    ASSERT_EQ(V(4u), wtl[0][1]);
-    ASSERT_EQ(V(0u), wtl[1][0]);
-    ASSERT_EQ(V(5u), wtl[1][1]);
-    wtl.clear();
-    index.scan("<x>", &wtl, index._PSO);
-    ASSERT_EQ(0u, wtl.size());
+    auto getId = makeGetId(index);
+    Id a = getId("<a>");
+    Id c = getId("<c>");
+    Id a2 = getId("<a2>");
+    Id c2 = getId("<c2>");
+    auto testTwo = makeTestWidthTwo(index);
 
-    index.scan("<c>", &wtl, index._PSO);
-    ASSERT_EQ(0u, wtl.size());
+    testTwo("<b>", index._PSO, {{a, c}, {a, c2}});
+    testTwo("<x>", index._PSO, {});
+    testTwo("<c>", index._PSO, {});
+    testTwo("<b>", index._POS, {{c, a}, {c2, a}});
+    testTwo("<x>", index._POS, {});
+    testTwo("<c>", index._POS, {});
 
-    index.scan("<b>", &wtl, index._POS);
-    ASSERT_EQ(2u, wtl.size());
-    ASSERT_EQ(V(4u), wtl[0][0]);
-    ASSERT_EQ(V(0u), wtl[0][1]);
-    ASSERT_EQ(V(5u), wtl[1][0]);
-    ASSERT_EQ(V(0u), wtl[1][1]);
-    wtl.clear();
-    index.scan("<x>", &wtl, index._POS);
-    ASSERT_EQ(0u, wtl.size());
+    auto testOne = makeTestWidthOne(index);
 
-    index.scan("<c>", &wtl, index._POS);
-    ASSERT_EQ(0u, wtl.size());
-
-    index.scan("<b>", "<a>", &wol, index._PSO);
-    ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(V(4u), wol[0][0]);
-    ASSERT_EQ(V(5u), wol[1][0]);
-    wol.clear();
-    index.scan("<b>", "<c>", &wol, index._PSO);
-    ASSERT_EQ(0u, wol.size());
-
-    index.scan("<b2>", "<c2>", &wol, index._POS);
-    ASSERT_EQ(1u, wol.size());
-    ASSERT_EQ(V(1u), wol[0][0]);
+    testOne("<b>", "<a>", index._PSO, {{c}, {c2}});
+    testOne("<b>", "<c>", index._PSO, {});
+    testOne("<b2>", "<c2>", index._POS, {{a2}});
   }
   kb = "<a> <is-a> <1> . \n"
        "<a> <is-a> <2> . \n"
@@ -424,14 +268,7 @@ TEST(IndexTest, scanTest) {
     const IndexImpl& index =
         ad_utility::testing::getQec(kb)->getIndex().getImpl();
 
-    IdTable wtl(2, makeAllocator());
-
-    auto getId = [&](const std::string& el) {
-      Id id;
-      bool success = index.getId(el, &id);
-      AD_CHECK(success);
-      return id;
-    };
+    auto getId = makeGetId(index);
     Id a = getId("<a>");
     Id b = getId("<b>");
     Id c = getId("<c>");
@@ -439,35 +276,26 @@ TEST(IndexTest, scanTest) {
     Id one = getId("<1>");
     Id two = getId("<2>");
     Id three = getId("<3>");
-    Id isA = getId("<is-a>");
 
-    index.scan("<is-a>", &wtl, index._PSO);
+    auto testTwo = makeTestWidthTwo(index);
+    testTwo("<is-a>", index._PSO,
+            {{{a, zero},
+              {a, one},
+              {a, two},
+              {b, zero},
+              {b, three},
+              {c, one},
+              {c, two}}});
+    testTwo("<is-a>", index._POS,
+            {{zero, a},
+             {zero, b},
+             {one, a},
+             {one, c},
+             {two, a},
+             {two, c},
+             {three, b}});
 
-    ASSERT_EQ(wtl, makeIdTableFromVector({{{a, zero},
-                                           {a, one},
-                                           {a, two},
-                                           {b, zero},
-                                           {b, three},
-                                           {c, one},
-                                           {c, two}}}));
-
-    index.scan("<is-a>", &wtl, index._POS);
-    ASSERT_EQ(wtl, makeIdTableFromVector({{zero, a},
-                                          {zero, b},
-                                          {one, a},
-                                          {one, c},
-                                          {two, a},
-                                          {two, c},
-                                          {three, b}}));
-
-    // TODO<joka921> Maybe we need this globally, and add a `source_location`.
-    auto testWidthOne = [&](const std::string& c0, const std::string& c1,
-                            const auto& permutation,
-                            const std::vector<std::vector<Id>>& expected) {
-      IdTable wol(1, makeAllocator());
-      index.scan(c0, c1, &wol, permutation);
-      ASSERT_EQ(wol, makeIdTableFromVector(expected));
-    };
+    auto testWidthOne = makeTestWidthOne(index);
 
     testWidthOne("<is-a>", "<0>", index._POS, {{a}, {b}});
     testWidthOne("<is-a>", "<1>", index._POS, {{a}, {c}});
