@@ -356,13 +356,6 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
 
 TEST(IndexTest, scanTest) {
   FILE_BUFFER_SIZE() = 1000;  // Increase performance in debug mode.
-  string location = "./";
-  string tail = "";
-  writeStxxlConfigFile(location, tail);
-  string stxxlFileName = getStxxlDiskFileName(location, tail);
-  string filename = "_testtmp2.ttl";
-  std::ofstream f(filename);
-
   // Vocab:
   // 0: a
   // 1: a2
@@ -370,20 +363,13 @@ TEST(IndexTest, scanTest) {
   // 3: b2
   // 4: c
   // 5: c2
-  f << "<a>\t<b>\t<c>\t.\n"
-       "<a>\t<b>\t<c2>\t.\n"
-       "<a>\t<b2>\t<c>\t.\n"
-       "<a2>\t<b2>\t<c2>\t.";
-  f.close();
+  std::string kb =
+      "<a>\t<b>\t<c>\t.\n"
+      "<a>\t<b>\t<c2>\t.\n"
+      "<a>\t<b2>\t<c>\t.\n"
+      "<a2>\t<b2>\t<c2>\t.";
   {
-    {
-      Index index = makeIndexWithTestSettings();
-      index.setOnDiskBase("_testindex");
-      index.createFromFile<TurtleParserAuto>(filename);
-    }
-
-    IndexImpl index;
-    index.createFromOnDiskIndex("_testindex");
+    const IndexImpl& index = getQec(kb)->getIndex().getImpl();
 
     IdTable wol(1, makeAllocator());
     IdTable wtl(2, makeAllocator());
@@ -426,55 +412,18 @@ TEST(IndexTest, scanTest) {
     ASSERT_EQ(1u, wol.size());
     ASSERT_EQ(V(1u), wol[0][0]);
   }
-
-  ad_utility::deleteFile(filename);
-  ad_utility::deleteFile(stxxlFileName);
-  ad_utility::deleteFile("_testindex.index.pso");
-  ad_utility::deleteFile("_testindex.index.pos");
-
-  // a       is-a    1       .
-  // a       is-a    2       .
-  // a       is-a    0       .
-  // b       is-a    3       .
-  // b       is-a    0       .
-  // c       is-a    1       .
-  // c       is-a    2       .
-  std::ofstream f2(filename);
-
-  // Vocab:
-  // 0: 0
-  // 1: 1
-  // 2: 2
-  // 3: 3
-  // 4: a
-  // 5: b
-  // 6: c
-  // 7: is-a
-  // 8: ql:langtag
-  std::string kb =
-      "<a>\t<is-a>\t<1>\t.\n"
-      "<a>\t<is-a>\t<2>\t.\n"
-      "<a>\t<is-a>\t<0>\t.\n"
-      "<b>\t<is-a>\t<3>\t.\n"
-      "<b>\t<is-a>\t<0>\t.\n"
-      "<c>\t<is-a>\t<1>\t.\n"
-      "<c>\t<is-a>\t<2>\t.\n";
-
-  f2 << kb;
-  f2.close();
+  kb = "<a> <is-a> <1> . \n"
+       "<a> <is-a> <2> . \n"
+       "<a> <is-a> <0> . \n"
+       "<b> <is-a> <3> . \n"
+       "<b> <is-a> <0> . \n"
+       "<c> <is-a> <1> . \n"
+       "<c> <is-a> <2> . \n";
 
   {
-    {
-      Index index = makeIndexWithTestSettings();
-      index.setOnDiskBase("_testindex");
-      index.createFromFile<TurtleParserAuto>(filename);
-    }
     const IndexImpl& index =
         ad_utility::testing::getQec(kb)->getIndex().getImpl();
-    // IndexImpl index;
-    // index.createFromOnDiskIndex("_testindex");
 
-    IdTable wol(1, makeAllocator());
     IdTable wtl(2, makeAllocator());
 
     auto getId = [&](const std::string& el) {
@@ -515,7 +464,7 @@ TEST(IndexTest, scanTest) {
     auto testWidthOne = [&](const std::string& c0, const std::string& c1,
                             const auto& permutation,
                             const std::vector<std::vector<Id>>& expected) {
-      wol.clear();
+      IdTable wol(1, makeAllocator());
       index.scan(c0, c1, &wol, permutation);
       ASSERT_EQ(wol, makeIdTableFromVector(expected));
     };
@@ -528,10 +477,6 @@ TEST(IndexTest, scanTest) {
     testWidthOne("<is-a>", "<b>", index._PSO, {{zero}, {three}});
     testWidthOne("<is-a>", "<c>", index._PSO, {{one}, {two}});
   }
-  ad_utility::deleteFile(filename);
-  ad_utility::deleteFile(stxxlFileName);
-  ad_utility::deleteFile("_testindex.index.pso");
-  ad_utility::deleteFile("_testindex.index.pos");
 };
 
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a

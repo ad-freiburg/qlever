@@ -72,10 +72,7 @@ IdTable makeIdTableFromVector(
   for (const auto& row : tableContent) {
     AD_CHECK(row.size() == result.numColumns());  // All rows of an IdTable must
     // have the same length.
-    const size_t backIndex{result.size()};
-    // TODO This should be
-    // std::ranges::copy(std::views::transform(row, I), result.back().begin());
-    // as soon as our compilers and the IdTable support it.
+    // TODO<joka921> Can this be a single call to `push_back`
     result.emplace_back();
     std::ranges::copy(row, result.back().begin());
   }
