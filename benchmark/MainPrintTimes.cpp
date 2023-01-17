@@ -47,14 +47,23 @@ int main() {
   // Visualizes the measured times.
   std::stringstream visualization;
 
+  // For minimizing code duplication.
+  // For adding linebreaks between printed categories.
+  auto addCategoryBreak = [](std::stringstream* stringStream){(*stringStream) << "\n\n";};
+
+  // Default conversion from BenchmarkRecords::RecordEntry to string.
+  auto recordEntryToString = [](const BenchmarkRecords::RecordEntry& recordEntry){
+    return "'" + recordEntry.descriptor + "' took " +
+      std::to_string(recordEntry.measuredTime) + " seconds.";
+  };
+
   // Visualization for single measurments.
   addCategoryTitelToStringstream(&visualization, "Single measurment benchmarks");
   for (const BenchmarkRecords::RecordEntry& entry: records.getSingleMeasurments()) {
-    visualization << "\nSingle measurment benchmark '" << entry.descriptor
-                  << "' took " << entry.measuredTime << " seconds.";
+    visualization << "\nSingle measurment benchmark " << recordEntryToString(entry);
   }
 
-  visualization << "\n\n";
+  addCategoryBreak(&visualization);
 
   // Visualization for groups.
   addCategoryTitelToStringstream(&visualization, "Group benchmarks");
@@ -62,12 +71,11 @@ int main() {
     const BenchmarkRecords::RecordGroup& group = entry.second;
     visualization << "\n\nGroup '" << group.descriptor << "':";
     for (const BenchmarkRecords::RecordEntry& groupEntry: group.entries) {
-      visualization << "\n\t'" << groupEntry.descriptor << "' took "
-                    << groupEntry.measuredTime << " seconds.";
+      visualization << "\n\t" << recordEntryToString(groupEntry);
     }
   }
 
-  visualization << "\n\n";
+  addCategoryBreak(&visualization);
 
   // Visualization for tables.
   addCategoryTitelToStringstream(&visualization, "Table benchmarks");
