@@ -45,6 +45,8 @@ int main() {
     }
   }
 
+  visualization << "\n\n";
+
   // Visualization for tables.
   visualization << "####################\n"
                 << "# Table benchmarks #\n"
