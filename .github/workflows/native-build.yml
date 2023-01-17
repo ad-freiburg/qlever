@@ -87,11 +87,10 @@ jobs:
       run: llvm-profdata-14 merge -sparse default.profraw -o default.profdata && llvm-cov export --format=lcov --instr-profile ./default.profdata ./ValueIdComparatorsTest > ./coverage.lcov
       if: matrix.compiler == 'clang14'
     - name: Submit to codecov.io
-      uses: codecov/codecov-action@v3
-      working-directory: ${{github.workspace}}/build/test
       if: matrix.compiler == 'clang14'
+      uses: codecov/codecov-action@v3
       with:
-        file: ./coverage.lcov
+        file: ${{github.workspace}}/build/test/coverage.lcov
 
     - name: E2E
       run: ${{github.workspace}}/e2e/e2e.sh
