@@ -7,8 +7,8 @@
 
 #include <utility>
 
-#include "util/OverloadCallOperator.h"
 #include "global/ValueId.h"
+#include "util/OverloadCallOperator.h"
 
 namespace valueIdComparators {
 /// This enum encodes the different numeric comparators LessThan, LessEqual,
@@ -485,7 +485,6 @@ inline bool compareIds(ValueId a, int64_t b, Comparison comparison) {
 inline bool compareIds(int64_t a, ValueId b, Comparison comparison) {
   return compareIds(ValueId::makeFromInt(a), b, comparison);
 }
-
 
 }  // namespace valueIdComparators
 
