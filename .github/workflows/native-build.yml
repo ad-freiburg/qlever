@@ -55,7 +55,7 @@ jobs:
     #  if:  matrix.compiler == 'clang13'
     - name: Install clang 14
       #run:  sudo apt install clang-14
-      run:  wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 14 all # && sudo apt install clang-15
+      run:  wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 15 all # && sudo apt install clang-15
       if:  matrix.compiler == 'clang14'
     - name: Install clang 15
       run:  wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 15 && sudo apt install clang-15
@@ -84,7 +84,7 @@ jobs:
 
     - name: Process coverage info
       working-directory: ${{github.workspace}}/build/test
-      run: llvm-profdata-14 merge -sparse default.profraw -o default.profdata && llvm-cov export --format=lcov --instr-profile ./default.profdata ./ValueIdComparatorsTest > ./coverage.lcov
+      run: llvm-profdata-15 merge -sparse default.profraw -o default.profdata && llvm-cov-15 export --format=lcov --instr-profile ./default.profdata ./ValueIdComparatorsTest > ./coverage.lcov
       if: matrix.compiler == 'clang14'
     - name: Submit to codecov.io
       if: matrix.compiler == 'clang14'
