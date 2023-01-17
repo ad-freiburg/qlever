@@ -49,12 +49,16 @@ IdTable makeIdTableFromVector(const VectorTable& tableContent) {
   for (const auto& row : tableContent) {
     AD_CHECK(row.size() == result.numColumns());  // All rows of an IdTable must
                                                   // have the same length.
-    // Create a new empty row at the bottom of the IdTable.
+    const size_t backIndex{result.size()};
+
+    // TODO<clang 16> This should be
+    // std::ranges::copy(std::views::transform(row, I), result.back().begin());
+    // as soon as our compilers supports it.
     result.emplace_back();
-    // transform() creates a view, which consits of the returned values of I
-    // , after calling it with each element of row. This view is then copied
-    // into the empty row at the bottom of IdTable.
-    std::ranges::copy(std::ranges::views::transform(row, I), result.back().begin());
+    
+    for (size_t c = 0; c < row.size(); c++) {
+      result(backIndex, c) = I(row[c]);
+    }
   }
 
   return result;
@@ -85,10 +89,10 @@ void compareIdTableWithExpectedContent(
   auto writeIdTableToStream = [&traceMessage](const IdTable& idTable) {
     std::ranges::for_each(idTable,
                           [&traceMessage](const auto& row) {
-                            std::ranges::for_each(row,
-                                [&traceMessage](const auto& rowEntry){
-                                traceMessage << rowEntry << " ";
-                                });
+                            //TODO<C++23> Use std::views::join_with for both loops.
+                            for (size_t i = 0; i < row.numColumns(); i++) {
+                              traceMessage << row[i] << " ";
+                            }
                             traceMessage << "\n";
                           },
                           {});
