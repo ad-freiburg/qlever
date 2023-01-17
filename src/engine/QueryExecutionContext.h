@@ -51,6 +51,7 @@ class QueryResultCache : public ConcurrentLruCache {
   PinnedSizes _pinnedSizes;
 
  public:
+  virtual ~QueryResultCache() = default;
   void clearAll() override {
     // The _pinnedSizes are not part of the (otherwise threadsafe) _cache
     // and thus have to be manually locked.

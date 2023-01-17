@@ -40,7 +40,8 @@ using VectorTable = std::vector<std::vector<size_t>>;
  * Return an 'IdTable' with the given 'tableContent'. all rows must have the
  * same length.
  */
-IdTable makeIdTableFromVector(const VectorTable& tableContent) {
+IdTable makeIdTableFromVector(const VectorTable& tableContent,
+                              auto transformation = I) {
   AD_CHECK(!tableContent.empty());
   IdTable result{tableContent[0].size(), allocator()};
 
@@ -55,8 +56,28 @@ IdTable makeIdTableFromVector(const VectorTable& tableContent) {
     result.emplace_back();
 
     for (size_t c = 0; c < row.size(); c++) {
-      result(backIndex, c) = I(row[c]);
+      result(backIndex, c) = transformation(row[c]);
     }
+  }
+
+  return result;
+}
+
+IdTable makeIdTableFromVector(
+    const std::vector<std::vector<Id>>& tableContent) {
+  AD_CHECK(!tableContent.empty());
+  IdTable result{tableContent[0].size(), allocator()};
+
+  // Copying the content into the table.
+  for (const auto& row : tableContent) {
+    AD_CHECK(row.size() == result.numColumns());  // All rows of an IdTable must
+    // have the same length.
+    const size_t backIndex{result.size()};
+    // TODO This should be
+    // std::ranges::copy(std::views::transform(row, I), result.back().begin());
+    // as soon as our compilers and the IdTable support it.
+    result.emplace_back();
+    std::ranges::copy(row, result.back().begin());
   }
 
   return result;

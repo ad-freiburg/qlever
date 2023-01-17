@@ -9,13 +9,14 @@
 #include <fstream>
 
 #include "./IndexTestHelpers.h"
+#include "./util/IdTableHelpers.h"
 #include "global/Pattern.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 
 using namespace ad_utility::testing;
 
-auto I = [](auto id) { return Id::makeFromVocabIndex(VocabIndex::make(id)); };
+auto V = [](auto id) { return Id::makeFromVocabIndex(VocabIndex::make(id)); };
 
 string getStxxlConfigFileName(const string& location) {
   std::ostringstream os;
@@ -79,37 +80,37 @@ TEST(IndexTest, createFromTurtleTest) {
     IndexImpl index;
     index.createFromOnDiskIndex("_testindex");
 
-    ASSERT_TRUE(index._PSO.metaData().col0IdExists(I(2)));
-    ASSERT_TRUE(index._PSO.metaData().col0IdExists(I(3)));
-    ASSERT_FALSE(index._PSO.metaData().col0IdExists(I(1)));
-    ASSERT_FALSE(index._PSO.metaData().col0IdExists(I(0)));
-    ASSERT_FALSE(index._PSO.metaData().getMetaData(I(2)).isFunctional());
-    ASSERT_TRUE(index._PSO.metaData().getMetaData(I(3)).isFunctional());
+    ASSERT_TRUE(index._PSO.metaData().col0IdExists(V(2)));
+    ASSERT_TRUE(index._PSO.metaData().col0IdExists(V(3)));
+    ASSERT_FALSE(index._PSO.metaData().col0IdExists(V(1)));
+    ASSERT_FALSE(index._PSO.metaData().col0IdExists(V(0)));
+    ASSERT_FALSE(index._PSO.metaData().getMetaData(V(2)).isFunctional());
+    ASSERT_TRUE(index._PSO.metaData().getMetaData(V(3)).isFunctional());
 
-    ASSERT_TRUE(index.POS().metaData().col0IdExists(I(2)));
-    ASSERT_TRUE(index.POS().metaData().col0IdExists(I(3)));
-    ASSERT_FALSE(index.POS().metaData().col0IdExists(I(1)));
-    ASSERT_FALSE(index.POS().metaData().col0IdExists(I(4)));
-    ASSERT_TRUE(index.POS().metaData().getMetaData(I(2)).isFunctional());
-    ASSERT_TRUE(index.POS().metaData().getMetaData(I(3)).isFunctional());
+    ASSERT_TRUE(index.POS().metaData().col0IdExists(V(2)));
+    ASSERT_TRUE(index.POS().metaData().col0IdExists(V(3)));
+    ASSERT_FALSE(index.POS().metaData().col0IdExists(V(1)));
+    ASSERT_FALSE(index.POS().metaData().col0IdExists(V(4)));
+    ASSERT_TRUE(index.POS().metaData().getMetaData(V(2)).isFunctional());
+    ASSERT_TRUE(index.POS().metaData().getMetaData(V(3)).isFunctional());
 
     // Relation b
     // Pair index
     std::vector<std::array<Id, 2>> buffer;
-    CompressedRelationMetaData::scan(I(2), &buffer, index.PSO());
+    CompressedRelationMetaData::scan(V(2), &buffer, index.PSO());
     ASSERT_EQ(2ul, buffer.size());
-    ASSERT_EQ(I(0), buffer[0][0]);
-    ASSERT_EQ(I(4), buffer[0][1]);
-    ASSERT_EQ(I(0u), buffer[1][0]);
-    ASSERT_EQ(I(5u), buffer[1][1]);
+    ASSERT_EQ(V(0), buffer[0][0]);
+    ASSERT_EQ(V(4), buffer[0][1]);
+    ASSERT_EQ(V(0u), buffer[1][0]);
+    ASSERT_EQ(V(5u), buffer[1][1]);
 
     // Relation b2
-    CompressedRelationMetaData::scan(I(3), &buffer, index.PSO());
+    CompressedRelationMetaData::scan(V(3), &buffer, index.PSO());
     ASSERT_EQ(2ul, buffer.size());
-    ASSERT_EQ(I(0), buffer[0][0]);
-    ASSERT_EQ(I(4u), buffer[0][1]);
-    ASSERT_EQ(I(1u), buffer[1][0]);
-    ASSERT_EQ(I(5u), buffer[1][1]);
+    ASSERT_EQ(V(0), buffer[0][0]);
+    ASSERT_EQ(V(4u), buffer[0][1]);
+    ASSERT_EQ(V(1u), buffer[1][0]);
+    ASSERT_EQ(V(5u), buffer[1][1]);
 
     {
       // Test for a previous bug in the scan of two fixed elements: An assertion
@@ -166,52 +167,52 @@ TEST(IndexTest, createFromTurtleTest) {
     IndexImpl index;
     index.createFromOnDiskIndex("_testindex");
 
-    ASSERT_TRUE(index._PSO.metaData().col0IdExists(I(7)));
-    ASSERT_FALSE(index._PSO.metaData().col0IdExists(I(1)));
+    ASSERT_TRUE(index._PSO.metaData().col0IdExists(V(7)));
+    ASSERT_FALSE(index._PSO.metaData().col0IdExists(V(1)));
 
-    ASSERT_FALSE(index._PSO.metaData().getMetaData(I(7)).isFunctional());
+    ASSERT_FALSE(index._PSO.metaData().getMetaData(V(7)).isFunctional());
 
-    ASSERT_TRUE(index.POS().metaData().col0IdExists(I(7)));
-    ASSERT_FALSE(index.POS().metaData().getMetaData(I(7)).isFunctional());
+    ASSERT_TRUE(index.POS().metaData().col0IdExists(V(7)));
+    ASSERT_FALSE(index.POS().metaData().getMetaData(V(7)).isFunctional());
 
     std::vector<std::array<Id, 2>> buffer;
     // is-a
-    CompressedRelationMetaData::scan(I(7), &buffer, index.PSO());
+    CompressedRelationMetaData::scan(V(7), &buffer, index.PSO());
     ASSERT_EQ(7ul, buffer.size());
     // Pair index
-    ASSERT_EQ(I(4u), buffer[0][0]);
-    ASSERT_EQ(I(0u), buffer[0][1]);
-    ASSERT_EQ(I(4u), buffer[1][0]);
-    ASSERT_EQ(I(1u), buffer[1][1]);
-    ASSERT_EQ(I(4u), buffer[2][0]);
-    ASSERT_EQ(I(2u), buffer[2][1]);
-    ASSERT_EQ(I(5u), buffer[3][0]);
-    ASSERT_EQ(I(0u), buffer[3][1]);
-    ASSERT_EQ(I(5u), buffer[4][0]);
-    ASSERT_EQ(I(3u), buffer[4][1]);
-    ASSERT_EQ(I(6u), buffer[5][0]);
-    ASSERT_EQ(I(1u), buffer[5][1]);
-    ASSERT_EQ(I(6u), buffer[6][0]);
-    ASSERT_EQ(I(2u), buffer[6][1]);
+    ASSERT_EQ(V(4u), buffer[0][0]);
+    ASSERT_EQ(V(0u), buffer[0][1]);
+    ASSERT_EQ(V(4u), buffer[1][0]);
+    ASSERT_EQ(V(1u), buffer[1][1]);
+    ASSERT_EQ(V(4u), buffer[2][0]);
+    ASSERT_EQ(V(2u), buffer[2][1]);
+    ASSERT_EQ(V(5u), buffer[3][0]);
+    ASSERT_EQ(V(0u), buffer[3][1]);
+    ASSERT_EQ(V(5u), buffer[4][0]);
+    ASSERT_EQ(V(3u), buffer[4][1]);
+    ASSERT_EQ(V(6u), buffer[5][0]);
+    ASSERT_EQ(V(1u), buffer[5][1]);
+    ASSERT_EQ(V(6u), buffer[6][0]);
+    ASSERT_EQ(V(2u), buffer[6][1]);
 
     // is-a for POS
-    CompressedRelationMetaData::scan(I(7), &buffer, index.POS());
+    CompressedRelationMetaData::scan(V(7), &buffer, index.POS());
     ASSERT_EQ(7ul, buffer.size());
     // Pair index
-    ASSERT_EQ(I(0u), buffer[0][0]);
-    ASSERT_EQ(I(4u), buffer[0][1]);
-    ASSERT_EQ(I(0u), buffer[1][0]);
-    ASSERT_EQ(I(5u), buffer[1][1]);
-    ASSERT_EQ(I(1u), buffer[2][0]);
-    ASSERT_EQ(I(4u), buffer[2][1]);
-    ASSERT_EQ(I(1u), buffer[3][0]);
-    ASSERT_EQ(I(6u), buffer[3][1]);
-    ASSERT_EQ(I(2u), buffer[4][0]);
-    ASSERT_EQ(I(4u), buffer[4][1]);
-    ASSERT_EQ(I(2u), buffer[5][0]);
-    ASSERT_EQ(I(6u), buffer[5][1]);
-    ASSERT_EQ(I(3u), buffer[6][0]);
-    ASSERT_EQ(I(5u), buffer[6][1]);
+    ASSERT_EQ(V(0u), buffer[0][0]);
+    ASSERT_EQ(V(4u), buffer[0][1]);
+    ASSERT_EQ(V(0u), buffer[1][0]);
+    ASSERT_EQ(V(5u), buffer[1][1]);
+    ASSERT_EQ(V(1u), buffer[2][0]);
+    ASSERT_EQ(V(4u), buffer[2][1]);
+    ASSERT_EQ(V(1u), buffer[3][0]);
+    ASSERT_EQ(V(6u), buffer[3][1]);
+    ASSERT_EQ(V(2u), buffer[4][0]);
+    ASSERT_EQ(V(4u), buffer[4][1]);
+    ASSERT_EQ(V(2u), buffer[5][0]);
+    ASSERT_EQ(V(6u), buffer[5][1]);
+    ASSERT_EQ(V(3u), buffer[6][0]);
+    ASSERT_EQ(V(5u), buffer[6][1]);
 
     ad_utility::deleteFile(filename);
     std::remove(stxxlFileName.c_str());
@@ -333,19 +334,19 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   IndexImpl index;
   index.createFromOnDiskIndex("_testindex2");
 
-  ASSERT_TRUE(index.PSO().metaData().col0IdExists(I(2)));
-  ASSERT_TRUE(index.PSO().metaData().col0IdExists(I(3)));
-  ASSERT_FALSE(index.PSO().metaData().col0IdExists(I(1)));
-  ASSERT_FALSE(index.PSO().metaData().col0IdExists(I(4)));
-  ASSERT_FALSE(index.PSO().metaData().getMetaData(I(2)).isFunctional());
-  ASSERT_TRUE(index.PSO().metaData().getMetaData(I(3)).isFunctional());
+  ASSERT_TRUE(index.PSO().metaData().col0IdExists(V(2)));
+  ASSERT_TRUE(index.PSO().metaData().col0IdExists(V(3)));
+  ASSERT_FALSE(index.PSO().metaData().col0IdExists(V(1)));
+  ASSERT_FALSE(index.PSO().metaData().col0IdExists(V(4)));
+  ASSERT_FALSE(index.PSO().metaData().getMetaData(V(2)).isFunctional());
+  ASSERT_TRUE(index.PSO().metaData().getMetaData(V(3)).isFunctional());
 
-  ASSERT_TRUE(index.POS().metaData().col0IdExists(I(2)));
-  ASSERT_TRUE(index.POS().metaData().col0IdExists(I(3)));
-  ASSERT_FALSE(index.POS().metaData().col0IdExists(I(1)));
-  ASSERT_FALSE(index.POS().metaData().col0IdExists(I(4)));
-  ASSERT_TRUE(index.POS().metaData().getMetaData(I(2)).isFunctional());
-  ASSERT_TRUE(index.POS().metaData().getMetaData(I(3)).isFunctional());
+  ASSERT_TRUE(index.POS().metaData().col0IdExists(V(2)));
+  ASSERT_TRUE(index.POS().metaData().col0IdExists(V(3)));
+  ASSERT_FALSE(index.POS().metaData().col0IdExists(V(1)));
+  ASSERT_FALSE(index.POS().metaData().col0IdExists(V(4)));
+  ASSERT_TRUE(index.POS().metaData().getMetaData(V(2)).isFunctional());
+  ASSERT_TRUE(index.POS().metaData().getMetaData(V(3)).isFunctional());
 
   ad_utility::deleteFile(filename);
   ad_utility::deleteFile("_testindex2.index.pso");
@@ -389,10 +390,10 @@ TEST(IndexTest, scanTest) {
 
     index.scan("<b>", &wtl, index._PSO);
     ASSERT_EQ(2u, wtl.size());
-    ASSERT_EQ(I(0u), wtl[0][0]);
-    ASSERT_EQ(I(4u), wtl[0][1]);
-    ASSERT_EQ(I(0u), wtl[1][0]);
-    ASSERT_EQ(I(5u), wtl[1][1]);
+    ASSERT_EQ(V(0u), wtl[0][0]);
+    ASSERT_EQ(V(4u), wtl[0][1]);
+    ASSERT_EQ(V(0u), wtl[1][0]);
+    ASSERT_EQ(V(5u), wtl[1][1]);
     wtl.clear();
     index.scan("<x>", &wtl, index._PSO);
     ASSERT_EQ(0u, wtl.size());
@@ -402,10 +403,10 @@ TEST(IndexTest, scanTest) {
 
     index.scan("<b>", &wtl, index._POS);
     ASSERT_EQ(2u, wtl.size());
-    ASSERT_EQ(I(4u), wtl[0][0]);
-    ASSERT_EQ(I(0u), wtl[0][1]);
-    ASSERT_EQ(I(5u), wtl[1][0]);
-    ASSERT_EQ(I(0u), wtl[1][1]);
+    ASSERT_EQ(V(4u), wtl[0][0]);
+    ASSERT_EQ(V(0u), wtl[0][1]);
+    ASSERT_EQ(V(5u), wtl[1][0]);
+    ASSERT_EQ(V(0u), wtl[1][1]);
     wtl.clear();
     index.scan("<x>", &wtl, index._POS);
     ASSERT_EQ(0u, wtl.size());
@@ -415,15 +416,15 @@ TEST(IndexTest, scanTest) {
 
     index.scan("<b>", "<a>", &wol, index._PSO);
     ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(I(4u), wol[0][0]);
-    ASSERT_EQ(I(5u), wol[1][0]);
+    ASSERT_EQ(V(4u), wol[0][0]);
+    ASSERT_EQ(V(5u), wol[1][0]);
     wol.clear();
     index.scan("<b>", "<c>", &wol, index._PSO);
     ASSERT_EQ(0u, wol.size());
 
     index.scan("<b2>", "<c2>", &wol, index._POS);
     ASSERT_EQ(1u, wol.size());
-    ASSERT_EQ(I(1u), wol[0][0]);
+    ASSERT_EQ(V(1u), wol[0][0]);
   }
 
   ad_utility::deleteFile(filename);
@@ -450,13 +451,16 @@ TEST(IndexTest, scanTest) {
   // 6: c
   // 7: is-a
   // 8: ql:langtag
-  f2 << "<a>\t<is-a>\t<1>\t.\n"
-        "<a>\t<is-a>\t<2>\t.\n"
-        "<a>\t<is-a>\t<0>\t.\n"
-        "<b>\t<is-a>\t<3>\t.\n"
-        "<b>\t<is-a>\t<0>\t.\n"
-        "<c>\t<is-a>\t<1>\t.\n"
-        "<c>\t<is-a>\t<2>\t.\n";
+  std::string kb =
+      "<a>\t<is-a>\t<1>\t.\n"
+      "<a>\t<is-a>\t<2>\t.\n"
+      "<a>\t<is-a>\t<0>\t.\n"
+      "<b>\t<is-a>\t<3>\t.\n"
+      "<b>\t<is-a>\t<0>\t.\n"
+      "<c>\t<is-a>\t<1>\t.\n"
+      "<c>\t<is-a>\t<2>\t.\n";
+
+  f2 << kb;
   f2.close();
 
   {
@@ -465,86 +469,64 @@ TEST(IndexTest, scanTest) {
       index.setOnDiskBase("_testindex");
       index.createFromFile<TurtleParserAuto>(filename);
     }
-    IndexImpl index;
-    index.createFromOnDiskIndex("_testindex");
+    const IndexImpl& index =
+        ad_utility::testing::getQec(kb)->getIndex().getImpl();
+    // IndexImpl index;
+    // index.createFromOnDiskIndex("_testindex");
 
     IdTable wol(1, makeAllocator());
     IdTable wtl(2, makeAllocator());
 
+    auto getId = [&](const std::string& el) {
+      Id id;
+      bool success = index.getId(el, &id);
+      AD_CHECK(success);
+      return id;
+    };
+    Id a = getId("<a>");
+    Id b = getId("<b>");
+    Id c = getId("<c>");
+    Id zero = getId("<0>");
+    Id one = getId("<1>");
+    Id two = getId("<2>");
+    Id three = getId("<3>");
+    Id isA = getId("<is-a>");
+
     index.scan("<is-a>", &wtl, index._PSO);
-    ASSERT_EQ(7u, wtl.size());
-    ASSERT_EQ(I(4u), wtl[0][0]);
-    ASSERT_EQ(I(0u), wtl[0][1]);
-    ASSERT_EQ(I(4u), wtl[1][0]);
-    ASSERT_EQ(I(1u), wtl[1][1]);
-    ASSERT_EQ(I(4u), wtl[2][0]);
-    ASSERT_EQ(I(2u), wtl[2][1]);
-    ASSERT_EQ(I(5u), wtl[3][0]);
-    ASSERT_EQ(I(0u), wtl[3][1]);
-    ASSERT_EQ(I(5u), wtl[4][0]);
-    ASSERT_EQ(I(3u), wtl[4][1]);
-    ASSERT_EQ(I(6u), wtl[5][0]);
-    ASSERT_EQ(I(1u), wtl[5][1]);
-    ASSERT_EQ(I(6u), wtl[6][0]);
-    ASSERT_EQ(I(2u), wtl[6][1]);
+
+    ASSERT_EQ(wtl, makeIdTableFromVector({{{a, zero},
+                                           {a, one},
+                                           {a, two},
+                                           {b, zero},
+                                           {b, three},
+                                           {c, one},
+                                           {c, two}}}));
 
     index.scan("<is-a>", &wtl, index._POS);
-    ASSERT_EQ(7u, wtl.size());
-    ASSERT_EQ(I(0u), wtl[0][0]);
-    ASSERT_EQ(I(4u), wtl[0][1]);
-    ASSERT_EQ(I(0u), wtl[1][0]);
-    ASSERT_EQ(I(5u), wtl[1][1]);
-    ASSERT_EQ(I(1u), wtl[2][0]);
-    ASSERT_EQ(I(4u), wtl[2][1]);
-    ASSERT_EQ(I(1u), wtl[3][0]);
-    ASSERT_EQ(I(6u), wtl[3][1]);
-    ASSERT_EQ(I(2u), wtl[4][0]);
-    ASSERT_EQ(I(4u), wtl[4][1]);
-    ASSERT_EQ(I(2u), wtl[5][0]);
-    ASSERT_EQ(I(6u), wtl[5][1]);
-    ASSERT_EQ(I(3u), wtl[6][0]);
-    ASSERT_EQ(I(5u), wtl[6][1]);
+    ASSERT_EQ(wtl, makeIdTableFromVector({{zero, a},
+                                          {zero, b},
+                                          {one, a},
+                                          {one, c},
+                                          {two, a},
+                                          {two, c},
+                                          {three, b}}));
 
-    index.scan("<is-a>", "<0>", &wol, index._POS);
-    ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(I(4u), wol[0][0]);
-    ASSERT_EQ(I(5u), wol[1][0]);
+    // TODO<joka921> Maybe we need this globally, and add a `source_location`.
+    auto testWidthOne = [&](const std::string& c0, const std::string& c1,
+                            const auto& permutation,
+                            const std::vector<std::vector<Id>>& expected) {
+      wol.clear();
+      index.scan(c0, c1, &wol, permutation);
+      ASSERT_EQ(wol, makeIdTableFromVector(expected));
+    };
 
-    wol.clear();
-    index.scan("<is-a>", "<1>", &wol, index._POS);
-    ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(I(4u), wol[0][0]);
-    ASSERT_EQ(I(6u), wol[1][0]);
-
-    wol.clear();
-    index.scan("<is-a>", "<2>", &wol, index._POS);
-    ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(I(4u), wol[0][0]);
-    ASSERT_EQ(I(6u), wol[1][0]);
-
-    wol.clear();
-    index.scan("<is-a>", "<3>", &wol, index._POS);
-    ASSERT_EQ(1u, wol.size());
-    ASSERT_EQ(I(5u), wol[0][0]);
-
-    wol.clear();
-    index.scan("<is-a>", "<a>", &wol, index._PSO);
-    ASSERT_EQ(3u, wol.size());
-    ASSERT_EQ(I(0u), wol[0][0]);
-    ASSERT_EQ(I(1u), wol[1][0]);
-    ASSERT_EQ(I(2u), wol[2][0]);
-
-    wol.clear();
-    index.scan("<is-a>", "<b>", &wol, index._PSO);
-    ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(I(0u), wol[0][0]);
-    ASSERT_EQ(I(3u), wol[1][0]);
-
-    wol.clear();
-    index.scan("<is-a>", "<c>", &wol, index._PSO);
-    ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(I(1u), wol[0][0]);
-    ASSERT_EQ(I(2u), wol[1][0]);
+    testWidthOne("<is-a>", "<0>", index._POS, {{a}, {b}});
+    testWidthOne("<is-a>", "<1>", index._POS, {{a}, {c}});
+    testWidthOne("<is-a>", "<2>", index._POS, {{a}, {c}});
+    testWidthOne("<is-a>", "<3>", index._POS, {{b}});
+    testWidthOne("<is-a>", "<a>", index._PSO, {{zero}, {one}, {two}});
+    testWidthOne("<is-a>", "<b>", index._PSO, {{zero}, {three}});
+    testWidthOne("<is-a>", "<c>", index._PSO, {{one}, {two}});
   }
   ad_utility::deleteFile(filename);
   ad_utility::deleteFile(stxxlFileName);
