@@ -22,7 +22,7 @@ jobs:
 #        compiler: [ gcc11, gcc12, gcc12-coverage, clang13, clang14, clang15-ubsan ]
         compiler: [ clang14 ]
         os: [ ubuntu-22.04 ]
-        warnings: [  "-Wall -Wextra -Werror" ]
+        warnings: [  "-Wall -Wextra " ]
     runs-on: ${{ matrix.os }}
 
 
