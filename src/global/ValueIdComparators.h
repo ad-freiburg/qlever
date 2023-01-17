@@ -486,6 +486,7 @@ inline bool compareIds(int64_t a, ValueId b, Comparison comparison) {
   return compareIds(ValueId::makeFromInt(a), b, comparison);
 }
 
+
 }  // namespace valueIdComparators
 
 #endif  // QLEVER_VALUEIDCOMPARATORS_H
