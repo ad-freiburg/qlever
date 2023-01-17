@@ -78,10 +78,12 @@ jobs:
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} -t ValueIdComparatorsTest -- -j $(nproc)
     - name: Test
       working-directory: ${{github.workspace}}/build/test
+      env:
+        LLVM_PROFILE_FILE: "default%p.profraw"
       # Execute tests defined by the CMake configuration.
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      #run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{env.BUILD_TYPE}} -R ValueIdComparators. .
-      run: ./ValueIdComparatorsTest
+      run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{env.BUILD_TYPE}} -R ValueIdComparators. .
+      #run: ./ValueIdComparatorsTest
 
     - name: GetListOfExecutablesForCoverageInfo
       working-directory: ${{github.workspace}}/build/test
@@ -90,7 +92,7 @@ jobs:
       run: ctest --show-only=json-v1 > tests.json && python3 ${{github.workspace}}/misc/ctest-output-to-executables.py tests.json tests.txt
     - name: Process coverage info
       working-directory: ${{github.workspace}}/build/test
-      run: llvm-profdata-15 merge -sparse default.profraw -o default.profdata && llvm-cov-15 export --format=lcov --instr-profile ./default.profdata $(cat tests.txt) > ./coverage.lcov
+      run: llvm-profdata-15 merge -sparse *.profraw -o default.profdata && llvm-cov-15 export --format=lcov --instr-profile ./default.profdata $(cat tests.txt) > ./coverage.lcov
       if: matrix.compiler == 'clang14'
     - name: Submit to codecov.io
       if: matrix.compiler == 'clang14'
