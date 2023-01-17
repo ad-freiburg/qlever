@@ -61,7 +61,7 @@ int main() {
 
     // Print the top row of names, before doing anything else.
     for (const std::string& columnName: table.columnNames) {
-      visualization << columnName << "\t";
+      visualization << "\t" << columnName;
     }
 
     // Print the rows.
