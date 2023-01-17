@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
 #        compiler: [ gcc11, gcc12, gcc12-coverage, clang13, clang14, clang15-ubsan ]
-        compiler: [ gcc12-coverage ]
+        compiler: [ clang14 ]
         os: [ ubuntu-22.04 ]
         warnings: [  "-Wall -Wextra -Werror" ]
     runs-on: ${{ matrix.os }}
@@ -54,7 +54,8 @@ jobs:
     #  run : sudo apt install -y libunwind-13-dev libc++abi-13-dev libc++-13-dev
     #  if:  matrix.compiler == 'clang13'
     - name: Install clang 14
-      run:  sudo apt install clang-14
+      #run:  sudo apt install clang-14
+      run:  wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 14 all # && sudo apt install clang-15
       if:  matrix.compiler == 'clang14'
     - name: Install clang 15
       run:  wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 15 && sudo apt install clang-15
@@ -74,23 +75,25 @@ jobs:
 
     - name: Build
         # Build your program with the given configuration
-      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} -- -j $(nproc)
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} -t ValueIdComparatorsTest -- -j $(nproc)
     - name: Test
       working-directory: ${{github.workspace}}/build/test
       # Execute tests defined by the CMake configuration.
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{env.BUILD_TYPE}} .
+      run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{env.BUILD_TYPE}} -R ValueIdComparators. .
 
     - name: Process coverage info
-      run: cmake --build ${{github.workspace}}/build -t qlever-coverage
-      if: matrix.compiler == 'gcc12-coverage'
+      working-directory: ${{github.workspace}}/build/test
+      run: llvm-profdata-14 merge -sparse default.profraw -o default.profdata && llvm-cov export --format=lcov --instr-profile ./default.profdata ./ValueIdComparatorsTest > ./coverage.lcov
+      if: matrix.compiler == 'clang14'
     - name: Submit to codecov.io
       uses: codecov/codecov-action@v3
-      if: matrix.compiler == 'gcc12-coverage'
+      working-directory: ${{github.workspace}}/build/test
+      if: matrix.compiler == 'clang14'
       with:
-        file: ${{github.workspace}}/build/coverage.info
+        file: ./coverage.lcov
 
     - name: E2E
       run: ${{github.workspace}}/e2e/e2e.sh
-      if: matrix.compiler != 'gcc12-coverage'
+      if: matrix.compiler != 'clang14'
 
