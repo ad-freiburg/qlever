@@ -126,6 +126,7 @@ class BenchmarkRecords {
      *
      * @param tableDescriptor The identification of the table.
      * @param row, column Where in the tables to write the measured time.
+     *  Starts with (0,0).
      * @param functionToMeasure The function, that represents the benchmark.
      *  Most of the time a lambda, that calls the actual function to benchmark
      *  with the needed parameters.
