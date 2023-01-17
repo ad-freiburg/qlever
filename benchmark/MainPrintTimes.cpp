@@ -10,6 +10,32 @@
 #include "../benchmark/Benchmark.h"
 #include "../benchmark/util/MainFunctionHelperFunction.h"
 
+// These helper function are only usable inside this file. Should you want to
+// use them elsewhere, please move them to a helper file in util, to prevent
+// code duplication.
+namespace {
+
+/*
+ * @brief Add a string of the form
+ * "
+ *  #################
+ *  # categoryTitel #
+ *  #################
+ *
+ *  "
+ *  to the stringStream.
+ */
+void addCategoryTitelToStringstream(std::stringstream* stringStream,
+    const std::string categoryTitel){
+  // The bar above and below the titel.
+  const size_t barLength = categoryTitel.size() + 4;
+  const std::string bar(barLength, '#');
+
+  (*stringStream) << "\n" << bar << "\n# " << categoryTitel << " #\n" << bar << "\n";
+}
+
+}
+
 /*
  * @brief Goes through all types of registerd benchmarks, measures their time
  * and prints their measured time in a fitting format.
@@ -22,9 +48,7 @@ int main() {
   std::stringstream visualization;
 
   // Visualization for single measurments.
-  visualization << "################################\n"
-                << "# Single measurment benchmarks #\n"
-                << "################################\n";
+  addCategoryTitelToStringstream(&visualization, "Single measurment benchmarks");
   for (const BenchmarkRecords::RecordEntry& entry: records.getSingleMeasurments()) {
     visualization << "\nSingle measurment benchmark '" << entry.descriptor
                   << "' took " << entry.measuredTime << " seconds.";
@@ -33,9 +57,7 @@ int main() {
   visualization << "\n\n";
 
   // Visualization for groups.
-  visualization << "####################\n"
-                << "# Group benchmarks #\n"
-                << "####################";
+  addCategoryTitelToStringstream(&visualization, "Group benchmarks");
   for (const auto& entry: records.getGroups()) {
     const BenchmarkRecords::RecordGroup& group = entry.second;
     visualization << "\n\nGroup '" << group.descriptor << "':";
@@ -48,9 +70,7 @@ int main() {
   visualization << "\n\n";
 
   // Visualization for tables.
-  visualization << "####################\n"
-                << "# Table benchmarks #\n"
-                << "####################";
+  addCategoryTitelToStringstream(&visualization, "Table benchmarks");
   for (const auto& entry: records.getTables()) {
     const BenchmarkRecords::RecordTable& table = entry.second;
     visualization << "\n\nTable '" << table.descriptor << "':\n\n";
