@@ -7,9 +7,9 @@
 #include <algorithm>
 #include <cstdio>
 #include <fstream>
+#include <ranges>
 #include <sstream>
 #include <tuple>
-#include <ranges>
 
 #include "./GTestHelpers.h"
 #include "engine/CallFixedSize.h"
@@ -55,7 +55,7 @@ IdTable makeIdTableFromVector(const VectorTable& tableContent) {
     // std::ranges::copy(std::views::transform(row, I), result.back().begin());
     // as soon as our compilers supports it.
     result.emplace_back();
-    
+
     for (size_t c = 0; c < row.size(); c++) {
       result(backIndex, c) = I(row[c]);
     }
@@ -89,7 +89,8 @@ void compareIdTableWithExpectedContent(
   auto writeIdTableToStream = [&traceMessage](const IdTable& idTable) {
     std::ranges::for_each(idTable,
                           [&traceMessage](const auto& row) {
-                            //TODO<C++23> Use std::views::join_with for both loops.
+                            // TODO<C++23> Use std::views::join_with for both
+                            // loops.
                             for (size_t i = 0; i < row.numColumns(); i++) {
                               traceMessage << row[i] << " ";
                             }

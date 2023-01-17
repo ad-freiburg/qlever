@@ -135,7 +135,9 @@ void runTestCasesForAllJoinAlgorithms(
   // For sorting IdTableAndJoinColumn by their join column.
   auto sortByJoinColumn = [](IdTableAndJoinColumn& idTableAndJC) {
     std::ranges::sort(idTableAndJC.idTable, {},
-        [&idTableAndJC](const auto& row){return row[idTableAndJC.joinColumn];});
+                      [&idTableAndJC](const auto& row) {
+                        return row[idTableAndJC.joinColumn];
+                      });
   };
 
   // Random shuffle both tables, run hashJoin, check result.
