@@ -269,10 +269,12 @@ void CompressedRelationMetaData::scan(
     return endBeforeBegin;
   };
 
-  auto [beginBlock, endBlock] =
+  auto [beginBlockI, endBlockI] =
       std::equal_range(permutation._meta.blockData().begin(),
                        permutation._meta.blockData().end(),
                        KeyLhs{col0Id, col0Id, col1Id, col1Id}, comp);
+  auto beginBlock = beginBlockI;
+  auto endBlock = endBlockI;
 
   // Invariant: The col0Id is completely stored in a single block, or it is
   // contained in multiple blocks that only contain this col0Id,
