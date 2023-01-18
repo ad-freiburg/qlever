@@ -17,7 +17,7 @@ jobs:
       matrix:
         compiler: [gcc, clang]
         compiler-version: [11, 12, 13, 14, 15]
-        warnings: [  "-Wall -Wextra " ]
+        warnings: [  "-Wall -Wextra -Werror " ]
         build-type: [Release]
         is-coverage: [false]
         exclude:
@@ -40,6 +40,9 @@ jobs:
           - compiler: clang
             compiler-version: 15
             build-type: Debug
+            warnings: [  "-Wall -Wextra " ]
+            asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
+            ubsan-flags: " -fsanitize=undefined"
             coverage-flags: "-fprofile-instr-generate -fcoverage-mapping"
             is-coverage: true
             # TODO<joka921> This currently creates a new configuration anyway,
@@ -75,7 +78,7 @@ jobs:
     #  run : sudo apt install -y libunwind-13-dev libc++abi-13-dev libc++-13-dev
     #  if:  matrix.compiler == 'clang13'
     - name: Install clang 14
-      run:  wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 14 && sudo apt install clang-14
+      run : sudo apt install clang-14
       if :  matrix.compiler == 'clang' && matrix.compiler-version == 14
     - name: Install clang 15
       run:  wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 15 all # && sudo apt install clang-15
