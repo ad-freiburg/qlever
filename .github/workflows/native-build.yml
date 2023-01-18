@@ -46,11 +46,13 @@ jobs:
             coverage-flags: "-fprofile-instr-generate -fcoverage-mapping"
             ubsan-flags: ""
             is-coverage: True
+            # TODO<joka921> This currently creates a new configuration anyway,
+            # so we can simplify the whole other stuff.
 
 
 
-    runs-on: ${{ matrix.os }}
-    #runs-on: ubuntu-22.04
+    #runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-22.04
 
 
     steps:
