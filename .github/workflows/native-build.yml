@@ -129,5 +129,5 @@ jobs:
 
     - name: E2E
       run: ${{github.workspace}}/e2e/e2e.sh
-      if: !matrix.is-coverage
+      if: matrix.is-coverage != true
 
