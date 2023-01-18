@@ -42,15 +42,15 @@ jobs:
             ubsan-flags: " -fsanitize=undefined"
           - compiler: clang
             compiler-version: 15
-            build-type: [Debug]
+            build-type: Debug
             coverage-flags: "-fprofile-instr-generate -fcoverage-mapping"
             ubsan-flags: ""
             is-coverage: True
 
 
 
-    #runs-on: ${{ matrix.os }}
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
+    #runs-on: ubuntu-22.04
 
 
     steps:
