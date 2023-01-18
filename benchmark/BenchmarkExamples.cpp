@@ -69,17 +69,23 @@ void BM_Tables(BenchmarkRecords* records) {
   };
 
   // Measuring functions.
-  records->addTable("Exponents with basis 2", {"2"}, {"0", "1", "2", "3", "4"});
-  records->addTable("Exponents with basis 3", {"3"}, {"0", "1", "2", "3", "4"});
+  records->addTable("Exponents with the given basis", {"2", "3"}, {"0", "1", "2", "3", "4"});
+  records->addTable("Adding exponents", {"2^10", "2^11"}, {"2^10", "2^11"});
 
   for (int i = 0; i < 5; i++) {
-    records->addToExistingTable("Exponents with basis 2", 0, i,
+    records->addToExistingTable("Exponents with the given basis", 0, i,
         [&](){exponentiateNTimes(2,i);});
   }
-
   for (int i = 0; i < 5; i++) {
-    records->addToExistingTable("Exponents with basis 3", 0, i,
+    records->addToExistingTable("Exponents with the given basis", 1, i,
         [&](){exponentiateNTimes(3,i);});
+  }
+
+  for (int row = 0; row < 2; row++) {
+    for (int column = 0; column < 2; column++) {
+      records->addToExistingTable("Adding exponents", row, column,
+          [&](){exponentiateNTimes(2, row+10)+exponentiateNTimes(2, column+10);});
+    }
   }
 }
 
