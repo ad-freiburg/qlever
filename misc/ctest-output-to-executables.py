@@ -3,9 +3,10 @@
 #  // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 """
-This scrip takes the output of `ctest --show-only=json-v1` and extracts the names of the binaries that
-have to be executed to run the tests. It writes the output to a file where each second line is "-object"
-An example output might be
+This script takes the output of `ctest --show-only=json-v1` and extracts the
+names of the binaries that have to be executed to run the tests. It writes
+the output to a file where each second line is "-object" An example output
+might be
 
 /path/to/tests/firstTestBinary
 -object
@@ -38,8 +39,3 @@ with open(sys.argv[2], "w") as out_file:
             print("-object", file=out_file)
         print(command, file=out_file)
         first = False
-
-
-
-
-
