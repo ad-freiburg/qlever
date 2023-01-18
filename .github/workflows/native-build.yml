@@ -99,7 +99,7 @@ jobs:
 
     - name: Build
         # Build your program with the given configuration
-      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} -t ValueIdComparatorsTest -- -j $(nproc)
+      run: cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -t ValueIdComparatorsTest -- -j $(nproc)
     - name: Test
       working-directory: ${{github.workspace}}/build/test
       env:
