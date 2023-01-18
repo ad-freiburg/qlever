@@ -2,11 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (January of 2023, schlegea@informatik.uni-freiburg.de)
 #include "../benchmark/Benchmark.h"
+#include "util/Random.h"
 
 // Single Measurments
 void BM_SingeMeasurments(BenchmarkRecords* records) {
   // Setup.
-  const size_t number = 10;
+  const size_t number = SlowRandomIntGenerator<size_t>(10,20)();
   auto exponentiate = [](const size_t number){
     return number*number;
   };
@@ -15,7 +16,7 @@ void BM_SingeMeasurments(BenchmarkRecords* records) {
   records->addSingleMeasurment("Exponentiate once", [&](){exponentiate(number);});
   records->addSingleMeasurment("Recursivly exponentiate ten times", [&](){
         size_t to_exponentiate = number;
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 10000000; i++) {
           to_exponentiate = exponentiate(to_exponentiate);
         }
       });

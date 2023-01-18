@@ -47,4 +47,4 @@ addAndLinkBenchmarkWithPrintAverageTime(SortedJoinBenchmarkPrintAverage SortedJo
 
 addAndLinkBenchmarkWithPrintAverageTime(UnsortedJoinBenchmarkPrintAverage UnsortedJoinBenchmark engine)
 
-addAndLinkBenchmarkWithPrintTimes(BasicBenchmark BasicBenchmark)
+addAndLinkBenchmarkWithPrintTimes(BenchmarkExamples BenchmarkExamples)
