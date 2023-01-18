@@ -264,7 +264,7 @@ add_subdirectory(src/engine)
 target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
 add_subdirectory(src/index)
 add_subdirectory(src/util)
-add_subdirectory(benchmark) # TODO Part of trying to integrate benchmarks.
+add_subdirectory(benchmark)
 enable_testing()
 add_subdirectory(test)
 
