@@ -52,16 +52,26 @@ int main() {
   auto addCategoryBreak = [](std::stringstream* stringStream){(*stringStream) << "\n\n";};
 
   // Default conversion from BenchmarkRecords::RecordEntry to string.
-  auto recordEntryToString = [](const BenchmarkRecords::RecordEntry& recordEntry){
+  auto recordEntryToString = [](const BenchmarkRecords::RecordEntry& recordEntry)->std::string{
     return "'" + recordEntry.descriptor + "' took " +
       std::to_string(recordEntry.measuredTime) + " seconds.";
   };
 
+  // Default way of adding a vector of RecordEntrys to a stringstream with
+  // optional prefix.
+  auto addVectorOfRecordEntry = [&recordEntryToString](
+      std::stringstream* stringStream,
+      const std::vector<BenchmarkRecords::RecordEntry>& entries,
+      const std::string& prefix = "") {
+    for (const BenchmarkRecords::RecordEntry& entry: entries) {
+      (*stringStream) << "\n" << prefix << recordEntryToString(entry);
+    }
+  };
+
   // Visualization for single measurments.
   addCategoryTitelToStringstream(&visualization, "Single measurment benchmarks");
-  for (const BenchmarkRecords::RecordEntry& entry: records.getSingleMeasurments()) {
-    visualization << "\nSingle measurment benchmark " << recordEntryToString(entry);
-  }
+  addVectorOfRecordEntry(&visualization, records.getSingleMeasurments(),
+      "Single measurment benchmark ");
 
   addCategoryBreak(&visualization);
 
@@ -70,9 +80,7 @@ int main() {
   for (const auto& entry: records.getGroups()) {
     const BenchmarkRecords::RecordGroup& group = entry.second;
     visualization << "\n\nGroup '" << group.descriptor << "':";
-    for (const BenchmarkRecords::RecordEntry& groupEntry: group.entries) {
-      visualization << "\n\t" << recordEntryToString(groupEntry);
-    }
+    addVectorOfRecordEntry(&visualization, group.entries, "\t");
   }
 
   addCategoryBreak(&visualization);
