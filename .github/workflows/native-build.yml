@@ -17,13 +17,10 @@ jobs:
       matrix:
         compiler: [gcc, clang]
         compiler-version: [11, 12, 13, 14, 15]
-        os: [ ubuntu-22.04 ]
         warnings: [  "-Wall -Wextra " ]
-        build-type: [Release, Debug]
-        is-coverage: [True, False]
+        build-type: Release]
+        is-coverage: False
         exclude:
-          - is-coverage: True
-          - build-type: Debug
           - compiler: gcc
             compiler-version: 13
           - compiler: gcc
@@ -44,7 +41,6 @@ jobs:
             compiler-version: 15
             build-type: Debug
             coverage-flags: "-fprofile-instr-generate -fcoverage-mapping"
-            ubsan-flags: ""
             is-coverage: True
             # TODO<joka921> This currently creates a new configuration anyway,
             # so we can simplify the whole other stuff.
@@ -106,7 +102,7 @@ jobs:
         LLVM_PROFILE_FILE: "default%p.profraw"
       # Execute tests defined by the CMake configuration.
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{env.BUILD_TYPE}} -R ValueIdComparators. .
+      run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} -R ValueIdComparators. .
       #run: ./ValueIdComparatorsTest
 
     - name: GetListOfExecutablesForCoverageInfo
