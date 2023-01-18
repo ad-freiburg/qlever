@@ -5,7 +5,7 @@
 """
 This script takes the output of `ctest --show-only=json-v1` and extracts the
 names of the binaries that have to be executed to run the tests. It writes
-the output to a file where each second line is "-object" An example output
+the output to a file where each second line is "-object". An example output
 might be
 
 /path/to/tests/firstTestBinary

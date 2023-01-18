@@ -37,7 +37,7 @@ jobs:
           - compiler: clang
             compiler-version: 15
             ubsan-flags: " -fsanitize=undefined"
-          # note: the following configuration is completely redefined from scratch.:w
+          # note: the following configuration is completely redefined from scratch.
           - compiler: clang
             compiler-version: 15
             build-type: Debug
