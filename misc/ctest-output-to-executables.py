@@ -13,8 +13,13 @@ with open(sys.argv[1], "r") as f:
                 commands.add(test["command"][0])
 
 with open(sys.argv[2], "w") as out_file:
+    first = True
     for command in commands:
+        if (not first):
+            # This is required by the llvm-cov binary.
+            print("-object", file=out_file)
         print(command, file=out_file)
+        first = False
 
 
 
