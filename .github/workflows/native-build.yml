@@ -17,8 +17,6 @@ jobs:
       matrix:
         compiler: [gcc, clang]
         compiler-version: [11, 12, 13, 14, 15]
-#       compiler: [ gcc11, gcc12, gcc12-coverage, clang13, clang14, clang15-ubsan ]
-        #compiler: [ clang14 ]
         os: [ ubuntu-22.04 ]
         warnings: [  "-Wall -Wextra " ]
         build-type: [Release, Debug]
@@ -51,7 +49,8 @@ jobs:
 
 
 
-    runs-on: ${{ matrix.os }}
+    #runs-on: ${{ matrix.os }}
+    runs-on: ${{ ubuntu-22.04 }}
 
 
     steps:
