@@ -18,8 +18,8 @@ jobs:
         compiler: [gcc, clang]
         compiler-version: [11, 12, 13, 14, 15]
         warnings: [  "-Wall -Wextra " ]
-        build-type: "Release"
-        is-coverage: False
+        build-type: [Release]
+        is-coverage: [False]
         exclude:
           - compiler: gcc
             compiler-version: 13
