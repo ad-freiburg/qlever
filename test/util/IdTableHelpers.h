@@ -37,11 +37,13 @@ auto I = [](const auto& id) {
 using VectorTable = std::vector<std::vector<size_t>>;
 
 /*
- * Return an 'IdTable' with the given 'tableContent'. all rows must have the
+ * Return an 'IdTable' with the given 'tableContent' by applying the
+ * `transformation` to each of them. All rows of `tableContent` must have the
  * same length.
  */
+template <typename Transformation = decltype(I)>
 IdTable makeIdTableFromVector(const VectorTable& tableContent,
-                              auto transformation = I) {
+                              Transformation transformation = {}) {
   if (tableContent.empty()) {
     return IdTable{allocator()};
   }
@@ -65,7 +67,7 @@ IdTable makeIdTableFromVector(const VectorTable& tableContent,
   return result;
 }
 
-IdTable makeIdTableFromVector(
+IdTable makeIdTableFromIdVector(
     const std::vector<std::vector<Id>>& tableContent) {
   if (tableContent.empty()) {
     return IdTable{allocator()};

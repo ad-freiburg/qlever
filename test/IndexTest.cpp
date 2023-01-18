@@ -16,8 +16,8 @@
 
 using namespace ad_utility::testing;
 
-auto V = [](auto id) { return Id::makeFromVocabIndex(VocabIndex::make(id)); };
-
+// Return a lambda that takes a string and converts it into an ID by looking
+// it up in the vocabulary of `index`.
 auto makeGetId = [](const IndexImpl& index) {
   return [&index](const std::string& el) {
     Id id;
@@ -27,22 +27,30 @@ auto makeGetId = [](const IndexImpl& index) {
   };
 };
 
+// Return a lambda that runs a scan for two fixed elements `c0` and `c1`
+// on the `permutation` (e.g. a fixed P and S in the PSO permutation)
+// of the `index` and checks whether the result of the
+// scan matches `expected`.
 auto makeTestWidthOne = [](const IndexImpl& index) {
   return [&index](const std::string& c0, const std::string& c1,
                   const auto& permutation,
                   const std::vector<std::vector<Id>>& expected) {
     IdTable wol(1, makeAllocator());
     index.scan(c0, c1, &wol, permutation);
-    ASSERT_EQ(wol, makeIdTableFromVector(expected));
+    ASSERT_EQ(wol, makeIdTableFromIdVector(expected));
   };
 };
 
+// Return a lambda that runs a scan for a fixed element `c0`
+// on the `permutation` (e.g. a fixed P in the PSO permutation)
+// of the `index` and checks whether the result of the
+// scan matches `expected`.
 auto makeTestWidthTwo = [](const IndexImpl& index) {
   return [&index](const std::string& c0, const auto& permutation,
                   const std::vector<std::vector<Id>>& expected) {
     IdTable wol(2, makeAllocator());
     index.scan(c0, &wol, permutation);
-    ASSERT_EQ(wol, makeIdTableFromVector(expected));
+    ASSERT_EQ(wol, makeIdTableFromIdVector(expected));
   };
 };
 
@@ -68,7 +76,8 @@ TEST(IndexTest, createFromTurtleTest) {
     ASSERT_TRUE(index._PSO.metaData().col0IdExists(b2));
     ASSERT_FALSE(index._PSO.metaData().col0IdExists(a));
     ASSERT_FALSE(index._PSO.metaData().col0IdExists(c));
-    ASSERT_FALSE(index._PSO.metaData().col0IdExists(V(735)));
+    ASSERT_FALSE(index._PSO.metaData().col0IdExists(
+        Id::makeFromVocabIndex(VocabIndex::make(735))));
     ASSERT_FALSE(index._PSO.metaData().getMetaData(b).isFunctional());
     ASSERT_TRUE(index._PSO.metaData().getMetaData(b2).isFunctional());
 
