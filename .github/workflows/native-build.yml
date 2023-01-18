@@ -6,23 +6,48 @@ on:
   pull_request:
     branches: [ master ]
 
-env:
-  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
-  BUILD_TYPE: Release
-
 jobs:
   build:
-    # The CMake configure and build commands are platform agnostic and should work equally
+    # The CMake configure and build commands are platform-agnostic and should work equally
     # well on Windows or Mac.  You can convert this to a matrix build if you need
     # cross-platform coverage.
     # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
     strategy:
       fail-fast: false
       matrix:
-        compiler: [ gcc11, gcc12, clang13, clang14, clang15-ubsan ]
-        os: [ ubuntu-22.04 ]
-        warnings: [  "-Wall -Wextra -Werror" ]
-    runs-on: ${{ matrix.os }}
+        compiler: [gcc, clang]
+        compiler-version: [11, 12, 13, 14, 15]
+        warnings: [  "-Wall -Wextra -Werror " ]
+        build-type: [Release]
+        is-coverage: [false]
+        exclude:
+          - compiler: gcc
+            compiler-version: 13
+          - compiler: gcc
+            compiler-version: 14
+          - compiler: gcc
+            compiler-version: 15
+          - compiler: clang
+            compiler-version: 11
+          - compiler: clang
+            compiler-version: 12
+        include:
+          - compiler: clang
+            asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
+          - compiler: clang
+            compiler-version: 15
+            ubsan-flags: " -fsanitize=undefined"
+          # note: the following configuration is completely redefined from scratch.
+          - compiler: clang
+            compiler-version: 15
+            build-type: Debug
+            warnings: "-Wall -Wextra "
+            asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
+            ubsan-flags: " -fsanitize=undefined"
+            coverage-flags: "-fprofile-instr-generate -fcoverage-mapping"
+            is-coverage: true
+
+    runs-on: ubuntu-22.04
 
 
     steps:
@@ -30,31 +55,27 @@ jobs:
 
     - name: Install dependencies
       run:  sudo apt update && sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
-    - name: Install boost Ubuntu 20.04
-      run : sudo add-apt-repository -y ppa:mhier/libboost-latest && sudo apt update && sudo apt install -y libboost1.74-dev
-      if : matrix.os == 'ubuntu-20.04'
     - name: Install boost Ubuntu 22.04
       run : sudo apt update && sudo apt install -y libboost-all-dev
-      if :  matrix.os == 'ubuntu-22.04'
     - name: Install gcc 11
       run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-11 g++-11
-      if :  matrix.compiler != 'gcc12'
+      if :  matrix.compiler == 'gcc' && matrix.compiler-version == 11
     - name: Install gcc 12
-      run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-11 g++-12
-      if :  matrix.compiler  == 'gcc12'
+      run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-12 g++-12
+      if :  matrix.compiler == 'gcc' && matrix.compiler-version == 12
     - name: Install clang 13
       run:  sudo apt install clang-13
-      if:  matrix.compiler == 'clang13'
+      if :  matrix.compiler == 'clang' && matrix.compiler-version == 13
     # Currently not needed, because we are not building against libc++
     #- name: Install libc++-13
     #  run : sudo apt install -y libunwind-13-dev libc++abi-13-dev libc++-13-dev
     #  if:  matrix.compiler == 'clang13'
     - name: Install clang 14
-      run:  sudo apt install clang-14
-      if:  matrix.compiler == 'clang14'
+      run : sudo apt install clang-14
+      if :  matrix.compiler == 'clang' && matrix.compiler-version == 14
     - name: Install clang 15
-      run:  wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 15 && sudo apt install clang-15
-      if:  matrix.compiler == 'clang15-ubsan'
+      run:  wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 15 all # && sudo apt install clang-15
+      if :  matrix.compiler == 'clang' && matrix.compiler-version == 15
 
     - name: Python dependencies
       run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
@@ -66,17 +87,34 @@ jobs:
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_TOOLCHAIN_FILE=$(pwd)/toolchains/${{matrix.compiler}}.cmake -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}} ${{matrix.coverage-flags}}" -DADDITIONAL_LINKER_FLAGS="${{matrix.coverage-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false
 
     - name: Build
         # Build your program with the given configuration
-      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} -- -j $(nproc)
+      run: cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- -j $(nproc)
     - name: Test
-      working-directory: ${{github.workspace}}/build
+      working-directory: ${{github.workspace}}/build/test
+      env:
+        LLVM_PROFILE_FILE: "default%p.profraw"
       # Execute tests defined by the CMake configuration.
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{env.BUILD_TYPE}}
+      run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} .
+
+    - name: GetListOfExecutablesForCoverageInfo
+      working-directory: ${{github.workspace}}/build/test
+      if: matrix.is-coverage
+      run: ctest --show-only=json-v1 > tests.json && python3 ${{github.workspace}}/misc/ctest-output-to-executables.py tests.json tests.txt
+    - name: Process coverage info
+      working-directory: ${{github.workspace}}/build/test
+      run: llvm-profdata-15 merge -sparse *.profraw -o default.profdata && xargs -a tests.txt llvm-cov-15 export --format=lcov --instr-profile ./default.profdata > ./coverage.lcov
+      if: matrix.is-coverage
+    - name: Submit to codecov.io
+      if: matrix.is-coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ${{github.workspace}}/build/test/coverage.lcov
 
     - name: E2E
       run: ${{github.workspace}}/e2e/e2e.sh
+      if: matrix.is-coverage != true
 

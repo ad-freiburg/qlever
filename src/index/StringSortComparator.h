@@ -16,9 +16,9 @@
 #include <cstring>
 #include <memory>
 
-#include "../global/Constants.h"
-#include "../util/Exception.h"
-#include "../util/StringUtils.h"
+#include "global/Constants.h"
+#include "util/Exception.h"
+#include "util/StringUtils.h"
 
 /**
  * @brief This class wraps all calls to the ICU library that are required by

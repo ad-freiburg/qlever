@@ -49,7 +49,12 @@ void CompressedRelationMetaData::scan(
     Id _col0FirstId;
     Id _col0LastId;
   };
-  auto [beginBlock, endBlock] = std::equal_range(
+  // TODO<joka921, Clang16> Use a structured binding. Structured bindings are
+  // currently not supported by clang when using OpenMP because clang internally
+  // transforms the `#pragma`s into lambdas, and capturing structured bindings
+  // is only supported in clang >= 16.
+  decltype(permutation._meta.blockData().begin()) beginBlock, endBlock;
+  std::tie(beginBlock, endBlock) = std::equal_range(
       permutation._meta.blockData().begin(),
       permutation._meta.blockData().end(), KeyLhs{col0Id, col0Id},
       [](const auto& a, const auto& b) {
@@ -266,7 +271,10 @@ void CompressedRelationMetaData::scan(
     return endBeforeBegin;
   };
 
-  auto [beginBlock, endBlock] =
+  // Note: See the comment in the other overload for `scan` above for the
+  // reason why we (currently) can't use a structured binding here.
+  decltype(permutation._meta.blockData().begin()) beginBlock, endBlock;
+  std::tie(beginBlock, endBlock) =
       std::equal_range(permutation._meta.blockData().begin(),
                        permutation._meta.blockData().end(),
                        KeyLhs{col0Id, col0Id, col1Id, col1Id}, comp);
