@@ -19,7 +19,7 @@ jobs:
         compiler-version: [11, 12, 13, 14, 15]
         warnings: [  "-Wall -Wextra " ]
         build-type: [Release]
-        is-coverage: [False]
+        is-coverage: [false]
         exclude:
           - compiler: gcc
             compiler-version: 13
@@ -41,7 +41,7 @@ jobs:
             compiler-version: 15
             build-type: Debug
             coverage-flags: "-fprofile-instr-generate -fcoverage-mapping"
-            is-coverage: True
+            is-coverage: true
             # TODO<joka921> This currently creates a new configuration anyway,
             # so we can simplify the whole other stuff.
 
@@ -58,7 +58,7 @@ jobs:
       run:  sudo apt update && sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
     - name: Install Lcov
       run : sudo apt-get update -q && sudo apt-get install lcov -q -y
-      if: matrix.is-coverage == 'True'
+      if :  matrix.is-coverage
     - name: Install boost Ubuntu 22.04
       run : sudo apt update && sudo apt install -y libboost-all-dev
     - name: Install gcc 11
@@ -107,7 +107,7 @@ jobs:
 
     - name: GetListOfExecutablesForCoverageInfo
       working-directory: ${{github.workspace}}/build/test
-      if: matrix.is-coverage == 'True'
+      if: matrix.is-coverage
       # Execute tests defined by the CMake configuration.
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
       run: ctest --show-only=json-v1 > tests.json && python3 ${{github.workspace}}/misc/ctest-output-to-executables.py tests.json tests.txt
@@ -116,18 +116,18 @@ jobs:
       # Execute tests defined by the CMake configuration.
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
       run: wc -l tests.txt && cat tests.txt && echo *.profraw
-      if: matrix.is-coverage == 'True'
+      if: matrix.is-coverage
     - name: Process coverage info
       working-directory: ${{github.workspace}}/build/test
       run: llvm-profdata-15 merge -sparse *.profraw -o default.profdata && xargs -a tests.txt llvm-cov-15 export --format=lcov --instr-profile ./default.profdata > ./coverage.lcov
-      if: matrix.is-coverage == 'True'
+      if: matrix.is-coverage
     - name: Submit to codecov.io
-      if: matrix.is-coverage == 'True'
+      if: matrix.is-coverage
       uses: codecov/codecov-action@v3
       with:
         file: ${{github.workspace}}/build/test/coverage.lcov
 
     - name: E2E
       run: ${{github.workspace}}/e2e/e2e.sh
-      if: matrix.is-coverage == 'False'
+      if: !matrix.is-coverage
 
