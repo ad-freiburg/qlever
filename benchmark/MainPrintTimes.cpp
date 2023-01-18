@@ -3,6 +3,8 @@
 // Author: Andre Schlegel (November of 2022, schlegea@informatik.uni-freiburg.de)
 
 #include <iostream>
+#include <ios>
+#include <iomanip>
 #include <sstream>
 #include <algorithm>
 #include <vector>
@@ -87,24 +89,69 @@ int main() {
 
   // Visualization for tables.
   addCategoryTitelToStringstream(&visualization, "Table benchmarks");
+
+  // Used for the formating of numbers in the table.
+  const size_t exactNumberOfDecimals = 2;
+
+  // How long is the string of a float, that has exactNumberOfDecimals amount
+  // of decimals?
+  auto stringLenghtOfFloat = [&exactNumberOfDecimals](const float number) {
+    std::stringstream ss;
+    ss << std::fixed << std::setprecision(exactNumberOfDecimals) << number;
+    return ss.str().length();
+  };
+
+  // Add a string to a stringstream with enough padding, empty spaces to the
+  // right of the string, to reach the wanted length.
+  auto addStringWithPadding = [](std::stringstream* stringStream,
+      const auto& text, const size_t wantedLength){
+    (*stringStream) << std::setw(wantedLength) << std::left << text;
+  };
+
   for (const auto& entry: records.getTables()) {
     const BenchmarkRecords::RecordTable& table = entry.second;
     visualization << "\n\nTable '" << table.descriptor << "':\n\n";
-
-    // For easier iteration of table entries.
+  
+    // For easier usage.
     size_t numberColumns = table.columnNames.size();
     size_t numberRows = table.rowNames.size();
 
-    // Print the top row of names, before doing anything else.
-    for (const std::string& columnName: table.columnNames) {
-      visualization << "\t" << columnName;
+    // For formating: What is the maximum string width of a column, if you
+    // compare all it's entries?
+    const size_t rowNameMaxStringWidth = std::ranges::max(table.rowNames,
+        {}, [](const std::string& name){return name.length();}).length();
+
+    std::vector<size_t> columnMaxStringWidth(numberColumns, 0);
+    for (size_t column = 0; column < numberColumns; column++) {
+      // Which of the entries is the longest?
+      columnMaxStringWidth[column] = stringLenghtOfFloat(
+          std::ranges::max(table.entries, {},
+          [&column, &stringLenghtOfFloat](const std::vector<float>& row){
+          return stringLenghtOfFloat(row[column]);})[column]);
+      // Is the name of the column bigger?
+      columnMaxStringWidth[column] =
+        (columnMaxStringWidth[column] > table.columnNames[column].length()) ?
+        columnMaxStringWidth[column] : table.columnNames[column].length();
+    }
+
+    // Because the column of row names also has a width, we create an empty
+    // string of that size, before actually printing the row of column names.
+    visualization << std::string(rowNameMaxStringWidth, ' ');
+
+    // Print the top row of names.
+    for (size_t column = 0; column < numberColumns; column++){
+      visualization << "\t";
+      addStringWithPadding(&visualization, table.columnNames[column], columnMaxStringWidth[column]);
     }
 
     // Print the rows.
     for (size_t row = 0; row < numberRows; row++) {
-      visualization << "\n" << table.rowNames[row] << "\t";
+      visualization << "\n";
+      addStringWithPadding(&visualization, table.rowNames[row], rowNameMaxStringWidth);
+      visualization << "\t";
       for (size_t column = 0; column < numberColumns; column++) {
-        visualization << table.entries[row][column] << "\t";
+        addStringWithPadding(&visualization, table.entries[row][column], columnMaxStringWidth[column]);
+        visualization << "\t";
       }
     }
   }
