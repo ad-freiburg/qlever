@@ -97,7 +97,7 @@ jobs:
       run: wc -l tests.txt && cat tests.txt && echo *.profraw
     - name: Process coverage info
       working-directory: ${{github.workspace}}/build/test
-      run: llvm-profdata-15 merge -sparse *.profraw -o default.profdata && llvm-cov-15 export --format=lcov --instr-profile ./default.profdata $(cat tests.txt) > ./coverage.lcov
+      run: llvm-profdata-15 merge -sparse *.profraw -o default.profdata && xargs -a tests.txt llvm-cov-15 export --format=lcov --instr-profile ./default.profdata > ./coverage.lcov
       if: matrix.compiler == 'clang14'
     - name: Submit to codecov.io
       if: matrix.compiler == 'clang14'
