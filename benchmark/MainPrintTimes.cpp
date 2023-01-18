@@ -108,6 +108,7 @@ int main() {
     (*stringStream) << std::setw(wantedLength) << std::left << text;
   };
 
+  // Printing the tables themselves.
   for (const auto& entry: records.getTables()) {
     const BenchmarkRecords::RecordTable& table = entry.second;
     visualization << "\n\nTable '" << table.descriptor << "':\n\n";
@@ -146,9 +147,12 @@ int main() {
 
     // Print the rows.
     for (size_t row = 0; row < numberRows; row++) {
+      // Row name
       visualization << "\n";
       addStringWithPadding(&visualization, table.rowNames[row], rowNameMaxStringWidth);
       visualization << "\t";
+
+      // Row content.
       for (size_t column = 0; column < numberColumns; column++) {
         addStringWithPadding(&visualization, table.entries[row][column], columnMaxStringWidth[column]);
         visualization << "\t";
