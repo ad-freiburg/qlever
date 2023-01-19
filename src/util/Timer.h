@@ -9,8 +9,9 @@
 #include <memory>
 #include <sstream>
 
-#include "./Log.h"
-#include "Synchronized.h"
+#include "util/Log.h"
+#include "util/Synchronized.h"
+#include "absl/strings/str_cat.h"
 
 // Björn 01Jun11: Copied this class from the CompleteSearch
 // code in order to use it in the semantic search, too.
