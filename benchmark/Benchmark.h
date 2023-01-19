@@ -147,12 +147,15 @@ class BenchmarkRecords {
  */
 class BenchmarkRegister {
  
-    // All registerd benchmark functions. That is, the functions, that do the
-    // setup needed for a benchmark and then record the execution time with
-    // the passed BenchmarkRecords.
-    // The calling of the registerd benchmark functions and the processing of
-    // the recorded times, will be done in a main function later.
-    static std::vector<std::function<void(BenchmarkRecords*)>> _registerdBenchmarks;
+    /*
+     * @brief Returns a reference to the static vector of all registerd
+     *  benchmark functions.
+     *  That is, the functions, that do the setup needed for a benchmark and
+     *  then record the execution time with the passed BenchmarkRecords.
+     *  The calling of the registerd benchmark functions and the processing of
+     *  the recorded times, will be done in a main function later.
+     */
+    static std::vector<std::function<void(BenchmarkRecords*)>>& getRegister();
 
   public:
 

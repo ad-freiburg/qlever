@@ -13,17 +13,23 @@
 #include <util/Exception.h>
 
 // ____________________________________________________________________________
-std::vector<std::function<void(BenchmarkRecords*)>> BenchmarkRegister::_registerdBenchmarks(0);
+std::vector<std::function<void(BenchmarkRecords*)>>&
+    BenchmarkRegister::getRegister(){
+  static std::vector<std::function<void(BenchmarkRecords*)>>
+    registerdBenchmarks(0);
+  return registerdBenchmarks;
+}
 
 // ____________________________________________________________________________
 const std::vector<std::function<void(BenchmarkRecords*)>>& BenchmarkRegister::getRegisterdBenchmarks() {
-  return _registerdBenchmarks;
+  return getRegister();
 }
 
 // ____________________________________________________________________________
 BenchmarkRegister::BenchmarkRegister(const std::vector<std::function<void(BenchmarkRecords*)>>& benchmarks) {
+  auto& registerdBenchmarks = getRegister();
   for (const auto& benchmark: benchmarks) {
-    _registerdBenchmarks.push_back(benchmark);
+    registerdBenchmarks.push_back(benchmark);
   }
 }
 
