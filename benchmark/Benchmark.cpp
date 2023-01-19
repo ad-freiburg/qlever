@@ -45,7 +45,7 @@ float BenchmarkRecords::measureTimeOfFunction(
 }
 
 // ____________________________________________________________________________
-void BenchmarkRecords::addSingleMeasurment(const std::string descriptor,
+void BenchmarkRecords::addSingleMeasurment(const std::string& descriptor,
       const std::function<void()>& functionToMeasure) {
     _singleMeasurments.push_back(RecordEntry{descriptor,
         measureTimeOfFunction(functionToMeasure)});
@@ -58,7 +58,7 @@ const std::vector<BenchmarkRecords::RecordEntry>&
 }
 
 // ____________________________________________________________________________
-void BenchmarkRecords::addGroup(const std::string descriptor) {
+void BenchmarkRecords::addGroup(const std::string& descriptor) {
   // Is there already a group with this descriptor? If so, that is not allowed.
   AD_CHECK(_recordGroups.find(descriptor) == _recordGroups.end());
 
@@ -69,7 +69,7 @@ void BenchmarkRecords::addGroup(const std::string descriptor) {
 
 // ____________________________________________________________________________
 void BenchmarkRecords::addToExistingGroup(const std::string& groupDescriptor,
-    const std::string descriptor,
+    const std::string& descriptor,
     const std::function<void()>& functionToMeasure) {
   // Does the group exist?
   auto groupEntry = _recordGroups.find(groupDescriptor);
@@ -87,9 +87,9 @@ const ad_utility::HashMap<std::string, BenchmarkRecords::RecordGroup>&
 }
 
 // ____________________________________________________________________________
-void BenchmarkRecords::addTable(const std::string descriptor,
-    const std::vector<std::string> rowNames,
-    const std::vector<std::string> columnNames) {
+void BenchmarkRecords::addTable(const std::string& descriptor,
+    const std::vector<std::string>& rowNames,
+    const std::vector<std::string>& columnNames) {
   // Is there already a table with this descriptor? If so, that is not allowed.
   AD_CHECK(_recordTables.find(descriptor) == _recordTables.end());
 

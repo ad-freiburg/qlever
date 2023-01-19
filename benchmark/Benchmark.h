@@ -76,7 +76,7 @@ class BenchmarkRecords {
      *  Most of the time a lambda, that calls the actual function to benchmark
      *  with the needed parameters.
      */
-    void addSingleMeasurment(const std::string descriptor,
+    void addSingleMeasurment(const std::string& descriptor,
         const std::function<void()>& functionToMeasure);
 
     // Returns a const view of all single recorded times.
@@ -86,7 +86,7 @@ class BenchmarkRecords {
      * @brief Creates an empty group, which can
      *  be accesed/identified using the descriptor.
      */
-    void addGroup(const std::string descriptor);
+    void addGroup(const std::string& descriptor);
 
     /*
      * @brief Measures the time needed for the execution of the given function and
@@ -101,7 +101,7 @@ class BenchmarkRecords {
      *  with the needed parameters.
      */
     void addToExistingGroup(const std::string& groupDescriptor,
-        const std::string descriptor,
+        const std::string& descriptor,
         const std::function<void()>& functionToMeasure);
 
     /*
@@ -116,9 +116,9 @@ class BenchmarkRecords {
      * @param descriptor The name/identifier of the table.
      * @param rowNames,columnNames The names for the rows/columns.
      */
-    void addTable(const std::string descriptor,
-        const std::vector<std::string> rowNames,
-        const std::vector<std::string> columnNames);
+    void addTable(const std::string& descriptor,
+        const std::vector<std::string>& rowNames,
+        const std::vector<std::string>& columnNames);
 
     /*
      * @brief Measures the time needed for the execution of the given function and
