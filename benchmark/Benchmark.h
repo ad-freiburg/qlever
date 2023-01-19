@@ -40,8 +40,7 @@ class BenchmarkRecords {
       // The names of the columns and rows.
       std::vector<std::string> rowNames;
       std::vector<std::string> columnNames;
-      // The actual content of the fields. As in the seconds one function
-      // execution takes. Access is [row, column].
+      // The time measurements in seconds. Access is [row, column].
       std::vector<std::vector<float>> entries;
     };
 
