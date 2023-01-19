@@ -9,8 +9,9 @@
 #include <memory>
 #include <sstream>
 
-#include "./Log.h"
-#include "Synchronized.h"
+#include "absl/strings/str_cat.h"
+#include "util/Log.h"
+#include "util/Synchronized.h"
 
 // Björn 01Jun11: Copied this class from the CompleteSearch
 // code in order to use it in the semantic search, too.
@@ -150,7 +151,7 @@ class TimeoutTimer : public Timer {
 
   // Check if this timer has timed out. If the timer has timed out, throws a
   // TimeoutException. Else, nothing happens.
-  void checkTimeoutAndThrow(std::string additionalMessage = {}) {
+  void checkTimeoutAndThrow(std::string_view additionalMessage = {}) {
     if (hasTimedOut()) {
       double seconds =
           static_cast<double>(_timeLimitInMicroseconds) / (1000 * 1000);
@@ -158,9 +159,20 @@ class TimeoutTimer : public Timer {
       // Seconds with three digits after the decimal point.
       // TODO<C++20> : Use std::format for formatting, it is much more readable.
       numberStream << std::setprecision(3) << std::fixed << seconds;
-      throw TimeoutException(additionalMessage +
-                             "A Timeout occured. The time limit was "s +
-                             std::move(numberStream).str() + "seconds"s);
+      throw TimeoutException{absl::StrCat(
+          additionalMessage, "A Timeout occured. The time limit was "s,
+          std::move(numberStream).str(), "seconds"s)};
+    }
+  }
+
+  // Overload that does not take an error message directly, but a callable that
+  // creates the error message lazily when the timeout occurs. This can be used
+  // to make calling this function cheaper in the typical "no timeout" case.
+  template <typename F>
+  requires std::is_invocable_r_v<std::string_view, F>
+  void checkTimeoutAndThrow(F&& f) {
+    if (hasTimedOut()) {
+      checkTimeoutAndThrow(f());
     }
   }
 
