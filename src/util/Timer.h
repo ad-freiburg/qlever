@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <memory>
 #include <sstream>
+#include <chrono>
 
 #include "absl/strings/str_cat.h"
 #include "util/Log.h"
@@ -18,91 +19,95 @@
 // Adapted header guard, namespace, etc.
 namespace ad_utility {
 using namespace std::string_literals;
+using namespace std::chrono_literals;
 // HOLGER 22Jan06 : changed all suseconds_t to off_t
 //
 //! A SIMPLE CLASS FOR TIME MEASUREMENTS.
 //
+namespace timer {
+  namespace chr = std::chrono;
 class Timer {
+ public:
+  using microseconds = chr::microseconds;
+  using milliseconds = chr::milliseconds;
+  using secondsInt = chr::seconds;
+  using secondsDouble = chr::duration<double>;
+  using Duration = microseconds;
+  using TimePoint = chr::time_point<chr::high_resolution_clock>;
+  Duration toDuration(const auto& duration) {
+    return chr::duration_cast<Duration>(duration);
+  }
  private:
   //! The timer value (initially zero)
-  off_t _usecs;
+  Duration value_ = Duration::zero();
 
-  //! The timer value at the last mark set (initially zero)
-  off_t _usecs_at_mark;
+    TimePoint timeOfStart_;
 
-  //! Used by the gettimeofday command.
-  struct timeval _tstart;
+    //! Indicates whether a measurement is running.
+    bool _running;
 
-  //! Used by the gettimeofday command.
-  struct timeval _tend;
+   public:
+    //! The default constructor.
+    Timer() { reset(); }
 
-  //! Used by the gettimeofday command.
-  struct timezone _tz;
+    //! Resets the timer value to zero and stops the measurement.
+    void reset() {
+      value_ = 0us;
+      _running = false;
+    }
 
-  //! Indicates whether a measurement is running.
-  bool _running;
-
- public:
-  //! The default constructor.
-  Timer() { reset(); }
-
-  //! Resets the timer value to zero and stops the measurement.
-  void reset() {
-    _usecs = _usecs_at_mark = 0;
-    _running = false;
-  }
-
-  //! Mark the current point in time
-  //! (to be considered by next usecs_since_mark)
-  void mark() {
-    stop();
-    _usecs_at_mark = _usecs;
-    cont();
-  }
-
-  //! Resets the timer value to zero and starts the measurement.
-  inline void start() {
-    _usecs = _usecs_at_mark = 0;
-    gettimeofday(&_tstart, &_tz);
-    _running = true;
-  }
-
-  //! Continues the measurement without resetting
-  //! the timer value (no effect if running)
-  inline void cont() {
-    if (_running == false) {
-      gettimeofday(&_tstart, &_tz);
+    //! Resets the timer value to zero and starts the measurement.
+    inline void start() {
+      value_ = Duration::zero();
+      timeOfStart_ = std::chrono::high_resolution_clock::now();
       _running = true;
     }
-  }
 
-  //! Stops the measurement (does *not* return the timer value anymore)
-  inline void stop() {
-    gettimeofday(&_tend, &_tz);
-    if (_running) {
-      _usecs += (off_t)(1000000) * (off_t)(_tend.tv_sec - _tstart.tv_sec) +
-                (off_t)(_tend.tv_usec - _tstart.tv_usec);
+    //! Continues the measurement without resetting
+    //! the timer value (no effect if running)
+    inline void cont() {
+      if (_running == false) {
+        timeOfStart_ = std::chrono::high_resolution_clock::now();
+        _running = true;
+      }
     }
-    _running = false;
-  }
+
+    //! Stops the measurement.
+    inline void stop() {
+      auto timeOfStop = std::chrono::high_resolution_clock::now();
+      if (_running) {
+        value_ += toDuration(timeOfStop - timeOfStart_);
+      }
+      _running = false;
+    }
   // (13.10.10 by baumgari for testing codebase/utility/TimerStatistics.h)
   // Sets the totalTime manually.
-  inline void setUsecs(off_t usecs) { _usecs = usecs; }
-  inline void setMsecs(off_t msecs) { _usecs = msecs * (off_t)(1000); }
-  inline void setSecs(off_t secs) { _usecs = secs * (off_t)(1000000); }
+  inline void setUsecs(off_t usecs) {
+    value_ = toDuration(std::chrono::microseconds{usecs});
+  }
+  inline void setMsecs(off_t msecs) {
+    value_ = toDuration(std::chrono::milliseconds{msecs});
+  }
+  inline void setSecs(off_t secs) {
+    value_ = toDuration(std::chrono::seconds{secs});
+  }
 
   //! Time at last stop (initially zero).
-  off_t value() const { return _usecs; }
-  off_t usecs() const { return _usecs; }
-  off_t msecs() const { return (_usecs + 500) / 1000; }
-  float secs() const { return _usecs / 1000000.0; }
+  Duration value() const { return value_; }
+  size_t usecs() const {
+    return chr::duration_cast<microseconds>(value_).count();
+  }
+  size_t msecs() const {
+    return chr::duration_cast<milliseconds>(value_).count();
+  }
+  double secs() const {
+    return chr::duration_cast<secondsDouble>(value_).count();
+  }
 
   // is the timer currently running
   bool isRunning() const { return _running; }
-
-  //! Time from last mark to last stop (initally zero)
-  off_t usecs_since_mark() const { return _usecs - _usecs_at_mark; }
 };
+
 
 /// An exception signalling a timeout
 class TimeoutException : public std::exception {
@@ -122,7 +127,7 @@ class TimeoutTimer : public Timer {
   static TimeoutTimer unlimited() { return TimeoutTimer(UnlimitedTag{}); }
   /// Factory function for a timer that times out after a number of microseconds
   static TimeoutTimer fromMicroseconds(off_t microseconds) {
-    return TimeoutTimer(microseconds);
+    return TimeoutTimer(chr::duration_cast<Timer::Duration>(Timer::microseconds{microseconds}));
   }
   /// Factory function for a timer that times out after a number of miliseconds
   static TimeoutTimer fromMilliseconds(off_t milliseconds) {
@@ -142,7 +147,7 @@ class TimeoutTimer : public Timer {
     // NOTE: we cannot get the current timer value without stopping the timer.
     auto isRunningSnapshot = isRunning();
     stop();
-    auto hasTimedOut = usecs() > _timeLimitInMicroseconds;
+    auto hasTimedOut = usecs() > _timeLimit;
     if (isRunningSnapshot) {
       cont();
     }
@@ -154,7 +159,7 @@ class TimeoutTimer : public Timer {
   void checkTimeoutAndThrow(std::string_view additionalMessage = {}) {
     if (hasTimedOut()) {
       double seconds =
-          static_cast<double>(_timeLimitInMicroseconds) / (1000 * 1000);
+           std::chrono::duration_cast<Timer::secondsDouble>(_timeLimit).count();
       std::stringstream numberStream;
       // Seconds with three digits after the decimal point.
       // TODO<C++20> : Use std::format for formatting, it is much more readable.
@@ -182,9 +187,8 @@ class TimeoutTimer : public Timer {
     }
     auto prevRunning = isRunning();
     stop();
-    off_t res = usecs() > _timeLimitInMicroseconds
-                    ? 0
-                    : _timeLimitInMicroseconds - usecs();
+    off_t res = usecs() > _timeLimit ? 0
+                    : _timeLimit - usecs();
     if (prevRunning) {
       cont();
     }
@@ -192,12 +196,12 @@ class TimeoutTimer : public Timer {
   }
 
  private:
-  off_t _timeLimitInMicroseconds = 0;
+  Timer::Duration _timeLimit = Timer::Duration::zero();
   bool _isUnlimited = false;  // never times out
   class UnlimitedTag {};
   TimeoutTimer(UnlimitedTag) : _isUnlimited{true} {}
-  TimeoutTimer(off_t timeLimitInMicroseconds)
-      : _timeLimitInMicroseconds{timeLimitInMicroseconds} {}
+  TimeoutTimer(Timer::Duration timeLimit)
+      : _timeLimit{timeLimit} {}
 };
 
 /// A threadsafe timeout timer
@@ -228,4 +232,7 @@ struct TimeBlockAndLog {
 };
 #endif
 
+} // namespace timer
+using timer::Timer;
+using timer::TimeoutTimer;
 }  // namespace ad_utility
