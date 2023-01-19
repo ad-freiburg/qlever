@@ -113,6 +113,12 @@ jobs:
       uses: codecov/codecov-action@v3
       with:
         file: ${{github.workspace}}/build/test/coverage.lcov
+        # Note: technically, a `token` is not required for codecov.io when
+        # uploading from a public repository, but specifying it avoids the
+        # nasty spurious failures due to Github's rate limit for codecov's
+        # public default token.
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: true
 
     - name: E2E
       run: ${{github.workspace}}/e2e/e2e.sh
