@@ -48,7 +48,7 @@ class BenchmarkRecords {
   private:
 
     // A vector of all single functions measured.
-    std::vector<RecordEntry> _singleMeasurments;
+    std::vector<RecordEntry> _singleMeasurements;
 
     // A hash map of all the created RecordGroups. For faster access.
     // The key for a RecordGroup is it's descriptor.

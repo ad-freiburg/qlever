@@ -47,14 +47,14 @@ float BenchmarkRecords::measureTimeOfFunction(
 // ____________________________________________________________________________
 void BenchmarkRecords::addSingleMeasurment(const std::string& descriptor,
       const std::function<void()>& functionToMeasure) {
-    _singleMeasurments.push_back(RecordEntry{descriptor,
+    _singleMeasurements.push_back(RecordEntry{descriptor,
         measureTimeOfFunction(functionToMeasure)});
 }
 
 // ____________________________________________________________________________
 const std::vector<BenchmarkRecords::RecordEntry>&
    BenchmarkRecords::getSingleMeasurments() const{
-  return _singleMeasurments;
+  return _singleMeasurements;
 }
 
 // ____________________________________________________________________________
