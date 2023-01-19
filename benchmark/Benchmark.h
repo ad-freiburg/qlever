@@ -7,6 +7,7 @@
 #include <vector>
 #include <functional>
 #include <string>
+#include <optional>
 
 #include "util/Timer.h"
 #include <util/HashMap.h>
@@ -41,7 +42,7 @@ class BenchmarkRecords {
       std::vector<std::string> rowNames;
       std::vector<std::string> columnNames;
       // The time measurements in seconds. Access is [row, column].
-      std::vector<std::vector<float>> entries;
+      std::vector<std::vector<std::optional<float>>> entries;
     };
 
   private:

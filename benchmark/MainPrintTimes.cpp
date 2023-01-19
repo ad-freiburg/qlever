@@ -93,11 +93,16 @@ int main() {
   // Used for the formating of numbers in the table.
   const size_t exactNumberOfDecimals = 2;
 
-  // How long is the string of a float, that has exactNumberOfDecimals amount
-  // of decimals?
-  auto stringLenghtOfFloat = [&exactNumberOfDecimals](const float number) {
+  // How long is the string of a std::optional<float>, that has
+  // exactNumberOfDecimals amount of decimals if it is a number?
+  auto stringLengthOfOptionalFloat = [&exactNumberOfDecimals](
+      const std::optional<float>& number)->size_t {
+    // If there is no value, we print it as NA.
+    if (!number.has_value()) {return 2;}
+
+    // If there is a value.
     std::stringstream ss;
-    ss << std::fixed << std::setprecision(exactNumberOfDecimals) << number;
+    ss << std::fixed << std::setprecision(exactNumberOfDecimals) << (number.value());
     return ss.str().length();
   };
 
@@ -125,10 +130,11 @@ int main() {
     std::vector<size_t> columnMaxStringWidth(numberColumns, 0);
     for (size_t column = 0; column < numberColumns; column++) {
       // Which of the entries is the longest?
-      columnMaxStringWidth[column] = stringLenghtOfFloat(
+      columnMaxStringWidth[column] = stringLengthOfOptionalFloat(
           std::ranges::max(table.entries, {},
-          [&column, &stringLenghtOfFloat](const std::vector<float>& row){
-          return stringLenghtOfFloat(row[column]);})[column]);
+          [&column, &stringLengthOfOptionalFloat](
+            const std::vector<std::optional<float>>& row){
+          return stringLengthOfOptionalFloat(row[column]);})[column]);
       // Is the name of the column bigger?
       columnMaxStringWidth[column] =
         (columnMaxStringWidth[column] > table.columnNames[column].length()) ?
@@ -154,7 +160,14 @@ int main() {
 
       // Row content.
       for (size_t column = 0; column < numberColumns; column++) {
-        addStringWithPadding(&visualization, table.entries[row][column], columnMaxStringWidth[column]);
+        // Is there a value?
+        if (table.entries[row][column].has_value()){
+          addStringWithPadding(&visualization,
+              table.entries[row][column].value(), columnMaxStringWidth[column]);
+        }else{
+          addStringWithPadding(&visualization, "NA",
+              columnMaxStringWidth[column]);
+        }
         visualization << "\t";
       }
     }

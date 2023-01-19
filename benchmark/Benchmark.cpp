@@ -97,10 +97,10 @@ void BenchmarkRecords::addTable(const std::string& descriptor,
   _recordTables[descriptor] = BenchmarkRecords::RecordTable{descriptor,
     rowNames, columnNames, {}};
 
-  // We already know the size of the table, so lets resize the vectors
-  // and give every entry a default value of 0.
+  // We already know the size of the table, so lets resize the vectors.
+  // The std::optional are all empty.
   _recordTables[descriptor].entries.resize(rowNames.size(),
-      std::vector<float>(rowNames.size(), 0));
+      std::vector<std::optional<float>>(rowNames.size()));
 }
 
 // ____________________________________________________________________________
