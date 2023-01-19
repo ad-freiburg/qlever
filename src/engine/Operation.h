@@ -203,8 +203,8 @@ class Operation {
             this](size_t countIncrease = 1) mutable {
       i += countIncrease;
       if (i >= numOperationsBetweenTimeoutChecks) {
-        _timeoutTimer->wlock()->checkTimeoutAndThrow("Timeout in " +
-                                                     getDescriptor());
+        _timeoutTimer->wlock()->checkTimeoutAndThrow(
+            [this]() { return "Timeout in " + getDescriptor(); });
         i = 0;
       }
     };
