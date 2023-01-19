@@ -91,7 +91,7 @@ void BenchmarkRecords::addTable(const std::string& descriptor,
     const std::vector<std::string>& rowNames,
     const std::vector<std::string>& columnNames) {
   // Is there already a table with this descriptor? If so, that is not allowed.
-  AD_CHECK(_recordTables.find(descriptor) == _recordTables.end());
+  AD_CHECK(!_recordTables.contains(descriptor));
 
   // Add a new entry.
   _recordTables[descriptor] = BenchmarkRecords::RecordTable{descriptor,
