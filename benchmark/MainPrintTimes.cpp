@@ -91,19 +91,20 @@ int main() {
   addCategoryTitelToStringstream(&visualization, "Table benchmarks");
 
   // Used for the formating of numbers in the table.
-  const size_t exactNumberOfDecimals = 2;
+  const size_t exactNumberOfDecimals = 4;
 
-  // How long is the string of a std::optional<float>, that has
-  // exactNumberOfDecimals amount of decimals if it is a number?
-  auto stringLengthOfOptionalFloat = [&exactNumberOfDecimals](
-      const std::optional<float>& number)->size_t {
+  // Convert an std::optional<float> to a screen friendly format.
+  auto optionalFloatToString = [&exactNumberOfDecimals](const
+      std::optional<float>& optionalFloat)->std::string{
     // If there is no value, we print it as NA.
-    if (!number.has_value()) {return 2;}
+    if (!optionalFloat.has_value()) {return "NA";}
 
-    // If there is a value.
+    // If there is a value, we print it with exactNumberOfDecimals
+    // decimals.
     std::stringstream ss;
-    ss << std::fixed << std::setprecision(exactNumberOfDecimals) << (number.value());
-    return ss.str().length();
+    ss << std::fixed << std::setprecision(exactNumberOfDecimals)
+      << (optionalFloat.value());
+    return ss.str();
   };
 
   // Add a string to a stringstream with enough padding, empty spaces to the
@@ -130,11 +131,11 @@ int main() {
     std::vector<size_t> columnMaxStringWidth(numberColumns, 0);
     for (size_t column = 0; column < numberColumns; column++) {
       // Which of the entries is the longest?
-      columnMaxStringWidth[column] = stringLengthOfOptionalFloat(
+      columnMaxStringWidth[column] = optionalFloatToString(
           std::ranges::max(table.entries, {},
-          [&column, &stringLengthOfOptionalFloat](
+          [&column, &optionalFloatToString](
             const std::vector<std::optional<float>>& row){
-          return stringLengthOfOptionalFloat(row[column]);})[column]);
+          return optionalFloatToString(row[column]).length();})[column]).length();
       // Is the name of the column bigger?
       columnMaxStringWidth[column] =
         (columnMaxStringWidth[column] > table.columnNames[column].length()) ?
@@ -160,14 +161,8 @@ int main() {
 
       // Row content.
       for (size_t column = 0; column < numberColumns; column++) {
-        // Is there a value?
-        if (table.entries[row][column].has_value()){
-          addStringWithPadding(&visualization,
-              table.entries[row][column].value(), columnMaxStringWidth[column]);
-        }else{
-          addStringWithPadding(&visualization, "NA",
-              columnMaxStringWidth[column]);
-        }
+        addStringWithPadding(&visualization,
+            optionalFloatToString(table.entries[row][column]), columnMaxStringWidth[column]);
         visualization << "\t";
       }
     }
