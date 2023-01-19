@@ -28,9 +28,8 @@ const std::vector<std::function<void(BenchmarkRecords*)>>& BenchmarkRegister::ge
 // ____________________________________________________________________________
 BenchmarkRegister::BenchmarkRegister(const std::vector<std::function<void(BenchmarkRecords*)>>& benchmarks) {
   auto& registerdBenchmarks = getRegister();
-  for (const auto& benchmark: benchmarks) {
-    registerdBenchmarks.push_back(benchmark);
-  }
+  // Append all the benchmarks to the internal register.
+  registerdBenchmarks.insert(registerdBenchmarks.end(), benchmarks.begin(), benchmarks.end());
 }
 
 // ____________________________________________________________________________
