@@ -48,15 +48,15 @@ class BenchmarkRecords {
   private:
 
     // A vector of all single functions measured.
-    std::vector<RecordEntry> _singleMeasurements;
+    std::vector<RecordEntry> singleMeasurements_;
 
     // A hash map of all the created RecordGroups. For faster access.
     // The key for a RecordGroup is it's descriptor.
-    ad_utility::HashMap<std::string, RecordGroup> _recordGroups;
+    ad_utility::HashMap<std::string, RecordGroup> recordGroups_;
   
     // A hash map of all the created RecordTables. For faster access.
     // The key for a RecordTable is it's descriptor.
-    ad_utility::HashMap<std::string, RecordTable> _recordTables;
+    ad_utility::HashMap<std::string, RecordTable> recordTables_;
     
     /*
      * @brief Return execution time of function in seconds.
@@ -166,7 +166,7 @@ class BenchmarkRegister {
      *
      * @param benchmarks The functions can be passed as
      *  `{&functionName1, &functionname2, ...}`. For more information about
-     *  their usage see _registerdBenchmarks . 
+     *  their usage see getRegister . 
      */
     BenchmarkRegister(const std::vector<std::function<void(BenchmarkRecords*)>>& benchmarks);
 
