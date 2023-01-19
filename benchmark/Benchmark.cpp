@@ -60,7 +60,7 @@ const std::vector<BenchmarkRecords::RecordEntry>&
 // ____________________________________________________________________________
 void BenchmarkRecords::addGroup(const std::string& descriptor) {
   // Is there already a group with this descriptor? If so, that is not allowed.
-  AD_CHECK(_recordGroups.find(descriptor) == _recordGroups.end());
+  AD_CHECK(!_recordGroups.contains(descriptor));
 
   // There is no group, so create one without any entries and add them to
   // the hash map.
