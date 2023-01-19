@@ -135,7 +135,10 @@ static inline QueryExecutionContext* getQec(std::string turtleInput = "") {
         turtleInput, Context{TypeErasedCleanup{[testIndexBasename]() {
                                for (const std::string& indexFilename :
                                     getAllIndexFilenames(testIndexBasename)) {
-                                 ad_utility::deleteFile(indexFilename);
+                                 // Don't log when a file can't be deleted,
+                                 // because the logging might already be
+                                 // destroyed.
+                                 ad_utility::deleteFile(indexFilename, false);
                                }
                              }},
                              std::make_unique<Index>(
