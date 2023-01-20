@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8.4)
+cmake_minimum_required(VERSION 3.16)
 project(QLever C CXX)
 
 # C/C++ Versions
@@ -116,8 +116,13 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
-# Enable the specification of additional warnings manually from the commandline
+# Enable the specification of additional compiler flags manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
+
+# Enable the specification of additional linker flags manually from the commandline
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
+
 
 
 if (${PERFTOOLS_PROFILER})

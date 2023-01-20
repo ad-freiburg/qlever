@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <fstream>
+#include <ranges>
 #include <sstream>
 #include <tuple>
 
@@ -56,9 +57,10 @@ IdTable makeIdTableFromVector(const VectorTable& tableContent) {
     AD_CHECK(row.size() == result.numColumns());  // All rows of an IdTable must
                                                   // have the same length.
     const size_t backIndex{result.size()};
-    // TODO This should be
+
+    // TODO<clang 16> This should be
     // std::ranges::copy(std::views::transform(row, I), result.back().begin());
-    // as soon as our compilers and the IdTable support it.
+    // as soon as our compilers supports it.
     result.emplace_back();
 
     for (size_t c = 0; c < row.size(); c++) {

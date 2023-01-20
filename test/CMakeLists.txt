@@ -125,7 +125,7 @@ addLinkAndDiscoverTest(BatchedPipelineTest)
 
 addLinkAndDiscoverTest(TupleHelpersTest)
 
-addLinkAndDiscoverTest(StringSortComparatorTest ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(StringSortComparatorTest ${ICU_LIBRARIES} absl::flat_hash_map)
 
 addLinkAndDiscoverTest(PriorityQueueTest absl::flat_hash_map ${ICU_LIBRARIES})
 

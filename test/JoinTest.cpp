@@ -64,8 +64,8 @@ void compareIdTableWithExpectedContent(
   auto writeIdTableToStream = [&traceMessage](const IdTable& idTable) {
     std::ranges::for_each(idTable,
                           [&traceMessage](const auto& row) {
-                            // TODO Could be done in one line, if row was
-                            // iterable. Unfortunaly, it isn't.
+                            // TODO<C++23> Use std::views::join_with for both
+                            // loops.
                             for (size_t i = 0; i < row.numColumns(); i++) {
                               traceMessage << row[i] << " ";
                             }
@@ -92,24 +92,8 @@ void compareIdTableWithExpectedContent(
 
   // Sort both the table and the expectedContent, so that both have a definite
   // form for comparison.
-  // TODO Instead of this, we could use std::ranges::lexicographical_compare
-  // for the body of the lambda, but that is currently not possible, because
-  // the rows of an IdTable are not iterable.
-  auto sortFunction = [](const auto& row1, const auto& row2) {
-    size_t i{0};
-    while (i < (row1.numColumns() - 1) && row1[i] == row2[i]) {
-      i++;
-    }
-    return row1[i] < row2[i];
-  };
-  /*
-   * TODO Introduce functionality to the IdTable-class, so that
-   * std::ranges::sort can be used instead of std::sort. Currently it seems like
-   * the iterators , produced by IdTable, aren't the right type.
-   */
-  std::sort(localTable.begin(), localTable.end(), sortFunction);
-  std::sort(localExpectedContent.begin(), localExpectedContent.end(),
-            sortFunction);
+  std::ranges::sort(localTable, std::ranges::lexicographical_compare);
+  std::ranges::sort(localExpectedContent, std::ranges::lexicographical_compare);
 
   ASSERT_EQ(localTable, localExpectedContent);
 }
@@ -167,16 +151,10 @@ void runTestCasesForAllJoinAlgorithms(
 
   // For sorting IdTableAndJoinColumn by their join column.
   auto sortByJoinColumn = [](IdTableAndJoinColumn& idTableAndJC) {
-    /*
-     * TODO Introduce functionality to the IdTable-class, so that
-     * std::ranges::sort can be used instead of std::sort. Currently it seems
-     * like the iterators , produced by IdTable, aren't the right type.
-     */
-    std::sort(idTableAndJC.idTable.begin(), idTableAndJC.idTable.end(),
-              [&idTableAndJC](const auto& row1, const auto& row2) {
-                return row1[idTableAndJC.joinColumn] <
-                       row2[idTableAndJC.joinColumn];
-              });
+    std::ranges::sort(idTableAndJC.idTable, {},
+                      [&idTableAndJC](const auto& row) {
+                        return row[idTableAndJC.joinColumn];
+                      });
   };
 
   // Random shuffle both tables, run hashJoin, check result.

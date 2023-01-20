@@ -134,6 +134,78 @@ TEST(IdTableTest, DocumentationOfIteratorUsage) {
   }
 }
 
+// The following test demonstrates the iterator functionality of a single
+// row.
+TEST(IdTableTest, rowIterators) {
+  using IntTable = columnBasedIdTable::IdTable<int, 0>;
+  auto testRow = [](auto row) {
+    row[0] = 0;
+    row[1] = 1;
+    row[2] = 2;
+    ASSERT_TRUE(std::is_sorted(row.begin(), row.end()));
+    ASSERT_TRUE(std::is_sorted(row.cbegin(), row.cend()));
+    ASSERT_TRUE(
+        std::is_sorted(std::as_const(row).begin(), std::as_const(row).end()));
+
+    row[0] = 3;
+    ASSERT_FALSE(std::is_sorted(row.begin(), row.end()));
+    ASSERT_FALSE(std::is_sorted(row.cbegin(), row.cend()));
+    ASSERT_FALSE(
+        std::is_sorted(std::as_const(row).begin(), std::as_const(row).end()));
+    row[0] = 0;
+    row[2] = -1;
+    ASSERT_FALSE(std::is_sorted(row.begin(), row.end()));
+    ASSERT_FALSE(std::is_sorted(row.cbegin(), row.cend()));
+    ASSERT_FALSE(
+        std::is_sorted(std::as_const(row).begin(), std::as_const(row).end()));
+
+    std::ranges::sort(row.begin(), row.end());
+    ASSERT_EQ(-1, row[0]);
+    ASSERT_EQ(0, row[1]);
+    ASSERT_EQ(1, row[2]);
+  };
+  using IntTable = columnBasedIdTable::IdTable<int, 0>;
+  testRow(IntTable::row_type{3});
+
+  IntTable table{3};
+  table.emplace_back();
+  testRow(IntTable::row_reference{table[0]});
+  // This shouldn't work
+  {
+    auto row = table[0];
+    table[0][0] = 0;
+    table[0][1] = 1;
+    table[0][2] = 2;
+    ASSERT_TRUE(std::is_sorted(row.begin(), row.end()));
+    ASSERT_TRUE(std::is_sorted(row.cbegin(), row.cend()));
+    ASSERT_TRUE(
+        std::is_sorted(std::as_const(row).begin(), std::as_const(row).end()));
+
+    table[0][0] = 3;
+    ASSERT_FALSE(std::is_sorted(row.begin(), row.end()));
+    ASSERT_FALSE(std::is_sorted(row.cbegin(), row.cend()));
+    ASSERT_FALSE(
+        std::is_sorted(std::as_const(row).begin(), std::as_const(row).end()));
+    table[0][0] = 0;
+    table[0][2] = -1;
+    ASSERT_FALSE(std::is_sorted(row.begin(), row.end()));
+    ASSERT_FALSE(std::is_sorted(row.cbegin(), row.cend()));
+    ASSERT_FALSE(
+        std::is_sorted(std::as_const(row).begin(), std::as_const(row).end()));
+
+    // Sorting the proxy type `row_reference_restricted` can
+    // only be performed via `std::sort` as follows:
+    std::sort(std::move(row).begin(), std::move(row).end());
+    // The following calls all would not compile:
+    // std::sort(row.begin(), row.end());
+    // std::ranges::sort(row);
+    // std::ranges::sort(std::move(row));
+    ASSERT_EQ(-1, row[0]);
+    ASSERT_EQ(0, row[1]);
+    ASSERT_EQ(1, row[2]);
+  }
+}
+
 // Run a test case for the following different instantiations of the `IdTable`
 // template:
 // - The default `IdTable` (stores `Id`s in a `vector<Id, AllocatorWithLimit>`.
@@ -446,8 +518,8 @@ TEST(IdTableTest, sortTest) {
 
   // Now try the actual sort
   test = orig.clone();
-  std::sort(test.begin(), test.end(),
-            [](const auto& v1, const auto& v2) { return v1[0] < v2[0]; });
+  std::ranges::sort(test, std::less<>{},
+                    [](const auto& row) { return row[0]; });
 
   // The sorted order of the orig tables should be:
   // 3, 2, 0, 4, 5, 1
@@ -740,9 +812,31 @@ TEST(IdTableTest, conversion) {
   }
 }
 
+TEST(IdTableTest, empty) {
+  using IntTable = columnBasedIdTable::IdTable<int, 0>;
+  IntTable t{3};
+  ASSERT_TRUE(t.empty());
+  t.emplace_back();
+  ASSERT_FALSE(t.empty());
+}
+
+TEST(IdTableTest, frontAndBack) {
+  using IntTable = columnBasedIdTable::IdTable<int, 0>;
+  IntTable t{1};
+  t.resize(3);
+  t(0, 0) = 42;
+  t(2, 0) = 43;
+  ASSERT_EQ(42, t.front()[0]);
+  ASSERT_EQ(42, std::as_const(t).front()[0]);
+  ASSERT_EQ(43, t.back()[0]);
+  ASSERT_EQ(43, std::as_const(t).back()[0]);
+}
+
 TEST(IdTableTest, staticAsserts) {
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::iterator>);
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
+  static_assert(std::ranges::random_access_range<IdTable>);
+  static_assert(std::ranges::random_access_range<IdTableStatic<1>>);
 }
 
 // Check that we can completely instantiate `IdTable`s with a different value
