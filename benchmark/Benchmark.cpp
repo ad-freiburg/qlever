@@ -33,25 +33,6 @@ BenchmarkRegister::BenchmarkRegister(const std::vector<std::function<void(Benchm
 }
 
 // ____________________________________________________________________________
-float BenchmarkRecords::measureTimeOfFunction(
-    const std::function<void()>& functionToMeasure) const {
-  ad_utility::Timer benchmarkTimer;
-     
-  benchmarkTimer.start();
-  functionToMeasure();
-  benchmarkTimer.stop();
-
-  return benchmarkTimer.secs();
-}
-
-// ____________________________________________________________________________
-void BenchmarkRecords::addSingleMeasurment(const std::string& descriptor,
-      const std::function<void()>& functionToMeasure) {
-    singleMeasurements_.push_back(RecordEntry{descriptor,
-        measureTimeOfFunction(functionToMeasure)});
-}
-
-// ____________________________________________________________________________
 const std::vector<BenchmarkRecords::RecordEntry>&
    BenchmarkRecords::getSingleMeasurments() const{
   return singleMeasurements_;
@@ -65,19 +46,6 @@ void BenchmarkRecords::addGroup(const std::string& descriptor) {
   // There is no group, so create one without any entries and add them to
   // the hash map.
   recordGroups_[descriptor] = BenchmarkRecords::RecordGroup{descriptor, {}};
-}
-
-// ____________________________________________________________________________
-void BenchmarkRecords::addToExistingGroup(const std::string& groupDescriptor,
-    const std::string& descriptor,
-    const std::function<void()>& functionToMeasure) {
-  // Does the group exist?
-  auto groupEntry = recordGroups_.find(groupDescriptor);
-  AD_CHECK(groupEntry != recordGroups_.end());
-
-  // Add the descriptor and measured time to the group.
-  groupEntry->second.entries.push_back(
-      RecordEntry{descriptor, measureTimeOfFunction(functionToMeasure)});
 }
 
 // ____________________________________________________________________________
@@ -101,25 +69,6 @@ void BenchmarkRecords::addTable(const std::string& descriptor,
   // The std::optional are all empty.
   recordTables_[descriptor].entries.resize(rowNames.size(),
       std::vector<std::optional<float>>(rowNames.size()));
-}
-
-// ____________________________________________________________________________
-void BenchmarkRecords::addToExistingTable(const std::string& tableDescriptor,
-        const size_t row, const size_t column,
-        const std::function<void()>& functionToMeasure){
-  // Does the table exist?
-  auto tableEntry = recordTables_.find(tableDescriptor);
-  AD_CHECK(tableEntry != recordTables_.end());
-
-  // For easier usage.
-  BenchmarkRecords::RecordTable& table = tableEntry->second;
-
-  // Are the given row and column number inside the table range?
-  // size_t is unsigned, so we only need to check, that they are not to big.
-  AD_CHECK(row < table.rowNames.size() && column < table.columnNames.size());
-  
-  // Add the measured time to the table.
-  table.entries[row][column] = measureTimeOfFunction(functionToMeasure);
 }
 
 // ____________________________________________________________________________

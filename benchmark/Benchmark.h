@@ -11,6 +11,7 @@
 
 #include "util/Timer.h"
 #include <util/HashMap.h>
+#include <util/Exception.h>
 
 /*
  * Used for measuring the time needed for the execution of a function. It also
@@ -60,14 +61,30 @@ class BenchmarkRecords {
     
     /*
      * @brief Return execution time of function in seconds.
+     *
+     * @tparam FUNCTION_TYPE Best left to type inference.
+     *
+     * @param functionToMeasure Must be a function, or callable.
      */
-    float measureTimeOfFunction(const std::function<void()>& functionToMeasure) const;
+    template<typename FUNCTION_TYPE>
+    float measureTimeOfFunction(const FUNCTION_TYPE& functionToMeasure) const{
+      ad_utility::Timer benchmarkTimer;
+         
+      benchmarkTimer.start();
+      functionToMeasure();
+      benchmarkTimer.stop();
+
+      return benchmarkTimer.secs();
+    }
+
 
   public:
 
     /*
      * @brief Measures the time needed for the execution of the given function and
      * saves it, together with a description, in a normal list.
+     *
+     * @tparam FUNCTION_TYPE Best left to type inference.
      *
      * @param descriptor A description, of what kind of benchmark case is
      *  getting measured. Needed, because otherwise nobody would be able to
@@ -76,8 +93,13 @@ class BenchmarkRecords {
      *  Most of the time a lambda, that calls the actual function to benchmark
      *  with the needed parameters.
      */
+    template<typename FUNCTION_TYPE>
     void addSingleMeasurment(const std::string& descriptor,
-        const std::function<void()>& functionToMeasure);
+        const FUNCTION_TYPE& functionToMeasure) {
+      singleMeasurements_.push_back(RecordEntry{descriptor,
+          measureTimeOfFunction(functionToMeasure)});
+    }
+
 
     // Returns a const view of all single recorded times.
     const std::vector<RecordEntry>& getSingleMeasurments() const;
@@ -92,6 +114,8 @@ class BenchmarkRecords {
      * @brief Measures the time needed for the execution of the given function and
      * saves it, together with a description, as an item in a group.
      *
+     * @tparam FUNCTION_TYPE Best left to type inference.
+     *
      * @param groupDescriptor The identification of the group.
      * @param descriptor A description, of what kind of benchmark case is
      *  getting measured. Needed, because otherwise nobody would be able to
@@ -100,9 +124,19 @@ class BenchmarkRecords {
      *  Most of the time a lambda, that calls the actual function to benchmark
      *  with the needed parameters.
      */
+    template<typename FUNCTION_TYPE>
     void addToExistingGroup(const std::string& groupDescriptor,
         const std::string& descriptor,
-        const std::function<void()>& functionToMeasure);
+        const FUNCTION_TYPE& functionToMeasure) {
+      // Does the group exist?
+      auto groupEntry = recordGroups_.find(groupDescriptor);
+      AD_CHECK(groupEntry != recordGroups_.end());
+
+      // Add the descriptor and measured time to the group.
+      groupEntry->second.entries.push_back(
+          RecordEntry{descriptor, measureTimeOfFunction(functionToMeasure)});
+    }
+
 
     /*
      * @brief Returns a const view of all the groups.
@@ -124,6 +158,8 @@ class BenchmarkRecords {
      * @brief Measures the time needed for the execution of the given function and
      * saves it as an entry in the table.
      *
+     * @tparam FUNCTION_TYPE Best left to type inference.
+     *
      * @param tableDescriptor The identification of the table.
      * @param row, column Where in the tables to write the measured time.
      *  Starts with (0,0).
@@ -131,9 +167,25 @@ class BenchmarkRecords {
      *  Most of the time a lambda, that calls the actual function to benchmark
      *  with the needed parameters.
      */
+    template<typename FUNCTION_TYPE>
     void addToExistingTable(const std::string& tableDescriptor,
         const size_t row, const size_t column,
-        const std::function<void()>& functionToMeasure);
+        const FUNCTION_TYPE& functionToMeasure) {
+      // Does the table exist?
+      auto tableEntry = recordTables_.find(tableDescriptor);
+      AD_CHECK(tableEntry != recordTables_.end());
+
+      // For easier usage.
+      BenchmarkRecords::RecordTable& table = tableEntry->second;
+
+      // Are the given row and column number inside the table range?
+      // size_t is unsigned, so we only need to check, that they are not to big.
+      AD_CHECK(row < table.rowNames.size() && column < table.columnNames.size());
+      
+      // Add the measured time to the table.
+      table.entries[row][column] = measureTimeOfFunction(functionToMeasure);
+    }
+
 
     /*
      * @brief Returns a const view of all the tables.
