@@ -42,7 +42,12 @@ class Timer {
   // A simple enum used in the constructor to decide whether the timer is
   // immediately started or not.
   enum class InitialStatus { Started, Stopped };
-  using enum InitialStatus;
+  // Allow the usage of `Timer::Started` and `Timer::Stopped`.
+  // TODO<joka921, GCC 12.3> This could be `using enum InitialStatus`,
+  // but that leads to an internal compiler error in GCC. I suspect that it is
+  // this bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103081
+  static const InitialStatus Started = InitialStatus::Started;
+  static const InitialStatus Stopped = InitialStatus::Stopped;
 
   // Convert any `std::chrono::duration` to the underlying `Duration` type
   // of the `Timer` class.
