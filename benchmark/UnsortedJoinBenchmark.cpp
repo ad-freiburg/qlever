@@ -63,16 +63,16 @@ void BM_UnsortedIdTable(BenchmarkRecords* records) {
   }
 
   // We need to order the IdTables, before using the normal join function on
-  // them. This is the sort function for that.
-  auto sortFunction = [](const auto& row1, const auto& row2) {
-    return row1[0] < row2[0];
+  // them. This is the projection function for that.
+  auto projectionFunction = [](const auto& row) {
+    return row[0];
   };
 
   // Lambda wrapper for the functions, that I measure.
   auto joinLambdaWrapper = [&]() {
         // Sorting the tables after the join column.
-        std::ranges::sort(a.idTable, sortFunction);
-        std::ranges::sort(b.idTable, sortFunction);
+        std::ranges::sort(a.idTable, {}, projectionFunction);
+        std::ranges::sort(b.idTable, {}, projectionFunction);
 
         useJoinFunctionOnIdTables(a, b, joinLambda);
   };

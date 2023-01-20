@@ -64,11 +64,11 @@ void BM_SortedIdTable(BenchmarkRecords* records) {
 
   // Sorting the tables by the join column.
   auto sortIdTables = [&a, &b] () {
-    auto sortFunction = [](const auto& row1, const auto& row2) {
-      return row1[0] < row2[0];
+    auto projectionFunction = [](const auto& row) {
+      return row[0];
     };
-    std::ranges::sort(a.idTable, sortFunction);
-    std::ranges::sort(b.idTable, sortFunction);
+    std::ranges::sort(a.idTable, {}, projectionFunction);
+    std::ranges::sort(b.idTable, {}, projectionFunction);
   };
   sortIdTables();
   
