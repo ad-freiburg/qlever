@@ -46,8 +46,8 @@ class Timer {
   // TODO<joka921, GCC 12.3> This could be `using enum InitialStatus`,
   // but that leads to an internal compiler error in GCC. I suspect that it is
   // this bug: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103081
-  static const InitialStatus Started = InitialStatus::Started;
-  static const InitialStatus Stopped = InitialStatus::Stopped;
+  static constexpr InitialStatus Started = InitialStatus::Started;
+  static constexpr InitialStatus Stopped = InitialStatus::Stopped;
 
   // Convert any `std::chrono::duration` to the underlying `Duration` type
   // of the `Timer` class.
