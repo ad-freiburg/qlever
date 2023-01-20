@@ -71,7 +71,7 @@ TEST(Timer, BasicWorkflow) {
   ASSERT_EQ(t.msecs(), 0u);
   std::this_thread::sleep_for(5ms);
 
-  // Start leads to a running timer
+  // Start leads to a running timer.
   t.start();
   ASSERT_TRUE(t.isRunning());
   testTime(t, 0ms);

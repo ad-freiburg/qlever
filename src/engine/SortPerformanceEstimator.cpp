@@ -101,7 +101,11 @@ auto SortPerformanceEstimator::estimatedSortTime(size_t numRows,
   auto numColumnsInSample = static_cast<double>(sampleValuesCols[columnIndex]);
   double columnRatio = static_cast<double>(numCols) / numColumnsInSample;
   // Scale linearly with the number of rows. Scale the number of columns with
-  // the square root
+  // the square root. The cast `toDuration` is necessary because the
+  // multiplication with a float (`rowRation`) propagates from the integer-
+  // based `Duration` to a float-based `std::chrono::duration`. The cast is
+  // semantically valid as the `result` is typically much larger than the
+  // timer resolution specified via the `Duration` (currently microseconds).
   result = Timer::toDuration(result * rowRatio * std::sqrt(columnRatio));
 
   return result;

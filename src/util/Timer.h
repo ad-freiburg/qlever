@@ -20,10 +20,10 @@ namespace ad_utility {
 using namespace std::string_literals;
 using namespace std::chrono_literals;
 
-// This internal namespace is used s.t. we can use an alias for the rather long
-// `std::chrono` namespace without leaking this alias into `ad_utility`. All
-// the defined types are exported into the `ad_utility` namespace via `using`
-// declarations.
+// This internal namespace is used such that we can use an alias for the rather
+// long `std::chrono` namespace without leaking this alias into `ad_utility`.
+// All the defined types are exported into the `ad_utility` namespace via
+// `using` declarations.
 namespace timer {
 namespace chr = std::chrono;
 
@@ -70,7 +70,7 @@ class Timer {
   }
 
  private:
-  //! The timer value (initially zero)
+  // The timer value (initially zero)
   Duration value_ = Duration::zero();
   TimePoint timeOfStart_;
   bool isRunning_ = false;
@@ -82,21 +82,21 @@ class Timer {
     }
   }
 
-  //! Resets the timer value to zero and stops the measurement.
+  // Reset the timer value to zero and stops the measurement.
   void reset() {
-    value_ = 0us;
+    value_ = Duration::zero();
     isRunning_ = false;
   }
 
-  //! Resets the timer value to zero and starts the measurement.
+  // Reset the timer value to zero and starts the measurement.
   inline void start() {
     value_ = Duration::zero();
     timeOfStart_ = chr::high_resolution_clock::now();
     isRunning_ = true;
   }
 
-  //! Continues the measurement without resetting
-  //! the timer value (no effect if running)
+  // Continue the measurement without resetting
+  // the timer value (no effect if running)
   inline void cont() {
     if (isRunning_ == false) {
       timeOfStart_ = chr::high_resolution_clock::now();
@@ -104,7 +104,7 @@ class Timer {
     }
   }
 
-  //! Stops the measurement.
+  // Stop the measurement.
   inline void stop() {
     if (isRunning_) {
       value_ += timeSinceLastStart();
@@ -136,11 +136,11 @@ class Timer {
 /// An exception signalling a timeout
 class TimeoutException : public std::exception {
  public:
-  TimeoutException(std::string message) : _message{std::move(message)} {}
-  const char* what() const noexcept override { return _message.c_str(); }
+  TimeoutException(std::string message) : message_{std::move(message)} {}
+  const char* what() const noexcept override { return message_.c_str(); }
 
  private:
-  std::string _message;
+  std::string message_;
 };
 
 /// A timer which also can be given a timeout value and queried whether it
@@ -152,15 +152,15 @@ class TimeoutTimer : public Timer {
 
   template <ad_utility::isInstantiation<chr::duration> T>
   TimeoutTimer(T timeLimit, Timer::InitialStatus status)
-      : Timer{status}, _timeLimit{toDuration(timeLimit)} {}
+      : Timer{status}, timeLimit_{toDuration(timeLimit)} {}
 
   /// Did this timer already timeout
   /// Can't be const because of the internals of the Timer class.
   bool hasTimedOut() {
-    if (_isUnlimited) {
+    if (isUnlimited_) {
       return false;
     } else {
-      return value() > _timeLimit;
+      return value() > timeLimit_;
     }
   }
 
@@ -169,7 +169,7 @@ class TimeoutTimer : public Timer {
   void checkTimeoutAndThrow(std::string_view additionalMessage = {}) {
     if (hasTimedOut()) {
       double seconds =
-          std::chrono::duration_cast<Timer::Seconds>(_timeLimit).count();
+          std::chrono::duration_cast<Timer::Seconds>(timeLimit_).count();
       std::stringstream numberStream;
       // Seconds with three digits after the decimal point.
       // TODO<C++20> : Use std::format for formatting, it is much more readable.
@@ -192,18 +192,18 @@ class TimeoutTimer : public Timer {
   }
 
   Duration remainingTime() const {
-    if (_isUnlimited) {
+    if (isUnlimited_) {
       return Duration::max();
     }
     auto passedTime = value();
-    return passedTime < _timeLimit ? _timeLimit - passedTime : Duration::zero();
+    return passedTime < timeLimit_ ? timeLimit_ - passedTime : Duration::zero();
   }
 
  private:
-  Timer::Duration _timeLimit = Timer::Duration::zero();
-  bool _isUnlimited = false;  // never times out
+  Timer::Duration timeLimit_ = Timer::Duration::zero();
+  bool isUnlimited_ = false;  // never times out
   class UnlimitedTag {};
-  TimeoutTimer(UnlimitedTag) : Timer{Timer::Started}, _isUnlimited{true} {}
+  TimeoutTimer(UnlimitedTag) : Timer{Timer::Started}, isUnlimited_{true} {}
 };
 
 namespace detail {
@@ -211,8 +211,11 @@ namespace detail {
 // destruction and logs the time together with a specified message
 // The callback can be used to change the logging mechanism. It must be
 // callable with a `size_t` (the number of milliseconds) and `message`.
-struct [[nodiscard]] TimeBlockAndLockCallbackDummy {};
-template <typename Callback = TimeBlockAndLockCallbackDummy>
+[[maybe_unused]] auto defaultLogger = [](size_t msecs,
+                                         std::string_view message) {
+  LOG(TIMING) << message << " took " << msecs << "ms" << std::endl;
+};
+template <typename Callback = decltype(defaultLogger)>
 struct TimeBlockAndLog {
   Timer t_{Timer::Started};
   std::string message_;
@@ -223,11 +226,7 @@ struct TimeBlockAndLog {
   }
   ~TimeBlockAndLog() {
     auto msecs = Timer::toMilliseconds(t_.value());
-    if constexpr (std::is_same_v<Callback, TimeBlockAndLockCallbackDummy>) {
-      LOG(TIMING) << message_ << " took " << msecs << "ms" << std::endl;
-    } else {
-      callback_(msecs, message_);
-    }
+    callback_(msecs, message_);
   }
 };
 }  // namespace detail
@@ -235,8 +234,8 @@ struct TimeBlockAndLog {
 #if LOGLEVEL >= TIMING
 using detail::TimeBlockAndLog;
 #else
-struct TimeBlockAndLog {
-  TimeBlockAndLog(const std::string&) {}
+<template typename T = int> struct TimeBlockAndLog {
+  TimeBlockAndLog(const std::string&, T t = {}) {}
 };
 #endif
 
