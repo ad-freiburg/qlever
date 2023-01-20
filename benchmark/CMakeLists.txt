@@ -1,7 +1,7 @@
 # Link binary ${basename} against the threading library,
 # and all libraries that are specified as additional arguments.
 function (linkBenchmark basename)
-    target_link_libraries(${basename} absl::flat_hash_map ${ARGN} ${CMAKE_THREAD_LIBS_INIT})
+    target_link_libraries(${basename} absl::flat_hash_map ${ARGN})
 endfunction()
 
 # Compile the benchmark with MainPrintTimes and link the benchmark, but
