@@ -34,7 +34,7 @@ BenchmarkRegister::BenchmarkRegister(const std::vector<std::function<void(Benchm
 
 // ____________________________________________________________________________
 const std::vector<BenchmarkRecords::RecordEntry>&
-   BenchmarkRecords::getSingleMeasurments() const{
+   BenchmarkRecords::getSingleMeasurements() const{
   return singleMeasurements_;
 }
 

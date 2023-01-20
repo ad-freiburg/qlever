@@ -4,8 +4,8 @@
 #include "../benchmark/Benchmark.h"
 #include "util/Random.h"
 
-// Single Measurments
-void BM_SingeMeasurments(BenchmarkRecords* records) {
+// Single Measurements
+void BM_SingeMeasurements(BenchmarkRecords* records) {
   // Setup.
   const size_t number = SlowRandomIntGenerator<size_t>(10,20)();
   auto exponentiate = [](const size_t number){
@@ -13,8 +13,8 @@ void BM_SingeMeasurments(BenchmarkRecords* records) {
   };
 
   // Measuring functions.
-  records->addSingleMeasurment("Exponentiate once", [&](){exponentiate(number);});
-  records->addSingleMeasurment("Recursivly exponentiate ten times", [&](){
+  records->addSingleMeasurement("Exponentiate once", [&](){exponentiate(number);});
+  records->addSingleMeasurement("Recursivly exponentiate ten times", [&](){
         size_t to_exponentiate = number;
         for (int i = 0; i < 10000000; i++) {
           to_exponentiate = exponentiate(to_exponentiate);
@@ -89,4 +89,4 @@ void BM_Tables(BenchmarkRecords* records) {
   }
 }
 
-BenchmarkRegister temp{{BM_SingeMeasurments, BM_Groups, BM_Tables}};
+BenchmarkRegister temp{{BM_SingeMeasurements, BM_Groups, BM_Tables}};

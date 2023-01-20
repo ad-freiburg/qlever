@@ -80,17 +80,17 @@ void BM_UnsortedIdTable(BenchmarkRecords* records) {
         useJoinFunctionOnIdTables(a, b, hashJoinLambda);
   };
 
-  records->addSingleMeasurment("Hashed join with overlapping IdTables", hashJoinLambdaWrapper);
+  records->addSingleMeasurement("Hashed join with overlapping IdTables", hashJoinLambdaWrapper);
   
-  records->addSingleMeasurment("Normal join with overlapping IdTables", joinLambdaWrapper);
+  records->addSingleMeasurement("Normal join with overlapping IdTables", joinLambdaWrapper);
 
   // Same thing, but non overlapping.
   a.idTable = createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 0, 10);
   b.idTable = createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 20, 30);
   
-  records->addSingleMeasurment("Hashed join with non-overlapping IdTables", hashJoinLambdaWrapper);
+  records->addSingleMeasurement("Hashed join with non-overlapping IdTables", hashJoinLambdaWrapper);
  
-  records->addSingleMeasurment("Normal join with non-overlapping IdTables", joinLambdaWrapper);
+  records->addSingleMeasurement("Normal join with non-overlapping IdTables", joinLambdaWrapper);
 }
 
 BenchmarkRegister temp{{BM_UnsortedIdTable}};

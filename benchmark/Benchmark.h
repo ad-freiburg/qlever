@@ -94,7 +94,7 @@ class BenchmarkRecords {
      *  with the needed parameters.
      */
     template<typename FUNCTION_TYPE>
-    void addSingleMeasurment(const std::string& descriptor,
+    void addSingleMeasurement(const std::string& descriptor,
         const FUNCTION_TYPE& functionToMeasure) {
       singleMeasurements_.push_back(RecordEntry{descriptor,
           measureTimeOfFunction(functionToMeasure)});
@@ -102,7 +102,7 @@ class BenchmarkRecords {
 
 
     // Returns a const view of all single recorded times.
-    const std::vector<RecordEntry>& getSingleMeasurments() const;
+    const std::vector<RecordEntry>& getSingleMeasurements() const;
 
     /*
      * @brief Creates an empty group, which can

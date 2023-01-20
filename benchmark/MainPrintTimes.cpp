@@ -72,7 +72,7 @@ int main() {
 
   // Visualization for single measurments.
   addCategoryTitelToStringstream(&visualization, "Single measurment benchmarks");
-  addVectorOfRecordEntry(&visualization, records.getSingleMeasurments(),
+  addVectorOfRecordEntry(&visualization, records.getSingleMeasurements(),
       "Single measurment benchmark ");
 
   addCategoryBreak(&visualization);
