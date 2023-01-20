@@ -258,6 +258,16 @@ endif()
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
 add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 
+# Make it possible to disable the `AD_CHECK()`s, mostly used for the
+# coverage checks.
+option(DISABLE_AD_CHECK "Disable AD_CHECK() and AD_FAIL() macros" OFF)
+if (DISABLE_AD_CHECK)
+    message(STATUS "Disabling AD_CHECK and AD_FAIL macros")
+    add_definitions(-DAD_DISABLE_CHECKS)
+endif(DISABLE_AD_CHECK)
+
+
+
 ##################################################
 # Precompiled headers
 set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)

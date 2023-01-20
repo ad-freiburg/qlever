@@ -34,6 +34,7 @@ using std::string;
 // Needed for Cygwin (will be an identical redefine  for *nixes)
 #define __STRING(x) #x
 
+#ifndef AD_DISABLE_CHECKS
 /// Custom assert that will always fail and report the file and line.
 #define AD_FAIL()                                  \
   AD_THROW(ad_semsearch::Exception::ASSERT_FAILED, \
@@ -85,6 +86,17 @@ using std::string;
                __STRING(t1 >= t2) << "; " << (t1) << " < " << (t2)); \
     }                                                                \
   }  // NOLINT
+
+#else
+/// Custom assert that will always fail and report the file and line.
+#define AD_FAIL() {}
+#define AD_CHECK(condition) {}
+#define AD_CHECK_EQ(t1, t2) {}
+#define AD_CHECK_LT(t1, t2) {}
+#define AD_CHECK_GT(t1, t2) {}
+#define AD_CHECK_LE(t1, t2) {}
+#define AD_CHECK_GE(t1, t2) {}
+#endif
 
 // -------------------------------------------
 // Exception class code
