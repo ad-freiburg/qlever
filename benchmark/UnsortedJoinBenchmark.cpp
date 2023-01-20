@@ -38,17 +38,8 @@ void BM_UnsortedIdTable(BenchmarkRecords* records) {
   const size_t NUMBER_ROWS = 1000;
   const size_t NUMBER_COLUMNS = NUMBER_ROWS; 
 
-  Join J{Join::InvalidOnlyForTestingJoinTag{}, ad_utility::testing::getQec()};
-  DISABLE_WARNINGS_CLANG_13
-  auto hashJoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
-    ENABLE_WARNINGS_CLANG_13
-    return J.hashJoin(AD_FWD(args)...);
-  };
-  DISABLE_WARNINGS_CLANG_13
-  auto joinLambda = [&J]<int A, int B, int C>(auto&&... args) {
-    ENABLE_WARNINGS_CLANG_13
-    return J.join<A, B, C>(AD_FWD(args)...);
-  };
+  auto hashJoinLambda = makeHashJoinLambda();
+  auto joinLambda = makeJoinLambda();
 
   // Tables, that have overlapping values in their join columns.
   IdTableAndJoinColumn a{

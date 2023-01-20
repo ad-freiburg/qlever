@@ -12,6 +12,8 @@
 #include "util/Random.h"
 #include "engine/idTable/IdTable.h"
 #include "../test/util/IdTableHelpers.h"
+#include "util/Forward.h"
+#include "../test/IndexTestHelpers.h"
 
 /*
  * @brief Join two IdTables using the given join function and return
@@ -46,4 +48,28 @@ IdTable useJoinFunctionOnIdTables(const IdTableAndJoinColumn& tableA,
       tableB.joinColumn, &result);
 
   return result;
+}
+
+/*
+ * @brief Returns a lambda for calling the Join::hashJoin.
+ */
+auto makeHashJoinLambda() {
+  DISABLE_WARNINGS_CLANG_13
+  return []<int A, int B, int C>(auto&&... args) {
+    ENABLE_WARNINGS_CLANG_13
+    Join J{Join::InvalidOnlyForTestingJoinTag{}, ad_utility::testing::getQec()};
+    return J.hashJoin(AD_FWD(args)...);
+  };
+}
+
+/*
+ * @brief Returns a lambda for calling the Join::join.
+ */
+auto makeJoinLambda() {
+  DISABLE_WARNINGS_CLANG_13
+  return []<int A, int B, int C>(auto&&... args) {
+    ENABLE_WARNINGS_CLANG_13
+    Join J{Join::InvalidOnlyForTestingJoinTag{}, ad_utility::testing::getQec()};
+    return J.join<A, B, C>(AD_FWD(args)...);
+  };
 }

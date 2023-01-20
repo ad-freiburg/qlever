@@ -137,17 +137,8 @@ void runTestCasesForAllJoinAlgorithms(
 
   // All normal join algorithm defined as lambda functions for easier handing
   // over to helper functions.
-  Join J{Join::InvalidOnlyForTestingJoinTag{}, ad_utility::testing::getQec()};
-  DISABLE_WARNINGS_CLANG_13
-  auto hashJoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
-    ENABLE_WARNINGS_CLANG_13
-    return J.hashJoin(AD_FWD(args)...);
-  };
-  DISABLE_WARNINGS_CLANG_13
-  auto joinLambda = [&J]<int A, int B, int C>(auto&&... args) {
-    ENABLE_WARNINGS_CLANG_13
-    return J.join<A, B, C>(AD_FWD(args)...);
-  };
+  auto hashJoinLambda = makeHashJoinLambda();
+  auto joinLambda = makeJoinLambda();
 
   // For sorting IdTableAndJoinColumn by their join column.
   auto sortByJoinColumn = [](IdTableAndJoinColumn& idTableAndJC) {
