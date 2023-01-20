@@ -54,10 +54,10 @@ IdTable useJoinFunctionOnIdTables(const IdTableAndJoinColumn& tableA,
  * @brief Returns a lambda for calling the Join::hashJoin.
  */
 auto makeHashJoinLambda() {
+  Join J{Join::InvalidOnlyForTestingJoinTag{}, ad_utility::testing::getQec()};
   DISABLE_WARNINGS_CLANG_13
-  return []<int A, int B, int C>(auto&&... args) {
+  return [J = std::move(J)]<int A, int B, int C>(auto&&... args) mutable {
     ENABLE_WARNINGS_CLANG_13
-    Join J{Join::InvalidOnlyForTestingJoinTag{}, ad_utility::testing::getQec()};
     return J.hashJoin(AD_FWD(args)...);
   };
 }
@@ -66,10 +66,10 @@ auto makeHashJoinLambda() {
  * @brief Returns a lambda for calling the Join::join.
  */
 auto makeJoinLambda() {
+  Join J{Join::InvalidOnlyForTestingJoinTag{}, ad_utility::testing::getQec()};
   DISABLE_WARNINGS_CLANG_13
-  return []<int A, int B, int C>(auto&&... args) {
+  return [J = std::move(J)]<int A, int B, int C>(auto&&... args) mutable {
     ENABLE_WARNINGS_CLANG_13
-    Join J{Join::InvalidOnlyForTestingJoinTag{}, ad_utility::testing::getQec()};
     return J.join<A, B, C>(AD_FWD(args)...);
   };
 }
