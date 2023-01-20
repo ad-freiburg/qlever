@@ -10,7 +10,7 @@ endfunction()
 #   - compileName : The name, that the compiled end product should have.
 #   - cppFileName : The .cpp file, that contains your benchmark without the file extension.
 function(addAndLinkBenchmarkWithPrintTimes compileName cppFileName)
-    add_executable(${compileName}  Benchmark.cpp "${cppFileName}.cpp" MainPrintTimes.cpp)
+    add_executable(${compileName}  Benchmark.cpp ${cppFileName} MainPrintTimes.cpp)
     linkBenchmark(${compileName} ${ARGN})
 endfunction()
 
@@ -20,7 +20,7 @@ endfunction()
 #   - compileName : The name, that the compiled end product should have.
 #   - cppFileName : The .cpp file, that contains your benchmark without the file extension.
 function(addAndLinkBenchmarkWithPrintRelativeSpeedup compileName cppFileName)
-    add_executable(${compileName}  Benchmark.cpp "${cppFileName}.cpp" MainPrintRelativeSpeedup.cpp)
+    add_executable(${compileName}  Benchmark.cpp ${cppFileName} MainPrintRelativeSpeedup.cpp)
     linkBenchmark(${compileName} ${ARGN})
 endfunction()
 
@@ -30,21 +30,21 @@ endfunction()
 #   - compileName : The name, that the compiled end product should have.
 #   - cppFileName : The .cpp file, that contains your benchmark without the file extension.
 function(addAndLinkBenchmarkWithPrintAverageTime compileName cppFileName)
-  add_executable(${compileName}  Benchmark.cpp "${cppFileName}.cpp" MainPrintAverageTimeSingleMeasurment.cpp)
+  add_executable(${compileName}  Benchmark.cpp ${cppFileName} MainPrintAverageTimeSingleMeasurment.cpp)
     linkBenchmark(${compileName} ${ARGN})
 endfunction()
 
 # Add benchmarks after here.
-addAndLinkBenchmarkWithPrintTimes(SortedJoinBenchmarkPrintTimes SortedJoinBenchmark engine)
+addAndLinkBenchmarkWithPrintTimes(SortedJoinBenchmarkPrintTimes SortedJoinBenchmark.cpp engine)
 
-addAndLinkBenchmarkWithPrintTimes(UnsortedJoinBenchmarkPrintTimes UnsortedJoinBenchmark engine)
+addAndLinkBenchmarkWithPrintTimes(UnsortedJoinBenchmarkPrintTimes UnsortedJoinBenchmark.cpp engine)
 
-addAndLinkBenchmarkWithPrintRelativeSpeedup(SortedJoinBenchmarkPrintSpeedup SortedJoinBenchmark engine)
+addAndLinkBenchmarkWithPrintRelativeSpeedup(SortedJoinBenchmarkPrintSpeedup SortedJoinBenchmark.cpp engine)
 
-addAndLinkBenchmarkWithPrintRelativeSpeedup(UnsortedJoinBenchmarkPrintSpeedup UnsortedJoinBenchmark engine)
+addAndLinkBenchmarkWithPrintRelativeSpeedup(UnsortedJoinBenchmarkPrintSpeedup UnsortedJoinBenchmark.cpp engine)
 
-addAndLinkBenchmarkWithPrintAverageTime(SortedJoinBenchmarkPrintAverage SortedJoinBenchmark engine)
+addAndLinkBenchmarkWithPrintAverageTime(SortedJoinBenchmarkPrintAverage SortedJoinBenchmark.cpp engine)
 
-addAndLinkBenchmarkWithPrintAverageTime(UnsortedJoinBenchmarkPrintAverage UnsortedJoinBenchmark engine)
+addAndLinkBenchmarkWithPrintAverageTime(UnsortedJoinBenchmarkPrintAverage UnsortedJoinBenchmark.cpp engine)
 
-addAndLinkBenchmarkWithPrintTimes(BenchmarkExamples BenchmarkExamples)
+addAndLinkBenchmarkWithPrintTimes(BenchmarkExamples BenchmarkExamples.cpp)
