@@ -44,6 +44,17 @@ class BenchmarkRecords {
       std::vector<std::string> columnNames;
       // The time measurements in seconds. Access is [row, column].
       std::vector<std::vector<std::optional<float>>> entries;
+
+      // Default constructor. Without it, some of the included headers generate
+      // errors.
+      RecordTable(): descriptor{""}, rowNames{{}}, columnNames{{}}, entries{{}} {}
+
+      RecordTable(const std::string& pDescriptor, 
+          const std::vector<std::string>& pRowNames,
+          const std::vector<std::string>& pColumnNames):
+          descriptor{pDescriptor}, rowNames{pRowNames},
+          columnNames{pColumnNames},
+          entries(rowNames.size(), std::vector<std::optional<float>>(rowNames.size())) {}
     };
 
   private:

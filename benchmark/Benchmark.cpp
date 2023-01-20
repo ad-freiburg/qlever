@@ -62,13 +62,8 @@ void BenchmarkRecords::addTable(const std::string& descriptor,
   AD_CHECK(!recordTables_.contains(descriptor));
 
   // Add a new entry.
-  recordTables_[descriptor] = BenchmarkRecords::RecordTable{descriptor,
-    rowNames, columnNames, {}};
-
-  // We already know the size of the table, so lets resize the vectors.
-  // The std::optional are all empty.
-  recordTables_[descriptor].entries.resize(rowNames.size(),
-      std::vector<std::optional<float>>(rowNames.size()));
+  recordTables_[descriptor] = BenchmarkRecords::RecordTable(descriptor,
+    rowNames, columnNames);
 }
 
 // ____________________________________________________________________________
