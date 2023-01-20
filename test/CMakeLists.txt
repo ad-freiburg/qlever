@@ -252,6 +252,4 @@ addLinkAndDiscoverTest(ConstexprUtilsTest)
 
 addLinkAndDiscoverTest(ResetWhenMovedTest)
 
-addLinkAndDiscoverTest(ResetWhenMovedTest)
-
 addLinkAndDiscoverTest(CompressedRelationsTest index)
