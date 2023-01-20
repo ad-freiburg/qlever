@@ -1,113 +1,132 @@
-// Copyright 2011, University of Freiburg, Chair of Algorithms and Data
+// Copyright 2011-2023, University of Freiburg, Chair of Algorithms and Data
 // Structures.
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 #pragma once
 
 #include <sys/time.h>
 #include <sys/types.h>
 
+#include <chrono>
 #include <iomanip>
 #include <memory>
 #include <sstream>
-#include <chrono>
 
 #include "absl/strings/str_cat.h"
 #include "util/Log.h"
 #include "util/Synchronized.h"
+#include "util/TypeTraits.h"
 
-// Björn 01Jun11: Copied this class from the CompleteSearch
-// code in order to use it in the semantic search, too.
-// Adapted header guard, namespace, etc.
 namespace ad_utility {
 using namespace std::string_literals;
 using namespace std::chrono_literals;
-// HOLGER 22Jan06 : changed all suseconds_t to off_t
-//
-//! A SIMPLE CLASS FOR TIME MEASUREMENTS.
-//
+
+// This internal namespace is used s.t. we can use an alias for the rather long
+// `std::chrono` namespace without leaking this alias into `ad_utility`. All
+// the defined types are exported into the `ad_utility` namespace via `using`
+// declarations.
 namespace timer {
-  namespace chr = std::chrono;
+namespace chr = std::chrono;
+
+// A simple class for time measurement.
 class Timer {
  public:
-  using microseconds = chr::microseconds;
-  using milliseconds = chr::milliseconds;
-  using secondsInt = chr::seconds;
-  using secondsDouble = chr::duration<double>;
-  using Duration = microseconds;
+  // Typedefs for some types from `std::chrono`. milli- and microseconds are
+  // stored as integrals and seconds are stored as doubles. The timer internally
+  // works with microseconds.
+  using Microseconds = chr::microseconds;
+  using Milliseconds = chr::milliseconds;
+  using Seconds = chr::duration<double>;
+  using Duration = Microseconds;
   using TimePoint = chr::time_point<chr::high_resolution_clock>;
-  Duration toDuration(const auto& duration) {
+
+  // A simple enum used in the constructor to decide whether the timer is
+  // immediately started or not.
+  enum class InitialStatus { Started, Stopped };
+  using enum InitialStatus;
+
+  // Convert any `std::chrono::duration` to the underlying `Duration` type
+  // of the `Timer` class.
+  template <ad_utility::isInstantiation<chr::duration> T>
+  static Duration toDuration(T duration) {
     return chr::duration_cast<Duration>(duration);
   }
+
+  // Convert a `Duration` to seconds (as a plain `double`).
+  // TODO<joka921> As soon as we have `std::format` or something similar that
+  // allows for simple formatting of `std::chrono` types, these functions
+  // also should return `std::chrono::duration` for more typesafety.
+  static double toSeconds(Duration d) {
+    return chr::duration_cast<Seconds>(d).count();
+  }
+
+  // Convert a `Duration` to milliseconds (as a plain `size_t`).
+  static size_t toMilliseconds(Duration d) {
+    return chr::duration_cast<Milliseconds>(d).count();
+  }
+
  private:
   //! The timer value (initially zero)
   Duration value_ = Duration::zero();
+  TimePoint timeOfStart_;
+  bool isRunning_ = false;
 
-    TimePoint timeOfStart_;
-
-    //! Indicates whether a measurement is running.
-    bool _running;
-
-   public:
-    //! The default constructor.
-    Timer() { reset(); }
-
-    //! Resets the timer value to zero and stops the measurement.
-    void reset() {
-      value_ = 0us;
-      _running = false;
+ public:
+  Timer(InitialStatus initialStatus) {
+    if (initialStatus == Started) {
+      start();
     }
+  }
 
-    //! Resets the timer value to zero and starts the measurement.
-    inline void start() {
-      value_ = Duration::zero();
-      timeOfStart_ = std::chrono::high_resolution_clock::now();
-      _running = true;
+  //! Resets the timer value to zero and stops the measurement.
+  void reset() {
+    value_ = 0us;
+    isRunning_ = false;
+  }
+
+  //! Resets the timer value to zero and starts the measurement.
+  inline void start() {
+    value_ = Duration::zero();
+    timeOfStart_ = chr::high_resolution_clock::now();
+    isRunning_ = true;
+  }
+
+  //! Continues the measurement without resetting
+  //! the timer value (no effect if running)
+  inline void cont() {
+    if (isRunning_ == false) {
+      timeOfStart_ = chr::high_resolution_clock::now();
+      isRunning_ = true;
     }
+  }
 
-    //! Continues the measurement without resetting
-    //! the timer value (no effect if running)
-    inline void cont() {
-      if (_running == false) {
-        timeOfStart_ = std::chrono::high_resolution_clock::now();
-        _running = true;
-      }
+  //! Stops the measurement.
+  inline void stop() {
+    if (isRunning_) {
+      value_ += timeSinceLastStart();
+      isRunning_ = false;
     }
-
-    //! Stops the measurement.
-    inline void stop() {
-      auto timeOfStop = std::chrono::high_resolution_clock::now();
-      if (_running) {
-        value_ += toDuration(timeOfStop - timeOfStart_);
-      }
-      _running = false;
+  }
+  // The following functions return the current time of the timer.
+  // Note that this also works while the timer is running.
+  Duration value() const {
+    if (isRunning()) {
+      return value_ + timeSinceLastStart();
+    } else {
+      return value_;
     }
-  // (13.10.10 by baumgari for testing codebase/utility/TimerStatistics.h)
-  // Sets the totalTime manually.
-  inline void setUsecs(off_t usecs) {
-    value_ = toDuration(std::chrono::microseconds{usecs});
-  }
-  inline void setMsecs(off_t msecs) {
-    value_ = toDuration(std::chrono::milliseconds{msecs});
-  }
-  inline void setSecs(off_t secs) {
-    value_ = toDuration(std::chrono::seconds{secs});
   }
 
-  //! Time at last stop (initially zero).
-  Duration value() const { return value_; }
-  size_t usecs() const {
-    return chr::duration_cast<microseconds>(value_).count();
-  }
-  size_t msecs() const {
-    return chr::duration_cast<milliseconds>(value_).count();
-  }
-  double secs() const {
-    return chr::duration_cast<secondsDouble>(value_).count();
-  }
+  size_t msecs() const { return toMilliseconds(value()); }
 
   // is the timer currently running
-  bool isRunning() const { return _running; }
-};
+  bool isRunning() const { return isRunning_; }
 
+ private:
+  Duration timeSinceLastStart() const {
+    auto now = chr::high_resolution_clock::now();
+    return toDuration(now - timeOfStart_);
+  }
+};
 
 /// An exception signalling a timeout
 class TimeoutException : public std::exception {
@@ -125,33 +144,19 @@ class TimeoutTimer : public Timer {
  public:
   /// Factory function for a timer that never times out
   static TimeoutTimer unlimited() { return TimeoutTimer(UnlimitedTag{}); }
-  /// Factory function for a timer that times out after a number of microseconds
-  static TimeoutTimer fromMicroseconds(off_t microseconds) {
-    return TimeoutTimer(chr::duration_cast<Timer::Duration>(Timer::microseconds{microseconds}));
-  }
-  /// Factory function for a timer that times out after a number of miliseconds
-  static TimeoutTimer fromMilliseconds(off_t milliseconds) {
-    return TimeoutTimer(milliseconds * 1000);
-  }
-  /// Factory function for a timer that times out after a number of seconds
-  static TimeoutTimer fromSeconds(double seconds) {
-    return TimeoutTimer(static_cast<off_t>(seconds * 1000 * 1000));
-  }
+
+  template <ad_utility::isInstantiation<chr::duration> T>
+  TimeoutTimer(T timeLimit, Timer::InitialStatus status)
+      : Timer{status}, _timeLimit{toDuration(timeLimit)} {}
 
   /// Did this timer already timeout
   /// Can't be const because of the internals of the Timer class.
   bool hasTimedOut() {
     if (_isUnlimited) {
       return false;
+    } else {
+      return value() > _timeLimit;
     }
-    // NOTE: we cannot get the current timer value without stopping the timer.
-    auto isRunningSnapshot = isRunning();
-    stop();
-    auto hasTimedOut = usecs() > _timeLimit;
-    if (isRunningSnapshot) {
-      cont();
-    }
-    return hasTimedOut;
   }
 
   // Check if this timer has timed out. If the timer has timed out, throws a
@@ -159,7 +164,7 @@ class TimeoutTimer : public Timer {
   void checkTimeoutAndThrow(std::string_view additionalMessage = {}) {
     if (hasTimedOut()) {
       double seconds =
-           std::chrono::duration_cast<Timer::secondsDouble>(_timeLimit).count();
+          std::chrono::duration_cast<Timer::Seconds>(_timeLimit).count();
       std::stringstream numberStream;
       // Seconds with three digits after the decimal point.
       // TODO<C++20> : Use std::format for formatting, it is much more readable.
@@ -181,48 +186,32 @@ class TimeoutTimer : public Timer {
     }
   }
 
-  off_t remainingMicroseconds() {
+  Duration remainingTime() const {
     if (_isUnlimited) {
-      return std::numeric_limits<off_t>::max();
+      return Duration::max();
     }
-    auto prevRunning = isRunning();
-    stop();
-    off_t res = usecs() > _timeLimit ? 0
-                    : _timeLimit - usecs();
-    if (prevRunning) {
-      cont();
-    }
-    return res;
+    auto passedTime = value();
+    return passedTime < _timeLimit ? _timeLimit - passedTime : Duration::zero();
   }
 
  private:
   Timer::Duration _timeLimit = Timer::Duration::zero();
   bool _isUnlimited = false;  // never times out
   class UnlimitedTag {};
-  TimeoutTimer(UnlimitedTag) : _isUnlimited{true} {}
-  TimeoutTimer(Timer::Duration timeLimit)
-      : _timeLimit{timeLimit} {}
+  TimeoutTimer(UnlimitedTag) : Timer{Timer::Started}, _isUnlimited{true} {}
 };
-
-/// A threadsafe timeout timer
-using ConcurrentTimeoutTimer =
-    ad_utility::Synchronized<TimeoutTimer, std::mutex>;
-
-/// A shared ptr to a threadsafe timeout timer
-using SharedConcurrentTimeoutTimer = std::shared_ptr<ConcurrentTimeoutTimer>;
 
 // A helper struct that measures the time from its creation until its
 // destruction and logs the time together with a specified message
 #if LOGLEVEL >= TIMING
 struct TimeBlockAndLog {
-  Timer t_;
+  Timer t_{Timer::Started};
   std::string message_;
   TimeBlockAndLog(std::string message) : message_{std::move(message)} {
     t_.start();
   }
   ~TimeBlockAndLog() {
-    t_.stop();
-    auto msecs = static_cast<double>(t_.usecs());
+    auto msecs = Timer::toMilliseconds(t_.value());
     LOG(TIMING) << message_ << " took " << msecs << "ms" << std::endl;
   }
 };
@@ -232,7 +221,16 @@ struct TimeBlockAndLog {
 };
 #endif
 
-} // namespace timer
-using timer::Timer;
+}  // namespace timer
+using timer::TimeBlockAndLog;
+using timer::TimeoutException;
 using timer::TimeoutTimer;
+using timer::Timer;
+
+/// A threadsafe timeout timer
+using ConcurrentTimeoutTimer =
+    ad_utility::Synchronized<TimeoutTimer, std::mutex>;
+
+/// A shared ptr to a threadsafe timeout timer
+using SharedConcurrentTimeoutTimer = std::shared_ptr<ConcurrentTimeoutTimer>;
 }  // namespace ad_utility

@@ -14,8 +14,8 @@
 
 namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
-    (ad_utility::similarToInstantiation<std::vector, T> ||
-     ad_utility::similarToInstantiation<std::basic_string, T>)) {
+    (ad_utility::similarToInstantiation<T, std::vector> ||
+     ad_utility::similarToInstantiation<T, std::basic_string>)) {
   using V = typename std::decay_t<T>::value_type;
   auto size = arg.size();  // The value is ignored for `ReadSerializer`s.
   serializer | size;

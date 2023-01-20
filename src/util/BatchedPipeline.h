@@ -16,6 +16,7 @@
 namespace ad_pipeline {
 
 using namespace ad_tuple_helpers;
+using Timer = ad_utility::Timer;
 
 namespace detail {
 
@@ -82,7 +83,9 @@ class Batcher {
 
   // get the accumulated time that calls to pickupBatch had to block until they
   // could return the next batch
-  std::vector<off_t> getWaitingTime() const { return {_timer->msecs()}; }
+  std::vector<Timer::Duration> getWaitingTime() const {
+    return {_timer->value()};
+  }
 
   // returns the batchSize. The last batch might be smaller
   [[nodiscard]] size_t getBatchSize() const { return _batchSize; }
@@ -91,7 +94,7 @@ class Batcher {
   size_t _batchSize;
   std::unique_ptr<Creator> _creator;
   std::unique_ptr<ad_utility::Timer> _timer =
-      std::make_unique<ad_utility::Timer>();
+      std::make_unique<ad_utility::Timer>(ad_utility::Timer::Stopped);
   std::future<detail::Batch<ValueT>> _fut;
 
   // start assembling the next batch in parallel
@@ -216,9 +219,9 @@ class BatchedPipeline {
 
   // for this and all previous steps of the pipeline, get the total blocking
   // time in calls to produce batch
-  std::vector<off_t> getWaitingTime() const {
+  std::vector<Timer::Duration> getWaitingTime() const {
     auto res = _previousStage->getWaitingTime();
-    res.push_back(_timer->msecs());
+    res.push_back(_timer->value());
     return res;
   }
 
@@ -343,7 +346,7 @@ class BatchedPipeline {
 
  private:
   std::unique_ptr<ad_utility::Timer> _timer =
-      std::make_unique<ad_utility::Timer>();
+      std::make_unique<ad_utility::Timer>(ad_utility::Timer::Stopped);
   // the unique_ptrs to our Transformers
   using uniquePtrTuple = toUniquePtrTuple_t<FirstTransformer, Transformers...>;
   // raw non-owning pointers to the transformers
@@ -506,9 +509,9 @@ class BatchExtractor {
    * @brief for all steps in the pipeline, report how long their calls to
    * pickupBatch were blocking. TODO<joka921>: how useful is this measure?
    */
-  [[nodiscard]] std::vector<off_t> getWaitingTime() const {
+  [[nodiscard]] std::vector<Timer::Duration> getWaitingTime() const {
     auto res = _pipeline->getWaitingTime();
-    res.push_back(_timer->msecs());
+    res.push_back(_timer->value());
     return res;
   }
 
@@ -517,7 +520,7 @@ class BatchExtractor {
 
  private:
   std::unique_ptr<ad_utility::Timer> _timer =
-      std::make_unique<ad_utility::Timer>();
+      std::make_unique<ad_utility::Timer>(ad_utility::Timer::Stopped);
   std::unique_ptr<Pipeline> _pipeline;
   std::future<detail::Batch<ValueT>> _fut;
   std::vector<ValueT> _buffer;

@@ -1,13 +1,13 @@
-//
-// Created by johannes on 21.04.21.
-//
+// Copyright 2021, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
-#include "SortPerformanceEstimator.h"
+#include "engine/SortPerformanceEstimator.h"
 
 #include <cstdlib>
 
-#include "CallFixedSize.h"
-#include "Engine.h"
+#include "engine/CallFixedSize.h"
+#include "engine/Engine.h"
 #include "engine/idTable/IdTable.h"
 #include "util/Log.h"
 #include "util/Random.h"
@@ -38,16 +38,14 @@ constexpr bool isSorted(const std::array<size_t, I>& array) {
 }
 
 // ____________________________________________________________________
-double SortPerformanceEstimator::measureSortingTimeInSeconds(
+auto SortPerformanceEstimator::measureSortingTime(
     size_t numRows, size_t numColumns,
-    const ad_utility::AllocatorWithLimit<Id>& allocator) {
+    const ad_utility::AllocatorWithLimit<Id>& allocator) -> Timer::Duration {
   auto randomTable = createRandomIdTable(numRows, numColumns, allocator);
-  ad_utility::Timer timer;
-  timer.start();
+  ad_utility::Timer timer{ad_utility::Timer::Started};
   // Always sort on the first column for simplicity;
   CALL_FIXED_SIZE(numColumns, &Engine::sort, &randomTable, 0ull);
-  timer.stop();
-  return timer.secs();
+  return timer.value();
 }
 
 // ____________________________________________________________________________
@@ -57,13 +55,14 @@ SortPerformanceEstimator::SortPerformanceEstimator(
   computeEstimatesExpensively(allocator, maxNumElementsToSort);
 }
 
-double SortPerformanceEstimator::estimatedSortTimeInSeconds(
-    size_t numRows, size_t numCols) const noexcept {
+auto SortPerformanceEstimator::estimatedSortTime(size_t numRows,
+                                                 size_t numCols) const noexcept
+    -> Timer::Duration {
   if (!_estimatesWereCalculated) {
     LOG(WARN) << "The estimates of the SortPerformanceEstimator were never set "
                  "up, Sorts will thus never time out"
               << std::endl;
-    return 0.0;
+    return Timer::Duration::zero();
   }
   // Return the index of the element in the !sorted! `sampleVector`, which is
   // closest to 'value'
@@ -89,12 +88,12 @@ double SortPerformanceEstimator::estimatedSortTimeInSeconds(
   auto columnIndex = getClosestIndex(sampleValuesCols, numCols);
 
   // start with the closest sample
-  double result = _samples[rowIndex][columnIndex];
+  Timer::Duration result = _samples[rowIndex][columnIndex];
 
   LOG(TRACE) << "Closest sample result was " << sampleValuesRows[rowIndex]
              << " rows with " << sampleValuesCols[columnIndex]
-             << " columns and an estimate of " << result << " seconds."
-             << std::endl;
+             << " columns and an estimate of " << Timer::toSeconds(result)
+             << " seconds." << std::endl;
 
   auto numRowsInSample = static_cast<double>(sampleValuesRows[rowIndex]);
   double rowRatio = static_cast<double>(numRows) / numRowsInSample;
@@ -103,7 +102,7 @@ double SortPerformanceEstimator::estimatedSortTimeInSeconds(
   double columnRatio = static_cast<double>(numCols) / numColumnsInSample;
   // Scale linearly with the number of rows. Scale the number of columns with
   // the square root
-  result = result * rowRatio * std::sqrt(columnRatio);
+  result = Timer::toDuration(result * rowRatio * std::sqrt(columnRatio));
 
   return result;
 }
@@ -140,7 +139,7 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
         }
 #endif
         if (!estimateSortingTime) {
-          _samples[i][j] = measureSortingTimeInSeconds(rows, cols, allocator);
+          _samples[i][j] = measureSortingTime(rows, cols, allocator);
         }
       } catch (const ad_utility::detail::AllocationExceedsLimitException& e) {
         estimateSortingTime = true;
@@ -156,14 +155,15 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
           // Assume that sorting time grows linearly in the number of rows
           float ratio = static_cast<float>(sampleValuesRows[i]) /
                         static_cast<float>(sampleValuesRows[i - 1]);
-          _samples[i][j] = _samples[i - 1][j] * ratio;
+          _samples[i][j] = Timer::toDuration(_samples[i - 1][j] * ratio);
         } else if (j > 0) {
           // Assume that sorting time grows with the square root in the number
           // of columns. The square root is just a heuristic: a simple function
           // between linear and constant.
           float ratio = static_cast<float>(sampleValuesCols[j]) /
                         static_cast<float>(sampleValuesCols[j - 1]);
-          _samples[i][j] = _samples[i][j - 1] * std::sqrt(ratio);
+          _samples[i][j] =
+              Timer::toDuration(_samples[i][j - 1] * std::sqrt(ratio));
         } else {
           // not even the smallest IdTable could be created, this should never
           // happen.
@@ -173,8 +173,8 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
               << "operations will be canceled." << std::endl;
         }
         LOG(TRACE) << "Estimated the sort time to be " << std::fixed
-                   << std::setprecision(3) << _samples[i][j] << " seconds."
-                   << std::endl;
+                   << std::setprecision(3) << Timer::toSeconds(_samples[i][j])
+                   << " seconds." << std::endl;
       }
     }
   }
