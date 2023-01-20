@@ -42,8 +42,8 @@ class Join : public Operation {
   //
   // @param qec Needed for creating some dummies, so that the time out checker
   //  in Join::join doesn't create a seg fault, when it detects a time out and
-  //  tries to crate an error message. (test/IndexTestHelpers.h has a function
-  //  (getQec) for easily creating one for tests.)
+  //  tries to create an error message. (test/IndexTestHelpers.h has a function
+  //  `getQec` for easily creating one for tests.)
   struct InvalidOnlyForTestingJoinTag {};
   explicit Join(InvalidOnlyForTestingJoinTag, QueryExecutionContext* qec);
 
