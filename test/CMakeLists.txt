@@ -251,3 +251,5 @@ addLinkAndDiscoverTest(CallFixedSizeTest)
 addLinkAndDiscoverTest(ConstexprUtilsTest)
 
 addLinkAndDiscoverTest(ResetWhenMovedTest)
+
+addLinkAndDiscoverTest(TimerTest absl::strings)

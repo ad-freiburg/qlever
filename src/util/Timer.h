@@ -203,16 +203,25 @@ class TimeoutTimer : public Timer {
 
 // A helper struct that measures the time from its creation until its
 // destruction and logs the time together with a specified message
+// The callback can be used to change the logging mechanism. It must be
+// callable with a `size_t` (the number of milliseconds) and `message`.
 #if LOGLEVEL >= TIMING
+struct [[nodiscard]] TimeBlockAndLockCallbackDummy{};
+template <typename Callback = TimeBlockAndLockCallbackDummy>
 struct TimeBlockAndLog {
   Timer t_{Timer::Started};
   std::string message_;
-  TimeBlockAndLog(std::string message) : message_{std::move(message)} {
+  Callback callback_;
+  TimeBlockAndLog(std::string message, Callback callback = {}) : message_{std::move(message)}, callback_{std::move(callback)} {
     t_.start();
   }
   ~TimeBlockAndLog() {
     auto msecs = Timer::toMilliseconds(t_.value());
-    LOG(TIMING) << message_ << " took " << msecs << "ms" << std::endl;
+    if constexpr (std::is_same_v<Callback, TimeBlockAndLockCallbackDummy>) {
+      LOG(TIMING) << message_ << " took " << msecs << "ms" << std::endl;
+    } else {
+      callback_(msecs, message_);
+    }
   }
 };
 #else
