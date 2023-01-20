@@ -5,15 +5,17 @@
 #include <gtest/gtest.h>
 
 // This redefinition is used to enable the `TimeBlockAndLog` struct for testing.
+#undef LOGLEVEL
 #define LOGLEVEL 10
 #include "util/Timer.h"
 
-using ad_utility::Timer;
 using ad_utility::TimeoutTimer;
+using ad_utility::Timer;
 using namespace std::chrono_literals;
 
-void testTime(Timer::Duration duration, size_t msecs, std::chrono::milliseconds expected) {
-  ASSERT_GE(duration, 0.9 * expected );
+void testTime(Timer::Duration duration, size_t msecs,
+              std::chrono::milliseconds expected) {
+  ASSERT_GE(duration, 0.9 * expected);
   ASSERT_LE(duration, 1.1 * (expected + 1ms));
 
   ASSERT_GE(msecs, 0.9 * expected.count());
@@ -21,10 +23,10 @@ void testTime(Timer::Duration duration, size_t msecs, std::chrono::milliseconds 
 
   ASSERT_GE(Timer::toSeconds(duration), 0.0009 * expected.count());
   ASSERT_LE(Timer::toSeconds(duration), 0.0011 * (expected.count() + 1));
-
 }
 
-void testTime(const ad_utility::Timer& timer, std::chrono::milliseconds expected) {
+void testTime(const ad_utility::Timer& timer,
+              std::chrono::milliseconds expected) {
   testTime(timer.value(), timer.msecs(), expected);
 }
 
@@ -98,7 +100,7 @@ TEST(TimeoutTimer, Unlimited) {
     std::this_thread::sleep_for(1ms);
     ASSERT_FALSE(timer.hasTimedOut());
     ASSERT_NO_THROW(timer.checkTimeoutAndThrow("error1"));
-    ASSERT_NO_THROW(timer.checkTimeoutAndThrow([](){return "error2";}));
+    ASSERT_NO_THROW(timer.checkTimeoutAndThrow([]() { return "error2"; }));
   }
 }
 
@@ -107,17 +109,18 @@ TEST(TimeoutTimer, Limited) {
   std::this_thread::sleep_for(5ms);
   ASSERT_FALSE(timer.hasTimedOut());
   ASSERT_NO_THROW(timer.checkTimeoutAndThrow("error1"));
-  ASSERT_NO_THROW(timer.checkTimeoutAndThrow([](){return "error2";}));
+  ASSERT_NO_THROW(timer.checkTimeoutAndThrow([]() { return "error2"; }));
   std::this_thread::sleep_for(7ms);
 
   ASSERT_TRUE(timer.hasTimedOut());
   ASSERT_THROW(timer.checkTimeoutAndThrow("hi"), ad_utility::TimeoutException);
   try {
-    timer.checkTimeoutAndThrow([](){return "test error";});
+    timer.checkTimeoutAndThrow([]() { return "Testing. "; });
     FAIL() << "Expected a timeout exception, but no exception was thrown";
-  }
-  catch (const ad_utility::TimeoutException& ex) {
-    ASSERT_EQ(ex.what(), "Some message");
+  } catch (const ad_utility::TimeoutException& ex) {
+    ASSERT_STREQ(
+        ex.what(),
+        "Testing. A Timeout occured. The time limit was 0.010 seconds");
   }
 }
 
@@ -127,9 +130,8 @@ TEST(TimeBlockAndLock, TimeBlockAndLock) {
     auto callback = [&s](size_t msecs, std::string_view message) {
       s = absl::StrCat(message, ": ", msecs);
     };
-    ad_utility::TimeBlockAndLog t {"message", callback};
+    ad_utility::TimeBlockAndLog t{"message", callback};
     std::this_thread::sleep_for(10ms);
   }
-  ASSERT_EQ("some Message", s);
-
+  ASSERT_EQ("message: 10", s);
 }

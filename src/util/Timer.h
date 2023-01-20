@@ -171,7 +171,7 @@ class TimeoutTimer : public Timer {
       numberStream << std::setprecision(3) << std::fixed << seconds;
       throw TimeoutException{absl::StrCat(
           additionalMessage, "A Timeout occured. The time limit was "s,
-          std::move(numberStream).str(), "seconds"s)};
+          std::move(numberStream).str(), " seconds"s)};
     }
   }
 
@@ -206,13 +206,14 @@ class TimeoutTimer : public Timer {
 // The callback can be used to change the logging mechanism. It must be
 // callable with a `size_t` (the number of milliseconds) and `message`.
 #if LOGLEVEL >= TIMING
-struct [[nodiscard]] TimeBlockAndLockCallbackDummy{};
+struct [[nodiscard]] TimeBlockAndLockCallbackDummy {};
 template <typename Callback = TimeBlockAndLockCallbackDummy>
 struct TimeBlockAndLog {
   Timer t_{Timer::Started};
   std::string message_;
   Callback callback_;
-  TimeBlockAndLog(std::string message, Callback callback = {}) : message_{std::move(message)}, callback_{std::move(callback)} {
+  TimeBlockAndLog(std::string message, Callback callback = {})
+      : message_{std::move(message)}, callback_{std::move(callback)} {
     t_.start();
   }
   ~TimeBlockAndLog() {
