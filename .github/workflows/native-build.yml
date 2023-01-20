@@ -45,7 +45,7 @@ jobs:
             asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
             ubsan-flags: " -fsanitize=undefined"
             coverage-flags: "-fprofile-instr-generate -fcoverage-mapping"
-            cmake-options: "-DDISABLE_AD_CHECK"
+            cmake-options: "-DDISABLE_AD_CHECK=ON"
             is-coverage: true
 
     runs-on: ubuntu-22.04
