@@ -156,14 +156,16 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
                    << std::endl;
         LOG(TRACE) << "Creating an estimate from a smaller result" << std::endl;
         if (i > 0) {
-          // Assume that sorting time grows linearly in the number of rows
+          // Assume that sorting time grows linearly in the number of rows. For
+          // details on the usage of `toDuration()` see its first usage above.
           float ratio = static_cast<float>(sampleValuesRows[i]) /
                         static_cast<float>(sampleValuesRows[i - 1]);
           _samples[i][j] = Timer::toDuration(_samples[i - 1][j] * ratio);
         } else if (j > 0) {
           // Assume that sorting time grows with the square root in the number
           // of columns. The square root is just a heuristic: a simple function
-          // between linear and constant.
+          // between linear and constant. For details on the usage of
+          // `toDuration()` see its first usage above.
           float ratio = static_cast<float>(sampleValuesCols[j]) /
                         static_cast<float>(sampleValuesCols[j - 1]);
           _samples[i][j] =
