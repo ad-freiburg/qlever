@@ -201,11 +201,11 @@ class TimeoutTimer : public Timer {
   TimeoutTimer(UnlimitedTag) : Timer{Timer::Started}, _isUnlimited{true} {}
 };
 
+namespace detail {
 // A helper struct that measures the time from its creation until its
 // destruction and logs the time together with a specified message
 // The callback can be used to change the logging mechanism. It must be
 // callable with a `size_t` (the number of milliseconds) and `message`.
-#if LOGLEVEL >= TIMING
 struct [[nodiscard]] TimeBlockAndLockCallbackDummy {};
 template <typename Callback = TimeBlockAndLockCallbackDummy>
 struct TimeBlockAndLog {
@@ -225,6 +225,10 @@ struct TimeBlockAndLog {
     }
   }
 };
+}  // namespace detail
+
+#if LOGLEVEL >= TIMING
+using detail::TimeBlockAndLog;
 #else
 struct TimeBlockAndLog {
   TimeBlockAndLog(const std::string&) {}

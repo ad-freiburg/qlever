@@ -4,9 +4,6 @@
 
 #include <gtest/gtest.h>
 
-// This redefinition is used to enable the `TimeBlockAndLog` struct for testing.
-#undef LOGLEVEL
-#define LOGLEVEL 10
 #include "util/Timer.h"
 
 using ad_utility::TimeoutTimer;
@@ -100,7 +97,9 @@ TEST(TimeoutTimer, Unlimited) {
     std::this_thread::sleep_for(1ms);
     ASSERT_FALSE(timer.hasTimedOut());
     ASSERT_NO_THROW(timer.checkTimeoutAndThrow("error1"));
-    ASSERT_NO_THROW(timer.checkTimeoutAndThrow([]() { return "error2"; }));
+    // When no timeout occurs, the lambda is not executed.
+    ASSERT_NO_THROW(
+        timer.checkTimeoutAndThrow([]() -> std::string { throw 42; }));
   }
 }
 
