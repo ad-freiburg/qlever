@@ -62,7 +62,7 @@ void BM_SortedIdTable(BenchmarkRecords* records) {
     b.idTable(i*20, 0) = I(10);
   }
 
-  // Sorting the tables after the join column.
+  // Sorting the tables by the join column.
   auto sortIdTables = [&a, &b] () {
     auto sortFunction = [](const auto& row1, const auto& row2) {
       return row1[0] < row2[0];
