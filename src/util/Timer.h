@@ -211,8 +211,8 @@ namespace detail {
 // destruction and logs the time together with a specified message
 // The callback can be used to change the logging mechanism. It must be
 // callable with a `size_t` (the number of milliseconds) and `message`.
-[[maybe_unused]] auto defaultLogger = [](size_t msecs,
-                                         std::string_view message) {
+[[maybe_unused]] inline auto defaultLogger = [](size_t msecs,
+                                                std::string_view message) {
   LOG(TIMING) << message << " took " << msecs << "ms" << std::endl;
 };
 template <typename Callback = decltype(defaultLogger)>
