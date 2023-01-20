@@ -67,8 +67,8 @@ void BM_SortedIdTable(BenchmarkRecords* records) {
     auto sortFunction = [](const auto& row1, const auto& row2) {
       return row1[0] < row2[0];
     };
-    std::sort(a.idTable.begin(), a.idTable.end(), sortFunction);
-    std::sort(b.idTable.begin(), b.idTable.end(), sortFunction);
+    std::ranges::sort(a.idTable, sortFunction);
+    std::ranges::sort(b.idTable, sortFunction);
   };
   sortIdTables();
   

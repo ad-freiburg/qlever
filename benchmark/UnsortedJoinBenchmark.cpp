@@ -71,8 +71,8 @@ void BM_UnsortedIdTable(BenchmarkRecords* records) {
   // Lambda wrapper for the functions, that I measure.
   auto joinLambdaWrapper = [&]() {
         // Sorting the tables after the join column.
-        std::sort(a.idTable.begin(), a.idTable.end(), sortFunction);
-        std::sort(b.idTable.begin(), b.idTable.end(), sortFunction);
+        std::ranges::sort(a.idTable, sortFunction);
+        std::ranges::sort(b.idTable, sortFunction);
 
         useJoinFunctionOnIdTables(a, b, joinLambda);
   };
