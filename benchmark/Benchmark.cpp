@@ -16,20 +16,20 @@
 std::vector<std::function<void(BenchmarkRecords*)>>&
     BenchmarkRegister::getRegister(){
   static std::vector<std::function<void(BenchmarkRecords*)>>
-    registerdBenchmarks(0);
-  return registerdBenchmarks;
+    registeredBenchmarks(0);
+  return registeredBenchmarks;
 }
 
 // ____________________________________________________________________________
-const std::vector<std::function<void(BenchmarkRecords*)>>& BenchmarkRegister::getRegisterdBenchmarks() {
+const std::vector<std::function<void(BenchmarkRecords*)>>& BenchmarkRegister::getRegisteredBenchmarks() {
   return getRegister();
 }
 
 // ____________________________________________________________________________
 BenchmarkRegister::BenchmarkRegister(const std::vector<std::function<void(BenchmarkRecords*)>>& benchmarks) {
-  auto& registerdBenchmarks = getRegister();
+  auto& registeredBenchmarks = getRegister();
   // Append all the benchmarks to the internal register.
-  registerdBenchmarks.insert(registerdBenchmarks.end(), benchmarks.begin(), benchmarks.end());
+  registeredBenchmarks.insert(registeredBenchmarks.end(), benchmarks.begin(), benchmarks.end());
 }
 
 // ____________________________________________________________________________

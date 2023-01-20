@@ -5,15 +5,15 @@
 #include "../benchmark/Benchmark.h"
 
 /*
- * @brief Measure the time needed for the execution of every registerd
+ * @brief Measure the time needed for the execution of every registered
  *  benchmark and return a copy of the used BenchmarkRecords.
  */
 const BenchmarkRecords measureTimeForAllBenchmarks() {
   // For measuring and saving the times.
   BenchmarkRecords benchmarksTime;
  
-  // Goes through all registerd benchmarks and measures them.
-  for (const auto& benchmarkFunction: BenchmarkRegister::getRegisterdBenchmarks()) {
+  // Goes through all registered benchmarks and measures them.
+  for (const auto& benchmarkFunction: BenchmarkRegister::getRegisteredBenchmarks()) {
     benchmarkFunction(&benchmarksTime);
   }
 

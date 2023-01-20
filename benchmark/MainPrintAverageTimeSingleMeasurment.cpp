@@ -11,7 +11,7 @@
 #include "../benchmark/util/MainFunctionHelperFunction.h"
 
 /*
- * @brief Goes through the registerd single measurments benchmarks
+ * @brief Goes through the registered single measurments benchmarks
  * N, here 100, times, and prints the average execution time of every
  * benchmark.
  */

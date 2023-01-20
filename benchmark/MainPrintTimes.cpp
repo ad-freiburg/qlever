@@ -39,7 +39,7 @@ void addCategoryTitelToStringstream(std::stringstream* stringStream,
 }
 
 /*
- * @brief Goes through all types of registerd benchmarks, measures their time
+ * @brief Goes through all types of registered benchmarks, measures their time
  * and prints their measured time in a fitting format.
  */
 int main() {

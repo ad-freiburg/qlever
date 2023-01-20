@@ -11,7 +11,7 @@
 #include "../benchmark/util/MainFunctionHelperFunction.h"
 
 /*
- * @brief Goes through the registerd single measurment benchmarks,
+ * @brief Goes through the registered single measurment benchmarks,
  * measures their time and compares their times. Then it prints the
  * relativ speedup of every possible single measurment benchmark
  * combination, with the exception of a benchmark with itself.
