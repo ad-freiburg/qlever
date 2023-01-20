@@ -35,7 +35,7 @@ void BM_UnsortedIdTable(BenchmarkRecords* records) {
   // far as I can tell, that pointer was never actually initialized here, so
   // it points into memory, which we are not allowed to access. Which leads
   // to the seg fault.
-  const size_t NUMBER_ROWS = 500;
+  const size_t NUMBER_ROWS = 10000;
   const size_t NUMBER_COLUMNS = NUMBER_ROWS; 
 
   Join J{Join::InvalidOnlyForTestingJoinTag{}, ad_utility::testing::getQec()};
