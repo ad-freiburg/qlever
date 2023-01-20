@@ -89,13 +89,20 @@ using std::string;
 
 #else
 /// Custom assert that will always fail and report the file and line.
-#define AD_FAIL() {}
-#define AD_CHECK(condition) {}
-#define AD_CHECK_EQ(t1, t2) {}
-#define AD_CHECK_LT(t1, t2) {}
-#define AD_CHECK_GT(t1, t2) {}
-#define AD_CHECK_LE(t1, t2) {}
-#define AD_CHECK_GE(t1, t2) {}
+#define AD_FAIL() \
+  {}
+#define AD_CHECK(condition) \
+  {}
+#define AD_CHECK_EQ(t1, t2) \
+  {}
+#define AD_CHECK_LT(t1, t2) \
+  {}
+#define AD_CHECK_GT(t1, t2) \
+  {}
+#define AD_CHECK_LE(t1, t2) \
+  {}
+#define AD_CHECK_GE(t1, t2) \
+  {}
 #endif
 
 // -------------------------------------------
