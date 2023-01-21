@@ -93,6 +93,9 @@ int main() {
   // Used for the formating of numbers in the table.
   const size_t exactNumberOfDecimals = 4;
 
+  // What should be printed between columns. Used for nicer formating.
+  const std::string columnSeperator = " | ";
+
   // Convert an std::optional<float> to a screen friendly format.
   auto optionalFloatToString = [&exactNumberOfDecimals](const
       std::optional<float>& optionalFloat)->std::string{
@@ -148,7 +151,7 @@ int main() {
 
     // Print the top row of names.
     for (size_t column = 0; column < numberColumns; column++){
-      visualization << "\t";
+      visualization << columnSeperator;
       addStringWithPadding(&visualization, table.columnNames[column], columnMaxStringWidth[column]);
     }
 
@@ -157,13 +160,12 @@ int main() {
       // Row name
       visualization << "\n";
       addStringWithPadding(&visualization, table.rowNames[row], rowNameMaxStringWidth);
-      visualization << "\t";
-
+      
       // Row content.
       for (size_t column = 0; column < numberColumns; column++) {
+        visualization << columnSeperator;
         addStringWithPadding(&visualization,
             optionalFloatToString(table.entries[row][column]), columnMaxStringWidth[column]);
-        visualization << "\t";
       }
     }
   }
