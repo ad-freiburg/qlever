@@ -60,8 +60,7 @@ void Operation::recursivelySetTimeoutTimer(
 // Get the result for the subtree rooted at this element. Use existing results
 // if they are already available, otherwise trigger computation.
 shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
-  ad_utility::Timer timer;
-  timer.start();
+  ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {
     // Start with an estimated runtime info which will be updated as we go.
@@ -99,7 +98,6 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     // exception handler is called.
     ad_utility::OnDestruction onDestruction{[&]() {
       if (std::uncaught_exceptions()) {
-        timer.stop();
         updateRuntimeInformationOnFailure(timer.msecs());
       }
     }};
@@ -122,11 +120,9 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       // correct runtimeInfo. The children of the runtime info are already set
       // correctly because the result was computed, so we can pass `nullopt` as
       // the last argument.
-      timer.stop();
       updateRuntimeInformationOnSuccess(*val._resultTable,
                                         ad_utility::CacheStatus::computed,
                                         timer.msecs(), std::nullopt);
-      timer.cont();
       val._runtimeInfo = getRuntimeInfo();
       return val;
     };
@@ -144,7 +140,6 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda)
                               : cache.computeOnce(cacheKey, computeLambda);
 
-    timer.stop();
     updateRuntimeInformationOnSuccess(result, timer.msecs());
     auto resultNumRows = result._resultPointer->_resultTable->size();
     auto resultNumCols = result._resultPointer->_resultTable->width();

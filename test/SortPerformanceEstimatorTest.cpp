@@ -1,15 +1,15 @@
-//
-// Created by johannes on 21.04.21.
-//
+//  Copyright 2021, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
 
 #include <chrono>
 #include <thread>
 
-#include "../../src/engine/SortPerformanceEstimator.h"
-#include "../../src/util/Log.h"
-#include "../../src/util/Random.h"
+#include "engine/SortPerformanceEstimator.h"
+#include "util/Log.h"
+#include "util/Random.h"
 
 TEST(SortPerformanceEstimator, TestManyEstimates) {
   // only allow the test to use 1 Gig of RAM
@@ -30,14 +30,15 @@ TEST(SortPerformanceEstimator, TestManyEstimates) {
         continue;
       }
       try {
-        double measurement =
-            SortPerformanceEstimator::measureSortingTimeInSeconds(i, numColumns,
-                                                                  allocator);
-        double estimate = t.estimatedSortTimeInSeconds(i, numColumns);
+        using ad_utility::Timer;
+        Timer::Duration measurement =
+            SortPerformanceEstimator::measureSortingTime(i, numColumns,
+                                                         allocator);
+        Timer::Duration estimate = t.estimatedSortTime(i, numColumns);
         LOG(INFO) << std::fixed << std::setprecision(3) << "input of size " << i
-                  << "with " << numColumns << " columns took " << measurement
-                  << " seconds, estimate was " << estimate << " seconds"
-                  << std::endl;
+                  << "with " << numColumns << " columns took "
+                  << Timer::toSeconds(measurement) << " seconds, estimate was "
+                  << Timer::toSeconds(estimate) << " seconds" << std::endl;
         ASSERT_GE(2 * measurement, estimate);
         if (!isFirst) {
           EXPECT_LE(0.5 * measurement, estimate);

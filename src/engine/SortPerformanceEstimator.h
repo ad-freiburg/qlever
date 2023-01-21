@@ -1,18 +1,21 @@
-//
-// Created by johannes on 21.04.21.
-//
+// Copyright 2021, University of Freiburg,
+//                 Chair of Algorithms and Data Structures.
+// Author: Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
 #ifndef QLEVER_SORTPERFORMANCEESTIMATOR_H
 #define QLEVER_SORTPERFORMANCEESTIMATOR_H
 
 #include <array>
 
-#include "../global/Id.h"
-#include "../util/AllocatorWithLimit.h"
+#include "global/Id.h"
+#include "util/AllocatorWithLimit.h"
+#include "util/Timer.h"
 
 /// Estimates the time it takes to sort an IdTable with a given number of rows
 /// and columns;
 class SortPerformanceEstimator {
+  using Timer = ad_utility::Timer;
+
  public:
   // Create a SortPerformanceEstimator. This involves sorting large results to
   // get good estimates. The call might take several minutes, depending on the
@@ -20,14 +23,14 @@ class SortPerformanceEstimator {
   // explicit factory function.
 
   // Create a random IdTable with the specified number of rows and columns. Sort
-  // this table and return the time in seconds that this sorting took.
-  static double measureSortingTimeInSeconds(
+  // this table and return the time that this sorting took.
+  static Timer::Duration measureSortingTime(
       size_t numRows, size_t numColumns,
       const ad_utility::AllocatorWithLimit<Id>& allocator);
 
   // Compute and return an Estimate for how long sorting an IdTable with the
   // specified number of rows and columns takes.
-  double estimatedSortTimeInSeconds(size_t numRows,
+  Timer::Duration estimatedSortTime(size_t numRows,
                                     size_t numCols) const noexcept;
 
   // Create an uninitialized SortPerformanceEstimator, which is cheap. Before
@@ -62,7 +65,8 @@ class SortPerformanceEstimator {
   // _samples[i][j] is the measured time it takes to sort an IdTable with
   // sampleValuesRows[i] rows and sampleValuesCols[j] columns.
   // The values are default-initialized to 0.
-  std::array<std::array<double, NUM_SAMPLES_COLS>, NUM_SAMPLES_ROWS> _samples{};
+  std::array<std::array<Timer::Duration, NUM_SAMPLES_COLS>, NUM_SAMPLES_ROWS>
+      _samples{};
 
   bool _estimatesWereCalculated = false;
 };
