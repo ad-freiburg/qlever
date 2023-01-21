@@ -84,7 +84,7 @@ void BM_Tables(BenchmarkRecords* records) {
   for (int row = 0; row < 2; row++) {
     for (int column = 0; column < 2; column++) {
       records->addToExistingTable("Adding exponents", row, column,
-          [&](){exponentiateNTimes(2, row+10)+exponentiateNTimes(2, column+10);});
+          [&](){size_t temp __attribute__((unused)); temp = exponentiateNTimes(2, row+10)+exponentiateNTimes(2, column+10);});
     }
   }
 }
