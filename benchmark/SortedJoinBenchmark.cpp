@@ -25,14 +25,6 @@
 // IdTables. Done with normal join and hash join.
 void BM_SortedIdTable(BenchmarkRecords* records) {
   // For easier changing of the IdTables size.
-  // Important: Apparently Join::join has an inbuild timeout checker, which
-  // keeps getting triggerd by tables with a size between 500-600, or higher.
-  // This leads to a segmentation fault, because it keeps trying to throw an
-  // exception about the time out, but that exception tries to include
-  // information about the query execution tree using a shared pointer. And, as
-  // far as I can tell, that pointer was never actually initialized here, so
-  // it points into memory, which we are not allowed to access. Which leads
-  // to the seg fault.
   const size_t NUMBER_ROWS = 1000;
   const size_t NUMBER_COLUMNS = NUMBER_ROWS; 
   
