@@ -57,16 +57,23 @@ void BM_UnsortedAndSortedIdTable(BenchmarkRecords* records) {
         useJoinFunctionOnIdTables(a, b, hashJoinLambda);
   };
 
+  // Because it's easier to read/interpret, the benchmarks are entries in tables.
+  records->addTable("Sorted IdTables", {"Merge join", "Hashed join"},
+      {"Overlapping join column entries", "Non-overlapping join column entries"});
+  records->addTable("Unsorted IdTables", {"Merge join", "Hashed join"},
+      {"Overlapping join column entries", "Non-overlapping join column entries"});
+
   // Benchmarking with non-overlapping IdTables.
  
-  records->addSingleMeasurement("Hashed join with non-overlapping unsorted IdTables", hashJoinLambdaWrapper);
-  records->addSingleMeasurement("Normal join with non-overlapping unsorted IdTables", sortThenJoinLambdaWrapper);
+  records->addToExistingTable("Unsorted IdTables", 1, 1, hashJoinLambdaWrapper);
+  records->addToExistingTable("Unsorted IdTables", 0, 1, sortThenJoinLambdaWrapper);
 
   // Because the sortThenJoinLambdaWrapper sorts tables IN PLACE, a and b are now sorted.
-  records->addSingleMeasurement("Hashed join with non-overlapping sorted IdTables", hashJoinLambdaWrapper);
-  records->addSingleMeasurement("Normal join with non-overlapping sorted IdTables", joinLambdaWrapper);
+  records->addToExistingTable("Sorted IdTables", 1, 1, hashJoinLambdaWrapper);
+  records->addToExistingTable("Sorted IdTables", 0, 1, joinLambdaWrapper);
 
   // Benchmarking with overlapping IdTables.
+
   // We make the tables overlapping and then randomly shuffle them.
   for (size_t i = 0; i*20 < NUMBER_ROWS; i++) {
     a.idTable(i*10, 0) = I(10);
@@ -75,12 +82,12 @@ void BM_UnsortedAndSortedIdTable(BenchmarkRecords* records) {
   randomShuffle(a.idTable.begin(), a.idTable.end());
   randomShuffle(b.idTable.begin(), b.idTable.end());
 
-  records->addSingleMeasurement("Hashed join with overlapping unsorted IdTables", hashJoinLambdaWrapper);
-  records->addSingleMeasurement("Normal join with overlapping unsorted IdTables", sortThenJoinLambdaWrapper);
+  records->addToExistingTable("Unsorted IdTables", 1, 0, hashJoinLambdaWrapper);
+  records->addToExistingTable("Unsorted IdTables", 0, 0, sortThenJoinLambdaWrapper);
 
   // Because the sortThenJoinLambdaWrapper sorts tables IN PLACE, a and b are now sorted.
-  records->addSingleMeasurement("Hashed join with overlapping sorted IdTables", hashJoinLambdaWrapper);
-  records->addSingleMeasurement("Normal join with overlapping sorted IdTables", joinLambdaWrapper);
+  records->addToExistingTable("Sorted IdTables", 1, 0, hashJoinLambdaWrapper);
+  records->addToExistingTable("Sorted IdTables", 0, 0, joinLambdaWrapper);
 }
 
 BenchmarkRegister temp{{BM_UnsortedAndSortedIdTable}};

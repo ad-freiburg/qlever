@@ -58,9 +58,12 @@ void BM_SortedIdTable(BenchmarkRecords* records) {
     useJoinFunctionOnIdTables(a, b, hashJoinLambda);
   };
 
+  // Because it's easier to read/interpret, the benchmarks are entries in tables.
+  records->addTable("Sorted IdTables", {"Merge join", "Hashed join"},
+      {"Overlapping join column entries", "Non-overlapping join column entries"});
 
-  records->addSingleMeasurement("Normal join with overlapping IdTables", joinLambdaWrapper);
-  records->addSingleMeasurement("Hashed join with overlapping IdTables", hashJoinLambdaWrapper);
+  records->addToExistingTable("Sorted IdTables", 0, 0, joinLambdaWrapper);
+  records->addToExistingTable("Sorted IdTables", 1, 0, hashJoinLambdaWrapper);
 
   // Same thing, but non overlapping.
   a.idTable = createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 0, 10);
@@ -68,8 +71,8 @@ void BM_SortedIdTable(BenchmarkRecords* records) {
  
   sortIdTables();
 
-  records->addSingleMeasurement("Normal join with non-overlapping IdTables", joinLambdaWrapper);
-  records->addSingleMeasurement("Hashed join with non-overlapping IdTables", hashJoinLambdaWrapper);
+  records->addToExistingTable("Sorted IdTables", 0, 1, joinLambdaWrapper);
+  records->addToExistingTable("Sorted IdTables", 1, 1, hashJoinLambdaWrapper);
 }
 
 BenchmarkRegister temp{{BM_SortedIdTable}};
