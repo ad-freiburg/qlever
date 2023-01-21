@@ -21,7 +21,6 @@
 // Non-local helper function.
 #include "../test/util/IdTableHelpers.h"
 #include "../test/util/JoinHelpers.h"
-#include "../test/IndexTestHelpers.h"
 
 // Benchmarks for unsorted tables, with and without overlapping values in
 // IdTables. Done with normal join and hash join.
@@ -45,17 +44,11 @@ void BM_UnsortedIdTable(BenchmarkRecords* records) {
     b.idTable(i*20, 0) = I(10);
   }
 
-  // We need to order the IdTables, before using the normal join function on
-  // them. This is the projection function for that.
-  auto projectionFunction = [](const auto& row) {
-    return row[0];
-  };
-
   // Lambda wrapper for the functions, that I measure.
   auto joinLambdaWrapper = [&]() {
-        // Sorting the tables after the join column.
-        std::ranges::sort(a.idTable, {}, projectionFunction);
-        std::ranges::sort(b.idTable, {}, projectionFunction);
+        // Sorting the tables by the join column.
+        Engine::sort<NUMBER_COLUMNS>(&a.idTable, 0);
+        Engine::sort<NUMBER_COLUMNS>(&b.idTable, 0);
 
         useJoinFunctionOnIdTables(a, b, joinLambda);
   };

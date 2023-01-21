@@ -38,19 +38,13 @@ void BM_UnsortedAndSortedIdTable(BenchmarkRecords* records) {
   IdTableAndJoinColumn b{
     createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 20, 30), 0};
 
-  // We need to order the IdTables, before using the normal join function on
-  // them. This is the projection function for that.
-  auto projectionFunction = [](const auto& row) {
-    return row[0];
-  };
-
   // Lambda wrapper for the functions, that I measure.
   
   // Sorts the table IN PLACE and the uses the normal join on them.
   auto sortThenJoinLambdaWrapper = [&]() {
-        // Sorting the tables after the join column.
-        std::ranges::sort(a.idTable, {}, projectionFunction);
-        std::ranges::sort(b.idTable, {}, projectionFunction);
+        // Sorting the tables by the join column.
+        Engine::sort<NUMBER_COLUMNS>(&a.idTable, 0);
+        Engine::sort<NUMBER_COLUMNS>(&b.idTable, 0);
 
         useJoinFunctionOnIdTables(a, b, joinLambda);
   };
