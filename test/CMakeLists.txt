@@ -253,3 +253,5 @@ addLinkAndDiscoverTest(ConstexprUtilsTest)
 addLinkAndDiscoverTest(ResetWhenMovedTest)
 
 addLinkAndDiscoverTest(TimerTest absl::strings)
+
+addLinkAndDiscoverTest(AlgorithmTest)

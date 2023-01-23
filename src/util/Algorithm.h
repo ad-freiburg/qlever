@@ -13,7 +13,6 @@
 #include "util/Iterators.h"
 #include "util/TypeTraits.h"
 
-// TODO: Test the algorithms.
 namespace ad_utility {
 
 /**
@@ -46,21 +45,6 @@ template <typename Container, typename Predicate>
 bool contains_if(const Container& container, const Predicate& predicate) {
   return std::find_if(container.begin(), container.end(), predicate) !=
          container.end();
-}
-
-/**
- * Checks whether a container is contained in another container.
- *
- * @param container Container& Container to check
- * @param containedContainer Container& Container where other container has to
- * be contained in
- * @return bool
- */
-template <typename Container>
-inline bool includes(const Container& container,
-                     const Container& containedContainer) {
-  return std::includes(container.begin(), container.end(),
-                       containedContainer.begin(), containedContainer.end());
 }
 
 /**
