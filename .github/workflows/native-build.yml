@@ -106,7 +106,9 @@ jobs:
       run: ctest --show-only=json-v1 > tests.json && python3 ${{github.workspace}}/misc/ctest-output-to-executables.py tests.json tests.txt
     - name: Process coverage info
       working-directory: ${{github.workspace}}/build/test
-      run: llvm-profdata-15 merge -sparse *.profraw -o default.profdata && xargs -a tests.txt llvm-cov-15 export --format=lcov --instr-profile ./default.profdata > ./coverage.lcov
+      run:  >
+        llvm-profdata-15 merge -sparse *.profraw -o default.profdata;
+        xargs -a tests.txt llvm-cov-15 export --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/third_party/" --ignore-filename-regex="/generated/"  --ignore-filename-regex="/nlohmann/" --ignore-filename-regex="/ctre/"  --ignore-filename-regex="/test/" > ./coverage.lcov
       if: matrix.is-coverage
     - name: Submit to codecov.io
       if: matrix.is-coverage
