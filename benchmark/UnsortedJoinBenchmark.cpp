@@ -26,8 +26,8 @@
 // IdTables. Done with normal join and hash join.
 void BM_UnsortedIdTable(BenchmarkRecords* records) {
   // For easier changing of the IdTables size.
-  const size_t NUMBER_ROWS = 1000;
-  const size_t NUMBER_COLUMNS = NUMBER_ROWS; 
+  const size_t NUMBER_ROWS = 5000;
+  const size_t NUMBER_COLUMNS = 4; 
 
   auto hashJoinLambda = makeHashJoinLambda();
   auto joinLambda = makeJoinLambda();
@@ -40,8 +40,7 @@ void BM_UnsortedIdTable(BenchmarkRecords* records) {
   
   // Because overlap is not yet guaranteed, we put some in.
   for (size_t i = 0; i*20 < NUMBER_ROWS; i++) {
-    a.idTable(i*10, 0) = I(10);
-    b.idTable(i*20, 0) = I(10);
+    a.idTable(i*10, 0) = b.idTable(i*20, 0);
   }
 
   // Lambda wrapper for the functions, that I measure.
