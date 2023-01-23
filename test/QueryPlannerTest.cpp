@@ -2,6 +2,7 @@
 // Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "./QueryPlannerTestHelpers.h"
@@ -765,11 +766,12 @@ TEST(QueryPlannerTest, threeVarXthreeVarException) {
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     FAIL() << "Was expecting exception, but got" << qet.asString() << std::endl;
   } catch (const ad_utility::Exception& e) {
-    ASSERT_STREQ(
-        "Could not find a suitable execution tree. "
-        "Likely cause: Queries that require joins of the full index with "
-        "itself are not supported at the moment.",
-        e.getErrorDetailsNoFileAndLines());
+    ASSERT_THAT(
+        e.what(),
+        ::testing::StartsWith(
+            "Could not find a suitable execution tree. "
+            "Likely cause: Queries that require joins of the full index with "
+            "itself are not supported at the moment."));
   } catch (const std::exception& e) {
     FAIL() << e.what();
   }

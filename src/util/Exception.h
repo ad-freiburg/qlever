@@ -1,11 +1,9 @@
 // Copyright 2011, University of Freiburg, Chair of Algorithms and Data
 // Structures.
-// Author: mostly copied from CompleteSearch code, original author unknown.
-// Adapted by: Björn Buchhold <buchholb>
+// Author: 2011-2017 Björn Buchhold <buchholb@cs.uni-freiburg.de>
+//         2020-     Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef GLOBALS_EXCEPTION_H_
-#define GLOBALS_EXCEPTION_H_
-
+#pragma once
 #include <exception>
 #include <sstream>
 #include <string>
@@ -20,9 +18,9 @@ using std::string;
 // -------------------------------------------
 namespace ad_utility {
 
-//! Exception class for rethrowing exceptions during a query abort
-//! such exceptions are never printed but still keep the original what()
-//! message just in case
+// Exception class for rethrowing exceptions during a query abort.
+// Such exceptions are never printed but still keep the original what()
+// message just in case
 class AbortException : public std::exception {
  public:
   AbortException(const std::exception& original) : _what(original.what()) {}
@@ -33,6 +31,9 @@ class AbortException : public std::exception {
   string _what;
 };
 
+// An exception that stores a message as well as the `source_location` where
+// the exception was triggered. Mostly used by the `AD_THROW` and `AD_CHECK`
+// macros (see below).
 class Exception : public std::exception {
  private:
   std::string message_;
@@ -42,9 +43,14 @@ class Exception : public std::exception {
   Exception(const std::string& message,
             ad_utility::source_location location =
                 ad_utility::source_location::current())
-      : message_{std::move(message)}, location_{location} {}
+      : location_{location} {
+    std::stringstream str;
+    // TODO<GCC13> Use `std::format`.
+    str << message << ". In file \"" << location_.file_name() << " \" on line "
+        << location_.line();
+    message_ = std::move(str).str();
+  }
   const char* what() const noexcept override { return message_.c_str(); }
-  const char* getErrorDetailsNoFileAndLines() const noexcept { return what(); }
 };
 }  // namespace ad_utility
 
@@ -68,21 +74,43 @@ class Exception : public std::exception {
 // Needed for Cygwin (will be an identical redefine  for *nixes)
 #define __STRING(x) #x
 
-/// Custom assert that will always fail and report the file and line.
-#define AD_FAIL() AD_THROW("This code should be unreachable");
-/// Custom assert which does not abort but throws an exception.
-// TODO<joka921> readd the `source_location` to make this more useful.
-inline void adCheckImpl(bool condition, std::string_view message,
-                        ad_utility::source_location location) {
+// Implementation for the macro `AD_UNSATISFIABLE` below.
+namespace ad_utility::detail {
+inline void adUnsatisfiableImpl(bool condition, std::string_view message,
+                                ad_utility::source_location location) {
   if (!(condition)) [[unlikely]] {
     using namespace std::string_literals;
     // TODO<GCC13> Use `std::format`.
-    AD_THROW("Assertion `"s + std::string(message) + "` failed."s, location);
+    AD_THROW("Assertion `"s + std::string(message) + "` failed"s, location);
   }
 }
+}  // namespace ad_utility::detail
 
-#define AD_CHECK(condition)                                      \
-  adCheckImpl(static_cast<bool>(condition), __STRING(condition), \
-              ad_utility::source_location::current())
+// Custom assert that will always fail and report the file and line. Note that
+// for code that is truly unreachable (not even by setting up artificially
+// faulty input in a unit test), our code coverage tools will always consider
+// this macro uncovered. This cannot even be changed by chaning it to something
+// like `__builtin_unreachable()` (last checked by Johannes in Jan 2023).
+#define AD_FAIL() AD_THROW("This code should be unreachable");
 
-#endif  // GLOBALS_EXCEPTION_H_
+// Custom assert which does not abort but throws an exception. Use this for
+// conditions that can be violated via a public API. Since it is a macro, the
+// code coverage check will only report a partial coverage for this macro if the
+// condition is never violated, so make sure to integrate a unit test that
+// violates the condition.
+#define AD_CHECK(condition)                                                    \
+  if (!(condition)) [[unlikely]] {                                             \
+    using namespace std::string_literals;                                      \
+    AD_THROW("Assertion `"s + std::string(__STRING(condition)) + "` failed"s); \
+  }
+
+// Custom assert which does not abort but throws an exception. Use this for
+// conditions that can never be violated via a public. It is thus impossible to
+// test the failure of such an assertion in a unit test. Because of the
+// additional indirection via the function call, code coverage tools will
+// consider this call fully covered as soon as the check is performed, even if
+// it never fails.
+#define AD_UNSATISFIABLE(condition)                         \
+  detail::adUnsatisfiableImpl(static_cast<bool>(condition), \
+                              __STRING(condition),          \
+                              ad_utility::source_location::current())
