@@ -137,10 +137,10 @@ void TextOperationWithFilter::computeMultiplicities() {
 
     if (multiplicitiesNoFilter.size() <= 2) {
       AD_THROW(
-               "One (out of more) reasons for this problem is if you connected"
-               " a text record variable to other variables with"
-               " a non-text predicate. "
-               "One should always use ql:contains-entity for that.");
+          "One (out of more) reasons for this problem is if you connected"
+          " a text record variable to other variables with"
+          " a non-text predicate. "
+          "One should always use ql:contains-entity for that.");
     }
 
     // Like joins

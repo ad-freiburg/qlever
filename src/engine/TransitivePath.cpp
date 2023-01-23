@@ -340,8 +340,8 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
     }
     if (minDist == 0) {
       AD_THROW(
-               "The TransitivePath operation does not support a minimum "
-               "distance of 0 (use at least one instead).");
+          "The TransitivePath operation does not support a minimum "
+          "distance of 0 (use at least one instead).");
     }
 
     // While we have not found the entire transitive hull and have not reached
@@ -465,8 +465,8 @@ void TransitivePath::computeTransitivePathLeftBound(
     }
     if (minDist == 0) {
       AD_THROW(
-               "The TransitivePath operation does not support a minimum "
-               "distance of 0 (use at least one instead).");
+          "The TransitivePath operation does not support a minimum "
+          "distance of 0 (use at least one instead).");
     }
 
     // While we have not found the entire transitive hull and have not reached
@@ -603,8 +603,8 @@ void TransitivePath::computeTransitivePathRightBound(
     }
     if (minDist == 0) {
       AD_THROW(
-               "The TransitivePath operation does not support a minimum "
-               "distance of 0 (use at least one instead).");
+          "The TransitivePath operation does not support a minimum "
+          "distance of 0 (use at least one instead).");
     }
 
     // While we have not found the entire transitive hull and have not reached

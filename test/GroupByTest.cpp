@@ -44,21 +44,14 @@ class GroupByTest : public ::testing::Test {
     docsFile.close();
     wordsFile.close();
     ntFile.close();
-    try {
-      _index.setKbName("group_by_test");
-      _index.setTextName("group_by_test");
-      _index.setOnDiskBase("group_ty_test");
-      _index.createFromFile<TurtleParserAuto>("group_by_test.nt");
-      _index.addTextFromContextFile("group_by_test.words", false);
-      _index.buildDocsDB("group_by_test.documents");
+    _index.setKbName("group_by_test");
+    _index.setTextName("group_by_test");
+    _index.setOnDiskBase("group_ty_test");
+    _index.createFromFile<TurtleParserAuto>("group_by_test.nt");
+    _index.addTextFromContextFile("group_by_test.words", false);
+    _index.buildDocsDB("group_by_test.documents");
 
-      _index.addTextFromOnDiskIndex();
-    } catch (const ad_semsearch::Exception& e) {
-      std::cout << "semsearch exception: " << e.getErrorMessage()
-                << e.getErrorDetails() << std::endl;
-    } catch (std::exception& e) {
-      std::cout << "std exception" << e.what() << std::endl;
-    }
+    _index.addTextFromOnDiskIndex();
   }
 
   virtual ~GroupByTest() {

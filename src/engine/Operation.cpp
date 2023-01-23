@@ -151,7 +151,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
                << resultNumCols << std::endl;
     return result._resultPointer->_resultTable;
-  } catch (const ad_semsearch::AbortException& e) {
+  } catch (const ad_utility::AbortException& e) {
     // A child Operation was aborted, do not print the information again.
     _runtimeInfo.status_ = RuntimeInformation::Status::failedBecauseChildFailed;
     throw;
@@ -163,21 +163,21 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     LOG(ERROR) << "Waited for a result from another thread which then failed"
                << endl;
     LOG(DEBUG) << asString();
-    throw ad_semsearch::AbortException(e);
+    throw ad_utility::AbortException(e);
   } catch (const std::exception& e) {
     // We are in the innermost level of the exception, so print
     LOG(ERROR) << "Aborted Operation" << endl;
     LOG(DEBUG) << asString() << endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
-    throw ad_semsearch::AbortException(e);
+    throw ad_utility::AbortException(e);
   } catch (...) {
     // We are in the innermost level of the exception, so print
     LOG(ERROR) << "Aborted Operation" << endl;
     LOG(DEBUG) << asString() << endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
-    throw ad_semsearch::AbortException(
+    throw ad_utility::AbortException(
         "Unexpected expection that is not a subclass of std::exception");
   }
 }

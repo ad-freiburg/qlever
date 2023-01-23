@@ -10,15 +10,15 @@
 #include <sstream>
 #include <string>
 
+#include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
-#include "absl/strings/str_cat.cc"
 
 using std::string;
 
 // -------------------------------------------
 // Exception class code
 // -------------------------------------------
-namespace ad_semsearch {
+namespace ad_utility {
 
 //! Exception class for rethrowing exceptions during a query abort
 //! such exceptions are never printed but still keep the original what()
@@ -26,202 +26,37 @@ namespace ad_semsearch {
 class AbortException : public std::exception {
  public:
   AbortException(const std::exception& original) : _what(original.what()) {}
-
   AbortException(const std::string& whatthe) : _what(whatthe) {}
-
   const char* what() const noexcept { return _what.c_str(); }
 
  private:
   string _what;
 };
 
-//! Exception class for all kinds of exceptions.
-//! Compatibility with the THROW macro is ensured by using error
-//! codes inside this exception class instead of implementing an
-//! exception hierarchy through inheritance.
-//! This approach is taken from CompleteSearch's exception code.
-//! Add error codes whenever necessary.
 class Exception : public std::exception {
  private:
-  //! Error code
-  int _errorCode;
-
-  //! Detailed information (beyond what the code already says,
-  //! optionally provided by thrower)
-  string _errorDetails;
-
-  string _errorDetailsFileAndLines;
-
-  string _errorMessageFull;
+  std::string message_;
+  ad_utility::source_location location_;
 
  public:
-  //! Error codes
-  //! They are always of type int, whereas the least 8 bits
-  //! are used to distinguish exceptions inside a category,
-  //! the more significant bits are used distinguish between
-  //! categories. This idea is also taken from CompleteSearch
-  //! and creates an artificial hierarchy.
-  enum ExceptionType {
-    // range errors
-    VOCABULARY_MISS = 16 * 1 + 1,
-    UNKNOWN_RELATION_ID = 16 * 1 + 2,
-
-    // formatting errors
-    BAD_INPUT = 16 * 2 + 5,
-    BAD_REQUEST = 16 * 2 + 6,
-
-    // memory allocation errors
-    REALLOC_FAILED = 16 * 3 + 1,
-    NEW_FAILED = 16 * 3 + 2,
-
-    // query errors
-    BAD_QUERY = 16 * 4 + 1,
-
-    // history errors
-
-    // (de)compression errors
-    UNCOMPRESS_ERROR = 16 * 6 + 1,
-    // multithreading-related
-    COULD_NOT_GET_MUTEX = 16 * 7 + 1,
-    COULD_NOT_CREATE_THREAD = 16 * 7 + 6,
-    // socket related
-    COULD_NOT_CREATE_SOCKET = 17 * 8 + 1,
-    // general errors
-    ASSERT_FAILED = 16 * 9 + 1,
-    ERROR_PASSED_ON = 16 * 9 + 3,
-    NOT_YET_IMPLEMENTED = 16 * 9 + 5,
-    INVALID_PARAMETER_VALUE = 16 * 9 + 6,
-    CHECK_FAILED = 16 * 9 + 7,
-    // unknown error
-    OTHER = 0
-  };
-
-  //! Error messages (one per code)
-  static const string errorCodeAsString(int errorCode) {
-    switch (errorCode) {
-      case VOCABULARY_MISS:
-        return "VOCABULARY MISS";
-      case UNKNOWN_RELATION_ID:
-        return "UNKNOWN_RELATION_ID: "
-               "Trying to access a relation that is not present.";
-      case BAD_INPUT:
-        return "BAD INPUT STRING";
-      case BAD_REQUEST:
-        return "BAD REQUEST STRING";
-      case BAD_QUERY:
-        return "BAD QUERY";
-      case REALLOC_FAILED:
-        return "MEMORY ALLOCATION ERROR: Realloc failed";
-      case NEW_FAILED:
-        return "MEMORY ALLOCATION ERROR: new failed";
-      case ERROR_PASSED_ON:
-        return "PASSING ON ERROR";
-      case UNCOMPRESS_ERROR:
-        return "UNCOMPRESSION PROBLEM";
-      case COULD_NOT_GET_MUTEX:
-        return "MUTEX EXCEPTION: "
-               "Could not get lock on mutex";
-      case COULD_NOT_CREATE_THREAD:
-        return "Error creating thread";
-      case COULD_NOT_CREATE_SOCKET:
-        return "SOCKET ERROR: could not create socket";
-      case ASSERT_FAILED:
-        return "ASSERT FAILED";
-      case NOT_YET_IMPLEMENTED:
-        return "NOT YET IMPLEMENTED";
-      case INVALID_PARAMETER_VALUE:
-        return "INVALID PARAMETER VALUE";
-      case CHECK_FAILED:
-        return "CHECK FAILED";
-      case OTHER:
-        return "ERROR";
-      default:
-        std::ostringstream os;
-        os << "UNKNOWN ERROR: Code is " << errorCode;
-        return std::move(os).str();
-    }
-  }
-
-  //! Constructor (code only)
-  explicit Exception(int errorCode) {
-    _errorCode = errorCode;
-    _errorDetails = "";
-    _errorDetailsFileAndLines = "";
-    _errorMessageFull = errorCodeAsString(_errorCode);
-  }
-
-  //! Constructor (code + details)
-  Exception(int errorCode, const string& errorDetails) {
-    _errorCode = errorCode;
-    _errorDetails = errorDetails;
-    _errorDetailsFileAndLines = "";
-    _errorMessageFull = getErrorMessage() + " (" + _errorDetails + ")";
-  }
-
-  //! Constructor
-  //! (code + details + file name + line number + enclosing method)
-  Exception(int errorCode, const string& errorDetails, const string& file_name,
-            int line_no, const string& fct_name) {
-    _errorCode = errorCode;
-    _errorDetails = errorDetails;
-    _errorDetailsFileAndLines = "in " + file_name + ", line " +
-                                std::to_string(line_no) + ", function " +
-                                fct_name;
-    _errorMessageFull = getErrorMessage() + " (" + getErrorDetails() + ")";
-  }
-
-  //! Set error code
-  void setErrorCode(int errorCode) { _errorCode = errorCode; }
-
-  //! Set error details
-  void setErrorDetails(const string& errorDetails) {
-    _errorDetails = errorDetails;
-  }
-
-  //! Get error Code
-  int getErrorCode() const noexcept { return _errorCode; }
-
-  //! Get error message pertaining to code
-  string getErrorMessage() const noexcept {
-    return errorCodeAsString(_errorCode);
-  }
-
-  //! Get error details
-  const string getErrorDetails() const noexcept {
-    return _errorDetails + "; " + _errorDetailsFileAndLines;
-  }
-
-  const string getErrorDetailsNoFileAndLines() const noexcept {
-    return _errorDetails;
-  }
-
-  const string& getFullErrorMessage() const noexcept {
-    return _errorMessageFull;
-  }
-
-  const char* what() const noexcept { return _errorMessageFull.c_str(); }
+  Exception(const std::string& message,
+            ad_utility::source_location location =
+                ad_utility::source_location::current())
+      : message_{std::move(message)}, location_{location} {}
+  const char* what() const noexcept override { return message_.c_str(); }
+  const char* getErrorDetailsNoFileAndLines() const noexcept { return what(); }
 };
-}  // namespace ad_semsearch
+}  // namespace ad_utility
 
 // -------------------------------------------
 // Macros for throwing exceptions comfortably.
 // -------------------------------------------
 // Throw exception with additional assert-like info
-// TODO<joka921> Readd `source_location`
-// TODO<joka921> Add support for custom exceptions.
-[[noreturn]] void  AD_THROW(std::string_view message) {
-  throw std::runtime_error{std::string{message}};
+[[noreturn]] inline void AD_THROW(std::string_view message,
+                                  ad_utility::source_location location =
+                                      ad_utility::source_location::current()) {
+  throw ad_utility::Exception{std::string{message}, location};
 }
-
-/*
-#define AD_THROW(m)                                                \
-  {                                                                   \
-    std::ostringstream __os;                                          \
-    __os << m;                                                        \
-    throw ad_semsearch::Exception(e, std::move(__os).str(), __FILE__, \
-                                  __LINE__, __PRETTY_FUNCTION__);     \
-  }  // NOLINT
-  */
 
 // --------------------------------------------------------------------------
 // Macros for assertions that will throw Exceptions.
@@ -237,13 +72,17 @@ class Exception : public std::exception {
 #define AD_FAIL() AD_THROW("This code should be unreachable");
 /// Custom assert which does not abort but throws an exception.
 // TODO<joka921> readd the `source_location` to make this more useful.
-inline void adCheckImpl(bool condition, std::string_view message) {
+inline void adCheckImpl(bool condition, std::string_view message,
+                        ad_utility::source_location location) {
   if (!(condition)) [[unlikely]] {
-    AD_THROW(absl::StrCat("Assertion `", message, "` failed."));
+    using namespace std::string_literals;
+    // TODO<GCC13> Use `std::format`.
+    AD_THROW("Assertion `"s + std::string(message) + "` failed."s, location);
   }
 }
 
-#define AD_CHECK(condition) \
-  adCheckImpl(static_cast<bool>(condition), __STRING(condition))
+#define AD_CHECK(condition)                                      \
+  adCheckImpl(static_cast<bool>(condition), __STRING(condition), \
+              ad_utility::source_location::current())
 
 #endif  // GLOBALS_EXCEPTION_H_

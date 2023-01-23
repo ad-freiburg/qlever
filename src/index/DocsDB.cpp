@@ -24,9 +24,9 @@ string DocsDB::getTextExcerpt(TextRecordIndex cid) const {
   // If no DocsDB available, we cannot return a text excerpt for the given ID.
   if (_size == 0) {
     AD_THROW(
-             "Text records not available, start QLever with -t option and make "
-             "sure that"
-             " a file .text.docsDB exists");
+        "Text records not available, start QLever with -t option and make "
+        "sure that"
+        " a file .text.docsDB exists");
   }
 
   off_t ft[2];

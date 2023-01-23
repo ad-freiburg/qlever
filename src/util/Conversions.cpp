@@ -65,8 +65,7 @@ string convertValueLiteralToIndexWord(const string& orig) {
   } else {
     size_t posOfDoubleDot = orig.rfind(':');
     if (posOfDoubleDot == string::npos) {
-      AD_THROW(ad_semsearch::Exception::BAD_INPUT,
-               "No ':' in non-URL ValueLiteral " + orig);
+      AD_THROW("No ':' in non-URL ValueLiteral " + orig);
     }
 
     // +1 for double dot

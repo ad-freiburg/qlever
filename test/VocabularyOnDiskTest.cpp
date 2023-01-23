@@ -150,10 +150,10 @@ TEST(VocabularyOnDisk, ErrorOnNonAscendingIds) {
   std::vector<uint64_t> ids{2, 4, 3};
   VocabularyCreator creator1{"ErrorOnNonAscendingIds1"};
   ASSERT_THROW(creator1.createVocabularyImpl(words, ids),
-               ad_semsearch::Exception);
+               ad_utility::Exception);
   VocabularyCreator creator2{"ErrorOnNonAscendingIds2"};
   ASSERT_THROW(creator2.createVocabularyFromDiskImpl(words, ids),
-               ad_semsearch::Exception);
+               ad_utility::Exception);
 }
 
 TEST(VocabularyOnDisk, EmptyVocabulary) {

@@ -141,7 +141,8 @@ auto Values::sanitizeValues(SparqlValues&& values) -> SparqlValues {
     }
   }
   if (values._values.empty() || values._variables.empty()) {
-    AD_THROW("After removing undefined values and variables, a VALUES clause was "
+    AD_THROW(
+        "After removing undefined values and variables, a VALUES clause was "
         "found to be empty. This"
         "(the neutral element for JOIN) is currently not supported by QLever");
   }

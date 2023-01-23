@@ -243,8 +243,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     } else if constexpr (std::is_same_v<p::Bind, std::decay_t<decltype(v)>>) {
       if (boundVariables.contains(v._target)) {
         AD_THROW(
-                 "The target variable of a BIND must not be used before the "
-                 "BIND clause");
+            "The target variable of a BIND must not be used before the "
+            "BIND clause");
       }
       boundVariables.insert(v._target);
 
@@ -417,8 +417,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
                 opt.has_value()) {
               leftValue = opt.value();
             } else {
-              AD_THROW(
-                       "No vocabulary entry for " + arg._left.toString());
+              AD_THROW("No vocabulary entry for " + arg._left.toString());
             }
           }
           // TODO<joka921> This is really much code duplication, get rid of it!
@@ -436,8 +435,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
                 opt.has_value()) {
               rightValue = opt.value();
             } else {
-              AD_THROW(
-                       "No vocabulary entry for " + arg._right.toString());
+              AD_THROW("No vocabulary entry for " + arg._right.toString());
             }
           }
           min = arg._min;
@@ -688,8 +686,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     const p::BasicGraphPattern* pattern) const {
   TripleGraph tg;
   if (pattern->_triples.size() > 64) {
-    AD_THROW(
-             "At most 64 triples allowed at the moment.");
+    AD_THROW("At most 64 triples allowed at the moment.");
   }
   for (auto& t : pattern->_triples) {
     // Add a node for the triple.
@@ -750,9 +747,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
       continue;
     }
     if (node._variables.empty()) {
-      AD_THROW(
-               "Triples should have at least one variable. Not the case in: " +
-                   node._triple.asString());
+      AD_THROW("Triples should have at least one variable. Not the case in: " +
+               node._triple.asString());
     }
 
     // If the predicate is a property path, we have to recursively set up the
@@ -768,11 +764,11 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
 
     if (_qec && !_qec->getIndex().hasAllPermutations() &&
         isVariable(node._triple._p._iri)) {
-      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-               "The query contains a predicate variable, but only the PSO "
-               "and POS permutations were loaded. Rerun the server without "
-               "the option --only-pso-and-pos-permutations and if "
-               "necessary also rebuild the index.");
+      AD_THROW(
+          "The query contains a predicate variable, but only the PSO "
+          "and POS permutations were loaded. Rerun the server without "
+          "the option --only-pso-and-pos-permutations and if "
+          "necessary also rebuild the index.");
     }
 
     if (node._triple._p._iri == HAS_PREDICATE_PREDICATE) {
@@ -785,8 +781,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
       if (isVariable(node._triple._s) && isVariable(node._triple._o) &&
           node._triple._s == node._triple._o) {
         if (isVariable(node._triple._p._iri)) {
-          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                   "Triple with one variable repeated three times");
+          AD_THROW("Triple with one variable repeated three times");
         }
         LOG(DEBUG) << "Subject variable same as object variable" << std::endl;
         // Need to handle this as IndexScan with a new unique
@@ -838,11 +833,11 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         addIndexScan(FULL_INDEX_SCAN_SPO);
         addIndexScan(FULL_INDEX_SCAN_SOP);
       } else {
-        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                 "With only 2 permutations registered (no -a option), "
-                 "triples should have at most two variables. "
-                 "Not the case in: " +
-                     node._triple.asString());
+        AD_THROW(
+            "With only 2 permutations registered (no -a option), "
+            "triples should have at most two variables. "
+            "Not the case in: " +
+            node._triple.asString());
       }
     }
   }
@@ -857,8 +852,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedFromPropertyPathTriple(
     buf << "The property path ";
     triple._p.writeToStream(buf);
     buf << " can evaluate to the empty path which is not yet supported.";
-    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-             std::move(buf).str());
+    AD_THROW(std::move(buf).str());
   }
   std::shared_ptr<ParsedQuery::GraphPattern> pattern =
       seedFromPropertyPath(triple._s, triple._p, triple._o);
@@ -891,10 +885,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
     case PropertyPath::Operation::TRANSITIVE_MIN:
       return seedFromTransitiveMin(left, path, right);
   }
-  AD_THROW(
-      ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-      "No implementation for creating a seed from a property path of type " +
-          std::to_string(static_cast<int>(path._operation)));
+  AD_FAIL();
 }
 
 // _____________________________________________________________________________
@@ -902,9 +893,9 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
   if (path._children.empty()) {
-    AD_THROW(ad_semsearch::Exception::BAD_INPUT,
-             "Tried processing a sequence property path node without any "
-             "children.");
+    AD_THROW(
+        "Tried processing a sequence property path node without any "
+        "children.");
   } else if (path._children.size() == 1) {
     LOG(WARN) << "Processing a sequence property path that has only one child."
               << std::endl;
@@ -971,7 +962,6 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
     }
     if (num_null_children > 10) {
       AD_THROW(
-          ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
           "More than 10 consecutive children of a sequence path that can be "
           "null are "
           "not yet supported.");
@@ -1054,9 +1044,9 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
   if (path._children.empty()) {
-    AD_THROW(ad_semsearch::Exception::BAD_INPUT,
-             "Tried processing an alternative property path node without any "
-             "children.");
+    AD_THROW(
+        "Tried processing an alternative property path node without any "
+        "children.");
   } else if (path._children.size() == 1) {
     LOG(WARN)
         << "Processing an alternative property path that has only one child."
@@ -1602,8 +1592,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   size_t numSeeds = tg._nodeMap.size() + children.size();
 
   if (filters.size() > 64) {
-    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-             "At most 64 filters allowed at the moment.");
+    AD_THROW("At most 64 filters allowed at the moment.");
   }
   LOG(TRACE) << "Fill DP table... (there are " << numSeeds
              << " operations to join)" << std::endl;
@@ -1624,10 +1613,10 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
       applyFiltersIfPossible(dpTab.back(), filters, numSeeds == k);
     }
     if (dpTab[k - 1].size() == 0) {
-      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-               "Could not find a suitable execution tree. "
-               "Likely cause: Queries that require joins of the full "
-               "index with itself are not supported at the moment.");
+      AD_THROW(
+          "Could not find a suitable execution tree. "
+          "Likely cause: Queries that require joins of the full "
+          "index with itself are not supported at the moment.");
     }
   }
 
@@ -2099,9 +2088,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   }
 
   if (a.type == SubtreePlan::MINUS) {
-    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-             "MINUS can only appear after"
-             " another graph pattern.");
+    AD_THROW(
+        "MINUS can only appear after"
+        " another graph pattern.");
   }
 
   if (b.type == SubtreePlan::MINUS) {

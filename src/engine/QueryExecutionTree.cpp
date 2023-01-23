@@ -81,9 +81,8 @@ size_t QueryExecutionTree::getVariableColumn(const Variable& variable) const {
   AD_CHECK(_rootOperation);
   const auto& varCols = getVariableColumns();
   if (!varCols.contains(variable)) {
-    AD_THROW(
-             "Variable could not be mapped to result column. Var: " +
-                 variable.name());
+    AD_THROW("Variable could not be mapped to result column. Var: " +
+             variable.name());
   }
   return varCols.at(variable);
 }
@@ -456,8 +455,7 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
                 _qec->getIndex().getTextExcerpt(id.getTextRecordIndex()));
             break;
           default:
-            AD_THROW(
-                     "Cannot deduce output type.");
+            AD_THROW("Cannot deduce output type.");
         }
       }
       co_yield j + 1 < selectedColumnIndices.size() ? sep : '\n';

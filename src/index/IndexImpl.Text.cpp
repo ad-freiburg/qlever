@@ -1224,7 +1224,7 @@ void IndexImpl::dumpAsciiLists(const vector<string>& lists,
       if (nofWordElems < 1000000) continue;
       if (tbmd._firstWordId > _textVocab.size()) return;
       if (decGapsFreq) {
-        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "not yet impl.");
+        AD_THROW(ad_utility::Exception::NOT_YET_IMPLEMENTED, "not yet impl.");
       } else {
         dumpAsciiLists(tbmd);
       }

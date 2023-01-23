@@ -308,8 +308,7 @@ void GroupBy::computeResult(ResultTable* result) {
   for (const auto& var : _groupByVariables) {
     auto it = subtreeVarCols.find(var);
     if (it == subtreeVarCols.end()) {
-      AD_THROW(
-               "Groupby variable " + var.name() + " is not groupable");
+      AD_THROW("Groupby variable " + var.name() + " is not groupable");
     }
 
     groupByColumns.push_back(it->second);

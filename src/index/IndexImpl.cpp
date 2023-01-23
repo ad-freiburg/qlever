@@ -723,9 +723,9 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
 // _____________________________________________________________________________
 void IndexImpl::throwExceptionIfNoPatterns() const {
   if (!_usePatterns) {
-    AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-             "The requested feature requires a loaded patterns file ("
-             "do not specify the --no-patterns option for this to work)");
+    AD_THROW(
+        "The requested feature requires a loaded patterns file ("
+        "do not specify the --no-patterns option for this to work)");
   }
 }
 

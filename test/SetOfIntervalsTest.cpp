@@ -27,12 +27,12 @@ TEST(SetOfIntervals, SortAndCheckDisjointAndNonempty) {
   // Invalid set with empty interval.
   SetOfIntervals emptyInterval{{{4, 5}, {2, 2}}};
   ASSERT_THROW(SetOfIntervals::SortAndCheckDisjointAndNonempty(emptyInterval),
-               ad_semsearch::Exception);
+               ad_utility::Exception);
 
   // Invalid set with overlapping intervals
   SetOfIntervals overlapping{{{4, 6}, {2, 5}}};
   ASSERT_THROW(SetOfIntervals::SortAndCheckDisjointAndNonempty(overlapping),
-               ad_semsearch::Exception);
+               ad_utility::Exception);
 }
 
 TEST(SetOfIntervals, CheckSortedAndDisjointAndSimplify) {
@@ -53,7 +53,7 @@ TEST(SetOfIntervals, CheckSortedAndDisjointAndSimplify) {
 
   SetOfIntervals unsorted{{{3, 5}, {0, 2}}};
   ASSERT_THROW(SetOfIntervals::CheckSortedAndDisjointAndSimplify(unsorted),
-               ad_semsearch::Exception);
+               ad_utility::Exception);
 }
 
 using Union = SetOfIntervals::Union;

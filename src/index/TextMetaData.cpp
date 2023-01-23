@@ -30,11 +30,11 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
 
   if (upper > *it) {
     AD_THROW(
-             "No words found for the given prefix. This usually means that the "
-             "prefix "
-             "is smaller than the configured minimum prefix size. This range "
-             "spans over " +
-                 std::to_string(upperIt - it) + " blocks");
+        "No words found for the given prefix. This usually means that the "
+        "prefix "
+        "is smaller than the configured minimum prefix size. This range "
+        "spans over " +
+        std::to_string(upperIt - it) + " blocks");
   }
 
   // Use the info to retrieve an index.

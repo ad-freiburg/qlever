@@ -249,9 +249,9 @@ class IndexImpl {
       return {numActually, _SPO.metaData().getNofDistinctC1() - numActually};
     } else {
       AD_THROW(
-               "Can only get # distinct subjects if all 6 permutations "
-               "have been registered on sever start (and index build time) "
-               "with the -a option.");
+          "Can only get # distinct subjects if all 6 permutations "
+          "have been registered on sever start (and index build time) "
+          "with the -a option.");
     }
   }
 
@@ -262,9 +262,9 @@ class IndexImpl {
       return {numActually, _OSP.metaData().getNofDistinctC1() - numActually};
     } else {
       AD_THROW(
-               "Can only get # distinct objects if all 6 permutations "
-               "have been registered on sever start (and index build time) "
-               "with the -a option.");
+          "Can only get # distinct objects if all 6 permutations "
+          "have been registered on sever start (and index build time) "
+          "with the -a option.");
     }
   }
 

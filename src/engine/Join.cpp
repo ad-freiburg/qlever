@@ -329,8 +329,7 @@ Join::ScanMethodType Join::getScanMethod(
       scanMethod = scanLambda(OPS);
       break;
     default:
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-               "Found non-dummy scan where one was expected.");
+      AD_THROW("Found non-dummy scan where one was expected.");
   }
   return scanMethod;
 }
