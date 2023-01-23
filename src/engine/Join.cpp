@@ -259,7 +259,7 @@ size_t Join::getCostEstimate() {
 void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
   LOG(DEBUG) << "Join by making multiple scans..." << endl;
   if (isFullScanDummy(_left)) {
-    AD_CHECK(!isFullScanDummy(_right))
+    AD_CHECK(!isFullScanDummy(_right));
     _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
     result->_idTable.setNumColumns(_right->getResultWidth() + 2);
     result->_sortedBy = {2 + _rightJoinCol};
@@ -273,7 +273,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
     doComputeJoinWithFullScanDummyLeft(nonDummyRes->_idTable,
                                        &result->_idTable);
   } else {
-    AD_CHECK(!isFullScanDummy(_left))
+    AD_CHECK(!isFullScanDummy(_left));
     _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
     result->_idTable.setNumColumns(_left->getResultWidth() + 2);
     result->_sortedBy = {_leftJoinCol};

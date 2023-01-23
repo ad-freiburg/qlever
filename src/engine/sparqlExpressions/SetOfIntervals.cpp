@@ -18,7 +18,7 @@ SetOfIntervals SetOfIntervals::SortAndCheckDisjointAndNonempty(
   }
 
   for (size_t i = 1; i < vec.size(); ++i) {
-    AD_CHECK(vec[i].first >= vec[i - 1].second)
+    AD_CHECK(vec[i].first >= vec[i - 1].second);
   }
 
   return input;

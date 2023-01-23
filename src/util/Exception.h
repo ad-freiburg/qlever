@@ -13,99 +13,6 @@
 using std::string;
 
 // -------------------------------------------
-// Macros for throwing exceptions comfortably.
-// -------------------------------------------
-// Throw exception with additional assert-like info
-#define AD_THROW(e, m)                                                \
-  {                                                                   \
-    std::ostringstream __os;                                          \
-    __os << m;                                                        \
-    throw ad_semsearch::Exception(e, std::move(__os).str(), __FILE__, \
-                                  __LINE__, __PRETTY_FUNCTION__);     \
-  }  // NOLINT
-
-// --------------------------------------------------------------------------
-// Macros for assertions that will throw Exceptions.
-// --------------------------------------------------------------------------
-//! NOTE: Should be used only for asserts which affect the total running only
-//! very insignificantly. Counterexample: don't use this in an inner loop that
-//! is executed million of times, and has otherwise little code.
-// --------------------------------------------------------------------------
-// Needed for Cygwin (will be an identical redefine  for *nixes)
-#define __STRING(x) #x
-
-#ifndef AD_DISABLE_CHECKS
-/// Custom assert that will always fail and report the file and line.
-#define AD_FAIL()                                  \
-  AD_THROW(ad_semsearch::Exception::ASSERT_FAILED, \
-           "This code should be unreachable")
-/// Custom assert which does not abort but throws an exception.
-#define AD_CHECK(condition)                                                  \
-  {                                                                          \
-    if (!(condition)) [[unlikely]] {                                         \
-      AD_THROW(ad_semsearch::Exception::ASSERT_FAILED, __STRING(condition)); \
-    }                                                                        \
-  }  // NOLINT
-/// Assert equality, and show values if fails.
-#define AD_CHECK_EQ(t1, t2)                                           \
-  {                                                                   \
-    if (!((t1) == (t2))) [[unlikely]] {                               \
-      AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,                \
-               __STRING(t1 == t2) << "; " << (t1) << " != " << (t2)); \
-    }                                                                 \
-  }  // NOLINT
-/// Assert less than, and show values if fails.
-#define AD_CHECK_LT(t1, t2)                                          \
-  {                                                                  \
-    if (!((t1) < (t2))) [[unlikely]] {                               \
-      AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,               \
-               __STRING(t1 < t2) << "; " << (t1) << " >= " << (t2)); \
-    }                                                                \
-  }  // NOLINT
-/// Assert greater than, and show values if fails.
-#define AD_CHECK_GT(t1, t2)                                          \
-  {                                                                  \
-    if (!((t1) > (t2))) [[unlikely]] {                               \
-      AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,               \
-               __STRING(t1 > t2) << "; " << (t1) << " <= " << (t2)); \
-    }                                                                \
-  }  // NOLINT
-/// Assert less or equal than, and show values if fails.
-#define AD_CHECK_LE(t1, t2)                                          \
-  {                                                                  \
-    if (!((t1) <= (t2))) [[unlikely]] {                              \
-      AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,               \
-               __STRING(t1 <= t2) << "; " << (t1) << " > " << (t2)); \
-    }                                                                \
-  }  // NOLINT
-/// Assert greater or equal than, and show values if fails.
-#define AD_CHECK_GE(t1, t2)                                          \
-  {                                                                  \
-    if (!((t1) >= (t2))) [[unlikely]] {                              \
-      AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,               \
-               __STRING(t1 >= t2) << "; " << (t1) << " < " << (t2)); \
-    }                                                                \
-  }  // NOLINT
-
-#else
-/// Custom assert that will always fail and report the file and line.
-#define AD_FAIL() \
-  {}
-#define AD_CHECK(condition) \
-  {}
-#define AD_CHECK_EQ(t1, t2) \
-  {}
-#define AD_CHECK_LT(t1, t2) \
-  {}
-#define AD_CHECK_GT(t1, t2) \
-  {}
-#define AD_CHECK_LE(t1, t2) \
-  {}
-#define AD_CHECK_GE(t1, t2) \
-  {}
-#endif
-
-// -------------------------------------------
 // Exception class code
 // -------------------------------------------
 namespace ad_semsearch {
@@ -292,5 +199,84 @@ class Exception : public std::exception {
   const char* what() const noexcept { return _errorMessageFull.c_str(); }
 };
 }  // namespace ad_semsearch
+
+// -------------------------------------------
+// Macros for throwing exceptions comfortably.
+// -------------------------------------------
+// Throw exception with additional assert-like info
+#define AD_THROW(e, m)                                                \
+  {                                                                   \
+    std::ostringstream __os;                                          \
+    __os << m;                                                        \
+    throw ad_semsearch::Exception(e, std::move(__os).str(), __FILE__, \
+                                  __LINE__, __PRETTY_FUNCTION__);     \
+  }  // NOLINT
+
+// --------------------------------------------------------------------------
+// Macros for assertions that will throw Exceptions.
+// --------------------------------------------------------------------------
+//! NOTE: Should be used only for asserts which affect the total running only
+//! very insignificantly. Counterexample: don't use this in an inner loop that
+//! is executed million of times, and has otherwise little code.
+// --------------------------------------------------------------------------
+// Needed for Cygwin (will be an identical redefine  for *nixes)
+#define __STRING(x) #x
+
+/// Custom assert that will always fail and report the file and line.
+#ifndef AD_DISABLE_CHECKS
+#define AD_FAIL()                                  \
+  AD_THROW(ad_semsearch::Exception::ASSERT_FAILED, \
+           "This code should be unreachable")
+#else
+#define AD_FAIL() __builtin_unreachable();
+#endif
+/// Custom assert which does not abort but throws an exception.
+inline void adCheckImpl(bool condition, std::string_view message) {
+  if (!(condition)) [[unlikely]] {
+    AD_THROW(ad_semsearch::Exception::ASSERT_FAILED, message);
+  }
+}
+#define AD_CHECK(condition) \
+  adCheckImpl(static_cast<bool>(condition), __STRING(condition))
+/// Assert equality, and show values if fails.
+#define AD_CHECK_EQ(t1, t2)                                           \
+  {                                                                   \
+    if (!((t1) == (t2))) [[unlikely]] {                               \
+      AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,                \
+               __STRING(t1 == t2) << "; " << (t1) << " != " << (t2)); \
+    }                                                                 \
+  }  // NOLINT
+/// Assert less than, and show values if fails.
+#define AD_CHECK_LT(t1, t2)                                          \
+  {                                                                  \
+    if (!((t1) < (t2))) [[unlikely]] {                               \
+      AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,               \
+               __STRING(t1 < t2) << "; " << (t1) << " >= " << (t2)); \
+    }                                                                \
+  }  // NOLINT
+/// Assert greater than, and show values if fails.
+#define AD_CHECK_GT(t1, t2)                                          \
+  {                                                                  \
+    if (!((t1) > (t2))) [[unlikely]] {                               \
+      AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,               \
+               __STRING(t1 > t2) << "; " << (t1) << " <= " << (t2)); \
+    }                                                                \
+  }  // NOLINT
+/// Assert less or equal than, and show values if fails.
+#define AD_CHECK_LE(t1, t2)                                          \
+  {                                                                  \
+    if (!((t1) <= (t2))) [[unlikely]] {                              \
+      AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,               \
+               __STRING(t1 <= t2) << "; " << (t1) << " > " << (t2)); \
+    }                                                                \
+  }  // NOLINT
+/// Assert greater or equal than, and show values if fails.
+#define AD_CHECK_GE(t1, t2)                                          \
+  {                                                                  \
+    if (!((t1) >= (t2))) [[unlikely]] {                              \
+      AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,               \
+               __STRING(t1 >= t2) << "; " << (t1) << " < " << (t2)); \
+    }                                                                \
+  }  // NOLINT
 
 #endif  // GLOBALS_EXCEPTION_H_
