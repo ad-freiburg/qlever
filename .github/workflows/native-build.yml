@@ -108,10 +108,7 @@ jobs:
       working-directory: ${{github.workspace}}/build/test
       run:  >
         llvm-profdata-15 merge -sparse *.profraw -o default.profdata;
-        xargs -a tests.txt llvm-cov-15 export --format=lcov --instr-profile ./default.profdata  \ 
-                               --ignore-filename-regex="/third_party/" --ignore-filename-regex="/generated/" \
-                               --ignore-filename-regex="/nlohmann/" --ignore-filename-regex="/ctre/" \
-                               --ignore-filename-regex="/test/" > ./coverage.lcov
+        xargs -a tests.txt llvm-cov-15 export --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/third_party/" --ignore-filename-regex="/generated/"  --ignore-filename-regex="/nlohmann/" --ignore-filename-regex="/ctre/"  --ignore-filename-regex="/test/" > ./coverage.lcov
       if: matrix.is-coverage
     - name: Submit to codecov.io
       if: matrix.is-coverage
