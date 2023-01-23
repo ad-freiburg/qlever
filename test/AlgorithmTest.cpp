@@ -81,3 +81,34 @@ TEST(Algorithm, AppendVector) {
   ASSERT_TRUE(v3[0].empty());
   ASSERT_TRUE(v3[1].empty());
 }
+
+TEST(Algorithm, Transform) {
+  std::vector<std::string> v{"hi", "bye", "why"};
+  auto vCopy = v;
+  auto v2 = transform(v, [](const std::string& s) { return s.substr(1); });
+  ASSERT_EQ((std::vector<std::string>{"i", "ye", "hy"}), v2);
+  ASSERT_EQ(vCopy, v);
+  // Transform using the moved values from `v`
+  auto v3 = transform(std::move(v), [](std::string s) {
+    s.push_back('x');
+    return s;
+  });
+  ASSERT_EQ((std::vector<std::string>{"hix", "byex", "whyx"}), v3);
+  ASSERT_EQ(3u, v.size());
+  // The individual elements of `v` were moved from.
+  ASSERT_TRUE(std::ranges::all_of(v, &std::string::empty));
+}
+
+TEST(Algorithm, Flatten) {
+  std::vector<std::vector<std::string>> v{{"hi"}, {"bye", "why"}, {"me"}};
+  auto v3 = flatten(std::move(v));
+  ASSERT_EQ((std::vector<std::string>{"hi", "bye", "why", "me"}), v3);
+  ASSERT_EQ(3u, v.size());
+  // The individual elements of `v` were moved from.
+  ASSERT_TRUE(std::ranges::all_of(v,
+                                  [](const auto& inner) {
+                                    return std::ranges::all_of(
+                                        inner, &std::string::empty);
+                                  }))
+      << v[0][0] << ' ' << v[0][0];
+}
