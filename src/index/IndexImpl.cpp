@@ -311,7 +311,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       }
       LOG(TIMING) << "WaitTimes for Pipeline in msecs\n";
       for (const auto& t : p.getWaitingTime()) {
-        LOG(TIMING) << t << " msecs" << std::endl;
+        LOG(TIMING) << ad_utility::Timer::toMilliseconds(t) << " msecs"
+                    << std::endl;
       }
 
       if constexpr (requires(Parser p) { p.printAndResetQueueStatistics(); }) {
@@ -324,12 +325,10 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     // to control the number of threads and the amount of memory used at the
     // same time. typically sorting is finished before we reach again here so
     // it is not a bottleneck.
-    ad_utility::Timer sortFutureTimer;
-    sortFutureTimer.start();
+    ad_utility::Timer sortFutureTimer{ad_utility::Timer::Started};
     if (writePartialVocabularyFuture[0].valid()) {
       writePartialVocabularyFuture[0].get();
     }
-    sortFutureTimer.stop();
     LOG(TIMING)
         << "Time spent waiting for the writing of a previous vocabulary: "
         << sortFutureTimer.msecs() << "ms." << std::endl;

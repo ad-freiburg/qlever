@@ -345,12 +345,13 @@ std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
 /// multiple `ValueGetters` (a parameter pack, that has to appear at the end of
 /// the template declaration) and the default parameter for the
 /// `FunctionForSetOfIntervals` (which also has to appear at the end).
-template <size_t NumOperands, typename FunctionAndValueGettersT,
-          typename... SpecializedFunctions>
-requires ad_utility::isInstantiation<FunctionAndValueGetters,
-                                     FunctionAndValueGettersT> &&
-    (...&& ad_utility::isInstantiation<SpecializedFunction,
-                                       SpecializedFunctions>)struct Operation {
+template <
+    size_t NumOperands,
+    ad_utility::isInstantiation<FunctionAndValueGetters>
+        FunctionAndValueGettersT,
+    ad_utility::isInstantiation<SpecializedFunction>... SpecializedFunctions>
+
+struct Operation {
  private:
   using OriginalValueGetters = typename FunctionAndValueGettersT::ValueGetters;
   static constexpr size_t NV = std::tuple_size_v<OriginalValueGetters>;

@@ -11,7 +11,7 @@
 
 namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
-    (ad_utility::similarToInstantiation<std::pair, T>)) {
+    (ad_utility::similarToInstantiation<T, std::pair>)) {
   serializer | arg.first;
   serializer | arg.second;
 }
