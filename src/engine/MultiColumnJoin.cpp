@@ -15,7 +15,7 @@ MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
                                  const vector<array<ColumnIndex, 2>>& jcs)
     : Operation(qec), _joinColumns(jcs), _multiplicitiesComputed(false) {
   // Make sure subtrees are ordered so that identical queries can be identified.
-  AD_CHECK(jcs.size() >= 0);
+  AD_CHECK(!jcs.empty());
   if (t1->asString() < t2->asString()) {
     _left = t1;
     _right = t2;
