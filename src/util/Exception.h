@@ -11,6 +11,7 @@
 #include <string>
 
 #include "util/TypeTraits.h"
+#include "absl/strings/str_cat.cc"
 
 using std::string;
 
@@ -206,13 +207,21 @@ class Exception : public std::exception {
 // Macros for throwing exceptions comfortably.
 // -------------------------------------------
 // Throw exception with additional assert-like info
-#define AD_THROW(e, m)                                                \
+// TODO<joka921> Readd `source_location`
+// TODO<joka921> Add support for custom exceptions.
+[[noreturn]] void  AD_THROW(std::string_view message) {
+  throw std::runtime_error{std::string{message}};
+}
+
+/*
+#define AD_THROW(m)                                                \
   {                                                                   \
     std::ostringstream __os;                                          \
     __os << m;                                                        \
     throw ad_semsearch::Exception(e, std::move(__os).str(), __FILE__, \
                                   __LINE__, __PRETTY_FUNCTION__);     \
   }  // NOLINT
+  */
 
 // --------------------------------------------------------------------------
 // Macros for assertions that will throw Exceptions.
@@ -225,88 +234,16 @@ class Exception : public std::exception {
 #define __STRING(x) #x
 
 /// Custom assert that will always fail and report the file and line.
-#ifndef AD_DISABLE_CHECKS
-#define AD_FAIL()                                  \
-  AD_THROW(ad_semsearch::Exception::ASSERT_FAILED, \
-           "This code should be unreachable")
-#else
-#define AD_FAIL() __builtin_unreachable();
-#endif
+#define AD_FAIL() AD_THROW("This code should be unreachable");
 /// Custom assert which does not abort but throws an exception.
 // TODO<joka921> readd the `source_location` to make this more useful.
 inline void adCheckImpl(bool condition, std::string_view message) {
   if (!(condition)) [[unlikely]] {
-    AD_THROW(ad_semsearch::Exception::ASSERT_FAILED, message);
-  }
-}
-
-/*
-template<typename Comp>
-void adCheckBinaryImpl(const Comp& comp, const auto& t1, const auto& t2,
-std::string_view t1s, std::string_view t2s) { if (!comp(t1, t2)) [[unlikely]] {
-    // TODO<joka921> source_location and maybe also print the arguments if
-    // possible.
-    AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,
-             message);
-  }
-}
- */
-
-// TODO<joka921> There are similar comparator structs elsewhere, unify them.
-enum struct Comps { LT, LE, EQ, NE, GT, GE };
-
-template <Comps comp>
-auto toComparatorAndIdentifier() {
-  using enum Comps;
-  using namespace std::string_view_literals;
-  if constexpr (comp == EQ) {
-    return std::pair{std::equal_to{}, "=="sv};
-  } else {
-    static_assert(ad_utility::alwaysFalse<decltype(comp)>);
+    AD_THROW(absl::StrCat("Assertion `", message, "` failed."));
   }
 }
 
 #define AD_CHECK(condition) \
   adCheckImpl(static_cast<bool>(condition), __STRING(condition))
-/// Assert equality, and show values if fails.
-#define AD_CHECK_EQ(t1, t2)                                           \
-  {                                                                   \
-    if (!((t1) == (t2))) [[unlikely]] {                               \
-      AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,                \
-               __STRING(t1 == t2) << "; " << (t1) << " != " << (t2)); \
-    }                                                                 \
-  }  // NOLINT
-/// Assert less than, and show values if fails.
-#define AD_CHECK_LT(t1, t2)                                          \
-  {                                                                  \
-    if (!((t1) < (t2))) [[unlikely]] {                               \
-      AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,               \
-               __STRING(t1 < t2) << "; " << (t1) << " >= " << (t2)); \
-    }                                                                \
-  }  // NOLINT
-/// Assert greater than, and show values if fails.
-#define AD_CHECK_GT(t1, t2)                                          \
-  {                                                                  \
-    if (!((t1) > (t2))) [[unlikely]] {                               \
-      AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,               \
-               __STRING(t1 > t2) << "; " << (t1) << " <= " << (t2)); \
-    }                                                                \
-  }  // NOLINT
-/// Assert less or equal than, and show values if fails.
-#define AD_CHECK_LE(t1, t2)                                          \
-  {                                                                  \
-    if (!((t1) <= (t2))) [[unlikely]] {                              \
-      AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,               \
-               __STRING(t1 <= t2) << "; " << (t1) << " > " << (t2)); \
-    }                                                                \
-  }  // NOLINT
-/// Assert greater or equal than, and show values if fails.
-#define AD_CHECK_GE(t1, t2)                                          \
-  {                                                                  \
-    if (!((t1) >= (t2))) [[unlikely]] {                              \
-      AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,               \
-               __STRING(t1 >= t2) << "; " << (t1) << " < " << (t2)); \
-    }                                                                \
-  }  // NOLINT
 
 #endif  // GLOBALS_EXCEPTION_H_

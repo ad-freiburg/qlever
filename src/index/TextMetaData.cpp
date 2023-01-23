@@ -10,7 +10,7 @@
 // _____________________________________________________________________________
 const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
     const uint64_t lower, const uint64_t upper) const {
-  AD_CHECK_GE(upper, lower);
+  AD_CHECK(upper >= lower);
   assert(_blocks.size() > 0);
   assert(_blocks.size() ==
          _blockUpperBoundWordIds.size() + _blockUpperBoundEntityIds.size());
@@ -29,7 +29,7 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
                                   _blockUpperBoundWordIds.end(), upper);
 
   if (upper > *it) {
-    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+    AD_THROW(
              "No words found for the given prefix. This usually means that the "
              "prefix "
              "is smaller than the configured minimum prefix size. This range "

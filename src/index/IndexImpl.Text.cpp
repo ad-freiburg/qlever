@@ -688,7 +688,7 @@ size_t IndexImpl::writeList(Numeric* data, size_t nofElements,
     uint64_t* encoded = new uint64_t[nofElements];
     size_t size = ad_utility::Simple8bCode::encode(data, nofElements, encoded);
     size_t ret = file.write(encoded, size);
-    AD_CHECK_EQ(size, ret);
+    AD_CHECK(size == ret);
     delete[] encoded;
     return size;
   } else {
@@ -1171,7 +1171,7 @@ template <typename T, typename MakeFromUint64t>
 void IndexImpl::readFreqComprList(size_t nofElements, off_t from,
                                   size_t nofBytes, vector<T>& result,
                                   MakeFromUint64t makeFromUint) const {
-  AD_CHECK_GT(nofBytes, 0);
+  AD_CHECK(nofBytes > 0);
   LOG(DEBUG) << "Reading frequency-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
              << ", nofBytes: " << nofBytes << '\n';
@@ -1181,16 +1181,16 @@ void IndexImpl::readFreqComprList(size_t nofElements, off_t from,
   off_t current = from;
   size_t ret = _textIndexFile.read(&nofCodebookBytes, sizeof(off_t), current);
   LOG(TRACE) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
-  AD_CHECK_EQ(sizeof(off_t), ret);
+  AD_CHECK(sizeof(off_t) == ret);
   current += ret;
   T* codebook = new T[nofCodebookBytes / sizeof(T)];
   ret = _textIndexFile.read(codebook, nofCodebookBytes, current);
   current += ret;
-  AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
+  AD_CHECK(ret == size_t(nofCodebookBytes));
   ret = _textIndexFile.read(
       encoded, static_cast<size_t>(nofBytes - (current - from)), current);
   current += ret;
-  AD_CHECK_EQ(size_t(current - from), nofBytes);
+  AD_CHECK(size_t(current - from) == nofBytes);
   LOG(DEBUG) << "Decoding Simple8b code...\n";
   ad_utility::Simple8bCode::decode(encoded, nofElements, result.data(),
                                    makeFromUint);
@@ -1690,7 +1690,7 @@ void IndexImpl::getRhsForSingleLhs(const IdTable& in, Id lhsId,
   LOG(DEBUG) << "Getting only rhs from a relation with " << in.size()
              << " elements by an Id key.\n";
   AD_CHECK(result);
-  AD_CHECK_EQ(0, result->size());
+  AD_CHECK(result->empty());
 
   // The second entry is unused.
   Id compareElem[] = {lhsId, Id::makeUndefined()};

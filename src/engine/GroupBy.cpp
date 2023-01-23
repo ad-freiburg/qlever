@@ -180,7 +180,7 @@ void GroupBy::processGroup(
           singleResult, *(outTable->_localVocab));
     } else {
       // This should never happen since aggregates always return constants.
-      AD_FAIL()
+      AD_FAIL();
     }
   };
 
@@ -308,9 +308,7 @@ void GroupBy::computeResult(ResultTable* result) {
   for (const auto& var : _groupByVariables) {
     auto it = subtreeVarCols.find(var);
     if (it == subtreeVarCols.end()) {
-      LOG(WARN) << "Group by variable " << var.name() << " is not groupable."
-                << std::endl;
-      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+      AD_THROW(
                "Groupby variable " + var.name() + " is not groupable");
     }
 

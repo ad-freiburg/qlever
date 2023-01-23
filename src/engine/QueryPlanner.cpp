@@ -146,7 +146,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
     }
   }
 
-  AD_CHECK_GT(lastRow.size(), 0);
+  AD_CHECK(!lastRow.empty());
   if (pq._rootGraphPattern._optional) {
     for (auto& plan : lastRow) {
       plan.type = SubtreePlan::OPTIONAL;
@@ -242,7 +242,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           std::make_move_iterator(v._triples.end()));
     } else if constexpr (std::is_same_v<p::Bind, std::decay_t<decltype(v)>>) {
       if (boundVariables.contains(v._target)) {
-        AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+        AD_THROW(
                  "The target variable of a BIND must not be used before the "
                  "BIND clause");
       }
@@ -417,7 +417,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
                 opt.has_value()) {
               leftValue = opt.value();
             } else {
-              AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+              AD_THROW(
                        "No vocabulary entry for " + arg._left.toString());
             }
           }
@@ -436,7 +436,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
                 opt.has_value()) {
               rightValue = opt.value();
             } else {
-              AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+              AD_THROW(
                        "No vocabulary entry for " + arg._right.toString());
             }
           }
@@ -688,7 +688,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     const p::BasicGraphPattern* pattern) const {
   TripleGraph tg;
   if (pattern->_triples.size() > 64) {
-    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+    AD_THROW(
              "At most 64 triples allowed at the moment.");
   }
   for (auto& t : pattern->_triples) {
@@ -750,7 +750,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
       continue;
     }
     if (node._variables.empty()) {
-      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+      AD_THROW(
                "Triples should have at least one variable. Not the case in: " +
                    node._triple.asString());
     }
@@ -2045,7 +2045,7 @@ void QueryPlanner::setEnablePatternTrick(bool enablePatternTrick) {
 // _________________________________________________________________________________
 size_t QueryPlanner::findCheapestExecutionTree(
     const std::vector<SubtreePlan>& lastRow) const {
-  AD_CHECK_GT(lastRow.size(), 0);
+  AD_CHECK(!lastRow.empty());
   auto compare = [this](const auto& a, const auto& b) {
     auto aCost = a.getCostEstimate(), bCost = b.getCostEstimate();
     if (aCost == bCost && isInTestMode()) {

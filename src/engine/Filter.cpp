@@ -99,7 +99,7 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
               output.push_back(input[i]);
             }
           }
-          AD_CHECK_EQ(output.size(), totalSize);
+          AD_CHECK(output.size() == totalSize);
         } else if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
           auto totalSize = std::accumulate(
               singleResult._intervals.begin(), singleResult._intervals.end(),
@@ -111,7 +111,7 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
             AD_CHECK(end <= input.size());
             output.insertAtEnd(input.cbegin() + beg, input.cbegin() + end);
           }
-          AD_CHECK_EQ(output.size(), totalSize);
+          AD_CHECK(output.size() == totalSize);
         } else {
           // Default case for all other types. We currently implicitly convert
           // all kinds of results (strings, doubles, ints) to bools inside a

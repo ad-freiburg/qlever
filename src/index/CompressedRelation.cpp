@@ -426,7 +426,7 @@ void CompressedRelationWriter::addRelation(
     Id col0Id, const ad_utility::BufferedVector<std::array<Id, 2>>& data,
     size_t numDistinctCol1, bool functional) {
   LOG(TRACE) << "Writing a relation ...\n";
-  AD_CHECK_GT(data.size(), 0);
+  AD_CHECK(data.size() > 0);
   LOG(TRACE) << "Calculating multiplicities ...\n";
   float multC1 = functional ? 1.0 : data.size() / float(numDistinctCol1);
   // Dummy value that will be overwritten later
