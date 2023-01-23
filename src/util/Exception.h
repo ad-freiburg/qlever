@@ -10,6 +10,8 @@
 #include <sstream>
 #include <string>
 
+#include "util/TypeTraits.h"
+
 using std::string;
 
 // -------------------------------------------
@@ -231,11 +233,39 @@ class Exception : public std::exception {
 #define AD_FAIL() __builtin_unreachable();
 #endif
 /// Custom assert which does not abort but throws an exception.
+// TODO<joka921> readd the `source_location` to make this more useful.
 inline void adCheckImpl(bool condition, std::string_view message) {
   if (!(condition)) [[unlikely]] {
     AD_THROW(ad_semsearch::Exception::ASSERT_FAILED, message);
   }
 }
+
+/*
+template<typename Comp>
+void adCheckBinaryImpl(const Comp& comp, const auto& t1, const auto& t2,
+std::string_view t1s, std::string_view t2s) { if (!comp(t1, t2)) [[unlikely]] {
+    // TODO<joka921> source_location and maybe also print the arguments if
+    // possible.
+    AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,
+             message);
+  }
+}
+ */
+
+// TODO<joka921> There are similar comparator structs elsewhere, unify them.
+enum struct Comps { LT, LE, EQ, NE, GT, GE };
+
+template <Comps comp>
+auto toComparatorAndIdentifier() {
+  using enum Comps;
+  using namespace std::string_view_literals;
+  if constexpr (comp == EQ) {
+    return std::pair{std::equal_to{}, "=="sv};
+  } else {
+    static_assert(ad_utility::alwaysFalse<decltype(comp)>);
+  }
+}
+
 #define AD_CHECK(condition) \
   adCheckImpl(static_cast<bool>(condition), __STRING(condition))
 /// Assert equality, and show values if fails.
