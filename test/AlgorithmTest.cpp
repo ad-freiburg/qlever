@@ -105,10 +105,7 @@ TEST(Algorithm, Flatten) {
   ASSERT_EQ((std::vector<std::string>{"hi", "bye", "why", "me"}), v3);
   ASSERT_EQ(3u, v.size());
   // The individual elements of `v` were moved from.
-  ASSERT_TRUE(std::ranges::all_of(v,
-                                  [](const auto& inner) {
-                                    return std::ranges::all_of(
-                                        inner, &std::string::empty);
-                                  }))
-      << v[0][0] << ' ' << v[0][0];
+  ASSERT_TRUE(std::ranges::all_of(v, [](const auto& inner) {
+    return std::ranges::all_of(inner, &std::string::empty);
+  }));
 }
