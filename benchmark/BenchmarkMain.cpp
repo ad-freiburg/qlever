@@ -10,12 +10,27 @@
 #include <vector>
 
 #include "../benchmark/Benchmark.h"
-#include "../benchmark/util/MainFunctionHelperFunction.h"
 
 // These helper function are only usable inside this file. Should you want to
 // use them elsewhere, please move them to a helper file in util, to prevent
 // code duplication.
 namespace {
+
+/*
+ * @brief Measure the time needed for the execution of every registered
+ *  benchmark and return a copy of the used BenchmarkRecords.
+ */
+const BenchmarkRecords measureTimeForAllBenchmarks() {
+  // For measuring and saving the times.
+  BenchmarkRecords benchmarksTime;
+ 
+  // Goes through all registered benchmarks and measures them.
+  for (const auto& benchmarkFunction: BenchmarkRegister::getRegisteredBenchmarks()) {
+    benchmarkFunction(&benchmarksTime);
+  }
+
+  return benchmarksTime;
+};
 
 /*
  * @brief Add a string of the form
