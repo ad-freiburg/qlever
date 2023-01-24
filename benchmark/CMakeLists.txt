@@ -35,18 +35,6 @@ function(addAndLinkBenchmarkWithPrintAverageTime compileName cppFileName)
 endfunction()
 
 # Add benchmarks after here.
-addAndLinkBenchmarkWithPrintTimes(SortedJoinBenchmarkPrintTimes SortedJoinBenchmark.cpp engine)
-
-addAndLinkBenchmarkWithPrintTimes(UnsortedJoinBenchmarkPrintTimes UnsortedJoinBenchmark.cpp engine)
-
-addAndLinkBenchmarkWithPrintRelativeSpeedup(SortedJoinBenchmarkPrintSpeedup SortedJoinBenchmark.cpp engine)
-
-addAndLinkBenchmarkWithPrintRelativeSpeedup(UnsortedJoinBenchmarkPrintSpeedup UnsortedJoinBenchmark.cpp engine)
-
-addAndLinkBenchmarkWithPrintAverageTime(SortedJoinBenchmarkPrintAverage SortedJoinBenchmark.cpp engine)
-
-addAndLinkBenchmarkWithPrintAverageTime(UnsortedJoinBenchmarkPrintAverage UnsortedJoinBenchmark.cpp engine)
-
 addAndLinkBenchmarkWithPrintTimes(BenchmarkExamples BenchmarkExamples.cpp)
 
 addAndLinkBenchmarkWithPrintTimes(UnsortedAndSortedJoinBenchmark UnsortedAndSortedJoinBenchmark.cpp engine)
