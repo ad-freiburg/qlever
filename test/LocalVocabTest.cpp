@@ -207,7 +207,7 @@ TEST(LocalVocab, propagation) {
   checkLocalVocab(orderBy, std::vector<std::string>{"x", "y1", "y2"});
 
   // SORT operation (the third operation is the sort column).
-  Sort sort(testQec, qet(values1), 0);
+  Sort sort(testQec, qet(values1), {0});
   checkLocalVocab(sort, std::vector<std::string>{"x", "y1", "y2"});
 
   // DISTINCT operation (the third argument are the indices of the input columns

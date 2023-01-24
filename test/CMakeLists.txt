@@ -255,3 +255,7 @@ addLinkAndDiscoverTest(ResetWhenMovedTest)
 addLinkAndDiscoverTest(TimerTest absl::strings)
 
 addLinkAndDiscoverTest(AlgorithmTest)
+
+addLinkAndDiscoverTestSerial(SortTest engine)
+
+addLinkAndDiscoverTestSerial(OrderByTest engine)

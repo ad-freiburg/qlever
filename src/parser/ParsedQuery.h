@@ -106,6 +106,7 @@ class ParsedQuery {
   // implementation of ORDER BY as BIND+ORDER BY.
   int64_t numInternalVariables_ = 0;
   vector<VariableOrderKey> _orderBy;
+  IsInternalSort _isInternalSort = IsInternalSort::False;
   vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
   string _originalString;

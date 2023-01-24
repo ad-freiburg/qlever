@@ -35,13 +35,15 @@ auto I = [](const auto& id) {
 
 // For easier reading. We repeat that type combination so often, that this
 // will make things a lot easier in terms of reading and writing.
-using VectorTable = std::vector<std::vector<size_t>>;
+using VectorTable = std::vector<std::vector<int64_t>>;
 
 /*
  * Return an 'IdTable' with the given 'tableContent'. all rows must have the
  * same length.
  */
-IdTable makeIdTableFromVector(const VectorTable& tableContent) {
+template <typename Transformation = decltype(I)>
+IdTable makeIdTableFromVector(const VectorTable& tableContent,
+                              Transformation transformation = {}) {
   AD_CHECK(!tableContent.empty());
   IdTable result{tableContent[0].size(), allocator()};
 
@@ -57,7 +59,7 @@ IdTable makeIdTableFromVector(const VectorTable& tableContent) {
     result.emplace_back();
 
     for (size_t c = 0; c < row.size(); c++) {
-      result(backIndex, c) = I(row[c]);
+      result(backIndex, c) = transformation(row[c]);
     }
   }
 
