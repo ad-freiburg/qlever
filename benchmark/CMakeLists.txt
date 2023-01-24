@@ -4,37 +4,15 @@ function (linkBenchmark basename)
     target_link_libraries(${basename} absl::flat_hash_map ${ARGN})
 endfunction()
 
-# Compile the benchmark with MainPrintTimes and link the benchmark, but
-# do not run it.
-# Usage: addAndLinkBenchmarkWithPrintTimes(compileName, cppFileName, [additionalLibraries...])
-#   - compileName : The name, that the compiled end product should have.
-#   - cppFileName : The .cpp file, that contains your benchmark without the file extension.
-function(addAndLinkBenchmarkWithPrintTimes compileName cppFileName)
-    add_executable(${compileName}  Benchmark.cpp ${cppFileName} MainPrintTimes.cpp)
-    linkBenchmark(${compileName} ${ARGN})
-endfunction()
-
-# Compile the benchmark with MainPrintRelativeSpeedup and link the benchmark, but
-# do not run it.
-# Usage: addAndLinkBenchmarkWithPrintRelativSpeedup(compileName, cppFileName, [additionalLibraries...])
-#   - compileName : The name, that the compiled end product should have.
-#   - cppFileName : The .cpp file, that contains your benchmark without the file extension.
-function(addAndLinkBenchmarkWithPrintRelativeSpeedup compileName cppFileName)
-    add_executable(${compileName}  Benchmark.cpp ${cppFileName} MainPrintRelativeSpeedup.cpp)
-    linkBenchmark(${compileName} ${ARGN})
-endfunction()
-
-# Compile the benchmark with MainPrintAverageTime and link the benchmark, but
-# do not run it.
-# Usage: addAndLinkBenchmarkWithPrintAverageTime(compileName, cppFileName, [additionalLibraries...])
-#   - compileName : The name, that the compiled end product should have.
-#   - cppFileName : The .cpp file, that contains your benchmark without the file extension.
-function(addAndLinkBenchmarkWithPrintAverageTime compileName cppFileName)
-  add_executable(${compileName}  Benchmark.cpp ${cppFileName} MainPrintAverageTimeSingleMeasurment.cpp)
-    linkBenchmark(${compileName} ${ARGN})
+# Compile the benchmark and link it, but do not run it.
+# Usage: addAndLinkBenchmark(baseName, [additionalLibraries...])
+#   - baseName: The name of the benchmark file without the .cpp ending.
+function(addAndLinkBenchmark baseName)
+    add_executable(${baseName}  Benchmark.cpp "${baseName}.cpp" BenchmarkMain.cpp)
+    linkBenchmark(${baseName} ${ARGN})
 endfunction()
 
 # Add benchmarks after here.
-addAndLinkBenchmarkWithPrintTimes(BenchmarkExamples BenchmarkExamples.cpp)
+addAndLinkBenchmark(BenchmarkExamples)
 
-addAndLinkBenchmarkWithPrintTimes(UnsortedAndSortedJoinBenchmark UnsortedAndSortedJoinBenchmark.cpp engine)
+addAndLinkBenchmark(UnsortedAndSortedJoinBenchmark engine)
