@@ -76,8 +76,7 @@ void BM_UnsortedAndSortedIdTable(BenchmarkRecords* records) {
 
   // We make the tables overlapping and then randomly shuffle them.
   for (size_t i = 0; i*20 < NUMBER_ROWS; i++) {
-    a.idTable(i*10, 0) = I(10);
-    b.idTable(i*20, 0) = I(10);
+    a.idTable(i*10, 0) = b.idTable(i*20, 0);
   }
   randomShuffle(a.idTable.begin(), a.idTable.end());
   randomShuffle(b.idTable.begin(), b.idTable.end());
