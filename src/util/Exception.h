@@ -22,13 +22,13 @@ namespace ad_utility {
 // Such exceptions are never printed but still keep the original what()
 // message just in case
 class AbortException : public std::exception {
- public:
-  AbortException(const std::exception& original) : _what(original.what()) {}
-  AbortException(const std::string& whatthe) : _what(whatthe) {}
-  const char* what() const noexcept { return _what.c_str(); }
-
  private:
-  string _what;
+  string what_;
+
+ public:
+  AbortException(const std::exception& original) : what_(original.what()) {}
+  AbortException(const std::string& what) : what_(what) {}
+  const char* what() const noexcept { return what_.c_str(); }
 };
 
 // An exception that stores a message as well as the `source_location` where
@@ -46,7 +46,7 @@ class Exception : public std::exception {
       : location_{location} {
     std::stringstream str;
     // TODO<GCC13> Use `std::format`.
-    str << message << ". In file \"" << location_.file_name() << " \" on line "
+    str << message << ". In file \"" << location_.file_name() << " \" at line "
         << location_.line();
     message_ = std::move(str).str();
   }
@@ -54,10 +54,7 @@ class Exception : public std::exception {
 };
 }  // namespace ad_utility
 
-// -------------------------------------------
-// Macros for throwing exceptions comfortably.
-// -------------------------------------------
-// Throw exception with additional assert-like info
+// Throw exception with additional assert-like info.
 [[noreturn]] inline void AD_THROW(std::string_view message,
                                   ad_utility::source_location location =
                                       ad_utility::source_location::current()) {
@@ -74,27 +71,16 @@ class Exception : public std::exception {
 // Needed for Cygwin (will be an identical redefine  for *nixes)
 #define __STRING(x) #x
 
-// Implementation for the macro `AD_UNSATISFIABLE` below.
-namespace ad_utility::detail {
-inline void adUnsatisfiableImpl(bool condition, std::string_view message,
-                                ad_utility::source_location location) {
-  if (!(condition)) [[unlikely]] {
-    using namespace std::string_literals;
-    // TODO<GCC13> Use `std::format`.
-    AD_THROW("Assertion `"s + std::string(message) + "` failed"s, location);
-  }
-}
-}  // namespace ad_utility::detail
-
 // Custom assert that will always fail and report the file and line. Note that
 // for code that is truly unreachable (not even by setting up artificially
 // faulty input in a unit test), our code coverage tools will always consider
-// this macro uncovered. This cannot even be changed by chaning it to something
+// this macro uncovered. This cannot even be changed by changing it to something
 // like `__builtin_unreachable()` (last checked by Johannes in Jan 2023).
 #define AD_FAIL() AD_THROW("This code should be unreachable");
 
 // Custom assert which does not abort but throws an exception. Use this for
-// conditions that can be violated via a public API. Since it is a macro, the
+// conditions that can be violated by calling a public (member) function with
+// invalid inputs. Since it is a macro, the
 // code coverage check will only report a partial coverage for this macro if the
 // condition is never violated, so make sure to integrate a unit test that
 // violates the condition.
@@ -105,11 +91,21 @@ inline void adUnsatisfiableImpl(bool condition, std::string_view message,
   }
 
 // Custom assert which does not abort but throws an exception. Use this for
-// conditions that can never be violated via a public. It is thus impossible to
-// test the failure of such an assertion in a unit test. Because of the
-// additional indirection via the function call, code coverage tools will
-// consider this call fully covered as soon as the check is performed, even if
-// it never fails.
+// conditions that can never be violated via a public (member) function. It is
+// thus impossible to test the failure of such an assertion in a unit test.
+// Because of the additional indirection via the function call, code coverage
+// tools will consider this call fully covered as soon as the check is
+// performed, even if it never fails.
+namespace ad_utility::detail {
+inline void adUnsatisfiableImpl(bool condition, std::string_view message,
+                                ad_utility::source_location location) {
+  if (!(condition)) [[unlikely]] {
+    using namespace std::string_literals;
+    // TODO<GCC13> Use `std::format`.
+    AD_THROW("Assertion `"s + std::string(message) + "` failed"s, location);
+  }
+}
+}  // namespace ad_utility::detail
 #define AD_UNSATISFIABLE(condition)                         \
   detail::adUnsatisfiableImpl(static_cast<bool>(condition), \
                               __STRING(condition),          \

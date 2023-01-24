@@ -77,9 +77,9 @@ class PrefixCompressor {
     unsigned char prefixIdx = 0;
     for (const auto& fulltext : prefixes) {
       if (prefixIdx >= NUM_COMPRESSION_PREFIXES) {
-        throw std::runtime_error{absl::StrCat(
+        AD_THROW(absl::StrCat(
             "More than ", NUM_COMPRESSION_PREFIXES,
-            " prefixes have been specified. This should never happen")};
+            " prefixes have been specified. This should never happen"));
       }
       _prefixToCode[prefixIdx] = fulltext;
       _codeToPrefix.emplace_back(prefixIdx + MIN_COMPRESSION_PREFIX, fulltext);

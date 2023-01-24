@@ -10,8 +10,8 @@
 
 using namespace ad_utility;
 
-void checkContains(const std::exception& e, std::string_view needle) {
-  ASSERT_TRUE(ad_utility::contains(std::string_view{e.what()}, needle));
+void checkContains(const std::exception& e, std::string_view substring) {
+  ASSERT_TRUE(ad_utility::contains(std::string_view{e.what()}, substring));
 }
 
 TEST(Exception, AbortException) {
@@ -75,5 +75,15 @@ TEST(Exception, AD_UNSATISFIABLE) {
                 ::testing::StartsWith("Assertion `v.empty()` failed. In file"));
     ASSERT_THAT(e.what(), ::testing::EndsWith(std::to_string(l.line() + 1)));
     checkContains(e, l.file_name());
+  }
+}
+
+TEST(Exception, AD_FAIL) {
+  try {
+    AD_FAIL();
+    FAIL() << "No exception was thrown, but one was expected";
+  } catch (const Exception& e) {
+    ASSERT_THAT(e.what(),
+                ::testing::StartsWith("This code should be unreachable."));
   }
 }

@@ -17,195 +17,181 @@ TEST(QueryPlannerTest, createTripleGraph) {
   using Node = QueryPlanner::TripleGraph::Node;
   using std::vector;
 
-  try {
-    {
-      ParsedQuery pq = SparqlParser::parseQuery(
-          "PREFIX : <http://rdf.myprefix.com/>\n"
-          "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
-          "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
-          "SELECT ?x ?z \n "
-          "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y xxx:rel2 "
-          "<http://abc.de>}");
-      QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(
-          &pq._rootGraphPattern._graphPatterns[0].getBasic());
-      TripleGraph expected =
-          TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
-              {std::make_pair<Node, vector<size_t>>(
-                   QueryPlanner::TripleGraph::Node(
-                       0, SparqlTriple(Var{"?x"},
-                                       "<http://rdf.myprefix.com/myrel>",
-                                       Var{"?y"})),
-                   {1, 2}),
-               std::make_pair<Node, vector<size_t>>(
-                   QueryPlanner::TripleGraph::Node(
-                       1, SparqlTriple(Var{"?y"},
-                                       "<http://rdf.myprefix.com/ns/myrel>",
-                                       Var{"?z"})),
-                   {0, 2}),
-               std::make_pair<Node, vector<size_t>>(
-                   QueryPlanner::TripleGraph::Node(
-                       2, SparqlTriple(Var{"?y"},
-                                       "<http://rdf.myprefix.com/xxx/rel2>",
-                                       "<http://abc.de>")),
-                   {0, 1})}));
+  {
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "PREFIX : <http://rdf.myprefix.com/>\n"
+        "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
+        "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
+        "SELECT ?x ?z \n "
+        "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y xxx:rel2 "
+        "<http://abc.de>}");
+    QueryPlanner qp(nullptr);
+    auto tg = qp.createTripleGraph(
+        &pq._rootGraphPattern._graphPatterns[0].getBasic());
+    TripleGraph expected =
+        TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+            {std::make_pair<Node, vector<size_t>>(
+                 QueryPlanner::TripleGraph::Node(
+                     0,
+                     SparqlTriple(Var{"?x"}, "<http://rdf.myprefix.com/myrel>",
+                                  Var{"?y"})),
+                 {1, 2}),
+             std::make_pair<Node, vector<size_t>>(
+                 QueryPlanner::TripleGraph::Node(
+                     1, SparqlTriple(Var{"?y"},
+                                     "<http://rdf.myprefix.com/ns/myrel>",
+                                     Var{"?z"})),
+                 {0, 2}),
+             std::make_pair<Node, vector<size_t>>(
+                 QueryPlanner::TripleGraph::Node(
+                     2, SparqlTriple(Var{"?y"},
+                                     "<http://rdf.myprefix.com/xxx/rel2>",
+                                     "<http://abc.de>")),
+                 {0, 1})}));
 
-      ASSERT_TRUE(tg.isSimilar(expected));
-    }
+    ASSERT_TRUE(tg.isSimilar(expected));
+  }
 
-    {
-      ParsedQuery pq = SparqlParser::parseQuery(
-          "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
-      QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
-      TripleGraph expected =
-          TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
-              {std::make_pair<Node, vector<size_t>>(
-                   QueryPlanner::TripleGraph::Node(
-                       0, SparqlTriple(Var{"?x"}, "?p", "<X>")),
-                   {1, 2}),
-               std::make_pair<Node, vector<size_t>>(
-                   QueryPlanner::TripleGraph::Node(
-                       1, SparqlTriple(Var{"?x"}, "?p2", "<Y>")),
-                   {0}),
-               std::make_pair<Node, vector<size_t>>(
-                   QueryPlanner::TripleGraph::Node(
-                       2, SparqlTriple("<X>", "?p", "<Y>")),
-                   {0})}));
-      ASSERT_TRUE(tg.isSimilar(expected));
-    }
+  {
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
+    QueryPlanner qp(nullptr);
+    auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
+    TripleGraph expected =
+        TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+            {std::make_pair<Node, vector<size_t>>(
+                 QueryPlanner::TripleGraph::Node(
+                     0, SparqlTriple(Var{"?x"}, "?p", "<X>")),
+                 {1, 2}),
+             std::make_pair<Node, vector<size_t>>(
+                 QueryPlanner::TripleGraph::Node(
+                     1, SparqlTriple(Var{"?x"}, "?p2", "<Y>")),
+                 {0}),
+             std::make_pair<Node, vector<size_t>>(
+                 QueryPlanner::TripleGraph::Node(
+                     2, SparqlTriple("<X>", "?p", "<Y>")),
+                 {0})}));
+    ASSERT_TRUE(tg.isSimilar(expected));
+  }
 
-    {
-      ParsedQuery pq = SparqlParser::parseQuery(
-          "SELECT ?x WHERE { ?x <is-a> <Book> . \n"
-          "?x <Author> <Anthony_Newman_(Author)> }");
-      QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
+  {
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?x WHERE { ?x <is-a> <Book> . \n"
+        "?x <Author> <Anthony_Newman_(Author)> }");
+    QueryPlanner qp(nullptr);
+    auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
 
-      TripleGraph expected =
-          TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>({
-              std::make_pair<Node, vector<size_t>>(
-                  QueryPlanner::TripleGraph::Node(
-                      0, SparqlTriple(Var{"?x"}, "<is-a>", "<Book>")),
-                  {1}),
-              std::make_pair<Node, vector<size_t>>(
-                  QueryPlanner::TripleGraph::Node(
-                      1, SparqlTriple(Var{"?x"}, "<Author>",
-                                      "<Anthony_Newman_(Author)>")),
-                  {0}),
-          }));
-      ASSERT_TRUE(tg.isSimilar(expected));
-    }
-  } catch (const std::exception& e) {
-    FAIL() << e.what();
+    TripleGraph expected =
+        TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>({
+            std::make_pair<Node, vector<size_t>>(
+                QueryPlanner::TripleGraph::Node(
+                    0, SparqlTriple(Var{"?x"}, "<is-a>", "<Book>")),
+                {1}),
+            std::make_pair<Node, vector<size_t>>(
+                QueryPlanner::TripleGraph::Node(
+                    1, SparqlTriple(Var{"?x"}, "<Author>",
+                                    "<Anthony_Newman_(Author)>")),
+                {0}),
+        }));
+    ASSERT_TRUE(tg.isSimilar(expected));
   }
 }
 
 TEST(QueryPlannerTest, testCpyCtorWithKeepNodes) {
-  try {
+  {
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
+    QueryPlanner qp(nullptr);
+    auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
+    ASSERT_EQ(2u, tg._nodeMap.find(0)->second->_variables.size());
+    ASSERT_EQ(2u, tg._nodeMap.find(1)->second->_variables.size());
+    ASSERT_EQ(1u, tg._nodeMap.find(2)->second->_variables.size());
+    ASSERT_EQ(
+        "0 {s: ?x, p: ?p, o: <X>} : (1, 2)\n"
+        "1 {s: ?x, p: ?p2, o: <Y>} : (0)\n"
+        "2 {s: <X>, p: ?p, o: <Y>} : (0)",
+        tg.asString());
     {
-      ParsedQuery pq = SparqlParser::parseQuery(
-          "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
-      QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
-      ASSERT_EQ(2u, tg._nodeMap.find(0)->second->_variables.size());
-      ASSERT_EQ(2u, tg._nodeMap.find(1)->second->_variables.size());
-      ASSERT_EQ(1u, tg._nodeMap.find(2)->second->_variables.size());
+      vector<size_t> keep;
+      QueryPlanner::TripleGraph tgnew(tg, keep);
+      ASSERT_EQ("", tgnew.asString());
+    }
+    {
+      vector<size_t> keep;
+      keep.push_back(0);
+      keep.push_back(1);
+      keep.push_back(2);
+      QueryPlanner::TripleGraph tgnew(tg, keep);
       ASSERT_EQ(
           "0 {s: ?x, p: ?p, o: <X>} : (1, 2)\n"
           "1 {s: ?x, p: ?p2, o: <Y>} : (0)\n"
           "2 {s: <X>, p: ?p, o: <Y>} : (0)",
-          tg.asString());
-      {
-        vector<size_t> keep;
-        QueryPlanner::TripleGraph tgnew(tg, keep);
-        ASSERT_EQ("", tgnew.asString());
-      }
-      {
-        vector<size_t> keep;
-        keep.push_back(0);
-        keep.push_back(1);
-        keep.push_back(2);
-        QueryPlanner::TripleGraph tgnew(tg, keep);
-        ASSERT_EQ(
-            "0 {s: ?x, p: ?p, o: <X>} : (1, 2)\n"
-            "1 {s: ?x, p: ?p2, o: <Y>} : (0)\n"
-            "2 {s: <X>, p: ?p, o: <Y>} : (0)",
-            tgnew.asString());
-        ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
-        ASSERT_EQ(2u, tgnew._nodeMap.find(1)->second->_variables.size());
-        ASSERT_EQ(1u, tgnew._nodeMap.find(2)->second->_variables.size());
-      }
-      {
-        vector<size_t> keep;
-        keep.push_back(0);
-        QueryPlanner::TripleGraph tgnew(tg, keep);
-        ASSERT_EQ("0 {s: ?x, p: ?p, o: <X>} : ()", tgnew.asString());
-        ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
-      }
-      {
-        vector<size_t> keep;
-        keep.push_back(0);
-        keep.push_back(1);
-        QueryPlanner::TripleGraph tgnew(tg, keep);
-        ASSERT_EQ(
-            "0 {s: ?x, p: ?p, o: <X>} : (1)\n"
-            "1 {s: ?x, p: ?p2, o: <Y>} : (0)",
-            tgnew.asString());
-        ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
-        ASSERT_EQ(2u, tgnew._nodeMap.find(1)->second->_variables.size());
-      }
+          tgnew.asString());
+      ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
+      ASSERT_EQ(2u, tgnew._nodeMap.find(1)->second->_variables.size());
+      ASSERT_EQ(1u, tgnew._nodeMap.find(2)->second->_variables.size());
     }
-  } catch (const std::exception& e) {
-    std::cout << "Caught: " << e.what() << std::endl;
-    FAIL() << e.what();
+    {
+      vector<size_t> keep;
+      keep.push_back(0);
+      QueryPlanner::TripleGraph tgnew(tg, keep);
+      ASSERT_EQ("0 {s: ?x, p: ?p, o: <X>} : ()", tgnew.asString());
+      ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
+    }
+    {
+      vector<size_t> keep;
+      keep.push_back(0);
+      keep.push_back(1);
+      QueryPlanner::TripleGraph tgnew(tg, keep);
+      ASSERT_EQ(
+          "0 {s: ?x, p: ?p, o: <X>} : (1)\n"
+          "1 {s: ?x, p: ?p2, o: <Y>} : (0)",
+          tgnew.asString());
+      ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
+      ASSERT_EQ(2u, tgnew._nodeMap.find(1)->second->_variables.size());
+    }
   }
 }
 
 TEST(QueryPlannerTest, testBFSLeaveOut) {
-  try {
-    {
-      ParsedQuery pq = SparqlParser::parseQuery(
-          "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
-      QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
-      ASSERT_EQ(3u, tg._adjLists.size());
-      ad_utility::HashSet<size_t> lo;
-      auto out = tg.bfsLeaveOut(0, lo);
-      ASSERT_EQ(3u, out.size());
-      lo.insert(1);
-      out = tg.bfsLeaveOut(0, lo);
-      ASSERT_EQ(2u, out.size());
-      lo.insert(2);
-      out = tg.bfsLeaveOut(0, lo);
-      ASSERT_EQ(1u, out.size());
-      lo.clear();
-      lo.insert(0);
-      out = tg.bfsLeaveOut(1, lo);
-      ASSERT_EQ(1u, out.size());
-    }
-    {
-      ParsedQuery pq = SparqlParser::parseQuery(
-          "SELECT ?x WHERE {<A> <B> ?x. ?x <C> ?y. ?y <X> <Y>}");
-      QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
-      ad_utility::HashSet<size_t> lo;
-      auto out = tg.bfsLeaveOut(0, lo);
-      ASSERT_EQ(3u, out.size());
-      lo.insert(1);
-      out = tg.bfsLeaveOut(0, lo);
-      ASSERT_EQ(1u, out.size());
-      lo.insert(2);
-      out = tg.bfsLeaveOut(0, lo);
-      ASSERT_EQ(1u, out.size());
-      lo.clear();
-      lo.insert(0);
-      out = tg.bfsLeaveOut(1, lo);
-      ASSERT_EQ(2u, out.size());
-    }
-  } catch (const std::exception& e) {
-    std::cout << "Caught: " << e.what() << std::endl;
-    FAIL() << e.what();
+  {
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
+    QueryPlanner qp(nullptr);
+    auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
+    ASSERT_EQ(3u, tg._adjLists.size());
+    ad_utility::HashSet<size_t> lo;
+    auto out = tg.bfsLeaveOut(0, lo);
+    ASSERT_EQ(3u, out.size());
+    lo.insert(1);
+    out = tg.bfsLeaveOut(0, lo);
+    ASSERT_EQ(2u, out.size());
+    lo.insert(2);
+    out = tg.bfsLeaveOut(0, lo);
+    ASSERT_EQ(1u, out.size());
+    lo.clear();
+    lo.insert(0);
+    out = tg.bfsLeaveOut(1, lo);
+    ASSERT_EQ(1u, out.size());
+  }
+  {
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?x WHERE {<A> <B> ?x. ?x <C> ?y. ?y <X> <Y>}");
+    QueryPlanner qp(nullptr);
+    auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
+    ad_utility::HashSet<size_t> lo;
+    auto out = tg.bfsLeaveOut(0, lo);
+    ASSERT_EQ(3u, out.size());
+    lo.insert(1);
+    out = tg.bfsLeaveOut(0, lo);
+    ASSERT_EQ(1u, out.size());
+    lo.insert(2);
+    out = tg.bfsLeaveOut(0, lo);
+    ASSERT_EQ(1u, out.size());
+    lo.clear();
+    lo.insert(0);
+    out = tg.bfsLeaveOut(1, lo);
+    ASSERT_EQ(2u, out.size());
   }
 }
 
@@ -213,276 +199,264 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
   using TripleGraph = QueryPlanner::TripleGraph;
   using Node = QueryPlanner::TripleGraph::Node;
   using std::vector;
-  try {
+  {
     {
-      {
-        ParsedQuery pq = SparqlParser::parseQuery(
-            "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
-            "ql:contains-word \"abc\"}");
-        QueryPlanner qp(nullptr);
-        auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
-        ASSERT_EQ(
-            "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-            "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : "
-            "(0, 2)\n"
-            "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: abc} : "
-            "(1)",
-            tg.asString());
-        tg.collapseTextCliques();
-        TripleGraph expected =
-            TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
-                {std::make_pair<Node, vector<size_t>>(
-                     QueryPlanner::TripleGraph::Node(
-                         0, Var{"?c"}, "abc",
-                         {
-                             SparqlTriple(
-                                 Var{"?c"},
+      ParsedQuery pq = SparqlParser::parseQuery(
+          "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
+          "ql:contains-word \"abc\"}");
+      QueryPlanner qp(nullptr);
+      auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
+      ASSERT_EQ(
+          "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
+          "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : "
+          "(0, 2)\n"
+          "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: abc} : "
+          "(1)",
+          tg.asString());
+      tg.collapseTextCliques();
+      TripleGraph expected =
+          TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+              {std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       0, Var{"?c"}, "abc",
+                       {
+                           SparqlTriple(
+                               Var{"?c"},
+                               "<QLever-internal-function/contains-entity>",
+                               Var{"?x"}),
+                           SparqlTriple(
+                               Var{"?c"},
+                               "<QLever-internal-function/contains-word>",
+                               "abc"),
+                       }),
+                   {1}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       1, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
+                   {0})}));
+      ASSERT_TRUE(tg.isSimilar(expected));
+    }
+    {
+      ParsedQuery pq = SparqlParser::parseQuery(
+          "SELECT ?x WHERE {?x <p> <X>. ?c "
+          "<QLever-internal-function/contains-entity> ?x. ?c "
+          "<QLever-internal-function/contains-word> \"abc\" . ?c "
+          "ql:contains-entity ?y}");
+      QueryPlanner qp(nullptr);
+      auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
+      ASSERT_EQ(
+          "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
+          "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : "
+          "(0, 2, 3)\n"
+          "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: abc} : "
+          "(1, 3)\n"
+          "3 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?y} : "
+          "(1, 2)",
+          tg.asString());
+      tg.collapseTextCliques();
+      TripleGraph expected =
+          TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+              {std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       0, Var{"?c"}, "abc",
+                       {SparqlTriple(
+                            Var{"?c"},
+                            "<QLever-internal-function/contains-entity>",
+                            Var{"?x"}),
+                        SparqlTriple(Var{"?c"},
+                                     "<QLever-internal-function/contains-word>",
+                                     "abc"),
+                        SparqlTriple(
+                            Var{"?c"},
+                            "<QLever-internal-function/contains-entity>",
+                            Var{"?y"})}),
+                   {1}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       1, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
+                   {0})}));
+      ASSERT_TRUE(tg.isSimilar(expected));
+    }
+    {
+      ParsedQuery pq = SparqlParser::parseQuery(
+          "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
+          "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?y <P2> "
+          "<X2>}");
+      QueryPlanner qp(nullptr);
+      auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
+      ASSERT_EQ(
+          "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
+          "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : "
+          "(0, 2, 3)\n"
+          "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: abc} : "
+          "(1, 3)\n"
+          "3 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?y} : "
+          "(1, 2, 4)\n"
+          "4 {s: ?y, p: <P2>, o: <X2>} : (3)",
+          tg.asString());
+      tg.collapseTextCliques();
+      TripleGraph expected =
+          TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+              {std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       0, Var{"?c"}, "abc",
+                       {SparqlTriple(
+                            Var{"?c"},
+                            "<QLever-internal-function/contains-entity>",
+                            Var{"?x"}),
+                        SparqlTriple(Var{"?c"},
+                                     "<QLever-internal-function/contains-word>",
+                                     "abc"),
+                        SparqlTriple(
+                            Var{"?c"},
+                            "<QLever-internal-function/contains-entity>",
+                            Var{"?y"})}),
+                   {1, 2}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       1, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
+                   {0}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       2, SparqlTriple(Var{"?y"}, "<P2>", "<X2>")),
+                   {0})}));
+      ASSERT_TRUE(tg.isSimilar(expected));
+    }
+    {
+      ParsedQuery pq = SparqlParser::parseQuery(
+          "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
+          "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?c2 "
+          "ql:contains-entity ?y. ?c2 ql:contains-word \"xx\"}");
+      QueryPlanner qp(nullptr);
+      auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
+      TripleGraph expected = TripleGraph(std::vector<
+                                         std::pair<Node, std::vector<size_t>>>(
+          {std::make_pair<Node, vector<size_t>>(
+               QueryPlanner::TripleGraph::Node(
+                   0, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
+               {1}),
+           std::make_pair<Node, vector<size_t>>(
+               QueryPlanner::TripleGraph::Node(
+                   1, SparqlTriple(Var{"?c"},
+                                   "<QLever-internal-function/contains-entity>",
+                                   Var{"?x"})),
+               {0, 2, 3}),
+           std::make_pair<Node, vector<size_t>>(
+               QueryPlanner::TripleGraph::Node(
+                   2, SparqlTriple(Var{"?c"},
+                                   "<QLever-internal-function/contains-word>",
+                                   "abc")),
+               {1, 3}),
+           std::make_pair<Node, vector<size_t>>(
+               QueryPlanner::TripleGraph::Node(
+                   3, SparqlTriple(Var{"?c"},
+                                   "<QLever-internal-function/contains-entity>",
+                                   Var{"?y"})),
+               {1, 2, 4}),
+           std::make_pair<Node, vector<size_t>>(
+               QueryPlanner::TripleGraph::Node(
+                   4, SparqlTriple(Var{"?c2"},
+                                   "<QLever-internal-function/contains-entity>",
+                                   Var{"?y"})),
+               {3, 5}),
+           std::make_pair<Node, vector<size_t>>(
+               QueryPlanner::TripleGraph::Node(
+                   5, SparqlTriple(Var{"?c2"},
+                                   "<QLever-internal-function/contains-word>",
+                                   "xx")),
+               {4})}));
+
+      ASSERT_TRUE(tg.isSimilar(expected));
+      tg.collapseTextCliques();
+      TripleGraph expected2 = TripleGraph(std::vector<
+                                          std::pair<Node, std::vector<size_t>>>(
+          {std::make_pair<Node, vector<size_t>>(
+               QueryPlanner::TripleGraph::Node(
+                   0, Var{"?c"}, "abc",
+                   {SparqlTriple(Var{"?c"},
                                  "<QLever-internal-function/contains-entity>",
                                  Var{"?x"}),
-                             SparqlTriple(
-                                 Var{"?c"},
+                    SparqlTriple(Var{"?c"},
                                  "<QLever-internal-function/contains-word>",
                                  "abc"),
-                         }),
-                     {1}),
-                 std::make_pair<Node, vector<size_t>>(
-                     QueryPlanner::TripleGraph::Node(
-                         1, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
-                     {0})}));
-        ASSERT_TRUE(tg.isSimilar(expected));
-      }
-      {
-        ParsedQuery pq = SparqlParser::parseQuery(
-            "SELECT ?x WHERE {?x <p> <X>. ?c "
-            "<QLever-internal-function/contains-entity> ?x. ?c "
-            "<QLever-internal-function/contains-word> \"abc\" . ?c "
-            "ql:contains-entity ?y}");
-        QueryPlanner qp(nullptr);
-        auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
-        ASSERT_EQ(
-            "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-            "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : "
-            "(0, 2, 3)\n"
-            "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: abc} : "
-            "(1, 3)\n"
-            "3 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?y} : "
-            "(1, 2)",
-            tg.asString());
-        tg.collapseTextCliques();
-        TripleGraph expected =
-            TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
-                {std::make_pair<Node, vector<size_t>>(
-                     QueryPlanner::TripleGraph::Node(
-                         0, Var{"?c"}, "abc",
-                         {SparqlTriple(
-                              Var{"?c"},
-                              "<QLever-internal-function/contains-entity>",
-                              Var{"?x"}),
-                          SparqlTriple(
-                              Var{"?c"},
-                              "<QLever-internal-function/contains-word>",
-                              "abc"),
-                          SparqlTriple(
-                              Var{"?c"},
-                              "<QLever-internal-function/contains-entity>",
-                              Var{"?y"})}),
-                     {1}),
-                 std::make_pair<Node, vector<size_t>>(
-                     QueryPlanner::TripleGraph::Node(
-                         1, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
-                     {0})}));
-        ASSERT_TRUE(tg.isSimilar(expected));
-      }
-      {
-        ParsedQuery pq = SparqlParser::parseQuery(
-            "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
-            "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?y <P2> "
-            "<X2>}");
-        QueryPlanner qp(nullptr);
-        auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
-        ASSERT_EQ(
-            "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-            "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : "
-            "(0, 2, 3)\n"
-            "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: abc} : "
-            "(1, 3)\n"
-            "3 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?y} : "
-            "(1, 2, 4)\n"
-            "4 {s: ?y, p: <P2>, o: <X2>} : (3)",
-            tg.asString());
-        tg.collapseTextCliques();
-        TripleGraph expected =
-            TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
-                {std::make_pair<Node, vector<size_t>>(
-                     QueryPlanner::TripleGraph::Node(
-                         0, Var{"?c"}, "abc",
-                         {SparqlTriple(
-                              Var{"?c"},
-                              "<QLever-internal-function/contains-entity>",
-                              Var{"?x"}),
-                          SparqlTriple(
-                              Var{"?c"},
-                              "<QLever-internal-function/contains-word>",
-                              "abc"),
-                          SparqlTriple(
-                              Var{"?c"},
-                              "<QLever-internal-function/contains-entity>",
-                              Var{"?y"})}),
-                     {1, 2}),
-                 std::make_pair<Node, vector<size_t>>(
-                     QueryPlanner::TripleGraph::Node(
-                         1, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
-                     {0}),
-                 std::make_pair<Node, vector<size_t>>(
-                     QueryPlanner::TripleGraph::Node(
-                         2, SparqlTriple(Var{"?y"}, "<P2>", "<X2>")),
-                     {0})}));
-        ASSERT_TRUE(tg.isSimilar(expected));
-      }
-      {
-        ParsedQuery pq = SparqlParser::parseQuery(
-            "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
-            "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?c2 "
-            "ql:contains-entity ?y. ?c2 ql:contains-word \"xx\"}");
-        QueryPlanner qp(nullptr);
-        auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
-        TripleGraph expected =
-            TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
-                {std::make_pair<Node, vector<size_t>>(
-                     QueryPlanner::TripleGraph::Node(
-                         0, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
-                     {1}),
-                 std::make_pair<Node, vector<size_t>>(
-                     QueryPlanner::TripleGraph::Node(
-                         1, SparqlTriple(
-                                Var{"?c"},
-                                "<QLever-internal-function/contains-entity>",
-                                Var{"?x"})),
-                     {0, 2, 3}),
-                 std::make_pair<Node, vector<size_t>>(
-                     QueryPlanner::TripleGraph::Node(
-                         2, SparqlTriple(
-                                Var{"?c"},
-                                "<QLever-internal-function/contains-word>",
-                                "abc")),
-                     {1, 3}),
-                 std::make_pair<Node, vector<size_t>>(
-                     QueryPlanner::TripleGraph::Node(
-                         3, SparqlTriple(
-                                Var{"?c"},
-                                "<QLever-internal-function/contains-entity>",
-                                Var{"?y"})),
-                     {1, 2, 4}),
-                 std::make_pair<Node, vector<size_t>>(
-                     QueryPlanner::TripleGraph::Node(
-                         4, SparqlTriple(
-                                Var{"?c2"},
-                                "<QLever-internal-function/contains-entity>",
-                                Var{"?y"})),
-                     {3, 5}),
-                 std::make_pair<Node, vector<size_t>>(
-                     QueryPlanner::TripleGraph::Node(
-                         5,
-                         SparqlTriple(
-                             Var{"?c2"},
-                             "<QLever-internal-function/contains-word>", "xx")),
-                     {4})}));
-
-        ASSERT_TRUE(tg.isSimilar(expected));
-        tg.collapseTextCliques();
-        TripleGraph expected2 = TripleGraph(std::vector<std::pair<
-                                                Node, std::vector<size_t>>>(
-            {std::make_pair<Node, vector<size_t>>(
-                 QueryPlanner::TripleGraph::Node(
-                     0, Var{"?c"}, "abc",
-                     {SparqlTriple(Var{"?c"},
-                                   "<QLever-internal-function/contains-entity>",
-                                   Var{"?x"}),
-                      SparqlTriple(Var{"?c"},
-                                   "<QLever-internal-function/contains-word>",
-                                   "abc"),
-                      SparqlTriple(Var{"?c"},
-                                   "<QLever-internal-function/contains-entity>",
-                                   Var{"?y"})}),
-                 {1, 2}),
-             std::make_pair<Node, vector<size_t>>(
-                 QueryPlanner::TripleGraph::Node(
-                     1, Var{"?c2"}, "xx",
-                     {SparqlTriple(Var{"?c2"},
-                                   "<QLever-internal-function/contains-entity>",
-                                   Var{"?y"}),
-                      SparqlTriple(Var{"?c2"},
-                                   "<QLever-internal-function/contains-word>",
-                                   "xx")}),
-                 {0}),
-             std::make_pair<Node, vector<size_t>>(
-                 QueryPlanner::TripleGraph::Node(
-                     2, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
-                 {0})}));
-        ASSERT_TRUE(tg.isSimilar(expected2));
-      }
-      {
-        ParsedQuery pq = SparqlParser::parseQuery(
-            "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
-            "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?c2 "
-            "ql:contains-entity ?y. ?c2 ql:contains-word \"xx\". ?y <P2> "
-            "<X2>}");
-        QueryPlanner qp(nullptr);
-        auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
-        ASSERT_EQ(
-            "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-            "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : "
-            "(0, 2, 3)\n"
-            "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: abc} : "
-            "(1, 3)\n"
-            "3 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?y} : "
-            "(1, 2, 4, 6)\n"
-            "4 {s: ?c2, p: <QLever-internal-function/contains-entity>, o: ?y} "
-            ": (3, 5, 6)\n"
-            "5 {s: ?c2, p: <QLever-internal-function/contains-word>, o: xx} : "
-            "(4)\n"
-            "6 {s: ?y, p: <P2>, o: <X2>} : (3, 4)",
-            tg.asString());
-        tg.collapseTextCliques();
-        TripleGraph expected2 = TripleGraph(std::vector<std::pair<
-                                                Node, std::vector<size_t>>>(
-            {std::make_pair<Node, vector<size_t>>(
-                 QueryPlanner::TripleGraph::Node(
-                     0, Var{"?c"}, "abc",
-                     {SparqlTriple(Var{"?c"},
-                                   "<QLever-internal-function/contains-entity>",
-                                   Var{"?x"}),
-                      SparqlTriple(Var{"?c"},
-                                   "<QLever-internal-function/contains-word>",
-                                   "abc"),
-                      SparqlTriple(Var{"?c"},
-                                   "<QLever-internal-function/contains-entity>",
-                                   Var{"?y"})}),
-                 {1, 2, 3}),
-             std::make_pair<Node, vector<size_t>>(
-                 QueryPlanner::TripleGraph::Node(
-                     1, Var{"?c2"}, "xx",
-                     {SparqlTriple(Var{"?c2"},
-                                   "<QLever-internal-function/contains-entity>",
-                                   Var{"?y"}),
-                      SparqlTriple(Var{"?c2"},
-                                   "<QLever-internal-function/contains-word>",
-                                   "xx")}),
-                 {0, 3}),
-             std::make_pair<Node, vector<size_t>>(
-                 QueryPlanner::TripleGraph::Node(
-                     2, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
-                 {0}),
-             std::make_pair<Node, vector<size_t>>(
-                 QueryPlanner::TripleGraph::Node(
-                     3, SparqlTriple(Var{"?y"}, "<P2>", "<X2>")),
-                 {0, 1})}));
-        ASSERT_TRUE(tg.isSimilar(expected2));
-      }
+                    SparqlTriple(Var{"?c"},
+                                 "<QLever-internal-function/contains-entity>",
+                                 Var{"?y"})}),
+               {1, 2}),
+           std::make_pair<Node, vector<size_t>>(
+               QueryPlanner::TripleGraph::Node(
+                   1, Var{"?c2"}, "xx",
+                   {SparqlTriple(Var{"?c2"},
+                                 "<QLever-internal-function/contains-entity>",
+                                 Var{"?y"}),
+                    SparqlTriple(Var{"?c2"},
+                                 "<QLever-internal-function/contains-word>",
+                                 "xx")}),
+               {0}),
+           std::make_pair<Node, vector<size_t>>(
+               QueryPlanner::TripleGraph::Node(
+                   2, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
+               {0})}));
+      ASSERT_TRUE(tg.isSimilar(expected2));
     }
-  } catch (const std::exception& e) {
-    std::cout << "Caught: " << e.what() << std::endl;
-    FAIL() << e.what();
+    {
+      ParsedQuery pq = SparqlParser::parseQuery(
+          "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
+          "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?c2 "
+          "ql:contains-entity ?y. ?c2 ql:contains-word \"xx\". ?y <P2> "
+          "<X2>}");
+      QueryPlanner qp(nullptr);
+      auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
+      ASSERT_EQ(
+          "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
+          "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : "
+          "(0, 2, 3)\n"
+          "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: abc} : "
+          "(1, 3)\n"
+          "3 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?y} : "
+          "(1, 2, 4, 6)\n"
+          "4 {s: ?c2, p: <QLever-internal-function/contains-entity>, o: ?y} "
+          ": (3, 5, 6)\n"
+          "5 {s: ?c2, p: <QLever-internal-function/contains-word>, o: xx} : "
+          "(4)\n"
+          "6 {s: ?y, p: <P2>, o: <X2>} : (3, 4)",
+          tg.asString());
+      tg.collapseTextCliques();
+      TripleGraph expected2 = TripleGraph(std::vector<
+                                          std::pair<Node, std::vector<size_t>>>(
+          {std::make_pair<Node, vector<size_t>>(
+               QueryPlanner::TripleGraph::Node(
+                   0, Var{"?c"}, "abc",
+                   {SparqlTriple(Var{"?c"},
+                                 "<QLever-internal-function/contains-entity>",
+                                 Var{"?x"}),
+                    SparqlTriple(Var{"?c"},
+                                 "<QLever-internal-function/contains-word>",
+                                 "abc"),
+                    SparqlTriple(Var{"?c"},
+                                 "<QLever-internal-function/contains-entity>",
+                                 Var{"?y"})}),
+               {1, 2, 3}),
+           std::make_pair<Node, vector<size_t>>(
+               QueryPlanner::TripleGraph::Node(
+                   1, Var{"?c2"}, "xx",
+                   {SparqlTriple(Var{"?c2"},
+                                 "<QLever-internal-function/contains-entity>",
+                                 Var{"?y"}),
+                    SparqlTriple(Var{"?c2"},
+                                 "<QLever-internal-function/contains-word>",
+                                 "xx")}),
+               {0, 3}),
+           std::make_pair<Node, vector<size_t>>(
+               QueryPlanner::TripleGraph::Node(
+                   2, SparqlTriple(Var{"?x"}, "<p>", "<X>")),
+               {0}),
+           std::make_pair<Node, vector<size_t>>(
+               QueryPlanner::TripleGraph::Node(
+                   3, SparqlTriple(Var{"?y"}, "<P2>", "<X2>")),
+               {0, 1})}));
+      ASSERT_TRUE(tg.isSimilar(expected2));
+    }
   }
 }
 
@@ -526,163 +500,133 @@ TEST(QueryPlannerTest, testSP_free_) {
 }
 
 TEST(QueryPlannerTest, testSPX_SPX) {
-  try {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "PREFIX : <pre/>\n"
-        "SELECT ?x \n "
-        "WHERE \t {:s1 :r ?x. :s2 :r ?x}");
-    QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SCAN PSO with P = \"<pre/r>\", S = \"<pre/s1>\"\n "
-        "   qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n    S"
-        "CAN PSO with P = \"<pre/r>\", S = \"<pre/s2>\"\n    qet-w"
-        "idth: 1 \n  } join-column: [0]\n  qet-width: 1 \n}",
-        qet.asString());
-  } catch (const std::exception& e) {
-    std::cout << "Caught: " << e.what() << std::endl;
-    FAIL() << e.what();
-  }
+  ParsedQuery pq = SparqlParser::parseQuery(
+      "PREFIX : <pre/>\n"
+      "SELECT ?x \n "
+      "WHERE \t {:s1 :r ?x. :s2 :r ?x}");
+  QueryPlanner qp(nullptr);
+  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ASSERT_EQ(
+      "{\n  JOIN\n  {\n    SCAN PSO with P = \"<pre/r>\", S = \"<pre/s1>\"\n "
+      "   qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n    S"
+      "CAN PSO with P = \"<pre/r>\", S = \"<pre/s2>\"\n    qet-w"
+      "idth: 1 \n  } join-column: [0]\n  qet-width: 1 \n}",
+      qet.asString());
 }
 
 TEST(QueryPlannerTest, test_free_PX_SPX) {
-  try {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "PREFIX : <pre/>\n"
-        "SELECT ?x ?y \n "
-        "WHERE  {?y :r ?x . :s2 :r ?x}");
-    QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/r>\"\n    "
-        "qet-width: 2 \n  } join-column: [0]\n  |X|\n  {\n   "
-        " SCAN PSO with P = \"<pre/r>\", S = \"<pre/s2>\"\n  "
-        "  qet-width: 1 \n  } join-column: [0]\n  qet-width: 2 \n}",
-        qet.asString());
-  } catch (const std::exception& e) {
-    FAIL() << e.what();
-  }
+  ParsedQuery pq = SparqlParser::parseQuery(
+      "PREFIX : <pre/>\n"
+      "SELECT ?x ?y \n "
+      "WHERE  {?y :r ?x . :s2 :r ?x}");
+  QueryPlanner qp(nullptr);
+  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ASSERT_EQ(
+      "{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/r>\"\n    "
+      "qet-width: 2 \n  } join-column: [0]\n  |X|\n  {\n   "
+      " SCAN PSO with P = \"<pre/r>\", S = \"<pre/s2>\"\n  "
+      "  qet-width: 1 \n  } join-column: [0]\n  qet-width: 2 \n}",
+      qet.asString());
 }
 
 TEST(QueryPlannerTest, test_free_PX__free_PX) {
-  try {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "PREFIX : <pre/>\n"
-        "SELECT ?x ?y ?z \n "
-        "WHERE {?y :r ?x. ?z :r ?x}");
-    QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/r>\"\n    "
-        "qet-width: 2 \n  } join-column: [0]\n  |X|\n  {\n    "
-        "SCAN POS with P = \"<pre/r>\"\n    qet-width: 2 \n"
-        "  } join-column: [0]\n  qet-width: 3 \n}",
-        qet.asString());
-  } catch (const std::exception& e) {
-    FAIL() << e.what();
-  }
+  ParsedQuery pq = SparqlParser::parseQuery(
+      "PREFIX : <pre/>\n"
+      "SELECT ?x ?y ?z \n "
+      "WHERE {?y :r ?x. ?z :r ?x}");
+  QueryPlanner qp(nullptr);
+  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ASSERT_EQ(
+      "{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/r>\"\n    "
+      "qet-width: 2 \n  } join-column: [0]\n  |X|\n  {\n    "
+      "SCAN POS with P = \"<pre/r>\"\n    qet-width: 2 \n"
+      "  } join-column: [0]\n  qet-width: 3 \n}",
+      qet.asString());
 }
 
 TEST(QueryPlannerTest, testActorsBornInEurope) {
-  try {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "PREFIX : <pre/>\n"
-        "SELECT ?a \n "
-        "WHERE {?a :profession :Actor . ?a :born-in ?c. ?c :in :Europe}\n"
-        "ORDER BY ?a");
-    QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ(18340u, qet.getCostEstimate());
-    ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/profession>\", "
-        "O = \"<pre/Actor>\"\n    qet-width: 1 \n  } join-column:"
-        " [0]\n  |X|\n  {\n    SORT / ORDER BY on columns:asc(1) \n    {\n     "
-        " "
-        "JOIN\n      {\n        SCAN POS with P = \"<pre/born-i"
-        "n>\"\n        qet-width: 2 \n      } join-column: [0]\n "
-        "     |X|\n      {\n        SCAN POS with P = \"<pre/in>\""
-        ", O = \"<pre/Europe>\"\n        qet-width: 1 \n      }"
-        " join-column: [0]\n      qet-width: 2 \n    }\n    "
-        "qet-width: 2 \n  } join-column: [1]\n  qet-width: 2 \n}",
-        qet.asString());
-  } catch (const std::exception& e) {
-    FAIL() << e.what();
-  }
+  ParsedQuery pq = SparqlParser::parseQuery(
+      "PREFIX : <pre/>\n"
+      "SELECT ?a \n "
+      "WHERE {?a :profession :Actor . ?a :born-in ?c. ?c :in :Europe}\n"
+      "ORDER BY ?a");
+  QueryPlanner qp(nullptr);
+  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ASSERT_EQ(18340u, qet.getCostEstimate());
+  ASSERT_EQ(
+      "{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/profession>\", "
+      "O = \"<pre/Actor>\"\n    qet-width: 1 \n  } join-column:"
+      " [0]\n  |X|\n  {\n    SORT / ORDER BY on columns:asc(1) \n    {\n     "
+      " "
+      "JOIN\n      {\n        SCAN POS with P = \"<pre/born-i"
+      "n>\"\n        qet-width: 2 \n      } join-column: [0]\n "
+      "     |X|\n      {\n        SCAN POS with P = \"<pre/in>\""
+      ", O = \"<pre/Europe>\"\n        qet-width: 1 \n      }"
+      " join-column: [0]\n      qet-width: 2 \n    }\n    "
+      "qet-width: 2 \n  } join-column: [1]\n  qet-width: 2 \n}",
+      qet.asString());
 }
 
 TEST(QueryPlannerTest, testStarTwoFree) {
-  try {
-    {
-      ParsedQuery pq = SparqlParser::parseQuery(
-          "PREFIX : <http://rdf.myprefix.com/>\n"
-          "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
-          "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
-          "SELECT ?x ?z \n "
-          "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z. ?y xxx:rel2 "
-          "<http://abc.de>}");
-      QueryPlanner qp(nullptr);
-      QueryExecutionTree qet = qp.createExecutionTree(pq);
-      ASSERT_EQ(
-          "{\n  JOIN\n  {\n    JOIN\n    {\n      SCAN POS with P = "
-          "\"<http://rdf.myprefix.com/myrel>\"\n      qet-width: 2 \n    } "
-          "join-column: [0]\n    |X|\n    {\n      SCAN POS with P = "
-          "\"<http://rdf.myprefix.com/xxx/rel2>\", O = \"<http://abc.de>\"\n   "
-          "   qet-width: 1 \n    } join-column: [0]\n    qet-width: 2 \n  } "
-          "join-column: [0]\n  |X|\n  {\n    SCAN PSO with P = "
-          "\"<http://rdf.myprefix.com/ns/myrel>\"\n    qet-width: 2 \n  } "
-          "join-column: [0]\n  qet-width: 3 \n}",
-          qet.asString());
-    }
-
-  } catch (const std::exception& e) {
-    FAIL() << e.what();
+  {
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "PREFIX : <http://rdf.myprefix.com/>\n"
+        "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
+        "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
+        "SELECT ?x ?z \n "
+        "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z. ?y xxx:rel2 "
+        "<http://abc.de>}");
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_EQ(
+        "{\n  JOIN\n  {\n    JOIN\n    {\n      SCAN POS with P = "
+        "\"<http://rdf.myprefix.com/myrel>\"\n      qet-width: 2 \n    } "
+        "join-column: [0]\n    |X|\n    {\n      SCAN POS with P = "
+        "\"<http://rdf.myprefix.com/xxx/rel2>\", O = \"<http://abc.de>\"\n   "
+        "   qet-width: 1 \n    } join-column: [0]\n    qet-width: 2 \n  } "
+        "join-column: [0]\n  |X|\n  {\n    SCAN PSO with P = "
+        "\"<http://rdf.myprefix.com/ns/myrel>\"\n    qet-width: 2 \n  } "
+        "join-column: [0]\n  qet-width: 3 \n}",
+        qet.asString());
   }
 }
 
 TEST(QueryPlannerTest, testFilterAfterSeed) {
-  try {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "SELECT ?x ?y ?z WHERE {"
-        "?x <r> ?y . ?y <r> ?z . "
-        "FILTER(?x != ?y) }");
-    QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ(
-        "{\n  FILTER   {\n    JOIN\n    {\n      SCAN POS with P = \"<r>\"\n   "
-        "   qet-width: 2 \n    } join-column: [0]\n    |X|\n    {\n      SCAN "
-        "PSO with P = \"<r>\"\n      qet-width: 2 \n    } join-column: [0]\n   "
-        " qet-width: 3 \n  } with "
-        "N16sparqlExpression10relational20RelationalExpressionILN18valueIdCompa"
-        "rators10ComparisonE3EEE#column_1##column_0#\n  qet-width: 3 \n}",
-        qet.asString());
-  } catch (const std::exception& e) {
-    FAIL() << e.what();
-  }
+  ParsedQuery pq = SparqlParser::parseQuery(
+      "SELECT ?x ?y ?z WHERE {"
+      "?x <r> ?y . ?y <r> ?z . "
+      "FILTER(?x != ?y) }");
+  QueryPlanner qp(nullptr);
+  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ASSERT_EQ(
+      "{\n  FILTER   {\n    JOIN\n    {\n      SCAN POS with P = \"<r>\"\n   "
+      "   qet-width: 2 \n    } join-column: [0]\n    |X|\n    {\n      SCAN "
+      "PSO with P = \"<r>\"\n      qet-width: 2 \n    } join-column: [0]\n   "
+      " qet-width: 3 \n  } with "
+      "N16sparqlExpression10relational20RelationalExpressionILN18valueIdCompa"
+      "rators10ComparisonE3EEE#column_1##column_0#\n  qet-width: 3 \n}",
+      qet.asString());
 }
 
 TEST(QueryPlannerTest, testFilterAfterJoin) {
-  try {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "SELECT ?x ?y ?z WHERE {"
-        "?x <r> ?y . ?y <r> ?z . "
-        "FILTER(?x != ?z) }");
-    QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ(
-        "{\n  FILTER   {\n    JOIN\n    {\n      SCAN POS with P = \"<r>\"\n   "
-        "   qet-width: 2 \n    } join-column: [0]\n    |X|\n    {\n      SCAN "
-        "PSO with P = \"<r>\"\n      qet-width: 2 \n    } join-column: [0]\n   "
-        " qet-width: 3 \n  } with "
-        "N16sparqlExpression10relational20RelationalExpressionILN18valueIdCompa"
-        "rators10ComparisonE3EEE#column_1##column_2#\n  qet-width: 3 \n}",
-        qet.asString());
-  } catch (const std::exception& e) {
-    FAIL() << e.what();
-  }
+  ParsedQuery pq = SparqlParser::parseQuery(
+      "SELECT ?x ?y ?z WHERE {"
+      "?x <r> ?y . ?y <r> ?z . "
+      "FILTER(?x != ?z) }");
+  QueryPlanner qp(nullptr);
+  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ASSERT_EQ(
+      "{\n  FILTER   {\n    JOIN\n    {\n      SCAN POS with P = \"<r>\"\n   "
+      "   qet-width: 2 \n    } join-column: [0]\n    |X|\n    {\n      SCAN "
+      "PSO with P = \"<r>\"\n      qet-width: 2 \n    } join-column: [0]\n   "
+      " qet-width: 3 \n  } with "
+      "N16sparqlExpression10relational20RelationalExpressionILN18valueIdCompa"
+      "rators10ComparisonE3EEE#column_1##column_2#\n  qet-width: 3 \n}",
+      qet.asString());
 }
 
 TEST(QueryPlannerTest, threeVarTriples) {
-  try {
+  {
     ParsedQuery pq = SparqlParser::parseQuery(
         "SELECT ?x ?p ?o WHERE {"
         "<s> <p> ?x . ?x ?p ?o }");
@@ -695,11 +639,8 @@ TEST(QueryPlannerTest, threeVarTriples) {
         "OPERATION)\n      qet-width: 3 \n    }\n    qet-width: 3 \n  } "
         "join-column: [1]\n  qet-width: 3 \n}",
         qet.asString());
-  } catch (const std::exception& e) {
-    FAIL() << e.what();
   }
-
-  try {
+  {
     ParsedQuery pq = SparqlParser::parseQuery(
         "SELECT ?x ?p ?o WHERE {"
         "<s> ?x <o> . ?x ?p ?o }");
@@ -712,11 +653,8 @@ TEST(QueryPlannerTest, threeVarTriples) {
         "OPERATION)\n      qet-width: 3 \n    }\n    qet-width: 3 \n  } "
         "join-column: [1]\n  qet-width: 3 \n}",
         qet.asString());
-  } catch (const std::exception& e) {
-    FAIL() << e.what();
   }
-
-  try {
+  {
     ParsedQuery pq = SparqlParser::parseQuery(
         "SELECT ?s ?p ?o WHERE {"
         "<s> <p> ?p . ?s ?p ?o }");
@@ -729,31 +667,25 @@ TEST(QueryPlannerTest, threeVarTriples) {
         "OPERATION)\n      qet-width: 3 \n    }\n    qet-width: 3 \n  } "
         "join-column: [1]\n  qet-width: 3 \n}",
         qet.asString());
-  } catch (const std::exception& e) {
-    FAIL() << e.what();
   }
 }
 
 TEST(QueryPlannerTest, threeVarTriplesTCJ) {
-  try {
+  {
     ParsedQuery pq = SparqlParser::parseQuery(
         "SELECT ?x ?p ?o WHERE {"
         "<s> ?p ?x . ?x ?p ?o }");
     QueryPlanner qp(nullptr);
     ASSERT_THROW(qp.createExecutionTree(pq), ad_utility::Exception);
-  } catch (const std::exception& e) {
-    FAIL() << e.what();
   }
 
-  try {
+  {
     ParsedQuery pq = SparqlParser::parseQuery(
         "SELECT ?s ?p ?o WHERE {"
         "?s ?p ?o . ?s ?p <x> }");
     QueryPlanner qp(nullptr);
     ASSERT_THROW(QueryExecutionTree qet = qp.createExecutionTree(pq),
                  ad_utility::Exception);
-  } catch (const std::exception& e) {
-    FAIL() << e.what();
   }
 }
 
