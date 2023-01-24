@@ -80,10 +80,9 @@ class Exception : public std::exception {
 
 // Custom assert which does not abort but throws an exception. Use this for
 // conditions that can be violated by calling a public (member) function with
-// invalid inputs. Since it is a macro, the
-// code coverage check will only report a partial coverage for this macro if the
-// condition is never violated, so make sure to integrate a unit test that
-// violates the condition.
+// invalid inputs. Since it is a macro, the code coverage check will only report
+// a partial coverage for this macro if the condition is never violated, so make
+// sure to integrate a unit test that violates the condition.
 #define AD_CHECK(condition)                                                    \
   if (!(condition)) [[unlikely]] {                                             \
     using namespace std::string_literals;                                      \
