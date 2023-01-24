@@ -26,8 +26,8 @@
 // IdTables. Done with normal join and hash join.
 void BM_UnsortedAndSortedIdTable(BenchmarkRecords* records) {
   // For easier changing of the IdTables size.
-  const size_t NUMBER_ROWS = 1000;
-  const size_t NUMBER_COLUMNS = NUMBER_ROWS; 
+  const size_t NUMBER_ROWS = 10000;
+  const size_t NUMBER_COLUMNS = 20; 
 
   auto hashJoinLambda = makeHashJoinLambda();
   auto joinLambda = makeJoinLambda();
