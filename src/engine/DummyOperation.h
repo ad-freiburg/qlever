@@ -60,7 +60,7 @@ class DummyOperation : public Operation {
 
   virtual float getMultiplicity(size_t col) override {
     (void)col;
-    return 1;
+    return (col + 1) * 42.0;
   }
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }

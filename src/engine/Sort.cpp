@@ -42,16 +42,16 @@ string Sort::asStringImpl(size_t indent) const {
 // _____________________________________________________________________________
 string Sort::getDescriptor() const {
   std::string orderByVars;
-  // TODO<joka921> Clean this up, also in the `OrderBy` class.
-  for (const auto& p : subtree_->getVariableColumns()) {
-    for (auto oc : sortColumnIndices_) {
-      if (oc == p.second) {
-        orderByVars += p.first.name();
+  const auto& varCols = subtree_->getVariableColumns();
+  for (auto sortColumn : sortColumnIndices_) {
+    for (const auto& [var, varIndex] : varCols) {
+      if (sortColumn == varIndex) {
+        orderByVars += " " + var.name();
       }
     }
   }
 
-  return "Sort (internal order) on " + orderByVars;
+  return "Sort (internal order) on" + orderByVars;
 }
 
 namespace {

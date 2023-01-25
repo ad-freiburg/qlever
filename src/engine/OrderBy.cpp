@@ -51,14 +51,13 @@ string OrderBy::asStringImpl(size_t indent) const {
 // _____________________________________________________________________________
 string OrderBy::getDescriptor() const {
   std::string orderByVars;
-  for (const auto& p : subtree_->getVariableColumns()) {
-    for (auto oc : sortIndices_) {
-      if (oc.first == p.second) {
-        if (oc.second) {
-          orderByVars += " DESC(" + p.first.name() + ")";
-        } else {
-          orderByVars += " ASC(" + p.first.name() + ")";
-        }
+  const auto& varCols = subtree_->getVariableColumns();
+  for (auto [sortIndex, isDescending] : sortIndices_) {
+    for (const auto& [var, varIndex] : varCols) {
+      if (sortIndex == varIndex) {
+        using namespace std::string_literals;
+        std::string s = isDescending ? " DESC("s : " ASC("s;
+        orderByVars += s + var.name() + ")";
       }
     }
   }

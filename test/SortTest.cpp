@@ -14,6 +14,7 @@
 using namespace std::string_literals;
 using ad_utility::source_location;
 
+// Create a `Sort` operation that sorts the `input` by the `sortColumns`.
 Sort makeSort(IdTable input, const std::vector<size_t>& sortColumns) {
   std::vector<Variable> vars;
   auto qec = ad_utility::testing::getQec();
@@ -25,20 +26,28 @@ Sort makeSort(IdTable input, const std::vector<size_t>& sortColumns) {
   return Sort{qec, dummy, sortColumns};
 }
 
+// Test that the `input`, when being sorted by its 0-th column as its primary
+// key, its 1st column as its secondary key etc. using a `Sort` operation,
+// yields the `expected` result.
 void testSort(IdTable input, const IdTable& expected,
               source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l);
   auto qec = ad_utility::testing::getQec();
 
+  // Set up the vector of sort columns. Those will later be permuted.
   std::vector<size_t> sortColumns;
   for (size_t i = 0; i < input.numColumns(); ++i) {
     sortColumns.push_back(i);
   }
+
+  // This loop runs over all possible permutations of the sort columns.
   do {
     IdTable permutedInput{input.numColumns(), qec->getAllocator()};
     IdTable permutedExpected{expected.numColumns(), qec->getAllocator()};
     permutedInput.resize(input.numRows());
     permutedExpected.resize(expected.numRows());
+    // Apply the current permutation of the `sortColumns` to `expected` and
+    // `input`.
     for (size_t i = 0; i < sortColumns.size(); ++i) {
       std::ranges::copy(input.getColumn(sortColumns[i]),
                         permutedInput.getColumn(i).begin());
@@ -47,7 +56,6 @@ void testSort(IdTable input, const IdTable& expected,
     }
 
     Sort s = makeSort(std::move(permutedInput), sortColumns);
-    // TODO<joka921> make `computeResult` accesible from tests.
     auto result = s.getResult();
     const auto& resultTable = result->_idTable;
     ASSERT_EQ(resultTable, permutedExpected);
@@ -101,15 +109,42 @@ TEST(Sort, ComputeSortThreeColumns) {
 }
 
 TEST(Sort, SimpleMemberFunctions) {
-  VectorTable input{{0},   {1},       {-1},  {3},
-                    {-17}, {1230957}, {123}, {-1249867132}};
-  auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
-  Sort s = makeSort(std::move(inputTable), {0});
-  EXPECT_EQ(1u, s.getResultWidth());
-  EXPECT_EQ("Sort (internal order) on ?0", s.getDescriptor());
+  {
+    VectorTable input{{0},   {1},       {-1},  {3},
+                      {-17}, {1230957}, {123}, {-1249867132}};
+    auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
+    Sort s = makeSort(std::move(inputTable), {0});
+    EXPECT_EQ(1u, s.getResultWidth());
+    EXPECT_EQ(8u, s.getSizeEstimate());
+    EXPECT_EQ("Sort (internal order) on ?0", s.getDescriptor());
 
-  EXPECT_THAT(s.asString(),
-              ::testing::StartsWith("SORT(internal) on columns:asc(0) \n"));
-  // TODO<joka921> Also test with another input (with multiple columns) for
-  // completeness.
+    EXPECT_THAT(s.asString(),
+                ::testing::StartsWith("SORT(internal) on columns:asc(0) \n"));
+    auto varColMap = s.getExternallyVisibleVariableColumns();
+    ASSERT_EQ(1u, varColMap.size());
+    ASSERT_EQ(0u, varColMap.at(Variable{"?0"}));
+    EXPECT_FALSE(s.knownEmptyResult());
+    EXPECT_EQ(42.0, s.getMultiplicity(0));
+  }
+
+  {
+    VectorTable input{{0, 1}, {0, 2}};
+    auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
+    Sort s = makeSort(std::move(inputTable), {1, 0});
+    EXPECT_EQ(2u, s.getResultWidth());
+    EXPECT_EQ(2u, s.getSizeEstimate());
+    EXPECT_FALSE(s.knownEmptyResult());
+    EXPECT_EQ("Sort (internal order) on ?1 ?0", s.getDescriptor());
+
+    EXPECT_THAT(
+        s.asString(),
+        ::testing::StartsWith("SORT(internal) on columns:asc(1) asc(0) \n"));
+    auto varColMap = s.getExternallyVisibleVariableColumns();
+    ASSERT_EQ(2u, varColMap.size());
+    ASSERT_EQ(0u, varColMap.at(Variable{"?0"}));
+    ASSERT_EQ(1u, varColMap.at(Variable{"?1"}));
+    EXPECT_FALSE(s.knownEmptyResult());
+    EXPECT_EQ(42.0, s.getMultiplicity(0));
+    EXPECT_EQ(84.0, s.getMultiplicity(1));
+  }
 }
