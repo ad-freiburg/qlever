@@ -1,5 +1,8 @@
 include(GoogleTest)
 
+set(QLEVER_TEST_SOURCES "")
+set(QLEVER_TEST_LIBRARIES "")
+
 # Link binary ${basename} against `gmock_main`, the threading library,
 # and all libraries that are specified as additional arguments.
 function (linkTest basename)
