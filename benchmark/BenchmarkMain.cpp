@@ -17,22 +17,6 @@
 namespace {
 
 /*
- * @brief Measure the time needed for the execution of every registered
- *  benchmark and return a copy of the used BenchmarkRecords.
- */
-const BenchmarkRecords measureTimeForAllBenchmarks() {
-  // For measuring and saving the times.
-  BenchmarkRecords benchmarksTime;
- 
-  // Goes through all registered benchmarks and measures them.
-  for (const auto& benchmarkFunction: BenchmarkRegister::getRegisteredBenchmarks()) {
-    benchmarkFunction(&benchmarksTime);
-  }
-
-  return benchmarksTime;
-};
-
-/*
  * @brief Add a string of the form
  * "
  *  #################
@@ -51,58 +35,44 @@ void addCategoryTitelToStringstream(std::stringstream* stringStream,
   (*stringStream) << "\n" << bar << "\n# " << categoryTitel << " #\n" << bar << "\n";
 }
 
+// Default conversion from BenchmarkRecords::RecordEntry to string.
+std::string recordEntryToString(const BenchmarkRecords::RecordEntry& recordEntry){
+  return "'" + recordEntry.descriptor + "' took " +
+    std::to_string(recordEntry.measuredTime) + " seconds.";
 }
 
-/*
- * @brief Goes through all types of registered benchmarks, measures their time
- * and prints their measured time in a fitting format.
- */
-int main() {
-  // The descriptors and measured times of all the benchmarks.
-  const BenchmarkRecords records = measureTimeForAllBenchmarks(); 
- 
-  // Visualizes the measured times.
-  std::stringstream visualization;
-
-  // For minimizing code duplication.
-  // For adding linebreaks between printed categories.
-  auto addCategoryBreak = [](std::stringstream* stringStream){(*stringStream) << "\n\n";};
-
-  // Default conversion from BenchmarkRecords::RecordEntry to string.
-  auto recordEntryToString = [](const BenchmarkRecords::RecordEntry& recordEntry)->std::string{
-    return "'" + recordEntry.descriptor + "' took " +
-      std::to_string(recordEntry.measuredTime) + " seconds.";
-  };
-
-  // Default way of adding a vector of RecordEntrys to a stringstream with
-  // optional prefix.
-  auto addVectorOfRecordEntry = [&recordEntryToString](
-      std::stringstream* stringStream,
-      const std::vector<BenchmarkRecords::RecordEntry>& entries,
-      const std::string& prefix = "") {
-    for (const BenchmarkRecords::RecordEntry& entry: entries) {
-      (*stringStream) << "\n" << prefix << recordEntryToString(entry);
-    }
-  };
-
-  // Visualization for single measurments.
-  addCategoryTitelToStringstream(&visualization, "Single measurment benchmarks");
-  addVectorOfRecordEntry(&visualization, records.getSingleMeasurements(),
-      "Single measurment benchmark ");
-
-  addCategoryBreak(&visualization);
-
-  // Visualization for groups.
-  addCategoryTitelToStringstream(&visualization, "Group benchmarks");
-  for (const auto& group: records.getGroups()) {
-    visualization << "\n\nGroup '" << group.descriptor << "':";
-    addVectorOfRecordEntry(&visualization, group.entries, "\t");
+// Default way of adding a vector of RecordEntrys to a stringstream with
+// optional prefix.
+void addVectorOfRecordEntryToStrinstream(std::stringstream* stringStream,
+    const std::vector<BenchmarkRecords::RecordEntry>& entries,
+    const std::string& prefix = "") {
+  for (const BenchmarkRecords::RecordEntry& entry: entries) {
+    (*stringStream) << "\n" << prefix << recordEntryToString(entry);
   }
+};
 
-  addCategoryBreak(&visualization);
+// Visualization for single measurments.
+void addSingleMeasurementsToStringstream(std::stringstream* stringStream,
+    const std::vector<BenchmarkRecords::RecordEntry>& recordEntries){
+  addCategoryTitelToStringstream(stringStream, "Single measurment benchmarks");
+  addVectorOfRecordEntryToStrinstream(stringStream, recordEntries,
+      "Single measurment benchmark ");
+}
 
-  // Visualization for tables.
-  addCategoryTitelToStringstream(&visualization, "Table benchmarks");
+// Visualization for groups.
+void addGroupsToStringstream(std::stringstream* stringStream,
+    const std::vector<BenchmarkRecords::RecordGroup>& recordGroups){
+  addCategoryTitelToStringstream(stringStream, "Group benchmarks");
+  for (const auto& group: recordGroups) {
+    (*stringStream) << "\n\nGroup '" << group.descriptor << "':";
+    addVectorOfRecordEntryToStrinstream(stringStream, group.entries, "\t");
+  }
+}
+
+// Visualization for tables.
+void addTablesToStringstream(std::stringstream* stringStream,
+    const std::vector<BenchmarkRecords::RecordTable>& recordTables){
+  addCategoryTitelToStringstream(stringStream, "Table benchmarks");
 
   // Used for the formating of numbers in the table.
   const size_t exactNumberOfDecimals = 4;
@@ -132,8 +102,8 @@ int main() {
   };
 
   // Printing the tables themselves.
-  for (const auto& table: records.getTables()) {
-    visualization << "\n\nTable '" << table.descriptor << "':\n\n";
+  for (const auto& table: recordTables) {
+    (*stringStream) << "\n\nTable '" << table.descriptor << "':\n\n";
   
     // For easier usage.
     size_t numberColumns = table.columnNames.size();
@@ -160,28 +130,92 @@ int main() {
 
     // Because the column of row names also has a width, we create an empty
     // string of that size, before actually printing the row of column names.
-    visualization << std::string(rowNameMaxStringWidth, ' ');
+    (*stringStream) << std::string(rowNameMaxStringWidth, ' ');
 
     // Print the top row of names.
     for (size_t column = 0; column < numberColumns; column++){
-      visualization << columnSeperator;
-      addStringWithPadding(&visualization, table.columnNames[column], columnMaxStringWidth[column]);
+      (*stringStream) << columnSeperator;
+      addStringWithPadding(stringStream, table.columnNames[column],
+          columnMaxStringWidth[column]);
     }
 
     // Print the rows.
     for (size_t row = 0; row < numberRows; row++) {
       // Row name
-      visualization << "\n";
-      addStringWithPadding(&visualization, table.rowNames[row], rowNameMaxStringWidth);
+      (*stringStream) << "\n";
+      addStringWithPadding(stringStream, table.rowNames[row],
+          rowNameMaxStringWidth);
       
       // Row content.
       for (size_t column = 0; column < numberColumns; column++) {
-        visualization << columnSeperator;
-        addStringWithPadding(&visualization,
-            optionalFloatToString(table.entries[row][column]), columnMaxStringWidth[column]);
+        (*stringStream) << columnSeperator;
+        addStringWithPadding(stringStream,
+            optionalFloatToString(table.entries[row][column]),
+            columnMaxStringWidth[column]);
       }
     }
   }
+}
+
+}
+
+/*
+ * @brief Goes through all types of registered benchmarks, measures their time
+ * and prints their measured time in a fitting format.
+ */
+int main() {
+  // Measuering the time for all registered benchmarks.
+  // For measuring and saving the times.
+  BenchmarkRecords records;
+ 
+  // Goes through all registered benchmarks and measures them.
+  for (const auto& benchmarkFunction: BenchmarkRegister::getRegisteredBenchmarks()) {
+    benchmarkFunction(&records);
+  }
+
+  // The values for all the categories of benchmarks.
+  const std::vector<BenchmarkRecords::RecordEntry>& singleMeasurements =
+    records.getSingleMeasurements();
+  const std::vector<BenchmarkRecords::RecordGroup>& recordGroups =
+    records.getGroups();
+  const std::vector<BenchmarkRecords::RecordTable>& recordTables =
+    records.getTables();
+
+  // Visualizes the measured times.
+  std::stringstream visualization;
+  
+  // @brief Adds a category to the string steam, if it is not empty. Mainly
+  //  exists for reducing code duplication.
+  //
+  // @param stringStream The stringstream where the text will get added.
+  // @param categoryRecord The information needed, for printing the benchmark
+  //  category. Should be a vector of RecordEntry, RecordGroup, or RecordTable.
+  // @param categoryAddPrintStreamFunction The function, which add the
+  //  benchmark category information, convert them to text, and add that text
+  //  to the stringstream.
+  // @param suffix Added to the stringstream after
+  //  categoryAddPrintStreamFunction. Mostly for linebreaks between those
+  //  categories.
+  auto addNonEmptyCategorieToStringSteam = [](std::stringstream* stringStream,
+      const auto& categoryRecord, const auto& categoryAddPrintStreamFunction,
+      const std::string& suffix = ""){
+    if (categoryRecord.size() > 0){
+      categoryAddPrintStreamFunction(stringStream, categoryRecord);
+      (*stringStream) << suffix;
+    }
+  };
+
+  // Visualization for single measurments, if there are any.
+  addNonEmptyCategorieToStringSteam(&visualization, singleMeasurements,
+      addSingleMeasurementsToStringstream, "\n\n");
+
+  // Visualization for groups, if there are any.
+  addNonEmptyCategorieToStringSteam(&visualization, recordGroups,
+      addGroupsToStringstream, "\n\n");
+
+  // Visualization for tables, if there are any.
+  addNonEmptyCategorieToStringSteam(&visualization, recordTables,
+      addTablesToStringstream);
 
   std::cout << visualization.str() << "\n";
 };
