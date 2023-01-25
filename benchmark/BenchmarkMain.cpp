@@ -94,8 +94,7 @@ int main() {
 
   // Visualization for groups.
   addCategoryTitelToStringstream(&visualization, "Group benchmarks");
-  for (const auto& entry: records.getGroups()) {
-    const BenchmarkRecords::RecordGroup& group = entry.second;
+  for (const auto& group: records.getGroups()) {
     visualization << "\n\nGroup '" << group.descriptor << "':";
     addVectorOfRecordEntry(&visualization, group.entries, "\t");
   }
@@ -133,8 +132,7 @@ int main() {
   };
 
   // Printing the tables themselves.
-  for (const auto& entry: records.getTables()) {
-    const BenchmarkRecords::RecordTable& table = entry.second;
+  for (const auto& table: records.getTables()) {
     visualization << "\n\nTable '" << table.descriptor << "':\n\n";
   
     // For easier usage.

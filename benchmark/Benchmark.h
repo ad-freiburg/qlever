@@ -65,11 +65,15 @@ class BenchmarkRecords {
     // A hash map of all the created RecordGroups. For faster access.
     // The key for a RecordGroup is it's descriptor.
     ad_utility::HashMap<std::string, RecordGroup> recordGroups_;
+    // The order of creation for the entries of recordGroups_.
+    std::vector<std::string> recordGroupsOrder_;
   
     // A hash map of all the created RecordTables. For faster access.
     // The key for a RecordTable is it's descriptor.
     ad_utility::HashMap<std::string, RecordTable> recordTables_;
-    
+     // The order of creation for the entries of recordTables_.
+    std::vector<std::string> recordTablesOrder_;
+
     /*
      * @brief Return execution time of function in seconds.
      *
@@ -88,6 +92,24 @@ class BenchmarkRecords {
       return benchmarkTimer.secs();
     }
 
+    /*
+     * @brief Translate the given hash map keys to their values and return
+     * those values in the same order as the keys.
+     *
+     * @tparam MAP_KEY_TYPE, MAP_VALUE_TYPE The types for the (key, value)
+     *  pairs of the hash map.
+     *
+     * @param hashMap The hash map, where the values should be looked up in.
+     * @param hashMapKeys The keys, for which the values should be looked up
+     *  and inserted in a vector.
+     *
+     * @returns A vector of the hashMap[hashMapKeys] values, in the same order
+     *  as the keys in hashMapKeys.
+     */
+    template<typename MAP_KEY_TYPE, typename MAP_VALUE_TYPE>
+    static const std::vector<MAP_VALUE_TYPE> createVectorOfHashMapValues(
+        const ad_utility::HashMap<MAP_KEY_TYPE, MAP_VALUE_TYPE>& hashMap,
+        const std::vector<MAP_KEY_TYPE>& hashMapKeys);
 
   public:
 
@@ -150,9 +172,9 @@ class BenchmarkRecords {
 
 
     /*
-     * @brief Returns a const view of all the groups.
+     * @brief Returns a vector of all the groups.
      */
-    const ad_utility::HashMap<std::string, RecordGroup>& getGroups() const;
+    const std::vector<BenchmarkRecords::RecordGroup> getGroups() const;
 
     /*
      * @brief Creates an empty table, which can be accesed/identified using the
@@ -199,9 +221,9 @@ class BenchmarkRecords {
 
 
     /*
-     * @brief Returns a const view of all the tables.
+     * @brief Returns a vector of all the tables.
      */
-    const ad_utility::HashMap<std::string, RecordTable>& getTables() const;
+    const std::vector<RecordTable> getTables() const;
 };
 
 /*

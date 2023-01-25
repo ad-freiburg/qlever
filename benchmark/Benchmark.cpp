@@ -46,12 +46,37 @@ void BenchmarkRecords::addGroup(const std::string& descriptor) {
   // There is no group, so create one without any entries and add them to
   // the hash map.
   recordGroups_[descriptor] = BenchmarkRecords::RecordGroup{descriptor, {}};
+  recordGroupsOrder_.push_back(descriptor);
 }
 
 // ____________________________________________________________________________
-const ad_utility::HashMap<std::string, BenchmarkRecords::RecordGroup>&
-   BenchmarkRecords::getGroups() const {
-  return recordGroups_;
+template<typename MAP_KEY_TYPE, typename MAP_VALUE_TYPE>
+const std::vector<MAP_VALUE_TYPE>
+BenchmarkRecords::createVectorOfHashMapValues(
+        const ad_utility::HashMap<MAP_KEY_TYPE, MAP_VALUE_TYPE>& hashMap,
+        const std::vector<MAP_KEY_TYPE>& hashMapKeys){
+  // The new vector containing the values for the keys in hashMapKeys in the
+  // same order.
+  std::vector<MAP_VALUE_TYPE> hashMapValues(hashMapKeys.size());
+
+  // Copying the values into hashMapValues.
+  std::ranges::for_each(hashMapKeys,
+      // We already know the size of hashMapValues and set it, so every call of
+      // this lambda has to walk through the vector. Which is what entryNumber
+      // is for.
+      [&hashMapValues, entryNumber = 0](const MAP_VALUE_TYPE& value)
+      mutable{
+        hashMapValues[entryNumber++] = value;
+      },
+      [&hashMap](const MAP_KEY_TYPE& key){return hashMap.at(key);});
+
+  return hashMapValues;
+}
+
+// ____________________________________________________________________________
+const std::vector<BenchmarkRecords::RecordGroup> BenchmarkRecords::getGroups()
+  const {
+  return createVectorOfHashMapValues(recordGroups_, recordGroupsOrder_);
 }
 
 // ____________________________________________________________________________
@@ -64,11 +89,12 @@ void BenchmarkRecords::addTable(const std::string& descriptor,
   // Add a new entry.
   recordTables_[descriptor] = BenchmarkRecords::RecordTable(descriptor,
     rowNames, columnNames);
+  recordTablesOrder_.push_back(descriptor);
 }
 
 // ____________________________________________________________________________
-const ad_utility::HashMap<std::string, BenchmarkRecords::RecordTable>&
-   BenchmarkRecords::getTables() const {
-  return recordTables_;
+const std::vector<BenchmarkRecords::RecordTable> BenchmarkRecords::getTables()
+  const {
+  return createVectorOfHashMapValues(recordTables_, recordTablesOrder_);
 }
 
