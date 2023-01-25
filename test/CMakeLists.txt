@@ -41,7 +41,7 @@ endfunction()
 # `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
 # additional libraries against which the test case has to be linked can be specified as
 # additional arguments after the `basename`
-function(addLinkAndDiscoverTest basename)
+macro(addLinkAndDiscoverTest basename)
   if (SINGLE_TEST_BINARY)
       set (QLEVER_TEST_SOURCES "${QLEVER_TEST_SOURCES} ${basename}.cpp" PARENT_SCOPE)
       set (QLEVER_TEST_LIBRARIES "${QLEVER_TEST_LiBRARIES} ${ARGN}" PARENT_SCOPE)
@@ -50,13 +50,13 @@ function(addLinkAndDiscoverTest basename)
     linkAndDiscoverTest(${basename} ${ARGN})
   endif()
 
-endfunction()
+endmacro()
 
 # Usage: `addAndLinkTestSerial(basename, [additionalLibraries...]`
 # Similar to `addAndLinkTest` but also requires that the test is run serially
 # (without any of the other test cases running in parallel). This can be
 # required e.g. if several tests cases write to the same file.
-function(addLinkAndDiscoverTestSerial basename)
+macro(addLinkAndDiscoverTestSerial basename)
   if (SINGLE_TEST_BINARY)
       message(STATUS "SINGLE_TEST_BINARY is ON")
       message(STATUS "QLEVER_TEST_SOURCES before ${QLEVER_TEST_SOURCES}")
@@ -70,7 +70,7 @@ function(addLinkAndDiscoverTestSerial basename)
     addTest(${basename})
     linkAndDiscoverTestSerial(${basename} ${ARGN})
   endif()
-endfunction()
+endmacro()
 
 # Only compile and link the test, but do not run it.
 # Usage: Same as for the two functions above.
