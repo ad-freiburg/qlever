@@ -14,7 +14,8 @@
 using namespace std::string_literals;
 using ad_utility::source_location;
 
-OrderBy makeOrderBy(IdTable input, const std::vector<std::pair<size_t, bool>>& sortColumns) {
+OrderBy makeOrderBy(IdTable input,
+                    const std::vector<std::pair<size_t, bool>>& sortColumns) {
   std::vector<Variable> vars;
   auto qec = ad_utility::testing::getQec();
   for (size_t i = 0; i < input.numColumns(); ++i) {
@@ -26,7 +27,7 @@ OrderBy makeOrderBy(IdTable input, const std::vector<std::pair<size_t, bool>>& s
 }
 
 void testOrderBy(IdTable input, const IdTable& expected,
-              source_location l = source_location::current()) {
+                 source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l);
   auto qec = ad_utility::testing::getQec();
 
@@ -43,8 +44,9 @@ void testOrderBy(IdTable input, const IdTable& expected,
     for (size_t i = 0; i < sortColumns.size(); ++i) {
       std::ranges::copy(input.getColumn(i),
                         permutedInput.getColumn(sortColumns[i].first).begin());
-      std::ranges::copy(expected.getColumn(i),
-                        permutedExpected.getColumn(sortColumns[i].first).begin());
+      std::ranges::copy(
+          expected.getColumn(i),
+          permutedExpected.getColumn(sortColumns[i].first).begin());
     }
 
     OrderBy s = makeOrderBy(std::move(permutedInput), sortColumns);
@@ -58,8 +60,8 @@ void testOrderBy(IdTable input, const IdTable& expected,
 TEST(OrderBy, ComputeOrderBySingleIntColumn) {
   VectorTable input{{0},   {1},       {-1},  {3},
                     {-17}, {1230957}, {123}, {-1249867132}};
-  VectorTable expected{{-1249867132},       {-17},           {-1},   {0},
-                       {1}, {3}, {123}, {1230957}};
+  VectorTable expected{{-1249867132}, {-17}, {-1},  {0},
+                       {1},           {3},   {123}, {1230957}};
   auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
   auto expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
   testOrderBy(std::move(inputTable), expectedTable);
@@ -71,7 +73,7 @@ TEST(OrderBy, TwoColumnsIntAndFloat) {
   IdTable expected{2, qec->getAllocator()};
 
   std::vector<std::pair<int64_t, double>> intsAndFloats{
-      {-3, 1.0},  {0, 7.0}, {-3, 0.5},{0, -2.8}};
+      {-3, 1.0}, {0, 7.0}, {-3, 0.5}, {0, -2.8}};
   std::vector<std::pair<int64_t, double>> intsAndFloatsExpected{
       {-3, 0.5}, {-3, 1.0}, {0, -2.8}, {0, 7.0}};
 

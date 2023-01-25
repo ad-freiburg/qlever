@@ -22,14 +22,14 @@ class OrderBy : public Operation {
   // TODO<joka921> This should by `pair<ColumnIndex, IsAscending>`
   // The bool means "isDescending"
   using SortIndices = std::vector<std::pair<ColumnIndex, bool>>;
+
  private:
   std::shared_ptr<QueryExecutionTree> subtree_;
   SortIndices sortIndices_;
 
  public:
   OrderBy(QueryExecutionContext* qec,
-          std::shared_ptr<QueryExecutionTree> subtree,
-          SortIndices sortIndices);
+          std::shared_ptr<QueryExecutionTree> subtree, SortIndices sortIndices);
 
  protected:
   string asStringImpl(size_t indent = 0) const override;

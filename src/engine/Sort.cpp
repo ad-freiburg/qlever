@@ -55,6 +55,11 @@ string Sort::getDescriptor() const {
 }
 
 namespace {
+
+// The call the `callFixedSize` is put into a separate function to get rid
+// of an internal compiler error in clang13.
+// TODO<joka921, future compilers> Check if this problem goes away in future
+// compiler versions as soon as we don't support clang 13 anymore.
 void callFixedSizeForSort(auto& idTable, auto comparison) {
   DISABLE_WARNINGS_CLANG_13
   ad_utility::callFixedSize(idTable.numColumns(),
@@ -62,39 +67,46 @@ void callFixedSizeForSort(auto& idTable, auto comparison) {
                               Engine::sort<I>(&idTable, comparison);
                             });
   ENABLE_WARNINGS_CLANG_13
+}
 
-  // The actual implementation of the sorting.
-  // TODO<joka921> Benchmark and test and everything else.
-  // TODO<joka921> Is it worth to instantiate further versions of the lambda,
-  // maybe even using `CALL_FIXED_SIZE`?
-  void sortImpl(IdTable & idTable, const std::vector<ColumnIndex>& sortCols) {
-    int width = idTable.numColumns();
+// The actual implementation of sorting an `IdTable` according to the
+// `sortCols`.
+void sortImpl(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
+  int width = idTable.numColumns();
 
-    if (sortCols.size() == 1) {
-      CALL_FIXED_SIZE(width, &Engine::sort, &idTable, sortCols.at(0));
-    } else if (sortCols.size() == 2) {
-      auto comparison = [c0 = sortCols[0], c1 = sortCols[1]](const auto& rowA,
-                                                             const auto& rowB) {
-        if (rowA[c0] != rowB[c0]) {
-          return rowA[c0] < rowB[c0];
-        } else {
-          return rowA[c1] < rowB[c1];
+  // Instantiate specialized comparison lambdas for one and two sort columns
+  // and use a generic comparison for a higher number of sort columns.
+  // TODO<joka921> As soon as we have merged the benchmark, measure whether
+  // this is in fact beneficial and whether it should also be applied for a
+  // higher number of columns, maybe even using `CALL_FIXED_SIZE` for the
+  // on the number of sort columns.
+  // TODO<joka921> Also experiment with sorting algorithms that take the
+  // column-based structure of the `IdTable` into account.
+  if (sortCols.size() == 1) {
+    CALL_FIXED_SIZE(width, &Engine::sort, &idTable, sortCols.at(0));
+  } else if (sortCols.size() == 2) {
+    auto comparison = [c0 = sortCols[0], c1 = sortCols[1]](const auto& rowA,
+                                                           const auto& rowB) {
+      if (rowA[c0] != rowB[c0]) {
+        return rowA[c0] < rowB[c0];
+      } else {
+        return rowA[c1] < rowB[c1];
+      }
+    };
+    callFixedSizeForSort(idTable, comparison);
+  } else {
+    auto comparison = [&sortCols](const auto& a, const auto& b) {
+      for (auto& col : sortCols) {
+        if (a[col] != b[col]) {
+          return a[col] < b[col];
         }
-      };
-      callFixedSizeForSort(idTable, comparison);
-    } else {
-      auto comparison = [&sortCols](const auto& a, const auto& b) {
-        for (auto& col : sortCols) {
-          if (a[col] != b[col]) {
-            return a[col] < b[col];
-          }
-        }
-        return false;
-      };
-      callFixedSizeForSort(idTable, comparison);
-    }
+      }
+      return false;
+    };
+    callFixedSizeForSort(idTable, comparison);
   }
 }
+}  // namespace
 
 // _____________________________________________________________________________
 void Sort::computeResult(ResultTable* result) {
