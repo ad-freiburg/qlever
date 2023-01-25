@@ -14,8 +14,9 @@
 using namespace std::string_literals;
 using ad_utility::source_location;
 
+// Create an `OrderBy` operation that sorts the `input` by the `sortColumns`.
 OrderBy makeOrderBy(IdTable input,
-                    const std::vector<std::pair<size_t, bool>>& sortColumns) {
+                    const OrderBy::SortIndices& sortColumns) {
   std::vector<Variable> vars;
   auto qec = ad_utility::testing::getQec();
   for (size_t i = 0; i < input.numColumns(); ++i) {
@@ -26,6 +27,9 @@ OrderBy makeOrderBy(IdTable input,
   return OrderBy{qec, dummy, sortColumns};
 }
 
+// Test that the `input`, when being sorted by its 0-th column as its primary
+// key, its 1st column as its secondary key etc. using an `ORDER BY` operation,
+// yields the `expected` result. The test is performed for all possible permutations of the sort columns by also permuting `input` and `expected` accordingly.
 void testOrderBy(IdTable input, const IdTable& expected,
                  source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l);
