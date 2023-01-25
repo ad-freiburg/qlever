@@ -4,7 +4,7 @@ on:
   workflow_run:
     workflows: [measure-code-coverage]
     types:
-      -completed
+      - completed
 
 jobs:
   upload:
