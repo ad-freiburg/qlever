@@ -234,7 +234,7 @@ addLinkAndDiscoverTest(ParseExceptionTest parser engine)
 
 addLinkAndDiscoverTest(TransparentFunctorsTest)
 
-addLinkAndDiscoverTest(SelectClauseTest parser engine)
+addLinkAndDiscoverTest(SelectClauseTest parser engine
 
 addLinkAndDiscoverTestSerial(RelationalExpressionTest sparqlExpressions index engine)
 
@@ -242,7 +242,7 @@ addLinkAndDiscoverTest(CheckUsePatternTrickTest parser engine)
 
 addLinkAndDiscoverTestSerial(RegexExpressionTest sparqlExpressions index engine)
 
-addLinkAndDiscoverTest(LocalVocabTest engine)
+addLinkAndDiscoverTestSerial(LocalVocabTest engine)
 
 addLinkAndDiscoverTest(HttpTest boost_iostreams http)
 
