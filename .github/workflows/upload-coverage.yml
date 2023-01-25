@@ -2,7 +2,7 @@ name: Upload code coverage
 
 on:
   workflow_run:
-    workflows: ["Measure code coverage"]
+    workflows: [measure-code-coverage]
     types:
       -completed
 
