@@ -4,8 +4,6 @@
 
 #pragma once
 
-#include "./util/AllocatorTestHelpers.h"
-#include "absl/cleanup/cleanup.h"
 #include "engine/QueryExecutionContext.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
@@ -15,6 +13,14 @@
 // be used for unit tests.
 
 namespace ad_utility::testing {
+
+// Create an unlimited allocator.
+ad_utility::AllocatorWithLimit<Id>& makeAllocator() {
+  static ad_utility::AllocatorWithLimit<Id> a{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<size_t>::max())};
+  return a;
+}
 // Create an empty `Index` object that has certain default settings overwritten
 // such that very small indices, as they are typically used for unit tests,
 // can be built without a lot of time and memory overhead.
@@ -93,7 +99,10 @@ inline Index makeTestIndex(const std::string& indexBasename,
 // build using `makeTestIndex` (see above). The index (most notably its
 // vocabulary) is the only part of the `QueryExecutionContext` that is actually
 // relevant for these tests, so the other members are defaulted.
-inline QueryExecutionContext* getQec(std::string turtleInput = "") {
+static inline QueryExecutionContext* getQec(std::string turtleInput = "") {
+  static ad_utility::AllocatorWithLimit<Id> alloc{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
+
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -139,16 +148,5 @@ inline QueryExecutionContext* getQec(std::string turtleInput = "") {
   }
   return contextMap.at(turtleInput).qec_.get();
 }
-
-// Return a lambda that takes a string and converts it into an ID by looking
-// it up in the vocabulary of `index`.
-auto makeGetId = [](const Index& index) {
-  return [&index](const std::string& el) {
-    Id id;
-    bool success = index.getId(el, &id);
-    AD_CONTRACT_CHECK(success);
-    return id;
-  };
-};
 
 }  // namespace ad_utility::testing

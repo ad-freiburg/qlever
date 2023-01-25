@@ -33,30 +33,14 @@ function(linkAndDiscoverTestSerial basename)
             TRUE)
 endfunction()
 
-if (SINGLE_TEST_BINARY)
-    message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
-    add_executable(QLeverAllUnitTestsMain)
-    target_link_libraries(QLeverAllUnitTestsMain gmock_main ${CMAKE_THREAD_LIBS_INIT})
-    gtest_discover_tests(QLeverAllUnitTestsMain QLeverAllUnitTestsMain PROPERTIES RUN_SERIAL
-            TRUE)
-else()
-    message(STATUS "The tests are split over multiple binaries")
-
-endif()
 # Usage: `addAndLinkTest(basename, [additionalLibraries...]`
 # Add a GTest/GMock test case that is called `basename` and compiled from a file called
 # `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
 # additional libraries against which the test case has to be linked can be specified as
 # additional arguments after the `basename`
 function(addLinkAndDiscoverTest basename)
-  if (SINGLE_TEST_BINARY)
-      target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
-      target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
-  else()
     addTest(${basename})
     linkAndDiscoverTest(${basename} ${ARGN})
-  endif()
-
 endfunction()
 
 # Usage: `addAndLinkTestSerial(basename, [additionalLibraries...]`
@@ -64,13 +48,8 @@ endfunction()
 # (without any of the other test cases running in parallel). This can be
 # required e.g. if several tests cases write to the same file.
 function(addLinkAndDiscoverTestSerial basename)
-  if (SINGLE_TEST_BINARY)
-    target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
-    target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
-  else()
     addTest(${basename})
     linkAndDiscoverTestSerial(${basename} ${ARGN})
-  endif()
 endfunction()
 
 # Only compile and link the test, but do not run it.
@@ -131,13 +110,8 @@ addLinkAndDiscoverTestSerial(BufferedVectorTest absl::strings)
 
 addLinkAndDiscoverTest(UnionTest engine)
 
-if (SINGLE_TEST_BINARY)
-    target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
-    target_link_libraries(QLeverAllUnitTestsMain parser re2 util ${ICU_LIBRARIES})
-else()
-    add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
-    linkAndDiscoverTest(TokenTest parser re2 util ${ICU_LIBRARIES})
-endif()
+add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
+linkAndDiscoverTest(TokenTest parser re2 util ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(TurtleParserTest parser absl::flat_hash_map re2)
 
@@ -250,7 +224,7 @@ addLinkAndDiscoverTest(HttpUtilsTest util http)
 
 addLinkAndDiscoverTest(DateTest)
 
-addLinkAndDiscoverTest(TripleComponentTest absl::strings parser)
+addLinkAndDiscoverTest(TripleObjectTest absl::strings parser)
 
 addLinkAndDiscoverTest(ValueIdTest absl::flat_hash_set)
 
@@ -262,13 +236,15 @@ addLinkAndDiscoverTest(TransparentFunctorsTest)
 
 addLinkAndDiscoverTest(SelectClauseTest parser engine)
 
-addLinkAndDiscoverTestSerial(RelationalExpressionTest parser sparqlExpressions index engine)
+addLinkAndDiscoverTestSerial(RelationalExpressionTest sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(CheckUsePatternTrickTest parser engine)
 
-addLinkAndDiscoverTestSerial(RegexExpressionTest parser sparqlExpressions index engine parser)
+addLinkAndDiscoverTestSerial(RegexExpressionTest sparqlExpressions index engine)
 
 addLinkAndDiscoverTestSerial(LocalVocabTest engine)
+
+addLinkAndDiscoverTest(ValuesTest engine)
 
 addLinkAndDiscoverTest(HttpTest boost_iostreams http)
 
@@ -280,18 +256,8 @@ addLinkAndDiscoverTest(ResetWhenMovedTest)
 
 addLinkAndDiscoverTest(TimerTest absl::strings)
 
-addLinkAndDiscoverTest(AlgorithmTest)
+addLinkAndDiscoverTest(AlgorithmTest absl::flat_hash_set)
 
 addLinkAndDiscoverTest(CompressedRelationsTest index)
 
 addLinkAndDiscoverTest(ExceptionTest)
-
-addLinkAndDiscoverTestSerial(RandomExpressionTest absl::flat_hash_map index)
-
-addLinkAndDiscoverTestSerial(SortTest engine)
-
-addLinkAndDiscoverTestSerial(OrderByTest engine)
-
-addLinkAndDiscoverTestSerial(ValuesForTestingTest index)
-
-addLinkAndDiscoverTestSerial(ExportQueryExecutionTreeTest index engine parser)

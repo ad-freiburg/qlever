@@ -1,35 +1,27 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: 2015 - 2017 Björn Buchhold (buchhold@cs.uni-freiburg.de)
-// Author: 2023 -      Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
+// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "engine/OrderBy.h"
+#include "OrderBy.h"
 
 #include <sstream>
 
-#include "engine/CallFixedSize.h"
-#include "engine/Comparators.h"
-#include "engine/QueryExecutionTree.h"
-#include "global/ValueIdComparators.h"
+#include "CallFixedSize.h"
+#include "Comparators.h"
+#include "QueryExecutionTree.h"
 
 using std::string;
 
 // _____________________________________________________________________________
-size_t OrderBy::getResultWidth() const { return subtree_->getResultWidth(); }
+size_t OrderBy::getResultWidth() const { return _subtree->getResultWidth(); }
 
 // _____________________________________________________________________________
 OrderBy::OrderBy(QueryExecutionContext* qec,
                  std::shared_ptr<QueryExecutionTree> subtree,
                  vector<pair<size_t, bool>> sortIndices)
-    : Operation{qec},
-      subtree_{std::move(subtree)},
-      sortIndices_{std::move(sortIndices)} {
-  AD_CONTRACT_CHECK(!sortIndices_.empty());
-  AD_CONTRACT_CHECK(std::ranges::all_of(
-      sortIndices_,
-      [this](ColumnIndex index) { return index < getResultWidth(); },
-      ad_utility::first));
-}
+    : Operation(qec),
+      _subtree(std::move(subtree)),
+      _sortIndices(std::move(sortIndices)) {}
 
 // _____________________________________________________________________________
 string OrderBy::asStringImpl(size_t indent) const {
@@ -37,38 +29,53 @@ string OrderBy::asStringImpl(size_t indent) const {
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
-  os << "ORDER BY on columns:";
+  os << "SORT / ORDER BY on columns:";
 
   // TODO<joka921> This produces exactly the same format as SORT operations
   // which is crucial for caching. Please refactor those classes to one class
   // (this is only an optimization for sorts on a single column)
-  for (auto ind : sortIndices_) {
+  for (auto ind : _sortIndices) {
     os << (ind.second ? "desc(" : "asc(") << ind.first << ") ";
   }
-  os << "\n" << subtree_->asString(indent);
+  os << "\n" << _subtree->asString(indent);
   return std::move(os).str();
 }
 
 // _____________________________________________________________________________
 string OrderBy::getDescriptor() const {
   std::string orderByVars;
-  const auto& varCols = subtree_->getVariableColumns();
-  for (auto [sortIndex, isDescending] : sortIndices_) {
-    for (const auto& [var, varIndex] : varCols) {
-      if (sortIndex == varIndex) {
-        using namespace std::string_literals;
-        std::string s = isDescending ? " DESC("s : " ASC("s;
-        orderByVars += s + var.name() + ")";
+  for (const auto& p : _subtree->getVariableColumns()) {
+    for (auto oc : _sortIndices) {
+      if (oc.first == p.second) {
+        if (oc.second) {
+          orderByVars += "DESC(" + p.first.name() + ") ";
+        } else {
+          orderByVars += "ASC(" + p.first.name() + ") ";
+        }
       }
     }
   }
-  return "OrderBy on" + orderByVars;
+  return "OrderBy (Sort) on " + orderByVars;
+}
+
+// _____________________________________________________________________________
+vector<size_t> OrderBy::resultSortedOn() const {
+  std::vector<size_t> sortedOn;
+  sortedOn.reserve(_sortIndices.size());
+  for (const pair<size_t, bool>& p : _sortIndices) {
+    if (!p.second) {
+      // Only ascending columns count as sorted.
+      sortedOn.push_back(p.first);
+    }
+  }
+  return sortedOn;
 }
 
 // _____________________________________________________________________________
 void OrderBy::computeResult(ResultTable* result) {
-  LOG(DEBUG) << "Getting sub-result for OrderBy result computation..." << endl;
-  shared_ptr<const ResultTable> subRes = subtree_->getResult();
+  LOG(DEBUG) << "Gettign sub-result for OrderBy result computation..." << endl;
+  AD_CONTRACT_CHECK(!_sortIndices.empty());
+  shared_ptr<const ResultTable> subRes = _subtree->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
   auto remainingTime = _timeoutTimer->wlock()->remainingTime();
@@ -89,45 +96,27 @@ void OrderBy::computeResult(ResultTable* result) {
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
-  result->_localVocab = subRes->_localVocab;
-
+  result->setLocalVocab(subRes->getLocalVocab());
   result->_idTable = subRes->_idTable.clone();
+  /*
+  result->_idTable.setNumColumns(subRes->_idTable.numColumns());
+  result->_idTable.insert(result->_idTable.end(), subRes->_idTable.begin(),
+                          subRes->_idTable.end());
+                          */
 
   int width = result->_idTable.numColumns();
 
-  // TODO<joka921> Measure (as soon as we have the benchmark merged)
-  // whether it is beneficial to manually instantiate the comparison when
-  // sorting by only one or two columns.
-
-  // TODO<joka921> In the case of a single variable, it might be more efficient
-  // to first sort by the ID values and then "repair" the resulting range by
-  // some O(n) algorithms, or even by returning lazy generators that yield
-  // the repaired order.
-
-  // TODO<joka921> For proper sorting of the local vocab we also need to
-  // add some logic for the proper sorting.
-
-  // TODO<joka921> Undefined values should always be at the end, no matter
-  // if the ordering is ascending or descending.
-
-  // TODO<joka921> If we know, that all the sort columns contain only datatypes
-  // for which the `internal` order is also the `semantic` order, or if a column
-  // only contains a single datatype, then we can use more efficient
-  // implementations here.
-
-  // Return true iff `rowA` comes before `rowB` in the sort order specified by
-  // `sortIndices_`.
-  auto comparison = [this](const auto& row1, const auto& row2) -> bool {
-    for (auto& [column, isDescending] : sortIndices_) {
-      if (row1[column] == row2[column]) {
-        continue;
+  // TODO(florian): Check if the lambda is a performance problem
+  auto comparison = [this](const auto& a, const auto& b) {
+    for (auto& entry : _sortIndices) {
+      if (a[entry.first] < b[entry.first]) {
+        return !entry.second;
       }
-      bool isLessThan = valueIdComparators::compareIds<
-          valueIdComparators::ComparisonForIncompatibleTypes::CompareByType>(
-          row1[column], row2[column], valueIdComparators::Comparison::LT);
-      return isLessThan != isDescending;
+      if (a[entry.first] > b[entry.first]) {
+        return entry.second;
+      }
     }
-    return false;
+    return a[0] < b[0];
   };
 
   // We cannot use the `CALL_FIXED_SIZE` macro here because the `sort` function

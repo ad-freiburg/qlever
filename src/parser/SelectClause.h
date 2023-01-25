@@ -51,7 +51,7 @@ struct SelectClause : ClauseBase {
   [[nodiscard]] bool isAsterisk() const;
 
   // Set the selector to '*', which means that all variables for which
-  // `addVariableForAsterisk()` is called are implicitly selected.
+  // `addVisibleVariable()` is called are implicitly selected.
   void setAsterisk();
 
   // Set the (manually) selected variables and aliases. All variables

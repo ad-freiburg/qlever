@@ -1,27 +1,26 @@
-//
-// Created by johannes on 09.05.21.
-//
+// Copyright 2021 - 2022, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_RESULTTYPE_H
-#define QLEVER_RESULTTYPE_H
+#pragma once
 
 namespace qlever {
-/**
- * @brief Describes the type of a columns data
- */
+
+// Enumerate the types of entries we can have in a `ResultTable`.
 enum class ResultType {
-  // An entry in the knowledgebase
+  // An entry that is contained in the vocabulary of the indexed data.
   KB,
-  // An unsigned integer (size_t)
+  // An unsigned integer. TODO: Briefly describe why this is still needed. It is
+  // used in `GroupBy`, `CountAvailablePredicates`, `TextOperationWithFilter`,
+  // `TextOperationWithoutFilter`.
   VERBATIM,
-  // A byte offset in the text index
+  // An entry from the text index (a byte offset in the text index).
   TEXT,
-  // A 32 bit float, stored in the first 4 bytes of the entry. The last four
-  // bytes have to be zero.
+  // A floating point number. TODO: Is this still used somwehere? It doesn't
+  // look like it is, now that we have values "folded into" IDs.
   FLOAT,
-  // An entry in the ResultTable's _localVocab
+  // An entry in the `LocalVocab` of a `ResultTable`. TODO: Is this still used
+  // somewhere? It doesn't look like it is.
   LOCAL_VOCAB
 };
 }  // namespace qlever
-
-#endif  // QLEVER_RESULTTYPE_H

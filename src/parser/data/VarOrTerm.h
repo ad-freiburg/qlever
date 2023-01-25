@@ -7,22 +7,23 @@
 #include <string>
 #include <variant>
 
-#include "../../engine/ResultTable.h"
-#include "../../index/Index.h"
-#include "../../util/VisitMixin.h"
-#include "./GraphTerm.h"
-#include "./Variable.h"
+#include "engine/ResultTable.h"
+#include "index/Index.h"
+#include "parser/data/GraphTerm.h"
+#include "parser/data/Variable.h"
+#include "util/VisitMixin.h"
 
 using VarOrTermBase = std::variant<Variable, GraphTerm>;
 
+// TODO: This class should have some documentation.
 class VarOrTerm : public VarOrTermBase,
                   public VisitMixin<VarOrTerm, VarOrTermBase> {
  public:
   using VarOrTermBase::VarOrTermBase;
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::optional<std::string> evaluate(
-      const ConstructQueryExportContext& context, PositionInTriple role) const {
+  [[nodiscard]] std::optional<std::string> evaluate(const Context& context,
+                                                    ContextRole role) const {
     // TODO<C++23>: Use std::visit when it is possible
     return visit([&context, &role](const auto& object) {
       return object.evaluate(context, role);

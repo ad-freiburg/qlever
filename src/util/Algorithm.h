@@ -1,16 +1,19 @@
-// Copyright 2022, University of Freiburg,
+// Copyright 2022 - 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
+// Authors: Julian Mundhahs <mundhahj@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #ifndef QLEVER_ALGORITHM_H
 #define QLEVER_ALGORITHM_H
 
+#include <algorithm>
 #include <numeric>
 #include <string>
 #include <string_view>
 #include <utility>
 
 #include "util/Forward.h"
+#include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/TypeTraits.h"
 
@@ -84,7 +87,8 @@ auto transform(Range&& input, F unaryOp) {
 template <typename T>
 std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
   std::vector<T> out;
-  // Reserve the total required space. It is the sum of all the vectors lengths.
+  // Reserve the total required space. It is the sum of all the vectors
+  // lengths.
   out.reserve(std::accumulate(
       input.begin(), input.end(), 0,
       [](size_t i, const std::vector<T>& elem) { return i + elem.size(); }));
@@ -93,6 +97,27 @@ std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
     appendVector(out, std::move(sub));
   }
   return out;
+}
+
+// Remove duplicates in the given vector without changing the order. For
+// example: 4, 6, 6, 2, 2, 4, 2 becomes 4, 6, 2.
+//
+// NOTE: This makes two copies of the first element in `input` with a
+// particular value. One copy for the result, and one copy for the hash set
+// used to keep track of which values we have already seen. One of these
+// copies could be avoided, but our current uses of this function are
+// currently not at all performance-critical (small `input` and small `T`).
+template <typename T>
+std::vector<T> removeDuplicates(const std::vector<T>& input) {
+  std::vector<T> result;
+  ad_utility::HashSet<T> distinctElements;
+  for (const T& element : input) {
+    if (!distinctElements.contains(element)) {
+      result.emplace_back(element);
+      distinctElements.insert(element);
+    }
+  }
+  return result;
 }
 
 }  // namespace ad_utility

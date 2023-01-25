@@ -11,9 +11,7 @@
 #include <sstream>
 #include <tuple>
 
-#include "./AllocatorTestHelpers.h"
 #include "./GTestHelpers.h"
-#include "./IdTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/Join.h"
@@ -24,22 +22,33 @@
 #include "util/Random.h"
 #include "util/SourceLocation.h"
 
+ad_utility::AllocatorWithLimit<Id>& allocator() {
+  static ad_utility::AllocatorWithLimit<Id> a{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<size_t>::max())};
+  return a;
+}
+
+auto I = [](const auto& id) {
+  return Id::makeFromVocabIndex(VocabIndex::make(id));
+};
+
 // For easier reading. We repeat that type combination so often, that this
 // will make things a lot easier in terms of reading and writing.
-using VectorTable = std::vector<std::vector<int64_t>>;
+using VectorTable = std::vector<std::vector<size_t>>;
 
 /*
  * Return an 'IdTable' with the given 'tableContent' by applying the
  * `transformation` to each of them. All rows of `tableContent` must have the
  * same length.
  */
-template <typename Transformation = decltype(ad_utility::testing::VocabId)>
+template <typename Transformation = decltype(I)>
 IdTable makeIdTableFromVector(const VectorTable& tableContent,
                               Transformation transformation = {}) {
   if (tableContent.empty()) {
-    return IdTable{ad_utility::testing::makeAllocator()};
+    return IdTable{allocator()};
   }
-  IdTable result{tableContent[0].size(), ad_utility::testing::makeAllocator()};
+  IdTable result{tableContent[0].size(), allocator()};
 
   // Copying the content into the table.
   for (const auto& row : tableContent) {
@@ -61,12 +70,12 @@ IdTable makeIdTableFromVector(const VectorTable& tableContent,
   return result;
 }
 
-inline IdTable makeIdTableFromIdVector(
+IdTable makeIdTableFromIdVector(
     const std::vector<std::vector<Id>>& tableContent) {
   if (tableContent.empty()) {
-    return IdTable{ad_utility::testing::makeAllocator()};
+    return IdTable{allocator()};
   }
-  IdTable result{tableContent[0].size(), ad_utility::testing::makeAllocator()};
+  IdTable result{tableContent[0].size(), allocator()};
 
   // Copy the content into the table.
   for (const auto& row : tableContent) {
@@ -94,7 +103,7 @@ inline IdTable makeIdTableFromIdVector(
  * @param l Ignore it. It's only here for being able to make better messages,
  *  if a IdTable fails the comparison.
  */
-inline void compareIdTableWithExpectedContent(
+void compareIdTableWithExpectedContent(
     const IdTable& table, const IdTable& expectedContent,
     const bool resultMustBeSortedByJoinColumn = false,
     const size_t joinColumn = 0,

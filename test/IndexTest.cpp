@@ -10,14 +10,22 @@
 
 #include "./IndexTestHelpers.h"
 #include "./util/IdTableHelpers.h"
-#include "./util/IdTestHelpers.h"
 #include "global/Pattern.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 
 using namespace ad_utility::testing;
 
-namespace {
+// Return a lambda that takes a string and converts it into an ID by looking
+// it up in the vocabulary of `index`.
+auto makeGetId = [](const IndexImpl& index) {
+  return [&index](const std::string& el) {
+    Id id;
+    bool success = index.getId(el, &id);
+    AD_CONTRACT_CHECK(success);
+    return id;
+  };
+};
 
 // Return a lambda that runs a scan for two fixed elements `c0` and `c1`
 // on the `permutation` (e.g. a fixed P and S in the PSO permutation)
@@ -45,7 +53,6 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index) {
     ASSERT_EQ(wol, makeIdTableFromIdVector(expected));
   };
 };
-}  // namespace
 
 TEST(IndexTest, createFromTurtleTest) {
   {
@@ -56,7 +63,7 @@ TEST(IndexTest, createFromTurtleTest) {
         "<a2> <b2> <c2> .";
     const IndexImpl& index = getQec(kb)->getIndex().getImpl();
 
-    auto getId = makeGetId(getQec(kb)->getIndex());
+    auto getId = makeGetId(index);
     Id a = getId("<a>");
     Id b = getId("<b>");
     Id c = getId("<c>");
@@ -113,7 +120,7 @@ TEST(IndexTest, createFromTurtleTest) {
 
     const IndexImpl& index = getQec(kb)->getIndex().getImpl();
 
-    auto getId = makeGetId(getQec(kb)->getIndex());
+    auto getId = makeGetId(index);
     Id zero = getId("<0>");
     Id one = getId("<1>");
     Id two = getId("<2>");
@@ -205,7 +212,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
       "<a2> <b2> <c2> .";
   const IndexImpl& index = getQec(kb)->getIndex().getImpl();
 
-  auto getId = makeGetId(getQec(kb)->getIndex());
+  auto getId = makeGetId(index);
   Id b = getId("<b>");
   Id b2 = getId("<b2>");
   Id a = getId("<a>");
@@ -238,7 +245,7 @@ TEST(IndexTest, scanTest) {
     IdTable wol(1, makeAllocator());
     IdTable wtl(2, makeAllocator());
 
-    auto getId = makeGetId(getQec(kb)->getIndex());
+    auto getId = makeGetId(index);
     Id a = getId("<a>");
     Id c = getId("<c>");
     Id a2 = getId("<a2>");
@@ -257,7 +264,6 @@ TEST(IndexTest, scanTest) {
     testOne("<b>", "<a>", index._PSO, {{c}, {c2}});
     testOne("<b>", "<c>", index._PSO, {});
     testOne("<b2>", "<c2>", index._POS, {{a2}});
-    testOne("<notExisting>", "<a>", index._PSO, {});
   }
   kb = "<a> <is-a> <1> . \n"
        "<a> <is-a> <2> . \n"
@@ -271,7 +277,7 @@ TEST(IndexTest, scanTest) {
     const IndexImpl& index =
         ad_utility::testing::getQec(kb)->getIndex().getImpl();
 
-    auto getId = makeGetId(ad_utility::testing::getQec(kb)->getIndex());
+    auto getId = makeGetId(index);
     Id a = getId("<a>");
     Id b = getId("<b>");
     Id c = getId("<c>");

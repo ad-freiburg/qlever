@@ -100,9 +100,9 @@ TEST_F(GroupByTest, doGroupBy) {
 
   // create an input result table with a local vocabulary
   ResultTable inTable{makeAllocator()};
-  inTable._localVocab->getIndexAndAddIfNotContained("<local1>");
-  inTable._localVocab->getIndexAndAddIfNotContained("<local2>");
-  inTable._localVocab->getIndexAndAddIfNotContained("<local3>");
+  inTable.getLocalVocab()->getIndexAndAddIfNotContained("<local1>");
+  inTable.getLocalVocab()->getIndexAndAddIfNotContained("<local2>");
+  inTable.getLocalVocab()->getIndexAndAddIfNotContained("<local3>");
 
   IdTable inputData(6, makeAllocator());
   // The input data types are

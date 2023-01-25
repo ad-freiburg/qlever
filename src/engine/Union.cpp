@@ -167,8 +167,8 @@ void Union::computeResult(ResultTable* result) {
                   subRes1->_idTable, subRes2->_idTable, _columnOrigins);
 
   // If only one of the two operands has a local vocab, pass it on.
-  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
-      subRes1->_localVocab, subRes2->_localVocab);
+  result->setLocalVocab(LocalVocab::mergeLocalVocabsIfOneIsEmpty(
+      subRes1->getLocalVocab(), subRes2->getLocalVocab()));
 
   LOG(DEBUG) << "Union result computation done." << std::endl;
 }

@@ -56,13 +56,15 @@ void SelectClause::setSelected(std::vector<Variable> variables) {
   setSelected(v);
 }
 
-// ____________________________________________________________________
+// ____________________________________________________________________________
 [[nodiscard]] const std::vector<Variable>& SelectClause::getSelectedVariables()
     const {
   return isAsterisk()
              ? visibleVariables_
              : std::get<VarsAndAliases>(varsAndAliasesOrAsterisk_).vars_;
 }
+
+// ____________________________________________________________________________
 [[nodiscard]] std::vector<std::string>
 SelectClause::getSelectedVariablesAsStrings() const {
   std::vector<std::string> result;

@@ -150,8 +150,8 @@ void Join::computeResult(ResultTable* result) {
                   _rightJoinCol, &result->_idTable);
 
   // If only one of the two operands has a local vocab, pass it on.
-  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
-      leftRes->_localVocab, rightRes->_localVocab);
+  result->setLocalVocab(LocalVocab::mergeLocalVocabsIfOneIsEmpty(
+      leftRes->getLocalVocab(), rightRes->getLocalVocab()));
 
   LOG(DEBUG) << "Join result computation done" << endl;
 }

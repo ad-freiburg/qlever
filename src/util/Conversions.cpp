@@ -240,7 +240,8 @@ string convertFloatStringToIndexWord(const string& orig,
 
 // _____________________________________________________________________________
 string convertIndexWordToFloatString(const string& indexWord) {
-  const static size_t prefixLength = sizeof(VALUE_FLOAT_PREFIX) - 1;
+  const static size_t prefixLength =
+      std::char_traits<char>::length(VALUE_FLOAT_PREFIX);
   AD_CONTRACT_CHECK(indexWord.size() > prefixLength + 1);
   // the -1 accounts for the originally float/int identifier suffix
   string number =
@@ -517,7 +518,7 @@ string convertDateToIndexWord(const string& value) {
 
 // _____________________________________________________________________________
 string convertIndexWordToDate(const string& indexWord) {
-  size_t prefixLength = sizeof(VALUE_DATE_PREFIX) - 1;
+  size_t prefixLength = std::char_traits<char>::length(VALUE_DATE_PREFIX);
   std::ostringstream os;
   if (indexWord[prefixLength] == '-') {
     os << '-'
