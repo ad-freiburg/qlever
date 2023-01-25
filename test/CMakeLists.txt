@@ -39,8 +39,14 @@ endfunction()
 # additional libraries against which the test case has to be linked can be specified as
 # additional arguments after the `basename`
 function(addLinkAndDiscoverTest basename)
+  if (SINGLE_TEST_BINARY)
+      set (QLEVER_TEST_SOURCES "${QLEVER_TEST_SOURCES} ${basename}.cpp")
+      set (QLEVER_TEST_LIBRARIES "${QLEVER_TEST_LiBRARIES} ${ARGN}")
+  else()
     addTest(${basename})
     linkAndDiscoverTest(${basename} ${ARGN})
+  endif()
+
 endfunction()
 
 # Usage: `addAndLinkTestSerial(basename, [additionalLibraries...]`
@@ -48,8 +54,13 @@ endfunction()
 # (without any of the other test cases running in parallel). This can be
 # required e.g. if several tests cases write to the same file.
 function(addLinkAndDiscoverTestSerial basename)
+  if (SINGLE_TEST_BINARY)
+    set (QLEVER_TEST_SOURCES "${QLEVER_TEST_SOURCES} ${basename}.cpp")
+    set (QLEVER_TEST_LIBRARIES "${QLEVER_TEST_LiBRARIES} ${ARGN}")
+  else()
     addTest(${basename})
     linkAndDiscoverTestSerial(${basename} ${ARGN})
+  endif()
 endfunction()
 
 # Only compile and link the test, but do not run it.
@@ -57,6 +68,14 @@ endfunction()
 function(addAndLinkTest basename)
     addTest(${basename})
     linkTest(${basename} ${ARGN})
+endfunction()
+
+function(addSingleTestBinary)
+  add_executable(QLeverAllUnitTestsMain ${QLEVER_TEST_SOURCES})
+  target_link_libraries(QLeverAllUnitTestsMain ${QLEVER_TEST_LIBRARIES})
+  gtest_discover_tests(QLeverAllUnitTestsMain  QLeverAllUnitTestsMain PROPERTIES RUN_SERIAL
+          TRUE)
+
 endfunction()
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest)
