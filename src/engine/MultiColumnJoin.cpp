@@ -115,8 +115,8 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
                   &result->_idTable);
 
   // If only one of the two operands has a local vocab, pass it on.
-  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
-      leftResult->_localVocab, rightResult->_localVocab);
+  result->setLocalVocab(LocalVocab::mergeLocalVocabsIfOneIsEmpty(
+      leftResult->getLocalVocab(), rightResult->getLocalVocab()));
 
   LOG(DEBUG) << "MultiColumnJoin result computation done." << endl;
 }

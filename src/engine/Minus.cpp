@@ -70,8 +70,8 @@ void Minus::computeResult(ResultTable* result) {
                   _matchedColumns, &result->_idTable);
 
   // If only one of the two operands has a local vocab, pass it on.
-  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
-      leftResult->_localVocab, rightResult->_localVocab);
+  result->setLocalVocab(LocalVocab::mergeLocalVocabsIfOneIsEmpty(
+      leftResult->getLocalVocab(), rightResult->getLocalVocab()));
 
   LOG(DEBUG) << "Minus result computation done." << endl;
 }

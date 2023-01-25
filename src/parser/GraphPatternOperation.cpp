@@ -14,10 +14,7 @@ namespace parsedQuery {
 
 // _____________________________________________________________________________
 std::string SparqlValues::variablesToString() const {
-  return absl::StrJoin(_variables, " ",
-                       [](std::string* out, const Variable& variable) {
-                         out->append(variable.name());
-                       });
+  return absl::StrJoin(_variables, "\t", Variable::AbslFormatter);
 }
 
 // _____________________________________________________________________________
