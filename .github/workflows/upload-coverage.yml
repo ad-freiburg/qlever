@@ -14,7 +14,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
     steps:
       - name: print info
-        env: 
+        env:
           GITHUB_CONTEXT: ${{toJson(github.event.workflow_run)}}
         run: echo "$GITHUB_CONTEXT"
       - name: 'Download artifact'
@@ -48,7 +48,7 @@ jobs:
         run: echo "original_github_repository=`cat github_repository`" >> $GITHUB_ENV; cat github_repository
       - name: "Checkout"
         uses: actions/checkout@v3
-        with: 
+        with:
           repository: ${{env.original_github_repository}}
           ref: ${{env.original_github_ref}}
           path: qlever-source
@@ -69,5 +69,5 @@ jobs:
           override_build: ${{github.event.workflow_run.workflow_id}}
           override_commit: ${{github.event.workflow_run.head_commit.id}}
           override_pr: ${{env.pr_number}}
-          
-         
+
+
