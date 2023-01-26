@@ -105,6 +105,7 @@ jobs:
       if: matrix.is-coverage
       run: ctest --show-only=json-v1 > tests.json && python3 ${{github.workspace}}/misc/ctest-output-to-executables.py tests.json tests.txt
     - name: Print list of executables
+      working-directory: ${{github.workspace}}/build/test
       run: cat tests.txt
     - name: Process coverage info
       working-directory: ${{github.workspace}}/build/test
