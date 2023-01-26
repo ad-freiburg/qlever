@@ -10,6 +10,7 @@
 #include "../src/engine/CallFixedSize.h"
 #include "../src/engine/Minus.h"
 
+namespace {
 auto table(size_t cols) {
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1'000'000)};
@@ -18,6 +19,7 @@ auto table(size_t cols) {
 auto I = [](const auto& id) {
   return Id::makeFromVocabIndex(VocabIndex::make(id));
 };
+}
 
 TEST(EngineTest, minusTest) {
   using std::array;

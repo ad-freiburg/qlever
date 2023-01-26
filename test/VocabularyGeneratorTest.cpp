@@ -11,6 +11,7 @@
 #include "../src/index/Index.h"
 #include "../src/index/VocabularyGenerator.h"
 
+namespace {
 // equality operator used in this test
 bool vocabTestCompare(const IdPairMMapVecView& a,
                       const std::vector<std::pair<Id, Id>>& b) {
@@ -30,6 +31,7 @@ bool vocabTestCompare(const IdPairMMapVecView& a,
 auto I = [](const auto& id) {
   return Id::makeFromVocabIndex(VocabIndex::make(id));
 };
+}
 
 // Test fixture that sets up the binary files vor partial vocabulary and
 // everything else connected with vocabulary merging.

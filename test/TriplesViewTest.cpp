@@ -6,6 +6,7 @@
 
 #include "../src/index/TriplesView.h"
 
+namespace {
 auto I = [](const auto& id) {
   return Id::makeFromVocabIndex(VocabIndex::make(id));
 };
@@ -52,6 +53,7 @@ std::vector<std::array<Id, 3>> expectedResult() {
     }
   }
   return result;
+}
 }
 
 TEST(TriplesView, AllTriples) {

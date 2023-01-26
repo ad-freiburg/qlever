@@ -10,9 +10,12 @@
 #include "../src/util/File.h"
 #include "../src/util/Serializer/FileSerializer.h"
 
+
+namespace {
 auto I = [](const auto& id) {
   return Id::makeFromVocabIndex(VocabIndex::make(id));
 };
+}
 
 TEST(RelationMetaDataTest, writeReadTest) {
   try {
