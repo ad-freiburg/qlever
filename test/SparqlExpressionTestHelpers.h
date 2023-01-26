@@ -30,10 +30,10 @@ struct DummyExpression : public SparqlExpression {
 };
 
 // Make a `ValueId` from an int. Shorter name, as it will be used often.
-ValueId IntId(int64_t i) { return ValueId::makeFromInt(i); }
+inline ValueId IntId(int64_t i) { return ValueId::makeFromInt(i); }
 
 // Make a `ValueId` from a double. Shorter name, as it will be used often.
-ValueId DoubleId(double d) { return ValueId::makeFromDouble(d); }
+inline ValueId DoubleId(double d) { return ValueId::makeFromDouble(d); }
 
 // Struct that stores a `sparqlExpression::EvaluationContext` and all the data
 // structures that this context refers to. Most importantly it uses the
@@ -104,7 +104,7 @@ struct TestContext {
 
 // Add output for `SetOfIntervals for Gtest.
 namespace ad_utility {
-void PrintTo(const SetOfIntervals& set, std::ostream* os) {
+inline void PrintTo(const SetOfIntervals& set, std::ostream* os) {
   for (auto [first, second] : set._intervals) {
     *os << '{' << first << ", " << second << '}';
   }

@@ -89,7 +89,7 @@ function(addSingleTestBinary)
     separate_arguments(QLEVER_TEST_LIBRARIES)
     message(STATUS "QLEVER_TEST_SOURCES inside addSingleTestBinary: ${QLEVER_TEST_SOURCES}")
   add_executable(QLeverAllUnitTestsMain ${QLEVER_TEST_SOURCES})
-  target_link_libraries(QLeverAllUnitTestsMain ${QLEVER_TEST_LIBRARIES})
+  target_link_libraries(QLeverAllUnitTestsMain ${QLEVER_TEST_LIBRARIES} gmock_main ${CMAKE_THREAD_LIBS_INIT})
   gtest_discover_tests(QLeverAllUnitTestsMain  QLeverAllUnitTestsMain PROPERTIES RUN_SERIAL
           TRUE)
 

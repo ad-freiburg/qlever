@@ -109,7 +109,7 @@ static inline QueryExecutionContext* getQec() {
 }
 
 // Create an unlimited allocator.
-ad_utility::AllocatorWithLimit<Id>& makeAllocator() {
+inline ad_utility::AllocatorWithLimit<Id>& makeAllocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
           std::numeric_limits<size_t>::max())};
