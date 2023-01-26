@@ -11,6 +11,7 @@
 #include "engine/TransitivePath.h"
 #include "global/Id.h"
 
+namespace {
 auto I = [](const auto& id) {
   return Id::makeFromVocabIndex(VocabIndex::make(id));
 };
@@ -41,6 +42,7 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
           std::numeric_limits<size_t>::max())};
   return a;
+}
 }
 
 TEST(TransitivePathTest, computeTransitivePath) {

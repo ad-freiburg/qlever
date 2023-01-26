@@ -12,6 +12,7 @@
 #include "global/Id.h"
 #include "util/BufferedVector.h"
 
+namespace {
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
@@ -22,6 +23,7 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
 auto I = [](const auto& id) {
   return Id::makeFromVocabIndex(VocabIndex::make(id));
 };
+}
 
 // This unit tests is part of the documentation of the `IdTable` class. It
 // demonstrates the correct usage of the proxy references that

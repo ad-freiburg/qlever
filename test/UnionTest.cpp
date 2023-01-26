@@ -11,6 +11,7 @@
 #include "../src/engine/Union.h"
 #include "../src/global/Id.h"
 
+namespace {
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
@@ -21,6 +22,7 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
 auto I = [](const auto& id) {
   return Id::makeFromVocabIndex(VocabIndex::make(id));
 };
+}
 
 TEST(UnionTest, computeUnion) {
   IdTable left(1, allocator());

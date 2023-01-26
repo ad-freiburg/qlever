@@ -9,6 +9,7 @@
 
 #include "../src/engine/CallFixedSize.h"
 #include "../src/engine/MultiColumnJoin.h"
+namespace {
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
@@ -18,6 +19,7 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
 auto I = [](const auto& id) {
   return Id::makeFromVocabIndex(VocabIndex::make(id));
 };
+}
 
 TEST(EngineTest, multiColumnJoinTest) {
   using std::array;

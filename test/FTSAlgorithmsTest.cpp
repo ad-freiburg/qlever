@@ -8,6 +8,7 @@
 #include "../src/index/FTSAlgorithms.h"
 #include "util/DisableWarningsClang13.h"
 
+namespace {
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
@@ -20,6 +21,7 @@ auto I = [](const auto& id) {
 auto T = [](const auto& id) { return TextRecordIndex::make(id); };
 auto TextId = [](const auto& id) { return Id::makeFromTextRecordIndex(T(id)); };
 auto IntId = [](const auto& id) { return Id::makeFromInt(id); };
+}
 
 TEST(FTSAlgorithmsTest, filterByRangeTest) {
   IdRange idRange;

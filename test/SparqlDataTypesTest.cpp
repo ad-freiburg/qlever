@@ -9,11 +9,13 @@
 using namespace std::string_literals;
 using ::testing::Optional;
 
+namespace {
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
           std::numeric_limits<size_t>::max())};
   return a;
+}
 }
 
 struct ContextWrapper {

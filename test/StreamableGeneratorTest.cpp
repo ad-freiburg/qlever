@@ -8,11 +8,13 @@
 
 using namespace ad_utility::streams;
 
+namespace {
 constexpr size_t TEST_BUFFER_SIZE = 10;
 
 stream_generator generateException() {
   throw std::runtime_error("Test Exception");
   co_return;
+}
 }
 
 TEST(StreamableGeneratorTest, TestGeneratorExceptionResultsInException) {
@@ -33,12 +35,14 @@ TEST(StreamableGeneratorTest, TestEmptyGeneratorReturnsEmptyResult) {
   ASSERT_EQ(iterator, generator.end());
 }
 
+namespace {
 const std::string MAX_TEST_BUFFER_STRING(TEST_BUFFER_SIZE, 'A');
 
 basic_stream_generator<TEST_BUFFER_SIZE> generateMultipleElements() {
   co_yield MAX_TEST_BUFFER_STRING;
   co_yield 1;
   co_yield "Abc";
+}
 }
 
 TEST(StreamableGeneratorTest, TestGeneratorReturnsBufferedResults) {
