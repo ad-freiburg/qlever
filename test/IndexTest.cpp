@@ -15,7 +15,9 @@
 
 using namespace ad_utility::testing;
 
+namespace {
 auto I = [](auto id) { return Id::makeFromVocabIndex(VocabIndex::make(id)); };
+}
 
 string getStxxlConfigFileName(const string& location) {
   std::ostringstream os;

@@ -16,7 +16,9 @@
 
 using namespace ad_utility::testing;
 
+namespace {
 auto I = [](const auto& id) { return Id::makeFromInt(id); };
+}
 
 // This fixture is used to create an Index for the tests.
 // The full index creation is required for initialization of the vocabularies.
