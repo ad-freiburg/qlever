@@ -9,6 +9,7 @@
 #include "index/Permutations.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
+namespace {
 // Return an `ID` of type `VocabIndex` from `index`. Assert that `index`
 // is `>= 0`.
 Id V(int64_t index) {
@@ -18,7 +19,7 @@ Id V(int64_t index) {
 
 // A representation of a relation, consisting of the constant `col0_` element
 // as well as the 2D-vector for the other two columns. `col1And2_` must be
-// sorted.
+// sorted lexicographically.
 struct RelationInput {
   int col0_;
   std::vector<std::array<int, 2>> col1And2_;
@@ -71,8 +72,8 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
       for (const auto& arr : input.col1And2_) {
         buffer.push_back({V(arr[0]), V(arr[1])});
       }
-      // The last argument is the number of distinctC1. We store a dummy value
-      // here that we can check later.
+      // The last argument is the number of distinct elements in `col1`. We
+      // store a dummy value here that we can check later.
       writer.addRelation(V(input.col0_), buffer, i + 1);
       ++i;
     }
@@ -100,8 +101,8 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
     const auto& m = metaData[i];
     ASSERT_EQ(V(inputs[i].col0_), m._col0Id);
     ASSERT_EQ(inputs[i].col1And2_.size(), m._numRows);
-    // The number of distinctC1 was passed in as `i + 1` for testing purposes,
-    // so this is the expected multiplicity.
+    // The number of distinct elements in `col1` was passed in as `i + 1` for
+    // testing purposes, so this is the expected multiplicity.
     ASSERT_FLOAT_EQ(m._numRows / static_cast<float>(i + 1),
                     m._multiplicityCol1);
     // Scan for all distinct `col0` and check that we get the expected result.
@@ -114,7 +115,7 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
 
     // Check for all distinct combinations of `(col0, col1)` and check that
     // we get the expected result.
-    // TODO<joka921, C++23 use views::chunk_by
+    // TODO<joka921>, C++23 use views::chunk_by
     int lastCol1Id = col1And2[0][0];
     std::vector<std::array<int, 1>> col3;
 
@@ -151,6 +152,7 @@ void testWithDifferentBlockSizes(const std::vector<RelationInput>& inputs,
   testCompressedRelations(inputs, testCaseName, 237);
   testCompressedRelations(inputs, testCaseName, 4096);
 }
+}  // namespace
 
 // Test for very small relations many of which are stored in the same block.
 TEST(CompressedRelationWriter, SmallRelations) {
