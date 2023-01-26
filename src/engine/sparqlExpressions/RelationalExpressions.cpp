@@ -27,8 +27,7 @@ namespace detail {
 // doesn't compile with G++11. Find out, why.
 template <typename T>
 constexpr auto getObjectOfValueTypeHelper(T&& t) {
-  if constexpr (ad_utility::similarToInstantiation<VectorWithMemoryLimit,
-                                                   std::decay_t<T>>) {
+  if constexpr (ad_utility::similarToInstantiation<T, VectorWithMemoryLimit>) {
     return std::move(t[0]);
   } else {
     return std::move(t);

@@ -132,13 +132,10 @@ class TaskQueue {
   decltype(auto) executeAndUpdateTimer(F&& f, std::atomic<size_t>& duration) {
     if constexpr (TrackTimes) {
       struct T {
-        ad_utility::Timer _t;
+        ad_utility::Timer _t{ad_utility::Timer::Started};
         std::atomic<size_t>& _target;
-        T(std::atomic<size_t>& target) : _target(target) { _t.start(); }
-        ~T() {
-          _t.stop();
-          _target += _t.msecs();
-        }
+        T(std::atomic<size_t>& target) : _target(target) {}
+        ~T() { _target += _t.msecs(); }
       };
       T timeHandler{duration};
       return f();
