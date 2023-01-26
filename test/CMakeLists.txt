@@ -1,7 +1,7 @@
 include(GoogleTest)
 
-set(QLEVER_TEST_SOURCES "nonexistinct.cpp" CACHE INTERNAL)
-set(QLEVER_TEST_LIBRARIES "notthislibrary" CACHE INTERNAL)
+set(QLEVER_TEST_SOURCES "")
+set(QLEVER_TEST_LIBRARIES "")
 
 # Link binary ${basename} against `gmock_main`, the threading library,
 # and all libraries that are specified as additional arguments.
@@ -43,8 +43,8 @@ endfunction()
 # additional arguments after the `basename`
 function(addLinkAndDiscoverTest basename)
   if (SINGLE_TEST_BINARY)
-      set (QLEVER_TEST_SOURCES "${QLEVER_TEST_SOURCES} ${basename}.cpp" CACHE INTERNAL)
-      set (QLEVER_TEST_LIBRARIES "${QLEVER_TEST_LiBRARIES} ${ARGN}" CACHE INTERNAL)
+      #set (QLEVER_TEST_SOURCES "${QLEVER_TEST_SOURCES} ${basename}.cpp" PARENT_SCOPE)
+      #set (QLEVER_TEST_LIBRARIES "${QLEVER_TEST_LiBRARIES} ${ARGN}" PARENT_SCOPE)
   else()
     addTest(${basename})
     linkAndDiscoverTest(${basename} ${ARGN})
@@ -56,21 +56,21 @@ endfunction()
 # Similar to `addAndLinkTest` but also requires that the test is run serially
 # (without any of the other test cases running in parallel). This can be
 # required e.g. if several tests cases write to the same file.
-function(addLinkAndDiscoverTestSerial basename)
+macro(addLinkAndDiscoverTestSerial basename)
   if (SINGLE_TEST_BINARY)
-      message(STATUS "SINGLE_TEST_BINARY is ON")
-      message(STATUS "QLEVER_TEST_SOURCES before ${QLEVER_TEST_SOURCES}")
-      message(STATUS "basename.cpp ${basename}.cpp")
-      message(STATUS "basename ${basename}")
-    set (QLEVER_TEST_SOURCES "${QLEVER_TEST_SOURCES} ${basename}.cpp" CACHE INTERNAL)
-    set (QLEVER_TEST_LIBRARIES "${QLEVER_TEST_LIBRARIES} ${ARGN}" CACHE INTERNAL)
-      message(STATUS "QLEVER_TEST_SOURCES after ${QLEVER_TEST_SOURCES}")
+    message(STATUS "SINGLE_TEST_BINARY is ON")
+    get_filename_component(CPP_FILE "${basename}.cpp" ABSOLUTE)
+    message(STATUS "sources before ${QLEVER_TEST_SOURCES}")
+    message(STATUS "CPP_FILE ${CPP_FILE}")
+    set (QLEVER_TEST_SOURCES "${QLEVER_TEST_SOURCES} ${CPP_FILE}")
+    #set (QLEVER_TEST_SOURCES "${QLEVER_TEST_SOURCES} transmogrify")
+    set (QLEVER_TEST_LIBRARIES "${QLEVER_TEST_LIBRARIES} ${ARGN}")
   else()
       message(STATUS "SINGLE_TEST_BINARY is OFF")
     addTest(${basename})
     linkAndDiscoverTestSerial(${basename} ${ARGN})
   endif()
-endfunction()
+endmacro()
 
 # Only compile and link the test, but do not run it.
 # Usage: Same as for the two functions above.
@@ -79,7 +79,15 @@ function(addAndLinkTest basename)
     linkTest(${basename} ${ARGN})
 endfunction()
 
+message(STATUS "QLEVER_TEST_SOURCES outside addSingleTestBinary: ${QLEVER_TEST_SOURCES}")
 function(addSingleTestBinary)
+    message(STATUS "QLEVER_TEST_SOURCES inside addSingleTestBinary: ${QLEVER_TEST_SOURCES}")
+    message(STATUS "QLEVER_TEST_LIBRARIES inside addSingleTestBinary: ${QLEVER_TEST_LIBRARIES}")
+    string(STRIP "${QLEVER_TEST_SOURCES}" QLEVER_TEST_SOURCES)
+    string(STRIP "${QLEVER_TEST_LIBRARIES}" QLEVER_TEST_LIBRARIES)
+    separate_arguments(QLEVER_TEST_SOURCES)
+    separate_arguments(QLEVER_TEST_LIBRARIES)
+    message(STATUS "QLEVER_TEST_SOURCES inside addSingleTestBinary: ${QLEVER_TEST_SOURCES}")
   add_executable(QLeverAllUnitTestsMain ${QLEVER_TEST_SOURCES})
   target_link_libraries(QLeverAllUnitTestsMain ${QLEVER_TEST_LIBRARIES})
   gtest_discover_tests(QLeverAllUnitTestsMain  QLeverAllUnitTestsMain PROPERTIES RUN_SERIAL
@@ -282,4 +290,9 @@ addLinkAndDiscoverTest(ResetWhenMovedTest)
 
 addLinkAndDiscoverTest(TimerTest absl::strings)
 
+
 addLinkAndDiscoverTest(AlgorithmTest)
+if (SINGLE_TEST_BINARY)
+    message(STATUS "only using a single binary for all unit tests")
+    addSingleTestBinary()
+endif()

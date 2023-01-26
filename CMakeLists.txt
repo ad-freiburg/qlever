@@ -274,10 +274,6 @@ enable_testing()
 option(SINGLE_TEST_BINARY "Link all unit tests into a single binary. This is useful e.g. for code coverage tools" OFF)
 add_subdirectory(test)
 
-if (SINGLE_TEST_BINARY)
-    message(STATUS "only using a single binary for all unit tests")
-  addSingleTestBinary()
-endif()
 
 configure_file(src/web/index.html index.html)
 configure_file(src/web/style.css style.css)
