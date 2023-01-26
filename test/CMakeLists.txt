@@ -41,7 +41,7 @@ endfunction()
 # `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
 # additional libraries against which the test case has to be linked can be specified as
 # additional arguments after the `basename`
-function(addLinkAndDiscoverTest basename)
+macro(addLinkAndDiscoverTest basename)
   if (SINGLE_TEST_BINARY)
       message(STATUS "SINGLE_TEST_BINARY is ON")
       get_filename_component(CPP_FILE "${basename}.cpp" ABSOLUTE)
@@ -55,7 +55,7 @@ function(addLinkAndDiscoverTest basename)
     linkAndDiscoverTest(${basename} ${ARGN})
   endif()
 
-endfunction()
+endmacro()
 
 # Usage: `addAndLinkTestSerial(basename, [additionalLibraries...]`
 # Similar to `addAndLinkTest` but also requires that the test is run serially
