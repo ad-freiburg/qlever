@@ -22,6 +22,48 @@
 #include "../test/util/IdTableHelpers.h"
 #include "../test/util/JoinHelpers.h"
 
+/*
+ * @brief Creates an overlap between the join columns of the IdTables, by
+ *  randomly overiding entries of the smaller table with entries of the bigger
+ *  table.
+ *
+ * @param smallerTable The table, where join column entries will be
+ *  overwritten.
+ * @param biggerTable The table, where join column entries will be copied from.
+ * @param probabilityToCreateOverlap The height of the probability for any
+ *  join column entry of smallerTable to be overwritten by a random join column
+ *  entry of biggerTable.
+ */
+void createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
+    const IdTableAndJoinColumn& biggerTable,
+    const double probabilityToCreateOverlap) {
+  // For easier reading.
+  const size_t smallerTableJoinColumn = (*smallerTable).joinColumn;
+  const size_t smallerTableNumberRows = (*smallerTable).idTable.numRows();
+
+  // The probability for creating an overlap must be in (0,100], any other
+  // values make no sense.
+  AD_CHECK(0 < probabilityToCreateOverlap && probabilityToCreateOverlap <= 100);
+
+  // Is the bigger table actually bigger?
+  AD_CHECK(smallerTableNumberRows <= biggerTable.idTable.numRows());
+
+  // Creating the generator for choosing a random row in the bigger table.
+  SlowRandomIntGenerator<size_t> randomBiggerTableRow(0, biggerTable.idTable.numRows() - 1);
+
+  // Generator for checking, if an overlap should be created.
+  RandomDoubleGenerator randomDouble(0, 100);
+
+  for(size_t i = 0; i < smallerTableNumberRows; i++) {
+    // Only do anything, if the probability is right.
+    if (randomDouble() <= probabilityToCreateOverlap) {
+      // Create an overlap.
+      (*smallerTable).idTable(i, smallerTableJoinColumn) =
+        biggerTable.idTable(randomBiggerTableRow(), biggerTable.joinColumn);
+    }
+  }
+}
+
 // Benchmarks for unsorted and sorted tables, with and without overlapping values in
 // IdTables. Done with normal join and hash join.
 void BM_UnsortedAndSortedIdTable(BenchmarkRecords* records) {
@@ -75,9 +117,8 @@ void BM_UnsortedAndSortedIdTable(BenchmarkRecords* records) {
   // Benchmarking with overlapping IdTables.
 
   // We make the tables overlapping and then randomly shuffle them.
-  for (size_t i = 0; i*20 < NUMBER_ROWS; i++) {
-    a.idTable(i*10, 0) = b.idTable(i*20, 0);
-  }
+  createOverlapRandomly(&a, b, 10.0);
+
   randomShuffle(a.idTable.begin(), a.idTable.end());
   randomShuffle(b.idTable.begin(), b.idTable.end());
 
