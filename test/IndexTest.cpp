@@ -31,13 +31,13 @@ auto makeGetId = [](const IndexImpl& index) {
 // on the `permutation` (e.g. a fixed P and S in the PSO permutation)
 // of the `index` and checks whether the result of the
 // scan matches `expected`.
-auto makeTestWidthOne = [](const IndexImpl& index) {
+auto makeTestScanWidthOne = [](const IndexImpl& index) {
   return [&index](const std::string& c0, const std::string& c1,
                   const auto& permutation,
                   const std::vector<std::vector<Id>>& expected) {
-    IdTable wol(1, makeAllocator());
-    index.scan(c0, c1, &wol, permutation);
-    ASSERT_EQ(wol, makeIdTableFromIdVector(expected));
+    IdTable result(1, makeAllocator());
+    index.scan(c0, c1, &result, permutation);
+    ASSERT_EQ(result, makeIdTableFromIdVector(expected));
   };
 };
 
@@ -45,7 +45,7 @@ auto makeTestWidthOne = [](const IndexImpl& index) {
 // on the `permutation` (e.g. a fixed P in the PSO permutation)
 // of the `index` and checks whether the result of the
 // scan matches `expected`.
-auto makeTestWidthTwo = [](const IndexImpl& index) {
+auto makeTestScanWidthTwo = [](const IndexImpl& index) {
   return [&index](const std::string& c0, const auto& permutation,
                   const std::vector<std::vector<Id>>& expected) {
     IdTable wol(2, makeAllocator());
@@ -57,9 +57,9 @@ auto makeTestWidthTwo = [](const IndexImpl& index) {
 TEST(IndexTest, createFromTurtleTest) {
   {
     std::string kb =
-        "<a> <b> <c> . \n"
-        "<a> <b> <c2> .\n"
-        "<a> <b2> <c> .\n"
+        "<a>  <b>  <c> . \n"
+        "<a>  <b>  <c2> .\n"
+        "<a>  <b2> <c> .\n"
         "<a2> <b2> <c2> .";
     const IndexImpl& index = getQec(kb)->getIndex().getImpl();
 
@@ -90,7 +90,7 @@ TEST(IndexTest, createFromTurtleTest) {
 
     // Relation b
     // Pair index
-    auto testTwo = makeTestWidthTwo(index);
+    auto testTwo = makeTestScanWidthTwo(index);
     testTwo("<b>", index.PSO(), {{a, c}, {a, c2}});
     std::vector<std::array<Id, 2>> buffer;
 
@@ -104,19 +104,19 @@ TEST(IndexTest, createFromTurtleTest) {
       // contain the combination of the ids. In this example <b2> is the largest
       // predicate that occurs and <c2> is larger than the largest subject that
       // appears with <b2>.
-      auto testOne = makeTestWidthOne(index);
+      auto testOne = makeTestScanWidthOne(index);
       testOne("<b2>", "<c2>", index.PSO(), {});
     }
   }
   {
     std::string kb =
-        "<a>\t<is-a>\t<1>\t.\n"
-        "<a>\t<is-a>\t<2>\t.\n"
-        "<a>\t<is-a>\t<0>\t.\n"
-        "<b>\t<is-a>\t<3>\t.\n"
-        "<b>\t<is-a>\t<0>\t.\n"
-        "<c>\t<is-a>\t<1>\t.\n"
-        "<c>\t<is-a>\t<2>\t.\n";
+        "<a> <is-a> <1> .\n"
+        "<a> <is-a> <2> .\n"
+        "<a> <is-a> <0> .\n"
+        "<b> <is-a> <3> .\n"
+        "<b> <is-a> <0> .\n"
+        "<c> <is-a> <1> .\n"
+        "<c> <is-a> <2> .\n";
 
     const IndexImpl& index = getQec(kb)->getIndex().getImpl();
 
@@ -138,7 +138,7 @@ TEST(IndexTest, createFromTurtleTest) {
     ASSERT_TRUE(index.POS().metaData().col0IdExists(isA));
     ASSERT_FALSE(index.POS().metaData().getMetaData(isA).isFunctional());
 
-    auto testTwo = makeTestWidthTwo(index);
+    auto testTwo = makeTestScanWidthTwo(index);
     testTwo("<is-a>", index.PSO(),
             {{a, zero},
              {a, one},
@@ -163,11 +163,11 @@ TEST(IndexTest, createFromTurtleTest) {
 TEST(CreatePatterns, createPatterns) {
   {
     std::string kb =
-        "<a>\t<b>\t<c>\t.\n"
-        "<a>\t<b>\t<c2>\t.\n"
-        "<a>\t<b2>\t<c>\t.\n"
-        "<a2>\t<b2>\t<c2>\t.\n"
-        "<a2>\t<d>\t<c2>\t.";
+        "<a>  <b>  <c>  .\n"
+        "<a>  <b>  <c2> .\n"
+        "<a>  <b2> <c>  .\n"
+        "<a2> <b2> <c2> .\n"
+        "<a2> <d>  <c2> .";
 
     const IndexImpl& index = getQec(kb)->getIndex().getImpl();
 
@@ -206,10 +206,10 @@ TEST(CreatePatterns, createPatterns) {
 
 TEST(IndexTest, createFromOnDiskIndexTest) {
   std::string kb =
-      "<a>\t<b>\t<c>\t.\n"
-      "<a>\t<b>\t<c2>\t.\n"
-      "<a>\t<b2>\t<c>\t.\n"
-      "<a2>\t<b2>\t<c2>\t.";
+      "<a>  <b>  <c>  .\n"
+      "<a>  <b>  <c2> .\n"
+      "<a>  <b2> <c>  .\n"
+      "<a2> <b2> <c2> .";
   const IndexImpl& index = getQec(kb)->getIndex().getImpl();
 
   auto getId = makeGetId(index);
@@ -250,7 +250,7 @@ TEST(IndexTest, scanTest) {
     Id c = getId("<c>");
     Id a2 = getId("<a2>");
     Id c2 = getId("<c2>");
-    auto testTwo = makeTestWidthTwo(index);
+    auto testTwo = makeTestScanWidthTwo(index);
 
     testTwo("<b>", index._PSO, {{a, c}, {a, c2}});
     testTwo("<x>", index._PSO, {});
@@ -259,7 +259,7 @@ TEST(IndexTest, scanTest) {
     testTwo("<x>", index._POS, {});
     testTwo("<c>", index._POS, {});
 
-    auto testOne = makeTestWidthOne(index);
+    auto testOne = makeTestScanWidthOne(index);
 
     testOne("<b>", "<a>", index._PSO, {{c}, {c2}});
     testOne("<b>", "<c>", index._PSO, {});
@@ -286,7 +286,7 @@ TEST(IndexTest, scanTest) {
     Id two = getId("<2>");
     Id three = getId("<3>");
 
-    auto testTwo = makeTestWidthTwo(index);
+    auto testTwo = makeTestScanWidthTwo(index);
     testTwo("<is-a>", index._PSO,
             {{{a, zero},
               {a, one},
@@ -304,7 +304,7 @@ TEST(IndexTest, scanTest) {
              {two, c},
              {three, b}});
 
-    auto testWidthOne = makeTestWidthOne(index);
+    auto testWidthOne = makeTestScanWidthOne(index);
 
     testWidthOne("<is-a>", "<0>", index._POS, {{a}, {b}});
     testWidthOne("<is-a>", "<1>", index._POS, {{a}, {c}});
