@@ -22,14 +22,14 @@
 #include "util/Random.h"
 #include "util/SourceLocation.h"
 
-ad_utility::AllocatorWithLimit<Id>& allocator() {
+inline ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
           std::numeric_limits<size_t>::max())};
   return a;
 }
 
-auto I = [](const auto& id) {
+inline auto I = [](const auto& id) {
   return Id::makeFromVocabIndex(VocabIndex::make(id));
 };
 
@@ -41,7 +41,7 @@ using VectorTable = std::vector<std::vector<size_t>>;
  * Return an 'IdTable' with the given 'tableContent'. all rows must have the
  * same length.
  */
-IdTable makeIdTableFromVector(const VectorTable& tableContent) {
+inline IdTable makeIdTableFromVector(const VectorTable& tableContent) {
   AD_CHECK(!tableContent.empty());
   IdTable result{tableContent[0].size(), allocator()};
 
@@ -78,7 +78,7 @@ IdTable makeIdTableFromVector(const VectorTable& tableContent) {
  * @param l Ignore it. It's only here for being able to make better messages,
  *  if a IdTable fails the comparison.
  */
-void compareIdTableWithExpectedContent(
+inline void compareIdTableWithExpectedContent(
     const IdTable& table, const IdTable& expectedContent,
     const bool resultMustBeSortedByJoinColumn = false,
     const size_t joinColumn = 0,
