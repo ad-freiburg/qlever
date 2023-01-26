@@ -71,9 +71,9 @@ class IndexMetaData {
  public:
   typedef M MapType;
   using value_type = typename MapType::value_type;
-  using AddType = CompressedRelationMetaData;
-  using GetType = const CompressedRelationMetaData&;
-  using BlocksType = std::vector<CompressedBlockMetaData>;
+  using AddType = CompressedRelationMetadata;
+  using GetType = const CompressedRelationMetadata&;
+  using BlocksType = std::vector<CompressedBlockMetadata>;
 
   // Private member variables.
  private:
@@ -124,9 +124,9 @@ class IndexMetaData {
   // from RAM-based (e.g. hashMap based sparse) ones at compile time, this is
   // done in the following block.
   using MetaWrapperMmap =
-      MetaDataWrapperDense<ad_utility::MmapVector<CompressedRelationMetaData>>;
+      MetaDataWrapperDense<ad_utility::MmapVector<CompressedRelationMetadata>>;
   using MetaWrapperMmapView = MetaDataWrapperDense<
-      ad_utility::MmapVectorView<CompressedRelationMetaData>>;
+      ad_utility::MmapVectorView<CompressedRelationMetadata>>;
   template <typename T>
   struct IsMmapBased {
     static const bool value = std::is_same<MetaWrapperMmap, T>::value ||
@@ -225,11 +225,11 @@ ad_utility::File& operator<<(ad_utility::File& f,
 
 // aliases for easier use in Index class
 using MetaWrapperMmap =
-    MetaDataWrapperDense<ad_utility::MmapVector<CompressedRelationMetaData>>;
+    MetaDataWrapperDense<ad_utility::MmapVector<CompressedRelationMetadata>>;
 using MetaWrapperMmapView = MetaDataWrapperDense<
-    ad_utility::MmapVectorView<CompressedRelationMetaData>>;
+    ad_utility::MmapVectorView<CompressedRelationMetadata>>;
 using MetaWrapperHashMap =
-    MetaDataWrapperHashMap<ad_utility::HashMap<Id, CompressedRelationMetaData>>;
+    MetaDataWrapperHashMap<ad_utility::HashMap<Id, CompressedRelationMetadata>>;
 using IndexMetaDataHmap = IndexMetaData<MetaWrapperHashMap>;
 using IndexMetaDataMmap = IndexMetaData<MetaWrapperMmap>;
 using IndexMetaDataMmapView = IndexMetaData<MetaWrapperMmapView>;
