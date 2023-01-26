@@ -106,7 +106,7 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
                     m._multiplicityCol1);
     // Scan for all distinct `col0` and check that we get the expected result.
     IdTable table{2, ad_utility::testing::makeAllocator()};
-    CompressedRelationMetaData::scan(metaData[i], blocks,
+    CompressedRelationMetadata::scan(metaData[i], blocks,
                                      testCaseName + std::to_string(blocksize),
                                      file, &table, timer);
     const auto& col1And2 = inputs[i].col1And2_;
@@ -120,7 +120,7 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
 
     auto scanAndCheck = [&]() {
       IdTable tableWidthOne{1, ad_utility::testing::makeAllocator()};
-      CompressedRelationMetaData::scan(metaData[i], V(lastCol1Id), blocks, file,
+      CompressedRelationMetadata::scan(metaData[i], V(lastCol1Id), blocks, file,
                                        &tableWidthOne, timer);
       checkThatTablesAreEqual(col3, tableWidthOne);
     };
@@ -235,8 +235,8 @@ TEST(CompressedRelationWriter, MultiplicityCornerCases) {
             CompressedRelationWriter::computeMultiplicity(plusOne, veryLarge));
 }
 
-TEST(CompressedRelationMetaData, GettersAndSetters) {
-  CompressedRelationMetaData m;
+TEST(CompressedRelationMetadata, GettersAndSetters) {
+  CompressedRelationMetadata m;
   m.setCol1Multiplicity(2.0f);
   ASSERT_FLOAT_EQ(2.0f, m.getCol1Multiplicity());
   ASSERT_FLOAT_EQ(2.0f, m._multiplicityCol1);

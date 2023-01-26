@@ -509,7 +509,7 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   size_t from = 0;
   std::optional<Id> currentRel;
   BufferedIdTable buffer{ad_utility::BufferedVector<Id>{
-      THRESHOLD_RELATION_CREATION, "fileName1.tmp.mmap-buffer"}};
+      THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.mmap-buffer"}};
   size_t distinctCol1 = 0;
   Id lastLhs = ID_NO_VALUE;
   uint64_t totalNumTriples = 0;

@@ -73,14 +73,14 @@ cppcoro::generator<std::array<Id, 3>> TriplesView(
   // blocks, making the limit here unnecessary.
   using Tuple = std::array<Id, 2>;
   auto tupleAllocator = allocator.as<Tuple>();
-  IdTable col2And3{2, allocator};
+  IdTable col1And2{2, allocator};
   for (auto& [begin, end] : allowedRanges) {
     for (auto it = begin; it != end; ++it) {
-      col2And3.clear();
+      col1And2.clear();
       Id id = it.getId();
       // TODO<joka921> We could also pass a timeout pointer here.
-      permutation.scan(id, &col2And3);
-      for (const auto& row : col2And3) {
+      permutation.scan(id, &col1And2);
+      for (const auto& row : col1And2) {
         std::array<Id, 3> triple{id, row[0], row[1]};
         if (isTripleIgnored(triple)) [[unlikely]] {
           continue;

@@ -65,7 +65,7 @@ class PermutationImpl {
       return;
     }
     const auto& metaData = _meta.getMetaData(col0Id);
-    return CompressedRelationMetaData::scan(metaData, _meta.blockData(),
+    return CompressedRelationMetadata::scan(metaData, _meta.blockData(),
                                             _readableName, _file, result,
                                             std::move(timer));
   }
@@ -80,7 +80,7 @@ class PermutationImpl {
     }
     const auto& metaData = _meta.getMetaData(col0Id);
 
-    return CompressedRelationMetaData::scan(metaData, col1Id, _meta.blockData(),
+    return CompressedRelationMetadata::scan(metaData, col1Id, _meta.blockData(),
                                             _file, result, timer);
   }
 

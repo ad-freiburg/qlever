@@ -36,8 +36,8 @@ using BufferedIdTable =
 // block.
 using SmallRelationsBuffer = columnBasedIdTable::IdTable<Id, NumColumns>;
 
-// Sometimes we do not read/decompress  all the columns, so we store in a
-// dynamic `IdTable`.
+// Sometimes we do not read/decompress  all the columns of a block, so we have
+// to use a dynamic `IdTable`.
 using DecompressedBlock = columnBasedIdTable::IdTable<Id, 0>;
 
 // After compression the columns have different sizes, so we cannot use an
@@ -45,7 +45,7 @@ using DecompressedBlock = columnBasedIdTable::IdTable<Id, 0>;
 using CompressedBlock = std::vector<std::vector<char>>;
 
 // The metadata of a compressed block of ID triples in an index permutation.
-struct CompressedBlockMetaData {
+struct CompressedBlockMetadata {
   // Since we have column-based indices, the two columns of each block are
   // stored separately (but adjacently).
   struct OffsetAndCompressedSize {
@@ -64,17 +64,17 @@ struct CompressedBlockMetaData {
   Id _col1LastId;
 
   // Two of these are equal if all members are equal.
-  bool operator==(const CompressedBlockMetaData&) const = default;
+  bool operator==(const CompressedBlockMetadata&) const = default;
 };
 
 // Serialization of the `OffsetAndcompressedSize` subclass.
-AD_SERIALIZE_FUNCTION(CompressedBlockMetaData::OffsetAndCompressedSize) {
+AD_SERIALIZE_FUNCTION(CompressedBlockMetadata::OffsetAndCompressedSize) {
   serializer | arg._offsetInFile;
   serializer | arg._compressedSize;
 }
 
 // Serialization of the block metadata.
-AD_SERIALIZE_FUNCTION(CompressedBlockMetaData) {
+AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
   serializer | arg._offsetsAndCompressedSize;
   serializer | arg._numRows;
   serializer | arg._col0FirstId;
@@ -86,7 +86,7 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetaData) {
 // The metadata of a whole compressed "relation", where relation refers to a
 // maximal sequence of triples with equal first component (e.g., P for the PSO
 // permutation).
-struct CompressedRelationMetaData {
+struct CompressedRelationMetadata {
   Id _col0Id;
   size_t _numRows;
   float _multiplicityCol1;  // E.g., in PSO this is the multiplicity of "S".
@@ -105,7 +105,7 @@ struct CompressedRelationMetaData {
   // triple). This might change in the future when we might also store
   // patterns and functional relations. Factor out this magic constant already
   // now to make the code more readable.
-  static constexpr size_t numColumns() { return 2; }
+  static constexpr size_t numColumns() { return NumColumns; }
 
   // Setters and getters for the multiplicities.
   float getCol1Multiplicity() const { return _multiplicityCol1; }
@@ -113,16 +113,17 @@ struct CompressedRelationMetaData {
   void setCol1Multiplicity(float mult) { _multiplicityCol1 = mult; }
   void setCol2Multiplicity(float mult) { _multiplicityCol2 = mult; }
 
-  bool isFunctional() const { return _multiplicityCol1 == 1.0; }
+  bool isFunctional() const { return _multiplicityCol1 == 1.0f; }
 
   // Two of these are equal if all members are equal.
-  bool operator==(const CompressedRelationMetaData&) const = default;
+  bool operator==(const CompressedRelationMetadata&) const = default;
 
   /**
    * @brief For a permutation XYZ, retrieve all YZ for a given X.
    *
-   * @param metaData The metadata of the given X.
-   * @param blocks The metadata of the on-disk blocks for the given permutation.
+   * @param metadata The metadata of the given X.
+   * @param blockMetadata The metadata of the on-disk blocks for the given
+   * permutation.
    * @param permutationName A human readable name that identifies the
    *          permutation. It is used to uniquely identify a cache for recently
    *          decompressed blocks.
@@ -135,8 +136,8 @@ struct CompressedRelationMetaData {
    * The arguments `metaData`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).
    */
-  static void scan(const CompressedRelationMetaData& metaData,
-                   const std::vector<CompressedBlockMetaData> blocks,
+  static void scan(const CompressedRelationMetadata& metadata,
+                   const vector<CompressedBlockMetadata>& blockMetadata,
                    const std::string& permutationName, ad_utility::File& file,
                    IdTable* result,
                    ad_utility::SharedConcurrentTimeoutTimer timer);
@@ -156,8 +157,8 @@ struct CompressedRelationMetaData {
    * The arguments `metaData`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).
    */
-  static void scan(const CompressedRelationMetaData& metaData, Id col1Id,
-                   const std::vector<CompressedBlockMetaData> blocks,
+  static void scan(const CompressedRelationMetadata& metaData, Id col1Id,
+                   const vector<CompressedBlockMetadata>& blocks,
                    ad_utility::File& file, IdTable* result,
                    ad_utility::SharedConcurrentTimeoutTimer timer = nullptr);
 
@@ -166,7 +167,7 @@ struct CompressedRelationMetaData {
   // If `columnIndices` is `nullopt`, then all columns of the block are read,
   // else only the specified columns are read.
   static CompressedBlock readCompressedBlockFromFile(
-      const CompressedBlockMetaData& blockMetaData, ad_utility::File& file,
+      const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
       std::optional<std::vector<size_t>> columnIndices);
 
   // Decompress the `compressedBlock`. The number of rows that the block will
@@ -197,12 +198,12 @@ struct CompressedRelationMetaData {
   // If `columnIndices` is `nullopt`, then all columns of the block are read,
   // else only the specified columns are read.
   static DecompressedBlock readAndDecompressBlock(
-      const CompressedBlockMetaData& blockMetaData, ad_utility::File& file,
+      const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
       std::optional<std::vector<size_t>> columnIndices);
 };
 
 // Serialization of the compressed "relation" meta data.
-AD_SERIALIZE_FUNCTION(CompressedRelationMetaData) {
+AD_SERIALIZE_FUNCTION(CompressedRelationMetadata) {
   serializer | arg._col0Id;
   serializer | arg._numRows;
   serializer | arg._multiplicityCol1;
@@ -215,9 +216,9 @@ AD_SERIALIZE_FUNCTION(CompressedRelationMetaData) {
 class CompressedRelationWriter {
  private:
   ad_utility::File _outfile;
-  std::vector<CompressedRelationMetaData> _metaDataBuffer;
-  std::vector<CompressedBlockMetaData> _blockBuffer;
-  CompressedBlockMetaData _currentBlockData;
+  std::vector<CompressedRelationMetadata> _metaDataBuffer;
+  std::vector<CompressedBlockMetadata> _blockBuffer;
+  CompressedBlockMetadata _currentBlockData;
   SmallRelationsBuffer _buffer;
   size_t _numBytesPerBlock;
 
@@ -294,7 +295,7 @@ class CompressedRelationWriter {
 
   // Compress the `column` and write it to the `_outfile`. Return the offset and
   // size of the compressed column in the `_outfile`.
-  CompressedBlockMetaData::OffsetAndCompressedSize compressAndWriteColumn(
+  CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
       std::span<const Id> column);
 };
 

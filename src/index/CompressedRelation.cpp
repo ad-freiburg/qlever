@@ -27,36 +27,36 @@ auto& globalBlockCache() {
 }
 
 // ____________________________________________________________________________
-void CompressedRelationMetaData::scan(
-    const CompressedRelationMetaData& metaData,
-    const std::vector<CompressedBlockMetaData> blocks,
+void CompressedRelationMetadata::scan(
+    const CompressedRelationMetadata& metadata,
+    const vector<CompressedBlockMetadata>& blockMetadata,
     const std::string& permutationName, ad_utility::File& file, IdTable* result,
     ad_utility::SharedConcurrentTimeoutTimer timer) {
-  AD_CHECK(result->numColumns() == 2);
+  AD_CHECK(result->numColumns() == NumColumns);
 
   // get all the blocks where _col0FirstId <= col0Id <= _col0LastId
   struct KeyLhs {
     Id _col0FirstId;
     Id _col0LastId;
   };
-  Id col0Id = metaData._col0Id;
+  Id col0Id = metadata._col0Id;
   // TODO<joka921, Clang16> Use a structured binding. Structured bindings are
   // currently not supported by clang when using OpenMP because clang internally
   // transforms the `#pragma`s into lambdas, and capturing structured bindings
   // is only supported in clang >= 16.
-  decltype(blocks.begin()) beginBlock, endBlock;
+  decltype(blockMetadata.begin()) beginBlock, endBlock;
   std::tie(beginBlock, endBlock) = std::equal_range(
       // TODO<joka921> For some reason we can't use `std::ranges::equal_range`,
       // find out why. Note: possibly it has something to do with the limited
       // support of ranges in clang with versions < 16. Revisit this when
       // we use clang 16.
-      blocks.begin(), blocks.end(), KeyLhs{col0Id, col0Id},
+      blockMetadata.begin(), blockMetadata.end(), KeyLhs{col0Id, col0Id},
       [](const auto& a, const auto& b) {
         return a._col0FirstId < b._col0FirstId && a._col0LastId < b._col0LastId;
       });
 
   // The total size of the result is now known.
-  result->resize(metaData.getNofElements());
+  result->resize(metadata.getNofElements());
 
   // The position in the result to which the next block is being
   // decompressed.
@@ -82,7 +82,7 @@ void CompressedRelationMetaData::scan(
   AD_CHECK(!firstBlockIsIncomplete || (beginBlock == lastBlock));
   AD_CHECK(!lastBlockIsIncomplete);
   if (firstBlockIsIncomplete) {
-    AD_CHECK(metaData._offsetInBlock != std::numeric_limits<uint64_t>::max());
+    AD_CHECK(metadata._offsetInBlock != std::numeric_limits<uint64_t>::max());
   }
 
   // We have at most one block that is incomplete and thus requires trimming.
@@ -102,11 +102,11 @@ void CompressedRelationMetaData::scan(
                                   ._resultPointer;
 
     // Extract the part of the block that actually belongs to the relation
-    auto numElements = metaData._numRows;
+    auto numElements = metadata._numRows;
     AD_CHECK(uncompressedBuffer->numColumns() == numColumns());
     for (size_t i = 0; i < uncompressedBuffer->numColumns(); ++i) {
       const auto& inputCol = uncompressedBuffer->getColumn(i);
-      auto begin = inputCol.begin() + metaData._offsetInBlock;
+      auto begin = inputCol.begin() + metadata._offsetInBlock;
       auto resultColumn = result->getColumn(i);
       AD_CHECK(numElements <= spaceLeft);
       std::copy(begin, begin + numElements, resultColumn.begin());
@@ -166,9 +166,9 @@ void CompressedRelationMetaData::scan(
 }
 
 // _____________________________________________________________________________
-void CompressedRelationMetaData::scan(
-    const CompressedRelationMetaData& metaData, Id col1Id,
-    const std::vector<CompressedBlockMetaData> blocks, ad_utility::File& file,
+void CompressedRelationMetadata::scan(
+    const CompressedRelationMetadata& metaData, Id col1Id,
+    const vector<CompressedBlockMetadata>& blocks, ad_utility::File& file,
     IdTable* result, ad_utility::SharedConcurrentTimeoutTimer timer) {
   AD_CHECK(result->numColumns() == 1);
 
@@ -216,6 +216,7 @@ void CompressedRelationMetaData::scan(
     AD_CHECK(uncompressedBuffer.numColumns() == 2);
     const auto& col1Column = uncompressedBuffer.getColumn(0);
     const auto& col2Column = uncompressedBuffer.getColumn(1);
+    AD_CHECK(col1Column.size() == col2Column.size());
 
     // Find the range in the block, that belongs to the same relation `col0Id`
     bool containedInOnlyOneBlock =
@@ -281,7 +282,7 @@ void CompressedRelationMetaData::scan(
     for (; beginBlock < endBlock; ++beginBlock) {
       const auto& block = *beginBlock;
 
-      // Read the block serially, only read the second column
+      // Read the block serially, only read the second column.
       AD_CHECK(block._offsetsAndCompressedSize.size() == 2);
       CompressedBlock compressedBuffer =
           readCompressedBlockFromFile(block, file, std::vector{1ul});
@@ -321,10 +322,10 @@ float CompressedRelationWriter::computeMultiplicity(
     size_t numElements, size_t numDistinctElements) {
   bool functional = numElements == numDistinctElements;
   float multiplicity =
-      functional ? 1.0 : numElements / float(numDistinctElements);
+      functional ? 1.0f : numElements / float(numDistinctElements);
   // Ensure that the multiplicity is only exactly 1.0 if the relation is indeed
   // functional to prevent numerical instabilities;
-  if (!functional && multiplicity == 1.0) [[unlikely]] {
+  if (!functional && multiplicity == 1.0f) [[unlikely]] {
     multiplicity = std::nextafter(1.0f, 2.0f);
   }
   return multiplicity;
@@ -340,7 +341,7 @@ void CompressedRelationWriter::addRelation(Id col0Id,
   float multC2 = 42.42;
   // This sets everything except the _offsetInBlock, which will be set
   // explicitly below.
-  CompressedRelationMetaData metaData{col0Id, col1And2Ids.numRows(), multC1,
+  CompressedRelationMetadata metaData{col0Id, col1And2Ids.numRows(), multC1,
                                       multC2};
   auto sizeOfRelation =
       col1And2Ids.numRows() * col1And2Ids.numColumns() * sizeof(Id);
@@ -382,20 +383,20 @@ void CompressedRelationWriter::addRelation(Id col0Id,
 // _____________________________________________________________________________
 void CompressedRelationWriter::writeRelationToExclusiveBlocks(
     Id col0Id, const BufferedIdTable& data) {
-  const size_t numRowsPerBlock = _numBytesPerBlock / (2 * sizeof(Id));
+  const size_t numRowsPerBlock = _numBytesPerBlock / (NumColumns * sizeof(Id));
   AD_CHECK(numRowsPerBlock > 0);
-  AD_CHECK(data.numColumns() == 2);
+  AD_CHECK(data.numColumns() == NumColumns);
   const auto totalSize = data.numRows();
   for (size_t i = 0; i < totalSize; i += numRowsPerBlock) {
     size_t actualNumRowsPerBlock = std::min(numRowsPerBlock, totalSize - i);
 
-    std::vector<CompressedBlockMetaData::OffsetAndCompressedSize> offsets;
+    std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
     for (const auto& column : data.getColumns()) {
       offsets.push_back(compressAndWriteColumn(
           {column.begin() + i, column.begin() + i + actualNumRowsPerBlock}));
     }
 
-    _blockBuffer.push_back(CompressedBlockMetaData{
+    _blockBuffer.push_back(CompressedBlockMetadata{
         std::move(offsets), actualNumRowsPerBlock, col0Id, col0Id, data[i][0],
         data[i + actualNumRowsPerBlock - 1][0]});
   }
@@ -407,7 +408,7 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
     return;
   }
 
-  AD_CHECK(_buffer.numColumns() == 2);
+  AD_CHECK(_buffer.numColumns() == NumColumns);
   // Convert from bytes to number of ID pairs.
   size_t numRows = _buffer.numRows();
 
@@ -425,13 +426,13 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
   // correctly by `addRelation()`.
   _blockBuffer.push_back(_currentBlockData);
   // Reset the data of the current block.
-  _currentBlockData = CompressedBlockMetaData{};
+  _currentBlockData = CompressedBlockMetadata{};
   _buffer.clear();
 }
 
 // _____________________________________________________________________________
-CompressedBlock CompressedRelationMetaData::readCompressedBlockFromFile(
-    const CompressedBlockMetaData& blockMetaData, ad_utility::File& file,
+CompressedBlock CompressedRelationMetadata::readCompressedBlockFromFile(
+    const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
     std::optional<std::vector<size_t>> columnIndices) {
   // If we have no column indices specified, we read all the columns.
   // TODO<joka921> This should be some kind of `smallVector` for performance
@@ -458,7 +459,7 @@ CompressedBlock CompressedRelationMetaData::readCompressedBlockFromFile(
 }
 
 // ____________________________________________________________________________
-DecompressedBlock CompressedRelationMetaData::decompressBlock(
+DecompressedBlock CompressedRelationMetadata::decompressBlock(
     const CompressedBlock& compressedBlock, size_t numRowsToRead) {
   DecompressedBlock decompressedBlock{compressedBlock.size()};
   decompressedBlock.resize(numRowsToRead);
@@ -470,7 +471,7 @@ DecompressedBlock CompressedRelationMetaData::decompressBlock(
 }
 
 // ____________________________________________________________________________
-void CompressedRelationMetaData::decompressBlockToExistingIdTable(
+void CompressedRelationMetadata::decompressBlockToExistingIdTable(
     const CompressedBlock& compressedBlock, size_t numRowsToRead,
     IdTable& table, size_t offsetInTable) {
   AD_CHECK(table.numRows() >= offsetInTable + numRowsToRead);
@@ -485,7 +486,7 @@ void CompressedRelationMetaData::decompressBlockToExistingIdTable(
 
 // ____________________________________________________________________________
 template <typename Iterator>
-void CompressedRelationMetaData::decompressColumn(
+void CompressedRelationMetadata::decompressColumn(
     const std::vector<char>& compressedBlock, size_t numRowsToRead,
     Iterator iterator) {
   auto numBytesActuallyRead = ZstdWrapper::decompressToBuffer(
@@ -496,8 +497,8 @@ void CompressedRelationMetaData::decompressColumn(
 }
 
 // _____________________________________________________________________________
-DecompressedBlock CompressedRelationMetaData::readAndDecompressBlock(
-    const CompressedBlockMetaData& blockMetaData, ad_utility::File& file,
+DecompressedBlock CompressedRelationMetadata::readAndDecompressBlock(
+    const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
     std::optional<std::vector<size_t>> columnIndices) {
   CompressedBlock compressedColumns = readCompressedBlockFromFile(
       blockMetaData, file, std::move(columnIndices));
@@ -506,7 +507,7 @@ DecompressedBlock CompressedRelationMetaData::readAndDecompressBlock(
 }
 
 // _____________________________________________________________________________
-CompressedBlockMetaData::OffsetAndCompressedSize
+CompressedBlockMetadata::OffsetAndCompressedSize
 CompressedRelationWriter::compressAndWriteColumn(std::span<const Id> column) {
   std::vector<char> compressedBlock = ZstdWrapper::compress(
       (void*)(column.data()), column.size() * sizeof(column[0]));
