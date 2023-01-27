@@ -38,11 +38,16 @@ auto I = [](const auto& id) {
 using VectorTable = std::vector<std::vector<size_t>>;
 
 /*
- * Return an 'IdTable' with the given 'tableContent'. all rows must have the
+ * Return an 'IdTable' with the given 'tableContent' by applying the
+ * `transformation` to each of them. All rows of `tableContent` must have the
  * same length.
  */
-IdTable makeIdTableFromVector(const VectorTable& tableContent) {
-  AD_CHECK(!tableContent.empty());
+template <typename Transformation = decltype(I)>
+IdTable makeIdTableFromVector(const VectorTable& tableContent,
+                              Transformation transformation = {}) {
+  if (tableContent.empty()) {
+    return IdTable{allocator()};
+  }
   IdTable result{tableContent[0].size(), allocator()};
 
   // Copying the content into the table.
@@ -57,8 +62,27 @@ IdTable makeIdTableFromVector(const VectorTable& tableContent) {
     result.emplace_back();
 
     for (size_t c = 0; c < row.size(); c++) {
-      result(backIndex, c) = I(row[c]);
+      result(backIndex, c) = transformation(row[c]);
     }
+  }
+
+  return result;
+}
+
+IdTable makeIdTableFromIdVector(
+    const std::vector<std::vector<Id>>& tableContent) {
+  if (tableContent.empty()) {
+    return IdTable{allocator()};
+  }
+  IdTable result{tableContent[0].size(), allocator()};
+
+  // Copy the content into the table.
+  for (const auto& row : tableContent) {
+    // All rows of an IdTable must have the same length.
+    AD_CHECK(row.size() == result.numColumns());
+    // TODO<joka921> Can this be a single call to `push_back`
+    result.emplace_back();
+    std::ranges::copy(row, result.back().begin());
   }
 
   return result;
