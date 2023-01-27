@@ -256,7 +256,7 @@ class RowReferenceImpl {
     // `RowReference`. This assignment actually writes to the underlying table.
     static This& assignmentImpl(auto&& self, const auto& other) {
       if constexpr (numStaticColumns == 0) {
-        AD_CHECK(self.numColumns() == other.numColumns());
+        AD_CONTRACT_CHECK(self.numColumns() == other.numColumns());
       }
       for (size_t i = 0; i < self.numColumns(); ++i) {
         operatorBracketImpl(self, i) = other[i];

@@ -146,7 +146,7 @@ TEST(LocalVocab, propagation) {
 
   // Lambda that checks that `computeResult` throws an exception.
   auto checkThrow = [&](Operation& operation) -> void {
-    ASSERT_THROW(operation.getResult(), ad_semsearch::AbortException)
+    ASSERT_THROW(operation.getResult(), ad_utility::AbortException)
         << "Operation: " << operation.getDescriptor() << std::endl;
   };
 

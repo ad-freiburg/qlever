@@ -37,7 +37,7 @@ class VocabularyCreator {
     if (!ids.has_value()) {
       vocabulary.buildFromVector(words, vocabFilename_);
     } else {
-      AD_CHECK(words.size() == ids.value().size());
+      AD_CONTRACT_CHECK(words.size() == ids.value().size());
       std::vector<std::pair<std::string, uint64_t>> wordsAndIds;
       for (size_t i = 0; i < words.size(); ++i) {
         wordsAndIds.emplace_back(words[i], ids.value()[i]);
@@ -150,10 +150,10 @@ TEST(VocabularyOnDisk, ErrorOnNonAscendingIds) {
   std::vector<uint64_t> ids{2, 4, 3};
   VocabularyCreator creator1{"ErrorOnNonAscendingIds1"};
   ASSERT_THROW(creator1.createVocabularyImpl(words, ids),
-               ad_semsearch::Exception);
+               ad_utility::Exception);
   VocabularyCreator creator2{"ErrorOnNonAscendingIds2"};
   ASSERT_THROW(creator2.createVocabularyFromDiskImpl(words, ids),
-               ad_semsearch::Exception);
+               ad_utility::Exception);
 }
 
 TEST(VocabularyOnDisk, EmptyVocabulary) {

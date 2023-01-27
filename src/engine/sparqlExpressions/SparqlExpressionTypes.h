@@ -299,7 +299,7 @@ struct SpecializedFunction {
                     }) {
         return Function{}(std::forward<Operands>(operands)...);
       } else {
-        AD_CHECK(false);
+        AD_FAIL();
       }
     }
   }

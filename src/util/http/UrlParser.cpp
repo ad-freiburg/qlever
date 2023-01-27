@@ -82,8 +82,7 @@ UrlParser::UrlPathAndParameters UrlParser::parseGetRequestTarget(
     auto [iterator, isNewElement] =
         result._parameters.insert(std::move(paramAndValue));
     if (!isNewElement) {
-      AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-               "Duplicate HTTP parameter: " + iterator->first);
+      AD_THROW("Duplicate HTTP parameter: " + iterator->first);
     }
     if (next == std::string::npos) {
       break;
@@ -98,8 +97,7 @@ std::pair<std::string, std::string> UrlParser::parseSingleKeyValuePair(
     std::string_view input, bool urlDecode) {
   size_t posOfEq = input.find('=');
   if (posOfEq == std::string_view::npos) {
-    AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-             "Parameter without \"=\" in HTTP Request. " + std::string{input});
+    AD_THROW("Parameter without \"=\" in HTTP Request. " + std::string{input});
   }
   std::string param{applyPercentDecoding(input.substr(0, posOfEq), urlDecode)};
   std::string value{applyPercentDecoding(input.substr(posOfEq + 1), urlDecode)};
@@ -111,8 +109,8 @@ std::optional<std::string> UrlParser::getDecodedPathAndCheck(
     std::string_view target) noexcept {
   try {
     auto filename = parseGetRequestTarget(target)._path;
-    AD_CHECK(filename.starts_with('/'));
-    AD_CHECK(filename.find("..") == string::npos);
+    AD_CONTRACT_CHECK(filename.starts_with('/'));
+    AD_CONTRACT_CHECK(filename.find("..") == string::npos);
     return filename;
   } catch (...) {
     return std::nullopt;

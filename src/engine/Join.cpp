@@ -24,7 +24,7 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            std::shared_ptr<QueryExecutionTree> t2, size_t t1JoinCol,
            size_t t2JoinCol, bool keepJoinColumn)
     : Operation(qec) {
-  AD_CHECK(t1 && t2);
+  AD_CONTRACT_CHECK(t1 && t2);
   // Currently all join algorithms require both inputs to be sorted, so we
   // enforce the sorting here.
   t1 = QueryExecutionTree::createSortedTree(std::move(t1), {t1JoinCol});
@@ -127,7 +127,7 @@ void Join::computeResult(ResultTable* result) {
 
   LOG(DEBUG) << "Computing Join result..." << endl;
 
-  AD_CHECK(result);
+  AD_CONTRACT_CHECK(result);
 
   result->_idTable.setNumColumns(leftWidth + rightWidth - 1);
   result->_resultTypes.reserve(result->_idTable.numColumns());
@@ -199,7 +199,7 @@ VariableToColumnMap Join::computeVariableToColumnMap() const {
 size_t Join::getResultWidth() const {
   size_t res = _left->getResultWidth() + _right->getResultWidth() -
                (_keepJoinColumn ? 1 : 2);
-  AD_CHECK(res > 0);
+  AD_CONTRACT_CHECK(res > 0);
   return res;
 }
 
@@ -259,7 +259,7 @@ size_t Join::getCostEstimate() {
 void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
   LOG(DEBUG) << "Join by making multiple scans..." << endl;
   if (isFullScanDummy(_left)) {
-    AD_CHECK(!isFullScanDummy(_right))
+    AD_CONTRACT_CHECK(!isFullScanDummy(_right));
     _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
     result->_idTable.setNumColumns(_right->getResultWidth() + 2);
     result->_sortedBy = {2 + _rightJoinCol};
@@ -273,7 +273,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
     doComputeJoinWithFullScanDummyLeft(nonDummyRes->_idTable,
                                        &result->_idTable);
   } else {
-    AD_CHECK(!isFullScanDummy(_left))
+    AD_CONTRACT_CHECK(!isFullScanDummy(_left));
     _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
     result->_idTable.setNumColumns(_left->getResultWidth() + 2);
     result->_sortedBy = {_leftJoinCol};
@@ -329,8 +329,7 @@ Join::ScanMethodType Join::getScanMethod(
       scanMethod = scanLambda(OPS);
       break;
     default:
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-               "Found non-dummy scan where one was expected.");
+      AD_THROW("Found non-dummy scan where one was expected.");
   }
   return scanMethod;
 }

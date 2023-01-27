@@ -40,10 +40,9 @@ class PermutationImpl {
     try {
       _file.open(filename, "r");
     } catch (const std::runtime_error& e) {
-      AD_THROW(ad_semsearch::Exception::BAD_INPUT,
-               "Could not open the index file " + filename +
-                   " for reading. Please check that you have read access to "
-                   "this file. If it does not exist, your index is broken.");
+      AD_THROW("Could not open the index file " + filename +
+               " for reading. Please check that you have read access to "
+               "this file. If it does not exist, your index is broken.");
     }
     _meta.readFromFile(&_file);
     LOG(INFO) << "Registered " << _readableName

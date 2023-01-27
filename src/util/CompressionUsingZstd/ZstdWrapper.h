@@ -31,7 +31,7 @@ class ZstdWrapper {
     std::vector<T> result(knownOriginalSize / sizeof(T));
     auto compressedSize =
         ZSTD_decompress(result.data(), knownOriginalSize, src, numBytes);
-    AD_CHECK(compressedSize == knownOriginalSize);
+    AD_CONTRACT_CHECK(compressedSize == knownOriginalSize);
     return result;
   }
 

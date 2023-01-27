@@ -31,7 +31,7 @@ LocalVocab LocalVocab::clone() const {
   const size_t localVocabSize = this->size();
   localVocabClone.indexesToWordsMap_.resize(localVocabSize);
   for (const auto& [wordInMap, index] : localVocabClone.wordsToIndexesMap_) {
-    AD_CHECK(index.get() < localVocabSize);
+    AD_CONTRACT_CHECK(index.get() < localVocabSize);
     localVocabClone.indexesToWordsMap_[index.get()] = std::addressof(wordInMap);
   }
   // Return the clone.
@@ -89,8 +89,8 @@ const std::string& LocalVocab::getWord(LocalVocabIndex localVocabIndex) const {
 std::shared_ptr<LocalVocab> LocalVocab::mergeLocalVocabsIfOneIsEmpty(
     const std::shared_ptr<LocalVocab>& localVocab1,
     const std::shared_ptr<LocalVocab>& localVocab2) {
-  AD_CHECK(localVocab1 != nullptr);
-  AD_CHECK(localVocab2 != nullptr);
+  AD_CONTRACT_CHECK(localVocab1 != nullptr);
+  AD_CONTRACT_CHECK(localVocab2 != nullptr);
   bool isLocalVocab1Empty = localVocab1->empty();
   bool isLocalVocab2Empty = localVocab2->empty();
   if (!isLocalVocab1Empty && !isLocalVocab2Empty) {

@@ -19,7 +19,7 @@ template <size_t WIDTH>
 void getIdsFromVariableImpl(VectorWithMemoryLimit<ValueId>& result,
                             const ::Variable& variable,
                             EvaluationContext* context) {
-  AD_CHECK(result.empty());
+  AD_CONTRACT_CHECK(result.empty());
   const auto inputTable = context->_inputTable.asStaticView<WIDTH>();
 
   const size_t beginIndex = context->_beginIndex;
@@ -65,7 +65,7 @@ requires isConstantResult<T> cppcoro::generator<T> resultGenerator(
 template <SingleExpressionResult T>
 requires isVectorResult<T> cppcoro::generator<typename T::value_type>
 resultGenerator(T vector, size_t numItems) {
-  AD_CHECK(numItems == vector.size());
+  AD_CONTRACT_CHECK(numItems == vector.size());
   for (auto& element : vector) {
     co_yield std::move(element);
   }

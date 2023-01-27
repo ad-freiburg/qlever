@@ -38,19 +38,23 @@ auto I = [](const auto& id) {
 using VectorTable = std::vector<std::vector<int64_t>>;
 
 /*
- * Return an 'IdTable' with the given 'tableContent'. all rows must have the
+ * Return an 'IdTable' with the given 'tableContent' by applying the
+ * `transformation` to each of them. All rows of `tableContent` must have the
  * same length.
  */
 template <typename Transformation = decltype(I)>
 IdTable makeIdTableFromVector(const VectorTable& tableContent,
                               Transformation transformation = {}) {
-  AD_CHECK(!tableContent.empty());
+  if (tableContent.empty()) {
+    return IdTable{allocator()};
+  }
   IdTable result{tableContent[0].size(), allocator()};
 
   // Copying the content into the table.
   for (const auto& row : tableContent) {
-    AD_CHECK(row.size() == result.numColumns());  // All rows of an IdTable must
-                                                  // have the same length.
+    AD_CONTRACT_CHECK(row.size() ==
+                      result.numColumns());  // All rows of an IdTable must
+                                             // have the same length.
     const size_t backIndex{result.size()};
 
     // TODO<clang 16> This should be
@@ -61,6 +65,25 @@ IdTable makeIdTableFromVector(const VectorTable& tableContent,
     for (size_t c = 0; c < row.size(); c++) {
       result(backIndex, c) = transformation(row[c]);
     }
+  }
+
+  return result;
+}
+
+IdTable makeIdTableFromIdVector(
+    const std::vector<std::vector<Id>>& tableContent) {
+  if (tableContent.empty()) {
+    return IdTable{allocator()};
+  }
+  IdTable result{tableContent[0].size(), allocator()};
+
+  // Copy the content into the table.
+  for (const auto& row : tableContent) {
+    // All rows of an IdTable must have the same length.
+    AD_CONTRACT_CHECK(row.size() == result.numColumns());
+    // TODO<joka921> Can this be a single call to `push_back`
+    result.emplace_back();
+    std::ranges::copy(row, result.back().begin());
   }
 
   return result;

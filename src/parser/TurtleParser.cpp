@@ -642,7 +642,7 @@ bool TurtleStreamParser<T>::resetStateAndRead(
 
   // return to the state of the last backup
   this->_numBlankNodes = b._numBlankNodes;
-  AD_CHECK(this->_triples.size() >= b._numTriples);
+  AD_CONTRACT_CHECK(this->_triples.size() >= b._numTriples);
   this->_triples.resize(b._numTriples);
   this->_tok.reset(b._tokenizerPosition, b._tokenizerSize);
 
@@ -676,7 +676,7 @@ void TurtleMmapParser<T>::initialize(const string& filename) {
   LOG(INFO) << "mapping " << size << " bytes" << std::endl;
   const int fd = f.getFileDescriptor();
   void* ptr = mmap(nullptr, size, PROT_READ, MAP_SHARED, fd, 0);
-  AD_CHECK(ptr != MAP_FAILED);
+  AD_CONTRACT_CHECK(ptr != MAP_FAILED);
   f.close();
   _dataSize = size;
   _data = static_cast<char*>(ptr);

@@ -50,7 +50,7 @@ class ByteBufferReadSerializer {
 
   explicit ByteBufferReadSerializer(Storage data) : _data{std::move(data)} {};
   void serializeBytes(char* bytePointer, size_t numBytes) {
-    AD_CHECK(_iterator + numBytes <= _data.end());
+    AD_CONTRACT_CHECK(_iterator + numBytes <= _data.end());
     std::copy(_iterator, _iterator + numBytes, bytePointer);
     _iterator += numBytes;
   }

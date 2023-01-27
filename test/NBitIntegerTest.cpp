@@ -149,7 +149,7 @@ bool multiplicationWouldOverflow(int64_t a, int64_t b) {
 
   // The following checks assume that max + min = -1 (2s complement arithmetic)
   // Which is enforced by C++20 and has been true in practice for ages.
-  AD_CHECK(max + min == -1);
+  AD_CONTRACT_CHECK(max + min == -1);
 
   if (a < 0 && b > 0) {
     return a == -1 ? false : b > min / a;
