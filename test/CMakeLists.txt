@@ -190,7 +190,7 @@ addLinkAndDiscoverTest(MinusTest engine)
 addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 #addLinkAndDiscoverTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 
-addLinkAndDiscoverTest(SparqlAntlrParserTest parser sparqlExpressions engine)
+addLinkAndDiscoverTestSerial(SparqlAntlrParserTest parser sparqlExpressions engine)
 
 # The SerializerTest uses temporary files. The tests fail when multiple test
 # cases are run in parallel. This should be fixed by using distinct filenames
@@ -291,7 +291,7 @@ addLinkAndDiscoverTest(CheckUsePatternTrickTest parser engine)
 
 addLinkAndDiscoverTestSerial(RegexExpressionTest sparqlExpressions index engine)
 
-addLinkAndDiscoverTest(LocalVocabTest engine)
+addLinkAndDiscoverTestSerial(LocalVocabTest engine)
 
 addLinkAndDiscoverTest(HttpTest boost_iostreams http)
 
@@ -309,3 +309,5 @@ addLinkAndDiscoverTest(AlgorithmTest)
 #    message(STATUS "only using a single binary for all unit tests")
 #    addSingleTestBinary()
 #endif()
+
+addLinkAndDiscoverTest(CompressedRelationsTest index)
