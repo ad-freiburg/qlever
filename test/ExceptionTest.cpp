@@ -54,7 +54,7 @@ TEST(Exception, AD_CONTRACT_CHECK) {
     FAIL() << "No exception was thrown, but one was expected";
   } catch (const Exception& e) {
     ASSERT_THAT(e.what(),
-                ::testing::StartsWith("Assertion `v.empty()` failed. In file"));
+                ::testing::StartsWith("Assertion `v.empty()` failed. Likely cause:"));
     ASSERT_THAT(e.what(), ::testing::EndsWith(std::to_string(l.line() + 1)));
     checkContains(e, l.file_name());
   }
@@ -62,17 +62,17 @@ TEST(Exception, AD_CONTRACT_CHECK) {
 
 TEST(Exception, AD_UNSATISFIABLE) {
   ad_utility::source_location l;
-  ASSERT_NO_THROW(AD_UNSATISFIABLE(3 < 5));
+  ASSERT_NO_THROW(AD_CORRECTNESS_CHECK(3 < 5));
   std::vector<int> v;
-  ASSERT_NO_THROW(AD_UNSATISFIABLE(v.empty()));
+  ASSERT_NO_THROW(AD_CORRECTNESS_CHECK(v.empty()));
   try {
     v.push_back(27);
     l = ad_utility::source_location::current();
-    AD_UNSATISFIABLE(v.empty());
+    AD_CORRECTNESS_CHECK(v.empty());
     FAIL() << "No exception was thrown, but one was expected";
   } catch (const Exception& e) {
     ASSERT_THAT(e.what(),
-                ::testing::StartsWith("Assertion `v.empty()` failed. In file"));
+                ::testing::StartsWith("Assertion `v.empty()` failed. This indicates that"));
     ASSERT_THAT(e.what(), ::testing::EndsWith(std::to_string(l.line() + 1)));
     checkContains(e, l.file_name());
   }

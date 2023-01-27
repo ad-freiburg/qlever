@@ -88,7 +88,7 @@ class Exception : public std::exception {
     using namespace std::string_literals;                                                                                                                         \
     AD_THROW(                                                                                                                                                     \
         "Assertion `"s + std::string(__STRING(condition)) +                                                                                                       \
-        "` failed. This indicates that an internal property of a class or module was violated. This should never happen. Please report this to the developers"s); \
+        "` failed. Likely cause: A function was called with invalid arguments. Please report this to the developers."s); \
   }
 
 // Custom assert which does not abort but throws an exception. Use this for
@@ -105,7 +105,7 @@ inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
     // TODO<GCC13> Use `std::format`.
     AD_THROW(
         "Assertion `"s + std::string(message) +
-            "` failed. Likely cause: A function was called with invalid arguments. Please report this to the developers."s,
+            "` failed. This indicates that an internal property of a class or module was violated. This should never happen. Please report this to the developers"s,
         location);
   }
 }
