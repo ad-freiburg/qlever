@@ -169,7 +169,7 @@ void GroupBy::processGroup(
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
-    AD_CHECK(sparqlExpression::isConstantResult<T>);
+    AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<T>);
     if constexpr (isStrongId) {
       resultEntry = singleResult;
       *resultType = qlever::ResultType::KB;
@@ -392,7 +392,7 @@ bool GroupBy::computeGroupByForSingleIndexScan(ResultTable* result) {
       const auto& var = varAndDistinctness.value().variable_;
       auto permutation =
           getPermutationForThreeVariableTriple(*_subtree, var, var);
-      AD_CHECK(permutation.has_value());
+      AD_CONTRACT_CHECK(permutation.has_value());
       result->_idTable(0, 0) = Id::makeFromInt(
           getIndex().getImpl().numDistinctCol0(permutation.value()).normal_);
     } else {

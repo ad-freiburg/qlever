@@ -32,8 +32,8 @@ class AbortException : public std::exception {
 };
 
 // An exception that stores a message as well as the `source_location` where
-// the exception was triggered. Mostly used by the `AD_THROW` and `AD_CHECK`
-// macros (see below).
+// the exception was triggered. Mostly used by the `AD_THROW` and
+// `AD_CONTRACT_CHECK` macros (see below).
 class Exception : public std::exception {
  private:
   std::string message_;
@@ -83,10 +83,12 @@ class Exception : public std::exception {
 // invalid inputs. Since it is a macro, the code coverage check will only report
 // a partial coverage for this macro if the condition is never violated, so make
 // sure to integrate a unit test that violates the condition.
-#define AD_CHECK(condition)                                                    \
-  if (!(condition)) [[unlikely]] {                                             \
-    using namespace std::string_literals;                                      \
-    AD_THROW("Assertion `"s + std::string(__STRING(condition)) + "` failed"s); \
+#define AD_CONTRACT_CHECK(condition)                                                                                                                              \
+  if (!(condition)) [[unlikely]] {                                                                                                                                \
+    using namespace std::string_literals;                                                                                                                         \
+    AD_THROW(                                                                                                                                                     \
+        "Assertion `"s + std::string(__STRING(condition)) +                                                                                                       \
+        "` failed. This indicates that an internal property of a class or module was violated. This should never happen. Please report this to the developers"s); \
   }
 
 // Custom assert which does not abort but throws an exception. Use this for
@@ -96,16 +98,19 @@ class Exception : public std::exception {
 // tools will consider this call fully covered as soon as the check is
 // performed, even if it never fails.
 namespace ad_utility::detail {
-inline void adUnsatisfiableImpl(bool condition, std::string_view message,
-                                ad_utility::source_location location) {
+inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
+                                   ad_utility::source_location location) {
   if (!(condition)) [[unlikely]] {
     using namespace std::string_literals;
     // TODO<GCC13> Use `std::format`.
-    AD_THROW("Assertion `"s + std::string(message) + "` failed"s, location);
+    AD_THROW(
+        "Assertion `"s + std::string(message) +
+            "` failed. Likely cause: A function was called with invalid arguments. Please report this to the developers."s,
+        location);
   }
 }
 }  // namespace ad_utility::detail
-#define AD_UNSATISFIABLE(condition)                         \
-  detail::adUnsatisfiableImpl(static_cast<bool>(condition), \
-                              __STRING(condition),          \
-                              ad_utility::source_location::current())
+#define AD_CORRECTNESS_CHECK(condition)                        \
+  detail::adCorrectnessCheckImpl(static_cast<bool>(condition), \
+                                 __STRING(condition),          \
+                                 ad_utility::source_location::current())

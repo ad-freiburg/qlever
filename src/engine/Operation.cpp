@@ -197,7 +197,7 @@ void Operation::updateRuntimeInformationOnSuccess(
   bool wasCached = cacheStatus != ad_utility::CacheStatus::computed;
   // If the result was read from the cache, then we need the additional
   // runtime info for the correct child information etc.
-  AD_CHECK(!wasCached || runtimeInfo.has_value());
+  AD_CONTRACT_CHECK(!wasCached || runtimeInfo.has_value());
 
   if (runtimeInfo.has_value()) {
     if (wasCached) {
@@ -214,7 +214,7 @@ void Operation::updateRuntimeInformationOnSuccess(
     // available.
     _runtimeInfo.children_.clear();
     for (auto* child : getChildren()) {
-      AD_CHECK(child);
+      AD_CONTRACT_CHECK(child);
       _runtimeInfo.children_.push_back(
           child->getRootOperation()->getRuntimeInfo());
     }
@@ -280,7 +280,7 @@ void Operation::createRuntimeInfoFromEstimates() {
   _runtimeInfo.descriptor_ = getDescriptor();
 
   for (const auto& child : getChildren()) {
-    AD_CHECK(child);
+    AD_CONTRACT_CHECK(child);
     child->getRootOperation()->createRuntimeInfoFromEstimates();
     _runtimeInfo.children_.push_back(
         child->getRootOperation()->getRuntimeInfo());

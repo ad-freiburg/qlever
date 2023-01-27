@@ -42,15 +42,15 @@ TEST(Exception, AD_THROW) {
   }
 }
 
-TEST(Exception, AD_CHECK) {
+TEST(Exception, AD_CONTRACT_CHECK) {
   ad_utility::source_location l;
-  ASSERT_NO_THROW(AD_CHECK(3 < 5));
+  ASSERT_NO_THROW(AD_CONTRACT_CHECK(3 < 5));
   std::vector<int> v;
-  ASSERT_NO_THROW(AD_CHECK(v.empty()));
+  ASSERT_NO_THROW(AD_CONTRACT_CHECK(v.empty()));
   try {
     v.push_back(27);
     l = ad_utility::source_location::current();
-    AD_CHECK(v.empty());
+    AD_CONTRACT_CHECK(v.empty());
     FAIL() << "No exception was thrown, but one was expected";
   } catch (const Exception& e) {
     ASSERT_THAT(e.what(),

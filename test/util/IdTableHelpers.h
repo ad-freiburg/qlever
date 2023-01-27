@@ -42,13 +42,14 @@ using VectorTable = std::vector<std::vector<size_t>>;
  * same length.
  */
 IdTable makeIdTableFromVector(const VectorTable& tableContent) {
-  AD_CHECK(!tableContent.empty());
+  AD_CONTRACT_CHECK(!tableContent.empty());
   IdTable result{tableContent[0].size(), allocator()};
 
   // Copying the content into the table.
   for (const auto& row : tableContent) {
-    AD_CHECK(row.size() == result.numColumns());  // All rows of an IdTable must
-                                                  // have the same length.
+    AD_CONTRACT_CHECK(row.size() ==
+                      result.numColumns());  // All rows of an IdTable must
+                                             // have the same length.
     const size_t backIndex{result.size()};
 
     // TODO<clang 16> This should be

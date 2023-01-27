@@ -57,7 +57,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
   std::string_view iriView = iri;
   if (iriView.starts_with(geofPrefix)) {
     iriView.remove_prefix(geofPrefix.size());
-    AD_CHECK(iriView.ends_with('>'));
+    AD_CONTRACT_CHECK(iriView.ends_with('>'));
     iriView.remove_suffix(1);
     if (iriView == "distance") {
       checkNumArgs("geof:", iriView, 2);
@@ -857,7 +857,7 @@ Triples Visitor::visit(Parser::TriplesSameSubjectContext* ctx) {
   Triples triples;
   if (ctx->varOrTerm()) {
     VarOrTerm subject = visit(ctx->varOrTerm());
-    AD_CHECK(ctx->propertyListNotEmpty());
+    AD_CONTRACT_CHECK(ctx->propertyListNotEmpty());
     auto propertyList = visit(ctx->propertyListNotEmpty());
     for (auto& tuple : propertyList.first) {
       triples.push_back({subject, std::move(tuple[0]), std::move(tuple[1])});
@@ -866,7 +866,7 @@ Triples Visitor::visit(Parser::TriplesSameSubjectContext* ctx) {
   } else if (ctx->triplesNode()) {
     auto tripleNodes = visit(ctx->triplesNode());
     ad_utility::appendVector(triples, std::move(tripleNodes.second));
-    AD_CHECK(ctx->propertyList());
+    AD_CONTRACT_CHECK(ctx->propertyList());
     auto propertyList = visit(ctx->propertyList());
     for (auto& tuple : propertyList.first) {
       triples.push_back(
@@ -1255,7 +1255,7 @@ GraphTerm Visitor::visit(Parser::GraphTermContext* ctx) {
 ExpressionPtr Visitor::visit(Parser::ConditionalOrExpressionContext* ctx) {
   auto childContexts = ctx->conditionalAndExpression();
   auto children = visitVector(ctx->conditionalAndExpression());
-  AD_CHECK(!children.empty());
+  AD_CONTRACT_CHECK(!children.empty());
   auto result = std::move(children.front());
   using C = sparqlExpression::OrExpression::Children;
   std::for_each(children.begin() + 1, children.end(),
@@ -1270,7 +1270,7 @@ ExpressionPtr Visitor::visit(Parser::ConditionalOrExpressionContext* ctx) {
 // ____________________________________________________________________________________
 ExpressionPtr Visitor::visit(Parser::ConditionalAndExpressionContext* ctx) {
   auto children = visitVector(ctx->valueLogical());
-  AD_CHECK(!children.empty());
+  AD_CONTRACT_CHECK(!children.empty());
   auto result = std::move(children.front());
   using C = sparqlExpression::AndExpression::Children;
   std::for_each(children.begin() + 1, children.end(),
@@ -1296,7 +1296,7 @@ ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
         ctx,
         "IN/ NOT IN in expressions are currently not supported by QLever.");
   }
-  AD_CHECK(children.size() == 1 || children.size() == 2);
+  AD_CONTRACT_CHECK(children.size() == 1 || children.size() == 2);
   if (children.size() == 1) {
     return std::move(children[0]);
   }
@@ -1548,7 +1548,7 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
 ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
   const auto& exp = ctx->expression();
   const auto& numArgs = exp.size();
-  AD_CHECK(numArgs >= 2 && numArgs <= 3);
+  AD_CONTRACT_CHECK(numArgs >= 2 && numArgs <= 3);
   auto flags = numArgs == 3 ? visitOptional(exp[2]) : std::nullopt;
   try {
     return std::make_unique<sparqlExpression::RegexExpression>(
@@ -1637,7 +1637,7 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
       //  into a typesafe format with a unique representation.
       separator = visit(ctx->string());
       // If there was a separator, we have to strip the quotation marks
-      AD_CHECK(separator.size() >= 2);
+      AD_CONTRACT_CHECK(separator.size() >= 2);
       separator = separator.substr(1, separator.size() - 2);
     } else {
       separator = " "s;
@@ -1763,7 +1763,7 @@ requires(!voidWhenVisited<Visitor, Ctx>) {
 template <typename Out, typename... Contexts>
 Out Visitor::visitAlternative(Contexts*... ctxs) {
   // Check that exactly one of the `ctxs` is not `nullptr`.
-  AD_CHECK(1u == (... + static_cast<bool>(ctxs)));
+  AD_CONTRACT_CHECK(1u == (... + static_cast<bool>(ctxs)));
   if constexpr (std::is_void_v<Out>) {
     (..., visitIf(ctxs));
   } else {

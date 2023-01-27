@@ -155,10 +155,10 @@ class IdTable {
   IdTable(size_t numColumns, Storage storage = {}) requires(!isView)
       : data_{std::move(storage)}, numColumns_{numColumns} {
     if constexpr (!isDynamic) {
-      AD_CHECK(NumColumns == numColumns);
+      AD_CONTRACT_CHECK(NumColumns == numColumns);
     }
     // The passed in `Storage` must be empty.
-    AD_CHECK(data_.empty());
+    AD_CONTRACT_CHECK(data_.empty());
   }
 
   // Quasi the default constructor. If `NumColumns != 0` then the table is
@@ -199,17 +199,17 @@ class IdTable {
         numRows_{numRows},
         capacityRows_{capacityRows} {
     if constexpr (!isDynamic) {
-      AD_CHECK(numColumns == NumColumns);
+      AD_CONTRACT_CHECK(numColumns == NumColumns);
     }
-    AD_CHECK(numRows_ <= capacityRows_);
-    AD_CHECK(this->data().size() == numColumns_ * capacityRows_);
+    AD_CONTRACT_CHECK(numRows_ <= capacityRows_);
+    AD_CONTRACT_CHECK(this->data().size() == numColumns_ * capacityRows_);
   }
 
  public:
   // For an empty and dynamic (`NumColumns == 0`) `IdTable`, specify the
   // number of columns.
   void setNumColumns(size_t numColumns) requires(isDynamic) {
-    AD_CHECK(size() == 0);
+    AD_CONTRACT_CHECK(size() == 0);
     numColumns_ = numColumns;
   }
 
@@ -388,7 +388,7 @@ class IdTable {
   // is then resized and filled with the appropriate contents.
   IdTable<T, NumColumns, Storage, IsView::False> clone(Storage storage) const
       requires(!std::is_copy_constructible_v<Storage>) {
-    AD_CHECK(storage.empty());
+    AD_CONTRACT_CHECK(storage.empty());
     storage.resize(data().size());
     std::copy(data().begin(), data().end(), storage.begin());
     return IdTable<T, NumColumns, Storage, IsView::False>{
@@ -411,7 +411,7 @@ class IdTable {
     if (size() == 0 && !isDynamic) {
       setNumColumns(NewNumColumns);
     }
-    AD_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
+    AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
     auto result = IdTable<T, NewNumColumns, Storage>{
         std::move(data()), numColumns(), std::move(numRows_),
         std::move(capacityRows_)};
@@ -444,7 +444,7 @@ class IdTable {
   requires(NumColumns == 0 && !isView)
       IdTable<T, NewNumColumns, Storage, IsView::True> asStaticView()
   const {
-    AD_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
+    AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
     return IdTable<T, NewNumColumns, Storage, IsView::True>{
         &data(), numColumns_, numRows_, capacityRows_};
   }

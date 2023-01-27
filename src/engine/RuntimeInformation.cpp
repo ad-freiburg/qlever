@@ -94,7 +94,7 @@ void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
   columnNames_.resize(maxColumnIndex + 1);
   // Now copy the (variable, index) pairs to the vector.
   for (const auto& [variable, columnIndex] : columnMap) {
-    AD_CHECK(columnIndex < columnNames_.size());
+    AD_CONTRACT_CHECK(columnIndex < columnNames_.size());
     columnNames_[columnIndex] = variable.name();
   }
 }

@@ -17,6 +17,6 @@ ParsedQuery SparqlParser::parseQuery(std::string query) {
   // The query rule ends with <EOF> so the parse always has to consume the whole
   // input. If this is not the case a ParseException should have been thrown at
   // an earlier point.
-  AD_CHECK(resultOfParseAndRemainingText.remainingText_.empty());
+  AD_CONTRACT_CHECK(resultOfParseAndRemainingText.remainingText_.empty());
   return std::move(resultOfParseAndRemainingText.resultOfParse_);
 }

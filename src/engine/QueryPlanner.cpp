@@ -146,7 +146,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
     }
   }
 
-  AD_CHECK(!lastRow.empty());
+  AD_CONTRACT_CHECK(!lastRow.empty());
   if (pq._rootGraphPattern._optional) {
     for (auto& plan : lastRow) {
       plan.type = SubtreePlan::OPTIONAL;
@@ -492,7 +492,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     applyFiltersIfPossible(candidatePlans[0], rootPattern->_filters, true);
   }
 
-  AD_CHECK(candidatePlans.size() == 1 || candidatePlans.empty());
+  AD_CONTRACT_CHECK(candidatePlans.size() == 1 || candidatePlans.empty());
   if (candidatePlans.empty()) {
     // this case is needed e.g. if we have the empty graph pattern due to a
     // pattern trick
@@ -807,7 +807,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
       } else if (isVariable(node._triple._o)) {
         addIndexScan(PSO_BOUND_S);
       } else {
-        AD_CHECK(isVariable(node._triple._p));
+        AD_CONTRACT_CHECK(isVariable(node._triple._p));
         addIndexScan(SOP_BOUND_O);
       }
     } else if (node._variables.size() == 2) {
@@ -1185,7 +1185,7 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   SubtreePlan plan(_qec);
   plan._idsOfIncludedNodes |= (size_t(1) << node._id);
   auto& tree = *plan._qet;
-  AD_CHECK(node._wordPart.size() > 0);
+  AD_CONTRACT_CHECK(node._wordPart.size() > 0);
   auto textOp = std::make_shared<TextOperationWithoutFilter>(
       _qec, node._wordPart, node._variables, node._cvar.value());
   tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER,
@@ -1256,7 +1256,8 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
     const SubtreePlan& a, const SubtreePlan& b) const {
   // Joining two optional patterns is illegal
   // TODO<joka921/kramerfl> : actually the second one must be the optional
-  AD_CHECK(a.type != SubtreePlan::OPTIONAL || b.type != SubtreePlan::OPTIONAL);
+  AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL ||
+                    b.type != SubtreePlan::OPTIONAL);
   SubtreePlan plan(_qec);
 
   std::vector<std::array<ColumnIndex, 2>> jcs = getJoinColumns(a, b);
@@ -1309,7 +1310,8 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
 // _____________________________________________________________________________
 QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
                                               const SubtreePlan& b) const {
-  AD_CHECK(a.type != SubtreePlan::MINUS && b.type == SubtreePlan::MINUS);
+  AD_CONTRACT_CHECK(a.type != SubtreePlan::MINUS &&
+                    b.type == SubtreePlan::MINUS);
   std::vector<std::array<ColumnIndex, 2>> jcs = getJoinColumns(a, b);
 
   const vector<size_t>& aSortedOn = a._qet->resultSortedOn();
@@ -2034,7 +2036,7 @@ void QueryPlanner::setEnablePatternTrick(bool enablePatternTrick) {
 // _________________________________________________________________________________
 size_t QueryPlanner::findCheapestExecutionTree(
     const std::vector<SubtreePlan>& lastRow) const {
-  AD_CHECK(!lastRow.empty());
+  AD_CONTRACT_CHECK(!lastRow.empty());
   auto compare = [this](const auto& a, const auto& b) {
     auto aCost = a.getCostEstimate(), bCost = b.getCostEstimate();
     if (aCost == bCost && isInTestMode()) {
@@ -2097,7 +2099,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     // This case shouldn't happen. If the first pattern is OPTIONAL, it
     // is made non optional earlier. If a minus occurs after an optional
     // further into the query that optional should be resolved by now.
-    AD_CHECK(a.type != SubtreePlan::OPTIONAL);
+    AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL);
     return std::vector{minus(a, b)};
   }
 
@@ -2183,7 +2185,7 @@ auto QueryPlanner::createJoinWithTransitivePath(
     return std::nullopt;
   }
   // An unbound transitive path has at most two columns.
-  AD_CHECK(thisCol <= 1);
+  AD_CONTRACT_CHECK(thisCol <= 1);
   // The left or right side is a TRANSITIVE_PATH and its join column
   // corresponds to the left side of its input.
   SubtreePlan plan = [&]() {

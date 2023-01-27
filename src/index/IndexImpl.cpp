@@ -1083,8 +1083,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
       _turtleParserIntegerOverflowBehavior =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
     } else {
-      AD_CHECK(std::find(allModes.begin(), allModes.end(), value) ==
-               allModes.end());
+      AD_CONTRACT_CHECK(std::find(allModes.begin(), allModes.end(), value) ==
+                        allModes.end());
       LOG(ERROR) << "Invalid value for " << key << std::endl;
       LOG(INFO) << "The currently supported values are "
                 << absl::StrJoin(allModes, ",") << std::endl;

@@ -81,7 +81,7 @@ string TextOperationWithFilter::getDescriptor() const {
 // _____________________________________________________________________________
 void TextOperationWithFilter::computeResult(ResultTable* result) {
   LOG(DEBUG) << "TextOperationWithFilter result computation..." << endl;
-  AD_CHECK(getNofVars() >= 1);
+  AD_CONTRACT_CHECK(getNofVars() >= 1);
   result->_idTable.setNumColumns(getResultWidth());
   shared_ptr<const ResultTable> filterResult = _filterResult->getResult();
   result->_localVocab = filterResult->_localVocab;
@@ -110,7 +110,7 @@ float TextOperationWithFilter::getMultiplicity(size_t col) {
   if (_multiplicities.size() == 0) {
     computeMultiplicities();
   }
-  AD_CHECK(col < _multiplicities.size());
+  AD_CONTRACT_CHECK(col < _multiplicities.size());
   return _multiplicities.at(col);
 }
 

@@ -37,7 +37,7 @@ void CompressedRelationMetaData::scan(
                              ", which was not loaded");
   }
   if constexpr (!ad_utility::isVector<IdTableImpl>) {
-    AD_CHECK(result->numColumns() == 2);
+    AD_CONTRACT_CHECK(result->numColumns() == 2);
   }
   if (!permutation._meta.col0IdExists(col0Id)) {
     return;
@@ -86,10 +86,11 @@ void CompressedRelationMetaData::scan(
 
   // Invariant: A relation spans multiple blocks exclusively or several
   // entities are stored completely in the same Block.
-  AD_CHECK(!firstBlockIsIncomplete || (beginBlock == lastBlock));
-  AD_CHECK(!lastBlockIsIncomplete);
+  AD_CONTRACT_CHECK(!firstBlockIsIncomplete || (beginBlock == lastBlock));
+  AD_CONTRACT_CHECK(!lastBlockIsIncomplete);
   if (firstBlockIsIncomplete) {
-    AD_CHECK(metaData._offsetInBlock != std::numeric_limits<uint64_t>::max());
+    AD_CONTRACT_CHECK(metaData._offsetInBlock !=
+                      std::numeric_limits<uint64_t>::max());
   }
 
   auto get = [result](size_t row, size_t col) -> Id& {
@@ -118,7 +119,7 @@ void CompressedRelationMetaData::scan(
     auto begin = uncompressedBuffer->begin() + metaData._offsetInBlock;
     auto end = begin + metaData._numRows;
     auto numElements = static_cast<size_t>(end - begin);
-    AD_CHECK(numElements <= spaceLeft);
+    AD_CONTRACT_CHECK(numElements <= spaceLeft);
     for (size_t i = 0; i < numElements; ++i) {
       get(currentIndex + i, 0) = (*(begin + i))[0];
       get(currentIndex + i, 1) = (*(begin + i))[1];
@@ -176,7 +177,7 @@ void CompressedRelationMetaData::scan(
         spaceLeft -= block._numRows;
         currentIndex += block._numRows;
       }
-      AD_CHECK(spaceLeft == 0);
+      AD_CONTRACT_CHECK(spaceLeft == 0);
     }  // End of omp parallel region, all the decompression was handled now.
   }
 }
@@ -248,7 +249,7 @@ void CompressedRelationMetaData::scan(
     const Id col0Id, const Id& col1Id, IdTableImpl* result,
     const Permutation& permutation,
     ad_utility::SharedConcurrentTimeoutTimer timer) {
-  AD_CHECK(result->numColumns() == 1);
+  AD_CONTRACT_CHECK(result->numColumns() == 1);
 
   if (!permutation._meta.col0IdExists(col0Id)) {
     return;
@@ -285,7 +286,7 @@ void CompressedRelationMetaData::scan(
       metaData._offsetInBlock == std::numeric_limits<uint64_t>::max();
   if (!col0IdHasExclusiveBlocks) {
     // This might also be zero if no block was found at all.
-    AD_CHECK(endBlock - beginBlock <= 1);
+    AD_CONTRACT_CHECK(endBlock - beginBlock <= 1);
   }
 
   // The first and the last block might possibly be incomplete (that is, only
@@ -398,7 +399,7 @@ void CompressedRelationMetaData::scan(
   // Add the last block.
   std::copy(lastBlockResult.begin(), lastBlockResult.end(), position);
   spaceLeft -= lastBlockResult.size();
-  AD_CHECK(spaceLeft == 0);
+  AD_CONTRACT_CHECK(spaceLeft == 0);
 }
 
 // Explicit instantiations for all six permutations
@@ -426,7 +427,7 @@ void CompressedRelationWriter::addRelation(
     Id col0Id, const ad_utility::BufferedVector<std::array<Id, 2>>& data,
     size_t numDistinctCol1, bool functional) {
   LOG(TRACE) << "Writing a relation ...\n";
-  AD_CHECK(data.size() > 0);
+  AD_CONTRACT_CHECK(data.size() > 0);
   LOG(TRACE) << "Calculating multiplicities ...\n";
   float multC1 = functional ? 1.0 : data.size() / float(numDistinctCol1);
   // Dummy value that will be overwritten later
@@ -539,7 +540,7 @@ void CompressedRelationMetaData::decompressBlock(
       compressedBlock.data(), compressedBlock.size(), iterator,
       numRowsToRead * sizeof(*iterator));
   static_assert(2 * sizeof(Id) == sizeof(*iterator));
-  AD_CHECK(numRowsToRead * 2 * sizeof(Id) == numBytesActuallyRead);
+  AD_CONTRACT_CHECK(numRowsToRead * 2 * sizeof(Id) == numBytesActuallyRead);
 }
 
 // _____________________________________________________________________________

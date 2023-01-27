@@ -109,8 +109,8 @@ std::optional<std::string> UrlParser::getDecodedPathAndCheck(
     std::string_view target) noexcept {
   try {
     auto filename = parseGetRequestTarget(target)._path;
-    AD_CHECK(filename.starts_with('/'));
-    AD_CHECK(filename.find("..") == string::npos);
+    AD_CONTRACT_CHECK(filename.starts_with('/'));
+    AD_CONTRACT_CHECK(filename.find("..") == string::npos);
     return filename;
   } catch (...) {
     return std::nullopt;

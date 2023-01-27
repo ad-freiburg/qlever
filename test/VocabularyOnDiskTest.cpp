@@ -37,7 +37,7 @@ class VocabularyCreator {
     if (!ids.has_value()) {
       vocabulary.buildFromVector(words, vocabFilename_);
     } else {
-      AD_CHECK(words.size() == ids.value().size());
+      AD_CONTRACT_CHECK(words.size() == ids.value().size());
       std::vector<std::pair<std::string, uint64_t>> wordsAndIds;
       for (size_t i = 0; i < words.size(); ++i) {
         wordsAndIds.emplace_back(words[i], ids.value()[i]);

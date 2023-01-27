@@ -54,7 +54,7 @@ void IndexMetaData<MapType>::writeToFile(const std::string& filename) const {
 // ____________________________________________________________________________
 template <class MapType>
 void IndexMetaData<MapType>::appendToFile(ad_utility::File* file) const {
-  AD_CHECK(file->isOpen());
+  AD_CONTRACT_CHECK(file->isOpen());
   file->seek(0, SEEK_END);
   off_t startOfMeta = file->tell();
   ad_utility::serialization::FileWriteSerializer serializer{std::move(*file)};

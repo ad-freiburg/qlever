@@ -176,7 +176,7 @@ template <SingleExpressionResult S>
 requires isVectorResult<S>
 auto idGenerator(S values, size_t targetSize, EvaluationContext* context)
     -> cppcoro::generator<decltype(makeValueId(values[0], context))> {
-  AD_CHECK(targetSize == values.size());
+  AD_CONTRACT_CHECK(targetSize == values.size());
   for (const auto& el : values) {
     auto id = makeValueId(el, context);
     co_yield id;
@@ -311,7 +311,7 @@ evaluateRelationalExpression(S1 value1, S2 value2, EvaluationContext* context) {
   }
 
   if constexpr (resultIsConstant) {
-    AD_CHECK(result.size() == 1);
+    AD_CONTRACT_CHECK(result.size() == 1);
     return result[0];
   } else {
     return result;

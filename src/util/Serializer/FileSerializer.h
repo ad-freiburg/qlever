@@ -22,7 +22,7 @@ class FileWriteSerializer {
   FileWriteSerializer(File&& file) : _file{std::move(file)} {};
 
   FileWriteSerializer(std::string filename) : _file{filename, "w"} {
-    AD_CHECK(_file.isOpen());
+    AD_CONTRACT_CHECK(_file.isOpen());
     // TODO<joka921> File should be a move-only type, should support
     // "isOpenForReading" and should automatically check for "isOpen() when
     // calling open with an appropriate error message
@@ -56,7 +56,7 @@ class FileReadSerializer {
 
   explicit FileReadSerializer(const std::string& filename)
       : _file{filename, "r"} {
-    AD_CHECK(_file.isOpen());
+    AD_CONTRACT_CHECK(_file.isOpen());
   }
 
   void serializeBytes(char* bytePtr, size_t numBytes) {
@@ -91,12 +91,12 @@ class CopyableFileReadSerializer {
 
   explicit CopyableFileReadSerializer(std::string filename)
       : _file{std::make_shared<File>(filename, "r")} {
-    AD_CHECK(_file->isOpen());
+    AD_CONTRACT_CHECK(_file->isOpen());
   }
 
   void serializeBytes(char* bytePtr, size_t numBytes) {
-    AD_CHECK(static_cast<ssize_t>(numBytes) ==
-             _file->read(bytePtr, numBytes, _serializationPosition));
+    AD_CONTRACT_CHECK(static_cast<ssize_t>(numBytes) ==
+                      _file->read(bytePtr, numBytes, _serializationPosition));
     _serializationPosition += numBytes;
   }
 

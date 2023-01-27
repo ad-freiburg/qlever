@@ -605,7 +605,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
   auto getId = [&index](const std::string& s) {
     Id id;
     bool success = index.getId(s, &id);
-    AD_CHECK(success);
+    AD_CONTRACT_CHECK(success);
     return id;
   };
 

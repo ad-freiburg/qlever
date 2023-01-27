@@ -10,7 +10,7 @@
 // _____________________________________________________________________________
 const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
     const uint64_t lower, const uint64_t upper) const {
-  AD_CHECK(upper >= lower);
+  AD_CONTRACT_CHECK(upper >= lower);
   assert(_blocks.size() > 0);
   assert(_blocks.size() ==
          _blockUpperBoundWordIds.size() + _blockUpperBoundEntityIds.size());

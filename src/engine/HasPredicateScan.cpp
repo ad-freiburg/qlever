@@ -20,7 +20,7 @@ HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
                                    SparqlTriple triple)
     : Operation{qec} {
   // Just pick one direction, they should be equivalent.
-  AD_CHECK(triple._p._iri == HAS_PREDICATE_PREDICATE);
+  AD_CONTRACT_CHECK(triple._p._iri == HAS_PREDICATE_PREDICATE);
   // TODO(schnelle): Handle ?p ql:has-predicate ?p
   _type = [&]() {
     if (isVariable(triple._s) && (isVariable(triple._o))) {

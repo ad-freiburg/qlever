@@ -52,7 +52,7 @@ class PrefixCompressor {
 
   // Decompress the given `compressedWord`.
   [[nodiscard]] std::string decompress(std::string_view compressedWord) const {
-    AD_CHECK(!compressedWord.empty());
+    AD_CONTRACT_CHECK(!compressedWord.empty());
     auto idx = static_cast<uint8_t>(compressedWord[0]) - MIN_COMPRESSION_PREFIX;
     if (idx >= 0 && idx < NUM_COMPRESSION_PREFIXES) {
       return _prefixToCode[idx] + compressedWord.substr(1);
