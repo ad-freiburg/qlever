@@ -54,7 +54,7 @@ jobs:
           fail_ci_if_error: true
           override_branch: ${{github.event.workflow_run.head_branch}}
           # Do we need the following line to work?
-          #override_build:
+          override_build: ${{github.event.workflow_run.workflow_id}}
           override_commit: ${{github.event.workflow_run.head_commit.id}}
           override_pr: ${{env.pr_number}}
           
