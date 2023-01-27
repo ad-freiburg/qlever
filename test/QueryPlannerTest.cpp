@@ -545,26 +545,26 @@ TEST(QueryPlannerTest, test_free_PX__free_PX) {
 }
 
 TEST(QueryPlannerTest, testActorsBornInEurope) {
-    ParsedQuery pq = SparqlParser::parseQuery(
-        "PREFIX : <pre/>\n"
-        "SELECT ?a \n "
-        "WHERE {?a :profession :Actor . ?a :born-in ?c. ?c :in :Europe}\n"
-        "ORDER BY ?a");
-    QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ(27493u, qet.getCostEstimate());
-    ASSERT_EQ(
-        "{\n  ORDER BY on columns:asc(0) \n  {\n    JOIN\n    {\n      SCAN "
-        "POS with P = \"<pre/profession>\", O = \"<pre/Actor>\"\n      "
-        "qet-width: 1 \n    } join-column: [0]\n    |X|\n    {\n      "
-        "SORT(internal) on columns:asc(1) \n      {\n        JOIN\n        {\n "
-        "         SCAN POS with P = \"<pre/born-in>\"\n          qet-width: 2 "
-        "\n        } join-column: [0]\n        |X|\n        {\n          SCAN "
-        "POS with P = \"<pre/in>\", O = \"<pre/Europe>\"\n          qet-width: "
-        "1 \n        } join-column: [0]\n        qet-width: 2 \n      }\n      "
-        "qet-width: 2 \n    } join-column: [1]\n    qet-width: 2 \n  }\n  "
-        "qet-width: 2 \n}",
-        qet.asString());
+  ParsedQuery pq = SparqlParser::parseQuery(
+      "PREFIX : <pre/>\n"
+      "SELECT ?a \n "
+      "WHERE {?a :profession :Actor . ?a :born-in ?c. ?c :in :Europe}\n"
+      "ORDER BY ?a");
+  QueryPlanner qp(nullptr);
+  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  ASSERT_EQ(27493u, qet.getCostEstimate());
+  ASSERT_EQ(
+      "{\n  ORDER BY on columns:asc(0) \n  {\n    JOIN\n    {\n      SCAN "
+      "POS with P = \"<pre/profession>\", O = \"<pre/Actor>\"\n      "
+      "qet-width: 1 \n    } join-column: [0]\n    |X|\n    {\n      "
+      "SORT(internal) on columns:asc(1) \n      {\n        JOIN\n        {\n "
+      "         SCAN POS with P = \"<pre/born-in>\"\n          qet-width: 2 "
+      "\n        } join-column: [0]\n        |X|\n        {\n          SCAN "
+      "POS with P = \"<pre/in>\", O = \"<pre/Europe>\"\n          qet-width: "
+      "1 \n        } join-column: [0]\n        qet-width: 2 \n      }\n      "
+      "qet-width: 2 \n    } join-column: [1]\n    qet-width: 2 \n  }\n  "
+      "qet-width: 2 \n}",
+      qet.asString());
 }
 
 TEST(QueryPlannerTest, testStarTwoFree) {
@@ -831,19 +831,19 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
 
-        "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
-        "\"manhattan project\" and 1 variables with textLimit = 1 filtered "
-        "by\n  {\n    JOIN\n    {\n      SCAN POS with P = \"<is-a>\", O = "
-        "\"<Scientist>\"\n      qet-width: 1 \n    } join-column: [0]\n    "
-        "|X|\n    {\n      SORT(internal) on columns:asc(2) \n      {\n       "
-        " TEXT OPERATION "
-        "WITH FILTER: co-occurrence with words: \"friend*\" and 2 variables "
-        "with textLimit = 1 filtered by\n        {\n          SCAN POS with P "
-        "= \"<is-a>\", O = \"<Politician>\"\n          qet-width: 1 \n        "
-        "}\n         filtered on column 0\n        qet-width: 4 \n      }\n    "
-        "  qet-width: 4 \n    } join-column: [2]\n    qet-width: 4 \n  }\n   "
-        "filtered on column 0\n  qet-width: 6 \n}",
-        qet.asString());
+      "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
+      "\"manhattan project\" and 1 variables with textLimit = 1 filtered "
+      "by\n  {\n    JOIN\n    {\n      SCAN POS with P = \"<is-a>\", O = "
+      "\"<Scientist>\"\n      qet-width: 1 \n    } join-column: [0]\n    "
+      "|X|\n    {\n      SORT(internal) on columns:asc(2) \n      {\n       "
+      " TEXT OPERATION "
+      "WITH FILTER: co-occurrence with words: \"friend*\" and 2 variables "
+      "with textLimit = 1 filtered by\n        {\n          SCAN POS with P "
+      "= \"<is-a>\", O = \"<Politician>\"\n          qet-width: 1 \n        "
+      "}\n         filtered on column 0\n        qet-width: 4 \n      }\n    "
+      "  qet-width: 4 \n    } join-column: [2]\n    qet-width: 4 \n  }\n   "
+      "filtered on column 0\n  qet-width: 6 \n}",
+      qet.asString());
 }
 
 TEST(QueryExecutionTreeTest, testCyclicQuery) {
@@ -857,42 +857,42 @@ TEST(QueryExecutionTreeTest, testCyclicQuery) {
   // estimate. It is currently very hard to make the query planning
   // deterministic in a test scenario, so we allow all four candidates
 
-    // delete all whitespace from the strings to make the matching easier.
-    auto strip = [](std::string s) {
-      s.erase(std::remove_if(s.begin(), s.end(), ::isspace), s.end());
-      return s;
-    };
-    std::string possible1 = strip(
-        "{\n  MULTI_COLUMN_JOIN\n    {\n    SCAN PSO with P = "
-        "\"<Film_performance>\"\n    qet-width: 2 \n  }\n  join-columns: [0 & "
-        "1]\n  |X|\n    {\n    SORT(internal) on columns:asc(2) asc(1) \n    "
-        "{\n      JOIN\n      {\n        SCAN PSO with P = "
-        "\"<Film_performance>\"\n        qet-width: 2 \n      } join-column: "
-        "[0]\n      |X|\n      {\n        SCAN PSO with P = "
-        "\"<Spouse_(or_domestic_partner)>\"\n        qet-width: 2 \n      } "
-        "join-column: [0]\n      qet-width: 3 \n    }\n    qet-width: 3 \n  "
-        "}\n  join-columns: [2 & 1]\n  qet-width: 3 \n}");
-    std::string possible2 = strip(
-        "{\n  MULTI_COLUMN_JOIN\n    {\n    SCAN POS with P = "
-        "\"<Film_performance>\"\n    qet-width: 2 \n  }\n  join-columns: [0 & "
-        "1]\n  |X|\n    {\n    SORT(internal) on columns:asc(1) asc(2) \n    "
-        "{\n      JOIN\n      {\n        SCAN PSO with P = "
-        "\"<Film_performance>\"\n        qet-width: 2 \n      } join-column: "
-        "[0]\n      |X|\n      {\n        SCAN PSO with P = "
-        "\"<Spouse_(or_domestic_partner)>\"\n        qet-width: 2 \n      } "
-        "join-column: [0]\n      qet-width: 3 \n    }\n    qet-width: 3 \n  "
-        "}\n  join-columns: [1 & 2]\n  qet-width: 3 \n}");
-    std::string possible3 = strip(
-        "{\n  MULTI_COLUMN_JOIN\n    {\n    SCAN POS with P = "
-        "\"<Spouse_(or_domestic_partner)>\"\n    qet-width: 2 \n  }\n  "
-        "join-columns: [0 & 1]\n  |X|\n    {\n    SORT(internal) on "
-        "columns:asc(1) asc(2) \n    {\n      JOIN\n      {\n        SCAN POS "
-        "with P = \"<Film_performance>\"\n        qet-width: 2 \n      } "
-        "join-column: [0]\n      |X|\n      {\n        SCAN POS with P = "
-        "\"<Film_performance>\"\n        qet-width: 2 \n      } join-column: "
-        "[0]\n      qet-width: 3 \n    }\n    qet-width: 3 \n  }\n  "
-        "join-columns: [1 & 2]\n  qet-width: 3 \n}");
-    std::string possible4 = strip(R"xxx(MULTI_COLUMN_JOIN
+  // delete all whitespace from the strings to make the matching easier.
+  auto strip = [](std::string s) {
+    s.erase(std::remove_if(s.begin(), s.end(), ::isspace), s.end());
+    return s;
+  };
+  std::string possible1 = strip(
+      "{\n  MULTI_COLUMN_JOIN\n    {\n    SCAN PSO with P = "
+      "\"<Film_performance>\"\n    qet-width: 2 \n  }\n  join-columns: [0 & "
+      "1]\n  |X|\n    {\n    SORT(internal) on columns:asc(2) asc(1) \n    "
+      "{\n      JOIN\n      {\n        SCAN PSO with P = "
+      "\"<Film_performance>\"\n        qet-width: 2 \n      } join-column: "
+      "[0]\n      |X|\n      {\n        SCAN PSO with P = "
+      "\"<Spouse_(or_domestic_partner)>\"\n        qet-width: 2 \n      } "
+      "join-column: [0]\n      qet-width: 3 \n    }\n    qet-width: 3 \n  "
+      "}\n  join-columns: [2 & 1]\n  qet-width: 3 \n}");
+  std::string possible2 = strip(
+      "{\n  MULTI_COLUMN_JOIN\n    {\n    SCAN POS with P = "
+      "\"<Film_performance>\"\n    qet-width: 2 \n  }\n  join-columns: [0 & "
+      "1]\n  |X|\n    {\n    SORT(internal) on columns:asc(1) asc(2) \n    "
+      "{\n      JOIN\n      {\n        SCAN PSO with P = "
+      "\"<Film_performance>\"\n        qet-width: 2 \n      } join-column: "
+      "[0]\n      |X|\n      {\n        SCAN PSO with P = "
+      "\"<Spouse_(or_domestic_partner)>\"\n        qet-width: 2 \n      } "
+      "join-column: [0]\n      qet-width: 3 \n    }\n    qet-width: 3 \n  "
+      "}\n  join-columns: [1 & 2]\n  qet-width: 3 \n}");
+  std::string possible3 = strip(
+      "{\n  MULTI_COLUMN_JOIN\n    {\n    SCAN POS with P = "
+      "\"<Spouse_(or_domestic_partner)>\"\n    qet-width: 2 \n  }\n  "
+      "join-columns: [0 & 1]\n  |X|\n    {\n    SORT(internal) on "
+      "columns:asc(1) asc(2) \n    {\n      JOIN\n      {\n        SCAN POS "
+      "with P = \"<Film_performance>\"\n        qet-width: 2 \n      } "
+      "join-column: [0]\n      |X|\n      {\n        SCAN POS with P = "
+      "\"<Film_performance>\"\n        qet-width: 2 \n      } join-column: "
+      "[0]\n      qet-width: 3 \n    }\n    qet-width: 3 \n  }\n  "
+      "join-columns: [1 & 2]\n  qet-width: 3 \n}");
+  std::string possible4 = strip(R"xxx(MULTI_COLUMN_JOIN
         {
           SCAN PSO with P = "<Film_performance>"
           qet-width: 2
@@ -992,18 +992,18 @@ TEST(QueryPlannerTest, testSimpleOptional) {
 
       qet.asString());
 
-    ParsedQuery pq2 = SparqlParser::parseQuery(
-        "SELECT ?a ?b \n "
-        "WHERE  {?a <rel1> ?b . "
-        "OPTIONAL { ?a <rel2> ?c }} ORDER BY ?b");
-    QueryExecutionTree qet2 = qp.createExecutionTree(pq2);
-    ASSERT_EQ(
-        "{\n  ORDER BY on columns:asc(1) \n  {\n    OPTIONAL_JOIN\n    "
-        "{\n      SCAN PSO with P = \"<rel1>\"\n      qet-width: 2 \n    } "
-        "join-columns: [0]\n    |X|\n    {\n      SCAN PSO with P = "
-        "\"<rel2>\"\n      qet-width: 2 \n    } join-columns: [0]\n    "
-        "qet-width: 3 \n  }\n  qet-width: 3 \n}",
-        qet2.asString());
+  ParsedQuery pq2 = SparqlParser::parseQuery(
+      "SELECT ?a ?b \n "
+      "WHERE  {?a <rel1> ?b . "
+      "OPTIONAL { ?a <rel2> ?c }} ORDER BY ?b");
+  QueryExecutionTree qet2 = qp.createExecutionTree(pq2);
+  ASSERT_EQ(
+      "{\n  ORDER BY on columns:asc(1) \n  {\n    OPTIONAL_JOIN\n    "
+      "{\n      SCAN PSO with P = \"<rel1>\"\n      qet-width: 2 \n    } "
+      "join-columns: [0]\n    |X|\n    {\n      SCAN PSO with P = "
+      "\"<rel2>\"\n      qet-width: 2 \n    } join-columns: [0]\n    "
+      "qet-width: 3 \n  }\n  qet-width: 3 \n}",
+      qet2.asString());
 }
 
 TEST(QueryPlannerTest, SimpleTripleOneVariable) {

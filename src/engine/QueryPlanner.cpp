@@ -1228,7 +1228,8 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
     const SubtreePlan& a, const SubtreePlan& b) const {
   // Joining two optional patterns is illegal
   // TODO<joka921/kramerfl> : actually the second one must be the optional
-  AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL || b.type != SubtreePlan::OPTIONAL);
+  AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL ||
+                    b.type != SubtreePlan::OPTIONAL);
 
   auto jcs = getJoinColumns(a, b);
   auto [qetA, qetB] =
