@@ -72,7 +72,7 @@ struct FirstWrapper : public std::type_identity<T> {};
 ///
 /// isInstantiation<std::vector, std::vector<int>> == true;
 /// isInstantiation<std::vector, const std::vector<int>&> == false;
-template <template <typename...> typename TemplatedType, typename T>
+template <typename T, template <typename...> typename TemplatedType>
 concept isInstantiation =
     detail::IsInstantiationOf<TemplatedType>::template Instantiation<T>::value;
 
@@ -81,21 +81,21 @@ concept isInstantiation =
 ///
 /// similarToInstantiation<std::vector, std::vector<int>> == true;
 /// similarToInstantiation<std::vector, const std::vector<int>&> == true;
-template <template <typename...> typename TemplatedType, typename T>
+template <typename T, template <typename...> typename TemplatedType>
 concept similarToInstantiation =
-    isInstantiation<TemplatedType, std::decay_t<T>>;
+    isInstantiation<std::decay_t<T>, TemplatedType>;
 
 /// isVector<T> is true if and only if T is an instantiation of std::vector
 template <typename T>
-constexpr static bool isVector = isInstantiation<std::vector, T>;
+constexpr static bool isVector = isInstantiation<T, std::vector>;
 
 /// isTuple<T> is true if and only if T is an instantiation of std::tuple
 template <typename T>
-constexpr static bool isTuple = isInstantiation<std::tuple, T>;
+constexpr static bool isTuple = isInstantiation<T, std::tuple>;
 
 /// isVariant<T> is true if and only if T is an instantiation of std::variant
 template <typename T>
-constexpr static bool isVariant = isInstantiation<std::variant, T>;
+constexpr static bool isVariant = isInstantiation<T, std::variant>;
 
 /// Two types are similar, if they are the same when we remove all cv (const or
 /// volatile) qualifiers and all references

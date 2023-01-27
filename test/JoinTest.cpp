@@ -134,16 +134,10 @@ void runTestCasesForAllJoinAlgorithms(
 
   // For sorting IdTableAndJoinColumn by their join column.
   auto sortByJoinColumn = [](IdTableAndJoinColumn& idTableAndJC) {
-    /*
-     * TODO Introduce functionality to the IdTable-class, so that
-     * std::ranges::sort can be used instead of std::sort. Currently it seems
-     * like the iterators , produced by IdTable, aren't the right type.
-     */
-    std::sort(idTableAndJC.idTable.begin(), idTableAndJC.idTable.end(),
-              [&idTableAndJC](const auto& row1, const auto& row2) {
-                return row1[idTableAndJC.joinColumn] <
-                       row2[idTableAndJC.joinColumn];
-              });
+    std::ranges::sort(idTableAndJC.idTable, {},
+                      [&idTableAndJC](const auto& row) {
+                        return row[idTableAndJC.joinColumn];
+                      });
   };
 
   // Random shuffle both tables, run hashJoin, check result.

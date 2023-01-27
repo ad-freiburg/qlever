@@ -7,10 +7,8 @@
 
 #include <utility>
 
-#include "../engine/ResultTable.h"
-#include "../index/Vocabulary.h"
-#include "../util/OverloadCallOperator.h"
-#include "./ValueId.h"
+#include "global/ValueId.h"
+#include "util/OverloadCallOperator.h"
 
 namespace valueIdComparators {
 /// This enum encodes the different numeric comparators LessThan, LessEqual,
@@ -390,7 +388,7 @@ namespace detail {
 
 // This function is part of the implementation of `compareIds` (see below).
 bool compareIdsImpl(ValueId a, ValueId b, auto comparator) {
-  auto isNumeric = [](Id id) {
+  auto isNumeric = [](ValueId id) {
     return id.getDatatype() == Datatype::Double ||
            id.getDatatype() == Datatype::Int;
   };
