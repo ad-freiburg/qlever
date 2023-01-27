@@ -95,8 +95,10 @@ TEST(IndexTest, createFromTurtleTest) {
 
     // Relation b
     // Pair index
-    std::vector<std::array<Id, 2>> buffer;
-    CompressedRelationMetaData::scan(I(2), &buffer, index.PSO());
+    IdTable buffer{2, makeAllocator()};
+    // TODO<joka921> All these tests should only work on vocabulary entries,
+    // and not on hardcoded IDs to make them robust against internal changes.
+    index.PSO().scan(I(2), &buffer);
     ASSERT_EQ(2ul, buffer.size());
     ASSERT_EQ(I(0), buffer[0][0]);
     ASSERT_EQ(I(4), buffer[0][1]);
@@ -104,7 +106,7 @@ TEST(IndexTest, createFromTurtleTest) {
     ASSERT_EQ(I(5u), buffer[1][1]);
 
     // Relation b2
-    CompressedRelationMetaData::scan(I(3), &buffer, index.PSO());
+    index.PSO().scan(I(3), &buffer);
     ASSERT_EQ(2ul, buffer.size());
     ASSERT_EQ(I(0), buffer[0][0]);
     ASSERT_EQ(I(4u), buffer[0][1]);
@@ -174,9 +176,9 @@ TEST(IndexTest, createFromTurtleTest) {
     ASSERT_TRUE(index.POS().metaData().col0IdExists(I(7)));
     ASSERT_FALSE(index.POS().metaData().getMetaData(I(7)).isFunctional());
 
-    std::vector<std::array<Id, 2>> buffer;
+    IdTable buffer{2, makeAllocator()};
     // is-a
-    CompressedRelationMetaData::scan(I(7), &buffer, index.PSO());
+    index.PSO().scan(I(7), &buffer);
     ASSERT_EQ(7ul, buffer.size());
     // Pair index
     ASSERT_EQ(I(4u), buffer[0][0]);
@@ -195,7 +197,7 @@ TEST(IndexTest, createFromTurtleTest) {
     ASSERT_EQ(I(2u), buffer[6][1]);
 
     // is-a for POS
-    CompressedRelationMetaData::scan(I(7), &buffer, index.POS());
+    index.POS().scan(I(7), &buffer);
     ASSERT_EQ(7ul, buffer.size());
     // Pair index
     ASSERT_EQ(I(0u), buffer[0][0]);

@@ -567,6 +567,12 @@ class IdTable {
     return {data().data() + i * capacityRows_, numRows_};
   }
 
+  // Return all the columns as a `std::vector` (if `isDynamic`) or as a
+  // `std::array` (else). The elements of the vector/array are `std::span<T>`
+  // or `std::span<const T>`, depending on whether `this` is const.
+  auto getColumns() { return getColumnsImpl(*this); }
+  auto getColumns() const { return getColumnsImpl(*this); }
+
  private:
   // Get direct access to the underlying data() as a reference.
   Storage& data() requires(!isView) { return data_; }
@@ -673,12 +679,6 @@ class IdTable {
       return columns;
     }
   }
-
-  // Return all the columns as a `std::vector` (if `isDynamic`) or as a
-  // `std::array` (else). The elements of the vector/array are `std::span<T>`
-  // or `std::span<const T>`, depending on whether `this` is const.
-  auto getColumns() { return getColumnsImpl(*this); }
-  auto getColumns() const { return getColumnsImpl(*this); }
 };
 
 }  // namespace columnBasedIdTable

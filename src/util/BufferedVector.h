@@ -76,12 +76,12 @@ class BufferedVector {
   const T& back() const { return at(size() - 1); }
 
   // no copy construction/assignment since the MmapVector does not support this
-  BufferedVector(const BufferedVector<T>&) = delete;
-  BufferedVector& operator=(const BufferedVector<T>&) = delete;
+  BufferedVector(const BufferedVector&) = delete;
+  BufferedVector& operator=(const BufferedVector&) = delete;
 
   // move construction and assignment
-  BufferedVector(BufferedVector<T>&& other) = default;
-  BufferedVector& operator=(BufferedVector<T>&& other) = default;
+  BufferedVector& operator=(BufferedVector&& other) = default;
+  BufferedVector(BufferedVector&& other) = default;
 
   // _________________________________________________________________________
   void clear() {
