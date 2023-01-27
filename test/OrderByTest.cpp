@@ -38,9 +38,9 @@ void testOrderBy(IdTable input, const IdTable& expected,
   auto trace = generateLocationTrace(l);
   auto qec = ad_utility::testing::getQec();
 
-  AD_CHECK(input.numColumns() == isDescending.size());
-  AD_CHECK(input.numColumns() == expected.numColumns());
-  AD_CHECK(input.numRows() == expected.numRows());
+  AD_CONTRACT_CHECK(input.numColumns() == isDescending.size());
+  AD_CONTRACT_CHECK(input.numColumns() == expected.numColumns());
+  AD_CONTRACT_CHECK(input.numRows() == expected.numRows());
   // Set up a vector of `SortIndices`. Those will later be permuted.
   // The second element (`isDescending`) will be correctly set later.
   OrderBy::SortIndices sortColumns;

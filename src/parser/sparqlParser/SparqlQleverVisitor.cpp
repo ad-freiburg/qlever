@@ -509,7 +509,7 @@ OrderClause Visitor::visit(Parser::OrderClauseContext* ctx) {
     }
     return {IsInternalSort::True, std::move(orderKeys)};
   } else {
-    AD_CHECK(ctx->orderBy);
+    AD_CONTRACT_CHECK(ctx->orderBy);
     return {IsInternalSort::False, std::move(orderKeys)};
   }
 }

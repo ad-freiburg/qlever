@@ -82,7 +82,7 @@ TEST(Sort, TwoColumnsIntAndFloat) {
   std::vector<std::pair<int64_t, double>> intsAndFloatsExpected{
       {0, 2.8}, {0, 7}, {-3, 0.5}, {-3, 1.0}};
 
-  AD_CHECK(intsAndFloats.size() == intsAndFloatsExpected.size());
+  AD_CONTRACT_CHECK(intsAndFloats.size() == intsAndFloatsExpected.size());
   input.resize(intsAndFloats.size());
   expected.resize(intsAndFloatsExpected.size());
 

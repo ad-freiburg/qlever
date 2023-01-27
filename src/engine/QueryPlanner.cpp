@@ -637,12 +637,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     if (pq._isInternalSort == IsInternalSort::True) {
       std::vector<size_t> sortColumns;
       for (auto& [index, isDescending] : sortIndices) {
-        AD_CHECK(!isDescending);
+        AD_CONTRACT_CHECK(!isDescending);
         sortColumns.push_back(index);
       }
       tree = QueryExecutionTree::createSortedTree(parent._qet, sortColumns);
     } else {
-      AD_CHECK(pq._isInternalSort == IsInternalSort::False);
+      AD_CONTRACT_CHECK(pq._isInternalSort == IsInternalSort::False);
       // Note: As the internal ordering is different from the semantic ordering
       // needed by `OrderBy`, we always have to instantiate the `OrderBy`
       // operation.

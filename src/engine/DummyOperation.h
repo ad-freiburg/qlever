@@ -8,19 +8,25 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/ResultTable.h"
 #include "util/Random.h"
-// used to test HasRelationScan with a subtree
+
+// An operation that yields a given `IdTable` as its result. It is used for
+// unit testing purposes when we need to specify the subtrees of another
+// operation.
 class DummyOperation : public Operation {
  private:
   IdTable table_;
   std::vector<Variable> variables_;
 
  public:
+  // Create a dummy operation with for a given `IdTable` and the given
+  // `variables`. The number of variables must be equal to the number
+  // of columns in the table.
   DummyOperation(QueryExecutionContext* ctx, IdTable table,
                  std::vector<Variable> variables)
       : Operation{ctx},
         table_{std::move(table)},
         variables_{std::move(variables)} {
-    AD_CHECK(variables_.size() == table_.numColumns());
+    AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
   }
   virtual void computeResult(ResultTable* result) override {
     for (size_t i = 0; i < table_.numColumns(); ++i) {
