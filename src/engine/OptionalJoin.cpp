@@ -18,7 +18,7 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
                            const vector<array<ColumnIndex, 2>>& jcs)
     : Operation(qec), _joinColumns(jcs), _multiplicitiesComputed(false) {
   // Make sure subtrees are ordered so that identical queries can be identified.
-  AD_CHECK_GT(jcs.size(), 0);
+  AD_CONTRACT_CHECK(jcs.size() > 0);
   if (t1->asString() < t2->asString()) {
     _left = t1;
     _leftOptional = t1Optional;
@@ -76,13 +76,13 @@ string OptionalJoin::getDescriptor() const {
 
 // _____________________________________________________________________________
 void OptionalJoin::computeResult(ResultTable* result) {
-  AD_CHECK(result);
+  AD_CONTRACT_CHECK(result);
   LOG(DEBUG) << "OptionalJoin result computation..." << endl;
 
   result->_sortedBy = resultSortedOn();
   result->_idTable.setNumColumns(getResultWidth());
 
-  AD_CHECK_GE(result->_idTable.numColumns(), _joinColumns.size());
+  AD_CONTRACT_CHECK(result->_idTable.numColumns() >= _joinColumns.size());
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
@@ -157,7 +157,7 @@ VariableToColumnMap OptionalJoin::computeVariableToColumnMap() const {
 size_t OptionalJoin::getResultWidth() const {
   size_t res =
       _left->getResultWidth() + _right->getResultWidth() - _joinColumns.size();
-  AD_CHECK(res > 0);
+  AD_CONTRACT_CHECK(res > 0);
   return res;
 }
 

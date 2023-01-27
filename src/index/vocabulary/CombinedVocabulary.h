@@ -84,7 +84,7 @@ class CombinedVocabulary {
   /// The highest ID (=index) that occurs in this vocabulary. May only be called
   /// if size() > 0
   auto getHighestId() const {
-    AD_CHECK(size() > 0);
+    AD_CONTRACT_CHECK(size() > 0);
     return getEndIndex() - 1;
   }
 

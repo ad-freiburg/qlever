@@ -89,7 +89,7 @@ class ResultInProgress {
   // waiting for the result have already finished or were aborted.
   void finish(shared_ptr<Value> result) {
     std::lock_guard lockGuard(_mutex);
-    AD_CHECK(_status == Status::IN_PROGRESS);
+    AD_CONTRACT_CHECK(_status == Status::IN_PROGRESS);
     _status = Status::FINISHED;
     _result = std::move(result);
     _conditionVariable.notify_all();
@@ -100,7 +100,7 @@ class ResultInProgress {
   // If the total number of calls to finish() or abort() exceeds 1, the program
   // will terminate.
   void abort() {
-    AD_CHECK(_status == Status::IN_PROGRESS);
+    AD_CONTRACT_CHECK(_status == Status::IN_PROGRESS);
     std::lock_guard lockGuard(_mutex);
     _status = Status::ABORTED;
     _conditionVariable.notify_all();
@@ -275,7 +275,7 @@ class ConcurrentCache {
   void moveFromInProgressToCache(Key key, shared_ptr<Value> computationResult) {
     // Obtain a lock for the whole operation, making it atomic.
     auto lockPtr = _cacheAndInProgressMap.wlock();
-    AD_CHECK(lockPtr->_inProgress.contains(key));
+    AD_CONTRACT_CHECK(lockPtr->_inProgress.contains(key));
     bool pinned = lockPtr->_inProgress[key].first;
     if (pinned) {
       lockPtr->_cache.insertPinned(std::move(key),

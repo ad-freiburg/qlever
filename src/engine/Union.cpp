@@ -14,7 +14,7 @@ Union::Union(QueryExecutionContext* qec,
              const std::shared_ptr<QueryExecutionTree>& t1,
              const std::shared_ptr<QueryExecutionTree>& t2)
     : Operation(qec) {
-  AD_CHECK(t1 && t2);
+  AD_CONTRACT_CHECK(t1 && t2);
   _subtrees[0] = t1;
   _subtrees[1] = t2;
 
@@ -229,7 +229,7 @@ void Union::computeUnion(
       // This if clause is only here to avoid creating the call to insert when
       // it would not be possible to call the function due to not matching
       // columns.
-      AD_CHECK(WIDTH == OUT_WIDTH);
+      AD_CONTRACT_CHECK(WIDTH == OUT_WIDTH);
       if constexpr (WIDTH == OUT_WIDTH) {
         appendToResultChunked(inputTable);
       }

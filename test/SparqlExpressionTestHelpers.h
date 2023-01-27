@@ -55,13 +55,13 @@ struct TestContext {
     Id Beta;
 
     bool b = qec->getIndex().getId("\"alpha\"", &alpha);
-    AD_CHECK(b);
+    AD_CONTRACT_CHECK(b);
     b = qec->getIndex().getId("\"älpha\"", &aelpha);
-    AD_CHECK(b);
+    AD_CONTRACT_CHECK(b);
     b = qec->getIndex().getId("\"A\"", &A);
-    AD_CHECK(b);
+    AD_CONTRACT_CHECK(b);
     b = qec->getIndex().getId("\"Beta\"", &Beta);
-    AD_CHECK(b);
+    AD_CONTRACT_CHECK(b);
 
     // Set up the `table` that represents the previous partial query results. It
     // has five columns/variables: ?ints (only integers), ?doubles (only

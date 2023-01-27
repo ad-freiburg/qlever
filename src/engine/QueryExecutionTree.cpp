@@ -78,12 +78,11 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
 
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getVariableColumn(const Variable& variable) const {
-  AD_CHECK(_rootOperation);
+  AD_CONTRACT_CHECK(_rootOperation);
   const auto& varCols = getVariableColumns();
   if (!varCols.contains(variable)) {
-    AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-             "Variable could not be mapped to result column. Var: " +
-                 variable.name());
+    AD_THROW("Variable could not be mapped to result column. Var: " +
+             variable.name());
   }
   return varCols.at(variable);
 }
@@ -206,10 +205,10 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
           b["xml:lang"] = entitystr.substr(quote_pos + 2);
         } else if (quote_pos < entitystr.size() - 2 &&
                    entitystr[quote_pos + 1] == '^') {
-          AD_CHECK(entitystr[quote_pos + 2] == '^');
+          AD_CONTRACT_CHECK(entitystr[quote_pos + 2] == '^');
           std::string_view datatype{entitystr};
           // remove the < angledBrackets> around the datatype IRI
-          AD_CHECK(datatype.size() >= quote_pos + 5);
+          AD_CONTRACT_CHECK(datatype.size() >= quote_pos + 5);
           datatype.remove_prefix(quote_pos + 4);
           datatype.remove_suffix(1);
           b["datatype"] = datatype;
@@ -287,7 +286,7 @@ bool QueryExecutionTree::knownEmptyResult() {
 
 // _____________________________________________________________________________
 bool QueryExecutionTree::isVariableCovered(Variable variable) const {
-  AD_CHECK(_rootOperation);
+  AD_CONTRACT_CHECK(_rootOperation);
   return getVariableColumns().contains(variable);
 }
 
@@ -456,8 +455,7 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
                 _qec->getIndex().getTextExcerpt(id.getTextRecordIndex()));
             break;
           default:
-            AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
-                     "Cannot deduce output type.");
+            AD_THROW("Cannot deduce output type.");
         }
       }
       co_yield j + 1 < selectedColumnIndices.size() ? sep : '\n';

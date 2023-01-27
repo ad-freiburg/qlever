@@ -146,7 +146,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
                << resultNumCols << std::endl;
     return result._resultPointer->_resultTable;
-  } catch (const ad_semsearch::AbortException& e) {
+  } catch (const ad_utility::AbortException& e) {
     // A child Operation was aborted, do not print the information again.
     _runtimeInfo.status_ = RuntimeInformation::Status::failedBecauseChildFailed;
     throw;
@@ -158,21 +158,21 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     LOG(ERROR) << "Waited for a result from another thread which then failed"
                << endl;
     LOG(DEBUG) << asString();
-    throw ad_semsearch::AbortException(e);
+    throw ad_utility::AbortException(e);
   } catch (const std::exception& e) {
     // We are in the innermost level of the exception, so print
     LOG(ERROR) << "Aborted Operation" << endl;
     LOG(DEBUG) << asString() << endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
-    throw ad_semsearch::AbortException(e);
+    throw ad_utility::AbortException(e);
   } catch (...) {
     // We are in the innermost level of the exception, so print
     LOG(ERROR) << "Aborted Operation" << endl;
     LOG(DEBUG) << asString() << endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
-    throw ad_semsearch::AbortException(
+    throw ad_utility::AbortException(
         "Unexpected expection that is not a subclass of std::exception");
   }
 }
@@ -197,7 +197,7 @@ void Operation::updateRuntimeInformationOnSuccess(
   bool wasCached = cacheStatus != ad_utility::CacheStatus::computed;
   // If the result was read from the cache, then we need the additional
   // runtime info for the correct child information etc.
-  AD_CHECK(!wasCached || runtimeInfo.has_value());
+  AD_CONTRACT_CHECK(!wasCached || runtimeInfo.has_value());
 
   if (runtimeInfo.has_value()) {
     if (wasCached) {
@@ -214,7 +214,7 @@ void Operation::updateRuntimeInformationOnSuccess(
     // available.
     _runtimeInfo.children_.clear();
     for (auto* child : getChildren()) {
-      AD_CHECK(child);
+      AD_CONTRACT_CHECK(child);
       _runtimeInfo.children_.push_back(
           child->getRootOperation()->getRuntimeInfo());
     }
@@ -280,7 +280,7 @@ void Operation::createRuntimeInfoFromEstimates() {
   _runtimeInfo.descriptor_ = getDescriptor();
 
   for (const auto& child : getChildren()) {
-    AD_CHECK(child);
+    AD_CONTRACT_CHECK(child);
     child->getRootOperation()->createRuntimeInfoFromEstimates();
     _runtimeInfo.children_.push_back(
         child->getRootOperation()->getRuntimeInfo());

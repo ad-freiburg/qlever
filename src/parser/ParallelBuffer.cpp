@@ -19,7 +19,7 @@ std::optional<ParallelBuffer::BufferType> ParallelFileBuffer::getNextBlock() {
     return std::nullopt;
   }
 
-  AD_CHECK(_file.isOpen() && _fut.valid());
+  AD_CONTRACT_CHECK(_file.isOpen() && _fut.valid());
   auto numBytesRead = _fut.get();
   if (numBytesRead == 0) {
     _eof = true;

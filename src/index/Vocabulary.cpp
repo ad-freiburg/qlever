@@ -181,15 +181,15 @@ void Vocabulary<S, C>::initializeInternalizedLangs(const StringRange& s) {
 template <typename S, typename C>
 bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
                                                    IdRange* range) const {
-  AD_CHECK_EQ(word[word.size() - 1], PREFIX_CHAR);
+  AD_CONTRACT_CHECK(word[word.size() - 1] == PREFIX_CHAR);
   auto prefixRange = prefix_range(word.substr(0, word.size() - 1));
   bool success = prefixRange.second > prefixRange.first;
   range->_first = prefixRange.first;
   range->_last = prefixRange.second.decremented();
 
   if (success) {
-    AD_CHECK_LT(range->_first.get(), _internalVocabulary.size());
-    AD_CHECK_LT(range->_last.get(), _internalVocabulary.size());
+    AD_CONTRACT_CHECK(range->_first.get() < _internalVocabulary.size());
+    AD_CONTRACT_CHECK(range->_last.get() < _internalVocabulary.size());
   }
   return success;
 }
@@ -274,7 +274,7 @@ const std::optional<string> Vocabulary<S, C>::indexToOptionalString(
   } else {
     // this word must be externalized
     idx.get() -= _internalVocabulary.size();
-    AD_CHECK(idx.get() < _externalVocabulary.size());
+    AD_CONTRACT_CHECK(idx.get() < _externalVocabulary.size());
     return _externalVocabulary[idx.get()];
   }
 }

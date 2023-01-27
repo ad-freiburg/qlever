@@ -44,7 +44,7 @@ TEST(PrefixCompressor, TooManyPrefixesThrow) {
   for (size_t i = 0; i < NUM_COMPRESSION_PREFIXES + 1; ++i) {
     tooManyPrefixes.push_back(std::to_string(i));
   }
-  ASSERT_THROW(p.buildCodebook(tooManyPrefixes), ad_semsearch::Exception);
+  ASSERT_THROW(p.buildCodebook(tooManyPrefixes), ad_utility::Exception);
 }
 
 TEST(PrefixCompressor, MaximumNumberOfPrefixes) {

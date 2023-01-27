@@ -21,32 +21,23 @@ TEST(RelationMetaDataTest, writeReadTest) {
         {{12, 34}, {46, 11}}, 5, V(0), V(2), V(13), V(24)};
     CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
 
-    ad_utility::serialization::FileWriteSerializer f("_testtmp.rmd");
-    f << rmdF;
-    f << rmdB;
-    f.close();
+  ad_utility::serialization::FileWriteSerializer f("_testtmp.rmd");
+  f << rmdF;
+  f << rmdB;
+  f.close();
 
-    ad_utility::serialization::FileReadSerializer in("_testtmp.rmd");
-    CompressedRelationMetadata rmdF2;
-    CompressedBlockMetadata rmdB2;
-    in >> rmdF2;
-    in >> rmdB2;
+  ad_utility::serialization::FileReadSerializer in("_testtmp.rmd");
+  CompressedRelationMetadata rmdF2;
+  CompressedBlockMetadata rmdB2;
+  in >> rmdF2;
+  in >> rmdB2;
 
-    remove("_testtmp.rmd");
-    ASSERT_EQ(rmdF, rmdF2);
-    ASSERT_EQ(rmdB, rmdB2);
-
-  } catch (const ad_semsearch::Exception& e) {
-    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
-    FAIL() << e.getFullErrorMessage();
-  } catch (const std::exception& e) {
-    std::cout << "Caught: " << e.what() << std::endl;
-    FAIL() << e.what();
-  }
+  remove("_testtmp.rmd");
+  ASSERT_EQ(rmdF, rmdF2);
+  ASSERT_EQ(rmdB, rmdB2);
 }
 
 TEST(IndexMetaDataTest, writeReadTest2Hmap) {
-  try {
     vector<CompressedBlockMetadata> bs;
     bs.push_back(CompressedBlockMetadata{
         {{12, 34}, {42, 5}}, 5, V(0), V(2), V(13), V(24)});
@@ -59,34 +50,26 @@ TEST(IndexMetaDataTest, writeReadTest2Hmap) {
     imd.add(rmdF2);
     imd.blockData() = bs;
 
-    const string filename = "_testtmp.imd";
-    imd.writeToFile(filename);
+  const string filename = "_testtmp.imd";
+  imd.writeToFile(filename);
 
-    ad_utility::File in("_testtmp.imd", "r");
-    IndexMetaDataHmap imd2;
-    imd2.readFromFile(&in);
-    remove("_testtmp.rmd");
+  ad_utility::File in("_testtmp.imd", "r");
+  IndexMetaDataHmap imd2;
+  imd2.readFromFile(&in);
+  remove("_testtmp.rmd");
 
     auto rmdFn = imd2.getMetaData(V(1));
     auto rmdFn2 = imd2.getMetaData(V(2));
 
-    ASSERT_EQ(rmdF, rmdFn);
-    ASSERT_EQ(rmdF2, rmdFn2);
+  ASSERT_EQ(rmdF, rmdFn);
+  ASSERT_EQ(rmdF2, rmdFn2);
 
-    ASSERT_EQ(imd2.blockData(), bs);
-  } catch (const ad_semsearch::Exception& e) {
-    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
-    FAIL() << e.getFullErrorMessage();
-  } catch (const std::exception& e) {
-    std::cout << "Caught: " << e.what() << std::endl;
-    FAIL() << e.what();
-  }
+  ASSERT_EQ(imd2.blockData(), bs);
 }
 
 TEST(IndexMetaDataTest, writeReadTest2Mmap) {
   std::string imdFilename = "_testtmp.imd";
   std::string mmapFilename = imdFilename + ".mmap";
-  try {
     vector<CompressedBlockMetadata> bs;
     bs.push_back(CompressedBlockMetadata{
         {{12, 34}, {42, 17}}, 5, V(0), V(2), V(13), V(24)});
@@ -103,31 +86,23 @@ TEST(IndexMetaDataTest, writeReadTest2Mmap) {
       imd.add(rmdF2);
       imd.blockData() = bs;
 
-      imd.writeToFile(imdFilename);
-    }
+    imd.writeToFile(imdFilename);
+  }
 
-    {
-      ad_utility::File in(imdFilename, "r");
-      IndexMetaDataMmap imd2;
-      imd2.setup(mmapFilename, ad_utility::ReuseTag());
-      imd2.readFromFile(&in);
+  {
+    ad_utility::File in(imdFilename, "r");
+    IndexMetaDataMmap imd2;
+    imd2.setup(mmapFilename, ad_utility::ReuseTag());
+    imd2.readFromFile(&in);
 
       auto rmdFn = imd2.getMetaData(V(1));
       auto rmdFn2 = imd2.getMetaData(V(2));
 
-      ASSERT_EQ(rmdF, rmdFn);
-      ASSERT_EQ(rmdF2, rmdFn2);
+    ASSERT_EQ(rmdF, rmdFn);
+    ASSERT_EQ(rmdF2, rmdFn2);
 
-      ASSERT_EQ(imd2.blockData(), bs);
-    }
-    ad_utility::deleteFile(imdFilename);
-    ad_utility::deleteFile(mmapFilename);
-
-  } catch (const ad_semsearch::Exception& e) {
-    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
-    FAIL() << e.getFullErrorMessage();
-  } catch (const std::exception& e) {
-    std::cout << "Caught: " << e.what() << std::endl;
-    FAIL() << e.what();
+    ASSERT_EQ(imd2.blockData(), bs);
   }
+  ad_utility::deleteFile(imdFilename);
+  ad_utility::deleteFile(mmapFilename);
 }

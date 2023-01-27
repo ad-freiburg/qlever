@@ -23,7 +23,7 @@ auto makeGetId = [](const IndexImpl& index) {
   return [&index](const std::string& el) {
     Id id;
     bool success = index.getId(el, &id);
-    AD_CHECK(success);
+    AD_CONTRACT_CHECK(success);
     return id;
   };
 };
@@ -370,7 +370,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
   auto getId = [&index](const std::string& s) {
     Id id;
     bool success = index.getId(s, &id);
-    AD_CHECK(success);
+    AD_CONTRACT_CHECK(success);
     return id;
   };
 

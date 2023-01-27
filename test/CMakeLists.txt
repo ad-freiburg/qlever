@@ -204,7 +204,7 @@ addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
 
-addLinkAndDiscoverTest(PrefixCompressorTest)
+addLinkAndDiscoverTest(PrefixCompressorTest absl::strings)
 
 addLinkAndDiscoverTest(MilestoneIdTest absl::strings)
 
@@ -278,3 +278,5 @@ addLinkAndDiscoverTest(TimerTest absl::strings)
 addLinkAndDiscoverTest(AlgorithmTest)
 
 addLinkAndDiscoverTest(CompressedRelationsTest index)
+
+addLinkAndDiscoverTest(ExceptionTest)
