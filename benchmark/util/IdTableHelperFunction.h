@@ -12,6 +12,7 @@
 #include "util/Forward.h"
 #include "engine/idTable/IdTable.h"
 #include "../test/util/IdTableHelpers.h"
+#include "engine/CallFixedSize.h"
 
 /*
  * @brief Return a IdTable, that is randomly filled. The range of numbers
@@ -51,3 +52,11 @@ IdTable createRandomlyFilledIdTable(const size_t numberRows,
   return makeIdTableFromVector(tableContent); 
 }
 
+/*
+ * @brief Sorts an IdTable in place, in the same way, that we sort them during normal programm
+ * usage.
+ */
+void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table) {
+  CALL_FIXED_SIZE( (std::array{table.idTable.numColumns()}),
+      &Engine::sort, &table.idTable, table.joinColumn);
+}

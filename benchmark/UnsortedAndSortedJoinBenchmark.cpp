@@ -6,6 +6,7 @@
 
 #include <cstdio>
 #include <algorithm>
+#include <concepts>
 
 #include "engine/Engine.h"
 #include "engine/Join.h"
@@ -85,8 +86,8 @@ void BM_UnsortedAndSortedIdTable(BenchmarkRecords* records) {
   // Sorts the table IN PLACE and the uses the normal join on them.
   auto sortThenJoinLambdaWrapper = [&]() {
         // Sorting the tables by the join column.
-        Engine::sort<NUMBER_COLUMNS>(&a.idTable, 0);
-        Engine::sort<NUMBER_COLUMNS>(&b.idTable, 0);
+        sortIdTableByJoinColumnInPlace(a);
+        sortIdTableByJoinColumnInPlace(b);
 
         useJoinFunctionOnIdTables(a, b, joinLambda);
   };
@@ -128,6 +129,163 @@ void BM_UnsortedAndSortedIdTable(BenchmarkRecords* records) {
   // Because the sortThenJoinLambdaWrapper sorts tables IN PLACE, a and b are now sorted.
   records->addToExistingTable("Sorted IdTables", 1, 0, hashJoinLambdaWrapper);
   records->addToExistingTable("Sorted IdTables", 0, 0, joinLambdaWrapper);
+}
+
+template<typename T1, typename T2, typename T3, typename T4>
+concept onlyFirstIsVector = std::is_same<T1, std::vector<size_t>>::value &&
+  std::is_same<T2, size_t>::value && std::is_same<T3, size_t>::value &&
+  std::is_same<T4, size_t>::value;
+
+/*
+ * @brief Create a benchmark table for join algorithm, with the given
+ *  parameters for the IdTables. The columns will be the algorithm and the
+ *  rows will be the parameter, you gave a list for.
+ *
+ * @tparam T1, T2, T3, T4 Exactly on of those muste be a std::vector<size_t>
+ *  and all others must be size_t. Typ inference should be able to handle it,
+ *  if you give the right function arguments.
+ *
+ * @param records The BenchmarkRecords, in which you want to create a new
+ *  benchmark table.
+ * @param overlap Should the tables used for the benchmark table have any
+ *  overlap concering the entries of their join columns?
+ * @param smallerTableSorted, biggerTableSorted Should the bigger/smaller table
+ *  be sorted by his join column before being joined? More specificly, some
+ *  join algorithm require one, or both, of the IdTables to be sorted. If this
+ *  argument is false, the time needed for sorting the required table will
+ *  added to the time of the join algorithm.
+ * @param ratioRows How many more rows than the smaller table should the
+ *  bigger table have? In more mathematical words: Number of rows of the
+ *  bigger table divided by the number of rows of the smaller table is equal
+ *  to ratioRows.
+ * @param smallerTableAmountRows How many rows should the smaller table have?
+ * @param smallerTableAmountColumns, biggerTableAmountColumns How many columns
+ *  should the bigger/smaller tables have?
+ */
+template<typename T1, typename T2, typename T3,typename T4>
+requires onlyFirstIsVector<T1, T2, T3, T4> || onlyFirstIsVector<T2, T1, T3, T4>
+  || onlyFirstIsVector<T3, T2, T1, T4> || onlyFirstIsVector<T4, T2, T3, T1>
+void makeBenchmarkTable(BenchmarkRecords* records, const bool overlap,
+    const bool smallerTableSorted, const bool biggerTableSorted, const T1& ratioRows,
+    const T2& smallerTableAmountRows, const T3& smallerTableAmountColumns,
+    const T4& biggerTableAmountColumns) {
+  // The name of the benchmark table, this function is creating.
+  std::stringstream tableDescriptor;
+  tableDescriptor << "Benchmark with " << ((overlap) ? "" : "no ") <<
+    "overlap betwenn " << (smallerTableSorted ? "" : "not ") <<
+    "sorted smaller table, with " << std::to_string(smallerTableAmountRows) <<
+    " rows and " << std::to_string(smallerTableAmountColumns) << ", and " <<
+    (biggerTableSorted ? "" : "not ") << "sorted bigger table, with " <<
+    std::to_string(biggerTableAmountColumns) << " columns and " <<
+    std::to_string(smallerTableAmountRows) << " * " << std::to_string(ratioRows)
+    << "rows.";
+
+  // The lambdas for the join algorithms.
+  auto hashJoinLambda = makeHashJoinLambda();
+  auto joinLambda = makeJoinLambda();
+
+  // To reduce code duplication, the creation of the benchmark table is done
+  // per lambda.
+  auto createBenchmarkTable = [&tableDescriptor, &records](
+      const std::vector<size_t>& unconvertedRowNames){
+    // Creating the names for the rows for the benchmark table creation.
+    std::vector<std::string> rowNames(unconvertedRowNames.size());
+    std::ranges::transform(unconvertedRowNames, rowNames,
+        [](const size_t& number){return std::to_string(number);});
+
+    records->addTable(tableDescriptor.str(), rowNames,
+        {"Merge join", "Hash join"});
+  };
+
+  // Setup for easier creation of the tables, that will be joined.
+  IdTableAndJoinColumn smallerTable{{}, 0};
+  IdTableAndJoinColumn biggerTable{{}, 0};
+  auto replaceIdTables = [&overlap, &smallerTableSorted, &biggerTableSorted,
+       &smallerTable, &biggerTable](size_t smallerTableAmountRows,
+           size_t smallerTableAmountColumns, size_t ratioRows,
+           size_t biggerTableAmountColumns){
+         // Replacing the old id tables with newly generated ones, based
+         // on specification.
+         smallerTable.idTable = createRandomlyFilledIdTable(
+             smallerTableAmountRows, smallerTableAmountColumns, 0, 0, 500);
+         biggerTable.idTable = createRandomlyFilledIdTable(
+             smallerTableAmountRows * ratioRows, biggerTableAmountColumns,
+             0, 501, 1000);
+
+         // Creating overlap, if wanted.
+         if (overlap) {createOverlapRandomly(&smallerTable, biggerTable, 42.0);};
+
+         // Sort the tables, if wanted.
+         if (smallerTableSorted){sortIdTableByJoinColumnInPlace(smallerTable);};
+         if (biggerTableSorted){sortIdTableByJoinColumnInPlace(biggerTable);};
+       };
+
+  // Add the next row of join algorithm measurements to the benchmark table.
+  auto addNextRowToBenchmarkTable = [i = 0, &tableDescriptor, &records,
+  &hashJoinLambda, &smallerTableSorted, &biggerTableSorted, &joinLambda,
+  &smallerTable, &biggerTable]()mutable{
+    // Hash join first, because merge join sorts all tables, if needed, before
+    // joining them.
+    records->addToExistingTable(tableDescriptor, i, 1, [&](){
+        useJoinFunctionOnIdTables(smallerTable, biggerTable, hashJoinLambda);});
+
+    // The merge join may have to sort non, one, or both tables, before using
+    // them. That decision shouldn't happen in the wrapper for the call, to
+    // minimize overhead.
+    if ((!smallerTableSorted) && (!biggerTableSorted)) {
+      records->addToExistingTable(tableDescriptor, i, 0, [&](){
+          sortIdTableByJoinColumnInPlace(smallerTable);
+          sortIdTableByJoinColumnInPlace(biggerTable);
+          useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda);});
+    } else if (!smallerTableSorted) {
+      records->addToExistingTable(tableDescriptor, i, 0, [&](){
+          sortIdTableByJoinColumnInPlace(smallerTable);
+          useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda);});
+    } else if (!biggerTableSorted) {
+      records->addToExistingTable(tableDescriptor, i, 0, [&](){
+          sortIdTableByJoinColumnInPlace(biggerTable);
+          useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda);});
+    } else {
+      records->addToExistingTable(tableDescriptor, i, 0, [&](){
+          useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda);});
+    }
+
+    // The next call of the lambda, will be one row further.
+    i++;
+  };
+
+  // We have to adjust a few things, based on which argument is the
+  // vector. Fortunaly, we can do it so, that the uneeded parts get deleted
+  // at compile time.
+  if constexpr (std::is_same<T1, std::vector<size_t>>::value){
+    createBenchmarkTable(ratioRows);
+    for (const size_t& ratioRow : ratioRows) {
+      replaceIdTables(smallerTableAmountRows, smallerTableAmountColumns,
+          ratioRow, biggerTableAmountColumns);
+      addNextRowToBenchmarkTable();
+    }
+  } else if constexpr (std::is_same<T2, std::vector<size_t>>::value){
+    createBenchmarkTable(smallerTableAmountRows);
+    for (const size_t& smallerTableAmountRow : smallerTableAmountRows) {
+      replaceIdTables(smallerTableAmountRow, smallerTableAmountColumns,
+          ratioRows, biggerTableAmountColumns);
+      addNextRowToBenchmarkTable();
+    }
+  } else if constexpr (std::is_same<T3, std::vector<size_t>>::value){
+    createBenchmarkTable(smallerTableAmountColumns);
+    for (const size_t& smallerTableAmountColumn : smallerTableAmountColumns) {
+      replaceIdTables(smallerTableAmountRows, smallerTableAmountColumn,
+          ratioRows, biggerTableAmountColumns);
+      addNextRowToBenchmarkTable();
+    }
+  } else {
+    createBenchmarkTable(biggerTableAmountColumns);
+    for (const size_t& biggerTableAmountColumn : biggerTableAmountColumns) {
+      replaceIdTables(smallerTableAmountRows, smallerTableAmountColumns,
+          ratioRows, biggerTableAmountColumn);
+      addNextRowToBenchmarkTable();
+    }
+  }
 }
 
 BenchmarkRegister temp{{BM_UnsortedAndSortedIdTable}};
