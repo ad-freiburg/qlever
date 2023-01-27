@@ -52,10 +52,10 @@ jobs:
           # public default token.
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
-          override_branch: $${{github.event.workflow_run.head_branch}}
+          override_branch: ${{github.event.workflow_run.head_branch}}
           # Do we need the following line to work?
           #override_build:
-          override_commit: $${{github.event.workflow_tun.head_commit.id}}
-          override_pr: $${{env.pr_number}}
+          override_commit: ${{github.event.workflow_tun.head_commit.id}}
+          override_pr: ${{env.pr_number}}
           
          
