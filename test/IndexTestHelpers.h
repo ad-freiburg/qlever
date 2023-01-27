@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include "absl/cleanup/cleanup.h"
 #include "engine/QueryExecutionContext.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
@@ -14,6 +13,14 @@
 // be used for unit tests.
 
 namespace ad_utility::testing {
+
+// Create an unlimited allocator.
+ad_utility::AllocatorWithLimit<Id>& makeAllocator() {
+  static ad_utility::AllocatorWithLimit<Id> a{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<size_t>::max())};
+  return a;
+}
 // Create an empty `Index` object that has certain default settings overwritten
 // such that very small indices, as they are typically used for unit tests,
 // can be built without a lot of time and memory overhead.
@@ -51,23 +58,30 @@ inline std::vector<std::string> getAllIndexFilenames(
           indexBasename + ".vocabulary.external.idsAndOffsets.mmap"};
 }
 
-// Create an `Index`, the vocabulary of which contains the literals `"alpha",
+// Create an `Index` from the given `turtleInput`. If the `turtleInput` is not
+// specified, a default input will be used and the resulting index will have the
+// following properties: Its vocabulary contains the literals `"alpha",
 // "älpha", "A", "Beta"`. These vocabulary entries are expected by the tests
 // for the subclasses of `SparqlExpression`.
 // The concrete triple contents are currently used in `GroupByTest.cpp`.
-inline Index makeTestIndex(const std::string& indexBasename) {
+inline Index makeTestIndex(const std::string& indexBasename,
+                           std::string turtleInput = "") {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
   ad_utility::setGlobalLoggingStream(&ignoreLogStream);
   std::string filename = "relationalExpressionTestIndex.ttl";
-  std::string dummyKb =
-      "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . <x> "
-      "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> \"zz\"@en";
+  if (turtleInput.empty()) {
+    turtleInput =
+        "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
+        "<x> "
+        "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
+        "\"zz\"@en";
+  }
 
   FILE_BUFFER_SIZE() = 1000;
   std::fstream f(filename, std::ios_base::out);
-  f << dummyKb;
+  f << turtleInput;
   f.close();
   {
     Index index = makeIndexWithTestSettings();
@@ -85,35 +99,54 @@ inline Index makeTestIndex(const std::string& indexBasename) {
 // build using `makeTestIndex` (see above). The index (most notably its
 // vocabulary) is the only part of the `QueryExecutionContext` that is actually
 // relevant for these tests, so the other members are defaulted.
-static inline QueryExecutionContext* getQec() {
+static inline QueryExecutionContext* getQec(std::string turtleInput = "") {
   static ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
-  std::string testIndexBasename = "_staticGlobalTestIndex";
-  static const absl::Cleanup cleanup = [testIndexBasename]() {
-    for (const std::string& indexFilename :
-         getAllIndexFilenames(testIndexBasename)) {
-      ad_utility::deleteFile(indexFilename);
-    }
-  };
-  static const Index index = makeTestIndex(testIndexBasename);
-  static const Engine engine{};
-  static QueryResultCache cache{};
-  static QueryExecutionContext qec{
-      index,
-      engine,
-      &cache,
-      ad_utility::AllocatorWithLimit<Id>{
-          ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)},
-      {}};
-  return &qec;
-}
 
-// Create an unlimited allocator.
-ad_utility::AllocatorWithLimit<Id>& makeAllocator() {
-  static ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<size_t>::max())};
-  return a;
+  // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
+  // the callback is stored as a `std::function`, which allows to store
+  // different types of callbacks in the same wrapper type.
+  struct TypeErasedCleanup {
+    std::function<void()> callback_;
+    ~TypeErasedCleanup() { callback_(); }
+  };
+
+  // A `QueryExecutionContext` together with all data structures that it
+  // depends on. The members are stored as `unique_ptr`s so that the references
+  // inside the `QueryExecutionContext` remain stable even when moving the
+  // `Context`.
+  struct Context {
+    TypeErasedCleanup cleanup_;
+    std::unique_ptr<Index> index_;
+    std::unique_ptr<Engine> engine_;
+    std::unique_ptr<QueryResultCache> cache_;
+    std::unique_ptr<QueryExecutionContext> qec_ =
+        std::make_unique<QueryExecutionContext>(*index_, *engine_, cache_.get(),
+                                                makeAllocator(),
+                                                SortPerformanceEstimator{});
+  };
+
+  static ad_utility::HashMap<std::string, Context> contextMap;
+
+  if (!contextMap.contains(turtleInput)) {
+    std::string testIndexBasename =
+        "_staticGlobalTestIndex" + std::to_string(contextMap.size());
+    contextMap.emplace(
+        turtleInput, Context{TypeErasedCleanup{[testIndexBasename]() {
+                               for (const std::string& indexFilename :
+                                    getAllIndexFilenames(testIndexBasename)) {
+                                 // Don't log when a file can't be deleted,
+                                 // because the logging might already be
+                                 // destroyed.
+                                 ad_utility::deleteFile(indexFilename, false);
+                               }
+                             }},
+                             std::make_unique<Index>(
+                                 makeTestIndex(testIndexBasename, turtleInput)),
+                             std::make_unique<Engine>(),
+                             std::make_unique<QueryResultCache>()});
+  }
+  return contextMap.at(turtleInput).qec_.get();
 }
 
 }  // namespace ad_utility::testing

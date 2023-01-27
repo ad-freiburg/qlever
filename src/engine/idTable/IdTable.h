@@ -539,7 +539,7 @@ class IdTable {
   // testing.
   bool operator==(const IdTable& other) const requires(!isView) {
     if (numColumns() != other.numColumns()) {
-      return false;
+      return (empty() && other.empty());
     }
     if (size() != other.numRows()) {
       return false;
