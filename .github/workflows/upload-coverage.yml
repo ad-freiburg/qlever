@@ -45,7 +45,7 @@ jobs:
       - name: "Checkout"
         uses: actions/checkout@v3
         with:
-          ref: "refs/remotes/pull/${{pr_number}}/merge"
+          ref: "refs/remotes/pull/${{env.pr_number}}/merge"
       - name: "Upload coverage report"
         uses: codecov/codecov-action@v3
         with:
