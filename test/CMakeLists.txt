@@ -1,8 +1,5 @@
 include(GoogleTest)
 
-set(QLEVER_TEST_SOURCES "")
-set(QLEVER_TEST_LIBRARIES "")
-
 # Link binary ${basename} against `gmock_main`, the threading library,
 # and all libraries that are specified as additional arguments.
 function (linkTest basename)
@@ -38,6 +35,9 @@ endfunction()
 
 if (SINGLE_TEST_BINARY)
     add_executable(QLeverAllUnitTestsMain)
+    target_link_libraries(QLeverAllUnitTestsMain gmock_main ${CMAKE_THREAD_LIBS_INIT})
+    gtest_discover_tests(${basename} ${basename} PROPERTIES RUN_SERIAL
+            TRUE)
 endif()
 # Usage: `addAndLinkTest(basename, [additionalLibraries...]`
 # Add a GTest/GMock test case that is called `basename` and compiled from a file called
@@ -46,16 +46,8 @@ endif()
 # additional arguments after the `basename`
 function(addLinkAndDiscoverTest basename)
   if (SINGLE_TEST_BINARY)
-      message(STATUS "target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)")
       target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
       target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
-      #message(STATUS "SINGLE_TEST_BINARY is ON")
-      #get_filename_component(CPP_FILE "${basename}.cpp" ABSOLUTE)
-      #message(STATUS "sources before ${QLEVER_TEST_SOURCES}")
-      #message(STATUS "CPP_FILE ${CPP_FILE}")
-      #set (QLEVER_TEST_SOURCES "${QLEVER_TEST_SOURCES} ${CPP_FILE}" PARENT_SCOPE)
-      #set (QLEVER_TEST_SOURCES "${QLEVER_TEST_SOURCES} transmogrify")
-      #set (QLEVER_TEST_LIBRARIES "${QLEVER_TEST_LIBRARIES} ${ARGN}" PARENT_SCOPE)
   else()
     addTest(${basename})
     linkAndDiscoverTest(${basename} ${ARGN})
@@ -69,15 +61,8 @@ endfunction()
 # required e.g. if several tests cases write to the same file.
 function(addLinkAndDiscoverTestSerial basename)
   if (SINGLE_TEST_BINARY)
-    message(STATUS "target_sources(QLeverAllUnitTestsMain ${basename}.cpp")
     target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
     target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
-    #message(STATUS "SINGLE_TEST_BINARY is ON")
-    #get_filename_component(CPP_FILE "${basename}.cpp" ABSOLUTE)
-    #message(STATUS "sources before ${QLEVER_TEST_SOURCES}")
-    #message(STATUS "CPP_FILE ${CPP_FILE}")
-    #set (QLEVER_TEST_SOURCES "${QLEVER_TEST_SOURCES} ${CPP_FILE}" PARENT_SCOPE)
-    #set (QLEVER_TEST_LIBRARIES "${QLEVER_TEST_LIBRARIES} ${ARGN}" PARENT_SCOPE)
   else()
       message(STATUS "SINGLE_TEST_BINARY is OFF")
     addTest(${basename})
@@ -90,23 +75,6 @@ endfunction()
 function(addAndLinkTest basename)
     addTest(${basename})
     linkTest(${basename} ${ARGN})
-endfunction()
-
-
-#message(STATUS "QLEVER_TEST_SOURCES outside addSingleTestBinary: ${QLEVER_TEST_SOURCES}")
-function(addSingleTestBinary)
-    #message(STATUS "QLEVER_TEST_SOURCES inside addSingleTestBinary: ${QLEVER_TEST_SOURCES}")
-    #message(STATUS "QLEVER_TEST_LIBRARIES inside addSingleTestBinary: ${QLEVER_TEST_LIBRARIES}")
-    #string(STRIP "${QLEVER_TEST_SOURCES}" QLEVER_TEST_SOURCES)
-    #string(STRIP "${QLEVER_TEST_LIBRARIES}" QLEVER_TEST_LIBRARIES)
-    #separate_arguments(QLEVER_TEST_SOURCES)
-    #separate_arguments(QLEVER_TEST_LIBRARIES)
-    #message(STATUS "QLEVER_TEST_SOURCES inside addSingleTestBinary: ${QLEVER_TEST_SOURCES}")
-  #add_executable(QLeverAllUnitTestsMain ${QLEVER_TEST_SOURCES})
-  #target_link_libraries(QLeverAllUnitTestsMain ${QLEVER_TEST_LIBRARIES} gmock_main ${CMAKE_THREAD_LIBS_INIT})
-  #gtest_discover_tests(QLeverAllUnitTestsMain  QLeverAllUnitTestsMain PROPERTIES RUN_SERIAL
-  #        TRUE)
-
 endfunction()
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest)
@@ -304,11 +272,6 @@ addLinkAndDiscoverTest(ResetWhenMovedTest)
 
 addLinkAndDiscoverTest(TimerTest absl::strings)
 
-
 addLinkAndDiscoverTest(AlgorithmTest)
-#if (SINGLE_TEST_BINARY)
-#    message(STATUS "only using a single binary for all unit tests")
-#    addSingleTestBinary()
-#endif()
 
 addLinkAndDiscoverTest(CompressedRelationsTest index)
