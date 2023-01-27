@@ -16,47 +16,83 @@ auto V = ad_utility::testing::VocabId;
 }
 
 TEST(RelationMetaDataTest, writeReadTest) {
-  try {
-    CompressedBlockMetadata rmdB{
-        {{12, 34}, {46, 11}}, 5, V(0), V(2), V(13), V(24)};
-    CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
+  CompressedBlockMetadata rmdB{
+      {{12, 34}, {46, 11}}, 5, V(0), V(2), V(13), V(24)};
+  CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
 
-    ad_utility::serialization::FileWriteSerializer f("_testtmp.rmd");
-    f << rmdF;
-    f << rmdB;
-    f.close();
+  ad_utility::serialization::FileWriteSerializer f("_testtmp.rmd");
+  f << rmdF;
+  f << rmdB;
+  f.close();
 
-    ad_utility::serialization::FileReadSerializer in("_testtmp.rmd");
-    CompressedRelationMetadata rmdF2;
-    CompressedBlockMetadata rmdB2;
-    in >> rmdF2;
-    in >> rmdB2;
+  ad_utility::serialization::FileReadSerializer in("_testtmp.rmd");
+  CompressedRelationMetadata rmdF2;
+  CompressedBlockMetadata rmdB2;
+  in >> rmdF2;
+  in >> rmdB2;
 
-    remove("_testtmp.rmd");
-    ASSERT_EQ(rmdF, rmdF2);
-    ASSERT_EQ(rmdB, rmdB2);
-  }
+  remove("_testtmp.rmd");
+  ASSERT_EQ(rmdF, rmdF2);
+  ASSERT_EQ(rmdB, rmdB2);
+}
 
-  TEST(IndexMetaDataTest, writeReadTest2Hmap) {
-    vector<CompressedBlockMetadata> bs;
-    bs.push_back(CompressedBlockMetadata{
-        {{12, 34}, {42, 5}}, 5, V(0), V(2), V(13), V(24)});
-    bs.push_back(CompressedBlockMetadata{
-        {{16, 34}, {165, 3}}, 5, V(0), V(2), V(13), V(24)});
-    CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
-    CompressedRelationMetadata rmdF2{V(2), 5, 3.0, 43.0, 10};
-    IndexMetaDataHmap imd;
+TEST(IndexMetaDataTest, writeReadTest2Hmap) {
+  vector<CompressedBlockMetadata> bs;
+  bs.push_back(CompressedBlockMetadata{
+      {{12, 34}, {42, 5}}, 5, V(0), V(2), V(13), V(24)});
+  bs.push_back(CompressedBlockMetadata{
+      {{16, 34}, {165, 3}}, 5, V(0), V(2), V(13), V(24)});
+  CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
+  CompressedRelationMetadata rmdF2{V(2), 5, 3.0, 43.0, 10};
+  IndexMetaDataHmap imd;
+  imd.add(rmdF);
+  imd.add(rmdF2);
+  imd.blockData() = bs;
+
+  const string filename = "_testtmp.imd";
+  imd.writeToFile(filename);
+
+  ad_utility::File in("_testtmp.imd", "r");
+  IndexMetaDataHmap imd2;
+  imd2.readFromFile(&in);
+  remove("_testtmp.rmd");
+
+  auto rmdFn = imd2.getMetaData(V(1));
+  auto rmdFn2 = imd2.getMetaData(V(2));
+
+  ASSERT_EQ(rmdF, rmdFn);
+  ASSERT_EQ(rmdF2, rmdFn2);
+
+  ASSERT_EQ(imd2.blockData(), bs);
+}
+
+TEST(IndexMetaDataTest, writeReadTest2Mmap) {
+  std::string imdFilename = "_testtmp.imd";
+  std::string mmapFilename = imdFilename + ".mmap";
+  vector<CompressedBlockMetadata> bs;
+  bs.push_back(CompressedBlockMetadata{
+      {{12, 34}, {42, 17}}, 5, V(0), V(2), V(13), V(24)});
+  bs.push_back(CompressedBlockMetadata{
+      {{12, 34}, {16, 12}}, 5, V(0), V(2), V(13), V(24)});
+  CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
+  CompressedRelationMetadata rmdF2{V(2), 5, 3.0, 43.0, 10};
+  // The index MetaData does not have an explicit clear, so we
+  // force destruction to close and reopen the mmap-File
+  {
+    IndexMetaDataMmap imd;
+    imd.setup(mmapFilename, ad_utility::CreateTag{});
     imd.add(rmdF);
     imd.add(rmdF2);
     imd.blockData() = bs;
 
-    const string filename = "_testtmp.imd";
-    imd.writeToFile(filename);
+    imd.writeToFile(imdFilename);
+  }
 
-    ad_utility::File in("_testtmp.imd", "r");
-    IndexMetaDataHmap imd2;
+  {
+    ad_utility::File in(imdFilename, "r");
+    IndexMetaDataMmap imd2;
+    imd2.setup(mmapFilename, ad_utility::ReuseTag());
     imd2.readFromFile(&in);
-    remove("_testtmp.rmd");
 
     auto rmdFn = imd2.getMetaData(V(1));
     auto rmdFn2 = imd2.getMetaData(V(2));
@@ -66,43 +102,6 @@ TEST(RelationMetaDataTest, writeReadTest) {
 
     ASSERT_EQ(imd2.blockData(), bs);
   }
-
-  TEST(IndexMetaDataTest, writeReadTest2Mmap) {
-    std::string imdFilename = "_testtmp.imd";
-    std::string mmapFilename = imdFilename + ".mmap";
-    vector<CompressedBlockMetadata> bs;
-    bs.push_back(CompressedBlockMetadata{
-        {{12, 34}, {42, 17}}, 5, V(0), V(2), V(13), V(24)});
-    bs.push_back(CompressedBlockMetadata{
-        {{12, 34}, {16, 12}}, 5, V(0), V(2), V(13), V(24)});
-    CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
-    CompressedRelationMetadata rmdF2{V(2), 5, 3.0, 43.0, 10};
-    // The index MetaData does not have an explicit clear, so we
-    // force destruction to close and reopen the mmap-File
-    {
-      IndexMetaDataMmap imd;
-      imd.setup(mmapFilename, ad_utility::CreateTag{});
-      imd.add(rmdF);
-      imd.add(rmdF2);
-      imd.blockData() = bs;
-
-      imd.writeToFile(imdFilename);
-    }
-
-    {
-      ad_utility::File in(imdFilename, "r");
-      IndexMetaDataMmap imd2;
-      imd2.setup(mmapFilename, ad_utility::ReuseTag());
-      imd2.readFromFile(&in);
-
-      auto rmdFn = imd2.getMetaData(V(1));
-      auto rmdFn2 = imd2.getMetaData(V(2));
-
-      ASSERT_EQ(rmdF, rmdFn);
-      ASSERT_EQ(rmdF2, rmdFn2);
-
-      ASSERT_EQ(imd2.blockData(), bs);
-    }
-    ad_utility::deleteFile(imdFilename);
-    ad_utility::deleteFile(mmapFilename);
-  }
+  ad_utility::deleteFile(imdFilename);
+  ad_utility::deleteFile(mmapFilename);
+}
