@@ -34,13 +34,13 @@ function(linkAndDiscoverTestSerial basename)
 endfunction()
 
 if (SINGLE_TEST_BINARY)
-    message(STATUS "All tests will be built into a single executable `QLeverAllUnitTestsMain`")
+    message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
     add_executable(QLeverAllUnitTestsMain)
     target_link_libraries(QLeverAllUnitTestsMain gmock_main ${CMAKE_THREAD_LIBS_INIT})
     gtest_discover_tests(QLeverAllUnitTestsMain QLeverAllUnitTestsMain PROPERTIES RUN_SERIAL
             TRUE)
 else()
-    message(STATUS "The tests will be split into several binaries")
+    message(STATUS "The tests are split over multiple binaries")
 
 endif()
 # Usage: `addAndLinkTest(basename, [additionalLibraries...]`

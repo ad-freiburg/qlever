@@ -9,8 +9,8 @@
 #include <fstream>
 
 #include "./IndexTestHelpers.h"
-#include "./util/IdTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/IdTestHelpers.h"
 #include "global/Pattern.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
