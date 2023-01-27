@@ -15,7 +15,7 @@ stream_generator generateException() {
   throw std::runtime_error("Test Exception");
   co_return;
 }
-}
+}  // namespace
 
 TEST(StreamableGeneratorTest, TestGeneratorExceptionResultsInException) {
   auto generator = generateException();
@@ -43,7 +43,7 @@ basic_stream_generator<TEST_BUFFER_SIZE> generateMultipleElements() {
   co_yield 1;
   co_yield "Abc";
 }
-}
+}  // namespace
 
 TEST(StreamableGeneratorTest, TestGeneratorReturnsBufferedResults) {
   auto generator = generateMultipleElements();

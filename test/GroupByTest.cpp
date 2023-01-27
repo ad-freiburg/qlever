@@ -5,6 +5,7 @@
 #include <cstdio>
 
 #include "./IndexTestHelpers.h"
+#include "./util/IdTestHelpers.h"
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -17,7 +18,7 @@
 using namespace ad_utility::testing;
 
 namespace {
-auto I = [](const auto& id) { return Id::makeFromInt(id); };
+auto I = IntId;
 }
 
 // This fixture is used to create an Index for the tests.

@@ -22,7 +22,7 @@ std::string_view toStringView(
     const streamable_body::writer::const_buffers_type& buffer) {
   return {static_cast<const char*>(buffer.data()), buffer.size()};
 }
-}
+}  // namespace
 
 namespace boost {
 // When using ASSERT_EQ/ASSERT_NE GTest always needs operator<< to print the
@@ -66,7 +66,7 @@ stream_generator generateException() {
   throw std::runtime_error("Test Exception");
   co_return;
 }
-}
+}  // namespace
 
 TEST(StreamableBodyTest, TestGeneratorExceptionResultsInErrorCode) {
   auto generator = toGenerator(generateException());
@@ -81,7 +81,7 @@ TEST(StreamableBodyTest, TestGeneratorExceptionResultsInErrorCode) {
 
 namespace {
 stream_generator generateNothing() { co_return; }
-}
+}  // namespace
 
 TEST(StreamableBodyTest, TestEmptyGeneratorReturnsEmptyResult) {
   auto generator = toGenerator(generateNothing());
@@ -100,7 +100,7 @@ stream_generator generateMultipleElements() {
   co_yield 1;
   co_yield "Abc";
 }
-}
+}  // namespace
 
 TEST(StreamableBodyTest, TestGeneratorReturnsBufferedResults) {
   auto generator = toGenerator(generateMultipleElements());

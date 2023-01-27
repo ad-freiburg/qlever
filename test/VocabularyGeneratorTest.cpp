@@ -6,10 +6,11 @@
 #include <iostream>
 #include <string>
 
-#include "../src/global/Constants.h"
-#include "../src/index/ConstantsIndexBuilding.h"
-#include "../src/index/Index.h"
-#include "../src/index/VocabularyGenerator.h"
+#include "./util/IdTestHelpers.h"
+#include "global/Constants.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/Index.h"
+#include "index/VocabularyGenerator.h"
 
 namespace {
 // equality operator used in this test
@@ -28,10 +29,8 @@ bool vocabTestCompare(const IdPairMMapVecView& a,
   return true;
 }
 
-auto I = [](const auto& id) {
-  return Id::makeFromVocabIndex(VocabIndex::make(id));
-};
-}
+auto V = ad_utility::testing::VocabId;
+}  // namespace
 
 // Test fixture that sets up the binary files vor partial vocabulary and
 // everything else connected with vocabulary merging.
@@ -106,7 +105,7 @@ class MergeVocabularyTest : public ::testing::Test {
             w._index = localIdx;
             partialVocab << w;
             if (mapping) {
-              mapping->emplace_back(I(localIdx), I(globalId));
+              mapping->emplace_back(V(localIdx), V(globalId));
             }
             localIdx++;
           }
@@ -214,10 +213,10 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
                         internalVocabularyAction);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
-    ASSERT_EQ(I(0), idMap[I(5)]);
-    ASSERT_EQ(I(1), idMap[I(7)]);
-    ASSERT_EQ(I(2), idMap[I(6)]);
-    ASSERT_EQ(I(3), idMap[I(8)]);
+    ASSERT_EQ(V(0), idMap[V(5)]);
+    ASSERT_EQ(V(1), idMap[V(7)]);
+    ASSERT_EQ(V(2), idMap[V(6)]);
+    ASSERT_EQ(V(3), idMap[V(8)]);
     auto res = system("rm _tmp_testidx*");
     (void)res;
   }
@@ -257,11 +256,11 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
                         internalVocabularyAction);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
-    EXPECT_EQ(I(0), idMap[I(6)]);
-    EXPECT_EQ(I(1), idMap[I(5)]);
-    EXPECT_EQ(I(2), idMap[I(9)]);
-    EXPECT_EQ(I(3), idMap[I(7)]);
-    EXPECT_EQ(I(4), idMap[I(8)]);
+    EXPECT_EQ(V(0), idMap[V(6)]);
+    EXPECT_EQ(V(1), idMap[V(5)]);
+    EXPECT_EQ(V(2), idMap[V(9)]);
+    EXPECT_EQ(V(3), idMap[V(7)]);
+    EXPECT_EQ(V(4), idMap[V(8)]);
     auto res = system("rm _tmp_testidx*");
     (void)res;
 

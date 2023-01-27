@@ -34,8 +34,9 @@ inline auto assertThatRangesAreEqual = [](const auto& a, const auto& b) {
  * `vocab[ids[i]] == words[i]` for all i.
  */
 inline void testUpperAndLowerBound(const auto& vocab, auto makeWordLarger,
-                            auto makeWordSmaller, auto comparator,
-                            const auto& words, std::vector<uint64_t> ids) {
+                                   auto makeWordSmaller, auto comparator,
+                                   const auto& words,
+                                   std::vector<uint64_t> ids) {
   ASSERT_FALSE(words.empty());
   ASSERT_EQ(vocab.size(), words.size());
 

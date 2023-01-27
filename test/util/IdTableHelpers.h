@@ -11,7 +11,9 @@
 #include <sstream>
 #include <tuple>
 
+#include "./AllocatorTestHelpers.h"
 #include "./GTestHelpers.h"
+#include "./IdTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/Join.h"
@@ -21,17 +23,6 @@
 #include "util/Forward.h"
 #include "util/Random.h"
 #include "util/SourceLocation.h"
-
-inline ad_utility::AllocatorWithLimit<Id>& allocator() {
-  static ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<size_t>::max())};
-  return a;
-}
-
-inline auto I = [](const auto& id) {
-  return Id::makeFromVocabIndex(VocabIndex::make(id));
-};
 
 // For easier reading. We repeat that type combination so often, that this
 // will make things a lot easier in terms of reading and writing.
@@ -43,7 +34,7 @@ using VectorTable = std::vector<std::vector<size_t>>;
  */
 inline IdTable makeIdTableFromVector(const VectorTable& tableContent) {
   AD_CHECK(!tableContent.empty());
-  IdTable result{tableContent[0].size(), allocator()};
+  IdTable result{tableContent[0].size(), ad_utility::testing::makeAllocator()};
 
   // Copying the content into the table.
   for (const auto& row : tableContent) {
@@ -57,7 +48,7 @@ inline IdTable makeIdTableFromVector(const VectorTable& tableContent) {
     result.emplace_back();
 
     for (size_t c = 0; c < row.size(); c++) {
-      result(backIndex, c) = I(row[c]);
+      result(backIndex, c) = ad_utility::testing::VocabId(row[c]);
     }
   }
 

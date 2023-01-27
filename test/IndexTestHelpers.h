@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "./util/AllocatorTestHelpers.h"
 #include "absl/cleanup/cleanup.h"
 #include "engine/QueryExecutionContext.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -107,13 +108,4 @@ static inline QueryExecutionContext* getQec() {
       {}};
   return &qec;
 }
-
-// Create an unlimited allocator.
-inline ad_utility::AllocatorWithLimit<Id>& makeAllocator() {
-  static ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<size_t>::max())};
-  return a;
-}
-
 }  // namespace ad_utility::testing
