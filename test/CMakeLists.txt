@@ -36,7 +36,7 @@ endfunction()
 if (SINGLE_TEST_BINARY)
     add_executable(QLeverAllUnitTestsMain)
     target_link_libraries(QLeverAllUnitTestsMain gmock_main ${CMAKE_THREAD_LIBS_INIT})
-    gtest_discover_tests(${basename} ${basename} PROPERTIES RUN_SERIAL
+    gtest_discover_tests(QLeverAllUnitTestsMain QLeverAllUnitTestsMain PROPERTIES RUN_SERIAL
             TRUE)
 endif()
 # Usage: `addAndLinkTest(basename, [additionalLibraries...]`
