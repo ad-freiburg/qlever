@@ -29,11 +29,16 @@
 using VectorTable = std::vector<std::vector<size_t>>;
 
 /*
- * Return an 'IdTable' with the given 'tableContent'. all rows must have the
+ * Return an 'IdTable' with the given 'tableContent' by applying the
+ * `transformation` to each of them. All rows of `tableContent` must have the
  * same length.
  */
-inline IdTable makeIdTableFromVector(const VectorTable& tableContent) {
-  AD_CHECK(!tableContent.empty());
+template <typename Transformation = decltype(ad_utility::testing::VocabId)>
+IdTable makeIdTableFromVector(const VectorTable& tableContent,
+                              Transformation transformation = {}) {
+  if (tableContent.empty()) {
+    return IdTable{ad_utility::testing::makeAllocator()};
+  }
   IdTable result{tableContent[0].size(), ad_utility::testing::makeAllocator()};
 
   // Copying the content into the table.
@@ -48,8 +53,27 @@ inline IdTable makeIdTableFromVector(const VectorTable& tableContent) {
     result.emplace_back();
 
     for (size_t c = 0; c < row.size(); c++) {
-      result(backIndex, c) = ad_utility::testing::VocabId(row[c]);
+      result(backIndex, c) = transformation(row[c]);
     }
+  }
+
+  return result;
+}
+
+IdTable makeIdTableFromIdVector(
+    const std::vector<std::vector<Id>>& tableContent) {
+  if (tableContent.empty()) {
+    return IdTable{ad_utility::testing::makeAllocator()};
+  }
+  IdTable result{tableContent[0].size(), ad_utility::testing::makeAllocator()};
+
+  // Copy the content into the table.
+  for (const auto& row : tableContent) {
+    // All rows of an IdTable must have the same length.
+    AD_CHECK(row.size() == result.numColumns());
+    // TODO<joka921> Can this be a single call to `push_back`
+    result.emplace_back();
+    std::ranges::copy(row, result.back().begin());
   }
 
   return result;
