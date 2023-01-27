@@ -83,12 +83,12 @@ class Exception : public std::exception {
 // invalid inputs. Since it is a macro, the code coverage check will only report
 // a partial coverage for this macro if the condition is never violated, so make
 // sure to integrate a unit test that violates the condition.
-#define AD_CONTRACT_CHECK(condition)                                                                                                                              \
-  if (!(condition)) [[unlikely]] {                                                                                                                                \
-    using namespace std::string_literals;                                                                                                                         \
-    AD_THROW(                                                                                                                                                     \
-        "Assertion `"s + std::string(__STRING(condition)) +                                                                                                       \
-        "` failed. Likely cause: A function was called with invalid arguments. Please report this to the developers."s); \
+#define AD_CONTRACT_CHECK(condition)                                                                                                                       \
+  if (!(condition)) [[unlikely]] {                                                                                                                         \
+    using namespace std::string_literals;                                                                                                                  \
+    AD_THROW(                                                                                                                                              \
+        "Assertion `"s + std::string(__STRING(condition)) +                                                                                                \
+        "` failed. Likely cause: A function was called with arguments that violate the contract of the function. Please report this to the developers."s); \
   }
 
 // Custom assert which does not abort but throws an exception. Use this for
@@ -105,7 +105,7 @@ inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
     // TODO<GCC13> Use `std::format`.
     AD_THROW(
         "Assertion `"s + std::string(message) +
-            "` failed. This indicates that an internal property of a class or module was violated. This should never happen. Please report this to the developers"s,
+            "` failed. This indicates that an internal function was not implemented correctly, which should never happen. Please report this to the developers"s,
         location);
   }
 }

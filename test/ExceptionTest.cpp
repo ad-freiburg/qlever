@@ -53,8 +53,8 @@ TEST(Exception, AD_CONTRACT_CHECK) {
     AD_CONTRACT_CHECK(v.empty());
     FAIL() << "No exception was thrown, but one was expected";
   } catch (const Exception& e) {
-    ASSERT_THAT(e.what(),
-                ::testing::StartsWith("Assertion `v.empty()` failed. Likely cause:"));
+    ASSERT_THAT(e.what(), ::testing::StartsWith(
+                              "Assertion `v.empty()` failed. Likely cause:"));
     ASSERT_THAT(e.what(), ::testing::EndsWith(std::to_string(l.line() + 1)));
     checkContains(e, l.file_name());
   }
@@ -72,7 +72,8 @@ TEST(Exception, AD_UNSATISFIABLE) {
     FAIL() << "No exception was thrown, but one was expected";
   } catch (const Exception& e) {
     ASSERT_THAT(e.what(),
-                ::testing::StartsWith("Assertion `v.empty()` failed. This indicates that"));
+                ::testing::StartsWith(
+                    "Assertion `v.empty()` failed. This indicates that"));
     ASSERT_THAT(e.what(), ::testing::EndsWith(std::to_string(l.line() + 1)));
     checkContains(e, l.file_name());
   }

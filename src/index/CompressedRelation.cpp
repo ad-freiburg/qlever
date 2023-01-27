@@ -82,7 +82,8 @@ void CompressedRelationMetadata::scan(
   AD_CONTRACT_CHECK(!firstBlockIsIncomplete || (beginBlock == lastBlock));
   AD_CONTRACT_CHECK(!lastBlockIsIncomplete);
   if (firstBlockIsIncomplete) {
-    AD_CONTRACT_CHECK(metadata._offsetInBlock != std::numeric_limits<uint64_t>::max());
+    AD_CONTRACT_CHECK(metadata._offsetInBlock !=
+                      std::numeric_limits<uint64_t>::max());
   }
 
   // We have at most one block that is incomplete and thus requires trimming.
@@ -314,7 +315,8 @@ void CompressedRelationMetadata::scan(
   // Add the last block.
   std::copy(lastBlockResult.begin(), lastBlockResult.end(),
             result->getColumn(0).data() + rowIndexOfNextBlockStart);
-  AD_CONTRACT_CHECK(rowIndexOfNextBlockStart + lastBlockResult.size() == result->size());
+  AD_CONTRACT_CHECK(rowIndexOfNextBlockStart + lastBlockResult.size() ==
+                    result->size());
 }
 
 // _____________________________________________________________________________
