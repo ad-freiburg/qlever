@@ -84,7 +84,7 @@ void MmapVector<T>::mapForReading() {
   int orig_fd = ::open(_filename.c_str(), O_RDONLY);
   // TODO: check if MAP_SHARED is necessary/usefule
   void* ptr = mmap(nullptr, _bytesize, PROT_READ, MAP_SHARED, orig_fd, 0);
-  AD_CHECK(ptr != MAP_FAILED);
+  AD_CONTRACT_CHECK(ptr != MAP_FAILED);
 
   // the filedescriptor and thus our mapping will still be valid
   // after closing, because mmap increases the count by one
@@ -101,7 +101,7 @@ void MmapVector<T>::mapForWriting() {
   // map_shared because we need our updates in the original file
   void* ptr =
       mmap(nullptr, _bytesize, PROT_WRITE | PROT_READ, MAP_SHARED, orig_fd, 0);
-  AD_CHECK(ptr != MAP_FAILED);
+  AD_CONTRACT_CHECK(ptr != MAP_FAILED);
   // the filedescriptor and thus our mapping will still be valid
   // after closing, because mmap increases the count by one
   ::close(orig_fd);
@@ -113,7 +113,7 @@ template <class T>
 void MmapVector<T>::remapLinux(size_t oldBytesize) {
   void* ptr =
       mremap(static_cast<void*>(_ptr), oldBytesize, _bytesize, MREMAP_MAYMOVE);
-  AD_CHECK(ptr != MAP_FAILED);
+  AD_CONTRACT_CHECK(ptr != MAP_FAILED);
   // the filedescriptor and thus our mapping will still be valid
   // after closing, because mmap increases the count by one
   _ptr = static_cast<T*>(ptr);
@@ -174,7 +174,7 @@ template <class T>
 void MmapVector<T>::push_back(T&& el) {
   if (_size == _capacity) {
     adaptCapacity(_capacity * ResizeFactor);
-    AD_CHECK(_capacity > _size);
+    AD_CONTRACT_CHECK(_capacity > _size);
   }
   _ptr[_size] = std::move(el);
   ++_size;
@@ -185,7 +185,7 @@ template <class T>
 void MmapVector<T>::push_back(const T& el) {
   if (_size == _capacity) {
     adaptCapacity(_capacity * ResizeFactor);
-    AD_CHECK(_capacity > _size);
+    AD_CONTRACT_CHECK(_capacity > _size);
   }
   _ptr[_size] = el;
   ++_size;

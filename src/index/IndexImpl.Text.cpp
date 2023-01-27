@@ -177,7 +177,7 @@ void IndexImpl::addTextFromOnDiskIndex() {
   LOG(INFO) << "Reading metadata from file " << textIndexFileName << " ..."
             << std::endl;
   _textIndexFile.open(textIndexFileName.c_str(), "r");
-  AD_CHECK(_textIndexFile.isOpen());
+  AD_CONTRACT_CHECK(_textIndexFile.isOpen());
   off_t metaFrom;
   [[maybe_unused]] off_t metaTo = _textIndexFile.getLastOffset(&metaFrom);
   ad_utility::serialization::FileReadSerializer serializer(
@@ -315,7 +315,7 @@ void IndexImpl::addContextToVector(
   for (auto it = entities.begin(); it != entities.end(); ++it) {
     TextBlockIndex blockId = getEntityBlockId(it->first);
     touchedBlocks.insert(blockId);
-    AD_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
+    AD_CONTRACT_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
     writer << std::make_tuple(blockId, context, it->first.getVocabIndex().get(),
                               it->second, false);
   }
@@ -331,7 +331,7 @@ void IndexImpl::addContextToVector(
       // FIX JUN 07 2017: DO add it. It's needed so that it is returned
       // as a result itself.
       // if (blockId == getEntityBlockId(it->first)) { continue; }
-      AD_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
+      AD_CONTRACT_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
       writer << std::make_tuple(
           blockId, context, it->first.getVocabIndex().get(), it->second, true);
     }
@@ -355,7 +355,7 @@ void IndexImpl::createTextIndex(const string& filename,
   size_t nofEntityContexts = 0;
   for (TextVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if (std::get<0>(*reader) != currentBlockIndex) {
-      AD_CHECK(classicPostings.size() > 0);
+      AD_CONTRACT_CHECK(classicPostings.size() > 0);
 
       bool isEntityBlock = isEntityBlockId(currentBlockIndex);
       if (isEntityBlock) {
@@ -390,7 +390,7 @@ void IndexImpl::createTextIndex(const string& filename,
     }
   }
   // Write the last block
-  AD_CHECK(classicPostings.size() > 0);
+  AD_CONTRACT_CHECK(classicPostings.size() > 0);
   if (isEntityBlockId(currentBlockIndex)) {
     ++nofEntities;
     nofEntityContexts += classicPostings.size();
@@ -465,7 +465,7 @@ ContextListMetaData IndexImpl::writePostings(ad_utility::File& out,
     ++n;
   }
 
-  AD_CHECK(meta._nofElements == n);
+  AD_CONTRACT_CHECK(meta._nofElements == n);
 
   // Do the actual writing:
   size_t bytes = 0;
@@ -671,7 +671,7 @@ TextBlockIndex IndexImpl::getWordBlockId(WordIndex wordIndex) const {
 
 // _____________________________________________________________________________
 TextBlockIndex IndexImpl::getEntityBlockId(Id entityId) const {
-  AD_CHECK(entityId.getDatatype() == Datatype::VocabIndex);
+  AD_CONTRACT_CHECK(entityId.getDatatype() == Datatype::VocabIndex);
   return entityId.getVocabIndex().get() + _blockBoundaries.size();
 }
 
@@ -688,7 +688,7 @@ size_t IndexImpl::writeList(Numeric* data, size_t nofElements,
     uint64_t* encoded = new uint64_t[nofElements];
     size_t size = ad_utility::Simple8bCode::encode(data, nofElements, encoded);
     size_t ret = file.write(encoded, size);
-    AD_CHECK_EQ(size, ret);
+    AD_CONTRACT_CHECK(size == ret);
     delete[] encoded;
     return size;
   } else {
@@ -757,7 +757,7 @@ size_t IndexImpl::writeCodebook(const vector<T>& codebook,
 
 // _____________________________________________________________________________
 void IndexImpl::openTextFileHandle() {
-  AD_CHECK(_onDiskBase.size() > 0);
+  AD_CONTRACT_CHECK(_onDiskBase.size() > 0);
   _textIndexFile.open(string(_onDiskBase + ".text.index").c_str(), "r");
 }
 
@@ -773,7 +773,7 @@ void IndexImpl::getContextListForWords(const string& words,
   // TODO vector can be of type std::string_view if called functions
   //  are updated to accept std::string_view instead of const std::string&
   std::vector<std::string> terms = absl::StrSplit(words, ' ');
-  AD_CHECK(terms.size() > 0);
+  AD_CONTRACT_CHECK(terms.size() > 0);
 
   vector<TextRecordIndex> cids;
   vector<Score> scores;
@@ -884,7 +884,7 @@ void IndexImpl::getContextEntityScoreListsForWords(
   // TODO vector can be of type std::string_view if called functions
   //  are updated to accept std::string_view instead of const std::string&
   std::vector<std::string> terms = absl::StrSplit(words, ' ');
-  AD_CHECK(terms.size() > 0);
+  AD_CONTRACT_CHECK(terms.size() > 0);
   if (terms.size() > 1) {
     // Find the term with the smallest block and/or one where no filtering
     // via wordlists is necessary. Only take entity postings form this one.
@@ -1171,7 +1171,7 @@ template <typename T, typename MakeFromUint64t>
 void IndexImpl::readFreqComprList(size_t nofElements, off_t from,
                                   size_t nofBytes, vector<T>& result,
                                   MakeFromUint64t makeFromUint) const {
-  AD_CHECK_GT(nofBytes, 0);
+  AD_CONTRACT_CHECK(nofBytes > 0);
   LOG(DEBUG) << "Reading frequency-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
              << ", nofBytes: " << nofBytes << '\n';
@@ -1181,16 +1181,16 @@ void IndexImpl::readFreqComprList(size_t nofElements, off_t from,
   off_t current = from;
   size_t ret = _textIndexFile.read(&nofCodebookBytes, sizeof(off_t), current);
   LOG(TRACE) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
-  AD_CHECK_EQ(sizeof(off_t), ret);
+  AD_CONTRACT_CHECK(sizeof(off_t) == ret);
   current += ret;
   T* codebook = new T[nofCodebookBytes / sizeof(T)];
   ret = _textIndexFile.read(codebook, nofCodebookBytes, current);
   current += ret;
-  AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
+  AD_CONTRACT_CHECK(ret == size_t(nofCodebookBytes));
   ret = _textIndexFile.read(
       encoded, static_cast<size_t>(nofBytes - (current - from)), current);
   current += ret;
-  AD_CHECK_EQ(size_t(current - from), nofBytes);
+  AD_CONTRACT_CHECK(size_t(current - from) == nofBytes);
   LOG(DEBUG) << "Decoding Simple8b code...\n";
   ad_utility::Simple8bCode::decode(encoded, nofElements, result.data(),
                                    makeFromUint);
@@ -1224,7 +1224,7 @@ void IndexImpl::dumpAsciiLists(const vector<string>& lists,
       if (nofWordElems < 1000000) continue;
       if (tbmd._firstWordId > _textVocab.size()) return;
       if (decGapsFreq) {
-        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "not yet impl.");
+        AD_THROW(ad_utility::Exception::NOT_YET_IMPLEMENTED, "not yet impl.");
       } else {
         dumpAsciiLists(tbmd);
       }
@@ -1689,8 +1689,8 @@ void IndexImpl::getRhsForSingleLhs(const IdTable& in, Id lhsId,
                                    IdTable* result) const {
   LOG(DEBUG) << "Getting only rhs from a relation with " << in.size()
              << " elements by an Id key.\n";
-  AD_CHECK(result);
-  AD_CHECK_EQ(0, result->size());
+  AD_CONTRACT_CHECK(result);
+  AD_CONTRACT_CHECK(result->empty());
 
   // The second entry is unused.
   Id compareElem[] = {lhsId, Id::makeUndefined()};

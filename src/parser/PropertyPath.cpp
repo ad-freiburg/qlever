@@ -115,7 +115,7 @@ void PropertyPath::computeCanBeNull() {
 
 // _____________________________________________________________________________
 const std::string& PropertyPath::getIri() const {
-  AD_CHECK(_operation == Operation::IRI);
+  AD_CONTRACT_CHECK(_operation == Operation::IRI);
   return _iri;
 }
 

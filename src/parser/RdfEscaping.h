@@ -51,7 +51,7 @@ std::string normalizeRDFLiteral(std::string_view origLiteral);
  * that is a valid literal in Turtle. For example, "al"pah" becomes "al\"pha"
  * and "be"ta"@en becomes "be\"ta"@en.
  *
- * If the `normLiteral` is not a literal, an AD_CHECK will fail.
+ * If the `normLiteral` is not a literal, an AD_CONTRACT_CHECK will fail.
  *
  * TODO: This function currently only handles the escaping of " inside the
  * literal, no other characters. Is that enough?

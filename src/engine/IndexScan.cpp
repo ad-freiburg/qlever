@@ -110,7 +110,7 @@ size_t IndexScan::getResultWidth() const {
     case FULL_INDEX_SCAN_OPS:
       return 3;
     default:
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED, "Should be unreachable.");
+      AD_FAIL();
   }
 }
 
@@ -136,7 +136,7 @@ vector<size_t> IndexScan::resultSortedOn() const {
     case FULL_INDEX_SCAN_OPS:
       return {0, 1, 2};
     default:
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED, "Should be unreachable.");
+      AD_FAIL();
   }
 }
 
@@ -205,7 +205,7 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
       addPredicate();
       return res;
     default:
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED, "Should be unreachable.");
+      AD_FAIL();
   }
 }
 // _____________________________________________________________________________
@@ -494,8 +494,7 @@ void IndexScan::determineMultiplicities() {
           _multiplicity = idx.getMultiplicities(Index::Permutation::OPS);
           break;
         default:
-          AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,
-                   "Switch reached default block unexpectedly!");
+          AD_FAIL();
       }
     }
   } else {

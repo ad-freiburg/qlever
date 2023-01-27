@@ -125,7 +125,7 @@ class MmapVector {
       throw std::out_of_range("call to MmapVector::at with idx >= size");
     }
     return *(_ptr + idx);
-    AD_CHECK(idx < _size);
+    AD_CONTRACT_CHECK(idx < _size);
   }
 
   // ____________________________________________________________________________

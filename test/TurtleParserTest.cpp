@@ -120,12 +120,12 @@ TEST(TurtleParserTest, prefixedName) {
 
     // TokenizerCTRE parsers `esc\` , which fails to unescape (single backslash)
     p.setInputStream("wd:esc\\,aped");
-    ASSERT_THROW(p.prefixedName(), ad_semsearch::Exception);
+    ASSERT_THROW(p.prefixedName(), ad_utility::Exception);
 
     // TokenizerCTRE parses `esc\\aped` which fails to unescape (escaped
     // backslashes are not allowed in prefixed names)
     p.setInputStream(R"(wd:esc\\aped.)");
-    ASSERT_THROW(p.prefixedName(), ad_semsearch::Exception);
+    ASSERT_THROW(p.prefixedName(), ad_utility::Exception);
   }
 }
 

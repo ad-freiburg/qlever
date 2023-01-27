@@ -45,14 +45,15 @@ struct TurtleTriple {
 };
 
 inline std::string_view stripAngleBrackets(std::string_view input) {
-  AD_CHECK(input.starts_with('<') && input.ends_with('>'));
+  AD_CONTRACT_CHECK(input.starts_with('<') && input.ends_with('>'));
   input.remove_prefix(1);
   input.remove_suffix(1);
   return input;
 }
 
 inline std::string_view stripDoubleQuotes(std::string_view input) {
-  AD_CHECK(input.starts_with('"') && input.ends_with('"') && input.size() >= 2);
+  AD_CONTRACT_CHECK(input.starts_with('"') && input.ends_with('"') &&
+                    input.size() >= 2);
   input.remove_prefix(1);
   input.remove_suffix(1);
   return input;
@@ -398,7 +399,7 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
   static TripleComponent parseTripleObject(std::string_view objectString) {
     TurtleStringParser parser;
     parser.parseUtf8String(absl::StrCat("<a> <b> ", objectString, "."));
-    AD_CHECK(parser._triples.size() == 1);
+    AD_CONTRACT_CHECK(parser._triples.size() == 1);
     return std::move(parser._triples[0]._object);
   }
 

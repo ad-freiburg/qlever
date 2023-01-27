@@ -14,11 +14,11 @@ SetOfIntervals SetOfIntervals::SortAndCheckDisjointAndNonempty(
   auto cmp = [](const auto& a, const auto& b) { return a.first < b.first; };
   std::sort(vec.begin(), vec.end(), cmp);
   for (size_t i = 0; i < vec.size(); ++i) {
-    AD_CHECK(vec[i].second > vec[i].first);
+    AD_CONTRACT_CHECK(vec[i].second > vec[i].first);
   }
 
   for (size_t i = 1; i < vec.size(); ++i) {
-    AD_CHECK(vec[i].first >= vec[i - 1].second)
+    AD_CONTRACT_CHECK(vec[i].first >= vec[i - 1].second);
   }
 
   return input;
@@ -144,7 +144,7 @@ SetOfIntervals SetOfIntervals::CheckSortedAndDisjointAndSimplify(
   auto current = inputVec[0];
   SetOfIntervals result;
   for (size_t i = 1; i < inputVec.size(); ++i) {
-    AD_CHECK(inputVec[i].first >= current.second);
+    AD_CONTRACT_CHECK(inputVec[i].first >= current.second);
     if (inputVec[i].first == current.second) {
       current = {current.first, inputVec[i].second};
     } else {
@@ -171,7 +171,7 @@ SetOfIntervals SetOfIntervals::Complement::operator()(SetOfIntervals s) const {
     }
     lastElement = end;
   }
-  AD_CHECK(lastElement <= s.upperBound);
+  AD_CONTRACT_CHECK(lastElement <= s.upperBound);
   if (lastElement < SetOfIntervals::upperBound) {
     intervals.emplace_back(lastElement, SetOfIntervals::upperBound);
   }

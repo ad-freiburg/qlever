@@ -339,9 +339,9 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
       edgeCache.push_back(rootEdges->second);
     }
     if (minDist == 0) {
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-               "The TransitivePath operation does not support a minimum "
-               "distance of 0 (use at least one instead).");
+      AD_THROW(
+          "The TransitivePath operation does not support a minimum "
+          "distance of 0 (use at least one instead).");
     }
 
     // While we have not found the entire transitive hull and have not reached
@@ -464,9 +464,9 @@ void TransitivePath::computeTransitivePathLeftBound(
       edgeCache.push_back(rootEdges->second);
     }
     if (minDist == 0) {
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-               "The TransitivePath operation does not support a minimum "
-               "distance of 0 (use at least one instead).");
+      AD_THROW(
+          "The TransitivePath operation does not support a minimum "
+          "distance of 0 (use at least one instead).");
     }
 
     // While we have not found the entire transitive hull and have not reached
@@ -602,9 +602,9 @@ void TransitivePath::computeTransitivePathRightBound(
       edgeCache.push_back(rootEdges->second);
     }
     if (minDist == 0) {
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-               "The TransitivePath operation does not support a minimum "
-               "distance of 0 (use at least one instead).");
+      AD_THROW(
+          "The TransitivePath operation does not support a minimum "
+          "distance of 0 (use at least one instead).");
     }
 
     // While we have not found the entire transitive hull and have not reached

@@ -7,6 +7,6 @@
 #include "ctre/ctre.h"
 // ____________________________________________________________________________
 Iri::Iri(std::string str) : _string{std::move(str)} {
-  AD_CHECK(ctre::match<"(?:@[a-zA-Z]+(?:-(?:[a-zA-Z]|\\d)+)*@)?"
-                       "<[^<>\"{}|^\\\\`\\0- ]*>">(_string));
+  AD_CONTRACT_CHECK(ctre::match<"(?:@[a-zA-Z]+(?:-(?:[a-zA-Z]|\\d)+)*@)?"
+                                "<[^<>\"{}|^\\\\`\\0- ]*>">(_string));
 }

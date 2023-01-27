@@ -120,7 +120,7 @@ class Operation {
   // Set the value of the `LIMIT` clause that will be applied to the result of
   // this operation. May only be called if `supportsLimit` returns true.
   void setLimit(uint64_t limit) {
-    AD_CHECK(supportsLimit());
+    AD_CONTRACT_CHECK(supportsLimit());
     _limit = limit;
   }
 

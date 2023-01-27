@@ -122,13 +122,13 @@ class BufferedVector {
       _vec.resize(newSize);
     } else if (_isInternal && newSize >= _threshold) {
       _extVec.resize(newSize);
-      AD_CHECK(newSize > oldSize);
+      AD_CONTRACT_CHECK(newSize > oldSize);
       std::copy(_vec.begin(), _vec.end(), _extVec.begin());
       _isInternal = false;
       _vec.clear();
     } else {
-      AD_CHECK(!_isInternal && newSize < _threshold);
-      AD_CHECK(newSize < oldSize);
+      AD_CONTRACT_CHECK(!_isInternal && newSize < _threshold);
+      AD_CONTRACT_CHECK(newSize < oldSize);
       _vec.resize(newSize);
       std::copy(_extVec.begin(), _extVec.begin() + newSize, _vec.begin());
       _isInternal = true;
