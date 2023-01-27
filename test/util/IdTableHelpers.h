@@ -80,7 +80,7 @@ IdTable makeIdTableFromIdVector(
   // Copy the content into the table.
   for (const auto& row : tableContent) {
     // All rows of an IdTable must have the same length.
-    AD_CHECK(row.size() == result.numColumns());
+    AD_CONTRACT_CHECK(row.size() == result.numColumns());
     // TODO<joka921> Can this be a single call to `push_back`
     result.emplace_back();
     std::ranges::copy(row, result.back().begin());

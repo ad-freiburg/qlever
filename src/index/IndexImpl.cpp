@@ -565,7 +565,7 @@ void IndexImpl::writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
   // the switched relations directly.
   auto& buffer = *bufPtr;
 
-  AD_CHECK(buffer.numColumns() == 2);
+  AD_CONTRACT_CHECK(buffer.numColumns() == 2);
   for (BufferedIdTable::row_reference row : buffer) {
     std::swap(row[0], row[1]);
   }

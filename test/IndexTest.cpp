@@ -22,7 +22,7 @@ auto makeGetId = [](const IndexImpl& index) {
   return [&index](const std::string& el) {
     Id id;
     bool success = index.getId(el, &id);
-    AD_CHECK(success);
+    AD_CONTRACT_CHECK(success);
     return id;
   };
 };
