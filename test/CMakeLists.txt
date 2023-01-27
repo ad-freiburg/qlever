@@ -92,6 +92,7 @@ function(addAndLinkTest basename)
     linkTest(${basename} ${ARGN})
 endfunction()
 
+
 #message(STATUS "QLEVER_TEST_SOURCES outside addSingleTestBinary: ${QLEVER_TEST_SOURCES}")
 function(addSingleTestBinary)
     #message(STATUS "QLEVER_TEST_SOURCES inside addSingleTestBinary: ${QLEVER_TEST_SOURCES}")
