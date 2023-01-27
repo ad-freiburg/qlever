@@ -57,7 +57,7 @@ struct SetOfIntervals {
                           OutputIterator it) {
     size_t previousEnd = 0;
     for (const auto& [begin, end] : s._intervals) {
-      AD_CHECK(end <= targetSize);
+      AD_CONTRACT_CHECK(end <= targetSize);
       auto spaceUntilInterval = begin - previousEnd;
       std::fill(it, it + spaceUntilInterval, false);
       it += spaceUntilInterval;

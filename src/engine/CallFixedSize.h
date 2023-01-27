@@ -52,7 +52,7 @@ namespace detail {
 // the `array` is `<= maxValue`.
 template <int maxValue, size_t NumValues, std::integral Int>
 auto callLambdaForIntArray(std::array<Int, NumValues> array, auto&& lambda, auto&&... args) {
-  AD_CHECK(std::ranges::all_of(array, [](auto el) { return el <= maxValue; }));
+  AD_CONTRACT_CHECK(std::ranges::all_of(array, [](auto el) { return el <= maxValue; }));
   using ArrayType = std::array<Int, NumValues>;
 
   // Call the `lambda` when the correct compile-time `Int`s are given as a

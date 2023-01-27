@@ -152,7 +152,7 @@ class VocabularyOnDisk {
     // return the input.
     auto getString = [&](const auto& input) {
       if constexpr (ad_utility::isSimilar<decltype(input), WordAndIndex>) {
-        AD_CHECK(input._word.has_value());
+        AD_CONTRACT_CHECK(input._word.has_value());
         return input._word.value();
       } else {
         return input;

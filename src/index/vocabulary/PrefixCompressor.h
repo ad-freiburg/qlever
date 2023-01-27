@@ -52,7 +52,7 @@ class PrefixCompressor {
 
   // Decompress the given `compressedWord`.
   [[nodiscard]] std::string decompress(std::string_view compressedWord) const {
-    AD_CHECK(!compressedWord.empty());
+    AD_CONTRACT_CHECK(!compressedWord.empty());
     auto idx = static_cast<uint8_t>(compressedWord[0]) - MIN_COMPRESSION_PREFIX;
     if (idx >= 0 && idx < NUM_COMPRESSION_PREFIXES) {
       return _prefixToCode[idx] + compressedWord.substr(1);
@@ -77,10 +77,9 @@ class PrefixCompressor {
     unsigned char prefixIdx = 0;
     for (const auto& fulltext : prefixes) {
       if (prefixIdx >= NUM_COMPRESSION_PREFIXES) {
-        LOG(ERROR)
-            << "More than " << NUM_COMPRESSION_PREFIXES
-            << " prefixes have been specified. This should never happen\n";
-        AD_FAIL();
+        AD_THROW(absl::StrCat(
+            "More than ", NUM_COMPRESSION_PREFIXES,
+            " prefixes have been specified. This should never happen"));
       }
       _prefixToCode[prefixIdx] = fulltext;
       _codeToPrefix.emplace_back(prefixIdx + MIN_COMPRESSION_PREFIX, fulltext);

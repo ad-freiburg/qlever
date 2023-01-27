@@ -113,7 +113,7 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
             ctx->type()->getText()}};
       }
     } else {
-      AD_CHECK(ctx->type() && ctx->subtype());
+      AD_CONTRACT_CHECK(ctx->type() && ctx->subtype());
       return V{ad_utility::toMediaType(absl::StrCat(
           ctx->type()->getText(), "/", ctx->subtype()->getText()))};
     }

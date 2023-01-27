@@ -60,7 +60,7 @@ class AggregateExpression : public SparqlExpression {
       auto optionalResult = evaluateOnSpecializedFunctionsIfPossible(
           aggregateOperation._specializedFunctions,
           std::forward<Operand>(operand));
-      AD_CHECK(optionalResult);
+      AD_CONTRACT_CHECK(optionalResult);
       return std::move(optionalResult.value());
     }
 

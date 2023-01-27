@@ -29,7 +29,7 @@ std::optional<OffsetAndSize> VocabularyOnDisk::getOffsetAndSize(
 // ____________________________________________________________________________
 VocabularyOnDisk::OffsetSizeId VocabularyOnDisk::getOffsetSizeIdForIthElement(
     size_t i) const {
-  AD_CHECK(i < size());
+  AD_CONTRACT_CHECK(i < size());
   const auto offset = _idsAndOffsets[i]._offset;
   const auto nextOffset = _idsAndOffsets[i + 1]._offset;
   return OffsetSizeId{offset, nextOffset - offset, _idsAndOffsets[i]._idx};
@@ -59,7 +59,7 @@ void VocabularyOnDisk::buildFromIterable(Iterable&& it,
     uint64_t currentOffset = 0;
     std::optional<uint64_t> previousId = std::nullopt;
     for (const auto& [word, id] : it) {
-      AD_CHECK(!previousId.has_value() || previousId.value() < id);
+      AD_CONTRACT_CHECK(!previousId.has_value() || previousId.value() < id);
       idsAndOffsets.push_back(IndexAndOffset{id, currentOffset});
       currentOffset += _file.write(word.data(), word.size());
       previousId = id;
@@ -131,7 +131,7 @@ void VocabularyOnDisk::buildFromTextFile(const string& textFileName,
 void VocabularyOnDisk::open(const string& filename) {
   _file.open(filename.c_str(), "r");
   _idsAndOffsets.open(filename + _offsetSuffix);
-  AD_CHECK(_idsAndOffsets.size() > 0);
+  AD_CONTRACT_CHECK(_idsAndOffsets.size() > 0);
   _size = _idsAndOffsets.size() - 1;
   if (_size > 0) {
     _highestIdx = (*(end() - 1))._index;
@@ -140,7 +140,7 @@ void VocabularyOnDisk::open(const string& filename) {
 
 // ____________________________________________________________________________
 WordAndIndex VocabularyOnDisk::getIthElement(size_t n) const {
-  AD_CHECK(n < _idsAndOffsets.size());
+  AD_CONTRACT_CHECK(n < _idsAndOffsets.size());
   auto offsetSizeId = getOffsetSizeIdForIthElement(n);
 
   string result(offsetSizeId._size, '\0');

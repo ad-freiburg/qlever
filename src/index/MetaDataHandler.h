@@ -93,21 +93,21 @@ class MetaDataWrapperDense {
   // ____________________________________________________________
   void set(Id id, const value_type& value) {
     // Assert that the ids are ascending.
-    AD_CHECK(_vec.size() == 0 || _vec.back()._col0Id < id);
+    AD_CONTRACT_CHECK(_vec.size() == 0 || _vec.back()._col0Id < id);
     _vec.push_back(value);
   }
 
   // __________________________________________________________
   const value_type& getAsserted(Id id) const {
     auto it = lower_bound(id);
-    AD_CHECK(it != _vec.end() && it->_col0Id == id);
+    AD_CONTRACT_CHECK(it != _vec.end() && it->_col0Id == id);
     return *it;
   }
 
   // _________________________________________________________
   value_type& operator[](Id id) {
     auto it = lower_bound(id);
-    AD_CHECK(it != _vec.end() && it->_col0Id == id);
+    AD_CONTRACT_CHECK(it != _vec.end() && it->_col0Id == id);
     return *it;
   }
 
@@ -202,7 +202,7 @@ class MetaDataWrapperHashMap {
 
   // _________________________________________________________________________
   ConstOrderedIterator ordered_end() const {
-    AD_CHECK(size() == _sortedKeys.size());
+    AD_CONTRACT_CHECK(size() == _sortedKeys.size());
     return ConstOrderedIterator{this, size()};
   }
 
@@ -210,7 +210,7 @@ class MetaDataWrapperHashMap {
   void set(Id id, value_type value) {
     _map[id] = std::move(value);
     if (!_sortedKeys.empty()) {
-      AD_CHECK(id > _sortedKeys.back());
+      AD_CONTRACT_CHECK(id > _sortedKeys.back());
     }
     _sortedKeys.push_back(id);
   }
@@ -220,14 +220,14 @@ class MetaDataWrapperHashMap {
   // __________________________________________________________
   const value_type& getAsserted(Id id) const {
     auto it = _map.find(id);
-    AD_CHECK(it != _map.end());
+    AD_CONTRACT_CHECK(it != _map.end());
     return std::cref(it->second);
   }
 
   // __________________________________________________________
   value_type& operator[](Id id) {
     auto it = _map.find(id);
-    AD_CHECK(it != _map.end());
+    AD_CONTRACT_CHECK(it != _map.end());
     return std::ref(it->second);
   }
 

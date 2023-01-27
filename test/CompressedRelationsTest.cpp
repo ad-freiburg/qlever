@@ -13,7 +13,7 @@ namespace {
 // Return an `ID` of type `VocabIndex` from `index`. Assert that `index`
 // is `>= 0`.
 Id V(int64_t index) {
-  AD_CHECK(index >= 0);
+  AD_CONTRACT_CHECK(index >= 0);
   return Id::makeFromVocabIndex(VocabIndex::make(index));
 }
 
@@ -49,9 +49,9 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
                              std::string testCaseName, size_t blocksize) {
   // First check the invariants of the `inputs`. They must be sorted by the
   // `col0_` and for each of the `inputs` the `col1And2_` must also be sorted.
-  AD_CHECK(std::ranges::is_sorted(
+  AD_CONTRACT_CHECK(std::ranges::is_sorted(
       inputs, {}, [](const RelationInput& r) { return r.col0_; }));
-  AD_CHECK(std::ranges::all_of(inputs, [](const RelationInput& r) {
+  AD_CONTRACT_CHECK(std::ranges::all_of(inputs, [](const RelationInput& r) {
     return std::ranges::is_sorted(
         r.col1And2_, [](const auto& a, const auto& b) {
           return std::ranges::lexicographical_compare(a, b);

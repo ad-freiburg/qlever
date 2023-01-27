@@ -144,7 +144,7 @@ float TextOperationWithoutFilter::getMultiplicity(size_t col) {
   if (_multiplicities.size() == 0) {
     computeMultiplicities();
   }
-  AD_CHECK_LT(col, _multiplicities.size());
+  AD_CONTRACT_CHECK(col < _multiplicities.size());
   return _multiplicities[col];
 }
 

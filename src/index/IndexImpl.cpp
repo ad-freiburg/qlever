@@ -565,7 +565,7 @@ void IndexImpl::writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
   // the switched relations directly.
   auto& buffer = *bufPtr;
 
-  AD_CHECK(buffer.numColumns() == 2);
+  AD_CONTRACT_CHECK(buffer.numColumns() == 2);
   for (BufferedIdTable::row_reference row : buffer) {
     std::swap(row[0], row[1]);
   }
@@ -712,9 +712,9 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
 // _____________________________________________________________________________
 void IndexImpl::throwExceptionIfNoPatterns() const {
   if (!_usePatterns) {
-    AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-             "The requested feature requires a loaded patterns file ("
-             "do not specify the --no-patterns option for this to work)");
+    AD_THROW(
+        "The requested feature requires a loaded patterns file ("
+        "do not specify the --no-patterns option for this to work)");
   }
 }
 
@@ -1073,8 +1073,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
       _turtleParserIntegerOverflowBehavior =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
     } else {
-      AD_CHECK(std::find(allModes.begin(), allModes.end(), value) ==
-               allModes.end());
+      AD_CONTRACT_CHECK(std::find(allModes.begin(), allModes.end(), value) ==
+                        allModes.end());
       LOG(ERROR) << "Invalid value for " << key << std::endl;
       LOG(INFO) << "The currently supported values are "
                 << absl::StrJoin(allModes, ",") << std::endl;

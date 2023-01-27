@@ -278,7 +278,7 @@ class BatchedPipeline {
       return idx == 0 ? std::pair{beg, end} : std::pair{end, end};
     }
     batchSize = size / Parallelism;
-    AD_CHECK(batchSize > 0);
+    AD_CONTRACT_CHECK(batchSize > 0);
     std::pair<It, It> res;
     res.first = std::min(beg + idx * batchSize, end);
     res.second = idx < Parallelism - 1

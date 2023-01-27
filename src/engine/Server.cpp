@@ -603,9 +603,9 @@ boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
   using namespace ad_utility::httpUtils;
-  AD_CHECK(params.contains("query"));
+  AD_CONTRACT_CHECK(params.contains("query"));
   const auto& query = params.at("query");
-  AD_CHECK(!query.empty());
+  AD_CONTRACT_CHECK(!query.empty());
 
   auto sendJson = [&request, &send](
                       const json& jsonString,
@@ -702,7 +702,7 @@ boost::asio::awaitable<void> Server::processQuery(
                   supportedMediaTypes()),
           request));
     }
-    AD_CHECK(mediaType.has_value());
+    AD_CONTRACT_CHECK(mediaType.has_value());
     LOG(INFO) << "Requested media type of result is \""
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
 
