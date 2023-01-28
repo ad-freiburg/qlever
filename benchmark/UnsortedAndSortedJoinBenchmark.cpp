@@ -321,7 +321,7 @@ void makeBenchmarkTable(BenchmarkRecords* records, const bool overlap,
 // the bigger tables keeps getting bigger. Amount of columns stays the same.
 void BM_OnlyBiggerTableSizeChanges(BenchmarkRecords* records){
   // Easier reading.
-  const std::vector<size_t> ratioRows{10, 20, 30, 40, 50};
+  const std::vector<size_t> ratioRows{10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
   constexpr size_t smallerTableAmountRows{2000};
   constexpr size_t smallerTableAmountColumns{20};
   constexpr size_t biggerTableAmountColumns{20};
@@ -335,4 +335,26 @@ void BM_OnlyBiggerTableSizeChanges(BenchmarkRecords* records){
   }
 }
 
-BenchmarkRegister temp{{BM_UnsortedAndSortedIdTable, BM_OnlyBiggerTableSizeChanges}};
+// Create benchmark tables, where the smaller table grows and the ratio
+// between tables stays the same. As does the amount of columns.
+void BM_OnlySmallerTableSizeChanges(BenchmarkRecords* records){
+  // Easier reading.
+  const std::vector<size_t> smallerTableAmountRows{2000, 4000, 8000, 16000,
+    32000, 64000, 128000};
+  constexpr size_t smallerTableAmountColumns{3};
+  constexpr size_t biggerTableAmountColumns{3};
+  // Making a benchmark table for all combination of IdTables being sorted.
+  for (const bool smallerTableSorted : {false, true}){
+    for (const bool biggerTableSorted : {false, true}) {
+      // We also make multiple tables for different row ratios.
+      for (const size_t ratioRows: {10, 20, 30, 40, 50, 60, 70, 80, 90, 100}){
+        makeBenchmarkTable(records, false, smallerTableSorted,
+            biggerTableSorted, ratioRows, smallerTableAmountRows,
+            smallerTableAmountColumns, biggerTableAmountColumns);
+      }
+    }
+  }
+}
+
+BenchmarkRegister temp{{BM_UnsortedAndSortedIdTable,
+  BM_OnlyBiggerTableSizeChanges, BM_OnlySmallerTableSizeChanges}};
