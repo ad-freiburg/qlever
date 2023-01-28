@@ -82,6 +82,7 @@ class BenchmarkRecords {
      * @param functionToMeasure Must be a function, or callable.
      */
     template<typename FUNCTION_TYPE>
+      requires std::invocable<FUNCTION_TYPE>
     float measureTimeOfFunction(const FUNCTION_TYPE& functionToMeasure) const{
       ad_utility::Timer benchmarkTimer;
          
@@ -127,6 +128,7 @@ class BenchmarkRecords {
      *  with the needed parameters.
      */
     template<typename FUNCTION_TYPE>
+      requires std::invocable<FUNCTION_TYPE>
     void addSingleMeasurement(const std::string& descriptor,
         const FUNCTION_TYPE& functionToMeasure) {
       singleMeasurements_.push_back(RecordEntry{descriptor,
@@ -158,6 +160,7 @@ class BenchmarkRecords {
      *  with the needed parameters.
      */
     template<typename FUNCTION_TYPE>
+      requires std::invocable<FUNCTION_TYPE>
     void addToExistingGroup(const std::string& groupDescriptor,
         const std::string& descriptor,
         const FUNCTION_TYPE& functionToMeasure) {
@@ -201,6 +204,7 @@ class BenchmarkRecords {
      *  with the needed parameters.
      */
     template<typename FUNCTION_TYPE>
+      requires std::invocable<FUNCTION_TYPE>
     void addToExistingTable(const std::string& tableDescriptor,
         const size_t row, const size_t column,
         const FUNCTION_TYPE& functionToMeasure) {
