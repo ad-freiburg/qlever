@@ -101,9 +101,9 @@ void BM_UnsortedAndSortedIdTable(BenchmarkRecords* records) {
   };
 
   // Because it's easier to read/interpret, the benchmarks are entries in tables.
-  records->addTable("Sorted IdTables", {"Merge join", "Hashed join"},
+  records->addTable("Sorted IdTables", {"Merge/Galloping join", "Hashed join"},
       {"Overlapping join column entries", "Non-overlapping join column entries"});
-  records->addTable("Unsorted IdTables", {"Merge join", "Hashed join"},
+  records->addTable("Unsorted IdTables", {"Merge/Galloping join", "Hashed join"},
       {"Overlapping join column entries", "Non-overlapping join column entries"});
 
   // Benchmarking with non-overlapping IdTables.
@@ -223,7 +223,7 @@ void makeBenchmarkTable(BenchmarkRecords* records, const bool overlap,
         [](const size_t& number){return std::to_string(number);}, {});
 
     records->addTable(tableDescriptor.str(), rowNames,
-        {"Merge join", "Hash join"});
+        {"Merge/Galloping join", "Hash join"});
   };
 
   // Setup for easier creation of the tables, that will be joined.
@@ -253,14 +253,14 @@ void makeBenchmarkTable(BenchmarkRecords* records, const bool overlap,
   auto addNextRowToBenchmarkTable = [i = 0, &tableDescriptor, &records,
   &hashJoinLambda, &smallerTableSorted, &biggerTableSorted, &joinLambda,
   &smallerTable, &biggerTable]()mutable{
-    // Hash join first, because merge join sorts all tables, if needed, before
-    // joining them.
+    // Hash join first, because merge/galloping join sorts all tables, if
+    // needed, before joining them.
     records->addToExistingTable(tableDescriptor.str(), i, 1, [&](){
         useJoinFunctionOnIdTables(smallerTable, biggerTable, hashJoinLambda);});
 
-    // The merge join may have to sort non, one, or both tables, before using
-    // them. That decision shouldn't happen in the wrapper for the call, to
-    // minimize overhead.
+    // The merge/galloping join may have to sort non, one, or both tables,
+    // before using them. That decision shouldn't happen in the wrapper for the
+    // call, to minimize overhead.
     if ((!smallerTableSorted) && (!biggerTableSorted)) {
       records->addToExistingTable(tableDescriptor.str(), i, 0, [&](){
           sortIdTableByJoinColumnInPlace(smallerTable);
