@@ -1,14 +1,19 @@
-# Link binary ${basename} against the threading library,
+# Re-compiling all the infrastructure all the time is a waste of time, so we
+# pre-compile that part as a library.
+add_library(benchmark Benchmark.cpp Benchmark.h BenchmarkMain.cpp)
+target_link_libraries(benchmark absl::flat_hash_map)
+
+# Link binary ${basename} against the benchmark library,
 # and all libraries that are specified as additional arguments.
 function (linkBenchmark basename)
-    target_link_libraries(${basename} absl::flat_hash_map ${ARGN})
+    target_link_libraries(${basename} benchmark ${ARGN})
 endfunction()
 
 # Compile the benchmark and link it, but do not run it.
 # Usage: addAndLinkBenchmark(baseName, [additionalLibraries...])
 #   - baseName: The name of the benchmark file without the .cpp ending.
 function(addAndLinkBenchmark baseName)
-    add_executable(${baseName}  Benchmark.cpp "${baseName}.cpp" BenchmarkMain.cpp)
+    add_executable(${baseName}  "${baseName}.cpp")
     linkBenchmark(${baseName} ${ARGN})
 endfunction()
 
