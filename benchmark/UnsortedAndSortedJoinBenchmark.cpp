@@ -206,7 +206,7 @@ void makeBenchmarkTable(BenchmarkRecords* records, const bool overlap,
     << " columns, and " << (biggerTableSorted ? "" : "not ") <<
     "sorted bigger table, with " <<
     size_tOrSize_tVectorToString(biggerTableAmountColumns) <<
-    " columns and " << size_tOrSize_tVectorToString(biggerTableAmountRows)
+    " columns and " << size_tOrSize_tVectorToString(smallerTableAmountRows)
     << " * " << size_tOrSize_tVectorToString(ratioRows) << " rows.";
 
   // The lambdas for the join algorithms.
