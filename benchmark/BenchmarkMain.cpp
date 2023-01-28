@@ -157,22 +157,7 @@ void addTablesToStringstream(std::stringstream* stringStream,
   }
 }
 
-}
-
-/*
- * @brief Goes through all types of registered benchmarks, measures their time
- * and prints their measured time in a fitting format.
- */
-int main() {
-  // Measuering the time for all registered benchmarks.
-  // For measuring and saving the times.
-  BenchmarkRecords records;
- 
-  // Goes through all registered benchmarks and measures them.
-  for (const auto& benchmarkFunction: BenchmarkRegister::getRegisteredBenchmarks()) {
-    benchmarkFunction(&records);
-  }
-
+void printBenchmarkRecords(const BenchmarkRecords& records) {
   // The values for all the categories of benchmarks.
   const std::vector<BenchmarkRecords::RecordEntry>& singleMeasurements =
     records.getSingleMeasurements();
@@ -190,8 +175,8 @@ int main() {
   // @param stringStream The stringstream where the text will get added.
   // @param categoryRecord The information needed, for printing the benchmark
   //  category. Should be a vector of RecordEntry, RecordGroup, or RecordTable.
-  // @param categoryAddPrintStreamFunction The function, which add the
-  //  benchmark category information, convert them to text, and add that text
+  // @param categoryAddPrintStreamFunction The function, which given the
+  //  benchmark category information, converts them to text, and adds that text
   //  to the stringstream.
   // @param suffix Added to the stringstream after
   //  categoryAddPrintStreamFunction. Mostly for linebreaks between those
@@ -218,4 +203,23 @@ int main() {
       addTablesToStringstream);
 
   std::cout << visualization.str() << "\n";
-};
+}
+
+}
+
+/*
+ * @brief Goes through all types of registered benchmarks, measures their time
+ * and prints their measured time in a fitting format.
+ */
+int main() {
+  // Measuering the time for all registered benchmarks.
+  // For measuring and saving the times.
+  BenchmarkRecords records;
+ 
+  // Goes through all registered benchmarks and measures them.
+  for (const auto& benchmarkFunction: BenchmarkRegister::getRegisteredBenchmarks()) {
+    benchmarkFunction(&records);
+  }
+
+  printBenchmarkRecords(records);
+}
