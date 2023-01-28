@@ -68,8 +68,7 @@ class LiteralExpression : public SparqlExpression {
     if constexpr (std::is_same_v<T, ::Variable>) {
       bool isRand = _value.name() == "?RAND";
       if (!isRand && !varColMap.contains(_value)) {
-        AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-                 absl::StrCat("Variable ", _value.name(), " not found"));
+        AD_THROW(absl::StrCat("Variable ", _value.name(), " not found"));
       }
       return {"#column_" +
               (isRand ? std::to_string(drand48())

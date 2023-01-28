@@ -67,7 +67,7 @@ struct UrlComponents {
 inline std::string path_cat(beast::string_view base, beast::string_view path) {
   if (base.empty()) return std::string(path);
   std::string result(base);
-  AD_CHECK(path.starts_with('/'));
+  AD_CONTRACT_CHECK(path.starts_with('/'));
   char constexpr path_separator = '/';
   if (result.back() == path_separator) result.resize(result.size() - 1);
   result.append(path.data(), path.size());

@@ -108,7 +108,7 @@ auto Values::sanitizeValues(SparqlValues&& values) -> SparqlValues {
   }
   std::vector<std::size_t> emptyValues;
   for (std::size_t i = 0; i < values._values.size(); ++i) {
-    AD_CHECK(values._values[i].size() == values._variables.size());
+    AD_CONTRACT_CHECK(values._values[i].size() == values._variables.size());
     auto& v = values._values[i];
     if (std::all_of(v.begin(), v.end(),
                     [](const auto& s) { return s == "UNDEF"; })) {
@@ -142,7 +142,6 @@ auto Values::sanitizeValues(SparqlValues&& values) -> SparqlValues {
   }
   if (values._values.empty() || values._variables.empty()) {
     AD_THROW(
-        ad_semsearch::Exception::BAD_INPUT,
         "After removing undefined values and variables, a VALUES clause was "
         "found to be empty. This"
         "(the neutral element for JOIN) is currently not supported by QLever");
@@ -164,7 +163,7 @@ void Values::writeValues(IdTable* res, const Index& index,
       const TripleComponent& tc = row[colIdx];
       std::optional<Id> id = tc.toValueId(index.getVocab());
       if (!id) {
-        AD_CHECK(tc.isString());
+        AD_CONTRACT_CHECK(tc.isString());
         auto& newWord = tc.getString();
         ++numLocalVocabPerColumn[colIdx];
         id = Id::makeFromLocalVocabIndex(
@@ -174,7 +173,7 @@ void Values::writeValues(IdTable* res, const Index& index,
     }
     numTuples++;
   }
-  AD_CHECK(numTuples == values._values.size());
+  AD_CONTRACT_CHECK(numTuples == values._values.size());
   LOG(INFO) << "Number of tuples in VALUES clause: " << numTuples << std::endl;
   LOG(DEBUG) << "Number of entries in local vocabulary per column: "
              << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;

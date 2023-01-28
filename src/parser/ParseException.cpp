@@ -9,7 +9,7 @@
 std::string ExceptionMetadata::coloredError() const {
   // stopIndex_ == startIndex_ - 1 might happen if the offending string is
   // empty.
-  AD_CHECK(stopIndex_ + 1 >= startIndex_);
+  AD_CONTRACT_CHECK(stopIndex_ + 1 >= startIndex_);
   std::string_view query = query_;
   // The `startIndex_` and `stopIndex_` are wrt Unicode codepoints, but the
   // `query_` is UTF-8 encoded.

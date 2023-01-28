@@ -311,7 +311,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       }
       LOG(TIMING) << "WaitTimes for Pipeline in msecs\n";
       for (const auto& t : p.getWaitingTime()) {
-        LOG(TIMING) << t << " msecs" << std::endl;
+        LOG(TIMING) << ad_utility::Timer::toMilliseconds(t) << " msecs"
+                    << std::endl;
       }
 
       if constexpr (requires(Parser p) { p.printAndResetQueueStatistics(); }) {
@@ -324,12 +325,10 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     // to control the number of threads and the amount of memory used at the
     // same time. typically sorting is finished before we reach again here so
     // it is not a bottleneck.
-    ad_utility::Timer sortFutureTimer;
-    sortFutureTimer.start();
+    ad_utility::Timer sortFutureTimer{ad_utility::Timer::Started};
     if (writePartialVocabularyFuture[0].valid()) {
       writePartialVocabularyFuture[0].get();
     }
-    sortFutureTimer.stop();
     LOG(TIMING)
         << "Time spent waiting for the writing of a previous vocabulary: "
         << sortFutureTimer.msecs() << "ms." << std::endl;
@@ -508,9 +507,8 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
   size_t from = 0;
   std::optional<Id> currentRel;
-  ad_utility::BufferedVector<array<Id, 2>> buffer(
-      THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.mmap-buffer");
-  bool functional = true;
+  BufferedIdTable buffer{ad_utility::BufferedVector<Id>{
+      THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.mmap-buffer"}};
   size_t distinctCol1 = 0;
   Id lastLhs = ID_NO_VALUE;
   uint64_t totalNumTriples = 0;
@@ -522,7 +520,7 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
     (..., perTripleCallbacks(triple));
     ++totalNumTriples;
     if (triple[c0] != currentRel) {
-      writer1.addRelation(currentRel.value(), buffer, distinctCol1, functional);
+      writer1.addRelation(currentRel.value(), buffer, distinctCol1);
       writeSwitchedRel(&writer2, currentRel.value(), &buffer);
       for (auto& md : writer1.getFinishedMetaData()) {
         metaData1.add(md);
@@ -533,19 +531,14 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
       buffer.clear();
       distinctCol1 = 1;
       currentRel = triple[c0];
-      functional = true;
     } else {
-      if (triple[c1] == lastLhs) {
-        functional = false;
-      } else {
-        distinctCol1++;
-      }
+      distinctCol1 += triple[c1] != lastLhs;
     }
-    buffer.push_back({triple[c1], triple[c2]});
+    buffer.push_back(std::array{triple[c1], triple[c2]});
     lastLhs = triple[c1];
   }
   if (from < totalNumTriples) {
-    writer1.addRelation(currentRel.value(), buffer, distinctCol1, functional);
+    writer1.addRelation(currentRel.value(), buffer, distinctCol1);
     writeSwitchedRel(&writer2, currentRel.value(), &buffer);
   }
 
@@ -564,33 +557,29 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
 }
 
 // __________________________________________________________________________
-void IndexImpl::writeSwitchedRel(
-    CompressedRelationWriter* out, Id currentRel,
-    ad_utility::BufferedVector<array<Id, 2>>* bufPtr) {
-  // sort according to the "switched" relation.
+void IndexImpl::writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
+                                 BufferedIdTable* bufPtr) {
+  // Sort according to the "switched" relation.
+  // TODO<joka921> The swapping is rather inefficient, as we have to iterate
+  // over the whole file. Maybe the `CompressedRelationWriter` should take
+  // the switched relations directly.
   auto& buffer = *bufPtr;
 
-  for (auto& el : buffer) {
-    std::swap(el[0], el[1]);
+  AD_CONTRACT_CHECK(buffer.numColumns() == 2);
+  for (BufferedIdTable::row_reference row : buffer) {
+    std::swap(row[0], row[1]);
   }
-  std::sort(buffer.begin(), buffer.end(), [](const auto& a, const auto& b) {
-    return a[0] == b[0] ? a[1] < b[1] : a[0] < b[0];
+  std::ranges::sort(buffer, [](const auto& a, const auto& b) {
+    return std::ranges::lexicographical_compare(a, b);
   });
-
   Id lastLhs = std::numeric_limits<Id>::max();
 
-  bool functional = true;
   size_t distinctC1 = 0;
-  for (const auto& el : buffer) {
-    if (el[0] == lastLhs) {
-      functional = false;
-    } else {
-      distinctC1++;
-    }
-    lastLhs = el[0];
+  for (const auto& el : buffer.getColumn(0)) {
+    distinctC1 += el != lastLhs;
+    lastLhs = el;
   }
-
-  out->addRelation(currentRel, buffer, distinctC1, functional);
+  out->addRelation(currentRel, buffer, distinctC1);
 }
 
 // ________________________________________________________________________
@@ -723,9 +712,9 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
 // _____________________________________________________________________________
 void IndexImpl::throwExceptionIfNoPatterns() const {
   if (!_usePatterns) {
-    AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-             "The requested feature requires a loaded patterns file ("
-             "do not specify the --no-patterns option for this to work)");
+    AD_THROW(
+        "The requested feature requires a loaded patterns file ("
+        "do not specify the --no-patterns option for this to work)");
   }
 }
 
@@ -1084,8 +1073,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
       _turtleParserIntegerOverflowBehavior =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
     } else {
-      AD_CHECK(std::find(allModes.begin(), allModes.end(), value) ==
-               allModes.end());
+      AD_CONTRACT_CHECK(std::find(allModes.begin(), allModes.end(), value) ==
+                        allModes.end());
       LOG(ERROR) << "Invalid value for " << key << std::endl;
       LOG(INFO) << "The currently supported values are "
                 << absl::StrJoin(allModes, ",") << std::endl;

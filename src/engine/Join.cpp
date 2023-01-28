@@ -7,11 +7,15 @@
 #include <engine/CallFixedSize.h>
 #include <engine/IndexScan.h>
 #include <engine/Join.h>
+#include <global/Constants.h>
+#include <global/Id.h>
+#include <util/HashMap.h>
 
 #include <functional>
 #include <sstream>
 #include <type_traits>
 #include <unordered_set>
+#include <vector>
 
 using std::string;
 
@@ -20,7 +24,7 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            std::shared_ptr<QueryExecutionTree> t2, size_t t1JoinCol,
            size_t t2JoinCol, bool keepJoinColumn)
     : Operation(qec) {
-  AD_CHECK(t1 && t2);
+  AD_CONTRACT_CHECK(t1 && t2);
   // Currently all join algorithms require both inputs to be sorted, so we
   // enforce the sorting here.
   t1 = QueryExecutionTree::createSortedTree(std::move(t1), {t1JoinCol});
@@ -123,7 +127,7 @@ void Join::computeResult(ResultTable* result) {
 
   LOG(DEBUG) << "Computing Join result..." << endl;
 
-  AD_CHECK(result);
+  AD_CONTRACT_CHECK(result);
 
   result->_idTable.setNumColumns(leftWidth + rightWidth - 1);
   result->_resultTypes.reserve(result->_idTable.numColumns());
@@ -195,7 +199,7 @@ VariableToColumnMap Join::computeVariableToColumnMap() const {
 size_t Join::getResultWidth() const {
   size_t res = _left->getResultWidth() + _right->getResultWidth() -
                (_keepJoinColumn ? 1 : 2);
-  AD_CHECK(res > 0);
+  AD_CONTRACT_CHECK(res > 0);
   return res;
 }
 
@@ -255,7 +259,7 @@ size_t Join::getCostEstimate() {
 void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
   LOG(DEBUG) << "Join by making multiple scans..." << endl;
   if (isFullScanDummy(_left)) {
-    AD_CHECK(!isFullScanDummy(_right))
+    AD_CONTRACT_CHECK(!isFullScanDummy(_right));
     _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
     result->_idTable.setNumColumns(_right->getResultWidth() + 2);
     result->_sortedBy = {2 + _rightJoinCol};
@@ -269,7 +273,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
     doComputeJoinWithFullScanDummyLeft(nonDummyRes->_idTable,
                                        &result->_idTable);
   } else {
-    AD_CHECK(!isFullScanDummy(_left))
+    AD_CONTRACT_CHECK(!isFullScanDummy(_left));
     _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
     result->_idTable.setNumColumns(_left->getResultWidth() + 2);
     result->_sortedBy = {_leftJoinCol};
@@ -325,8 +329,7 @@ Join::ScanMethodType Join::getScanMethod(
       scanMethod = scanLambda(OPS);
       break;
     default:
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-               "Found non-dummy scan where one was expected.");
+      AD_THROW("Found non-dummy scan where one was expected.");
   }
   return scanMethod;
 }
@@ -571,22 +574,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
         // Always fix a and go through b.
         size_t keepJ = j;
         while (a(i, jc1) == b(j, jc2)) {
-          result.emplace_back();
-          const size_t backIndex = result.size() - 1;
-          for (size_t h = 0; h < a.numColumns(); h++) {
-            result(backIndex, h) = a(i, h);
-          }
-
-          // Copy bs columns before the join column
-          for (size_t h = 0; h < jc2; h++) {
-            result(backIndex, h + a.numColumns()) = b(j, h);
-          }
-
-          // Copy bs columns after the join column
-          for (size_t h = jc2 + 1; h < b.numColumns(); h++) {
-            result(backIndex, h + a.numColumns() - 1) = b(j, h);
-          }
-
+          addCombinedRowToIdTable(a[i], b[j], jc2, &result);
           ++j;
           checkTimeoutAfterNCalls();
           if (j >= b.size()) {
@@ -709,20 +697,7 @@ void Join::doGallopInnerJoin(const TagType, const IdTableView<L_WIDTH>& l1,
       // Always fix l1 and go through l2.
       const size_t keepJ = j;
       while (l1(i, jc1) == l2(j, jc2)) {
-        size_t rowIndex = result->size();
-        result->emplace_back();
-        for (size_t h = 0; h < l1.numColumns(); h++) {
-          (*result)(rowIndex, h) = l1(i, h);
-        }
-        // Copy l2s columns before the join column
-        for (size_t h = 0; h < jc2; h++) {
-          (*result)(rowIndex, h + l1.numColumns()) = l2(j, h);
-        }
-
-        // Copy l2s columns after the join column
-        for (size_t h = jc2 + 1; h < l2.numColumns(); h++) {
-          (*result)(rowIndex, h + l1.numColumns() - 1) = l2(j, h);
-        }
+        addCombinedRowToIdTable(l1[i], l2[j], jc2, result);
         ++j;
         if (j >= l2.size()) {
           break;
@@ -744,5 +719,136 @@ void Join::doGallopInnerJoin(const TagType, const IdTableView<L_WIDTH>& l1,
         return;
       }
     }
+  }
+}
+
+// ______________________________________________________________________________
+template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+void Join::hashJoinImpl(const IdTable& dynA, size_t jc1, const IdTable& dynB,
+                        size_t jc2, IdTable* dynRes) {
+  const IdTableView<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
+  const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
+
+  LOG(DEBUG) << "Performing hashJoin between two tables.\n";
+  LOG(DEBUG) << "A: width = " << a.numColumns() << ", size = " << a.size()
+             << "\n";
+  LOG(DEBUG) << "B: width = " << b.numColumns() << ", size = " << b.size()
+             << "\n";
+
+  // Check trivial case.
+  if (a.size() == 0 || b.size() == 0) {
+    return;
+  }
+
+  IdTableStatic<OUT_WIDTH> result = std::move(*dynRes).toStatic<OUT_WIDTH>();
+
+  // Puts the rows of the given table into a hash map, with the value of
+  // the join column of a row as the key, and returns the hash map.
+  auto idTableToHashMap = []<typename Table>(const Table& table,
+                                             const size_t jc) {
+    // This declaration works, because generic lambdas are just syntactic sugar
+    // for templates.
+    ad_utility::HashMap<Id, std::vector<typename Table::row_type>> map;
+    for (const auto& row : table) {
+      map[row[jc]].push_back(row);
+    }
+    return map;
+  };
+
+  /*
+   * @brief Joins the two tables, putting the result in result. Creates a cross
+   *  product for matching rows by putting the smaller IdTable in a hash map and
+   *  using that, to faster find the matching rows.
+   *
+   * @tparam leftIsLarger If the left table in the join operation has more
+   *  rows, or the right. True, if he has. False, if he hasn't.
+   * @tparam LargerTableType, SmallerTableType The types of the tables given.
+   *  Can be easily done with type interference, so no need to write them out.
+   *
+   * @param largerTable, smallerTable The two tables of the join operation.
+   * @param largerTableJoinColumn, smallerTableJoinColumn The join columns
+   *  of the tables
+   */
+  auto performHashJoin = [&idTableToHashMap,
+                          &result]<bool leftIsLarger, typename LargerTableType,
+                                   typename SmallerTableType>(
+                             const LargerTableType& largerTable,
+                             const size_t largerTableJoinColumn,
+                             const SmallerTableType& smallerTable,
+                             const size_t smallerTableJoinColumn) {
+    // Put the smaller table into the hash table.
+    auto map = idTableToHashMap(smallerTable, smallerTableJoinColumn);
+
+    // Create cross product by going through the larger table.
+    for (size_t i = 0; i < largerTable.size(); i++) {
+      // Skip, if there is no matching entry for the join column.
+      auto entry = map.find(largerTable(i, largerTableJoinColumn));
+      if (entry == map.end()) {
+        continue;
+      }
+
+      for (const auto& row : entry->second) {
+        // Based on which table was larger, the arguments of
+        // addCombinedRowToIdTable are different.
+        // However this information is known at compile time, so the other
+        // branch gets discarded at compile time, which makes this
+        // condition have constant runtime.
+        if constexpr (leftIsLarger) {
+          addCombinedRowToIdTable(largerTable[i], row, smallerTableJoinColumn,
+                                  &result);
+        } else {
+          addCombinedRowToIdTable(row, largerTable[i], largerTableJoinColumn,
+                                  &result);
+        }
+      }
+    }
+  };
+
+  // Cannot just switch a and b around because the order of
+  // items in the result tuples is important.
+  // Procceding with the actual hash join depended on which IdTableView
+  // is bigger.
+  if (a.size() >= b.size()) {
+    performHashJoin.template operator()<true>(a, jc1, b, jc2);
+  } else {
+    performHashJoin.template operator()<false>(b, jc2, a, jc1);
+  }
+  *dynRes = std::move(result).toDynamic();
+
+  LOG(DEBUG) << "HashJoin done.\n";
+  LOG(DEBUG) << "Result: width = " << dynRes->numColumns()
+             << ", size = " << dynRes->size() << "\n";
+}
+
+// ______________________________________________________________________________
+void Join::hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
+                    size_t jc2, IdTable* dynRes) {
+  CALL_FIXED_SIZE(
+      (std::array{dynA.numColumns(), dynB.numColumns(), dynRes->numColumns()}),
+      &Join::hashJoinImpl, this, dynA, jc1, dynB, jc2, dynRes);
+}
+
+// ___________________________________________________________________________
+template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>
+void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
+                                   const size_t jcRowB,
+                                   IdTableStatic<TABLE_WIDTH>* table) {
+  // Add a new, empty row.
+  const size_t backIndex = table->size();
+  table->emplace_back();
+
+  // Copy the entire rowA in the table.
+  for (size_t h = 0; h < rowA.numColumns(); h++) {
+    (*table)(backIndex, h) = rowA[h];
+  }
+
+  // Copy rowB columns before the join column.
+  for (size_t h = 0; h < jcRowB; h++) {
+    (*table)(backIndex, h + rowA.numColumns()) = rowB[h];
+  }
+
+  // Copy rowB columns after the join column.
+  for (size_t h = jcRowB + 1; h < rowB.numColumns(); h++) {
+    (*table)(backIndex, h + rowA.numColumns() - 1) = rowB[h];
   }
 }

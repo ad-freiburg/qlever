@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/index/StringSortComparator.h"
+#include "index/StringSortComparator.h"
 using namespace std::literals;
 
 using namespace std::literals;

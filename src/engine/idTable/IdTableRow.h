@@ -10,8 +10,11 @@
 #include <variant>
 #include <vector>
 
-#include "global/Id.h"
 #include "util/Enums.h"
+#include "util/Exception.h"
+#include "util/Forward.h"
+#include "util/Iterators.h"
+#include "util/TypeTraits.h"
 #include "util/UninitializedAllocator.h"
 
 namespace columnBasedIdTable {
@@ -21,14 +24,14 @@ namespace columnBasedIdTable {
 // below).
 enum struct IsView { True, False };
 
-// A row of a table of IDs. It stores the IDs as a `std::array` or `std::vector`
-// depending on whether `NumColumns` is 0 (which means that the number of
-// columns is specified at runtime). This class is used as the `value_type` of
-// the columns-ordered `IdTable` and must be used whenever a row (not a
-// reference to a row) has to be stored outside the IdTable. The implementation
-// is a rather thin wrapper around `std::vector<Id>` or `std::array<Id,
-// NumColumns>`, respectively (see above).
-template <int NumColumns = 0>
+// A row of a table of `T`s. It stores the IDs as a `std::array` or
+// `std::vector` depending on whether `NumColumns` is 0 (which means that the
+// number of columns is specified at runtime). This class is used as the
+// `value_type` of the columns-ordered `IdTable` and must be used whenever a row
+// (not a reference to a row) has to be stored outside the IdTable. The
+// implementation is a rather thin wrapper around `std::vector<T>` or
+// `std::array<T, NumColumns>`, respectively (see above).
+template <typename T, int NumColumns = 0>
 class Row {
  public:
   // Returns true iff the number of columns is only known at runtime and we
@@ -41,9 +44,8 @@ class Row {
   // `isDynamic()` case.
   using Data = std::conditional_t<
       isDynamic(),
-      std::vector<Id,
-                  ad_utility::default_init_allocator<Id, std::allocator<Id>>>,
-      std::array<Id, NumColumns>>;
+      std::vector<T, ad_utility::default_init_allocator<T, std::allocator<T>>>,
+      std::array<T, NumColumns>>;
 
  private:
   Data data_;
@@ -62,8 +64,20 @@ class Row {
       : Row() {}
 
   // Access the i-th element.
-  Id& operator[](size_t i) { return data_[i]; }
-  const Id& operator[](size_t i) const { return data_[i]; }
+  T& operator[](size_t i) { return data_[i]; }
+  const T& operator[](size_t i) const { return data_[i]; }
+
+  // Define iterators
+  using iterator = ad_utility::IteratorForAccessOperator<
+      Row, ad_utility::AccessViaBracketOperator, ad_utility::IsConst::False>;
+  using const_iterator = ad_utility::IteratorForAccessOperator<
+      Row, ad_utility::AccessViaBracketOperator, ad_utility::IsConst::True>;
+  iterator begin() { return {this, 0}; };
+  iterator end() { return {this, numColumns()}; };
+  const_iterator cbegin() { return {this, 0}; };
+  const_iterator cend() { return {this, numColumns()}; };
+  const_iterator begin() const { return {this, 0}; };
+  const_iterator end() const { return {this, numColumns()}; };
 
   size_t numColumns() const { return data_.size(); }
 
@@ -92,7 +106,7 @@ class RowReferenceImpl {
   template <typename Table, ad_utility::IsConst isConst>
   friend class RowReference;
 
-  template <int NumCols, typename Allocator, IsView isView>
+  template <typename T, int NumCols, typename Allocator, IsView isView>
   friend class IdTable;
 
   // The actual implementation of a reference to a row that allows mutable
@@ -105,10 +119,11 @@ class RowReferenceImpl {
    public:
     static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
     using TablePtr = std::conditional_t<isConst, const Table*, Table*>;
+    using T = typename Table::value_type;
     static constexpr int numStaticColumns = Table::numStaticColumns;
 
     // Grant the `IdTable` class access to the internal details.
-    template <int NumCols, typename Allocator, IsView isView>
+    template <typename T, int NumCols, typename Allocator, IsView isView>
     friend class IdTable;
 
    private:
@@ -136,16 +151,53 @@ class RowReferenceImpl {
 
    protected:
     // The actual implementation of operator[].
-    static decltype(auto) getImpl(auto&& self, size_t i) {
+    static T& operatorBracketImpl(auto& self, size_t i) {
+      return (*self.table_)(self.row_, i);
+    }
+    static const T& operatorBracketImpl(const auto& self, size_t i) {
       return (*self.table_)(self.row_, i);
     }
 
    public:
     // Access to the `i`-th columns of this row. Only allowed for const values
     // and for rvalues.
-    Id& operator[](size_t i) && requires(!isConst) { return getImpl(*this, i); }
-    const Id& operator[](size_t i) const& { return getImpl(*this, i); }
-    const Id& operator[](size_t i) const&& { return getImpl(*this, i); }
+    T& operator[](size_t i) && requires(!isConst) {
+      return operatorBracketImpl(*this, i);
+    }
+    const T& operator[](size_t i) const& {
+      return operatorBracketImpl(*this, i);
+    }
+    const T& operator[](size_t i) const&& {
+      return operatorBracketImpl(*this, i);
+    }
+
+    // Define iterators.
+    template <typename RowT>
+    struct IteratorHelper {
+      decltype(auto) operator()(auto&& row, size_t colIdx) const {
+        return std::decay_t<decltype(row)>::operatorBracketImpl(AD_FWD(row),
+                                                                colIdx);
+      }
+    };
+    using iterator = ad_utility::IteratorForAccessOperator<
+        RowReferenceWithRestrictedAccess,
+        IteratorHelper<RowReferenceWithRestrictedAccess>,
+        ad_utility::IsConst::False>;
+    using const_iterator = ad_utility::IteratorForAccessOperator<
+        RowReferenceWithRestrictedAccess,
+        IteratorHelper<RowReferenceWithRestrictedAccess>,
+        ad_utility::IsConst::True>;
+    // Non-const iterators allow non-const access and are therefore only allowed
+    // on rvalues.
+    iterator begin() && { return {this, 0}; };
+    iterator end() && { return {this, numColumns()}; };
+    // Const iterators are always fine.
+    const_iterator cbegin() { return {this, 0}; };
+    const_iterator cend() { return {this, numColumns()}; };
+    const_iterator begin() const& { return {this, 0}; };
+    const_iterator end() const& { return {this, numColumns()}; };
+    const_iterator begin() const&& { return {this, 0}; };
+    const_iterator end() const&& { return {this, numColumns()}; };
 
     // The number of columns that this row contains.
     size_t numColumns() const { return table_->numColumns(); }
@@ -155,9 +207,14 @@ class RowReferenceImpl {
     // value or by reference).
     static void swapImpl(auto&& a, auto&& b) requires(!isConst) {
       for (size_t i = 0; i < a.numColumns(); ++i) {
-        std::swap(getImpl(a, i), getImpl(b, i));
+        std::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
       }
     }
+
+    // Protected implementation for the "ordinary" non-const iterators for
+    // lvalues s.t. the not restricted child class can access them.
+    iterator beginImpl() { return {this, 0}; }
+    iterator endImpl() { return {this, numColumns()}; }
 
    public:
     // Swap two `RowReference`s, but only if they are temporaries (rvalues).
@@ -168,9 +225,9 @@ class RowReferenceImpl {
 
     // Equality comparison. Works between two `RowReference`s, but also between
     // a `RowReference` and a `Row` if the number of columns match.
-    template <typename T>
-    bool operator==(const T& other) const
-        requires(numStaticColumns == T::numStaticColumns) {
+    template <typename U>
+    bool operator==(const U& other) const
+        requires(numStaticColumns == U::numStaticColumns) {
       if constexpr (numStaticColumns == 0) {
         if (numColumns() != other.numColumns()) {
           return false;
@@ -185,9 +242,9 @@ class RowReferenceImpl {
     }
 
     // Convert from a `RowReference` to a `Row`.
-    operator Row<numStaticColumns>() const {
+    operator Row<T, numStaticColumns>() const {
       auto numCols = (std::move(*this)).numColumns();
-      Row<numStaticColumns> result{numCols};
+      Row<T, numStaticColumns> result{numCols};
       for (size_t i = 0; i < numCols; ++i) {
         result[i] = std::move(*this)[i];
       }
@@ -199,17 +256,17 @@ class RowReferenceImpl {
     // `RowReference`. This assignment actually writes to the underlying table.
     static This& assignmentImpl(auto&& self, const auto& other) {
       if constexpr (numStaticColumns == 0) {
-        AD_CHECK(self.numColumns() == other.numColumns());
+        AD_CONTRACT_CHECK(self.numColumns() == other.numColumns());
       }
       for (size_t i = 0; i < self.numColumns(); ++i) {
-        getImpl(self, i) = other[i];
+        operatorBracketImpl(self, i) = other[i];
       }
       return self;
     }
 
    public:
     // Assignment from a `Row` with the same number of columns.
-    This& operator=(const Row<numStaticColumns>& other) && {
+    This& operator=(const Row<T, numStaticColumns>& other) && {
       return assignmentImpl(*this, other);
     }
 
@@ -225,9 +282,17 @@ class RowReferenceImpl {
       return assignmentImpl(*this, other);
     }
 
+    // This strange overload needs to be declared to make `Row` a
+    // `std::random_access_range` that can be used e.g. with
+    // `std::ranges::sort`. There is no need to define it, as it is only
+    // needed to fulfill the concept `std::indirectly_writable`. For more
+    // details on this "esoteric" overload see the notes at the end of
+    // `https://en.cppreference.com/w/cpp/iterator/indirectly_writable`
+    This& operator=(const Row<T, numStaticColumns>& other) const&&;
+
    protected:
     // No need to copy this internal type, but the implementation of the
-    // `RowReference` class below requiress it,
+    // `RowReference` class below requires it,
     // so the copy Constructor is protected.
     RowReferenceWithRestrictedAccess(const RowReferenceWithRestrictedAccess&) =
         default;
@@ -247,6 +312,7 @@ class RowReference
       RowReferenceImpl::RowReferenceWithRestrictedAccess<Table, isConstTag>;
   using Base::numStaticColumns;
   using TablePtr = typename Base::TablePtr;
+  using T = typename Base::T;
   static constexpr bool isConst = isConstTag == ad_utility::IsConst::True;
 
   // Efficient access to the base class subobject to invoke its functions.
@@ -260,10 +326,20 @@ class RowReference
   RowReference(Base b) : Base{std::move(b)} {}
 
   // Access to the `i`-th column of this row.
-  Id& operator[](size_t i) requires(!isConst) {
-    return Base::getImpl(base(), i);
+  T& operator[](size_t i) requires(!isConst) {
+    return Base::operatorBracketImpl(base(), i);
   }
-  const Id& operator[](size_t i) const { return Base::getImpl(base(), i); }
+  const T& operator[](size_t i) const {
+    return Base::operatorBracketImpl(base(), i);
+  }
+
+  // The iterators are implemented in the base class and can simply be
+  // forwarded.
+  typename Base::iterator begin() { return Base::beginImpl(); };
+  typename Base::iterator end() { return Base::endImpl(); };
+  typename Base::const_iterator begin() const { return Base::begin(); };
+  typename Base::const_iterator end() const { return Base::end(); };
+  // The `cbegin` and `cend` functions are implicitly inherited from `Base`.
 
   // __________________________________________________________________________
   template <ad_utility::SimilarTo<RowReference> R>
@@ -281,9 +357,13 @@ class RowReference
 
  public:
   // Assignment from a `Row` with the same number of columns.
-  RowReference& operator=(const Row<numStaticColumns>& other) {
+  RowReference& operator=(const Row<T, numStaticColumns>& other) & {
     return this->assignmentImpl(base(), other);
   }
+  RowReference& operator=(const Row<T, numStaticColumns>& other) && {
+    return this->assignmentImpl(base(), other);
+  }
+  RowReference& operator=(const Row<T, numStaticColumns>& other) const&&;
 
   // Assignment from a `RowReference` with the same number of columns.
   RowReference& operator=(const RowReference& other) {

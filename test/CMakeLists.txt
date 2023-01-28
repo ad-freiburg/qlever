@@ -87,6 +87,8 @@ addLinkAndDiscoverTest(FTSAlgorithmsTest index)
 
 addLinkAndDiscoverTest(EngineTest engine)
 
+addLinkAndDiscoverTest(JoinTest engine)
+
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
 addLinkAndDiscoverTest(ConversionsTest util absl::strings)
@@ -115,7 +117,7 @@ addLinkAndDiscoverTest(TurtleParserTest parser absl::flat_hash_map re2)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
-addLinkAndDiscoverTest(IdTableTest)
+addLinkAndDiscoverTest(IdTableTest absl::strings)
 
 addLinkAndDiscoverTest(TransitivePathTest engine)
 
@@ -123,7 +125,7 @@ addLinkAndDiscoverTest(BatchedPipelineTest)
 
 addLinkAndDiscoverTest(TupleHelpersTest)
 
-addLinkAndDiscoverTest(StringSortComparatorTest ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(StringSortComparatorTest ${ICU_LIBRARIES} absl::flat_hash_map)
 
 addLinkAndDiscoverTest(PriorityQueueTest absl::flat_hash_map ${ICU_LIBRARIES})
 
@@ -139,7 +141,7 @@ addLinkAndDiscoverTest(MinusTest engine)
 addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 #addLinkAndDiscoverTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 
-addLinkAndDiscoverTest(SparqlAntlrParserTest parser sparqlExpressions engine)
+addLinkAndDiscoverTestSerial(SparqlAntlrParserTest parser sparqlExpressions engine)
 
 # The SerializerTest uses temporary files. The tests fail when multiple test
 # cases are run in parallel. This should be fixed by using distinct filenames
@@ -181,7 +183,7 @@ addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
 
-addLinkAndDiscoverTest(PrefixCompressorTest)
+addLinkAndDiscoverTest(PrefixCompressorTest absl::strings)
 
 addLinkAndDiscoverTest(MilestoneIdTest absl::strings)
 
@@ -240,10 +242,20 @@ addLinkAndDiscoverTest(CheckUsePatternTrickTest parser engine)
 
 addLinkAndDiscoverTestSerial(RegexExpressionTest sparqlExpressions index engine)
 
-addLinkAndDiscoverTest(LocalVocabTest engine)
+addLinkAndDiscoverTestSerial(LocalVocabTest engine)
 
 addLinkAndDiscoverTest(HttpTest boost_iostreams http)
 
 addLinkAndDiscoverTest(CallFixedSizeTest)
 
 addLinkAndDiscoverTest(ConstexprUtilsTest)
+
+addLinkAndDiscoverTest(ResetWhenMovedTest)
+
+addLinkAndDiscoverTest(TimerTest absl::strings)
+
+addLinkAndDiscoverTest(AlgorithmTest)
+
+addLinkAndDiscoverTest(CompressedRelationsTest index)
+
+addLinkAndDiscoverTest(ExceptionTest)

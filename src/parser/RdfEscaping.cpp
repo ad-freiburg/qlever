@@ -79,7 +79,7 @@ void unescapeStringAndNumericEscapes(InputIterator beginIterator,
   auto pushNumericEscape = [&outputIterator, &endIterator](const auto& iterator,
                                                            size_t length) {
     if constexpr (!acceptOnlyBackslashAndNewline) {
-      AD_CHECK(iterator + length <= endIterator);
+      AD_CONTRACT_CHECK(iterator + length <= endIterator);
       auto unesc =
           hexadecimalCharactersToUtf8(std::string_view(iterator, length));
       std::copy(unesc.begin(), unesc.end(), outputIterator);
@@ -98,7 +98,7 @@ void unescapeStringAndNumericEscapes(InputIterator beginIterator,
     if (nextBackslashIterator == endIterator) {
       break;
     }
-    AD_CHECK(nextBackslashIterator + 1 < endIterator);
+    AD_CONTRACT_CHECK(nextBackslashIterator + 1 < endIterator);
 
     size_t numCharactersFromInput = 2;  // backslash + 1 character
     switch (*(nextBackslashIterator + 1)) {
@@ -199,12 +199,12 @@ std::string normalizeRDFLiteral(const std::string_view origLiteral) {
   // Find out, which of the forms "literal", 'literal', """literal""" or
   // '''literal''' the input has, and strip all the quotes.
   if (literal.starts_with(R"(""")") || literal.starts_with("'''")) {
-    AD_CHECK(literal.ends_with(literal.substr(0, 3)));
+    AD_CONTRACT_CHECK(literal.ends_with(literal.substr(0, 3)));
     literal.remove_prefix(3);
     literal.remove_suffix(3);
   } else {
-    AD_CHECK(literal.starts_with('"') || literal.starts_with('\''));
-    AD_CHECK(literal.ends_with(literal[0]));
+    AD_CONTRACT_CHECK(literal.starts_with('"') || literal.starts_with('\''));
+    AD_CONTRACT_CHECK(literal.ends_with(literal[0]));
     literal.remove_prefix(1);
     literal.remove_suffix(1);
   }
@@ -218,9 +218,9 @@ std::string normalizeRDFLiteral(const std::string_view origLiteral) {
 
 // ____________________________________________________________________________
 std::string validRDFLiteralFromNormalized(std::string_view normLiteral) {
-  AD_CHECK(normLiteral.starts_with('"'));
+  AD_CONTRACT_CHECK(normLiteral.starts_with('"'));
   size_t posSecondQuote = normLiteral.find('"', 1);
-  AD_CHECK(posSecondQuote != std::string::npos);
+  AD_CONTRACT_CHECK(posSecondQuote != std::string::npos);
   size_t posLastQuote = normLiteral.rfind('"');
   // If there are onyl two quotes (the first and the last, which every
   // normalized literal has), there is nothing to do.
@@ -248,8 +248,8 @@ std::string validRDFLiteralFromNormalized(std::string_view normLiteral) {
  * actual value
  */
 std::string unescapeIriref(std::string_view iriref) {
-  AD_CHECK(iriref.starts_with('<'));
-  AD_CHECK(iriref.ends_with('>'));
+  AD_CONTRACT_CHECK(iriref.starts_with('<'));
+  AD_CONTRACT_CHECK(iriref.ends_with('>'));
   iriref.remove_prefix(1);
   iriref.remove_suffix(1);
   std::string result = "<";
@@ -275,8 +275,8 @@ std::string unescapePrefixedIri(std::string_view literal) {
                     "prefixed iri "
                  << origLiteral << '\n';
     }
-    AD_CHECK(pos + 1 < literal.size());
-    AD_CHECK(m.contains(literal[pos + 1]));
+    AD_CONTRACT_CHECK(pos + 1 < literal.size());
+    AD_CONTRACT_CHECK(m.contains(literal[pos + 1]));
     res += literal[pos + 1];
 
     literal.remove_prefix(pos + 2);

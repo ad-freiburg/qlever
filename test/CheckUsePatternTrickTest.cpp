@@ -49,10 +49,10 @@ auto expectNotContained = [](const std::string& whereClause,
 // clause doesn't start with a triple, throw an exception.
 const SparqlTriple& getFirstTriple(const ParsedQuery& parsedQuery) {
   const auto& children = parsedQuery._rootGraphPattern._graphPatterns;
-  AD_CHECK_GE(children.size(), 1);
+  AD_CONTRACT_CHECK(children.size() >= 1);
   const auto& firstChild =
       std::get<parsedQuery::BasicGraphPattern>(children[0]);
-  AD_CHECK_GE(firstChild._triples.size(), 1);
+  AD_CONTRACT_CHECK(firstChild._triples.size() >= 1);
   return firstChild._triples[0];
 }
 

@@ -106,7 +106,7 @@ class BackgroundStxxlSorter {
  private:
   // Transition from the input to the output state.
   void setupSort() {
-    AD_CHECK(!_sortWasCalled);
+    AD_CONTRACT_CHECK(!_sortWasCalled);
     _sortWasCalled = true;
     // First sort all remaining elements from the input phase.
     if (_sortInBackgroundFuture.valid()) {

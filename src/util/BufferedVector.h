@@ -29,6 +29,7 @@ class BufferedVector {
 
   // __________________________________________________________________
   size_t size() const { return _isInternal ? _vec.size() : _extVec.size(); }
+  bool empty() const { return size() == 0; }
 
   // standard iterator functions, each in a const and non-const version
   // begin
@@ -75,12 +76,12 @@ class BufferedVector {
   const T& back() const { return at(size() - 1); }
 
   // no copy construction/assignment since the MmapVector does not support this
-  BufferedVector(const BufferedVector<T>&) = delete;
-  BufferedVector& operator=(const BufferedVector<T>&) = delete;
+  BufferedVector(const BufferedVector&) = delete;
+  BufferedVector& operator=(const BufferedVector&) = delete;
 
   // move construction and assignment
-  BufferedVector(BufferedVector<T>&& other) = default;
-  BufferedVector& operator=(BufferedVector<T>&& other) = default;
+  BufferedVector& operator=(BufferedVector&& other) = default;
+  BufferedVector(BufferedVector&& other) = default;
 
   // _________________________________________________________________________
   void clear() {
@@ -109,13 +110,41 @@ class BufferedVector {
     }
   }
 
+  // Change the size of the `BufferedVector` to `newSize`. This might move
+  // the data from the internal to the external vector or vice versa. If
+  // `newSize < size()` the `BufferedVector` will be truncated to the first
+  // `newSize` elements.
+  void resize(size_t newSize) {
+    auto oldSize = size();
+    if (!_isInternal && newSize > _threshold) {
+      _extVec.resize(newSize);
+    } else if (_isInternal && newSize < _threshold) {
+      _vec.resize(newSize);
+    } else if (_isInternal && newSize >= _threshold) {
+      _extVec.resize(newSize);
+      AD_CONTRACT_CHECK(newSize > oldSize);
+      std::copy(_vec.begin(), _vec.end(), _extVec.begin());
+      _isInternal = false;
+      _vec.clear();
+    } else {
+      AD_CONTRACT_CHECK(!_isInternal && newSize < _threshold);
+      AD_CONTRACT_CHECK(newSize < oldSize);
+      _vec.resize(newSize);
+      std::copy(_extVec.begin(), _extVec.begin() + newSize, _vec.begin());
+      _isInternal = true;
+    }
+  }
+
+  // Get the underlying allocator of the vector.
+  auto get_allocator() const { return _vec.get_allocator(); }
+
   // testing interface
   size_t threshold() const { return _threshold; }
   bool isInternal() const { return _isInternal; }
 
  private:
   // the externalization threshold
-  const size_t _threshold = 2 << 25;
+  size_t _threshold = 2 << 25;
   // keep track on which of our data stores we are currently using.
   bool _isInternal = true;
 

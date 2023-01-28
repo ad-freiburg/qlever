@@ -166,6 +166,45 @@ TEST(MmapVectorTest, PushBackLvalue) {
   }
 }
 
+// ___________________________________________________________________
+TEST(MmapVectorTest, ReserveAndResize) {
+  {
+    MmapVector<int> v(0, "_testResize.mmap");
+    ASSERT_EQ(size_t(0), v.size());
+    for (int i = 0; i < 5000; i++) {
+      int tmp = 5000 - i;
+      v.push_back(tmp);
+    }
+    size_t s = 5000;
+    ASSERT_EQ(s, v.size());
+    ASSERT_LE(s, v.capacity());
+    v.reserve(12000);
+    ASSERT_EQ(s, v.size());
+    ASSERT_LE(12000, v.capacity());
+    for (int i = 0; i < 5000; i++) {
+      ASSERT_EQ(v.at(i), 5000 - i);
+    }
+    auto ptr = v.data();
+    v.resize(12000);
+    ASSERT_LE(12000, v.capacity());
+    ASSERT_EQ(12000, v.size());
+    // There was enough capacity for the resize, so the underlying data hasn't
+    // changed.
+    ASSERT_EQ(ptr, v.data());
+
+    v.resize(14000);
+    ASSERT_EQ(14000, v.size());
+    ASSERT_LE(14000, v.capacity());
+
+    v.resize(500);
+    ASSERT_EQ(500, v.size());
+    ASSERT_LE(14000, v.capacity());
+    for (int i = 0; i < 500; i++) {
+      ASSERT_EQ(v.at(i), 5000 - i);
+    }
+  }
+}
+
 // ____________________________________________________________________
 TEST(MmapVectorTest, constIterators) {
   // make sure that we get a unsignned 5000 to prevent compiler warnings
@@ -295,7 +334,7 @@ TEST(MmapVectorTest, Reuse) {
 
 // ____________________________________________________________________
 TEST(MmapVectorTest, MoveConstructor) {
-  // make sure that we get a unsignned 5000 to prevent compiler warnings
+  // make sure that we get a unsigned 5000 to prevent compiler warnings
 
   size_t s = 5000;
   {
@@ -311,6 +350,10 @@ TEST(MmapVectorTest, MoveConstructor) {
 
     MmapVector<int> v2(std::move(v));
     ASSERT_EQ(nullptr, v.data());
+    ASSERT_EQ(0, v.size());
+    ASSERT_EQ(0, v.capacity());
+    ASSERT_ANY_THROW(v.push_back(42));
+    ASSERT_ANY_THROW(v.resize(42));
 
     ASSERT_EQ(s, v2.size());
     ASSERT_LE(s, v2.capacity());
@@ -330,6 +373,8 @@ TEST(MmapVectorTest, MoveConstructor) {
 
   MmapVectorView<int> v2(std::move(v));
   ASSERT_EQ(nullptr, v.data());
+  ASSERT_EQ(nullptr, v.data());
+  ASSERT_EQ(0, v.size());
 
   ASSERT_EQ(s, v2.size());
   ASSERT_NE(nullptr, v2.data());
@@ -354,8 +399,19 @@ TEST(MmapVectorTest, MoveAssignment) {
       v[i] = i;
     }
 
-    MmapVector<int> v2 = std::move(v);
+    MmapVector<int> v2;
+    ASSERT_EQ(nullptr, v2.data());
+    ASSERT_EQ(0, v2.size());
+    ASSERT_EQ(0, v2.capacity());
+    ASSERT_ANY_THROW(v2.push_back(42));
+    ASSERT_ANY_THROW(v2.resize(42));
+    v2 = std::move(v);
+
     ASSERT_EQ(nullptr, v.data());
+    ASSERT_EQ(0, v.size());
+    ASSERT_EQ(0, v.capacity());
+    ASSERT_ANY_THROW(v.push_back(42));
+    ASSERT_ANY_THROW(v.resize(42));
 
     ASSERT_EQ(s, v2.size());
     ASSERT_LE(s, v2.capacity());
@@ -372,9 +428,12 @@ TEST(MmapVectorTest, MoveAssignment) {
   for (int i = 0; i < 5000; ++i) {
     ASSERT_EQ(v[i], i);
   }
-
-  MmapVectorView<int> v2 = std::move(v);
+  MmapVectorView<int> v2;
+  ASSERT_EQ(nullptr, v2.data());
+  ASSERT_EQ(0, v2.size());
+  v2 = std::move(v);
   ASSERT_EQ(nullptr, v.data());
+  ASSERT_EQ(0, v.size());
 
   ASSERT_EQ(s, v2.size());
   ASSERT_NE(nullptr, v2.data());

@@ -67,16 +67,16 @@ std::optional<std::string> getPrefixRegex(std::string regex) {
 // Assert that `input` starts and ends with double quotes `"` and remove those
 // quotes.
 std::string removeQuotes(std::string_view input) {
-  AD_CHECK(input.size() >= 2);
+  AD_CONTRACT_CHECK(input.size() >= 2);
   // Currently, IRIs are also passed as strings, but are not allowed here.
   if (input.starts_with('<')) {
-    AD_CHECK(input.ends_with('>'));
+    AD_CONTRACT_CHECK(input.ends_with('>'));
     throw std::runtime_error(
         "An IRI was passed as the second or third argument to the REGEX "
         "function, but only string literals are allowed.");
   }
-  AD_CHECK(input.starts_with('"'));
-  AD_CHECK(input.ends_with('"'));
+  AD_CONTRACT_CHECK(input.starts_with('"'));
+  AD_CONTRACT_CHECK(input.ends_with('"'));
   input.remove_prefix(1);
   input.remove_suffix(1);
   return std::string{input};
@@ -159,7 +159,7 @@ ExpressionResult RegexExpression::evaluate(
     sparqlExpression::EvaluationContext* context) const {
   auto resultAsVariant = child_->evaluate(context);
   auto variablePtr = std::get_if<Variable>(&resultAsVariant);
-  AD_CHECK(variablePtr);
+  AD_CONTRACT_CHECK(variablePtr);
 
   if (auto prefixRegex = std::get_if<std::string>(&regex_)) {
     auto prefixRange =
@@ -168,7 +168,7 @@ ExpressionResult RegexExpression::evaluate(
     Id upperId = Id::makeFromVocabIndex(prefixRange.second);
     auto beg = context->_inputTable.begin() + context->_beginIndex;
     auto end = context->_inputTable.begin() + context->_endIndex;
-    AD_CHECK(end <= context->_inputTable.end());
+    AD_CONTRACT_CHECK(end <= context->_inputTable.end());
     if (context->isResultSortedBy(*variablePtr)) {
       auto column = context->getColumnIndexForVariable(*variablePtr);
       auto lower = std::lower_bound(
@@ -197,7 +197,7 @@ ExpressionResult RegexExpression::evaluate(
       return result;
     }
   } else {
-    AD_CHECK(std::holds_alternative<RE2>(regex_));
+    AD_CONTRACT_CHECK(std::holds_alternative<RE2>(regex_));
     auto resultSize = context->size();
     VectorWithMemoryLimit<Bool> result{context->_allocator};
     result.reserve(resultSize);
@@ -231,7 +231,7 @@ auto RegexExpression::getEstimatesForFilterExpression(
     reductionFactor = std::max(1.0, reductionFactor);
     size_t sizeEstimate = inputSize / static_cast<size_t>(reductionFactor);
     auto varPtr = dynamic_cast<VariableExpression*>(child_.get());
-    AD_CHECK(varPtr);
+    AD_CONTRACT_CHECK(varPtr);
     size_t costEstimate = firstSortedVariable == varPtr->value()
                               ? sizeEstimate
                               : sizeEstimate + inputSize;

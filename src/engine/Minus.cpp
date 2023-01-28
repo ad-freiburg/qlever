@@ -21,11 +21,11 @@ Minus::Minus(QueryExecutionContext* qec,
   // Check that the invariant (inputs are sorted on the matched columns) holds.
   auto l = _left->resultSortedOn();
   auto r = _right->resultSortedOn();
-  AD_CHECK(_matchedColumns.size() <= l.size());
-  AD_CHECK(_matchedColumns.size() <= r.size());
+  AD_CONTRACT_CHECK(_matchedColumns.size() <= l.size());
+  AD_CONTRACT_CHECK(_matchedColumns.size() <= r.size());
   for (size_t i = 0; i < _matchedColumns.size(); ++i) {
-    AD_CHECK(_matchedColumns[i][0] == l[i]);
-    AD_CHECK(_matchedColumns[i][1] == r[i]);
+    AD_CONTRACT_CHECK(_matchedColumns[i][0] == l[i]);
+    AD_CONTRACT_CHECK(_matchedColumns[i][1] == r[i]);
   }
 }
 
@@ -45,7 +45,7 @@ string Minus::getDescriptor() const { return "Minus"; }
 
 // _____________________________________________________________________________
 void Minus::computeResult(ResultTable* result) {
-  AD_CHECK(result);
+  AD_CONTRACT_CHECK(result);
   LOG(DEBUG) << "Minus result computation..." << endl;
 
   result->_sortedBy = resultSortedOn();
@@ -68,6 +68,11 @@ void Minus::computeResult(ResultTable* result) {
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth}), &Minus::computeMinus,
                   this, leftResult->_idTable, rightResult->_idTable,
                   _matchedColumns, &result->_idTable);
+
+  // If only one of the two operands has a local vocab, pass it on.
+  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
+      leftResult->_localVocab, rightResult->_localVocab);
+
   LOG(DEBUG) << "Minus result computation done." << endl;
 }
 

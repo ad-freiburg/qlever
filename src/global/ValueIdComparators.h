@@ -7,10 +7,8 @@
 
 #include <utility>
 
-#include "../engine/ResultTable.h"
-#include "../index/Vocabulary.h"
-#include "../util/OverloadCallOperator.h"
-#include "./ValueId.h"
+#include "global/ValueId.h"
+#include "util/OverloadCallOperator.h"
 
 namespace valueIdComparators {
 /// This enum encodes the different numeric comparators LessThan, LessEqual,
@@ -148,7 +146,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForDouble(
         return !doubleIdIsNegative(id);
       });
 
-  AD_CHECK(beginOfNegatives >= beginOfNans);
+  AD_CONTRACT_CHECK(beginOfNegatives >= beginOfNans);
 
   auto comparatorLess = makeSymmetricComparator(&ValueId::getDouble);
   auto comparatorGreater =
@@ -254,7 +252,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIntsAndDoubles(
   if (comparison == Comparison::NE) {
     auto rangeOfDoubles = getRangeForDatatype(begin, end, Datatype::Double);
     auto rangeOfInts = getRangeForDatatype(begin, end, Datatype::Int);
-    AD_CHECK(rangeOfInts.first <= rangeOfDoubles.first);
+    AD_CONTRACT_CHECK(rangeOfInts.first <= rangeOfDoubles.first);
     result.push_back({begin, rangeOfInts.first});
     result.push_back({rangeOfInts.second, rangeOfDoubles.first});
     result.push_back({rangeOfDoubles.second, end});
@@ -360,18 +358,18 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
 /// Similar to `getRangesForId` above but takes a range [valueIdBegin,
 /// valueIdEnd) of Ids that are considered to be equal. `valueIdBegin` and
 /// `valueIdEnd` must have the same datatype which must be one of the index
-/// types `VocabIndex, LocalVocabIndex, ...`, otherwise an `AD_CHECK` will fail
-/// at runtime.
+/// types `VocabIndex, LocalVocabIndex, ...`, otherwise an `AD_CONTRACT_CHECK`
+/// will fail at runtime.
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
     RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
     Comparison comparison) {
   // For an explanation of the case `valueIdBegin == valueIdEnd`, see the
   // documentation of a similar check in `compareIds` below.
-  AD_CHECK(valueIdBegin <= valueIdEnd);
+  AD_CONTRACT_CHECK(valueIdBegin <= valueIdEnd);
   // This lambda enforces the invariants `non-empty` and `sorted` and also
   // merges directly adjacent ranges.
-  AD_CHECK(valueIdBegin.getDatatype() == valueIdEnd.getDatatype());
+  AD_CONTRACT_CHECK(valueIdBegin.getDatatype() == valueIdEnd.getDatatype());
   switch (valueIdBegin.getDatatype()) {
     case Datatype::Double:
     case Datatype::Int:
@@ -390,7 +388,7 @@ namespace detail {
 
 // This function is part of the implementation of `compareIds` (see below).
 bool compareIdsImpl(ValueId a, ValueId b, auto comparator) {
-  auto isNumeric = [](Id id) {
+  auto isNumeric = [](ValueId id) {
     return id.getDatatype() == Datatype::Double ||
            id.getDatatype() == Datatype::Int;
   };
@@ -447,7 +445,7 @@ inline bool compareWithEqualIds(ValueId a, ValueId bBegin, ValueId bEnd,
   // vocabulary. In this case the ID `bBegin` is the ID of the smallest
   // vocabulary entry that is larger than the non-existing word that it
   // represents.
-  AD_CHECK(bBegin <= bEnd);
+  AD_CONTRACT_CHECK(bBegin <= bEnd);
   switch (comparison) {
     case Comparison::LT:
       return detail::compareIdsImpl(a, bBegin, std::less<>());

@@ -169,7 +169,7 @@ void GroupBy::processGroup(
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
-    AD_CHECK(sparqlExpression::isConstantResult<T>);
+    AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<T>);
     if constexpr (isStrongId) {
       resultEntry = singleResult;
       *resultType = qlever::ResultType::KB;
@@ -180,7 +180,7 @@ void GroupBy::processGroup(
           singleResult, *(outTable->_localVocab));
     } else {
       // This should never happen since aggregates always return constants.
-      AD_FAIL()
+      AD_FAIL();
     }
   };
 
@@ -285,6 +285,16 @@ void GroupBy::computeResult(ResultTable* result) {
   std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
   LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
 
+  // Make a copy of the local vocab from the sub-result and then add to it (in
+  // case GROUP_CONCAT adds something).
+  //
+  // NOTE: If we did `result->_localVocab = subresult->_localVocab` here, only a
+  // shared pointer would be copied. The the additions made in this operation
+  // would also affect the `subresult`, which leads to all kinds of unexpected
+  // behavior.
+  result->_localVocab =
+      std::make_shared<LocalVocab>(subresult->_localVocab->clone());
+
   std::vector<size_t> groupByColumns;
 
   result->_sortedBy = resultSortedOn();
@@ -298,10 +308,7 @@ void GroupBy::computeResult(ResultTable* result) {
   for (const auto& var : _groupByVariables) {
     auto it = subtreeVarCols.find(var);
     if (it == subtreeVarCols.end()) {
-      LOG(WARN) << "Group by variable " << var.name() << " is not groupable."
-                << std::endl;
-      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-               "Groupby variable " + var.name() + " is not groupable");
+      AD_THROW("Groupby variable " + var.name() + " is not groupable");
     }
 
     groupByColumns.push_back(it->second);
@@ -343,6 +350,7 @@ void GroupBy::computeResult(ResultTable* result) {
   CALL_FIXED_SIZE((std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
                   subresult->_idTable, groupByCols, aggregates,
                   &result->_idTable, subresult.get(), result);
+
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
 }
 
@@ -384,7 +392,7 @@ bool GroupBy::computeGroupByForSingleIndexScan(ResultTable* result) {
       const auto& var = varAndDistinctness.value().variable_;
       auto permutation =
           getPermutationForThreeVariableTriple(*_subtree, var, var);
-      AD_CHECK(permutation.has_value());
+      AD_CONTRACT_CHECK(permutation.has_value());
       result->_idTable(0, 0) = Id::makeFromInt(
           getIndex().getImpl().numDistinctCol0(permutation.value()).normal_);
     } else {

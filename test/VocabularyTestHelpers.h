@@ -180,7 +180,7 @@ void testUpperAndLowerBoundWithNumericComparator(auto createVocabulary) {
 auto testAccessOperatorFromWordsAndIds(auto vocabulary, const auto& words,
                                        const auto& ids) {
   // Not in any particulary order.
-  AD_CHECK(words.size() == ids.size());
+  AD_CONTRACT_CHECK(words.size() == ids.size());
   ASSERT_EQ(words.size(), vocabulary.size());
   for (size_t i = 0; i < words.size(); ++i) {
     ASSERT_EQ(words[i], vocabulary[ids[i]]);

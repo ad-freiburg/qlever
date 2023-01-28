@@ -80,12 +80,10 @@ using SimpleConcurrentLruCache =
 
 TEST(ConcurrentCache, sequentialComputation) {
   SimpleConcurrentLruCache a{3ul};
-  ad_utility::Timer t;
-  t.start();
+  ad_utility::Timer t{ad_utility::Timer::Started};
   // Fake computation that takes 5ms and returns value "3", which is then
   // stored under key 3.
   auto result = a.computeOnce(3, waiting_function("3"s, 5));
-  t.stop();
   ASSERT_EQ("3"s, *result._resultPointer);
   ASSERT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
   ASSERT_GE(t.msecs(), 5);
@@ -98,7 +96,6 @@ TEST(ConcurrentCache, sequentialComputation) {
   t.start();
   // takes 0 msecs to compute, as the request is served from the cache.
   auto result2 = a.computeOnce(3, waiting_function("3"s, 5));
-  t.stop();
   // computing result again: still yields "3", was cached and takes 0
   // milliseconds (result is read from cache)
   ASSERT_EQ("3"s, *result2._resultPointer);
@@ -112,12 +109,10 @@ TEST(ConcurrentCache, sequentialComputation) {
 
 TEST(ConcurrentCache, sequentialPinnedComputation) {
   SimpleConcurrentLruCache a{3ul};
-  ad_utility::Timer t;
-  t.start();
+  ad_utility::Timer t{ad_utility::Timer::Started};
   // Fake computation that takes 5ms and returns value "3", which is then
   // stored under key 3.
   auto result = a.computeOncePinned(3, waiting_function("3"s, 5));
-  t.stop();
   ASSERT_EQ("3"s, *result._resultPointer);
   ASSERT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
   ASSERT_GE(t.msecs(), 5);
@@ -131,7 +126,6 @@ TEST(ConcurrentCache, sequentialPinnedComputation) {
   // takes 0 msecs to compute, as the request is served from the cache.
   // we don't request a pin, but the original computation was pinned
   auto result2 = a.computeOnce(3, waiting_function("3"s, 5));
-  t.stop();
   // computing result again: still yields "3", was cached and takes 0
   // milliseconds (result is read from cache)
   ASSERT_EQ("3"s, *result2._resultPointer);
@@ -145,12 +139,10 @@ TEST(ConcurrentCache, sequentialPinnedComputation) {
 
 TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
   SimpleConcurrentLruCache a{3ul};
-  ad_utility::Timer t;
-  t.start();
+  ad_utility::Timer t{ad_utility::Timer::Started};
   // Fake computation that takes 5ms and returns value "3", which is then
   // stored under key 3.
   auto result = a.computeOnce(3, waiting_function("3"s, 5));
-  t.stop();
   ASSERT_EQ("3"s, *result._resultPointer);
   ASSERT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
   ASSERT_GE(t.msecs(), 5);
@@ -165,7 +157,6 @@ TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
   // request a pin, the result should be read from the cache and upgraded
   // to a pinned result.
   auto result2 = a.computeOncePinned(3, waiting_function("3"s, 5));
-  t.stop();
   // computing result again: still yields "3", was cached and takes 0
   // milliseconds (result is read from cache)
   ASSERT_EQ("3"s, *result2._resultPointer);
