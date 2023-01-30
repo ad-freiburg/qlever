@@ -48,7 +48,7 @@ jobs:
         run: echo "original_github_repository=`cat github_repository`" >> $GITHUB_ENV; cat github_repository
       - name: "Checkout"
         uses: actions/checkout@v3
-        with: 
+        with:
           repository: ${{env.original_github_repository}}
           ref: ${{env.original_github_ref}}
           path: qlever-source

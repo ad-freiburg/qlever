@@ -4,21 +4,16 @@
 
 #include <gmock/gmock.h>
 
-#include "../src/parser/data/VarOrTerm.h"
+#include "./util/AllocatorTestHelpers.h"
+#include "parser/data/VarOrTerm.h"
 
 using namespace std::string_literals;
 using ::testing::Optional;
 
-ad_utility::AllocatorWithLimit<Id>& allocator() {
-  static ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<size_t>::max())};
-  return a;
-}
-
+namespace {
 struct ContextWrapper {
   Index _index{};
-  ResultTable _resultTable{allocator()};
+  ResultTable _resultTable{ad_utility::testing::makeAllocator()};
   // TODO<joka921> `VariableToColumnMap`
   ad_utility::HashMap<Variable, size_t> _hashMap{};
 
@@ -28,6 +23,7 @@ struct ContextWrapper {
 };
 
 ContextWrapper prepareContext() { return {}; }
+}  // namespace
 
 TEST(SparqlDataTypesTest, BlankNodeInvalidLabelsThrowException) {
   EXPECT_THROW(BlankNode(false, ""), ad_utility::Exception);

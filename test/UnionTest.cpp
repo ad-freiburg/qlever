@@ -7,32 +7,28 @@
 #include <array>
 #include <vector>
 
-#include "../src/engine/CallFixedSize.h"
-#include "../src/engine/Union.h"
-#include "../src/global/Id.h"
+#include "./util/AllocatorTestHelpers.h"
+#include "./util/IdTestHelpers.h"
+#include "engine/CallFixedSize.h"
+#include "engine/Union.h"
+#include "global/Id.h"
 
-ad_utility::AllocatorWithLimit<Id>& allocator() {
-  static ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<size_t>::max())};
-  return a;
+using ad_utility::testing::makeAllocator;
+namespace {
+auto V = ad_utility::testing::VocabId;
 }
 
-auto I = [](const auto& id) {
-  return Id::makeFromVocabIndex(VocabIndex::make(id));
-};
-
 TEST(UnionTest, computeUnion) {
-  IdTable left(1, allocator());
-  left.push_back({I(1)});
-  left.push_back({I(2)});
-  left.push_back({I(3)});
+  IdTable left(1, makeAllocator());
+  left.push_back({V(1)});
+  left.push_back({V(2)});
+  left.push_back({V(3)});
 
-  IdTable right(2, allocator());
-  right.push_back({I(4), I(5)});
-  right.push_back({I(6), I(7)});
+  IdTable right(2, makeAllocator());
+  right.push_back({V(4), V(5)});
+  right.push_back({V(6), V(7)});
 
-  IdTable result(2, allocator());
+  IdTable result(2, makeAllocator());
 
   const std::vector<std::array<size_t, 2>> columnOrigins = {
       {0, 1}, {Union::NO_COLUMN, 0}};
@@ -58,16 +54,16 @@ TEST(UnionTest, computeUnion) {
 
 TEST(UnionTest, computeUnionOptimized) {
   // the left and right data vectors will be deleted by the result tables
-  IdTable left(2, allocator());
-  left.push_back({I(1), I(2)});
-  left.push_back({I(2), I(3)});
-  left.push_back({I(3), I(4)});
+  IdTable left(2, makeAllocator());
+  left.push_back({V(1), V(2)});
+  left.push_back({V(2), V(3)});
+  left.push_back({V(3), V(4)});
 
-  IdTable right(2, allocator());
-  right.push_back({I(4), I(5)});
-  right.push_back({I(6), I(7)});
+  IdTable right(2, makeAllocator());
+  right.push_back({V(4), V(5)});
+  right.push_back({V(6), V(7)});
 
-  IdTable result(2, allocator());
+  IdTable result(2, makeAllocator());
 
   const std::vector<std::array<size_t, 2>> columnOrigins = {{0, 0}, {1, 1}};
   int leftWidth = left.numColumns();
