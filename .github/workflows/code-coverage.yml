@@ -1,8 +1,18 @@
+# Measure the code coverage of QLever's unit tests using LLVMs source instrumentation.
+# When this workflow runs in the master branch, the coverage report is directly uploaded to Codecov.io
+# When this workflow runs for a pull request, the coverage report is stored as a GitHub artifact and the separate
+# privileged workflow from `upload-coverage.yml` is triggered that uploads the coverage report. That way the uploader
+# always has access to the Codecov token and the uploads should never fail.
+
+# This name has to be the same as in the `workflows:` key in `upload-coverage.yml`, otherwise the uploader won't
+# pick up the result of this workflow.
 name: measure-code-coverage
 
 on:
+  push:
+    branches: [ master ]
   pull_request:
-    branches: [ master, '**' ]
+    branches: [ master ]
 
 jobs:
   build:
@@ -34,14 +44,14 @@ jobs:
 
     - name: Build
         # Build your program with the given configuration
-      run: cmake --build ${{github.workspace}}/build --config ${{env.build-type}} -t ValueIdComparatorsTest -- -j $(nproc)
-    - name: Test
+      run: cmake --build ${{github.workspace}}/build --config ${{env.build-type}} -- -j $(nproc)
+    - name: Run unit tests
       working-directory: ${{github.workspace}}/build/test
       env:
         LLVM_PROFILE_FILE: "default%p.profraw"
       # Execute tests defined by the CMake configuration.
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{env.build-type}} -R ValueIdComparators. .
+      run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{env.build-type}} .
 
     - name: GetListOfExecutablesForCoverageInfo
       working-directory: ${{github.workspace}}/build/test
@@ -52,6 +62,8 @@ jobs:
         llvm-profdata-15 merge -sparse *.profraw -o default.profdata;
         xargs -a tests.txt llvm-cov-15 export --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/third_party/" --ignore-filename-regex="/generated/"  --ignore-filename-regex="/nlohmann/" --ignore-filename-regex="/ctre/"  --ignore-filename-regex="/test/" > ./coverage.lcov
 
+# only upload the coverage directly if this is not a pull request. In this case we are on the master branch and have
+# access to the Codecov token
     - name: "Submit coverage data to codecov.io"
       if: github.event_name != 'pull_request'
       uses: codecov/codecov-action@v3
@@ -59,13 +71,17 @@ jobs:
         file: ${{github.workspace}}/build/test/coverage.lcov
         # Note: technically, a `token` is not required for codecov.io when
         # uploading from a public repository, but specifying it avoids the
-        # nasty spurious failures due to Github's rate limit for codecov's
+        # nasty spurious failures due to GitHub's rate limit for codecov's
         # public default token.
         token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: true
 
+# For a pull request we store the coverage file as well as some information about this PR (number, how to check it out,
+# etc. and upload it as an artifact. This is all the data that is required for running the Codecov uploader manually
+# from `upload-coverage.yml`.
     - name: Save PR number and coverage file in same directory
       if: github.event_name == 'pull_request'
+      # Note: If you change any of the filenames here, you also have to change them in `upload-coverage.yml`
       run : |
         mkdir -p coverage-report
         echo ${{ github.event.number }} > ./coverage-report/pr
