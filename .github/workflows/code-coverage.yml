@@ -34,7 +34,7 @@ jobs:
     - name: Install dependencies
       run:  sudo apt update && sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev libboost-all-dev
     - name: Install clang 15
-      run:  wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 15 all
+      run:  wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 14 all
     - name: Python dependencies
       run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
     - name: Configure CMake
