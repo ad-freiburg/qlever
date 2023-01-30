@@ -1,4 +1,4 @@
-name: Code Format Check
+name: Format check
 
 on:
   push:

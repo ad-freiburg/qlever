@@ -155,10 +155,10 @@ class IdTable {
   IdTable(size_t numColumns, Storage storage = {}) requires(!isView)
       : data_{std::move(storage)}, numColumns_{numColumns} {
     if constexpr (!isDynamic) {
-      AD_CHECK(NumColumns == numColumns);
+      AD_CONTRACT_CHECK(NumColumns == numColumns);
     }
     // The passed in `Storage` must be empty.
-    AD_CHECK(data_.empty());
+    AD_CONTRACT_CHECK(data_.empty());
   }
 
   // Quasi the default constructor. If `NumColumns != 0` then the table is
@@ -199,17 +199,17 @@ class IdTable {
         numRows_{numRows},
         capacityRows_{capacityRows} {
     if constexpr (!isDynamic) {
-      AD_CHECK(numColumns == NumColumns);
+      AD_CONTRACT_CHECK(numColumns == NumColumns);
     }
-    AD_CHECK(numRows_ <= capacityRows_);
-    AD_CHECK(this->data().size() == numColumns_ * capacityRows_);
+    AD_CONTRACT_CHECK(numRows_ <= capacityRows_);
+    AD_CONTRACT_CHECK(this->data().size() == numColumns_ * capacityRows_);
   }
 
  public:
   // For an empty and dynamic (`NumColumns == 0`) `IdTable`, specify the
   // number of columns.
   void setNumColumns(size_t numColumns) requires(isDynamic) {
-    AD_CHECK(size() == 0);
+    AD_CONTRACT_CHECK(size() == 0);
     numColumns_ = numColumns;
   }
 
@@ -219,6 +219,7 @@ class IdTable {
   // `std::vector<someRowType>`.
   size_t numRows() const { return numRows_; }
   size_t size() const { return numRows(); }
+  bool empty() const { return numRows() == 0; }
 
   // Return the number of columns.
   size_t numColumns() const {
@@ -253,6 +254,15 @@ class IdTable {
   const_row_reference_restricted operator[](size_t index) const {
     return *(begin() + index);
   }
+
+  // The usual `front` and `back` functions to make the interface similar to
+  // `std::vector` aand other containers.
+  // TODO<C++23, joka921> Remove the duplicates via explicit object parameters
+  // ("deducing this").
+  row_reference_restricted front() { return (*this)[0]; }
+  const_row_reference_restricted front() const { return (*this)[0]; }
+  row_reference_restricted back() { return (*this)[numRows() - 1]; }
+  const_row_reference_restricted back() const { return (*this)[numRows() - 1]; }
 
   // Resize the `IdTable` to exactly `numRows`. If `numRows < size()`, then the
   // last `size() - numRows` rows of the table will be deleted. If
@@ -378,7 +388,7 @@ class IdTable {
   // is then resized and filled with the appropriate contents.
   IdTable<T, NumColumns, Storage, IsView::False> clone(Storage storage) const
       requires(!std::is_copy_constructible_v<Storage>) {
-    AD_CHECK(storage.empty());
+    AD_CONTRACT_CHECK(storage.empty());
     storage.resize(data().size());
     std::copy(data().begin(), data().end(), storage.begin());
     return IdTable<T, NumColumns, Storage, IsView::False>{
@@ -401,7 +411,7 @@ class IdTable {
     if (size() == 0 && !isDynamic) {
       setNumColumns(NewNumColumns);
     }
-    AD_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
+    AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
     auto result = IdTable<T, NewNumColumns, Storage>{
         std::move(data()), numColumns(), std::move(numRows_),
         std::move(capacityRows_)};
@@ -434,7 +444,7 @@ class IdTable {
   requires(NumColumns == 0 && !isView)
       IdTable<T, NewNumColumns, Storage, IsView::True> asStaticView()
   const {
-    AD_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
+    AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
     return IdTable<T, NewNumColumns, Storage, IsView::True>{
         &data(), numColumns_, numRows_, capacityRows_};
   }
@@ -529,7 +539,7 @@ class IdTable {
   // testing.
   bool operator==(const IdTable& other) const requires(!isView) {
     if (numColumns() != other.numColumns()) {
-      return false;
+      return (empty() && other.empty());
     }
     if (size() != other.numRows()) {
       return false;
@@ -548,6 +558,20 @@ class IdTable {
     }
     return true;
   }
+
+  // Get the `i`-th column. It is stored contiguously in memory.
+  std::span<T> getColumn(size_t i) {
+    return {data().data() + i * capacityRows_, numRows_};
+  }
+  std::span<const T> getColumn(size_t i) const {
+    return {data().data() + i * capacityRows_, numRows_};
+  }
+
+  // Return all the columns as a `std::vector` (if `isDynamic`) or as a
+  // `std::array` (else). The elements of the vector/array are `std::span<T>`
+  // or `std::span<const T>`, depending on whether `this` is const.
+  auto getColumns() { return getColumnsImpl(*this); }
+  auto getColumns() const { return getColumnsImpl(*this); }
 
  private:
   // Get direct access to the underlying data() as a reference.
@@ -634,14 +658,6 @@ class IdTable {
     }
   }
 
-  // Get the `i`-th column. It is stored contiguously in memory.
-  std::span<T> getColumn(size_t i) {
-    return {data().data() + i * capacityRows_, numRows_};
-  }
-  std::span<const T> getColumn(size_t i) const {
-    return {data().data() + i * capacityRows_, numRows_};
-  }
-
   // Common implementation for const and mutable overloads of `getColumns`
   // (see below).
   static auto getColumnsImpl(auto&& self) {
@@ -663,12 +679,6 @@ class IdTable {
       return columns;
     }
   }
-
-  // Return all the columns as a `std::vector` (if `isDynamic`) or as a
-  // `std::array` (else). The elements of the vector/array are `std::span<T>`
-  // or `std::span<const T>`, depending on whether `this` is const.
-  auto getColumns() { return getColumnsImpl(*this); }
-  auto getColumns() const { return getColumnsImpl(*this); }
 };
 
 }  // namespace columnBasedIdTable

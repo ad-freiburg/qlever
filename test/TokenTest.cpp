@@ -440,6 +440,6 @@ TEST(Escaping, unescapeIriref) {
   {
     std::string unterminated = "<noending";
     ASSERT_THROW(RdfEscaping::unescapeIriref(unterminated),
-                 ad_semsearch::Exception);
+                 ad_utility::Exception);
   }
 }

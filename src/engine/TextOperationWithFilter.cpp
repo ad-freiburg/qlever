@@ -81,7 +81,7 @@ string TextOperationWithFilter::getDescriptor() const {
 // _____________________________________________________________________________
 void TextOperationWithFilter::computeResult(ResultTable* result) {
   LOG(DEBUG) << "TextOperationWithFilter result computation..." << endl;
-  AD_CHECK_GE(getNofVars(), 1);
+  AD_CONTRACT_CHECK(getNofVars() >= 1);
   result->_idTable.setNumColumns(getResultWidth());
   shared_ptr<const ResultTable> filterResult = _filterResult->getResult();
   result->_localVocab = filterResult->_localVocab;
@@ -110,8 +110,8 @@ float TextOperationWithFilter::getMultiplicity(size_t col) {
   if (_multiplicities.size() == 0) {
     computeMultiplicities();
   }
-  AD_CHECK_LT(col, _multiplicities.size());
-  return _multiplicities[col];
+  AD_CONTRACT_CHECK(col < _multiplicities.size());
+  return _multiplicities.at(col);
 }
 
 // _____________________________________________________________________________
@@ -136,11 +136,11 @@ void TextOperationWithFilter::computeMultiplicities() {
     }
 
     if (multiplicitiesNoFilter.size() <= 2) {
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-               "One (out of more) reasons for this problem is if you connected"
-               " a text record variable to other variables with"
-               " a non-text predicate. "
-               "One should always use ql:contains-entity for that.");
+      AD_THROW(
+          "One (out of more) reasons for this problem is if you connected"
+          " a text record variable to other variables with"
+          " a non-text predicate. "
+          "One should always use ql:contains-entity for that.");
     }
 
     // Like joins

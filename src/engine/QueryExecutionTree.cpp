@@ -79,12 +79,11 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
 
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getVariableColumn(const Variable& variable) const {
-  AD_CHECK(_rootOperation);
+  AD_CONTRACT_CHECK(_rootOperation);
   const auto& varCols = getVariableColumns();
   if (!varCols.contains(variable)) {
-    AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-             "Variable could not be mapped to result column. Var: " +
-                 variable.name());
+    AD_THROW("Variable could not be mapped to result column. Var: " +
+             variable.name());
   }
   return varCols.at(variable);
 }
@@ -156,7 +155,7 @@ bool QueryExecutionTree::knownEmptyResult() {
 
 // _____________________________________________________________________________
 bool QueryExecutionTree::isVariableCovered(Variable variable) const {
-  AD_CHECK(_rootOperation);
+  AD_CONTRACT_CHECK(_rootOperation);
   return getVariableColumns().contains(variable);
 }
 

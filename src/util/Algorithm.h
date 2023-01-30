@@ -10,10 +10,10 @@
 #include <string_view>
 #include <utility>
 
+#include "util/Forward.h"
 #include "util/Iterators.h"
 #include "util/TypeTraits.h"
 
-// TODO: Test the algorithms.
 namespace ad_utility {
 
 /**
@@ -49,21 +49,6 @@ bool contains_if(const Container& container, const Predicate& predicate) {
 }
 
 /**
- * Checks whether a container is contained in another container.
- *
- * @param container Container& Container to check
- * @param containedContainer Container& Container where other container has to
- * be contained in
- * @return bool
- */
-template <typename Container>
-inline bool includes(const Container& container,
-                     const Container& containedContainer) {
-  return std::includes(container.begin(), container.end(),
-                       containedContainer.begin(), containedContainer.end());
-}
-
-/**
  * Appends the second vector to the first one.
  *
  * @param destination Vector& to which to append
@@ -93,7 +78,8 @@ auto transform(Range&& input, F unaryOp) {
 }
 
 /**
- * Flatten a vector<vector<T>> into a vector<T>.
+ * Flatten a vector<vector<T>> into a vector<T>. Currently requires an rvalue
+ * (temporary or `std::move`d value) as an input.
  */
 template <typename T>
 std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
@@ -102,7 +88,8 @@ std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
   out.reserve(std::accumulate(
       input.begin(), input.end(), 0,
       [](size_t i, const std::vector<T>& elem) { return i + elem.size(); }));
-  for (std::vector<T> sub : input) {
+  for (auto& sub : input) {
+    // As the input is an rvalue, it is save to always move.
     appendVector(out, std::move(sub));
   }
   return out;

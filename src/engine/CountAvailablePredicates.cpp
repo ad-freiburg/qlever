@@ -300,12 +300,17 @@ void CountAvailablePredicates::computePatternTrick(
 #pragma omp single
 #pragma omp taskloop grainsize(100000) default(none) reduction(MergeHashmapsId:predicateCounts) reduction(+ : numPredicatesSubsumedInPatterns) \
                                        reduction(+ : numEntitiesWithPatterns) reduction(+: numPatternPredicates) reduction(+: numListPredicates) shared( patternVec, patterns)
-    for (auto it = patternVec.begin(); it != patternVec.end(); ++it) {
-      const auto& pattern = patterns[it->first];
+    // TODO<joka921> When we use iterators (`patternVec.begin()`) for the loop,
+    // there is a strange warning on clang15 when OpenMP is activated. Find out
+    // whether this is a known issue and whether this will be fixed in later
+    // versions of clang.
+    for (size_t i = 0; i != patternVec.size(); ++i) {
+      auto [patternIndex, patternCount] = patternVec[i];
+      const auto& pattern = patterns[patternIndex];
       numPatternPredicates += pattern.size();
       for (const auto& predicate : pattern) {
-        predicateCounts[predicate] += it->second;
-        numPredicatesSubsumedInPatterns += it->second;
+        predicateCounts[predicate] += patternCount;
+        numPredicatesSubsumedInPatterns += patternCount;
       }
     }
   }

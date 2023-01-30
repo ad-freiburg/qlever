@@ -223,8 +223,7 @@ Awaitable<void> Server::process(
             << std::endl;
 
   // Start timing.
-  ad_utility::Timer requestTimer;
-  requestTimer.start();
+  ad_utility::Timer requestTimer{ad_utility::Timer::Started};
 
   // Parse the path and the URL parameters from the given request. Works for GET
   // requests as well as the two kinds of POST requests allowed by the SPARQL
@@ -415,14 +414,13 @@ json Server::composeErrorResponseJson(
     const string& query, const std::string& errorMsg,
     ad_utility::Timer& requestTimer,
     const std::optional<ExceptionMetadata>& metadata) {
-  requestTimer.stop();
-
   json j;
+  using ad_utility::Timer;
   j["query"] = query;
   j["status"] = "ERROR";
   j["resultsize"] = 0;
-  j["time"]["total"] = requestTimer.msecs();
-  j["time"]["computeResult"] = requestTimer.msecs();
+  j["time"]["total"] = Timer::toMilliseconds(requestTimer.value());
+  j["time"]["computeResult"] = Timer::toMilliseconds(requestTimer.value());
   j["exception"] = errorMsg;
 
   if (metadata.has_value()) {
@@ -481,9 +479,9 @@ boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
   using namespace ad_utility::httpUtils;
-  AD_CHECK(params.contains("query"));
+  AD_CONTRACT_CHECK(params.contains("query"));
   const auto& query = params.at("query");
-  AD_CHECK(!query.empty());
+  AD_CONTRACT_CHECK(!query.empty());
 
   auto sendJson = [&request, &send](
                       const json& jsonString,
@@ -499,18 +497,18 @@ boost::asio::awaitable<void> Server::processQuery(
   // block, hence the workaround with the optional `exceptionErrorMsg`.
   std::optional<std::string> exceptionErrorMsg;
   std::optional<ExceptionMetadata> metadata;
-  // Also store the QueryExecutionTree outside of the try-catch block to gain
+  // Also store the QueryExecutionTree outside the try-catch block to gain
   // access to the runtimeInformation in the case of an error.
   std::optional<QueryExecutionTree> queryExecutionTree;
   try {
-    ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
-        std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
-            ad_utility::TimeoutTimer::unlimited());
-    if (params.contains("timeout")) {
-      timeoutTimer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
-          ad_utility::TimeoutTimer::fromSeconds(
-              std::stof(params.at("timeout"))));
-    }
+    ad_utility::SharedConcurrentTimeoutTimer timeoutTimer = [&]() {
+      auto t = ad_utility::TimeoutTimer::unlimited();
+      if (params.contains("timeout")) {
+        ad_utility::Timer::Seconds timeout{std::stof(params.at("timeout"))};
+        t = ad_utility::TimeoutTimer{timeout, ad_utility::Timer::Started};
+      }
+      return std::make_shared<ad_utility::ConcurrentTimeoutTimer>(std::move(t));
+    }();
 
     auto containsParam = [&params](const std::string& param,
                                    const std::string& expected) {
@@ -580,7 +578,7 @@ boost::asio::awaitable<void> Server::processQuery(
                   supportedMediaTypes()),
           request));
     }
-    AD_CHECK(mediaType.has_value());
+    AD_CONTRACT_CHECK(mediaType.has_value());
     LOG(INFO) << "Requested media type of result is \""
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
 
@@ -588,11 +586,10 @@ boost::asio::awaitable<void> Server::processQuery(
     // then be used to process the query. Start the shared `timeoutTimer` here
     // to also include the query planning.
     //
-    // NOTE: This should come after determining the media type. Otherwise it
+    // NOTE: This should come after determining the media type. Otherwise, it
     // might happen that the query planner runs for a while (recall that it many
     // do index scans) and then we get an error message afterwards that a
     // certain media type is not supported.
-    timeoutTimer->wlock()->start();
     QueryExecutionContext qec(_index, _engine, &_cache, _allocator,
                               _sortPerformanceEstimator, pinSubtrees,
                               pinResult);
@@ -603,7 +600,6 @@ boost::asio::awaitable<void> Server::processQuery(
     qet.isRoot() = true;  // allow pinning of the final result
     qet.recursivelySetTimeoutTimer(timeoutTimer);
     qet.getRootOperation()->createRuntimeInfoFromEstimates();
-    requestTimer.stop();
     size_t timeForIndexScansInQueryPlanning =
         qet.getRootOperation()->getTotalExecutionTimeDuringQueryPlanning();
     size_t timeForQueryPlanning =
@@ -617,7 +613,6 @@ boost::asio::awaitable<void> Server::processQuery(
         << "Query planning done in " << timeForQueryPlanning << " ms"
         << ", additional time spend on index scans during query planning: "
         << timeForIndexScansInQueryPlanning << " ms" << std::endl;
-    requestTimer.cont();
     LOG(TRACE) << qet.asString() << std::endl;
 
     // Common code for sending responses for the streamable media types
@@ -683,7 +678,6 @@ boost::asio::awaitable<void> Server::processQuery(
     // contain timing information).
     //
     // TODO<joka921> Also log an identifier of the query.
-    requestTimer.stop();
     LOG(INFO) << "Done processing query and sending result"
               << ", total time was " << requestTimer.msecs() << " ms"
               << std::endl;

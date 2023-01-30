@@ -147,10 +147,8 @@ class File {
       buf[stringLength - 1] = 0;
     } else if (retVal && !isAtEof()) {
       // Stopped inside a line because the end of the buffer was reached.
-      AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
-               "Buffer too small when reading from file: " + _name +
-                   ". "
-                   "Or the line contains a 0 character.");
+      AD_THROW("Buffer too small when reading from file: " + _name +
+               ". Or the line contains a 0 character.");
     }
     *line = buf;
     return retVal;

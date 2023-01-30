@@ -37,7 +37,7 @@ class TripleComponent {
       // Previously we stored variables as strings, so this check is a way
       // to easily track places where this old behavior is accidentally still
       // in place.
-      AD_CHECK(!getString().starts_with("?"));
+      AD_CONTRACT_CHECK(!getString().starts_with("?"));
     }
   }
 
@@ -48,7 +48,7 @@ class TripleComponent {
     // Previously we stored variables as strings, so this check is a way
     // to easily track places where this old behavior is accidentally still
     // in place.
-    AD_CHECK(!getString().starts_with("?"));
+    AD_CONTRACT_CHECK(!getString().starts_with("?"));
   }
 
   /// Defaulted copy and move constructors.
@@ -135,7 +135,7 @@ class TripleComponent {
     if (isDouble()) {
       return absl::StrCat("\"", getDouble(), "\"^^<", XSD_DOUBLE_TYPE, ">");
     } else {
-      AD_CHECK(isInt());
+      AD_CONTRACT_CHECK(isInt());
       return absl::StrCat("\"", getInt(), "\"^^<", XSD_INTEGER_TYPE, ">");
     }
   }

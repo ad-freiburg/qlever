@@ -293,7 +293,7 @@ void testLessThanGreaterThanEqualMultipleValuesHelper(
 
   TestContext testContext;
   sparqlExpression::EvaluationContext* context = &testContext.context;
-  AD_CHECK(rightValue.size() == 9);
+  AD_CONTRACT_CHECK(rightValue.size() == 9);
   context->_beginIndex = 0;
   context->_endIndex = 9;
 
@@ -407,7 +407,7 @@ auto testNotComparableHelper(T leftValue, U rightValue,
   IdTable table{alloc};
   sparqlExpression::EvaluationContext context{*getQec(), map, table, alloc,
                                               localVocab};
-  AD_CHECK(rightValue.size() == 5);
+  AD_CONTRACT_CHECK(rightValue.size() == 5);
   context._beginIndex = 0;
   context._endIndex = 5;
 

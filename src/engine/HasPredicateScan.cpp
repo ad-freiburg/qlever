@@ -20,7 +20,7 @@ HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
                                    SparqlTriple triple)
     : Operation{qec} {
   // Just pick one direction, they should be equivalent.
-  AD_CHECK(triple._p._iri == HAS_PREDICATE_PREDICATE);
+  AD_CONTRACT_CHECK(triple._p._iri == HAS_PREDICATE_PREDICATE);
   // TODO(schnelle): Handle ?p ql:has-predicate ?p
   _type = [&]() {
     if (isVariable(triple._s) && (isVariable(triple._o))) {
@@ -222,8 +222,7 @@ void HasPredicateScan::computeResult(ResultTable* result) {
     case ScanType::FREE_S: {
       Id objectId;
       if (!getIndex().getId(_object, &objectId)) {
-        AD_THROW(ad_semsearch::Exception::BAD_INPUT,
-                 "The predicate '" + _object + "' is not in the vocabulary.");
+        AD_THROW("The predicate '" + _object + "' is not in the vocabulary.");
       }
       HasPredicateScan::computeFreeS(result, objectId, hasPattern, hasPredicate,
                                      patterns);
@@ -231,8 +230,7 @@ void HasPredicateScan::computeResult(ResultTable* result) {
     case ScanType::FREE_O: {
       Id subjectId;
       if (!getIndex().getId(_subject, &subjectId)) {
-        AD_THROW(ad_semsearch::Exception::BAD_INPUT,
-                 "The subject " + _subject + " is not in the vocabulary.");
+        AD_THROW("The subject " + _subject + " is not in the vocabulary.");
       }
       HasPredicateScan::computeFreeO(result, subjectId, hasPattern,
                                      hasPredicate, patterns);

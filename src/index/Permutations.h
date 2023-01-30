@@ -40,10 +40,9 @@ class PermutationImpl {
     try {
       _file.open(filename, "r");
     } catch (const std::runtime_error& e) {
-      AD_THROW(ad_semsearch::Exception::BAD_INPUT,
-               "Could not open the index file " + filename +
-                   " for reading. Please check that you have read access to "
-                   "this file. If it does not exist, your index is broken.");
+      AD_THROW("Could not open the index file " + filename +
+               " for reading. Please check that you have read access to "
+               "this file. If it does not exist, your index is broken.");
     }
     _meta.readFromFile(&_file);
     LOG(INFO) << "Registered " << _readableName
@@ -57,7 +56,17 @@ class PermutationImpl {
   template <typename IdTableImpl>
   void scan(Id col0Id, IdTableImpl* result,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
-    return CompressedRelationMetaData::scan(col0Id, result, *this, timer);
+    if (!_isLoaded) {
+      throw std::runtime_error("This query requires the permutation " +
+                               _readableName + ", which was not loaded");
+    }
+    if (!_meta.col0IdExists(col0Id)) {
+      return;
+    }
+    const auto& metaData = _meta.getMetaData(col0Id);
+    return CompressedRelationMetadata::scan(metaData, _meta.blockData(),
+                                            _readableName, _file, result,
+                                            std::move(timer));
   }
   /// For given IDs for the first and second column, retrieve all IDs of the
   /// third column, and store them in `result`. This is just a thin wrapper
@@ -65,8 +74,13 @@ class PermutationImpl {
   template <typename IdTableImpl>
   void scan(Id col0Id, Id col1Id, IdTableImpl* result,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
-    return CompressedRelationMetaData::scan(col0Id, col1Id, result, *this,
-                                            timer);
+    if (!_meta.col0IdExists(col0Id)) {
+      return;
+    }
+    const auto& metaData = _meta.getMetaData(col0Id);
+
+    return CompressedRelationMetadata::scan(metaData, col1Id, _meta.blockData(),
+                                            _file, result, timer);
   }
 
   // _______________________________________________________

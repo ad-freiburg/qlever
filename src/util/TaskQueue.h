@@ -60,7 +60,7 @@ class TaskQueue {
   /// sometimes (which the queue can then accomodate).
   TaskQueue(size_t maxQueueSize, size_t numThreads, std::string name = "")
       : _queueMaxSize{maxQueueSize}, _name{std::move(name)} {
-    AD_CHECK(_queueMaxSize > 0);
+    AD_CONTRACT_CHECK(_queueMaxSize > 0);
     _threads.reserve(numThreads);
     for (size_t i = 0; i < numThreads; ++i) {
       _threads.emplace_back(&TaskQueue::function_for_thread, this);
@@ -132,13 +132,10 @@ class TaskQueue {
   decltype(auto) executeAndUpdateTimer(F&& f, std::atomic<size_t>& duration) {
     if constexpr (TrackTimes) {
       struct T {
-        ad_utility::Timer _t;
+        ad_utility::Timer _t{ad_utility::Timer::Started};
         std::atomic<size_t>& _target;
-        T(std::atomic<size_t>& target) : _target(target) { _t.start(); }
-        ~T() {
-          _t.stop();
-          _target += _t.msecs();
-        }
+        T(std::atomic<size_t>& target) : _target(target) {}
+        ~T() { _target += _t.msecs(); }
       };
       T timeHandler{duration};
       return f();

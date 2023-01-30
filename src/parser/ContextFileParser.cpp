@@ -36,8 +36,7 @@ bool ContextFileParser::getLine(ContextFileParser::Line& line) {
     line._score = static_cast<Score>(atol(l.substr(k + 1).c_str()));
 #ifndef NDEBUG
     if (_lastCId > line._contextId) {
-      AD_THROW(ad_semsearch::Exception::BAD_INPUT,
-               "ContextFile has to be sorted by context Id.");
+      AD_THROW("ContextFile has to be sorted by context Id.");
     }
     _lastCId = line._contextId;
 #endif

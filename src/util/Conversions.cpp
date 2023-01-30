@@ -65,8 +65,7 @@ string convertValueLiteralToIndexWord(const string& orig) {
   } else {
     size_t posOfDoubleDot = orig.rfind(':');
     if (posOfDoubleDot == string::npos) {
-      AD_THROW(ad_semsearch::Exception::BAD_INPUT,
-               "No ':' in non-URL ValueLiteral " + orig);
+      AD_THROW("No ':' in non-URL ValueLiteral " + orig);
     }
 
     // +1 for double dot
@@ -202,7 +201,7 @@ string convertFloatStringToIndexWord(const string& orig,
   }
 
   // Add padding to the exponent;
-  AD_CHECK_GT(DEFAULT_NOF_VALUE_EXPONENT_DIGITS, expoString.size());
+  AD_CONTRACT_CHECK(DEFAULT_NOF_VALUE_EXPONENT_DIGITS > expoString.size());
   size_t nofPaddingElems =
       DEFAULT_NOF_VALUE_EXPONENT_DIGITS - expoString.size();
   for (size_t i = 0; i < nofPaddingElems; ++i) {
@@ -243,7 +242,7 @@ string convertFloatStringToIndexWord(const string& orig,
 string convertIndexWordToFloatString(const string& indexWord) {
   const static size_t prefixLength =
       std::char_traits<char>::length(VALUE_FLOAT_PREFIX);
-  AD_CHECK_GT(indexWord.size(), prefixLength + 1);
+  AD_CONTRACT_CHECK(indexWord.size() > prefixLength + 1);
   // the -1 accounts for the originally float/int identifier suffix
   string number =
       indexWord.substr(prefixLength, indexWord.size() - prefixLength - 1);
@@ -331,7 +330,7 @@ string convertIndexWordToFloatString(const string& indexWord) {
 // _____________________________________________________________________________
 float convertIndexWordToFloat(const string& indexWord) {
   size_t prefixLength = std::char_traits<char>::length(VALUE_FLOAT_PREFIX);
-  AD_CHECK_GT(indexWord.size(), prefixLength + 1);
+  AD_CONTRACT_CHECK(indexWord.size() > prefixLength + 1);
   // the -1 accounts for the originally float/int identifier suffix
   string number =
       indexWord.substr(prefixLength, indexWord.size() - prefixLength - 1);

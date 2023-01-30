@@ -405,7 +405,7 @@ class FlexibleCache {
   // Removes the entry with the smallest score from the cache.
   // Precondition: The cache must not be empty.
   void removeOneEntry() {
-    AD_CHECK(!_entries.empty());
+    AD_CONTRACT_CHECK(!_entries.empty());
     auto handle = _entries.pop();
     _totalSizeNonPinned -= _valueSizeGetter(*handle.value().value());
     _accessMap.erase(handle.value().key());

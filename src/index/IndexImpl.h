@@ -248,10 +248,10 @@ class IndexImpl {
       auto numActually = _numSubjectsNormal;
       return {numActually, _SPO.metaData().getNofDistinctC1() - numActually};
     } else {
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-               "Can only get # distinct subjects if all 6 permutations "
-               "have been registered on sever start (and index build time) "
-               "with the -a option.")
+      AD_THROW(
+          "Can only get # distinct subjects if all 6 permutations "
+          "have been registered on sever start (and index build time) "
+          "with the -a option.");
     }
   }
 
@@ -261,10 +261,10 @@ class IndexImpl {
       auto numActually = _numObjectsNormal;
       return {numActually, _OSP.metaData().getNofDistinctC1() - numActually};
     } else {
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-               "Can only get # distinct objects if all 6 permutations "
-               "have been registered on sever start (and index build time) "
-               "with the -a option.")
+      AD_THROW(
+          "Can only get # distinct objects if all 6 permutations "
+          "have been registered on sever start (and index build time) "
+          "with the -a option.");
     }
   }
 
@@ -534,7 +534,7 @@ class IndexImpl {
   template <class Permutation>
   void scan(Id key, IdTable* result, const Permutation& p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
-    CompressedRelationMetaData::scan(key, result, p, std::move(timer));
+    p.scan(key, result, std::move(timer));
   }
 
   /**
@@ -594,8 +594,7 @@ class IndexImpl {
                << col0String << " with fixed subject: " << col1String
                << "...\n";
 
-    CompressedRelationMetaData::scan(col0Id.value(), col1Id.value(), result, p,
-                                     timer);
+    p.scan(col0Id.value(), col1Id.value(), result, timer);
   }
 
   // Internal implementation for `applyToPermutation` (see below).
@@ -698,7 +697,7 @@ class IndexImpl {
                             size_t c2, auto&&... perTripleCallbacks);
 
   void writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
-                        ad_utility::BufferedVector<array<Id, 2>>* bufPtr);
+                        BufferedIdTable* bufPtr);
 
   // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,

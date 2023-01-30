@@ -20,11 +20,11 @@ ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
       // If there exists an element that is true, return true.
       return Bool{!childResult._intervals.empty()};
     } else if constexpr (isVectorResult<T>) {
-      AD_CHECK(!childResult.empty());
+      AD_CONTRACT_CHECK(!childResult.empty());
       return childResult[0];
     } else if constexpr (std::is_same_v<T, ::Variable>) {
       // TODO<joka921> Can't this be a simpler function (getIdAt)
-      AD_CHECK(context->_endIndex > context->_beginIndex);
+      AD_CONTRACT_CHECK(context->_endIndex > context->_beginIndex);
       EvaluationContext contextForSingleValue = *context;
       contextForSingleValue._endIndex = contextForSingleValue._beginIndex + 1;
       auto idOfFirstAsVector =

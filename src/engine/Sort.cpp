@@ -55,15 +55,12 @@ void Sort::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
-  double remainingSecs =
-      static_cast<double>(_timeoutTimer->wlock()->remainingMicroseconds()) /
-      1'000'000;
+  auto remainingTime = _timeoutTimer->wlock()->remainingTime();
   auto sortEstimateCancellationFactor =
       RuntimeParameters().get<"sort-estimate-cancellation-factor">();
-  if (getExecutionContext()
-          ->getSortPerformanceEstimator()
-          .estimatedSortTimeInSeconds(subRes->size(), subRes->width()) >
-      remainingSecs * sortEstimateCancellationFactor) {
+  if (getExecutionContext()->getSortPerformanceEstimator().estimatedSortTime(
+          subRes->size(), subRes->width()) >
+      remainingTime * sortEstimateCancellationFactor) {
     // The estimated time for this sort is much larger than the actually
     // remaining time, cancel this operation
     throw ad_utility::TimeoutException(

@@ -67,7 +67,7 @@ requires(isOperation<NaryOperation>) class NaryExpression
       auto optionalResult = evaluateOnSpecializedFunctionsIfPossible(
           naryOperation._specializedFunctions,
           std::forward<Operands>(operands)...);
-      AD_CHECK(optionalResult);
+      AD_CONTRACT_CHECK(optionalResult);
       return std::move(optionalResult.value());
     }
 
@@ -91,7 +91,7 @@ requires(isOperation<NaryOperation>) class NaryExpression
     }
 
     if constexpr (resultIsConstant) {
-      AD_CHECK(result.size() == 1);
+      AD_CONTRACT_CHECK(result.size() == 1);
       return std::move(result[0]);
     } else {
       return result;

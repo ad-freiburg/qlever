@@ -14,7 +14,7 @@ BlankNode::BlankNode(bool generated, std::string label)
   // roughly check allowed characters as blank node labels.
   // Weaker than the SPARQL grammar, but good
   // enough so that it will likely never be an issue
-  AD_CHECK(ctre::match<"\\w(?:(?:\\w|-|\\.)*\\w)?">(_label));
+  AD_CONTRACT_CHECK(ctre::match<"\\w(?:(?:\\w|-|\\.)*\\w)?">(_label));
 }
 
 // ___________________________________________________________________________

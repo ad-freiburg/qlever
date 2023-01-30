@@ -44,21 +44,14 @@ class GroupByTest : public ::testing::Test {
     docsFile.close();
     wordsFile.close();
     ntFile.close();
-    try {
-      _index.setKbName("group_by_test");
-      _index.setTextName("group_by_test");
-      _index.setOnDiskBase("group_ty_test");
-      _index.createFromFile<TurtleParserAuto>("group_by_test.nt");
-      _index.addTextFromContextFile("group_by_test.words", false);
-      _index.buildDocsDB("group_by_test.documents");
+    _index.setKbName("group_by_test");
+    _index.setTextName("group_by_test");
+    _index.setOnDiskBase("group_ty_test");
+    _index.createFromFile<TurtleParserAuto>("group_by_test.nt");
+    _index.addTextFromContextFile("group_by_test.words", false);
+    _index.buildDocsDB("group_by_test.documents");
 
-      _index.addTextFromOnDiskIndex();
-    } catch (const ad_semsearch::Exception& e) {
-      std::cout << "semsearch exception: " << e.getErrorMessage()
-                << e.getErrorDetails() << std::endl;
-    } catch (std::exception& e) {
-      std::cout << "std exception" << e.what() << std::endl;
-    }
+    _index.addTextFromOnDiskIndex();
   }
 
   virtual ~GroupByTest() {
@@ -392,12 +385,12 @@ struct GroupBySpecialCount : ::testing::Test {
 
   const Join* getJoinPtr(const Tree& tree) {
     auto join = dynamic_cast<const Join*>(tree->getRootOperation().get());
-    AD_CHECK(join);
+    AD_CONTRACT_CHECK(join);
     return join;
   }
   const IndexScan* getScanPtr(const Tree& tree) {
     auto scan = dynamic_cast<const IndexScan*>(tree->getRootOperation().get());
-    AD_CHECK(scan);
+    AD_CONTRACT_CHECK(scan);
     return scan;
   }
 };
@@ -472,13 +465,13 @@ TEST_F(GroupBySpecialCount, computeGroupByForJoinWithFullScan) {
     ASSERT_FALSE(
         invalidForOptimization.computeGroupByForJoinWithFullScan(&result));
     // No optimization was applied, so the result is untouched.
-    AD_CHECK(result._idTable.size() == 0);
+    AD_CONTRACT_CHECK(result._idTable.size() == 0);
 
     // The child of the GROUP BY is not a join, so this is also
     // invalid.
     GroupBy invalidGroupBy2{qec, variablesOnlyX, emptyAliases, xScan};
     ASSERT_FALSE(invalidGroupBy2.computeGroupByForJoinWithFullScan(&result));
-    AD_CHECK(result._idTable.size() == 0);
+    AD_CONTRACT_CHECK(result._idTable.size() == 0);
     ;
   }
 

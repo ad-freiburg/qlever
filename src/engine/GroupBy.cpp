@@ -169,7 +169,7 @@ void GroupBy::processGroup(
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
-    AD_CHECK(sparqlExpression::isConstantResult<T>);
+    AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<T>);
     if constexpr (isStrongId) {
       resultEntry = singleResult;
       *resultType = qlever::ResultType::KB;
@@ -180,7 +180,7 @@ void GroupBy::processGroup(
           singleResult, *(outTable->_localVocab));
     } else {
       // This should never happen since aggregates always return constants.
-      AD_FAIL()
+      AD_FAIL();
     }
   };
 
@@ -308,10 +308,7 @@ void GroupBy::computeResult(ResultTable* result) {
   for (const auto& var : _groupByVariables) {
     auto it = subtreeVarCols.find(var);
     if (it == subtreeVarCols.end()) {
-      LOG(WARN) << "Group by variable " << var.name() << " is not groupable."
-                << std::endl;
-      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-               "Groupby variable " + var.name() + " is not groupable");
+      AD_THROW("Groupby variable " + var.name() + " is not groupable");
     }
 
     groupByColumns.push_back(it->second);
@@ -395,7 +392,7 @@ bool GroupBy::computeGroupByForSingleIndexScan(ResultTable* result) {
       const auto& var = varAndDistinctness.value().variable_;
       auto permutation =
           getPermutationForThreeVariableTriple(*_subtree, var, var);
-      AD_CHECK(permutation.has_value());
+      AD_CONTRACT_CHECK(permutation.has_value());
       result->_idTable(0, 0) = Id::makeFromInt(
           getIndex().getImpl().numDistinctCol0(permutation.value()).normal_);
     } else {

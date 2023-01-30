@@ -246,56 +246,48 @@ TEST(FTSAlgorithmsTest, intersectKWayTest) {
 };
 
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
-  try {
-    IdTable result{allocator()};
-    result.setNumColumns(3);
-    vector<TextRecordIndex> cids;
-    vector<Id> eids;
-    vector<Score> scores;
+  IdTable result{allocator()};
+  result.setNumColumns(3);
+  vector<TextRecordIndex> cids;
+  vector<Id> eids;
+  vector<Score> scores;
 
-    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
-    ASSERT_EQ(0u, result.size());
+  FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
+  ASSERT_EQ(0u, result.size());
 
-    cids.push_back(T(0));
-    cids.push_back(T(1));
-    cids.push_back(T(2));
+  cids.push_back(T(0));
+  cids.push_back(T(1));
+  cids.push_back(T(2));
 
-    eids.push_back(I(0));
-    eids.push_back(I(0));
-    eids.push_back(I(0));
+  eids.push_back(I(0));
+  eids.push_back(I(0));
+  eids.push_back(I(0));
 
-    scores.push_back(0);
-    scores.push_back(1);
-    scores.push_back(2);
+  scores.push_back(0);
+  scores.push_back(1);
+  scores.push_back(2);
 
-    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
-    ASSERT_EQ(2u, result.size());
-    ASSERT_EQ(TextId(2u), result(0, 0));
-    ASSERT_EQ(IntId(3u), result(0, 1));
-    ASSERT_EQ(I(0u), result(0, 2));
-    ASSERT_EQ(TextId(1u), result(1, 0));
-    ASSERT_EQ(IntId(3u), result(1, 1));
-    ASSERT_EQ(I(0u), result(1, 2));
+  FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
+  ASSERT_EQ(2u, result.size());
+  ASSERT_EQ(TextId(2u), result(0, 0));
+  ASSERT_EQ(IntId(3u), result(0, 1));
+  ASSERT_EQ(I(0u), result(0, 2));
+  ASSERT_EQ(TextId(1u), result(1, 0));
+  ASSERT_EQ(IntId(3u), result(1, 1));
+  ASSERT_EQ(I(0u), result(1, 2));
 
-    cids.push_back(T(4));
-    eids.push_back(I(1));
-    scores.push_back(1);
+  cids.push_back(T(4));
+  eids.push_back(I(1));
+  scores.push_back(1);
 
-    result.clear();
-    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
-    ASSERT_EQ(3u, result.size());
-    std::sort(result.begin(), result.end(),
-              [](const auto& a, const auto& b) { return a[0] < b[0]; });
-    ASSERT_EQ(TextId(4u), result(2, 0));
-    ASSERT_EQ(IntId(1u), result(2, 1));
-    ASSERT_EQ(I(1u), result(2, 2));
-  } catch (const ad_semsearch::Exception& e) {
-    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
-    FAIL() << e.getFullErrorMessage();
-  } catch (const std::exception& e) {
-    std::cout << "Caught: " << e.what() << std::endl;
-    FAIL() << e.what();
-  }
+  result.clear();
+  FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
+  ASSERT_EQ(3u, result.size());
+  std::sort(result.begin(), result.end(),
+            [](const auto& a, const auto& b) { return a[0] < b[0]; });
+  ASSERT_EQ(TextId(4u), result(2, 0));
+  ASSERT_EQ(IntId(1u), result(2, 1));
+  ASSERT_EQ(I(1u), result(2, 2));
 };
 
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
@@ -659,130 +651,121 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
 }
 
 TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
-  try {
-    vector<TextRecordIndex> cids;
-    vector<Id> eids;
-    vector<Score> scores;
-    cids.push_back(T(0));
-    cids.push_back(T(1));
-    cids.push_back(T(1));
-    cids.push_back(T(2));
-    cids.push_back(T(2));
-    cids.push_back(T(2));
+  vector<TextRecordIndex> cids;
+  vector<Id> eids;
+  vector<Score> scores;
+  cids.push_back(T(0));
+  cids.push_back(T(1));
+  cids.push_back(T(1));
+  cids.push_back(T(2));
+  cids.push_back(T(2));
+  cids.push_back(T(2));
 
-    eids.push_back(I(0));
-    eids.push_back(I(0));
-    eids.push_back(I(1));
-    eids.push_back(I(0));
-    eids.push_back(I(1));
-    eids.push_back(I(2));
+  eids.push_back(I(0));
+  eids.push_back(I(0));
+  eids.push_back(I(1));
+  eids.push_back(I(0));
+  eids.push_back(I(1));
+  eids.push_back(I(2));
 
-    scores.push_back(10);
-    scores.push_back(3);
-    scores.push_back(3);
-    scores.push_back(1);
-    scores.push_back(1);
-    scores.push_back(1);
+  scores.push_back(10);
+  scores.push_back(3);
+  scores.push_back(3);
+  scores.push_back(1);
+  scores.push_back(1);
+  scores.push_back(1);
 
-    size_t k = 1;
-    IdTable resW4{4, allocator()};
-    ad_utility::HashMap<Id, IdTable> fMap1;
+  size_t k = 1;
+  IdTable resW4{4, allocator()};
+  ad_utility::HashMap<Id, IdTable> fMap1;
 
-    size_t nofVars = 2;
-    int width = resW4.numColumns();
+  size_t nofVars = 2;
+  int width = resW4.numColumns();
 
-    // The `multVarsFilterAggScoresAndTakeTopKContexts` function is overloaded,
-    // so it doesn't work with the `CALL_FIXED_SIZE` macro. We thus need
-    // to use an explicit lambda to pass to `callFixedSize`.
+  // The `multVarsFilterAggScoresAndTakeTopKContexts` function is overloaded,
+  // so it doesn't work with the `CALL_FIXED_SIZE` macro. We thus need
+  // to use an explicit lambda to pass to `callFixedSize`.
 
-    auto test = [&](int width, auto&&... args) {
-      ad_utility::callFixedSize(
-          DISABLE_WARNINGS_CLANG_13 width, [&]<int I>() mutable {
-            ENABLE_WARNINGS_CLANG_13
-            FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<I>(
-                AD_FWD(args)...);
-          });
-    };
-    test(width, cids, eids, scores, fMap1, nofVars, k, &resW4);
-    ASSERT_EQ(0u, resW4.size());
+  auto test = [&](int width, auto&&... args) {
+    ad_utility::callFixedSize(
+        DISABLE_WARNINGS_CLANG_13 width, [&]<int I>() mutable {
+          ENABLE_WARNINGS_CLANG_13
+          FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<I>(
+              AD_FWD(args)...);
+        });
+  };
+  test(width, cids, eids, scores, fMap1, nofVars, k, &resW4);
+  ASSERT_EQ(0u, resW4.size());
 
-    auto [it, suc] = fMap1.emplace(I(1), IdTable{1, allocator()});
-    it->second.push_back({I(1)});
+  auto [it, suc] = fMap1.emplace(I(1), IdTable{1, allocator()});
+  it->second.push_back({I(1)});
 
-    test(width,
+  test(width,
 
-         cids, eids, scores, fMap1, nofVars, k, &resW4);
+       cids, eids, scores, fMap1, nofVars, k, &resW4);
 
-    ASSERT_EQ(3u, resW4.size());  // 1-1 1-0 1-2
+  ASSERT_EQ(3u, resW4.size());  // 1-1 1-0 1-2
 
-    std::sort(resW4.begin(), resW4.end(), [](const auto& a, const auto& b) {
-      if (a[1] == b[1]) {
-        if (a[2] == b[2]) {
-          return a[0] < b[0];
-        }
-        return a[2] < b[2];
+  std::sort(resW4.begin(), resW4.end(), [](const auto& a, const auto& b) {
+    if (a[1] == b[1]) {
+      if (a[2] == b[2]) {
+        return a[0] < b[0];
       }
-      return a[1] > b[1];
-    });
+      return a[2] < b[2];
+    }
+    return a[1] > b[1];
+  });
 
-    ASSERT_EQ(TextId(1), resW4(0, 0));
-    ASSERT_EQ(IntId(2), resW4(0, 1));
-    ASSERT_EQ(I(0), resW4(0, 2));
-    ASSERT_EQ(I(1), resW4(0, 3));
-    ASSERT_EQ(TextId(1), resW4(1, 0));
-    ASSERT_EQ(IntId(2), resW4(1, 1));
-    ASSERT_EQ(I(1), resW4(1, 2));
-    ASSERT_EQ(I(1), resW4(1, 3));
-    ASSERT_EQ(TextId(2), resW4(2, 0));
-    ASSERT_EQ(IntId(1), resW4(2, 1));
-    ASSERT_EQ(I(2), resW4(2, 2));
-    ASSERT_EQ(I(1), resW4(2, 3));
+  ASSERT_EQ(TextId(1), resW4(0, 0));
+  ASSERT_EQ(IntId(2), resW4(0, 1));
+  ASSERT_EQ(I(0), resW4(0, 2));
+  ASSERT_EQ(I(1), resW4(0, 3));
+  ASSERT_EQ(TextId(1), resW4(1, 0));
+  ASSERT_EQ(IntId(2), resW4(1, 1));
+  ASSERT_EQ(I(1), resW4(1, 2));
+  ASSERT_EQ(I(1), resW4(1, 3));
+  ASSERT_EQ(TextId(2), resW4(2, 0));
+  ASSERT_EQ(IntId(1), resW4(2, 1));
+  ASSERT_EQ(I(2), resW4(2, 2));
+  ASSERT_EQ(I(1), resW4(2, 3));
 
-    resW4.clear();
-    test(width,
+  resW4.clear();
+  test(width,
 
-         cids, eids, scores, fMap1, nofVars, 2, &resW4);
-    ASSERT_EQ(5u, resW4.size());  // 2x 1-1  2x 1-0   1x 1-2
+       cids, eids, scores, fMap1, nofVars, 2, &resW4);
+  ASSERT_EQ(5u, resW4.size());  // 2x 1-1  2x 1-0   1x 1-2
 
-    std::sort(std::begin(resW4), std::end(resW4),
-              [](const auto& a, const auto& b) {
-                if (a[1] == b[1]) {
-                  if (a[2] == b[2]) {
-                    return a[0] < b[0];
-                  }
-                  return a[2] < b[2];
+  std::sort(std::begin(resW4), std::end(resW4),
+            [](const auto& a, const auto& b) {
+              if (a[1] == b[1]) {
+                if (a[2] == b[2]) {
+                  return a[0] < b[0];
                 }
-                return a[1] > b[1];
-              });
+                return a[2] < b[2];
+              }
+              return a[1] > b[1];
+            });
 
-    ASSERT_EQ(TextId(1u), resW4(0, 0));
-    ASSERT_EQ(IntId(2u), resW4(0, 1));
-    ASSERT_EQ(I(0u), resW4(0, 2));
-    ASSERT_EQ(I(1u), resW4(0, 3));
-    ASSERT_EQ(TextId(2u), resW4(1, 0));
-    ASSERT_EQ(IntId(2u), resW4(1, 1));
-    ASSERT_EQ(I(0u), resW4(1, 2));
-    ASSERT_EQ(I(1u), resW4(1, 3));
+  ASSERT_EQ(TextId(1u), resW4(0, 0));
+  ASSERT_EQ(IntId(2u), resW4(0, 1));
+  ASSERT_EQ(I(0u), resW4(0, 2));
+  ASSERT_EQ(I(1u), resW4(0, 3));
+  ASSERT_EQ(TextId(2u), resW4(1, 0));
+  ASSERT_EQ(IntId(2u), resW4(1, 1));
+  ASSERT_EQ(I(0u), resW4(1, 2));
+  ASSERT_EQ(I(1u), resW4(1, 3));
 
-    ASSERT_EQ(TextId(1u), resW4(2, 0));
-    ASSERT_EQ(IntId(2u), resW4(2, 1));
-    ASSERT_EQ(I(1u), resW4(2, 2));
-    ASSERT_EQ(I(1u), resW4(2, 3));
-    ASSERT_EQ(TextId(2u), resW4(3, 0));
-    ASSERT_EQ(IntId(2u), resW4(3, 1));
-    ASSERT_EQ(I(1u), resW4(3, 2));
-    ASSERT_EQ(I(1u), resW4(3, 3));
+  ASSERT_EQ(TextId(1u), resW4(2, 0));
+  ASSERT_EQ(IntId(2u), resW4(2, 1));
+  ASSERT_EQ(I(1u), resW4(2, 2));
+  ASSERT_EQ(I(1u), resW4(2, 3));
+  ASSERT_EQ(TextId(2u), resW4(3, 0));
+  ASSERT_EQ(IntId(2u), resW4(3, 1));
+  ASSERT_EQ(I(1u), resW4(3, 2));
+  ASSERT_EQ(I(1u), resW4(3, 3));
 
-    ASSERT_EQ(TextId(2u), resW4(4, 0));
-    ASSERT_EQ(IntId(1u), resW4(4, 1));
-    ASSERT_EQ(I(2u), resW4(4, 2));
-    ASSERT_EQ(I(1u), resW4(4, 3));
-
-  } catch (const ad_semsearch::Exception& e) {
-    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
-    FAIL() << e.getFullErrorMessage();
-  } catch (const std::exception& e) {
-    std::cout << "Caught: " << e.what() << std::endl;
-    FAIL() << e.what();
-  }
+  ASSERT_EQ(TextId(2u), resW4(4, 0));
+  ASSERT_EQ(IntId(1u), resW4(4, 1));
+  ASSERT_EQ(I(2u), resW4(4, 2));
+  ASSERT_EQ(I(1u), resW4(4, 3));
 }
