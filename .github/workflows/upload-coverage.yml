@@ -42,6 +42,18 @@ jobs:
         run: ls -al
       - name: "Read PR number"
         run: echo "pr_number=`cat pr`" >> $GITHUB_ENV
+      - name: "Read Github Ref"
+        run: echo "original_github_ref=`cat github_ref`" >> $GITHUB_ENV; cat github_ref
+      - name: "Read Github Repository"
+        run: echo "original_github_repository=`cat github_repository`" >> $GITHUB_ENV; cat github_repository
+      - name: "Checkout"
+        uses: actions/checkout@v3
+        with:
+          repository: ${{env.original_github_repository}}
+          ref: ${{env.original_github_ref}}
+          path: qlever-source
+      - name: "Move qlever sources up"
+        run: mv qlever-source/* .
       - name: "Upload coverage report"
         uses: codecov/codecov-action@v3
         with:
