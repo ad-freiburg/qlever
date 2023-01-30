@@ -8,6 +8,7 @@
 #include <sstream>
 #include <algorithm>
 #include <vector>
+#include <getopt.h>
 
 #include "../benchmark/Benchmark.h"
 
@@ -211,7 +212,50 @@ void printBenchmarkRecords(const BenchmarkRecords& records) {
  * @brief Goes through all types of registered benchmarks, measures their time
  * and prints their measured time in a fitting format.
  */
-int main() {
+int main(int argc, char** argv) {
+  // Prints how to use the file correctly and exits.
+  auto printUsageAndExit = [&argv](){
+    std::cerr << "Usage: ./" << argv[0] << " [options]\n"
+      << " --print, -p: Roughly prints all benchmarks.\n"
+      << " --json, -j <file>: Writes the benchmarks as json to a file.\n";
+    exit(1);
+  };
+
+  // Calling without using ANY arguments makes no sense.
+  if (argc == 1) {printUsageAndExit();}
+
+  // The flags and arguments, about what the user wants to happen.
+  bool print = false;
+  bool writeAsJson = false;
+  char* fileName = NULL;
+
+  struct option options[] = {
+    { "print", 0, NULL, 'p' },
+    { "json", 1, NULL, 'j' },
+    { NULL, 0, NULL, 0 }
+  };
+
+  // Parsing the arguments.
+  char c = ' ';
+  optind = 1;
+  while (c != -1) {
+    c = getopt_long(argc, argv, "pj:", options, NULL);
+    switch (c){
+      case 'p':
+        print = true;
+        break;
+      case 'j':
+        writeAsJson = true;
+        fileName = optarg;
+    }
+  }
+
+  // Where there unknown arguments?
+  if (optind != argc) { printUsageAndExit(); }
+
+  // We got at least one argument at this point and all options need all the
+  // benchmarks measured, so time to do that.
+
   // Measuering the time for all registered benchmarks.
   // For measuring and saving the times.
   BenchmarkRecords records;
@@ -221,5 +265,11 @@ int main() {
     benchmarkFunction(&records);
   }
 
-  printBenchmarkRecords(records);
+  // Actually processing the arguments.
+  if (print) {printBenchmarkRecords(records);};
+  
+  if (writeAsJson) {
+    // TODO Actually implement this.
+    std::cout << "Write as json in file " << fileName << ".\n";
+  };
 }
