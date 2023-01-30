@@ -1,7 +1,7 @@
 # Re-compiling all the infrastructure all the time is a waste of time, so we
 # pre-compile that part as a library.
 add_library(benchmark Benchmark.cpp Benchmark.h BenchmarkMain.cpp)
-target_link_libraries(benchmark absl::flat_hash_map)
+target_link_libraries(benchmark absl::flat_hash_map boost_program_options)
 
 # Link binary ${basename} against the benchmark library,
 # and all libraries that are specified as additional arguments.

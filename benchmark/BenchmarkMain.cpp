@@ -8,7 +8,7 @@
 #include <sstream>
 #include <algorithm>
 #include <vector>
-#include <getopt.h>
+#include <boost/program_options.hpp>
 
 #include "../benchmark/Benchmark.h"
 
@@ -216,6 +216,7 @@ int main(int argc, char** argv) {
   // Prints how to use the file correctly and exits.
   auto printUsageAndExit = [&argv](){
     std::cerr << "Usage: ./" << argv[0] << " [options]\n"
+      << " --help, -h: Print this help message.\n"
       << " --print, -p: Roughly prints all benchmarks.\n"
       << " --json, -j <file>: Writes the benchmarks as json to a file.\n";
     exit(1);
@@ -224,34 +225,26 @@ int main(int argc, char** argv) {
   // Calling without using ANY arguments makes no sense.
   if (argc == 1) {printUsageAndExit();}
 
-  // The flags and arguments, about what the user wants to happen.
-  bool print = false;
-  bool writeAsJson = false;
-  char* fileName = NULL;
+  // The filename, should the json option be choosen.
+  std::string jsonFileName = "";
 
-  struct option options[] = {
-    { "print", 0, NULL, 'p' },
-    { "json", 1, NULL, 'j' },
-    { NULL, 0, NULL, 0 }
-  };
+  // Declaring the supported options.
+  boost::program_options::options_description options("options");
+  options.add_options()
+      ("help,h", "Print the help message.")
+      ("print,p", "Roughly prints all benchmarks.")
+      ("json,j", boost::program_options::value<std::string>(&jsonFileName),
+       "Writes the benchmarks as json to a file.")
+  ;
 
-  // Parsing the arguments.
-  char c = ' ';
-  optind = 1;
-  while (c != -1) {
-    c = getopt_long(argc, argv, "pj:", options, NULL);
-    switch (c){
-      case 'p':
-        print = true;
-        break;
-      case 'j':
-        writeAsJson = true;
-        fileName = optarg;
-    }
-  }
+  // Parsing the given arguments.
+  boost::program_options::variables_map vm;
+  boost::program_options::store(
+      boost::program_options::parse_command_line(argc, argv, options), vm);
+  boost::program_options::notify(vm);
 
-  // Where there unknown arguments?
-  if (optind != argc) { printUsageAndExit(); }
+  // Did they want the help option?
+  if (vm.count("help")) {printUsageAndExit();}
 
   // We got at least one argument at this point and all options need all the
   // benchmarks measured, so time to do that.
@@ -266,10 +259,10 @@ int main(int argc, char** argv) {
   }
 
   // Actually processing the arguments.
-  if (print) {printBenchmarkRecords(records);};
+  if (vm.count("print")) {printBenchmarkRecords(records);};
   
-  if (writeAsJson) {
+  if (vm.count("json")) {
     // TODO Actually implement this.
-    std::cout << "Write as json in file " << fileName << ".\n";
+    std::cout << "Write as json in file " << jsonFileName << ".\n";
   };
 }
