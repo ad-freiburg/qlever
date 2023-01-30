@@ -152,7 +152,7 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       // TODO<joka921> As soon as we get rid of the special encoding of date
       // values, we can use `index.getVocab().indexToOptionalString()` directly.
       std::optional<string> entity = index.idToOptionalString(id);
-      AD_CHECK(entity.has_value());
+      AD_CONTRACT_CHECK(entity.has_value());
       return std::pair{escapeFunction(std::move(entity.value())), nullptr};
     }
     case Datatype::LocalVocabIndex: {
@@ -246,10 +246,10 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryToSparqlJSON(
           b["xml:lang"] = entitystr.substr(quote_pos + 2);
         } else if (quote_pos < entitystr.size() - 2 &&
                    entitystr[quote_pos + 1] == '^') {
-          AD_CHECK(entitystr[quote_pos + 2] == '^');
+          AD_CONTRACT_CHECK(entitystr[quote_pos + 2] == '^');
           std::string_view datatype{entitystr};
           // remove the < angledBrackets> around the datatype IRI
-          AD_CHECK(datatype.size() >= quote_pos + 5);
+          AD_CONTRACT_CHECK(datatype.size() >= quote_pos + 5);
           datatype.remove_prefix(quote_pos + 4);
           datatype.remove_suffix(1);
           b["datatype"] = datatype;
@@ -421,9 +421,9 @@ nlohmann::json ExportQueryExecutionTrees::queryToQLeverJSON(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     ad_utility::Timer& requestTimer, size_t maxSend) {
   shared_ptr<const ResultTable> resultTable = qet.getResult();
-  requestTimer.stop();
   resultTable->logResultSize();
-  off_t compResultUsecs = requestTimer.usecs();
+  auto timeResultComputation = requestTimer.value();
+
   size_t resultSize = resultTable->size();
 
   nlohmann::json j;
@@ -446,7 +446,6 @@ nlohmann::json ExportQueryExecutionTrees::queryToQLeverJSON(
   {
     auto limitAndOffset = query._limitOffset;
     limitAndOffset._limit = std::min(limitAndOffset._limit, maxSend);
-    requestTimer.cont();
     j["res"] = query.hasSelectClause()
                    ? ExportQueryExecutionTrees::selectQueryToQLeverJSONArray(
                          qet, query.selectClause(), limitAndOffset,
@@ -454,15 +453,11 @@ nlohmann::json ExportQueryExecutionTrees::queryToQLeverJSON(
                    : ExportQueryExecutionTrees::constructQueryToQLeverJSONArray(
                          qet, query.constructClause().triples_, limitAndOffset,
                          std::move(resultTable));
-    requestTimer.stop();
   }
   j["resultsize"] = query.hasSelectClause() ? resultSize : j["res"].size();
-
-  requestTimer.stop();
-  j["time"]["total"] =
-      std::to_string(static_cast<double>(requestTimer.usecs()) / 1000.0) + "ms";
+  j["time"]["total"] = std::to_string(requestTimer.msecs()) + "ms";
   j["time"]["computeResult"] =
-      std::to_string(static_cast<double>(compResultUsecs) / 1000.0) + "ms";
+      std::to_string(ad_utility::Timer::toMilliseconds(timeResultComputation)) + "ms";
 
   return j;
 }
@@ -510,21 +505,18 @@ ExportQueryExecutionTrees::composeTurtleResponse(
 // _____________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::queryToSparqlJSON(
     const ParsedQuery& query, const QueryExecutionTree& qet,
-    ad_utility::Timer& requestTimer, size_t maxSend) {
+    [[maybe_unused]] ad_utility::Timer& requestTimer, size_t maxSend) {
   if (!query.hasSelectClause()) {
     throw std::runtime_error{
         "SPARQL-compliant JSON format is only supported for SELECT queries"};
   }
   shared_ptr<const ResultTable> resultTable = qet.getResult();
   resultTable->logResultSize();
-  requestTimer.stop();
   nlohmann::json j;
   auto limitAndOffset = query._limitOffset;
   limitAndOffset._limit = std::min(limitAndOffset._limit, maxSend);
-  requestTimer.cont();
   j = ExportQueryExecutionTrees::selectQueryToSparqlJSON(
       qet, query.selectClause(), limitAndOffset, std::move(resultTable));
-  requestTimer.stop();
   return j;
 }
 
