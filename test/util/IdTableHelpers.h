@@ -61,7 +61,7 @@ IdTable makeIdTableFromVector(const VectorTable& tableContent,
   return result;
 }
 
-IdTable makeIdTableFromIdVector(
+inline IdTable makeIdTableFromIdVector(
     const std::vector<std::vector<Id>>& tableContent) {
   if (tableContent.empty()) {
     return IdTable{ad_utility::testing::makeAllocator()};
