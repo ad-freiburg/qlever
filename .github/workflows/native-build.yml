@@ -41,7 +41,9 @@ jobs:
 
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
+      with:
+        submodules: 'recursive'
 
     - name: Install dependencies
       run:  sudo apt update && sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
@@ -69,10 +71,6 @@ jobs:
 
     - name: Python dependencies
       run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
-
-    - name: Checkout submodules
-      run: git submodule update --init --recursive
-
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
