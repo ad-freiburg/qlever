@@ -8,6 +8,7 @@
 #include <functional>
 #include <string>
 #include <optional>
+#include "../src/util/json.h"
 
 #include "util/Timer.h"
 #include <util/HashMap.h>
@@ -229,6 +230,11 @@ class BenchmarkRecords {
      */
     const std::vector<RecordTable> getTables() const;
 };
+
+// JSON (d)serilization for all the created structures in BenchmarkRecords.
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BenchmarkRecords::RecordEntry, descriptor, measuredTime)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BenchmarkRecords::RecordGroup, descriptor, entries)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BenchmarkRecords::RecordTable, descriptor, rowNames, columnNames, entries)
 
 /*
  * This class exists as a round about way, of registering functions as

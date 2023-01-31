@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <vector>
 #include <boost/program_options.hpp>
+#include "../src/util/json.h"
 
 #include "../benchmark/Benchmark.h"
 
@@ -206,6 +207,26 @@ void printBenchmarkRecords(const BenchmarkRecords& records) {
   std::cout << visualization.str() << "\n";
 }
 
+/*
+ * @brief Create a nlohmann::json object with all relevant informations
+ *  about the measurments taken by a BenchmarkRecords.
+ */
+nlohmann::json benchmarksToJson(const BenchmarkRecords& records){
+  // The values for all the categories of benchmarks.
+  const std::vector<BenchmarkRecords::RecordEntry>& singleMeasurements =
+    records.getSingleMeasurements();
+  const std::vector<BenchmarkRecords::RecordGroup>& recordGroups =
+    records.getGroups();
+  const std::vector<BenchmarkRecords::RecordTable>& recordTables =
+    records.getTables();
+
+  // Creating the json object. We actually don't want BenchmarkRecords to
+  // be serilized, because that is the management class for measured
+  // benchmarks. We just want the measured benchmarks.
+  return nlohmann::json{{"singleMeasurements", singleMeasurements},
+    {"recordGroups", recordGroups}, {"recordTables", recordTables}};
+}
+
 }
 
 /*
@@ -263,6 +284,6 @@ int main(int argc, char** argv) {
   
   if (vm.count("json")) {
     // TODO Actually implement this.
-    std::cout << "Write as json in file " << jsonFileName << ".\n";
+    std::cout << "Write\n\n" << benchmarksToJson(records) << "\n\nto file '" << jsonFileName << "'.\n";
   };
 }
