@@ -31,7 +31,7 @@ jobs:
         uses: actions/github-script@v3.1.0
         # The following script is taken from the link stated at the
         # beginning of this file. It manually downloads an artifact
-        # from a different workflow.
+        # from another workflow.
         with:
           script: |
             var artifacts = await github.actions.listWorkflowRunArtifacts({
@@ -62,7 +62,7 @@ jobs:
         # won't process the upload properly. We first check it out into a
         # subdirectory `qlever-source`, otherwise the coverage report will
         # be overwritten. We then move all the files back into the working
-        # directory s.t. Codecov will pick them up properly.
+        # directory such that Codecov will pick them up properly.
       - name: "Checkout"
         uses: actions/checkout@v3
         with:
@@ -82,9 +82,9 @@ jobs:
           # public default token.
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
-          # Single our workflow runs on the master branch and not in the PR
+          # Since this workflow runs on the master branch and not in a PR
           # we have to specify the following settings manually to make Codecov
-          # aware of the `actual` origin of the coverage report.
+          # aware of the "actual" origin of the coverage report.
           override_branch: ${{github.event.workflow_run.head_branch}}
           override_build: ${{github.event.workflow_run.workflow_id}}
           override_commit: ${{github.event.workflow_run.head_commit.id}}

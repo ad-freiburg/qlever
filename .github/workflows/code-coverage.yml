@@ -4,7 +4,7 @@
 # runs for a pull request, the coverage report is stored as a GitHub artifact
 # and a separate workflow from `upload-coverage.yml` is triggered that uploads
 # the coverage report. That way the uploader has access to the Codecov token
-# in any case and the upload should never fail.
+# in all cases and the upload should never fail.
 
 # The following name has to be the same as in the `workflows:` key in
 # `upload-coverage.yml`, otherwise the uploader won't pick up the result
@@ -88,7 +88,7 @@ jobs:
         fail_ci_if_error: true
 
 # For a pull request we store the coverage file as well as some information
-# about this PR (number, how to check it out, etc. and upload it as an artifact.
+# about this PR (number, how to check it out, etc.) and upload it as an artifact.
 # This is all the data that is required for running the Codecov uploader manually
 # from `upload-coverage.yml`.
     - name: Save PR number and coverage file in same directory
