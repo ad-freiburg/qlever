@@ -56,8 +56,8 @@ string Sort::getDescriptor() const {
 
 namespace {
 
-// The call the `callFixedSize` is put into a separate function to get rid
-// of an internal compiler error in clang13.
+// The call to `callFixedSize` is put into a separate function to get rid
+// of an internal compiler error in clang 13.
 // TODO<joka921, future compilers> Check if this problem goes away in future
 // compiler versions as soon as we don't support clang 13 anymore.
 void callFixedSizeForSort(auto& idTable, auto comparison) {
@@ -79,26 +79,26 @@ void sortImpl(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
   // TODO<joka921> As soon as we have merged the benchmark, measure whether
   // this is in fact beneficial and whether it should also be applied for a
   // higher number of columns, maybe even using `CALL_FIXED_SIZE` for the
-  // on the number of sort columns.
+  // number of sort columns.
   // TODO<joka921> Also experiment with sorting algorithms that take the
   // column-based structure of the `IdTable` into account.
   if (sortCols.size() == 1) {
     CALL_FIXED_SIZE(width, &Engine::sort, &idTable, sortCols.at(0));
   } else if (sortCols.size() == 2) {
-    auto comparison = [c0 = sortCols[0], c1 = sortCols[1]](const auto& rowA,
-                                                           const auto& rowB) {
-      if (rowA[c0] != rowB[c0]) {
-        return rowA[c0] < rowB[c0];
+    auto comparison = [c0 = sortCols[0], c1 = sortCols[1]](const auto& row1,
+                                                           const auto& row2) {
+      if (row1[c0] != row2[c0]) {
+        return row1[c0] < row2[c0];
       } else {
-        return rowA[c1] < rowB[c1];
+        return row1[c1] < row2[c1];
       }
     };
     callFixedSizeForSort(idTable, comparison);
   } else {
-    auto comparison = [&sortCols](const auto& a, const auto& b) {
+    auto comparison = [&sortCols](const auto& row1, const auto& row2) {
       for (auto& col : sortCols) {
-        if (a[col] != b[col]) {
-          return a[col] < b[col];
+        if (row1[col] != row2[col]) {
+          return row1[col] < row2[col];
         }
       }
       return false;

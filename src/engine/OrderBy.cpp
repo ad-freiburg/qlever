@@ -65,13 +65,6 @@ string OrderBy::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-vector<size_t> OrderBy::resultSortedOn() const {
-  // This function refers to the `internal` sorting by ID value. This is
-  // different from the `semantic` sorting that this class creates.
-  return {};
-}
-
-// _____________________________________________________________________________
 void OrderBy::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Getting sub-result for OrderBy result computation..." << endl;
   AD_CONTRACT_CHECK(!sortIndices_.empty());
@@ -103,8 +96,8 @@ void OrderBy::computeResult(ResultTable* result) {
   int width = result->_idTable.numColumns();
 
   // TODO<joka921> Measure (as soon as we have the benchmark merged)
-  // whether it is beneficial to manually instantiate the comparison for
-  // the case of sorting by only one or two columns.
+  // whether it is beneficial to manually instantiate the comparison when
+  // sorting by only one or two columns.
 
   // TODO<joka921> In the case of a single variable, it might be more efficient
   // to first sort by the ID values and then "repair" the resulting range by
@@ -114,20 +107,24 @@ void OrderBy::computeResult(ResultTable* result) {
   // TODO<joka921> For proper sorting of the local vocab we also need to
   // add some logic for the proper sorting.
 
+  // TODO<joka921> Undefined values should always be at the end, no matter
+  // if the ordering is ascending or descending.
+
   // TODO<joka921> If we know, that all the sort columns contain only datatypes
   // for which the `internal` order is also the `semantic` order, or if a column
   // only contains a single datatype, then we can use more efficient
   // implementations here.
-  auto comparison = [this](const auto& a, const auto& b) {
-    auto f = [](Id a, Id b) -> bool {
-      return valueIdComparators::compareIds(a, b,
-                                            valueIdComparators::Comparison::LT);
-    };
+
+  // Return true iff `rowA` comes before `rowB` in the sort order specified by
+  // `sortIndices_`.
+  auto comparison = [this](const auto& row1, const auto& row2) -> bool {
     for (auto& [column, isDescending] : sortIndices_) {
-      if (a[column] == b[column]) {
+      if (row1[column] == row2[column]) {
         continue;
       }
-      return f(a[column], b[column]) != isDescending;
+      bool isLessThan = valueIdComparators::compareIds(
+          row1[column], row2[column], valueIdComparators::Comparison::LT);
+      return isLessThan != isDescending;
     }
     return false;
   };

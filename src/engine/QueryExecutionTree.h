@@ -222,8 +222,8 @@ class QueryExecutionTree {
 
   // Similar to `createSortedTree` (see directly above), but create the sorted
   // trees for two different trees, the sort columns of which are specified as
-  // a vector of two-dimensional arrays (This format often appears in
-  // `QueryPlanner.cpp`).
+  // a vector of two-dimensional arrays. This format often appears in
+  // `QueryPlanner.cpp`.
   static std::array<std::shared_ptr<QueryExecutionTree>, 2> createSortedTrees(
       std::shared_ptr<QueryExecutionTree> qetA,
       std::shared_ptr<QueryExecutionTree> qetB,
@@ -287,8 +287,9 @@ class QueryExecutionTree {
 };
 
 namespace ad_utility {
-// All the operations take a `QueryExecutionContext` as a first argument.
-// Todo: Continue the comment.
+// Create a `QueryExecutionTree` with `Operation` at the root.
+// The `Operation` is created using `qec` and `args...` as constructor
+// arguments.
 template <typename Operation>
 std::shared_ptr<QueryExecutionTree> makeExecutionTree(
     QueryExecutionContext* qec, auto&&... args) {

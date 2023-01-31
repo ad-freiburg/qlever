@@ -11,15 +11,16 @@
 #include "engine/QueryExecutionTree.h"
 
 // The implementation of the SPARQL `ORDER BY` operation.
+//
 // Note: This class sorts its input in the way that is expected by an end user
 // e.g. `-3 < 0` etc. This is different from the internal order of the IDs
-// which is cheaper to compute and used to compute efficient JOIN`s etc. This
+// which is cheaper to compute and used to compute efficient JOIN`s etc. The
 // internal ordering is computed by the `Sort` operation in `Sort.h`. It is thus
 // important to use the `OrderBy` operation only as the last step during query
 // processing directly before exporting the result.
 class OrderBy : public Operation {
  public:
-  // TODO<joka921> This should by `pair<ColumnIndex, IsAscending>`
+  // TODO<joka921> This should be `pair<ColumnIndex, IsAscending>`
   // The bool means "isDescending"
   using SortIndices = std::vector<std::pair<ColumnIndex, bool>>;
 
@@ -37,7 +38,10 @@ class OrderBy : public Operation {
  public:
   string getDescriptor() const override;
 
-  vector<size_t> resultSortedOn() const override;
+  // The function `resultSortedOn` refers to the `internal` sorting by ID value.
+  // This is different from the `semantic` sorting that the ORDER BY operation
+  // computes.
+  std::vector<size_t> resultSortedOn() const override { return {}; }
 
   void setTextLimit(size_t limit) override { subtree_->setTextLimit(limit); }
 
@@ -66,7 +70,7 @@ class OrderBy : public Operation {
   }
 
  private:
-  void computeResult(ResultTable* result) override;
+  void computeResult(ResultTable* row1) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override {
     return subtree_->getVariableColumns();
