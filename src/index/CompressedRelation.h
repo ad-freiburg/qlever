@@ -44,6 +44,7 @@ using DecompressedBlock = columnBasedIdTable::IdTable<Id, 0>;
 // `IdTable`.
 using CompressedBlock = std::vector<std::vector<char>>;
 
+
 // The metadata of a compressed block of ID triples in an index permutation.
 struct CompressedBlockMetadata {
   // Since we have column-based indices, the two columns of each block are
@@ -82,6 +83,9 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
   serializer | arg._col1FirstId;
   serializer | arg._col1LastId;
 }
+
+// TODO<joka921> Comment
+using FilteredBlocks = std::vector<std::reference_wrapper<const CompressedBlockMetadata>>;
 
 // The metadata of a whole compressed "relation", where relation refers to a
 // maximal sequence of triples with equal first component (e.g., P for the PSO
@@ -142,6 +146,16 @@ struct CompressedRelationMetadata {
                    IdTable* result,
                    ad_utility::SharedConcurrentTimeoutTimer timer);
 
+  static std::span<const CompressedBlockMetadata> getRelevantBlocks(
+      const CompressedRelationMetadata& metadata,
+      const vector<CompressedBlockMetadata>& blockMetadata);
+
+  static void scanWithGivenBlockSubset(const CompressedRelationMetadata& metadata,
+                   const auto& blockMetadata,
+                   const std::string& permutationName, ad_utility::File& file,
+                   IdTable* result,
+                   ad_utility::SharedConcurrentTimeoutTimer timer);
+
   /**
    * @brief For a permutation XYZ, retrieve all Z for given X and Y.
    *
@@ -161,6 +175,9 @@ struct CompressedRelationMetadata {
                    const vector<CompressedBlockMetadata>& blocks,
                    ad_utility::File& file, IdTable* result,
                    ad_utility::SharedConcurrentTimeoutTimer timer = nullptr);
+  static std::span<const CompressedBlockMetadata> getRelevantBlocks(
+      const CompressedRelationMetadata& metadata, Id col1Id,
+      const vector<CompressedBlockMetadata>& blockMetadata);
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.

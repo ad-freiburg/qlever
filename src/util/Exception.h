@@ -111,6 +111,6 @@ inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
 }
 }  // namespace ad_utility::detail
 #define AD_CORRECTNESS_CHECK(condition)                        \
-  detail::adCorrectnessCheckImpl(static_cast<bool>(condition), \
+  ad_utility::detail::adCorrectnessCheckImpl(static_cast<bool>(condition), \
                                  __STRING(condition),          \
                                  ad_utility::source_location::current())
