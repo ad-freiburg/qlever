@@ -88,6 +88,8 @@ void runSelectQueryTestCase(
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, csv),
             testCase.resultCsv);
   auto qleverJSONResult = runJSONQuery(testCase.kg, testCase.query, qleverJson);
+  // TODO<joka921> Test other members of the JSON result (e.g. the selected
+  // variables).
   ASSERT_EQ(qleverJSONResult["query"], testCase.query);
   ASSERT_EQ(qleverJSONResult["resultsize"], testCase.resultSize);
   EXPECT_EQ(qleverJSONResult["res"], testCase.resultQLeverJSON);
