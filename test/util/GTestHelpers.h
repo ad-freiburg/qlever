@@ -33,7 +33,7 @@
 // while the return value is still in scope. It is important to bind the return
 // value to a variable, otherwise it will immediately go of scope and have no
 // effect.
-[[nodiscard]] testing::ScopedTrace generateLocationTrace(
+[[nodiscard]] inline testing::ScopedTrace generateLocationTrace(
     ad_utility::source_location l,
     std::string_view errorMessage = "Actual location of the test failure") {
   return {l.file_name(), static_cast<int>(l.line()), errorMessage};

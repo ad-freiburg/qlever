@@ -26,7 +26,7 @@
 
 // Not relevant for the actual test logic, but provides
 // human-readable output if a test fails.
-std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
+inline std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
   std::visit(
       [&]<typename T>(const T& object) {
         if constexpr (ad_utility::isSimilar<T, Literal>) {
@@ -46,7 +46,7 @@ std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
 
 // _____________________________________________________________________________
 
-std::ostream& operator<<(std::ostream& out, const VarOrTerm& varOrTerm) {
+inline std::ostream& operator<<(std::ostream& out, const VarOrTerm& varOrTerm) {
   std::visit(
       [&]<typename T>(const T& object) {
         if constexpr (ad_utility::isSimilar<T, GraphTerm>) {
@@ -64,13 +64,15 @@ std::ostream& operator<<(std::ostream& out, const VarOrTerm& varOrTerm) {
 // _____________________________________________________________________________
 
 namespace parsedQuery {
-std::ostream& operator<<(std::ostream& out, const parsedQuery::Bind& bind) {
+inline std::ostream& operator<<(std::ostream& out,
+                                const parsedQuery::Bind& bind) {
   out << "Bind " << bind._expression.getDescriptor() << " as "
       << bind._target.name();
   return out;
 }
 
-std::ostream& operator<<(std::ostream& out, const parsedQuery::Values& values) {
+inline std::ostream& operator<<(std::ostream& out,
+                                const parsedQuery::Values& values) {
   out << "Values: variables "
       << ::testing::PrintToString(values._inlineValues._variables) << " values "
       << ::testing::PrintToString(values._inlineValues._values);
@@ -80,14 +82,15 @@ std::ostream& operator<<(std::ostream& out, const parsedQuery::Values& values) {
 
 // _____________________________________________________________________________
 
-std::ostream& operator<<(std::ostream& out, const VariableOrderKey& orderkey) {
+inline std::ostream& operator<<(std::ostream& out,
+                                const VariableOrderKey& orderkey) {
   out << "Order " << (orderkey.isDescending_ ? "DESC" : "ASC") << " by "
       << orderkey.variable_.name();
   return out;
 }
 
-std::ostream& operator<<(std::ostream& out,
-                         const ExpressionOrderKey& expressionOrderKey) {
+inline std::ostream& operator<<(std::ostream& out,
+                                const ExpressionOrderKey& expressionOrderKey) {
   out << "Order " << (expressionOrderKey.isDescending_ ? "DESC" : "ASC")
       << " by " << expressionOrderKey.expression_.getDescriptor();
   return out;
@@ -97,7 +100,7 @@ std::ostream& operator<<(std::ostream& out,
 
 namespace sparqlExpression {
 
-std::ostream& operator<<(
+inline std::ostream& operator<<(
     std::ostream& out,
     const sparqlExpression::SparqlExpressionPimpl& groupKey) {
   out << "Group by " << groupKey.getDescriptor();
@@ -107,7 +110,8 @@ std::ostream& operator<<(
 
 // _____________________________________________________________________________
 
-std::ostream& operator<<(std::ostream& out, const ExceptionMetadata& metadata) {
+inline std::ostream& operator<<(std::ostream& out,
+                                const ExceptionMetadata& metadata) {
   out << "ExceptionMetadata(\"" << metadata.query_ << "\", "
       << metadata.startIndex_ << ", " << metadata.stopIndex_ << ", "
       << metadata.line_ << ", " << metadata.charPositionInLine_ << ")";
@@ -174,12 +178,12 @@ constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
   }
 }
 // _____________________________________________________________________________
-auto NumericLiteralDouble =
+inline auto NumericLiteralDouble =
     [](double value) -> Matcher<const std::variant<int64_t, double>&> {
   return testing::VariantWith<double>(testing::DoubleEq(value));
 };
 
-auto NumericLiteralInt =
+inline auto NumericLiteralInt =
     [](int64_t value) -> Matcher<const std::variant<int64_t, double>&> {
   return testing::VariantWith<int64_t>(testing::Eq(value));
 };
@@ -249,7 +253,7 @@ MultiVariantWith(const Matcher<const ad_utility::Last<Ts...>&>& matcher) {
 }
 
 // Returns a matcher that accepts a `VarOrTerm`, `GraphTerm` or `Iri`.
-auto Iri = [](const std::string& value) {
+inline auto Iri = [](const std::string& value) {
   return MultiVariantWith<VarOrTerm, GraphTerm, ::Iri>(
       AD_PROPERTY(::Iri, iri, testing::Eq(value)));
 };
@@ -257,7 +261,7 @@ auto Iri = [](const std::string& value) {
 // _____________________________________________________________________________
 
 // Returns a matcher that accepts a `VarOrTerm`, `GraphTerm` or `BlankNode`.
-auto BlankNode = [](bool generated, const std::string& label) {
+inline auto BlankNode = [](bool generated, const std::string& label) {
   return MultiVariantWith<VarOrTerm, GraphTerm, ::BlankNode>(testing::AllOf(
       AD_PROPERTY(::BlankNode, isGenerated, testing::Eq(generated)),
       AD_PROPERTY(::BlankNode, label, testing::Eq(label))));
@@ -265,27 +269,29 @@ auto BlankNode = [](bool generated, const std::string& label) {
 
 // _____________________________________________________________________________
 
-auto Variable = [](const std::string& value) -> Matcher<const ::Variable&> {
+inline auto Variable =
+    [](const std::string& value) -> Matcher<const ::Variable&> {
   return AD_PROPERTY(::Variable, name, testing::Eq(value));
 };
 
 // Returns a matcher that matches a variant that given a variant checks that it
 // contains a variable and that the variable matches.
-auto VariableVariant = [](const std::string& value) {
+inline auto VariableVariant = [](const std::string& value) {
   return testing::VariantWith<::Variable>(Variable(value));
 };
 
 // _____________________________________________________________________________
 
 // Returns a matcher that accepts a `VarOrTerm`, `GraphTerm` or `Literal`.
-auto Literal = [](const std::string& value) {
+inline auto Literal = [](const std::string& value) {
   return MultiVariantWith<VarOrTerm, GraphTerm, ::Literal>(
       AD_PROPERTY(::Literal, literal, testing::Eq(value)));
 };
 
 // _____________________________________________________________________________
 
-auto ConstructClause = [](const std::vector<std::array<VarOrTerm, 3>>& elems)
+inline auto ConstructClause =
+    [](const std::vector<std::array<VarOrTerm, 3>>& elems)
     -> Matcher<const std::optional<parsedQuery::ConstructClause>&> {
   return testing::Optional(
       AD_FIELD(parsedQuery::ConstructClause, triples_, testing::Eq(elems)));
@@ -293,7 +299,7 @@ auto ConstructClause = [](const std::vector<std::array<VarOrTerm, 3>>& elems)
 
 // _____________________________________________________________________________
 namespace detail {
-auto Expression = [](const std::string& descriptor)
+inline auto Expression = [](const std::string& descriptor)
     -> Matcher<const sparqlExpression::SparqlExpressionPimpl&> {
   return AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl, getDescriptor,
                      testing::Eq(descriptor));
@@ -308,11 +314,12 @@ auto GraphPatternOperation =
 };
 }
 
-auto BindExpression = [](const string& expression) -> Matcher<const p::Bind&> {
+inline auto BindExpression =
+    [](const string& expression) -> Matcher<const p::Bind&> {
   return AD_FIELD(p::Bind, _expression, detail::Expression(expression));
 };
 
-auto Bind =
+inline auto Bind =
     [](const ::Variable& variable,
        const string& expression) -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::Bind>(
@@ -320,27 +327,29 @@ auto Bind =
                      AD_FIELD(p::Bind, _target, testing::Eq(variable))));
 };
 
-auto LimitOffset = [](uint64_t limit, uint64_t textLimit,
-                      uint64_t offset) -> Matcher<const LimitOffsetClause&> {
+inline auto LimitOffset =
+    [](uint64_t limit, uint64_t textLimit,
+       uint64_t offset) -> Matcher<const LimitOffsetClause&> {
   return testing::AllOf(
       AD_FIELD(LimitOffsetClause, _limit, testing::Eq(limit)),
       AD_FIELD(LimitOffsetClause, _textLimit, testing::Eq(textLimit)),
       AD_FIELD(LimitOffsetClause, _offset, testing::Eq(offset)));
 };
 
-auto VariableOrderKey = [](const ::Variable& variable,
-                           bool desc) -> Matcher<const ::VariableOrderKey&> {
+inline auto VariableOrderKey =
+    [](const ::Variable& variable,
+       bool desc) -> Matcher<const ::VariableOrderKey&> {
   return testing::AllOf(
       AD_FIELD(::VariableOrderKey, variable_, testing::Eq(variable)),
       AD_FIELD(::VariableOrderKey, isDescending_, testing::Eq(desc)));
 };
 
-auto VariableOrderKeyVariant = [](const ::Variable& key,
-                                  bool desc) -> Matcher<const OrderKey&> {
+inline auto VariableOrderKeyVariant =
+    [](const ::Variable& key, bool desc) -> Matcher<const OrderKey&> {
   return testing::VariantWith<::VariableOrderKey>(VariableOrderKey(key, desc));
 };
 
-auto VariableOrderKeys =
+inline auto VariableOrderKeys =
     [](const std::vector<std::pair<::Variable, bool>>& orderKeys)
     -> Matcher<const std::vector<::VariableOrderKey>&> {
   vector<Matcher<const ::VariableOrderKey&>> matchers;
@@ -350,15 +359,15 @@ auto VariableOrderKeys =
   return testing::ElementsAreArray(matchers);
 };
 
-auto ExpressionOrderKey = [](const string& expr,
-                             bool desc) -> Matcher<const OrderKey&> {
+inline auto ExpressionOrderKey = [](const string& expr,
+                                    bool desc) -> Matcher<const OrderKey&> {
   return testing::VariantWith<::ExpressionOrderKey>(testing::AllOf(
       AD_FIELD(::ExpressionOrderKey, expression_, detail::Expression(expr)),
       AD_FIELD(::ExpressionOrderKey, isDescending_, testing::Eq(desc))));
 };
 
 using ExpressionOrderKeyTest = std::pair<std::string, bool>;
-auto OrderKeys =
+inline auto OrderKeys =
     [](const std::vector<
         std::variant<::VariableOrderKey, ExpressionOrderKeyTest>>& orderKeys)
     -> Matcher<const vector<OrderKey>&> {
@@ -379,17 +388,19 @@ auto OrderKeys =
   return testing::ElementsAreArray(keyMatchers);
 };
 
-auto VariableGroupKey = [](const string& key) -> Matcher<const GroupKey&> {
+inline auto VariableGroupKey =
+    [](const string& key) -> Matcher<const GroupKey&> {
   return testing::VariantWith<::Variable>(
       AD_PROPERTY(Variable, name, testing::Eq(key)));
 };
 
-auto ExpressionGroupKey = [](const string& expr) -> Matcher<const GroupKey&> {
+inline auto ExpressionGroupKey =
+    [](const string& expr) -> Matcher<const GroupKey&> {
   return testing::VariantWith<sparqlExpression::SparqlExpressionPimpl>(
       detail::Expression(expr));
 };
 
-auto AliasGroupKey =
+inline auto AliasGroupKey =
     [](const string& expr,
        const ::Variable& variable) -> Matcher<const GroupKey&> {
   return testing::VariantWith<Alias>(
@@ -397,7 +408,7 @@ auto AliasGroupKey =
                      AD_FIELD(Alias, _expression, detail::Expression(expr))));
 };
 
-auto GroupKeys =
+inline auto GroupKeys =
     [](const std::vector<std::variant<
            std::string, std::pair<std::string, ::Variable>, ::Variable>>&
            groupKeys) -> Matcher<const vector<GroupKey>&> {
@@ -423,14 +434,14 @@ auto GroupKeys =
   return testing::ElementsAreArray(keyMatchers);
 };
 
-auto GroupByVariables =
+inline auto GroupByVariables =
     [](const vector<::Variable>& vars) -> Matcher<const ParsedQuery&> {
   return AD_FIELD(ParsedQuery, _groupByVariables,
                   testing::UnorderedElementsAreArray(vars));
 };
 
-auto Values = [](const std::vector<::Variable>& vars,
-                 const std::vector<vector<TripleComponent>>& values)
+inline auto Values = [](const std::vector<::Variable>& vars,
+                        const std::vector<vector<TripleComponent>>& values)
     -> Matcher<const p::Values&> {
   // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
   //  becomes a trivial Eq matcher.
@@ -441,8 +452,8 @@ auto Values = [](const std::vector<::Variable>& vars,
                      AD_FIELD(SparqlValues, _values, testing::Eq(values)))));
 };
 
-auto InlineData = [](const std::vector<::Variable>& vars,
-                     const vector<vector<TripleComponent>>& values)
+inline auto InlineData = [](const std::vector<::Variable>& vars,
+                            const vector<vector<TripleComponent>>& values)
     -> Matcher<const p::GraphPatternOperation&> {
   // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
   //  becomes a trivial Eq matcher.
@@ -450,7 +461,7 @@ auto InlineData = [](const std::vector<::Variable>& vars,
 };
 
 namespace detail {
-auto SelectBase =
+inline auto SelectBase =
     [](bool distinct,
        bool reduced) -> Matcher<const ParsedQuery::SelectClause&> {
   return testing::AllOf(
@@ -460,15 +471,15 @@ auto SelectBase =
 };
 }
 
-auto AsteriskSelect = [](bool distinct = false,
-                         bool reduced =
-                             false) -> Matcher<const p::SelectClause&> {
+inline auto AsteriskSelect = [](bool distinct = false,
+                                bool reduced =
+                                    false) -> Matcher<const p::SelectClause&> {
   return testing::AllOf(
       detail::SelectBase(distinct, reduced),
       AD_PROPERTY(p::SelectClause, isAsterisk, testing::IsTrue()));
 };
 
-auto VariablesSelect =
+inline auto VariablesSelect =
     [](const vector<string>& variables, bool distinct = false,
        bool reduced = false) -> Matcher<const p::SelectClause&> {
   return testing::AllOf(
@@ -522,7 +533,7 @@ MATCHER_P3(Select, distinct, reduced, selection, "") {
 }
 }  // namespace detail
 
-auto Select =
+inline auto Select =
     [](std::vector<std::variant<::Variable, std::pair<string, ::Variable>>>
            selection,
        bool distinct = false,
@@ -533,7 +544,7 @@ auto Select =
 
 // Return a `Matcher` that tests whether the descriptor of the expression of a
 // `SparqlFilter` matches the given `expectedDescriptor`.
-auto stringMatchesFilter =
+inline auto stringMatchesFilter =
     [](const std::string& expectedDescriptor) -> Matcher<const SparqlFilter&> {
   auto inner = AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl,
                            getDescriptor, testing::Eq(expectedDescriptor));
@@ -543,7 +554,7 @@ auto stringMatchesFilter =
 // Return a `Matcher` that tests whether the descriptors of the expressions of
 // the given `vector` of `SparqlFilter`s  matches the given
 // `expectedDescriptors`.
-auto stringsMatchFilters =
+inline auto stringsMatchFilters =
     [](const std::vector<std::string>& expectedDescriptors)
     -> Matcher<const std::vector<SparqlFilter>&> {
   auto matchers =
@@ -551,7 +562,7 @@ auto stringsMatchFilters =
   return testing::ElementsAreArray(matchers);
 };
 
-auto SolutionModifier =
+inline auto SolutionModifier =
     [](const std::vector<std::variant<
            std::string, std::pair<std::string, ::Variable>, ::Variable>>&
            groupKeys = {},
@@ -568,7 +579,7 @@ auto SolutionModifier =
       AD_FIELD(SolutionModifiers, limitOffset_, testing::Eq(limitOffset)));
 };
 
-auto Triples = [](const vector<SparqlTriple>& triples)
+inline auto Triples = [](const vector<SparqlTriple>& triples)
     -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::BasicGraphPattern>(
       AD_FIELD(p::BasicGraphPattern, _triples,
@@ -576,19 +587,20 @@ auto Triples = [](const vector<SparqlTriple>& triples)
 };
 
 namespace detail {
-auto Optional =
+inline auto Optional =
     [](auto&& subMatcher) -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::Optional>(
       AD_FIELD(p::Optional, _child, subMatcher));
 };
 }
 
-auto Group = [](auto&& subMatcher) -> Matcher<const p::GraphPatternOperation&> {
+inline auto Group =
+    [](auto&& subMatcher) -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::GroupGraphPattern>(
       AD_FIELD(p::GroupGraphPattern, _child, subMatcher));
 };
 
-auto Union =
+inline auto Union =
     [](auto&& subMatcher1,
        auto&& subMatcher2) -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::Union>(
@@ -596,12 +608,13 @@ auto Union =
                      AD_FIELD(p::Union, _child2, subMatcher2)));
 };
 
-auto Minus = [](auto&& subMatcher) -> Matcher<const p::GraphPatternOperation&> {
+inline auto Minus =
+    [](auto&& subMatcher) -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::Minus>(
       AD_FIELD(p::Minus, _child, subMatcher));
 };
 
-auto RootGraphPattern = [](const Matcher<const p::GraphPattern&>& m)
+inline auto RootGraphPattern = [](const Matcher<const p::GraphPattern&>& m)
     -> Matcher<const ::ParsedQuery&> {
   return AD_FIELD(ParsedQuery, _rootGraphPattern, m);
 };
@@ -634,7 +647,7 @@ struct MatcherWithDefaultFiltersAndOptional {
 };
 
 namespace detail {
-auto GraphPattern =
+inline auto GraphPattern =
     [](bool optional, const vector<std::string>& filters,
        auto&&... childMatchers) -> Matcher<const ParsedQuery::GraphPattern&> {
   return testing::AllOf(
@@ -646,42 +659,44 @@ auto GraphPattern =
 };
 }
 
-auto GraphPattern =
+inline auto GraphPattern =
     MatcherWithDefaultFiltersAndOptional<detail::GraphPattern>{};
 
 namespace detail {
-auto OptionalGraphPattern = [](vector<std::string>&& filters,
-                               const auto&... childMatchers)
+inline auto OptionalGraphPattern = [](vector<std::string>&& filters,
+                                      const auto&... childMatchers)
     -> Matcher<const p::GraphPatternOperation&> {
   return detail::Optional(
       detail::GraphPattern(true, filters, childMatchers...));
 };
 }
 
-auto OptionalGraphPattern =
+inline auto OptionalGraphPattern =
     MatcherWithDefaultFilters<detail::OptionalGraphPattern>{};
 
 namespace detail {
-auto GroupGraphPattern = [](vector<std::string>&& filters,
-                            const auto&... childMatchers)
+inline auto GroupGraphPattern = [](vector<std::string>&& filters,
+                                   const auto&... childMatchers)
     -> Matcher<const p::GraphPatternOperation&> {
   return Group(detail::GraphPattern(false, filters, childMatchers...));
 };
 }
 
-auto GroupGraphPattern = MatcherWithDefaultFilters<detail::GroupGraphPattern>{};
+inline auto GroupGraphPattern =
+    MatcherWithDefaultFilters<detail::GroupGraphPattern>{};
 
 namespace detail {
-auto MinusGraphPattern = [](vector<std::string>&& filters,
-                            const auto&... childMatchers)
+inline auto MinusGraphPattern = [](vector<std::string>&& filters,
+                                   const auto&... childMatchers)
     -> Matcher<const p::GraphPatternOperation&> {
   return Minus(detail::GraphPattern(false, filters, childMatchers...));
 };
 }
 
-auto MinusGraphPattern = MatcherWithDefaultFilters<detail::MinusGraphPattern>{};
+inline auto MinusGraphPattern =
+    MatcherWithDefaultFilters<detail::MinusGraphPattern>{};
 
-auto SubSelect =
+inline auto SubSelect =
     [](auto&& selectMatcher,
        auto&& whereMatcher) -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::Subquery>(AD_PROPERTY(
@@ -692,7 +707,7 @@ auto SubSelect =
           AD_FIELD(ParsedQuery, _rootGraphPattern, whereMatcher))));
 };
 
-auto SelectQuery =
+inline auto SelectQuery =
     [](const Matcher<const p::SelectClause&>& selectMatcher,
        const Matcher<const p::GraphPattern&>& graphPatternMatcher)
     -> Matcher<const ::ParsedQuery&> {
@@ -706,31 +721,31 @@ namespace pq {
 
 // This is implemented as a separater Matcher because it generates some overhead
 // in the tests.
-auto OriginalString =
+inline auto OriginalString =
     [](const std::string& originalString) -> Matcher<const ::ParsedQuery&> {
   return AD_FIELD(ParsedQuery, _originalString, testing::Eq(originalString));
 };
 
-auto LimitOffset = [](const LimitOffsetClause& limitOffset = {})
+inline auto LimitOffset = [](const LimitOffsetClause& limitOffset = {})
     -> Matcher<const ::ParsedQuery&> {
   return AD_FIELD(ParsedQuery, _limitOffset, testing::Eq(limitOffset));
 };
-auto Having = [](const vector<std::string>& havingClauses = {})
+inline auto Having = [](const vector<std::string>& havingClauses = {})
     -> Matcher<const ::ParsedQuery&> {
   return AD_FIELD(ParsedQuery, _havingClauses,
                   stringsMatchFilters(havingClauses));
 };
-auto OrderKeys =
+inline auto OrderKeys =
     [](const std::vector<std::pair<::Variable, bool>>& orderKeys = {})
     -> Matcher<const ::ParsedQuery&> {
   return AD_FIELD(ParsedQuery, _orderBy, VariableOrderKeys(orderKeys));
 };
-auto GroupKeys = GroupByVariables;
+inline auto GroupKeys = GroupByVariables;
 }  // namespace pq
 
 // _____________________________________________________________________________
-auto ConstructQuery(const std::vector<std::array<VarOrTerm, 3>>& elems,
-                    const Matcher<const p::GraphPattern&>& m)
+inline auto ConstructQuery(const std::vector<std::array<VarOrTerm, 3>>& elems,
+                           const Matcher<const p::GraphPattern&>& m)
     -> Matcher<const ParsedQuery&> {
   return testing::AllOf(
       AD_PROPERTY(ParsedQuery, hasConstructClause, testing::IsTrue()),
@@ -741,7 +756,7 @@ auto ConstructQuery(const std::vector<std::array<VarOrTerm, 3>>& elems,
 }
 
 // _____________________________________________________________________________
-auto VisibleVariables =
+inline auto VisibleVariables =
     [](const std::vector<::Variable>& elems) -> Matcher<const ParsedQuery&> {
   return AD_PROPERTY(ParsedQuery, getVisibleVariables, testing::Eq(elems));
 };

@@ -11,7 +11,7 @@ namespace vocabulary_test {
 
 // Can be used to compare arbitrary vocabularies to each other and to
 // `std::vector<string>`.
-auto assertThatRangesAreEqual = [](const auto& a, const auto& b) {
+inline auto assertThatRangesAreEqual = [](const auto& a, const auto& b) {
   ASSERT_EQ(a.size(), b.size());
   for (size_t i = 0; i < a.size(); ++i) {
     ASSERT_EQ(a[i], b[i]);
@@ -33,9 +33,10 @@ auto assertThatRangesAreEqual = [](const auto& a, const auto& b) {
  * @param ids Must have the same size as `words` The tests expect that
  * `vocab[ids[i]] == words[i]` for all i.
  */
-void testUpperAndLowerBound(const auto& vocab, auto makeWordLarger,
-                            auto makeWordSmaller, auto comparator,
-                            const auto& words, std::vector<uint64_t> ids) {
+inline void testUpperAndLowerBound(const auto& vocab, auto makeWordLarger,
+                                   auto makeWordSmaller, auto comparator,
+                                   const auto& words,
+                                   std::vector<uint64_t> ids) {
   ASSERT_FALSE(words.empty());
   ASSERT_EQ(vocab.size(), words.size());
 
