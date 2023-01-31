@@ -4,13 +4,14 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/index/PatternCreator.h"
-#include "../src/util/Serializer/ByteBufferSerializer.h"
-#include "../src/util/Serializer/Serializer.h"
+#include "./util/IdTestHelpers.h"
+#include "index/PatternCreator.h"
+#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/Serializer.h"
 
-auto I = [](const auto& id) {
-  return Id::makeFromVocabIndex(VocabIndex::make(id));
-};
+namespace {
+auto V = ad_utility::testing::VocabId;
+}
 
 TEST(PatternStatistics, Initialization) {
   PatternStatistics patternStatistics{50, 25, 4};
@@ -36,15 +37,15 @@ TEST(PatternStatistics, Serialization) {
 
 // Create patterns from a small SPO-sorted sequence of triples.
 void createExamplePatterns(PatternCreator& creator) {
-  creator.processTriple({I(0), I(10), I(20)});
-  creator.processTriple({I(0), I(10), I(21)});
-  creator.processTriple({I(0), I(11), I(18)});
-  creator.processTriple({I(1), I(10), I(18)});
-  creator.processTriple({I(1), I(12), I(18)});
-  creator.processTriple({I(1), I(13), I(18)});
-  creator.processTriple({I(3), I(10), I(28)});
-  creator.processTriple({I(3), I(11), I(29)});
-  creator.processTriple({I(3), I(11), I(45)});
+  creator.processTriple({V(0), V(10), V(20)});
+  creator.processTriple({V(0), V(10), V(21)});
+  creator.processTriple({V(0), V(11), V(18)});
+  creator.processTriple({V(1), V(10), V(18)});
+  creator.processTriple({V(1), V(12), V(18)});
+  creator.processTriple({V(1), V(13), V(18)});
+  creator.processTriple({V(3), V(10), V(28)});
+  creator.processTriple({V(3), V(11), V(29)});
+  creator.processTriple({V(3), V(11), V(45)});
 }
 
 // Assert that the contents of patterns read from `filename` match the triples
@@ -68,13 +69,13 @@ void assertPatternContents(const std::string& filename) {
   ASSERT_EQ(patterns.size(), 2);
 
   ASSERT_EQ(patterns[0].size(), 2);
-  ASSERT_EQ(patterns[0][0], I(10));
-  ASSERT_EQ(patterns[0][1], I(11));
+  ASSERT_EQ(patterns[0][0], V(10));
+  ASSERT_EQ(patterns[0][1], V(11));
 
   ASSERT_EQ(patterns[1].size(), 3);
-  ASSERT_EQ(patterns[1][0], I(10));
-  ASSERT_EQ(patterns[1][1], I(12));
-  ASSERT_EQ(patterns[1][2], I(13));
+  ASSERT_EQ(patterns[1][0], V(10));
+  ASSERT_EQ(patterns[1][1], V(12));
+  ASSERT_EQ(patterns[1][2], V(13));
 
   // We have 4 subjects 0, 1, 2, 3. Subject 2 has no pattern, because
   // it has no triples. Subjects 0 and 3 have the first pattern, subject 1 has
