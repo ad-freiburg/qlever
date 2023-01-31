@@ -457,7 +457,8 @@ nlohmann::json ExportQueryExecutionTrees::queryToQLeverJSON(
   j["resultsize"] = query.hasSelectClause() ? resultSize : j["res"].size();
   j["time"]["total"] = std::to_string(requestTimer.msecs()) + "ms";
   j["time"]["computeResult"] =
-      std::to_string(ad_utility::Timer::toMilliseconds(timeResultComputation)) + "ms";
+      std::to_string(ad_utility::Timer::toMilliseconds(timeResultComputation)) +
+      "ms";
 
   return j;
 }
