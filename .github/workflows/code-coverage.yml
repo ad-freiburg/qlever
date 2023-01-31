@@ -1,11 +1,14 @@
-# Measure the code coverage of QLever's unit tests using LLVMs source instrumentation.
-# When this workflow runs in the master branch, the coverage report is directly uploaded to Codecov.io
-# When this workflow runs for a pull request, the coverage report is stored as a GitHub artifact and the separate
-# privileged workflow from `upload-coverage.yml` is triggered that uploads the coverage report. That way the uploader
-# always has access to the Codecov token and the uploads should never fail.
+# Measure the code coverage of QLever's unit tests using LLVMs source
+# instrumentation. When this workflow runs for the master branch, the
+# coverage report is directly uploaded to Codecov.io. When this workflow
+# runs for a pull request, the coverage report is stored as a GitHub artifact
+# and a separate workflow from `upload-coverage.yml` is triggered that uploads
+# the coverage report. That way the uploader has access to the Codecov token
+# in any case and the upload should never fail.
 
-# This name has to be the same as in the `workflows:` key in `upload-coverage.yml`, otherwise the uploader won't
-# pick up the result of this workflow.
+# The following name has to be the same as in the `workflows:` key in
+# `upload-coverage.yml`, otherwise the uploader won't pick up the result
+# of this workflow.
 name: measure-code-coverage
 
 on:
@@ -70,8 +73,8 @@ jobs:
         llvm-profdata-15 merge -sparse *.profraw -o default.profdata;
         xargs -a tests.txt llvm-cov-15 export --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/third_party/" --ignore-filename-regex="/generated/"  --ignore-filename-regex="/nlohmann/" --ignore-filename-regex="/ctre/"  --ignore-filename-regex="/test/" > ./coverage.lcov
 
-# only upload the coverage directly if this is not a pull request. In this case we are on the master branch and have
-# access to the Codecov token
+# Only upload the coverage directly if this is not a pull request. In this
+# case we are on the master branch and have access to the Codecov token.
     - name: "Submit coverage data to codecov.io"
       if: github.event_name != 'pull_request'
       uses: codecov/codecov-action@v3
@@ -84,8 +87,9 @@ jobs:
         token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: true
 
-# For a pull request we store the coverage file as well as some information about this PR (number, how to check it out,
-# etc. and upload it as an artifact. This is all the data that is required for running the Codecov uploader manually
+# For a pull request we store the coverage file as well as some information
+# about this PR (number, how to check it out, etc. and upload it as an artifact.
+# This is all the data that is required for running the Codecov uploader manually
 # from `upload-coverage.yml`.
     - name: Save PR number and coverage file in same directory
       if: github.event_name == 'pull_request'
