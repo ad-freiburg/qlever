@@ -48,7 +48,9 @@ auto makeTestScanWidthOne = [](const IndexImpl& index) {
 // scan matches `expected`.
 auto makeTestScanWidthTwo = [](const IndexImpl& index) {
   return [&index](const std::string& c0, const auto& permutation,
-                  const std::vector<std::vector<Id>>& expected, ad_utility::source_location l = ad_utility::source_location::current()) {
+                  const std::vector<std::vector<Id>>& expected,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) {
     auto t = generateLocationTrace(l);
     IdTable wol(2, makeAllocator());
     index.scan(c0, &wol, permutation);
