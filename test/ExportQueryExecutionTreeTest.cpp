@@ -64,6 +64,19 @@ struct TestCaseSelectQuery {
   nlohmann::json resultSparqlJSON;  // The expected result in SparqlJSON format.
 };
 
+struct TestCaseConstructQuery {
+  std::string kg;                   // The knowledge graph (TURTLE)
+  std::string query;                // The query (SPARQL)
+  size_t resultSize;                // The expected number of results.
+  std::string resultTsv;            // The expected result in TSV format.
+  std::string resultCsv;            // The expected result in CSV format
+  std::string resultTurtle;         // The expected result in Turtle format
+  nlohmann::json resultQLeverJSON;  // The expected result in QLeverJSOn format.
+                                    // Note: this member only contains the inner
+                                    // result array with the bindings and NOT
+                                    // the metadata.
+};
+
 // Run a single test case for a select query.
 void runSelectQueryTestCase(
     const TestCaseSelectQuery& testCase,
@@ -81,6 +94,24 @@ void runSelectQueryTestCase(
 
   auto sparqlJSONResult = runJSONQuery(testCase.kg, testCase.query, sparqlJson);
   EXPECT_EQ(sparqlJSONResult, testCase.resultSparqlJSON);
+}
+
+// Run a single test case for a select query.
+void runConstructQueryTestCase(
+    const TestCaseConstructQuery& testCase,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  auto trace = generateLocationTrace(l, "runConstructQueryTestCase");
+  using enum ad_utility::MediaType;
+  EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, tsv),
+            testCase.resultTsv);
+  EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, csv),
+            testCase.resultCsv);
+  auto qleverJSONResult = runJSONQuery(testCase.kg, testCase.query, qleverJson);
+  ASSERT_EQ(qleverJSONResult["query"], testCase.query);
+  ASSERT_EQ(qleverJSONResult["resultsize"], testCase.resultSize);
+  EXPECT_EQ(qleverJSONResult["res"], testCase.resultQLeverJSON);
+  EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, turtle),
+            testCase.resultTurtle);
 }
 
 // Create a `json` that can be used as the `resultQLeverJSON` of a
@@ -155,6 +186,21 @@ TEST(ExportQueryExecutionTree, Integers) {
                            "-42019234865781")}),
   };
   runSelectQueryTestCase(testCase);
+
+  TestCaseConstructQuery testCaseConstruct{
+      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 3,
+      // TODO<joka921> the ORDER BY of negative numbers is incorrect.
+      "<s>\t<p>\t42\n<s>\t<p>\t4012934858173560\n<s>\t<p>\t-42019234865781\n",
+      "<s>,<p>,42\n<s>,<p>,4012934858173560\n<s>,<p>,-42019234865781\n",
+      "<s> <p> 42 .\n<s> <p> 4012934858173560 .\n<s> <p> -42019234865781 .\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{"<s>"s, "<p>"s, "42"s});
+        j.push_back(std::vector{"<s>"s, "<p>"s, "4012934858173560"s});
+        j.push_back(std::vector{"<s>"s, "<p>"s, "-42019234865781"s});
+        return j;
+      }()};
+  runConstructQueryTestCase(testCaseConstruct);
 }
 
 TEST(ExportQueryExecutionTree, Floats) {
@@ -183,6 +229,24 @@ TEST(ExportQueryExecutionTree, Floats) {
                            "literal", "-42019234865780982022144")}),
   };
   runSelectQueryTestCase(testCaseFloat);
+
+  TestCaseConstructQuery testCaseConstruct{
+      kg,
+      "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      3,
+      "<s>\t<p>\t4.01293e-12\n<s>\t<p>\t42.2\n<s>\t<p>\t-"
+      "42019234865780982022144\n",
+      "<s>,<p>,4.01293e-12\n<s>,<p>,42.2\n<s>,<p>,-42019234865780982022144\n",
+      "<s> <p> 4.01293e-12 .\n<s> <p> 42.2 .\n<s> <p> -42019234865780982022144 "
+      ".\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{"<s>"s, "<p>"s, "4.01293e-12"s});
+        j.push_back(std::vector{"<s>"s, "<p>"s, "42.2"s});
+        j.push_back(std::vector{"<s>"s, "<p>"s, "-42019234865780982022144"s});
+        return j;
+      }()};
+  runConstructQueryTestCase(testCaseConstruct);
 }
 
 TEST(ExportQueryExecutionTree, Dates) {
@@ -206,6 +270,27 @@ TEST(ExportQueryExecutionTree, Dates) {
                            "literal", "1950-01-01T00:00:00")}),
   };
   runSelectQueryTestCase(testCase);
+
+  TestCaseConstructQuery testCaseConstruct{
+      kg,
+      "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
+      "<s>\t<p>\t\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/"
+      "XMLSchema#dateTime>\n",
+      "<s>,<p>,\"\"\"1950-01-01T00:00:00\"\"^^<http://www.w3.org/2001/"
+      "XMLSchema#dateTime>\"\n",
+      "<s> <p> "
+      "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> "
+      ".\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{
+            "<s>"s, "<p>"s,
+            "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"s});
+        return j;
+      }(),
+  };
+  runConstructQueryTestCase(testCaseConstruct);
 }
 
 TEST(ExportQueryExecutionTree, Entities) {
@@ -227,6 +312,21 @@ TEST(ExportQueryExecutionTree, Entities) {
       "PREFIX qlever: <http://qlever.com/> \n SELECT ?o WHERE {VALUES ?o "
       "{qlever:o}} ORDER BY ?o";
   runSelectQueryTestCase(testCase);
+
+  TestCaseConstructQuery testCaseConstruct{
+      kg,
+      "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
+      "<s>\t<p>\t<http://qlever.com/o>\n",
+      "<s>,<p>,<http://qlever.com/o>\n",
+      "<s> <p> <http://qlever.com/o> .\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{"<s>"s, "<p>"s, "<http://qlever.com/o>"s});
+        return j;
+      }(),
+  };
+  runConstructQueryTestCase(testCaseConstruct);
 }
 
 TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
@@ -247,6 +347,23 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
       "SELECT ?o WHERE { VALUES ?o {\"\"\"Some\"Where\tOver,\"\"\"@en-ca}} "
       "ORDER BY ?o";
   runSelectQueryTestCase(testCase);
+
+  TestCaseConstructQuery testCaseConstruct{
+      kg,
+      "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
+      // TODO<joka921> the ORDER BY of negative numbers is incorrect.
+      "<s>\t<p>\t\"Some\"Where Over,\"@en-ca\n",
+      "<s>,<p>,\"\"\"Some\"\"Where\tOver,\"\"@en-ca\"\n",
+      "<s> <p> \"Some\\\"Where\tOver,\"@en-ca .\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(
+            std::vector{"<s>"s, "<p>"s, "\"Some\"Where\tOver,\"@en-ca"s});
+        return j;
+      }(),
+  };
+  runConstructQueryTestCase(testCaseConstruct);
 }
 
 TEST(ExportQueryExecutionTree, UndefinedValues) {
@@ -267,6 +384,19 @@ TEST(ExportQueryExecutionTree, UndefinedValues) {
         return j;
       }()};
   runSelectQueryTestCase(testCase);
+
+  // In CONSTRUCT queries, results with undefined values in the exported
+  // variables are filtered out, so the result is empty.
+  TestCaseConstructQuery testCaseConstruct{
+      kg,
+      "CONSTRUCT {?s <pred> ?o} WHERE {?s <p> <o> OPTIONAL {?s <p2> ?o}} ORDER "
+      "BY ?o",
+      0,
+      "",
+      "",
+      "",
+      std::vector<std::string>{}};
+  runConstructQueryTestCase(testCaseConstruct);
 }
 
 TEST(ExportQueryExecutionTree, BlankNode) {
@@ -315,5 +445,7 @@ TEST(ExportQueryExecutionTree, MultipleVariables) {
   // nothing to test here.
 }
 
-// TODO<joka921> There are tests missing for the CONSTRUCT query export, but
-// that module has to be restructured anyway.
+// TODO<joka921> Unit tests for the more complex COSTRUCT export (combination
+// between constants and stuff from the knowledge graph).
+
+// TODO<joka921> Unit tests that systematically fill the coverage gaps.
