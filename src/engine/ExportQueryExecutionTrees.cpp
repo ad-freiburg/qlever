@@ -89,9 +89,7 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
     const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
     const QueryExecutionTree::ColumnIndicesAndTypes& columns,
     std::shared_ptr<const ResultTable> resultTable) {
-  if (!resultTable) {
-    resultTable = qet.getResult();
-  }
+  AD_CORRECTNESS_CHECK(resultTable != nullptr);
   const IdTable& data = resultTable->_idTable;
   nlohmann::json json = nlohmann::json::array();
 
@@ -184,10 +182,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryToSparqlJSON(
     shared_ptr<const ResultTable> resultTable) {
   using nlohmann::json;
 
-  // This might trigger the actual query processing.
-  if (!resultTable) {
-    resultTable = qet.getResult();
-  }
+  AD_CORRECTNESS_CHECK(resultTable != nullptr);
   LOG(DEBUG) << "Finished computing the query result in the ID space. "
                 "Resolving strings in result...\n";
 
@@ -299,10 +294,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryToQLeverJSONArray(
     const parsedQuery::SelectClause& selectClause,
     LimitOffsetClause limitAndOffset,
     shared_ptr<const ResultTable> resultTable) {
-  // They may trigger computation (but does not have to).
-  if (!resultTable) {
-    resultTable = qet.getResult();
-  }
+  AD_CORRECTNESS_CHECK(resultTable != nullptr);
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   QueryExecutionTree::ColumnIndicesAndTypes validIndices =
       qet.selectedVariablesToColumnIndices(selectClause, *resultTable, true);
@@ -396,8 +388,7 @@ ExportQueryExecutionTrees::constructQueryToTsvOrCsv(
   static_assert(format == MediaType::octetStream || format == MediaType::csv ||
                 format == MediaType::tsv);
   if constexpr (format == MediaType::octetStream) {
-    throw std::runtime_error{
-        "Binary export is not supported for CONSTRUCT queries"};
+    AD_THROW("Binary export is not supported for CONSTRUCT queries");
   }
   resultTable->logResultSize();
   constexpr auto& escapeFunction = format == MediaType::tsv
@@ -495,9 +486,9 @@ ad_utility::streams::stream_generator
 ExportQueryExecutionTrees::composeTurtleResponse(
     const ParsedQuery& query, const QueryExecutionTree& qet) {
   if (!query.hasConstructClause()) {
-    throw std::runtime_error{
+    AD_THROW(
         "RDF Turtle as an export format is only supported for CONSTRUCT "
-        "queries"};
+        "queries");
   }
   return ExportQueryExecutionTrees::constructQueryToTurtle(
       qet, query.constructClause().triples_, query._limitOffset,
@@ -508,8 +499,8 @@ nlohmann::json ExportQueryExecutionTrees::queryToSparqlJSON(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     [[maybe_unused]] ad_utility::Timer& requestTimer, size_t maxSend) {
   if (!query.hasSelectClause()) {
-    throw std::runtime_error{
-        "SPARQL-compliant JSON format is only supported for SELECT queries"};
+    AD_THROW(
+        "SPARQL-compliant JSON format is only supported for SELECT queries");
   }
   shared_ptr<const ResultTable> resultTable = qet.getResult();
   resultTable->logResultSize();

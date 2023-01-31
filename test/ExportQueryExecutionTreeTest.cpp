@@ -447,6 +447,34 @@ TEST(ExportQueryExecutionTree, MultipleVariables) {
   // nothing to test here.
 }
 
+TEST(ExportQueryExecutionTree, CornerCases) {
+  std::string kg = "<s> <p> <o>";
+  std::string query = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
+  std::string constructQuery =
+      "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o } ORDER BY ?p ?o";
+
+  // JSON is not streamable.
+  ASSERT_THROW(
+      runQueryStreamableResult(kg, query, ad_utility::MediaType::qleverJson),
+      ad_utility::Exception);
+  // Turtle is not supported for SELECT queries.
+  ASSERT_THROW(
+      runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
+      ad_utility::Exception);
+  // TSV is not a `JSON` format
+  ASSERT_THROW(runJSONQuery(kg, query, ad_utility::MediaType::tsv),
+               ad_utility::Exception);
+  // SPARQL JSON is not supported for construct queries.
+  ASSERT_THROW(
+      runJSONQuery(kg, constructQuery, ad_utility::MediaType::sparqlJson),
+      ad_utility::Exception);
+
+  // Binary export is not supported for CONSTRUCT queries.
+  ASSERT_THROW(runQueryStreamableResult(kg, constructQuery,
+                                        ad_utility::MediaType::octetStream),
+               ad_utility::Exception);
+}
+
 // TODO<joka921> Unit tests for the more complex COSTRUCT export (combination
 // between constants and stuff from the knowledge graph).
 
