@@ -131,8 +131,13 @@ addLinkAndDiscoverTestSerial(BufferedVectorTest absl::strings)
 
 addLinkAndDiscoverTest(UnionTest engine)
 
-add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
-linkAndDiscoverTest(TokenTest parser re2 util ${ICU_LIBRARIES})
+if (SINGLE_TEST_BINARY)
+    target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
+    target_link_libraries(QLeverAllUnitTestsMain parser re2 util ${ICU_LIBRARIES})
+else()
+    add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
+    linkAndDiscoverTest(TokenTest parser re2 util ${ICU_LIBRARIES})
+endif()
 
 addLinkAndDiscoverTest(TurtleParserTest parser absl::flat_hash_map re2)
 
