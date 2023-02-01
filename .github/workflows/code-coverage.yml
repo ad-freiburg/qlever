@@ -1,0 +1,110 @@
+# Measure the code coverage of QLever's unit tests using LLVMs source
+# instrumentation. When this workflow runs for the master branch, the
+# coverage report is directly uploaded to Codecov.io. When this workflow
+# runs for a pull request, the coverage report is stored as a GitHub artifact
+# and a separate workflow from `upload-coverage.yml` is triggered that uploads
+# the coverage report. That way the uploader has access to the Codecov token
+# in all cases and the upload should never fail.
+
+# The following name has to be the same as in the `workflows:` key in
+# `upload-coverage.yml`, otherwise the uploader won't pick up the result
+# of this workflow.
+name: measure-code-coverage
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    env:
+          compiler: clang
+          compiler-version: 15
+          build-type: Debug
+          warnings: "-Wall -Wextra "
+          asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
+          ubsan-flags: " -fsanitize=undefined"
+          coverage-flags: "-fprofile-instr-generate -fcoverage-mapping"
+
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: "recursive"
+
+    - name: Install dependencies
+      run:  sudo apt update && sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev libboost-all-dev
+    - name: Install clang 15
+      # The sed command fixes a bug in `llvm.sh` in combination with the latest version of
+      # `apt-key`. Without it the GPG key for the llvm repository is downloaded but deleted
+      # immediately after.
+      run: |
+        wget https://apt.llvm.org/llvm.sh
+        sudo chmod +x llvm.sh
+        sed   's/apt-key del/echo/' llvm.sh -iy
+        sudo ./llvm.sh 15 all
+        sudo apt install clang-15
+    - name: Python dependencies
+      run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
+    - name: Configure CMake
+      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
+      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{env.compiler}}${{env.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}} ${{env.asan-flags}} ${{env.ubsan-flags}} ${{env.coverage-flags}}" -DADDITIONAL_LINKER_FLAGS="${{env.coverage-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false -DSINGLE_TEST_BINARY=ON
+
+    - name: Build
+        # Build your program with the given configuration
+      run: cmake --build ${{github.workspace}}/build --config ${{env.build-type}} -- -j $(nproc)
+    - name: Run unit tests
+      working-directory: ${{github.workspace}}/build/test
+      env:
+        LLVM_PROFILE_FILE: "default%p.profraw"
+      # Execute tests defined by the CMake configuration.
+      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+      run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{env.build-type}} .
+
+    - name: GetListOfExecutablesForCoverageInfo
+      working-directory: ${{github.workspace}}/build/test
+      run: ctest --show-only=json-v1 > tests.json && python3 ${{github.workspace}}/misc/ctest-output-to-executables.py tests.json tests.txt
+    - name: Process coverage info
+      working-directory: ${{github.workspace}}/build/test
+      run:  >
+        llvm-profdata-15 merge -sparse *.profraw -o default.profdata;
+        xargs -a tests.txt llvm-cov-15 export --dump --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/third_party/" --ignore-filename-regex="/generated/"  --ignore-filename-regex="/nlohmann/" --ignore-filename-regex="/ctre/"  --ignore-filename-regex="/test/" > ./coverage.lcov
+
+# Only upload the coverage directly if this is not a pull request. In this
+# case we are on the master branch and have access to the Codecov token.
+    - name: "Submit coverage data to codecov.io"
+      if: github.event_name != 'pull_request'
+      uses: codecov/codecov-action@v3
+      with:
+        file: ${{github.workspace}}/build/test/coverage.lcov
+        # Note: technically, a `token` is not required for codecov.io when
+        # uploading from a public repository, but specifying it avoids the
+        # nasty spurious failures due to GitHub's rate limit for codecov's
+        # public default token.
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: true
+
+# For a pull request we store the coverage file as well as some information
+# about this PR (number, how to check it out, etc.) and upload it as an artifact.
+# This is all the data that is required for running the Codecov uploader manually
+# from `upload-coverage.yml`.
+    - name: Save PR number and coverage file in same directory
+      if: github.event_name == 'pull_request'
+      # Note: If you change any of the filenames here, you also have to change them in `upload-coverage.yml`
+      run : |
+        mkdir -p coverage-report
+        echo ${{ github.event.number }} > ./coverage-report/pr
+        echo ${{ github.repository }} > ./coverage-report/github_repository
+        echo ${GITHUB_REF} > ./coverage-report/github_ref
+        mv ${{ github.workspace}}/build/test/coverage.lcov coverage-report
+    - name: Upload coverage artifact
+      if: github.event_name == 'pull_request'
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: coverage-report/
+    # Note: for now we do not run the e2e tests for the coverage check
+
