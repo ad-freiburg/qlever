@@ -55,7 +55,7 @@ class BenchmarkRecords {
           const std::vector<std::string>& pColumnNames):
           descriptor{pDescriptor}, rowNames{pRowNames},
           columnNames{pColumnNames},
-          entries(rowNames.size(), std::vector<std::optional<float>>(rowNames.size())) {}
+          entries(pRowNames.size(), std::vector<std::optional<float>>(pColumnNames.size())) {}
     };
 
   private:
