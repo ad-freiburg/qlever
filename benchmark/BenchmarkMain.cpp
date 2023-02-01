@@ -107,7 +107,7 @@ void addTablesToStringstream(std::stringstream* stringStream,
   // Printing the tables themselves.
   for (const auto& table: recordTables) {
     (*stringStream) << "\n\nTable '" << table.descriptor << "':\n\n";
-  
+
     // For easier usage.
     size_t numberColumns = table.columnNames.size();
     size_t numberRows = table.rowNames.size();
@@ -148,7 +148,7 @@ void addTablesToStringstream(std::stringstream* stringStream,
       (*stringStream) << "\n";
       addStringWithPadding(stringStream, table.rowNames[row],
           rowNameMaxStringWidth);
-      
+
       // Row content.
       for (size_t column = 0; column < numberColumns; column++) {
         (*stringStream) << columnSeperator;
@@ -171,7 +171,7 @@ void printBenchmarkRecords(const BenchmarkRecords& records) {
 
   // Visualizes the measured times.
   std::stringstream visualization;
-  
+
   // @brief Adds a category to the string steam, if it is not empty. Mainly
   //  exists for reducing code duplication.
   //
@@ -228,9 +228,19 @@ nlohmann::json benchmarksToJson(const BenchmarkRecords& records){
     {"recordGroups", recordGroups}, {"recordTables", recordTables}};
 }
 
-void writeJsonToFile(nlohmann::json j, std::string fileName) {
+/*
+ * @brief Write the json object to the specified file.
+ *
+ * @param fileName The name of the file, where the json informationen
+ *  should be written in.
+ * @param appendToFile Should the json informationen be appended to the end
+ *  of the file, or should the previous content be overwritten?
+ */
+void writeJsonToFile(nlohmann::json j, std::string fileName,
+    bool appendToFile = false) {
   // Using this constructor, the file is already opened.
-  std::ofstream myFile(fileName, std::ios::out);
+  std::ofstream myFile(fileName, (appendToFile) ?
+      (std::ios::out | std::ios::app) : (std::ios::out));
 
   // Error message, if the file couldn't be opened.
   if (!myFile.is_open()){
@@ -255,7 +265,10 @@ int main(int argc, char** argv) {
     std::cerr << "Usage: ./" << argv[0] << " [options]\n"
       << " --help, -h: Print this help message.\n"
       << " --print, -p: Roughly prints all benchmarks.\n"
-      << " --json, -j <file>: Writes the benchmarks as json to a file.\n";
+      << " --json, -j <file>: Writes the benchmarks as json to a file,"
+      " overriding the previous content of the file.\n"
+      << " --append, -a: Causes the json option to append to the end of the"
+      "file, instead of overriding the previous content of the file.\n";
     exit(1);
   };
 
@@ -271,7 +284,10 @@ int main(int argc, char** argv) {
       ("help,h", "Print the help message.")
       ("print,p", "Roughly prints all benchmarks.")
       ("json,j", boost::program_options::value<std::string>(&jsonFileName),
-       "Writes the benchmarks as json to a file.")
+       "Writes the benchmarks as json to a file, overriding the previous"
+       "content of the file.")
+      ("append,a", "Causes the json option to append to the end of the"
+      "file, instead of overriding the previous content of the file.")
   ;
 
   // Parsing the given arguments.
@@ -289,7 +305,7 @@ int main(int argc, char** argv) {
   // Measuering the time for all registered benchmarks.
   // For measuring and saving the times.
   BenchmarkRecords records;
- 
+
   // Goes through all registered benchmarks and measures them.
   for (const auto& benchmarkFunction: BenchmarkRegister::getRegisteredBenchmarks()) {
     benchmarkFunction(&records);
@@ -297,8 +313,9 @@ int main(int argc, char** argv) {
 
   // Actually processing the arguments.
   if (vm.count("print")) {printBenchmarkRecords(records);};
-  
+
   if (vm.count("json")) {
-    writeJsonToFile(benchmarksToJson(records), jsonFileName);
+    writeJsonToFile(benchmarksToJson(records), jsonFileName,
+        vm.count("append"));
   };
 }
