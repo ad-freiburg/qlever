@@ -14,6 +14,8 @@
 using namespace std::string_literals;
 using ad_utility::source_location;
 
+namespace {
+
 // Create a `Sort` operation that sorts the `input` by the `sortColumns`.
 Sort makeSort(IdTable input, const std::vector<size_t>& sortColumns) {
   std::vector<Variable> vars;
@@ -60,6 +62,7 @@ void testSort(IdTable input, const IdTable& expected,
     const auto& resultTable = result->_idTable;
     ASSERT_EQ(resultTable, permutedExpected);
   } while (std::next_permutation(sortColumns.begin(), sortColumns.end()));
+}
 }
 
 TEST(Sort, ComputeSortSingleIntColumn) {
