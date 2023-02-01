@@ -8,80 +8,76 @@
 #include <array>
 #include <vector>
 
+#include "./util/AllocatorTestHelpers.h"
+#include "./util/IdTestHelpers.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/BufferedVector.h"
 
-ad_utility::AllocatorWithLimit<Id>& allocator() {
-  static ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<size_t>::max())};
-  return a;
+using namespace ad_utility::testing;
+namespace {
+auto V = ad_utility::testing::VocabId;
 }
-
-auto I = [](const auto& id) {
-  return Id::makeFromVocabIndex(VocabIndex::make(id));
-};
 
 // This unit tests is part of the documentation of the `IdTable` class. It
 // demonstrates the correct usage of the proxy references that
 // are returned by the `IdTable` when calling `operator[]` or when dereferencing
 // an iterator.
 TEST(IdTableTest, DocumentationOfIteratorUsage) {
-  IdTable t{2, allocator()};
-  t.push_back({I(42), I(43)});
+  IdTable t{2, makeAllocator()};
+  t.push_back({V(42), V(43)});
 
   // The following read-only calls use the proxy object and do not copy
   // the rows (The right hand side of the `ASSERT_EQ` calls has the type
   // `IdTable::row_reference_restricted`. The table is not changed, as there is
   // no write access.
-  ASSERT_EQ(I(42), t[0][0]);
-  ASSERT_EQ(I(42), t(0, 0));
-  ASSERT_EQ(I(42), (*t.begin())[0]);
+  ASSERT_EQ(V(42), t[0][0]);
+  ASSERT_EQ(V(42), t(0, 0));
+  ASSERT_EQ(V(42), (*t.begin())[0]);
 
   // Writing to the table directly via a temporary proxy reference is ok, as
   // the syntax of all the following calls indicates that the table should
   // be changed.
-  t[0][0] = I(5);
-  ASSERT_EQ(I(5), t(0, 0));
-  t(0, 0) = I(6);
-  ASSERT_EQ(I(6), t(0, 0));
-  (*t.begin())[0] = I(4);
-  ASSERT_EQ(I(4), t(0, 0));
+  t[0][0] = V(5);
+  ASSERT_EQ(V(5), t(0, 0));
+  t(0, 0) = V(6);
+  ASSERT_EQ(V(6), t(0, 0));
+  (*t.begin())[0] = V(4);
+  ASSERT_EQ(V(4), t(0, 0));
 
   // The following examples also mutate the `IdTable` which is again expected,
   // because we explicitly bind to a reference:
   {
     IdTable::row_reference ref = t[0];
-    ref[0] = I(12);
-    ASSERT_EQ(I(12), t(0, 0));
+    ref[0] = V(12);
+    ASSERT_EQ(V(12), t(0, 0));
   }
 
   // This is the interface that all generic algorithms that work on iterators
   // use. The type of `ref` is also `IdTable::row_reference`.
   {
     std::iterator_traits<IdTable::iterator>::reference ref = *(t.begin());
-    ref[0] = I(13);
-    ASSERT_EQ(I(13), t(0, 0));
+    ref[0] = V(13);
+    ASSERT_EQ(V(13), t(0, 0));
   }
 
   // The following calls do not change the table, but are also not expected to
   // do so because we explicitly bind to a `value_type`.
   {
     IdTable::row_type row = t[0];  // Explitly copy/materialize the full row.
-    row[0] = I(50);
+    row[0] = V(50);
     // We have changed the copied row, but not the table.
-    ASSERT_EQ(I(50), row[0]);
-    ASSERT_EQ(I(13), t[0][0]);
+    ASSERT_EQ(V(50), row[0]);
+    ASSERT_EQ(V(13), t[0][0]);
   }
   {
     // Exactly the same example, but with `iterator`s and `iterator_traits`.
     std::iterator_traits<IdTable::iterator>::value_type row =
         *t.begin();  // Explitly copy/materialize the full row.
-    row[0] = I(51);
+    row[0] = V(51);
     // We have changed the copied row, but not the table.
-    ASSERT_EQ(I(51), row[0]);
-    ASSERT_EQ(I(13), t[0][0]);
+    ASSERT_EQ(V(51), row[0]);
+    ASSERT_EQ(V(13), t[0][0]);
   }
 
   // The following examples show the cases where a syntax would lead to
@@ -93,10 +89,10 @@ TEST(IdTableTest, DocumentationOfIteratorUsage) {
     // `auto` typically yields a value type. Reading from the proxy is fine, as
     // read access never does any harm.
     Id id = rowProxy[0];
-    ASSERT_EQ(I(13), id);
+    ASSERT_EQ(V(13), id);
     // The following syntax would change the table unexpectedly and therefore
     // doesn't compile
-    // rowProxy[0] = I(32);  // Would change `t`, but the variable was created
+    // rowProxy[0] = V(32);  // Would change `t`, but the variable was created
     // via auto!
     // The technical reason is that the `operator[]` returns a `const Id&` even
     // though the `rowProxy` object is not const:
@@ -109,10 +105,10 @@ TEST(IdTableTest, DocumentationOfIteratorUsage) {
     // because `auto` typically yields a value type. Reading from the proxy is
     // fine, as read access never does any harm.
     Id id = rowProxy[0];
-    ASSERT_EQ(I(13), id);
+    ASSERT_EQ(V(13), id);
     // The following syntax would change the table unexpectedly and therefore
     // doesn't compile
-    // rowProxy[0] = I(32);  // Would change `t`, but the variable was created
+    // rowProxy[0] = V(32);  // Would change `t`, but the variable was created
     // via auto!
     // The technical reason is that the `operator[]` returns a `const Id&` even
     // though the `rowProxy` object is not const:
@@ -126,11 +122,11 @@ TEST(IdTableTest, DocumentationOfIteratorUsage) {
     auto rowProxy = *t.begin();
     // The write access to an rvalue of type `row_reference_restricted` is
     // allowed. This is necessary to make the above examples like `*t.begin() =
-    // I(12)` work. However this syntax (explicitly moving, and then directly
+    // V(12)` work. However this syntax (explicitly moving, and then directly
     // writing to the moved object) is not something that should ever be
     // written.
-    std::move(rowProxy)[0] = I(4321);
-    ASSERT_EQ(I(4321), t(0, 0));
+    std::move(rowProxy)[0] = V(4321);
+    ASSERT_EQ(V(4321), t(0, 0));
   }
 }
 
@@ -227,14 +223,14 @@ void runTestForDifferentTypes(auto testCase, std::string testCaseName) {
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
   // Prepare the vectors of `allocators` and distinct `BufferedVector`s needed
   // for the respective `IdTable` types.
-  std::vector<std::decay_t<decltype(allocator())>> allocators;
+  std::vector<std::decay_t<decltype(makeAllocator())>> allocators;
   std::vector<Buffer> buffers;
   for (size_t i = 0; i < NumIdTables; ++i) {
     buffers.emplace_back(3, testCaseName + std::to_string(i) + ".dat");
-    allocators.emplace_back(allocator());
+    allocators.emplace_back(makeAllocator());
   }
-  testCase.template operator()<IdTable>(I, std::move(allocators));
-  testCase.template operator()<BufferedTable>(I, std::move(buffers));
+  testCase.template operator()<IdTable>(V, std::move(allocators));
+  testCase.template operator()<BufferedTable>(V, std::move(buffers));
   auto makeInt = [](auto el) { return static_cast<int>(el); };
   testCase.template operator()<IntTable>(makeInt);
 }
@@ -428,12 +424,12 @@ TEST(IdTableTest, erase) {
   constexpr size_t NUM_ROWS = 12;
   constexpr size_t NUM_COLS = 4;
 
-  IdTable t1(NUM_COLS, allocator());
+  IdTable t1(NUM_COLS, makeAllocator());
   // Fill the rows with numbers counting up from 1
   for (size_t j = 0; j < 2 * NUM_ROWS; j++) {
     size_t i = j / 2;
-    t1.push_back({I(i * NUM_COLS + 1), I(i * NUM_COLS + 2), I(i * NUM_COLS + 3),
-                  I(i * NUM_COLS + 4)});
+    t1.push_back({V(i * NUM_COLS + 1), V(i * NUM_COLS + 2), V(i * NUM_COLS + 3),
+                  V(i * NUM_COLS + 4)});
   }
   // i will underflow and then be larger than 2 * NUM_ROWS
   for (size_t i = 2 * NUM_ROWS - 1; i <= 2 * NUM_ROWS; i -= 2) {
@@ -445,7 +441,7 @@ TEST(IdTableTest, erase) {
   ASSERT_EQ(NUM_COLS, t1.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(V(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
   }
 
   t1.erase(t1.begin(), t1.end());
@@ -456,12 +452,12 @@ TEST(IdTableTest, iterating) {
   constexpr size_t NUM_ROWS = 42;
   constexpr size_t NUM_COLS = 17;
 
-  IdTable t1(NUM_COLS, allocator());
+  IdTable t1(NUM_COLS, makeAllocator());
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.emplace_back();
     for (size_t j = 0; j < NUM_COLS; j++) {
-      t1(i, j) = I(i * NUM_COLS + 1 + j);
+      t1(i, j) = V(i * NUM_COLS + 1 + j);
     }
   }
 
@@ -476,20 +472,20 @@ TEST(IdTableTest, iterating) {
   size_t row_index = 0;
   for (auto row : t1) {
     for (size_t i = 0; i < NUM_COLS; i++) {
-      ASSERT_EQ(I(row_index * NUM_COLS + i + 1), row[i]);
+      ASSERT_EQ(V(row_index * NUM_COLS + i + 1), row[i]);
     }
     row_index++;
   }
 }
 
 TEST(IdTableTest, sortTest) {
-  IdTable test(2, allocator());
-  test.push_back({I(3), I(1)});
-  test.push_back({I(8), I(9)});
-  test.push_back({I(1), I(5)});
-  test.push_back({I(0), I(4)});
-  test.push_back({I(5), I(8)});
-  test.push_back({I(6), I(2)});
+  IdTable test(2, makeAllocator());
+  test.push_back({V(3), V(1)});
+  test.push_back({V(8), V(9)});
+  test.push_back({V(1), V(5)});
+  test.push_back({V(0), V(4)});
+  test.push_back({V(5), V(8)});
+  test.push_back({V(6), V(2)});
 
   IdTable orig = test.clone();
 
@@ -539,11 +535,11 @@ TEST(IdTableStaticTest, push_back_and_assign) {
   constexpr size_t NUM_ROWS = 30;
   constexpr size_t NUM_COLS = 4;
 
-  IdTableStatic<NUM_COLS> t1{allocator()};
+  IdTableStatic<NUM_COLS> t1{makeAllocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
-    t1.push_back({I(i * NUM_COLS + 1), I(i * NUM_COLS + 2), I(i * NUM_COLS + 3),
-                  I(i * NUM_COLS + 4)});
+    t1.push_back({V(i * NUM_COLS + 1), V(i * NUM_COLS + 2), V(i * NUM_COLS + 3),
+                  V(i * NUM_COLS + 4)});
   }
 
   ASSERT_EQ(NUM_ROWS, t1.size());
@@ -551,30 +547,30 @@ TEST(IdTableStaticTest, push_back_and_assign) {
   ASSERT_EQ(NUM_COLS, t1.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(V(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
   }
 
   // assign new values to the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    t1(i / NUM_COLS, i % NUM_COLS) = I((NUM_ROWS * NUM_COLS) - i);
+    t1(i / NUM_COLS, i % NUM_COLS) = V((NUM_ROWS * NUM_COLS) - i);
   }
 
   // test for the new entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(I((NUM_ROWS * NUM_COLS) - i), t1(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(V((NUM_ROWS * NUM_COLS) - i), t1(i / NUM_COLS, i % NUM_COLS));
   }
 }
 
 TEST(IdTableStaticTest, insert) {
-  IdTableStatic<4> t1{allocator()};
-  t1.push_back({I(7), I(2), I(4), I(1)});
-  t1.push_back({I(0), I(22), I(1), I(4)});
+  IdTableStatic<4> t1{makeAllocator()};
+  t1.push_back({V(7), V(2), V(4), V(1)});
+  t1.push_back({V(0), V(22), V(1), V(4)});
 
-  IdTableStatic<4> init{allocator()};
-  init.push_back({I(1), I(0), I(6), I(3)});
-  init.push_back({I(3), I(1), I(8), I(2)});
-  init.push_back({I(0), I(6), I(8), I(5)});
-  init.push_back({I(9), I(2), I(6), I(8)});
+  IdTableStatic<4> init{makeAllocator()};
+  init.push_back({V(1), V(0), V(6), V(3)});
+  init.push_back({V(3), V(1), V(8), V(2)});
+  init.push_back({V(0), V(6), V(8), V(5)});
+  init.push_back({V(9), V(2), V(6), V(8)});
 
   IdTableStatic<4> t2 = init.clone();
 
@@ -596,14 +592,14 @@ TEST(IdTableStaticTest, reserve_and_resize) {
   constexpr size_t NUM_COLS = 20;
 
   // Test a reserve call before insertions
-  IdTableStatic<NUM_COLS> t1{allocator()};
+  IdTableStatic<NUM_COLS> t1{makeAllocator()};
   t1.reserve(NUM_ROWS);
 
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.emplace_back();
     for (size_t j = 0; j < NUM_COLS; j++) {
-      t1(i, j) = I(i * NUM_COLS + 1 + j);
+      t1(i, j) = V(i * NUM_COLS + 1 + j);
     }
   }
 
@@ -612,16 +608,16 @@ TEST(IdTableStaticTest, reserve_and_resize) {
   ASSERT_EQ(NUM_COLS, t1.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(V(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
   }
 
   // Test a resize call instead of insertions
-  IdTableStatic<NUM_COLS> t2{allocator()};
+  IdTableStatic<NUM_COLS> t2{makeAllocator()};
   t2.resize(NUM_ROWS);
 
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    t2(i / NUM_COLS, i % NUM_COLS) = I(i + 1);
+    t2(i / NUM_COLS, i % NUM_COLS) = V(i + 1);
   }
 
   ASSERT_EQ(NUM_ROWS, t2.size());
@@ -629,7 +625,7 @@ TEST(IdTableStaticTest, reserve_and_resize) {
   ASSERT_EQ(NUM_COLS, t2.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(I(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(V(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
   }
 }
 
@@ -637,11 +633,11 @@ TEST(IdTableStaticTest, copyAndMove) {
   constexpr size_t NUM_ROWS = 100;
   constexpr size_t NUM_COLS = 4;
 
-  IdTableStatic<NUM_COLS> t1{allocator()};
+  IdTableStatic<NUM_COLS> t1{makeAllocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
-    t1.push_back({I(i * NUM_COLS + 1), I(i * NUM_COLS + 2), I(i * NUM_COLS + 3),
-                  I(i * NUM_COLS + 4)});
+    t1.push_back({V(i * NUM_COLS + 1), V(i * NUM_COLS + 2), V(i * NUM_COLS + 3),
+                  V(i * NUM_COLS + 4)});
   }
 
   // Test all copy and move constructors and assignment operators
@@ -669,10 +665,10 @@ TEST(IdTableStaticTest, copyAndMove) {
 
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(I(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
-    ASSERT_EQ(I(i + 1), t3(i / NUM_COLS, i % NUM_COLS));
-    ASSERT_EQ(I(i + 1), t4(i / NUM_COLS, i % NUM_COLS));
-    ASSERT_EQ(I(i + 1), t5(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(V(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(V(i + 1), t3(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(V(i + 1), t4(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(V(i + 1), t5(i / NUM_COLS, i % NUM_COLS));
   }
 }
 
@@ -680,12 +676,12 @@ TEST(IdTableStaticTest, erase) {
   constexpr size_t NUM_ROWS = 12;
   constexpr size_t NUM_COLS = 4;
 
-  IdTableStatic<NUM_COLS> t1{allocator()};
+  IdTableStatic<NUM_COLS> t1{makeAllocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t j = 0; j < 2 * NUM_ROWS; j++) {
     size_t i = j / 2;
-    t1.push_back({I(i * NUM_COLS + 1), I(i * NUM_COLS + 2), I(i * NUM_COLS + 3),
-                  I(i * NUM_COLS + 4)});
+    t1.push_back({V(i * NUM_COLS + 1), V(i * NUM_COLS + 2), V(i * NUM_COLS + 3),
+                  V(i * NUM_COLS + 4)});
   }
   // i will underflow and then be larger than 2 * NUM_ROWS
   for (size_t i = 2 * NUM_ROWS - 1; i <= 2 * NUM_ROWS; i -= 2) {
@@ -697,7 +693,7 @@ TEST(IdTableStaticTest, erase) {
   ASSERT_EQ(NUM_COLS, t1.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(V(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
   }
 
   t1.erase(t1.begin(), t1.end());
@@ -708,12 +704,12 @@ TEST(IdTableStaticTest, iterating) {
   constexpr size_t NUM_ROWS = 42;
   constexpr size_t NUM_COLS = 17;
 
-  IdTableStatic<NUM_COLS> t1{allocator()};
+  IdTableStatic<NUM_COLS> t1{makeAllocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.emplace_back();
     for (size_t j = 0; j < NUM_COLS; j++) {
-      t1(i, j) = I(i * NUM_COLS + 1 + j);
+      t1(i, j) = V(i * NUM_COLS + 1 + j);
     }
   }
 
@@ -728,7 +724,7 @@ TEST(IdTableStaticTest, iterating) {
   size_t row_index = 0;
   for (const IdTableStatic<NUM_COLS>::row_type& row : t1) {
     for (size_t i = 0; i < NUM_COLS; i++) {
-      ASSERT_EQ(I(row_index * NUM_COLS + i + 1), row[i]);
+      ASSERT_EQ(V(row_index * NUM_COLS + i + 1), row[i]);
     }
     row_index++;
   }
@@ -738,11 +734,11 @@ TEST(IdTableStaticTest, iterating) {
 // Conversion Tests
 // =============================================================================
 TEST(IdTableTest, conversion) {
-  IdTable table(3, allocator());
-  table.push_back({I(4), I(1), I(0)});
-  table.push_back({I(1), I(7), I(8)});
-  table.push_back({I(7), I(12), I(2)});
-  table.push_back({I(9), I(3), I(4)});
+  IdTable table(3, makeAllocator());
+  table.push_back({V(4), V(1), V(0)});
+  table.push_back({V(1), V(7), V(8)});
+  table.push_back({V(7), V(12), V(2)});
+  table.push_back({V(9), V(3), V(4)});
 
   IdTable initial = table.clone();
 
@@ -775,11 +771,11 @@ TEST(IdTableTest, conversion) {
   }
 
   // Test with more than 5 columns
-  IdTable tableVar(6, allocator());
-  tableVar.push_back({I(1), I(2), I(3), I(6), I(5), I(9)});
-  tableVar.push_back({I(0), I(4), I(3), I(4), I(5), I(3)});
-  tableVar.push_back({I(3), I(2), I(3), I(2), I(5), I(6)});
-  tableVar.push_back({I(5), I(5), I(9), I(4), I(7), I(0)});
+  IdTable tableVar(6, makeAllocator());
+  tableVar.push_back({V(1), V(2), V(3), V(6), V(5), V(9)});
+  tableVar.push_back({V(0), V(4), V(3), V(4), V(5), V(3)});
+  tableVar.push_back({V(3), V(2), V(3), V(2), V(5), V(6)});
+  tableVar.push_back({V(5), V(5), V(9), V(4), V(7), V(0)});
 
   IdTable initialVar = tableVar.clone();
 

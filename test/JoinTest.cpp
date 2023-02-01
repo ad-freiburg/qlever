@@ -12,6 +12,7 @@
 #include <sstream>
 #include <tuple>
 
+#include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "engine/CallFixedSize.h"
@@ -24,6 +25,8 @@
 #include "util/Random.h"
 #include "util/SourceLocation.h"
 
+using ad_utility::testing::makeAllocator;
+namespace {
 /*
  * Does what it says on the tin: Save an IdTable with the corresponding
  * join column.
@@ -66,7 +69,7 @@ IdTable useJoinFunctionOnIdTables(const IdTableAndJoinColumn& tableA,
                                   JOIN_FUNCTION func) {
   int resultWidth{static_cast<int>(tableA.idTable.numColumns() +
                                    tableB.idTable.numColumns() - 1)};
-  IdTable result{static_cast<size_t>(resultWidth), allocator()};
+  IdTable result{static_cast<size_t>(resultWidth), makeAllocator()};
 
   // You need to use this special function for executing lambdas. The normal
   // function for functions won't work.
@@ -246,6 +249,7 @@ std::vector<JoinTestCase> createJoinTestSet() {
 
   return myTestSet;
 }
+}  // namespace
 
 TEST(JoinTest, joinTest) {
   runTestCasesForAllJoinAlgorithms(createJoinTestSet());

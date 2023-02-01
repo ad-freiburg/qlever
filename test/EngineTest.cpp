@@ -12,6 +12,7 @@
 #include <sstream>
 #include <tuple>
 
+#include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "engine/CallFixedSize.h"
@@ -24,11 +25,13 @@
 #include "util/Random.h"
 #include "util/SourceLocation.h"
 
+using ad_utility::testing::makeAllocator;
+
 TEST(EngineTest, distinctTest) {
   IdTable inp{makeIdTableFromVector(
       {{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
 
-  IdTable result{4, allocator()};
+  IdTable result{4, makeAllocator()};
 
   std::vector<size_t> keepIndices{{1, 2}};
   CALL_FIXED_SIZE(4, Engine::distinct, inp, keepIndices, &result);
@@ -44,7 +47,7 @@ TEST(JoinTest, optionalJoinTest) {
       {{4, 1, 2}, {2, 1, 3}, {1, 1, 4}, {2, 2, 1}, {1, 3, 1}})};
   IdTable b{
       makeIdTableFromVector({{3, 3, 1}, {1, 8, 1}, {4, 2, 2}, {1, 1, 3}})};
-  IdTable result{4, allocator()};
+  IdTable result{4, makeAllocator()};
   vector<array<ColumnIndex, 2>> jcls{};
   jcls.push_back(array<ColumnIndex, 2>{{1, 2}});
   jcls.push_back(array<ColumnIndex, 2>{{2, 1}});
@@ -72,7 +75,7 @@ TEST(JoinTest, optionalJoinTest) {
 
   IdTable vb{makeIdTableFromVector({{2, 3, 4}, {2, 3, 5}, {6, 7, 4}})};
 
-  IdTable vresult{7, allocator()};
+  IdTable vresult{7, makeAllocator()};
   jcls.clear();
   jcls.push_back(array<ColumnIndex, 2>{{1, 0}});
   jcls.push_back(array<ColumnIndex, 2>{{2, 1}});

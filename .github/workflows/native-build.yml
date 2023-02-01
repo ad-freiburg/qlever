@@ -44,7 +44,7 @@ jobs:
             warnings: "-Wall -Wextra "
             asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
             ubsan-flags: " -fsanitize=undefined"
-            coverage-flags: "-fprofile-instr-generate -fcoverage-mapping"
+            coverage-flags: "-fprofile-instr-generate -fcoverage-mapping -fno-inline-functions"
             is-coverage: true
 
     runs-on: ubuntu-22.04
@@ -74,7 +74,15 @@ jobs:
       run : sudo apt install clang-14
       if :  matrix.compiler == 'clang' && matrix.compiler-version == 14
     - name: Install clang 15
-      run:  wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 15 all # && sudo apt install clang-15
+      # The sed command fixes a bug in `llvm.sh` in combination with the latest version of
+      # `apt-key`. Without it the GPG key for the llvm repository is downloaded but deleted
+      # immediately after.
+      run:  | 
+        wget https://apt.llvm.org/llvm.sh
+        sudo chmod +x llvm.sh
+        sed   's/apt-key del/echo/' llvm.sh -iy
+        sudo ./llvm.sh 15 all
+        sudo apt install clang-15
       if :  matrix.compiler == 'clang' && matrix.compiler-version == 15
 
     - name: Python dependencies
@@ -87,7 +95,7 @@ jobs:
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}} ${{matrix.coverage-flags}}" -DADDITIONAL_LINKER_FLAGS="${{matrix.coverage-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}} ${{matrix.coverage-flags}}" -DADDITIONAL_LINKER_FLAGS="${{matrix.coverage-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false -DSINGLE_TEST_BINARY=ON
 
     - name: Build
         # Build your program with the given configuration

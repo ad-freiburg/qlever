@@ -3,6 +3,7 @@
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #include "./IndexTestHelpers.h"
+#include "./util/IdTestHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 #include "gtest/gtest.h"
@@ -29,11 +30,10 @@ struct DummyExpression : public SparqlExpression {
   std::span<SparqlExpression::Ptr> children() override { return {}; }
 };
 
-// Make a `ValueId` from an int. Shorter name, as it will be used often.
-ValueId IntId(int64_t i) { return ValueId::makeFromInt(i); }
-
-// Make a `ValueId` from a double. Shorter name, as it will be used often.
-ValueId DoubleId(double d) { return ValueId::makeFromDouble(d); }
+// Make a `ValueId` from an int/ a double. Shorter name, as it will be used
+// often.
+using ad_utility::testing::DoubleId;
+using ad_utility::testing::IntId;
 
 // Struct that stores a `sparqlExpression::EvaluationContext` and all the data
 // structures that this context refers to. Most importantly it uses the
@@ -104,7 +104,7 @@ struct TestContext {
 
 // Add output for `SetOfIntervals for Gtest.
 namespace ad_utility {
-void PrintTo(const SetOfIntervals& set, std::ostream* os) {
+inline void PrintTo(const SetOfIntervals& set, std::ostream* os) {
   for (auto [first, second] : set._intervals) {
     *os << '{' << first << ", " << second << '}';
   }

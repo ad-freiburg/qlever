@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "./util/AllocatorTestHelpers.h"
+#include "absl/cleanup/cleanup.h"
 #include "engine/QueryExecutionContext.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
@@ -13,14 +15,6 @@
 // be used for unit tests.
 
 namespace ad_utility::testing {
-
-// Create an unlimited allocator.
-ad_utility::AllocatorWithLimit<Id>& makeAllocator() {
-  static ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<size_t>::max())};
-  return a;
-}
 // Create an empty `Index` object that has certain default settings overwritten
 // such that very small indices, as they are typically used for unit tests,
 // can be built without a lot of time and memory overhead.
