@@ -148,12 +148,6 @@ TEST(OrderBy, ComputeOrderByThreeColumns) {
               {true, true, true});
 }
 
-TEST(OrderBy, emptyInputEmptyColumns) {
-  // This is mostly for  finding something out about the coverage.
-  IdTable table{0, ad_utility::testing::makeAllocator()};
-  testOrderBy(table.clone(), table, {});
-}
-
 TEST(OrderBy, SimpleMemberFunctions) {
   {
     VectorTable input{{0},   {1},       {-1},  {3},
