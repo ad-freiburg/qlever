@@ -59,7 +59,6 @@ function(addLinkAndDiscoverTest basename)
 
 endfunction()
 
-
 # Usage: `addAndLinkTestSerial(basename, [additionalLibraries...]`
 # Similar to `addAndLinkTest` but also requires that the test is run serially
 # (without any of the other test cases running in parallel). This can be
