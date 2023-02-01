@@ -12,6 +12,7 @@
 #include "../src/engine/HasPredicateScan.h"
 #include "../src/engine/SortPerformanceEstimator.h"
 
+namespace {
 auto I = [](const auto& id) {
   return Id::makeFromVocabIndex(VocabIndex::make(id));
 };
@@ -71,6 +72,7 @@ class DummyOperation : public Operation {
     return m;
   }
 };
+}  // namespace
 
 TEST(HasPredicateScan, freeS) {
   // Used to store the result.

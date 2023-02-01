@@ -94,9 +94,6 @@ inline Index makeTestIndex(const std::string& indexBasename,
 // vocabulary) is the only part of the `QueryExecutionContext` that is actually
 // relevant for these tests, so the other members are defaulted.
 inline QueryExecutionContext* getQec(std::string turtleInput = "") {
-  static ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
-
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.

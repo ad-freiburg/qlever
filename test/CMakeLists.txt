@@ -131,6 +131,8 @@ addLinkAndDiscoverTestSerial(BufferedVectorTest absl::strings)
 
 addLinkAndDiscoverTest(UnionTest engine)
 
+# TODO<joka921> Those are currently not yet included in the single test binary, this should
+# be fixed to correct the code coverage metric.
 add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
 linkAndDiscoverTest(TokenTest parser re2 util ${ICU_LIBRARIES})
 

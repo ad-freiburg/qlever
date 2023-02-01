@@ -63,7 +63,7 @@ void testSort(IdTable input, const IdTable& expected,
     ASSERT_EQ(resultTable, permutedExpected);
   } while (std::next_permutation(sortColumns.begin(), sortColumns.end()));
 }
-}
+}  // namespace
 
 TEST(Sort, ComputeSortSingleIntColumn) {
   VectorTable input{{0},   {1},       {-1},  {3},

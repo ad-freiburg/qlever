@@ -75,7 +75,7 @@ void testOrderBy(IdTable input, const IdTable& expected,
     ASSERT_EQ(resultTable, permutedExpected);
   } while (std::next_permutation(sortColumns.begin(), sortColumns.end()));
 }
-}
+}  // namespace
 
 TEST(OrderBy, ComputeOrderBySingleIntColumn) {
   VectorTable input{{0},   {1},       {-1},  {3},
@@ -146,6 +146,12 @@ TEST(OrderBy, ComputeOrderByThreeColumns) {
               {true, false, true});
   testOrderBy(inputTable.clone(), expectedTableAllDescending,
               {true, true, true});
+}
+
+TEST(OrderBy, emptyInputEmptyColumns) {
+  // This is mostly for  finding something out about the coverage.
+  IdTable table{0, ad_utility::testing::makeAllocator()};
+  testOrderBy(table.clone(), table, {});
 }
 
 TEST(OrderBy, SimpleMemberFunctions) {
