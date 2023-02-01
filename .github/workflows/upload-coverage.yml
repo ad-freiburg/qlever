@@ -1,7 +1,19 @@
+# This workflow runs as soon as the workflow from `code-coverage.yml` has
+# successfully finished. It downloads the created artifact and runs the
+# Codecov uploader. This workflow uses the `workflow_run` trigger. This
+# means that it will always be run from the master branch, meaning that
+# the contents of this file will always be taken from the master branch,
+# even if a PR changes it. Since this approach disallows several attacks
+# from malicious PR authors, such workflows have access to the secrets
+# stored on GitHub. For details on the `workflow_run` trigger and this
+# security measures, see
+# https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
 name: Upload code coverage
 
 on:
   workflow_run:
+    # This has to be the `name:` of the workflow in `code_coverage.yml`.
+    # Start when this  workflow has finished successfully.
     workflows: [measure-code-coverage]
     types:
       - completed
@@ -9,16 +21,17 @@ on:
 jobs:
   upload:
     runs-on: ubuntu-latest
+    # Only run on successful pull requests. Merge commits to master upload
+    # their coverage reports directly inside `code-coverage.yml`
     if: >
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.conclusion == 'success'
     steps:
-      - name: print info
-        env: 
-          GITHUB_CONTEXT: ${{toJson(github.event.workflow_run)}}
-        run: echo "$GITHUB_CONTEXT"
       - name: 'Download artifact'
         uses: actions/github-script@v3.1.0
+        # The following script is taken from the link stated at the
+        # beginning of this file. It manually downloads an artifact
+        # from another workflow.
         with:
           script: |
             var artifacts = await github.actions.listWorkflowRunArtifacts({
@@ -38,18 +51,23 @@ jobs:
             var fs = require('fs');
             fs.writeFileSync('${{github.workspace}}/coverage-report.zip', Buffer.from(download.data));
       - run: unzip coverage-report.zip
-      - name: 'View files'
-        run: ls -al
+      # Read the metadata into environment variables.
       - name: "Read PR number"
         run: echo "pr_number=`cat pr`" >> $GITHUB_ENV
       - name: "Read Github Ref"
-        run: echo "original_github_ref=`cat github_ref`" >> $GITHUB_ENV; cat github_ref
+        run: echo "original_github_ref=`cat github_ref`" >> $GITHUB_ENV;
       - name: "Read Github Repository"
-        run: echo "original_github_repository=`cat github_repository`" >> $GITHUB_ENV; cat github_repository
+        run: echo "original_github_repository=`cat github_repository`" >> $GITHUB_ENV;
+        # We have to check out the source code from the PR, otherwise Codecov
+        # won't process the upload properly. We first check it out into a
+        # subdirectory `qlever-source`, otherwise the coverage report will
+        # be overwritten. We then move all the files back into the working
+        # directory such that Codecov will pick them up properly.
       - name: "Checkout"
         uses: actions/checkout@v3
         with:
           repository: ${{env.original_github_repository}}
+          submodules: "recursive"
           ref: ${{env.original_github_ref}}
           path: qlever-source
       - name: "Move qlever sources up"
@@ -64,10 +82,10 @@ jobs:
           # public default token.
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
+          # Since this workflow runs on the master branch and not in a PR
+          # we have to specify the following settings manually to make Codecov
+          # aware of the "actual" origin of the coverage report.
           override_branch: ${{github.event.workflow_run.head_branch}}
-          # Do we need the following line to work?
           override_build: ${{github.event.workflow_run.workflow_id}}
           override_commit: ${{github.event.workflow_run.head_commit.id}}
           override_pr: ${{env.pr_number}}
-          
-         

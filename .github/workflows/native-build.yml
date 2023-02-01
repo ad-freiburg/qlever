@@ -19,7 +19,6 @@ jobs:
         compiler-version: [11, 12, 13, 14, 15]
         warnings: [  "-Wall -Wextra -Werror " ]
         build-type: [Release]
-        is-coverage: [false]
         exclude:
           - compiler: gcc
             compiler-version: 13
@@ -37,21 +36,14 @@ jobs:
           - compiler: clang
             compiler-version: 15
             ubsan-flags: " -fsanitize=undefined"
-          # note: the following configuration is completely redefined from scratch.
-          - compiler: clang
-            compiler-version: 15
-            build-type: Debug
-            warnings: "-Wall -Wextra "
-            asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
-            ubsan-flags: " -fsanitize=undefined"
-            coverage-flags: "-fprofile-instr-generate -fcoverage-mapping -fno-inline-functions"
-            is-coverage: true
 
     runs-on: ubuntu-22.04
 
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
+      with:
+        submodules: 'recursive'
 
     - name: Install dependencies
       run:  sudo apt update && sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
@@ -88,49 +80,20 @@ jobs:
     - name: Python dependencies
       run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
 
-    - name: Checkout submodules
-      run: git submodule update --init --recursive
-
-
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}} ${{matrix.coverage-flags}}" -DADDITIONAL_LINKER_FLAGS="${{matrix.coverage-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false -DSINGLE_TEST_BINARY=ON
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true
 
     - name: Build
         # Build your program with the given configuration
       run: cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- -j $(nproc)
     - name: Test
       working-directory: ${{github.workspace}}/build/test
-      env:
-        LLVM_PROFILE_FILE: "default%p.profraw"
       # Execute tests defined by the CMake configuration.
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
       run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} .
 
-    - name: GetListOfExecutablesForCoverageInfo
-      working-directory: ${{github.workspace}}/build/test
-      if: matrix.is-coverage
-      run: ctest --show-only=json-v1 > tests.json && python3 ${{github.workspace}}/misc/ctest-output-to-executables.py tests.json tests.txt
-    - name: Process coverage info
-      working-directory: ${{github.workspace}}/build/test
-      run:  >
-        llvm-profdata-15 merge -sparse *.profraw -o default.profdata;
-        xargs -a tests.txt llvm-cov-15 export --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/third_party/" --ignore-filename-regex="/generated/"  --ignore-filename-regex="/nlohmann/" --ignore-filename-regex="/ctre/"  --ignore-filename-regex="/test/" > ./coverage.lcov
-      if: matrix.is-coverage
-    - name: Submit to codecov.io
-      if: matrix.is-coverage
-      uses: codecov/codecov-action@v3
-      with:
-        file: ${{github.workspace}}/build/test/coverage.lcov
-        # Note: technically, a `token` is not required for codecov.io when
-        # uploading from a public repository, but specifying it avoids the
-        # nasty spurious failures due to Github's rate limit for codecov's
-        # public default token.
-        token: ${{ secrets.CODECOV_TOKEN }}
-        fail_ci_if_error: true
-
     - name: E2E
       run: ${{github.workspace}}/e2e/e2e.sh
-      if: matrix.is-coverage != true
 
