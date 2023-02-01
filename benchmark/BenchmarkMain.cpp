@@ -3,6 +3,7 @@
 // Author: Andre Schlegel (November of 2022, schlegea@informatik.uni-freiburg.de)
 
 #include <iostream>
+#include <fstream>
 #include <ios>
 #include <iomanip>
 #include <sstream>
@@ -227,6 +228,21 @@ nlohmann::json benchmarksToJson(const BenchmarkRecords& records){
     {"recordGroups", recordGroups}, {"recordTables", recordTables}};
 }
 
+void writeJsonToFile(nlohmann::json j, std::string fileName) {
+  // Using this constructor, the file is already opened.
+  std::ofstream myFile(fileName, std::ios::out);
+
+  // Error message, if the file couldn't be opened.
+  if (!myFile.is_open()){
+    std::cerr << "Unable to open file '" << fileName << "'.";
+  }
+
+  // nlohmann already has support for things like this.
+  myFile << j;
+
+  myFile.close();
+}
+
 }
 
 /*
@@ -283,7 +299,6 @@ int main(int argc, char** argv) {
   if (vm.count("print")) {printBenchmarkRecords(records);};
   
   if (vm.count("json")) {
-    // TODO Actually implement this.
-    std::cout << "Write\n\n" << benchmarksToJson(records) << "\n\nto file '" << jsonFileName << "'.\n";
+    writeJsonToFile(benchmarksToJson(records), jsonFileName);
   };
 }
