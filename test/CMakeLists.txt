@@ -59,6 +59,7 @@ function(addLinkAndDiscoverTest basename)
 
 endfunction()
 
+
 # Usage: `addAndLinkTestSerial(basename, [additionalLibraries...]`
 # Similar to `addAndLinkTest` but also requires that the test is run serially
 # (without any of the other test cases running in parallel). This can be
@@ -131,8 +132,13 @@ addLinkAndDiscoverTestSerial(BufferedVectorTest absl::strings)
 
 addLinkAndDiscoverTest(UnionTest engine)
 
-add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
-linkAndDiscoverTest(TokenTest parser re2 util ${ICU_LIBRARIES})
+if (SINGLE_TEST_BINARY)
+    target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelpers.cpp)
+    target_link_libraries(QLeverAllUnitTestsMain parser re2 util ${ICU_LIBRARIES})
+else()
+    add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
+    linkAndDiscoverTest(TokenTest parser re2 util ${ICU_LIBRARIES})
+endif()
 
 addLinkAndDiscoverTest(TurtleParserTest parser absl::flat_hash_map re2)
 
