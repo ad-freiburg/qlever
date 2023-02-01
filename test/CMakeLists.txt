@@ -133,7 +133,7 @@ addLinkAndDiscoverTestSerial(BufferedVectorTest absl::strings)
 addLinkAndDiscoverTest(UnionTest engine)
 
 if (SINGLE_TEST_BINARY)
-    target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelpers.cpp)
+    target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
     target_link_libraries(QLeverAllUnitTestsMain parser re2 util ${ICU_LIBRARIES})
 else()
     add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
