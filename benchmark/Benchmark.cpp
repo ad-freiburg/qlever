@@ -43,7 +43,7 @@ const std::vector<BenchmarkRecords::RecordEntry>&
 
 // ____________________________________________________________________________
 void BenchmarkRecords::addGroup(const std::string& descriptor) {
-  // Is there already a group with this descriptor? If so, that is not allowed.
+  // It is not allowed to have two groups with the same descriptor.
   AD_CHECK(!recordGroups_.contains(descriptor));
 
   // There is no group, so create one without any entries and add them to
@@ -86,7 +86,7 @@ const std::vector<BenchmarkRecords::RecordGroup> BenchmarkRecords::getGroups()
 void BenchmarkRecords::addTable(const std::string& descriptor,
     const std::vector<std::string>& rowNames,
     const std::vector<std::string>& columnNames) {
-  // Is there already a table with this descriptor? If so, that is not allowed.
+  // It is not allowed to have two tables with the same descriptor.
   AD_CHECK(!recordTables_.contains(descriptor));
 
   // Add a new entry.
