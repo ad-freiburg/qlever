@@ -46,8 +46,7 @@ void BenchmarkRecords::addGroup(const std::string& descriptor) {
   // It is not allowed to have two groups with the same descriptor.
   AD_CHECK(!recordGroups_.contains(descriptor));
 
-  // There is no group, so create one without any entries and add them to
-  // the hash map.
+  // Create an empty group with the given descriptor and add it to the hash map.
   recordGroups_[descriptor] = BenchmarkRecords::RecordGroup{descriptor, {}};
   recordGroupsOrder_.push_back(descriptor);
 }
@@ -89,7 +88,7 @@ void BenchmarkRecords::addTable(const std::string& descriptor,
   // It is not allowed to have two tables with the same descriptor.
   AD_CHECK(!recordTables_.contains(descriptor));
 
-  // Add a new entry.
+  // Create an empty table with the given descriptor and add it to the hash map.
   recordTables_[descriptor] = BenchmarkRecords::RecordTable(descriptor,
     rowNames, columnNames);
   recordTablesOrder_.push_back(descriptor);
