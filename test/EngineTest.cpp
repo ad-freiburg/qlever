@@ -58,7 +58,7 @@ TEST(JoinTest, optionalJoinTest) {
   int bWidth{static_cast<int>(b.numColumns())};
   int resultWidth{static_cast<int>(result.numColumns())};
   CALL_FIXED_SIZE((std::array{aWidth, bWidth, resultWidth}),
-                  OptionalJoin::optionalJoin, a, b, false, true, jcls, &result);
+                  OptionalJoin::optionalJoin, a, b, jcls, &result);
 
   // For easier checking of the result.
   IdTable expectedResult{makeIdTableFromVector(
@@ -84,8 +84,7 @@ TEST(JoinTest, optionalJoinTest) {
   bWidth = vb.numColumns();
   resultWidth = vresult.numColumns();
   CALL_FIXED_SIZE((std::array{aWidth, bWidth, resultWidth}),
-                  OptionalJoin::optionalJoin, va, vb, true, false, jcls,
-                  &vresult);
+                  OptionalJoin::optionalJoin, va, vb, jcls, &vresult);
 
   // For easier checking.
   expectedResult = makeIdTableFromVector({{1, 2, 3, 4, 5, 6, 4},

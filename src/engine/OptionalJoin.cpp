@@ -16,8 +16,14 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
                            std::shared_ptr<QueryExecutionTree> t2,
                            bool t2Optional,
                            const vector<array<ColumnIndex, 2>>& jcs)
-    : Operation(qec), _joinColumns(jcs), _multiplicitiesComputed(false) {
+    : Operation(qec),
+      _left{std::move(t1)},
+      _right{std::move(t2)},
+      _joinColumns(jcs),
+      _multiplicitiesComputed(false) {
   // Make sure subtrees are ordered so that identical queries can be identified.
+  // TODO<joka921> These shouldn't even be arguments.
+  AD_CONTRACT_CHECK(!t1Optional && t2Optional);
   AD_CONTRACT_CHECK(jcs.size() > 0);
 }
 
@@ -101,8 +107,7 @@ void OptionalJoin::computeResult(ResultTable* result) {
   int resWidth = result->_idTable.numColumns();
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, resWidth}),
                   &OptionalJoin::optionalJoin, leftResult->_idTable,
-                  rightResult->_idTable,
-                  _joinColumns, &result->_idTable);
+                  rightResult->_idTable, _joinColumns, &result->_idTable);
 
   // If only one of the two operands has a local vocab, pass it on.
   result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
@@ -205,12 +210,7 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
   size_t numDistinctResult = std::min(numDistinctLeft, numDistinctRight);
   // The number of distinct is at leat the number of distinct in a non optional
   // column, if the other one is optional.
-  if (_leftOptional) {
-    numDistinctResult = std::max(numDistinctLeft, numDistinctResult);
-  }
-  if (_rightOptional) {
-    numDistinctRight = std::max(numDistinctRight, numDistinctResult);
-  }
+  numDistinctRight = std::max(numDistinctRight, numDistinctResult);
 
   // compute an estimate for the results multiplicity
   float multLeft = std::numeric_limits<float>::max();
@@ -222,16 +222,8 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
   }
   float multResult = multLeft * multRight;
 
-  if (_leftOptional && _rightOptional) {
-    _sizeEstimate =
-        (_left->getSizeEstimate() + _right->getSizeEstimate()) * multResult;
-  } else if (_leftOptional) {
-    _sizeEstimate = _right->getSizeEstimate() * multResult;
-  } else if (_rightOptional) {
-    _sizeEstimate = _left->getSizeEstimate() * multResult;
-  } else {
-    _sizeEstimate = multResult * numDistinctResult;
-  }
+  _sizeEstimate = _left->getSizeEstimate() * multResult;
+
   // Don't estimate 0 since then some parent operations
   // (in particular joins) using isKnownEmpty() will
   // will assume the size to be exactly zero
@@ -263,17 +255,17 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
 }
 
 template <int OUT_WIDTH>
-void OptionalJoin::createOptionalResult(
-    const auto& row,IdTableStatic<OUT_WIDTH>* res) {
+void OptionalJoin::createOptionalResult(const auto& row,
+                                        IdTableStatic<OUT_WIDTH>* res) {
   res->emplace_back();
   size_t rIdx = res->size() - 1;
-    // Fill the columns of b with ID_NO_VALUE and the rest with a
-    for (size_t col = 0; col < row.numColumns(); col++) {
-      (*res)(rIdx, col) = row[col];
-    }
-    for (size_t col = row.numColumns(); col < res->numColumns(); col++) {
-      (*res)(rIdx, col) = ID_NO_VALUE;
-    }
+  // Fill the columns of b with ID_NO_VALUE and the rest with a
+  for (size_t col = 0; col < row.numColumns(); col++) {
+    (*res)(rIdx, col) = row[col];
+  }
+  for (size_t col = row.numColumns(); col < res->numColumns(); col++) {
+    (*res)(rIdx, col) = ID_NO_VALUE;
+  }
 }
 
 template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
@@ -310,25 +302,28 @@ void OptionalJoin::optionalJoin(
 
   std::vector<size_t> joinColumnsLeft;
   std::vector<size_t> joinColumnsRight;
-  for (auto [jc1, jc2]: joinColumns) {
+  for (auto [jc1, jc2] : joinColumns) {
     joinColumnsLeft.push_back(jc1);
     joinColumnsRight.push_back(jc2);
   }
   auto smallerUndefRangesLeft = [&](const auto& rowLeft, auto begin, auto end) {
     using Row = typename IdTableView<B_WIDTH>::row_type;
     Row row{b.numColumns()};
-    for (auto [jc1, jc2]: joinColumns) {
+    for (auto [jc1, jc2] : joinColumns) {
       row[jc2] = rowLeft[jc1];
     }
-    return ad_utility::findSmallerUndefRanges<Row>(row, joinColumnsRight, begin, end);
+    return ad_utility::findSmallerUndefRanges<Row>(row, joinColumnsRight, begin,
+                                                   end);
   };
-  auto smallerUndefRangesRight = [&](const auto& rowRight, auto begin, auto end) {
+  auto smallerUndefRangesRight = [&](const auto& rowRight, auto begin,
+                                     auto end) {
     using Row = typename IdTableView<A_WIDTH>::row_type;
     Row row{a.numColumns()};
-    for (auto [jc1, jc2]: joinColumns) {
+    for (auto [jc1, jc2] : joinColumns) {
       row[jc1] = rowRight[jc2];
     }
-    return ad_utility::findSmallerUndefRanges<Row>(row, joinColumnsLeft, begin, end);
+    return ad_utility::findSmallerUndefRanges<Row>(row, joinColumnsLeft, begin,
+                                                   end);
   };
 
   int joinColumnBitmapLeft = 0;
@@ -341,6 +336,16 @@ void OptionalJoin::optionalJoin(
   auto combineRows = [&](const auto& row1, const auto& row2) {
     result.emplace_back();
     size_t backIdx = result.size() - 1;
+
+    std::cout << "Row a ";
+    for (auto id : row1) {
+      std::cout << id << ' ';
+    }
+    std::cout << "\nRow b ";
+    for (auto id : row2) {
+      std::cout << id;
+    }
+    std::cout << '\n' << std::endl;
 
     // fill the result
     size_t rIndex = 0;
@@ -355,6 +360,7 @@ void OptionalJoin::optionalJoin(
       }
     }
 
+    /*
     size_t col = 0;
     for (const auto [jcL, jcR] : joinColumns) {
       // TODO<joka921> This can be implemented as a bitwise OR.
@@ -363,12 +369,15 @@ void OptionalJoin::optionalJoin(
       }
       ++col;
     }
+     */
   };
 
-  auto notFoundInRightAction = [this, &result](const auto& row) {
+  auto notFoundInRightAction = [&result](const auto& row) {
     createOptionalResult(row, &result);
   };
-  ad_utility::zipperJoinWithUndef(a, b, lessThan, lessThanReversed, combineRows, smallerUndefRangesLeft, smallerUndefRangesRight, notFoundInRightAction);
+  ad_utility::zipperJoinWithUndef(
+      a, b, lessThan, lessThanReversed, combineRows, smallerUndefRangesLeft,
+      smallerUndefRangesRight, notFoundInRightAction);
 
   /*
   // When a is optional this is used to quickly determine

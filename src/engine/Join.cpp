@@ -592,8 +592,8 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
 
     // TODO<joka921> This does not yet respect the timeout.
     // ad_utility::zipperJoin(a, b, lessThan, combineRows);
-    ad_utility::zipperJoinWithUndef(a, b, lessThan, lessThanReversed, combineRows,
-                                    findSmallerUndefRangeLeft,
+    ad_utility::zipperJoinWithUndef(a, b, lessThan, lessThanReversed,
+                                    combineRows, findSmallerUndefRangeLeft,
                                     findSmallerUndefRangeRight);
   }
   *dynRes = std::move(result).toDynamic();

@@ -183,12 +183,12 @@ TEST(LocalVocab, propagation) {
 
   // OPTIONAL JOIN operation with exactly one non-empty local vocab. The last
   // arguments are the two join columns.
-  OptionalJoin optJoin1(testQec, qet(values1), true, qet(values2), true,
+  OptionalJoin optJoin1(testQec, qet(values1), false, qet(values2), true,
                         {{0, 0}});
   checkLocalVocab(optJoin1, std::vector<std::string>{"x", "y1", "y2"});
 
   // OPTIONAL JOIN operation with two non-empty local vocab.
-  OptionalJoin optJoin2(testQec, qet(values1), true, qet(values1), true,
+  OptionalJoin optJoin2(testQec, qet(values1), false, qet(values1), true,
                         {{0, 0}});
   checkThrow(optJoin2);
 

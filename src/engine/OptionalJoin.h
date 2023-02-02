@@ -43,11 +43,7 @@ class OptionalJoin : public Operation {
     _right->setTextLimit(limit);
   }
 
-  virtual bool knownEmptyResult() override {
-    return (_left->knownEmptyResult() && !_leftOptional) ||
-           (_right->knownEmptyResult() && !_rightOptional) ||
-           (_left->knownEmptyResult() && _right->knownEmptyResult());
-  }
+  virtual bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 
   virtual float getMultiplicity(size_t col) override;
 
@@ -64,8 +60,6 @@ class OptionalJoin : public Operation {
    *        special value ID_NO_VALUE for any entries marked as optional.
    * @param a
    * @param b
-   * @param aOptional
-   * @param bOptional
    * @param joinColumns
    * @param result
    */
@@ -90,7 +84,8 @@ class OptionalJoin : public Operation {
    * @param res the result row
    */
   template <int OUT_WIDTH>
-  static void createOptionalResult(const auto& row, IdTableStatic<OUT_WIDTH>* res);
+  static void createOptionalResult(const auto& row,
+                                   IdTableStatic<OUT_WIDTH>* res);
 
   virtual void computeResult(ResultTable* result) override;
 

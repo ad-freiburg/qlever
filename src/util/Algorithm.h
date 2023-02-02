@@ -154,27 +154,30 @@ auto findSmallerUndefRanges(const auto& row, const auto& joinColumns,
       rowCopy[definedColumns[j]] =
           i >> j ? row[definedColumns[j]] : ValueId::makeUndefined();
     }
-    result.push_back(std::equal_range(begin, end, rowCopy, std::ranges::lexicographical_compare));
+    result.push_back(std::equal_range(begin, end, rowCopy,
+                                      std::ranges::lexicographical_compare));
   }
   return result;
 }
 
-[[maybe_unused]] static inline auto noop = [](auto&&...){};
+[[maybe_unused]] static inline auto noop = [](auto&&...) {};
 // TODO<joka921> Comment, cleanup, move into header.
-template<typename ElFromFirstNotFoundAction = decltype(noop)>
-void zipperJoinWithUndef(auto&& range1, auto&& range2, auto&& lessThan,
-                         auto&& lessThanReversed, auto&& compatibleRowAction,
-                         auto&& findSmallerUndefRangesLeft,
-                         auto&& findSmallerUndefRangesRight, ElFromFirstNotFoundAction elFromFirstNotFoundAction = {}) {
+template <typename ElFromFirstNotFoundAction = decltype(noop)>
+void zipperJoinWithUndef(
+    auto&& range1, auto&& range2, auto&& lessThan, auto&& lessThanReversed,
+    auto&& compatibleRowAction, auto&& findSmallerUndefRangesLeft,
+    auto&& findSmallerUndefRangesRight,
+    ElFromFirstNotFoundAction elFromFirstNotFoundAction = {}) {
   auto it1 = range1.begin();
   auto end1 = range1.end();
   auto it2 = range2.begin();
   auto end2 = range2.end();
   while (it1 < end1 && it2 < end2) {
     while (lessThan(*it1, *it2)) {
+      bool compatibleWasFound = false;
+      /*
       auto smallerUndefRanges =
           findSmallerUndefRangesLeft(*it1, range2.begin(), it2);
-      bool compatibleWasFound = false;
       for (auto [begin, end] : smallerUndefRanges) {
         for (; begin != end; ++begin) {
           if (lessThanReversed(*begin, *it1)) {
@@ -183,6 +186,7 @@ void zipperJoinWithUndef(auto&& range1, auto&& range2, auto&& lessThan,
           }
         }
       }
+       */
       if (!compatibleWasFound) {
         elFromFirstNotFoundAction(*it1);
       }
@@ -192,6 +196,7 @@ void zipperJoinWithUndef(auto&& range1, auto&& range2, auto&& lessThan,
       return;
     }
     while (lessThanReversed(*it2, *it1)) {
+      /*
       auto smallerUndefRanges =
           findSmallerUndefRangesRight(*it2, range1.begin(), it1);
       for (auto [begin, end] : smallerUndefRanges) {
@@ -201,6 +206,7 @@ void zipperJoinWithUndef(auto&& range1, auto&& range2, auto&& lessThan,
           }
         }
       }
+       */
       ++it2;
     }
     if (it2 > end2) {
@@ -214,15 +220,17 @@ void zipperJoinWithUndef(auto&& range1, auto&& range2, auto&& lessThan,
     auto endSame2 = std::find_if_not(
         it2, end2, [&](const auto& row) { return eq(*it1, row); });
 
+    size_t increment = 0;
     if (endSame1 == it1) {
       elFromFirstNotFoundAction(*it1);
+      increment = 1;
     }
     for (; it1 != endSame1; ++it1) {
       for (auto innerIt2 = it2; innerIt2 != endSame2; ++innerIt2) {
         compatibleRowAction(*it1, *innerIt2);
       }
     }
-    it1 = endSame1;
+    it1 = endSame1 + increment;
     it2 = endSame2;
   }
 }
