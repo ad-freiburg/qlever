@@ -52,25 +52,25 @@ void BenchmarkRecords::addGroup(const std::string& descriptor) {
 }
 
 // ____________________________________________________________________________
-template<typename MAP_KEY_TYPE, typename MAP_VALUE_TYPE>
-const std::vector<MAP_VALUE_TYPE>
+template<typename Key, typename Value>
+const std::vector<Value>
 BenchmarkRecords::createVectorOfHashMapValues(
-        const ad_utility::HashMap<MAP_KEY_TYPE, MAP_VALUE_TYPE>& hashMap,
-        const std::vector<MAP_KEY_TYPE>& hashMapKeys){
+        const ad_utility::HashMap<Key, Value>& hashMap,
+        const std::vector<Key>& hashMapKeys){
   // The new vector containing the values for the keys in hashMapKeys in the
   // same order.
-  std::vector<MAP_VALUE_TYPE> hashMapValues(hashMapKeys.size());
+  std::vector<Value> hashMapValues(hashMapKeys.size());
 
   // Copying the values into hashMapValues.
   std::ranges::for_each(hashMapKeys,
       // We already know the size of hashMapValues and set it, so every call of
       // this lambda has to walk through the vector. Which is what entryNumber
       // is for.
-      [&hashMapValues, entryNumber = 0](const MAP_VALUE_TYPE& value)
+      [&hashMapValues, entryNumber = 0](const Value& value)
       mutable{
         hashMapValues[entryNumber++] = value;
       },
-      [&hashMap](const MAP_KEY_TYPE& key){return hashMap.at(key);});
+      [&hashMap](const Key& key){return hashMap.at(key);});
 
   return hashMapValues;
 }

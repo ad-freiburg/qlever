@@ -98,7 +98,7 @@ class BenchmarkRecords {
      * @brief Translate the given hash map keys to their values and return
      * those values in the same order as the keys.
      *
-     * @tparam MAP_KEY_TYPE, MAP_VALUE_TYPE The types for the (key, value)
+     * @tparam Key, Value The types for the (key, value)
      *  pairs of the hash map.
      *
      * @param hashMap The hash map, where the values should be looked up in.
@@ -108,10 +108,10 @@ class BenchmarkRecords {
      * @returns A vector of the hashMap[hashMapKeys] values, in the same order
      *  as the keys in hashMapKeys.
      */
-    template<typename MAP_KEY_TYPE, typename MAP_VALUE_TYPE>
-    static const std::vector<MAP_VALUE_TYPE> createVectorOfHashMapValues(
-        const ad_utility::HashMap<MAP_KEY_TYPE, MAP_VALUE_TYPE>& hashMap,
-        const std::vector<MAP_KEY_TYPE>& hashMapKeys);
+    template<typename Key, typename Value>
+    static const std::vector<Value> createVectorOfHashMapValues(
+        const ad_utility::HashMap<Key, Value>& hashMap,
+        const std::vector<Key>& hashMapKeys);
 
   public:
 
