@@ -91,11 +91,9 @@ TEST(JoinTest, optionalJoinTest) {
                                           {1, 2, 3, 4, 5, 6, 5},
                                           {1, 2, 3, 7, 5, 6, 4},
                                           {1, 2, 3, 7, 5, 6, 5},
-                                          {0, 6, 7, 0, 0, 0, 4}});
-  expectedResult(4, 0) = ID_NO_VALUE;
-  expectedResult(4, 3) = ID_NO_VALUE;
-  expectedResult(4, 4) = ID_NO_VALUE;
-  expectedResult(4, 5) = ID_NO_VALUE;
+                                          {7, 6, 5, 4, 3, 2, 0}});
+  expectedResult(4, 6) = ID_NO_VALUE;
 
   ASSERT_EQ(expectedResult, vresult);
+  // TODO<joka921> Tests with nullopt in the input etc. are missing.
 }
