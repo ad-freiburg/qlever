@@ -16,7 +16,7 @@
 std::vector<BenchmarkRegister::BenchmarkFunction>&
     BenchmarkRegister::getRegister(){
   static std::vector<BenchmarkRegister::BenchmarkFunction>
-    registeredBenchmarks(0);
+    registeredBenchmarks;
   return registeredBenchmarks;
 }
 
