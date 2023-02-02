@@ -57,9 +57,9 @@ string Sort::getDescriptor() const {
 namespace {
 
 // The call to `callFixedSize` is put into a separate function to get rid
-// of an internal compiler error in clang 13.
+// of an internal compiler error in Clang 13.
 // TODO<joka921, future compilers> Check if this problem goes away in future
-// compiler versions as soon as we don't support clang 13 anymore.
+// compiler versions as soon as we don't support Clang 13 anymore.
 void callFixedSizeForSort(auto& idTable, auto comparison) {
   DISABLE_WARNINGS_CLANG_13
   ad_utility::callFixedSize(idTable.numColumns(),

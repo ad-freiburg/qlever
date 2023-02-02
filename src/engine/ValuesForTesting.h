@@ -18,7 +18,7 @@ class ValuesForTesting : public Operation {
   std::vector<Variable> variables_;
 
  public:
-  // Create an operation with for a given `IdTable` as its result and the given
+  // Create an operation that has as its result the given `table` and the given
   // `variables`. The number of variables must be equal to the number
   // of columns in the table.
   ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
