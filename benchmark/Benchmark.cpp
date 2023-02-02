@@ -58,16 +58,13 @@ BenchmarkRecords::createVectorOfHashMapValues(
         const std::vector<Key>& hashMapKeys){
   // The new vector containing the values for the keys in hashMapKeys in the
   // same order.
-  std::vector<Value> hashMapValues(hashMapKeys.size());
+  std::vector<Value> hashMapValues;
 
   // Copying the values into hashMapValues.
   std::ranges::for_each(hashMapKeys,
-      // We already know the size of hashMapValues and set it, so every call of
-      // this lambda has to walk through the vector. Which is what entryNumber
-      // is for.
-      [&hashMapValues, &hashMap, entryNumber = 0](const Key& key)
+      [&hashMapValues, &hashMap](const Key& key)
       mutable{
-        hashMapValues[entryNumber++] = hashMap.at(key);
+        hashMapValues.push_back(hashMap.at(key));
       },
       {});
 
@@ -88,8 +85,9 @@ void BenchmarkRecords::addTable(const std::string& descriptor,
   AD_CHECK(!recordTables_.contains(descriptor));
 
   // Create an empty table with the given descriptor and add it to the hash map.
-  recordTables_[descriptor] = BenchmarkRecords::RecordTable(descriptor,
-    rowNames, columnNames);
+  recordTables_.try_emplace(descriptor, descriptor, rowNames, columnNames);
+  /*recordTables_[descriptor] = BenchmarkRecords::RecordTable(descriptor,
+    rowNames, columnNames);*/
   recordTablesOrder_.push_back(descriptor);
 }
 
