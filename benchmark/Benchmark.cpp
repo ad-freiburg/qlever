@@ -13,23 +13,26 @@
 #include <util/Exception.h>
 
 // ____________________________________________________________________________
-std::vector<std::function<void(BenchmarkRecords*)>>&
+std::vector<BenchmarkRegister::BenchmarkFunction>&
     BenchmarkRegister::getRegister(){
-  static std::vector<std::function<void(BenchmarkRecords*)>>
+  static std::vector<BenchmarkRegister::BenchmarkFunction>
     registeredBenchmarks(0);
   return registeredBenchmarks;
 }
 
 // ____________________________________________________________________________
-const std::vector<std::function<void(BenchmarkRecords*)>>& BenchmarkRegister::getRegisteredBenchmarks() {
+const std::vector<BenchmarkRegister::BenchmarkFunction>&
+BenchmarkRegister::getRegisteredBenchmarks() {
   return getRegister();
 }
 
 // ____________________________________________________________________________
-BenchmarkRegister::BenchmarkRegister(const std::vector<std::function<void(BenchmarkRecords*)>>& benchmarks) {
+BenchmarkRegister::BenchmarkRegister(
+    const std::vector<BenchmarkRegister::BenchmarkFunction>& benchmarks) {
   auto& registeredBenchmarks = getRegister();
   // Append all the benchmarks to the internal register.
-  registeredBenchmarks.insert(registeredBenchmarks.end(), benchmarks.begin(), benchmarks.end());
+  registeredBenchmarks.insert(registeredBenchmarks.end(), benchmarks.begin(),
+      benchmarks.end());
 }
 
 // ____________________________________________________________________________

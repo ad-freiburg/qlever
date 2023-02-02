@@ -241,6 +241,9 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BenchmarkRecords::RecordTable, descriptor, ro
  * benchmarks before entering the main function.
  */
 class BenchmarkRegister {
+
+    // Alias for a type, so that we don't repeat things so often.
+    using BenchmarkFunction = std::function<void(BenchmarkRecords*)>;
  
     /*
      * @brief Returns a reference to the static vector of all registered
@@ -250,7 +253,7 @@ class BenchmarkRegister {
      *  The calling of the registered benchmark functions and the processing of
      *  the recorded times, will be done in a main function later.
      */
-    static std::vector<std::function<void(BenchmarkRecords*)>>& getRegister();
+    static std::vector<BenchmarkFunction>& getRegister();
 
   public:
 
@@ -263,8 +266,8 @@ class BenchmarkRegister {
      *  `{&functionName1, &functionname2, ...}`. For more information about
      *  their usage see getRegister . 
      */
-    BenchmarkRegister(const std::vector<std::function<void(BenchmarkRecords*)>>& benchmarks);
+    BenchmarkRegister(const std::vector<BenchmarkFunction>& benchmarks);
 
     // Return a const view of all registered benchmarks.
-    static const std::vector<std::function<void(BenchmarkRecords*)>>& getRegisteredBenchmarks();
+    static const std::vector<BenchmarkFunction>& getRegisteredBenchmarks();
 };
