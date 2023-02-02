@@ -60,6 +60,11 @@ BenchmarkRecords::createVectorOfHashMapValues(
   // same order.
   std::vector<Value> hashMapValues;
 
+  // The end size of hashMapValues is exactly the size of hashMapKeys. So
+  // we can already allocate all memory, that it will use, making all the
+  // following calls of push_back cheap.
+  hashMapValues.reserve(hashMapKeys.size());
+
   // Copying the values into hashMapValues.
   std::ranges::for_each(hashMapKeys,
       [&hashMapValues, &hashMap](const Key& key)
@@ -86,8 +91,6 @@ void BenchmarkRecords::addTable(const std::string& descriptor,
 
   // Create an empty table with the given descriptor and add it to the hash map.
   recordTables_.try_emplace(descriptor, descriptor, rowNames, columnNames);
-  /*recordTables_[descriptor] = BenchmarkRecords::RecordTable(descriptor,
-    rowNames, columnNames);*/
   recordTablesOrder_.push_back(descriptor);
 }
 
