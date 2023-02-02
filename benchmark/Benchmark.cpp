@@ -13,16 +13,15 @@
 #include <util/Exception.h>
 
 // ____________________________________________________________________________
-std::vector<BenchmarkRegister::BenchmarkFunction>&
-    BenchmarkRegister::getRegister(){
+auto BenchmarkRegister::getRegister() -> std::vector<BenchmarkFunction>& {
   static std::vector<BenchmarkRegister::BenchmarkFunction>
     registeredBenchmarks;
   return registeredBenchmarks;
 }
 
 // ____________________________________________________________________________
-const std::vector<BenchmarkRegister::BenchmarkFunction>&
-BenchmarkRegister::getRegisteredBenchmarks() {
+auto BenchmarkRegister::getRegisteredBenchmarks() ->
+    const std::vector<BenchmarkFunction>& {
   return getRegister();
 }
 
@@ -36,8 +35,8 @@ BenchmarkRegister::BenchmarkRegister(
 }
 
 // ____________________________________________________________________________
-const std::vector<BenchmarkRecords::RecordEntry>&
-   BenchmarkRecords::getSingleMeasurements() const{
+auto BenchmarkRecords::getSingleMeasurements() const
+    -> const std::vector<RecordEntry>& {
   return singleMeasurements_;
 }
 
@@ -76,8 +75,8 @@ BenchmarkRecords::createVectorOfHashMapValues(
 }
 
 // ____________________________________________________________________________
-const std::vector<BenchmarkRecords::RecordGroup> BenchmarkRecords::getGroups()
-  const {
+auto BenchmarkRecords::getGroups() const
+    -> const std::vector<BenchmarkRecords::RecordGroup> {
   return createVectorOfHashMapValues(recordGroups_, recordGroupsOrder_);
 }
 
@@ -95,8 +94,7 @@ void BenchmarkRecords::addTable(const std::string& descriptor,
 }
 
 // ____________________________________________________________________________
-const std::vector<BenchmarkRecords::RecordTable> BenchmarkRecords::getTables()
-  const {
+auto BenchmarkRecords::getTables() const -> const std::vector<RecordTable> {
   return createVectorOfHashMapValues(recordTables_, recordTablesOrder_);
 }
 
