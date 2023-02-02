@@ -66,11 +66,11 @@ BenchmarkRecords::createVectorOfHashMapValues(
       // We already know the size of hashMapValues and set it, so every call of
       // this lambda has to walk through the vector. Which is what entryNumber
       // is for.
-      [&hashMapValues, entryNumber = 0](const Value& value)
+      [&hashMapValues, &hashMap, entryNumber = 0](const Key& key)
       mutable{
-        hashMapValues[entryNumber++] = value;
+        hashMapValues[entryNumber++] = hashMap.at(key);
       },
-      [&hashMap](const Key& key){return hashMap.at(key);});
+      {});
 
   return hashMapValues;
 }
