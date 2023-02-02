@@ -25,37 +25,37 @@ class BenchmarkRecords {
 
     // Describes a measured function.
     struct RecordEntry {
-      std::string descriptor; // Needed, because without it, nobody could tell,
+      std::string descriptor_; // Needed, because without it, nobody could tell,
                               // which time belongs to which benchmark.
-      float measuredTime; // The measured time in seconds.
+      float measuredTime_; // The measured time in seconds.
     };
 
     // Describes a group of measured functions.
     struct RecordGroup {
-      std::string descriptor; // Needed for identifying groups.
-      std::vector<RecordEntry> entries;
+      std::string descriptor_; // Needed for identifying groups.
+      std::vector<RecordEntry> entries_;
     };
     
     // Describes a table of measured functions.
     struct RecordTable {
       // For identification.
-      std::string descriptor;
+      std::string descriptor_;
       // The names of the columns and rows.
-      std::vector<std::string> rowNames;
-      std::vector<std::string> columnNames;
+      std::vector<std::string> rowNames_;
+      std::vector<std::string> columnNames_;
       // The time measurements in seconds. Access is [row, column].
-      std::vector<std::vector<std::optional<float>>> entries;
+      std::vector<std::vector<std::optional<float>>> entries_;
 
       // Default constructor. Without it, some of the included headers generate
       // errors.
-      RecordTable(): descriptor{""}, rowNames{{}}, columnNames{{}}, entries{{}} {}
+      RecordTable(): descriptor_{""}, rowNames_{{}}, columnNames_{{}}, entries_{{}} {}
 
       RecordTable(const std::string& pDescriptor, 
           const std::vector<std::string>& pRowNames,
           const std::vector<std::string>& pColumnNames):
-          descriptor{pDescriptor}, rowNames{pRowNames},
-          columnNames{pColumnNames},
-          entries(pRowNames.size(), std::vector<std::optional<float>>(pColumnNames.size())) {}
+          descriptor_{pDescriptor}, rowNames_{pRowNames},
+          columnNames_{pColumnNames},
+          entries_(pRowNames.size(), std::vector<std::optional<float>>(pColumnNames.size())) {}
     };
 
   private:
@@ -170,7 +170,7 @@ class BenchmarkRecords {
       AD_CHECK(groupEntry != recordGroups_.end());
 
       // Add the descriptor and measured time to the group.
-      groupEntry->second.entries.push_back(
+      groupEntry->second.entries_.push_back(
           RecordEntry{descriptor, measureTimeOfFunction(functionToMeasure)});
     }
 
@@ -218,10 +218,10 @@ class BenchmarkRecords {
 
       // Are the given row and column number inside the table range?
       // size_t is unsigned, so we only need to check, that they are not to big.
-      AD_CHECK(row < table.rowNames.size() && column < table.columnNames.size());
+      AD_CHECK(row < table.rowNames_.size() && column < table.columnNames_.size());
       
       // Add the measured time to the table.
-      table.entries[row][column] = measureTimeOfFunction(functionToMeasure);
+      table.entries_[row][column] = measureTimeOfFunction(functionToMeasure);
     }
 
 
@@ -232,9 +232,9 @@ class BenchmarkRecords {
 };
 
 // JSON (d)serilization for all the created structures in BenchmarkRecords.
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BenchmarkRecords::RecordEntry, descriptor, measuredTime)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BenchmarkRecords::RecordGroup, descriptor, entries)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BenchmarkRecords::RecordTable, descriptor, rowNames, columnNames, entries)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BenchmarkRecords::RecordEntry, descriptor_, measuredTime_)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BenchmarkRecords::RecordGroup, descriptor_, entries_)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BenchmarkRecords::RecordTable, descriptor_, rowNames_, columnNames_, entries_)
 
 /*
  * This class exists as a round about way, of registering functions as

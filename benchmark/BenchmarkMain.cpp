@@ -40,8 +40,8 @@ void addCategoryTitelToStringstream(std::stringstream* stringStream,
 
 // Default conversion from BenchmarkRecords::RecordEntry to string.
 std::string recordEntryToString(const BenchmarkRecords::RecordEntry& recordEntry){
-  return "'" + recordEntry.descriptor + "' took " +
-    std::to_string(recordEntry.measuredTime) + " seconds.";
+  return "'" + recordEntry.descriptor_ + "' took " +
+    std::to_string(recordEntry.measuredTime_) + " seconds.";
 }
 
 // Default way of adding a vector of RecordEntrys to a stringstream with
@@ -67,8 +67,8 @@ void addGroupsToStringstream(std::stringstream* stringStream,
     const std::vector<BenchmarkRecords::RecordGroup>& recordGroups){
   addCategoryTitelToStringstream(stringStream, "Group benchmarks");
   for (const auto& group: recordGroups) {
-    (*stringStream) << "\n\nGroup '" << group.descriptor << "':";
-    addVectorOfRecordEntryToStrinstream(stringStream, group.entries, "\t");
+    (*stringStream) << "\n\nGroup '" << group.descriptor_ << "':";
+    addVectorOfRecordEntryToStrinstream(stringStream, group.entries_, "\t");
   }
 }
 
@@ -106,29 +106,29 @@ void addTablesToStringstream(std::stringstream* stringStream,
 
   // Printing the tables themselves.
   for (const auto& table: recordTables) {
-    (*stringStream) << "\n\nTable '" << table.descriptor << "':\n\n";
+    (*stringStream) << "\n\nTable '" << table.descriptor_ << "':\n\n";
 
     // For easier usage.
-    size_t numberColumns = table.columnNames.size();
-    size_t numberRows = table.rowNames.size();
+    size_t numberColumns = table.columnNames_.size();
+    size_t numberRows = table.rowNames_.size();
 
     // For formating: What is the maximum string width of a column, if you
     // compare all it's entries?
-    const size_t rowNameMaxStringWidth = std::ranges::max(table.rowNames,
+    const size_t rowNameMaxStringWidth = std::ranges::max(table.rowNames_,
         {}, [](const std::string& name){return name.length();}).length();
 
     std::vector<size_t> columnMaxStringWidth(numberColumns, 0);
     for (size_t column = 0; column < numberColumns; column++) {
       // Which of the entries is the longest?
       columnMaxStringWidth[column] = optionalFloatToString(
-          std::ranges::max(table.entries, {},
+          std::ranges::max(table.entries_, {},
           [&column, &optionalFloatToString](
             const std::vector<std::optional<float>>& row){
           return optionalFloatToString(row[column]).length();})[column]).length();
       // Is the name of the column bigger?
       columnMaxStringWidth[column] =
-        (columnMaxStringWidth[column] > table.columnNames[column].length()) ?
-        columnMaxStringWidth[column] : table.columnNames[column].length();
+        (columnMaxStringWidth[column] > table.columnNames_[column].length()) ?
+        columnMaxStringWidth[column] : table.columnNames_[column].length();
     }
 
     // Because the column of row names also has a width, we create an empty
@@ -138,7 +138,7 @@ void addTablesToStringstream(std::stringstream* stringStream,
     // Print the top row of names.
     for (size_t column = 0; column < numberColumns; column++){
       (*stringStream) << columnSeperator;
-      addStringWithPadding(stringStream, table.columnNames[column],
+      addStringWithPadding(stringStream, table.columnNames_[column],
           columnMaxStringWidth[column]);
     }
 
@@ -146,14 +146,14 @@ void addTablesToStringstream(std::stringstream* stringStream,
     for (size_t row = 0; row < numberRows; row++) {
       // Row name
       (*stringStream) << "\n";
-      addStringWithPadding(stringStream, table.rowNames[row],
+      addStringWithPadding(stringStream, table.rowNames_[row],
           rowNameMaxStringWidth);
 
       // Row content.
       for (size_t column = 0; column < numberColumns; column++) {
         (*stringStream) << columnSeperator;
         addStringWithPadding(stringStream,
-            optionalFloatToString(table.entries[row][column]),
+            optionalFloatToString(table.entries_[row][column]),
             columnMaxStringWidth[column]);
       }
     }
