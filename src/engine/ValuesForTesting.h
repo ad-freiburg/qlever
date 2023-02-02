@@ -12,22 +12,24 @@
 // An operation that yields a given `IdTable` as its result. It is used for
 // unit testing purposes when we need to specify the subtrees of another
 // operation.
-class DummyOperation : public Operation {
+class ValuesForTesting : public Operation {
  private:
   IdTable table_;
   std::vector<Variable> variables_;
 
  public:
-  // Create a dummy operation with for a given `IdTable` and the given
+  // Create an operation with for a given `IdTable` as its result and the given
   // `variables`. The number of variables must be equal to the number
   // of columns in the table.
-  DummyOperation(QueryExecutionContext* ctx, IdTable table,
-                 std::vector<Variable> variables)
+  ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
+                   std::vector<Variable> variables)
       : Operation{ctx},
         table_{std::move(table)},
         variables_{std::move(variables)} {
     AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
   }
+
+  // ___________________________________________________________________________
   virtual void computeResult(ResultTable* result) override {
     for (size_t i = 0; i < table_.numColumns(); ++i) {
       result->_resultTypes.push_back(ResultTable::ResultType::KB);
@@ -36,10 +38,10 @@ class DummyOperation : public Operation {
   }
 
  private:
-  string asStringImpl(size_t indent = 0) const override {
-    (void)indent;
+  // ___________________________________________________________________________
+  string asStringImpl([[maybe_unused]] size_t indent = 0) const override {
     std::stringstream str;
-    str << "dummy operation with " << table_.numColumns()
+    str << "Values for testing with " << table_.numColumns()
         << "columns and contents ";
     for (size_t i = 0; i < table_.numColumns(); ++i) {
       for (Id entry : table_.getColumn(i)) {
@@ -50,7 +52,9 @@ class DummyOperation : public Operation {
   }
 
  public:
-  string getDescriptor() const override { return "dummy"; }
+  string getDescriptor() const override {
+    return "explicit values for testing";
+  }
 
   virtual size_t getResultWidth() const override { return table_.numColumns(); }
 
@@ -64,6 +68,8 @@ class DummyOperation : public Operation {
 
   virtual size_t getSizeEstimate() override { return table_.numRows(); }
 
+  // For unit testing purposes it is useful that the columns have different
+  // multiplicities to find bugs in functions that use the multiplicity.
   virtual float getMultiplicity(size_t col) override {
     (void)col;
     return (col + 1) * 42.0;

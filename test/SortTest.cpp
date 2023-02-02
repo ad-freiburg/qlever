@@ -7,8 +7,8 @@
 
 #include "./IndexTestHelpers.h"
 #include "./util/IdTableHelpers.h"
-#include "engine/DummyOperation.h"
 #include "engine/Sort.h"
+#include "engine/ValuesForTesting.h"
 #include "global/ValueIdComparators.h"
 
 using namespace std::string_literals;
@@ -23,14 +23,16 @@ Sort makeSort(IdTable input, const std::vector<size_t>& sortColumns) {
   for (size_t i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));
   }
-  auto dummy = ad_utility::makeExecutionTree<DummyOperation>(
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       ad_utility::testing::getQec(), std::move(input), vars);
-  return Sort{qec, dummy, sortColumns};
+  return Sort{qec, subtree, sortColumns};
 }
 
 // Test that the `input`, when being sorted by its 0-th column as its primary
 // key, its 1st column as its secondary key etc. using a `Sort` operation,
-// yields the `expected` result.
+// yields the `expected` result. The test is performed for all possible
+// permutations of the sort columns by also permuting `input` and `expected`
+// accordingly.
 void testSort(IdTable input, const IdTable& expected,
               source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l);

@@ -15,7 +15,6 @@
 #include "engine/Bind.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Distinct.h"
-#include "engine/DummyOperation.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/HasPredicateScan.h"
@@ -31,6 +30,7 @@
 #include "engine/TransitivePath.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
+#include "engine/ValuesForTesting.h"
 #include "parser/RdfEscaping.h"
 
 using std::string;
@@ -638,7 +638,7 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
     _type = OPTIONAL_JOIN;
   } else if constexpr (std::is_same_v<Op, MultiColumnJoin>) {
     _type = MULTICOLUMN_JOIN;
-  } else if constexpr (std::is_same_v<Op, DummyOperation>) {
+  } else if constexpr (std::is_same_v<Op, ValuesForTesting>) {
     _type = DUMMY;
   } else {
     static_assert(ad_utility::alwaysFalse<Op>,
@@ -670,7 +670,8 @@ template void QueryExecutionTree::setOperation(std::shared_ptr<Minus>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<OptionalJoin>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<MultiColumnJoin>);
-template void QueryExecutionTree::setOperation(std::shared_ptr<DummyOperation>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<ValuesForTesting>);
 
 // ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(

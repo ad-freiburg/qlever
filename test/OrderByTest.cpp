@@ -7,8 +7,8 @@
 
 #include "./IndexTestHelpers.h"
 #include "./util/IdTableHelpers.h"
-#include "engine/DummyOperation.h"
 #include "engine/OrderBy.h"
+#include "engine/ValuesForTesting.h"
 #include "global/ValueIdComparators.h"
 
 using namespace std::string_literals;
@@ -22,9 +22,9 @@ OrderBy makeOrderBy(IdTable input, const OrderBy::SortIndices& sortColumns) {
   for (size_t i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));
   }
-  auto dummy = ad_utility::makeExecutionTree<DummyOperation>(
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       ad_utility::testing::getQec(), std::move(input), vars);
-  return OrderBy{qec, dummy, sortColumns};
+  return OrderBy{qec, std::move(subtree), sortColumns};
 }
 
 // Test that the `input`, when being sorted by its 0-th column as its primary
@@ -77,26 +77,30 @@ void testOrderBy(IdTable input, const IdTable& expected,
 }
 }  // namespace
 
-TEST(OrderBy, ComputeOrderBySingleIntColumn) {
+// _____________________________________________________________________________
+TEST(OrderBy, computeOrderBySingleIntColumn) {
   VectorTable input{{0},   {1},       {-1},  {3},
                     {-17}, {1230957}, {123}, {-1249867132}};
-  VectorTable expected{{-1249867132}, {-17}, {-1},  {0},
-                       {1},           {3},   {123}, {1230957}};
+  VectorTable expectedAscending{{-1249867132}, {-17}, {-1},  {0},
+                                {1},           {3},   {123}, {1230957}};
   VectorTable expectedDescending{{1230957}, {123}, {3},   {1},
                                  {0},       {-1},  {-17}, {-1249867132}};
   auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
-  auto expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
+  auto expectedAscendingTable =
+      makeIdTableFromVector(expectedAscending, &Id::makeFromInt);
   auto expectedDescendingTable =
       makeIdTableFromVector(expectedDescending, &Id::makeFromInt);
-  testOrderBy(inputTable.clone(), expectedTable, {false});
+  testOrderBy(inputTable.clone(), expectedAscendingTable, {false});
   testOrderBy(inputTable.clone(), expectedDescendingTable, {true});
 }
 
-TEST(OrderBy, TwoColumnsIntAndFloat) {
+// _____________________________________________________________________________
+TEST(OrderBy, twoColumnsIntAndFloat) {
   auto qec = ad_utility::testing::getQec();
   using Vec = std::vector<std::pair<int64_t, double>>;
   Vec intsAndFloats{{-3, 1.0}, {0, 7.0}, {-3, 0.5}, {0, -2.8}};
-  Vec intsAndFloatsExpected{{-3, 0.5}, {-3, 1.0}, {0, -2.8}, {0, 7.0}};
+  Vec intsAndFloatsExpectedAllAscending{
+      {-3, 0.5}, {-3, 1.0}, {0, -2.8}, {0, 7.0}};
   Vec intsAndFloatsExpectedFirstDescending{
       {0, -2.8}, {0, 7.0}, {-3, 0.5}, {-3, 1.0}};
   Vec intsAndFloatsExpectedSecondDescending{
@@ -115,40 +119,44 @@ TEST(OrderBy, TwoColumnsIntAndFloat) {
   };
 
   auto input = makeTable(intsAndFloats);
-  auto expected = makeTable(intsAndFloatsExpected);
+  auto expectedAllAscending = makeTable(intsAndFloatsExpectedAllAscending);
   auto firstDescending = makeTable(intsAndFloatsExpectedFirstDescending);
   auto secondDescending = makeTable(intsAndFloatsExpectedSecondDescending);
   auto bothDescending = makeTable(intsAndFloatsExpectedBothDescending);
 
-  testOrderBy(input.clone(), expected, {false, false});
+  testOrderBy(input.clone(), expectedAllAscending, {false, false});
   testOrderBy(input.clone(), firstDescending, {true, false});
   testOrderBy(input.clone(), secondDescending, {false, true});
   testOrderBy(input.clone(), bothDescending, {true, true});
 }
 
-TEST(OrderBy, ComputeOrderByThreeColumns) {
+// _____________________________________________________________________________
+TEST(OrderBy, computeOrderByThreeColumns) {
   VectorTable input{
       {-1, 12, -3}, {1, 7, 11}, {-1, 12, -4}, {1, 6, 0}, {1, 7, 11}};
-  VectorTable expected{
+  VectorTable expectedAllAscending{
       {-1, 12, -4}, {-1, 12, -3}, {1, 6, 0}, {1, 7, 11}, {1, 7, 11}};
   VectorTable expectedFirstAndThirdDescending{
       {1, 6, 0}, {1, 7, 11}, {1, 7, 11}, {-1, 12, -3}, {-1, 12, -4}};
   VectorTable expectedAllDescending{
       {1, 7, 11}, {1, 7, 11}, {1, 6, 0}, {-1, 12, -3}, {-1, 12, -4}};
   auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
-  auto expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
+  auto expectedTableAllAscending =
+      makeIdTableFromVector(expectedAllAscending, &Id::makeFromInt);
   auto expectedTableFirstAndThirdDescending =
       makeIdTableFromVector(expectedFirstAndThirdDescending, &Id::makeFromInt);
   auto expectedTableAllDescending =
       makeIdTableFromVector(expectedAllDescending, &Id::makeFromInt);
-  testOrderBy(inputTable.clone(), expectedTable, {false, false, false});
+  testOrderBy(inputTable.clone(), expectedTableAllAscending,
+              {false, false, false});
   testOrderBy(inputTable.clone(), expectedTableFirstAndThirdDescending,
               {true, false, true});
   testOrderBy(inputTable.clone(), expectedTableAllDescending,
               {true, true, true});
 }
 
-TEST(OrderBy, SimpleMemberFunctions) {
+// _____________________________________________________________________________
+TEST(OrderBy, simpleMemberFunctions) {
   {
     VectorTable input{{0},   {1},       {-1},  {3},
                       {-17}, {1230957}, {123}, {-1249867132}};
