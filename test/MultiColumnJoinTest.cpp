@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "./util/AllocatorTestHelpers.h"
+#include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/MultiColumnJoin.h"
@@ -21,17 +22,25 @@ TEST(EngineTest, multiColumnJoinTest) {
   using std::array;
   using std::vector;
 
+  IdTable a = makeIdTableFromVector(
+      {{4, 1, 2}, {2, 1, 3}, {1, 1, 4}, {2, 2, 1}, {1, 3, 1}});
+  /*
   IdTable a(3, makeAllocator());
   a.push_back({V(4), V(1), V(2)});
   a.push_back({V(2), V(1), V(3)});
   a.push_back({V(1), V(1), V(4)});
   a.push_back({V(2), V(2), V(1)});
   a.push_back({V(1), V(3), V(1)});
+   */
+  IdTable b =
+      makeIdTableFromVector({{3, 3, 1}, {1, 8, 1}, {4, 2, 2}, {1, 1, 3}});
+  /*
   IdTable b(3, makeAllocator());
   b.push_back({V(3), V(3), V(1)});
   b.push_back({V(1), V(8), V(1)});
   b.push_back({V(4), V(2), V(2)});
   b.push_back({V(1), V(1), V(3)});
+   */
   IdTable res(4, makeAllocator());
   vector<array<ColumnIndex, 2>> jcls;
   jcls.push_back(array<ColumnIndex, 2>{{1, 2}});
@@ -44,6 +53,9 @@ TEST(EngineTest, multiColumnJoinTest) {
   int resWidth = res.numColumns();
   CALL_FIXED_SIZE((std::array{aWidth, bWidth, resWidth}),
                   MultiColumnJoin::computeMultiColumnJoin, a, b, jcls, &res);
+
+  auto expected = makeIdTableFromVector({{2, 1, 3, 3}, {1, 3, 1, 1}});
+  ASSERT_EQ(expected, res);
 
   ASSERT_EQ(2u, res.size());
 
