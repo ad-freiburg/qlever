@@ -15,8 +15,6 @@ class OptionalJoin : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
-  bool _leftOptional;
-  bool _rightOptional;
 
   std::vector<std::array<ColumnIndex, 2>> _joinColumns;
 
@@ -73,7 +71,6 @@ class OptionalJoin : public Operation {
    */
   template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
   static void optionalJoin(const IdTable& dynA, const IdTable& dynB,
-                           bool aOptional, bool bOptional,
                            const vector<array<ColumnIndex, 2>>& joinColumns,
                            IdTable* dynResult);
 
@@ -92,13 +89,8 @@ class OptionalJoin : public Operation {
    * @param joinColumnAToB Maps join columns in a to their counterparts in b
    * @param res the result row
    */
-  template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
-  static void createOptionalResult(
-      const IdTableView<A_WIDTH>& a, size_t aIdx, bool aEmpty,
-      const IdTableView<B_WIDTH>& b, size_t bIdx, bool bEmpty,
-      int joinColumnBitmap_a, int joinColumnBitmap_b,
-      const std::vector<ColumnIndex>& joinColumnAToB,
-      IdTableStatic<OUT_WIDTH>* res);
+  template <int OUT_WIDTH>
+  static void createOptionalResult(const auto& row, IdTableStatic<OUT_WIDTH>* res);
 
   virtual void computeResult(ResultTable* result) override;
 

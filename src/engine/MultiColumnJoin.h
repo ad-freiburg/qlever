@@ -104,6 +104,28 @@ void MultiColumnJoin::computeMultiColumnJoin(
     return false;
   };
 
+  std::vector<size_t> joinColumnsLeft;
+  std::vector<size_t> joinColumnsRight;
+  for (auto [jc1, jc2]: joinColumns) {
+    joinColumnsLeft.push_back(jc1);
+    joinColumnsRight.push_back(jc2);
+  }
+  auto smallerUndefRangesLeft = [&](const auto& rowLeft, auto begin, auto end) {
+    using Row = typename IdTableView<B_WIDTH>::row_type;
+    Row row{b.numColumns()};
+    for (auto [jc1, jc2]: joinColumns) {
+      row[jc2] = rowLeft[jc1];
+    }
+    return ad_utility::findSmallerUndefRanges<Row>(row, joinColumnsRight, begin, end);
+  };
+  auto smallerUndefRangesRight = [&](const auto& rowRight, auto begin, auto end) {
+    using Row = typename IdTableView<A_WIDTH>::row_type;
+    Row row{a.numColumns()};
+    for (auto [jc1, jc2]: joinColumns) {
+      row[jc1] = rowRight[jc2];
+    }
+    return ad_utility::findSmallerUndefRanges<Row>(row, joinColumnsLeft, begin, end);
+  };
   // Marks the columns in b that are join columns. Used to skip these
   // when computing the result of the join
   int joinColumnBitmap_b = 0;
@@ -126,8 +148,16 @@ void MultiColumnJoin::computeMultiColumnJoin(
         rIndex++;
       }
     }
+    size_t col = 0;
+    for (const auto [jcL, jcR] : joinColumns) {
+      // TODO<joka921> This can be implemented as a bitwise OR.
+      if (row2[jcR] != ValueId::makeUndefined()) {
+        result(backIdx, col) = row2[jcR];
+      }
+      ++col;
+    }
   };
 
-  ad_utility::zipperJoin(a, b, lessThan, lessThanReversed, combineRows);
+  ad_utility::zipperJoinWithUndef(a, b, lessThan, lessThanReversed, combineRows, smallerUndefRangesLeft, smallerUndefRangesRight);
   *dynResult = std::move(result).toDynamic();
 }

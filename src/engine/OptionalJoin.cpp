@@ -19,20 +19,6 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
     : Operation(qec), _joinColumns(jcs), _multiplicitiesComputed(false) {
   // Make sure subtrees are ordered so that identical queries can be identified.
   AD_CONTRACT_CHECK(jcs.size() > 0);
-  if (t1->asString() < t2->asString()) {
-    _left = t1;
-    _leftOptional = t1Optional;
-    _right = t2;
-    _rightOptional = t2Optional;
-  } else {
-    _left = t2;
-    _leftOptional = t2Optional;
-    _right = t1;
-    _rightOptional = t1Optional;
-    for (unsigned int i = 0; i < _joinColumns.size(); i++) {
-      std::swap(_joinColumns[i][0], _joinColumns[i][1]);
-    }
-  }
 }
 
 // _____________________________________________________________________________
@@ -109,15 +95,13 @@ void OptionalJoin::computeResult(ResultTable* result) {
 
   LOG(DEBUG) << "Computing optional join between results of size "
              << leftResult->size() << " and " << rightResult->size() << endl;
-  LOG(DEBUG) << "Left side optional: " << _leftOptional
-             << " right side optional: " << _rightOptional << endl;
 
   int leftWidth = leftResult->_idTable.numColumns();
   int rightWidth = rightResult->_idTable.numColumns();
   int resWidth = result->_idTable.numColumns();
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, resWidth}),
                   &OptionalJoin::optionalJoin, leftResult->_idTable,
-                  rightResult->_idTable, _leftOptional, _rightOptional,
+                  rightResult->_idTable,
                   _joinColumns, &result->_idTable);
 
   // If only one of the two operands has a local vocab, pass it on.
@@ -278,72 +262,74 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
   _multiplicitiesComputed = true;
 }
 
-template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
+template <int OUT_WIDTH>
 void OptionalJoin::createOptionalResult(
-    const IdTableView<A_WIDTH>& a, size_t aIdx, bool aEmpty,
-    const IdTableView<B_WIDTH>& b, size_t bIdx, bool bEmpty,
-    int joinColumnBitmap_a, int joinColumnBitmap_b,
-    const std::vector<ColumnIndex>& joinColumnAToB,
-    IdTableStatic<OUT_WIDTH>* res) {
-  assert(!(aEmpty && bEmpty));
+    const auto& row,IdTableStatic<OUT_WIDTH>* res) {
   res->emplace_back();
   size_t rIdx = res->size() - 1;
-  if (aEmpty) {
-    // Fill the columns of a with ID_NO_VALUE and the rest with b.
-    size_t i = 0;
-    for (size_t col = 0; col < a.numColumns(); col++) {
-      if ((joinColumnBitmap_a & (1 << col)) == 0) {
-        (*res)(rIdx, col) = ID_NO_VALUE;
-      } else {
-        // if this is one of the join columns use the value in b
-        (*res)(rIdx, col) = b(bIdx, joinColumnAToB[col]);
-      }
-      i++;
-    }
-    for (size_t col = 0; col < b.numColumns(); col++) {
-      if ((joinColumnBitmap_b & (1 << col)) == 0) {
-        // only write the value if it is not one of the join columns in b
-        (*res)(rIdx, i) = b(bIdx, col);
-        i++;
-      }
-    }
-  } else if (bEmpty) {
     // Fill the columns of b with ID_NO_VALUE and the rest with a
-    for (size_t col = 0; col < a.numColumns(); col++) {
-      (*res)(rIdx, col) = a(aIdx, col);
+    for (size_t col = 0; col < row.numColumns(); col++) {
+      (*res)(rIdx, col) = row[col];
     }
-    for (size_t col = a.numColumns(); col < res->numColumns(); col++) {
+    for (size_t col = row.numColumns(); col < res->numColumns(); col++) {
       (*res)(rIdx, col) = ID_NO_VALUE;
     }
-  } else {
-    // Use the values from both a and b
-    size_t i = 0;
-    for (size_t col = 0; col < a.numColumns(); col++) {
-      (*res)(rIdx, col) = a(aIdx, col);
-      i++;
-    }
-    for (size_t col = 0; col < b.numColumns(); col++) {
-      if ((joinColumnBitmap_b & (1 << col)) == 0) {
-        (*res)(rIdx, i) = b(bIdx, col);
-        i++;
-      }
-    }
-  }
 }
 
 template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
 void OptionalJoin::optionalJoin(
-    const IdTable& dynA, const IdTable& dynB, bool aOptional, bool bOptional,
+    const IdTable& dynA, const IdTable& dynB,
     const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* dynResult) {
   // check for trivial cases
-  if ((dynA.size() == 0 && dynB.size() == 0) ||
-      (dynA.size() == 0 && !aOptional) || (dynB.size() == 0 && !bOptional)) {
+  if (dynA.empty()) {
     return;
   }
 
   const IdTableView<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
   const IdTableView<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
+
+  // TODO<joka921> There is a lot of code duplication from the multicolumn
+  // join.
+  auto lessThan = [&joinColumns](const auto& row1, const auto& row2) {
+    for (const auto [jc1, jc2] : joinColumns) {
+      if (row1[jc1] != row2[jc2]) {
+        return row1[jc1] < row2[jc2];
+      }
+    }
+    return false;
+  };
+  auto lessThanReversed = [&joinColumns](const auto& row1, const auto& row2) {
+    for (const auto [jc1, jc2] : joinColumns) {
+      if (row1[jc2] != row2[jc1]) {
+        return row1[jc2] < row2[jc1];
+      }
+    }
+    return false;
+  };
+
+  std::vector<size_t> joinColumnsLeft;
+  std::vector<size_t> joinColumnsRight;
+  for (auto [jc1, jc2]: joinColumns) {
+    joinColumnsLeft.push_back(jc1);
+    joinColumnsRight.push_back(jc2);
+  }
+  auto smallerUndefRangesLeft = [&](const auto& rowLeft, auto begin, auto end) {
+    using Row = typename IdTableView<B_WIDTH>::row_type;
+    Row row{b.numColumns()};
+    for (auto [jc1, jc2]: joinColumns) {
+      row[jc2] = rowLeft[jc1];
+    }
+    return ad_utility::findSmallerUndefRanges<Row>(row, joinColumnsRight, begin, end);
+  };
+  auto smallerUndefRangesRight = [&](const auto& rowRight, auto begin, auto end) {
+    using Row = typename IdTableView<A_WIDTH>::row_type;
+    Row row{a.numColumns()};
+    for (auto [jc1, jc2]: joinColumns) {
+      row[jc1] = rowRight[jc2];
+    }
+    return ad_utility::findSmallerUndefRanges<Row>(row, joinColumnsLeft, begin, end);
+  };
 
   int joinColumnBitmapLeft = 0;
   int joinColumnBitmapRight = 0;
@@ -352,6 +338,39 @@ void OptionalJoin::optionalJoin(
     joinColumnBitmapRight |= (1 << joinColumnRight);
   }
 
+  auto combineRows = [&](const auto& row1, const auto& row2) {
+    result.emplace_back();
+    size_t backIdx = result.size() - 1;
+
+    // fill the result
+    size_t rIndex = 0;
+    for (size_t col = 0; col < a.numColumns(); col++) {
+      result(backIdx, rIndex) = row1[col];
+      rIndex++;
+    }
+    for (size_t col = 0; col < b.numColumns(); col++) {
+      if ((joinColumnBitmapRight & (1 << col)) == 0) {
+        result(backIdx, rIndex) = row2[col];
+        rIndex++;
+      }
+    }
+
+    size_t col = 0;
+    for (const auto [jcL, jcR] : joinColumns) {
+      // TODO<joka921> This can be implemented as a bitwise OR.
+      if (row2[jcR] != ValueId::makeUndefined()) {
+        result(backIdx, col) = row2[jcR];
+      }
+      ++col;
+    }
+  };
+
+  auto notFoundInRightAction = [this, &result](const auto& row) {
+    createOptionalResult(row, &result);
+  };
+  ad_utility::zipperJoinWithUndef(a, b, lessThan, lessThanReversed, combineRows, smallerUndefRangesLeft, smallerUndefRangesRight, notFoundInRightAction);
+
+  /*
   // When a is optional this is used to quickly determine
   // in which column of b the value of a joined column can be found.
   std::vector<ColumnIndex> joinColumnLeftToRight;
@@ -413,6 +432,7 @@ void OptionalJoin::optionalJoin(
         goto finish;
       }
     }
+
 
     // check if the rest of the join columns also match
     matched = true;
@@ -500,5 +520,6 @@ finish:
       ++ia;
     }
   }
+   */
   *dynResult = std::move(result).toDynamic();
 }

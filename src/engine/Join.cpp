@@ -565,6 +565,9 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     auto lessThan = [jc1, jc2](const auto& row1, const auto& row2) {
       return row1[jc1] < row2[jc2];
     };
+    auto lessThanReversed = [jc1, jc2](const auto& row1, const auto& row2) {
+      return row1[jc2] < row2[jc1];
+    };
     auto combineRows = [jc2, &result](const auto& row1, const auto& row2) {
       addCombinedRowToIdTable(row1, row2, jc2, &result);
     };
@@ -589,7 +592,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
 
     // TODO<joka921> This does not yet respect the timeout.
     // ad_utility::zipperJoin(a, b, lessThan, combineRows);
-    ad_utility::zipperJoinWithUndef(a, b, lessThan, combineRows,
+    ad_utility::zipperJoinWithUndef(a, b, lessThan, lessThanReversed, combineRows,
                                     findSmallerUndefRangeLeft,
                                     findSmallerUndefRangeRight);
   }
