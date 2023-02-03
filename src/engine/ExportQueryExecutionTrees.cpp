@@ -192,8 +192,12 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryToSparqlJSON(
 
   std::erase(columns, std::nullopt);
 
+  // TODO<joka921> Do we want to have those messages also for the other
+  // formats?
   if (columns.empty()) {
-    return {std::vector<std::string>()};
+    if (columns.empty()) {
+      AD_THROW("None of the selected variables is visible in the query body");
+    }
   }
 
   const IdTable& idTable = resultTable->_idTable;
@@ -296,14 +300,17 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryToQLeverJSONArray(
     shared_ptr<const ResultTable> resultTable) {
   AD_CORRECTNESS_CHECK(resultTable != nullptr);
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  QueryExecutionTree::ColumnIndicesAndTypes validIndices =
+  QueryExecutionTree::ColumnIndicesAndTypes selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, *resultTable, true);
-  if (validIndices.empty()) {
-    return {std::vector<std::string>()};
-  }
+
+  // This case should only fail if we have no variables selected at all.
+  // This case should be handled earlier by the parser.
+  // TODO<joka921, hannahbast> What do we want to do for variables that don't
+  // appear in the query body?
+  AD_CONTRACT_CHECK(!selectedColumnIndices.empty());
 
   return ExportQueryExecutionTrees::idTableToQLeverJSONArray(
-      qet, limitAndOffset, validIndices, std::move(resultTable));
+      qet, limitAndOffset, selectedColumnIndices, std::move(resultTable));
 }
 
 using parsedQuery::SelectClause;
@@ -326,6 +333,11 @@ ExportQueryExecutionTrees::selectQueryToCsvTsvOrBinary(
              << std::endl;
   auto selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, *resultTable, true);
+  // This case should only fail if we have no variables selected at all.
+  // This case should be handled earlier by the parser.
+  // TODO<joka921, hannahbast> What do we want to do for variables that don't
+  // appear in the query body?
+  AD_CONTRACT_CHECK(!selectedColumnIndices.empty());
 
   const auto& idTable = resultTable->_idTable;
   // TODO<C++20/Clang16> There are a lot of redundant computations of

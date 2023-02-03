@@ -6,6 +6,7 @@
 
 #include "./IndexTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "./util/IdTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryPlanner.h"
@@ -447,6 +448,30 @@ TEST(ExportQueryExecutionTree, MultipleVariables) {
   // nothing to test here.
 }
 
+TEST(ExportQueryExecutionTree, BinaryExport) {
+  std::string kg = "<s> <p> 31 . <s> <o> 42";
+  std::string query = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
+  std::string result =
+      runQueryStreamableResult(kg, query, ad_utility::MediaType::octetStream);
+  ASSERT_EQ(4 * sizeof(Id), result.size());
+  auto qec = ad_utility::testing::getQec(kg);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto p = getId("<p>");
+  auto o = getId("<o>");
+
+  Id id0, id1, id2, id3;
+  std::memcpy(&id0, result.data(), sizeof(Id));
+  std::memcpy(&id1, result.data() + sizeof(Id), sizeof(Id));
+  std::memcpy(&id2, result.data() + 2 * sizeof(Id), sizeof(Id));
+  std::memcpy(&id3, result.data() + 3 * sizeof(Id), sizeof(Id));
+
+  // The result is "p, 31" (first row) "o, 42" (second row)
+  ASSERT_EQ(o, id0);
+  ASSERT_EQ(ad_utility::testing::IntId(42), id1) << id0 << id1 << id2 << id3;
+  ASSERT_EQ(p, id2);
+  ASSERT_EQ(ad_utility::testing::IntId(31), id3);
+}
+
 TEST(ExportQueryExecutionTree, CornerCases) {
   std::string kg = "<s> <p> <o>";
   std::string query = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
@@ -473,9 +498,17 @@ TEST(ExportQueryExecutionTree, CornerCases) {
   ASSERT_THROW(runQueryStreamableResult(kg, constructQuery,
                                         ad_utility::MediaType::octetStream),
                ad_utility::Exception);
+
+  // A SparqlJSON query where none of the variables is even visible in the
+  // query body is not supported.
+  std::string queryNoVariablesVisible = "SELECT ?not ?known WHERE {<s> ?p ?o}";
+  ASSERT_THROW(runJSONQuery(kg, queryNoVariablesVisible,
+                            ad_utility::MediaType::sparqlJson),
+               ad_utility::Exception);
 }
 
-// TODO<joka921> Unit tests for the more complex COSTRUCT export (combination
+// TODO<joka921> Unit tests for the more complex CONSTRUCT export (combination
 // between constants and stuff from the knowledge graph).
 
-// TODO<joka921> Unit tests that systematically fill the coverage gaps.
+// TODO<joka921> Unit tests that also test for the export of text records from
+// the text index and thus systematically fill the coverage gaps.
