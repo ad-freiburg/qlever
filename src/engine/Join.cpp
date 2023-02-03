@@ -568,8 +568,11 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     auto lessThanReversed = [jc1, jc2](const auto& row1, const auto& row2) {
       return row1[jc2] < row2[jc1];
     };
-    auto combineRows = [jc2, &result](const auto& row1, const auto& row2) {
-      addCombinedRowToIdTable(row1, row2, jc2, &result);
+    // TODO<joka921>
+    auto combineRows = [jcs = std::vector{std::array{jc1, jc2}},
+                        jcBitmap = 1ul << jc2,
+                        &result](const auto& row1, const auto& row2) {
+      ad_utility::addCombinedRowToIdTable(row1, row2, jcs, jcBitmap, &result);
     };
     auto joinColumnL = a.getColumn(jc1);
     auto joinColumnR = b.getColumn(jc2);

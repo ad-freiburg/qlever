@@ -88,22 +88,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
   IdTableView<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
 
-  auto lessThan = [&joinColumns](const auto& row1, const auto& row2) {
-    for (const auto [jc1, jc2] : joinColumns) {
-      if (row1[jc1] != row2[jc2]) {
-        return row1[jc1] < row2[jc2];
-      }
-    }
-    return false;
-  };
-  auto lessThanReversed = [&joinColumns](const auto& row1, const auto& row2) {
-    for (const auto [jc1, jc2] : joinColumns) {
-      if (row1[jc2] != row2[jc1]) {
-        return row1[jc2] < row2[jc1];
-      }
-    }
-    return false;
-  };
+  auto lessThanBoth = ad_utility::makeLessThanAndReversed(joinColumns);
 
   std::vector<size_t> joinColumnsLeft;
   std::vector<size_t> joinColumnsRight;
@@ -111,59 +96,19 @@ void MultiColumnJoin::computeMultiColumnJoin(
     joinColumnsLeft.push_back(jc1);
     joinColumnsRight.push_back(jc2);
   }
-  auto smallerUndefRangesLeft = [&](const auto& rowLeft, auto begin, auto end) {
-    using Row = typename IdTableView<B_WIDTH>::row_type;
-    Row row{b.numColumns()};
-    for (auto [jc1, jc2] : joinColumns) {
-      row[jc2] = rowLeft[jc1];
-    }
-    return ad_utility::findSmallerUndefRanges<Row>(row, joinColumnsRight, begin,
-                                                   end);
-  };
-  auto smallerUndefRangesRight = [&](const auto& rowRight, auto begin,
-                                     auto end) {
-    using Row = typename IdTableView<A_WIDTH>::row_type;
-    Row row{a.numColumns()};
-    for (auto [jc1, jc2] : joinColumns) {
-      row[jc1] = rowRight[jc2];
-    }
-    return ad_utility::findSmallerUndefRanges<Row>(row, joinColumnsLeft, begin,
-                                                   end);
-  };
+
+  using RowLeft = typename IdTableView<A_WIDTH>::row_type;
+  using RowRight = typename IdTableView<B_WIDTH>::row_type;
+  auto smallerUndefRanges =
+      ad_utility::makeSmallerUndefRanges<RowLeft, RowRight>(
+          joinColumns, joinColumnsLeft, joinColumnsRight);
   // Marks the columns in b that are join columns. Used to skip these
   // when computing the result of the join
-  int joinColumnBitmap_b = 0;
-  for (const array<ColumnIndex, 2>& jc : joinColumns) {
-    joinColumnBitmap_b |= (1 << jc[1]);
-  }
-  auto combineRows = [&](const auto& row1, const auto& row2) {
-    result.emplace_back();
-    size_t backIdx = result.size() - 1;
 
-    // fill the result
-    size_t rIndex = 0;
-    for (size_t col = 0; col < a.numColumns(); col++) {
-      result(backIdx, rIndex) = row1[col];
-      rIndex++;
-    }
-    for (size_t col = 0; col < b.numColumns(); col++) {
-      if ((joinColumnBitmap_b & (1 << col)) == 0) {
-        result(backIdx, rIndex) = row2[col];
-        rIndex++;
-      }
-    }
-    /*
-    for (const auto [jcL, jcR] : joinColumns) {
-      // TODO<joka921> This can be implemented as a bitwise OR.
-      if (row2[jcR] != ValueId::makeUndefined()) {
-        result(backIdx, jcL) = row2[jcR];
-      }
-    }
-     */
-  };
+  auto combineRows = ad_utility::makeCombineRows(joinColumns, result);
 
-  ad_utility::zipperJoinWithUndef(a, b, lessThan, lessThanReversed, combineRows,
-                                  smallerUndefRangesLeft,
-                                  smallerUndefRangesRight);
+  ad_utility::zipperJoinWithUndef(a, b, lessThanBoth.first, lessThanBoth.second,
+                                  combineRows, smallerUndefRanges.first,
+                                  smallerUndefRanges.second);
   *dynResult = std::move(result).toDynamic();
 }
