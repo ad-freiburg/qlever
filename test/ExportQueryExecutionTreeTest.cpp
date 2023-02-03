@@ -27,7 +27,7 @@ std::string runQueryStreamableResult(const std::string& kg,
   auto pq = SparqlParser::parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
   auto tsvGenerator =
-      ExportQueryExecutionTrees::queryToStreamableGenerator(pq, qet, mediaType);
+      ExportQueryExecutionTrees::computeResultAsStream(pq, qet, mediaType);
   std::string result;
   for (const auto& block : tsvGenerator) {
     result += block;
@@ -47,7 +47,8 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
   auto pq = SparqlParser::parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer{ad_utility::Timer::Started};
-  return ExportQueryExecutionTrees::queryToJSON(pq, qet, timer, 200, mediaType);
+  return ExportQueryExecutionTrees::computeResultAsJSON(pq, qet, timer, 200,
+                                                        mediaType);
 }
 
 // A test case that tests the correct execution and exporting of a SELECT query

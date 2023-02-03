@@ -9,7 +9,7 @@
 
 // _____________________________________________________________________________
 cppcoro::generator<QueryExecutionTree::StringTriple>
-ExportQueryExecutionTrees::constructQueryToTriples(
+ExportQueryExecutionTrees::constructQueryResultToTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res) {
@@ -37,13 +37,13 @@ ExportQueryExecutionTrees::constructQueryToTriples(
 
 // _____________________________________________________________________________
 ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::constructQueryToTurtle(
+ExportQueryExecutionTrees::constructQueryResultToTurtle(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset,
     std::shared_ptr<const ResultTable> resultTable) {
   resultTable->logResultSize();
-  auto generator = ExportQueryExecutionTrees::constructQueryToTriples(
+  auto generator = ExportQueryExecutionTrees::constructQueryResultToTriples(
       qet, constructTriples, limitAndOffset, resultTable);
   for (const auto& triple : generator) {
     co_yield triple._subject;
@@ -69,12 +69,12 @@ ExportQueryExecutionTrees::constructQueryToTurtle(
 }
 
 // _____________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::constructQueryToQLeverJSONArray(
+nlohmann::json ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res) {
-  auto generator = constructQueryToTriples(qet, constructTriples,
-                                           limitAndOffset, std::move(res));
+  auto generator = constructQueryResultToTriples(
+      qet, constructTriples, limitAndOffset, std::move(res));
   std::vector<std::array<std::string, 3>> jsonArray;
   for (auto& triple : generator) {
     jsonArray.push_back({std::move(triple._subject),
@@ -175,7 +175,7 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
                                              std::identity&& escapeFunction);
 
 // _____________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::selectQueryToSparqlJSON(
+nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
     LimitOffsetClause limitAndOffset,
@@ -186,7 +186,8 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryToSparqlJSON(
   LOG(DEBUG) << "Finished computing the query result in the ID space. "
                 "Resolving strings in result...\n";
 
-  // Don't include the question mark in the variable names.
+  // The `false` means "Don't include the question mark in the variable names".
+  // TODO<joka921> Use a strong enum, and get rid of the comment.
   QueryExecutionTree::ColumnIndicesAndTypes columns =
       qet.selectedVariablesToColumnIndices(selectClause, *resultTable, false);
 
@@ -195,9 +196,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryToSparqlJSON(
   // TODO<joka921> Do we want to have those messages also for the other
   // formats?
   if (columns.empty()) {
-    if (columns.empty()) {
-      AD_THROW("None of the selected variables is visible in the query body");
-    }
+    AD_THROW("None of the selected variables is visible in the query body");
   }
 
   const IdTable& idTable = resultTable->_idTable;
@@ -276,8 +275,8 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryToSparqlJSON(
       const auto& [stringValue, xsdType] = optionalValue.value();
       nlohmann::ordered_json b;
       if (!xsdType) {
-        // no xsdType, this means that `stringValue` is a plain string literal
-        // or entity
+        // No xsdType, this means that `stringValue` is a plain string literal
+        // or entity.
         b = stringToBinding(stringValue);
       } else {
         b["value"] = stringValue;
@@ -293,7 +292,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryToSparqlJSON(
 }
 
 // _____________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::selectQueryToQLeverJSONArray(
+nlohmann::json ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
     LimitOffsetClause limitAndOffset,
@@ -307,6 +306,8 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryToQLeverJSONArray(
   // This case should be handled earlier by the parser.
   // TODO<joka921, hannahbast> What do we want to do for variables that don't
   // appear in the query body?
+  // TODO<joka921>: We want to keep those columns, but we also want to add a
+  // warning to the resulting JSON that is then shown in the UI.
   AD_CONTRACT_CHECK(!selectedColumnIndices.empty());
 
   return ExportQueryExecutionTrees::idTableToQLeverJSONArray(
@@ -318,7 +319,7 @@ using parsedQuery::SelectClause;
 // _____________________________________________________________________________
 template <ad_utility::MediaType format>
 ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::selectQueryToCsvTsvOrBinary(
+ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
     LimitOffsetClause limitAndOffset) {
@@ -392,7 +393,7 @@ ExportQueryExecutionTrees::selectQueryToCsvTsvOrBinary(
 // _____________________________________________________________________________
 template <ad_utility::MediaType format>
 ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::constructQueryToTsvOrCsv(
+ExportQueryExecutionTrees::constructQueryResultToTsvOrCsv(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset,
@@ -407,7 +408,7 @@ ExportQueryExecutionTrees::constructQueryToTsvOrCsv(
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
   constexpr char sep = format == MediaType::tsv ? '\t' : ',';
-  auto generator = ExportQueryExecutionTrees::constructQueryToTriples(
+  auto generator = ExportQueryExecutionTrees::constructQueryResultToTriples(
       qet, constructTriples, limitAndOffset, resultTable);
   for (auto& triple : generator) {
     co_yield escapeFunction(std::move(triple._subject));
@@ -420,7 +421,7 @@ ExportQueryExecutionTrees::constructQueryToTsvOrCsv(
 }
 
 // _____________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::queryToQLeverJSON(
+nlohmann::json ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     ad_utility::Timer& requestTimer, size_t maxSend) {
   shared_ptr<const ResultTable> resultTable = qet.getResult();
@@ -450,12 +451,13 @@ nlohmann::json ExportQueryExecutionTrees::queryToQLeverJSON(
     auto limitAndOffset = query._limitOffset;
     limitAndOffset._limit = std::min(limitAndOffset._limit, maxSend);
     j["res"] = query.hasSelectClause()
-                   ? ExportQueryExecutionTrees::selectQueryToQLeverJSONArray(
-                         qet, query.selectClause(), limitAndOffset,
-                         std::move(resultTable))
-                   : ExportQueryExecutionTrees::constructQueryToQLeverJSONArray(
-                         qet, query.constructClause().triples_, limitAndOffset,
-                         std::move(resultTable));
+                   ? ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
+                  qet, query.selectClause(), limitAndOffset,
+                  std::move(resultTable))
+                   : ExportQueryExecutionTrees::
+                  constructQueryResultBindingsToQLeverJSON(
+                      qet, query.constructClause().triples_, limitAndOffset,
+                      std::move(resultTable));
   }
   j["resultsize"] = query.hasSelectClause() ? resultSize : j["res"].size();
   j["time"]["total"] = std::to_string(requestTimer.msecs()) + "ms";
@@ -468,17 +470,17 @@ nlohmann::json ExportQueryExecutionTrees::queryToQLeverJSON(
 
 // _____________________________________________________________________________
 ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::queryToStreamableGenerator(
+ExportQueryExecutionTrees::computeResultAsStream(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
     ad_utility::MediaType mediaType) {
   auto compute = [&]<MediaType format> {
     auto limitAndOffset = parsedQuery._limitOffset;
     return parsedQuery.hasSelectClause()
-               ? ExportQueryExecutionTrees::selectQueryToCsvTsvOrBinary<format>(
-                     qet, parsedQuery.selectClause(), limitAndOffset)
-               : ExportQueryExecutionTrees::constructQueryToTsvOrCsv<format>(
-                     qet, parsedQuery.constructClause().triples_,
-                     limitAndOffset, qet.getResult());
+               ? ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary<
+                     format>(qet, parsedQuery.selectClause(), limitAndOffset)
+               : ExportQueryExecutionTrees::constructQueryResultToTsvOrCsv<
+                     format>(qet, parsedQuery.constructClause().triples_,
+                             limitAndOffset, qet.getResult());
   };
   // TODO<joka921> Clean this up by a `switch-constexpr`-abstraction
   if (mediaType == MediaType::csv) {
@@ -488,26 +490,26 @@ ExportQueryExecutionTrees::queryToStreamableGenerator(
   } else if (mediaType == ad_utility::MediaType::octetStream) {
     return compute.template operator()<MediaType::octetStream>();
   } else if (mediaType == ad_utility::MediaType::turtle) {
-    return composeTurtleResponse(parsedQuery, qet);
+    return computeConstructQueryResultAsTurtle(parsedQuery, qet);
   }
   AD_FAIL();
 }
 
 // _____________________________________________________________________________
 ad_utility::streams::stream_generator
-ExportQueryExecutionTrees::composeTurtleResponse(
+ExportQueryExecutionTrees::computeConstructQueryResultAsTurtle(
     const ParsedQuery& query, const QueryExecutionTree& qet) {
   if (!query.hasConstructClause()) {
     AD_THROW(
         "RDF Turtle as an export format is only supported for CONSTRUCT "
         "queries");
   }
-  return ExportQueryExecutionTrees::constructQueryToTurtle(
+  return ExportQueryExecutionTrees::constructQueryResultToTurtle(
       qet, query.constructClause().triples_, query._limitOffset,
       qet.getResult());
 }
 // _____________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::queryToSparqlJSON(
+nlohmann::json ExportQueryExecutionTrees::computeResultAsSparqlJSON(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     [[maybe_unused]] ad_utility::Timer& requestTimer, size_t maxSend) {
   if (!query.hasSelectClause()) {
@@ -519,21 +521,21 @@ nlohmann::json ExportQueryExecutionTrees::queryToSparqlJSON(
   nlohmann::json j;
   auto limitAndOffset = query._limitOffset;
   limitAndOffset._limit = std::min(limitAndOffset._limit, maxSend);
-  j = ExportQueryExecutionTrees::selectQueryToSparqlJSON(
+  j = ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
       qet, query.selectClause(), limitAndOffset, std::move(resultTable));
   return j;
 }
 
 // _____________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::queryToJSON(
+nlohmann::json ExportQueryExecutionTrees::computeResultAsJSON(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
     ad_utility::Timer& requestTimer, size_t maxSend,
     ad_utility::MediaType mediaType) {
   switch (mediaType) {
     case ad_utility::MediaType::qleverJson:
-      return queryToQLeverJSON(parsedQuery, qet, requestTimer, maxSend);
+      return computeResultAsQLeverJSON(parsedQuery, qet, requestTimer, maxSend);
     case ad_utility::MediaType::sparqlJson:
-      return queryToSparqlJSON(parsedQuery, qet, requestTimer, maxSend);
+      return computeResultAsSparqlJSON(parsedQuery, qet, requestTimer, maxSend);
     default:
       AD_FAIL();
   }

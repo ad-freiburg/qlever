@@ -13,9 +13,9 @@
 
 // This class contains all the functionality to convert a query that has already
 // been parsed (by the SPARQL parser) and planned (by the query planner) into
-// a serialized result. In particular, it creates tsv, csv, turtle, json (sparql
-// conforming and QLever's flavor) and binary results). The queries are first
-// computed or This class has only two static public functions, one for the JSON
+// a serialized result. In particular, it creates TSV, CSV, Turtle, JSON (SPARQL
+// conforming and QLever's flavor) and binary results).
+// This class has only two static public functions, one for the JSON
 // output format (which returns a `nlohmann::json` object) and one for the other
 // result formats (tsv, csv, turtle, binary) which returns a
 // `streamable_generator`.
@@ -25,9 +25,9 @@ class ExportQueryExecutionTrees {
  public:
   using MediaType = ad_utility::MediaType;
 
-  // Convert a `ParsedQuery` (created by the `SparqlParser`) and a
-  // `QueryExecutionTree` (created by the `QueryPlanner` using the
-  // `ParsedQuery`) into a sequence of bytes that represents the result of the
+  // Compute the result of the given `parsedQuery` (created by the `SparqlParser`) for which the
+  // `QueryExecutionTree` has been previously created by the `QueryPlanner`.
+  // The result is converted into a sequence of bytes that represents the result of the
   // computed query in the format specified by the `mediaType`. Supported
   // formats for this function are CSV, TSV, Turtle, Binary. Note that the
   // Binary format can only be used with SELECT queries and the Turtle format
@@ -35,14 +35,13 @@ class ExportQueryExecutionTrees {
   // combinations of `mediaType` and the query type will throw. The result is
   // returned as a `stream_generator` that lazily computes the serialized result
   // in large chunks of bytes.
-  static ad_utility::streams::stream_generator queryToStreamableGenerator(
+  static ad_utility::streams::stream_generator computeResultAsStream(
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
       MediaType mediaType);
 
-  // Convert a `ParsedQuery` (created by the `SparqlParser`) and a
-  // `QueryExecutionTree` (created by the `QueryPlanner` using the
-  // `ParsedQuery`) into a sequence of bytes that represents the result of the
-  // computed query in the format specified by the `mediaType`. Supported
+  // Compute the result of the given `parsedQuery` (created by the `SparqlParser`) for which the
+  // `QueryExecutionTree` has been previously created by the `QueryPlanner`.
+  // The result is converted to the format specified by the `mediaType`. Supported
   // formats for this function are `SparqlJSON` and `QLeverJSON`. Note that the
   // SparqlJSON format can only be used with SELECT queries. Invalid
   // `mediaType`s and invalid combinations of `mediaType` and the query type
@@ -52,7 +51,7 @@ class ExportQueryExecutionTrees {
   // query planning to produce the expected results. If `maxSend` is smaller
   // than the size of the query result, then only the first `maxSend` rows are
   // returned.
-  static nlohmann::json queryToJSON(const ParsedQuery& parsedQuery,
+  static nlohmann::json computeResultAsJSON(const ParsedQuery& parsedQuery,
                                     const QueryExecutionTree& qet,
                                     ad_utility::Timer& requestTimer,
                                     size_t maxSend, MediaType mediaType);
@@ -85,13 +84,13 @@ class ExportQueryExecutionTrees {
   // be merged).
 
   // Similar to `queryToJSON`, but always returns the `QLeverJSON` format.
-  static nlohmann::json queryToQLeverJSON(const ParsedQuery& query,
+  static nlohmann::json computeResultAsQLeverJSON(const ParsedQuery& query,
                                           const QueryExecutionTree& qet,
                                           ad_utility::Timer& requestTimer,
                                           size_t maxSend);
 
   // ___________________________________________________________________________
-  static nlohmann::json selectQueryToQLeverJSONArray(
+  static nlohmann::json selectQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       LimitOffsetClause limitAndOffset,
@@ -100,7 +99,7 @@ class ExportQueryExecutionTrees {
   /**
    * @brief Convert an `IdTable` (typically from a query result) to a JSON array
    *   In the `QLeverJSON` format. This function is called by
-   *  `queryToQLeverJSON` to obtain the "actual" query results (without the meta
+   *  `computeResultAsQLeverJSON` to obtain the "actual" query results (without the meta
    *   data)
    * @param qet The `QueryExecutionTree` of the query.
    * @param from the first <from> entries of the idTable are skipped
@@ -118,33 +117,33 @@ class ExportQueryExecutionTrees {
       std::shared_ptr<const ResultTable> resultTable = nullptr);
 
   // ___________________________________________________________________________
-  static nlohmann::json constructQueryToQLeverJSONArray(
+  static nlohmann::json constructQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res);
 
   // Similar to `queryToJSON`, but always returns the `SparqlJSON` format.
-  static nlohmann::json queryToSparqlJSON(const ParsedQuery& query,
+  static nlohmann::json computeResultAsSparqlJSON(const ParsedQuery& query,
                                           const QueryExecutionTree& qet,
                                           ad_utility::Timer& requestTimer,
                                           size_t maxSend);
 
   // Generate an RDF graph for a CONSTRUCT query.
   static cppcoro::generator<QueryExecutionTree::StringTriple>
-  constructQueryToTriples(
+  constructQueryResultToTriples(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res);
 
   // ___________________________________________________________________________
-  static ad_utility::streams::stream_generator constructQueryToTurtle(
+  static ad_utility::streams::stream_generator constructQueryResultToTurtle(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset,
       std::shared_ptr<const ResultTable> resultTable);
 
   // ___________________________________________________________________________
-  static nlohmann::json selectQueryToSparqlJSON(
+  static nlohmann::json selectQueryResultToSparqlJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       LimitOffsetClause limitAndOffset,
@@ -152,7 +151,7 @@ class ExportQueryExecutionTrees {
 
   // ___________________________________________________________________________
   template <MediaType format>
-  static ad_utility::streams::stream_generator constructQueryToTsvOrCsv(
+  static ad_utility::streams::stream_generator constructQueryResultToTsvOrCsv(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset,
@@ -160,12 +159,14 @@ class ExportQueryExecutionTrees {
 
   // _____________________________________________________________________________
   template <MediaType format>
-  static ad_utility::streams::stream_generator selectQueryToCsvTsvOrBinary(
+  static ad_utility::streams::stream_generator
+  selectQueryResultToCsvTsvOrBinary(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       LimitOffsetClause limitAndOffset);
 
   // ___________________________________________________________________________
-  static ad_utility::streams::stream_generator composeTurtleResponse(
+  static ad_utility::streams::stream_generator
+  computeConstructQueryResultAsTurtle(
       const ParsedQuery& query, const QueryExecutionTree& qet);
 };

@@ -620,8 +620,8 @@ boost::asio::awaitable<void> Server::processQuery(
     auto sendStreamableResponse =
         [&](ad_utility::MediaType mediaType) -> Awaitable<void> {
       auto responseGenerator = co_await computeInNewThread([&] {
-        return ExportQueryExecutionTrees::queryToStreamableGenerator(pq, qet,
-                                                                     mediaType);
+        return ExportQueryExecutionTrees::computeResultAsStream(pq, qet,
+                                                                mediaType);
       });
 
       // The `streamable_body` that is used internally turns all exceptions that
@@ -657,7 +657,7 @@ boost::asio::awaitable<void> Server::processQuery(
       case ad_utility::MediaType::sparqlJson: {
         // Normal case: JSON response
         auto responseString = co_await computeInNewThread([&, maxSend] {
-          return ExportQueryExecutionTrees::queryToJSON(
+          return ExportQueryExecutionTrees::computeResultAsJSON(
               pq, qet, requestTimer, maxSend, mediaType.value());
         });
         co_await sendJson(std::move(responseString));
