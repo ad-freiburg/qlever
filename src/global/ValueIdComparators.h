@@ -395,7 +395,7 @@ bool compareIdsImpl(ValueId a, ValueId b, auto comparator) {
   bool compatible =
       (a.getDatatype() == b.getDatatype()) || (isNumeric(a) && isNumeric(b));
   if (!compatible) {
-    return false;
+    return comparator(a.getDatatype(), b.getDatatype());
   }
 
   auto visitor = [comparator](const auto& aValue, const auto& bValue) -> bool {
