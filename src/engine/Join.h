@@ -6,12 +6,13 @@
 
 #pragma once
 
-#include <engine/Operation.h>
-#include <engine/QueryExecutionTree.h>
-#include <util/HashMap.h>
-#include <util/HashSet.h>
-
 #include <list>
+
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
+#include "util/HashMap.h"
+#include "util/HashSet.h"
+#include "util/JoinAlgorithms.h"
 
 using std::list;
 

@@ -3,27 +3,23 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //         Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 
-#include "OptionalJoin.h"
+#include "engine/OptionalJoin.h"
 
-#include "CallFixedSize.h"
+#include "engine/CallFixedSize.h"
+#include "util/JoinAlgorithms.h"
 
 using std::string;
 
 // _____________________________________________________________________________
 OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
                            std::shared_ptr<QueryExecutionTree> t1,
-                           bool t1Optional,
                            std::shared_ptr<QueryExecutionTree> t2,
-                           bool t2Optional,
                            const vector<array<ColumnIndex, 2>>& jcs)
     : Operation(qec),
       _left{std::move(t1)},
       _right{std::move(t2)},
       _joinColumns(jcs),
       _multiplicitiesComputed(false) {
-  // Make sure subtrees are ordered so that identical queries can be identified.
-  // TODO<joka921> These shouldn't even be arguments.
-  AD_CONTRACT_CHECK(!t1Optional && t2Optional);
   AD_CONTRACT_CHECK(jcs.size() > 0);
 }
 
@@ -326,10 +322,8 @@ void OptionalJoin::optionalJoin(
                                                    end);
   };
 
-  int joinColumnBitmapLeft = 0;
   int joinColumnBitmapRight = 0;
   for (const auto& [joinColumnLeft, joinColumnRight] : joinColumns) {
-    joinColumnBitmapLeft |= (1 << joinColumnLeft);
     joinColumnBitmapRight |= (1 << joinColumnRight);
   }
 
@@ -360,175 +354,27 @@ void OptionalJoin::optionalJoin(
       }
     }
 
-    /*
-    size_t col = 0;
+    auto mergeWithUndefined = [](ValueId& target, const ValueId& source) {
+      static_assert(ValueId::makeUndefined().getBits() == 0u);
+      target = ValueId::fromBits(target.getBits() | source.getBits());
+    };
     for (const auto [jcL, jcR] : joinColumns) {
       // TODO<joka921> This can be implemented as a bitwise OR.
-      if (row2[jcR] != ValueId::makeUndefined()) {
-        result(backIdx, col) = row2[jcR];
-      }
-      ++col;
+      mergeWithUndefined(result(backIdx, jcL), row2[jcR]);
     }
-     */
   };
 
   auto notFoundInRightAction = [&result](const auto& row) {
+    std::cout << "Row for optional";
+    for (auto id : row) {
+      std::cout << id << ' ';
+    }
+    std::cout << '\n' << std::endl;
     createOptionalResult(row, &result);
   };
   ad_utility::zipperJoinWithUndef(
       a, b, lessThan, lessThanReversed, combineRows, smallerUndefRangesLeft,
       smallerUndefRangesRight, notFoundInRightAction);
 
-  /*
-  // When a is optional this is used to quickly determine
-  // in which column of b the value of a joined column can be found.
-  std::vector<ColumnIndex> joinColumnLeftToRight;
-  if (aOptional) {
-    uint32_t maxJoinColLeft = 0;
-    for (const auto& [joinColumnLeft, joinColumnRight] : joinColumns) {
-      if (joinColumnLeft > maxJoinColLeft) {
-        maxJoinColLeft = joinColumnLeft;
-      }
-    }
-    joinColumnLeftToRight.resize(maxJoinColLeft + 1);
-    for (const auto& [joinColumnLeft, joinColumnRight] : joinColumns) {
-      joinColumnLeftToRight[joinColumnLeft] = joinColumnRight;
-    }
-  }
-
-  // Deal with one of the two tables beeing both empty and optional
-  if (a.size() == 0 && aOptional) {
-    for (size_t ib = 0; ib < b.size(); ib++) {
-      createOptionalResult(a, 0, true, b, ib, false, joinColumnBitmapLeft,
-                           joinColumnBitmapRight, joinColumnLeftToRight,
-                           &result);
-    }
-    *dynResult = std::move(result).toDynamic();
-    return;
-  } else if (b.size() == 0 && bOptional) {
-    for (size_t ia = 0; ia < a.size(); ia++) {
-      createOptionalResult(a, ia, false, b, 0, true, joinColumnBitmapLeft,
-                           joinColumnBitmapRight, joinColumnLeftToRight,
-                           &result);
-    }
-    *dynResult = std::move(result).toDynamic();
-    return;
-  }
-
-  bool matched = false;
-  size_t ia = 0, ib = 0;
-  while (ia < a.size() && ib < b.size()) {
-    // Join columns 0 are the primary sort columns
-    while (a(ia, joinColumns[0][0]) < b(ib, joinColumns[0][1])) {
-      if (bOptional) {
-        createOptionalResult(a, ia, false, b, ib, true, joinColumnBitmapLeft,
-                             joinColumnBitmapRight, joinColumnLeftToRight,
-                             &result);
-      }
-      ia++;
-      if (ia >= a.size()) {
-        goto finish;
-      }
-    }
-    while (b[ib][joinColumns[0][1]] < a[ia][joinColumns[0][0]]) {
-      if (aOptional) {
-        createOptionalResult(a, ia, true, b, ib, false, joinColumnBitmapLeft,
-                             joinColumnBitmapRight, joinColumnLeftToRight,
-                             &result);
-      }
-      ib++;
-      if (ib >= b.size()) {
-        goto finish;
-      }
-    }
-
-
-    // check if the rest of the join columns also match
-    matched = true;
-    for (size_t joinColIndex = 0; joinColIndex < joinColumns.size();
-         joinColIndex++) {
-      const auto& joinColumn = joinColumns[joinColIndex];
-      if (a[ia][joinColumn[0]] < b[ib][joinColumn[1]]) {
-        if (bOptional) {
-          createOptionalResult(a, ia, false, b, ib, true, joinColumnBitmapLeft,
-                               joinColumnBitmapRight, joinColumnLeftToRight,
-                               &result);
-        }
-        ia++;
-        matched = false;
-        break;
-      }
-      if (b[ib][joinColumn[1]] < a[ia][joinColumn[0]]) {
-        if (aOptional) {
-          createOptionalResult(a, ia, true, b, ib, false, joinColumnBitmapLeft,
-                               joinColumnBitmapRight, joinColumnLeftToRight,
-                               &result);
-        }
-        ib++;
-        matched = false;
-        break;
-      }
-    }
-
-    // Compute the cross product of the row in a and all matching
-    // rows in b.
-    while (matched && ia < a.size() && ib < b.size()) {
-      // used to reset ib if another cross product needs to be computed
-      size_t initIb = ib;
-
-      while (matched) {
-        createOptionalResult(a, ia, false, b, ib, false, joinColumnBitmapLeft,
-                             joinColumnBitmapRight, joinColumnLeftToRight,
-                             &result);
-
-        ib++;
-
-        // do the rows still match?
-        for (const auto& [joinColumnLeft, joinColumnRight] : joinColumns) {
-          if (ib >= b.size() ||
-              a[ia][joinColumnLeft] != b[ib][joinColumnRight]) {
-            matched = false;
-            break;
-          }
-        }
-      }
-      ia++;
-      // Check if the next row in a also matches the initial row in b
-      matched = true;
-      for (const auto& [joinColumnLeft, joinColumnRight] : joinColumns) {
-        if (ia >= a.size() ||
-            a[ia][joinColumnLeft] != b[initIb][joinColumnRight]) {
-          matched = false;
-          break;
-        }
-      }
-      // If they match reset ib and compute another cross product
-      if (matched) {
-        ib = initIb;
-      }
-    }
-  }
-finish:
-
-  // If the table of which we reached the end is optional, add all entries
-  // of the other table.
-  if (aOptional && ib < b.size()) {
-    while (ib < b.size()) {
-      createOptionalResult(a, ia, true, b, ib, false, joinColumnBitmapLeft,
-                           joinColumnBitmapRight, joinColumnLeftToRight,
-                           &result);
-
-      ++ib;
-    }
-  }
-  if (bOptional && ia < a.size()) {
-    while (ia < a.size()) {
-      createOptionalResult(a, ia, false, b, ib, true, joinColumnBitmapLeft,
-                           joinColumnBitmapRight, joinColumnLeftToRight,
-                           &result);
-      ++ia;
-    }
-  }
-   */
   *dynResult = std::move(result).toDynamic();
 }

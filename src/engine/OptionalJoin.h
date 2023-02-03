@@ -24,8 +24,8 @@ class OptionalJoin : public Operation {
 
  public:
   OptionalJoin(QueryExecutionContext* qec,
-               std::shared_ptr<QueryExecutionTree> t1, bool t1Optional,
-               std::shared_ptr<QueryExecutionTree> t2, bool t2Optional,
+               std::shared_ptr<QueryExecutionTree> t1,
+               std::shared_ptr<QueryExecutionTree> t2,
                const std::vector<array<ColumnIndex, 2>>& joinCols);
 
  private:

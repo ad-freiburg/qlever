@@ -8,6 +8,7 @@
 
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
+#include "util/JoinAlgorithms.h"
 
 class MultiColumnJoin : public Operation {
  private:

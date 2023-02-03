@@ -83,6 +83,8 @@ TEST(JoinTest, optionalJoinTest) {
   aWidth = va.numColumns();
   bWidth = vb.numColumns();
   resultWidth = vresult.numColumns();
+
+  std::cout << std::endl << std::endl;
   CALL_FIXED_SIZE((std::array{aWidth, bWidth, resultWidth}),
                   OptionalJoin::optionalJoin, va, vb, jcls, &vresult);
 
