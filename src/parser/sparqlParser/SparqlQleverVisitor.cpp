@@ -1529,29 +1529,21 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   auto functionName = ad_utility::getLowercase(ctx->children[0]->getText());
   auto argList = visitVector(ctx->expression());
   using namespace sparqlExpression;
-  // Now implement a selection of functions using the lambdas defined
-  // `NaryExpression.h`. TODO: Since many of these lambdas are very simple:
-  // can't we define them right here?
+  // Create the expression using the matching lambda from `NaryExpression.h`.
+  auto createUnaryExpression = [this, &argList]<typename Expression>() {
+    AD_CONTRACT_CHECK(argList.size() == 1);
+    return createExpression<Expression>(std::move(argList[0]));
+  };
   if (functionName == "str") {
-    AD_CONTRACT_CHECK(argList.size() == 1);
-    return createExpression<sparqlExpression::StrExpression>(
-        std::move(argList[0]));
+    return createUnaryExpression.template operator()<StrExpression>();
   } else if (functionName == "strlen") {
-    AD_CONTRACT_CHECK(argList.size() == 1);
-    return createExpression<sparqlExpression::StrlenExpression>(
-        std::move(argList[0]));
+    return createUnaryExpression.template operator()<StrlenExpression>();
   } else if (functionName == "year") {
-    AD_CONTRACT_CHECK(argList.size() == 1);
-    return createExpression<sparqlExpression::YearExpression>(
-        std::move(argList[0]));
+    return createUnaryExpression.template operator()<YearExpression>();
   } else if (functionName == "month") {
-    AD_CONTRACT_CHECK(argList.size() == 1);
-    return createExpression<sparqlExpression::MonthExpression>(
-        std::move(argList[0]));
+    return createUnaryExpression.template operator()<MonthExpression>();
   } else if (functionName == "day") {
-    AD_CONTRACT_CHECK(argList.size() == 1);
-    return createExpression<sparqlExpression::DayExpression>(
-        std::move(argList[0]));
+    return createUnaryExpression.template operator()<DayExpression>();
   } else if (functionName == "rand") {
     AD_CONTRACT_CHECK(argList.size() == 0);
     return std::make_unique<sparqlExpression::VariableExpression>(

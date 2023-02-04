@@ -12,8 +12,8 @@
 #pragma once
 
 namespace sparqlExpression {
-/// Dummy expression for testing, that for `evaluate` returns the `result`
-/// that is specified in the constructor.
+// Dummy expression for testing, that for `evaluate` returns the `result` that
+// is specified in the constructor.
 struct DummyExpression : public SparqlExpression {
   explicit DummyExpression(ExpressionResult result)
       : _result{std::move(result)} {}

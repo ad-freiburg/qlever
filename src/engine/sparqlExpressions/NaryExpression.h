@@ -1,38 +1,37 @@
-// Copyright 2021, University of Freiburg,
+// Copyright 2021 - 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-// Nary expressions
-
-#ifndef QLEVER_NARYEXPRESSION_H
-#define QLEVER_NARYEXPRESSION_H
-
-#include <engine/sparqlExpressions/SparqlExpression.h>
-#include <engine/sparqlExpressions/SparqlExpressionGenerators.h>
-#include <util/GeoSparqlHelpers.h>
+#pragma once
 
 #include <cstdlib>
+
+#include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "util/Conversions.h"
+#include "util/GeoSparqlHelpers.h"
 
 namespace sparqlExpression {
 namespace detail {
 
-/**
- * @brief A sequence of binary operations, which is executed from left to
-right, for example (?a or ?b), (?a and ?b ?and ?c), (3 * 5 / 7 * ?x) . Different
-operations in the same expression, like (?a + ?b - ?c) are
-supported by passing in multiple operations as the `BinaryOperations` template
-parameter and by choosing the corresponding operation for each sub-expression
-via the `tags` argument to the `create` function (see there).
- * @tparam ValueGetter A callable type that takes a
- * double/int64_t/Bool/string/StrongIdWithResultType and extracts the actual
-input to the operation. Can be
- * used to perform type conversions before the actual operation.
- * @tparam BinaryOperations The actual binary operations. They must be callable
-with
- * the result types of the `ValueGetter`.
- */
-
+// TODO: This comment is out of date. It refers to `BinaryOperations`,
+// `ValueGetter`, and `create`, none of which can be found in this file.
+//
+// A sequence of binary operations, which is executed from left to right, for
+// example (?a or ?b), (?a and ?b ?and ?c), (3 * 5 / 7 * ?x) . Different
+// operations in the same expression, like (?a + ?b - ?c) are supported by
+// passing in multiple operations as the `BinaryOperations` template parameter
+// and by choosing the corresponding operation for each sub-expression via the
+// `tags` argument to the `create` function (see there).
+//
+// @tparam ValueGetter A callable type that takes a
+// double/int64_t/Bool/string/StrongIdWithResultType and extracts the actual
+// input to the operation. Can be used to perform type conversions before the
+// actual operation.
+//
+// @tparam BinaryOperations The actual binary operations. They must be callable
+// with the result types of the `ValueGetter`.
 template <typename NaryOperation>
 requires(isOperation<NaryOperation>) class NaryExpression
     : public SparqlExpression {
@@ -40,9 +39,9 @@ requires(isOperation<NaryOperation>) class NaryExpression
   static constexpr size_t N = NaryOperation::N;
   using Children = std::array<SparqlExpression::Ptr, N>;
 
-  /// The actual constructor. It is private; to construct an object of this
-  /// class, use the static `create` function (which uses this private
-  /// constructor).
+  // The actual constructor. It is private; to construct an object of this
+  // class, use the static `create` function (which uses this private
+  // constructor).
   NaryExpression(Children&& children);
 
  public:
@@ -57,7 +56,7 @@ requires(isOperation<NaryOperation>) class NaryExpression
       const VariableToColumnMap& varColMap) const override;
 
  private:
-  /// Evaluate the `naryOperation` on the `operands` using the `context`.
+  // Evaluate the `naryOperation` on the `operands` using the `context`.
   static inline auto evaluateOnChildrenOperands =
       []<SingleExpressionResult... Operands>(
           NaryOperation naryOperation, EvaluationContext* context,
@@ -102,7 +101,7 @@ requires(isOperation<NaryOperation>) class NaryExpression
   Children _children;
 };
 
-/// Three short aliases to make the instantiations more readable.
+// Two short aliases to make the instantiations more readable.
 template <typename... T>
 using FV = FunctionAndValueGetters<T...>;
 
@@ -118,7 +117,7 @@ using SET = SpecializedFunction<F, decltype(areAllSetOfIntervals)>;
 
 using ad_utility::SetOfIntervals;
 
-/// The types for the concrete MultiBinaryExpressions and UnaryExpressions.
+// The types for the concrete MultiBinaryExpressions and UnaryExpressions.
 inline auto orLambda = [](bool a, bool b) -> Bool { return a || b; };
 using OrExpression =
     NARY<2, FV<decltype(orLambda), EffectiveBooleanValueGetter>,
@@ -129,24 +128,25 @@ using AndExpression =
     NARY<2, FV<decltype(andLambda), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Intersection>>;
 
-/// Unary Negation
+// Unary Negation
 inline auto unaryNegate = [](bool a) -> Bool { return !a; };
 using UnaryNegateExpression =
     NARY<1, FV<decltype(unaryNegate), EffectiveBooleanValueGetter>,
          SET<SetOfIntervals::Complement>>;
 
-/// Unary Minus, currently all results are converted to double
+// Unary Minus, currently all results are converted to double
 inline auto unaryMinus = [](auto a) -> double { return -a; };
 using UnaryMinusExpression =
     NARY<1, FV<decltype(unaryMinus), NumericValueGetter>>;
 
-/// Multiplication.
+// Multiplication.
 inline auto multiply = [](const auto& a, const auto& b) -> double {
   return a * b;
 };
 using MultiplyExpression = NARY<2, FV<decltype(multiply), NumericValueGetter>>;
 
-/// Division.
+// Division.
+//
 // TODO<joka921> If `b == 0` this is technically undefined behavior and
 // should lead to an expression error in SPARQL. Fix this as soon as we
 // introduce the proper semantics for expression errors.
@@ -155,7 +155,7 @@ inline auto divide = [](const auto& a, const auto& b) -> double {
 };
 using DivideExpression = NARY<2, FV<decltype(divide), NumericValueGetter>>;
 
-/// Addition and subtraction, currently all results are converted to double.
+// Addition and subtraction, currently all results are converted to double.
 inline auto add = [](const auto& a, const auto& b) -> double { return a + b; };
 using AddExpression = NARY<2, FV<decltype(add), NumericValueGetter>>;
 
@@ -173,24 +173,38 @@ using DistExpression =
     NARY<2, FV<decltype(ad_utility::wktDist), StringValueGetter>>;
 
 // Date functions.
+//
+// TODO: These are currently inefficient because they still operate on our old
+// ":v:date:..." strings. It will be easy to make more efficient, once we switch
+// to representing dates directly in an `Id`, see `util/Date.h`.
+const size_t yearIndexBegin = sizeof(VALUE_DATE_PREFIX) - 1;
+const size_t yearIndexEnd = yearIndexBegin + DEFAULT_NOF_DATE_YEAR_DIGITS;
+const size_t monthIndex = yearIndexEnd + 1;
+const size_t dayIndex = monthIndex + 3;
+// Helper function that extracts a part of a date string. Note the extra work
+// for year because of the potential two's complement.
 template <size_t pos1, size_t pos2>
 inline auto extractNumberFromDate = [](const auto& dateAsString) -> long int {
   static_assert(pos2 > pos1);
-  const size_t offset = std::strlen(VALUE_DATE_PREFIX) + 15;
-  if (dateAsString.size() >= pos2) {
-    return std::atol(dateAsString.data() + offset + pos1);
-  } else {
+  if (dateAsString.size() < pos2) {
     return 0;
+  } else if (pos1 == yearIndexBegin && dateAsString[pos1] == '-') {
+    static_assert(pos2 > pos1 + 1);
+    return -std::atol(ad_utility::getBase10ComplementOfIntegerString(
+                          dateAsString.substr(pos1 + 1, pos2 - pos1 - 1))
+                          .data());
+  } else {
+    return std::atol(dateAsString.data() + pos1);
   }
 };
-using YearExpression =
-    NARY<1, FV<decltype(extractNumberFromDate<0, 4>), StringValueGetter>>;
-using MonthExpression =
-    NARY<1, FV<decltype(extractNumberFromDate<5, 7>), StringValueGetter>>;
-using DayExpression =
-    NARY<1, FV<decltype(extractNumberFromDate<8, 10>), StringValueGetter>>;
+inline auto extractYear = extractNumberFromDate<yearIndexBegin, yearIndexEnd>;
+inline auto extractMonth = extractNumberFromDate<monthIndex, monthIndex + 2>;
+inline auto extractDay = extractNumberFromDate<dayIndex, dayIndex + 2>;
+using YearExpression = NARY<1, FV<decltype(extractYear), StringValueGetter>>;
+using MonthExpression = NARY<1, FV<decltype(extractMonth), StringValueGetter>>;
+using DayExpression = NARY<1, FV<decltype(extractDay), StringValueGetter>>;
 
-// Convert to string.
+// String functions.
 inline auto str = [](const auto& s) -> std::string { return s; };
 using StrExpression = NARY<1, FV<decltype(str), StringValueGetter>>;
 
@@ -229,5 +243,3 @@ using detail::StrExpression;
 using detail::StrlenExpression;
 
 }  // namespace sparqlExpression
-
-#endif  // QLEVER_NARYEXPRESSION_H

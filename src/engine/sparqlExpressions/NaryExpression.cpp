@@ -76,12 +76,9 @@ INSTANTIATE_NARY(1, FV<decltype(ad_utility::wktLongitude), StringValueGetter>);
 INSTANTIATE_NARY(1, FV<decltype(ad_utility::wktLatitude), StringValueGetter>);
 INSTANTIATE_NARY(2, FV<decltype(ad_utility::wktDist), StringValueGetter>);
 
-INSTANTIATE_NARY(1,
-                 FV<decltype(extractNumberFromDate<0, 4>), StringValueGetter>);
-INSTANTIATE_NARY(1,
-                 FV<decltype(extractNumberFromDate<5, 7>), StringValueGetter>);
-INSTANTIATE_NARY(1,
-                 FV<decltype(extractNumberFromDate<8, 10>), StringValueGetter>);
+INSTANTIATE_NARY(1, FV<decltype(extractYear), StringValueGetter>);
+INSTANTIATE_NARY(1, FV<decltype(extractMonth), StringValueGetter>);
+INSTANTIATE_NARY(1, FV<decltype(extractDay), StringValueGetter>);
 INSTANTIATE_NARY(1, FV<decltype(str), StringValueGetter>);
 INSTANTIATE_NARY(1, FV<decltype(strlen), StringValueGetter>);
 }  // namespace detail
