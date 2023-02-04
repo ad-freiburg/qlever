@@ -11,6 +11,7 @@
 #include "util/Timer.h"
 #include <util/HashMap.h>
 #include <util/Exception.h>
+#include "../benchmark/util/HashMapWithInsertionOrder.h"
 
 // ____________________________________________________________________________
 auto BenchmarkRegister::getRegister() -> std::vector<BenchmarkFunction>& {
@@ -42,60 +43,26 @@ auto BenchmarkRecords::getSingleMeasurements() const
 
 // ____________________________________________________________________________
 void BenchmarkRecords::addGroup(const std::string& descriptor) {
-  // It is not allowed to have two groups with the same descriptor.
-  AD_CHECK(!recordGroups_.contains(descriptor));
-
-  // Create an empty group with the given descriptor and add it to the hash map.
-  recordGroups_[descriptor] = BenchmarkRecords::RecordGroup{descriptor, {}};
-  recordGroupsOrder_.push_back(descriptor);
-}
-
-// ____________________________________________________________________________
-template<typename Key, typename Value>
-const std::vector<Value>
-BenchmarkRecords::createVectorOfHashMapValues(
-        const ad_utility::HashMap<Key, Value>& hashMap,
-        const std::vector<Key>& hashMapKeys){
-  // The new vector containing the values for the keys in hashMapKeys in the
-  // same order.
-  std::vector<Value> hashMapValues;
-
-  // The end size of hashMapValues is exactly the size of hashMapKeys. So
-  // we can already allocate all memory, that it will use, making all the
-  // following calls of push_back cheap.
-  hashMapValues.reserve(hashMapKeys.size());
-
-  // Copying the values into hashMapValues.
-  std::ranges::for_each(hashMapKeys,
-      [&hashMapValues, &hashMap](const Key& key)
-      mutable{
-        hashMapValues.push_back(hashMap.at(key));
-      },
-      {});
-
-  return hashMapValues;
+  recordGroups_.addEntry(descriptor, BenchmarkRecords::RecordGroup{descriptor,
+      {}});
 }
 
 // ____________________________________________________________________________
 auto BenchmarkRecords::getGroups() const
     -> const std::vector<BenchmarkRecords::RecordGroup> {
-  return createVectorOfHashMapValues(recordGroups_, recordGroupsOrder_);
+  return recordGroups_.getAllValues();
 }
 
 // ____________________________________________________________________________
 void BenchmarkRecords::addTable(const std::string& descriptor,
     const std::vector<std::string>& rowNames,
     const std::vector<std::string>& columnNames) {
-  // It is not allowed to have two tables with the same descriptor.
-  AD_CHECK(!recordTables_.contains(descriptor));
-
-  // Create an empty table with the given descriptor and add it to the hash map.
-  recordTables_.try_emplace(descriptor, descriptor, rowNames, columnNames);
-  recordTablesOrder_.push_back(descriptor);
+  recordTables_.addEntry(descriptor,
+      BenchmarkRecords::RecordTable(descriptor, rowNames, columnNames));
 }
 
 // ____________________________________________________________________________
 auto BenchmarkRecords::getTables() const -> const std::vector<RecordTable> {
-  return createVectorOfHashMapValues(recordTables_, recordTablesOrder_);
+  return recordTables_.getAllValues();
 }
 

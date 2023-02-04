@@ -13,6 +13,7 @@
 #include "util/Timer.h"
 #include <util/HashMap.h>
 #include <util/Exception.h>
+#include "../benchmark/util/HashMapWithInsertionOrder.h"
 
 /*
  * Used for measuring the time needed for the execution of a function. It also
@@ -61,15 +62,11 @@ class BenchmarkRecords {
 
     // A hash map of all the created RecordGroups. For faster access.
     // The key for a RecordGroup is it's descriptor.
-    ad_utility::HashMap<std::string, RecordGroup> recordGroups_;
-    // The order of creation for the entries of recordGroups_.
-    std::vector<std::string> recordGroupsOrder_;
+    HashMapWithInsertionOrder<std::string, RecordGroup> recordGroups_;
   
     // A hash map of all the created RecordTables. For faster access.
     // The key for a RecordTable is it's descriptor.
-    ad_utility::HashMap<std::string, RecordTable> recordTables_;
-     // The order of creation for the entries of recordTables_.
-    std::vector<std::string> recordTablesOrder_;
+    HashMapWithInsertionOrder<std::string, RecordTable> recordTables_;
 
     /*
      * @brief Return execution time of function in seconds.
@@ -89,25 +86,6 @@ class BenchmarkRecords {
 
       return benchmarkTimer.secs();
     }
-
-    /*
-     * @brief Translate the given hash map keys to their values and return
-     * those values in the same order as the keys.
-     *
-     * @tparam Key, Value The types for the (key, value)
-     *  pairs of the hash map.
-     *
-     * @param hashMap The hash map, where the values should be looked up in.
-     * @param hashMapKeys The keys, for which the values should be looked up
-     *  and inserted in a vector.
-     *
-     * @returns A vector of the hashMap[hashMapKeys] values, in the same order
-     *  as the keys in hashMapKeys.
-     */
-    template<typename Key, typename Value>
-    static const std::vector<Value> createVectorOfHashMapValues(
-        const ad_utility::HashMap<Key, Value>& hashMap,
-        const std::vector<Key>& hashMapKeys);
 
   public:
 
@@ -161,12 +139,9 @@ class BenchmarkRecords {
     void addToExistingGroup(const std::string& groupDescriptor,
         const std::string& descriptor,
         const FUNCTION_TYPE& functionToMeasure) {
-      // Does the group exist?
-      auto groupEntry = recordGroups_.find(groupDescriptor);
-      AD_CHECK(groupEntry != recordGroups_.end());
-
-      // Add the descriptor and measured time to the group.
-      groupEntry->second.entries_.push_back(
+      // Get the entry of the hash map and add to it.
+      auto& groupEntry = recordGroups_.getReferenceToValue(groupDescriptor);
+      groupEntry.entries_.push_back(
           RecordEntry{descriptor, measureTimeOfFunction(functionToMeasure)});
     }
 
@@ -205,12 +180,8 @@ class BenchmarkRecords {
     void addToExistingTable(const std::string& tableDescriptor,
         const size_t row, const size_t column,
         const FUNCTION_TYPE& functionToMeasure) {
-      // Does the table exist?
-      auto tableEntry = recordTables_.find(tableDescriptor);
-      AD_CHECK(tableEntry != recordTables_.end());
-
-      // For easier usage.
-      BenchmarkRecords::RecordTable& table = tableEntry->second;
+      // Get the entry of the hash map.
+      auto& table = recordTables_.getReferenceToValue(tableDescriptor);
 
       // Are the given row and column number inside the table range?
       // size_t is unsigned, so we only need to check, that they are not to big.
