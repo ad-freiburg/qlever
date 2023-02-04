@@ -7,33 +7,34 @@
 #include <array>
 #include <vector>
 
-#include "../src/engine/CallFixedSize.h"
-#include "../src/engine/Minus.h"
+#include "./util/IdTestHelpers.h"
+#include "engine/CallFixedSize.h"
+#include "engine/Minus.h"
 
+namespace {
 auto table(size_t cols) {
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1'000'000)};
   return IdTable(cols, std::move(alloc));
 }
-auto I = [](const auto& id) {
-  return Id::makeFromVocabIndex(VocabIndex::make(id));
-};
+auto V = ad_utility::testing::VocabId;
+}  // namespace
 
 TEST(EngineTest, minusTest) {
   using std::array;
   using std::vector;
 
   IdTable a = table(3);
-  a.push_back({I(1), I(2), I(1)});
-  a.push_back({I(2), I(1), I(4)});
-  a.push_back({I(5), I(4), I(1)});
-  a.push_back({I(8), I(1), I(2)});
-  a.push_back({I(8), I(2), I(3)});
+  a.push_back({V(1), V(2), V(1)});
+  a.push_back({V(2), V(1), V(4)});
+  a.push_back({V(5), V(4), V(1)});
+  a.push_back({V(8), V(1), V(2)});
+  a.push_back({V(8), V(2), V(3)});
 
   IdTable b = table(4);
-  b.push_back({I(1), I(2), I(7), I(5)});
-  b.push_back({I(3), I(3), I(1), I(5)});
-  b.push_back({I(1), I(8), I(1), I(5)});
+  b.push_back({V(1), V(2), V(7), V(5)});
+  b.push_back({V(3), V(3), V(1), V(5)});
+  b.push_back({V(1), V(8), V(1), V(5)});
 
   IdTable res = table(3);
 
@@ -42,9 +43,9 @@ TEST(EngineTest, minusTest) {
   jcls.push_back(array<ColumnIndex, 2>{{1, 0}});
 
   IdTable wantedRes = table(3);
-  wantedRes.push_back({I(1), I(2), I(1)});
-  wantedRes.push_back({I(5), I(4), I(1)});
-  wantedRes.push_back({I(8), I(2), I(3)});
+  wantedRes.push_back({V(1), V(2), V(1)});
+  wantedRes.push_back({V(5), V(4), V(1)});
+  wantedRes.push_back({V(8), V(2), V(3)});
 
   // Subtract b from a on the column pairs 1,2 and 2,1 (entries from columns 1
   // of a have to equal those of column 2 of b and vice versa).
@@ -72,14 +73,14 @@ TEST(EngineTest, minusTest) {
 
   // Test minus with variable sized data.
   IdTable va = table(6);
-  va.push_back({I(1), I(2), I(3), I(4), I(5), I(6)});
-  va.push_back({I(1), I(2), I(3), I(7), I(5), I(6)});
-  va.push_back({I(7), I(6), I(5), I(4), I(3), I(2)});
+  va.push_back({V(1), V(2), V(3), V(4), V(5), V(6)});
+  va.push_back({V(1), V(2), V(3), V(7), V(5), V(6)});
+  va.push_back({V(7), V(6), V(5), V(4), V(3), V(2)});
 
   IdTable vb = table(3);
-  vb.push_back({I(2), I(3), I(4)});
-  vb.push_back({I(2), I(3), I(5)});
-  vb.push_back({I(6), I(7), I(4)});
+  vb.push_back({V(2), V(3), V(4)});
+  vb.push_back({V(2), V(3), V(5)});
+  vb.push_back({V(6), V(7), V(4)});
 
   IdTable vres = table(6);
   jcls.clear();
@@ -94,7 +95,7 @@ TEST(EngineTest, minusTest) {
                   jcls, &vres);
 
   wantedRes = table(6);
-  wantedRes.push_back({I(7), I(6), I(5), I(4), I(3), I(2)});
+  wantedRes.push_back({V(7), V(6), V(5), V(4), V(3), V(2)});
   ASSERT_EQ(wantedRes.size(), vres.size());
   ASSERT_EQ(wantedRes.numColumns(), vres.numColumns());
 
