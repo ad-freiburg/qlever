@@ -43,8 +43,8 @@ auto BenchmarkRecords::getSingleMeasurements() const
 
 // ____________________________________________________________________________
 void BenchmarkRecords::addGroup(const std::string& descriptor) {
-  recordGroups_.addEntry(descriptor, BenchmarkRecords::RecordGroup{descriptor,
-      {}});
+  recordGroups_.addEntry(std::string(descriptor),
+      BenchmarkRecords::RecordGroup{descriptor, {}});
 }
 
 // ____________________________________________________________________________
@@ -57,7 +57,7 @@ auto BenchmarkRecords::getGroups() const
 void BenchmarkRecords::addTable(const std::string& descriptor,
     const std::vector<std::string>& rowNames,
     const std::vector<std::string>& columnNames) {
-  recordTables_.addEntry(descriptor,
+  recordTables_.addEntry(std::string(descriptor),
       BenchmarkRecords::RecordTable(descriptor, rowNames, columnNames));
 }
 
