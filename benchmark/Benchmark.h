@@ -71,13 +71,13 @@ class BenchmarkRecords {
     /*
      * @brief Return execution time of function in seconds.
      *
-     * @tparam FUNCTION_TYPE Best left to type inference.
+     * @tparam Function Best left to type inference.
      *
      * @param functionToMeasure Must be a function, or callable.
      */
-    template<typename FUNCTION_TYPE>
-      requires std::invocable<FUNCTION_TYPE>
-    float measureTimeOfFunction(const FUNCTION_TYPE& functionToMeasure) const{
+    template<typename Function>
+      requires std::invocable<Function>
+    float measureTimeOfFunction(const Function& functionToMeasure) const{
       ad_utility::Timer benchmarkTimer;
          
       benchmarkTimer.start();
@@ -93,7 +93,7 @@ class BenchmarkRecords {
      * @brief Measures the time needed for the execution of the given function and
      * saves it, together with a description, in a normal list.
      *
-     * @tparam FUNCTION_TYPE Best left to type inference.
+     * @tparam Function Best left to type inference.
      *
      * @param descriptor A description, of what kind of benchmark case is
      *  getting measured. Needed, because otherwise nobody would be able to
@@ -102,10 +102,10 @@ class BenchmarkRecords {
      *  Most of the time a lambda, that calls the actual function to benchmark
      *  with the needed parameters.
      */
-    template<typename FUNCTION_TYPE>
-      requires std::invocable<FUNCTION_TYPE>
+    template<typename Function>
+      requires std::invocable<Function>
     void addSingleMeasurement(const std::string& descriptor,
-        const FUNCTION_TYPE& functionToMeasure) {
+        const Function& functionToMeasure) {
       singleMeasurements_.push_back(RecordEntry{descriptor,
           measureTimeOfFunction(functionToMeasure)});
     }
@@ -124,7 +124,7 @@ class BenchmarkRecords {
      * @brief Measures the time needed for the execution of the given function and
      * saves it, together with a description, as an item in a group.
      *
-     * @tparam FUNCTION_TYPE Best left to type inference.
+     * @tparam Function Best left to type inference.
      *
      * @param groupDescriptor The identification of the group.
      * @param descriptor A description, of what kind of benchmark case is
@@ -134,11 +134,11 @@ class BenchmarkRecords {
      *  Most of the time a lambda, that calls the actual function to benchmark
      *  with the needed parameters.
      */
-    template<typename FUNCTION_TYPE>
-      requires std::invocable<FUNCTION_TYPE>
+    template<typename Function>
+      requires std::invocable<Function>
     void addToExistingGroup(const std::string& groupDescriptor,
         const std::string& descriptor,
-        const FUNCTION_TYPE& functionToMeasure) {
+        const Function& functionToMeasure) {
       // Get the entry of the hash map and add to it.
       auto& groupEntry = recordGroups_.getReferenceToValue(groupDescriptor);
       groupEntry.entries_.push_back(
@@ -166,7 +166,7 @@ class BenchmarkRecords {
      * @brief Measures the time needed for the execution of the given function and
      * saves it as an entry in the table.
      *
-     * @tparam FUNCTION_TYPE Best left to type inference.
+     * @tparam Function Best left to type inference.
      *
      * @param tableDescriptor The identification of the table.
      * @param row, column Where in the tables to write the measured time.
@@ -175,11 +175,11 @@ class BenchmarkRecords {
      *  Most of the time a lambda, that calls the actual function to benchmark
      *  with the needed parameters.
      */
-    template<typename FUNCTION_TYPE>
-      requires std::invocable<FUNCTION_TYPE>
+    template<typename Function>
+      requires std::invocable<Function>
     void addToExistingTable(const std::string& tableDescriptor,
         const size_t row, const size_t column,
-        const FUNCTION_TYPE& functionToMeasure) {
+        const Function& functionToMeasure) {
       // Get the entry of the hash map.
       auto& table = recordTables_.getReferenceToValue(tableDescriptor);
 
