@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "engine/sparqlExpressions/LangExpression.h"
+#include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "parser/SparqlParser.h"
@@ -1523,7 +1524,7 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   }
   // Get the function name and the arguments. Note that we do not have to check
   // the number of arguments like for `processIriFunctionCall`, since the number
-  // of arguments is fixed by the gramar and we wouldn't even get here if the
+  // of arguments is fixed by the grammar and we wouldn't even get here if the
   // number were wrong. Hence only the `AD_CONTRACT_CHECK`s.
   AD_CONTRACT_CHECK(ctx->children.size() >= 1);
   auto functionName = ad_utility::getLowercase(ctx->children[0]->getText());
@@ -1545,9 +1546,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   } else if (functionName == "day") {
     return createUnaryExpression.template operator()<DayExpression>();
   } else if (functionName == "rand") {
-    AD_CONTRACT_CHECK(argList.size() == 0);
-    return std::make_unique<sparqlExpression::VariableExpression>(
-        Variable{"?RAND"});
+    AD_CONTRACT_CHECK(argList.empty());
+    return std::make_unique<RandomExpression>();
   } else {
     reportError(
         ctx,

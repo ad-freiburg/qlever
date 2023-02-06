@@ -23,10 +23,9 @@
  * a type that does not fulfill this property, the template will not match
  * (because of the std::enable_if) and there will be a compile-time error.
  */
-template <typename Int,
-          typename = std::enable_if_t<std::is_integral_v<Int> &&
-                                      sizeof(Int) <= sizeof(uint64_t)>>
-class FastRandomIntGenerator {
+template <typename Int>
+requires(std::is_integral_v<Int> &&
+         sizeof(Int) <= sizeof(uint64_t)) class FastRandomIntGenerator {
  public:
   FastRandomIntGenerator() {
     // Randomly initialize the shuffleTable

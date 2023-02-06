@@ -39,9 +39,6 @@ requires(isOperation<NaryOperation>) class NaryExpression
   static constexpr size_t N = NaryOperation::N;
   using Children = std::array<SparqlExpression::Ptr, N>;
 
-  // The actual constructor. It is private; to construct an object of this
-  // class, use the static `create` function (which uses this private
-  // constructor).
   NaryExpression(Children&& children);
 
  public:

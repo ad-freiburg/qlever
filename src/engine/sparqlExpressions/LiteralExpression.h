@@ -66,14 +66,10 @@ class LiteralExpression : public SparqlExpression {
   // ______________________________________________________________________
   string getCacheKey(const VariableToColumnMap& varColMap) const override {
     if constexpr (std::is_same_v<T, ::Variable>) {
-      bool isRand = _value.name() == "?RAND";
-      if (!isRand && !varColMap.contains(_value)) {
+      if (!varColMap.contains(_value)) {
         AD_THROW(absl::StrCat("Variable ", _value.name(), " not found"));
       }
-      return {"#column_" +
-              (isRand ? std::to_string(drand48())
-                      : std::to_string(varColMap.at(_value))) +
-              "#"};
+      return {"#column_" + std::to_string(varColMap.at(_value)) + "#"};
     } else if constexpr (std::is_same_v<T, string>) {
       return _value;
     } else if constexpr (std::is_same_v<T, ValueId>) {

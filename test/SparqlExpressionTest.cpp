@@ -73,7 +73,8 @@ auto testNaryExpression = [](const auto& expected, auto&&... operands) {
                                               map, table, alloc, localVocab};
   context._endIndex = resultSize;
 
-  // TODO: explain why we need to clone the operands below.
+  // NOTE: We need to clone because `VectorWithMemoryLimit` does not have a copy
+  // constructor (deliberately).
   auto clone = [](const auto& x) {
     if constexpr (requires { x.clone(); }) {
       return x.clone();
@@ -233,13 +234,15 @@ TEST(SparqlExpression, arithemticOperators) {
 template <typename UnaryExpression, typename OperandType, typename OutputType>
 auto testUnaryExpression =
     [](std::vector<OperandType>&& operand, std::vector<OutputType>&& expected) {
-      V<OperandType> operandV{operand.begin(), operand.end(), alloc};
-      V<OutputType> expectedV{expected.begin(), expected.end(), alloc};
+      V<OperandType> operandV{std::make_move_iterator(operand.begin()),
+                              std::make_move_iterator(operand.end()), alloc};
+      V<OutputType> expectedV{std::make_move_iterator(expected.begin()),
+                              std::make_move_iterator(expected.end()), alloc};
       testNaryExpression<UnaryExpression>(expectedV, operandV);
     };
 
 // Test `YearExpression`, `MonthExpression`, and `DayExpression`.
-TEST(SparqlExpression, dateOperator) {
+TEST(SparqlExpression, dateOperators) {
   // Helper function that asserts that the date operators give the expected
   // result on the given date.
   auto check = [](const string& date, int expectedYear, int expectedMonth,
