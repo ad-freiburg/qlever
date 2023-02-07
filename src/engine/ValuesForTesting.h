@@ -30,7 +30,7 @@ class ValuesForTesting : public Operation {
   }
 
   // ___________________________________________________________________________
-  virtual void computeResult(ResultTable* result) override {
+  void computeResult(ResultTable* result) override {
     for (size_t i = 0; i < table_.numColumns(); ++i) {
       result->_resultTypes.push_back(ResultTable::ResultType::KB);
     }
@@ -39,10 +39,10 @@ class ValuesForTesting : public Operation {
 
  private:
   // ___________________________________________________________________________
-  string asStringImpl([[maybe_unused]] size_t indent = 0) const override {
+  string asStringImpl([[maybe_unused]] size_t indent) const override {
     std::stringstream str;
     str << "Values for testing with " << table_.numColumns()
-        << "columns and contents ";
+        << " columns and contents ";
     for (size_t i = 0; i < table_.numColumns(); ++i) {
       for (Id entry : table_.getColumn(i)) {
         str << entry << ' ';
@@ -56,31 +56,31 @@ class ValuesForTesting : public Operation {
     return "explicit values for testing";
   }
 
-  virtual size_t getResultWidth() const override { return table_.numColumns(); }
+  size_t getResultWidth() const override { return table_.numColumns(); }
 
   // TODO<joka921> Maybe we will need to store sorted tables for future unit
   // tests.
-  virtual vector<size_t> resultSortedOn() const override { return {}; }
+  vector<size_t> resultSortedOn() const override { return {}; }
 
-  virtual void setTextLimit(size_t limit) override { (void)limit; }
+  void setTextLimit(size_t limit) override { (void)limit; }
 
-  virtual size_t getCostEstimate() override { return table_.numRows(); }
+  size_t getCostEstimate() override { return table_.numRows(); }
 
-  virtual size_t getSizeEstimate() override { return table_.numRows(); }
+  size_t getSizeEstimate() override { return table_.numRows(); }
 
   // For unit testing purposes it is useful that the columns have different
   // multiplicities to find bugs in functions that use the multiplicity.
-  virtual float getMultiplicity(size_t col) override {
+  float getMultiplicity(size_t col) override {
     (void)col;
-    return (col + 1) * 42.0;
+    return static_cast<float>(col + 1) * 42.0f;
   }
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
-  virtual bool knownEmptyResult() override { return table_.empty(); }
+  bool knownEmptyResult() override { return table_.empty(); }
 
  private:
-  virtual VariableToColumnMap computeVariableToColumnMap() const override {
+  VariableToColumnMap computeVariableToColumnMap() const override {
     VariableToColumnMap m;
     for (size_t i = 0; i < variables_.size(); ++i) {
       m[variables_.at(i)] = i;

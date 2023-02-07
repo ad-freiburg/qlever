@@ -460,7 +460,6 @@ inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
       return !compare(std::equal_to{});
     case GE:
       return compare(std::greater_equal{});
-      return detail::compareIdsImpl<compType>(a, b, std::greater_equal<>());
     case GT:
       return compare(std::greater{});
     default:

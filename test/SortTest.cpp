@@ -148,6 +148,9 @@ TEST(Sort, SimpleMemberFunctions) {
     ASSERT_EQ(0u, varColMap.at(Variable{"?0"}));
     EXPECT_FALSE(s.knownEmptyResult());
     EXPECT_EQ(42.0, s.getMultiplicity(0));
+
+    EXPECT_THAT(s.getSubtree()->getRootOperation()->asString(),
+                ::testing::StartsWith("Values for testing with"));
   }
 
   {
