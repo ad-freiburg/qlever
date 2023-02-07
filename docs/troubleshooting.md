@@ -97,5 +97,5 @@ One possible error may be the following:
 
 While macOS including Docker on Mac is not supported there are some workarounds.
 You can manually change the constant `static const size_t STXXL_DISK_SIZE_INDEX_BUILDER` 
-in [file](../src/global/Constants.h) or 
+in [file](../src/qlever/global/Constants.h) or 
 you can try using a named volume instead of a path on the host.

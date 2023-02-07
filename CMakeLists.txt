@@ -260,46 +260,46 @@ add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 
 ##################################################
 # Precompiled headers
-set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)
-set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h third_party/ctre/include/ctre/ctre.h third_party/antlr4/runtime/Cpp/runtime/src/antlr4-runtime.h)
+set(PRECOMPILED_HEADER_FILES_ENGINE src/qlever/util/HashMap.h src/qlever/engine/Operation.h src/qlever/engine/QueryExecutionTree.h)
+set(PRECOMPILED_HEADER_FILES_PARSER src/qlever/engine/sparqlExpressions/AggregateExpression.h third_party/ctre/include/ctre/ctre.h third_party/antlr4/runtime/Cpp/runtime/src/antlr4-runtime.h)
 
-add_subdirectory(src/parser)
+add_subdirectory(src/qlever/parser)
 target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
-add_subdirectory(src/engine)
+add_subdirectory(src/qlever/engine)
 target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
-add_subdirectory(src/index)
-add_subdirectory(src/util)
+add_subdirectory(src/qlever/index)
+add_subdirectory(src/qlever/util)
 
 enable_testing()
 option(SINGLE_TEST_BINARY "Link all unit tests into a single binary. This is useful e.g. for code coverage tools" OFF)
-add_subdirectory(test)
+add_subdirectory(src/test)
 
-configure_file(src/web/index.html index.html)
-configure_file(src/web/style.css style.css)
-configure_file(src/web/script.js script.js)
+configure_file(src/qlever/web/index.html index.html)
+configure_file(src/qlever/web/style.css style.css)
+configure_file(src/qlever/web/script.js script.js)
 
 # Add the library with the constants declared in `CompilationInfo.h` and defined
 # in `CompilationInfo.cpp` created by `CompilationInfo.cmake`.
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 
-add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
+add_executable(IndexBuilderMain src/qlever/index/IndexBuilderMain.cpp)
 target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
 
-add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp src/util/ConstexprSmallString.h)
+add_executable(CreatePatternsMain src/qlever/index/CreatePatternsMain.cpp src/qlever/util/ConstexprSmallString.h)
 target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(ServerMain src/ServerMain.cpp)
+add_executable(ServerMain src/qlever/ServerMain.cpp)
 target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
 target_precompile_headers(ServerMain REUSE_FROM engine)
 
-add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
+add_executable(PrefixHeuristicEvaluatorMain src/qlever/PrefixHeuristicEvaluatorMain.cpp)
 target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(TurtleParserMain src/TurtleParserMain.cpp)
+add_executable(TurtleParserMain src/qlever/TurtleParserMain.cpp)
 target_link_libraries(TurtleParserMain parser ${CMAKE_THREAD_LIBS_INIT} absl::flat_hash_map)
 
-add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
+add_executable(VocabularyMergerMain src/qlever/VocabularyMergerMain.cpp)
 target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(PermutationExporterMain src/index/PermutationExporterMain.cpp)
+add_executable(PermutationExporterMain src/qlever/index/PermutationExporterMain.cpp)
 target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_INIT})
