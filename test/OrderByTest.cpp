@@ -47,7 +47,7 @@ void testOrderBy(IdTable input, const IdTable& expected,
   // The second element (`isDescending`) will be correctly set later.
   OrderBy::SortIndices sortColumns;
   for (size_t i = 0; i < input.numColumns(); ++i) {
-    sortColumns.push_back(std::pair{i, false});
+    sortColumns.emplace_back(i, false);
   }
 
   // This loop runs over all possible permutations of the sort columns.
