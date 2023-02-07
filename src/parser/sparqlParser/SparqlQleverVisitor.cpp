@@ -741,7 +741,7 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
     // TODO implement
     reportError(ctx, "UNDEF in values clauses is not supported.");
   }
-  AD_FAIL()  // Should be unreachable.
+  AD_FAIL();  // Should be unreachable.
 }
 
 // ____________________________________________________________________________________
@@ -912,7 +912,7 @@ VarOrTerm Visitor::visit(Parser::VerbContext* ctx) {
     // Special keyword 'a'
     return GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}};
   } else {
-    AD_FAIL()  // Should be unreachable.
+    AD_FAIL();  // Should be unreachable.
   }
 }
 
@@ -967,7 +967,7 @@ vector<TripleWithPropertyPath> Visitor::visit(
   } else if (ctx->triplesNodePath()) {
     visit(ctx->triplesNodePath());
   } else {
-    AD_FAIL()  // Should be unreachable.
+    AD_FAIL();  // Should be unreachable.
   }
 }
 
@@ -1061,7 +1061,7 @@ PropertyPath Visitor::visit(Parser::PathEltContext* ctx) {
     } else if (ctx->pathMod()->getText() == "*") {
       p = PropertyPath::makeTransitive(p);
     } else {
-      AD_FAIL()  // Should be unreachable.
+      AD_FAIL();  // Should be unreachable.
     }
   }
 
@@ -1102,7 +1102,7 @@ PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
     return PropertyPath::fromIri(
         "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
   }
-  AD_FAIL()  // Should be unreachable.
+  AD_FAIL();  // Should be unreachable.
 }
 
 // ____________________________________________________________________________________
@@ -1214,7 +1214,7 @@ VarOrTerm Visitor::visit(Parser::GraphNodePathContext* ctx) {
   } else if (ctx->triplesNodePath()) {
     visit(ctx->triplesNodePath());
   } else {
-    AD_FAIL()  // Should be unreachable.
+    AD_FAIL();  // Should be unreachable.
   }
 }
 
@@ -1233,7 +1233,7 @@ VarOrTerm Visitor::visit(Parser::VarOrIriContext* ctx) {
     // `visitAlternative`.
     return GraphTerm{Iri{visit(ctx->iri())}};
   } else {
-    AD_FAIL()  // Should be unreachable.
+    AD_FAIL();  // Should be unreachable.
   }
 }
 
@@ -1344,7 +1344,7 @@ ExpressionPtr Visitor::visit(Parser::AdditiveExpressionContext* ctx) {
             std::move(result), std::move(signAndExpression.expression_));
         break;
       default:
-        AD_FAIL()
+        AD_FAIL();
     }
   }
   return result;
@@ -1647,7 +1647,7 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
   } else if (functionName == "sample") {
     return makePtr.operator()<SampleExpression>();
   }
-  AD_FAIL()  // Should be unreachable.
+  AD_FAIL();  // Should be unreachable.
 }
 
 // ____________________________________________________________________________________

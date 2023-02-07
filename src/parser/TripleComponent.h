@@ -153,7 +153,7 @@ class TripleComponent {
         return Id::makeFromDouble(value);
       } else if constexpr (std::is_same_v<T, Variable>) {
         // Cannot turn a variable into a ValueId.
-        AD_FAIL()
+        AD_FAIL();
       } else {
         static_assert(ad_utility::alwaysFalse<T>);
       }
