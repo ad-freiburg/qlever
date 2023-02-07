@@ -12,8 +12,22 @@
 
 namespace valueIdComparators {
 /// This enum encodes the different numeric comparators LessThan, LessEqual,
-/// EQual, NotEqual, GreaterEqual, GreaterThan.
+/// Equal, NotEqual, GreaterEqual, GreaterThan.
 enum struct Comparison { LT, LE, EQ, NE, GE, GT };
+
+/// This enum can be used to configure the behavior of the `compareIds` method
+/// below in the case when two `Id`s have incompatible datatypes (e.g.
+/// `VocabIndex` and a numeric type, or `Undefined` and any other type).
+/// For `AlwaysFalse`, the comparison will always be false, so for example `"x"`
+/// is neither smaller than nor greater than nor equal to `42`. This behavior is
+/// similar to the behavior of floating point `NaN` values. It is used for
+/// example for filter expressions like `FILTER (?x < 42)` which will filter out
+/// all string values. For `CompareByType` such pairs of `Id`s will be compared
+/// by the numeric order of their datatypes, so for example all `Undefined` IDs
+/// will be smaller than all IDs with a type different from `Undefined`. This
+/// behavior is used e.g. in `ORDER BY` expressions where we need a consistent
+/// partial ordering on all possible IDs.
+enum struct ComparisonForIncompatibleTypes { AlwaysFalse, CompareByType };
 
 /// Compares two `ValueId`s directly on the underlying representation. Note
 /// that because the type bits are the most significant bits, all values of
@@ -387,6 +401,8 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
 namespace detail {
 
 // This function is part of the implementation of `compareIds` (see below).
+template <ComparisonForIncompatibleTypes compType =
+              ComparisonForIncompatibleTypes::AlwaysFalse>
 bool compareIdsImpl(ValueId a, ValueId b, auto comparator) {
   auto isNumeric = [](ValueId id) {
     return id.getDatatype() == Datatype::Double ||
@@ -395,7 +411,13 @@ bool compareIdsImpl(ValueId a, ValueId b, auto comparator) {
   bool compatible =
       (a.getDatatype() == b.getDatatype()) || (isNumeric(a) && isNumeric(b));
   if (!compatible) {
-    return comparator(a.getDatatype(), b.getDatatype());
+    using enum ComparisonForIncompatibleTypes;
+    if constexpr (compType == AlwaysFalse) {
+      return false;
+    } else {
+      static_assert(compType == CompareByType);
+      return comparator(a.getDatatype(), b.getDatatype());
+    }
   }
 
   auto visitor = [comparator](const auto& aValue, const auto& bValue) -> bool {
@@ -416,21 +438,31 @@ bool compareIdsImpl(ValueId a, ValueId b, auto comparator) {
 // bValue are the values contained in `a` and `b`.
 // 2. The datatype of `a` and `b` are compatible, s.t. the comparison in
 // condition one is well-defined.
+// For the definition of the template parameter `compType` see the documentation
+// of the enum `ComparisonForIncompatibleTypes` above.
+template <ComparisonForIncompatibleTypes compType =
+              ComparisonForIncompatibleTypes::AlwaysFalse>
 inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
+  // A helper lambda to factor out common code
+  auto compare = [&](auto comparator) {
+    return detail::compareIdsImpl<compType>(a, b, comparator);
+  };
+  using enum Comparison;
   switch (comparison) {
-    case Comparison::LT:
-      return detail::compareIdsImpl(a, b, std::less<>());
-    case Comparison::LE:
-      return detail::compareIdsImpl(a, b, std::less_equal<>());
-    case Comparison::EQ:
-      return detail::compareIdsImpl(a, b, std::equal_to<>());
-    case Comparison::NE:
+    case LT:
+      return compare(std::less{});
+    case LE:
+      return compare(std::less_equal{});
+    case EQ:
+      return compare(std::equal_to{});
+    case NE:
       // IDs with incompatible datatypes are also considered "not equal".
-      return !compareIds(a, b, Comparison::EQ);
-    case Comparison::GE:
-      return detail::compareIdsImpl(a, b, std::greater_equal<>());
-    case Comparison::GT:
-      return detail::compareIdsImpl(a, b, std::greater<>());
+      return !compare(std::equal_to{});
+    case GE:
+      return compare(std::greater_equal{});
+      return detail::compareIdsImpl<compType>(a, b, std::greater_equal<>());
+    case GT:
+      return compare(std::greater{});
     default:
       AD_FAIL();
   }
@@ -446,20 +478,26 @@ inline bool compareWithEqualIds(ValueId a, ValueId bBegin, ValueId bEnd,
   // vocabulary entry that is larger than the non-existing word that it
   // represents.
   AD_CONTRACT_CHECK(bBegin <= bEnd);
+
+  // The comparison for `equal` is also used for the `not equal` case, so we
+  // factor it out.
+  auto compareEqual = [&]() {
+    return detail::compareIdsImpl(a, bBegin, std::greater_equal<>()) &&
+           detail::compareIdsImpl(a, bEnd, std::less<>());
+  };
+  using enum Comparison;
   switch (comparison) {
-    case Comparison::LT:
+    case LT:
       return detail::compareIdsImpl(a, bBegin, std::less<>());
-    case Comparison::LE:
+    case LE:
       return detail::compareIdsImpl(a, bEnd, std::less<>());
-    case Comparison::EQ:
-      return detail::compareIdsImpl(a, bBegin, std::greater_equal<>()) &&
-             detail::compareIdsImpl(a, bEnd, std::less<>());
-    case Comparison::NE:
-      // IDs with incompatible datatypes are also considered "not equal".
-      return !compareWithEqualIds(a, bBegin, bEnd, Comparison::EQ);
-    case Comparison::GE:
+    case EQ:
+      return compareEqual();
+    case NE:
+      return !compareEqual();
+    case GE:
       return detail::compareIdsImpl(a, bBegin, std::greater_equal<>());
-    case Comparison::GT:
+    case GT:
       return detail::compareIdsImpl(a, bEnd, std::greater_equal<>());
     default:
       AD_FAIL();

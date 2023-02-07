@@ -7,6 +7,7 @@
 
 #include "./IndexTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/IdTestHelpers.h"
 #include "engine/OrderBy.h"
 #include "engine/ValuesForTesting.h"
 #include "global/ValueIdComparators.h"
@@ -69,10 +70,14 @@ void testOrderBy(IdTable input, const IdTable& expected,
       sortColumns[i].second = isDescending[i];
     }
 
-    OrderBy s = makeOrderBy(std::move(permutedInput), sortColumns);
-    auto result = s.getResult();
-    const auto& resultTable = result->_idTable;
-    ASSERT_EQ(resultTable, permutedExpected);
+    // Randomly shuffle the input and sort.
+    for (size_t i = 0; i < 5; ++i) {
+      randomShuffle(permutedInput.begin(), permutedInput.end());
+      OrderBy s = makeOrderBy(permutedInput.clone(), sortColumns);
+      auto result = s.getResult();
+      const auto& resultTable = result->_idTable;
+      ASSERT_EQ(resultTable, permutedExpected);
+    }
   } while (std::next_permutation(sortColumns.begin(), sortColumns.end()));
 }
 }  // namespace
@@ -153,6 +158,22 @@ TEST(OrderBy, computeOrderByThreeColumns) {
               {true, false, true});
   testOrderBy(inputTable.clone(), expectedTableAllDescending,
               {true, true, true});
+}
+
+TEST(OrderBy, mixedDatatypes) {
+  auto I = ad_utility::testing::IntId;
+  auto V = ad_utility::testing::VocabId;
+  auto D = ad_utility::testing::DoubleId;
+  auto U = Id::makeUndefined();
+
+  std::vector<std::vector<Id>> input{{I(13)},   {I(-7)}, {U},       {I(0)},
+                                     {D(12.3)}, {U},     {V(12)},   {V(0)},
+                                     {U},       {U},     {D(-2e-4)}};
+  std::vector<std::vector<Id>> expected{{U},     {U},        {U},    {U},
+                                        {I(-7)}, {D(-2e-4)}, {I(0)}, {D(12.3)},
+                                        {I(13)}, {V(0)},     {V(12)}};
+  testOrderBy(makeIdTableFromIdVector(input), makeIdTableFromIdVector(expected),
+              {false});
 }
 
 // _____________________________________________________________________________

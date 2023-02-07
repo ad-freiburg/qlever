@@ -59,10 +59,13 @@ void testSort(IdTable input, const IdTable& expected,
                         permutedExpected.getColumn(i).begin());
     }
 
-    Sort s = makeSort(std::move(permutedInput), sortColumns);
-    auto result = s.getResult();
-    const auto& resultTable = result->_idTable;
-    ASSERT_EQ(resultTable, permutedExpected);
+    for (size_t i = 0; i < 5; ++i) {
+      randomShuffle(permutedInput.begin(), permutedInput.end());
+      Sort s = makeSort(permutedInput.clone(), sortColumns);
+      auto result = s.getResult();
+      const auto& resultTable = result->_idTable;
+      ASSERT_EQ(resultTable, permutedExpected);
+    }
   } while (std::next_permutation(sortColumns.begin(), sortColumns.end()));
 }
 }  // namespace
@@ -111,6 +114,21 @@ TEST(Sort, ComputeSortThreeColumns) {
   auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
   auto expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
   testSort(std::move(inputTable), expectedTable);
+}
+
+TEST(Sort, mixedDatatypes) {
+  auto I = ad_utility::testing::IntId;
+  auto V = ad_utility::testing::VocabId;
+  auto D = ad_utility::testing::DoubleId;
+  auto U = Id::makeUndefined();
+
+  std::vector<std::vector<Id>> input{{I(13)},   {I(-7)}, {U},       {I(0)},
+                                     {D(12.3)}, {U},     {V(12)},   {V(0)},
+                                     {U},       {U},     {D(-2e-4)}};
+  std::vector<std::vector<Id>> expected{{U},        {U},     {U},     {U},
+                                        {I(0)},     {I(13)}, {I(-7)}, {D(12.3)},
+                                        {D(-2e-4)}, {V(0)},  {V(12)}};
+  testSort(makeIdTableFromIdVector(input), makeIdTableFromIdVector(expected));
 }
 
 TEST(Sort, SimpleMemberFunctions) {

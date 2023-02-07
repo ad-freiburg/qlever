@@ -122,7 +122,8 @@ void OrderBy::computeResult(ResultTable* result) {
       if (row1[column] == row2[column]) {
         continue;
       }
-      bool isLessThan = valueIdComparators::compareIds(
+      bool isLessThan = valueIdComparators::compareIds<
+          valueIdComparators::ComparisonForIncompatibleTypes::CompareByType>(
           row1[column], row2[column], valueIdComparators::Comparison::LT);
       return isLessThan != isDescending;
     }
