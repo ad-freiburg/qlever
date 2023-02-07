@@ -4,12 +4,12 @@
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include <engine/CallFixedSize.h>
-#include <engine/IndexScan.h>
-#include <engine/Join.h>
-#include <global/Constants.h>
-#include <global/Id.h>
-#include <util/HashMap.h>
+#include <qlever/engine/CallFixedSize.h>
+#include <qlever/engine/IndexScan.h>
+#include <qlever/engine/Join.h>
+#include <qlever/global/Constants.h>
+#include <qlever/global/Id.h>
+#include <qlever/util/HashMap.h>
 
 #include <functional>
 #include <sstream>

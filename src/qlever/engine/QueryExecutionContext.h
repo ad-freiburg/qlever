@@ -6,22 +6,22 @@
 
 #pragma once
 
-#include <engine/Engine.h>
-#include <engine/QueryPlanningCostFactors.h>
-#include <engine/ResultTable.h>
-#include <engine/RuntimeInformation.h>
-#include <engine/SortPerformanceEstimator.h>
-#include <global/Constants.h>
-#include <index/Index.h>
-#include <util/Cache.h>
-#include <util/ConcurrentCache.h>
-#include <util/Log.h>
-#include <util/Synchronized.h>
-
 #include <memory>
 #include <shared_mutex>
 #include <string>
 #include <vector>
+
+#include "qlever/engine/Engine.h"
+#include "qlever/engine/QueryPlanningCostFactors.h"
+#include "qlever/engine/ResultTable.h"
+#include "qlever/engine/RuntimeInformation.h"
+#include "qlever/engine/SortPerformanceEstimator.h"
+#include "qlever/global/Constants.h"
+#include "qlever/index/Index.h"
+#include "qlever/util/Cache.h"
+#include "qlever/util/ConcurrentCache.h"
+#include "qlever/util/Log.h"
+#include "qlever/util/Synchronized.h"
 
 using std::shared_ptr;
 using std::string;

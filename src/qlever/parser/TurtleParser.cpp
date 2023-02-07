@@ -3,9 +3,9 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 
-#include <parser/RdfEscaping.h>
-#include <parser/TurtleParser.h>
-#include <util/Conversions.h>
+#include <qlever/parser/RdfEscaping.h>
+#include <qlever/parser/TurtleParser.h>
+#include <qlever/util/Conversions.h>
 
 #include <cstring>
 

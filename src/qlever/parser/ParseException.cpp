@@ -3,8 +3,8 @@
 //  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
 #include <Token.h>
-#include <parser/ParseException.h>
-#include <util/Exception.h>
+#include <qlever/parser/ParseException.h>
+#include <qlever/util/Exception.h>
 
 std::string ExceptionMetadata::coloredError() const {
   // stopIndex_ == startIndex_ - 1 might happen if the offending string is

@@ -6,8 +6,8 @@
 #ifndef QLEVER_TRANSPARENTFUNCTORS_H
 #define QLEVER_TRANSPARENTFUNCTORS_H
 
-#include <util/Forward.h>
-#include <util/TypeTraits.h>
+#include <qlever/util/Forward.h>
+#include <qlever/util/TypeTraits.h>
 
 #include <utility>
 

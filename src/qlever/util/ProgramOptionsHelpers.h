@@ -5,8 +5,8 @@
 #ifndef QLEVER_PROGRAMOPTIONSHELPERS_H
 #define QLEVER_PROGRAMOPTIONSHELPERS_H
 
-#include <util/Concepts.h>
-#include <util/Parameters.h>
+#include <qlever/util/Concepts.h>
+#include <qlever/util/Parameters.h>
 
 #include <boost/program_options.hpp>
 #include <vector>

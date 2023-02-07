@@ -4,29 +4,29 @@
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include <engine/Bind.h>
-#include <engine/CheckUsePatternTrick.h>
-#include <engine/CountAvailablePredicates.h>
-#include <engine/Distinct.h>
-#include <engine/Filter.h>
-#include <engine/GroupBy.h>
-#include <engine/HasPredicateScan.h>
-#include <engine/IndexScan.h>
-#include <engine/Join.h>
-#include <engine/Minus.h>
-#include <engine/MultiColumnJoin.h>
-#include <engine/NeutralElementOperation.h>
-#include <engine/OptionalJoin.h>
-#include <engine/OrderBy.h>
-#include <engine/QueryPlanner.h>
-#include <engine/Sort.h>
-#include <engine/TextOperationWithFilter.h>
-#include <engine/TextOperationWithoutFilter.h>
-#include <engine/TransitivePath.h>
-#include <engine/Union.h>
-#include <engine/Values.h>
-#include <parser/Alias.h>
-#include <parser/SparqlParserHelpers.h>
+#include <qlever/engine/Bind.h>
+#include <qlever/engine/CheckUsePatternTrick.h>
+#include <qlever/engine/CountAvailablePredicates.h>
+#include <qlever/engine/Distinct.h>
+#include <qlever/engine/Filter.h>
+#include <qlever/engine/GroupBy.h>
+#include <qlever/engine/HasPredicateScan.h>
+#include <qlever/engine/IndexScan.h>
+#include <qlever/engine/Join.h>
+#include <qlever/engine/Minus.h>
+#include <qlever/engine/MultiColumnJoin.h>
+#include <qlever/engine/NeutralElementOperation.h>
+#include <qlever/engine/OptionalJoin.h>
+#include <qlever/engine/OrderBy.h>
+#include <qlever/engine/QueryPlanner.h>
+#include <qlever/engine/Sort.h>
+#include <qlever/engine/TextOperationWithFilter.h>
+#include <qlever/engine/TextOperationWithoutFilter.h>
+#include <qlever/engine/TransitivePath.h>
+#include <qlever/engine/Union.h>
+#include <qlever/engine/Values.h>
+#include <qlever/parser/Alias.h>
+#include <qlever/parser/SparqlParserHelpers.h>
 
 #include <algorithm>
 #include <ctime>
