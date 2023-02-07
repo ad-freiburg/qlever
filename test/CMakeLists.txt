@@ -285,3 +285,5 @@ addLinkAndDiscoverTest(AlgorithmTest)
 addLinkAndDiscoverTest(CompressedRelationsTest index)
 
 addLinkAndDiscoverTest(ExceptionTest)
+
+addLinkAndDiscoverTestSerial(RandomExpressionTest absl::flat_hash_map index)

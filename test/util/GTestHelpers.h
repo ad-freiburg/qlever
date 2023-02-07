@@ -18,14 +18,14 @@
 #error "AD_PROPERTY must not already be defined. Consider renaming it."
 #else
 #define AD_PROPERTY(Class, Member, Matcher) \
-  testing::Property(#Member "()", &Class::Member, Matcher)
+  ::testing::Property(#Member "()", &Class::Member, Matcher)
 #endif
 
 #ifdef AD_FIELD
 #error "AD_FIELD must not already be defined. Consider renaming it."
 #else
 #define AD_FIELD(Class, Member, Matcher) \
-  testing::Field(#Member, &Class::Member, Matcher)
+  ::testing::Field(#Member, &Class::Member, Matcher)
 #endif
 
 // _____________________________________________________________________________
