@@ -15,7 +15,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app/build/
 RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -GNinja .. && ninja
-RUN make test
+RUN env CTEST_OUTPUT_ON_FAILURE=1 ctest -C Release .
 
 FROM base as runtime
 WORKDIR /app

@@ -57,7 +57,7 @@ jobs:
         # Build your program with the given configuration
       run: cmake --build ${{github.workspace}}/build --config ${{env.build-type}} -- -j $(nproc)
     - name: Run unit tests
-      working-directory: ${{github.workspace}}/build/test
+      working-directory: ${{github.workspace}}/build/src/test
       env:
         LLVM_PROFILE_FILE: "default%p.profraw"
       # Execute tests defined by the CMake configuration.
@@ -65,10 +65,10 @@ jobs:
       run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{env.build-type}} .
 
     - name: GetListOfExecutablesForCoverageInfo
-      working-directory: ${{github.workspace}}/build/test
+      working-directory: ${{github.workspace}}/build/src/test
       run: ctest --show-only=json-v1 > tests.json && python3 ${{github.workspace}}/misc/ctest-output-to-executables.py tests.json tests.txt
     - name: Process coverage info
-      working-directory: ${{github.workspace}}/build/test
+      working-directory: ${{github.workspace}}/build/src/test
       run:  >
         llvm-profdata-15 merge -sparse *.profraw -o default.profdata;
         xargs -a tests.txt llvm-cov-15 export --dump --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/third_party/" --ignore-filename-regex="/generated/"  --ignore-filename-regex="/nlohmann/" --ignore-filename-regex="/ctre/"  --ignore-filename-regex="/test/" > ./coverage.lcov
@@ -79,7 +79,7 @@ jobs:
       if: github.event_name != 'pull_request'
       uses: codecov/codecov-action@v3
       with:
-        file: ${{github.workspace}}/build/test/coverage.lcov
+        file: ${{github.workspace}}/build/src/test/coverage.lcov
         # Note: technically, a `token` is not required for codecov.io when
         # uploading from a public repository, but specifying it avoids the
         # nasty spurious failures due to GitHub's rate limit for codecov's
@@ -99,7 +99,7 @@ jobs:
         echo ${{ github.event.number }} > ./coverage-report/pr
         echo ${{ github.repository }} > ./coverage-report/github_repository
         echo ${GITHUB_REF} > ./coverage-report/github_ref
-        mv ${{ github.workspace}}/build/test/coverage.lcov coverage-report
+        mv ${{ github.workspace}}/build/src/test/coverage.lcov coverage-report
     - name: Upload coverage artifact
       if: github.event_name == 'pull_request'
       uses: actions/upload-artifact@v3
