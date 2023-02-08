@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/util/stream_generator.h"
+#include "../src/util/stream_generatorX.h"
 
 using namespace ad_utility::streams;
 

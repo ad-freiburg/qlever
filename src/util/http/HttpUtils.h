@@ -19,7 +19,7 @@
 #include "util/http/UrlParser.h"
 #include "util/http/beast.h"
 #include "util/http/streamable_body.h"
-#include "util/stream_generator.h"
+#include "util/stream_generatorX.h"
 
 /// Several utilities for using/customizing the HttpServer template from
 /// HttpServer.h

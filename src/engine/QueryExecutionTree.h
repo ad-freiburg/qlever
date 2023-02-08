@@ -16,7 +16,7 @@
 #include "../util/Conversions.h"
 #include "../util/Generator.h"
 #include "../util/HashSet.h"
-#include "../util/stream_generator.h"
+#include "../util/stream_generatorX.h"
 #include "./Operation.h"
 #include "./QueryExecutionContext.h"
 

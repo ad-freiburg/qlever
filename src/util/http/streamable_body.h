@@ -8,7 +8,7 @@
 
 #include "../Generator.h"
 #include "../Log.h"
-#include "../stream_generator.h"
+#include "../stream_generatorX.h"
 #include "./ContentEncodingHelper.h"
 #include "./beast.h"
 
