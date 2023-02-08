@@ -27,7 +27,7 @@ RUN groupadd -r qlever && useradd --no-log-init -r -u $UID -g qlever qlever && c
 USER qlever
 ENV PATH=/app/:$PATH
 
-COPY --from=builder /app/build/*Main /app/src/web/* /app/
+COPY --from=builder /app/build/*Main /app/src/qlever/web/* /app/
 COPY --from=builder /app/e2e/* /app/e2e/
 ENV PATH=/app/:$PATH
 
