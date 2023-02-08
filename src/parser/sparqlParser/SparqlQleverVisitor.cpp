@@ -1218,7 +1218,7 @@ VarOrTerm Visitor::visit(Parser::VarOrTermContext* ctx) {
 VarOrTerm Visitor::visit(Parser::VarOrIriContext* ctx) {
   if (ctx->var()) {
     return visit(ctx->var());
-  } else if (ctx->iri()) {
+  } else {
     AD_CORRECTNESS_CHECK(ctx->iri());
     // TODO<qup42> If `visit` returns an `Iri` and `VarOrTerm` can be
     // constructed from an `Iri`, this whole function becomes
@@ -1308,6 +1308,7 @@ ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
     return make.operator()<LessEqualExpression>();
   } else {
     AD_CORRECTNESS_CHECK(relation == ">=");
+    return make.operator()<GreaterEqualExpression>();
   }
 }
 
