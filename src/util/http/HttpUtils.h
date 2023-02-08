@@ -11,7 +11,7 @@
 
 #include "absl/strings/str_cat.h"
 #include "nlohmann/json.hpp"
-#include "util/AsyncStreamRenamed.h"
+#include "util/AsyncStreamRenumed.h"
 #include "util/CompressorStream.h"
 #include "util/StringUtils.h"
 #include "util/TypeTraits.h"

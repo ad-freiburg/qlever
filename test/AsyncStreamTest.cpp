@@ -9,7 +9,7 @@
 #include <chrono>
 #include <semaphore>
 
-#include "../src/util/AsyncStreamRenamed.h"
+#include "../src/util/AsyncStreamRenumed.h"
 
 using ad_utility::streams::runStreamAsync;
 
