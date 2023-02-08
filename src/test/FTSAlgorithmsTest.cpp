@@ -4,10 +4,10 @@
 
 #include <gtest/gtest.h>
 
-#include "./IndexTestHelpers.h"
 #include "qlever/engine/CallFixedSize.h"
 #include "qlever/index/FTSAlgorithms.h"
 #include "qlever/util/DisableWarningsClang13.h"
+#include "test/IndexTestHelpers.h"
 #include "test/util/IdTestHelpers.h"
 
 using namespace ad_utility::testing;

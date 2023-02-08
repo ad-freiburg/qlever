@@ -8,8 +8,8 @@
 #include <tuple>
 #include <vector>
 
-#include "../PropertyPath.h"
-#include "./VarOrTerm.h"
+#include "qlever/parser/PropertyPath.h"
+#include "qlever/parser/data/VarOrTerm.h"
 
 namespace ad_utility::sparql_types {
 using Objects = std::vector<VarOrTerm>;

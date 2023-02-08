@@ -7,11 +7,11 @@
 
 #include <string>
 
-#include "./SparqlExpressionTestHelpers.h"
 #include "qlever/engine/sparqlExpressions/LiteralExpression.h"
 #include "qlever/engine/sparqlExpressions/NaryExpression.h"
 #include "qlever/engine/sparqlExpressions/RelationalExpressions.h"
 #include "qlever/engine/sparqlExpressions/SparqlExpression.h"
+#include "test/SparqlExpressionTestHelpers.h"
 
 using namespace sparqlExpression;
 using namespace std::literals;

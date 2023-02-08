@@ -2,11 +2,11 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include "./IndexTestHelpers.h"
 #include "gtest/gtest.h"
 #include "qlever/engine/sparqlExpressions/SparqlExpression.h"
 #include "qlever/global/ValueIdComparators.h"
 #include "qlever/index/ConstantsIndexBuilding.h"
+#include "test/IndexTestHelpers.h"
 #include "test/util/IdTestHelpers.h"
 
 #pragma once

@@ -6,12 +6,12 @@
 
 #include <bitset>
 
-#include "./ValueIdTestHelpers.h"
 #include "qlever/global/ValueId.h"
 #include "qlever/util/HashSet.h"
 #include "qlever/util/Random.h"
 #include "qlever/util/Serializer/ByteBufferSerializer.h"
 #include "qlever/util/Serializer/Serializer.h"
+#include "test/ValueIdTestHelpers.h"
 
 TEST(ValueId, makeFromDouble) {
   auto testRepresentableDouble = [](double d) {

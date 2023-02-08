@@ -4,10 +4,10 @@
 
 #include <gtest/gtest.h>
 
-#include "SparqlAntlrParserTestHelpers.h"
 #include "qlever/parser/ParseException.h"
 #include "qlever/parser/SparqlParser.h"
 #include "qlever/util/SourceLocation.h"
+#include "test/SparqlAntlrParserTestHelpers.h"
 
 TEST(ParseException, coloredError) {
   auto exampleQuery = "SELECT A ?var WHERE";

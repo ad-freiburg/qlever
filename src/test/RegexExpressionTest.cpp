@@ -5,10 +5,10 @@
 #include <optional>
 #include <string>
 
-#include "./SparqlExpressionTestHelpers.h"
 #include "gtest/gtest.h"
 #include "qlever/engine/sparqlExpressions/LiteralExpression.h"
 #include "qlever/engine/sparqlExpressions/RegexExpression.h"
+#include "test/SparqlExpressionTestHelpers.h"
 #include "test/util/GTestHelpers.h"
 
 using namespace sparqlExpression;

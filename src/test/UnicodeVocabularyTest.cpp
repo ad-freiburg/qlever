@@ -4,10 +4,10 @@
 
 #include <gtest/gtest.h>
 
-#include "./VocabularyTestHelpers.h"
 #include "qlever/index/StringSortComparator.h"
 #include "qlever/index/vocabulary/UnicodeVocabulary.h"
 #include "qlever/index/vocabulary/VocabularyInMemory.h"
+#include "test/VocabularyTestHelpers.h"
 
 using Vocab = UnicodeVocabulary<VocabularyInMemory, SimpleStringComparator>;
 using namespace vocabulary_test;

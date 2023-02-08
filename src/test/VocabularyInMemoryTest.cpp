@@ -4,8 +4,8 @@
 
 #include <gtest/gtest.h>
 
-#include "./VocabularyTestHelpers.h"
 #include "qlever/index/vocabulary/VocabularyInMemory.h"
+#include "test/VocabularyTestHelpers.h"
 using Vocab = VocabularyInMemory;
 
 namespace {

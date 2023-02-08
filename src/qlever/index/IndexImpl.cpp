@@ -6,17 +6,6 @@
 
 #include "./IndexImpl.h"
 
-#include <absl/strings/str_join.h>
-#include <qlever/index/PrefixHeuristic.h>
-#include <qlever/index/TriplesView.h>
-#include <qlever/index/VocabularyGenerator.h>
-#include <qlever/parser/ParallelParseBuffer.h>
-#include <qlever/util/BatchedPipeline.h>
-#include <qlever/util/CompressionUsingZstd/ZstdWrapper.h>
-#include <qlever/util/HashMap.h>
-#include <qlever/util/Serializer/FileSerializer.h>
-#include <qlever/util/TupleHelpers.h>
-
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -26,7 +15,17 @@
 #include <stxxl/map>
 #include <unordered_map>
 
+#include "absl/strings/str_join.h"
 #include "qlever/CompilationInfo.h"
+#include "qlever/index/PrefixHeuristic.h"
+#include "qlever/index/TriplesView.h"
+#include "qlever/index/VocabularyGenerator.h"
+#include "qlever/parser/ParallelParseBuffer.h"
+#include "qlever/util/BatchedPipeline.h"
+#include "qlever/util/CompressionUsingZstd/ZstdWrapper.h"
+#include "qlever/util/HashMap.h"
+#include "qlever/util/Serializer/FileSerializer.h"
+#include "qlever/util/TupleHelpers.h"
 
 using std::array;
 

@@ -4,9 +4,9 @@
 
 #include <gtest/gtest.h>
 
-#include "./ValueIdTestHelpers.h"
 #include "qlever/global/ValueIdComparators.h"
 #include "qlever/util/Random.h"
+#include "test/ValueIdTestHelpers.h"
 
 using namespace valueIdComparators;
 

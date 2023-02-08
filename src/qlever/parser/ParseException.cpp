@@ -2,9 +2,13 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
-#include <Token.h>
-#include <qlever/parser/ParseException.h>
-#include <qlever/util/Exception.h>
+// Note: `Token.h` is a header from the ANTLR cpp runtime. Unfortunately we
+// cannot specify an absolute path for it.
+// TODO<joka921> Fix this.
+#include "qlever/parser/ParseException.h"
+
+#include "Token.h"
+#include "qlever/util/Exception.h"
 
 std::string ExceptionMetadata::coloredError() const {
   // stopIndex_ == startIndex_ - 1 might happen if the offending string is

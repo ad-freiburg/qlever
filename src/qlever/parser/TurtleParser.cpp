@@ -3,11 +3,12 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 
-#include <qlever/parser/RdfEscaping.h>
-#include <qlever/parser/TurtleParser.h>
-#include <qlever/util/Conversions.h>
+#include "qlever/parser/TurtleParser.h"
 
 #include <cstring>
+
+#include "qlever/parser/RdfEscaping.h"
+#include "qlever/util/Conversions.h"
 
 // _______________________________________________________________
 template <class T>

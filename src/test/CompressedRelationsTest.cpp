@@ -4,10 +4,10 @@
 
 #include <gtest/gtest.h>
 
-#include "./IndexTestHelpers.h"
 #include "qlever/index/CompressedRelation.h"
 #include "qlever/index/Permutations.h"
 #include "qlever/util/Serializer/ByteBufferSerializer.h"
+#include "test/IndexTestHelpers.h"
 
 namespace {
 // Return an `ID` of type `VocabIndex` from `index`. Assert that `index`

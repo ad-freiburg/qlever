@@ -7,7 +7,6 @@
 #include <sstream>
 #include <string>
 
-#include "./IndexTestHelpers.h"
 #include "qlever/engine/Bind.h"
 #include "qlever/engine/CountAvailablePredicates.h"
 #include "qlever/engine/Distinct.h"
@@ -30,6 +29,7 @@
 #include "qlever/engine/sparqlExpressions/GroupConcatExpression.h"
 #include "qlever/engine/sparqlExpressions/LiteralExpression.h"
 #include "qlever/global/Id.h"
+#include "test/IndexTestHelpers.h"
 
 // Get test collection of words of a given size. The words are all distinct.
 std::vector<std::string> getTestCollectionOfWords(size_t size) {

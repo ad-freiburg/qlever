@@ -7,7 +7,7 @@
 #include <sstream>
 #include <string>
 
-#include "../../util/Concepts.h"
+#include "qlever/util/Concepts.h"
 
 class Literal {
   std::string _stringRepresentation;

@@ -4,9 +4,9 @@
 
 #include <gtest/gtest.h>
 
-#include "./VocabularyTestHelpers.h"
 #include "qlever/index/vocabulary/CombinedVocabulary.h"
 #include "qlever/index/vocabulary/VocabularyInMemory.h"
+#include "test/VocabularyTestHelpers.h"
 
 using namespace vocabulary_test;
 

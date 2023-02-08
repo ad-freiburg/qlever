@@ -4,14 +4,13 @@
 
 #pragma once
 
-#include <absl/cleanup/cleanup.h>
-
 #include <exception>
 #include <thread>
 
-#include "./Generator.h"
-#include "./OnDestruction.h"
-#include "./ThreadSafeQueue.h"
+#include "absl/cleanup/cleanup.h"
+#include "qlever/util/Generator.h"
+#include "qlever/util/OnDestruction.h"
+#include "qlever/util/ThreadSafeQueue.h"
 
 namespace ad_utility::streams {
 

@@ -8,9 +8,9 @@
 
 #include <variant>
 
-#include "SparqlAntlrParserTestHelpers.h"
 #include "qlever/global/Constants.h"
 #include "qlever/parser/SparqlParser.h"
+#include "test/SparqlAntlrParserTestHelpers.h"
 
 namespace m = matchers;
 namespace p = parsedQuery;

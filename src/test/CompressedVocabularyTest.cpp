@@ -4,10 +4,10 @@
 
 #include <gtest/gtest.h>
 
-#include "./VocabularyTestHelpers.h"
 #include "qlever/index/vocabulary/CompressedVocabulary.h"
 #include "qlever/index/vocabulary/PrefixCompressor.h"
 #include "qlever/index/vocabulary/VocabularyInMemory.h"
+#include "test/VocabularyTestHelpers.h"
 
 // A stateless "compressor" that applies a trivial transformation to a string
 struct DummyCompressor {

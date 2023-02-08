@@ -3,9 +3,9 @@
 #include <utility>
 #include <vector>
 
-#include "CompressedRelation.h"
 #include "qlever/engine/idTable/IdTable.h"
 #include "qlever/global/Id.h"
+#include "qlever/index/CompressedRelation.h"
 #include "qlever/util/AllocatorWithLimit.h"
 #include "qlever/util/File.h"
 #include "qlever/util/Generator.h"

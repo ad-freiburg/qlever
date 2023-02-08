@@ -11,9 +11,6 @@
 #include <sstream>
 #include <tuple>
 
-#include "./AllocatorTestHelpers.h"
-#include "./GTestHelpers.h"
-#include "./IdTestHelpers.h"
 #include "qlever/engine/CallFixedSize.h"
 #include "qlever/engine/Engine.h"
 #include "qlever/engine/Join.h"
@@ -23,6 +20,9 @@
 #include "qlever/util/Forward.h"
 #include "qlever/util/Random.h"
 #include "qlever/util/SourceLocation.h"
+#include "test/util/AllocatorTestHelpers.h"
+#include "test/util/GTestHelpers.h"
+#include "test/util/IdTestHelpers.h"
 
 // For easier reading. We repeat that type combination so often, that this
 // will make things a lot easier in terms of reading and writing.

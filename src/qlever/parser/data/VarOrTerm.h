@@ -7,11 +7,11 @@
 #include <string>
 #include <variant>
 
-#include "../../engine/ResultTable.h"
-#include "../../index/Index.h"
-#include "../../util/VisitMixin.h"
-#include "./GraphTerm.h"
-#include "./Variable.h"
+#include "qlever/engine/ResultTable.h"
+#include "qlever/index/Index.h"
+#include "qlever/parser/data/GraphTerm.h"
+#include "qlever/parser/data/Variable.h"
+#include "qlever/util/VisitMixin.h"
 
 using VarOrTermBase = std::variant<Variable, GraphTerm>;
 

@@ -10,12 +10,12 @@
 #include <type_traits>
 #include <utility>
 
-#include "./SparqlExpressionTestHelpers.h"
-#include "SparqlAntlrParserTestHelpers.h"
 #include "qlever/parser/ConstructClause.h"
 #include "qlever/parser/SparqlParserHelpers.h"
 #include "qlever/parser/sparqlParser/SparqlQleverVisitor.h"
 #include "qlever/util/SourceLocation.h"
+#include "test/SparqlAntlrParserTestHelpers.h"
+#include "test/SparqlExpressionTestHelpers.h"
 
 using namespace sparqlParserHelpers;
 namespace m = matchers;

@@ -7,10 +7,10 @@
 #include <iostream>
 #include <string>
 
-#include "./TokenTestCtreHelper.h"
 #include "qlever/parser/RdfEscaping.h"
 #include "qlever/parser/Tokenizer.h"
 #include "qlever/parser/TokenizerCtre.h"
+#include "test/TokenTestCtreHelper.h"
 
 using std::string;
 TEST(TokenTest, Numbers) {

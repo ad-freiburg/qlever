@@ -4,18 +4,19 @@
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include "qlever/engine/CallFixedSize.h"
-#include "qlever/engine/IndexScan.h"
 #include "qlever/engine/Join.h"
-#include "qlever/global/Constants.h"
-#include "qlever/global/Id.h"
-#include "qlever/util/HashMap.h"
 
 #include <functional>
 #include <sstream>
 #include <type_traits>
 #include <unordered_set>
 #include <vector>
+
+#include "qlever/engine/CallFixedSize.h"
+#include "qlever/engine/IndexScan.h"
+#include "qlever/global/Constants.h"
+#include "qlever/global/Id.h"
+#include "qlever/util/HashMap.h"
 
 using std::string;
 

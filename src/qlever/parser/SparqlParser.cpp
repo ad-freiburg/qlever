@@ -2,7 +2,7 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
-#include "./SparqlParser.h"
+#include "qlever/parser/SparqlParser.h"
 
 #include "qlever/parser/SparqlParserHelpers.h"
 

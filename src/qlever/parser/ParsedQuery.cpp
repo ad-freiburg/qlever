@@ -4,16 +4,16 @@
 
 #include "ParsedQuery.h"
 
-#include <absl/strings/str_join.h>
-#include <absl/strings/str_split.h>
-#include <qlever/parser/RdfEscaping.h>
-#include <qlever/util/Conversions.h>
-
 #include <optional>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "absl/strings/str_join.h"
+#include "absl/strings/str_split.h"
+#include "qlever/parser/RdfEscaping.h"
+#include "qlever/util/Conversions.h"
 
 using std::string;
 using std::vector;

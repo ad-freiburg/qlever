@@ -6,10 +6,10 @@
 #ifndef QLEVER_TRANSPARENTFUNCTORS_H
 #define QLEVER_TRANSPARENTFUNCTORS_H
 
-#include <qlever/util/Forward.h>
-#include <qlever/util/TypeTraits.h>
-
 #include <utility>
+
+#include "qlever/util/Forward.h"
+#include "qlever/util/TypeTraits.h"
 
 /// Contains several function object types with templated operator() that wrap
 /// overloaded functions from the standard library. This enables passing them as

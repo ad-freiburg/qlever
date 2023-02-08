@@ -5,33 +5,6 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 #pragma once
 
-#include <qlever/engine/ResultTable.h>
-#include <qlever/global/Pattern.h>
-#include <qlever/index/CompressedRelation.h>
-#include <qlever/index/ConstantsIndexBuilding.h>
-#include <qlever/index/DocsDB.h>
-#include <qlever/index/Index.h>
-#include <qlever/index/IndexBuilderTypes.h>
-#include <qlever/index/IndexMetaData.h>
-#include <qlever/index/PatternCreator.h>
-#include <qlever/index/Permutations.h>
-#include <qlever/index/StxxlSortFunctors.h>
-#include <qlever/index/TextMetaData.h>
-#include <qlever/index/Vocabulary.h>
-#include <qlever/index/VocabularyGenerator.h>
-#include <qlever/parser/ContextFileParser.h>
-#include <qlever/parser/TripleComponent.h>
-#include <qlever/parser/TurtleParser.h>
-#include <qlever/util/BackgroundStxxlSorter.h>
-#include <qlever/util/BufferedVector.h>
-#include <qlever/util/CompressionUsingZstd/ZstdWrapper.h>
-#include <qlever/util/File.h>
-#include <qlever/util/Forward.h>
-#include <qlever/util/HashMap.h>
-#include <qlever/util/MmapVector.h>
-#include <qlever/util/Timer.h>
-#include <qlever/util/json.h>
-
 #include <array>
 #include <fstream>
 #include <memory>
@@ -41,6 +14,33 @@
 #include <stxxl/stream>
 #include <stxxl/vector>
 #include <vector>
+
+#include "qlever/engine/ResultTable.h"
+#include "qlever/global/Pattern.h"
+#include "qlever/index/CompressedRelation.h"
+#include "qlever/index/ConstantsIndexBuilding.h"
+#include "qlever/index/DocsDB.h"
+#include "qlever/index/Index.h"
+#include "qlever/index/IndexBuilderTypes.h"
+#include "qlever/index/IndexMetaData.h"
+#include "qlever/index/PatternCreator.h"
+#include "qlever/index/Permutations.h"
+#include "qlever/index/StxxlSortFunctors.h"
+#include "qlever/index/TextMetaData.h"
+#include "qlever/index/Vocabulary.h"
+#include "qlever/index/VocabularyGenerator.h"
+#include "qlever/parser/ContextFileParser.h"
+#include "qlever/parser/TripleComponent.h"
+#include "qlever/parser/TurtleParser.h"
+#include "qlever/util/BackgroundStxxlSorter.h"
+#include "qlever/util/BufferedVector.h"
+#include "qlever/util/CompressionUsingZstd/ZstdWrapper.h"
+#include "qlever/util/File.h"
+#include "qlever/util/Forward.h"
+#include "qlever/util/HashMap.h"
+#include "qlever/util/MmapVector.h"
+#include "qlever/util/Timer.h"
+#include "qlever/util/json.h"
 
 using ad_utility::BufferedVector;
 using ad_utility::MmapVector;

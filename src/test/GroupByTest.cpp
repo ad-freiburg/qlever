@@ -4,7 +4,6 @@
 
 #include <cstdio>
 
-#include "./IndexTestHelpers.h"
 #include "gtest/gtest.h"
 #include "qlever/engine/GroupBy.h"
 #include "qlever/engine/IndexScan.h"
@@ -13,6 +12,7 @@
 #include "qlever/engine/sparqlExpressions/AggregateExpression.h"
 #include "qlever/engine/sparqlExpressions/LiteralExpression.h"
 #include "qlever/index/ConstantsIndexBuilding.h"
+#include "test/IndexTestHelpers.h"
 #include "test/util/IdTestHelpers.h"
 
 using namespace ad_utility::testing;
