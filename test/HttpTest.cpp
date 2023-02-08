@@ -9,7 +9,7 @@
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
-#include "util/http/HttpClient.h"
+#include "util/http/HttpClients.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
 

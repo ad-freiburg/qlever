@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "util/http/HttpClient.h"
+#include "util/http/HttpClients.h"
 
 #include <sstream>
 #include <string>
@@ -15,6 +15,7 @@ namespace beast = boost::beast;
 namespace ssl = boost::asio::ssl;
 namespace http = boost::beast::http;
 using tcp = boost::asio::ip::tcp;
+// Changed something.
 
 // Implemented using Boost.Beast, code apapted from
 // https://www.boost.org/doc/libs/master/libs/beast/example/http/client/sync/http_client_sync.cpp
