@@ -12,24 +12,32 @@ TEST(RandomExpression, evaluate) {
   TestContext testContext{};
   auto& evaluationContext = testContext.context;
   evaluationContext._beginIndex = 43;
-  evaluationContext._endIndex = 144;
+  evaluationContext._endIndex = 1044;
   auto resultAsVariant = RandomExpression{}.evaluate(&evaluationContext);
 
   using V = VectorWithMemoryLimit<int64_t>;
   ASSERT_TRUE(std::holds_alternative<V>(resultAsVariant));
   const auto& resultVector = std::get<V>(resultAsVariant);
-  ASSERT_EQ(101, resultVector.size());
+  ASSERT_EQ(resultVector.size(), 1001);
 
   ad_utility::HashMap<int64_t, size_t> histogram;
   for (auto rand : resultVector) {
-    histogram[rand]++;
+    histogram[rand % 10]++;
   }
 
   // A simple check whether the numbers are sufficiently random. It has a
   // very low percentage of failure.
   for (const auto& [rand, count] : histogram) {
-    ASSERT_LE(count, 5);
+    ASSERT_GE(count, 10);
+    ASSERT_LE(count, 200);
   }
+
+  size_t numSwaps = 0;
+  for (size_t i = 1; i < resultVector.size(); ++i) {
+    numSwaps += resultVector[i] < resultVector[i - 1];
+  }
+  ASSERT_GE(numSwaps, 100);
+  ASSERT_LE(numSwaps, 900);
 }
 
 TEST(RandomExpression, simpleMemberFunctions) {

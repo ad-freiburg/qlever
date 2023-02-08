@@ -1010,7 +1010,7 @@ TEST(SparqlParser, Query) {
 // test the parsing of other expressions more cleanly.
 namespace builtInCallTestHelpers {
 // Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
-// (via `dynamic_cast` points to an object of type `Expression`, and that that
+// (via `dynamic_cast`) points to an object of type `Expression`, and that this
 // `Expression` matches the `matcher`.
 template <typename Expression, typename Matcher = decltype(testing::_)>
 auto matchPtr(Matcher matcher = Matcher{})
@@ -1033,6 +1033,8 @@ auto matchUnaryX()
       SparqlExpression, childrenForTesting, ::testing::ElementsAre(varX)));
 }
 }  // namespace builtInCallTestHelpers
+
+// ___________________________________________________________________________
 TEST(SparqlParser, builtInCall) {
   using namespace sparqlExpression;
   using namespace builtInCallTestHelpers;
