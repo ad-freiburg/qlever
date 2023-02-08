@@ -10,7 +10,8 @@
 #include <sstream>
 
 // Coroutines are still experimental in clang libcpp, therefore
-// adapt the appropriate namespaces using the convenience header.
+
+// adapt the appropriate nmespaces using the convenience header.
 #include "./Concepts.h"
 #include "./Coroutines.h"
 #include "./Exception.h"
