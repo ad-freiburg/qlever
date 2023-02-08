@@ -4,29 +4,29 @@
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include <qlever/engine/Bind.h>
-#include <qlever/engine/CheckUsePatternTrick.h>
-#include <qlever/engine/CountAvailablePredicates.h>
-#include <qlever/engine/Distinct.h>
-#include <qlever/engine/Filter.h>
-#include <qlever/engine/GroupBy.h>
-#include <qlever/engine/HasPredicateScan.h>
-#include <qlever/engine/IndexScan.h>
-#include <qlever/engine/Join.h>
-#include <qlever/engine/Minus.h>
-#include <qlever/engine/MultiColumnJoin.h>
-#include <qlever/engine/NeutralElementOperation.h>
-#include <qlever/engine/OptionalJoin.h>
-#include <qlever/engine/OrderBy.h>
-#include <qlever/engine/QueryPlanner.h>
-#include <qlever/engine/Sort.h>
-#include <qlever/engine/TextOperationWithFilter.h>
-#include <qlever/engine/TextOperationWithoutFilter.h>
-#include <qlever/engine/TransitivePath.h>
-#include <qlever/engine/Union.h>
-#include <qlever/engine/Values.h>
-#include <qlever/parser/Alias.h>
-#include <qlever/parser/SparqlParserHelpers.h>
+#include "qlever/engine/Bind.h"
+#include "qlever/engine/CheckUsePatternTrick.h"
+#include "qlever/engine/CountAvailablePredicates.h"
+#include "qlever/engine/Distinct.h"
+#include "qlever/engine/Filter.h"
+#include "qlever/engine/GroupBy.h"
+#include "qlever/engine/HasPredicateScan.h"
+#include "qlever/engine/IndexScan.h"
+#include "qlever/engine/Join.h"
+#include "qlever/engine/Minus.h"
+#include "qlever/engine/MultiColumnJoin.h"
+#include "qlever/engine/NeutralElementOperation.h"
+#include "qlever/engine/OptionalJoin.h"
+#include "qlever/engine/OrderBy.h"
+#include "qlever/engine/QueryPlanner.h"
+#include "qlever/engine/Sort.h"
+#include "qlever/engine/TextOperationWithFilter.h"
+#include "qlever/engine/TextOperationWithoutFilter.h"
+#include "qlever/engine/TransitivePath.h"
+#include "qlever/engine/Union.h"
+#include "qlever/engine/Values.h"
+#include "qlever/parser/Alias.h"
+#include "qlever/parser/SparqlParserHelpers.h"
 
 #include <algorithm>
 #include <ctime>

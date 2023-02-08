@@ -3,10 +3,10 @@
 // Author:
 //   2022-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include <qlever/engine/RuntimeInformation.h>
-#include <qlever/util/Exception.h>
-#include <qlever/util/Log.h>
-#include <qlever/util/TransparentFunctors.h>
+#include "qlever/engine/RuntimeInformation.h"
+#include "qlever/util/Exception.h"
+#include "qlever/util/Log.h"
+#include "qlever/util/TransparentFunctors.h"
 
 #include <ranges>
 

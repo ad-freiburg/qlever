@@ -6,10 +6,10 @@
 
 #pragma once
 
-#include <qlever/engine/Operation.h>
-#include <qlever/engine/QueryExecutionTree.h>
-#include <qlever/util/HashMap.h>
-#include <qlever/util/HashSet.h>
+#include "qlever/engine/Operation.h"
+#include "qlever/engine/QueryExecutionTree.h"
+#include "qlever/util/HashMap.h"
+#include "qlever/util/HashSet.h"
 
 #include <list>
 

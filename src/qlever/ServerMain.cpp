@@ -3,18 +3,17 @@
 //   2011-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include <qlever/engine/Server.h>
-#include <qlever/global/Constants.h>
-#include <qlever/util/ProgramOptionsHelpers.h>
-#include <qlever/util/ReadableNumberFact.h>
-
 #include <boost/program_options.hpp>
 #include <cstdlib>
 #include <iostream>
 #include <string>
 #include <vector>
 
-#include "CompilationInfo.h"
+#include "qlever/CompilationInfo.h"
+#include "qlever/engine/Server.h"
+#include "qlever/global/Constants.h"
+#include "qlever/util/ProgramOptionsHelpers.h"
+#include "qlever/util/ReadableNumberFact.h"
 
 using std::cerr;
 using std::cout;

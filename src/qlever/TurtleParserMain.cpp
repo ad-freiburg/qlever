@@ -9,8 +9,8 @@
 #include <iostream>
 #include <string>
 
-#include "./parser/TurtleParser.h"
-#include "./util/Log.h"
+#include "qlever/parser/TurtleParser.h"
+#include "qlever/util/Log.h"
 
 /**
  * @brief Instantiate a Parser that parses filename and writes the resulting

@@ -3,7 +3,7 @@
 // Author: Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 #pragma once
 
-#include <qlever/engine/Operation.h>
+#include "qlever/engine/Operation.h"
 
 /// The neutral element wrt `JOIN`. It contains one element, but binds no
 /// variables (which means it has 0 columns).
