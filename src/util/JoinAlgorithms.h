@@ -55,6 +55,7 @@ auto findSmallerUndefRanges(const auto& row, const auto& joinColumns,
   }
   return result;
 }
+
 template <typename RowLeft, typename RowRight>
 auto makeSmallerUndefRanges(const auto& joinColumns,
                             const auto& joinColumnsLeft,
@@ -175,9 +176,11 @@ void zipperJoinWithUndef(
       lessThanReversed, findSmallerUndefRangesLeft, false);
   auto mergeWithUndefRight =
       makeMergeWithUndefLeft(lessThan, findSmallerUndefRangesRight, true);
+
   [&]() {
     while (it1 < end1 && it2 < end2) {
       while (lessThan(*it1, *it2)) {
+        auto ii1 = *it1;
         if (!mergeWithUndefLeft(*it1, range2.begin(), it2)) {
           elFromFirstNotFoundAction(*it1);
         }
@@ -219,7 +222,9 @@ void zipperJoinWithUndef(
     }
   }();
   std::for_each(it1, end1,
-                [&](const auto& row) { elFromFirstNotFoundAction(row); });
+                [&](const auto& row) {
+                  if (!mergeWithUndefLeft(row, range2.begin(), range2.end())) {
+                  elFromFirstNotFoundAction(row); }});
 }
 
 // _____________________________________________________________________________
