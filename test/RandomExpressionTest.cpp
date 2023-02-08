@@ -20,14 +20,14 @@ TEST(RandomExpression, evaluate) {
   const auto& resultVector = std::get<V>(resultAsVariant);
   ASSERT_EQ(resultVector.size(), 1001);
 
-  ad_utility::HashMap<int64_t, size_t> histogram;
+  std::vector<int64_t> histogram(10);
   for (auto rand : resultVector) {
     histogram[rand % 10]++;
   }
 
   // A simple check whether the numbers are sufficiently random. It has a
-  // very low percentage of failure.
-  for (const auto& [rand, count] : histogram) {
+  // negligible probability of failure.
+  for (const auto& count : histogram) {
     ASSERT_GE(count, 10);
     ASSERT_LE(count, 200);
   }
