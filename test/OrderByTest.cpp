@@ -174,6 +174,10 @@ TEST(OrderBy, mixedDatatypes) {
                                         {I(13)}, {V(0)},     {V(12)}};
   testOrderBy(makeIdTableFromIdVector(input), makeIdTableFromIdVector(expected),
               {false});
+
+  std::ranges::reverse(expected);
+  testOrderBy(makeIdTableFromIdVector(input), makeIdTableFromIdVector(expected),
+              {true});
 }
 
 // _____________________________________________________________________________

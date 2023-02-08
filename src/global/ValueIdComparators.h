@@ -11,49 +11,49 @@
 #include "util/OverloadCallOperator.h"
 
 namespace valueIdComparators {
-/// This enum encodes the different numeric comparators LessThan, LessEqual,
-/// Equal, NotEqual, GreaterEqual, GreaterThan.
+// This enum encodes the different numeric comparators LessThan, LessEqual,
+// Equal, NotEqual, GreaterEqual, GreaterThan.
 enum struct Comparison { LT, LE, EQ, NE, GE, GT };
 
-/// This enum can be used to configure the behavior of the `compareIds` method
-/// below in the case when two `Id`s have incompatible datatypes (e.g.
-/// `VocabIndex` and a numeric type, or `Undefined` and any other type).
-/// For `AlwaysFalse`, the comparison will always be false, so for example `"x"`
-/// is neither smaller than nor greater than nor equal to `42`. This behavior is
-/// similar to the behavior of floating point `NaN` values. It is used for
-/// example for filter expressions like `FILTER (?x < 42)` which will filter out
-/// all string values. For `CompareByType` such pairs of `Id`s will be compared
-/// by the numeric order of their datatypes, so for example all `Undefined` IDs
-/// will be smaller than all IDs with a type different from `Undefined`. This
-/// behavior is used e.g. in `ORDER BY` expressions where we need a consistent
-/// partial ordering on all possible IDs.
+// This enum can be used to configure the behavior of the `compareIds` method
+// below in the case when two `Id`s have incompatible datatypes (e.g.
+// `VocabIndex` and a numeric type, or `Undefined` and any other type).
+// For `AlwaysFalse`, the comparison will always be false, so for example `"x"`
+// is neither smaller than nor greater than nor equal to `42`. This behavior is
+// similar to the behavior of floating point `NaN` values. It is used for
+// example for filter expressions like `FILTER (?x < 42)` which will filter out
+// all string values. For `CompareByType` such pairs of `Id`s will be compared
+// by the numeric order of their datatypes, so for example all `Undefined` IDs
+// will be smaller than all IDs with a type different from `Undefined`. This
+// behavior is used e.g. in `ORDER BY` expressions where we need a consistent
+// partial ordering on all possible IDs.
 enum struct ComparisonForIncompatibleTypes { AlwaysFalse, CompareByType };
 
-/// Compares two `ValueId`s directly on the underlying representation. Note
-/// that because the type bits are the most significant bits, all values of
-/// the same `Datatype` will be adjacent to each other. Unsigned index types
-/// are also ordered correctly. Signed integers are ordered as follows: first
-/// the positive integers (>= 0) in order and then the negative integers (< 0)
-/// in order. For doubles it is first the positive doubles in order, then the
-/// negative doubles in reversed order. In detail it is [0.0 ... infinity, NaN,
-/// -0.0, ... -infinity]. This is a direct consequence of comparing the bit
-/// representation of these values as unsigned integers.
+// Compares two `ValueId`s directly on the underlying representation. Note
+// that because the type bits are the most significant bits, all values of
+// the same `Datatype` will be adjacent to each other. Unsigned index types
+// are also ordered correctly. Signed integers are ordered as follows: first
+// the positive integers (>= 0) in order and then the negative integers (< 0)
+// in order. For doubles it is first the positive doubles in order, then the
+// negative doubles in reversed order. In detail it is [0.0 ... infinity, NaN,
+// -0.0, ... -infinity]. This is a direct consequence of comparing the bit
+// representation of these values as unsigned integers.
 inline bool compareByBits(ValueId a, ValueId b) {
   return a.getBits() < b.getBits();
 }
 
 namespace detail {
 
-/// Returns a comparator predicate `pred` that can be called with two arguments:
-/// a `ValueId` and a templated `Value`. The predicate first calls the
-/// `valueIdProjection` on the `ValueId` and then calls the `comparator` with
-/// the `value` and the result of the projection. The predicate is symmetric, so
-/// both `pred(ValueId, Value)` and `pred(Value, ValueId)` work as expected.
-/// This function is useful for `std::equal_range` which expects both orders to
-/// work. Example: `makeSymmetricComparator(&ValueId::getDatatype,
-/// std::equal_to<>{})` returns a predicate that can be called with
-/// `pred(Datatype, ValueId)` and pred(ValueId, Datatype)` and returns true iff
-/// `Datatype` and the datatype of the Id are the same.
+// Returns a comparator predicate `pred` that can be called with two arguments:
+// a `ValueId` and a templated `Value`. The predicate first calls the
+// `valueIdProjection` on the `ValueId` and then calls the `comparator` with
+// the `value` and the result of the projection. The predicate is symmetric, so
+// both `pred(ValueId, Value)` and `pred(Value, ValueId)` work as expected.
+// This function is useful for `std::equal_range` which expects both orders to
+// work. Example: `makeSymmetricComparator(&ValueId::getDatatype,
+// std::equal_to<>{})` returns a predicate that can be called with
+// `pred(Datatype, ValueId)` and pred(ValueId, Datatype)` and returns true iff
+// `Datatype` and the datatype of the Id are the same.
 template <typename Projection, typename Comparator = std::less<>>
 auto makeSymmetricComparator(Projection valueIdProjection,
                              Comparator comparator = Comparator{}) {
@@ -67,9 +67,9 @@ auto makeSymmetricComparator(Projection valueIdProjection,
 }
 }  // namespace detail
 
-/// For a range of `ValueId`s that is represented by `[begin, end)` and has to
-/// be sorted according to `compareByBits`, return the contiguous range of
-/// `ValueIds` (as a pair of iterators) where the Ids have the `datatype`.
+// For a range of `ValueId`s that is represented by `[begin, end)` and has to
+// be sorted according to `compareByBits`, return the contiguous range of
+// `ValueIds` (as a pair of iterators) where the Ids have the `datatype`.
 template <typename RandomIt>
 inline std::pair<RandomIt, RandomIt> getRangeForDatatype(RandomIt begin,
                                                          RandomIt end,
@@ -369,11 +369,11 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
   AD_FAIL();
 }
 
-/// Similar to `getRangesForId` above but takes a range [valueIdBegin,
-/// valueIdEnd) of Ids that are considered to be equal. `valueIdBegin` and
-/// `valueIdEnd` must have the same datatype which must be one of the index
-/// types `VocabIndex, LocalVocabIndex, ...`, otherwise an `AD_CONTRACT_CHECK`
-/// will fail at runtime.
+// Similar to `getRangesForId` above but takes a range [valueIdBegin,
+// valueIdEnd) of Ids that are considered to be equal. `valueIdBegin` and
+// `valueIdEnd` must have the same datatype which must be one of the index
+// types `VocabIndex, LocalVocabIndex, ...`, otherwise an `AD_CONTRACT_CHECK`
+// will fail at runtime.
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
     RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
@@ -401,7 +401,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
 namespace detail {
 
 // This function is part of the implementation of `compareIds` (see below).
-template <ComparisonForIncompatibleTypes compType =
+template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
               ComparisonForIncompatibleTypes::AlwaysFalse>
 bool compareIdsImpl(ValueId a, ValueId b, auto comparator) {
   auto isNumeric = [](ValueId id) {
@@ -412,10 +412,10 @@ bool compareIdsImpl(ValueId a, ValueId b, auto comparator) {
       (a.getDatatype() == b.getDatatype()) || (isNumeric(a) && isNumeric(b));
   if (!compatible) {
     using enum ComparisonForIncompatibleTypes;
-    if constexpr (compType == AlwaysFalse) {
+    if constexpr (comparisonForIncompatibleTypes == AlwaysFalse) {
       return false;
     } else {
-      static_assert(compType == CompareByType);
+      static_assert(comparisonForIncompatibleTypes == CompareByType);
       return comparator(a.getDatatype(), b.getDatatype());
     }
   }
@@ -438,14 +438,15 @@ bool compareIdsImpl(ValueId a, ValueId b, auto comparator) {
 // bValue are the values contained in `a` and `b`.
 // 2. The datatype of `a` and `b` are compatible, s.t. the comparison in
 // condition one is well-defined.
-// For the definition of the template parameter `compType` see the documentation
-// of the enum `ComparisonForIncompatibleTypes` above.
-template <ComparisonForIncompatibleTypes compType =
+// For the definition of the template parameter `comparisonForIncompatibleTypes`
+// see the documentation of the enum `ComparisonForIncompatibleTypes` above.
+template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
               ComparisonForIncompatibleTypes::AlwaysFalse>
 inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
   // A helper lambda to factor out common code
   auto compare = [&](auto comparator) {
-    return detail::compareIdsImpl<compType>(a, b, comparator);
+    return detail::compareIdsImpl<comparisonForIncompatibleTypes>(a, b,
+                                                                  comparator);
   };
   using enum Comparison;
   switch (comparison) {
@@ -467,8 +468,8 @@ inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
   }
 }
 
-/// Similar to `compareIds` above but takes a range [bBegin, bEnd) of Ids that
-/// are considered to be equal.
+// Similar to `compareIds` above but takes a range [bBegin, bEnd) of Ids that
+// are considered to be equal.
 inline bool compareWithEqualIds(ValueId a, ValueId bBegin, ValueId bEnd,
                                 Comparison comparison) {
   // The case `bBegin == bEnd` happens when IDs from QLever's vocabulary are

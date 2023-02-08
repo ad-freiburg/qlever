@@ -264,6 +264,5 @@ TEST(ValueIdComparators, contractViolations) {
       (compareWithEqualIds(u, u, u, static_cast<Comparison>(542))));
 
   // The third argument must be >= the second.
-  ASSERT_ANY_THROW(
-      (compareWithEqualIds(I(3), I(25), I(12), static_cast<Comparison>(542))));
+  ASSERT_ANY_THROW((compareWithEqualIds(I(3), I(25), I(12), Comparison::LE)));
 }
