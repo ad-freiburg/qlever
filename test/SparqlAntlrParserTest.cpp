@@ -999,5 +999,3 @@ TEST(SparqlParser, Query) {
   expectQueryFails("DESCRIBE *");
   expectQueryFails("ASK WHERE { ?x <foo> <bar> }");
 }
-
-TEST(SparqlParser, contractViolations) {}

@@ -112,7 +112,6 @@ TEST(TripleComponent, toValueIdIfNotString) {
   ASSERT_FALSE(tc.toValueIdIfNotString().has_value());
 
   tc = Variable{"?x"};
-
   // Note: we cannot simply write `ASSERT_THROW(tc.toValueIdIfNotString(),
   // Exception)` because `toValueIdIfNotString` is marked `nodiscard` and we
   // would get a compiler warning.
