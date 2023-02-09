@@ -22,7 +22,7 @@ TEST(RandomExpression, evaluate) {
 
   std::vector<int64_t> histogram(10);
   for (auto rand : resultVector) {
-    histogram[rand % 10]++;
+    histogram[std::abs(rand) % 10]++;
   }
 
   // A simple check whether the numbers are sufficiently random. It has a
