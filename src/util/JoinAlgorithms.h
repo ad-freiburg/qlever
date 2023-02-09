@@ -9,6 +9,7 @@
 #include <cstdint>
 
 #include "global/Id.h"
+#include "util/Generator.h"
 
 namespace ad_utility {
 
@@ -32,43 +33,88 @@ auto makeLessThanAndReversed(const auto& joinColumns) {
   return std::pair{lessThan, lessThanReversed};
 }
 
-template <typename Row>
-auto findSmallerUndefRanges(const auto& row, const auto& joinColumns,
-                            auto begin, auto end) {
-  std::vector<std::pair<decltype(begin), decltype(end)>> result;
-  std::vector<size_t> definedColumns;
-  for (auto col : joinColumns) {
-    if (row[col] != ValueId::makeUndefined()) {
-      definedColumns.push_back(col);
-    }
-  }
+// Todo<joka921> Optimize this for small numbers of columns (no use of std::vector etc).
+template<typename Row>
+auto findSmallerUndefRangesForRowsWithoutUndef(const auto row, const auto& joinColumns,
+                            auto begin, auto end) ->cppcoro::generator<decltype(begin)> {
 
-  if (definedColumns.empty()) {
-    return result;
-  }
+  // TODO<joka921> This can be done without copying.
+  Row rowLower = row;
 
-  Row rowCopy = row;
-
-  size_t upperBound = std::pow(2, definedColumns.size());
-  // TODO<joka921> Remove this, it doesn't work with one column...
-  if (row.numColumns() >= 2 && row[0] == row[1]) {
-    std::cout << "duplicate row " << row[0] << std::endl;
-  }
+  size_t upperBound = std::pow(2, joinColumns.size());
   for (size_t i = 0; i < upperBound - 1; ++i) {
-    for (size_t j = 0; j < definedColumns.size(); ++j) {
-      //std::cout <<"i " << i << " j:" << j << " i >> j" << (i >>j) << std::endl;
-      rowCopy[definedColumns[j]] =
-          (i >> j) & 1 ? row[definedColumns[j]] : ValueId::makeUndefined();
+    for (size_t j = 0; j < joinColumns.size(); ++j) {
+      std::cout <<"i " << i << " j:" << j << " i >> j " << (i >>j) << std::endl;
+      rowLower[joinColumns[j]] =
+          (i >> j) & 1 ? row[joinColumns[j]] : ValueId::makeUndefined();
     }
-    std::cout << "Outputting defined row" << std::endl;
-    for (const auto& id : rowCopy) {
-      std::cout << id << std::endl;
+
+    auto [begOfUndef, endOfUndef] = std::equal_range(begin, end, rowLower,
+    std::ranges::lexicographical_compare);
+    for (; begOfUndef != endOfUndef; ++begOfUndef) {
+      co_yield begOfUndef;
     }
-    std::cout << "done" << std::endl;
-    result.push_back(std::equal_range(begin, end, rowCopy,
-                                      std::ranges::lexicographical_compare));
   }
-  return result;
+}
+
+template<typename Row>
+auto findSmallerUndefRangesForRowsWithUndefInLastColumns(const auto row, const auto& joinColumns, size_t numLastUndefined,
+                                               auto begin, auto end) ->cppcoro::generator<decltype(begin)> {
+
+  // TODO<joka921> This can be done without copying.
+  Row rowLower = row;
+
+  size_t numDefinedColumns = joinColumns.size() - numLastUndefined;
+  size_t upperBound = std::pow(2, numDefinedColumns);
+  for (size_t i = 0; i < upperBound - 1; ++i) {
+    for (size_t j = 0; j < joinColumns.size() - numLastUndefined; ++j) {
+      std::cout << "i " << i << " j:" << j << " i >> j " << (i >> j)
+                << std::endl;
+      rowLower[joinColumns[j]] =
+          (i >> j) & 1 ? row[joinColumns[j]] : ValueId::makeUndefined();
+    }
+  }
+
+  auto begOfUndef = std::lower_bound(begin, end, rowLower,std::ranges::lexicographical_compare);
+  static_assert(Id::makeUndefined().getBits() == 0);
+  rowLower[joinColumns[numDefinedColumns]] = Id::fromBits(1);
+  auto endOfUndef = std::lower_bound(begin, end, rowLower,std::ranges::lexicographical_compare);
+    for (; begOfUndef != endOfUndef; ++begOfUndef) {
+      co_yield begOfUndef;
+    }
+  }
+
+auto findSmallerUndefRanges(const auto row, const auto& joinColumns,
+                            auto begin, auto end) ->cppcoro::generator<decltype(begin)> {
+
+  auto isCompatible = [&](const auto& otherRow) {
+    auto n = joinColumns.size();
+    for (size_t k=0u; k < n; ++k) {
+      // TODO<joka921> This is probably wrong as we might have differing join columns!!!
+      Id a = row[joinColumns[k]];
+      Id b = otherRow[joinColumns[k]];
+      std::cout << " Comparing " << a << "( " << a.getBits() << " and " << b << "(" << b.getBits() << ")";
+      bool aUndef = a == Id::makeUndefined();
+      bool bUndef = b == Id::makeUndefined();
+      bool eq = a==b;
+      auto match = aUndef || bUndef || eq;
+      std::cout << " " << aUndef << bUndef << eq << match << '\n';
+      if (!match) {
+        std::cout << " not compatible" << std::endl;
+        return false;
+      }
+    }
+    std::cout << " compatible" << std::endl;
+    return true;
+  };
+
+  for (auto it = begin; it!= end; ++it) {
+    if (isCompatible(*it)) {
+      co_yield it;
+      }
+  }
+
+  co_return;
 }
 
 template <typename RowLeft, typename RowRight>
@@ -177,27 +223,18 @@ void zipperJoinWithUndef(
       (void) cover;
       bool compatibleWasFound = false;
       auto smallerUndefRanges = findUndef(el, startOfRange, endOfRange);
-      std::cout << "merging with undef ranges" << '\n';
-      for (auto [begin, end] : smallerUndefRanges) {
-        if (begin < end) {
-          std::cout << "Range with size " << end - begin << '\n';
-          for (const auto& id : *begin) {
-            std::cout << id << '\n';
-          }
-          std::cout << std::endl;
-        }
-        for (; begin != end; ++begin) {
-          if (lt(*begin, el)) {
+      //std::cout << "merging with undef ranges" << '\n';
+      for (const auto& it : smallerUndefRanges) {
+          if (lt(*it, el)) {
             compatibleWasFound = true;
             if constexpr (reversed) {
-              compatibleRowAction(el, *begin);
+              compatibleRowAction(el, *it);
             } else {
-              compatibleRowAction(*begin, el);
-              cover(begin);
+              compatibleRowAction(el, *it);
+              cover(it);
             }
           }
         }
-      }
       return compatibleWasFound;
     };
   };

@@ -142,17 +142,19 @@ TEST(OptionalJoin, twoColumnsPreexistingUndefLeft) {
     auto expected = makeTableV({{3, 3}, {3, 3}, {3, 3}, {3, 3}});
     testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
   }
+
   {
     auto a = makeTableV({{U, U},
-                         {U, 3},
                          {U, 2},
+                         {U, 3},
                          {U, 123},
                          {0, 1},
                          {3, U},
                          {3, U},
                          {3, 7},
+                         {4, U},
                          {5, 2},
-                         {6, U}});
+                         {6, U}, {18, U}});
     auto b =
         makeTableV({{0, 0}, {0, 1}, {0, 1}, {3, 3}, {5, 2}, {6, 12}, {20, 3}});
     auto expected = makeTableV({{0, 0},
@@ -172,10 +174,97 @@ TEST(OptionalJoin, twoColumnsPreexistingUndefLeft) {
                                 {6, 12},
                                 {20, 3},
                                 {20, 3},
-                                {U, 123}});
+                                {U, 123}, {4, U}, {18, U}});
     testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
   }
+}
 
+TEST(OptionalJoin, twoColumnsPreexistingUndefRight) {
+  {
+    auto a =
+        makeTableV({{0, 0}, {0, 1}, {0, 1}, {3, 3}, {5, 2}, {6, 12}, {20, 3}});
+    auto b = makeTableV({{U, U},
+                         {U, 2},
+                         {U, 3},
+                         {U, 123},
+                         {0, 1},
+                         {3, U},
+                         {3, U},
+                         {3, 7},
+                         {4, U},
+                         {5, 2},
+                         {6, U}, {18, U}});
+    auto expected = makeTableV({{0, 0},
+                                {0, 1},
+                                {0, 1},
+                                {0, 1},
+                                {0, 1},
+                                {3, 3},
+                                {3, 3},
+                                {3, 3},
+                                {3, 3},
+                                {5, 2},
+                                {5, 2},
+                                {5, 2},
+                                {6, 12},
+                                {6, 12},
+                                {20, 3},
+                                {20, 3}});
+
+    testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
+  }
+}
+
+TEST(OptionalJoin, twoColumnsPreexistingUndefBoth) {
+  {
+    auto a =
+        makeTableV({{12, U} });
+    auto b = makeTableV({{U, U},
+                         {U, 3},
+                         {U, 123}});
+    auto expected = makeTableV({
+                                {12, U},
+                                {12, 3},
+                                {12, 123}});
+
+    testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
+  }
+  /*
+  {
+    auto a =
+        makeTableV({{0, 0}, {0, 1}, {0, 1}, {3, 3}, {5, U}, {6, 12}, {12, U}, {20, 3}});
+    auto b = makeTableV({{U, U},
+                         {U, 2},
+                         {U, 3},
+                         {U, 123},
+                         {0, 1},
+                         {3, U},
+                         {3, U},
+                         {3, 7},
+                         {4, U},
+                         {5, 2},
+                         {6, U}, {18, U}});
+    auto expected = makeTableV({{0, 0},
+                                {0, 1},
+                                {0, 1},
+                                {0, 1},
+                                {0, 1},
+                                {3, 3},
+                                {3, 3},
+                                {3, 3},
+                                {3, 3},
+                                {5, U},
+                                {5, 2},
+                                {6, 12},
+                                {6, 12},
+                                {12, U},
+                                {12, 123},
+                                {20, 3},
+                                {20, 3}});
+
+    testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
+  }
+   */
 }
 
 TEST(OptionalJoin, multipleColumnsNoUndef) {

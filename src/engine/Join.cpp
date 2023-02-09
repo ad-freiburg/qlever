@@ -586,11 +586,15 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     auto numUndefB = bUndef.first - bUndef.second;
     std::pair aUnd{a.begin(), a.begin() + numUndefA};
     std::pair bUnd{b.begin(), b.begin() + numUndefB};
-    auto findSmallerUndefRangeLeft = [=](auto&&...) {
-      return std::array{aUnd};
+    auto findSmallerUndefRangeLeft = [=](auto&&...) ->cppcoro::generator<decltype(aUnd.first)> {
+      for (auto it = aUnd.first; it != aUnd.second; ++it) {
+        co_yield it;
+      }
     };
-    auto findSmallerUndefRangeRight = [=](auto&&...) {
-      return std::array{bUnd};
+    auto findSmallerUndefRangeRight = [=](auto&&...) ->cppcoro::generator<decltype(bUnd.first)> {
+      for (auto it = bUnd.first; it != bUnd.second; ++it) {
+        co_yield it;
+      }
     };
 
     // TODO<joka921> This does not yet respect the timeout.
