@@ -74,12 +74,12 @@ auto testGetRangesForId(auto begin, auto end, ValueId id,
     for (auto [rangeBegin, rangeEnd] : ranges) {
       while (it != rangeBegin) {
         ASSERT_FALSE(isMatching(*it, id)) << *it << ' ' << id;
-        ASSERT_FALSE(compareIds(*it, id, comparison))<< *it << ' ' << id;
+        ASSERT_FALSE(compareIds(*it, id, comparison)) << *it << ' ' << id;
         ++it;
       }
       while (it != rangeEnd) {
         ASSERT_TRUE(isMatching(*it, id)) << *it << ' ' << id;
-        ASSERT_TRUE(compareIds(*it, id, comparison))<< *it << ' ' << id;
+        ASSERT_TRUE(compareIds(*it, id, comparison)) << *it << ' ' << id;
         ++it;
       }
     }

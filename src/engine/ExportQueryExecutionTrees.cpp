@@ -13,7 +13,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res) {
-  // TODO<C++20, Clang16> Use views to create an abstraction for the repeatet
+  // TODO<C++20, Clang16> Use views to create an abstraction for the repeated
   // `upperBound` code.
   size_t upperBound = std::min<size_t>(
       limitAndOffset._limit + limitAndOffset._offset, res->_idTable.size());
@@ -69,7 +69,8 @@ ExportQueryExecutionTrees::constructQueryResultToTurtle(
 }
 
 // _____________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
+nlohmann::json
+ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res) {
@@ -193,10 +194,12 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
 
   std::erase(columns, std::nullopt);
 
-  // TODO<joka921> Do we want to have those messages also for the other
-  // formats?
+  // TODO<joka921> add a warning to the result (Also for other formats).
   if (columns.empty()) {
-    AD_THROW("None of the selected variables is visible in the query body");
+    LOG(WARN) << "Exporting a SPARQL query where none of the selected "
+                 "variables is bound in the query"
+              << std::endl;
+    return {std::vector<std::string>{}};
   }
 
   const IdTable& idTable = resultTable->_idTable;
@@ -302,13 +305,13 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
   QueryExecutionTree::ColumnIndicesAndTypes selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, *resultTable, true);
 
-  // This case should only fail if we have no variables selected at all.
-  // This case should be handled earlier by the parser.
-  // TODO<joka921, hannahbast> What do we want to do for variables that don't
-  // appear in the query body?
-  // TODO<joka921>: We want to keep those columns, but we also want to add a
-  // warning to the resulting JSON that is then shown in the UI.
-  AD_CONTRACT_CHECK(!selectedColumnIndices.empty());
+  // TODO<joka921> Also add a warning to the exported result.
+  if (selectedColumnIndices.empty()) {
+    LOG(WARN) << "Exporting a SPARQL query where none of the selected "
+                 "variables is bound in the query"
+              << std::endl;
+    return {std::vector<std::string>{}};
+  }
 
   return ExportQueryExecutionTrees::idTableToQLeverJSONArray(
       qet, limitAndOffset, selectedColumnIndices, std::move(resultTable));
@@ -421,7 +424,7 @@ ExportQueryExecutionTrees::constructQueryResultToTsvOrCsv(
 }
 
 // _____________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::computeResultAsQLeverJSON(
+nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     ad_utility::Timer& requestTimer, size_t maxSend) {
   shared_ptr<const ResultTable> resultTable = qet.getResult();
@@ -450,11 +453,12 @@ nlohmann::json ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   {
     auto limitAndOffset = query._limitOffset;
     limitAndOffset._limit = std::min(limitAndOffset._limit, maxSend);
-    j["res"] = query.hasSelectClause()
-                   ? ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
+    j["res"] =
+        query.hasSelectClause()
+            ? ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
                   qet, query.selectClause(), limitAndOffset,
                   std::move(resultTable))
-                   : ExportQueryExecutionTrees::
+            : ExportQueryExecutionTrees::
                   constructQueryResultBindingsToQLeverJSON(
                       qet, query.constructClause().triples_, limitAndOffset,
                       std::move(resultTable));
@@ -482,7 +486,7 @@ ExportQueryExecutionTrees::computeResultAsStream(
                      format>(qet, parsedQuery.constructClause().triples_,
                              limitAndOffset, qet.getResult());
   };
-  // TODO<joka921> Clean this up by a `switch-constexpr`-abstraction
+  // TODO<joka921> Clean this up by a "switch constexpr"-abstraction
   if (mediaType == MediaType::csv) {
     return compute.template operator()<MediaType::csv>();
   } else if (mediaType == MediaType::tsv) {
@@ -509,7 +513,7 @@ ExportQueryExecutionTrees::computeConstructQueryResultAsTurtle(
       qet.getResult());
 }
 // _____________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::computeResultAsSparqlJSON(
+nlohmann::json ExportQueryExecutionTrees::computeSelectQueryResultAsSparqlJSON(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     [[maybe_unused]] ad_utility::Timer& requestTimer, size_t maxSend) {
   if (!query.hasSelectClause()) {
@@ -533,9 +537,11 @@ nlohmann::json ExportQueryExecutionTrees::computeResultAsJSON(
     ad_utility::MediaType mediaType) {
   switch (mediaType) {
     case ad_utility::MediaType::qleverJson:
-      return computeResultAsQLeverJSON(parsedQuery, qet, requestTimer, maxSend);
+      return computeQueryResultAsQLeverJSON(parsedQuery, qet, requestTimer,
+                                            maxSend);
     case ad_utility::MediaType::sparqlJson:
-      return computeResultAsSparqlJSON(parsedQuery, qet, requestTimer, maxSend);
+      return computeSelectQueryResultAsSparqlJSON(parsedQuery, qet,
+                                                  requestTimer, maxSend);
     default:
       AD_FAIL();
   }
