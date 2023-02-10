@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "engine/sparqlExpressions/LangExpression.h"
+#include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "parser/SparqlParser.h"
@@ -1509,27 +1510,41 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return visit(ctx->regexExpression());
   } else if (ctx->langExpression()) {
     return visit(ctx->langExpression());
-    // TODO: Implement built-in calls according to the following examples.
-    //
-    // } else if (ad_utility::getLowercase(ctx->children[0]->getText()) ==
-    //            "sqr") {
-    //   if (ctx->expression().size() != 1) {
-    //     throw ParseException{"SQR needs one argument"};
-    //   }
-    //   auto children = visitVector<ExpressionPtr>(ctx->expression());
-    //   return createExpression<sparqlExpression::SquareExpression>(
-    //       std::move(children[0]));
-    // } else if (ad_utility::getLowercase(ctx->children[0]->getText()) ==
-    //            "dist") {
-    //   if (ctx->expression().size() != 2) {
-    //     throw ParseException{"DIST needs two arguments"};
-    //   }
-    //   auto children = visitVector<ExpressionPtr>(ctx->expression());
-    //   return createExpression<sparqlExpression::DistExpression>(
-    //       std::move(children[0]), std::move(children[1]));
+  }
+  // Get the function name and the arguments. Note that we do not have to check
+  // the number of arguments like for `processIriFunctionCall`, since the number
+  // of arguments is fixed by the grammar and we wouldn't even get here if the
+  // number were wrong. Hence only the `AD_CONTRACT_CHECK`s.
+  AD_CONTRACT_CHECK(ctx->children.size() >= 1);
+  auto functionName = ad_utility::getLowercase(ctx->children[0]->getText());
+  auto argList = visitVector(ctx->expression());
+  using namespace sparqlExpression;
+  // Create the expression using the matching lambda from `NaryExpression.h`.
+  auto createUnaryExpression = [this, &argList]<typename Expression>() {
+    AD_CONTRACT_CHECK(argList.size() == 1);
+    return createExpression<Expression>(std::move(argList[0]));
+  };
+  if (functionName == "str") {
+    return createUnaryExpression.template operator()<StrExpression>();
+  } else if (functionName == "strlen") {
+    return createUnaryExpression.template operator()<StrlenExpression>();
+  } else if (functionName == "year") {
+    return createUnaryExpression.template operator()<YearExpression>();
+  } else if (functionName == "month") {
+    return createUnaryExpression.template operator()<MonthExpression>();
+  } else if (functionName == "day") {
+    return createUnaryExpression.template operator()<DayExpression>();
+  } else if (functionName == "rand") {
+    AD_CONTRACT_CHECK(argList.empty());
+    return std::make_unique<RandomExpression>();
   } else {
-    reportNotSupported(
-        ctx, "Built-in functions (other than aggregates and REGEX) are ");
+    reportError(
+        ctx,
+        absl::StrCat("Built-in function \"", functionName,
+                     "\"  not yet implemented; if you need it, just add it to ",
+                     "SparqlQleverVisitor.cpp::visitTypesafe(Parser::"
+                     "BuiltInCallContext ",
+                     "following the already implemented functions there"));
   }
 }
 
