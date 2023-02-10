@@ -61,12 +61,18 @@ class TripleComponent {
   requires requires(Variant v, T&& t) { _variant = t; }
   TripleComponent& operator=(T&& value) {
     _variant = AD_FWD(value);
+    // See the similar check in the constructor for details.
+    if (isString()) {
+      AD_CONTRACT_CHECK(!getString().starts_with("?"));
+    }
     return *this;
   }
 
   /// Assign a `std::string` to the variant that is constructed from `value`.
   TripleComponent& operator=(std::string_view value) {
     _variant = std::string{value};
+    // See the similar check in the constructor for details.
+    AD_CONTRACT_CHECK(!value.starts_with("?"));
     return *this;
   }
 
@@ -153,7 +159,7 @@ class TripleComponent {
         return Id::makeFromDouble(value);
       } else if constexpr (std::is_same_v<T, Variable>) {
         // Cannot turn a variable into a ValueId.
-        AD_FAIL()
+        AD_FAIL();
       } else {
         static_assert(ad_utility::alwaysFalse<T>);
       }
