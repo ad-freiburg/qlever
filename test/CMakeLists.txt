@@ -250,7 +250,7 @@ addLinkAndDiscoverTest(HttpUtilsTest util http)
 
 addLinkAndDiscoverTest(DateTest)
 
-addLinkAndDiscoverTest(TripleObjectTest absl::strings parser)
+addLinkAndDiscoverTest(TripleComponentTest absl::strings parser)
 
 addLinkAndDiscoverTest(ValueIdTest absl::flat_hash_set)
 
@@ -285,3 +285,5 @@ addLinkAndDiscoverTest(AlgorithmTest)
 addLinkAndDiscoverTest(CompressedRelationsTest index)
 
 addLinkAndDiscoverTest(ExceptionTest)
+
+addLinkAndDiscoverTestSerial(RandomExpressionTest absl::flat_hash_map index)

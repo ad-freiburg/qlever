@@ -11,7 +11,12 @@
 #include <utility>
 
 #include "./SparqlExpressionTestHelpers.h"
+#include "./util/GTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
+#include "engine/sparqlExpressions/LangExpression.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/RandomExpression.h"
+#include "engine/sparqlExpressions/RegexExpression.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
@@ -998,4 +1003,53 @@ TEST(SparqlParser, Query) {
   // Describe and Ask Queries are not supported.
   expectQueryFails("DESCRIBE *");
   expectQueryFails("ASK WHERE { ?x <foo> <bar> }");
+}
+
+// Some helper matchers for the `builtInCall` test below.
+// TODO<joka921> The first of these matchers can probably also be used to
+// test the parsing of other expressions more cleanly.
+namespace builtInCallTestHelpers {
+// Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
+// (via `dynamic_cast`) points to an object of type `Expression`, and that this
+// `Expression` matches the `matcher`.
+template <typename Expression, typename Matcher = decltype(testing::_)>
+auto matchPtr(Matcher matcher = Matcher{})
+    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
+  return testing::Pointee(
+      testing::WhenDynamicCastTo<const Expression&>(matcher));
+}
+
+// Return a matcher  that checks whether a given `SparqlExpression::Ptr` points
+// (via `dynamic_cast`) to an object of type `UnaryExpression` that has a single
+// child expression that is the variable `x`. (e.g.  "COUNT(?x)" or
+// "STRLEN(?x)".
+template <typename UnaryExpression>
+auto matchUnaryX()
+    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
+  using namespace sparqlExpression;
+  auto varX = matchPtr<VariableExpression>(
+      AD_PROPERTY(VariableExpression, value, testing::Eq(Variable("?x"))));
+  return matchPtr<UnaryExpression>(AD_PROPERTY(
+      SparqlExpression, childrenForTesting, ::testing::ElementsAre(varX)));
+}
+}  // namespace builtInCallTestHelpers
+
+// ___________________________________________________________________________
+TEST(SparqlParser, builtInCall) {
+  using namespace sparqlExpression;
+  using namespace builtInCallTestHelpers;
+  auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
+  auto expectFails = ExpectParseFails<&Parser::builtInCall>{};
+  expectBuiltInCall("StrLEN(?x)", matchUnaryX<StrlenExpression>());
+  expectBuiltInCall("year(?x)", matchUnaryX<YearExpression>());
+  expectBuiltInCall("month(?x)", matchUnaryX<MonthExpression>());
+  expectBuiltInCall("day(?x)", matchUnaryX<DayExpression>());
+  expectBuiltInCall("RAND()", matchPtr<RandomExpression>());
+
+  // The following three cases delegate to a separate parsing function, so we
+  // only perform rather simple checks.
+  expectBuiltInCall("COUNT(?x)", matchPtr<CountExpression>());
+  expectBuiltInCall("regex(?x, \"ab\")", matchPtr<RegexExpression>());
+  expectBuiltInCall("LANG(?x)", matchPtr<LangExpression>());
+  expectFails("SHA512(?x)");
 }

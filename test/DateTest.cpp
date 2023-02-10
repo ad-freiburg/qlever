@@ -6,8 +6,8 @@
 
 #include <bitset>
 
-#include "../src/util/Date.h"
-#include "../src/util/Random.h"
+#include "util/Date.h"
+#include "util/Random.h"
 
 SlowRandomIntGenerator yearGenerator{-9999, 9999};
 SlowRandomIntGenerator monthGenerator{1, 12};

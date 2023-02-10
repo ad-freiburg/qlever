@@ -762,6 +762,3 @@ inline auto VisibleVariables =
 };
 
 }  // namespace matchers
-
-#undef AD_PROPERTY
-#undef AD_FIELD
