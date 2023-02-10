@@ -26,9 +26,12 @@ class AbortException : public std::exception {
   string what_;
 
  public:
-  AbortException(const std::exception& original) : what_(original.what()) {}
-  AbortException(const std::string& what) : what_(what) {}
-  const char* what() const noexcept { return what_.c_str(); }
+  explicit AbortException(const std::exception& original)
+      : what_{original.what()} {}
+  explicit AbortException(std::string what) : what_{std::move(what)} {}
+  [[nodiscard]] const char* what() const noexcept override {
+    return what_.c_str();
+  }
 };
 
 // An exception that stores a message as well as the `source_location` where
@@ -40,9 +43,9 @@ class Exception : public std::exception {
   ad_utility::source_location location_;
 
  public:
-  Exception(const std::string& message,
-            ad_utility::source_location location =
-                ad_utility::source_location::current())
+  explicit Exception(const std::string& message,
+                     ad_utility::source_location location =
+                         ad_utility::source_location::current())
       : location_{location} {
     std::stringstream str;
     // TODO<GCC13> Use `std::format`.
@@ -50,7 +53,9 @@ class Exception : public std::exception {
         << location_.line();
     message_ = std::move(str).str();
   }
-  const char* what() const noexcept override { return message_.c_str(); }
+  [[nodiscard]] const char* what() const noexcept override {
+    return message_.c_str();
+  }
 };
 }  // namespace ad_utility
 
@@ -68,15 +73,13 @@ class Exception : public std::exception {
 //! very insignificantly. Counterexample: don't use this in an inner loop that
 //! is executed million of times, and has otherwise little code.
 // --------------------------------------------------------------------------
-// Needed for Cygwin (will be an identical redefine  for *nixes)
-#define __STRING(x) #x
 
 // Custom assert that will always fail and report the file and line. Note that
 // for code that is truly unreachable (not even by setting up artificially
 // faulty input in a unit test), our code coverage tools will always consider
 // this macro uncovered. This cannot even be changed by changing it to something
 // like `__builtin_unreachable()` (last checked by Johannes in Jan 2023).
-#define AD_FAIL() AD_THROW("This code should be unreachable");
+#define AD_FAIL() AD_THROW("This code should be unreachable")
 
 // Custom assert which does not abort but throws an exception. Use this for
 // conditions that can be violated by calling a public (member) function with
@@ -89,7 +92,8 @@ class Exception : public std::exception {
     AD_THROW(                                                                                                                                              \
         "Assertion `"s + std::string(__STRING(condition)) +                                                                                                \
         "` failed. Likely cause: A function was called with arguments that violate the contract of the function. Please report this to the developers."s); \
-  }
+  }                                                                                                                                                        \
+  void(0)
 
 // Custom assert which does not abort but throws an exception. Use this for
 // conditions that can never be violated via a public (member) function. It is
@@ -110,7 +114,7 @@ inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
   }
 }
 }  // namespace ad_utility::detail
-#define AD_CORRECTNESS_CHECK(condition)                        \
-  detail::adCorrectnessCheckImpl(static_cast<bool>(condition), \
-                                 __STRING(condition),          \
-                                 ad_utility::source_location::current())
+#define AD_CORRECTNESS_CHECK(condition)                  \
+  ad_utility::detail::adCorrectnessCheckImpl(            \
+      static_cast<bool>(condition), __STRING(condition), \
+      ad_utility::source_location::current())

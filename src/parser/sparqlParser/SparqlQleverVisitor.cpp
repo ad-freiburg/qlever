@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "engine/sparqlExpressions/LangExpression.h"
+#include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "parser/SparqlParser.h"
@@ -288,7 +289,8 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
       pattern._graphPatterns.emplace_back(std::move(valuesOpt.value()));
     }
     return pattern;
-  } else if (ctx->groupGraphPatternSub()) {
+  } else {
+    AD_CORRECTNESS_CHECK(ctx->groupGraphPatternSub());
     auto [subOps, filters] = visit(ctx->groupGraphPatternSub());
 
     if (subOps.empty()) {
@@ -310,8 +312,6 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
       }
     }
     return pattern;
-  } else {
-    AD_FAIL();  // Unreachable
   }
 }
 
@@ -641,7 +641,8 @@ GroupKey Visitor::visit(Parser::GroupConditionContext* ctx) {
     // builtInCall and functionCall are both also an Expression
     return (ctx->builtInCall() ? visitExpressionPimpl(ctx->builtInCall())
                                : visitExpressionPimpl(ctx->functionCall()));
-  } else if (ctx->expression()) {
+  } else {
+    AD_CORRECTNESS_CHECK(ctx->expression());
     auto expr = visitExpressionPimpl(ctx->expression());
     if (ctx->AS() && ctx->var()) {
       return Alias{std::move(expr), visit(ctx->var())};
@@ -649,7 +650,6 @@ GroupKey Visitor::visit(Parser::GroupConditionContext* ctx) {
       return expr;
     }
   }
-  AD_FAIL();  // Should be unreachable.
 }
 
 // ____________________________________________________________________________________
@@ -669,11 +669,11 @@ OrderKey Visitor::visit(Parser::OrderConditionContext* ctx) {
     return VariableOrderKey(visit(ctx->var()));
   } else if (ctx->constraint()) {
     return visitExprOrderKey(false, ctx->constraint());
-  } else if (ctx->brackettedExpression()) {
+  } else {
+    AD_CORRECTNESS_CHECK(ctx->brackettedExpression());
     return visitExprOrderKey(ctx->DESC() != nullptr,
                              ctx->brackettedExpression());
   }
-  AD_FAIL();  // Should be unreachable.
 }
 
 // ____________________________________________________________________________________
@@ -752,11 +752,11 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
   } else if (ctx->booleanLiteral()) {
     // TODO implement
     reportError(ctx, "Booleans in values clauses are not supported.");
-  } else if (ctx->UNDEF()) {
+  } else {
+    AD_CORRECTNESS_CHECK(ctx->UNDEF());
     // TODO implement
     reportError(ctx, "UNDEF in values clauses is not supported.");
   }
-  AD_FAIL()  // Should be unreachable.
 }
 
 // ____________________________________________________________________________________
@@ -878,7 +878,8 @@ Triples Visitor::visit(Parser::TriplesSameSubjectContext* ctx) {
       triples.push_back({subject, std::move(tuple[0]), std::move(tuple[1])});
     }
     ad_utility::appendVector(triples, std::move(propertyList.second));
-  } else if (ctx->triplesNode()) {
+  } else {
+    AD_CORRECTNESS_CHECK(ctx->triplesNode());
     auto tripleNodes = visit(ctx->triplesNode());
     ad_utility::appendVector(triples, std::move(tripleNodes.second));
     AD_CONTRACT_CHECK(ctx->propertyList());
@@ -888,9 +889,6 @@ Triples Visitor::visit(Parser::TriplesSameSubjectContext* ctx) {
           {tripleNodes.first, std::move(tuple[0]), std::move(tuple[1])});
     }
     ad_utility::appendVector(triples, std::move(propertyList.second));
-  } else {
-    // Invalid grammar
-    AD_FAIL();
   }
   return triples;
 }
@@ -923,11 +921,10 @@ PropertyList Visitor::visit(Parser::PropertyListNotEmptyContext* ctx) {
 VarOrTerm Visitor::visit(Parser::VerbContext* ctx) {
   if (ctx->varOrIri()) {
     return visit(ctx->varOrIri());
-  } else if (ctx->getText() == "a") {
-    // Special keyword 'a'
-    return GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}};
   } else {
-    AD_FAIL()  // Should be unreachable.
+    // Special keyword 'a'
+    AD_CORRECTNESS_CHECK(ctx->getText() == "a");
+    return GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}};
   }
 }
 
@@ -979,10 +976,9 @@ vector<TripleWithPropertyPath> Visitor::visit(
                                                std::move(object)});
     }
     return triples;
-  } else if (ctx->triplesNodePath()) {
-    visit(ctx->triplesNodePath());
   } else {
-    AD_FAIL()  // Should be unreachable.
+    AD_CORRECTNESS_CHECK(ctx->triplesNodePath());
+    visit(ctx->triplesNodePath());
   }
 }
 
@@ -1073,13 +1069,11 @@ PropertyPath Visitor::visit(Parser::PathEltContext* ctx) {
       p = PropertyPath::makeTransitiveMin(p, 1);
     } else if (ctx->pathMod()->getText() == "?") {
       p = PropertyPath::makeTransitiveMax(p, 1);
-    } else if (ctx->pathMod()->getText() == "*") {
-      p = PropertyPath::makeTransitive(p);
     } else {
-      AD_FAIL()  // Should be unreachable.
+      AD_CORRECTNESS_CHECK(ctx->pathMod()->getText() == "*");
+      p = PropertyPath::makeTransitive(p);
     }
   }
-
   return p;
 }
 
@@ -1112,12 +1106,12 @@ PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
     return visit(ctx->path());
   } else if (ctx->pathNegatedPropertySet()) {
     return visit(ctx->pathNegatedPropertySet());
-  } else if (ctx->getText() == "a") {
+  } else {
+    AD_CORRECTNESS_CHECK(ctx->getText() == "a");
     // Special keyword 'a'
     return PropertyPath::fromIri(
         "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
   }
-  AD_FAIL()  // Should be unreachable.
 }
 
 // ____________________________________________________________________________________
@@ -1215,10 +1209,9 @@ void Visitor::visit(Parser::CollectionPathContext* ctx) {
 Node Visitor::visit(Parser::GraphNodeContext* ctx) {
   if (ctx->varOrTerm()) {
     return {visit(ctx->varOrTerm()), Triples{}};
-  } else if (ctx->triplesNode()) {
-    return visit(ctx->triplesNode());
   } else {
-    AD_FAIL();
+    AD_CORRECTNESS_CHECK(ctx->triplesNode());
+    return visit(ctx->triplesNode());
   }
 }
 
@@ -1226,10 +1219,9 @@ Node Visitor::visit(Parser::GraphNodeContext* ctx) {
 VarOrTerm Visitor::visit(Parser::GraphNodePathContext* ctx) {
   if (ctx->varOrTerm()) {
     return visit(ctx->varOrTerm());
-  } else if (ctx->triplesNodePath()) {
-    visit(ctx->triplesNodePath());
   } else {
-    AD_FAIL()  // Should be unreachable.
+    AD_CORRECTNESS_CHECK(ctx->triplesNodePath());
+    visit(ctx->triplesNodePath());
   }
 }
 
@@ -1242,13 +1234,12 @@ VarOrTerm Visitor::visit(Parser::VarOrTermContext* ctx) {
 VarOrTerm Visitor::visit(Parser::VarOrIriContext* ctx) {
   if (ctx->var()) {
     return visit(ctx->var());
-  } else if (ctx->iri()) {
+  } else {
+    AD_CORRECTNESS_CHECK(ctx->iri());
     // TODO<qup42> If `visit` returns an `Iri` and `VarOrTerm` can be
     // constructed from an `Iri`, this whole function becomes
     // `visitAlternative`.
     return GraphTerm{Iri{visit(ctx->iri())}};
-  } else {
-    AD_FAIL()  // Should be unreachable.
   }
 }
 
@@ -1331,10 +1322,9 @@ ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
     return make.operator()<GreaterThanExpression>();
   } else if (relation == "<=") {
     return make.operator()<LessEqualExpression>();
-  } else if (relation == ">=") {
-    return make.operator()<GreaterEqualExpression>();
   } else {
-    AD_FAIL();
+    AD_CORRECTNESS_CHECK(relation == ">=");
+    return make.operator()<GreaterEqualExpression>();
   }
 }
 
@@ -1359,7 +1349,7 @@ ExpressionPtr Visitor::visit(Parser::AdditiveExpressionContext* ctx) {
             std::move(result), std::move(signAndExpression.expression_));
         break;
       default:
-        AD_FAIL()
+        AD_FAIL();
     }
   }
   return result;
@@ -1535,27 +1525,41 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return visit(ctx->regexExpression());
   } else if (ctx->langExpression()) {
     return visit(ctx->langExpression());
-    // TODO: Implement built-in calls according to the following examples.
-    //
-    // } else if (ad_utility::getLowercase(ctx->children[0]->getText()) ==
-    //            "sqr") {
-    //   if (ctx->expression().size() != 1) {
-    //     throw ParseException{"SQR needs one argument"};
-    //   }
-    //   auto children = visitVector<ExpressionPtr>(ctx->expression());
-    //   return createExpression<sparqlExpression::SquareExpression>(
-    //       std::move(children[0]));
-    // } else if (ad_utility::getLowercase(ctx->children[0]->getText()) ==
-    //            "dist") {
-    //   if (ctx->expression().size() != 2) {
-    //     throw ParseException{"DIST needs two arguments"};
-    //   }
-    //   auto children = visitVector<ExpressionPtr>(ctx->expression());
-    //   return createExpression<sparqlExpression::DistExpression>(
-    //       std::move(children[0]), std::move(children[1]));
+  }
+  // Get the function name and the arguments. Note that we do not have to check
+  // the number of arguments like for `processIriFunctionCall`, since the number
+  // of arguments is fixed by the grammar and we wouldn't even get here if the
+  // number were wrong. Hence only the `AD_CONTRACT_CHECK`s.
+  AD_CONTRACT_CHECK(ctx->children.size() >= 1);
+  auto functionName = ad_utility::getLowercase(ctx->children[0]->getText());
+  auto argList = visitVector(ctx->expression());
+  using namespace sparqlExpression;
+  // Create the expression using the matching lambda from `NaryExpression.h`.
+  auto createUnaryExpression = [this, &argList]<typename Expression>() {
+    AD_CONTRACT_CHECK(argList.size() == 1);
+    return createExpression<Expression>(std::move(argList[0]));
+  };
+  if (functionName == "str") {
+    return createUnaryExpression.template operator()<StrExpression>();
+  } else if (functionName == "strlen") {
+    return createUnaryExpression.template operator()<StrlenExpression>();
+  } else if (functionName == "year") {
+    return createUnaryExpression.template operator()<YearExpression>();
+  } else if (functionName == "month") {
+    return createUnaryExpression.template operator()<MonthExpression>();
+  } else if (functionName == "day") {
+    return createUnaryExpression.template operator()<DayExpression>();
+  } else if (functionName == "rand") {
+    AD_CONTRACT_CHECK(argList.empty());
+    return std::make_unique<RandomExpression>();
   } else {
-    reportNotSupported(
-        ctx, "Built-in functions (other than aggregates and REGEX) are ");
+    reportError(
+        ctx,
+        absl::StrCat("Built-in function \"", functionName,
+                     "\"  not yet implemented; if you need it, just add it to ",
+                     "SparqlQleverVisitor.cpp::visitTypesafe(Parser::"
+                     "BuiltInCallContext ",
+                     "following the already implemented functions there"));
   }
 }
 
@@ -1659,10 +1663,10 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
     }
 
     return makePtr.operator()<GroupConcatExpression>(std::move(separator));
-  } else if (functionName == "sample") {
+  } else {
+    AD_CORRECTNESS_CHECK(functionName == "sample");
     return makePtr.operator()<SampleExpression>();
   }
-  AD_FAIL()  // Should be unreachable.
 }
 
 // ____________________________________________________________________________________
@@ -1741,14 +1745,13 @@ bool Visitor::visit(Parser::BooleanLiteralContext* ctx) {
 BlankNode Visitor::visit(Parser::BlankNodeContext* ctx) {
   if (ctx->ANON()) {
     return newBlankNode();
-  } else if (ctx->BLANK_NODE_LABEL()) {
+  } else {
+    AD_CORRECTNESS_CHECK(ctx->BLANK_NODE_LABEL());
     // strip _: prefix from string
     constexpr size_t length = std::string_view{"_:"}.length();
     const string label = ctx->BLANK_NODE_LABEL()->getText().substr(length);
     // false means the query explicitly contains a blank node label
     return {false, label};
-  } else {
-    AD_FAIL();
   }
 }
 

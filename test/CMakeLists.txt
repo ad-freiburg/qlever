@@ -135,7 +135,7 @@ if (SINGLE_TEST_BINARY)
     target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
     target_link_libraries(QLeverAllUnitTestsMain parser re2 util ${ICU_LIBRARIES})
 else()
-    add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp ValuesForTestingTest.cpp)
+    add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
     linkAndDiscoverTest(TokenTest parser re2 util ${ICU_LIBRARIES})
 endif()
 
@@ -250,7 +250,7 @@ addLinkAndDiscoverTest(HttpUtilsTest util http)
 
 addLinkAndDiscoverTest(DateTest)
 
-addLinkAndDiscoverTest(TripleObjectTest absl::strings parser)
+addLinkAndDiscoverTest(TripleComponentTest absl::strings parser)
 
 addLinkAndDiscoverTest(ValueIdTest absl::flat_hash_set)
 
@@ -285,6 +285,8 @@ addLinkAndDiscoverTest(AlgorithmTest)
 addLinkAndDiscoverTest(CompressedRelationsTest index)
 
 addLinkAndDiscoverTest(ExceptionTest)
+
+addLinkAndDiscoverTestSerial(RandomExpressionTest absl::flat_hash_map index)
 
 addLinkAndDiscoverTestSerial(SortTest engine)
 
