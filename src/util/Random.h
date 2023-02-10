@@ -30,7 +30,8 @@ class FastRandomIntGenerator {
   FastRandomIntGenerator() {
     // Randomly initialize the shuffleTable
     std::random_device seeder{};
-    // `std::random_device` only yields 32 bit values, so we need two of them for each entry of `_shuffleTable`
+    // `std::random_device` only yields 32 bit values, so we need two of them
+    // for each entry of `_shuffleTable`
     static_assert(sizeof(decltype(seeder())) == 4);
     for (auto& el : _shuffleTable) {
       el = seeder();
