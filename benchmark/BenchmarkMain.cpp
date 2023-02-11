@@ -302,7 +302,7 @@ int main(int argc, char** argv) {
   // We got at least one argument at this point and all options need all the
   // benchmarks measured, so time to do that.
 
-  // Measuering the time for all registered benchmarks.
+  // Measuring the time for all registered benchmarks.
   // For measuring and saving the times.
   const BenchmarkRecords&
     records{BenchmarkRegister::runAllRegisteredBenchmarks()};
