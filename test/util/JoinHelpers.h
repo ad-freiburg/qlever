@@ -51,7 +51,8 @@ IdTable useJoinFunctionOnIdTables(const IdTableAndJoinColumn& tableA,
 }
 
 /*
- * @brief Returns a lambda for calling the Join::hashJoin.
+ * @brief Returns a lambda for calling `Join::hashJoin` via
+ *  `ad_utility::callFixedSize`.
  */
 auto makeHashJoinLambda() {
   Join J{Join::InvalidOnlyForTestingJoinTag{}, ad_utility::testing::getQec()};
@@ -63,7 +64,8 @@ auto makeHashJoinLambda() {
 }
 
 /*
- * @brief Returns a lambda for calling the Join::join.
+ * @brief Returns a lambda for calling `Join::join` via
+ *  `ad_utility::callFixedSize`.
  */
 auto makeJoinLambda() {
   Join J{Join::InvalidOnlyForTestingJoinTag{}, ad_utility::testing::getQec()};
