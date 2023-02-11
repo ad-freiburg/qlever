@@ -27,6 +27,20 @@ auto BenchmarkRegister::getRegisteredBenchmarks() ->
 }
 
 // ____________________________________________________________________________
+const BenchmarkRecords BenchmarkRegister::runAllRegisteredBenchmarks(){
+  // For measuring and saving the times.
+  BenchmarkRecords records;
+
+  // Goes through all registered benchmarks and measures them.
+  for (const auto& benchmarkFunction:
+      BenchmarkRegister::getRegisteredBenchmarks()) {
+    benchmarkFunction(&records);
+  }
+
+  return records;
+}
+
+// ____________________________________________________________________________
 BenchmarkRegister::BenchmarkRegister(
     const std::vector<BenchmarkRegister::BenchmarkFunction>& benchmarks) {
   auto& registeredBenchmarks = getRegister();

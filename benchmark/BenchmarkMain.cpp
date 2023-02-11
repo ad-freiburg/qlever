@@ -304,12 +304,8 @@ int main(int argc, char** argv) {
 
   // Measuering the time for all registered benchmarks.
   // For measuring and saving the times.
-  BenchmarkRecords records;
-
-  // Goes through all registered benchmarks and measures them.
-  for (const auto& benchmarkFunction: BenchmarkRegister::getRegisteredBenchmarks()) {
-    benchmarkFunction(&records);
-  }
+  const BenchmarkRecords&
+    records{BenchmarkRegister::runAllRegisteredBenchmarks()};
 
   // Actually processing the arguments.
   if (vm.count("print")) {printBenchmarkRecords(records);};

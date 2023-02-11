@@ -225,9 +225,9 @@ class BenchmarkRegister {
   public:
 
     /*
-     * @brief Register one, or more, functions as benchmarks by creating a
-     * global instance of this class. Shouldn't take up much space and I
-     * couldn't find a better way of doing it.
+     * @brief Register one, or more, functions as benchmark functions
+     *  by creating a global instance of this class. Shouldn't take up much
+     *  space and I couldn't find a better way of doing it.
      *
      * @param benchmarks The functions can be passed as
      *  `{&functionName1, &functionname2, ...}`. For more information about
@@ -237,4 +237,10 @@ class BenchmarkRegister {
 
     // Return a const view of all registered benchmarks.
     static const std::vector<BenchmarkFunction>& getRegisteredBenchmarks();
+
+    /*
+     * @brief Measures all the benchmarks registered per benchmark functions
+     *  and returns the resulting BenchmarkRecords object.
+     */
+    static const BenchmarkRecords runAllRegisteredBenchmarks();
 };
