@@ -19,9 +19,11 @@ namespace nlohmann {
     template <typename T>
     struct adl_serializer<std::optional<T>> {
         static void to_json(nlohmann::json& j, const std::optional<T>& opt) {
-          j = nlohmann::json{{"has_value", opt.has_value()}};
-          // Only add, if there is value.
-          if (opt.has_value()) {j["value"] = opt.value();}
+          if (opt.has_value()) {
+            j = opt.value();
+          } else {
+            j = nullptr;
+          }
         }
 
         static void from_json(const nlohmann::json& j, std::optional<T>& opt) {
