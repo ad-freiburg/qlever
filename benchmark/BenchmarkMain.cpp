@@ -60,7 +60,12 @@ int main(int argc, char** argv) {
   };
 
   // Calling without using ANY arguments makes no sense.
-  if (argc == 1) {printUsageAndExit();}
+  if (argc == 1) {
+    std::cerr << "You have to specify at least one of the options of print,"
+      " or json. Running the benchmarks without outputting their resulsts,"
+      " is just a waste of time.\n";
+    printUsageAndExit();
+  }
 
   // Parsing the given arguments.
   boost::program_options::variables_map vm;
