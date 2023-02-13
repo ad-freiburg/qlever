@@ -235,7 +235,7 @@ void makeBenchmarkTable(BenchmarkRecords* records, const bool overlap,
              smallerTableAmountRows, smallerTableAmountColumns, 0, 0, 500);
          biggerTable.idTable = createRandomlyFilledIdTable(
              smallerTableAmountRows * ratioRows, biggerTableAmountColumns,
-             0, 501, 1000);
+             0, 501, 1'000'000'000);
 
          // Creating overlap, if wanted.
          if (overlap) {createOverlapRandomly(&smallerTable, biggerTable, 42.0);};

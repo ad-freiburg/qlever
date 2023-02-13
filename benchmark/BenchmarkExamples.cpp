@@ -7,7 +7,7 @@
 // Single Measurements
 void BM_SingeMeasurements(BenchmarkRecords* records) {
   // Setup.
-  const size_t number = SlowRandomIntGenerator<size_t>(10,20)();
+  const size_t number = SlowRandomIntGenerator<size_t>(10,1'000)();
   auto exponentiate = [](const size_t number){
     return number*number;
   };
@@ -16,9 +16,12 @@ void BM_SingeMeasurements(BenchmarkRecords* records) {
   records->addSingleMeasurement("Exponentiate once", [&](){exponentiate(number);});
   records->addSingleMeasurement("Recursivly exponentiate ten times", [&](){
         size_t to_exponentiate = number;
-        for (int i = 0; i < 10000000; i++) {
+        for (size_t i = 0; i < 10'000'000'000; i++) {
           to_exponentiate = exponentiate(to_exponentiate);
         }
+        // TODO Too much optimization without the line. Alternative can be found
+        // under the `DoNotOptimize(...)` of google benchmark.
+        std::cout << to_exponentiate;
       });
 }
 
