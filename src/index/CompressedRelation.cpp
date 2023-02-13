@@ -5,7 +5,6 @@
 #include "CompressedRelation.h"
 
 #include "engine/idTable/IdTable.h"
-#include "index/Permutations.h"
 #include "util/Cache.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/ConcurrentCache.h"
@@ -14,24 +13,12 @@
 
 using namespace std::chrono_literals;
 
-// This cache stores a small number of decompressed blocks. Its only purpose
-// currently is to make the e2e-tests run fast. They contain many Sparql queries
-// with ?s ?p ?o triples in the body.
-// TODO<joka921> Improve the performance of these triples also for large
-// knowledge bases.
-auto& globalBlockCache() {
-  static ad_utility::ConcurrentCache<
-      ad_utility::HeapBasedLRUCache<std::string, DecompressedBlock>>
-      globalCache(20ul);
-  return globalCache;
-}
-
 // ____________________________________________________________________________
-void CompressedRelationMetadata::scan(
+void CompressedRelationReader::scan(
     const CompressedRelationMetadata& metadata,
     const vector<CompressedBlockMetadata>& blockMetadata,
     const std::string& permutationName, ad_utility::File& file, IdTable* result,
-    ad_utility::SharedConcurrentTimeoutTimer timer) {
+    ad_utility::SharedConcurrentTimeoutTimer timer) const {
   AD_CONTRACT_CHECK(result->numColumns() == NumColumns);
 
   // get all the blocks where _col0FirstId <= col0Id <= _col0LastId
@@ -94,7 +81,7 @@ void CompressedRelationMetadata::scan(
         permutationName +
         std::to_string(block._offsetsAndCompressedSize.at(0)._offsetInFile);
 
-    auto uncompressedBuffer = globalBlockCache()
+    auto uncompressedBuffer = blockCache_
                                   .computeOnce(cacheKey,
                                                [&]() {
                                                  return readAndDecompressBlock(
@@ -104,7 +91,8 @@ void CompressedRelationMetadata::scan(
 
     // Extract the part of the block that actually belongs to the relation
     auto numElements = metadata._numRows;
-    AD_CONTRACT_CHECK(uncompressedBuffer->numColumns() == numColumns());
+    AD_CONTRACT_CHECK(uncompressedBuffer->numColumns() ==
+                      metadata.numColumns());
     for (size_t i = 0; i < uncompressedBuffer->numColumns(); ++i) {
       const auto& inputCol = uncompressedBuffer->getColumn(i);
       auto begin = inputCol.begin() + metadata._offsetInBlock;
@@ -167,10 +155,10 @@ void CompressedRelationMetadata::scan(
 }
 
 // _____________________________________________________________________________
-void CompressedRelationMetadata::scan(
+void CompressedRelationReader::scan(
     const CompressedRelationMetadata& metaData, Id col1Id,
     const vector<CompressedBlockMetadata>& blocks, ad_utility::File& file,
-    IdTable* result, ad_utility::SharedConcurrentTimeoutTimer timer) {
+    IdTable* result, ad_utility::SharedConcurrentTimeoutTimer timer) const {
   AD_CONTRACT_CHECK(result->numColumns() == 1);
 
   // Get all the blocks  that possibly might contain our pair of col0Id and
@@ -433,7 +421,7 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
 }
 
 // _____________________________________________________________________________
-CompressedBlock CompressedRelationMetadata::readCompressedBlockFromFile(
+CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
     const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
     std::optional<std::vector<size_t>> columnIndices) {
   // If we have no column indices specified, we read all the columns.
@@ -461,7 +449,7 @@ CompressedBlock CompressedRelationMetadata::readCompressedBlockFromFile(
 }
 
 // ____________________________________________________________________________
-DecompressedBlock CompressedRelationMetadata::decompressBlock(
+DecompressedBlock CompressedRelationReader::decompressBlock(
     const CompressedBlock& compressedBlock, size_t numRowsToRead) {
   DecompressedBlock decompressedBlock{compressedBlock.size()};
   decompressedBlock.resize(numRowsToRead);
@@ -473,7 +461,7 @@ DecompressedBlock CompressedRelationMetadata::decompressBlock(
 }
 
 // ____________________________________________________________________________
-void CompressedRelationMetadata::decompressBlockToExistingIdTable(
+void CompressedRelationReader::decompressBlockToExistingIdTable(
     const CompressedBlock& compressedBlock, size_t numRowsToRead,
     IdTable& table, size_t offsetInTable) {
   AD_CONTRACT_CHECK(table.numRows() >= offsetInTable + numRowsToRead);
@@ -488,7 +476,7 @@ void CompressedRelationMetadata::decompressBlockToExistingIdTable(
 
 // ____________________________________________________________________________
 template <typename Iterator>
-void CompressedRelationMetadata::decompressColumn(
+void CompressedRelationReader::decompressColumn(
     const std::vector<char>& compressedBlock, size_t numRowsToRead,
     Iterator iterator) {
   auto numBytesActuallyRead = ZstdWrapper::decompressToBuffer(
@@ -499,7 +487,7 @@ void CompressedRelationMetadata::decompressColumn(
 }
 
 // _____________________________________________________________________________
-DecompressedBlock CompressedRelationMetadata::readAndDecompressBlock(
+DecompressedBlock CompressedRelationReader::readAndDecompressBlock(
     const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
     std::optional<std::vector<size_t>> columnIndices) {
   CompressedBlock compressedColumns = readCompressedBlockFromFile(
