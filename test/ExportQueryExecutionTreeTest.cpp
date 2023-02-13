@@ -172,54 +172,51 @@ TEST(ExportQueryExecutionTree, Integers) {
       "<s> <p> 42 . <s> <p> -42019234865781 . <s> <p> 4012934858173560";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
   TestCaseSelectQuery testCase{
-      kg,
-      query,
-      3,
+      kg, query, 3,
       // TODO<joka921> the ORDER BY of negative numbers is incorrect.
       // TSV
       "?o\n"
+      "-42019234865781\n"
       "42\n"
-      "4012934858173560\n"
-      "-42019234865781\n",
+      "4012934858173560\n",
       // CSV
       "?o\n"
+      "-42019234865781\n"
       "42\n"
-      "4012934858173560\n"
-      "-42019234865781\n",
+      "4012934858173560\n",
       makeExpectedQLeverJSON(
-          {"\"42\"^^<http://www.w3.org/2001/XMLSchema#int>"s,
-           "\"4012934858173560\"^^<http://www.w3.org/2001/XMLSchema#int>"s,
-           "\"-42019234865781\"^^<http://www.w3.org/2001/XMLSchema#int>"s}),
+          {"\"-42019234865781\"^^<http://www.w3.org/2001/XMLSchema#int>"s,
+           "\"42\"^^<http://www.w3.org/2001/XMLSchema#int>"s,
+           "\"4012934858173560\"^^<http://www.w3.org/2001/XMLSchema#int>"s}),
       makeExpectedSparqlJSON(
           {makeJSONBinding("http://www.w3.org/2001/XMLSchema#int", "literal",
+                           "-42019234865781"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#int", "literal",
                            "42"),
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#int", "literal",
-                           "4012934858173560"),
-           makeJSONBinding("http://www.w3.org/2001/XMLSchema#int", "literal",
-                           "-42019234865781")}),
-  };
+                           "4012934858173560")})};
   runSelectQueryTestCase(testCase);
 
   TestCaseConstructQuery testCaseConstruct{
       kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 3,
       // TODO<joka921> the ORDER BY of negative numbers is incorrect.
       // TSV
+      "<s>\t<p>\t-42019234865781\n"
       "<s>\t<p>\t42\n"
-      "<s>\t<p>\t4012934858173560\n"
-      "<s>\t<p>\t-42019234865781\n",
+      "<s>\t<p>\t4012934858173560\n",
       // CSV
+      "<s>,<p>,-42019234865781\n"
       "<s>,<p>,42\n"
-      "<s>,<p>,4012934858173560\n"
-      "<s>,<p>,-42019234865781\n",
+      "<s>,<p>,4012934858173560\n",
       // Turtle
+      "<s> <p> -42019234865781 .\n"
       "<s> <p> 42 .\n"
-      "<s> <p> 4012934858173560 .\n"
-      "<s> <p> -42019234865781 .\n",
+      "<s> <p> 4012934858173560 .\n",
       []() {
         nlohmann::json j;
+        j.push_back(std::vector{"<s>"s, "<p>"s, "-42019234865781"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "42"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "4012934858173560"s});
-        j.push_back(std::vector{"<s>"s, "<p>"s, "-42019234865781"s});
         return j;
       }()};
   runConstructQueryTestCase(testCaseConstruct);
@@ -239,47 +236,47 @@ TEST(ExportQueryExecutionTree, Floats) {
       // number is strange.
       // TSV
       "?o\n"
+      "-42019234865780982022144\n"
       "4.01293e-12\n"
-      "42.2\n"
-      "-42019234865780982022144\n",
+      "42.2\n",
       // CSV
       "?o\n"
+      "-42019234865780982022144\n"
       "4.01293e-12\n"
-      "42.2\n"
-      "-42019234865780982022144\n",
+      "42.2\n",
       makeExpectedQLeverJSON(
-          {"\"4.01293e-12\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
-           "\"42.2\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
-           "\"-42019234865780982022144\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s}),
+          {"\"-42019234865780982022144\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
+           "\"4.01293e-12\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
+           "\"42.2\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s}),
       makeExpectedSparqlJSON(
           {makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
+                           "literal", "-42019234865780982022144"),
+           makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
                            "literal", "4.01293e-12"),
            makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
-                           "literal", "42.2"),
-           makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
-                           "literal", "-42019234865780982022144")}),
+                           "literal", "42.2")}),
   };
   runSelectQueryTestCase(testCaseFloat);
 
   TestCaseConstructQuery testCaseConstruct{
       kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 3,
       // TSV
+      "<s>\t<p>\t-42019234865780982022144\n"
       "<s>\t<p>\t4.01293e-12\n"
-      "<s>\t<p>\t42.2\n"
-      "<s>\t<p>\t-42019234865780982022144\n",
+      "<s>\t<p>\t42.2\n",
       // CSV
+      "<s>,<p>,-42019234865780982022144\n"
       "<s>,<p>,4.01293e-12\n"
-      "<s>,<p>,42.2\n"
-      "<s>,<p>,-42019234865780982022144\n",
+      "<s>,<p>,42.2\n",
       // Turtle
+      "<s> <p> -42019234865780982022144 .\n"
       "<s> <p> 4.01293e-12 .\n"
-      "<s> <p> 42.2 .\n"
-      "<s> <p> -42019234865780982022144 .\n",
+      "<s> <p> 42.2 .\n",
       []() {
         nlohmann::json j;
+        j.push_back(std::vector{"<s>"s, "<p>"s, "-42019234865780982022144"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "4.01293e-12"s});
         j.push_back(std::vector{"<s>"s, "<p>"s, "42.2"s});
-        j.push_back(std::vector{"<s>"s, "<p>"s, "-42019234865780982022144"s});
         return j;
       }()};
   runConstructQueryTestCase(testCaseConstruct);
