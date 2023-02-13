@@ -75,6 +75,9 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
       // The last argument is the number of distinct elements in `col1`. We
       // store a dummy value here that we can check later.
       writer.addRelation(V(input.col0_), buffer, i + 1);
+      buffer.clear();
+      ASSERT_THROW(writer.addRelation(V(input.col0_), buffer, i + 1),
+                   ad_utility::Exception);
       ++i;
     }
   }
@@ -97,6 +100,8 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
   auto timer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
       ad_utility::TimeoutTimer::unlimited());
   // Check the contents of the metadata.
+
+  CompressedRelationReader reader;
   for (size_t i = 0; i < metaData.size(); ++i) {
     const auto& m = metaData[i];
     ASSERT_EQ(V(inputs[i].col0_), m._col0Id);
@@ -107,9 +112,12 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
                     m._multiplicityCol1);
     // Scan for all distinct `col0` and check that we get the expected result.
     IdTable table{2, ad_utility::testing::makeAllocator()};
-    CompressedRelationMetadata::scan(metaData[i], blocks,
-                                     testCaseName + std::to_string(blocksize),
-                                     file, &table, timer);
+    reader.scan(metaData[i], blocks, file, &table, timer);
+    {
+      IdTable wrongNumCols{3, ad_utility::testing::makeAllocator()};
+      ASSERT_THROW(reader.scan(metaData[i], blocks, file, &wrongNumCols, timer),
+                   ad_utility::Exception);
+    }
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
 
@@ -121,9 +129,15 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
 
     auto scanAndCheck = [&]() {
       IdTable tableWidthOne{1, ad_utility::testing::makeAllocator()};
-      CompressedRelationMetadata::scan(metaData[i], V(lastCol1Id), blocks, file,
-                                       &tableWidthOne, timer);
+      reader.scan(metaData[i], V(lastCol1Id), blocks, file, &tableWidthOne,
+                  timer);
       checkThatTablesAreEqual(col3, tableWidthOne);
+      {
+        IdTable wrongNumCols{2, ad_utility::testing::makeAllocator()};
+        ASSERT_THROW(reader.scan(metaData[i], V(lastCol1Id), blocks, file,
+                                 &wrongNumCols, timer),
+                     ad_utility::Exception);
+      }
     };
     for (size_t j = 0; j < col1And2.size(); ++j) {
       if (col1And2[j][0] == lastCol1Id) {

@@ -257,6 +257,7 @@ TEST(IndexTest, scanTest) {
     testOne("<b>", "<a>", index._PSO, {{c}, {c2}});
     testOne("<b>", "<c>", index._PSO, {});
     testOne("<b2>", "<c2>", index._POS, {{a2}});
+    testOne("<notExisting>", "<a>", index._PSO, {});
   }
   kb = "<a> <is-a> <1> . \n"
        "<a> <is-a> <2> . \n"

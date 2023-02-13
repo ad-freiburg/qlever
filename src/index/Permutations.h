@@ -64,9 +64,8 @@ class PermutationImpl {
       return;
     }
     const auto& metaData = _meta.getMetaData(col0Id);
-    return CompressedRelationMetadata::scan(metaData, _meta.blockData(),
-                                            _readableName, _file, result,
-                                            std::move(timer));
+    return _reader.scan(metaData, _meta.blockData(), _file, result,
+                        std::move(timer));
   }
   /// For given IDs for the first and second column, retrieve all IDs of the
   /// third column, and store them in `result`. This is just a thin wrapper
@@ -79,8 +78,8 @@ class PermutationImpl {
     }
     const auto& metaData = _meta.getMetaData(col0Id);
 
-    return CompressedRelationMetadata::scan(metaData, col1Id, _meta.blockData(),
-                                            _file, result, timer);
+    return _reader.scan(metaData, col1Id, _meta.blockData(), _file, result,
+                        timer);
   }
 
   // _______________________________________________________
@@ -101,6 +100,8 @@ class PermutationImpl {
   MetaData _meta;
 
   mutable ad_utility::File _file;
+
+  CompressedRelationReader _reader;
 
   bool _isLoaded = false;
 };

@@ -12,6 +12,8 @@
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "util/BufferedVector.h"
+#include "util/Cache.h"
+#include "util/ConcurrentCache.h"
 #include "util/File.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/SerializeVector.h"
@@ -117,89 +119,6 @@ struct CompressedRelationMetadata {
 
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedRelationMetadata&) const = default;
-
-  /**
-   * @brief For a permutation XYZ, retrieve all YZ for a given X.
-   *
-   * @param metadata The metadata of the given X.
-   * @param blockMetadata The metadata of the on-disk blocks for the given
-   * permutation.
-   * @param permutationName A human readable name that identifies the
-   *          permutation. It is used to uniquely identify a cache for recently
-   *          decompressed blocks.
-   * @param file The file in which the permutation is stored.
-   * @param result The ID table to which we write the result. It must have
-   * exactly two columns.
-   * @param timer If specified (!= nullptr) a `TimeoutException` will be thrown
-   *          if the timer runs out during the exeuction of this function.
-   *
-   * The arguments `metaData`, `blocks`, and `file` must all be obtained from
-   * The same `CompressedRelationWriter` (see below).
-   */
-  static void scan(const CompressedRelationMetadata& metadata,
-                   const vector<CompressedBlockMetadata>& blockMetadata,
-                   const std::string& permutationName, ad_utility::File& file,
-                   IdTable* result,
-                   ad_utility::SharedConcurrentTimeoutTimer timer);
-
-  /**
-   * @brief For a permutation XYZ, retrieve all Z for given X and Y.
-   *
-   * @param metaData The metadata of the given X.
-   * @param col1Id The ID for Y.
-   * @param blocks The metadata of the on-disk blocks for the given permutation.
-   * @param file The file in which the permutation is stored.
-   * @param result The ID table to which we write the result. It must have
-   * exactly one column.
-   * @param timer If specified (!= nullptr) a `TimeoutException` will be thrown
-   *              if the timer runs out during the exeuction of this function.
-   *
-   * The arguments `metaData`, `blocks`, and `file` must all be obtained from
-   * The same `CompressedRelationWriter` (see below).
-   */
-  static void scan(const CompressedRelationMetadata& metaData, Id col1Id,
-                   const vector<CompressedBlockMetadata>& blocks,
-                   ad_utility::File& file, IdTable* result,
-                   ad_utility::SharedConcurrentTimeoutTimer timer = nullptr);
-
- private:
-  // Read the block that is identified by the `blockMetaData` from the `file`.
-  // If `columnIndices` is `nullopt`, then all columns of the block are read,
-  // else only the specified columns are read.
-  static CompressedBlock readCompressedBlockFromFile(
-      const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
-      std::optional<std::vector<size_t>> columnIndices);
-
-  // Decompress the `compressedBlock`. The number of rows that the block will
-  // have after decompression must be passed in via the `numRowsToRead`
-  // argument. It is typically obtained from the corresponding
-  // `CompressedBlockMetaData`.
-  static DecompressedBlock decompressBlock(
-      const CompressedBlock& compressedBlock, size_t numRowsToRead);
-
-  // Similar to `decompressBlock`, but the block is directly decompressed into
-  // the `table`, starting at the `offsetInTable`-th row. The `table` and the
-  // `compressedBlock` must have the same number of columns, and the `table`
-  // must have at least `numRowsToRead + offsetInTable` rows.
-  static void decompressBlockToExistingIdTable(
-      const CompressedBlock& compressedBlock, size_t numRowsToRead,
-      IdTable& table, size_t offsetInTable);
-
-  // Helper function used by `decompressBlock` and
-  // `decompressBlockToExistingIdTable`. Decompress the `compressedColumn` and
-  // store the result at the `iterator`. For the `numRowsToRead` argument, see
-  // the documentation of `decompressBlock`.
-  template <typename Iterator>
-  static void decompressColumn(const std::vector<char>& compressedColumn,
-                               size_t numRowsToRead, Iterator iterator);
-
-  // Read the block that is identified by the `blockMetaData` from the `file`,
-  // decompress and return it.
-  // If `columnIndices` is `nullopt`, then all columns of the block are read,
-  // else only the specified columns are read.
-  static DecompressedBlock readAndDecompressBlock(
-      const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
-      std::optional<std::vector<size_t>> columnIndices);
 };
 
 // Serialization of the compressed "relation" meta data.
@@ -297,6 +216,101 @@ class CompressedRelationWriter {
   // size of the compressed column in the `_outfile`.
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
       std::span<const Id> column);
+};
+
+/// Manage the reading of relations from disk that have been previously written
+/// using the `CompressedRelationWriter`.
+class CompressedRelationReader {
+ private:
+  // This cache stores a small number of decompressed blocks. Its current
+  // purpose is to make the e2e-tests run fast. They contain many SPARQL queries
+  // with ?s ?p ?o triples in the body.
+  // Note: The cache is thread-safe and using it does not change the semantics
+  // of this class, so it is safe to mark it as `mutable` to make the `scan`
+  // functions below `const`.
+  mutable ad_utility::ConcurrentCache<
+      ad_utility::HeapBasedLRUCache<off_t, DecompressedBlock>>
+      blockCache_{20ul};
+
+ public:
+  /**
+   * @brief For a permutation XYZ, retrieve all YZ for a given X.
+   *
+   * @param metadata The metadata of the given X.
+   * @param blockMetadata The metadata of the on-disk blocks for the given
+   * permutation.
+   * @param file The file in which the permutation is stored.
+   * @param result The ID table to which we write the result. It must have
+   * exactly two columns.
+   * @param timer If specified (!= nullptr) a `TimeoutException` will be thrown
+   *          if the timer runs out during the exeuction of this function.
+   *
+   * The arguments `metaData`, `blocks`, and `file` must all be obtained from
+   * The same `CompressedRelationWriter` (see below).
+   */
+  void scan(const CompressedRelationMetadata& metadata,
+            const vector<CompressedBlockMetadata>& blockMetadata,
+            ad_utility::File& file, IdTable* result,
+            ad_utility::SharedConcurrentTimeoutTimer timer) const;
+
+  /**
+   * @brief For a permutation XYZ, retrieve all Z for given X and Y.
+   *
+   * @param metaData The metadata of the given X.
+   * @param col1Id The ID for Y.
+   * @param blocks The metadata of the on-disk blocks for the given permutation.
+   * @param file The file in which the permutation is stored.
+   * @param result The ID table to which we write the result. It must have
+   * exactly one column.
+   * @param timer If specified (!= nullptr) a `TimeoutException` will be thrown
+   *              if the timer runs out during the exeuction of this function.
+   *
+   * The arguments `metaData`, `blocks`, and `file` must all be obtained from
+   * The same `CompressedRelationWriter` (see below).
+   */
+  void scan(const CompressedRelationMetadata& metaData, Id col1Id,
+            const vector<CompressedBlockMetadata>& blocks,
+            ad_utility::File& file, IdTable* result,
+            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+
+ private:
+  // Read the block that is identified by the `blockMetaData` from the `file`.
+  // If `columnIndices` is `nullopt`, then all columns of the block are read,
+  // else only the specified columns are read.
+  static CompressedBlock readCompressedBlockFromFile(
+      const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
+      std::optional<std::vector<size_t>> columnIndices);
+
+  // Decompress the `compressedBlock`. The number of rows that the block will
+  // have after decompression must be passed in via the `numRowsToRead`
+  // argument. It is typically obtained from the corresponding
+  // `CompressedBlockMetaData`.
+  static DecompressedBlock decompressBlock(
+      const CompressedBlock& compressedBlock, size_t numRowsToRead);
+
+  // Similar to `decompressBlock`, but the block is directly decompressed into
+  // the `table`, starting at the `offsetInTable`-th row. The `table` and the
+  // `compressedBlock` must have the same number of columns, and the `table`
+  // must have at least `numRowsToRead + offsetInTable` rows.
+  static void decompressBlockToExistingIdTable(
+      const CompressedBlock& compressedBlock, size_t numRowsToRead,
+      IdTable& table, size_t offsetInTable);
+
+  // Helper function used by `decompressBlock` and
+  // `decompressBlockToExistingIdTable`. Decompress the `compressedColumn` and
+  // store the result at the `iterator`. For the `numRowsToRead` argument, see
+  // the documentation of `decompressBlock`.
+  template <typename Iterator>
+  static void decompressColumn(const std::vector<char>& compressedColumn,
+                               size_t numRowsToRead, Iterator iterator);
+
+  // Read the block that is identified by the `blockMetaData` from the `file`,
+  // decompress and return it.
+  // If `columnIndices` is `nullopt`, then all columns of the block are read,
+  // else only the specified columns are read.
+  static DecompressedBlock readAndDecompressBlock(
+      const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
+      std::optional<std::vector<size_t>> columnIndices);
 };
 
 #endif  // QLEVER_COMPRESSEDRELATION_H
