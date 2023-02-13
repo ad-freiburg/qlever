@@ -37,35 +37,30 @@ void writeJsonToFile(nlohmann::json j, std::string fileName,
  * and prints their measured time in a fitting format.
  */
 int main(int argc, char** argv) {
-  // Prints how to use the file correctly and exits.
-  auto printUsageAndExit = [&argv](){
-    std::cerr << "Usage: ./" << argv[0] << " [options]\n"
-      << " --help, -h: Print this help message.\n"
-      << " --print, -p: Roughly prints all benchmarks.\n"
-      << " --json, -j <file>: Writes the benchmarks as json to a file,"
-      " overriding the previous content of the file.\n"
-      << " --append, -a: Causes the json option to append to the end of the"
-      "file, instead of overriding the previous content of the file.\n";
-    exit(1);
-  };
-
-  // Calling without using ANY arguments makes no sense.
-  if (argc == 1) {printUsageAndExit();}
-
   // The filename, should the json option be choosen.
   std::string jsonFileName = "";
 
   // Declaring the supported options.
-  boost::program_options::options_description options("options");
+  boost::program_options::options_description options("Options for the"
+      " benchmark");
   options.add_options()
       ("help,h", "Print the help message.")
       ("print,p", "Roughly prints all benchmarks.")
       ("json,j", boost::program_options::value<std::string>(&jsonFileName),
        "Writes the benchmarks as json to a file, overriding the previous"
-       "content of the file.")
+       " content of the file.")
       ("append,a", "Causes the json option to append to the end of the"
-      "file, instead of overriding the previous content of the file.")
+      " file, instead of overriding the previous content of the file.")
   ;
+
+  // Prints how to use the file correctly and exits.
+  auto printUsageAndExit = [&options](){
+    std::cerr << options << "\n";
+    exit(1);
+  };
+
+  // Calling without using ANY arguments makes no sense.
+  if (argc == 1) {printUsageAndExit();}
 
   // Parsing the given arguments.
   boost::program_options::variables_map vm;
