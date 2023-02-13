@@ -4,8 +4,7 @@
 
 // Simple interfaces for the random facilities from the STL
 
-#ifndef QLEVER_RANDOM_H
-#define QLEVER_RANDOM_H
+#pragma once
 
 #include <algorithm>
 #include <array>
@@ -23,16 +22,20 @@
  * a type that does not fulfill this property, the template will not match
  * (because of the std::enable_if) and there will be a compile-time error.
  */
-template <typename Int,
-          typename = std::enable_if_t<std::is_integral_v<Int> &&
-                                      sizeof(Int) <= sizeof(uint64_t)>>
-class FastRandomIntGenerator {
+template <typename Int>
+requires(std::is_integral_v<Int> &&
+         sizeof(Int) <= sizeof(uint64_t)) class FastRandomIntGenerator {
  public:
   FastRandomIntGenerator() {
     // Randomly initialize the shuffleTable
     std::random_device seeder{};
+    // `std::random_device` only yields 32 bit values, so we need two of them
+    // for each entry of `_shuffleTable`
+    static_assert(sizeof(decltype(seeder())) == 4);
     for (auto& el : _shuffleTable) {
       el = seeder();
+      el <<= 32;
+      el |= seeder();
     }
   }
 
@@ -98,5 +101,3 @@ void randomShuffle(RandomIt begin, RandomIt end) {
   std::mt19937 g(rd());
   std::shuffle(begin, end, g);
 }
-
-#endif  // QLEVER_RANDOM_H

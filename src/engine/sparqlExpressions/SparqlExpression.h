@@ -131,6 +131,13 @@ class SparqlExpression {
   // __________________________________________________________________________
   virtual ~SparqlExpression() = default;
 
+  // Returns all the children of this expression. Typically only used for
+  // testing
+  virtual std::span<const SparqlExpression::Ptr> childrenForTesting()
+      const final {
+    return children();
+  }
+
  private:
   // Get the direct child expressions.
   virtual std::span<SparqlExpression::Ptr> children() = 0;

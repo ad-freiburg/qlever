@@ -16,12 +16,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        #dockerfile: [ Dockerfile, Dockerfiles/Dockerfile.Ubuntu18.04, Dockerfiles/Dockerfile.Ubuntu20.04]
         dockerfile: [ Dockerfile]
         os: [ ubuntu-latest ]
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
       - name: Install dependencies
         run: |
           sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
@@ -33,9 +34,6 @@ jobs:
 
       - name: Prepare folders
         run:  mkdir -p ${{github.workspace}}/e2e_data/scientist-collection/ && sudo chmod -R o+rwx ${{github.workspace}}/e2e_data
-
-      - name: Checkout submodules
-        run: git submodule update --init --recursive
 
       - name: Docker build
         run: sudo docker build -t qlever ${{github.workspace}} -f ${{github.workspace}}/${{matrix.dockerfile}}
