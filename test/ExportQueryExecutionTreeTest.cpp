@@ -79,7 +79,7 @@ struct TestCaseConstructQuery {
                                     // the metadata.
 };
 
-// Run a single test case for a select query.
+// Run a single test case for a SELECT query.
 void runSelectQueryTestCase(
     const TestCaseSelectQuery& testCase,
     ad_utility::source_location l = ad_utility::source_location::current()) {
@@ -100,7 +100,7 @@ void runSelectQueryTestCase(
   EXPECT_EQ(sparqlJSONResult, testCase.resultSparqlJSON);
 }
 
-// Run a single test case for a select query.
+// Run a single test case for a CONSTRUCT query.
 void runConstructQueryTestCase(
     const TestCaseConstructQuery& testCase,
     ad_utility::source_location l = ad_utility::source_location::current()) {
@@ -132,7 +132,7 @@ nlohmann::json makeExpectedQLeverJSON(const std::vector<std::string>& values) {
 
 // Create a single binding in the `SparqlJSON` format from the given `datatype`
 // `type`, `value` and `langtag`. `datatype` and `langtag` are not always
-// present, so those arguments are `optional`.
+// present, so those arguments are of type `std::optional`.
 nlohmann::json makeJSONBinding(
     const std::optional<std::string>& datatype, const std::string& type,
     const std::string& value,
@@ -152,7 +152,7 @@ nlohmann::json makeJSONBinding(
 // Create a `json` that can be used as the `resultSparqlJSON` member of a
 // `TestCaseSelectQuery`. This function can only be used when there is a single
 // variable called `?o` in the result. The `bindings` then become the bindings
-// of that variable. These bindings typically are created via the
+// of that variable. These bindings are typically created via the
 // `makeJSONBinding` function.
 nlohmann::json makeExpectedSparqlJSON(
     const std::vector<nlohmann::json>& bindings) {
@@ -175,8 +175,16 @@ TEST(ExportQueryExecutionTree, Integers) {
       query,
       3,
       // TODO<joka921> the ORDER BY of negative numbers is incorrect.
-      "?o\n42\n4012934858173560\n-42019234865781\n",
-      "?o\n42\n4012934858173560\n-42019234865781\n",
+      // TSV
+      "?o\n"
+      "42\n"
+      "4012934858173560\n"
+      "-42019234865781\n",
+      // CSV
+      "?o\n"
+      "42\n"
+      "4012934858173560\n"
+      "-42019234865781\n",
       makeExpectedQLeverJSON(
           {"\"42\"^^<http://www.w3.org/2001/XMLSchema#int>"s,
            "\"4012934858173560\"^^<http://www.w3.org/2001/XMLSchema#int>"s,
@@ -194,9 +202,18 @@ TEST(ExportQueryExecutionTree, Integers) {
   TestCaseConstructQuery testCaseConstruct{
       kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 3,
       // TODO<joka921> the ORDER BY of negative numbers is incorrect.
-      "<s>\t<p>\t42\n<s>\t<p>\t4012934858173560\n<s>\t<p>\t-42019234865781\n",
-      "<s>,<p>,42\n<s>,<p>,4012934858173560\n<s>,<p>,-42019234865781\n",
-      "<s> <p> 42 .\n<s> <p> 4012934858173560 .\n<s> <p> -42019234865781 .\n",
+      // TSV
+      "<s>\t<p>\t42\n"
+      "<s>\t<p>\t4012934858173560\n"
+      "<s>\t<p>\t-42019234865781\n",
+      // CSV
+      "<s>,<p>,42\n"
+      "<s>,<p>,4012934858173560\n"
+      "<s>,<p>,-42019234865781\n",
+      // Turtle
+      "<s> <p> 42 .\n"
+      "<s> <p> 4012934858173560 .\n"
+      "<s> <p> -42019234865781 .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "42"s});
@@ -218,8 +235,16 @@ TEST(ExportQueryExecutionTree, Floats) {
       3,
       // TODO<joka921> The sorting is wrong, and the formatting of the negative
       // number is strange.
-      "?o\n4.01293e-12\n42.2\n-42019234865780982022144\n",
-      "?o\n4.01293e-12\n42.2\n-42019234865780982022144\n",
+      // TSV
+      "?o\n"
+      "4.01293e-12\n"
+      "42.2\n"
+      "-42019234865780982022144\n",
+      // CSV
+      "?o\n"
+      "4.01293e-12\n"
+      "42.2\n"
+      "-42019234865780982022144\n",
       makeExpectedQLeverJSON(
           {"\"4.01293e-12\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
            "\"42.2\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
@@ -238,11 +263,18 @@ TEST(ExportQueryExecutionTree, Floats) {
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
       3,
-      "<s>\t<p>\t4.01293e-12\n<s>\t<p>\t42.2\n<s>\t<p>\t-"
-      "42019234865780982022144\n",
-      "<s>,<p>,4.01293e-12\n<s>,<p>,42.2\n<s>,<p>,-42019234865780982022144\n",
-      "<s> <p> 4.01293e-12 .\n<s> <p> 42.2 .\n<s> <p> -42019234865780982022144 "
-      ".\n",
+      // TSV
+      "<s>\t<p>\t4.01293e-12\n"
+      "<s>\t<p>\t42.2\n"
+      "<s>\t<p>\t-42019234865780982022144\n",
+      // CSV
+      "<s>,<p>,4.01293e-12\n"
+      "<s>,<p>,42.2\n"
+      "<s>,<p>,-42019234865780982022144\n",
+      // Turtle
+      "<s> <p> 4.01293e-12 .\n"
+      "<s> <p> 42.2 .\n"
+      "<s> <p> -42019234865780982022144 .\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<s>"s, "<p>"s, "4.01293e-12"s});
@@ -262,11 +294,12 @@ TEST(ExportQueryExecutionTree, Dates) {
       kg,
       query,
       1,
-      "?o\n\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/"
-      "XMLSchema#dateTime>\n",
+      // TSV
+      "?o\n"
+      "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>\n",
       // Note: the duplicate quotes are due to the escaping for CSV.
-      "?o\n\"\"\"1950-01-01T00:00:00\"\"^^<http://www.w3.org/2001/"
-      "XMLSchema#dateTime>\"\n",
+      "?o\n"
+      "\"\"\"1950-01-01T00:00:00\"\"^^<http://www.w3.org/2001/XMLSchema#dateTime>\"\n",
       makeExpectedQLeverJSON(
           {"\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"s}),
       makeExpectedSparqlJSON(
@@ -279,9 +312,12 @@ TEST(ExportQueryExecutionTree, Dates) {
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
       1,
+      // TSV
       "<s>\t<p>\t\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/"
       "XMLSchema#dateTime>\n",
+      // TSV
       "<s>,<p>,\"\"\"1950-01-01T00:00:00\"\"^^<http://www.w3.org/2001/"
+      // Turtle
       "XMLSchema#dateTime>\"\n",
       "<s> <p> "
       "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> "
@@ -304,8 +340,12 @@ TEST(ExportQueryExecutionTree, Entities) {
       kg,
       query,
       1,
-      "?o\n<http://qlever.com/o>\n",
-      "?o\n<http://qlever.com/o>\n",
+      // TSV
+      "?o\n"
+      "<http://qlever.com/o>\n",
+      // CSV
+      "?o\n"
+      "<http://qlever.com/o>\n",
       makeExpectedQLeverJSON({"<http://qlever.com/o>"s}),
       makeExpectedSparqlJSON(
           {makeJSONBinding(std::nullopt, "uri", "http://qlever.com/o")}),
@@ -321,8 +361,11 @@ TEST(ExportQueryExecutionTree, Entities) {
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
       1,
+      // TSV
       "<s>\t<p>\t<http://qlever.com/o>\n",
+      // CSV
       "<s>,<p>,<http://qlever.com/o>\n",
+      // Turtle
       "<s> <p> <http://qlever.com/o> .\n",
       []() {
         nlohmann::json j;
@@ -340,8 +383,12 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
       kg,
       query,
       1,
-      "?o\n\"Some\"Where Over,\"@en-ca\n",
-      "?o\n\"\"\"Some\"\"Where\tOver,\"\"@en-ca\"\n",
+      // TSV
+      "?o\n"
+      "\"Some\"Where Over,\"@en-ca\n",
+      // CSV
+      "?o\n"
+      "\"\"\"Some\"\"Where\tOver,\"\"@en-ca\"\n",
       makeExpectedQLeverJSON({"\"Some\"Where\tOver,\"@en-ca"s}),
       makeExpectedSparqlJSON({makeJSONBinding(std::nullopt, "literal",
                                               "Some\"Where\tOver,", "en-ca")})};
@@ -357,8 +404,11 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
       1,
       // TODO<joka921> the ORDER BY of negative numbers is incorrect.
+      // TSV
       "<s>\t<p>\t\"Some\"Where Over,\"@en-ca\n",
+      // CSV
       "<s>,<p>,\"\"\"Some\"\"Where\tOver,\"\"@en-ca\"\n",
+      // Turtle
       "<s> <p> \"Some\\\"Where\tOver,\"@en-ca .\n",
       []() {
         nlohmann::json j;
@@ -410,25 +460,34 @@ TEST(ExportQueryExecutionTree, BlankNode) {
       kg,
       objectQuery,
       1,
-      "?o\n_:u_blank\n",
-      "?o\n_:u_blank\n",
+      // TSV
+      "?o\n"
+      "_:u_blank\n",
+      // CSV
+      "?o\n"
+      "_:u_blank\n",
       makeExpectedQLeverJSON({"_:u_blank"s}),
       makeExpectedSparqlJSON(
           {makeJSONBinding(std::nullopt, "bnode", "u_blank")})};
   runSelectQueryTestCase(testCaseBlankNode);
-  // Note: Blank nodes cannot be introduced in a VALUES clause, so there is
-  // nothing to test here.
+  // Note: Blank nodes cannot be introduced in a `VALUES` clause, so they can
+  // never be part of the local vocabulary. For this reason we don't need a
+  // `VALUES` clause in the test query like in the test cases above.
 }
 
 TEST(ExportQueryExecutionTree, MultipleVariables) {
   std::string kg = "<s> <p> <o>";
   std::string objectQuery = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
-  TestCaseSelectQuery testCaseBlankNode{
+  TestCaseSelectQuery testCaseMultipleVariables{
       kg,
       objectQuery,
       1,
-      "?p\t?o\n<p>\t<o>\n",
-      "?p,?o\n<p>,<o>\n",
+      // TSV
+      "?p\t?o\n"
+      "<p>\t<o>\n",
+      // CSV
+      "?p,?o\n"
+      "<p>,<o>\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<p>"s, "<o>"s});
@@ -444,9 +503,7 @@ TEST(ExportQueryExecutionTree, MultipleVariables) {
         bindings.back()["o"] = makeJSONBinding(std::nullopt, "uri", "o");
         return j;
       }()};
-  runSelectQueryTestCase(testCaseBlankNode);
-  // Note: Blank nodes cannot be introduced in a VALUES clause, so there is
-  // nothing to test here.
+  runSelectQueryTestCase(testCaseMultipleVariables);
 }
 
 TEST(ExportQueryExecutionTree, BinaryExport) {
@@ -461,6 +518,7 @@ TEST(ExportQueryExecutionTree, BinaryExport) {
   auto o = getId("<o>");
 
   Id id0, id1, id2, id3;
+  // TODO<joka921, C++20> Use `std::bit_cast`
   std::memcpy(&id0, result.data(), sizeof(Id));
   std::memcpy(&id1, result.data() + sizeof(Id), sizeof(Id));
   std::memcpy(&id2, result.data() + 2 * sizeof(Id), sizeof(Id));
@@ -468,7 +526,7 @@ TEST(ExportQueryExecutionTree, BinaryExport) {
 
   // The result is "p, 31" (first row) "o, 42" (second row)
   ASSERT_EQ(o, id0);
-  ASSERT_EQ(ad_utility::testing::IntId(42), id1) << id0 << id1 << id2 << id3;
+  ASSERT_EQ(ad_utility::testing::IntId(42), id1);
   ASSERT_EQ(p, id2);
   ASSERT_EQ(ad_utility::testing::IntId(31), id3);
 }
@@ -503,9 +561,9 @@ TEST(ExportQueryExecutionTree, CornerCases) {
   // A SparqlJSON query where none of the variables is even visible in the
   // query body is not supported.
   std::string queryNoVariablesVisible = "SELECT ?not ?known WHERE {<s> ?p ?o}";
-  ASSERT_THROW(runJSONQuery(kg, queryNoVariablesVisible,
-                            ad_utility::MediaType::sparqlJson),
-               ad_utility::Exception);
+  auto resultNoColumns = runJSONQuery(kg, queryNoVariablesVisible,
+                                      ad_utility::MediaType::sparqlJson);
+  ASSERT_TRUE(resultNoColumns["result"]["bindings"].empty());
 }
 
 // TODO<joka921> Unit tests for the more complex CONSTRUCT export (combination
