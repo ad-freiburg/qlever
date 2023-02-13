@@ -198,7 +198,7 @@ class BenchmarkRecords {
     const std::vector<RecordTable> getTables() const;
 };
 
-// JSON (d)serilization for all the created structures in BenchmarkRecords.
+// JSON (d)serialization for all the created structures in BenchmarkRecords.
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BenchmarkRecords::RecordEntry, descriptor_, measuredTime_)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BenchmarkRecords::RecordGroup, descriptor_, entries_)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BenchmarkRecords::RecordTable, descriptor_, rowNames_, columnNames_, entries_)
