@@ -223,7 +223,7 @@ class CompressedRelationWriter {
 class CompressedRelationReader {
  private:
   // This cache stores a small number of decompressed blocks. Its current
-  // purpose is to make the e2e-tests run fast. They contain many SPARL queries
+  // purpose is to make the e2e-tests run fast. They contain many SPARQL queries
   // with ?s ?p ?o triples in the body.
   // Note: The cache is thread-safe and using it does not change the semantics
   // of this class, so it is safe to mark it as `mutable` to make the `scan`
