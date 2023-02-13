@@ -64,8 +64,8 @@ class PermutationImpl {
       return;
     }
     const auto& metaData = _meta.getMetaData(col0Id);
-    return _reader.scan(metaData, _meta.blockData(), _readableName, _file,
-                        result, std::move(timer));
+    return _reader.scan(metaData, _meta.blockData(), _file, result,
+                        std::move(timer));
   }
   /// For given IDs for the first and second column, retrieve all IDs of the
   /// third column, and store them in `result`. This is just a thin wrapper

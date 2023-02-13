@@ -17,7 +17,7 @@ using namespace std::chrono_literals;
 void CompressedRelationReader::scan(
     const CompressedRelationMetadata& metadata,
     const vector<CompressedBlockMetadata>& blockMetadata,
-    const std::string& permutationName, ad_utility::File& file, IdTable* result,
+    ad_utility::File& file, IdTable* result,
     ad_utility::SharedConcurrentTimeoutTimer timer) const {
   AD_CONTRACT_CHECK(result->numColumns() == NumColumns);
 
@@ -77,10 +77,8 @@ void CompressedRelationReader::scan(
   // Set up a lambda, that reads this block and decompresses it to
   // the result.
   auto readIncompleteBlock = [&](const auto& block) {
-    auto cacheKey =
-        permutationName +
-        std::to_string(block._offsetsAndCompressedSize.at(0)._offsetInFile);
-
+    // A block is uniquely identified by its start position in the file.
+    auto cacheKey = block._offsetsAndCompressedSize.at(0)._offsetInFile;
     auto uncompressedBuffer = blockCache_
                                   .computeOnce(cacheKey,
                                                [&]() {

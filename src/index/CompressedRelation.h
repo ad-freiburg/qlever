@@ -234,7 +234,7 @@ class CompressedRelationReader {
   // of this class, so it is safe to mark it as `mutable` to make the `scan`
   // functions below `const`.
   mutable ad_utility::ConcurrentCache<
-      ad_utility::HeapBasedLRUCache<std::string, DecompressedBlock>>
+      ad_utility::HeapBasedLRUCache<off_t, DecompressedBlock>>
       blockCache_{20ul};
 
  public:
@@ -244,9 +244,6 @@ class CompressedRelationReader {
    * @param metadata The metadata of the given X.
    * @param blockMetadata The metadata of the on-disk blocks for the given
    * permutation.
-   * @param permutationName A human readable name that identifies the
-   *          permutation. It is used to uniquely identify a cache for recently
-   *          decompressed blocks.
    * @param file The file in which the permutation is stored.
    * @param result The ID table to which we write the result. It must have
    * exactly two columns.
@@ -258,8 +255,7 @@ class CompressedRelationReader {
    */
   void scan(const CompressedRelationMetadata& metadata,
             const vector<CompressedBlockMetadata>& blockMetadata,
-            const std::string& permutationName, ad_utility::File& file,
-            IdTable* result,
+            ad_utility::File& file, IdTable* result,
             ad_utility::SharedConcurrentTimeoutTimer timer) const;
 
   /**

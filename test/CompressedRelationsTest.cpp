@@ -109,8 +109,7 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
                     m._multiplicityCol1);
     // Scan for all distinct `col0` and check that we get the expected result.
     IdTable table{2, ad_utility::testing::makeAllocator()};
-    reader.scan(metaData[i], blocks, testCaseName + std::to_string(blocksize),
-                file, &table, timer);
+    reader.scan(metaData[i], blocks, file, &table, timer);
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
 
