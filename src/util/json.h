@@ -14,7 +14,7 @@
 #include <nlohmann/json.hpp>
 #include <optional>
 
-// Adding third party type support.
+// Added support for serializing `std::optional` using `nlohmann::json`.
 namespace nlohmann {
     template <typename T>
     struct adl_serializer<std::optional<T>> {
