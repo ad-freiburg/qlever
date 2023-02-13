@@ -566,8 +566,8 @@ TEST(ExportQueryExecutionTree, CornerCases) {
   std::string queryNoVariablesVisible = "SELECT ?not ?known WHERE {<s> ?p ?o}";
   auto resultNoColumns = runJSONQuery(kg, queryNoVariablesVisible,
                                       ad_utility::MediaType::sparqlJson);
-  ASSERT_TRUE(resultNoColumns["result"]["bindngs"].empty());
-}
+  ASSERT_TRUE(resultNoColumns["result"]["bindings"].empty());
+
 
 // TODO<joka921> Unit tests for the more complex CONSTRUCT export (combination
 // between constants and stuff from the knowledge graph).

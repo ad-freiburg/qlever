@@ -194,14 +194,6 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
 
   std::erase(columns, std::nullopt);
 
-  // TODO<joka921> add a warning to the result (Also for other formats).
-  if (columns.empty()) {
-    LOG(WARN) << "Exporting a SPARQL query where none of the selected "
-                 "variables is bound in the query"
-              << std::endl;
-    return {std::vector<std::string>{}};
-  }
-
   const IdTable& idTable = resultTable->_idTable;
 
   json result;
@@ -217,6 +209,15 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
   result["head"]["vars"] = selectedVars;
 
   json bindings = json::array();
+
+  // TODO<joka921> add a warning to the result (Also for other formats).
+  if (columns.empty()) {
+    LOG(WARN) << "Exporting a SPARQL query where none of the selected "
+                 "variables is bound in the query"
+              << std::endl;
+    result["results"]["bindings"] = json::array();
+    return result;
+  }
 
   // Take a string from the vocabulary, deduce the type and
   // return a json dict that describes the binding
