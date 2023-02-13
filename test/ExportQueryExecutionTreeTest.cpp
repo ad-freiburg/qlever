@@ -166,6 +166,7 @@ nlohmann::json makeExpectedSparqlJSON(
   return j;
 }
 
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTree, Integers) {
   std::string kg =
       "<s> <p> 42 . <s> <p> -42019234865781 . <s> <p> 4012934858173560";
@@ -224,6 +225,7 @@ TEST(ExportQueryExecutionTree, Integers) {
   runConstructQueryTestCase(testCaseConstruct);
 }
 
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTree, Floats) {
   std::string kg =
       "<s> <p> 42.2 . <s> <p> -42019234865.781e12 . <s> <p> "
@@ -260,9 +262,7 @@ TEST(ExportQueryExecutionTree, Floats) {
   runSelectQueryTestCase(testCaseFloat);
 
   TestCaseConstructQuery testCaseConstruct{
-      kg,
-      "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
-      3,
+      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 3,
       // TSV
       "<s>\t<p>\t4.01293e-12\n"
       "<s>\t<p>\t42.2\n"
@@ -285,6 +285,7 @@ TEST(ExportQueryExecutionTree, Floats) {
   runConstructQueryTestCase(testCaseConstruct);
 }
 
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTree, Dates) {
   std::string kg =
       "<s> <p> "
@@ -299,7 +300,8 @@ TEST(ExportQueryExecutionTree, Dates) {
       "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>\n",
       // Note: the duplicate quotes are due to the escaping for CSV.
       "?o\n"
-      "\"\"\"1950-01-01T00:00:00\"\"^^<http://www.w3.org/2001/XMLSchema#dateTime>\"\n",
+      "\"\"\"1950-01-01T00:00:00\"\"^^<http://www.w3.org/2001/"
+      "XMLSchema#dateTime>\"\n",
       makeExpectedQLeverJSON(
           {"\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"s}),
       makeExpectedSparqlJSON(
@@ -333,6 +335,7 @@ TEST(ExportQueryExecutionTree, Dates) {
   runConstructQueryTestCase(testCaseConstruct);
 }
 
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTree, Entities) {
   std::string kg = "PREFIX qlever: <http://qlever.com/> \n <s> <p> qlever:o";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
@@ -376,13 +379,12 @@ TEST(ExportQueryExecutionTree, Entities) {
   runConstructQueryTestCase(testCaseConstruct);
 }
 
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
   std::string kg = "<s> <p> \"\"\"Some\"Where\tOver,\"\"\"@en-ca.";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
   TestCaseSelectQuery testCase{
-      kg,
-      query,
-      1,
+      kg, query, 1,
       // TSV
       "?o\n"
       "\"Some\"Where Over,\"@en-ca\n",
@@ -420,6 +422,7 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
   runConstructQueryTestCase(testCaseConstruct);
 }
 
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTree, UndefinedValues) {
   std::string kg = "<s> <p> <o>";
   std::string query =
@@ -453,13 +456,12 @@ TEST(ExportQueryExecutionTree, UndefinedValues) {
   runConstructQueryTestCase(testCaseConstruct);
 }
 
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTree, BlankNode) {
   std::string kg = "<s> <p> _:blank";
   std::string objectQuery = "SELECT ?o WHERE {?s ?p ?o } ORDER BY ?o";
   TestCaseSelectQuery testCaseBlankNode{
-      kg,
-      objectQuery,
-      1,
+      kg, objectQuery, 1,
       // TSV
       "?o\n"
       "_:u_blank\n",
@@ -475,13 +477,12 @@ TEST(ExportQueryExecutionTree, BlankNode) {
   // `VALUES` clause in the test query like in the test cases above.
 }
 
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTree, MultipleVariables) {
   std::string kg = "<s> <p> <o>";
   std::string objectQuery = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
   TestCaseSelectQuery testCaseMultipleVariables{
-      kg,
-      objectQuery,
-      1,
+      kg, objectQuery, 1,
       // TSV
       "?p\t?o\n"
       "<p>\t<o>\n",
@@ -506,6 +507,7 @@ TEST(ExportQueryExecutionTree, MultipleVariables) {
   runSelectQueryTestCase(testCaseMultipleVariables);
 }
 
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTree, BinaryExport) {
   std::string kg = "<s> <p> 31 . <s> <o> 42";
   std::string query = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
@@ -531,6 +533,7 @@ TEST(ExportQueryExecutionTree, BinaryExport) {
   ASSERT_EQ(ad_utility::testing::IntId(31), id3);
 }
 
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTree, CornerCases) {
   std::string kg = "<s> <p> <o>";
   std::string query = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
@@ -563,7 +566,7 @@ TEST(ExportQueryExecutionTree, CornerCases) {
   std::string queryNoVariablesVisible = "SELECT ?not ?known WHERE {<s> ?p ?o}";
   auto resultNoColumns = runJSONQuery(kg, queryNoVariablesVisible,
                                       ad_utility::MediaType::sparqlJson);
-  ASSERT_TRUE(resultNoColumns["result"]["bindings"].empty());
+  ASSERT_TRUE(resultNoColumns["result"]["bindngs"].empty());
 }
 
 // TODO<joka921> Unit tests for the more complex CONSTRUCT export (combination
