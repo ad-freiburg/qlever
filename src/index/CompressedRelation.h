@@ -24,11 +24,6 @@
 // Forward declaration of the `IdTable` class.
 class IdTable;
 
-inline bool& globalBlockCacheIsEnabled() {
-  static bool isEnabled = false;
-  return isEnabled;
-}
-
 // Currently our indexes have two columns (the first column of a triple
 // is stored in the respective metadata). This might change in the future when
 // we add a column for patterns or functional relations like rdf:type.
