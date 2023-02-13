@@ -13,6 +13,6 @@
 struct SolutionModifiers {
   vector<GroupKey> groupByVariables_;
   vector<SparqlFilter> havingClauses_;
-  vector<OrderKey> orderBy_;
+  OrderClause orderBy_;
   LimitOffsetClause limitOffset_{};
 };

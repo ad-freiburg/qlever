@@ -26,7 +26,7 @@
 
 // For easier reading. We repeat that type combination so often, that this
 // will make things a lot easier in terms of reading and writing.
-using VectorTable = std::vector<std::vector<size_t>>;
+using VectorTable = std::vector<std::vector<int64_t>>;
 
 /*
  * Return an 'IdTable' with the given 'tableContent' by applying the

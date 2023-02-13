@@ -55,7 +55,8 @@ class QueryExecutionTree {
     VALUES,
     BIND,
     MINUS,
-    NEUTRAL_ELEMENT
+    NEUTRAL_ELEMENT,
+    DUMMY
   };
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
@@ -187,6 +188,15 @@ class QueryExecutionTree {
       std::shared_ptr<QueryExecutionTree> qet,
       const vector<size_t>& sortColumns);
 
+  // Similar to `createSortedTree` (see directly above), but create the sorted
+  // trees for two different trees, the sort columns of which are specified as
+  // a vector of two-dimensional arrays. This format often appears in
+  // `QueryPlanner.cpp`.
+  static std::array<std::shared_ptr<QueryExecutionTree>, 2> createSortedTrees(
+      std::shared_ptr<QueryExecutionTree> qetA,
+      std::shared_ptr<QueryExecutionTree> qetB,
+      const vector<std::array<size_t, 2>>& sortColumns);
+
   // If the result of this `Operation` is sorted (either because this
   // `Operation` enforces this sorting, or because it preserves the sorting of
   // its children), return the variable that is the primary sort key. Else
@@ -223,3 +233,15 @@ class QueryExecutionTree {
           _object{std::move(object)} {}
   };
 };
+
+namespace ad_utility {
+// Create a `QueryExecutionTree` with `Operation` at the root.
+// The `Operation` is created using `qec` and `args...` as constructor
+// arguments.
+template <typename Operation>
+std::shared_ptr<QueryExecutionTree> makeExecutionTree(
+    QueryExecutionContext* qec, auto&&... args) {
+  return std::make_shared<QueryExecutionTree>(
+      qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
+}
+}  // namespace ad_utility

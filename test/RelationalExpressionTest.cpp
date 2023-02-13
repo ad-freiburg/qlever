@@ -6,6 +6,7 @@
 #include <string>
 
 #include "./SparqlExpressionTestHelpers.h"
+#include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "gtest/gtest.h"
@@ -21,10 +22,6 @@ using valueIdComparators::Comparison;
 // First some internal helper functions and constants.
 namespace {
 
-// A global allocator that will be used to setup test inputs.
-ad_utility::AllocatorWithLimit<Id> allocator{
-    ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
-
 // Convenient access to constants for "infinity" and "not a number". The
 // spelling `NaN` was chosen because `nan` conflicts with the standard library.
 const auto inf = std::numeric_limits<double>::infinity();
@@ -34,7 +31,7 @@ const auto NaN = std::numeric_limits<double>::quiet_NaN();
 // values of the original vector.
 VectorWithMemoryLimit<ValueId> makeValueIdVector(
     const VectorWithMemoryLimit<double>& vec) {
-  VectorWithMemoryLimit<ValueId> result{allocator};
+  VectorWithMemoryLimit<ValueId> result{makeAllocator()};
   for (double d : vec) {
     result.push_back(DoubleId(d));
   }
@@ -44,7 +41,7 @@ VectorWithMemoryLimit<ValueId> makeValueIdVector(
 // Same as the above function, but for `int64_t` instead of `double`.
 VectorWithMemoryLimit<ValueId> makeValueIdVector(
     const VectorWithMemoryLimit<int64_t>& vec) {
-  VectorWithMemoryLimit<ValueId> result{allocator};
+  VectorWithMemoryLimit<ValueId> result{makeAllocator()};
   for (int64_t i : vec) {
     result.push_back(IntId(i));
   }
@@ -265,10 +262,11 @@ TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
   auto stringVec = VectorWithMemoryLimit<std::string>({"hallo",
                                                        "by"
                                                        ""},
-                                                      allocator);
-  auto intVec = VectorWithMemoryLimit<int64_t>({-12365, 0, 12}, allocator);
+                                                      makeAllocator());
+  auto intVec =
+      VectorWithMemoryLimit<int64_t>({-12365, 0, 12}, makeAllocator());
   auto doubleVec =
-      VectorWithMemoryLimit<double>({-12.365, 0, 12.1e5}, allocator);
+      VectorWithMemoryLimit<double>({-12.365, 0, 12.1e5}, makeAllocator());
   testNotEqualHelper(int64_t{3}, "hallo"s);
   testNotEqualHelper(int64_t{3}, "3"s);
   testNotEqualHelper(-12.0, "hallo"s);
@@ -465,18 +463,20 @@ auto testNotComparable(T leftValue, U rightValue,
 
 TEST(RelationalExpression, NumericConstantAndNumericVector) {
   VectorWithMemoryLimit<double> doubles{
-      {-24.3, 0.0, 3.0, 12.8, 1235e12, 523.13, 3.8, 3.8, 3.8}, allocator};
+      {-24.3, 0.0, 3.0, 12.8, 1235e12, 523.13, 3.8, 3.8, 3.8}, makeAllocator()};
   testLessThanGreaterThanEqualMultipleValues(3.8, doubles.clone());
 
   VectorWithMemoryLimit<int64_t> ints{{-523, -15, -3, -1, 0, 12305, -2, -2, -2},
-                                      allocator};
+                                      makeAllocator()};
   testLessThanGreaterThanEqualMultipleValues(-2.0, ints.clone());
   testLessThanGreaterThanEqualMultipleValues(int64_t{-2}, ints.clone());
 
   // Test cases for comparison with NaN
-  VectorWithMemoryLimit<double> nonNans{{1.0, 2.0, -inf, inf, 12e6}, allocator};
-  VectorWithMemoryLimit<double> Nans{{NaN, NaN, NaN, NaN, NaN}, allocator};
-  VectorWithMemoryLimit<int64_t> fiveInts{{-1, 0, 1, 2, 3}, allocator};
+  VectorWithMemoryLimit<double> nonNans{{1.0, 2.0, -inf, inf, 12e6},
+                                        makeAllocator()};
+  VectorWithMemoryLimit<double> Nans{{NaN, NaN, NaN, NaN, NaN},
+                                     makeAllocator()};
+  VectorWithMemoryLimit<int64_t> fiveInts{{-1, 0, 1, 2, 3}, makeAllocator()};
 
   testNotComparable(NaN, nonNans.clone());
   testNotComparable(NaN, fiveInts.clone());
@@ -488,7 +488,7 @@ TEST(RelationalExpression, StringConstantsAndStringVector) {
   VectorWithMemoryLimit<std::string> vec(
       {"alpha", "alpaka", "bertram", "sigma", "zeta", "kaulquappe", "caesar",
        "caesar", "caesar"},
-      allocator);
+      makeAllocator());
   testLessThanGreaterThanEqualMultipleValuesHelper("caesar"s, vec.clone());
 
   // TODO<joka921> These tests only work, when we actually use unicode
@@ -504,36 +504,39 @@ TEST(RelationalExpression, StringConstantsAndStringVector) {
 
 TEST(RelationalExpression, IntVectorAndIntVector) {
   VectorWithMemoryLimit<int64_t> vecA{
-      {1065918, 17, 3, 1, 0, -102934, 2, -3120, 0}, allocator};
+      {1065918, 17, 3, 1, 0, -102934, 2, -3120, 0}, makeAllocator()};
   VectorWithMemoryLimit<int64_t> vecB{
-      {1065000, 16, -12340, 42, 1, -102930, 2, -3120, 0}, allocator};
+      {1065000, 16, -12340, 42, 1, -102930, 2, -3120, 0}, makeAllocator()};
   testLessThanGreaterThanEqualMultipleValues(vecA.clone(), vecB.clone());
 }
 
 TEST(RelationalExpression, DoubleVectorAndDoubleVector) {
   VectorWithMemoryLimit<double> vecA{
       {1.1e12, 0.0, 3.120, -1230, -1.3e12, 1.2e-13, -0.0, 13, -1.2e6},
-      allocator};
+      makeAllocator()};
   VectorWithMemoryLimit<double> vecB{
       {1.0e12, -0.1, -3.120e5, 1230, -1.3e10, 1.1e-12, 0.0, 13, -1.2e6},
-      allocator};
+      makeAllocator()};
   testLessThanGreaterThanEqualMultipleValues(vecA.clone(), vecB.clone());
 
-  VectorWithMemoryLimit<double> nanA{{NaN, 1.0, NaN, 3.2, NaN}, allocator};
-  VectorWithMemoryLimit<double> nanB{{-12.3, NaN, 0.0, NaN, inf}, allocator};
+  VectorWithMemoryLimit<double> nanA{{NaN, 1.0, NaN, 3.2, NaN},
+                                     makeAllocator()};
+  VectorWithMemoryLimit<double> nanB{{-12.3, NaN, 0.0, NaN, inf},
+                                     makeAllocator()};
   testNotComparable(nanA.clone(), nanB.clone());
 }
 
 TEST(RelationalExpression, DoubleVectorAndIntVector) {
   VectorWithMemoryLimit<int64_t> vecA{
-      {1065918, 17, 3, 1, 0, -102934, 2, -3120, 0}, allocator};
+      {1065918, 17, 3, 1, 0, -102934, 2, -3120, 0}, makeAllocator()};
   VectorWithMemoryLimit<double> vecB{{1065917.9, 1.5e1, -3.120e5, 1.0e1, 1e-12,
                                       -102934e-1, 20.0e-1, -3.120e3, -0.0},
-                                     allocator};
+                                     makeAllocator()};
   testLessThanGreaterThanEqualMultipleValues(vecA.clone(), vecB.clone());
 
-  VectorWithMemoryLimit<int64_t> fiveInts{{0, 1, 2, 3, -4}, allocator};
-  VectorWithMemoryLimit<double> fiveNans{{NaN, NaN, NaN, NaN, NaN}, allocator};
+  VectorWithMemoryLimit<int64_t> fiveInts{{0, 1, 2, 3, -4}, makeAllocator()};
+  VectorWithMemoryLimit<double> fiveNans{{NaN, NaN, NaN, NaN, NaN},
+                                         makeAllocator()};
   testNotComparable(fiveInts.clone(), fiveNans.clone());
 }
 
@@ -541,11 +544,11 @@ TEST(RelationalExpression, StringVectorAndStringVector) {
   VectorWithMemoryLimit<std::string> vecA{
       {"alpha", "beta", "g", "epsilon", "fraud", "capitalism", "", "bo'sä30",
        "Me"},
-      allocator};
+      makeAllocator()};
   VectorWithMemoryLimit<std::string> vecB{
       {"alph", "alpha", "f", "epsiloo", "freud", "communism", "", "bo'sä30",
        "Me"},
-      allocator};
+      makeAllocator()};
   testLessThanGreaterThanEqualMultipleValuesHelper(vecA.clone(), vecB.clone());
   // TODO<joka921> Add a test case for correct unicode collation as soon as that
   // is actually supported.

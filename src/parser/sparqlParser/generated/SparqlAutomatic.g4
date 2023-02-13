@@ -109,7 +109,7 @@ havingClause: HAVING havingCondition+;
 havingCondition : constraint;
 
 orderClause
-    : ORDERBY orderCondition+
+    : (orderBy = ORDERBY | internalSortBy = INTERNALSORTBY) orderCondition+
     ;
 
 orderCondition
@@ -623,6 +623,7 @@ GROUPBY : G R O U P WS+ B Y;
 GROUP_CONCAT : G R O U P '_' C O N C A T;
 HAVING : H A V I N G;
 ORDERBY: O R D E R WS+ B Y;
+INTERNALSORTBY: I N T E R N A L WS+ S O R T WS+ B Y;
 ASC : A S C;
 DESC : D E S C;
 LIMIT : L I M I T;
