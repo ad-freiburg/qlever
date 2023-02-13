@@ -29,12 +29,18 @@ class BenchmarkRecords {
       std::string descriptor_; // Needed, because without it, nobody could tell,
                               // which time belongs to which benchmark.
       float measuredTime_; // The measured time in seconds.
+
+    // JSON (d)serialization for all the created structures in BenchmarkRecords.
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkRecords::RecordEntry, descriptor_, measuredTime_)
     };
 
     // Describes a group of measured functions.
     struct RecordGroup {
       std::string descriptor_; // Needed for identifying groups.
       std::vector<RecordEntry> entries_;
+
+    // JSON (d)serialization for all the created structures in BenchmarkRecords.
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkRecords::RecordGroup, descriptor_, entries_)
     };
     
     // Describes a table of measured functions.
@@ -53,6 +59,9 @@ class BenchmarkRecords {
           descriptor_{pDescriptor}, rowNames_{pRowNames},
           columnNames_{pColumnNames},
           entries_(pRowNames.size(), std::vector<std::optional<float>>(pColumnNames.size())) {}
+
+      // JSON (d)serialization for all the created structures in BenchmarkRecords.
+      NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkRecords::RecordTable, descriptor_, rowNames_, columnNames_, entries_)
     };
 
   private:
@@ -197,11 +206,6 @@ class BenchmarkRecords {
      */
     const std::vector<RecordTable> getTables() const;
 };
-
-// JSON (d)serialization for all the created structures in BenchmarkRecords.
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BenchmarkRecords::RecordEntry, descriptor_, measuredTime_)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BenchmarkRecords::RecordGroup, descriptor_, entries_)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BenchmarkRecords::RecordTable, descriptor_, rowNames_, columnNames_, entries_)
 
 /*
  * This class exists as a round about way, of registering functions as
