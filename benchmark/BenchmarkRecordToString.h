@@ -7,8 +7,8 @@
 #include <sstream>
 #include <algorithm>
 #include <vector>
-#include "../src/util/json.h"
 
+#include "util/json.h"
 #include "../benchmark/Benchmark.h"
 #include "../benchmark/BenchmarkRecordToString.h"
 

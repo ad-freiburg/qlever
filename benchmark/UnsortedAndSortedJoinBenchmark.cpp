@@ -15,11 +15,7 @@
 #include "util/Random.h"
 #include "engine/idTable/IdTable.h"
 #include "../benchmark/Benchmark.h"
-
-// Local helper function.
 #include "../benchmark/util/IdTableHelperFunction.h"
-
-// Non-local helper function.
 #include "../test/util/IdTableHelpers.h"
 #include "../test/util/JoinHelpers.h"
 

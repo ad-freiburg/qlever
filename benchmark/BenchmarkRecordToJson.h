@@ -5,8 +5,8 @@
 # pragma once
 
 #include <vector>
-#include "../src/util/json.h"
 
+#include "util/json.h"
 #include "../benchmark/Benchmark.h"
 
 /*

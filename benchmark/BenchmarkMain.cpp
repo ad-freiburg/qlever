@@ -9,9 +9,9 @@
 #include <sstream>
 #include <algorithm>
 #include <vector>
-#include <boost/program_options.hpp>
-#include "../src/util/json.h"
 
+#include <boost/program_options.hpp>
+#include "util/json.h"
 #include "../benchmark/Benchmark.h"
 #include "../benchmark/BenchmarkRecordToJson.h"
 #include "../benchmark/BenchmarkRecordToString.h"
