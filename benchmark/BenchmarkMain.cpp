@@ -12,6 +12,7 @@
 
 #include <boost/program_options.hpp>
 #include "util/json.h"
+#include "util/File.h"
 #include "../benchmark/Benchmark.h"
 #include "../benchmark/BenchmarkRecordToJson.h"
 #include "../benchmark/BenchmarkRecordToString.h"
@@ -27,19 +28,8 @@
  */
 void writeJsonToFile(nlohmann::json j, std::string fileName,
     bool appendToFile = false) {
-  // Using this constructor, the file is already opened.
-  std::ofstream myFile(fileName, (appendToFile) ?
-      (std::ios::out | std::ios::app) : (std::ios::out));
-
-  // Error message, if the file couldn't be opened.
-  if (!myFile.is_open()){
-    std::cerr << "Unable to open file '" << fileName << "'.";
-  }
-
-  // nlohmann already has support for things like this.
-  myFile << j;
-
-  myFile.close();
+  ad_utility::makeOfstream(fileName, (appendToFile) ?
+      (std::ios::out | std::ios::app) : (std::ios::out)) << j;
 }
 
 /*
