@@ -9,7 +9,7 @@
 
 #include "../../util/VisitMixin.h"
 #include "./BlankNode.h"
-#include "./Context.h"
+#include "./ConstructQueryExportContext.h"
 #include "./Iri.h"
 #include "./Literal.h"
 
@@ -21,8 +21,8 @@ class GraphTerm : public GraphTermBase,
   using GraphTermBase::GraphTermBase;
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::optional<std::string> evaluate(const Context& context,
-                                                    ContextRole role) const {
+  [[nodiscard]] std::optional<std::string> evaluate(
+      const ConstructQueryExportContext& context, PositionInTriple role) const {
     // TODO<C++23>: Use std::visit when it is possible
     return visit([&context, &role](const auto& object) {
       return object.evaluate(context, role);

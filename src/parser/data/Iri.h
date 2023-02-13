@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "parser/data/Context.h"
+#include "parser/data/ConstructQueryExportContext.h"
 
 class Iri {
   std::string _string;
@@ -20,8 +20,8 @@ class Iri {
 
   // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> evaluate(
-      [[maybe_unused]] const Context& context,
-      [[maybe_unused]] ContextRole role) const {
+      [[maybe_unused]] const ConstructQueryExportContext& context,
+      [[maybe_unused]] PositionInTriple role) const {
     return _string;
   }
 

@@ -44,8 +44,9 @@ class Literal {
 
   // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> evaluate(
-      [[maybe_unused]] const Context& context, ContextRole role) const {
-    if (role == OBJECT) {
+      [[maybe_unused]] const ConstructQueryExportContext& context,
+      PositionInTriple role) const {
+    if (role == PositionInTriple::OBJECT) {
       return _stringRepresentation;
     }
     return std::nullopt;

@@ -10,7 +10,7 @@
 #include <unordered_set>
 
 #include "../parser/ParsedQuery.h"
-#include "../parser/data/Context.h"
+#include "../parser/data/ConstructQueryExportContext.h"
 #include "../parser/data/Types.h"
 #include "../parser/data/VarOrTerm.h"
 #include "../util/Conversions.h"
@@ -58,8 +58,6 @@ class QueryExecutionTree {
     NEUTRAL_ELEMENT,
     DUMMY
   };
-
-  enum class ExportSubFormat { CSV, TSV, BINARY };
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
 
@@ -110,36 +108,6 @@ class QueryExecutionTree {
   ColumnIndicesAndTypes selectedVariablesToColumnIndices(
       const parsedQuery::SelectClause& selectClause,
       const ResultTable& resultTable, bool includeQuestionMark = true) const;
-
-  template <ExportSubFormat format>
-  ad_utility::streams::stream_generator generateResults(
-      const parsedQuery::SelectClause& selectClause, size_t limit,
-      size_t offset) const;
-
-  // Generate an RDF graph in turtle format for a CONSTRUCT query.
-  ad_utility::streams::stream_generator writeRdfGraphTurtle(
-      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-      size_t offset, std::shared_ptr<const ResultTable> res) const;
-
-  // Generate an RDF graph in csv/tsv format for a CONSTRUCT query.
-  template <ExportSubFormat format>
-  ad_utility::streams::stream_generator writeRdfGraphSeparatedValues(
-      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-      size_t offset, std::shared_ptr<const ResultTable> res) const;
-
-  // Generate an RDF graph in json format for a CONSTRUCT query.
-  nlohmann::json writeRdfGraphJson(
-      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-      size_t offset, std::shared_ptr<const ResultTable> res) const;
-
-  nlohmann::json writeResultAsQLeverJson(
-      const parsedQuery::SelectClause& selectClause, size_t limit,
-      size_t offset, shared_ptr<const ResultTable> resultTable = nullptr) const;
-
-  nlohmann::json writeResultAsSparqlJson(
-      const parsedQuery::SelectClause& selectClause, size_t limit,
-      size_t offset,
-      shared_ptr<const ResultTable> preComputedResult = nullptr) const;
 
   const std::vector<size_t>& resultSortedOn() const {
     return _rootOperation->getResultSortedOn();
@@ -250,6 +218,7 @@ class QueryExecutionTree {
 
   std::shared_ptr<const ResultTable> _cachedResult = nullptr;
 
+ public:
   // Helper class to avoid bug in g++ that leads to memory corruption when
   // used inside of coroutines when using srd::array<std::string, 3> instead
   // see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more
@@ -263,27 +232,6 @@ class QueryExecutionTree {
           _predicate{std::move(predicate)},
           _object{std::move(object)} {}
   };
-
-  /**
-   * @brief Convert an IdTable (typically from a query result) to a json array
-   * @param data the IdTable from which we read
-   * @param from the first <from> entries of the idTable are skipped
-   * @param limit at most <limit> entries are written, starting at <from>
-   * @param columns each pair of <columnInIdTable, correspondingType> tells
-   * us which columns are to be serialized in which order
-   * @return a 2D-Json array corresponding to the IdTable given the arguments
-   */
-  nlohmann::json writeQLeverJsonTable(
-      size_t from, size_t limit, const ColumnIndicesAndTypes& columns,
-      std::shared_ptr<const ResultTable> resultTable = nullptr) const;
-
-  [[nodiscard]] std::optional<std::pair<std::string, const char*>>
-  idToStringAndType(Id id, const ResultTable& resultTable) const;
-
-  // Generate an RDF graph for a CONSTRUCT query.
-  cppcoro::generator<StringTriple> generateRdfGraph(
-      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-      size_t offset, std::shared_ptr<const ResultTable> res) const;
 };
 
 namespace ad_utility {

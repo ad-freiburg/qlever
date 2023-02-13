@@ -140,4 +140,15 @@ inline QueryExecutionContext* getQec(std::string turtleInput = "") {
   return contextMap.at(turtleInput).qec_.get();
 }
 
+// Return a lambda that takes a string and converts it into an ID by looking
+// it up in the vocabulary of `index`.
+auto makeGetId = [](const Index& index) {
+  return [&index](const std::string& el) {
+    Id id;
+    bool success = index.getId(el, &id);
+    AD_CONTRACT_CHECK(success);
+    return id;
+  };
+};
+
 }  // namespace ad_utility::testing

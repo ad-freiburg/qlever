@@ -4,6 +4,13 @@
 
 #pragma once
 
+// For some include orders the EOF constant is not defined although `<cstdio>`
+// was included, so we define it manually.
+// TODO<joka921> Find out where this happens.
+#ifndef EOF
+#define EOF std::char_traits<char>::eof()
+#endif
+
 #include <boost/iostreams/device/back_inserter.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
 #include <exception>
