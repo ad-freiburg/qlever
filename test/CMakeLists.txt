@@ -287,3 +287,9 @@ addLinkAndDiscoverTest(CompressedRelationsTest index)
 addLinkAndDiscoverTest(ExceptionTest)
 
 addLinkAndDiscoverTestSerial(RandomExpressionTest absl::flat_hash_map index)
+
+addLinkAndDiscoverTestSerial(SortTest engine)
+
+addLinkAndDiscoverTestSerial(OrderByTest engine)
+
+addLinkAndDiscoverTestSerial(ValuesForTestingTest index)

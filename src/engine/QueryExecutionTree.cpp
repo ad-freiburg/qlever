@@ -20,13 +20,17 @@
 #include "engine/HasPredicateScan.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/Minus.h"
+#include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/Sort.h"
 #include "engine/TextOperationWithFilter.h"
 #include "engine/TransitivePath.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
+#include "engine/ValuesForTesting.h"
 #include "parser/RdfEscaping.h"
 
 using std::string;
@@ -628,6 +632,14 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
     _type = TEXT_WITH_FILTER;
   } else if constexpr (std::is_same_v<Op, CountAvailablePredicates>) {
     _type = COUNT_AVAILABLE_PREDICATES;
+  } else if constexpr (std::is_same_v<Op, Minus>) {
+    _type = MINUS;
+  } else if constexpr (std::is_same_v<Op, OptionalJoin>) {
+    _type = OPTIONAL_JOIN;
+  } else if constexpr (std::is_same_v<Op, MultiColumnJoin>) {
+    _type = MULTICOLUMN_JOIN;
+  } else if constexpr (std::is_same_v<Op, ValuesForTesting>) {
+    _type = DUMMY;
   } else {
     static_assert(ad_utility::alwaysFalse<Op>,
                   "New type of operation that was not yet registered");
@@ -654,6 +666,12 @@ template void QueryExecutionTree::setOperation(
     std::shared_ptr<TextOperationWithFilter>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<CountAvailablePredicates>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<Minus>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<OptionalJoin>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<MultiColumnJoin>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<ValuesForTesting>);
 
 // ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
@@ -669,18 +687,22 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
   }
 
   QueryExecutionContext* qec = qet->getRootOperation()->getExecutionContext();
-  if (sortColumns.size() == 1) {
-    auto sort = std::make_shared<Sort>(qec, std::move(qet), sortColumns[0]);
-    return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
-  } else {
-    std::vector<std::pair<size_t, bool>> sortColsForOrderBy;
-    for (auto i : sortColumns) {
-      // The second argument set to `false` means sort in ascending order.
-      // TODO<joka921> fix this.
-      sortColsForOrderBy.emplace_back(i, false);
-    }
-    auto sort = std::make_shared<OrderBy>(qec, std::move(qet),
-                                          std::move(sortColsForOrderBy));
-    return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
+  auto sort = std::make_shared<Sort>(qec, std::move(qet), sortColumns);
+  return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
+}
+
+// ________________________________________________________________________________________________________________
+std::array<std::shared_ptr<QueryExecutionTree>, 2>
+QueryExecutionTree::createSortedTrees(
+    std::shared_ptr<QueryExecutionTree> qetA,
+    std::shared_ptr<QueryExecutionTree> qetB,
+    const vector<std::array<size_t, 2>>& sortColumns) {
+  std::vector<size_t> sortColumnsA, sortColumnsB;
+  for (auto [sortColumnA, sortColumnB] : sortColumns) {
+    sortColumnsA.push_back(sortColumnA);
+    sortColumnsB.push_back(sortColumnB);
   }
+
+  return {createSortedTree(std::move(qetA), sortColumnsA),
+          createSortedTree(std::move(qetB), sortColumnsB)};
 }

@@ -495,8 +495,23 @@ SparqlFilter Visitor::visit(Parser::HavingConditionContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-vector<OrderKey> Visitor::visit(Parser::OrderClauseContext* ctx) {
-  return visitVector(ctx->orderCondition());
+OrderClause Visitor::visit(Parser::OrderClauseContext* ctx) {
+  auto orderKeys = visitVector(ctx->orderCondition());
+
+  if (ctx->internalSortBy) {
+    auto isDescending = [](const auto& variant) {
+      return std::visit([](const auto& k) { return k.isDescending_; }, variant);
+    };
+    if (std::ranges::any_of(orderKeys, isDescending)) {
+      reportError(ctx,
+                  "When using the `INTERNAL SORT BY` modifier, all sorted "
+                  "variables have to be ascending");
+    }
+    return {IsInternalSort::True, std::move(orderKeys)};
+  } else {
+    AD_CONTRACT_CHECK(ctx->orderBy);
+    return {IsInternalSort::False, std::move(orderKeys)};
+  }
 }
 
 // ____________________________________________________________________________________

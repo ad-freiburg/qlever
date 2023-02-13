@@ -220,11 +220,12 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
     _orderBy.emplace_back(additionalVariable, orderKey.isDescending_);
   };
 
-  for (auto& orderKey : modifiers.orderBy_) {
+  for (auto& orderKey : modifiers.orderBy_.orderKeys) {
     std::visit(ad_utility::OverloadCallOperator{processVariableOrderKey,
                                                 processExpressionOrderKey},
                std::move(orderKey));
   }
+  _isInternalSort = modifiers.orderBy_.isInternalSort;
 
   // Process limitOffsetClause
   _limitOffset = modifiers.limitOffset_;

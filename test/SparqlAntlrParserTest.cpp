@@ -489,10 +489,18 @@ TEST(SparqlParser, OrderCondition) {
 }
 
 TEST(SparqlParser, OrderClause) {
-  expectCompleteParse(
-      parse<&Parser::orderClause>("ORDER BY ?test DESC(?foo - 5)"),
+  auto expectOrderClause = ExpectCompleteParse<&Parser::orderClause>{};
+  auto expectOrderClauseFails = ExpectParseFails<&Parser::orderClause>{};
+  expectOrderClause(
+      "ORDER BY ?test DESC(?foo - 5)",
       m::OrderKeys({VariableOrderKey{Var{"?test"}, false},
                     m::ExpressionOrderKeyTest{"(?foo-5)", true}}));
+
+  expectOrderClause("INTERNAL SORT BY ?test",
+                    m::OrderKeys({VariableOrderKey{Var{"?test"}, false}},
+                                 IsInternalSort::True));
+
+  expectOrderClauseFails("INTERNAL SORT BY ?test DESC(?blubb)");
 }
 
 TEST(SparqlParser, GroupCondition) {

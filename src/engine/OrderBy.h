@@ -1,30 +1,36 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author: 2015 - 2017 Björn Buchhold (buchhold@cs.uni-freiburg.de)
+// Author: 2023 -      Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 #pragma once
 
-#include <list>
 #include <utility>
 #include <vector>
 
-#include "./IndexScan.h"
-#include "./Operation.h"
-#include "./QueryExecutionTree.h"
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
 
-using std::list;
-
-using std::pair;
-using std::vector;
-
+// The implementation of the SPARQL `ORDER BY` operation.
+//
+// Note: This class sorts its input in the way that is expected by an end user
+// e.g. `-3 < 0` etc. This is different from the internal order of the IDs
+// which is cheaper to compute and used to compute efficient JOIN`s etc. The
+// internal ordering is computed by the `Sort` operation in `Sort.h`. It is thus
+// important to use the `OrderBy` operation only as the last step during query
+// processing directly before exporting the result.
 class OrderBy : public Operation {
+ public:
+  // TODO<joka921> This should be `pair<ColumnIndex, IsAscending>`
+  // The bool means "isDescending"
+  using SortIndices = std::vector<std::pair<ColumnIndex, bool>>;
+
  private:
-  std::shared_ptr<QueryExecutionTree> _subtree;
-  vector<pair<size_t, bool>> _sortIndices;
+  std::shared_ptr<QueryExecutionTree> subtree_;
+  SortIndices sortIndices_;
 
  public:
   OrderBy(QueryExecutionContext* qec,
-          std::shared_ptr<QueryExecutionTree> subtree,
-          vector<pair<size_t, bool>> sortIndices);
+          std::shared_ptr<QueryExecutionTree> subtree, SortIndices sortIndices);
 
  protected:
   string asStringImpl(size_t indent = 0) const override;
@@ -32,14 +38,17 @@ class OrderBy : public Operation {
  public:
   string getDescriptor() const override;
 
-  vector<size_t> resultSortedOn() const override;
+  // The function `resultSortedOn` refers to the `internal` sorting by ID value.
+  // This is different from the `semantic` sorting that the ORDER BY operation
+  // computes.
+  std::vector<size_t> resultSortedOn() const override { return {}; }
 
-  void setTextLimit(size_t limit) override { _subtree->setTextLimit(limit); }
+  void setTextLimit(size_t limit) override { subtree_->setTextLimit(limit); }
 
-  size_t getSizeEstimate() override { return _subtree->getSizeEstimate(); }
+  size_t getSizeEstimate() override { return subtree_->getSizeEstimate(); }
 
   float getMultiplicity(size_t col) override {
-    return _subtree->getMultiplicity(col);
+    return subtree_->getMultiplicity(col);
   }
 
   size_t getCostEstimate() override {
@@ -48,22 +57,22 @@ class OrderBy : public Operation {
         size_t(1),
         static_cast<size_t>(logb(static_cast<double>(getSizeEstimate()))));
     size_t nlogn = size * logSize;
-    size_t subcost = _subtree->getCostEstimate();
+    size_t subcost = subtree_->getCostEstimate();
     return nlogn + subcost;
   }
 
-  bool knownEmptyResult() override { return _subtree->knownEmptyResult(); }
+  bool knownEmptyResult() override { return subtree_->knownEmptyResult(); }
 
   size_t getResultWidth() const override;
 
   vector<QueryExecutionTree*> getChildren() override {
-    return {_subtree.get()};
+    return {subtree_.get()};
   }
 
  private:
   void computeResult(ResultTable* result) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override {
-    return _subtree->getVariableColumns();
+    return subtree_->getVariableColumns();
   }
 };

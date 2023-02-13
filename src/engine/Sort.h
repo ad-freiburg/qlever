@@ -1,61 +1,68 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author: 2015 - 2017 Björn Buchhold (buchhold@cs.uni-freiburg.de)
+// Author: 2023 -      Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
 #pragma once
 
-#include <list>
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
 
-#include "./Operation.h"
-#include "./QueryExecutionTree.h"
-
-using std::list;
-
+// This operation sorts an `IdTable` by the `internal` order of the IDs. This
+// order is cheap to compute (just a bitwise compare of integers), but is
+// different from the `semantic` order that is computed by ORDER BY. For
+// example, in the internal Order `Int(0) < Int(-3)`. For details on the
+// different orderings see `ValueId.h` and `ValueIdComparators.h`. The `Sort`
+// class has to be used when an operation requires a presorted input (e.g. JOIN,
+// GROUP BY). To compute an `ORDER BY` clause at the end of the query
+// processing, the `OrderBy` class from `OrderBy.h/.cpp` has to be used.
 class Sort : public Operation {
  private:
-  std::shared_ptr<QueryExecutionTree> _subtree;
-  size_t _sortCol;
+  std::shared_ptr<QueryExecutionTree> subtree_;
+  std::vector<ColumnIndex> sortColumnIndices_;
 
  public:
   Sort(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
-       size_t sortCol);
+       std::vector<ColumnIndex> sortColumnIndices);
 
  public:
   virtual string getDescriptor() const override;
 
-  virtual vector<size_t> resultSortedOn() const override { return {_sortCol}; }
+  virtual vector<size_t> resultSortedOn() const override {
+    return sortColumnIndices_;
+  }
 
   virtual void setTextLimit(size_t limit) override {
-    _subtree->setTextLimit(limit);
+    subtree_->setTextLimit(limit);
   }
 
   virtual size_t getSizeEstimate() override {
-    return _subtree->getSizeEstimate();
+    return subtree_->getSizeEstimate();
   }
 
   virtual float getMultiplicity(size_t col) override {
-    return _subtree->getMultiplicity(col);
+    return subtree_->getMultiplicity(col);
   }
 
-  std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; }
+  std::shared_ptr<QueryExecutionTree> getSubtree() const { return subtree_; }
 
   virtual size_t getCostEstimate() override {
     size_t size = getSizeEstimate();
     size_t logSize = std::max(
         size_t(2), static_cast<size_t>(logb(static_cast<double>(size))));
     size_t nlogn = size * logSize;
-    size_t subcost = _subtree->getCostEstimate();
+    size_t subcost = subtree_->getCostEstimate();
     return nlogn + subcost;
   }
 
   virtual bool knownEmptyResult() override {
-    return _subtree->knownEmptyResult();
+    return subtree_->knownEmptyResult();
   }
 
   [[nodiscard]] size_t getResultWidth() const override;
 
   vector<QueryExecutionTree*> getChildren() override {
-    return {_subtree.get()};
+    return {subtree_.get()};
   }
 
  private:
@@ -63,7 +70,7 @@ class Sort : public Operation {
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
       const override {
-    return _subtree->getVariableColumns();
+    return subtree_->getVariableColumns();
   }
 
   virtual string asStringImpl(size_t indent = 0) const override;

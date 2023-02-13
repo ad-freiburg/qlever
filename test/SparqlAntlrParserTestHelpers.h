@@ -369,8 +369,9 @@ inline auto ExpressionOrderKey = [](const string& expr,
 using ExpressionOrderKeyTest = std::pair<std::string, bool>;
 inline auto OrderKeys =
     [](const std::vector<
-        std::variant<::VariableOrderKey, ExpressionOrderKeyTest>>& orderKeys)
-    -> Matcher<const vector<OrderKey>&> {
+           std::variant<::VariableOrderKey, ExpressionOrderKeyTest>>& orderKeys,
+       IsInternalSort isInternalSort =
+           IsInternalSort::False) -> Matcher<const OrderClause&> {
   vector<Matcher<const OrderKey&>> keyMatchers;
   auto variableOrderKey =
       [](const ::VariableOrderKey& key) -> Matcher<const OrderKey&> {
@@ -385,7 +386,9 @@ inline auto OrderKeys =
         ad_utility::OverloadCallOperator{variableOrderKey, expressionOrderKey},
         key));
   }
-  return testing::ElementsAreArray(keyMatchers);
+  return testing::AllOf(
+      AD_FIELD(OrderClause, orderKeys, testing::ElementsAreArray(keyMatchers)),
+      AD_FIELD(OrderClause, isInternalSort, testing::Eq(isInternalSort)));
 };
 
 inline auto VariableGroupKey =
