@@ -49,7 +49,7 @@ jobs:
     - name: Install dependencies
       run:  sudo apt update && sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
     - name: Install conan
-      run: sudo pip3 install conan && conan profile update settings.compiler.libcxx=libstdc++11 default
+      run: sudo pip3 install conan && conan profile new default --detect && conan profile update settings.compiler.libcxx=libstdc++11 default
     - name: Install boost Ubuntu 22.04
       run : sudo apt update && sudo apt install -y libboost-all-dev
     - name: Install gcc 11
