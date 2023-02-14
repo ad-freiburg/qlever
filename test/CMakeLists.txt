@@ -238,7 +238,7 @@ addLinkAndDiscoverTest(CompressorStreamTest engine)
 
 addLinkAndDiscoverTest(AsyncStreamTest)
 
-addLinkAndDiscoverTest(TriplesViewTest)
+addLinkAndDiscoverTest(TriplesViewTest folly)
 
 addLinkAndDiscoverTest(BitUtilsTest)
 

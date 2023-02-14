@@ -167,7 +167,7 @@ include_directories(SYSTEM third_party/abseil-cpp/)
 ##################################
 # FOLLY
 #################################
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DFOLLY_USE_JEMALLOC -DFOLLY_ASSUME_NO_TCMALLOC -DFOLLY_NO_CONFIG -DFOLLY_CFG_NO_COROUTINES")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DFOLLY_USE_JEMALLOC -DFOLLY_ASSUME_NO_TCMALLOC -DFOLLY_NO_CONFIG -DFOLLY_CFG_NO_COROUTINES -DFOLLY_HAVE_LIBUNWIND=0")
 include_directories(SYSTEM third_party/folly/)
 
 #if defined(FOLLY_CFG_NO_COROUTINES)

@@ -93,22 +93,27 @@ class BufferedVector {
 
   // add element specified by arg el at the end of the array
   // possibly invalidates iterators
-  void push_back(const T& el) {
+ private:
+  void push_backImpl(auto&&... args) {
     auto oldSize = size();
     if (!_isInternal) {
-      _extVec.push_back(el);
+      _extVec.push_back(T{AD_FWD(args)...});
     } else if (oldSize < _threshold) {
-      _vec.push_back(el);
+      _vec.emplace_back(AD_FWD(args)...);
     } else {
       _extVec.resize(oldSize + 1);
       for (size_t i = 0; i < oldSize; ++i) {
         _extVec[i] = _vec[i];
       }
-      _extVec[oldSize] = el;
+      _extVec[oldSize] = T{AD_FWD(args)...};
       _isInternal = false;
       _vec.clear();
     }
   }
+
+ public:
+  void push_back(const T& el) { push_backImpl(el); }
+  void emplace_back(auto&&... args) { push_backImpl(AD_FWD(args)...); }
 
   // Change the size of the `BufferedVector` to `newSize`. This might move
   // the data from the internal to the external vector or vice versa. If
@@ -134,6 +139,32 @@ class BufferedVector {
       _isInternal = true;
     }
   }
+
+  // This insert method may only be called with `end()` as the first argument.
+  void insert(T* target, auto begin, auto end) {
+    AD_CONTRACT_CHECK(target == this->end());
+    AD_CONTRACT_CHECK(end > begin);
+    size_t oldSize = size();
+    resize(size() + (end - begin));
+    for (auto it = begin; it != end; ++it) {
+      (*this)[oldSize++] = *it;
+    }
+  }
+
+  // erase the elements between `it1` and `it2`. The remaining elements will
+  // stay in the same order.
+  void erase(T* it1, T* it2) {
+    AD_CONTRACT_CHECK(begin() <= it1 && it1 <= it2 && it2 < end());
+    size_t numErased = it2 - it1;
+    std::shift_left(it1, end(), numErased);
+    resize(size() - numErased);
+  }
+
+  // This stub implementation of `reserve` currently does nothing, but makes the
+  // interface more consistent with `std::vector`
+  void reserve([[maybe_unused]] size_t newCapacity) {}
+  // Same goes for `shrink_to_fit`
+  void shrink_to_fit() {}
 
   // Get the underlying allocator of the vector.
   auto get_allocator() const { return _vec.get_allocator(); }
