@@ -13,3 +13,6 @@
 [submodule "third_party/antlr4"]
 	path = third_party/antlr4
 	url = https://github.com/antlr/antlr4.git
+[submodule "third_party/folly"]
+	path = third_party/folly
+	url = git@github.com:facebook/folly.git
