@@ -12,6 +12,7 @@
 #include <variant>
 #include <vector>
 
+#include "folly/FBVector.h"
 #include "engine/idTable/IdTableRow.h"
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
@@ -102,7 +103,7 @@ namespace columnBasedIdTable {
 // additional changes in the rest of the code.
 //
 template <typename T = Id, int NumColumns = 0,
-          typename Storage = std::vector<
+          typename Storage = folly::fbvector<
               T, ad_utility::default_init_allocator<T, std::allocator<T>>>,
           IsView isViewTag = IsView::False>
 class IdTable {

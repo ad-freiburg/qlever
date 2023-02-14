@@ -143,7 +143,7 @@ addLinkAndDiscoverTest(TurtleParserTest parser absl::flat_hash_map re2)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
-addLinkAndDiscoverTest(IdTableTest absl::strings)
+addLinkAndDiscoverTest(IdTableTest absl::strings folly)
 
 addLinkAndDiscoverTest(TransitivePathTest engine)
 
