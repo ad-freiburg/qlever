@@ -153,7 +153,6 @@ include_directories(third_party/json/)
 # CTRE, Compile-Time-Regular-Expressions
 ################################
 # Header only, nothing to include
-add_subdirectory(third_party/folly)
 include_directories(third_party/ctre/include)
 
 
@@ -164,13 +163,12 @@ set(BUILD_TESTING OFF CACHE BOOL "Don't build tests for abseil" FORCE)
 add_subdirectory(third_party/abseil-cpp  EXCLUDE_FROM_ALL)
 include_directories(SYSTEM third_party/abseil-cpp/)
 
-##################################
-# FOLLY
-#################################
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DFOLLY_USE_JEMALLOC -DFOLLY_ASSUME_NO_TCMALLOC -DFOLLY_NO_CONFIG -DFOLLY_CFG_NO_COROUTINES -DFOLLY_HAVE_LIBUNWIND=0")
-include_directories(SYSTEM third_party/folly/)
+################################
+# Dependency management using CONAN
+################################
+include (${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
+conan_basic_setup(TARGETS)
 
-#if defined(FOLLY_CFG_NO_COROUTINES)
 if (USE_PARALLEL)
     include(FindOpenMP)
     if (OPENMP_FOUND)

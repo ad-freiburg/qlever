@@ -13,14 +13,13 @@
 #include <vector>
 
 #include "engine/idTable/IdTableRow.h"
-#include "folly/FBVector.h"
-#include "folly/small_vector.h"
 #include "global/Id.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Iterators.h"
 #include "util/LambdaHelpers.h"
 #include "util/ResetWhenMoved.h"
 #include "util/UninitializedAllocator.h"
+#include "folly/small_vector.h"
 
 namespace columnBasedIdTable {
 // The `IdTable` class is QLever's central data structure. It is used to store
@@ -115,8 +114,9 @@ class IdTable {
   static constexpr int numStaticColumns = NumColumns;
   // The actual storage is a plain 1D vector with the logical columns
   // concatenated.
-  // Place for 100 columns on the stack.
-  // TODO<joka921> move this constant into a config file.
+  // TODO<joka921> Use something like `folly::small_vector` to get rid of the `conditional` and gain performance for the
+  // NumColumns == 0 case.
+  //using Storage = std::conditional_t<NumColumns == 0, std::vector<ColumnStorage>, std::array<ColumnStorage, NumColumns>>;
   using Storage = folly::small_vector<ColumnStorage, 100>;
   using Data = std::conditional_t<isView, const Storage*, Storage>;
   using Allocator = decltype(std::declval<ColumnStorage&>().get_allocator());
@@ -681,10 +681,6 @@ class IdTableStatic
     return *this;
   }
 
-  explicit IdTableStatic(detail::DefaultAllocator allocator)
-      : Base{std::move(allocator)} {}
-  IdTableStatic(size_t numColumns, detail::DefaultAllocator allocator)
-      : Base{numColumns, std::move(allocator)} {}
 };
 
 // This was previously implemented as an alias (`using IdTable =

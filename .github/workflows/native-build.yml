@@ -48,6 +48,8 @@ jobs:
 
     - name: Install dependencies
       run:  sudo apt update && sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
+    - name: Install conan
+      run: sudo pip3 install conan
     - name: Install boost Ubuntu 22.04
       run : sudo apt update && sudo apt install -y libboost-all-dev
     - name: Install gcc 11
@@ -81,6 +83,9 @@ jobs:
     - name: Python dependencies
       run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
 
+    - name: Run Conan to get dependencies
+      working-directory: ${{github.workspace}}/build/test
+      run: conan install .. --build=missing
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type

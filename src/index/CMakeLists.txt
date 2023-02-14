@@ -16,4 +16,4 @@ add_library(index
         CompressedRelation.h CompressedRelation.cpp
         PatternCreator.h PatternCreator.cpp)
 
-target_link_libraries(index parser vocabulary compilationInfo ${STXXL_LIBRARIES} ${ICU_LIBRARIES} absl::flat_hash_map absl::flat_hash_set zstd folly)
+target_link_libraries(index parser vocabulary compilationInfo ${STXXL_LIBRARIES} ${ICU_LIBRARIES} absl::flat_hash_map absl::flat_hash_set zstd CONAN_PKG::folly)

@@ -1,0 +1,5 @@
+[requires]
+folly/2022.01.31.00
+
+[generators]
+cmake
