@@ -148,10 +148,18 @@ class BenchmarkRecords {
     void addToExistingGroup(const std::string& groupDescriptor,
         const std::string& descriptor,
         const Function& functionToMeasure) {
-      // Get the entry of the hash map and add to it.
-      auto& groupEntry = recordGroups_.getReferenceToValue(groupDescriptor);
-      groupEntry.entries_.push_back(
-          RecordEntry{descriptor, measureTimeOfFunction(functionToMeasure)});
+      // Adding more details to a possible exception.
+      try {
+        // Get the entry of the hash map and add to it.
+        auto& groupEntry = recordGroups_.getReferenceToValue(groupDescriptor);
+        groupEntry.entries_.push_back(
+            RecordEntry{descriptor, measureTimeOfFunction(functionToMeasure)});
+      } catch(KeyIsntRegisteredException const&) {
+        // The exception INSIDE the object, do not know, what they object is
+        // called, but that information is helpful for the exception. So we
+        // do it here.
+        throw KeyIsntRegisteredException(groupDescriptor, "recordGroups_");
+      }
     }
 
 
@@ -189,15 +197,24 @@ class BenchmarkRecords {
     void addToExistingTable(const std::string& tableDescriptor,
         const size_t row, const size_t column,
         const Function& functionToMeasure) {
-      // Get the entry of the hash map.
-      auto& table = recordTables_.getReferenceToValue(tableDescriptor);
+      // Adding more details to a possible exception.
+      try {
+        // Get the entry of the hash map.
+        auto& table = recordTables_.getReferenceToValue(tableDescriptor);
 
-      // Are the given row and column number inside the table range?
-      // size_t is unsigned, so we only need to check, that they are not to big.
-      AD_CHECK(row < table.rowNames_.size() && column < table.columnNames_.size());
-      
-      // Add the measured time to the table.
-      table.entries_[row][column] = measureTimeOfFunction(functionToMeasure);
+        // Are the given row and column number inside the table range?
+        // size_t is unsigned, so we only need to check, that they are not to big.
+        AD_CHECK(row < table.rowNames_.size() &&
+            column < table.columnNames_.size());
+        
+        // Add the measured time to the table.
+        table.entries_[row][column] = measureTimeOfFunction(functionToMeasure);
+      } catch(KeyIsntRegisteredException const&) {
+        // The exception INSIDE the object, do not know, what they object is
+        // called, but that information is helpful for the exception. So we
+        // do it here.
+        throw KeyIsntRegisteredException(tableDescriptor, "recordTables_");
+      }
     }
 
 
