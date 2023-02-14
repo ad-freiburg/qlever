@@ -84,7 +84,6 @@ jobs:
       run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
 
     - name: Run Conan to get dependencies
-      working-directory: ${{github.workspace}}/build/test
       run: conan install . -if ${{github.workspace}}/build --build=missing
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.

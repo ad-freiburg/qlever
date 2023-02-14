@@ -104,6 +104,11 @@ endif()
 find_package(Boost 1.74 COMPONENTS iostreams program_options REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
+#####################################
+#
+#####################################
+find_package(folly REQUIRED)
+
 
 ######################################
 # SSL
@@ -162,12 +167,6 @@ include_directories(third_party/ctre/include)
 set(BUILD_TESTING OFF CACHE BOOL "Don't build tests for abseil" FORCE)
 add_subdirectory(third_party/abseil-cpp  EXCLUDE_FROM_ALL)
 include_directories(SYSTEM third_party/abseil-cpp/)
-
-################################
-# Dependency management using CONAN
-################################
-include (${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
-conan_basic_setup(TARGETS)
 
 if (USE_PARALLEL)
     include(FindOpenMP)
