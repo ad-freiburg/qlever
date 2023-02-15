@@ -22,9 +22,25 @@
 /// (xsd:int and xsd:integer) and `std::string` (variables, IRIs, and literals
 /// of any other type).
 class TripleComponent {
+ public:
+  // Own class for the UNDEF value.
+  struct UNDEF {
+    // Default equality operator.
+    bool operator==(const UNDEF&) const = default;
+    // Hash to arbitrary (fixed) value. For example, needed in
+    // `Values::computeMultiplicities`.
+    //
+    // TODO: Without this, the code seg faults when creating a `VALUES` caluse
+    // containing an `UNDEF` value. Report this to the `absl` people.
+    template <typename H>
+    friend H AbslHashValue(H h, const UNDEF& undef) {
+      return H::combine(std::move(h), 42);
+    }
+  };
+
  private:
   // The underlying variant type.
-  using Variant = std::variant<std::string, double, int64_t, Variable>;
+  using Variant = std::variant<std::string, double, int64_t, UNDEF, Variable>;
   Variant _variant;
 
  public:
@@ -158,6 +174,8 @@ class TripleComponent {
         return Id::makeFromInt(value);
       } else if constexpr (std::is_same_v<T, double>) {
         return Id::makeFromDouble(value);
+      } else if constexpr (std::is_same_v<T, UNDEF>) {
+        return Id::makeUndefined();
       } else if constexpr (std::is_same_v<T, Variable>) {
         // Cannot turn a variable into a ValueId.
         AD_FAIL();

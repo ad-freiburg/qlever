@@ -749,13 +749,12 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
     return std::visit(
         [](auto intOrDouble) { return TripleComponent{intOrDouble}; },
         visit(ctx->numericLiteral()));
-  } else if (ctx->booleanLiteral()) {
-    // TODO implement
-    reportError(ctx, "Booleans in values clauses are not supported.");
+  } else if (ctx->UNDEF()) {
+    return TripleComponent::UNDEF{};
   } else {
-    AD_CORRECTNESS_CHECK(ctx->UNDEF());
-    // TODO implement
-    reportError(ctx, "UNDEF in values clauses is not supported.");
+    // TODO implement.
+    AD_CORRECTNESS_CHECK(ctx->booleanLiteral());
+    reportError(ctx, "Booleans in VALUES clauses are not supported");
   }
 }
 
