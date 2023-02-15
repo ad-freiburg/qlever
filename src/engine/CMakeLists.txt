@@ -1,6 +1,5 @@
 add_subdirectory(sparqlExpressions)
 add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp SortPerformanceEstimator.h)
-target_link_libraries(SortPerformanceEstimator)
 add_library(engine
         Engine.h
         IndexSequence.h

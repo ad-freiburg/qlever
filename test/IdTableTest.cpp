@@ -833,6 +833,48 @@ TEST(IdTableTest, frontAndBack) {
   ASSERT_EQ(43, std::as_const(t).back()[0]);
 }
 
+TEST(IdTableTest, cornerCases) {
+  {
+    columnBasedIdTable::IdTable<int, 0> dynamic;
+    dynamic.setNumColumns(12);
+    ASSERT_NO_THROW(dynamic.asStaticView<12>());
+    ASSERT_NO_THROW(dynamic.asStaticView<0>());
+    ASSERT_ANY_THROW(dynamic.asStaticView<6>());
+
+    // This also sets the number of columns correctly, as the table
+    // was previously empty.
+    auto st = std::move(dynamic).toStatic<3>();
+    ASSERT_TRUE(st.empty());
+    ASSERT_EQ(3, st.numColumns());
+  }
+  {
+    columnBasedIdTable::IdTable<int, 0> dynamic;
+    dynamic.setNumColumns(12);
+    dynamic.emplace_back();
+    dynamic(0, 3) = -24;
+    // Wrong number of columns on a non-empty table.
+    ASSERT_ANY_THROW(std::move(dynamic).toStatic<3>());
+    auto dynamic2 = std::move(dynamic).toStatic<0>();
+    ASSERT_EQ(dynamic2.numColumns(), 12u);
+    ASSERT_EQ(dynamic2.numRows(), 1u);
+    ASSERT_EQ(dynamic2(0, 3), -24);
+  }
+
+  // TODO<joka921> `setNumCols` on a nonempty table.
+  {
+    // Cloning a BufferedTable with to few columns or nonempty storage.
+    // TODO<joka921> Implement this test.
+    void(0);
+  }
+
+  // TODO<joka921> Test `shrinkToFit`.
+
+  // TODO<joka921> The checks in line 232, should they be CORRECTNESS_CHECKs
+
+  // TODO<joka921> The following lines also have yellow chekcs:
+  // 165, 181, 183, 184, 187
+}
+
 TEST(IdTableTest, staticAsserts) {
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::iterator>);
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);

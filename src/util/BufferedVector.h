@@ -21,7 +21,19 @@ class BufferedVector {
  public:
   using const_iterator = const T*;
   using iterator = T*;
+  using value_type = T;
 
+ private:
+  // the externalization threshold
+  size_t _threshold = 2 << 25;
+  // keep track on which of our data stores we are currently using.
+  bool _isInternal = true;
+
+  // the two possible data storages
+  std::vector<T> _vec;
+  ad_utility::MmapVectorTmp<T> _extVec;
+
+ public:
   // Constructor needs the wanted threshold (how many elements until we
   // externalize) and the filename Where we will initialize the mmapVector
   BufferedVector(size_t threshold, std::string extFilename)
@@ -140,21 +152,32 @@ class BufferedVector {
     }
   }
 
-  // This insert method may only be called with `end()` as the first argument.
-  void insert(T* target, auto begin, auto end) {
-    AD_CONTRACT_CHECK(target == this->end());
-    AD_CONTRACT_CHECK(end > begin);
-    size_t oldSize = size();
-    resize(size() + (end - begin));
-    for (auto it = begin; it != end; ++it) {
-      (*this)[oldSize++] = *it;
+  // Similar to `std::vector::insert`. Insert the elements in the iterator range
+  // `[it1, it2)` into the vector at `target`. The `it1` and `it2` must not
+  // overlap with `this` and `target` must be a valid iterator for `this`. Both
+  // of these conditions are checked via an `AD_CONTRACT_CHECK`.
+  void insert(T* target, auto it1, auto it2) {
+    AD_CONTRACT_CHECK(target >= begin() && target <= end());
+    AD_CONTRACT_CHECK(it2 >= it1);
+    auto addr1 = &(*it1);
+    auto addr2 = &(*it2);
+    AD_CONTRACT_CHECK((addr1 < begin() || addr1 >= end()) &&
+                      (addr2 < begin() || addr2 >= end()));
+    size_t numInserted = it2 - it1;
+    size_t offset = target - begin();
+    resize(size() + numInserted);
+    std::shift_right(begin() + offset, end(), numInserted);
+    for (auto it = it1; it != it2; ++it) {
+      (*this)[offset++] = *it;
     }
   }
 
-  // erase the elements between `it1` and `it2`. The remaining elements will
-  // stay in the same order.
+  // Erase the elements between `it1` and `it2`. The remaining elements will
+  // stay in the same order. `it1` and `it2` must be valid iterators for `this`
+  // and `it1 <= `it2` must hold. Both of these conditions are checked via
+  // `AD_CONTRACT_CHECK`.
   void erase(T* it1, T* it2) {
-    AD_CONTRACT_CHECK(begin() <= it1 && it1 <= it2 && it2 < end());
+    AD_CONTRACT_CHECK(begin() <= it1 && it1 <= it2 && it2 <= end());
     size_t numErased = it2 - it1;
     std::shift_left(it1, end(), numErased);
     resize(size() - numErased);
@@ -172,15 +195,5 @@ class BufferedVector {
   // testing interface
   size_t threshold() const { return _threshold; }
   bool isInternal() const { return _isInternal; }
-
- private:
-  // the externalization threshold
-  size_t _threshold = 2 << 25;
-  // keep track on which of our data stores we are currently using.
-  bool _isInternal = true;
-
-  // the two possible data storages
-  std::vector<T> _vec;
-  ad_utility::MmapVectorTmp<T> _extVec;
 };
 }  // namespace ad_utility

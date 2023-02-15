@@ -25,7 +25,8 @@ jobs:
           compiler-version: 15
           build-type: Debug
           warnings: "-Wall -Wextra "
-          asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
+          # we disable the `assert()` macro as it messes with the coverage reports
+          asan-flags: "-fsanitize=address -fno-omit-frame-pointer -DNDEBUG"
           ubsan-flags: " -fsanitize=undefined"
           coverage-flags: "-fprofile-instr-generate -fcoverage-mapping"
 
