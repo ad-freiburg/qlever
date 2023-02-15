@@ -33,7 +33,7 @@ class TripleComponent {
     // TODO: Without this, the code seg faults when creating a `VALUES` caluse
     // containing an `UNDEF` value. Report this to the `absl` people.
     template <typename H>
-    friend H AbslHashValue(H h, const UNDEF& undef) {
+    friend H AbslHashValue(H h, [[maybe_unused]] const UNDEF& undef) {
       return H::combine(std::move(h), 42);
     }
   };
