@@ -343,7 +343,7 @@ std::vector<size_t> createExponentVectorUntilSize(const size_t base,
 void BM_OnlyBiggerTableSizeChanges(BenchmarkRecords* records){
   // Easier reading.
   const std::vector<size_t> ratioRows{
-    createExponentVectorUntilSize(2, 200'000'000'000)};
+    createExponentVectorUntilSize(2, 100'000)};
   constexpr size_t smallerTableAmountRows{2000};
   constexpr size_t smallerTableAmountColumns{20};
   constexpr size_t biggerTableAmountColumns{20};
@@ -362,14 +362,14 @@ void BM_OnlyBiggerTableSizeChanges(BenchmarkRecords* records){
 void BM_OnlySmallerTableSizeChanges(BenchmarkRecords* records){
   // Easier reading.
   const std::vector<size_t> smallerTableAmountRows{
-    createExponentVectorUntilSize(2, 200'000'000'000)};
+    createExponentVectorUntilSize(2, 200'000)};
   constexpr size_t smallerTableAmountColumns{3};
   constexpr size_t biggerTableAmountColumns{3};
   // Making a benchmark table for all combination of IdTables being sorted.
   for (const bool smallerTableSorted : {false, true}){
     for (const bool biggerTableSorted : {false, true}) {
       // We also make multiple tables for different row ratios.
-      for (const size_t ratioRows: createExponentVectorUntilSize(2, 200'000'000'000)){
+      for (const size_t ratioRows: createExponentVectorUntilSize(2, 1'000)){
         makeBenchmarkTable(records, false, smallerTableSorted,
             biggerTableSorted, ratioRows, smallerTableAmountRows,
             smallerTableAmountColumns, biggerTableAmountColumns);
@@ -383,7 +383,7 @@ void BM_OnlySmallerTableSizeChanges(BenchmarkRecords* records){
 void BM_SameSizeRowGrowth(BenchmarkRecords* records){
   // Easier reading.
   const std::vector<size_t> smallerTableAmountRows{
-    createExponentVectorUntilSize(2, 200'000'000'000)};
+    createExponentVectorUntilSize(2, 200'000'000)};
   constexpr size_t smallerTableAmountColumns{3};
   constexpr size_t biggerTableAmountColumns{3};
   constexpr size_t ratioRows{1};
