@@ -180,14 +180,12 @@ class IdTable {
     if constexpr (!isDynamic) {
       AD_CONTRACT_CHECK(NumColumns == numColumns);
     }
-    size_t numActualColumns = data().size();
-    AD_CONTRACT_CHECK(numActualColumns >= numColumns_);
-    if (numActualColumns > numColumns_) {
+    AD_CONTRACT_CHECK(data().size() >= numColumns_);
+    if (data().size() > numColumns_) {
       data().erase(data().begin() + numColumns_, data().end());
     }
-    bool allEmpty = std::ranges::all_of(
-        data(), [](const auto& column) { return column.empty(); });
-    AD_CONTRACT_CHECK(allEmpty);
+    AD_CONTRACT_CHECK(std::ranges::all_of(
+        data(), [](const auto& column) { return column.empty(); }));
   }
 
   // Quasi the default constructor. If `NumColumns != 0` then the table is
