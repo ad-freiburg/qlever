@@ -378,5 +378,24 @@ void BM_OnlySmallerTableSizeChanges(BenchmarkRecords* records){
   }
 }
 
+// Create benchmark tables, where the tables are the same size and
+// both just get more rows.
+void BM_SameSizeRowGrowth(BenchmarkRecords* records){
+  // Easier reading.
+  const std::vector<size_t> smallerTableAmountRows{
+    createExponentVectorUntilSize(2, 200'000'000'000)};
+  constexpr size_t smallerTableAmountColumns{3};
+  constexpr size_t biggerTableAmountColumns{3};
+  constexpr size_t ratioRows{1};
+  // Making a benchmark table for all combination of IdTables being sorted.
+  for (const bool smallerTableSorted : {false, true}){
+    for (const bool biggerTableSorted : {false, true}) {
+      makeBenchmarkTable(records, false, smallerTableSorted,
+          biggerTableSorted, ratioRows, smallerTableAmountRows,
+          smallerTableAmountColumns, biggerTableAmountColumns);
+    }
+  }
+}
+
 BenchmarkRegister temp{{BM_UnsortedAndSortedIdTable,
   BM_OnlyBiggerTableSizeChanges, BM_OnlySmallerTableSizeChanges}};
