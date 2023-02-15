@@ -313,11 +313,37 @@ void makeBenchmarkTable(BenchmarkRecords* records, const bool overlap,
   }
 }
 
+/*
+ * @brief Returns a vector of exponents $base^x$, with $x$ staring at 0, and
+ *  ending with the last $base^x$ that is smaller, or equal, to the stopping
+ *  point.
+ * 
+ * @param base The base of the exponents.
+ * @param stoppingPoint What the biggest exponent is allowed to be.
+ *
+ * @return `{base^0, base^1, ...., base^N}` with `base^N <= stoppingPoint` and
+ *  `base^(N+1) > stoppingPoint`.
+ */
+std::vector<size_t> createExponentVectorUntilSize(const size_t base,
+    const size_t stoppingPoint) {
+  std::vector<size_t> exponentVector{};
+
+  // Calculating and adding the exponents.
+  size_t currentExponent = 1; // base^0 = 1
+  while (currentExponent <= stoppingPoint) {
+    exponentVector.push_back(currentExponent);
+    currentExponent *= base;
+  }
+
+  return exponentVector;
+}
+
 // Create benchmark tables, where the smaller table stays at 2000 rows and
 // the bigger tables keeps getting bigger. Amount of columns stays the same.
 void BM_OnlyBiggerTableSizeChanges(BenchmarkRecords* records){
   // Easier reading.
-  const std::vector<size_t> ratioRows{10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
+  const std::vector<size_t> ratioRows{
+    createExponentVectorUntilSize(2, 200'000'000'000)};
   constexpr size_t smallerTableAmountRows{2000};
   constexpr size_t smallerTableAmountColumns{20};
   constexpr size_t biggerTableAmountColumns{20};
@@ -335,15 +361,15 @@ void BM_OnlyBiggerTableSizeChanges(BenchmarkRecords* records){
 // between tables stays the same. As does the amount of columns.
 void BM_OnlySmallerTableSizeChanges(BenchmarkRecords* records){
   // Easier reading.
-  const std::vector<size_t> smallerTableAmountRows{2000, 4000, 8000, 16000,
-    32000, 64000, 128000};
+  const std::vector<size_t> smallerTableAmountRows{
+    createExponentVectorUntilSize(2, 200'000'000'000)};
   constexpr size_t smallerTableAmountColumns{3};
   constexpr size_t biggerTableAmountColumns{3};
   // Making a benchmark table for all combination of IdTables being sorted.
   for (const bool smallerTableSorted : {false, true}){
     for (const bool biggerTableSorted : {false, true}) {
       // We also make multiple tables for different row ratios.
-      for (const size_t ratioRows: {10, 20, 30, 40, 50, 60, 70, 80, 90, 100}){
+      for (const size_t ratioRows: createExponentVectorUntilSize(2, 200'000'000'000)){
         makeBenchmarkTable(records, false, smallerTableSorted,
             biggerTableSorted, ratioRows, smallerTableAmountRows,
             smallerTableAmountColumns, biggerTableAmountColumns);
