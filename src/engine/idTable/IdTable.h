@@ -454,7 +454,7 @@ class IdTable {
   template <int NewNumColumns>
   requires(NumColumns == 0 &&
            !isView) IdTable<T, NewNumColumns, ColumnStorage> toStatic() && {
-    if (size() == 0 && !isDynamic) {
+    if (size() == 0 && isDynamic) {
       setNumColumns(NewNumColumns);
     }
     AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
