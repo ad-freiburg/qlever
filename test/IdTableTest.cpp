@@ -834,24 +834,21 @@ TEST(IdTableTest, frontAndBack) {
 }
 
 TEST(IdTableTest, cornerCases) {
+  using Dynamic = columnBasedIdTable::IdTable<int, 0>;
   {
-    columnBasedIdTable::IdTable<int, 0> dynamic;
+    Dynamic dynamic;
     dynamic.setNumColumns(12);
     ASSERT_NO_THROW(dynamic.asStaticView<12>());
     ASSERT_NO_THROW(dynamic.asStaticView<0>());
     ASSERT_ANY_THROW(dynamic.asStaticView<6>());
-
-    // This also sets the number of columns correctly, as the table
-    // was previously empty.
-    auto st = std::move(dynamic).toStatic<3>();
-    ASSERT_TRUE(st.empty());
-    ASSERT_EQ(3, st.numColumns());
   }
   {
-    columnBasedIdTable::IdTable<int, 0> dynamic;
+    Dynamic dynamic;
     dynamic.setNumColumns(12);
     dynamic.emplace_back();
     dynamic(0, 3) = -24;
+    // `setNumColumns` may only be called on an empty table.
+    ASSERT_ANY_THROW(dynamic.setNumColumns(3));
     // Wrong number of columns on a non-empty table.
     ASSERT_ANY_THROW(std::move(dynamic).toStatic<3>());
     auto dynamic2 = std::move(dynamic).toStatic<0>();
@@ -860,19 +857,48 @@ TEST(IdTableTest, cornerCases) {
     ASSERT_EQ(dynamic2(0, 3), -24);
   }
 
-  // TODO<joka921> `setNumCols` on a nonempty table.
+  using WidthTwo = columnBasedIdTable::IdTable<int, 2>;
+  // Wrong number of columns in the constructor.
+  ASSERT_ANY_THROW(WidthTwo(3));
+
   {
-    // Cloning a BufferedTable with to few columns or nonempty storage.
-    // TODO<joka921> Implement this test.
-    void(0);
+    // Test everything that can go wrong when passing in the storage explicitly.
+    // This is `vector<vector<int>>` but with a `default_init_allocator`.
+    Dynamic::Storage columns;
+    columns.resize(2);
+    // Wrong number of columns in the constructor
+    ASSERT_ANY_THROW(WidthTwo(3, columns));
+    // Too few columns.
+    columns.resize(1);
+    ASSERT_ANY_THROW(WidthTwo(2, columns));
+    columns.resize(2);
+    columns[0].push_back(42);
+    // One of the columns isn't empty
+    ASSERT_ANY_THROW(WidthTwo(2, columns));
   }
+}
 
-  // TODO<joka921> Test `shrinkToFit`.
-
-  // TODO<joka921> The checks in line 232, should they be CORRECTNESS_CHECKs
-
-  // TODO<joka921> The following lines also have yellow chekcs:
-  // 165, 181, 183, 184, 187
+TEST(IdTableTest, shrinkToFit) {
+  // Note: The behavior of the following test case depends on the implementation
+  // of `std::vector::reserve` and `std::vector::push_back`. It might be
+  // necessary to change them if one of our used standard libraries has a
+  // different behavior, but this is unlikely due to ABI stability goals between
+  // library versions.
+  auto memory = ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000);
+  IdTable table{2, ad_utility::AllocatorWithLimit<Id>{memory}};
+  ASSERT_EQ(memory.ptr().get()->wlock()->numFreeBytes(), 1000);
+  table.reserve(20);
+  ASSERT_TRUE(table.empty());
+  // 20 rows * 2 columns * 8 bytes per ID were allocated.
+  ASSERT_EQ(memory.ptr().get()->wlock()->numFreeBytes(), 680);
+  table.emplace_back();
+  table.emplace_back();
+  ASSERT_EQ(table.numRows(), 2u);
+  ASSERT_EQ(memory.ptr().get()->wlock()->numFreeBytes(), 680);
+  table.shrinkToFit();
+  ASSERT_EQ(table.numRows(), 2u);
+  // Now only 2 rows * 2 columns * 8 bytes were allocated.
+  ASSERT_EQ(memory.ptr().get()->wlock()->numFreeBytes(), 968);
 }
 
 TEST(IdTableTest, staticAsserts) {

@@ -227,10 +227,10 @@ class IdTable {
         numRows_{numRows},
         allocator_{std::move(allocator)} {
     if constexpr (!isDynamic) {
-      AD_CONTRACT_CHECK(numColumns == NumColumns);
+      AD_CORRECTNESS_CHECK(numColumns == NumColumns);
     }
-    AD_CONTRACT_CHECK(this->data().size() == numColumns_);
-    AD_CONTRACT_CHECK(std::ranges::all_of(
+    AD_CORRECTNESS_CHECK(this->data().size() == numColumns_);
+    AD_CORRECTNESS_CHECK(std::ranges::all_of(
         this->data(),
         [this](const auto& column) { return column.size() == numRows_; }));
   }
@@ -376,7 +376,7 @@ class IdTable {
   void push_back(const std::array<T, N>& newRow) requires(!isView &&
                                                           (isDynamic ||
                                                            NumColumns == N)) {
-    if constexpr (NumColumns == 0) {
+    if constexpr (isDynamic) {
       assert(newRow.size() == numColumns());
     }
     // TODO<joka921> We could directly `push_back` to the single columns.
@@ -399,7 +399,7 @@ class IdTable {
                        row_reference_restricted, const_row_reference_restricted,
                        const_row_reference_view_restricted>>
   void push_back(const RowT& newRow) requires(!isView) {
-    if constexpr (NumColumns == 0) {
+    if constexpr (isDynamic) {
       assert(newRow.numColumns() == numColumns());
     }
     // TODO<joka921> We could directly `push_back` to the single columns.
@@ -452,11 +452,8 @@ class IdTable {
   //       generic code that is templated on the number of columns easier to
   //       write.
   template <int NewNumColumns>
-  requires(NumColumns == 0 &&
+  requires(isDynamic &&
            !isView) IdTable<T, NewNumColumns, ColumnStorage> toStatic() && {
-    if (size() == 0 && isDynamic) {
-      setNumColumns(NewNumColumns);
-    }
     AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
     auto result = IdTable<T, NewNumColumns, ColumnStorage>{
         std::move(data()), numColumns(), std::move(numRows_),
@@ -487,7 +484,7 @@ class IdTable {
   // creates a dynamic view from a dynamic table. This makes generic code that
   // is templated on the number of columns easier to write.
   template <size_t NewNumColumns>
-  requires(NumColumns == 0 && !isView)
+  requires(isDynamic && !isView)
       IdTable<T, NewNumColumns, ColumnStorage, IsView::True> asStaticView()
   const {
     AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);

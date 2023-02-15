@@ -157,7 +157,7 @@ addLinkAndDiscoverTest(PriorityQueueTest absl::flat_hash_map ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(SynchronizedTest)
 
-addLinkAndDiscoverTest(LimitedAllocatorTest)
+addLinkAndDiscoverTest(AllocatorWithLimitTest)
 
 addLinkAndDiscoverTest(MinusTest engine)
 
