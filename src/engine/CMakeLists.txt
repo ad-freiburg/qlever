@@ -1,6 +1,6 @@
 add_subdirectory(sparqlExpressions)
 add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp SortPerformanceEstimator.h)
-target_link_libraries(SortPerformanceEstimator Folly::Folly)
+target_link_libraries(SortPerformanceEstimator)
 add_library(engine
         Engine.h
         IndexSequence.h
@@ -41,4 +41,4 @@ add_library(engine
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp )
 
 
-target_link_libraries(engine index parser sparqlExpressions http SortPerformanceEstimator absl::flat_hash_set ${ICU_LIBRARIES} boost_iostreams Folly::Folly)
+target_link_libraries(engine index parser sparqlExpressions http SortPerformanceEstimator absl::flat_hash_set ${ICU_LIBRARIES} boost_iostreams)

@@ -104,11 +104,6 @@ endif()
 find_package(Boost 1.74 COMPONENTS iostreams program_options REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
-#####################################
-#
-#####################################
-find_package(folly REQUIRED)
-
 
 ######################################
 # SSL
@@ -159,7 +154,6 @@ include_directories(third_party/json/)
 ################################
 # Header only, nothing to include
 include_directories(third_party/ctre/include)
-
 
 ################################
 # ABSEIL

@@ -446,7 +446,7 @@ TEST(IdTableTest, erase) {
   ASSERT_EQ(NUM_COLS, t1.numColumns());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(V(i + 1), t1(i / NUM_COLS, i % NUM_COLS)) << i;
+    ASSERT_EQ(V(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
   }
 
   t1.erase(t1.begin(), t1.end());
@@ -677,7 +677,6 @@ TEST(IdTableStaticTest, copyAndMove) {
   }
 }
 
-/*
 TEST(IdTableStaticTest, erase) {
   constexpr size_t NUM_ROWS = 12;
   constexpr size_t NUM_COLS = 4;
@@ -705,9 +704,7 @@ TEST(IdTableStaticTest, erase) {
   t1.erase(t1.begin(), t1.end());
   ASSERT_EQ(0u, t1.size());
 }
- */
 
-/*
 TEST(IdTableStaticTest, iterating) {
   constexpr size_t NUM_ROWS = 42;
   constexpr size_t NUM_COLS = 17;
@@ -737,7 +734,6 @@ TEST(IdTableStaticTest, iterating) {
     row_index++;
   }
 }
- */
 
 // =============================================================================
 // Conversion Tests
