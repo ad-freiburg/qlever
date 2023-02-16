@@ -18,6 +18,11 @@
 Values::Values(QueryExecutionContext* qec, SparqlValues parsedValues)
     : Operation(qec) {
   parsedValues_ = sanitizeValues(std::move(parsedValues));
+
+  AD_CONTRACT_CHECK(
+      std::ranges::all_of(parsedValues_._values, [&](const auto& row) {
+        return row.size() == parsedValues_._variables.size();
+      }));
 }
 
 // ____________________________________________________________________________
@@ -85,7 +90,8 @@ void Values::computeMultiplicities() {
       distinctValues.insert(valuesTuple[col]);
     }
     size_t numDistinctValues = distinctValues.size();
-    multiplicities_[col] = float(numValues) / float(numDistinctValues);
+    multiplicities_[col] =
+        static_cast<float>(numValues) / static_cast<float>(numDistinctValues);
   }
 }
 

@@ -13,7 +13,7 @@ class Values : public Operation {
   using SparqlValues = parsedQuery::SparqlValues;
 
  private:
-  std::vector<size_t> multiplicities_;
+  std::vector<float> multiplicities_;
 
   SparqlValues parsedValues_;
 
@@ -23,7 +23,7 @@ class Values : public Operation {
   Values(QueryExecutionContext* qec, SparqlValues parsedValues);
 
  protected:
-  virtual string asStringImpl(size_t indent = 0) const override;
+  virtual string asStringImpl(size_t indent) const override;
 
  public:
   virtual string getDescriptor() const override;

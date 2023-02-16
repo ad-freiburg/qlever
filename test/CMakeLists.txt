@@ -270,7 +270,7 @@ addLinkAndDiscoverTestSerial(RegexExpressionTest parser sparqlExpressions index 
 
 addLinkAndDiscoverTestSerial(LocalVocabTest engine)
 
-addLinkAndDiscoverTest(ValuesTest engine)
+addLinkAndDiscoverTestSerial(ValuesTest engine)
 
 addLinkAndDiscoverTest(HttpTest boost_iostreams http)
 

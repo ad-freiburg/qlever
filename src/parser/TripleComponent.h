@@ -29,9 +29,6 @@ class TripleComponent {
     bool operator==(const UNDEF&) const = default;
     // Hash to arbitrary (fixed) value. For example, needed in
     // `Values::computeMultiplicities`.
-    //
-    // TODO: Without this, the code seg faults when creating a `VALUES` caluse
-    // containing an `UNDEF` value. Report this to the `absl` people.
     template <typename H>
     friend H AbslHashValue(H h, [[maybe_unused]] const UNDEF& undef) {
       return H::combine(std::move(h), 42);
@@ -106,8 +103,12 @@ class TripleComponent {
   bool operator==(const TripleComponent&) const = default;
 
   /// Hash value for `TripleComponent` object.
+  /// Note: It is important to use `std::same_as` because otherwise this
+  /// overload would also be eligible for the contained types that are
+  /// implicitly convertible to `TripleComponent` which would lead to strange
+  /// bugs.
   template <typename H>
-  friend H AbslHashValue(H h, const TripleComponent& tc) {
+  friend H AbslHashValue(H h, const std::same_as<TripleComponent> auto& tc) {
     return H::combine(std::move(h), tc._variant);
   }
 
