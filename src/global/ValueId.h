@@ -73,10 +73,7 @@ class ValueId {
 
   /// A struct that represents the single undefined value. This is required for
   /// generic code like in the `visit` method.
-  struct UndefinedType {
-    // Two undefined values are always equal to themselves by default.
-    auto operator<=>(const UndefinedType&) const = default;
-  };
+  struct UndefinedType {};
 
  private:
   // The actual bits.

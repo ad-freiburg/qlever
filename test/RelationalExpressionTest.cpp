@@ -9,6 +9,7 @@
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "index/Index.h"
 
@@ -567,10 +568,7 @@ void testWithExplicitResult(SingleExpressionResult auto leftValue,
   auto trace = generateLocationTrace(l, "test lambda was called here");
   auto resultAsVariant = expression.evaluate(&ctx.context);
   const auto& result = std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
-  ASSERT_EQ(result.size(), expected.size());
-  for (size_t i = 0; i < result.size(); ++i) {
-    EXPECT_EQ(expected[i], result[i]);
-  }
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
 }
 
 TEST(RelationalExpression, VariableAndConstant) {
@@ -608,8 +606,10 @@ TEST(RelationalExpression, VariableAndConstant) {
   testWithExplicitResult<LT>("\"atm\""s, Variable{"?mixed"},
                              {false, false, false});
 
+  // Note: `1` and `A` are "not compatible", so even the "not equal" comparison
+  // returns false.
   testWithExplicitResult<NE>(int64_t{1}, Variable{"?mixed"},
-                             {false, true, true});
+                             {false, true, false});
   testWithExplicitResult<GE>(Variable{"?mixed"}, DoubleId(-0.1),
                              {true, true, false});
 }
@@ -636,9 +636,13 @@ TEST(RelationalExpression, VariableAndVariable) {
 
   testWithExplicitResult<GT>(doubles, ints, {false, false, true});
   testWithExplicitResult<LE>(numeric, doubles, {false, true, false});
-  testWithExplicitResult<NE>(ints, mixed, {false, true, true});
+  // Note: `1` and `A` are "not compatible" so even the "not equal" comparison
+  // returns false (this is the third entry in the expected result).
+  testWithExplicitResult<NE>(ints, mixed, {false, true, false});
 
-  testWithExplicitResult<NE>(doubles, vocab, {true, true, true});
+  // The same note applies here, double values and vocab entries are always
+  // incompatible.
+  testWithExplicitResult<NE>(doubles, vocab, {false, false, false});
   testWithExplicitResult<LE>(vocab, doubles, {false, false, false});
   testWithExplicitResult<GE>(vocab, doubles, {false, false, false});
 
@@ -680,7 +684,8 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<LT>(ints, int64_t{-1}, {});
   testSortedVariableAndConstant<GE>(ints, int64_t{-1}, {{{0, 3}}});
   testSortedVariableAndConstant<LE>(ints, 0.3, {{{0, 1}, {2, 3}}});
-  testSortedVariableAndConstant<NE>(ints, "a string"s, {{{0, 3}}});
+  // ints and strings are always incompatible.
+  testSortedVariableAndConstant<NE>(ints, "a string"s, {});
 
   testSortedVariableAndConstant<GT>(doubles, int64_t{0}, {{{0, 2}}});
   testSortedVariableAndConstant<EQ>(doubles, 2.8, {{{1, 2}}});
@@ -695,9 +700,13 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<LE>(vocab, "\"ball\""s, {{{0, 2}}});
   testSortedVariableAndConstant<NE>(vocab, "\"älpha\""s, {{{0, 1}, {2, 3}}});
   testSortedVariableAndConstant<LE>(vocab, inf, {});
-  testSortedVariableAndConstant<NE>(vocab, 3.2, {{{0, 3}}});
 
-  testSortedVariableAndConstant<NE>(mixed, 1.0, {{{1, 3}}});
+  // Note: vocab entries and numeric values are not compatible, so every
+  // comparison returns false.
+  testSortedVariableAndConstant<NE>(vocab, 3.2, {});
+
+  // Note: only *numeric* values that are not equal to 1.0 are considered here.
+  testSortedVariableAndConstant<NE>(mixed, 1.0, {{{1, 2}}});
   testSortedVariableAndConstant<GT>(mixed, -inf, {{{0, 2}}});
   testSortedVariableAndConstant<LE>(mixed, "\"b\""s, {{{2, 3}}});
 }
