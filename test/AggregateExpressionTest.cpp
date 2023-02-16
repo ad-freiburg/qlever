@@ -33,36 +33,32 @@ auto testAggregate = [](std::vector<T> inputAsVector, T expectedResult,
   VectorWithMemoryLimit<T> input(inputAsVector.begin(), inputAsVector.end(),
                                  makeAllocator());
   auto d = std::make_unique<DummyExpression>(input.clone());
-
   auto t = TestContext{};
   t.context._endIndex = input.size();
-
   AggregateExpressionT m{distinct, std::move(d)};
-
   auto resAsVariant = m.evaluate(&t.context);
-
   auto res = std::get<T>(resAsVariant);
   EXPECT_EQ(res, expectedResult);
 };
 
 TEST(AggregateExpression, max) {
-  auto testId = testAggregate<MaxExpression, Id>;
-  testId({I(3), U, I(0), I(4), U, (I(-1))}, I(4));
-  testId({V(7), U, V(2), V(4)}, V(7));
-  testId({I(3), U, V(0), L(3), U, (I(-1))}, L(3));
+  auto testMaxId = testAggregate<MaxExpression, Id>;
+  testMaxId({I(3), U, I(0), I(4), U, (I(-1))}, I(4));
+  testMaxId({V(7), U, V(2), V(4)}, V(7));
+  testMaxId({I(3), U, V(0), L(3), U, (I(-1))}, L(3));
 
-  auto testString = testAggregate<MaxExpression, std::string>;
+  auto testMaxString = testAggregate<MaxExpression, std::string>;
   // TODO<joka921> Implement correct comparison on strings
-  testString({"alpha", "äpfel", "Beta", "unfug"}, "äpfel");
+  testMaxString({"alpha", "äpfel", "Beta", "unfug"}, "äpfel");
 }
 
 TEST(AggregateExpression, min) {
-  auto testId = testAggregate<MinExpression, Id>;
-  testId({I(3), U, I(0), I(4), U, (I(-1))}, I(-1));
-  testId({V(7), U, V(2), V(4)}, V(2));
-  testId({I(3), U, V(0), L(3), U, (I(-1))}, I(-1));
+  auto testMinId = testAggregate<MinExpression, Id>;
+  testMinId({I(3), U, I(0), I(4), U, (I(-1))}, I(-1));
+  testMinId({V(7), U, V(2), V(4)}, V(2));
+  testMinId({I(3), U, V(0), L(3), U, (I(-1))}, I(-1));
 
-  auto testString = testAggregate<MinExpression, std::string>;
+  auto testMinString = testAggregate<MinExpression, std::string>;
   // TODO<joka921> Implement correct comparison on strings
-  testString({"alpha", "äpfel", "Beta", "unfug"}, "Beta");
+  testMinString({"alpha", "äpfel", "Beta", "unfug"}, "Beta");
 }

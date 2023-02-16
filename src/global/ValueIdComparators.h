@@ -260,18 +260,6 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIntsAndDoubles(
   auto result = getRangesForDouble(begin, end, value, comparison);
   auto resultInt = getRangesForInt(begin, end, value, comparison);
   result.insert(result.end(), resultInt.begin(), resultInt.end());
-
-  // If the comparison is "not equal" we also have to add the ranges for
-  // non-matching datatypes.
-  if (comparison == Comparison::NE) {
-    // auto rangeOfDoubles = getRangeForDatatype(begin, end, Datatype::Double);
-    // auto rangeOfInts = getRangeForDatatype(begin, end, Datatype::Int);
-    // AD_CONTRACT_CHECK(rangeOfInts.first <= rangeOfDoubles.first);
-    // result.push_back({begin, rangeOfInts.first});
-    // result.push_back({rangeOfInts.second, rangeOfDoubles.first});
-    // result.push_back({rangeOfDoubles.second, end});
-  }
-
   return result;
 }
 
@@ -286,11 +274,9 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
   RangeFilter<RandomIt> rangeFilter{comparison};
   auto [eqBegin, eqEnd] =
       std::equal_range(beginType, endType, valueId, &compareByBits);
-  // rangeFilter.addNotEqual(begin, beginType);
   rangeFilter.addSmaller(beginType, eqBegin);
   rangeFilter.addEqual(eqBegin, eqEnd);
   rangeFilter.addGreater(eqEnd, endType);
-  // rangeFilter.addNotEqual(endType, end);
   return std::move(rangeFilter).getResult();
 }
 
@@ -308,11 +294,9 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
       std::lower_bound(beginOfType, endOfType, valueIdBegin, &compareByBits);
   auto eqEnd =
       std::lower_bound(beginOfType, endOfType, valueIdEnd, &compareByBits);
-  // rangeFilter.addNotEqual(begin, beginOfType);
   rangeFilter.addSmaller(beginOfType, eqBegin);
   rangeFilter.addEqual(eqBegin, eqEnd);
   rangeFilter.addGreater(eqEnd, endOfType);
-  // rangeFilter.addNotEqual(endOfType, end);
   return std::move(rangeFilter).getResult();
 }
 
@@ -406,8 +390,8 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
 namespace detail {
 
 // Determine whether the two datatypes can be compared. If they cannot be
-// compared, a comparison always is an `expression error` (term from the SPARQL
-// standard) which we currently denote by all the comparisons returning `false`.
+// compared, a comparison is always an `expression error` (term from the SPARQL
+// standard) which we currently handle by all the comparisons returning `false`.
 inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
   auto isNumeric = [](Datatype type) {
     return type == Datatype::Double || type == Datatype::Int;

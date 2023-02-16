@@ -181,57 +181,46 @@ using AvgExpression =
 // types like an int and a bool. Then we need to manually specify the
 // return type.
 
-// MIN
-inline auto minLambdaForAllTypes = []<SingleExpressionResult T>(const T& a,
-                                                                const T& b) {
-  if constexpr (std::is_arithmetic_v<T> || ad_utility::isSimilar<T, Bool> ||
-                ad_utility::isSimilar<T, std::string>) {
-    // TODO<joka921> Also implement correct comparisons for `std::string` using
-    // ICU that respect the locale
-    return std::min(a, b);
-  } else if constexpr (ad_utility::isSimilar<T, Id>) {
-    if (a.getDatatype() == Datatype::Undefined ||
-        b.getDatatype() == Datatype::Undefined) {
-      // If one of the values is undefined, we just return the other.
-      static_assert(0u == Id::makeUndefined().getBits());
-      return Id::fromBits(a.getBits() | b.getBits());
-    }
-    return valueIdComparators::compareIds<
-               valueIdComparators::ComparisonForIncompatibleTypes::
-                   CompareByType>(a, b, valueIdComparators::Comparison::LT)
-               ? a
-               : b;
-  } else {
-    return ad_utility::alwaysFalse<T>;
-  }
+template <typename comparator, valueIdComparators::Comparison comparison>
+inline auto minMaxLambdaForAllTypes =
+    []<SingleExpressionResult T>(const T& a, const T& b) {
+      if constexpr (std::is_arithmetic_v<T> || ad_utility::isSimilar<T, Bool> ||
+                    ad_utility::isSimilar<T, std::string>) {
+        // TODO<joka921> Also implement correct comparisons for `std::string`
+        // using ICU that respect the locale
+        return comparator{}(a, b);
+      } else if constexpr (ad_utility::isSimilar<T, Id>) {
+        if (a.getDatatype() == Datatype::Undefined ||
+            b.getDatatype() == Datatype::Undefined) {
+          // If one of the values is undefined, we just return the other.
+          static_assert(0u == Id::makeUndefined().getBits());
+          return Id::fromBits(a.getBits() | b.getBits());
+        }
+        return valueIdComparators::compareIds<
+                   valueIdComparators::ComparisonForIncompatibleTypes::
+                       CompareByType>(a, b, comparison)
+                   ? a
+                   : b;
+      } else {
+        return ad_utility::alwaysFalse<T>;
+      }
+    };
+
+constexpr inline auto min = [](const auto& a, const auto& b) {
+  return std::min(a, b);
 };
+constexpr inline auto max = [](const auto& a, const auto& b) {
+  return std::max(a, b);
+};
+constexpr inline auto minLambdaForAllTypes =
+    minMaxLambdaForAllTypes<decltype(min), valueIdComparators::Comparison::LT>;
+constexpr inline auto maxLambdaForAllTypes =
+    minMaxLambdaForAllTypes<decltype(max), valueIdComparators::Comparison::GT>;
+// MIN
 using MinExpression =
     AGG_EXP<decltype(minLambdaForAllTypes), ActualValueGetter>;
 
 // MAX
-inline auto maxLambdaForAllTypes = []<SingleExpressionResult T>(const T& a,
-                                                                const T& b) {
-  if constexpr (std::is_arithmetic_v<T> || ad_utility::isSimilar<T, Bool> ||
-                ad_utility::isSimilar<T, std::string>) {
-    // TODO<joka921> Also implement correct comparisons for `std::string` using
-    // ICU that respect the locale
-    return std::max(a, b);
-  } else if constexpr (ad_utility::isSimilar<T, Id>) {
-    if (a.getDatatype() == Datatype::Undefined ||
-        b.getDatatype() == Datatype::Undefined) {
-      // If one of the values is undefined, we just return the other.
-      static_assert(0u == Id::makeUndefined().getBits());
-      return Id::fromBits(a.getBits() | b.getBits());
-    }
-    return valueIdComparators::compareIds<
-               valueIdComparators::ComparisonForIncompatibleTypes::
-                   CompareByType>(a, b, valueIdComparators::Comparison::GT)
-               ? a
-               : b;
-  } else {
-    return ad_utility::alwaysFalse<T>;
-  }
-};
 using MaxExpression =
     AGG_EXP<decltype(maxLambdaForAllTypes), ActualValueGetter>;
 
