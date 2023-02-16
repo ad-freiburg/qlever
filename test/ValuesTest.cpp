@@ -120,10 +120,12 @@ TEST(Values, BasicMethods) {
     // function which will be removed soon anyway. Then we can reinstate this
     // code. But maybe we want to disallow empty VALUES clauses altogether and
     // remove that code.
+    /*
     Values emptyValuesOp(testQec, {});
     EXPECT_TRUE(emptyValuesOp.knownEmptyResult());
     // The current implementation always returns `1.0` for nonexisting columns.
     EXPECT_FLOAT_EQ(emptyValuesOp.getMultiplicity(32), 1.0);
+     */
   }
 }
 
