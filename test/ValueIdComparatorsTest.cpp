@@ -255,6 +255,18 @@ TEST(ValueIdComparators, IndexTypes) {
   testImpl.operator()<Datatype::LocalVocabIndex>(&getLocalVocabIndex);
 }
 
+// _______________________________________________________________________
+TEST(ValueIdComparators, undefinedWithItself) {
+  auto u = ValueId::makeUndefined();
+  ASSERT_FALSE(valueIdComparators::compareIds(u, u, Comparison::LT));
+  ASSERT_TRUE(valueIdComparators::compareIds(u, u, Comparison::LE));
+  ASSERT_TRUE(valueIdComparators::compareIds(u, u, Comparison::EQ));
+  ASSERT_FALSE(valueIdComparators::compareIds(u, u, Comparison::NE));
+  ASSERT_FALSE(valueIdComparators::compareIds(u, u, Comparison::GT));
+  ASSERT_TRUE(valueIdComparators::compareIds(u, u, Comparison::GE));
+}
+
+// _______________________________________________________________________
 TEST(ValueIdComparators, contractViolations) {
   auto u = ValueId::makeUndefined();
   auto I = ad_utility::testing::IntId;
