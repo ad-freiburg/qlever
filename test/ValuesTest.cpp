@@ -93,6 +93,7 @@ TEST(Values, BasicMethods) {
                           {TC{7}, TC{42}, TC{3}}};
   Values valuesOp(testQec,
                   {{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}}, values});
+  EXPECT_FALSE(valuesOp.knownEmptyResult());
   EXPECT_EQ(valuesOp.getSizeEstimate(), 4u);
   EXPECT_EQ(valuesOp.getCostEstimate(), 4u);
   EXPECT_EQ(valuesOp.getDescriptor(), "Values with variables ?x\t?y\t?z");
@@ -112,6 +113,18 @@ TEST(Values, BasicMethods) {
   ASSERT_EQ(varToCol.at(Variable{"?x"}), 0);
   ASSERT_EQ(varToCol.at(Variable{"?y"}), 1);
   ASSERT_EQ(varToCol.at(Variable{"?z"}), 2);
+
+  {
+    // Test some corner cases for an empty VALUES clause
+    // TODO<joka921> This case is currently disallowed by the `sanitizeValues`
+    // function which will be removed soon anyway. Then we can reinstate this
+    // code. But maybe we want to disallow empty VALUES clauses altogether and
+    // remove that code.
+    Values emptyValuesOp(testQec, {});
+    EXPECT_TRUE(emptyValuesOp.knownEmptyResult());
+    // The current implementation always returns `1.0` for nonexisting columns.
+    EXPECT_FLOAT_EQ(emptyValuesOp.getMultiplicity(32), 1.0);
+  }
 }
 
 TEST(Values, computeResult) {
