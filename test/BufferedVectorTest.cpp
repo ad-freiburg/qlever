@@ -193,28 +193,28 @@ TEST(BufferedVector, insert) {
   ASSERT_THAT(b, ::testing::ElementsAreArray(i));
 
   {
-    // Insert at begin
+    // Insert at beginning.
     std::vector<int> i2{3, 0, 1};
     b.insert(b.begin(), i2.begin(), i2.end());
     i.insert(i.begin(), i2.begin(), i2.end());
     ASSERT_THAT(b, ::testing::ElementsAreArray(i));
   }
   {
-    // Insert at end
+    // Insert at end.
     std::vector<int> i2{-17, 12};
     b.insert(b.end(), i2.begin(), i2.end());
     i.insert(i.end(), i2.begin(), i2.end());
     ASSERT_THAT(b, ::testing::ElementsAreArray(i));
   }
   {
-    // Insert in the middle
+    // Insert in the middle.
     std::vector<int> i2{83};
     b.insert(b.end(), i2.begin(), i2.end());
     i.insert(i.end(), i2.begin(), i2.end());
     ASSERT_THAT(b, ::testing::ElementsAreArray(i));
   }
 
-  // Cornercases
+  // Corner cases
   ASSERT_ANY_THROW(b.insert(b.begin() - 1, i.begin(), i.end()));
   ASSERT_ANY_THROW(b.insert(b.end() + 3, i.begin(), i.end()));
   ASSERT_ANY_THROW(b.insert(b.begin(), b.begin(), b.end()));
@@ -239,14 +239,14 @@ TEST(BufferedVector, erase) {
     ASSERT_THAT(b, ::testing::ElementsAreArray(i));
   }
   {
-    // Erase in the middle
+    // Erase in the middle.
     b.erase(b.begin() + 1, b.begin() + 2);
     i.erase(i.begin() + 1, i.begin() + 2);
     ASSERT_THAT(b, ::testing::ElementsAreArray(i));
     ASSERT_THAT(b, ::testing::ElementsAre(8, 4));
   }
 
-  // Cornercases
+  // Corner cases
   ASSERT_ANY_THROW(b.erase(b.begin() - 1, b.begin()));
   ASSERT_ANY_THROW(b.erase(b.begin(), b.end() + 1));
   ASSERT_ANY_THROW(b.erase(b.end(), b.begin()));

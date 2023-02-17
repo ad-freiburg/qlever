@@ -23,7 +23,7 @@ auto V = ad_utility::testing::VocabId;
 // demonstrates the correct usage of the proxy references that
 // are returned by the `IdTable` when calling `operator[]` or when dereferencing
 // an iterator.
-TEST(IdTableTest, DocumentationOfIteratorUsage) {
+TEST(IdTable, DocumentationOfIteratorUsage) {
   IdTable t{2, makeAllocator()};
   t.push_back({V(42), V(43)});
 
@@ -132,7 +132,7 @@ TEST(IdTableTest, DocumentationOfIteratorUsage) {
 
 // The following test demonstrates the iterator functionality of a single
 // row.
-TEST(IdTableTest, rowIterators) {
+TEST(IdTable, rowIterators) {
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
   auto testRow = [](auto row) {
     row[0] = 0;
@@ -255,7 +255,7 @@ auto clone(const auto& table, auto... args) {
   }
 }
 
-TEST(IdTableTest, push_back_and_assign) {
+TEST(IdTable, push_back_and_assign) {
   // A lambda that is used as the `testCase` argument to the
   // `runtTestForDifferenTypes` function (see above for details).
   auto runTestForIdTable = []<typename Table>(auto make,
@@ -292,7 +292,7 @@ TEST(IdTableTest, push_back_and_assign) {
   runTestForDifferentTypes<1>(runTestForIdTable, "idTableTest.pushBackAssign");
 }
 
-TEST(IdTableTest, insertAtEnd) {
+TEST(IdTable, insertAtEnd) {
   // A lambda that is used as the `testCase` argument to the
   // `runTestForDifferentTypes` function (see above for details).
   auto runTestForIdTable = []<typename Table>(auto make,
@@ -320,7 +320,7 @@ TEST(IdTableTest, insertAtEnd) {
   runTestForDifferentTypes<3>(runTestForIdTable, "idTableTest.insertAtEnd");
 }
 
-TEST(IdTableTest, reserve_and_resize) {
+TEST(IdTable, reserve_and_resize) {
   // A lambda that is used as the `testCase` argument to the
   // `runtTestForDifferenTypes` function (see above for details).
   auto runTestForIdTable = []<typename Table>(auto make,
@@ -369,7 +369,7 @@ TEST(IdTableTest, reserve_and_resize) {
                               "idTableTest.reserveAndResize");
 }
 
-TEST(IdTableTest, copyAndMove) {
+TEST(IdTable, copyAndMove) {
   // A lambda that is used as the `testCase` argument to the
   // `runtTestForDifferenTypes` function (see above for details).
   auto runTestForIdTable = []<typename Table>(auto make,
@@ -425,7 +425,7 @@ TEST(IdTableTest, copyAndMove) {
   runTestForDifferentTypes<6>(runTestForIdTable, "idTableTest.copyAndMove");
 }
 
-TEST(IdTableTest, erase) {
+TEST(IdTable, erase) {
   constexpr size_t NUM_ROWS = 12;
   constexpr size_t NUM_COLS = 4;
 
@@ -453,7 +453,7 @@ TEST(IdTableTest, erase) {
   ASSERT_EQ(0u, t1.size());
 }
 
-TEST(IdTableTest, iterating) {
+TEST(IdTable, iterating) {
   constexpr size_t NUM_ROWS = 42;
   constexpr size_t NUM_COLS = 17;
 
@@ -483,7 +483,7 @@ TEST(IdTableTest, iterating) {
   }
 }
 
-TEST(IdTableTest, sortTest) {
+TEST(IdTable, sortTest) {
   IdTable test(2, makeAllocator());
   test.push_back({V(3), V(1)});
   test.push_back({V(8), V(9)});
@@ -738,7 +738,7 @@ TEST(IdTableStaticTest, iterating) {
 // =============================================================================
 // Conversion Tests
 // =============================================================================
-TEST(IdTableTest, conversion) {
+TEST(IdTable, conversion) {
   IdTable table(3, makeAllocator());
   table.push_back({V(4), V(1), V(0)});
   table.push_back({V(1), V(7), V(8)});
@@ -813,7 +813,7 @@ TEST(IdTableTest, conversion) {
   }
 }
 
-TEST(IdTableTest, empty) {
+TEST(IdTable, empty) {
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
   IntTable t{3};
   ASSERT_TRUE(t.empty());
@@ -821,7 +821,7 @@ TEST(IdTableTest, empty) {
   ASSERT_FALSE(t.empty());
 }
 
-TEST(IdTableTest, frontAndBack) {
+TEST(IdTable, frontAndBack) {
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
   IntTable t{1};
   t.resize(3);
@@ -833,7 +833,7 @@ TEST(IdTableTest, frontAndBack) {
   ASSERT_EQ(43, std::as_const(t).back()[0]);
 }
 
-TEST(IdTableTest, cornerCases) {
+TEST(IdTable, cornerCases) {
   using Dynamic = columnBasedIdTable::IdTable<int, 0>;
   {
     Dynamic dynamic;
@@ -878,7 +878,7 @@ TEST(IdTableTest, cornerCases) {
   }
 }
 
-TEST(IdTableTest, shrinkToFit) {
+TEST(IdTable, shrinkToFit) {
   // Note: The behavior of the following test case depends on the implementation
   // of `std::vector::reserve` and `std::vector::push_back`. It might be
   // necessary to change them if one of our used standard libraries has a
@@ -901,7 +901,7 @@ TEST(IdTableTest, shrinkToFit) {
   ASSERT_EQ(memory.ptr().get()->wlock()->numFreeBytes(), 968);
 }
 
-TEST(IdTableTest, staticAsserts) {
+TEST(IdTable, staticAsserts) {
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::iterator>);
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
   static_assert(std::ranges::random_access_range<IdTable>);

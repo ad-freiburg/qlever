@@ -168,10 +168,14 @@ class IdTable {
     data_.resize(numColumns, ColumnStorage{allocator_});
   }
 
-  // Construct from the number of columns and an allocator. If `NumColumns != 0`
-  // Then the argument `numColumns` and `NumColumns` (the static and the
-  // dynamic number of columns) must be equal, else a runtime check fails.
-  // TODO<joka921> Make this a reasonable template
+  // Construct from the number of columns and a container (e.g. `vector` or
+  // `array`) of empty columns. If `NumColumns != 0` then the argument
+  // `numColumns` and `NumColumns` (the static and the dynamic number of
+  // columns) must be equal, else a runtime check fails. The number of empty
+  // `columns` passed in must at least be `numColumns`, else a runtime check
+  // fails. Additional columns (if `columns.size() > numColumns`) are deleted.
+  // This behavior is useful for unit tests Where we can just generically pass
+  // in more columns than are needed in any test.
   IdTable(size_t numColumns,
           std::ranges::forward_range auto columns) requires(!isView)
       : data_{std::make_move_iterator(columns.begin()),
@@ -361,11 +365,8 @@ class IdTable {
   // undefined behavior which is caught by an `assert` in Debug builds.
   void push_back(const std::initializer_list<T>& newRow) requires(!isView) {
     assert(newRow.size() == numColumns());
-    emplace_back();
-    auto sz = size();
-    // TODO<joka921> We could directly `push_back` to the single columns.
     for (size_t i = 0; i < numColumns(); ++i) {
-      operator()(sz - 1, i) = *(newRow.begin() + i);
+      data()[i].push_back(*(newRow.begin() + i));
     }
   }
 
@@ -379,11 +380,8 @@ class IdTable {
     if constexpr (isDynamic) {
       assert(newRow.size() == numColumns());
     }
-    // TODO<joka921> We could directly `push_back` to the single columns.
-    emplace_back();
-    auto sz = size();
     for (size_t i = 0; i < numColumns(); ++i) {
-      operator()(sz - 1, i) = *(newRow.begin() + i);
+      data()[i].push_back(*(newRow.begin() + i));
     }
   }
 
@@ -402,10 +400,8 @@ class IdTable {
     if constexpr (isDynamic) {
       assert(newRow.numColumns() == numColumns());
     }
-    // TODO<joka921> We could directly `push_back` to the single columns.
-    emplace_back();
     for (size_t i = 0; i < numColumns(); ++i) {
-      operator()(size() - 1, i) = newRow[i];
+      data()[i].push_back(newRow[i]);
     }
   }
 
@@ -422,7 +418,6 @@ class IdTable {
         data(), numColumns_, numRows_, allocator_};
   }
 
-  // TODO<joka921> We also need one storage object per Column for this case
   // Overload of `clone` for `Storage` types that are not copy constructible.
   // It requires a preconstructed but empty argument of type `Storage` that
   // is then resized and filled with the appropriate contents.
