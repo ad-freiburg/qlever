@@ -182,13 +182,29 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   //  expressions, also add similar sanity checks for the HAVING clause here.
   _havingClauses = std::move(modifiers.havingClauses_);
 
+  const bool isExplicitGroupBy = !_groupByVariables.empty();
+  const bool isImplicitGroupBy =
+      std::ranges::any_of(getAliases(),
+                          [](const Alias& alias) {
+                            return alias._expression.isAggregate({});
+                          }) &&
+      !isExplicitGroupBy;
+  const bool isGroupBy = isExplicitGroupBy || isImplicitGroupBy;
+  using namespace std::string_literals;
+  std::string noteForGroupByError =
+      isImplicitGroupBy
+          ? " Note: The GROUP BY in this query is implicit because an aggregate expression was used in the SELECT clause"s
+          : ""s;
+
   // Process orderClause
-  auto processVariableOrderKey = [this, &checkVariableIsVisible](
+  auto processVariableOrderKey = [this, &checkVariableIsVisible, isGroupBy,
+                                  &noteForGroupByError](
                                      VariableOrderKey orderKey) {
     // Check whether grouping is done. The variable being ordered by
     // must then be either grouped or the result of an alias in the select.
     const vector<Variable>& groupByVariables = _groupByVariables;
-    if (groupByVariables.empty()) {
+
+    if (!isGroupBy) {
       checkVariableIsVisible(orderKey.variable_, "ORDERY BY");
     } else if (!ad_utility::contains(groupByVariables, orderKey.variable_) &&
                // `ConstructClause` has no Aliases. So the variable can never be
@@ -203,7 +219,8 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           "Variable " + orderKey.variable_.name() +
           " was used in an ORDER BY "
           "clause, but is neither grouped, nor created as an alias in the "
-          "SELECT clause.");
+          "SELECT clause." +
+          noteForGroupByError);
     }
 
     _orderBy.push_back(std::move(orderKey));
@@ -212,10 +229,11 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   // QLever currently only supports ordering by variables. To allow
   // all `orderConditions`, the corresponding expression is bound to a new
   // internal variable. Ordering is then done by this variable.
-  auto processExpressionOrderKey = [this, &checkUsedVariablesAreVisible](
+  auto processExpressionOrderKey = [this, &checkUsedVariablesAreVisible,
+                                    isGroupBy, &noteForGroupByError](
                                        ExpressionOrderKey orderKey) {
     checkUsedVariablesAreVisible(orderKey.expression_, "Order Key");
-    if (!_groupByVariables.empty()) {
+    if (isGroupBy) {
       // TODO<qup42> Implement this by adding a hidden alias in the
       //  SELECT clause.
       throw ParseException(
@@ -224,7 +242,8 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           orderKey.expression_.getDescriptor() +
           "\"). Please assign this expression to a "
           "new variable in the SELECT clause and then order by this "
-          "variable.");
+          "variable." +
+          noteForGroupByError);
     }
     auto additionalVariable = addInternalBind(std::move(orderKey.expression_));
     _orderBy.emplace_back(additionalVariable, orderKey.isDescending_);
@@ -252,7 +271,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       };
 
   if (hasSelectClause()) {
-    if (!_groupByVariables.empty()) {
+    if (isGroupBy) {
       ad_utility::HashSet<string> groupVariables{};
       for (const auto& variable : _groupByVariables) {
         groupVariables.emplace(variable.toSparql());
@@ -296,7 +315,8 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       // aliases like SELECT (?x as ?y) have to be added as ordinary BIND
       // expressions to the query body. In CONSTRUCT queries there are no such
       // aliases, and in case of a GROUP BY clause the aliases are read directly
-      // from the SELECt clause by the `GroupBy` operation.
+      // from the SELECT clause by the `GroupBy` operation.
+
       auto& selectClause = std::get<SelectClause>(_clause);
       for (const auto& alias : selectClause.getAliases()) {
         // As the clause is NOT `SELECT *` it is not required to register the

@@ -909,6 +909,17 @@ TEST(SparqlParser, SelectQuery) {
           m::SelectQuery(m::Select({Var{"?x"}}), DummyGraphPatternMatcher),
           m::pq::Having({"(?x>5)"}), m::pq::OrderKeys({{Var{"?y"}, false}})));
 
+  // When there is no
+  expectSelectQuery("SELECT (?x AS ?y) (?y AS ?z) WHERE { BIND(1 AS ?x)}",
+                    m::SelectQuery(m::Select({Var("?y"), Var("?z")}),
+                                   m::GraphPattern(m::Bind(Var("?x"), "1"),
+                                                   m::Bind(Var("?y"), "?x"),
+                                                   m::Bind(Var{"?z"}, "?y"))));
+  // The variable in the implicit BIND expression in the alias binds to the
+  // variable `?y` which is already in scope. This is forbidden by the SPARQL
+  // standard.
+  expectSelectQueryFails("SELECT (?x AS ?y) WHERE { ?x <is-a> ?y }");
+
   // Grouping by a variable or expression which contains a variable
   // that is not visible in the query body is not allowed.
   expectSelectQueryFails("SELECT ?x WHERE { ?a ?b ?c } GROUP BY ?x");

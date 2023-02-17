@@ -106,7 +106,8 @@ void GraphPatternOperation::toString(std::ostringstream& os,
       }
 
     } else if constexpr (std::is_same_v<T, Bind>) {
-      os << "Some kind of BIND\n";
+      os << "BIND " << arg._expression.getDescriptor() << " as "
+         << arg._target.name() << "\n";
       // TODO<joka921> proper ToString (are they used for something?)
     } else if constexpr (std::is_same_v<T, Minus>) {
       os << "MINUS ";
