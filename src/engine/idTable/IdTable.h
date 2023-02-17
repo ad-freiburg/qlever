@@ -365,6 +365,7 @@ class IdTable {
   // undefined behavior which is caught by an `assert` in Debug builds.
   void push_back(const std::initializer_list<T>& newRow) requires(!isView) {
     assert(newRow.size() == numColumns());
+    ++numRows_;
     for (size_t i = 0; i < numColumns(); ++i) {
       data()[i].push_back(*(newRow.begin() + i));
     }
@@ -380,6 +381,7 @@ class IdTable {
     if constexpr (isDynamic) {
       assert(newRow.size() == numColumns());
     }
+    ++numRows_;
     for (size_t i = 0; i < numColumns(); ++i) {
       data()[i].push_back(*(newRow.begin() + i));
     }
@@ -400,6 +402,7 @@ class IdTable {
     if constexpr (isDynamic) {
       assert(newRow.numColumns() == numColumns());
     }
+    ++numRows_;
     for (size_t i = 0; i < numColumns(); ++i) {
       data()[i].push_back(newRow[i]);
     }
