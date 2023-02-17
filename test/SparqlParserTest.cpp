@@ -446,7 +446,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, pq._orderBy[0].isDescending_);
     ASSERT_EQ(Var{"?movie"}, pq._orderBy[0].variable_);
 
-    auto sc = get<ParsedQuery::SelectClause>(pq._clause);
+    auto sc = pq.selectClause();
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
@@ -486,7 +486,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, pq._orderBy[0].isDescending_);
     ASSERT_EQ(Var{"?movie"}, pq._orderBy[0].variable_);
 
-    auto sc = get<ParsedQuery::SelectClause>(pq._clause);
+    auto sc = pq.selectClause();
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
@@ -519,8 +519,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, parsed_sub_query.get()._orderBy[0].isDescending_);
     ASSERT_EQ(Var{"?director"}, parsed_sub_query.get()._orderBy[0].variable_);
 
-    auto sc_subquery =
-        get<ParsedQuery::SelectClause>(parsed_sub_query.get()._clause);
+    auto sc_subquery = parsed_sub_query.get().selectClause();
     ASSERT_EQ(false, sc_subquery.distinct_);
     ASSERT_EQ(false, sc_subquery.reduced_);
     ASSERT_EQ(true, sc_subquery.isAsterisk());
@@ -565,7 +564,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, pq._orderBy[0].isDescending_);
     ASSERT_EQ(Var{"?movie"}, pq._orderBy[0].variable_);
 
-    auto sc = get<ParsedQuery::SelectClause>(pq._clause);
+    auto sc = pq.selectClause();
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
@@ -594,8 +593,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, parsed_sub_query.get()._orderBy[0].isDescending_);
     ASSERT_EQ(Var{"?director"}, parsed_sub_query.get()._orderBy[0].variable_);
 
-    auto sc_subquery =
-        get<ParsedQuery::SelectClause>(parsed_sub_query.get()._clause);
+    auto sc_subquery = parsed_sub_query.get().selectClause();
     ASSERT_EQ(false, sc_subquery.distinct_);
     ASSERT_EQ(false, sc_subquery.reduced_);
     ASSERT_EQ(true, sc_subquery.isAsterisk());
@@ -621,8 +619,7 @@ TEST(ParserTest, testParse) {
               aux_parsed_sub_sub_query._limitOffset._limit);
     ASSERT_EQ(0u, aux_parsed_sub_sub_query._orderBy.size());
 
-    auto sc_sub_subquery =
-        get<ParsedQuery::SelectClause>(aux_parsed_sub_sub_query._clause);
+    auto sc_sub_subquery = aux_parsed_sub_sub_query.selectClause();
     ASSERT_EQ(false, sc_sub_subquery.distinct_);
     ASSERT_EQ(false, sc_sub_subquery.reduced_);
     ASSERT_EQ(false, sc_sub_subquery.isAsterisk());

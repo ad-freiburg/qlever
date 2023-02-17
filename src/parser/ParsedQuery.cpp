@@ -108,14 +108,24 @@ Variable ParsedQuery::addInternalBind(
   auto targetVariable = Variable{INTERNAL_VARIABLE_PREFIX +
                                  std::to_string(numInternalVariables_)};
   numInternalVariables_++;
-  parsedQuery::Bind bind{std::move(expression), targetVariable};
-  _rootGraphPattern._graphPatterns.emplace_back(std::move(bind));
   // Don't register the targetVariable as visible because it is used
-  // internally and should not be selected by SELECT *.
+  // internally and should not be selected by SELECT * (this is the `bool`
+  // argument to `addBind`).
   // TODO<qup42, joka921> Implement "internal" variables, that can't be
   //  selected at all and can never interfere with variables from the
   //  query.
+  addBind(std::move(expression), targetVariable, false);
   return targetVariable;
+}
+
+// ________________________________________________________________________
+void ParsedQuery::addBind(sparqlExpression::SparqlExpressionPimpl expression,
+                          Variable targetVariable, bool targetIsVisible) {
+  if (targetIsVisible) {
+    registerVariableVisibleInQueryBody(targetVariable);
+  }
+  parsedQuery::Bind bind{std::move(expression), std::move(targetVariable)};
+  _rootGraphPattern._graphPatterns.emplace_back(std::move(bind));
 }
 
 // ________________________________________________________________________
@@ -282,6 +292,21 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           selectClause().getVisibleVariables(),
           " is the target of an alias although it is also visible in the query "
           "body. This is not allowed.");
+      // If there is no GROUP BY clause and there is a SELECT clause, then the
+      // aliases like SELECT (?x as ?y) have to be added as ordinary BIND
+      // expressions to the query body. In CONSTRUCT queries there are no such
+      // aliases, and in case of a GROUP BY clause the aliases are read directly
+      // from the SELECt clause by the `GroupBy` operation.
+      auto& selectClause = std::get<SelectClause>(_clause);
+      for (const auto& alias : selectClause.getAliases()) {
+        // As the clause is NOT `SELECT *` it is not required to register the
+        // target variable as visible, but it helps with several sanity checks.
+        addBind(alias._expression, alias._target, true);
+      }
+
+      // We do not need the aliases anymore as we have converted them to BIND
+      // expressions
+      selectClause.deleteAliasesButKeepVariables();
     }
 
     ad_utility::HashMap<std::string, size_t> variable_counts;
