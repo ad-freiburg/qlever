@@ -211,7 +211,7 @@ void makeBenchmarkTable(BenchmarkRecords* records, const TF& overlap,
   // because std::vector needs special behaviour and we do not know,
   // which argument is the vector.
   std::stringstream tableDescriptor;
-  tableDescriptor << "Benchmarks with a" <<
+  tableDescriptor << "Benchmarks with a " <<
     templateParameterArgumentToString(overlap) << "\% chance for " <<
     "overlap betwenn " << (smallerTableSorted ? "" : "not ") <<
     "sorted smaller table, with " <<
