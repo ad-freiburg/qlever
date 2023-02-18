@@ -260,18 +260,6 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIntsAndDoubles(
   auto result = getRangesForDouble(begin, end, value, comparison);
   auto resultInt = getRangesForInt(begin, end, value, comparison);
   result.insert(result.end(), resultInt.begin(), resultInt.end());
-
-  // If the comparison is "not equal" we also have to add the ranges for
-  // non-matching datatypes.
-  if (comparison == Comparison::NE) {
-    auto rangeOfDoubles = getRangeForDatatype(begin, end, Datatype::Double);
-    auto rangeOfInts = getRangeForDatatype(begin, end, Datatype::Int);
-    AD_CONTRACT_CHECK(rangeOfInts.first <= rangeOfDoubles.first);
-    result.push_back({begin, rangeOfInts.first});
-    result.push_back({rangeOfInts.second, rangeOfDoubles.first});
-    result.push_back({rangeOfDoubles.second, end});
-  }
-
   return result;
 }
 
@@ -286,11 +274,9 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
   RangeFilter<RandomIt> rangeFilter{comparison};
   auto [eqBegin, eqEnd] =
       std::equal_range(beginType, endType, valueId, &compareByBits);
-  rangeFilter.addNotEqual(begin, beginType);
   rangeFilter.addSmaller(beginType, eqBegin);
   rangeFilter.addEqual(eqBegin, eqEnd);
   rangeFilter.addGreater(eqEnd, endType);
-  rangeFilter.addNotEqual(endType, end);
   return std::move(rangeFilter).getResult();
 }
 
@@ -308,11 +294,9 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
       std::lower_bound(beginOfType, endOfType, valueIdBegin, &compareByBits);
   auto eqEnd =
       std::lower_bound(beginOfType, endOfType, valueIdEnd, &compareByBits);
-  rangeFilter.addNotEqual(begin, beginOfType);
   rangeFilter.addSmaller(beginOfType, eqBegin);
   rangeFilter.addEqual(eqBegin, eqEnd);
   rangeFilter.addGreater(eqEnd, endOfType);
-  rangeFilter.addNotEqual(endOfType, end);
   return std::move(rangeFilter).getResult();
 }
 
@@ -351,6 +335,11 @@ inline auto simplifyRanges =
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison) {
+  // For the evaluation of FILTERs, comparisons that involve undefined values
+  // are always false.
+  if (valueId.getDatatype() == Datatype::Undefined) {
+    return {};
+  }
   // This lambda enforces the invariants `non-empty` and `sorted`.
   switch (valueId.getDatatype()) {
     case Datatype::Double:
@@ -400,17 +389,26 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
 
 namespace detail {
 
+// Determine whether the two datatypes can be compared. If they cannot be
+// compared, a comparison is always an `expression error` (term from the SPARQL
+// standard) which we currently handle by all the comparisons returning `false`.
+inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
+  auto isNumeric = [](Datatype type) {
+    return type == Datatype::Double || type == Datatype::Int;
+  };
+  auto isUndefined = [](Datatype type) { return type == Datatype::Undefined; };
+  // Note: Undefined values cannot be compared to other undefined values.
+  return (!isUndefined(typeA)) &&
+         ((typeA == typeB) || (isNumeric(typeA) && isNumeric(typeB)));
+}
+
 // This function is part of the implementation of `compareIds` (see below).
 template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
               ComparisonForIncompatibleTypes::AlwaysFalse>
 bool compareIdsImpl(ValueId a, ValueId b, auto comparator) {
-  auto isNumeric = [](ValueId id) {
-    return id.getDatatype() == Datatype::Double ||
-           id.getDatatype() == Datatype::Int;
-  };
-  bool compatible =
-      (a.getDatatype() == b.getDatatype()) || (isNumeric(a) && isNumeric(b));
-  if (!compatible) {
+  Datatype typeA = a.getDatatype();
+  Datatype typeB = b.getDatatype();
+  if (!areTypesCompatible(typeA, typeB)) {
     using enum ComparisonForIncompatibleTypes;
     if constexpr (comparisonForIncompatibleTypes == AlwaysFalse) {
       return false;
@@ -457,8 +455,7 @@ inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
     case EQ:
       return compare(std::equal_to{});
     case NE:
-      // IDs with incompatible datatypes are also considered "not equal".
-      return !compare(std::equal_to{});
+      return compare(std::not_equal_to{});
     case GE:
       return compare(std::greater_equal{});
     case GT:
@@ -494,7 +491,11 @@ inline bool compareWithEqualIds(ValueId a, ValueId bBegin, ValueId bEnd,
     case EQ:
       return compareEqual();
     case NE:
-      return !compareEqual();
+      // If the datatypes are not compatible then we always yield `false`. This
+      // is the correct behavior for SPARQL filters where this is called an
+      // `expression error`.
+      return !compareEqual() &&
+             detail::areTypesCompatible(a.getDatatype(), bBegin.getDatatype());
     case GE:
       return detail::compareIdsImpl(a, bBegin, std::greater_equal<>());
     case GT:
