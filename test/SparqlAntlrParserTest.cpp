@@ -574,10 +574,9 @@ TEST(SparqlParser, DataBlock) {
   expectDataBlockFails("?test { true }");
   expectDataBlock(R"(?foo { "baz" "bar" })",
                   m::Values({Var{"?foo"}}, {{"\"baz\""}, {"\"bar\""}}));
-  // TODO<joka921/qup42> implement.
-  expectDataBlockFails(R"(( ) { })");
-  expectDataBlockFails(R"(?foo { })");
-  expectDataBlockFails(R"(( ?foo ) { })");
+  expectDataBlock(R"(( ) { })", m::Values({}, {}));
+  expectDataBlock(R"(?foo { })", m::Values({Var{"?foo"}}, {}));
+  expectDataBlock(R"(( ?foo ) { })", m::Values({Var{"?foo"}}, {}));
   expectDataBlockFails(R"(( ?foo ?bar ) { (<foo>) (<bar>) })");
   expectDataBlock(R"(( ?foo ?bar ) { (<foo> <bar>) })",
                   m::Values({Var{"?foo"}, Var{"?bar"}}, {{"<foo>", "<bar>"}}));
