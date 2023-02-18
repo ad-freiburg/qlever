@@ -17,8 +17,7 @@
 // ____________________________________________________________________________
 Values::Values(QueryExecutionContext* qec, SparqlValues parsedValues)
     : Operation(qec) {
-  parsedValues_ = sanitizeValues(std::move(parsedValues));
-
+  parsedValues_ = std::move(parsedValues);
   AD_CONTRACT_CHECK(
       std::ranges::all_of(parsedValues_._values, [&](const auto& row) {
         return row.size() == parsedValues_._variables.size();
@@ -93,60 +92,6 @@ void Values::computeMultiplicities() {
     multiplicities_[col] =
         static_cast<float>(numValues) / static_cast<float>(numDistinctValues);
   }
-}
-
-// ____________________________________________________________________________
-auto Values::sanitizeValues(SparqlValues&& values) -> SparqlValues {
-  // Find all UNDEF values and remember tuples (rows) where all values are
-  // UNDEF as well as for each variable when it had a value that was not UNDEF
-  // at least once.
-  std::vector<std::pair<std::size_t, std::size_t>> variableBound;
-  for (size_t i = 0; i < values._variables.size(); ++i) {
-    variableBound.emplace_back(i, 0);
-  }
-  std::vector<std::size_t> emptyValues;
-  for (std::size_t i = 0; i < values._values.size(); ++i) {
-    AD_CONTRACT_CHECK(values._values[i].size() == values._variables.size());
-    auto& v = values._values[i];
-    if (std::all_of(v.begin(), v.end(),
-                    [](const auto& s) { return s == "UNDEF"; })) {
-      emptyValues.push_back(i);
-    }
-    for (std::size_t k = 0; k < v.size(); ++k) {
-      if (v[k] != "UNDEF") {
-        variableBound[k].second = 1;
-      }
-    }
-  }
-
-  // Remove all value tuples where every value is "UNDEF".
-  for (auto it = emptyValues.rbegin(); it != emptyValues.rend(); ++it) {
-    getWarnings().push_back("Removing VALUES tuple where all values are UNDEF");
-    values._values.erase(values._values.begin() + *it);
-  }
-
-  // Remove all variables that are not bound in a single value tuple.
-  for (auto it = variableBound.rbegin(); it != variableBound.rend(); ++it) {
-    if (it->second) {
-      continue;
-    }
-    getWarnings().push_back(
-        "Removing VALUES variable for which all values were UNDEF");
-    values._variables.erase(values._variables.begin() + it->first);
-    for (auto& val : values._values) {
-      val.erase(val.begin() + it->first);
-    }
-  }
-
-  // If no variables or tuples remain, throw an exception.
-  if (values._values.empty() || values._variables.empty()) {
-    AD_THROW(
-        "After removing all UNDEF values and variables, a VALUES clause was "
-        "found to be empty. Such an operation result (the neutral element for "
-        "JOIN) is currently not supported by QLever");
-  }
-
-  return std::move(values);
 }
 
 // ____________________________________________________________________________

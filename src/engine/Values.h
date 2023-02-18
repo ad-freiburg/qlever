@@ -53,11 +53,6 @@ class Values : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
-  // Remove all UNDEF values and with it all tuples with only UNDEF values as
-  // well as variables with only UNDEF values. Throws an exception if nothing
-  // remains.
-  SparqlValues sanitizeValues(SparqlValues&& values);
-
   // Compute the per-column multiplicity of the parsed values.
   void computeMultiplicities();
 
