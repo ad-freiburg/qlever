@@ -177,7 +177,7 @@ void GroupBy::processGroup(
       *resultType =
           sparqlExpression::detail::expressionResultTypeToQleverResultType<T>();
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
-          singleResult, *(outTable->getLocalVocab()));
+          singleResult, outTable->getLocalVocabNonConst());
     } else {
       // This should never happen since aggregates always return constants.
       AD_FAIL();
@@ -225,7 +225,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
 
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), columnMap, inTable->_idTable,
-      getExecutionContext()->getAllocator(), *outTable->getLocalVocab());
+      getExecutionContext()->getAllocator(), outTable->getLocalVocabNonConst());
 
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
     result.emplace_back();
@@ -287,13 +287,7 @@ void GroupBy::computeResult(ResultTable* result) {
 
   // Make a deep copy of the local vocab from `subresult` and then add to it (in
   // case GROUP_CONCAT adds something).
-  //
-  // NOTE: With `result->setLocalVocab(subresult->getLocalVocab())`, only a
-  // shared pointer would be copied. The the additions made in this operation
-  // would also affect `subresult`, which leads to all kinds of unexpected
-  // behavior.
-  result->setLocalVocab(
-      std::make_shared<LocalVocab>(subresult->getLocalVocab()->clone()));
+  result->getCopyOfLocalVocabFrom(*subresult);
 
   std::vector<size_t> groupByColumns;
 

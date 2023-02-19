@@ -37,6 +37,11 @@ class LocalVocab {
   // word).
   LocalVocabIndex nextFreeIndex_ = LocalVocabIndex::make(0);
 
+  // Indicator that the local vocabulary is read only. This will be set once the
+  // local vocabulary is shared between more than one result; see the respective
+  // methods in `ResultTable`.
+  bool readOnly_ = false;
+
  public:
   // Create a new, empty local vocabulary.
   LocalVocab() = default;
@@ -53,6 +58,9 @@ class LocalVocab {
   LocalVocab(LocalVocab&&) = default;
   LocalVocab& operator=(LocalVocab&&) = default;
 
+  // Make the local vocabulary read only.
+  void makeReadOnly() { readOnly_ = true; }
+
   // Get the index of a word in the local vocabulary. If the word was already
   // contained, return the already existing index. If the word was not yet
   // contained, add it, and return the new index.
@@ -67,16 +75,6 @@ class LocalVocab {
 
   // Return a const reference to the word.
   const std::string& getWord(LocalVocabIndex localVocabIndex) const;
-
-  // Merge two local vocabularies if at least one of them is empty. If both are
-  // non-empty, throws an exception. Assumes that both vocabularies exist.
-  //
-  // TODO: Eventually, we want to have one local vocab for the whole query to
-  // which each operation writes (one after the other). Then we don't need a
-  // merge function anymore.
-  static std::shared_ptr<LocalVocab> mergeLocalVocabsIfOneIsEmpty(
-      const std::shared_ptr<LocalVocab>& localVocab1,
-      const std::shared_ptr<LocalVocab>& localVocab2);
 
  private:
   // Common implementation for the two variants of

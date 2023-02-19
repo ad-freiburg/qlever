@@ -87,7 +87,7 @@ void Bind::computeResult(ResultTable* result) {
 
   result->_idTable.setNumColumns(getResultWidth());
   result->_resultTypes = subRes->_resultTypes;
-  result->setLocalVocab(subRes->getLocalVocab());
+  result->shareLocalVocabFrom(*subRes);
   int inwidth = subRes->_idTable.numColumns();
   int outwidth = getResultWidth();
 
@@ -115,7 +115,7 @@ void Bind::computeExpressionBind(
 
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), columnMap, inputResultTable._idTable,
-      getExecutionContext()->getAllocator(), *inputResultTable.getLocalVocab());
+      getExecutionContext()->getAllocator(), inputResultTable.getLocalVocab());
 
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);
@@ -165,7 +165,7 @@ void Bind::computeExpressionBind(
         if (it != resultGenerator.end()) {
           Id constantId =
               sparqlExpression::detail::constantExpressionResultToId(
-                  std::move(*it), *(outputResultTable->getLocalVocab()));
+                  std::move(*it), outputResultTable->getLocalVocabNonConst());
           for (size_t i = 0; i < inSize; ++i) {
             output(i, inCols) = constantId;
           }
@@ -176,7 +176,7 @@ void Bind::computeExpressionBind(
           output(i, inCols) =
               sparqlExpression::detail::constantExpressionResultToId(
                   std::move(resultValue),
-                  *(outputResultTable->getLocalVocab()));
+                  outputResultTable->getLocalVocabNonConst());
           i++;
         }
       }

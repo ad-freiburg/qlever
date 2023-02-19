@@ -1,4 +1,4 @@
-// Copyright 2015 - 2022, University of Freiburg
+// Copyright 2015 - 2023, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors: Björn Buchhold <b.buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
@@ -90,15 +90,57 @@ class ResultTable {
   // Get the number of columns of this result.
   size_t width() const { return _idTable.numColumns(); }
 
-  // Set local vocabulary. This only copies a shared pointer. In order to make a
-  // deep copy, use LocalVocab::clone(); see `GroupBy.cpp` for an example.
-  void setLocalVocab(const std::shared_ptr<LocalVocab>& localVocab) {
-    localVocab_ = localVocab;
-  }
+  // Share the local vocabulary with the given other result. After this is
+  // called, the (shared) local vocabulary is set to read only (because adding
+  // to it further would affect earlier results, which might be cached, which
+  // can give all sort of unexpected behavior or even wrong results).
+  //
+  // NOTE: In order to make a deep copy, use LocalVocab::clone(); see
+  // `GroupBy.cpp` for an example.
+  void shareLocalVocabFrom(const ResultTable& resultTable);
 
-  // Get the local vocabulary of this result (not `const` because we may want to
-  // augment it while constructing the result).
-  std::shared_ptr<LocalVocab> getLocalVocab() const { return localVocab_; }
+  // Like `shareLocalVocabFrom`, but takes *two* results and assumes that one of
+  // their local vocabularies is empty and shares the the result with the
+  // non-empty one (if both are empty, arbitrarily share with the first one).
+  //
+  // TODO: Eventually, we want to be able to merge two non-empty local
+  // vocabularies, but that requires more work since we have to rewrite IDs then
+  // (from the previous separate local vocabularies to the new merged one).
+  void shareLocalVocabFromNonEmptyOf(const ResultTable& resultTable1,
+                                     const ResultTable& resultTable2);
+
+  // Get a (deep) copy of the local vocabulary from the given result. Use this
+  // when you want to (potentially) add further words to the local vocabulary
+  // (which is not possible with `shareLocalVocabFrom`).
+  void getCopyOfLocalVocabFrom(const ResultTable& resultTable);
+
+  // Get the local vocabulary of this result, used for lookup only.
+  //
+  // NOTE: This is currently used in the following methods (in parentheses
+  // the name of the function called with the local vocab as argument):
+  //
+  // ExportQueryExecutionTrees::idTableToQLeverJSONArray (idToStringAndType)
+  // ExportQueryExecutionTrees::selectQueryResultToSparqlJSON (dito)
+  // ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary (dito)
+  // Filter::computeFilterImpl (evaluationContext)
+  // Variable::evaluate (idToStringAndType)
+  //
+  const LocalVocab& getLocalVocab() const { return *localVocab_; }
+
+  // The non-const version of the above.
+  //
+  // NOTE: This is currently used in the following methods:
+  //
+  // Values::writeValues (toValueId)
+  // Bind::computeExpressionBind (evaluationContext)
+  // Bind::computeExpressionBind (constantExpressionResultToId)
+  // GroupBy::processGroup (constantExpressionResultToId)
+  // GroupBy::doGroupBy (evaluationContext)
+  // GroupByTest::doGroupBy [that could be done differently there]
+  //
+  // TODO: I added the `NonConst` to the name to emphasize that this is not the
+  // ideal interface. But good enough for now.
+  LocalVocab& getLocalVocabNonConst() { return *localVocab_; }
 
   // Log the size of this result. We call this at several places in
   // `Server::processQuery`. Ideally, this should only be called in one

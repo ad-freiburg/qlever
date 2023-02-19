@@ -136,7 +136,7 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
         &result->_idTable, hasPattern, hasPredicate, patterns);
   } else {
     std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
-    result->setLocalVocab(subresult->getLocalVocab());
+    result->shareLocalVocabFrom(*subresult);
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
 

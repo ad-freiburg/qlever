@@ -673,7 +673,7 @@ void TransitivePath::computeResult(ResultTable* result) {
   // an index scan (which has an empty local vocabulary by default) is the
   // `LocalVocabTest`. But it doesn't harm to propagate the local vocab here
   // either.
-  result->setLocalVocab(subRes->getLocalVocab());
+  result->shareLocalVocabFrom(*subRes);
 
   result->_sortedBy = resultSortedOn();
   if (_leftIsVar || _leftSideTree != nullptr) {
