@@ -22,8 +22,8 @@ using tcp = boost::asio::ip::tcp;
 
 // ____________________________________________________________________________
 template <typename StreamType>
-HttpClientImpl<StreamType>::HttpClientImpl(const std::string& host,
-                                           const std::string& port) {
+HttpClientImpl<StreamType>::HttpClientImpl(std::string_view host,
+                                           std::string_view port) {
   // IMPORTANT implementation note: Although we need only `stream_` later, it
   // is important that we also keep `io_context_` and `ssl_context_` alive.
   // Otherwise, we get a nasty and non-deterministic segmentation fault when
@@ -42,7 +42,8 @@ HttpClientImpl<StreamType>::HttpClientImpl(const std::string& host,
     ssl_context_->set_verify_mode(ssl::verify_none);
     tcp::resolver resolver{io_context_};
     stream_ = std::make_unique<StreamType>(io_context_, *ssl_context_);
-    if (!SSL_set_tlsext_host_name(stream_->native_handle(), host.c_str())) {
+    if (!SSL_set_tlsext_host_name(stream_->native_handle(),
+                                  std::string{host}.c_str())) {
       boost::system::error_code ec{static_cast<int>(::ERR_get_error()),
                                    boost::asio::error::get_ssl_category()};
       throw boost::system::system_error{ec};
@@ -59,7 +60,7 @@ HttpClientImpl<StreamType>::~HttpClientImpl() noexcept(false) {
   boost::system::error_code ec;
   if constexpr (std::is_same_v<StreamType, beast::tcp_stream>) {
     stream_->socket().shutdown(tcp::socket::shutdown_both, ec);
-    // `not_connected happens sometimes, so don't bother reporting it.
+    // `not_connected` happens sometimes, so don't bother reporting it.
     if (ec && ec != beast::errc::not_connected) {
       if (std::uncaught_exceptions() == 0) {
         throw beast::system_error{ec};
@@ -86,9 +87,9 @@ HttpClientImpl<StreamType>::~HttpClientImpl() noexcept(false) {
 // ____________________________________________________________________________
 template <typename StreamType>
 std::istringstream HttpClientImpl<StreamType>::sendRequest(
-    const boost::beast::http::verb& method, const std::string& host,
-    const std::string& target, const std::string& requestBody,
-    const std::string& contentTypeHeader, const std::string& acceptHeader) {
+    const boost::beast::http::verb& method, std::string_view host,
+    std::string_view target, std::string_view requestBody,
+    std::string_view contentTypeHeader, std::string_view acceptHeader) {
   // Check that we have a stream (obtained via a call to `openStream` above).
   if (!stream_) {
     throw std::runtime_error("Trying to send request without connection");
@@ -120,3 +121,20 @@ std::istringstream HttpClientImpl<StreamType>::sendRequest(
 // Explicit instantiations for HTTP and HTTPS, see the bottom of `HttpClient.h`.
 template class HttpClientImpl<beast::tcp_stream>;
 template class HttpClientImpl<ssl::stream<tcp::socket>>;
+
+// ____________________________________________________________________________
+std::istringstream sendHttpOrHttpsRequest(
+    ad_utility::httpUtils::Url url, const boost::beast::http::verb& method,
+    std::string_view requestData, std::string_view contentTypeHeader,
+    std::string_view acceptHeader) {
+  auto sendRequest = [&]<typename Client>() {
+    Client client{url.host(), url.port()};
+    return client.sendRequest(method, url.host(), url.target(), requestData,
+                              contentTypeHeader, acceptHeader);
+  };
+  if (url.protocol() == ad_utility::httpUtils::Url::Protocol::HTTP) {
+    return sendRequest.operator()<HttpClient>();
+  } else {
+    return sendRequest.operator()<HttpsClient>();
+  }
+}

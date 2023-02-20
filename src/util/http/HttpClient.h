@@ -18,6 +18,7 @@
 #include <sstream>
 #include <string>
 
+#include "util/http/HttpUtils.h"
 #include "util/http/beast.h"
 
 // A class for basic communication with a remote server via HTTP or HTTPS. For
@@ -31,7 +32,7 @@ template <typename StreamType>
 class HttpClientImpl {
  public:
   // The constructor sets up the connection to the client.
-  HttpClientImpl(const std::string& host, const std::string& port);
+  HttpClientImpl(std::string_view host, std::string_view port);
 
   // The destructor closes the connection.
   ~HttpClientImpl() noexcept(false);
@@ -44,10 +45,10 @@ class HttpClientImpl {
   // TODO: Read and process the response in chunks. Here is a code example:
   // https://stackoverflow.com/questions/69011767/handling-large-http-response-using-boostbeast
   std::istringstream sendRequest(
-      const boost::beast::http::verb& method, const std::string& host,
-      const std::string& target, const std::string& requestBody = "",
-      const std::string& contentTypeHeader = "text/plain",
-      const std::string& acceptHeader = "text/plain");
+      const boost::beast::http::verb& method, std::string_view host,
+      std::string_view target, std::string_view requestBody = "",
+      std::string_view contentTypeHeader = "text/plain",
+      std::string_view acceptHeader = "text/plain");
 
  private:
   // The connection stream and associated objects. See the implementation of
@@ -63,3 +64,14 @@ using HttpClient = HttpClientImpl<boost::beast::tcp_stream>;
 // Instantiation for HTTPS.
 using HttpsClient =
     HttpClientImpl<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>;
+
+// Global convenience function for sending a request (default: GET) to the given
+// URL and obtaining the result as a `std::istringstream`. The protocol (HTTP or
+// HTTPS) is chosen automatically based on the URL. The `requestBody` is the
+// payload sent for POST requests (default: empty).
+std::istringstream sendHttpOrHttpsRequest(
+    ad_utility::httpUtils::Url url,
+    const boost::beast::http::verb& method = boost::beast::http::verb::get,
+    std::string_view postData = "",
+    std::string_view contentTypeHeader = "text/plain",
+    std::string_view acceptHeader = "text/plain");
