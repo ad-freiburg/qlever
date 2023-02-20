@@ -134,9 +134,9 @@ TEST(LocalVocab, propagation) {
     ASSERT_TRUE(resultTable)
         << "Operation: " << operation.getDescriptor() << std::endl;
     std::vector<std::string> localVocabWords;
-    for (size_t i = 0; i < resultTable->getLocalVocab().size(); ++i) {
+    for (size_t i = 0; i < resultTable->localVocab().size(); ++i) {
       localVocabWords.emplace_back(
-          resultTable->getLocalVocab().getWord(LocalVocabIndex::make(i)));
+          resultTable->localVocab().getWord(LocalVocabIndex::make(i)));
     }
     ASSERT_EQ(localVocabWords, expectedWords)
         << "Operation: " << operation.getDescriptor() << std::endl;

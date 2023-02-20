@@ -42,7 +42,7 @@ class ResultTable {
 
  public:
   // TODO: I think that none of these member variables should be public. They
-  // probably are for historical reasons. I already added a `getLocalVocab`
+  // probably are for historical reasons. I already added a `localVocab`
   // method.
 
   // The actual entries.
@@ -122,7 +122,7 @@ class ResultTable {
   // Filter::computeFilterImpl (evaluationContext)
   // Variable::evaluate (idToStringAndType)
   //
-  const LocalVocab& getLocalVocab() const { return *localVocab_; }
+  const LocalVocab& localVocab() const { return *localVocab_; }
 
   // The non-const version of the above.
   //
@@ -137,7 +137,7 @@ class ResultTable {
   //
   // TODO: I added the `NonConst` to the name to emphasize that this is not the
   // ideal interface. But good enough for now.
-  LocalVocab& getLocalVocabNonConst() { return *localVocab_; }
+  LocalVocab& localVocabNonConst() { return *localVocab_; }
 
   // Log the size of this result. We call this at several places in
   // `Server::processQuery`. Ideally, this should only be called in one

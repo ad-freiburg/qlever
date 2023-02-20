@@ -117,7 +117,7 @@ void Values::writeValues(ResultTable* result) {
     for (size_t colIdx = 0; colIdx < idTable.numColumns(); colIdx++) {
       TripleComponent& tc = row[colIdx];
       Id id = std::move(tc).toValueId(getIndex().getVocab(),
-                                      result->getLocalVocabNonConst());
+                                      result->localVocabNonConst());
       idTable(rowIdx, colIdx) = id;
       if (id.getDatatype() == Datatype::LocalVocabIndex) {
         ++numLocalVocabPerColumn[colIdx];

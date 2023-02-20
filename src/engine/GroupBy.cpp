@@ -177,7 +177,7 @@ void GroupBy::processGroup(
       *resultType =
           sparqlExpression::detail::expressionResultTypeToQleverResultType<T>();
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
-          singleResult, outTable->getLocalVocabNonConst());
+          singleResult, outTable->localVocabNonConst());
     } else {
       // This should never happen since aggregates always return constants.
       AD_FAIL();
@@ -225,7 +225,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
 
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), columnMap, inTable->_idTable,
-      getExecutionContext()->getAllocator(), outTable->getLocalVocabNonConst());
+      getExecutionContext()->getAllocator(), outTable->localVocabNonConst());
 
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
     result.emplace_back();

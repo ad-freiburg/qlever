@@ -74,7 +74,7 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
 
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), columnMap, inputResultTable._idTable,
-      getExecutionContext()->getAllocator(), inputResultTable.getLocalVocab());
+      getExecutionContext()->getAllocator(), inputResultTable.localVocab());
 
   // TODO<joka921> This should be a mandatory argument to the EvaluationContext
   // constructor.
