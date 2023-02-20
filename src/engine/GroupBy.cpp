@@ -286,7 +286,12 @@ void GroupBy::computeResult(ResultTable* result) {
   LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
 
   // Make a deep copy of the local vocab from `subresult` and then add to it (in
-  // case GROUP_CONCAT adds something).
+  // case GROUP_CONCAT adds a new word or words).
+  //
+  // TODO: In most GROUP BY operations, nothing is added to the local
+  // vocabulary, so it would be more efficient to first share the pointer here
+  // (like with `shareLocalVocabFrom`) and only copy it when a new word is about
+  // to be added. Same for BIND.
   result->getCopyOfLocalVocabFrom(*subresult);
 
   std::vector<size_t> groupByColumns;

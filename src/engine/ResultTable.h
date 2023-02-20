@@ -48,15 +48,12 @@ class ResultTable {
   // The actual entries.
   IdTable _idTable;
 
-  // The entries in `_resultTypes` used to be significant in an old version of
-  // the QLever code, but they longer are (because reality is more complicated
-  // than "one type per column). It is still important for the correctness of
-  // the code, however, that this vector has the same size as the number of
-  // columns of the table.
+  // The semantics of `_resultTypes` is not not used anymore in the QLever code,
+  // see the comment in `ResultType.h`. We still need the declaration though
+  // because it is checked, at various places, that this vector has the same
+  // size as the number of columns of the table.
   //
-  // TODO: Properly keep track of result types again. In particular, efficiency
-  // should benefit in the common use case where all entries in a column have a
-  // certain type or types.
+  // TODO: Refactor this code according to the comment in `ResultType.h`.
   using ResultType = qlever::ResultType;
   vector<ResultType> _resultTypes;
 

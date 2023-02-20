@@ -48,10 +48,6 @@ TEST(Values, basicMethods) {
 }
 
 // Check some corner cases for an empty VALUES clause.
-//
-// TODO: An empty VALUES clause currently produces a parse error ("No values
-// were specified in Values clause") in `SparqlQleverVisitor.cpp`. Shouldn't we
-// just allow it?
 TEST(Values, emptyValuesClause) {
   auto testQec = ad_utility::testing::getQec();
   Values emptyValuesOp(testQec, {});

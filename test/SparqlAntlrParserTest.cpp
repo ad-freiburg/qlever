@@ -574,7 +574,10 @@ TEST(SparqlParser, DataBlock) {
   expectDataBlockFails("?test { true }");
   expectDataBlock(R"(?foo { "baz" "bar" })",
                   m::Values({Var{"?foo"}}, {{"\"baz\""}, {"\"bar\""}}));
+  // TODO: Is this semantics correct?
+  expectDataBlock(R"(( ) { ( ) })", m::Values({}, {{}}));
   expectDataBlock(R"(( ) { })", m::Values({}, {}));
+  expectDataBlockFails("?test { ( ) }");
   expectDataBlock(R"(?foo { })", m::Values({Var{"?foo"}}, {}));
   expectDataBlock(R"(( ?foo ) { })", m::Values({Var{"?foo"}}, {}));
   expectDataBlockFails(R"(( ?foo ?bar ) { (<foo>) (<bar>) })");
