@@ -88,7 +88,7 @@ void Bind::computeResult(ResultTable* result) {
   result->_idTable.setNumColumns(getResultWidth());
   result->_resultTypes = subRes->_resultTypes;
 
-  // Make a deep copy of the local vocab from `subresult` and then add to it (in
+  // Make a deep copy of the local vocab from `subRes` and then add to it (in
   // case BIND adds a new word or words).
   //
   // TODO: In most BIND operations, nothing is added to the local vocabulary, so
