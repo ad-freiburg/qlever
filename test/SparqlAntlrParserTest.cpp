@@ -853,8 +853,10 @@ TEST(SparqlParser, GroupGraphPattern) {
   // graphGraphPattern and serviceGraphPattern are not supported.
   expectGroupGraphPatternFails("{ GRAPH ?a { } }");
   expectGroupGraphPatternFails("{ GRAPH <foo> { } }");
-  expectGroupGraphPatternFails("{ SERVICE <foo> { } }");
-  expectGroupGraphPatternFails("{ SERVICE SILENT ?bar { } }");
+
+  // TODO: Add tests for parsing of SERVICE queries.
+  // expectGroupGraphPatternFails("{ SERVICE <foo> { } }");
+  // expectGroupGraphPatternFails("{ SERVICE SILENT ?bar { } }");
 }
 
 TEST(SparqlParser, RDFLiteral) {

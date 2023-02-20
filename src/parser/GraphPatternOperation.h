@@ -43,6 +43,25 @@ struct SparqlValues {
   std::string valuesToString() const;
 };
 
+/// A `SERVICE` clause.
+struct Service {
+ public:
+  // The visible variables of the service clause.
+  std::vector<Variable> visibleVariables_;
+  // The URL of the service clause.
+  Iri serviceIri_;
+  // The prologue (prefix definitions).
+  std::string prologue_;
+  // The body of the SPARQL query for the remote endpoint.
+  std::string graphPatternAsString_;
+  // The corresponding graph pattern from the parser.
+  //
+  // TODO: This is currently only used by `GraphPatternOperation::toString()`.
+  // What is the use of that function? Does it really need the `GraphPattern`
+  // object from the partse or would `graphPatternAsString_` do equally fine?
+  GraphPattern graphPattern_;
+};
+
 /// A `BasicGraphPattern` represents a consecutive block of triples.
 struct BasicGraphPattern {
   std::vector<SparqlTriple> _triples;
@@ -148,7 +167,7 @@ struct Bind {
 // class actually becomes `using GraphPatternOperation = std::variant<...>`
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-                 Values, Minus, GroupGraphPattern>;
+                 Values, Service, Minus, GroupGraphPattern>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {

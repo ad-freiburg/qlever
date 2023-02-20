@@ -19,6 +19,7 @@
 #include <engine/OptionalJoin.h>
 #include <engine/OrderBy.h>
 #include <engine/QueryPlanner.h>
+#include <engine/Service.h>
 #include <engine/Sort.h>
 #include <engine/TextOperationWithFilter.h>
 #include <engine/TextOperationWithoutFilter.h>
@@ -445,7 +446,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         SubtreePlan valuesPlan =
             makeSubtreePlan<Values>(_qec, arg._inlineValues);
         joinCandidates(std::vector{std::move(valuesPlan)});
-
+      } else if constexpr (std::is_same_v<T, p::Service>) {
+        SubtreePlan servicePlan = makeSubtreePlan<Service>(_qec, arg);
+        joinCandidates(std::vector{std::move(servicePlan)});
       } else if constexpr (std::is_same_v<T, p::Bind>) {
         // The logic of the BIND operation is implemented in the joinCandidates
         // lambda. Reason: BIND does not add a new join operation like for the

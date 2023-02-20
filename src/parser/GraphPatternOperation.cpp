@@ -90,6 +90,11 @@ void GraphPatternOperation::toString(std::ostringstream& os,
     } else if constexpr (std::is_same_v<T, Values>) {
       os << "VALUES (" << arg._inlineValues.variablesToString() << ") "
          << arg._inlineValues.valuesToString();
+    } else if constexpr (std::is_same_v<T, Service>) {
+      os << "SERVICE " << arg.serviceIri_.toSparql() << " {";
+      // TODO: In other places, the interface is `os << ...asString(indent)`.
+      arg.graphPattern_.toString(os, indentation);
+      os << "}";
     } else if constexpr (std::is_same_v<T, BasicGraphPattern>) {
       for (size_t i = 0; i + 1 < arg._triples.size(); ++i) {
         os << "\n";
