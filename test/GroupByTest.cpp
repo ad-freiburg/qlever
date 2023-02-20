@@ -87,7 +87,7 @@ TEST_F(GroupByTest, doGroupBy) {
     floatBuffers[i] = Id::makeFromDouble(floatValues[i]);
   }
 
-  // add some words to the index's vocabulary
+  // Add some words to the index's vocabulary.
   auto& vocab = const_cast<RdfsVocabulary&>(_index.getVocab());
   ad_utility::HashSet<std::string> s;
   s.insert("<entity1>");
@@ -98,15 +98,14 @@ TEST_F(GroupByTest, doGroupBy) {
   s.insert(ad_utility::convertFloatStringToIndexWord("17"));
   vocab.createFromSet(s);
 
-  // create an input result table with a local vocabulary
+  // Create an input result table with a local vocabulary.
   ResultTable inTable{makeAllocator()};
-  inTable._localVocab->getIndexAndAddIfNotContained("<local1>");
-  inTable._localVocab->getIndexAndAddIfNotContained("<local2>");
-  inTable._localVocab->getIndexAndAddIfNotContained("<local3>");
+  inTable.localVocabNonConst().getIndexAndAddIfNotContained("<local1>");
+  inTable.localVocabNonConst().getIndexAndAddIfNotContained("<local2>");
+  inTable.localVocabNonConst().getIndexAndAddIfNotContained("<local3>");
 
   IdTable inputData(6, makeAllocator());
-  // The input data types are
-  //                   KB, KB, VERBATIM, TEXT, FLOAT,           STRING
+  // The input data types are KB, KB, VERBATIM, TEXT, FLOAT, STRING.
   inputData.push_back({I(1), I(4), I(123), I(0), floatBuffers[0], I(0)});
   inputData.push_back({I(1), I(5), I(0), I(1), floatBuffers[1], I(1)});
 

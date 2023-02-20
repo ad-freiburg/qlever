@@ -243,7 +243,7 @@ void HasPredicateScan::computeResult(ResultTable* result) {
     case ScanType::SUBQUERY_S:
 
       std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
-      result->_localVocab = subresult->_localVocab;
+      result->shareLocalVocabFrom(*subresult);
       result->_resultTypes.insert(result->_resultTypes.begin(),
                                   subresult->_resultTypes.begin(),
                                   subresult->_resultTypes.end());

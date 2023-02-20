@@ -13,6 +13,8 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
       [&stream]<typename T>(const T& value) -> void {
         if constexpr (std::is_same_v<T, Variable>) {
           stream << value.name();
+        } else if constexpr (std::is_same_v<T, TripleComponent::UNDEF>) {
+          stream << "UNDEF";
         } else {
           stream << value;
         }

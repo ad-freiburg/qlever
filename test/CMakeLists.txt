@@ -270,6 +270,8 @@ addLinkAndDiscoverTestSerial(RegexExpressionTest parser sparqlExpressions index 
 
 addLinkAndDiscoverTestSerial(LocalVocabTest engine)
 
+addLinkAndDiscoverTestSerial(ValuesTest engine)
+
 addLinkAndDiscoverTest(HttpTest boost_iostreams http)
 
 addLinkAndDiscoverTest(CallFixedSizeTest)
@@ -280,7 +282,7 @@ addLinkAndDiscoverTest(ResetWhenMovedTest)
 
 addLinkAndDiscoverTest(TimerTest absl::strings)
 
-addLinkAndDiscoverTest(AlgorithmTest)
+addLinkAndDiscoverTest(AlgorithmTest absl::flat_hash_set)
 
 addLinkAndDiscoverTest(CompressedRelationsTest index)
 

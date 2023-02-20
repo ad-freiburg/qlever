@@ -114,11 +114,11 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
                   leftResult->_idTable, rightResult->_idTable, _joinColumns,
                   &result->_idTable);
 
-  // If only one of the two operands has a local vocab, pass it on.
-  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
-      leftResult->_localVocab, rightResult->_localVocab);
+  // If only one of the two operands has a non-empty local vocabulary, share
+  // with that one (otherwise, throws an exception).
+  result->shareLocalVocabFromNonEmptyOf(*leftResult, *rightResult);
 
-  LOG(DEBUG) << "MultiColumnJoin result computation done." << endl;
+  LOG(DEBUG) << "MultiColumnJoin result computation done" << endl;
 }
 
 // _____________________________________________________________________________

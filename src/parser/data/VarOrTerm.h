@@ -7,14 +7,15 @@
 #include <string>
 #include <variant>
 
-#include "../../engine/ResultTable.h"
-#include "../../index/Index.h"
-#include "../../util/VisitMixin.h"
-#include "./GraphTerm.h"
-#include "./Variable.h"
+#include "engine/ResultTable.h"
+#include "index/Index.h"
+#include "parser/data/GraphTerm.h"
+#include "parser/data/Variable.h"
+#include "util/VisitMixin.h"
 
 using VarOrTermBase = std::variant<Variable, GraphTerm>;
 
+// TODO: This class should have some documentation.
 class VarOrTerm : public VarOrTermBase,
                   public VisitMixin<VarOrTerm, VarOrTermBase> {
  public:

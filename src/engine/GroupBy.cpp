@@ -177,7 +177,7 @@ void GroupBy::processGroup(
       *resultType =
           sparqlExpression::detail::expressionResultTypeToQleverResultType<T>();
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
-          singleResult, *(outTable->_localVocab));
+          singleResult, outTable->localVocabNonConst());
     } else {
       // This should never happen since aggregates always return constants.
       AD_FAIL();
@@ -225,7 +225,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
 
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), columnMap, inTable->_idTable,
-      getExecutionContext()->getAllocator(), *outTable->_localVocab);
+      getExecutionContext()->getAllocator(), outTable->localVocabNonConst());
 
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
     result.emplace_back();
@@ -285,15 +285,14 @@ void GroupBy::computeResult(ResultTable* result) {
   std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
   LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
 
-  // Make a copy of the local vocab from the sub-result and then add to it (in
-  // case GROUP_CONCAT adds something).
+  // Make a deep copy of the local vocab from `subresult` and then add to it (in
+  // case GROUP_CONCAT adds a new word or words).
   //
-  // NOTE: If we did `result->_localVocab = subresult->_localVocab` here, only a
-  // shared pointer would be copied. The the additions made in this operation
-  // would also affect the `subresult`, which leads to all kinds of unexpected
-  // behavior.
-  result->_localVocab =
-      std::make_shared<LocalVocab>(subresult->_localVocab->clone());
+  // TODO: In most GROUP BY operations, nothing is added to the local
+  // vocabulary, so it would be more efficient to first share the pointer here
+  // (like with `shareLocalVocabFrom`) and only copy it when a new word is about
+  // to be added. Same for BIND.
+  result->getCopyOfLocalVocabFrom(*subresult);
 
   std::vector<size_t> groupByColumns;
 

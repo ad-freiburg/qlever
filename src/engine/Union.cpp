@@ -166,11 +166,11 @@ void Union::computeResult(ResultTable* result) {
                   &Union::computeUnion, this, &result->_idTable,
                   subRes1->_idTable, subRes2->_idTable, _columnOrigins);
 
-  // If only one of the two operands has a local vocab, pass it on.
-  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
-      subRes1->_localVocab, subRes2->_localVocab);
+  // If only one of the two operands has a non-empty local vocabulary, share
+  // with that one (otherwise, throws an exception).
+  result->shareLocalVocabFromNonEmptyOf(*subRes1, *subRes2);
 
-  LOG(DEBUG) << "Union result computation done." << std::endl;
+  LOG(DEBUG) << "Union result computation done" << std::endl;
 }
 
 template <int LEFT_WIDTH, int RIGHT_WIDTH, int OUT_WIDTH>

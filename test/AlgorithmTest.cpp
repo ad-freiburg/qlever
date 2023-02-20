@@ -1,6 +1,7 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2023, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
 
@@ -10,6 +11,7 @@
 
 using namespace ad_utility;
 
+// _____________________________________________________________________________
 TEST(Algorithm, Contains) {
   std::vector v{1, 42, 5, 3};
   ASSERT_TRUE(
@@ -54,6 +56,7 @@ TEST(Algorithm, Contains) {
   testStringLike.template operator()<std::string_view>();
 }
 
+// _____________________________________________________________________________
 TEST(Algorithm, ContainsIF) {
   std::vector v{1, 3, 42};
   ASSERT_TRUE(contains_if(v, [](const auto& el) { return el > 5; }));
@@ -63,6 +66,7 @@ TEST(Algorithm, ContainsIF) {
   ASSERT_FALSE(contains_if(v, [](const auto& el) { return el < 0; }));
 }
 
+// _____________________________________________________________________________
 TEST(Algorithm, AppendVector) {
   using V = std::vector<std::string>;
   V v{"1", "2", "7"};
@@ -82,6 +86,7 @@ TEST(Algorithm, AppendVector) {
   ASSERT_TRUE(v3[1].empty());
 }
 
+// _____________________________________________________________________________
 TEST(Algorithm, Transform) {
   std::vector<std::string> v{"hi", "bye", "why"};
   auto vCopy = v;
@@ -99,6 +104,7 @@ TEST(Algorithm, Transform) {
   ASSERT_TRUE(std::ranges::all_of(v, &std::string::empty));
 }
 
+// _____________________________________________________________________________
 TEST(Algorithm, Flatten) {
   std::vector<std::vector<std::string>> v{{"hi"}, {"bye", "why"}, {"me"}};
   auto v3 = flatten(std::move(v));
@@ -109,3 +115,20 @@ TEST(Algorithm, Flatten) {
     return std::ranges::all_of(inner, &std::string::empty);
   }));
 }
+
+// _____________________________________________________________________________
+TEST(AlgorithmTest, removeDuplicates) {
+  // Test with ints.
+  ASSERT_EQ(ad_utility::removeDuplicates(std::vector<int>{4, 6, 6, 2, 2, 4, 2}),
+            (std::vector<int>{4, 6, 2}));
+  // Test with strings.
+  std::string s1 = "four";
+  std::string s2 = "six";
+  std::string s3 = "abcdefghijklmnopqrstuvwxzy";
+  ASSERT_EQ(ad_utility::removeDuplicates(
+                std::vector<std::string>{s1, s2, s1, s1, s3, s1, s3}),
+            (std::vector<std::string>{s1, s2, s3}));
+  // Test with empty input.
+  ASSERT_EQ(ad_utility::removeDuplicates(std::vector<int>{}),
+            (std::vector<int>{}));
+};

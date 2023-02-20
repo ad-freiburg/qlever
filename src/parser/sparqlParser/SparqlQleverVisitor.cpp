@@ -695,10 +695,6 @@ uint64_t Visitor::visit(Parser::TextLimitClauseContext* ctx) {
 SparqlValues Visitor::visit(Parser::InlineDataOneVarContext* ctx) {
   SparqlValues values;
   values._variables.push_back(visit(ctx->var()));
-  if (ctx->dataBlockValue().empty())
-    reportError(ctx,
-                "No values were specified in Values "
-                "clause. This is not supported by QLever.");
   for (auto& dataBlockValue : ctx->dataBlockValue()) {
     values._values.push_back({visit(dataBlockValue)});
   }
@@ -708,14 +704,6 @@ SparqlValues Visitor::visit(Parser::InlineDataOneVarContext* ctx) {
 // ____________________________________________________________________________________
 SparqlValues Visitor::visit(Parser::InlineDataFullContext* ctx) {
   SparqlValues values;
-  if (ctx->dataBlockSingle().empty())
-    reportError(ctx,
-                "No values were specified in Values "
-                "clause. This is not supported by QLever.");
-  if (ctx->NIL())
-    reportError(ctx,
-                "No variables were specified in Values "
-                "clause. This is not supported by QLever.");
   values._variables = visitVector(ctx->var());
   values._values = visitVector(ctx->dataBlockSingle());
   if (std::any_of(values._values.begin(), values._values.end(),
@@ -732,7 +720,7 @@ SparqlValues Visitor::visit(Parser::InlineDataFullContext* ctx) {
 // ____________________________________________________________________________________
 vector<TripleComponent> Visitor::visit(Parser::DataBlockSingleContext* ctx) {
   if (ctx->NIL()) {
-    reportNotSupported(ctx, "Empty VALUES clauses are");
+    return {};
   }
   return visitVector(ctx->dataBlockValue());
 }
@@ -749,13 +737,12 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
     return std::visit(
         [](auto intOrDouble) { return TripleComponent{intOrDouble}; },
         visit(ctx->numericLiteral()));
-  } else if (ctx->booleanLiteral()) {
-    // TODO implement
-    reportError(ctx, "Booleans in values clauses are not supported.");
+  } else if (ctx->UNDEF()) {
+    return TripleComponent::UNDEF{};
   } else {
-    AD_CORRECTNESS_CHECK(ctx->UNDEF());
-    // TODO implement
-    reportError(ctx, "UNDEF in values clauses is not supported.");
+    // TODO implement.
+    AD_CORRECTNESS_CHECK(ctx->booleanLiteral());
+    reportError(ctx, "Booleans in VALUES clauses are not supported");
   }
 }
 

@@ -566,17 +566,20 @@ TEST(SparqlParser, DataBlock) {
   expectDataBlock("?test { \"foo\" }",
                   m::Values({Var{"?test"}}, {{"\"foo\""}}));
   expectDataBlock("?test { 10.0 }", m::Values({Var{"?test"}}, {{10.0}}));
-  // Booleans and UNDEF are not yet parsed as `dataBlockValue`.
+  expectDataBlock("?test { UNDEF }",
+                  m::Values({Var{"?test"}}, {{TripleComponent::UNDEF{}}}));
+  // Booleans are not yet parsed as `dataBlockValue`.
   // (numericLiteral/booleanLiteral)
   // TODO<joka921/qup42> implement.
   expectDataBlockFails("?test { true }");
-  expectDataBlockFails("?test { UNDEF }");
   expectDataBlock(R"(?foo { "baz" "bar" })",
                   m::Values({Var{"?foo"}}, {{"\"baz\""}, {"\"bar\""}}));
-  // TODO<joka921/qup42> implement.
-  expectDataBlockFails(R"(( ) { })");
-  expectDataBlockFails(R"(?foo { })");
-  expectDataBlockFails(R"(( ?foo ) { })");
+  // TODO: Is this semantics correct?
+  expectDataBlock(R"(( ) { ( ) })", m::Values({}, {{}}));
+  expectDataBlock(R"(( ) { })", m::Values({}, {}));
+  expectDataBlockFails("?test { ( ) }");
+  expectDataBlock(R"(?foo { })", m::Values({Var{"?foo"}}, {}));
+  expectDataBlock(R"(( ?foo ) { })", m::Values({Var{"?foo"}}, {}));
   expectDataBlockFails(R"(( ?foo ?bar ) { (<foo>) (<bar>) })");
   expectDataBlock(R"(( ?foo ?bar ) { (<foo> <bar>) })",
                   m::Values({Var{"?foo"}, Var{"?bar"}}, {{"<foo>", "<bar>"}}));

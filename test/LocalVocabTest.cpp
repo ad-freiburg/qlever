@@ -119,11 +119,9 @@ TEST(LocalVocab, clone) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, propagation) {
-  // Query execution context (with small test index) and allocator for testing,
-  // see `IndexTestHelpers.h`.
+  // Query execution context (with small test index), see `IndexTestHelpers.h`.
   using ad_utility::AllocatorWithLimit;
   QueryExecutionContext* testQec = ad_utility::testing::getQec();
-  AllocatorWithLimit<Id> testAllocator = ad_utility::testing::makeAllocator();
 
   // Lambda that checks the contents of the local vocabulary after the specified
   // operation.
@@ -136,9 +134,9 @@ TEST(LocalVocab, propagation) {
     ASSERT_TRUE(resultTable)
         << "Operation: " << operation.getDescriptor() << std::endl;
     std::vector<std::string> localVocabWords;
-    for (size_t i = 0; i < resultTable->_localVocab->size(); ++i) {
+    for (size_t i = 0; i < resultTable->localVocab().size(); ++i) {
       localVocabWords.emplace_back(
-          resultTable->_localVocab->getWord(LocalVocabIndex::make(i)));
+          resultTable->localVocab().getWord(LocalVocabIndex::make(i)));
     }
     ASSERT_EQ(localVocabWords, expectedWords)
         << "Operation: " << operation.getDescriptor() << std::endl;
@@ -159,20 +157,27 @@ TEST(LocalVocab, propagation) {
 
   // VALUES operation with two variables and two rows. Adds four new literals.
   //
-  // Note: For literals, the quotes are part of the name, so if we wanted the
+  // Note 1: It is important to pass a copy of `values1` (and `values2` below)
+  // to `checkLocalVocab` because when the operation is executed, the parsed
+  // values are moved out by `Values::writeValues` and would then no longer be
+  // there in the subsequent uses of `values1` and `values2` if it were not
+  // copied.
+  //
+  // Note 2: For literals, the quotes are part of the name, so if we wanted the
   // literal "x", we would have to write TripleComponent{"\"x\""}. For the
   // purposes of this test, we just want something that's not yet in the index,
   // so "x" etc. is just fine (and also different from the "<x>" below).
-  //
   Values values1(testQec, {{Variable{"?x"}, Variable{"?y"}},
                            {{TripleComponent{"x"}, TripleComponent{"y1"}},
                             {TripleComponent{"x"}, TripleComponent{"y2"}}}});
-  checkLocalVocab(values1, std::vector<std::string>{"x", "y1", "y2"});
+  Values values1copy = values1;
+  checkLocalVocab(values1copy, std::vector<std::string>{"x", "y1", "y2"});
 
   // VALUES operation that uses an existing literal (from the test index).
   Values values2(testQec, {{Variable{"?x"}, Variable{"?y"}},
                            {{TripleComponent{"<x>"}, TripleComponent{"<y>"}}}});
-  checkLocalVocab(values2, std::vector<std::string>{});
+  Values values2copy = values2;
+  checkLocalVocab(values2copy, std::vector<std::string>{});
 
   // JOIN operation with exactly one non-empty local vocab and with two
   // non-empty local vocabs (the last two arguments are the two join columns).
