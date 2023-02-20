@@ -22,14 +22,24 @@
  *  returned.
  * @param joinColumn The joinColumn of the IdTable, that is to be returned.
  * @param joinColumnLowerBound, joinColumnUpperBound The range of the entries
- *  in the join column.
+ *  in the join column, definied as
+ *  [joinColumnLowerBound, joinColumnUpperBound].
 */
 IdTable createRandomlyFilledIdTable(const size_t numberRows,
     const size_t numberColumns, const size_t joinColumn,
     const size_t joinColumnLowerBound, const size_t joinColumnUpperBound) {
+  // Entries in IdTables have a max size.
+  constexpr size_t maxIdSize =static_cast<size_t>(1ull << 59) ;
+
+  // Is the lower bound smaller, or equal, to the upper bound?
+  AD_CHECK(joinColumnLowerBound <= joinColumnUpperBound);
+  // Is the upper bound smaller, or equal, to the maximum size of an IdTable
+  // entry?
+  AD_CHECK(joinColumnUpperBound <= maxIdSize);
+
   // The random number generators for normal entries and join column entries.
   // Both can be found in util/Random.h
-  SlowRandomIntGenerator<size_t> normalEntryGenerator(0, static_cast<size_t>(1ull << 59)); // Entries in IdTables have a max size.
+  SlowRandomIntGenerator<size_t> normalEntryGenerator(0, maxIdSize); // Entries in IdTables have a max size.
   SlowRandomIntGenerator<size_t> joinColumnEntryGenerator(joinColumnLowerBound, joinColumnUpperBound);
   
   // There is a help function for creating IdTables by giving a vector of

@@ -136,22 +136,21 @@ concept isFloatVector = std::is_same<T, std::vector<float>>::value;
 template<typename T, typename... objects>
 concept areAllTheSameType = (std::is_same<T, objects>::value && ...);
 
-template<typename T, typename... objects>
-concept onlyFirstIsVector = isSizeTVector<T> &&
-  areAllTheSameType<size_t, objects...>;
+template<typename vectorContent, typename T, typename... objects>
+concept onlyFirstIsVector = std::is_same<T, std::vector<vectorContent>>::value
+  && areAllTheSameType<vectorContent, objects...>;
 
 /*
  * @brief Create a benchmark table for join algorithm, with the given
  *  parameters for the IdTables. The columns will be the algorithm and the
  *  rows will be the parameter, you gave a list for.
  *
- * @tparam TF Must be a float, or a std::vector<float>. Can only be a vector
- *  , if all other template parameter are not vectors. Type inference should
- *  be able to handle it, if you give the right function arguments.
- * @tparam T1, T2, T3, T4 If TF is a float, exactly on of those muste be a
- *  std::vector<size_t> and all others must be size_t. If TF is a vector,
- *  all of them must be a size_t. Typ inference should be able to handle it,
- *  if you give the right function arguments.
+ * @tparam TF, T5, T6 Must be a float, or a std::vector<float>. Can only be a
+ *  vector, if all other template parameter are not vectors. Type inference
+ *  should be able to handle it, if you give the right function arguments.
+ * @tparam T1, T2, T3, T4 Must be a size_t, or a std::vector<size_t>. Can only
+ *  be a vector, if all other template parameter are not vectors. Type inference
+ *  should be able to handle it, if you give the right function arguments.
  *
  * @param records The BenchmarkRecords, in which you want to create a new
  *  benchmark table.
@@ -169,16 +168,45 @@ concept onlyFirstIsVector = isSizeTVector<T> &&
  * @param smallerTableAmountRows How many rows should the smaller table have?
  * @param smallerTableAmountColumns, biggerTableAmountColumns How many columns
  *  should the bigger/smaller tables have?
+ * @param smallerTableJoinColumnSampleSizeRatio,
+ *  biggerTableJoinColumnSampleSizeRatio The join column of the tables normally
+ *  get random entries out of a sample size with the same amount of possible
+ *  numbers as there are rows in the table. (With every number having the same
+ *  chance to be picked.) This adjusts the number of elements in the sample
+ *  size to `Amount of rows * ratio`, which affects the possibility of
+ *  duplicates. Important: `Amount of rows * ratio` must be a natural number.
  */
-template<typename T1, typename T2, typename T3, typename T4, typename TF>
-requires ((onlyFirstIsVector<T1, T2, T3, T4> || onlyFirstIsVector<T2, T1, T3, T4>
-  || onlyFirstIsVector<T3, T2, T1, T4> || onlyFirstIsVector<T4, T2, T3, T1> )
-  && std::is_same<TF, float>::value) || (isFloatVector<TF> &&
+template<typename T1, typename T2, typename T3, typename T4,
+  typename TF, typename T5 = float, typename T6 = float>
+requires ((onlyFirstIsVector<size_t, T1, T2, T3, T4> ||
+      onlyFirstIsVector<size_t, T2, T1, T3, T4> ||
+      onlyFirstIsVector<size_t, T3, T2, T1, T4> ||
+      onlyFirstIsVector<size_t, T4, T2, T3, T1>) &&
+    areAllTheSameType<float, TF, T5, T6>) ||
+  ((onlyFirstIsVector<float, TF, T5, T6> ||
+    onlyFirstIsVector<float, T5, TF, T6> ||
+    onlyFirstIsVector<float, T6, T5, TF>) &&
     areAllTheSameType<size_t, T1, T2, T3, T4>)
 void makeBenchmarkTable(BenchmarkRecords* records, const TF& overlap,
     const bool smallerTableSorted, const bool biggerTableSorted, const T1& ratioRows,
     const T2& smallerTableAmountRows, const T3& smallerTableAmountColumns,
-    const T4& biggerTableAmountColumns) {
+    const T4& biggerTableAmountColumns,
+    const T5& smallerTableJoinColumnSampleSizeRatio = 1.0,
+    const T6& biggerTableJoinColumnSampleSizeRatio = 1.0) {
+  // Checking, if smallerTableJoinColumnSampleSizeRatio and
+  // biggerTableJoinColumnSampleSizeRatio are floats bigger than 0. Otherwise
+  // , they don't make sense.
+  auto biggerThanZero = []<typename T>(const T& object){
+    if constexpr(std::is_same<T, std::vector<float>>::value) {
+      std::ranges::for_each(object, [](float number){AD_CHECK(number > 0);}, {});
+    }else{
+      // Object must be a float.
+      AD_CHECK(object > 0);
+    }
+  };
+  biggerThanZero(smallerTableJoinColumnSampleSizeRatio);
+  biggerThanZero(biggerTableJoinColumnSampleSizeRatio);
+
   /*
    * For converting of the template parameter argument to string at runtime.
    * We don't know, which one of the template parameter is a vector, and
@@ -216,12 +244,16 @@ void makeBenchmarkTable(BenchmarkRecords* records, const TF& overlap,
     "overlap betwenn " << (smallerTableSorted ? "" : "not ") <<
     "sorted smaller table, with " <<
     templateParameterArgumentToString(smallerTableAmountRows) <<
-    " rows and " << templateParameterArgumentToString(smallerTableAmountColumns)
-    << " columns, and " << (biggerTableSorted ? "" : "not ") <<
+    " rows, " << templateParameterArgumentToString(smallerTableAmountColumns)
+    << " columns and " <<
+    templateParameterArgumentToString(smallerTableJoinColumnSampleSizeRatio) <<
+    " sample size ratio, and " << (biggerTableSorted ? "" : "not ") <<
     "sorted bigger table, with " <<
     templateParameterArgumentToString(biggerTableAmountColumns) <<
-    " columns and " << templateParameterArgumentToString(smallerTableAmountRows)
-    << " * " << templateParameterArgumentToString(ratioRows) << " rows.";
+    " columns , " << templateParameterArgumentToString(smallerTableAmountRows)
+    << " * " << templateParameterArgumentToString(ratioRows) << " rows and "
+    << templateParameterArgumentToString(biggerTableJoinColumnSampleSizeRatio)
+    << " sample size ratio.";
 
   // The lambdas for the join algorithms.
   auto hashJoinLambda = makeHashJoinLambda();
@@ -247,15 +279,34 @@ void makeBenchmarkTable(BenchmarkRecords* records, const TF& overlap,
   auto replaceIdTables = [&smallerTableSorted, &biggerTableSorted,
        &smallerTable, &biggerTable](float overlap,
            size_t smallerTableAmountRows,
-           size_t smallerTableAmountColumns, size_t ratioRows,
-           size_t biggerTableAmountColumns){
+           size_t smallerTableAmountColumns,
+           float smallerTableJoinColumnSampleSizeRatio, size_t ratioRows,
+           size_t biggerTableAmountColumns,
+           float biggerTableJoinColumnSampleSizeRatio){
+         // For easier use, we only calculate the boundaries for the random
+         // join column entry generators once.
+         // Reminder: The $-1$ in the upper bounds is, because a range [a, b]
+         // of natural numbers has $b - a + 1$ elements.
+         const size_t smallerTableJoinColumnLowerBound = 0;
+         const size_t smallerTableJoinColumnUpperBound = (smallerTableAmountRows
+           * smallerTableJoinColumnSampleSizeRatio) - 1;
+         const size_t biggerTableJoinColumnLowerBound =
+           smallerTableJoinColumnUpperBound + 1;
+         const size_t biggerTableJoinColumnUpperBound =
+           biggerTableJoinColumnLowerBound + (smallerTableAmountRows *
+               ratioRows * biggerTableJoinColumnSampleSizeRatio) - 1;
+
          // Replacing the old id tables with newly generated ones, based
          // on specification.
          smallerTable.idTable = createRandomlyFilledIdTable(
-             smallerTableAmountRows, smallerTableAmountColumns, 0, 0, 500);
+             smallerTableAmountRows, smallerTableAmountColumns, 0,
+             smallerTableJoinColumnLowerBound, smallerTableJoinColumnUpperBound);
+         // We want the tables to have no overlap at this stage, so we have to
+         // move the bounds of the entries for the join column a bit, to make
+         // sure.
          biggerTable.idTable = createRandomlyFilledIdTable(
-             smallerTableAmountRows * ratioRows, biggerTableAmountColumns,
-             0, 501, 1'000'000'000);
+             smallerTableAmountRows * ratioRows, biggerTableAmountColumns, 0, 
+             biggerTableJoinColumnLowerBound, biggerTableJoinColumnUpperBound);
 
          // Creating overlap, if wanted.
          if (overlap > 0) {
@@ -308,40 +359,62 @@ void makeBenchmarkTable(BenchmarkRecords* records, const TF& overlap,
     createBenchmarkTable(ratioRows);
     for (const size_t& ratioRow : ratioRows) {
       replaceIdTables(overlap, smallerTableAmountRows,
-          smallerTableAmountColumns,
-          ratioRow, biggerTableAmountColumns);
+          smallerTableAmountColumns, smallerTableJoinColumnSampleSizeRatio,
+          ratioRow, biggerTableAmountColumns,
+          biggerTableJoinColumnSampleSizeRatio);
       addNextRowToBenchmarkTable();
     }
   } else if constexpr (std::is_same<T2, std::vector<size_t>>::value){
     createBenchmarkTable(smallerTableAmountRows);
     for (const size_t& smallerTableAmountRow : smallerTableAmountRows) {
       replaceIdTables(overlap, smallerTableAmountRow,
-          smallerTableAmountColumns,
-          ratioRows, biggerTableAmountColumns);
+          smallerTableAmountColumns, smallerTableJoinColumnSampleSizeRatio,
+          ratioRows, biggerTableAmountColumns,
+          biggerTableJoinColumnSampleSizeRatio);
       addNextRowToBenchmarkTable();
     }
   } else if constexpr (std::is_same<T3, std::vector<size_t>>::value){
     createBenchmarkTable(smallerTableAmountColumns);
     for (const size_t& smallerTableAmountColumn : smallerTableAmountColumns) {
       replaceIdTables(overlap, smallerTableAmountRows,
-          smallerTableAmountColumn,
-          ratioRows, biggerTableAmountColumns);
+          smallerTableAmountColumn, smallerTableJoinColumnSampleSizeRatio,
+          ratioRows, biggerTableAmountColumns,
+          biggerTableJoinColumnSampleSizeRatio);
       addNextRowToBenchmarkTable();
     }
   } else if constexpr (std::is_same<T4, std::vector<size_t>>::value){
     createBenchmarkTable(biggerTableAmountColumns);
     for (const size_t& biggerTableAmountColumn : biggerTableAmountColumns) {
       replaceIdTables(overlap, smallerTableAmountRows,
-          smallerTableAmountColumns,
-          ratioRows, biggerTableAmountColumn);
+          smallerTableAmountColumns, smallerTableJoinColumnSampleSizeRatio,
+          ratioRows, biggerTableAmountColumn,
+          biggerTableJoinColumnSampleSizeRatio);
       addNextRowToBenchmarkTable();
     }
-  } else {
+  } else if constexpr (std::is_same<T4, std::vector<float>>::value){
     createBenchmarkTable(overlap);
     for (const size_t& overlapChance : overlap) {
       replaceIdTables(overlapChance, smallerTableAmountRows,
-          smallerTableAmountColumns,
-          ratioRows, biggerTableAmountColumns);
+          smallerTableAmountColumns, smallerTableJoinColumnSampleSizeRatio,
+          ratioRows, biggerTableAmountColumns,
+          biggerTableJoinColumnSampleSizeRatio);
+      addNextRowToBenchmarkTable();
+    }
+  } else if constexpr (std::is_same<T5, std::vector<float>>::value) {
+    createBenchmarkTable(smallerTableJoinColumnSampleSizeRatio);
+    for (const size_t& sampleSizeRatio : smallerTableJoinColumnSampleSizeRatio){
+      replaceIdTables(overlap, smallerTableAmountRows,
+          smallerTableAmountColumns, sampleSizeRatio,
+          ratioRows, biggerTableAmountColumns,
+          biggerTableJoinColumnSampleSizeRatio);
+      addNextRowToBenchmarkTable();
+    }
+  } else if constexpr (std::is_same<T6, std::vector<float>>::value) {
+    createBenchmarkTable(biggerTableJoinColumnSampleSizeRatio);
+    for (const size_t& sampleSizeRatio : biggerTableJoinColumnSampleSizeRatio){
+      replaceIdTables(overlap, smallerTableAmountRows,
+          smallerTableAmountColumns, smallerTableJoinColumnSampleSizeRatio,
+          ratioRows, biggerTableAmountColumns, sampleSizeRatio);
       addNextRowToBenchmarkTable();
     }
   }
