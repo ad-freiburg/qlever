@@ -280,3 +280,5 @@ addLinkAndDiscoverTest(AlgorithmTest)
 addLinkAndDiscoverTest(CompressedRelationsTest index)
 
 addLinkAndDiscoverTest(ExceptionTest)
+
+addLinkAndDiscoverTest(JoinAlgorithmsTest)
