@@ -8,59 +8,92 @@
 #include <cmath>
 #include <cstdint>
 
+#include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/Generator.h"
-#include "engine/idTable/IdTable.h"
 
 namespace ad_utility {
 
-// TODO<joka921> Comment
-// TODO<joka921> We could also implement a version that is optimized on the [begin, end] range not having
-// UNDEF values in some of the columns
-template<typename Row>
-auto findSmallerUndefRangesForRowsWithoutUndef(const auto& row,
-                            auto begin, auto end) ->cppcoro::generator<decltype(begin)> {
+// For a single `row` of IDs that doesn't contain any UNDEF values find all the
+// iterators in the sorted range `[begin, end)` that are lexicographically
+// smaller than `row`, are compatible with `row` (meaning that on each position
+// they have either the same value, or one of them is UNDEF), and contain at
+// least one UNDEF entry. This function runs in `O(2^C * log(N) + R)` where C is
+// the number of columns, N is the size of the range `[begin, end)` and `R` is
+// the number of matching elements.
 
+// Preconditions (all checked via `assert()` macros):
+//   - The `row` must have the same number of entries than the elements in the
+//   range `[begin, end)`
+//   - The range `[begin, end)` must be lexicographically sorted.
+//   - None of the entries of `row` must be `UNDEF`.
+// TODO<joka921> We could also implement a version that is optimized on the
+// [begin, end] range not having UNDEF values in some of the columns
+template <typename Row>
+auto findSmallerUndefRangesForRowsWithoutUndef(const auto& row, auto begin,
+                                               auto end)
+    -> cppcoro::generator<decltype(begin)> {
   assert(row.size() == begin->size());
+  assert(std::ranges::is_sorted(begin, end));
+  assert((std::ranges::all_of(
+      row, [](Id id) { return id != Id::makeUndefined(); })));
   size_t numJoinColumns = row.size();
   // TODO<joka921> This can be done without copying.
   Row rowLower = row;
 
-  size_t upperBound = std::pow(2, row.size());
+  size_t upperBound = 1ul << row.size();
   for (size_t i = 0; i < upperBound - 1; ++i) {
     for (size_t j = 0; j < numJoinColumns; ++j) {
-      rowLower[j] =
-          (i >> (numJoinColumns - j - 1)) & 1 ? row[j] : ValueId::makeUndefined();
+      rowLower[j] = (i >> (numJoinColumns - j - 1)) & 1
+                        ? row[j]
+                        : ValueId::makeUndefined();
     }
 
-    auto [begOfUndef, endOfUndef] = std::equal_range(begin, end, rowLower,
-    std::ranges::lexicographical_compare);
+    auto [begOfUndef, endOfUndef] = std::equal_range(
+        begin, end, rowLower, std::ranges::lexicographical_compare);
     for (; begOfUndef != endOfUndef; ++begOfUndef) {
       co_yield begOfUndef;
     }
   }
 }
 
-template<typename Row>
-auto findSmallerUndefRangesForRowsWithUndefInLastColumns(const auto& row, const size_t numJoinColumns, const size_t numLastUndefined,
-                                               auto begin, auto end) ->cppcoro::generator<decltype(begin)> {
-  assert(numJoinColumns > numLastUndefined);
-  assert(numLastUndefined > 0);
-  // TODO<joka921> This can be done without copying.
+auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
+    const auto& row, const size_t numLastUndefined, auto begin, auto end)
+    -> cppcoro::generator<decltype(begin)> {
+  using Row = typename std::iterator_traits<decltype(begin)>::value_type;
+  const size_t numJoinColumns = row.size();
+  assert(numJoinColumns >= numLastUndefined);
+  const size_t numDefinedColumns = numJoinColumns - numLastUndefined;
+  for (size_t i = 0; i < numDefinedColumns; ++i) {
+    assert(row[i] != Id::makeUndefined());
+  }
+  for (size_t i = numDefinedColumns; i < numJoinColumns; ++i) {
+    assert(row[i] == Id::makeUndefined());
+  }
+
+  // If every entry in the row is undefined, then it is the smallest possible
+  // row, and there can be no smaller row.
+  if (numLastUndefined == 0) {
+    co_return;
+  }
   Row rowLower = row;
 
-  size_t numDefinedColumns = numJoinColumns - numLastUndefined;
-  size_t upperBound = std::pow(2, numDefinedColumns);
-  for (size_t permutationCounter = 0; permutationCounter < upperBound - 1; ++permutationCounter) {
+  size_t upperBound = 1u << numDefinedColumns;
+  for (size_t permutationCounter = 0; permutationCounter < upperBound - 1;
+       ++permutationCounter) {
     for (size_t colIdx = 0; colIdx < numDefinedColumns; ++colIdx) {
       rowLower[colIdx] =
-          (permutationCounter >> colIdx) & 1 ? row[colIdx] : ValueId::makeUndefined();
+          (permutationCounter >> (numDefinedColumns - colIdx - 1)) & 1
+              ? row[colIdx]
+              : ValueId::makeUndefined();
     }
 
-  auto begOfUndef = std::lower_bound(begin, end, rowLower,std::ranges::lexicographical_compare);
-  static_assert(Id::makeUndefined().getBits() == 0);
-  rowLower[numDefinedColumns] = Id::fromBits(1);
-  auto endOfUndef = std::lower_bound(begin, end, rowLower,std::ranges::lexicographical_compare);
+    auto begOfUndef = std::lower_bound(begin, end, rowLower,
+                                       std::ranges::lexicographical_compare);
+    rowLower[numDefinedColumns - 1] =
+        Id::fromBits(rowLower[numDefinedColumns - 1].getBits() + 1);
+    auto endOfUndef = std::lower_bound(begin, end, rowLower,
+                                       std::ranges::lexicographical_compare);
     for (; begOfUndef != endOfUndef; ++begOfUndef) {
       co_yield begOfUndef;
     }
@@ -68,16 +101,18 @@ auto findSmallerUndefRangesForRowsWithUndefInLastColumns(const auto& row, const 
 }
 
 // The (very expensive) general case:
-// The `row` contains UNDEF values in arbitrary positions, and same goes for the range [begin, end].
+// The `row` contains UNDEF values in arbitrary positions, and same goes for the
+// range [begin, end].
 auto findSmallerUndefRanges(const auto& row, const size_t numJoinColumns,
-                            auto begin, auto end) ->cppcoro::generator<decltype(begin)> {
+                            auto begin, auto end)
+    -> cppcoro::generator<decltype(begin)> {
   auto isCompatible = [&](const auto& otherRow) {
-    for (size_t k=0u; k < numJoinColumns; ++k) {
+    for (size_t k = 0u; k < numJoinColumns; ++k) {
       Id a = row[k];
       Id b = otherRow[k];
       bool aUndef = a == Id::makeUndefined();
       bool bUndef = b == Id::makeUndefined();
-      bool eq = a==b;
+      bool eq = a == b;
       auto match = aUndef || bUndef || eq;
       if (!match) {
         return false;
@@ -86,10 +121,10 @@ auto findSmallerUndefRanges(const auto& row, const size_t numJoinColumns,
     return true;
   };
 
-  for (auto it = begin; it!= end; ++it) {
+  for (auto it = begin; it != end; ++it) {
     if (isCompatible(*it)) {
       co_yield it;
-      }
+    }
   }
   co_return;
 }
@@ -98,7 +133,7 @@ template <typename Row>
 auto makeSmallerUndefRanges(const size_t numJoinColumns) {
   return [&](const auto& rowLeft, auto begin, auto end) {
     return ad_utility::findSmallerUndefRanges<Row>(rowLeft, numJoinColumns,
-                                                        begin, end);
+                                                   begin, end);
   };
 }
 
@@ -129,8 +164,9 @@ void addCombinedRowToIdTable(const ROW_A& row1, const ROW_B& row2,
 
   // fill the result
   size_t rIndex = 0;
-  // TODO<joka921> We could possibly implement an optimization for the case where we know that there are no
-  // undefined values in at least one of the inputs, but maybe that doesn't help too much.
+  // TODO<joka921> We could possibly implement an optimization for the case
+  // where we know that there are no undefined values in at least one of the
+  // inputs, but maybe that doesn't help too much.
   for (size_t col = 0; col < numJoinColumns; col++) {
     result(backIdx, rIndex) = mergeWithUndefined(row1[col], row2[col]);
     rIndex++;
@@ -142,15 +178,16 @@ void addCombinedRowToIdTable(const ROW_A& row1, const ROW_B& row2,
   }
 
   for (size_t col = numJoinColumns; col < row2.numColumns(); col++) {
-      result(backIdx, rIndex) = row2[col];
-      rIndex++;
+    result(backIdx, rIndex) = row2[col];
+    rIndex++;
   }
 }
 
 auto makeCombineRows(const size_t numJoinColumns, auto& result) {
-  auto combineRows = [numJoinColumns, &result](
-                         const auto& row1, const auto& row2) {
-    return ad_utility::addCombinedRowToIdTable(row1, row2, numJoinColumns, &result);
+  auto combineRows = [numJoinColumns, &result](const auto& row1,
+                                               const auto& row2) {
+    return ad_utility::addCombinedRowToIdTable(row1, row2, numJoinColumns,
+                                               &result);
   };
   return combineRows;
 }
@@ -159,9 +196,8 @@ auto makeCombineRows(const size_t numJoinColumns, auto& result) {
 // TODO<joka921> Comment, cleanup, move into header.
 template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
 void zipperJoinWithUndef(
-    Range&& range1, Range&& range2, auto&& lessThan,
-    auto&& compatibleRowAction, auto&& findSmallerUndefRangesLeft,
-    auto&& findSmallerUndefRangesRight,
+    Range&& range1, Range&& range2, auto&& lessThan, auto&& compatibleRowAction,
+    auto&& findSmallerUndefRangesLeft, auto&& findSmallerUndefRangesRight,
     ElFromFirstNotFoundAction elFromFirstNotFoundAction = {}) {
   auto it1 = range1.begin();
   auto end1 = range1.end();
@@ -169,42 +205,41 @@ void zipperJoinWithUndef(
   auto end2 = range2.end();
 
   std::vector<bool> coveredFromLeft(end1 - it1);
-  auto cover = [&](auto it) {
-    coveredFromLeft[it - range1.begin()] = true;
-  };
+  auto cover = [&](auto it) { coveredFromLeft[it - range1.begin()] = true; };
 
-  auto makeMergeWithUndefLeft = [&cover, &compatibleRowAction] < bool reversed> (const auto& lt,
-                                                       const auto& findUndef) {
+  auto makeMergeWithUndefLeft = [&cover, &compatibleRowAction]<bool reversed>(
+                                    const auto& lt, const auto& findUndef) {
     return [&cover, &lt, &findUndef, &compatibleRowAction](
                const auto& el, auto startOfRange, auto endOfRange) {
-      (void) cover;
+      (void)cover;
       bool compatibleWasFound = false;
       auto smallerUndefRanges = findUndef(el, startOfRange, endOfRange);
-      //std::cout << "merging with undef ranges" << '\n';
+      // std::cout << "merging with undef ranges" << '\n';
       for (const auto& it : smallerUndefRanges) {
-          if (lt(*it, el)) {
-            compatibleWasFound = true;
-            if constexpr (reversed) {
-              compatibleRowAction(el, *it);
-            } else {
-              compatibleRowAction(el, *it);
-              cover(it);
-            }
+        if (lt(*it, el)) {
+          compatibleWasFound = true;
+          if constexpr (reversed) {
+            compatibleRowAction(el, *it);
+          } else {
+            compatibleRowAction(el, *it);
+            cover(it);
           }
         }
+      }
       return compatibleWasFound;
     };
   };
   auto mergeWithUndefLeft = makeMergeWithUndefLeft.template operator()<false>(
       lessThan, findSmallerUndefRangesLeft);
-  auto mergeWithUndefRight =
-      makeMergeWithUndefLeft.template operator()<true>(lessThan, findSmallerUndefRangesRight);
+  auto mergeWithUndefRight = makeMergeWithUndefLeft.template operator()<true>(
+      lessThan, findSmallerUndefRangesRight);
 
   [&]() {
     while (it1 < end1 && it2 < end2) {
       while (lessThan(*it1, *it2)) {
         if (!mergeWithUndefRight(*it1, range2.begin(), it2)) {
-          if (std::ranges::none_of(*it1, [](Id id){return id == Id::makeUndefined();})) {
+          if (std::ranges::none_of(
+                  *it1, [](Id id) { return id == Id::makeUndefined(); })) {
             cover(it1);
             elFromFirstNotFoundAction(*it1);
           }
@@ -224,7 +259,8 @@ void zipperJoinWithUndef(
         }
       }
 
-      // TODO <joka921> Maybe we can pass in the equality operator for increased performance.
+      // TODO <joka921> Maybe we can pass in the equality operator for increased
+      // performance.
       auto eq = [&lessThan](const auto& el1, const auto& el2) {
         return !lessThan(el1, el2) && !lessThan(el2, el1);
       };
@@ -251,15 +287,17 @@ void zipperJoinWithUndef(
     }
   }();
 
-  std::for_each(it2, end2,
-                [&](const auto& row) {
-                  mergeWithUndefLeft(row, range1.begin(), range1.end());});
+  std::for_each(it2, end2, [&](const auto& row) {
+    mergeWithUndefLeft(row, range1.begin(), range1.end());
+  });
 
   for (; it1 < end1; ++it1) {
     cover(it1);
     if (!mergeWithUndefRight(*it1, range2.begin(), range2.end())) {
-      elFromFirstNotFoundAction(*it1); } else {
-    }}
+      elFromFirstNotFoundAction(*it1);
+    } else {
+    }
+  }
 
   // TODO<joka921> These will be out of order;
   for (size_t i = 0; i < coveredFromLeft.size(); ++i) {

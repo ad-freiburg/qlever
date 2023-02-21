@@ -32,7 +32,7 @@ namespace {
 auto V = VocabId;
 constexpr auto U = Id::makeUndefined();
 using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
-}
+}  // namespace
 
 TEST(EngineTest, distinctTest) {
   IdTable inp{makeIdTableFromVector(
@@ -49,10 +49,11 @@ TEST(EngineTest, distinctTest) {
   ASSERT_EQ(expectedResult, result);
 }
 
-void testOptionalJoin(const IdTable& inputA, const IdTable& inputB, JoinColumns jcls, const IdTable& expectedResult) {
-
+void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
+                      JoinColumns jcls, const IdTable& expectedResult) {
   // TODO<joka921> Let this use the proper constructor of OptionalJoin.
-  IdTable result{inputA.numColumns() + inputB.numColumns() - jcls.size(), makeAllocator()};
+  IdTable result{inputA.numColumns() + inputB.numColumns() - jcls.size(),
+                 makeAllocator()};
   // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
   // a have to equal those of column 2 of b and vice versa).
   int aWidth{static_cast<int>(inputA.numColumns())};
@@ -63,7 +64,8 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB, JoinColumns 
   ASSERT_EQ(expectedResult, result);
 }
 
-// TODO<joka921> This function already exists in another PR in a better version, merge them.
+// TODO<joka921> This function already exists in another PR in a better version,
+// merge them.
 IdTable makeTable(const std::vector<std::vector<Id>>& input) {
   size_t numCols = input[0].size();
   IdTable table{numCols, makeAllocator()};
@@ -77,8 +79,10 @@ IdTable makeTable(const std::vector<std::vector<Id>>& input) {
   return table;
 }
 
-// TODO<joka921> This function already exists in another PR in a better version, merge them.
-IdTable makeTableV(const std::vector<std::vector<std::variant<Id, int>>>& input) {
+// TODO<joka921> This function already exists in another PR in a better version,
+// merge them.
+IdTable makeTableV(
+    const std::vector<std::vector<std::variant<Id, int>>>& input) {
   size_t numCols = input[0].size();
   IdTable table{numCols, makeAllocator()};
   table.reserve(input.size());
@@ -95,7 +99,6 @@ IdTable makeTableV(const std::vector<std::vector<std::variant<Id, int>>>& input)
   return table;
 }
 
-
 TEST(OptionalJoin, singleColumnRightIsEmpty) {
   auto a = makeTableV({{U}, {2}, {3}});
   IdTable b(1, makeAllocator());
@@ -110,7 +113,7 @@ TEST(OptionalJoin, singleColumnLeftIsEmpty) {
 }
 
 TEST(OptionalJoin, singleColumnPreexistingNulloptsLeft) {
-  auto a = makeTableV({{U}, {U}, {2}, {3}, {4} });
+  auto a = makeTableV({{U}, {U}, {2}, {3}, {4}});
   auto b = makeTableV({{3}, {5}});
   auto expected = makeTableV({{2}, {3}, {3}, {3}, {4}, {5}, {5}});
   testOptionalJoin(a, b, {{0, 0}}, expected);
@@ -118,27 +121,37 @@ TEST(OptionalJoin, singleColumnPreexistingNulloptsLeft) {
 
 TEST(OptionalJoin, singleColumnPreexistingNulloptsRight) {
   auto a = makeTableV({{0}, {3}, {5}});
-  auto b = makeTableV({{U}, {U}, {2}, {3}, {4} });
+  auto b = makeTableV({{U}, {U}, {2}, {3}, {4}});
   auto expected = makeTableV({{0}, {0}, {3}, {3}, {3}, {5}, {5}});
   testOptionalJoin(a, b, {{0, 0}}, expected);
 }
 
 TEST(OptionalJoin, singleColumnPreexistingNulloptsBoth) {
-  auto a = makeTableV({{U}, {U} , {0}, {3}, {3}, {5}, {6}});
-  auto b = makeTableV({{U},  {2}, {3}, {5} });
-  auto expected = makeTableV({{U}, {U}, {0}, {2}, {2}, {3}, {3}, {3}, {3}, {3}, {3}, {5}, {5}, {5}, {5}, {6}} );
+  auto a = makeTableV({{U}, {U}, {0}, {3}, {3}, {5}, {6}});
+  auto b = makeTableV({{U}, {2}, {3}, {5}});
+  auto expected = makeTableV({{U},
+                              {U},
+                              {0},
+                              {2},
+                              {2},
+                              {3},
+                              {3},
+                              {3},
+                              {3},
+                              {3},
+                              {3},
+                              {5},
+                              {5},
+                              {5},
+                              {5},
+                              {6}});
   testOptionalJoin(a, b, {{0, 0}}, expected);
 }
 
 TEST(OptionalJoin, twoColumnsPreexistingUndefLeft) {
   {
-    auto a = makeTableV({{U, U},
-                         {U, 3},
-                         {3, U},
-                         {3, U}
-                         });
-    auto b =
-        makeTableV({{3, 3}});
+    auto a = makeTableV({{U, U}, {U, 3}, {3, U}, {3, U}});
+    auto b = makeTableV({{3, 3}});
     auto expected = makeTableV({{3, 3}, {3, 3}, {3, 3}, {3, 3}});
     testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
   }
@@ -154,27 +167,14 @@ TEST(OptionalJoin, twoColumnsPreexistingUndefLeft) {
                          {3, 7},
                          {4, U},
                          {5, 2},
-                         {6, U}, {18, U}});
+                         {6, U},
+                         {18, U}});
     auto b =
         makeTableV({{0, 0}, {0, 1}, {0, 1}, {3, 3}, {5, 2}, {6, 12}, {20, 3}});
-    auto expected = makeTableV({{0, 0},
-                                {0, 1},
-                                {0, 1},
-                                {0, 1},
-                                {0, 1},
-                                {3, 3},
-                                {3, 3},
-                                {3, 3},
-                                {3, 3},
-                                {3, 7},
-                                {5, 2},
-                                {5, 2},
-                                {5, 2},
-                                {6, 12},
-                                {6, 12},
-                                {20, 3},
-                                {20, 3},
-                                {U, 123}, {4, U}, {18, U}});
+    auto expected = makeTableV({{0, 0},  {0, 1},  {0, 1},   {0, 1},  {0, 1},
+                                {3, 3},  {3, 3},  {3, 3},   {3, 3},  {3, 7},
+                                {5, 2},  {5, 2},  {5, 2},   {6, 12}, {6, 12},
+                                {20, 3}, {20, 3}, {U, 123}, {4, U},  {18, U}});
     testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
   }
 }
@@ -193,7 +193,8 @@ TEST(OptionalJoin, twoColumnsPreexistingUndefRight) {
                          {3, 7},
                          {4, U},
                          {5, 2},
-                         {6, U}, {18, U}});
+                         {6, U},
+                         {18, U}});
     auto expected = makeTableV({{0, 0},
                                 {0, 1},
                                 {0, 1},
@@ -217,41 +218,19 @@ TEST(OptionalJoin, twoColumnsPreexistingUndefRight) {
 
 TEST(OptionalJoin, twoColumnsPreexistingUndefBoth) {
   {
-    auto a =
-        makeTableV({{12, U} });
-    auto b = makeTableV({{U, U},
-                         {U, 3},
-                         {U, 123}});
-    auto expected = makeTableV({
-                                {12, U},
-                                {12, 3},
-                                {12, 123}});
+    auto a = makeTableV({{12, U}});
+    auto b = makeTableV({{U, U}, {U, 3}, {U, 123}});
+    auto expected = makeTableV({{12, U}, {12, 3}, {12, 123}});
 
     testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
   }
   /*
   {
     auto a =
-        makeTableV({{0, 0}, {0, 1}, {0, 1}, {3, 3}, {5, U}, {6, 12}, {12, U}, {20, 3}});
-    auto b = makeTableV({{U, U},
-                         {U, 2},
-                         {U, 3},
-                         {U, 123},
-                         {0, 1},
-                         {3, U},
-                         {3, U},
-                         {3, 7},
-                         {4, U},
-                         {5, 2},
-                         {6, U}, {18, U}});
-    auto expected = makeTableV({{0, 0},
-                                {0, 1},
-                                {0, 1},
-                                {0, 1},
-                                {0, 1},
-                                {3, 3},
-                                {3, 3},
-                                {3, 3},
+        makeTableV({{0, 0}, {0, 1}, {0, 1}, {3, 3}, {5, U}, {6, 12}, {12, U},
+  {20, 3}}); auto b = makeTableV({{U, U}, {U, 2}, {U, 3}, {U, 123}, {0, 1}, {3,
+  U}, {3, U}, {3, 7}, {4, U}, {5, 2}, {6, U}, {18, U}}); auto expected =
+  makeTableV({{0, 0}, {0, 1}, {0, 1}, {0, 1}, {0, 1}, {3, 3}, {3, 3}, {3, 3},
                                 {3, 3},
                                 {5, U},
                                 {5, 2},
@@ -302,4 +281,3 @@ TEST(OptionalJoin, multipleColumnsNoUndef) {
     testOptionalJoin(va, vb, jcls, expectedResult);
   }
 }
-
