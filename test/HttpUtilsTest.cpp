@@ -31,6 +31,12 @@ TEST(HttpUtils, Url) {
   check("https://host.name", HTTPS, "host.name", "443", "/");
   check("https://host.name:442", HTTPS, "host.name", "442", "/");
 
+  ASSERT_EQ(Url("http://bla").protocolAsString(), "http");
+  ASSERT_EQ(Url("https://bla").protocolAsString(), "https");
+
+  ASSERT_EQ(Url("http://bla/bli").asString(), "http://bla:80/bli");
+  ASSERT_EQ(Url("https://bla:81/bli").asString(), "https://bla:81/bli");
+
   using Error = std::runtime_error;
   ASSERT_THROW(Url("htt://host.name/tar/get"), Error);
   ASSERT_THROW(Url("http://host.name:8x/tar/get"), Error);

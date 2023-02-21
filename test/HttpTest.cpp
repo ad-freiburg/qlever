@@ -14,6 +14,7 @@
 #include "util/http/HttpUtils.h"
 
 using namespace ad_utility::httpUtils;
+using namespace boost::beast::http;
 
 TEST(HttpServer, HttpTest) {
   // Create and run a HTTP server, which replies to each request with three
@@ -23,10 +24,10 @@ TEST(HttpServer, HttpTest) {
                                auto&& send) -> boost::asio::awaitable<void> {
     std::string methodName;
     switch (request.method()) {
-      case http::verb::get:
+      case boost::beast::http::verb::get:
         methodName = "GET";
         break;
-      case http::verb::post:
+      case boost::beast::http::verb::post:
         methodName = "POST";
         break;
       default:
@@ -39,39 +40,47 @@ TEST(HttpServer, HttpTest) {
   });
   httpServer.runInOwnThread();
 
-  // Helper lambdas for testing GET and POST requests.
-  auto testGetRequest = [](HttpClient* httpClient, const std::string& target) {
-    std::istringstream response = httpClient->sendRequest(
-        boost::beast::http::verb::get, "localhost", target);
-    ASSERT_EQ(response.str(), absl::StrCat("GET\n", target, "\n"));
-  };
-  auto testPostRequest = [](HttpClient* httpClient, const std::string& target,
-                            const std::string& body) {
-    std::istringstream response = httpClient->sendRequest(
-        boost::beast::http::verb::post, "localhost", target, body);
-    ASSERT_EQ(response.str(), absl::StrCat("POST\n", target, "\n", body));
-  };
+  // TODO: If one of the following tests fails or anything goes wrong, the whole
+  // test hangs. I presume that is because the server is still running in a
+  // separate thread and needs to be shut down, so that the test program can
+  // exit. What's the best way to handle this?
 
-  // First session (checks whether client and server can communicate as they
-  // should).
+  // Create a client, and send a GET and a POST request in one session.
   {
     HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
-    testGetRequest(&httpClient, "target1");
-    testPostRequest(&httpClient, "target1", "body1");
+    ASSERT_EQ(httpClient.sendRequest(verb::get, "localhost", "target1").str(),
+              "GET\ntarget1\n");
+    ASSERT_EQ(
+        httpClient.sendRequest(verb::post, "localhost", "target1", "body1")
+            .str(),
+        "POST\ntarget1\nbody1");
   }
 
-  // Second session (checks if everything is still fine with the server after we
-  // have communicated with it for one session).
+  // Do the same thing in a second session (to check if everything is still fine
+  // with the server after we have communicated with it for one session).
   {
     HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
-    testGetRequest(&httpClient, "target2");
-    testPostRequest(&httpClient, "target2", "body2");
+    ASSERT_EQ(httpClient.sendRequest(verb::get, "localhost", "target2").str(),
+              "GET\ntarget2\n");
+    ASSERT_EQ(
+        httpClient.sendRequest(verb::post, "localhost", "target2", "body2")
+            .str(),
+        "POST\ntarget2\nbody2");
+  }
+
+  // Also test the convenience function `sendHttpOrHttpsRequest` (which creates
+  // an own client for each request).
+  {
+    Url url{absl::StrCat("http://localhost:", httpServer.getPort(), "/target")};
+    ASSERT_EQ(sendHttpOrHttpsRequest(url, verb::get).str(), "GET\n/target\n");
+    ASSERT_EQ(sendHttpOrHttpsRequest(url, verb::post, "body").str(),
+              "POST\n/target\nbody");
   }
 
   // Third session (check that after shutting down, no more new connections are
   // being accepted.
   // httpServer->shutDown();
   httpServer.shutDown();
-  ASSERT_THROW(HttpClient("localhost", std::to_string(httpServer.getPort())),
-               std::exception);
+  ASSERT_ANY_THROW(
+      HttpClient("localhost", std::to_string(httpServer.getPort())));
 }
