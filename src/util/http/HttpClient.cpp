@@ -92,7 +92,7 @@ std::istringstream HttpClientImpl<StreamType>::sendRequest(
     std::string_view target, std::string_view requestBody,
     std::string_view contentTypeHeader, std::string_view acceptHeader) {
   // Check that we have a stream (created in the constructor).
-  AD_CONTRACT_CHECK(stream_);
+  AD_CORRECTNESS_CHECK(stream_);
 
   // Set up the request.
   http::request<http::string_body> request;

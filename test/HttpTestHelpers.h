@@ -31,6 +31,10 @@ class TestHttpServer {
   // program would hang because the thread would wait for the server to exit.
   std::unique_ptr<std::jthread> serverThread_;
 
+  // Indicator whether the server has been shut down. We need this because
+  // `HttpServer::shutDown` must only be called once.
+  bool hasBeenShutDown_ = false;
+
  public:
   // Create server on localhost. Try out 10 different ports, if connection
   // to all of them fail, throw `std::runtime_error`.
@@ -97,7 +101,18 @@ class TestHttpServer {
     }
   }
 
-  // Shut down the server (this will end the `httpServer->run()` running in the
-  // thread created by `runInOwnThread`, so that thread will also end).
-  void shutDown() { server_->shutDown(); }
+  // Shut down the server explicitly (needed in `HttpTest`).
+  //
+  // NOTE: This works by causing the `httpServer->run()` running in the server
+  // thread to return, so that the thread can complete.
+  void shutDown() {
+    if (!hasBeenShutDown_) {
+      server_->shutDown();
+      hasBeenShutDown_ = true;
+    }
+  }
+
+  // Since we detach the server thread in `runInOwnThread`, we need to make sure
+  // that the server is always shut down when this object does out of scope.
+  ~TestHttpServer() { shutDown(); }
 };

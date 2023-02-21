@@ -37,7 +37,6 @@ TEST(HttpUtils, Url) {
   ASSERT_EQ(Url("http://bla/bli").asString(), "http://bla:80/bli");
   ASSERT_EQ(Url("https://bla:81/bli").asString(), "https://bla:81/bli");
 
-  using Error = std::runtime_error;
   ASSERT_ANY_THROW(Url("htt://host.name/tar/get"));
   ASSERT_ANY_THROW(Url("http://host.name:8x/tar/get"));
   ASSERT_ANY_THROW(Url("http://host.name:8x"));

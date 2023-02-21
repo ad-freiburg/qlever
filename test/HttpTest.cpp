@@ -40,11 +40,6 @@ TEST(HttpServer, HttpTest) {
   });
   httpServer.runInOwnThread();
 
-  // TODO: If one of the following tests fails or anything goes wrong, the whole
-  // test hangs. I presume that is because the server is still running in a
-  // separate thread and needs to be shut down, so that the test program can
-  // exit. What's the best way to handle this?
-
   // Create a client, and send a GET and a POST request in one session.
   {
     HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
