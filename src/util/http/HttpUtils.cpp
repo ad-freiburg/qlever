@@ -20,11 +20,11 @@ static constexpr char urlRegexString[] =
 static constexpr auto urlRegex = ctll::fixed_string(urlRegexString);
 
 // ____________________________________________________________________________
-Url::Url(const std::string_view url) {
+Url::Url(std::string_view url) {
   auto match = ctre::search<urlRegex>(url);
   if (!match) {
-    throw std::runtime_error(
-        absl::StrCat("URL malformed, must match regex ", urlRegexString));
+    throw std::runtime_error(absl::StrCat(
+        "URL \"", url, "\" malformed, must match regex ", urlRegexString));
   }
   protocol_ =
       match.get<1>().to_string() == "http" ? Protocol::HTTP : Protocol::HTTPS;

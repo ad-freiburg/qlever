@@ -77,9 +77,7 @@ TEST(HttpServer, HttpTest) {
               "POST\n/target\nbody");
   }
 
-  // Third session (check that after shutting down, no more new connections are
-  // being accepted.
-  // httpServer->shutDown();
+  // Check that after shutting down, no more new connections are accepted.
   httpServer.shutDown();
   ASSERT_ANY_THROW(
       HttpClient("localhost", std::to_string(httpServer.getPort())));

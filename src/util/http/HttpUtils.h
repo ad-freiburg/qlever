@@ -32,16 +32,16 @@ using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
 namespace streams = ad_utility::streams;
 using ad_utility::httpUtils::httpStreams::streamable_body;
 
-/// Simple URL class that provides "getters" for the various URL components
-/// (some of the components are implicit, such as the port, so these are not
-/// really getters). For example, the components of the URL
-/// https://qlever.cs.uni-freiburg.de/api/wikidata are:
-///
-/// protocol: HTTPS
-/// host:     qlever.cs.uni-freiburg.de
-/// port:     443 (implicit)
-/// target:   /api/wikidata .
-///
+// Simple URL class that parses the components from a given URL string and
+// provides "getters" for them (some of the components are implicit, such as the
+// port, so these are not really getters). For example, the components of the
+// URL https://qlever.cs.uni-freiburg.de/api/wikidata are:
+//
+// protocol: HTTPS
+// host:     qlever.cs.uni-freiburg.de
+// port:     443 (implicit)
+// target:   /api/wikidata .
+//
 class Url {
  public:
   enum class Protocol { HTTP, HTTPS };
@@ -54,7 +54,7 @@ class Url {
 
  public:
   // Construct from given URL.
-  Url(const std::string_view url);
+  explicit Url(std::string_view url);
   // The protocol: one of Protocol::HTTP or Protocol::HTTPS.
   Protocol protocol() const { return protocol_; }
   // The host; this is always a substring of the given URL.

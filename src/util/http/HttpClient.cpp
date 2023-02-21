@@ -15,6 +15,7 @@ namespace beast = boost::beast;
 namespace ssl = boost::asio::ssl;
 namespace http = boost::beast::http;
 using tcp = boost::asio::ip::tcp;
+using ad_utility::httpUtils::Url;
 
 // Implemented using Boost.Beast, code apapted from
 // https://www.boost.org/doc/libs/master/libs/beast/example/http/client/sync/http_client_sync.cpp
@@ -90,10 +91,8 @@ std::istringstream HttpClientImpl<StreamType>::sendRequest(
     const boost::beast::http::verb& method, std::string_view host,
     std::string_view target, std::string_view requestBody,
     std::string_view contentTypeHeader, std::string_view acceptHeader) {
-  // Check that we have a stream (obtained via a call to `openStream` above).
-  if (!stream_) {
-    throw std::runtime_error("Trying to send request without connection");
-  }
+  // Check that we have a stream (created in the constructor).
+  AD_CONTRACT_CHECK(stream_);
 
   // Set up the request.
   http::request<http::string_body> request;
@@ -132,9 +131,10 @@ std::istringstream sendHttpOrHttpsRequest(
     return client.sendRequest(method, url.host(), url.target(), requestData,
                               contentTypeHeader, acceptHeader);
   };
-  if (url.protocol() == ad_utility::httpUtils::Url::Protocol::HTTP) {
+  if (url.protocol() == Url::Protocol::HTTP) {
     return sendRequest.operator()<HttpClient>();
   } else {
+    AD_CORRECTNESS_CHECK(url.protocol() == Url::Protocol::HTTPS);
     return sendRequest.operator()<HttpsClient>();
   }
 }

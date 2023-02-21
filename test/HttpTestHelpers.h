@@ -52,7 +52,7 @@ class TestHttpServer {
                   << " failed, trying next port ..." << std::endl;
       }
     }
-    throw std::runtime_error(
+    AD_THROW(
         absl::StrCat("Could not start test HTTP server on any of these ports: ",
                      absl::StrJoin(ports, ", ")));
   }
@@ -64,8 +64,9 @@ class TestHttpServer {
   // throw `std::runtime_error` if it's not (it should be up immediately).
   //
   // NOTE 1: It is important to *copy* the `httpServer` shared pointer into the
-  // thread. That way, whoever dies first (this thread or `httpServerThread`),
-  // the pointer is still valid in the other thread.
+  // thread. That way, no matter which thread completes first (this thread or
+  // `httpServerThread`), the `httpServer` is still alive and can be used in the
+  // other thread.
   //
   // NOTE 2: Catch all exceptions in the server thread so that if an exception
   // is thrown, the whole process does not simply terminate.
@@ -83,8 +84,8 @@ class TestHttpServer {
     auto waitTimeUntilServerIsUp = 100ms;
     std::this_thread::sleep_for(waitTimeUntilServerIsUp);
     if (exception_ptr || !server_->serverIsReady()) {
-      // Detach the server thread (the `run()` above never terminates), so that
-      // we can exit this test.
+      // Detach the server thread (the `run()` above never returns), so that we
+      // can exit this test.
       serverThread_->detach();
       if (exception_ptr) {
         std::rethrow_exception(exception_ptr);
