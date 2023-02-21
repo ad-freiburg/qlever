@@ -261,16 +261,20 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
 
   // Check that the query is valid
 
-  auto checkAliasOutNamesHaveNoOverlapWith =
-      [this](const auto& container, const std::string& message) {
-        for (const auto& alias : selectClause().getAliases()) {
-          if (ad_utility::contains(container, alias._target)) {
-            throw ParseException(absl::StrCat(alias._target.name(), message));
-          }
-        }
-      };
+  auto checkAliasOutNamesHaveNoOverlapWithVisibleVariables = [this]() {
+    for (const auto& alias : selectClause().getAliases()) {
+      if (ad_utility::contains(selectClause().getVisibleVariables(),
+                               alias._target)) {
+        throw ParseException(absl::StrCat(alias._target.name(),
+                                          " is the target of an alias although "
+                                          "it is also visible in the query "
+                                          "body. This is not allowed."));
+      }
+    }
+  };
 
   if (hasSelectClause()) {
+    checkAliasOutNamesHaveNoOverlapWithVisibleVariables();
     if (isGroupBy) {
       ad_utility::HashSet<string> groupVariables{};
       for (const auto& variable : _groupByVariables) {
@@ -286,13 +290,20 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       // Check if all selected variables are either aggregated or
       // part of the group by statement.
       for (const Variable& var : selectClause().getSelectedVariables()) {
-        if (ad_utility::contains_if(
-                selectClause().getAliases(),
-                [&var, &groupVariables](const Alias& alias) {
-                  return alias._target == var &&
-                         alias._expression.isAggregate(groupVariables);
-                })) {
-          continue;
+        auto it = std::ranges::find_if(
+            selectClause().getAliases(),
+            [&var](const Alias& alias) { return alias._target == var; });
+        if (it != selectClause().getAliases().end()) {
+          const auto& alias = *it;
+          if (alias._expression.isAggregate(groupVariables)) {
+            continue;
+          } else {
+            throw ParseException(absl::StrCat(
+                "The expression ", alias._expression.getDescriptor(),
+                " which is bound to the variable ", alias._target.name(),
+                " is not an aggregate on the variable ", var.name(),
+                " but that variable is not part of the GROUP BY clause"));
+          }
         }
         if (!ad_utility::contains(_groupByVariables, var)) {
           throw ParseException(
@@ -302,25 +313,18 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
                            var.name(), "."));
         }
       }
-      checkAliasOutNamesHaveNoOverlapWith(_groupByVariables,
-                                          " is the target of an alias although "
-                                          "the query is grouped by it. This "
-                                          "is not allowed.");
     } else {
-      checkAliasOutNamesHaveNoOverlapWith(
-          selectClause().getVisibleVariables(),
-          " is the target of an alias although it is also visible in the query "
-          "body. This is not allowed.");
       // If there is no GROUP BY clause and there is a SELECT clause, then the
       // aliases like SELECT (?x as ?y) have to be added as ordinary BIND
       // expressions to the query body. In CONSTRUCT queries there are no such
-      // aliases, and in case of a GROUP BY clause the aliases are read directly
-      // from the SELECT clause by the `GroupBy` operation.
+      // aliases, and in case of a GROUP BY clause the aliases are read
+      // directly from the SELECT clause by the `GroupBy` operation.
 
       auto& selectClause = std::get<SelectClause>(_clause);
       for (const auto& alias : selectClause.getAliases()) {
         // As the clause is NOT `SELECT *` it is not required to register the
-        // target variable as visible, but it helps with several sanity checks.
+        // target variable as visible, but it helps with several sanity
+        // checks.
         addBind(alias._expression, alias._target, true);
       }
 
@@ -466,10 +470,10 @@ ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}
 void ParsedQuery::GraphPattern::addLanguageFilter(
     const Variable& variable, const std::string& languageInQuotes) {
   auto langTag = languageInQuotes.substr(1, languageInQuotes.size() - 2);
-  // Find all triples where the object is the `variable` and the predicate is a
-  // simple `IRIREF` (neither a variable nor a complex property path). Search in
-  // all the basic graph patterns, as filters have the complete graph patterns
-  // as their scope.
+  // Find all triples where the object is the `variable` and the predicate is
+  // a simple `IRIREF` (neither a variable nor a complex property path).
+  // Search in all the basic graph patterns, as filters have the complete
+  // graph patterns as their scope.
   // TODO<joka921> In theory we could also recurse into GroupGraphPatterns,
   // Subqueries etc.
   // TODO<joka921> Also support property paths (^rdfs:label,
@@ -496,8 +500,8 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
   }
 
   // Handle the case, that no suitable triple (see above) was found. In this
-  // case a triple `?variable ql:langtag "language"` is added at the end of the
-  // graph pattern.
+  // case a triple `?variable ql:langtag "language"` is added at the end of
+  // the graph pattern.
   if (matchingTriples.empty()) {
     LOG(DEBUG) << "language filter variable " + variable.name() +
                       " did not appear as object in any suitable "
