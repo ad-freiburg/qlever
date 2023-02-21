@@ -4,9 +4,8 @@
 
 #include "engine/Service.h"
 
-#include <absl/strings/str_cat.h>
-#include <absl/strings/str_split.h>
-
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Values.h"
 #include "engine/VariableToColumnMap.h"
@@ -22,8 +21,8 @@ Service::Service(QueryExecutionContext* qec,
                  parsedQuery::Service parsedServiceClause,
                  GetTsvFunction getTsvFunction)
     : Operation{qec},
-      parsedServiceClause_(parsedServiceClause),
-      getTsvFunction_(getTsvFunction) {}
+      parsedServiceClause_{std::move(parsedServiceClause)},
+      getTsvFunction_{std::move(getTsvFunction)} {}
 
 // ____________________________________________________________________________
 std::string Service::asStringImpl(size_t indent) const {
@@ -48,9 +47,6 @@ std::string Service::getDescriptor() const {
 size_t Service::getResultWidth() const {
   return parsedServiceClause_.visibleVariables_.size();
 }
-
-// ____________________________________________________________________________
-std::vector<size_t> Service::resultSortedOn() const { return {}; }
 
 // ____________________________________________________________________________
 VariableToColumnMap Service::computeVariableToColumnMap() const {
@@ -118,7 +114,6 @@ void Service::computeResult(ResultTable* result) {
   std::istringstream tsvResult =
       getTsvFunction_(serviceUrl, boost::beast::http::verb::post, serviceQuery,
                       "application/sparql-query", "text/tab-separated-values");
-  LOG(DEBUG) << "TSV result is:" << std::endl << tsvResult.str() << std::endl;
 
   // The first line of the TSV result contains the variable names.
   std::string tsvHeaderRow;
@@ -160,14 +155,19 @@ void Service::writeTsvResult(std::istringstream tsvResult,
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
   std::string line;
   std::string lastLine;
+  const size_t numVariables = parsedServiceClause_.visibleVariables_.size();
   while (lastLine = std::move(line), std::getline(tsvResult, line)) {
     // Print first line.
     if (rowIdx == 0) {
       LOG(INFO) << "First non-header row of TSV result: " << line << std::endl;
     }
     std::vector<std::string_view> valueStrings = absl::StrSplit(line, "\t");
-    AD_CONTRACT_CHECK(valueStrings.size() ==
-                      parsedServiceClause_.visibleVariables_.size());
+    if (valueStrings.size() != numVariables) {
+      throw std::runtime_error(absl::StrCat(
+          "Number of columns in ", rowIdx + 1, " of TSV result is ",
+          valueStrings.size(), "but number of variables in header row is ",
+          numVariables));
+    }
     idTable.emplace_back();
     for (size_t colIdx = 0; colIdx < valueStrings.size(); colIdx++) {
       TripleComponent tc = TurtleStringParser<TokenizerCtre>::parseTripleObject(

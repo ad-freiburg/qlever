@@ -2,12 +2,14 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <regex>
 
 #include "./HttpTestHelpers.h"
 #include "./IndexTestHelpers.h"
+#include "./util/IdTableHelpers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
@@ -60,15 +62,14 @@ class ServiceTest : public ::testing::Test {
       EXPECT_EQ(acceptHeader, "text/tab-separated-values");
       EXPECT_EQ(url.asString(), expectedUrl);
 
-      // Check that the (whitespace-normalized) post data contains the expected
-      // query.
+      // Check that the whitespace-normalized POST data is the expected query.
       //
       // NOTE: a SERVICE clause specifies only the body of a SPARQL query, from
       // which `Service::computeResult` has to construct a full SPARQL query by
       // adding `SELECT ... WHERE`, so this checks something non-trivial.
-      EXPECT_EQ(
-          std::regex_replace(std::string{postData}, std::regex{"\\s+"}, " "),
-          expectedSparqlQuery);
+      std::string whitespaceNormalizedPostData =
+          std::regex_replace(std::string{postData}, std::regex{"\\s+"}, " ");
+      EXPECT_EQ(whitespaceNormalizedPostData, expectedSparqlQuery);
 
       return std::istringstream{predefinedResult};
     };
@@ -84,25 +85,25 @@ TEST_F(ServiceTest, basicMethods) {
   parsedQuery::Service parsedServiceClause{{Variable{"?x"}, Variable{"?y"}},
                                            Iri{"<http://localhorst/api>"},
                                            "PREFIX doof: <http://doof.org>",
-                                           "{ }",
-                                           parsedQuery::GraphPattern{}};
+                                           "{ }"};
   // Create an operation from this.
   Service serviceOp{testQec, parsedServiceClause};
 
   // Test the basic methods.
   ASSERT_EQ(serviceOp.getDescriptor(),
             "Service with IRI <http://localhorst/api>");
+  ASSERT_TRUE(
+      serviceOp.asString().starts_with("SERVICE <http://localhorst/api>"));
   ASSERT_EQ(serviceOp.getResultWidth(), 2);
   ASSERT_EQ(serviceOp.getMultiplicity(0), 1);
   ASSERT_EQ(serviceOp.getMultiplicity(1), 1);
   ASSERT_EQ(serviceOp.getSizeEstimate(), 100'000);
   ASSERT_EQ(serviceOp.getCostEstimate(), 1'000'000);
-  VariableToColumnMap varToColMap = serviceOp.computeVariableToColumnMap();
-  ASSERT_EQ(varToColMap.size(), 2);
-  ASSERT_EQ(varToColMap.at(Variable{"?x"}), 0);
-  ASSERT_EQ(varToColMap.at(Variable{"?y"}), 1);
+  ASSERT_THAT(serviceOp.computeVariableToColumnMap(),
+              (::testing::UnorderedElementsAreArray(VariableToColumnMap{
+                  {Variable{"?x"}, 0}, {Variable{"?y"}, 1}})));
   ASSERT_FALSE(serviceOp.knownEmptyResult());
-  ASSERT_EQ(serviceOp.getChildren(), std::vector<QueryExecutionTree*>{});
+  ASSERT_TRUE(serviceOp.getChildren().empty());
 }
 
 // Tests that `computeResult` behaves as expected.
@@ -111,8 +112,7 @@ TEST_F(ServiceTest, computeResult) {
   parsedQuery::Service parsedServiceClause{{Variable{"?x"}, Variable{"?y"}},
                                            Iri{"<http://localhorst/api>"},
                                            "PREFIX doof: <http://doof.org>",
-                                           "{ }",
-                                           parsedQuery::GraphPattern{}};
+                                           "{ }"};
 
   // This is the (port-normalized) URL and (whitespace-normalized) SPARQL query
   // we expect.
@@ -124,7 +124,7 @@ TEST_F(ServiceTest, computeResult) {
   Service serviceOperation1{
       testQec, parsedServiceClause,
       getTsvFunctionFactory(expectedUrl, expectedSparqlQuery, "")};
-  ASSERT_THROW(serviceOperation1.getResult(), ad_utility::AbortException);
+  ASSERT_ANY_THROW(serviceOperation1.getResult());
 
   // CHECK 2: Header row of returned TSV is wrong (variables in wrong order) ->
   // an exception should be thrown.
@@ -133,7 +133,7 @@ TEST_F(ServiceTest, computeResult) {
       getTsvFunctionFactory(
           expectedUrl, expectedSparqlQuery,
           "?y\t?x\n<x>\t<y>\n<bla>\t<bli>\n<blu>\t<bla>\n<bli>\t<blu>\n")};
-  ASSERT_THROW(serviceOperation2.getResult(), ad_utility::AbortException);
+  ASSERT_ANY_THROW(serviceOperation2.getResult());
 
   // CHECK 3: Returned TSV has correct format matching the query -> check that
   // the result table returned by the operation corresponds to the contents of
@@ -148,32 +148,24 @@ TEST_F(ServiceTest, computeResult) {
   // Check that `<x>` and `<y>` were contained in the original vocabulary and
   // that `<bla>`, `<bli>`, `<blu>` were added to the (initially empty) local
   // vocabulary.
-  VocabIndex idxX;
-  VocabIndex idxY;
-  EXPECT_TRUE(testQec->getIndex().getVocab().getId("<x>", &idxX));
-  EXPECT_TRUE(testQec->getIndex().getVocab().getId("<y>", &idxY));
-  LocalVocabIndex idxBla = LocalVocabIndex::make(0);
-  LocalVocabIndex idxBli = LocalVocabIndex::make(1);
-  LocalVocabIndex idxBlu = LocalVocabIndex::make(2);
-  EXPECT_EQ(result->localVocab().getWord(idxBla), "<bla>");
-  EXPECT_EQ(result->localVocab().getWord(idxBli), "<bli>");
-  EXPECT_EQ(result->localVocab().getWord(idxBlu), "<blu>");
+  Id idX, idY;
+  EXPECT_TRUE(testQec->getIndex().getId("<x>", &idX));
+  EXPECT_TRUE(testQec->getIndex().getId("<y>", &idY));
+  const auto& localVocab = result->localVocab();
+  EXPECT_EQ(localVocab.size(), 3);
+  const auto& word1 = localVocab.getWord(LocalVocabIndex::make(0));
+  const auto& word2 = localVocab.getWord(LocalVocabIndex::make(1));
+  const auto& word3 = localVocab.getWord(LocalVocabIndex::make(2));
+  ASSERT_THAT((std::vector{word1, word2, word3}),
+              ::testing::UnorderedElementsAre("<bla>", "<bli>", "<blu>"));
+  // TODO: Don't assume this ordering of the IDs!
+  Id idBla = Id::makeFromLocalVocabIndex(LocalVocabIndex::make(0));
+  Id idBli = Id::makeFromLocalVocabIndex(LocalVocabIndex::make(1));
+  Id idBlu = Id::makeFromLocalVocabIndex(LocalVocabIndex::make(2));
 
   // Check that the result table corresponds to the contents of the TSV.
   EXPECT_TRUE(result);
-  EXPECT_EQ(result->_idTable.numColumns(), 2);
-  EXPECT_EQ(result->_idTable.numRows(), 4);
-  Id idX = Id::makeFromVocabIndex(idxX);
-  Id idY = Id::makeFromVocabIndex(idxY);
-  Id idBla = Id::makeFromLocalVocabIndex(idxBla);
-  Id idBli = Id::makeFromLocalVocabIndex(idxBli);
-  Id idBlu = Id::makeFromLocalVocabIndex(idxBlu);
-  auto checkRow = [&](size_t rowIdx, Id id1, Id id2) {
-    EXPECT_EQ(result->_idTable(rowIdx, 0), id1) << "at row " << rowIdx;
-    EXPECT_EQ(result->_idTable(rowIdx, 1), id2) << "at row " << rowIdx;
-  };
-  checkRow(0, idX, idY);
-  checkRow(1, idBla, idBli);
-  checkRow(2, idBlu, idBla);
-  checkRow(3, idBli, idBlu);
+  IdTable expectedIdTable = makeIdTableFromIdVector(
+      {{idX, idY}, {idBla, idBli}, {idBlu, idBla}, {idBli, idBlu}});
+  EXPECT_EQ(result->_idTable, expectedIdTable);
 }

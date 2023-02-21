@@ -488,8 +488,8 @@ parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
                            visibleVariablesServiceQuery.end());
   // Create suitable `parsedQuery::Service` object and return it.
   return {std::move(visibleVariablesServiceQuery), std::move(serviceIri),
-          prologueString_, getOriginalInputForContext(ctx->groupGraphPattern()),
-          std::move(graphPattern)};
+          prologueString_,
+          getOriginalInputForContext(ctx->groupGraphPattern())};
 }
 
 // ____________________________________________________________________________

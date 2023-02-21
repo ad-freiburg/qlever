@@ -850,13 +850,15 @@ TEST(SparqlParser, GroupGraphPattern) {
       m::GraphPattern(m::SubSelect(m::AsteriskSelect(false, false),
                                    m::GraphPattern(DummyTriplesMatcher)),
                       m::InlineData({Var{"?a"}}, {{"<a>"}, {"<b>"}})));
-  // graphGraphPattern and serviceGraphPattern are not supported.
+  expectGraphPattern("{ SERVICE <endpoint> { ?s ?p ?o } }",
+                     m::GraphPattern(m::Service(
+                         Iri{"<endpoint>"}, {Var{"?s"}, Var{"?p"}, Var{"?o"}},
+                         "{ ?s ?p ?o }")));
+  expectGroupGraphPatternFails("{ SERVICE SILENT ?bar { } }");
+
+  // graphGraphPattern is not supported.
   expectGroupGraphPatternFails("{ GRAPH ?a { } }");
   expectGroupGraphPatternFails("{ GRAPH <foo> { } }");
-
-  // TODO: Add tests for parsing of SERVICE queries.
-  // expectGroupGraphPatternFails("{ SERVICE <foo> { } }");
-  // expectGroupGraphPatternFails("{ SERVICE SILENT ?bar { } }");
 }
 
 TEST(SparqlParser, RDFLiteral) {
@@ -1013,6 +1015,18 @@ TEST(SparqlParser, Query) {
               "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } LIMIT 10"),
           m::pq::LimitOffset({10}),
           m::VisibleVariables({Var{"?x"}, Var{"?y"}, Var{"?z"}})));
+
+  // Test that the prologue is parsed properly. We use `m::Service` here
+  // because the parsing of a SERVICE clause is the only place where the
+  // prologue is explicitly passed on from the parser.
+  expectQuery(
+      "PREFIX doof: <http://doof.org/> "
+      "SELECT * WHERE { SERVICE <endpoint> { ?s ?p ?o } }",
+      m::SelectQuery(m::AsteriskSelect(),
+                     m::GraphPattern(m::Service(
+                         Iri{"<endpoint>"}, {Var{"?s"}, Var{"?p"}, Var{"?o"}},
+                         "{ ?s ?p ?o }", "PREFIX doof: <http://doof.org/>"))));
+
   // Describe and Ask Queries are not supported.
   expectQueryFails("DESCRIBE *");
   expectQueryFails("ASK WHERE { ?x <foo> <bar> }");

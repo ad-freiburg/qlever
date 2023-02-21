@@ -38,9 +38,6 @@ class Service : public Operation {
       std::string_view, std::string_view, std::string_view)>;
 
  private:
-  // For each column, its multiplicity.
-  std::vector<size_t> multiplicities_;
-
   // The parsed SERVICE clause.
   parsedQuery::Service parsedServiceClause_;
 
@@ -55,12 +52,12 @@ class Service : public Operation {
   // but in our tests (`ServiceTest`) we use a mock function that does not
   // require a running `HttpServer`.
   Service(QueryExecutionContext* qec, parsedQuery::Service parsedServiceClause,
-          GetTsvFunction getTsvFunction = &sendHttpOrHttpsRequest);
+          GetTsvFunction getTsvFunction = sendHttpOrHttpsRequest);
 
   // Methods inherited from base class `Operation`.
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
-  std::vector<size_t> resultSortedOn() const override;
+  std::vector<size_t> resultSortedOn() const override { return {}; }
   float getMultiplicity(size_t col) override;
   size_t getSizeEstimate() override;
   size_t getCostEstimate() override;
@@ -82,7 +79,8 @@ class Service : public Operation {
   // Compute the result using `getTsvFunction_`.
   void computeResult(ResultTable* result) override;
 
-  // Write the given TSV result to the given result object.
+  // Write the given TSV result to the given result object. The `I` is the width
+  // of the result table.
   //
   // NOTE: This is similar to `Values::writeValues`, except that we have to
   // parse TSV here and not a VALUES clause. Note that the only reason that

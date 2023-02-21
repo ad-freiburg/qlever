@@ -80,6 +80,7 @@ TEST(CheckUsePatternTrick, isVariableContainedInGraphPattern) {
   expectXYZContained("?x <is-a> ?z. BIND(?y AS ?t)");
   expectXYZContained("VALUES ?x {<a> <b>}. ?y <is-a> ?z");
   expectXYZContained("VALUES ?x {<a> <b>}. ?y <is-a> ?z");
+  expectXYZContained("?x <is-a> ?y { SERVICE <endpoint> { ?x ?y ?z } }");
 }
 
 TEST(CheckUsePatternTrick, isVariableContainedInGraphPatternIgnoredTriple) {

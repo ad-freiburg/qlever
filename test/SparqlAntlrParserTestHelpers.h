@@ -17,6 +17,7 @@
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/TripleComponent.h"
+#include "parser/data/Iri.h"
 #include "parser/data/OrderKey.h"
 #include "parser/data/VarOrTerm.h"
 #include "parser/data/Variable.h"
@@ -461,6 +462,20 @@ inline auto InlineData = [](const std::vector<::Variable>& vars,
   // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
   //  becomes a trivial Eq matcher.
   return detail::GraphPatternOperation<p::Values>(Values(vars, values));
+};
+
+inline auto Service = [](const ::Iri& iri,
+                         const std::vector<::Variable>& variables,
+                         const std::string& graphPattern,
+                         const std::string& prologue =
+                             "") -> Matcher<const p::GraphPatternOperation&> {
+  auto serviceMatcher = testing::AllOf(
+      AD_FIELD(p::Service, serviceIri_, testing::Eq(iri)),
+      AD_FIELD(p::Service, visibleVariables_,
+               testing::UnorderedElementsAreArray(variables)),
+      AD_FIELD(p::Service, graphPatternAsString_, testing::Eq(graphPattern)),
+      AD_FIELD(p::Service, prologue_, testing::Eq(prologue)));
+  return detail::GraphPatternOperation<p::Service>(serviceMatcher);
 };
 
 namespace detail {
