@@ -67,6 +67,11 @@ class LocalVocab {
   LocalVocabIndex getIndexAndAddIfNotContained(const std::string& word);
   LocalVocabIndex getIndexAndAddIfNotContained(std::string&& word);
 
+  // Get the index of a word in the local vocabulary, or std::nullopt if it is
+  // not contained. This is useful for testing.
+  std::optional<LocalVocabIndex> getIndexOrNullopt(
+      const std::string& word) const;
+
   // The number of words in the vocabulary.
   size_t size() const { return indexesToWordsMap_.size(); }
 

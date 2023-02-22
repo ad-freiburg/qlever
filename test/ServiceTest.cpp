@@ -135,33 +135,42 @@ TEST_F(ServiceTest, computeResult) {
           "?y\t?x\n<x>\t<y>\n<bla>\t<bli>\n<blu>\t<bla>\n<bli>\t<blu>\n")};
   ASSERT_ANY_THROW(serviceOperation2.getResult());
 
-  // CHECK 3: Returned TSV has correct format matching the query -> check that
-  // the result table returned by the operation corresponds to the contents of
-  // the TSV and its local vocabulary are correct.
+  // CHECK 3: In one of the rows with the values, there is a different number of
+  // columns than in the header row.
   Service serviceOperation3{
       testQec, parsedServiceClause,
       getTsvFunctionFactory(
           expectedUrl, expectedSparqlQuery,
+          "?y\t?x\n<x>\t<y>\n<bla>\t<bli>\n<blu>\n<bli>\t<blu>\n")};
+  ASSERT_ANY_THROW(serviceOperation3.getResult());
+
+  // CHECK 4: Returned TSV has correct format matching the query -> check that
+  // the result table returned by the operation corresponds to the contents of
+  // the TSV and its local vocabulary are correct.
+  Service serviceOperation4{
+      testQec, parsedServiceClause,
+      getTsvFunctionFactory(
+          expectedUrl, expectedSparqlQuery,
           "?x\t?y\n<x>\t<y>\n<bla>\t<bli>\n<blu>\t<bla>\n<bli>\t<blu>\n")};
-  std::shared_ptr<const ResultTable> result = serviceOperation3.getResult();
+  std::shared_ptr<const ResultTable> result = serviceOperation4.getResult();
 
   // Check that `<x>` and `<y>` were contained in the original vocabulary and
   // that `<bla>`, `<bli>`, `<blu>` were added to the (initially empty) local
-  // vocabulary.
+  // vocabulary. On the way, obtain their IDs, which we then need below.
   Id idX, idY;
   EXPECT_TRUE(testQec->getIndex().getId("<x>", &idX));
   EXPECT_TRUE(testQec->getIndex().getId("<y>", &idY));
   const auto& localVocab = result->localVocab();
   EXPECT_EQ(localVocab.size(), 3);
-  const auto& word1 = localVocab.getWord(LocalVocabIndex::make(0));
-  const auto& word2 = localVocab.getWord(LocalVocabIndex::make(1));
-  const auto& word3 = localVocab.getWord(LocalVocabIndex::make(2));
-  ASSERT_THAT((std::vector{word1, word2, word3}),
-              ::testing::UnorderedElementsAre("<bla>", "<bli>", "<blu>"));
-  // TODO: Don't assume this ordering of the IDs!
-  Id idBla = Id::makeFromLocalVocabIndex(LocalVocabIndex::make(0));
-  Id idBli = Id::makeFromLocalVocabIndex(LocalVocabIndex::make(1));
-  Id idBlu = Id::makeFromLocalVocabIndex(LocalVocabIndex::make(2));
+  std::optional<LocalVocabIndex> idxBla = localVocab.getIndexOrNullopt("<bla>");
+  std::optional<LocalVocabIndex> idxBli = localVocab.getIndexOrNullopt("<bli>");
+  std::optional<LocalVocabIndex> idxBlu = localVocab.getIndexOrNullopt("<blu>");
+  ASSERT_TRUE(idxBli.has_value());
+  ASSERT_TRUE(idxBla.has_value());
+  ASSERT_TRUE(idxBlu.has_value());
+  Id idBli = Id::makeFromLocalVocabIndex(idxBli.value());
+  Id idBla = Id::makeFromLocalVocabIndex(idxBla.value());
+  Id idBlu = Id::makeFromLocalVocabIndex(idxBlu.value());
 
   // Check that the result table corresponds to the contents of the TSV.
   EXPECT_TRUE(result);

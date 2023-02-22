@@ -854,7 +854,14 @@ TEST(SparqlParser, GroupGraphPattern) {
                      m::GraphPattern(m::Service(
                          Iri{"<endpoint>"}, {Var{"?s"}, Var{"?p"}, Var{"?o"}},
                          "{ ?s ?p ?o }")));
-  expectGroupGraphPatternFails("{ SERVICE SILENT ?bar { } }");
+  expectGraphPattern(
+      "{ SERVICE <ep> { { SELECT ?s ?o WHERE { ?s ?p ?o } } } }",
+      m::GraphPattern(m::Service(Iri{"<ep>"}, {Var{"?s"}, Var{"?o"}},
+                                 "{ { SELECT ?s ?o WHERE { ?s ?p ?o } } }")));
+
+  // SERVICE with SILENT or a variable endpoint is not yet supported.
+  expectGroupGraphPatternFails("{ SERVICE SILENT <ep> { ?s ?p ?o} }");
+  expectGroupGraphPatternFails("{ SERVICE ?endpoint { ?s ?p ?o} }");
 
   // graphGraphPattern is not supported.
   expectGroupGraphPatternFails("{ GRAPH ?a { } }");
@@ -1018,7 +1025,7 @@ TEST(SparqlParser, Query) {
 
   // Test that the prologue is parsed properly. We use `m::Service` here
   // because the parsing of a SERVICE clause is the only place where the
-  // prologue is explicitly passed on from the parser.
+  // prologue is explicitly passed on to a `parsedQuery::` object.
   expectQuery(
       "PREFIX doof: <http://doof.org/> "
       "SELECT * WHERE { SERVICE <endpoint> { ?s ?p ?o } }",

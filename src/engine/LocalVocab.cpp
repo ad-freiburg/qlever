@@ -76,6 +76,17 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(std::string&& word) {
 }
 
 // _____________________________________________________________________________
+std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
+    const std::string& word) const {
+  auto localVocabIndex = wordsToIndexesMap_.find(word);
+  if (localVocabIndex != wordsToIndexesMap_.end()) {
+    return localVocabIndex->second;
+  } else {
+    return std::nullopt;
+  }
+}
+
+// _____________________________________________________________________________
 const std::string& LocalVocab::getWord(LocalVocabIndex localVocabIndex) const {
   if (localVocabIndex.get() >= indexesToWordsMap_.size()) {
     throw std::runtime_error(absl::StrCat(
