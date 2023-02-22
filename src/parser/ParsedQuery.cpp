@@ -398,6 +398,7 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
         arg._id = (*id_count)++;
       } else {
         static_assert(std::is_same_v<T, parsedQuery::Subquery> ||
+                      std::is_same_v<T, parsedQuery::Service> ||
                       std::is_same_v<T, parsedQuery::BasicGraphPattern> ||
                       std::is_same_v<T, parsedQuery::Bind>);
         // subquery children have their own id space

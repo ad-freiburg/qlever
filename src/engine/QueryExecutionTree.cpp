@@ -26,6 +26,7 @@
 #include "engine/NeutralElementOperation.h"
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
+#include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/TextOperationWithFilter.h"
 #include "engine/TransitivePath.h"
@@ -191,6 +192,8 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
     _type = DISTINCT;
   } else if constexpr (std::is_same_v<Op, Values>) {
     _type = VALUES;
+  } else if constexpr (std::is_same_v<Op, Service>) {
+    _type = SERVICE;
   } else if constexpr (std::is_same_v<Op, TransitivePath>) {
     _type = TRANSITIVE_PATH;
   } else if constexpr (std::is_same_v<Op, OrderBy>) {
@@ -230,6 +233,7 @@ template void QueryExecutionTree::setOperation(std::shared_ptr<Bind>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Sort>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Distinct>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Values>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<Service>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<TransitivePath>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<OrderBy>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<GroupBy>);

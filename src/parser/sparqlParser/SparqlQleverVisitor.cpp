@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/strings/str_join.h"
 #include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
@@ -34,6 +35,19 @@ using SparqlValues = parsedQuery::SparqlValues;
 
 using Visitor = SparqlQleverVisitor;
 using Parser = SparqlAutomaticParser;
+
+// _____________________________________________________________________________
+std::string Visitor::getOriginalInputForContext(
+    antlr4::ParserRuleContext* context) {
+  const auto& fullInput = context->getStart()->getInputStream()->toString();
+  size_t posBeg = context->getStart()->getStartIndex();
+  size_t posEnd = context->getStop()->getStopIndex();
+  // Note that `getUTF8Substring` returns a `std::string_view`. We copy this to
+  // a `std::string` because it's not clear whether the original string still
+  // exists when the result of this call is used. Not performance-critical.
+  return std::string{
+      ad_utility::getUTF8Substring(fullInput, posBeg, posEnd - posBeg + 1)};
+}
 
 // ___________________________________________________________________________
 ExpressionPtr Visitor::processIriFunctionCall(
@@ -82,7 +96,7 @@ void Visitor::addVisibleVariable(string var) {
 }
 
 void Visitor::addVisibleVariable(Variable var) {
-  visibleVariables_.back().emplace_back(std::move(var));
+  visibleVariables_.emplace_back(std::move(var));
 }
 
 // ___________________________________________________________________________
@@ -434,32 +448,79 @@ GraphPatternOperation Visitor::visit(Parser::OptionalGraphPatternContext* ctx) {
   return GraphPatternOperation{parsedQuery::Optional{std::move(pattern)}};
 }
 
-// ____________________________________________________________________________________
+// Parsing for the `serviceGraphPattern` rule.
+parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
+  // If SILENT is specified, report that we do not support it yet.
+  //
+  // TODO: Support it, it's not hard. The semantics of SILENT is that if no
+  // result can be obtained from the remote endpoint, then do as if the SERVICE
+  // clause would not be there = the result is the neutral element.
+  if (ctx->SILENT()) {
+    reportNotSupported(ctx, "SILENT modifier in SERVICE is");
+  }
+  // Get the IRI and if a variable is specified, report that we do not support
+  // it yet.
+  //
+  // NOTE: According to the grammar, this should either be a `Variable` or an
+  // `Iri`, but due to (not very good) technical reasons, the `visit` returns a
+  // `std::variant<Variable, GraphTerm>`, where `GraphTerm` is a
+  // `std::variant<Literal, BlankNode, Iri>`, hence the `AD_CONTRACT_CHECK`.
+  //
+  // TODO: Also support variables. The semantics is to make a connection for
+  // each IRI matching the variable and take the union of the results.
+  VarOrTerm varOrIri = visit(ctx->varOrIri());
+  if (std::holds_alternative<Variable>(varOrIri)) {
+    reportNotSupported(ctx->varOrIri(), "Variable endpoint in SERVICE is");
+  }
+  AD_CONTRACT_CHECK(std::holds_alternative<Iri>(std::get<GraphTerm>(varOrIri)));
+  Iri serviceIri = std::get<Iri>(std::get<GraphTerm>(varOrIri));
+  // Parse the body of the SERVICE query. Add the visible variables from the
+  // SERVICE clause to the visible variables so far, but also remember them
+  // separately (with duplicates removed) because we need them in `Service.cpp`
+  // when computing the result for this operation.
+  std::vector<Variable> visibleVariablesSoFar = std::move(visibleVariables_);
+  parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
+  std::vector<Variable> visibleVariablesServiceQuery =
+      ad_utility::removeDuplicates(std::move(visibleVariables_));
+  visibleVariables_ = std::move(visibleVariablesSoFar);
+  visibleVariables_.insert(visibleVariables_.end(),
+                           visibleVariablesServiceQuery.begin(),
+                           visibleVariablesServiceQuery.end());
+  // Create suitable `parsedQuery::Service` object and return it.
+  return {std::move(visibleVariablesServiceQuery), std::move(serviceIri),
+          prologueString_,
+          getOriginalInputForContext(ctx->groupGraphPattern())};
+}
+
+// ____________________________________________________________________________
 parsedQuery::GraphPatternOperation Visitor::visit(
     Parser::GraphGraphPatternContext* ctx) {
   reportNotSupported(ctx, "Named Graphs (FROM, GRAPH) are");
 }
 
-// ____________________________________________________________________________________
-parsedQuery::GraphPatternOperation Visitor::visit(
-    Parser::ServiceGraphPatternContext* ctx) {
-  reportNotSupported(ctx, "Federated queries (SERVICE) are");
-}
-
-// ____________________________________________________________________________________
+// Parsing for the `expression` rule.
 sparqlExpression::SparqlExpression::Ptr Visitor::visit(
     Parser::ExpressionContext* ctx) {
   return visit(ctx->conditionalOrExpression());
 }
 
-// ____________________________________________________________________________________
+// Parsing for the `whereClause` rule.
 Visitor::PatternAndVisibleVariables Visitor::visit(
     Parser::WhereClauseContext* ctx) {
-  visibleVariables_.emplace_back();
-  auto pattern = visit(ctx->groupGraphPattern());
-  auto visible = std::move(visibleVariables_.back());
-  visibleVariables_.pop_back();
-  return {std::move(pattern), std::move(visible)};
+  // Get the variables visible in this WHERE clause separately from the visible
+  // variables so far because they might not all be visible in the outer query.
+  // Adding appropriately to the visible variables so far is then taken care of
+  // in `visit(SubSelectContext*)`.
+  std::vector<Variable> visibleVariablesSoFar = std::move(visibleVariables_);
+  auto graphPatternWhereClause = visit(ctx->groupGraphPattern());
+  // Using `std::exchange` as per Johannes' suggestion. I am slightly irritated
+  // that this calls the move constructor AND the move assignment operator for
+  // the second argument, since this is a potential performance issue (not in
+  // this case though).
+  auto visibleVariablesWhereClause =
+      std::exchange(visibleVariables_, std::move(visibleVariablesSoFar));
+  return {std::move(graphPatternWhereClause),
+          std::move(visibleVariablesWhereClause)};
 }
 
 // ____________________________________________________________________________________
@@ -585,6 +646,11 @@ string Visitor::visit(Parser::PnameNsContext* ctx) {
 void Visitor::visit(Parser::PrologueContext* ctx) {
   visitVector(ctx->baseDecl());
   visitVector(ctx->prefixDecl());
+  // Remember the whole prologue (we need this when we encounter a SERVICE
+  // clause, see `visit(ServiceGraphPatternContext*)` below.
+  if (ctx->getStart() && ctx->getStop()) {
+    prologueString_ = getOriginalInputForContext(ctx);
+  }
 }
 
 // ____________________________________________________________________________________
@@ -1764,7 +1830,6 @@ requires(!voidWhenVisited<Visitor, Ctx>) {
 }
 
 // ____________________________________________________________________________________
-
 template <typename Out, typename... Contexts>
 Out Visitor::visitAlternative(Contexts*... ctxs) {
   // Check that exactly one of the `ctxs` is not `nullptr`.
@@ -1809,7 +1874,7 @@ void Visitor::visitIf(Ctx* ctx) requires voidWhenVisited<Visitor, Ctx> {
 void Visitor::reportError(antlr4::ParserRuleContext* ctx,
                           const std::string& msg) {
   throw ParseException{
-      absl::StrCat("Clause \"", ctx->getText(), "\" at line ",
+      absl::StrCat("Clause \"", getOriginalInputForContext(ctx), "\" at line ",
                    ctx->getStart()->getLine(), ":",
                    ctx->getStart()->getCharPositionInLine(), " ", msg),
       generateMetadata(ctx)};

@@ -65,6 +65,8 @@ bool isVariableContainedInGraphPatternOperation(
           });
     } else if constexpr (std::is_same_v<T, p::Values>) {
       return ad_utility::contains(arg._inlineValues._variables, variable);
+    } else if constexpr (std::is_same_v<T, p::Service>) {
+      return ad_utility::contains(arg.visibleVariables_, variable);
     } else {
       static_assert(std::is_same_v<T, p::TransPath>);
       // The `TransPath` is set up later in the query planning, when this
