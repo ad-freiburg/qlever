@@ -93,7 +93,8 @@ TEST_F(ServiceTest, basicMethods) {
   ASSERT_EQ(serviceOp.getDescriptor(),
             "Service with IRI <http://localhorst/api>");
   ASSERT_TRUE(
-      serviceOp.asString().starts_with("SERVICE <http://localhorst/api>"));
+      serviceOp.asString(2).starts_with("  SERVICE <http://localhorst/api>"))
+      << serviceOp.asString(2);
   ASSERT_EQ(serviceOp.getResultWidth(), 2);
   ASSERT_EQ(serviceOp.getMultiplicity(0), 1);
   ASSERT_EQ(serviceOp.getMultiplicity(1), 1);
@@ -141,7 +142,7 @@ TEST_F(ServiceTest, computeResult) {
       testQec, parsedServiceClause,
       getTsvFunctionFactory(
           expectedUrl, expectedSparqlQuery,
-          "?y\t?x\n<x>\t<y>\n<bla>\t<bli>\n<blu>\n<bli>\t<blu>\n")};
+          "?x\t?y\n<x>\t<y>\n<bla>\t<bli>\n<blu>\n<bli>\t<blu>\n")};
   ASSERT_ANY_THROW(serviceOperation3.getResult());
 
   // CHECK 4: Returned TSV has correct format matching the query -> check that
