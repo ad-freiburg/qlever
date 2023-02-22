@@ -50,20 +50,35 @@ TEST(LocalVocab, constructionAndAccess) {
   ASSERT_TRUE(localVocab.empty());
 
   // Add the words from our test vocabulary and check that they get the expected
-  // local IDs.
+  // local vocab indexes.
   for (size_t i = 0; i < testWords.size(); ++i) {
     ASSERT_EQ(localVocab.getIndexAndAddIfNotContained(testWords[i]),
               LocalVocabIndex::make(i));
   }
   ASSERT_EQ(localVocab.size(), testWords.size());
 
-  // Check that we get the same IDs if we do this again, but that no new words
-  // will be added.
+  // Check that we get the same indexes if we do this again, but that no new
+  // words will be added.
   for (size_t i = 0; i < testWords.size(); ++i) {
     ASSERT_EQ(localVocab.getIndexAndAddIfNotContained(testWords[i]),
               LocalVocabIndex::make(i));
   }
   ASSERT_EQ(localVocab.size(), testWords.size());
+
+  // Check again that we get the right indexes, but with `getIndexOrNullopt`.
+  for (size_t i = 0; i < testWords.size(); ++i) {
+    std::optional<LocalVocabIndex> localVocabIndex =
+        localVocab.getIndexOrNullopt(testWords[i]);
+    ASSERT_TRUE(localVocabIndex.has_value());
+    ASSERT_EQ(localVocabIndex.value(), LocalVocabIndex::make(i));
+  }
+
+  // Check that `getIndexOrNullopt` returns `std::nullopt` for words that are
+  // not contained in the local vocab. This makes use of the fact that the words
+  // in our test vocabulary only contain digits as letters, see above.
+  for (size_t i = 0; i < testWords.size(); ++i) {
+    ASSERT_FALSE(localVocab.getIndexOrNullopt(testWords[i] + "A"));
+  }
 
   // Check that the lookup by ID gives the correct words.
   for (size_t i = 0; i < testWords.size(); ++i) {

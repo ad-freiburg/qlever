@@ -860,8 +860,8 @@ TEST(SparqlParser, GroupGraphPattern) {
                                  "{ { SELECT ?s ?o WHERE { ?s ?p ?o } } }")));
 
   // SERVICE with SILENT or a variable endpoint is not yet supported.
-  expectGroupGraphPatternFails("{ SERVICE SILENT <ep> { ?s ?p ?o} }");
-  expectGroupGraphPatternFails("{ SERVICE ?endpoint { ?s ?p ?o} }");
+  expectGroupGraphPatternFails("{ SERVICE SILENT <ep> { ?s ?p ?o } }");
+  expectGroupGraphPatternFails("{ SERVICE ?endpoint { ?s ?p ?o } }");
 
   // graphGraphPattern is not supported.
   expectGroupGraphPatternFails("{ GRAPH ?a { } }");
