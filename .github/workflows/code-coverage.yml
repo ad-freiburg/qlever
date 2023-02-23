@@ -25,9 +25,9 @@ jobs:
           compiler-version: 15
           build-type: Debug
           warnings: "-Wall -Wextra "
-          asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
-          ubsan-flags: " -fsanitize=undefined"
-          coverage-flags: "-fprofile-instr-generate -fcoverage-mapping"
+          asan-flags: ""
+          ubsan-flags: ""
+          coverage-flags: "-fprofile-instr-generate -fcoverage-mapping -fno-unroll-loops"
 
     runs-on: ubuntu-22.04
     steps:
