@@ -169,7 +169,7 @@ static constexpr uint32_t PATTERNS_FILE_VERSION = 1;
 // more columns, but also increases compile times because more templates
 // have to be instantiated. It might also be necessary to increase some internal
 // compiler limits for the evaluation of constexpr functions and templates.
-static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 1;
+static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 0;
 
 inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Double;
