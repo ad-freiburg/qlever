@@ -393,6 +393,7 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
   // unless the result is already cached.
   shared_ptr<const ResultTable> resultTable = getResult();
   resultTable->logResultSize();
+  LOG(INFO) << "Result Table:\n" << resultTable->asDebugString();
   LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
              << std::endl;
   auto selectedColumnIndices =

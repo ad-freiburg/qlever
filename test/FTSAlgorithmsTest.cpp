@@ -26,59 +26,103 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
   idRange._first = VocabIndex::make(5);
   idRange._last = VocabIndex::make(7);
 
-  vector<TextRecordIndex> blockCids;
-  vector<WordIndex> blockWids;
-  vector<Score> blockScores;
-  vector<TextRecordIndex> resultCids;
-  vector<Score> resultScores;
+  IndexImpl::WordEntityPostings wep;
+  IndexImpl::WordEntityPostings resultWep;
 
   // Empty
-  FTSAlgorithms::filterByRange(idRange, blockCids, blockWids, blockScores,
-                               resultCids, resultScores);
-  ASSERT_EQ(0u, resultCids.size());
+  resultWep = FTSAlgorithms::filterByRange(idRange, wep);
+  ASSERT_EQ(0u, resultWep.cids.size());
 
   // None
-  blockCids.push_back(T(0));
-  blockWids.push_back(2);
-  blockScores.push_back(1);
+  wep.cids.push_back(T(0));
+  wep.wids.push_back(2);
+  wep.scores.push_back(1);
 
-  FTSAlgorithms::filterByRange(idRange, blockCids, blockWids, blockScores,
-                               resultCids, resultScores);
-  ASSERT_EQ(0u, resultCids.size());
+  resultWep = FTSAlgorithms::filterByRange(idRange, wep);
+  ASSERT_EQ(0u, resultWep.cids.size());
 
   // Match
-  blockCids.push_back(T(0));
-  blockCids.push_back(T(1));
-  blockCids.push_back(T(2));
-  blockCids.push_back(T(3));
+  wep.cids.push_back(T(0));
+  wep.cids.push_back(T(1));
+  wep.cids.push_back(T(2));
+  wep.cids.push_back(T(3));
 
-  blockWids.push_back(5);
-  blockWids.push_back(7);
-  blockWids.push_back(5);
-  blockWids.push_back(6);
+  wep.wids.push_back(5);
+  wep.wids.push_back(7);
+  wep.wids.push_back(5);
+  wep.wids.push_back(6);
 
-  blockScores.push_back(1);
-  blockScores.push_back(1);
-  blockScores.push_back(1);
-  blockScores.push_back(1);
+  wep.scores.push_back(1);
+  wep.scores.push_back(1);
+  wep.scores.push_back(1);
+  wep.scores.push_back(1);
 
-  FTSAlgorithms::filterByRange(idRange, blockCids, blockWids, blockScores,
-                               resultCids, resultScores);
-  ASSERT_EQ(4u, resultCids.size());
-  ASSERT_EQ(4u, resultScores.size());
+  resultWep = FTSAlgorithms::filterByRange(idRange, wep);
+  ASSERT_EQ(4u, resultWep.cids.size());
+  ASSERT_EQ(4u, resultWep.scores.size());
 
-  resultCids.clear();
-  resultScores.clear();
-
-  blockCids.push_back(T(4));
-  blockWids.push_back(8);
-  blockScores.push_back(1);
+  wep.cids.push_back(T(4));
+  wep.wids.push_back(8);
+  wep.scores.push_back(1);
 
   // Partial
-  FTSAlgorithms::filterByRange(idRange, blockCids, blockWids, blockScores,
-                               resultCids, resultScores);
-  ASSERT_EQ(4u, resultCids.size());
-  ASSERT_EQ(4u, resultScores.size());
+  resultWep = FTSAlgorithms::filterByRange(idRange, wep);
+  ASSERT_EQ(4u, resultWep.cids.size());
+  ASSERT_EQ(4u, resultWep.scores.size());
+};
+
+TEST(FTSAlgorithmsTest, crossIntersectTest) {
+  IndexImpl::WordEntityPostings matchingContextsWep;
+  IndexImpl::WordEntityPostings eBlockWep;
+  IndexImpl::WordEntityPostings resultWep;
+  resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
+  ASSERT_EQ(0u, resultWep.wids.size());
+  ASSERT_EQ(0u, resultWep.cids.size());
+  ASSERT_EQ(0u, resultWep.eids.size());
+  ASSERT_EQ(0u, resultWep.scores.size());
+
+  matchingContextsWep.cids.push_back(T(0));
+  matchingContextsWep.cids.push_back(T(2));
+  matchingContextsWep.wids.push_back(1);
+  matchingContextsWep.wids.push_back(4);
+  matchingContextsWep.scores.push_back(1);
+  matchingContextsWep.scores.push_back(1);
+
+  resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
+  ASSERT_EQ(0u, resultWep.wids.size());
+  ASSERT_EQ(0u, resultWep.cids.size());
+  ASSERT_EQ(0u, resultWep.eids.size());
+  ASSERT_EQ(0u, resultWep.scores.size());
+
+  eBlockWep.cids.push_back(T(1));
+  eBlockWep.cids.push_back(T(2));
+  eBlockWep.cids.push_back(T(2));
+  eBlockWep.cids.push_back(T(4));
+  eBlockWep.eids.push_back(I(10));
+  eBlockWep.eids.push_back(I(1));
+  eBlockWep.eids.push_back(I(1));
+  eBlockWep.eids.push_back(I(2));
+  eBlockWep.scores.push_back(1);
+  eBlockWep.scores.push_back(1);
+  eBlockWep.scores.push_back(1);
+  eBlockWep.scores.push_back(1);
+
+  resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
+  ASSERT_EQ(2u, resultWep.wids.size());
+  ASSERT_EQ(2u, resultWep.cids.size());
+  ASSERT_EQ(2u, resultWep.eids.size());
+  ASSERT_EQ(2u, resultWep.scores.size());
+
+  matchingContextsWep.cids.push_back(T(2));
+  matchingContextsWep.wids.push_back(8);
+  matchingContextsWep.scores.push_back(1);
+
+  resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
+  ASSERT_EQ(4u, resultWep.wids.size());
+  ASSERT_EQ(4u, resultWep.cids.size());
+  ASSERT_EQ(4u, resultWep.eids.size());
+  ASSERT_EQ(4u, resultWep.scores.size());
+  ASSERT_EQ(8u, resultWep.wids[1]);
 };
 
 TEST(FTSAlgorithmsTest, intersectTest) {

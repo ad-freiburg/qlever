@@ -178,7 +178,11 @@ void Index::getContextEntityScoreListsForWords(const std::string& words,
                                                vector<TextRecordIndex>& cids,
                                                vector<Id>& eids,
                                                vector<Score>& scores) const {
-  return pimpl_->getContextEntityScoreListsForWords(words, cids, eids, scores);
+  IndexImpl::WordEntityPostings wep = pimpl_->getContextEntityScoreListsForWords(words);
+  cids = wep.cids;
+  eids = wep.eids;
+  scores = wep.scores;
+  return;
 }
 
 // ______________________________
@@ -209,10 +213,15 @@ void Index::getECListForWordsAndSubtrees(
 }
 
 // ___________________________
+// QUESTION: Warum werden die IndexImpl methoden hier nochmal definiert und
+// sollte ich es hier auch umschreiben, so dass wep verwendet wird?
 void Index::getWordPostingsForTerm(const std::string& term,
                                    vector<TextRecordIndex>& cids,
                                    vector<Score>& scores) const {
-  return pimpl_->getWordPostingsForTerm(term, cids, scores);
+  IndexImpl::WordEntityPostings wep =  pimpl_->getWordPostingsForTerm(term);
+  cids = wep.cids;
+  scores = wep.scores;
+  return;
 }
 
 // __________________________
@@ -220,7 +229,10 @@ void Index::getEntityPostingsForTerm(const std::string& term,
                                      vector<TextRecordIndex>& cids,
                                      vector<Id>& eids,
                                      vector<Score>& scores) const {
-  return pimpl_->getEntityPostingsForTerm(term, cids, eids, scores);
+  IndexImpl::WordEntityPostings wep =  pimpl_->getEntityPostingsForTerm(term);
+  cids = wep.cids;
+  scores = wep.scores;
+  return;
 }
 
 // _________________________
