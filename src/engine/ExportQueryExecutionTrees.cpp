@@ -108,7 +108,7 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
       }
       const auto& currentId = data(rowIndex, opt->_columnIndex);
       const auto& optionalStringAndXsdType = idToStringAndType(
-          qet.getQec()->getIndex(), currentId, *resultTable->_localVocab);
+          qet.getQec()->getIndex(), currentId, resultTable->localVocab());
       if (!optionalStringAndXsdType.has_value()) {
         row.emplace_back(nullptr);
         continue;
@@ -272,7 +272,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
     for (const auto& column : columns) {
       const auto& currentId = idTable(rowIndex, column->_columnIndex);
       const auto& optionalValue = idToStringAndType(
-          qet.getQec()->getIndex(), currentId, *resultTable->_localVocab);
+          qet.getQec()->getIndex(), currentId, resultTable->localVocab());
       if (!optionalValue.has_value()) {
         continue;
       }
@@ -381,7 +381,7 @@ ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary(
         Id id = idTable(i, val._columnIndex);
         auto optionalStringAndType =
             idToStringAndType(qet.getQec()->getIndex(), id,
-                              *resultTable->_localVocab, escapeFunction);
+                              resultTable->localVocab(), escapeFunction);
         if (optionalStringAndType.has_value()) [[likely]] {
           co_yield optionalStringAndType.value().first;
         }

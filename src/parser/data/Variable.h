@@ -47,4 +47,9 @@ class Variable {
   friend H AbslHashValue(H h, const Variable& v) {
     return H::combine(std::move(h), v._name);
   }
+
+  // Formatter for use in `absl::StrJoin` (we need this in several places).
+  static void AbslFormatter(std::string* out, const Variable& variable) {
+    out->append(variable.name());
+  }
 };

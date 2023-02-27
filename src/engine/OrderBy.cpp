@@ -89,8 +89,7 @@ void OrderBy::computeResult(ResultTable* result) {
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
-  result->_localVocab = subRes->_localVocab;
-
+  result->shareLocalVocabFrom(*subRes);
   result->_idTable = subRes->_idTable.clone();
 
   int width = result->_idTable.numColumns();

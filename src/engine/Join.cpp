@@ -149,9 +149,9 @@ void Join::computeResult(ResultTable* result) {
                   leftRes->_idTable, _leftJoinCol, rightRes->_idTable,
                   _rightJoinCol, &result->_idTable);
 
-  // If only one of the two operands has a local vocab, pass it on.
-  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
-      leftRes->_localVocab, rightRes->_localVocab);
+  // If only one of the two operands has a non-empty local vocabulary, share
+  // with that one (otherwise, throws an exception).
+  result->shareLocalVocabFromNonEmptyOf(*leftRes, *rightRes);
 
   LOG(DEBUG) << "Join result computation done" << endl;
 }

@@ -10,7 +10,6 @@
 #include <string_view>
 
 #include "absl/strings/str_cat.h"
-#include "nlohmann/json.hpp"
 #include "util/AsyncStream.h"
 #include "util/CompressorStream.h"
 #include "util/StringUtils.h"
@@ -19,6 +18,7 @@
 #include "util/http/UrlParser.h"
 #include "util/http/beast.h"
 #include "util/http/streamable_body.h"
+#include "util/json.h"
 #include "util/stream_generator.h"
 
 /// Several utilities for using/customizing the HttpServer template from
@@ -32,32 +32,46 @@ using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
 namespace streams = ad_utility::streams;
 using ad_utility::httpUtils::httpStreams::streamable_body;
 
-/// The components of a URL. For example, the components of the URL
-/// https://qlever.cs.uni-freiburg.de/api/wikidata are:
-///
-/// protocol: HTTPS
-/// host:     qlever.cs.uni-freiburg.de
-/// port:     443 (implicit)
-/// target:   /api/wikidata .
-///
-/// NOTE: `host` and `target` could be `std::string_view` because they are parts
-/// of the given URL. However, `port` can be implicit, so we need a
-/// `std::string` here (and it's not an `int` because the Beast functions ask
-/// for the port as a string). Since URLs are short and we do not handle large
-/// numbers of URLs, the overhead of the string copies are negligible.
-struct UrlComponents {
+// Simple URL class that parses the components from a given URL string and
+// provides "getters" for them (some of the components are implicit, such as the
+// port, so these are not really getters). For example, the components of the
+// URL https://qlever.cs.uni-freiburg.de/api/wikidata are:
+//
+// protocol: HTTPS
+// host:     qlever.cs.uni-freiburg.de
+// port:     443 (implicit)
+// target:   /api/wikidata .
+//
+class Url {
+ public:
+  enum class Protocol { HTTP, HTTPS };
+
+ private:
+  Protocol protocol_;
+  std::string host_;
+  std::string port_;
+  std::string target_;
+
+ public:
   // Construct from given URL.
-  UrlComponents(const std::string_view url);
-  // Members.
-  enum Protocol { HTTP, HTTPS } protocol;
-  std::string host;
-  std::string port;
-  std::string target;
-  // For testing.
-  friend std::ostream& operator<<(std::ostream& os, const UrlComponents& uc) {
-    return os << "UrlComponents("
-              << (uc.protocol == Protocol::HTTP ? "http" : "https") << ", "
-              << uc.host << ", " << uc.port << ", " << uc.target << ")";
+  explicit Url(std::string_view url);
+  // The protocol: one of Protocol::HTTP or Protocol::HTTPS.
+  Protocol protocol() const { return protocol_; }
+  // The host; this is always a substring of the given URL.
+  const std::string& host() const { return host_; }
+  // The port; inferred from the protocol if not specified explicitly (80 for
+  // HTTP, 443 for HTTPS).
+  const std::string& port() const { return port_; }
+  // The target; this is a substring of the given URL, except when it's empty in
+  // the URL, then it's "/".
+  const std::string& target() const { return target_; }
+  // The protocol as string.
+  std::string_view protocolAsString() const {
+    return protocol_ == Protocol::HTTP ? "http" : "https";
+  }
+  // The whole URL as a string again (with explicit port).
+  std::string asString() const {
+    return absl::StrCat(protocolAsString(), "://", host_, ":", port_, target_);
   }
 };
 

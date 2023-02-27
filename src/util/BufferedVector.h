@@ -21,7 +21,19 @@ class BufferedVector {
  public:
   using const_iterator = const T*;
   using iterator = T*;
+  using value_type = T;
 
+ private:
+  // the externalization threshold
+  size_t _threshold = 2 << 25;
+  // keep track on which of our data stores we are currently using.
+  bool _isInternal = true;
+
+  // the two possible data storages
+  std::vector<T> _vec;
+  ad_utility::MmapVectorTmp<T> _extVec;
+
+ public:
   // Constructor needs the wanted threshold (how many elements until we
   // externalize) and the filename Where we will initialize the mmapVector
   BufferedVector(size_t threshold, std::string extFilename)
@@ -93,22 +105,27 @@ class BufferedVector {
 
   // add element specified by arg el at the end of the array
   // possibly invalidates iterators
-  void push_back(const T& el) {
+ private:
+  void push_backImpl(auto&&... args) {
     auto oldSize = size();
     if (!_isInternal) {
-      _extVec.push_back(el);
+      _extVec.push_back(T{AD_FWD(args)...});
     } else if (oldSize < _threshold) {
-      _vec.push_back(el);
+      _vec.emplace_back(AD_FWD(args)...);
     } else {
       _extVec.resize(oldSize + 1);
       for (size_t i = 0; i < oldSize; ++i) {
         _extVec[i] = _vec[i];
       }
-      _extVec[oldSize] = el;
+      _extVec[oldSize] = T{AD_FWD(args)...};
       _isInternal = false;
       _vec.clear();
     }
   }
+
+ public:
+  void push_back(const T& el) { push_backImpl(el); }
+  void emplace_back(auto&&... args) { push_backImpl(AD_FWD(args)...); }
 
   // Change the size of the `BufferedVector` to `newSize`. This might move
   // the data from the internal to the external vector or vice versa. If
@@ -135,21 +152,48 @@ class BufferedVector {
     }
   }
 
+  // Similar to `std::vector::insert`. Insert the elements in the iterator range
+  // `[it1, it2)` into the vector at `target`. The `it1` and `it2` must not
+  // overlap with `this` and `target` must be a valid iterator for `this`. Both
+  // of these conditions are checked via an `AD_CONTRACT_CHECK`.
+  void insert(T* target, auto it1, auto it2) {
+    AD_CONTRACT_CHECK(target >= begin() && target <= end());
+    AD_CONTRACT_CHECK(it2 >= it1);
+    auto addr1 = &(*it1);
+    auto addr2 = &(*it2);
+    AD_CONTRACT_CHECK((addr1 < begin() || addr1 >= end()) &&
+                      (addr2 < begin() || addr2 >= end()));
+    size_t numInserted = it2 - it1;
+    size_t offset = target - begin();
+    resize(size() + numInserted);
+    std::shift_right(begin() + offset, end(), numInserted);
+    for (auto it = it1; it != it2; ++it) {
+      (*this)[offset++] = *it;
+    }
+  }
+
+  // Erase the elements between `it1` and `it2`. The remaining elements will
+  // stay in the same order. `it1` and `it2` must be valid iterators for `this`
+  // and `it1 <= `it2` must hold. Both of these conditions are checked via
+  // `AD_CONTRACT_CHECK`.
+  void erase(T* it1, T* it2) {
+    AD_CONTRACT_CHECK(begin() <= it1 && it1 <= it2 && it2 <= end());
+    size_t numErased = it2 - it1;
+    std::shift_left(it1, end(), numErased);
+    resize(size() - numErased);
+  }
+
+  // This stub implementation of `reserve` currently does nothing, but makes the
+  // interface more consistent with `std::vector`
+  void reserve([[maybe_unused]] size_t newCapacity) {}
+  // Same goes for `shrink_to_fit`
+  void shrink_to_fit() {}
+
   // Get the underlying allocator of the vector.
   auto get_allocator() const { return _vec.get_allocator(); }
 
   // testing interface
   size_t threshold() const { return _threshold; }
   bool isInternal() const { return _isInternal; }
-
- private:
-  // the externalization threshold
-  size_t _threshold = 2 << 25;
-  // keep track on which of our data stores we are currently using.
-  bool _isInternal = true;
-
-  // the two possible data storages
-  std::vector<T> _vec;
-  ad_utility::MmapVectorTmp<T> _extVec;
 };
 }  // namespace ad_utility

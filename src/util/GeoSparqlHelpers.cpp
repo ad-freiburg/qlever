@@ -4,9 +4,6 @@
 
 #include "./GeoSparqlHelpers.h"
 
-#include <absl/strings/charconv.h>
-#include <ctre/ctre.h>
-
 #include <cmath>
 #include <limits>
 #include <numbers>
@@ -15,6 +12,8 @@
 #include <string_view>
 
 #include "./Exception.h"
+#include "absl/strings/charconv.h"
+#include "ctre/ctre.h"
 
 namespace ad_utility {
 

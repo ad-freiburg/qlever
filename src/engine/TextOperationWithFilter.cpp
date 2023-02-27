@@ -84,7 +84,7 @@ void TextOperationWithFilter::computeResult(ResultTable* result) {
   AD_CONTRACT_CHECK(getNofVars() >= 1);
   result->_idTable.setNumColumns(getResultWidth());
   shared_ptr<const ResultTable> filterResult = _filterResult->getResult();
-  result->_localVocab = filterResult->_localVocab;
+  result->shareLocalVocabFrom(*filterResult);
 
   result->_resultTypes.reserve(result->_idTable.numColumns());
   result->_resultTypes.push_back(ResultTable::ResultType::TEXT);

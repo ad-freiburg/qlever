@@ -507,8 +507,13 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
   size_t from = 0;
   std::optional<Id> currentRel;
-  BufferedIdTable buffer{ad_utility::BufferedVector<Id>{
-      THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.mmap-buffer"}};
+  BufferedIdTable buffer{
+      2,
+      std::array{
+          ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
+                                         fileName1 + ".tmp.mmap-buffer-col0"},
+          ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
+                                         fileName1 + ".tmp.mmap-buffer-col1"}}};
   size_t distinctCol1 = 0;
   Id lastLhs = ID_NO_VALUE;
   uint64_t totalNumTriples = 0;

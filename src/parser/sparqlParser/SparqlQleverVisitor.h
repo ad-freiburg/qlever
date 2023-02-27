@@ -1,8 +1,8 @@
-// Copyright 2021, University of Freiburg,
+// Copyright 2021 - 2022, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Authors:
-//   2021 - Johannes Kalmbach <kalmbacj@informatik.uni-freiburg.de>
-//   2022   Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+// Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -77,11 +77,15 @@ class SparqlQleverVisitor {
   size_t _blankNodeCounter = 0;
   int64_t numInternalVariables_ = 0;
   int64_t numGraphPatterns_ = 0;
-  // A Stack of vector<Variable> that store the variables that are visible in a
-  // query body. Each element corresponds to nested Queries that the parse is
-  // currently parsing.
-  std::vector<std::vector<Variable>> visibleVariables_{{}};
+  // The visible variables in the order in which they are encountered in the
+  // query. This may contain duplicates. A variable is added via
+  // `addVisibleVariable`.
+  std::vector<Variable> visibleVariables_{};
   PrefixMap prefixMap_{};
+  // We need to remember the prologue (prefix declarations) when we encounter it
+  // because we need it when we encounter a SERVICE query. When there is no
+  // prologue, this string simply remains empty.
+  std::string prologueString_;
 
  public:
   SparqlQleverVisitor() = default;
@@ -187,7 +191,7 @@ class SparqlQleverVisitor {
   [[noreturn]] parsedQuery::GraphPatternOperation visit(
       Parser::GraphGraphPatternContext* ctx);
 
-  [[noreturn]] parsedQuery::GraphPatternOperation visit(
+  [[nodiscard]] parsedQuery::Service visit(
       Parser::ServiceGraphPatternContext* ctx);
 
   [[nodiscard]] parsedQuery::GraphPatternOperation visit(
@@ -421,6 +425,14 @@ class SparqlQleverVisitor {
     // true means automatically generated
     return {true, std::move(label)};
   }
+
+  // Get the part of the original input string that pertains to the given
+  // context. This is necessary because ANTLR's `getText()` only provides that
+  // part with *all* whitespace removed. Preserving the whitespace is important
+  // for readability (for example, in an error message), and even more so when
+  // using such parts for further processing (like the body of a SERVICE query,
+  // which is not valid SPARQL anymore when you remove all whitespace).
+  std::string getOriginalInputForContext(antlr4::ParserRuleContext* context);
 
   // Process an IRI function call. This is used in both `visitFunctionCall` and
   // `visitIriOrFunction`.

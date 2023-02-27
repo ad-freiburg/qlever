@@ -13,17 +13,17 @@ class Values : public Operation {
   using SparqlValues = parsedQuery::SparqlValues;
 
  private:
-  std::vector<size_t> _multiplicities;
+  std::vector<float> multiplicities_;
 
-  SparqlValues _values;
+  SparqlValues parsedValues_;
 
  public:
-  /// constructor sanitizes the input by removing completely undefined variables
-  /// and values.
-  Values(QueryExecutionContext* qec, SparqlValues values);
+  // Create operation from parsed values. This calls `sanitizeValues`.
+  // and values.
+  Values(QueryExecutionContext* qec, SparqlValues parsedValues);
 
  protected:
-  virtual string asStringImpl(size_t indent = 0) const override;
+  virtual string asStringImpl(size_t indent) const override;
 
  public:
   virtual string getDescriptor() const override;
@@ -35,7 +35,7 @@ class Values : public Operation {
   virtual void setTextLimit(size_t limit) override { (void)limit; }
 
   virtual bool knownEmptyResult() override {
-    return _values._variables.empty() || _values._values.empty();
+    return parsedValues_._variables.empty() || parsedValues_._values.empty();
   }
 
   virtual float getMultiplicity(size_t col) override;
@@ -53,13 +53,13 @@ class Values : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
-  template <size_t I>
-  void writeValues(IdTable* res, const Index& index, const SparqlValues& values,
-                   std::shared_ptr<LocalVocab> localVocab);
-
-  /// remove all completely undefined values and variables
-  /// throw if nothing remains
-  SparqlValues sanitizeValues(SparqlValues&& values);
-
+  // Compute the per-column multiplicity of the parsed values.
   void computeMultiplicities();
+
+  // Write `parsedValues_` to the given result object.
+  //
+  // NOTE: this moves the values out of `parsedValues_` (to save a string copy
+  // for those values that end up in the local vocabulary).
+  template <size_t I>
+  void writeValues(ResultTable* result);
 };

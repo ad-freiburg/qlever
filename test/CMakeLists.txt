@@ -157,7 +157,7 @@ addLinkAndDiscoverTest(PriorityQueueTest absl::flat_hash_map ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(SynchronizedTest)
 
-addLinkAndDiscoverTest(LimitedAllocatorTest)
+addLinkAndDiscoverTest(AllocatorWithLimitTest)
 
 addLinkAndDiscoverTest(MinusTest engine)
 
@@ -270,6 +270,10 @@ addLinkAndDiscoverTestSerial(RegexExpressionTest parser sparqlExpressions index 
 
 addLinkAndDiscoverTestSerial(LocalVocabTest engine)
 
+addLinkAndDiscoverTestSerial(ValuesTest engine)
+
+addLinkAndDiscoverTestSerial(ServiceTest engine)
+
 addLinkAndDiscoverTest(HttpTest boost_iostreams http)
 
 addLinkAndDiscoverTest(CallFixedSizeTest)
@@ -280,7 +284,7 @@ addLinkAndDiscoverTest(ResetWhenMovedTest)
 
 addLinkAndDiscoverTest(TimerTest absl::strings)
 
-addLinkAndDiscoverTest(AlgorithmTest)
+addLinkAndDiscoverTest(AlgorithmTest absl::flat_hash_set)
 
 addLinkAndDiscoverTest(CompressedRelationsTest index)
 
@@ -295,3 +299,5 @@ addLinkAndDiscoverTestSerial(OrderByTest engine)
 addLinkAndDiscoverTestSerial(ValuesForTestingTest index)
 
 addLinkAndDiscoverTestSerial(ExportQueryExecutionTreeTest index engine parser)
+
+addLinkAndDiscoverTestSerial(AggregateExpressionTest parser sparqlExpressions index engine)

@@ -53,6 +53,7 @@ class QueryExecutionTree {
     MULTICOLUMN_JOIN,
     TRANSITIVE_PATH,
     VALUES,
+    SERVICE,
     BIND,
     MINUS,
     NEUTRAL_ELEMENT,

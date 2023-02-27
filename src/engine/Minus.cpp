@@ -54,7 +54,7 @@ void Minus::computeResult(ResultTable* result) {
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
 
-  LOG(DEBUG) << "Minus subresult computation done." << std::endl;
+  LOG(DEBUG) << "Minus subresult computation done" << std::endl;
 
   // We have the same output columns as the left input, so we also
   // have the same output column types.
@@ -69,11 +69,11 @@ void Minus::computeResult(ResultTable* result) {
                   this, leftResult->_idTable, rightResult->_idTable,
                   _matchedColumns, &result->_idTable);
 
-  // If only one of the two operands has a local vocab, pass it on.
-  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
-      leftResult->_localVocab, rightResult->_localVocab);
+  // If only one of the two operands has a non-empty local vocabulary, share
+  // with that one (otherwise, throws an exception).
+  result->shareLocalVocabFromNonEmptyOf(*leftResult, *rightResult);
 
-  LOG(DEBUG) << "Minus result computation done." << endl;
+  LOG(DEBUG) << "Minus result computation done" << endl;
 }
 
 // _____________________________________________________________________________

@@ -132,7 +132,7 @@ void Sort::computeResult(ResultTable* result) {
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
-  result->_localVocab = subRes->_localVocab;
+  result->shareLocalVocabFrom(*subRes);
   result->_idTable = subRes->_idTable.clone();
   result->_sortedBy = resultSortedOn();
   sortImpl(result->_idTable, sortColumnIndices_);

@@ -87,7 +87,16 @@ void Bind::computeResult(ResultTable* result) {
 
   result->_idTable.setNumColumns(getResultWidth());
   result->_resultTypes = subRes->_resultTypes;
-  result->_localVocab = subRes->_localVocab;
+
+  // Make a deep copy of the local vocab from `subRes` and then add to it (in
+  // case BIND adds a new word or words).
+  //
+  // TODO: In most BIND operations, nothing is added to the local vocabulary, so
+  // it would be more efficient to first share the pointer here (like with
+  // `shareLocalVocabFrom`) and only copy it when a new word is about to be
+  // added. Same for GROUP BY.
+  result->getCopyOfLocalVocabFrom(*subRes);
+
   int inwidth = subRes->_idTable.numColumns();
   int outwidth = getResultWidth();
 
@@ -115,7 +124,7 @@ void Bind::computeExpressionBind(
 
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), columnMap, inputResultTable._idTable,
-      getExecutionContext()->getAllocator(), *inputResultTable._localVocab);
+      getExecutionContext()->getAllocator(), inputResultTable.localVocab());
 
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);
@@ -165,7 +174,7 @@ void Bind::computeExpressionBind(
         if (it != resultGenerator.end()) {
           Id constantId =
               sparqlExpression::detail::constantExpressionResultToId(
-                  std::move(*it), *(outputResultTable->_localVocab));
+                  std::move(*it), outputResultTable->localVocabNonConst());
           for (size_t i = 0; i < inSize; ++i) {
             output(i, inCols) = constantId;
           }
@@ -175,7 +184,8 @@ void Bind::computeExpressionBind(
         for (auto&& resultValue : resultGenerator) {
           output(i, inCols) =
               sparqlExpression::detail::constantExpressionResultToId(
-                  std::move(resultValue), *(outputResultTable->_localVocab));
+                  std::move(resultValue),
+                  outputResultTable->localVocabNonConst());
           i++;
         }
       }

@@ -9,6 +9,7 @@
 #include <string>
 #include <variant>
 
+#include "engine/LocalVocab.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "parser/data/Variable.h"
@@ -21,9 +22,22 @@
 /// (xsd:int and xsd:integer) and `std::string` (variables, IRIs, and literals
 /// of any other type).
 class TripleComponent {
+ public:
+  // Own class for the UNDEF value.
+  struct UNDEF {
+    // Default equality operator.
+    bool operator==(const UNDEF&) const = default;
+    // Hash to arbitrary (fixed) value. For example, needed in
+    // `Values::computeMultiplicities`.
+    template <typename H>
+    friend H AbslHashValue(H h, [[maybe_unused]] const UNDEF& undef) {
+      return H::combine(std::move(h), 42);
+    }
+  };
+
  private:
   // The underlying variant type.
-  using Variant = std::variant<std::string, double, int64_t, Variable>;
+  using Variant = std::variant<std::string, double, int64_t, UNDEF, Variable>;
   Variant _variant;
 
  public:
@@ -89,8 +103,12 @@ class TripleComponent {
   bool operator==(const TripleComponent&) const = default;
 
   /// Hash value for `TripleComponent` object.
+  /// Note: It is important to use `std::same_as` because otherwise this
+  /// overload would also be eligible for the contained types that are
+  /// implicitly convertible to `TripleComponent` which would lead to strange
+  /// bugs.
   template <typename H>
-  friend H AbslHashValue(H h, const TripleComponent& tc) {
+  friend H AbslHashValue(H h, const std::same_as<TripleComponent> auto& tc) {
     return H::combine(std::move(h), tc._variant);
   }
 
@@ -157,6 +175,8 @@ class TripleComponent {
         return Id::makeFromInt(value);
       } else if constexpr (std::is_same_v<T, double>) {
         return Id::makeFromDouble(value);
+      } else if constexpr (std::is_same_v<T, UNDEF>) {
+        return Id::makeUndefined();
       } else if constexpr (std::is_same_v<T, Variable>) {
         // Cannot turn a variable into a ValueId.
         AD_FAIL();
@@ -167,9 +187,9 @@ class TripleComponent {
     return std::visit(visitor, _variant);
   }
 
-  /// Convert the `TripleComponent` to an ID. If the `TripleComponent` is a
-  /// string, the IDs are resolved using the `vocabulary`. If a string is not
-  /// found in the vocabulary, `std::nullopt` is returned.
+  // Convert the `TripleComponent` to an ID. If the `TripleComponent` is a
+  // string, the IDs are resolved using the `vocabulary`. If a string is not
+  // found in the vocabulary, `std::nullopt` is returned.
   template <typename Vocabulary>
   [[nodiscard]] std::optional<Id> toValueId(
       const Vocabulary& vocabulary) const {
@@ -185,8 +205,31 @@ class TripleComponent {
     }
   }
 
-  /// Human readable output. Is used for debugging, testing, and for the
-  /// creation of descriptors and cache keys.
+  // Same as the above, but also consider the given local vocabulary. If the
+  // string is neither in `vocabulary` nor in `localVocab`, it will be added to
+  // `localVocab`. Therefore, we get a valid `Id` in any case. The modifier is
+  // `&&` because in our uses of this method, the `TripleComponent` object is
+  // created solely to call this method and we want to avoid copying the
+  // `std::string` when passing it to the local vocabulary.
+  template <typename Vocabulary>
+  [[nodiscard]] Id toValueId(const Vocabulary& vocabulary,
+                             LocalVocab& localVocab) && {
+    std::optional<Id> id = toValueId(vocabulary);
+    if (!id) {
+      // If `toValueId` could not convert to `Id`, we have a string, which we
+      // look up in (and potentially add to) our local vocabulary.
+      AD_CORRECTNESS_CHECK(isString());
+      // NOTE: There is a `&&` version of `getIndexAndAddIfNotContained`.
+      // Otherwise, `newWord` would be copied here despite the `std::move`.
+      std::string& newWord = getString();
+      id = Id::makeFromLocalVocabIndex(
+          localVocab.getIndexAndAddIfNotContained(std::move(newWord)));
+    }
+    return id.value();
+  }
+
+  // Human readable output. Is used for debugging, testing, and for the creation
+  // of descriptors and cache keys.
   friend std::ostream& operator<<(std::ostream& stream,
                                   const TripleComponent& obj);
 
