@@ -7,7 +7,7 @@
 #include <vector>
 #include <functional>
 #include <string>
-#include <optional>
+#include <variant>
 
 #include "util/json.h"
 #include "util/Timer.h"
@@ -50,15 +50,18 @@ class BenchmarkRecords {
       // The names of the columns and rows.
       std::vector<std::string> rowNames_;
       std::vector<std::string> columnNames_;
-      // The time measurements in seconds. Access is [row, column].
-      std::vector<std::vector<std::optional<float>>> entries_;
+      // The entries in the table. Access is [row, column]. Can be the time in
+      // seconds, or a string.
+      using EntryType = std::variant<std::monostate, float, std::string>;
+      std::vector<std::vector<EntryType>> entries_;
 
       RecordTable(const std::string& pDescriptor, 
           const std::vector<std::string>& pRowNames,
           const std::vector<std::string>& pColumnNames):
           descriptor_{pDescriptor}, rowNames_{pRowNames},
           columnNames_{pColumnNames},
-          entries_(pRowNames.size(), std::vector<std::optional<float>>(pColumnNames.size())) {}
+          entries_(pRowNames.size(),
+              std::vector<EntryType>(pColumnNames.size())) {}
 
       // JSON (d)serialization for all the created structures in BenchmarkRecords.
       NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkRecords::RecordTable, descriptor_, rowNames_, columnNames_, entries_)
@@ -94,6 +97,33 @@ class BenchmarkRecords {
       benchmarkTimer.stop();
 
       return benchmarkTimer.secs();
+    }
+
+    /*
+     * @brief Returns a reference to an entry in a recordTable of the hash map
+     *  recordTables_. Strictly a helper function.
+     */
+    RecordTable::EntryType& getHashMapTableEntry(
+        const std::string& tableDescriptor,
+        const size_t row, const size_t column){
+      // Adding more details to a possible exception.
+      try {
+        // Get the entry of the hash map.
+        auto& table = recordTables_.getReferenceToValue(tableDescriptor);
+
+        // Are the given row and column number inside the table range?
+        // size_t is unsigned, so we only need to check, that they are not to big.
+        AD_CHECK(row < table.rowNames_.size() &&
+            column < table.columnNames_.size());
+        
+        // Return  the reference to the table entry.
+        return table.entries_[row][column];
+      } catch(KeyIsntRegisteredException const&) {
+        // The exception INSIDE the object, do not know, what they object is
+        // called, but that information is helpful for the exception. So we
+        // do it here.
+        throw KeyIsntRegisteredException(tableDescriptor, "recordTables_");
+      }
     }
 
   public:
@@ -162,7 +192,6 @@ class BenchmarkRecords {
       }
     }
 
-
     /*
      * @brief Returns a vector of all the groups.
      */
@@ -197,26 +226,57 @@ class BenchmarkRecords {
     void addToExistingTable(const std::string& tableDescriptor,
         const size_t row, const size_t column,
         const Function& functionToMeasure) {
-      // Adding more details to a possible exception.
-      try {
-        // Get the entry of the hash map.
-        auto& table = recordTables_.getReferenceToValue(tableDescriptor);
-
-        // Are the given row and column number inside the table range?
-        // size_t is unsigned, so we only need to check, that they are not to big.
-        AD_CHECK(row < table.rowNames_.size() &&
-            column < table.columnNames_.size());
-        
-        // Add the measured time to the table.
-        table.entries_[row][column] = measureTimeOfFunction(functionToMeasure);
-      } catch(KeyIsntRegisteredException const&) {
-        // The exception INSIDE the object, do not know, what they object is
-        // called, but that information is helpful for the exception. So we
-        // do it here.
-        throw KeyIsntRegisteredException(tableDescriptor, "recordTables_");
-      }
+      // Add the measured time to the table.
+      RecordTable::EntryType& entry =
+        getHashMapTableEntry(tableDescriptor, row, column);
+      entry = measureTimeOfFunction(functionToMeasure);
     }
 
+    /*
+     * @brief Manually set the entry of an existing table.
+     *
+     * @tparam T Must be either float, or string.
+     *
+     * @param tableDescriptor The identification of the table.
+     * @param row, column Where in the tables to write the measured time.
+     *  Starts with (0,0).
+     * @param newEntryContent What to set the entry to.
+     */
+    template<typename T>
+      requires std::is_same<T, float>::value ||
+      std::is_same<T, std::string>::value
+    void setEntryOfExistingTable(const std::string& tableDescriptor,
+        const size_t row, const size_t column,
+        const T& newEntryContent) {
+      RecordTable::EntryType& entry =
+        getHashMapTableEntry(tableDescriptor, row, column);
+      entry = newEntryContent;
+    }
+
+    /*
+     * @brief Returns the content of a table entry, if the entry holds a value.
+     *
+     * @tparam T What type the entry has. Must be either float, or string. If
+     *  you give the wrong one, or the entry was never set/added, then this
+     *  function will cause an exception.
+     *
+     * @param tableDescriptor The identification of the table.
+     * @param row, column Where in the tables to write the measured time.
+     *  Starts with (0,0).
+     */
+    template<typename T>
+      requires std::is_same<T, float>::value ||
+      std::is_same<T, std::string>::value
+    const T getEntryOfExistingTable(const std::string& tableDescriptor,
+        const size_t row, const size_t column){
+      RecordTable::EntryType& entry =
+        getHashMapTableEntry(tableDescriptor, row, column);
+
+      // There is a chance, that the entry of the table does NOT have type T,
+      // in which case this will cause an error. As this is a mistake on the
+      // side of the user, we don't really care.
+      return std::get<T>(entry);
+    }
 
     /*
      * @brief Returns a vector of all the tables.

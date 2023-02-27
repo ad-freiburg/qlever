@@ -52,24 +52,46 @@ void addTablesToStringstream(std::stringstream* stringStream,
     const std::vector<BenchmarkRecords::RecordTable>& recordTables){
   addCategoryTitelToStringstream(stringStream, "Table benchmarks");
 
+  // For easier reading.
+  using RecordTableEntryType = BenchmarkRecords::RecordTable::EntryType;
+
   // Used for the formating of numbers in the table.
   const size_t exactNumberOfDecimals = 4;
 
   // What should be printed between columns. Used for nicer formating.
   const std::string columnSeperator = " | ";
 
-  // Convert an std::optional<float> to a screen friendly format.
-  auto optionalFloatToString = [&exactNumberOfDecimals](const
-      std::optional<float>& optionalFloat)->std::string{
-    // If there is no value, we print it as NA.
-    if (!optionalFloat.has_value()) {return "NA";}
-
-    // If there is a value, we print it with exactNumberOfDecimals
-    // decimals.
+  // Convert an RecordTableEntryType to a screen friendly
+  // format.
+  auto recordTableEntryToStringVisitor = [&exactNumberOfDecimals]<typename T>(
+      const T& entry)->std::string{
+    // We may need formating.
     std::stringstream ss;
-    ss << std::fixed << std::setprecision(exactNumberOfDecimals)
-      << (optionalFloat.value());
+
+    // We have 3 possible types, because
+    // RecordTableEntryType has three distinct possible
+    // types, that all need different handeling.
+    // Fortunaly, we can decide the handeling at compile time and throw the
+    // others away, using `if constexpr(std::is_same<...,...>::eval`.
+    if constexpr(std::is_same<T, std::monostate>::value) {
+      // No value, print it as NA.
+      ss << "NA";
+    } else if constexpr(std::is_same<T, float>::value) {
+      // There is a value, print it with exactNumberOfDecimals decimals.
+      ss << std::fixed << std::setprecision(exactNumberOfDecimals) << entry;
+    } else {
+      // Only other possible type is a string, which needs no formating.
+      ss << entry;
+    }
+
     return ss.str();
+  };
+  auto recordTableEntryToString = [&exactNumberOfDecimals,
+       &recordTableEntryToStringVisitor](const
+      RecordTableEntryType& entry)->std::string{
+    // The std::visit checks which type a std::variant is and calls our
+    // visitor function with the right template parameter.
+    return std::visit(recordTableEntryToStringVisitor, entry);
   };
 
   // Add a string to a stringstream with enough padding, empty spaces to the
@@ -89,17 +111,22 @@ void addTablesToStringstream(std::stringstream* stringStream,
 
     // For formating: What is the maximum string width of a column, if you
     // compare all it's entries?
+    
+    // The max width of the column with the row names.
     const size_t rowNameMaxStringWidth = std::ranges::max(table.rowNames_,
         {}, [](const std::string& name){return name.length();}).length();
 
+    // The max width for columns with actual entries.
     std::vector<size_t> columnMaxStringWidth(numberColumns, 0);
     for (size_t column = 0; column < numberColumns; column++) {
       // Which of the entries is the longest?
-      columnMaxStringWidth[column] = optionalFloatToString(
-          std::ranges::max(table.entries_, {},
-          [&column, &optionalFloatToString](
-            const std::vector<std::optional<float>>& row){
-          return optionalFloatToString(row[column]).length();})[column]).length();
+      const std::vector<RecordTableEntryType>&
+        rowWithTheWidestColumnEntry = std::ranges::max(table.entries_, {},
+          [&column, &recordTableEntryToString](
+            const std::vector<RecordTableEntryType>& row){
+          return recordTableEntryToString(row[column]).length();});
+      columnMaxStringWidth[column] =
+        recordTableEntryToString(rowWithTheWidestColumnEntry[column]).length();
       // Is the name of the column bigger?
       columnMaxStringWidth[column] =
         (columnMaxStringWidth[column] > table.columnNames_[column].length()) ?
@@ -128,7 +155,7 @@ void addTablesToStringstream(std::stringstream* stringStream,
       for (size_t column = 0; column < numberColumns; column++) {
         (*stringStream) << columnSeperator;
         addStringWithPadding(stringStream,
-            optionalFloatToString(table.entries_[row][column]),
+            recordTableEntryToString(table.entries_[row][column]),
             columnMaxStringWidth[column]);
       }
     }
