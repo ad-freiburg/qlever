@@ -171,8 +171,8 @@ class ParsedQuery {
   void addBind(sparqlExpression::SparqlExpressionPimpl expression,
                Variable targetVariable, bool targetIsVisible);
 
-  // Generates an internal bind that binds the given expression using a bind.
-  // The bind is added to the query as child. The variable that the expression
+  // Generates an internal BIND that binds the given expression using a BIND.
+  // The BIND is added to the query as child. The variable that the expression
   // is bound to is returned.
   Variable addInternalBind(sparqlExpression::SparqlExpressionPimpl expression);
 

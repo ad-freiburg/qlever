@@ -191,14 +191,18 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       !isExplicitGroupBy;
   const bool isGroupBy = isExplicitGroupBy || isImplicitGroupBy;
   using namespace std::string_literals;
-  std::string noteForGroupByError =
+  std::string noteForImplicitGroupBy =
       isImplicitGroupBy
           ? " Note: The GROUP BY in this query is implicit because an aggregate expression was used in the SELECT clause"s
           : ""s;
+  std::string noteForGroupByError =
+      ". All non-aggregated variables must be part of the GROUP BY "
+      "clause." +
+      noteForImplicitGroupBy;
 
   // Process orderClause
   auto processVariableOrderKey = [this, &checkVariableIsVisible, isGroupBy,
-                                  &noteForGroupByError](
+                                  &noteForImplicitGroupBy](
                                      VariableOrderKey orderKey) {
     // Check whether grouping is done. The variable being ordered by
     // must then be either grouped or the result of an alias in the select.
@@ -220,7 +224,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           " was used in an ORDER BY "
           "clause, but is neither grouped, nor created as an alias in the "
           "SELECT clause." +
-          noteForGroupByError);
+          noteForImplicitGroupBy);
     }
 
     _orderBy.push_back(std::move(orderKey));
@@ -230,7 +234,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   // all `orderConditions`, the corresponding expression is bound to a new
   // internal variable. Ordering is then done by this variable.
   auto processExpressionOrderKey = [this, &checkUsedVariablesAreVisible,
-                                    isGroupBy, &noteForGroupByError](
+                                    isGroupBy, &noteForImplicitGroupBy](
                                        ExpressionOrderKey orderKey) {
     checkUsedVariablesAreVisible(orderKey.expression_, "Order Key");
     if (isGroupBy) {
@@ -243,7 +247,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           "\"). Please assign this expression to a "
           "new variable in the SELECT clause and then order by this "
           "variable." +
-          noteForGroupByError);
+          noteForImplicitGroupBy);
     }
     auto additionalVariable = addInternalBind(std::move(orderKey.expression_));
     _orderBy.emplace_back(additionalVariable, orderKey.isDescending_);
@@ -301,17 +305,13 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
             throw ParseException(absl::StrCat(
                 "The expression \"", alias._expression.getDescriptor(),
                 "\" does not aggregate ", absl::StrJoin(unaggregatedVars, ", "),
-                ". All non-aggregated variables must be part of the GROUP BY "
-                "clause." +
-                    noteForGroupByError));
+                ". " + noteForGroupByError));
           }
         }
         if (!ad_utility::contains(_groupByVariables, var)) {
-          throw ParseException(
-              absl::StrCat("Variable ", var.name(),
-                           " is selected but not aggregated despite the "
-                           "query not being grouped by ",
-                           var.name(), "."));
+          throw ParseException(absl::StrCat("Variable ", var.name(),
+                                            " is selected but not aggregated. ",
+                                            noteForGroupByError));
         }
       }
     } else {
@@ -360,9 +360,8 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       if (!ad_utility::contains(_groupByVariables, variable)) {
         throw ParseException("Variable " + variable.name() +
                              " is used but not "
-                             "aggregated despite the query not being "
-                             "grouped by " +
-                             variable.name() + ".");
+                             "aggregated. " +
+                             noteForGroupByError);
       }
     }
   }
