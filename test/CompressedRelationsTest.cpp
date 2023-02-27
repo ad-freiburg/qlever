@@ -68,7 +68,11 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
       std::string bufferFilename =
           testCaseName + ".buffers." + std::to_string(i) + ".dat";
       BufferedIdTable buffer{
-          ad_utility::BufferedVector<Id>{30, bufferFilename}};
+          2,
+          std::array{ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
+                                                    bufferFilename + ".0"},
+                     ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
+                                                    bufferFilename + ".1"}}};
       for (const auto& arr : input.col1And2_) {
         buffer.push_back({V(arr[0]), V(arr[1])});
       }

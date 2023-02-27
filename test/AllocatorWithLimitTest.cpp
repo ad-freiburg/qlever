@@ -2,11 +2,11 @@
 // Created by johannes on 27.04.20.
 //
 
-#include <gtest/gtest.h>
-
 #include <vector>
 
-#include "../src/util/AllocatorWithLimit.h"
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+#include "util/AllocatorWithLimit.h"
 
 using ad_utility::AllocatorWithLimit;
 using ad_utility::makeAllocationMemoryLeftThreadsafeObject;
@@ -14,12 +14,20 @@ using ad_utility::makeAllocationMemoryLeftThreadsafeObject;
 using V = std::vector<int, AllocatorWithLimit<int>>;
 TEST(AllocatorWithLimit, initial) {
   AllocatorWithLimit<int> all{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(25)};
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(2ul << 20)};
   static_assert(sizeof(int) == 4);
-  [[maybe_unused]] auto ptr = all.allocate(6);
-  ASSERT_THROW(all.allocate(1),
-               ad_utility::detail::AllocationExceedsLimitException);
-  all.deallocate(ptr, 6);
+  [[maybe_unused]] auto ptr = all.allocate(250'000);
+  ASSERT_EQ(all.numFreeBytes(), (2ul << 20) - 1'000'000);
+  ASSERT_EQ(std::as_const(all).numFreeBytes(), (2ul << 20) - 1'000'000);
+  try {
+    all.allocate(600'000);
+    FAIL() << "Should have thrown";
+  } catch (const ad_utility::detail::AllocationExceedsLimitException& e) {
+    ASSERT_THAT(e.what(),
+                ::testing::StartsWith(
+                    "Tried to allocate 2MB, but only 1MB were available."));
+  }
+  all.deallocate(ptr, 250'000);
 }
 
 TEST(AllocatorWithLimit, vector) {
@@ -50,4 +58,15 @@ TEST(AllocatorWithLimit, vectorShared) {
 
   ASSERT_THROW(u.push_back(1),
                ad_utility::detail::AllocationExceedsLimitException);
+}
+
+TEST(AllocatorWithLimit, equality) {
+  AllocatorWithLimit<int> a1{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(20)};
+  AllocatorWithLimit<int> a2{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(20)};
+
+  ASSERT_EQ(a1, a1);
+  ASSERT_EQ(a2, a2);
+  ASSERT_NE(a1, a2);
 }
