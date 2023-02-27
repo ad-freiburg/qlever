@@ -142,7 +142,7 @@ PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
         }
       }
     }
-    tuples.push_back({predicate, std::move(object)});
+    tuples.emplace_back(predicate, std::move(object));
   }
   return tuples;
 }
@@ -150,7 +150,7 @@ PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
 // ___________________________________________________________________________
 SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx,
                                                     bool allowLanguageFilters) {
-  SparqlExpressionPimpl result{visit(ctx), std::move(ctx->getText())};
+  SparqlExpressionPimpl result{visit(ctx), getOriginalInputForContext(ctx)};
   if (allowLanguageFilters) {
     checkUnsupportedLangOperationAllowFilters(ctx, result);
   } else {

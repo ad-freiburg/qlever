@@ -931,13 +931,13 @@ TEST(SparqlParser, SelectQuery) {
                                                    m::Bind(Var("?y"), "?x"),
                                                    m::Bind(Var{"?z"}, "?y"))));
 
-  // The variable in the implicit BIND expression in the alias binds to the
-  // variable `?y` which is already in scope. This is forbidden by the SPARQL
-  // standard.
+  // The target of the alias (`?y`) is already bound in the WHERE clause. This
+  // is forbidden by the SPARQL standard.
   expectSelectQueryFails("SELECT (?x AS ?y) WHERE { ?x <is-a> ?y }");
 
   // It is also illegal to reuse a variable from the body of a query with a
-  // GROUP BY as the target of an alias
+  // GROUP BY as the target of an alias, even if it is the aggregated variable
+  // itself.
   expectSelectQueryFails(
       "SELECT (SUM(?y) AS ?y) WHERE { ?x <is-a> ?y } GROUP BY ?x");
 

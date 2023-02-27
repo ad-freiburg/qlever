@@ -27,7 +27,8 @@ class SparqlExpressionPimpl {
   void setDescriptor(std::string descriptor);
 
   // Get the variables that are not aggregated by this expression.
-  [[nodiscard]] std::vector<std::string> getUnaggregatedVariables() const;
+  [[nodiscard]] std::vector<std::string> getUnaggregatedVariables(
+      const ad_utility::HashSet<string>& groupedVariables = {}) const;
 
   // Does this expression aggregate over all variables that are not in
   // `groupedVariables`. For example, COUNT(<subex>) always returns true.

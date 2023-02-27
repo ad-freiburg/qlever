@@ -259,7 +259,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   // Process limitOffsetClause
   _limitOffset = modifiers.limitOffset_;
 
-  auto checkAliasOutNamesHaveNoOverlapWithVisibleVariables = [this]() {
+  auto checkAliasTargetsHaveNoOverlapWithVisibleVariables = [this]() {
     for (const auto& alias : selectClause().getAliases()) {
       if (ad_utility::contains(selectClause().getVisibleVariables(),
                                alias._target)) {
@@ -272,7 +272,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   };
 
   if (hasSelectClause()) {
-    checkAliasOutNamesHaveNoOverlapWithVisibleVariables();
+    checkAliasTargetsHaveNoOverlapWithVisibleVariables();
     if (isGroupBy) {
       ad_utility::HashSet<string> groupVariables{};
       for (const auto& variable : _groupByVariables) {
@@ -296,11 +296,14 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           if (alias._expression.isAggregate(groupVariables)) {
             continue;
           } else {
+            auto unaggregatedVars =
+                alias._expression.getUnaggregatedVariables(groupVariables);
             throw ParseException(absl::StrCat(
-                "The expression ", alias._expression.getDescriptor(),
-                " which is bound to the variable ", alias._target.name(),
-                " is not an aggregate on the variable ", var.name(),
-                " but that variable is not part of the GROUP BY clause"));
+                "The expression \"", alias._expression.getDescriptor(),
+                "\" does not aggregate ", absl::StrJoin(unaggregatedVars, ", "),
+                ". All non-aggregated variables must be part of the GROUP BY "
+                "clause." +
+                    noteForGroupByError));
           }
         }
         if (!ad_utility::contains(_groupByVariables, var)) {

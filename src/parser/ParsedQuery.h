@@ -164,8 +164,9 @@ class ParsedQuery {
   }
 
  private:
-  // Add a BIND clause to the body of the query. The second argument determines whether the `targetVariable` will
-  // be part of the visible variables that are selected by `SELECT *`. For an example usage see `addInternalBind` and
+  // Add a BIND clause to the body of the query. The second argument determines
+  // whether the `targetVariable` will be part of the visible variables that are
+  // selected by `SELECT *`. For an example usage see `addInternalBind` and
   // `addSolutionModifiers`.
   void addBind(sparqlExpression::SparqlExpressionPimpl expression,
                Variable targetVariable, bool targetIsVisible);
