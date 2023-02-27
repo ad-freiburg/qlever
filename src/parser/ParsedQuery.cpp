@@ -196,7 +196,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           ? " Note: The GROUP BY in this query is implicit because an aggregate expression was used in the SELECT clause"s
           : ""s;
   std::string noteForGroupByError =
-      ". All non-aggregated variables must be part of the GROUP BY "
+      " All non-aggregated variables must be part of the GROUP BY "
       "clause." +
       noteForImplicitGroupBy;
 
@@ -305,12 +305,12 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
             throw ParseException(absl::StrCat(
                 "The expression \"", alias._expression.getDescriptor(),
                 "\" does not aggregate ", absl::StrJoin(unaggregatedVars, ", "),
-                ". " + noteForGroupByError));
+                "." + noteForGroupByError));
           }
         }
         if (!ad_utility::contains(_groupByVariables, var)) {
           throw ParseException(absl::StrCat("Variable ", var.name(),
-                                            " is selected but not aggregated. ",
+                                            " is selected but not aggregated.",
                                             noteForGroupByError));
         }
       }
@@ -360,7 +360,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       if (!ad_utility::contains(_groupByVariables, variable)) {
         throw ParseException("Variable " + variable.name() +
                              " is used but not "
-                             "aggregated. " +
+                             "aggregated." +
                              noteForGroupByError);
       }
     }
