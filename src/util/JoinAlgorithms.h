@@ -29,12 +29,13 @@ namespace ad_utility {
 //   - None of the entries of `row` must be `UNDEF`.
 // TODO<joka921> We could also implement a version that is optimized on the
 // [begin, end] range not having UNDEF values in some of the columns
-template <typename Row>
 auto findSmallerUndefRangesForRowsWithoutUndef(const auto& row, auto begin,
                                                auto end)
     -> cppcoro::generator<decltype(begin)> {
+  using Row = typename std::iterator_traits<decltype(begin)>::value_type;
   assert(row.size() == begin->size());
-  assert(std::ranges::is_sorted(begin, end));
+  assert(
+      std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
   assert((std::ranges::all_of(
       row, [](Id id) { return id != Id::makeUndefined(); })));
   size_t numJoinColumns = row.size();
@@ -57,12 +58,33 @@ auto findSmallerUndefRangesForRowsWithoutUndef(const auto& row, auto begin,
   }
 }
 
+// For a single `row` of IDs that contains UNDEF values in all the last
+// `numLastUndefined` columns, and no UNDEF values in any of the other columns,
+// find all the iterators in the sorted range `[begin, end)` that are
+// lexicographically smaller than `row`, are compatible with `row` (meaning that
+// on each position they have either the same value, or one of them is UNDEF),
+// and contain at least one UNDEF entry. This function runs in `O(2^C * log(N) +
+// R)` where C is the number of  defined columns (`numColumns -
+// numLastUndefined`), N is the size of the range `[begin, end)` and `R` is the
+// number of matching elements.
+
+// Preconditions (all checked via `assert()` macros):
+//   - The `row` must have the same number of entries than the elements in the
+//   range `[begin, end)`
+//   - The range `[begin, end)` must be lexicographically sorted.
+//   - The last `numLastUndefined` entries of `row` must be `UNDEF`, none of the
+//   other entries of `row` mayb be UNDEF
+// TODO<joka921> We could also implement a version that is optimized on the
+// [begin, end] range not having UNDEF values in some of the columns
 auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
     const auto& row, const size_t numLastUndefined, auto begin, auto end)
     -> cppcoro::generator<decltype(begin)> {
   using Row = typename std::iterator_traits<decltype(begin)>::value_type;
   const size_t numJoinColumns = row.size();
+  assert(row.size() == begin->size());
   assert(numJoinColumns >= numLastUndefined);
+  assert(
+      std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
   const size_t numDefinedColumns = numJoinColumns - numLastUndefined;
   for (size_t i = 0; i < numDefinedColumns; ++i) {
     assert(row[i] != Id::makeUndefined());
@@ -101,11 +123,33 @@ auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
 }
 
 // The (very expensive) general case:
-// The `row` contains UNDEF values in arbitrary positions, and same goes for the
-// range [begin, end].
-auto findSmallerUndefRanges(const auto& row, const size_t numJoinColumns,
-                            auto begin, auto end)
+// For a single arbitrary `row` of IDs that may contain UNDEF values in any
+// entry, find all the iterators in the sorted range `[begin, end)` that are
+// lexicographically smaller than `row`, are compatible with `row` (meaning that
+// on each position they have either the same value, or one of them is UNDEF),
+// and contain at least one UNDEF entry. This function runs in `O(C * N)` where
+// C is the number of  columns and N is the size of the range `[begin, end)`.
+
+// Preconditions (all checked via `assert()` macros):
+//   - The `row` must have the same number of entries than the elements in the
+//   range `[begin, end)`
+//   - The range `[begin, end)` must be lexicographically sorted.
+//   - The last `numLastUndefined` entries of `row` must be `UNDEF`, none of the
+//   other entries of `row` mayb be UNDEF
+// TODO<joka921> We could also implement a version that is optimized on the
+// [begin, end] range not having UNDEF values in some of the columns
+auto findSmallerUndefRangesArbitrary(const auto& row, auto begin, auto end)
     -> cppcoro::generator<decltype(begin)> {
+  assert(row.size() == begin->size());
+  assert(
+      std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
+
+  // To only get smaller entries, we first find a suitable upper bound in the
+  // input range. We use `std::lower_bound` because the input row itself is not
+  // a valid match.
+  end = std::lower_bound(begin, end, row);
+
+  const size_t numJoinColumns = row.size();
   auto isCompatible = [&](const auto& otherRow) {
     for (size_t k = 0u; k < numJoinColumns; ++k) {
       Id a = row[k];
@@ -129,68 +173,83 @@ auto findSmallerUndefRanges(const auto& row, const size_t numJoinColumns,
   co_return;
 }
 
-template <typename Row>
-auto makeSmallerUndefRanges(const size_t numJoinColumns) {
-  return [&](const auto& rowLeft, auto begin, auto end) {
-    return ad_utility::findSmallerUndefRanges<Row>(rowLeft, numJoinColumns,
-                                                   begin, end);
-  };
-}
-
-// TODO<joka921> Do we need a specialized overload for a single table?
-// TODO<joka921> Add a reasonable constraint for the join columns.
-template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>
-void addCombinedRowToIdTable(const ROW_A& row1, const ROW_B& row2,
-                             const size_t numJoinColumns,
-                             IdTableStatic<TABLE_WIDTH>* table) {
-  auto& result = *table;
-  result.emplace_back();
-  size_t backIdx = result.size() - 1;
-
-  std::cout << "Row a ";
-  for (auto id : row1) {
-    std::cout << id << ' ';
+// TODO<joka921> Comment, this is the dispatcher.
+auto findSmallerUndefRanges(const auto& row, auto begin, auto end)
+    -> cppcoro::generator<decltype(begin)> {
+  size_t numLastUndefined = 0;
+  assert(row.size() > 0);
+  auto it = row.end() - 1;
+  for (; it >= row.begin(); --it) {
+    if (*it != Id::makeUndefined()) {
+      break;
+    }
+    ++numLastUndefined;
   }
-  std::cout << "\nRow b ";
-  for (auto id : row2) {
-    std::cout << id;
+  for (; it >= row.begin(); --it) {
+    if (*it == Id::makeUndefined()) {
+      return findSmallerUndefRangesArbitrary(row, begin, end);
+    }
   }
-  std::cout << '\n' << std::endl;
-
-  auto mergeWithUndefined = [](const ValueId a, const ValueId b) {
-    static_assert(ValueId::makeUndefined().getBits() == 0u);
-    return ValueId::fromBits(a.getBits() | b.getBits());
-  };
-
-  // fill the result
-  size_t rIndex = 0;
-  // TODO<joka921> We could possibly implement an optimization for the case
-  // where we know that there are no undefined values in at least one of the
-  // inputs, but maybe that doesn't help too much.
-  for (size_t col = 0; col < numJoinColumns; col++) {
-    result(backIdx, rIndex) = mergeWithUndefined(row1[col], row2[col]);
-    rIndex++;
-  }
-
-  for (size_t col = numJoinColumns; col < row1.numColumns(); ++col) {
-    result(backIdx, rIndex) = row1[col];
-    rIndex++;
-  }
-
-  for (size_t col = numJoinColumns; col < row2.numColumns(); col++) {
-    result(backIdx, rIndex) = row2[col];
-    rIndex++;
+  if (numLastUndefined == 0) {
+    return findSmallerUndefRangesForRowsWithoutUndef(row, begin, end);
+  } else {
+    return findSmallerUndefRangesForRowsWithUndefInLastColumns(
+        row, numLastUndefined, begin, end);
   }
 }
 
-auto makeCombineRows(const size_t numJoinColumns, auto& result) {
-  auto combineRows = [numJoinColumns, &result](const auto& row1,
-                                               const auto& row2) {
-    return ad_utility::addCombinedRowToIdTable(row1, row2, numJoinColumns,
-                                               &result);
-  };
-  return combineRows;
-}
+// TODO<joka921> Comment and test
+class AddCombinedRowToIdTable {
+  std::vector<size_t> numUndefinedPerColumn_;
+
+ public:
+  explicit AddCombinedRowToIdTable(size_t numColumns)
+      : numUndefinedPerColumn_(numColumns) {}
+
+  const std::vector<size_t>& numUndefinedPerColumn() const {
+    return numUndefinedPerColumn_;
+  }
+
+  // TODO<joka921> Do we need a specialized overload for a single column?
+  template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>
+  void operator()(const ROW_A& row1, const ROW_B& row2,
+                  const size_t numJoinColumns,
+                  IdTableStatic<TABLE_WIDTH>* table) {
+    assert(numUndefinedPerColumn_.size() ==
+           row1.size() + row2.size() - numJoinColumns);
+    auto& result = *table;
+    result.emplace_back();
+    size_t backIdx = result.size() - 1;
+
+    auto mergeWithUndefined = [](const ValueId a, const ValueId b) {
+      static_assert(ValueId::makeUndefined().getBits() == 0u);
+      return ValueId::fromBits(a.getBits() | b.getBits());
+    };
+
+    // fill the result
+    size_t rIndex = 0;
+    auto add = [&, this](Id id) {
+      numUndefinedPerColumn_[rIndex] += id == Id::makeUndefined();
+      result(backIdx, rIndex) = id;
+      ++rIndex;
+    };
+
+    // TODO<joka921> We could possibly implement an optimization for the case
+    // where we know that there are no undefined values in at least one of the
+    // inputs, but maybe that doesn't help too much.
+    for (size_t col = 0; col < numJoinColumns; col++) {
+      add(mergeWithUndefined(row1[col], row2[col]));
+    }
+
+    for (size_t col = numJoinColumns; col < row1.size(); ++col) {
+      add(row1[col]);
+    }
+
+    for (size_t col = numJoinColumns; col < row2.size(); col++) {
+      add(row2[col]);
+    }
+  }
+};
 
 [[maybe_unused]] static inline auto noop = [](auto&&...) {};
 // TODO<joka921> Comment, cleanup, move into header.
