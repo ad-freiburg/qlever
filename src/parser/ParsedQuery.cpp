@@ -259,8 +259,6 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   // Process limitOffsetClause
   _limitOffset = modifiers.limitOffset_;
 
-  // Check that the query is valid
-
   auto checkAliasOutNamesHaveNoOverlapWithVisibleVariables = [this]() {
     for (const auto& alias : selectClause().getAliases()) {
       if (ad_utility::contains(selectClause().getVisibleVariables(),
