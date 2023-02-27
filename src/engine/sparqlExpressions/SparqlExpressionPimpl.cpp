@@ -42,6 +42,7 @@ std::vector<std::string> SparqlExpressionPimpl::getUnaggregatedVariables(
                               return groupedVariables.contains(var);
                             }),
              vars.end());
+  return vars;
 }
 
 // ___________________________________________________________________________
