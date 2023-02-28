@@ -48,6 +48,10 @@ class SparqlExpressionPimpl {
     return true;
   }
 
+  // Returns true iff this expression contain one of the aggregate expressions
+  // SUM, AVG, COUNT, etc. in any form.
+  bool containsAggregate() const;
+
   struct VariableAndDistinctness {
     ::Variable variable_;
     bool isDistinct_;

@@ -98,4 +98,9 @@ auto SparqlExpressionPimpl::getEstimatesForFilterExpression(
 bool SparqlExpressionPimpl::containsLangExpression() const {
   return _pimpl->containsLangExpression();
 }
+
+// _____________________________________________________________________________
+bool SparqlExpressionPimpl::containsAggregate() const {
+  return _pimpl->containsAggregate();
+}
 }  // namespace sparqlExpression

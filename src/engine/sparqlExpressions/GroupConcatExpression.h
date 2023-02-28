@@ -49,10 +49,14 @@ class GroupConcatExpression : public SparqlExpression {
     return {&_actualExpression, 1};
   }
 
+  // _________________________________________________________________________
   vector<std::string> getUnaggregatedVariables() override {
     // This is an aggregation, so it never leaves any unaggregated variables.
     return {};
   }
+
+  // _________________________________________________________________________
+  bool containsAggregate() const override { return true; }
 
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override {

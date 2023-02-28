@@ -186,7 +186,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   const bool isImplicitGroupBy =
       std::ranges::any_of(getAliases(),
                           [](const Alias& alias) {
-                            return alias._expression.isAggregate({});
+                            return alias._expression.containsAggregate();
                           }) &&
       !isExplicitGroupBy;
   const bool isGroupBy = isExplicitGroupBy || isImplicitGroupBy;
