@@ -89,7 +89,7 @@ jobs:
         if: github.event.workflow_run.event == 'pull_request'
         run: |
           git remote add upstream ${{ github.event.repository.clone_url }}
-          git fetch upstream
+          git fetch upstream --no-recurse-submodules
           git checkout -B ${{ fromJson(steps.get_pr_data.outputs.data).base.ref }} upstream/${{ fromJson(steps.get_pr_data.outputs.data).base.ref }}
           git checkout ${{ github.event.workflow_run.head_branch }}
           git clean -ffdx && git reset --hard HEAD
