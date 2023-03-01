@@ -12,7 +12,7 @@
 # Credit goes to the `1c-syntax` project where I found a code snippet to make
 # SonarCloud work with the `workflow_run` trigger:
 # https://github.com/1c-syntax/bsl-language-server/blob/21a6bb5172cbc4591a05414d5d0ac221689e45ce/.github/workflows/qa.yml#L16
-name: Upload SonarCloud Analysis
+name: Upload and run SonarCloud Analysis
 
 on:
   workflow_run:
@@ -91,7 +91,7 @@ jobs:
           git remote add upstream ${{ github.event.repository.clone_url }}
           git fetch upstream --no-recurse-submodules
           git checkout -B ${{ fromJson(steps.get_pr_data.outputs.data).base.ref }} upstream/${{ fromJson(steps.get_pr_data.outputs.data).base.ref }}
-          git checkout ${{ github.event.workflow_run.head_branch }}
+          git checkout ${{env.original_github_ref}}
           git clean -ffdx && git reset --hard HEAD
       - name: Install sonar-scanner and build-wrapper
         uses: SonarSource/sonarcloud-github-c-cpp@v1
