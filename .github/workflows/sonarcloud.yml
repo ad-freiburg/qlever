@@ -1,0 +1,34 @@
+name: sonarcloud-analysis
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: 'recursive'
+
+    - name: Save PR number and sonarcloud data in same directory
+      if: github.event_name == 'pull_request'
+      # Note: If you change any of the filenames here, you also have to change them in `upload-sonarcloud.yml`
+      run : |
+        mkdir -p sonarcloud-report
+        echo ${{ github.event.number }} > ./sonarcloud-report/pr
+        echo ${{ github.repository }} > ./sonarcloud-report/github_repository
+        echo ${GITHUB_REF} > ./sonarcloud-report/github_ref
+    - name: Upload sonarcloud artifact
+      if: github.event_name == 'pull_request'
+      uses: actions/upload-artifact@v3
+      with:
+        name: sonarcloud-report
+        path: sonarcloud-report/
+    # Note: for now we do not run the e2e tests for the coverage check
+
