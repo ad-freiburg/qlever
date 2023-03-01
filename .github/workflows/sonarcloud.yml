@@ -92,7 +92,7 @@ jobs:
         echo ${{ github.event.number }} > ./sonarcloud-report/pr
         echo ${{ github.repository }} > ./sonarcloud-report/github_repository
         echo ${GITHUB_REF} > ./sonarcloud-report/github_ref
-        mv ${{ env.BUILD_WRAPPER_OUT_DIR }} coverage-report
+        mv ${{ env.BUILD_WRAPPER_OUT_DIR }} sonarcloud-report
     - name: Upload sonarcloud artifact
       if: github.event_name == 'pull_request'
       uses: actions/upload-artifact@v3
