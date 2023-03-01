@@ -28,9 +28,7 @@ jobs:
     # Only run on successful pull requests. Merge commits to master upload
     # their coverage reports directly inside `code-coverage.yml`
     # TODO<joka921> Also make this work for pushes to the master branch!
-    if: >
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'success'
+    if: github.event.workflow_run.conclusion == 'success'
     env:
       compiler: clang
       compiler-version: 15
@@ -40,6 +38,7 @@ jobs:
     steps:
       - name: 'Download artifact'
         uses: actions/github-script@v3.1.0
+        if: github.event.workflow_run.event == 'pull_request'
         # The following script is taken from the link stated at the
         # beginning of this file. It manually downloads an artifact
         # from another workflow.
@@ -62,13 +61,17 @@ jobs:
             var fs = require('fs');
             fs.writeFileSync('${{github.workspace}}/sonarcloud-report.zip', Buffer.from(download.data));
       - run: unzip sonarcloud-report.zip
+        if: github.event.workflow_run.event == 'pull_request'
       # Read the metadata into environment variables.
       - name: "Read PR number"
         run: echo "pr_number=`cat pr`" >> $GITHUB_ENV
+        if: github.event.workflow_run.event == 'pull_request'
       - name: "Read Github Ref"
         run: echo "original_github_ref=`cat github_ref`" >> $GITHUB_ENV;
+        if: github.event.workflow_run.event == 'pull_request'
       - name: "Read Github Repository"
         run: echo "original_github_repository=`cat github_repository`" >> $GITHUB_ENV;
+        if: github.event.workflow_run.event == 'pull_request'
         # We have to check out the source code from the PR, otherwise Codecov
         # won't process the upload properly. We first check it out into a
         # subdirectory `qlever-source`, otherwise the coverage report will
@@ -77,6 +80,7 @@ jobs:
       - name: Request GitHub API for PR data
         uses: octokit/request-action@v2.x
         id: get_pr_data
+        if: github.event.workflow_run.event == 'pull_request'
         with:
           route: GET /repos/{full_name}/pulls/{number}
           number: ${{ env.pr_number }}
@@ -126,9 +130,16 @@ jobs:
       - name: Build
         # Build your program with the given configuration
         run: build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build ${{github.workspace}}/build --config ${{env.build-type}} --target ValueIdComparatorsTest -- -j $(nproc)
-      - name: Run sonar-scanner
+      - name: Run sonar-scanner on PR
+        if: github.event.workflow_run.event == 'pull_request'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           sonar-scanner --define sonar.cfamily.build-wrapper-output=build_wrapper_output_directory -Dsonar.scm.revision=${{ github.event.workflow_run.head_sha }} -Dsonar.pullrequest.key=${{ fromJson(steps.get_pr_data.outputs.data).number }} -Dsonar.pullrequest.branch=${{ fromJson(steps.get_pr_data.outputs.data).head.ref }} -Dsonar.pullrequest.base=${{ fromJson(steps.get_pr_data.outputs.data).base.ref }}
+      - name: SonarCloud Scan on push
+        if: github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.event.repository.full_name
+        run: sonar-scanner --define sonar.cfamily.build-wrapper-output=build_wrapper_output_directory -Dsonar.scm.revision=${{ github.event.workflow_run.head_sha }} -Dsonar.branch.name=${{ github.event.workflow_run.head_branch }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
