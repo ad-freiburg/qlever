@@ -129,7 +129,7 @@ jobs:
         run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{env.compiler}}${{env.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}} ${{env.asan-flags}} ${{env.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true
       - name: Build
         # Build your program with the given configuration
-        run: build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build ${{github.workspace}}/build --config ${{env.build-type}} --target ValueIdComparatorsTest -- -j $(nproc)
+        run: build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build ${{github.workspace}}/build --config ${{env.build-type}} -- -j $(nproc)
       - name: Run sonar-scanner on PR
         if: github.event.workflow_run.event == 'pull_request'
         env:
