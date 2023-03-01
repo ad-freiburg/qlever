@@ -1,4 +1,4 @@
-name: Sonarcloud
+name: sonarcloud-analysis
 
 on:
   push:
@@ -74,9 +74,30 @@ jobs:
         # Build your program with the given configuration
       run: build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} --target ValueIdComparatorsTest -- -j $(nproc)
     - name: Run sonar-scanner
+      if: github.event_name != 'pull_request'
       env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       run: |
         sonar-scanner -X --define sonar.cfamily.build-wrapper-output="${{ env.BUILD_WRAPPER_OUT_DIR }}"
+      # For a pull request we store the scanner data as well as some information
+      # about this PR (number, how to check it out, etc.) and upload it as an artifact.
+      # This is all the data that is required for running the sonarcloud analysis and uploader manually
+      # from `upload-sonarcloud.yml`.
+    - name: Save PR number and sonarcloud data in same directory
+      if: github.event_name == 'pull_request'
+      # Note: If you change any of the filenames here, you also have to change them in `upload-coverage.yml`
+      run : |
+        mkdir -p sonarcloud-report
+        echo ${{ github.event.number }} > ./sonarcloud-report/pr
+        echo ${{ github.repository }} > ./sonarcloud-report/github_repository
+        echo ${GITHUB_REF} > ./sonarcloud-report/github_ref
+        mv ${{ env.BUILD_WRAPPER_OUT_DIR }} coverage-report
+    - name: Upload sonarcloud artifact
+      if: github.event_name == 'pull_request'
+      uses: actions/upload-artifact@v3
+      with:
+        name: sonarcloud-report
+        path: sonarcloud-report/
+    # Note: for now we do not run the e2e tests for the coverage check
 

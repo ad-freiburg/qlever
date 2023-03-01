@@ -1,0 +1,101 @@
+# This workflow runs as soon as the workflow from `sonarcloud.yml` has
+# successfully finished. It downloads the created artifact and runs the
+# SonarCloud analysis and uploader. This workflow uses the `workflow_run` trigger. This
+# means that it will always be run from the master branch, meaning that
+# the contents of this file will always be taken from the master branch,
+# even if a PR changes it. Since this approach disallows several attacks
+# from malicious PR authors, such workflows have access to the secrets
+# stored on GitHub. For details on the `workflow_run` trigger and this
+# security measures, see
+# https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
+
+# Credit goes to the `1c-syntax` project where I found a code snippet to make
+# SonarCloud work with the `workflow_run` trigger:
+# https://github.com/1c-syntax/bsl-language-server/blob/21a6bb5172cbc4591a05414d5d0ac221689e45ce/.github/workflows/qa.yml#L16
+name: Upload SonarCloud Analysis
+
+on:
+  workflow_run:
+    # This has to be the `name:` of the workflow in `code_coverage.yml`.
+    # Start when this  workflow has finished successfully.
+    workflows: [sonarcloud-analysis]
+    types:
+      - completed
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    # Only run on successful pull requests. Merge commits to master upload
+    # their coverage reports directly inside `code-coverage.yml`
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: 'Download artifact'
+        uses: actions/github-script@v3.1.0
+        # The following script is taken from the link stated at the
+        # beginning of this file. It manually downloads an artifact
+        # from another workflow.
+        with:
+          script: |
+            var artifacts = await github.actions.listWorkflowRunArtifacts({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               run_id: ${{github.event.workflow_run.id }},
+            });
+            var matchArtifact = artifacts.data.artifacts.filter((artifact) => {
+              return artifact.name == "sonarcloud-report"
+            })[0];
+            var download = await github.actions.downloadArtifact({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               artifact_id: matchArtifact.id,
+               archive_format: 'zip',
+            });
+            var fs = require('fs');
+            fs.writeFileSync('${{github.workspace}}/sonarcloud-report.zip', Buffer.from(download.data));
+      - run: unzip sonarcloud-report.zip
+      # Read the metadata into environment variables.
+      - name: "Read PR number"
+        run: echo "pr_number=`cat pr`" >> $GITHUB_ENV
+      - name: "Read Github Ref"
+        run: echo "original_github_ref=`cat github_ref`" >> $GITHUB_ENV;
+      - name: "Read Github Repository"
+        run: echo "original_github_repository=`cat github_repository`" >> $GITHUB_ENV;
+        # We have to check out the source code from the PR, otherwise Codecov
+        # won't process the upload properly. We first check it out into a
+        # subdirectory `qlever-source`, otherwise the coverage report will
+        # be overwritten. We then move all the files back into the working
+        # directory such that Codecov will pick them up properly.
+      - name: Request GitHub API for PR data
+        uses: octokit/request-action@v2.x
+        id: get_pr_data
+        with:
+          route: GET /repos/{full_name}/pulls/{number}
+          number: ${{ env.pr_number }}
+          full_name: ${{ github.event.repository.full_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: "Checkout"
+        uses: actions/checkout@v3
+        with:
+          repository: ${{env.original_github_repository}}
+          submodules: "recursive"
+          ref: ${{env.original_github_ref}}
+          path: qlever-source
+      - name: "Move qlever sources up"
+        run: mv qlever-source/* .
+      - name: Checkout base branch
+        if: github.event.workflow_run.event == 'pull_request'
+        run: |
+          git remote add upstream ${{ github.event.repository.clone_url }}
+          git fetch upstream
+          git checkout -B ${{ fromJson(steps.get_pr_data.outputs.data).base.ref }} upstream/${{ fromJson(steps.get_pr_data.outputs.data).base.ref }}
+          git checkout ${{ github.event.workflow_run.head_branch }}
+          git clean -ffdx && git reset --hard HEAD
+      - name: Run sonar-scanner
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          sonar-scanner --define sonar.cfamily.build-wrapper-output=build_wrapper_output_directory -Dsonar.scm.revision=${{ github.event.workflow_run.head_sha }} -Dsonar.pullrequest.key=${{ fromJson(steps.get_pr_data.outputs.data).number }} -Dsonar.pullrequest.branch=${{ fromJson(steps.get_pr_data.outputs.data).head.ref }} -Dsonar.pullrequest.base=${{ fromJson(steps.get_pr_data.outputs.data).base.ref }}
