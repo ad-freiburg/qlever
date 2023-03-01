@@ -1,4 +1,4 @@
-name: Native build
+name: Sonarcloud
 
 on:
   push:
@@ -19,7 +19,6 @@ jobs:
         compiler-version: [15]
         warnings: [  "-Wall -Wextra -Werror " ]
         build-type: [Release]
-        exclude:
     runs-on: ubuntu-22.04
     BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
 
