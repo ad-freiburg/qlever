@@ -95,11 +95,7 @@ class ValueId {
   /// For doubles it is first the positive doubles in order, then the negative
   /// doubles in reversed order. This is a direct consequence of comparing the
   /// bit representation of these values as unsigned integers.
-  /// TODO<joka921> Is this ordering also consistent for corner cases of doubles
-  /// (inf, nan, denormalized numbers, negative zero)?
-  constexpr auto operator<=>(const ValueId& other) const {
-    return _bits <=> other._bits;
-  }
+  constexpr auto operator<=>(const ValueId& other) const = default;
 
   /// Get the underlying bit representation, e.g. for compression etc.
   [[nodiscard]] constexpr T getBits() const noexcept { return _bits; }
