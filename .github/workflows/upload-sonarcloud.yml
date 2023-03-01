@@ -84,9 +84,8 @@ jobs:
           fetch-depth: 0
           submodules: "recursive"
           path: qlever-source
-      - name: "Move qlever sources up"
-        run: shopt -s dotglob && mv qlever-source/* .
       - name: Checkout base branch
+        working-directory: qlever-source
         if: github.event.workflow_run.event == 'pull_request'
         run: |
           git remote add upstream ${{ github.event.repository.clone_url }}
@@ -94,6 +93,8 @@ jobs:
           git checkout -B ${{ fromJson(steps.get_pr_data.outputs.data).base.ref }} upstream/${{ fromJson(steps.get_pr_data.outputs.data).base.ref }}
           git checkout ${{ github.event.workflow_run.head_branch }}
           git clean -ffdx && git reset --hard HEAD
+      - name: "Move qlever sources up"
+        run: shopt -s dotglob && mv qlever-source/* .
       - name: Install sonar-scanner and build-wrapper
         uses: SonarSource/sonarcloud-github-c-cpp@v1
       - name: Run sonar-scanner
