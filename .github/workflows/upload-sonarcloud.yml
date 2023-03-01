@@ -79,9 +79,10 @@ jobs:
       - name: "Checkout"
         uses: actions/checkout@v3
         with:
-          repository: ${{env.original_github_repository}}
+          repository: ${{ github.event.workflow_run.head_repository.full_name }}
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
           submodules: "recursive"
-          ref: ${{env.original_github_ref}}
           path: qlever-source
       - name: "Move qlever sources up"
         run: shopt -s dotglob && mv qlever-source/* .
@@ -91,7 +92,7 @@ jobs:
           git remote add upstream ${{ github.event.repository.clone_url }}
           git fetch upstream --no-recurse-submodules
           git checkout -B ${{ fromJson(steps.get_pr_data.outputs.data).base.ref }} upstream/${{ fromJson(steps.get_pr_data.outputs.data).base.ref }}
-          git checkout ${{env.original_github_ref}}
+          git checkout ${{ github.event.workflow_run.head_branch }}
           git clean -ffdx && git reset --hard HEAD
       - name: Install sonar-scanner and build-wrapper
         uses: SonarSource/sonarcloud-github-c-cpp@v1
