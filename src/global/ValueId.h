@@ -83,10 +83,6 @@ class ValueId {
   /// Default construction of an uninitialized id.
   ValueId() = default;
 
-  /// Equality comparison is performed directly on the underlying
-  /// representation.
-  constexpr bool operator==(const ValueId&) const = default;
-
   /// Comparison is performed directly on the underlying representation. Note
   /// that because the type bits are the most significant bits, all values of
   /// the same `Datatype` will be adjacent to each other. Unsigned index types
