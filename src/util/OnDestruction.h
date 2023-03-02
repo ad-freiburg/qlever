@@ -34,8 +34,11 @@ class OnDestruction {
 // `noexcept()` that have to perform some non-trivial logic (e.g. writing a
 // trailer to a file), when such a failure should never occur in practice and
 // also is not easily recovarable. For an example usage see `PatternCreator.h`.
+// The actual termination call can be configured for testing purposes. Note that
+// this function must never throw an exception.
 template <std::invocable<> F>
 void terminateIfThrows(F&& f, std::string_view message,
+                       void (*terminateAction)() noexcept = &std::terminate,
                        ad_utility::source_location l =
                            ad_utility::source_location::current()) noexcept {
   try {
@@ -47,14 +50,14 @@ void terminateIfThrows(F&& f, std::string_view message,
               << l.file_name() << " on line " << l.line()
               << ". Additional information: " << message
               << ". Please report this. Terminating" << std::endl;
-    std::terminate();
+    terminateAction();
   } catch (...) {
     std::cerr << "A function that should never throw has thrown an exception. "
                  "The function was called in file "
               << l.file_name() << " on line " << l.line()
               << ". Additional information: " << message
               << ". Please report this. Terminating" << std::endl;
-    std::terminate();
+    terminateAction();
   }
 }
 }  // namespace ad_utility
