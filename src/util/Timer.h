@@ -226,6 +226,9 @@ struct [[nodiscard(
       : message_{std::move(message)}, callback_{std::move(callback)} {
     t_.start();
   }
+  // RAII types like this typically should not be copied.
+  TimeBlockAndLog(const TimeBlockAndLog&) = delete;
+  TimeBlockAndLog& operator=(const TimeBlockAndLog&) = delete;
   ~TimeBlockAndLog() {
     auto msecs = Timer::toMilliseconds(t_.value());
     callback_(msecs, message_);

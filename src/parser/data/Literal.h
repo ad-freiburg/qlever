@@ -9,6 +9,21 @@
 
 #include "../../util/Concepts.h"
 
+class Dummy {
+  template <typename T>
+  requires(!std::same_as<std::remove_cvref_t<T>, Dummy>) Dummy(T&&) {}
+};
+
+class Dummy3 {
+  template <typename T>
+  Dummy3(T&&) {}
+};
+
+class Dummy2 {
+  template <typename T>
+  requires(!std::same_as<Dummy2, std::remove_cvref_t<T>>) Dummy2(T&&) {}
+};
+
 class Literal {
   std::string _stringRepresentation;
 
@@ -25,8 +40,9 @@ class Literal {
 
  public:
   template <typename T>
-  requires(ad_utility::Streamable<T> &&
-           !ad_utility::isSimilar<T, Literal>) explicit Literal(T&& t)
+  requires(
+      ad_utility::Streamable<T> &&
+      !std::same_as<std::remove_cvref_t<T>, Literal>) explicit Literal(T&& t)
       : _stringRepresentation(toString(std::forward<T>(t))) {}
 
   explicit Literal(std::variant<int64_t, double> t) {
