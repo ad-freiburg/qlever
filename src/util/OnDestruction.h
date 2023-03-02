@@ -8,6 +8,7 @@
 #include <exception>
 #include <iostream>
 
+#include "util/Forward.h"
 #include "util/SourceLocation.h"
 
 namespace ad_utility {
@@ -36,13 +37,14 @@ class OnDestruction {
 // also is not easily recovarable. For an example usage see `PatternCreator.h`.
 // The actual termination call can be configured for testing purposes. Note that
 // this function must never throw an exception.
-template <std::invocable<> F>
+template <typename F>
+requires std::invocable<std::remove_cvref_t<F>>
 void terminateIfThrows(F&& f, std::string_view message,
                        void (*terminateAction)() noexcept = &std::terminate,
                        ad_utility::source_location l =
                            ad_utility::source_location::current()) noexcept {
   try {
-    std::invoke(f);
+    std::invoke(AD_FWD(f));
   } catch (const std::exception& e) {
     std::cerr << "A function that should never throw has thrown an exception "
                  "with message \""

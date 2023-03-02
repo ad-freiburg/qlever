@@ -203,7 +203,8 @@ class TimeoutTimer : public Timer {
   Timer::Duration timeLimit_ = Timer::Duration::zero();
   bool isUnlimited_ = false;  // never times out
   class UnlimitedTag {};
-  TimeoutTimer(UnlimitedTag) : Timer{Timer::Started}, isUnlimited_{true} {}
+  explicit TimeoutTimer(UnlimitedTag)
+      : Timer{Timer::Started}, isUnlimited_{true} {}
 };
 
 namespace detail {
