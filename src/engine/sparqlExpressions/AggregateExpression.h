@@ -37,7 +37,7 @@ class AggregateExpression : public SparqlExpression {
   // _________________________________________________________________________
   vector<std::string> getUnaggregatedVariables() override;
 
-  // This is an aggregate!
+  // An `AggregateExpression` (obviously) contains an aggregate.
   bool containsAggregate() const override { return true; }
 
   // __________________________________________________________________________

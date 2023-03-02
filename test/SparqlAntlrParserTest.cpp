@@ -900,6 +900,28 @@ TEST(SparqlParser, SelectQuery) {
   expectSelectQuery("SELECT * WHERE { ?x ?y ?z }",
                     testing::AllOf(m::SelectQuery(m::AsteriskSelect(),
                                                   DummyGraphPatternMatcher)));
+  expectSelectQuery(
+      "SELECT ?x WHERE { ?x ?y ?z . FILTER(?x != <foo>) } LIMIT 10 TEXTLIMIT 5",
+      testing::AllOf(
+          m::SelectQuery(
+              m::Select({Var{"?x"}}),
+              m::GraphPattern(false, {"(?x != <foo>)"},
+                              m::Triples({{Var{"?x"}, "?y", Var{"?z"}}}))),
+          m::pq::LimitOffset({10, 5})));
+
+  // ORDER BY
+  expectSelectQuery(
+      "SELECT ?x WHERE { ?x ?y ?z } HAVING (?x > 5) ORDER BY ?y ",
+      testing::AllOf(
+          m::SelectQuery(m::Select({Var{"?x"}}), DummyGraphPatternMatcher),
+          m::pq::Having({"(?x > 5)"}), m::pq::OrderKeys({{Var{"?y"}, false}})));
+
+  // Ordering by a variable or expression which contains a variable that is not
+  // visible in the query body is not allowed.
+  expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY ?x");
+  expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY (?x - 10)");
+
+  // Explicit GROUP BY
   expectSelectQuery("SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x",
                     testing::AllOf(m::SelectQuery(m::VariablesSelect({"?x"}),
                                                   DummyGraphPatternMatcher),
@@ -910,31 +932,14 @@ TEST(SparqlParser, SelectQuery) {
           m::SelectQuery(m::Select({std::pair{"COUNT(?y)", Var{"?a"}}}),
                          DummyGraphPatternMatcher),
           m::pq::GroupKeys({Var{"?x"}})));
-  expectSelectQuery(
-      "SELECT ?x WHERE { ?x ?y ?z . FILTER(?x != <foo>) } LIMIT 10 TEXTLIMIT 5",
-      testing::AllOf(
-          m::SelectQuery(
-              m::Select({Var{"?x"}}),
-              m::GraphPattern(false, {"(?x != <foo>)"},
-                              m::Triples({{Var{"?x"}, "?y", Var{"?z"}}}))),
-          m::pq::LimitOffset({10, 5})));
-  expectSelectQuery(
-      "SELECT ?x WHERE { ?x ?y ?z } HAVING (?x > 5) ORDER BY ?y ",
-      testing::AllOf(
-          m::SelectQuery(m::Select({Var{"?x"}}), DummyGraphPatternMatcher),
-          m::pq::Having({"(?x > 5)"}), m::pq::OrderKeys({{Var{"?y"}, false}})));
 
-  // When there is no GROUP BY, the aliases are equivalently transformed into
-  // BINDs and then deleted from the SELECT clause.
-  expectSelectQuery("SELECT (?x AS ?y) (?y AS ?z) WHERE { BIND(1 AS ?x)}",
-                    m::SelectQuery(m::Select({Var("?y"), Var("?z")}),
-                                   m::GraphPattern(m::Bind(Var("?x"), "1"),
-                                                   m::Bind(Var("?y"), "?x"),
-                                                   m::Bind(Var{"?z"}, "?y"))));
-
-  // The target of the alias (`?y`) is already bound in the WHERE clause. This
-  // is forbidden by the SPARQL standard.
-  expectSelectQueryFails("SELECT (?x AS ?y) WHERE { ?x <is-a> ?y }");
+  expectSelectQuery(
+      "SELECT (SUM(?x) as ?a) (COUNT(?y) + ?z AS ?b)  WHERE { ?x ?y ?z } GROUP "
+      "BY ?z",
+      testing::AllOf(
+          m::SelectQuery(m::Select({std::pair{"SUM(?x)", Var{"?a"}},
+                                    std::pair{"COUNT(?y) + ?z", Var{"?b"}}}),
+                         DummyGraphPatternMatcher)));
 
   // It is also illegal to reuse a variable from the body of a query with a
   // GROUP BY as the target of an alias, even if it is the aggregated variable
@@ -947,18 +952,12 @@ TEST(SparqlParser, SelectQuery) {
   expectSelectQueryFails("SELECT ?x WHERE { ?a ?b ?c } GROUP BY ?x");
   expectSelectQueryFails(
       "SELECT (COUNT(?a) as ?d) WHERE { ?a ?b ?c } GROUP BY (?x - 10)");
-  // Ordering by a variable or expression which contains a variable that is not
-  // visible in the query body is not allowed.
-  expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY ?x");
-  expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY (?x - 10)");
+
   // All variables used in an aggregate must be visible in the query body.
   expectSelectQueryFails(
       "SELECT (COUNT(?x) as ?y) WHERE { ?a ?b ?c } GROUP BY ?a");
   // `SELECT *` is not allowed while grouping.
   expectSelectQueryFails("SELECT * WHERE { ?x ?y ?z } GROUP BY ?x");
-  // `?x` is selected twice. Once as variable and once as the result of an
-  // alias. This is not allowed.
-  expectSelectQueryFails("SELECT ?x (?y as ?x) WHERE { ?x ?y ?z }");
   // When grouping selected variables must either be grouped by or aggregated.
   // `?y` is neither.
   expectSelectQueryFails("SELECT (?y as ?a) WHERE { ?x ?y ?z } GROUP BY ?x");
@@ -976,6 +975,23 @@ TEST(SparqlParser, SelectQuery) {
   // Implicit GROUP BY but the variable `?x` is not aggregated inside the
   // expression that also contains the aggregate.
   expectSelectQueryFails("SELECT (?x + SUM(?y) AS ?z) WHERE { ?x <p> ?y}");
+
+  // When there is no GROUP BY (implicit or explicit), the aliases are
+  // equivalently transformed into BINDs and then deleted from the SELECT
+  // clause.
+  expectSelectQuery("SELECT (?x AS ?y) (?y AS ?z) WHERE { BIND(1 AS ?x)}",
+                    m::SelectQuery(m::Select({Var("?y"), Var("?z")}),
+                                   m::GraphPattern(m::Bind(Var("?x"), "1"),
+                                                   m::Bind(Var("?y"), "?x"),
+                                                   m::Bind(Var{"?z"}, "?y"))));
+
+  // `?x` is selected twice. Once as variable and once as the result of an
+  // alias. This is not allowed.
+  expectSelectQueryFails("SELECT ?x (?y as ?x) WHERE { ?x ?y ?z }");
+
+  // The target of the alias (`?y`) is already bound in the WHERE clause. This
+  // is forbidden by the SPARQL standard.
+  expectSelectQueryFails("SELECT (?x AS ?y) WHERE { ?x <is-a> ?y }");
 
   // Datasets are not supported.
   expectSelectQueryFails("SELECT * FROM  WHERE <foo> { ?x ?y ?z }");
@@ -1058,7 +1074,6 @@ TEST(SparqlParser, Query) {
           m::VisibleVariables({Var{"?x"}, Var{"?y"}, Var{"?z"}})));
 
   // Construct query with GROUP BY
-  // TODO<joka921> Check the GROUP BY variables.
   expectQuery(
       "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } GROUP BY ?x",
       testing::AllOf(
