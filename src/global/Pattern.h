@@ -20,6 +20,7 @@
 #include "../util/TypeTraits.h"
 #include "../util/UninitializedAllocator.h"
 #include "Id.h"
+#include "util/OnDestruction.h"
 
 typedef uint32_t PatternID;
 
@@ -250,16 +251,10 @@ struct CompactStringVectorWriter {
 
   ~CompactStringVectorWriter() {
     if (!_finished) {
-      try {
-        finish();
-      } catch (const std::exception& e) {
-        LOG(ERROR)
-            << "Finishing the underlying File of a `CompactStringVectorWriter` "
-               "failed with an exception, this should never happen, please "
-               "report this. The exception message is \""
-            << e.what() << "\"Terminating" << std::endl;
-        std::terminate();
-      }
+      ad_utility::terminateIfThrows(
+          [this]() { finish(); },
+          "Finishing the underlying File of a `CompactStringVectorWriter` "
+          "during destruction failed");
     }
   }
 

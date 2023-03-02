@@ -4,6 +4,12 @@
 #ifndef QLEVER_ONDESTRUCTION_H
 #define QLEVER_ONDESTRUCTION_H
 
+#include <concepts>
+#include <exception>
+#include <iostream>
+
+#include "util/SourceLocation.h"
+
 namespace ad_utility {
 
 /// A simple type that executes a specified action at the time it is destroyed
@@ -21,6 +27,36 @@ class OnDestruction {
   explicit OnDestruction(F f) : f_{std::move(f)} {}
   ~OnDestruction() noexcept(noexcept(f_())) { f_(); }
 };
+
+// Call `f()`. If this call throws, then terminate the program after logging an
+// error message that includes the `message`, information on the thrown
+// exception, and the location of the call. This can be used to make destructors
+// `noexcept()` that have to perform some non-trivial logic (e.g. writing a
+// trailer to a file), when such a failure should never occur in practice and
+// also is not easily recovarable. For an example usage see `PatternCreator.h`.
+template <std::invocable<> F>
+void terminateIfThrows(F&& f, std::string_view message,
+                       ad_utility::source_location l =
+                           ad_utility::source_location::current()) noexcept {
+  try {
+    std::invoke(f);
+  } catch (const std::exception& e) {
+    std::cerr << "A function that should never throw has thrown an exception "
+                 "with message \""
+              << e.what() << "\". The function was called in file "
+              << l.file_name() << " on line " << l.line()
+              << ". Additional information: " << message
+              << ". Please report this. Terminating" << std::endl;
+    std::terminate();
+  } catch (...) {
+    std::cerr << "A function that should never throw has thrown an exception. "
+                 "The function was called in file "
+              << l.file_name() << " on line " << l.line()
+              << ". Additional information: " << message
+              << ". Please report this. Terminating" << std::endl;
+    std::terminate();
+  }
+}
 }  // namespace ad_utility
 
 #endif  // QLEVER_ONDESTRUCTION_H

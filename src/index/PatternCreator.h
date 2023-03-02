@@ -10,13 +10,14 @@
 #ifndef QLEVER_PATTERNCREATOR_H
 #define QLEVER_PATTERNCREATOR_H
 
-#include "../global/Constants.h"
-#include "../global/Id.h"
-#include "../global/Pattern.h"
-#include "../util/MmapVector.h"
-#include "../util/Serializer/SerializeVector.h"
-#include "../util/Serializer/Serializer.h"
-#include "../util/TypeTraits.h"
+#include "global/Constants.h"
+#include "global/Id.h"
+#include "global/Pattern.h"
+#include "util/MmapVector.h"
+#include "util/OnDestruction.h"
+#include "util/Serializer/SerializeVector.h"
+#include "util/Serializer/Serializer.h"
+#include "util/TypeTraits.h"
 
 /// Several statistics for the patterns, as well as the functionality to
 /// serialize them.
@@ -124,15 +125,9 @@ class PatternCreator {
 
   /// Destructor implicitly calls `finish`
   ~PatternCreator() {
-    try {
-      finish();
-    } catch (const std::exception& e) {
-      LOG(ERROR) << "Finishing the underlying File of a `PatternCreator` "
-                    "failed with an exception, this should never happen, "
-                    "please report this. The exception message is \""
-                 << e.what() << "\"Terminating" << std::endl;
-      std::terminate();
-    }
+    ad_utility::terminateIfThrows([this]() { finish(); },
+                                  "Finishing the underlying file of a "
+                                  "`PatternCreator` during destruction.");
   }
 
   /// Read the patterns from `filename`. The patterns must have been written to
