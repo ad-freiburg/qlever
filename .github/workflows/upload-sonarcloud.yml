@@ -1,0 +1,145 @@
+# This workflow runs as soon as the workflow from `sonarcloud.yml` has
+# successfully finished. It downloads the created artifact and runs the
+# SonarCloud analysis and uploader. This workflow uses the `workflow_run` trigger. This
+# means that it will always be run from the master branch, meaning that
+# the contents of this file will always be taken from the master branch,
+# even if a PR changes it. Since this approach disallows several attacks
+# from malicious PR authors, such workflows have access to the secrets
+# stored on GitHub. For details on the `workflow_run` trigger and this
+# security measures, see
+# https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
+
+# Credit goes to the `1c-syntax` project where I found a code snippet to make
+# SonarCloud work with the `workflow_run` trigger:
+# https://github.com/1c-syntax/bsl-language-server/blob/21a6bb5172cbc4591a05414d5d0ac221689e45ce/.github/workflows/qa.yml#L16
+name: Upload and run SonarCloud Analysis
+
+on:
+  workflow_run:
+    # This has to be the `name:` of the workflow in `code_coverage.yml`.
+    # Start when this  workflow has finished successfully.
+    workflows: [sonarcloud-analysis]
+    types:
+      - completed
+
+jobs:
+  upload:
+    runs-on: ubuntu-22.04
+    # Only run on successful pull requests. Merge commits to master upload
+    # their coverage reports directly inside `code-coverage.yml`
+    # TODO<joka921> Also make this work for pushes to the master branch!
+    if: github.event.workflow_run.conclusion == 'success'
+    env:
+      compiler: clang
+      compiler-version: 15
+      warnings:   "-Wall -Wextra -Werror "
+      build-type: Release
+      BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
+    steps:
+      - name: 'Download artifact'
+        uses: actions/github-script@v3.1.0
+        if: github.event.workflow_run.event == 'pull_request'
+        # The following script is taken from the link stated at the
+        # beginning of this file. It manually downloads an artifact
+        # from another workflow.
+        with:
+          script: |
+            var artifacts = await github.actions.listWorkflowRunArtifacts({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               run_id: ${{github.event.workflow_run.id }},
+            });
+            var matchArtifact = artifacts.data.artifacts.filter((artifact) => {
+              return artifact.name == "sonarcloud-report"
+            })[0];
+            var download = await github.actions.downloadArtifact({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               artifact_id: matchArtifact.id,
+               archive_format: 'zip',
+            });
+            var fs = require('fs');
+            fs.writeFileSync('${{github.workspace}}/sonarcloud-report.zip', Buffer.from(download.data));
+      - run: unzip sonarcloud-report.zip
+        if: github.event.workflow_run.event == 'pull_request'
+      # Read the metadata into environment variables.
+      - name: "Read PR number"
+        run: echo "pr_number=`cat pr`" >> $GITHUB_ENV
+        if: github.event.workflow_run.event == 'pull_request'
+      - name: "Read Github Ref"
+        run: echo "original_github_ref=`cat github_ref`" >> $GITHUB_ENV;
+        if: github.event.workflow_run.event == 'pull_request'
+      - name: "Read Github Repository"
+        run: echo "original_github_repository=`cat github_repository`" >> $GITHUB_ENV;
+        if: github.event.workflow_run.event == 'pull_request'
+        # We have to check out the source code from the PR, otherwise Codecov
+        # won't process the upload properly. We first check it out into a
+        # subdirectory `qlever-source`, otherwise the coverage report will
+        # be overwritten. We then move all the files back into the working
+        # directory such that Codecov will pick them up properly.
+      - name: Request GitHub API for PR data
+        uses: octokit/request-action@v2.x
+        id: get_pr_data
+        if: github.event.workflow_run.event == 'pull_request'
+        with:
+          route: GET /repos/{full_name}/pulls/{number}
+          number: ${{ env.pr_number }}
+          full_name: ${{ github.event.repository.full_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: "Checkout"
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ github.event.workflow_run.head_repository.full_name }}
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
+          submodules: "recursive"
+          path: qlever-source
+      - name: Checkout base branch
+        working-directory: qlever-source
+        if: github.event.workflow_run.event == 'pull_request'
+        run: |
+          git remote add upstream ${{ github.event.repository.clone_url }}
+          git fetch upstream --no-recurse-submodules
+          git checkout -B ${{ fromJson(steps.get_pr_data.outputs.data).base.ref }} upstream/${{ fromJson(steps.get_pr_data.outputs.data).base.ref }}
+          git checkout ${{ github.event.workflow_run.head_branch }}
+          git clean -ffdx && git reset --hard HEAD
+      - name: "Move qlever sources up"
+        run: shopt -s dotglob && mv qlever-source/* .
+      - name: Install sonar-scanner and build-wrapper
+        uses: SonarSource/sonarcloud-github-c-cpp@v1
+      - name: Install dependencies
+        run:  sudo apt update && sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
+      - name: Install boost Ubuntu 22.04
+        run : sudo apt update && sudo apt install -y libboost-all-dev
+      - name: Install clang 15
+        # The sed command fixes a bug in `llvm.sh` in combination with the latest version of
+        # `apt-key`. Without it the GPG key for the llvm repository is downloaded but deleted
+        # immediately after.
+        run:  |
+          wget https://apt.llvm.org/llvm.sh
+          sudo chmod +x llvm.sh
+          sed   's/apt-key del/echo/' llvm.sh -iy
+          sudo ./llvm.sh 15 all
+          sudo apt install clang-15
+
+      - name: Configure CMake
+        # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
+        # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{env.compiler}}${{env.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}} ${{env.asan-flags}} ${{env.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=true
+      - name: Build
+        # Build your program with the given configuration
+        run: build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} cmake --build ${{github.workspace}}/build --config ${{env.build-type}} -- -j $(nproc)
+      - name: Run sonar-scanner on PR
+        if: github.event.workflow_run.event == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          sonar-scanner --define sonar.cfamily.build-wrapper-output=build_wrapper_output_directory -Dsonar.scm.revision=${{ github.event.workflow_run.head_sha }} -Dsonar.pullrequest.key=${{ fromJson(steps.get_pr_data.outputs.data).number }} -Dsonar.pullrequest.branch=${{ fromJson(steps.get_pr_data.outputs.data).head.ref }} -Dsonar.pullrequest.base=${{ fromJson(steps.get_pr_data.outputs.data).base.ref }}
+      - name: SonarCloud Scan on push
+        if: github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.event.repository.full_name
+        run: sonar-scanner --define sonar.cfamily.build-wrapper-output=build_wrapper_output_directory -Dsonar.scm.revision=${{ github.event.workflow_run.head_sha }} -Dsonar.branch.name=${{ github.event.workflow_run.head_branch }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
