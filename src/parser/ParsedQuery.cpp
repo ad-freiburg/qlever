@@ -351,7 +351,8 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
 
       checkUsedVariablesAreVisible(a._expression, "Alias");
     }
-  } else if (hasConstructClause()) {
+  } else {
+    AD_CORRECTNESS_CHECK(hasConstructClause());
     if (_groupByVariables.empty()) {
       return;
     }

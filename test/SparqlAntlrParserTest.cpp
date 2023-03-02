@@ -1057,6 +1057,21 @@ TEST(SparqlParser, Query) {
           m::pq::LimitOffset({10}),
           m::VisibleVariables({Var{"?x"}, Var{"?y"}, Var{"?z"}})));
 
+  // Construct query with GROUP BY
+  // TODO<joka921> Check the GROUP BY variables.
+  expectQuery(
+      "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } GROUP BY ?x",
+      testing::AllOf(
+          m::ConstructQuery(
+              {{Var{"?x"}, Iri{"<foo>"}, Iri{"<bar>"}}},
+              m::GraphPattern(m::Triples({{Var{"?x"}, "?y", Var{"?z"}}}))),
+          m::pq::OriginalString(
+              "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } GROUP BY ?x"),
+          m::VisibleVariables({Var{"?x"}, Var{"?y"}, Var{"?z"}})));
+  // Construct query with GROUP BY, but a variable that is not grouped is used.
+  expectQueryFails(
+      "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } GROUP BY ?y");
+
   // Test that the prologue is parsed properly. We use `m::Service` here
   // because the parsing of a SERVICE clause is the only place where the
   // prologue is explicitly passed on to a `parsedQuery::` object.
