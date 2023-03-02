@@ -292,10 +292,9 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       // Check if all selected variables are either aggregated or
       // part of the group by statement.
       for (const Variable& var : selectClause().getSelectedVariables()) {
-        auto it = std::ranges::find_if(
-            selectClause().getAliases(),
-            [&var](const Alias& alias) { return alias._target == var; });
-        if (it != selectClause().getAliases().end()) {
+        const auto& aliases = selectClause().getAliases();
+        if (auto it = std::ranges::find(aliases, var, &Alias::_target);
+            it != aliases.end()) {
           const auto& alias = *it;
           if (alias._expression.isAggregate(groupVariables)) {
             continue;

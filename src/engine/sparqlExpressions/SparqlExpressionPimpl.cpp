@@ -37,11 +37,8 @@ SparqlExpressionPimpl& SparqlExpressionPimpl::operator=(
 std::vector<std::string> SparqlExpressionPimpl::getUnaggregatedVariables(
     const ad_utility::HashSet<string>& groupedVariables) const {
   auto vars = _pimpl->getUnaggregatedVariables();
-  vars.erase(std::remove_if(vars.begin(), vars.end(),
-                            [&](const auto& var) {
-                              return groupedVariables.contains(var);
-                            }),
-             vars.end());
+  std::erase_if(
+      vars, [&](const auto& var) { return groupedVariables.contains(var); });
   return vars;
 }
 
