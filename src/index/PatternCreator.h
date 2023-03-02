@@ -123,7 +123,17 @@ class PatternCreator {
   void finish();
 
   /// Destructor implicitly calls `finish`
-  ~PatternCreator() { finish(); }
+  ~PatternCreator() {
+    try {
+      finish();
+    } catch (const std::exception& e) {
+      LOG(ERROR) << "Finishing the underlying File of a `PatternCreator` "
+                    "failed with an exception, this should never happen, "
+                    "please report this. The exception message is \""
+                 << e.what() << "\"Terminating" << std::endl;
+      std::terminate();
+    }
+  }
 
   /// Read the patterns from `filename`. The patterns must have been written to
   /// this file using a `PatternCreator`. The patterns and all their statistics

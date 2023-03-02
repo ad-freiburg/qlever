@@ -250,7 +250,16 @@ struct CompactStringVectorWriter {
 
   ~CompactStringVectorWriter() {
     if (!_finished) {
-      finish();
+      try {
+        finish();
+      } catch (const std::exception& e) {
+        LOG(ERROR)
+            << "Finishing the underlying File of a `CompactStringVectorWriter` "
+               "failed with an exception, this should never happen, please "
+               "report this. The exception message is \""
+            << e.what() << "\"Terminating" << std::endl;
+        std::terminate();
+      }
     }
   }
 

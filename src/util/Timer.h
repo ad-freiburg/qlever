@@ -216,11 +216,13 @@ namespace detail {
   LOG(TIMING) << message << " took " << msecs << "ms" << std::endl;
 };
 template <typename Callback = decltype(defaultLogger)>
-struct TimeBlockAndLog {
+struct [[nodiscard(
+    "TimeBlockAndLog objects are RAII types that always have to be bound to a "
+    "variable")]] TimeBlockAndLog {
   Timer t_{Timer::Started};
   std::string message_;
   Callback callback_;
-  TimeBlockAndLog(std::string message, Callback callback = {})
+  explicit TimeBlockAndLog(std::string message, Callback callback = {})
       : message_{std::move(message)}, callback_{std::move(callback)} {
     t_.start();
   }
