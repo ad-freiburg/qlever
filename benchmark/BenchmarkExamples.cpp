@@ -1,6 +1,9 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (January of 2023, schlegea@informatik.uni-freiburg.de)
+#include <cmath>
+#include <string>
+
 #include "../benchmark/Benchmark.h"
 #include "util/Random.h"
 
@@ -72,9 +75,12 @@ void BM_Tables(BenchmarkRecords* records) {
   };
 
   // Measuring functions.
-  records->addTable("Exponents with the given basis", {"2", "3"}, {"0", "1", "2", "3", "4"});
-  records->addTable("Adding exponents", {"2^10", "2^11"}, {"2^10", "2^11"});
+  records->addTable("Exponents with the given basis",
+      {"2", "3", "Time difference"}, {"0", "1", "2", "3", "4"});
+  records->addTable("Adding exponents", {"2^10", "2^11", "Values written out"},
+      {"2^10", "2^11"});
 
+  // Measuers for calculating the exponents.
   for (int i = 0; i < 5; i++) {
     records->addToExistingTable("Exponents with the given basis", 0, i,
         [&](){exponentiateNTimes(2,i);});
@@ -83,7 +89,19 @@ void BM_Tables(BenchmarkRecords* records) {
     records->addToExistingTable("Exponents with the given basis", 1, i,
         [&](){exponentiateNTimes(3,i);});
   }
+  // Calculating the time differnce between them.
+  for (size_t column = 0; column < 5; column++){
+    float entryWithBasis2 =
+      records->getEntryOfExistingTable<float>("Exponents with the given basis",
+          0, column);
+    float entryWithBasis3 =
+      records->getEntryOfExistingTable<float>("Exponents with the given basis",
+          1, column);
+    records->setEntryOfExistingTable("Exponents with the given basis",
+          2, column, std::abs(entryWithBasis3 - entryWithBasis2));
+  }
 
+  // Measuers for calculating and adding the exponents.
   for (int row = 0; row < 2; row++) {
     for (int column = 0; column < 2; column++) {
       records->addToExistingTable("Adding exponents", row, column,
@@ -92,6 +110,12 @@ void BM_Tables(BenchmarkRecords* records) {
           exponentiateNTimes(2, row+10)+exponentiateNTimes(2, column+10);});
     }
   }
+
+  // Manually setting strings.
+  records->setEntryOfExistingTable("Adding exponents", 2, 0,
+      std::string{"1024+1024 and 1024+2048"});
+  records->setEntryOfExistingTable("Adding exponents", 2, 1,
+      std::string{"1024+2048 and 2048+2048"});
 }
 
 BenchmarkRegister temp{{BM_SingeMeasurements, BM_Groups, BM_Tables}};
