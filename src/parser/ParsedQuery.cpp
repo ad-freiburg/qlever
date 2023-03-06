@@ -130,21 +130,28 @@ void ParsedQuery::addBind(sparqlExpression::SparqlExpressionPimpl expression,
 
 // ________________________________________________________________________
 void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
-  auto checkVariableIsVisible = [this](const Variable& var,
-                                       const std::string& locationDescription) {
-    if (!ad_utility::contains(getVisibleVariables(), var)) {
-      throw ParseException("Variable " + var.name() + " was used in " +
-                           locationDescription +
-                           ", but is not visible in the Query Body.");
-    }
-  };
+  auto checkVariableIsVisible =
+      [this](const Variable& var, const std::string& locationDescription,
+             const ad_utility::HashSet<Variable>& additionalVisibleVariables =
+                 {}) {
+        if (!ad_utility::contains(getVisibleVariables(), var) &&
+            !additionalVisibleVariables.contains(var)) {
+          throw ParseException("Variable " + var.name() + " was used in " +
+                               locationDescription +
+                               ", but is not visible in the Query Body.");
+        }
+      };
   auto checkUsedVariablesAreVisible =
       [&checkVariableIsVisible](
           const sparqlExpression::SparqlExpressionPimpl& expression,
-          const std::string& locationDescription) {
+          const std::string& locationDescription,
+          const ad_utility::HashSet<Variable>& additionalVisibleVariables =
+              {}) {
         for (const auto* var : expression.containedVariables()) {
-          checkVariableIsVisible(*var, locationDescription + " in Expression " +
-                                           expression.getDescriptor());
+          checkVariableIsVisible(*var,
+                                 locationDescription + " in Expression " +
+                                     expression.getDescriptor(),
+                                 additionalVisibleVariables);
         }
       };
 
@@ -263,7 +270,13 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   // Process limitOffsetClause
   _limitOffset = modifiers.limitOffset_;
 
-  auto checkAliasTargetsHaveNoOverlapWithVisibleVariables = [this]() {
+  auto checkAliasTargetsHaveNoOverlap = [this]() {
+    ad_utility::HashMap<Variable, size_t> variable_counts;
+
+    for (const Variable& v : selectClause().getSelectedVariables()) {
+      variable_counts[v]++;
+    }
+
     for (const auto& alias : selectClause().getAliases()) {
       if (ad_utility::contains(selectClause().getVisibleVariables(),
                                alias._target)) {
@@ -272,11 +285,36 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
                                           "it is also visible in the query "
                                           "body. This is not allowed."));
       }
+
+      // The variable was already added to the selected variables while
+      // parsing the alias, thus it should appear exactly once
+      if (variable_counts[alias._target] > 1) {
+        throw ParseException("The variable name " + alias._target.name() +
+                             " used in an alias was already prviously used in "
+                             "the SELECT clause.");
+      }
     }
   };
 
   if (hasSelectClause()) {
-    checkAliasTargetsHaveNoOverlapWithVisibleVariables();
+    checkAliasTargetsHaveNoOverlap();
+
+    // Check that all the variables that are used in aliases are either visible
+    // in the query body or are bound by a previous alias from the same SELECT
+    // clause. Note: Currently the reusage of variables from previous aliases
+    // like SELECT (?a AS ?b) (?b AS ?c) is only supported by QLever if there is
+    // no GROUP BY in the query. To support this we would also need changes in
+    // the `GroupBy` class.
+    // TODO<joka921> Implement these changes and support this case.
+    ad_utility::HashSet<Variable> variablesBoundInAliases;
+    for (const auto& alias : selectClause().getAliases()) {
+      checkUsedVariablesAreVisible(alias._expression, "Alias",
+                                   variablesBoundInAliases);
+      if (!isGroupBy) {
+        variablesBoundInAliases.insert(alias._target);
+      }
+    }
+
     if (isGroupBy) {
       ad_utility::HashSet<string> groupVariables{};
       for (const auto& variable : _groupByVariables) {
@@ -331,24 +369,6 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       // We do not need the aliases anymore as we have converted them to BIND
       // expressions
       selectClause.deleteAliasesButKeepVariables();
-    }
-
-    ad_utility::HashMap<std::string, size_t> variable_counts;
-
-    for (const std::string& s :
-         selectClause().getSelectedVariablesAsStrings()) {
-      variable_counts[s]++;
-    }
-
-    for (const Alias& a : selectClause().getAliases()) {
-      // The variable was already added to the selected variables while
-      // parsing the alias, thus it should appear exactly once
-      if (variable_counts[a._target.name()] > 1) {
-        throw ParseException("The variable name " + a._target.name() +
-                             " used in an alias was already selected on.");
-      }
-
-      checkUsedVariablesAreVisible(a._expression, "Alias");
     }
   } else {
     AD_CORRECTNESS_CHECK(hasConstructClause());

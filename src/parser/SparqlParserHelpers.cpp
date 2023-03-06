@@ -10,8 +10,10 @@ namespace sparqlParserHelpers {
 using std::string;
 
 // _____________________________________________________________________________
-ParserAndVisitor::ParserAndVisitor(std::string input)
-    : input_{std::move(input)}, visitor_{} {
+ParserAndVisitor::ParserAndVisitor(
+    std::string input,
+    SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
+    : input_{std::move(input)}, visitor_{{}, disableSomeChecks} {
   // The default in ANTLR is to log all errors to the console and to continue
   // the parsing. We need to turn parse errors into exceptions instead to
   // propagate them to the user.
@@ -22,9 +24,10 @@ ParserAndVisitor::ParserAndVisitor(std::string input)
 }
 
 // _____________________________________________________________________________
-ParserAndVisitor::ParserAndVisitor(std::string input,
-                                   SparqlQleverVisitor::PrefixMap prefixes)
-    : ParserAndVisitor{std::move(input)} {
+ParserAndVisitor::ParserAndVisitor(
+    std::string input, SparqlQleverVisitor::PrefixMap prefixes,
+    SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
+    : ParserAndVisitor{std::move(input), disableSomeChecks} {
   visitor_.setPrefixMapManually(std::move(prefixes));
 }
 }  // namespace sparqlParserHelpers

@@ -30,8 +30,10 @@ using Var = Variable;
 
 template <auto F>
 auto parse =
-    [](const string& input, SparqlQleverVisitor::PrefixMap prefixes = {}) {
-      ParserAndVisitor p{input, std::move(prefixes)};
+    [](const string& input, SparqlQleverVisitor::PrefixMap prefixes = {},
+       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
+           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
+      ParserAndVisitor p{input, std::move(prefixes), disableSomeChecks};
       return p.parseTypesafe(F);
     };
 
@@ -52,6 +54,8 @@ template <auto Clause,
           typename Value = decltype(parse<Clause>("").resultOfParse_)>
 struct ExpectCompleteParse {
   SparqlQleverVisitor::PrefixMap prefixMap_ = {};
+  SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
+      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False;
 
   auto operator()(const string& input, const Value& value,
                   ad_utility::source_location l =
@@ -78,14 +82,17 @@ struct ExpectCompleteParse {
                   SparqlQleverVisitor::PrefixMap prefixMap,
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) const {
-    return expectCompleteParse(parse<Clause>(input, std::move(prefixMap)),
-                               matcher, l);
+    return expectCompleteParse(
+        parse<Clause>(input, std::move(prefixMap), disableSomeChecks), matcher,
+        l);
   };
 };
 
 template <auto Clause, typename Exception = ParseException>
 struct ExpectParseFails {
   SparqlQleverVisitor::PrefixMap prefixMap_ = {};
+  SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
+      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False;
 
   auto operator()(
       const string& input,
@@ -97,7 +104,8 @@ struct ExpectParseFails {
       const string& input, SparqlQleverVisitor::PrefixMap prefixMap,
       ad_utility::source_location l = ad_utility::source_location::current()) {
     auto trace = generateLocationTrace(l);
-    EXPECT_THROW(parse<Clause>(input, std::move(prefixMap)), Exception)
+    EXPECT_THROW(parse<Clause>(input, std::move(prefixMap), disableSomeChecks),
+                 Exception)
         << input;
   }
 };
@@ -431,7 +439,8 @@ TEST(SparqlParser, VariableWithDollarSign) {
 }
 
 TEST(SparqlParser, Bind) {
-  auto expectBind = ExpectCompleteParse<&Parser::bind>{};
+  auto noChecks = SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::True;
+  auto expectBind = ExpectCompleteParse<&Parser::bind>{{}, noChecks};
   expectBind("BIND (10 - 5 as ?a)", m::Bind(Var{"?a"}, "10 - 5"));
   expectBind("bInD (?age - 10 As ?s)", m::Bind(Var{"?s"}, "?age - 10"));
 }
@@ -765,10 +774,13 @@ TEST(SparqlParser, HavingCondition) {
 }
 
 TEST(SparqlParser, GroupGraphPattern) {
+  // TODO<joka921> This shouldn't be True, we have to adapt some tests.
+  auto noChecks = SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False;
   auto expectGraphPattern = ExpectCompleteParse<&Parser::groupGraphPattern>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}},
+      noChecks};
   auto expectGroupGraphPatternFails =
-      ExpectParseFails<&Parser::groupGraphPattern>();
+      ExpectParseFails<&Parser::groupGraphPattern>{{}, noChecks};
   auto DummyTriplesMatcher = m::Triples({{Var{"?x"}, "?y", Var{"?z"}}});
 
   // Empty GraphPatterns are not supported.
@@ -799,8 +811,10 @@ TEST(SparqlParser, GroupGraphPattern) {
   expectGraphPattern(
       "{ FILTER (?a = 10) . ?x ?y ?z }",
       m::GraphPattern(false, {"(?a = 10)"}, DummyTriplesMatcher));
-  expectGraphPattern("{ BIND (?f - ?b as ?c) }",
-                     m::GraphPattern(m::Bind(Var{"?c"}, "?f - ?b")));
+  expectGraphPattern("{ BIND (3 as ?c) }",
+                     m::GraphPattern(m::Bind(Var{"?c"}, "3")));
+  // The variables `?f` and `?b` have not been used before the BIND clause.
+  expectGroupGraphPatternFails("{ BIND (?f - ?b as ?c) }");
   expectGraphPattern(
       "{ VALUES (?a ?b) { (<foo> <bar>) (<a> <b>) } }",
       m::GraphPattern(m::InlineData({Var{"?a"}, Var{"?b"}},
@@ -833,13 +847,13 @@ TEST(SparqlParser, GroupGraphPattern) {
                       {Var{"?c"}, CONTAINS_ENTITY_PREDICATE, Var{"?x"}},
                       {Var{"?c"}, CONTAINS_WORD_PREDICATE, "coca* abuse"}})));
   expectGraphPattern(
-      "{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) }",
+      "{?x <is-a> <Actor> . BIND(10 - ?x as ?y) }",
       m::GraphPattern(m::Triples({{Var{"?x"}, "<is-a>", "<Actor>"}}),
-                      m::Bind(Var{"?y"}, "10 - ?foo")));
+                      m::Bind(Var{"?y"}, "10 - ?x")));
   expectGraphPattern(
-      "{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) . ?a ?b ?c }",
+      "{?x <is-a> <Actor> . BIND(10 - ?x as ?y) . ?a ?b ?c }",
       m::GraphPattern(m::Triples({{Var{"?x"}, "<is-a>", "<Actor>"}}),
-                      m::Bind(Var{"?y"}, "10 - ?foo"),
+                      m::Bind(Var{"?y"}, "10 - ?x"),
                       m::Triples({{Var{"?a"}, "?b", Var{"?c"}}})));
   expectGraphPattern(
       "{?x <is-a> <Actor> . OPTIONAL { ?x <foo> <bar> } }",
@@ -962,6 +976,18 @@ TEST(SparqlParser, SelectQuery) {
   // `?y` is neither.
   expectSelectQueryFails("SELECT (?y as ?a) WHERE { ?x ?y ?z } GROUP BY ?x");
 
+  // Explicit GROUP BY but the target of an alias is used twice.
+  expectSelectQueryFails(
+      "SELECT (?x AS ?z) (?x AS ?z) WHERE { ?x <p> ?y} GROUP BY ?x");
+
+  // Explicit GROUP BY but the second alias uses the target of the first alias
+  // as input.
+  // TODO<joka921> This is actually allowed by the SPARQL standard, but
+  // currently not yet supported by QLever. Implement this (for details see the
+  // comment in `ParsedQuery::addSolutionModifiers`.
+  expectSelectQueryFails(
+      "SELECT (?x AS ?z) (?z AS ?zz) WHERE { ?x <p> ?y} GROUP BY ?x");
+
   // Implicit GROUP BY.
   expectSelectQuery(
       "SELECT (SUM(?x) as ?a) (COUNT(?y) + AVG(?z) AS ?b)  WHERE { ?x ?y ?z }",
@@ -984,6 +1010,9 @@ TEST(SparqlParser, SelectQuery) {
                                    m::GraphPattern(m::Bind(Var("?x"), "1"),
                                                    m::Bind(Var("?y"), "?x"),
                                                    m::Bind(Var{"?z"}, "?y"))));
+
+  // No GROUP BY but the target of an alias is used twice.
+  expectSelectQueryFails("SELECT (?x AS ?z) (?x AS ?z) WHERE { ?x <p> ?y}");
 
   // `?x` is selected twice. Once as variable and once as the result of an
   // alias. This is not allowed.

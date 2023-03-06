@@ -77,7 +77,7 @@ TEST(CheckUsePatternTrick, isVariableContainedInGraphPattern) {
   expectXYZContained("{?x <is-a> ?y} UNION {?z <is-a> <something>}");
   expectXYZContained("?x <is-a> ?y {SELECT ?z WHERE {?z <is-a> ?not}}");
   expectXYZContained("BIND (3 AS ?x) . ?y <is-a> ?z");
-  expectXYZContained("?x <is-a> ?z. BIND(?y AS ?t)");
+  expectXYZContained("?x <is-a> ?z. BIND(?z AS ?y)");
   expectXYZContained("VALUES ?x {<a> <b>}. ?y <is-a> ?z");
   expectXYZContained("VALUES ?x {<a> <b>}. ?y <is-a> ?z");
   expectXYZContained("?x <is-a> ?y { SERVICE <endpoint> { ?x ?y ?z } }");

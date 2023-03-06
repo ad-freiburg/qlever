@@ -267,9 +267,27 @@ Variable Visitor::visit(Parser::VarContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphPatternOperation Visitor::visit(Parser::BindContext* ctx) {
-  addVisibleVariable(ctx->var()->getText());
-  return GraphPatternOperation{
-      Bind{visitExpressionPimpl(ctx->expression()), visit(ctx->var())}};
+  Variable target = visit(ctx->var());
+  if (ad_utility::contains(visibleVariables_, target)) {
+    reportError(ctx, absl::StrCat("The target variable ", target.name(),
+                                  " of a BIND clause is used in the query body "
+                                  "before the BIND. This is not allowed"));
+  }
+
+  auto expression = visitExpressionPimpl(ctx->expression());
+  if (disableSomeChecksOnlyForTesting_ ==
+      DisableSomeChecksOnlyForTesting::False) {
+    for (const auto& var : expression.containedVariables()) {
+      if (!ad_utility::contains(visibleVariables_, *var)) {
+        reportError(ctx,
+                    absl::StrCat("The variable ", var->name(),
+                                 " was used in the expression of a BIND clause "
+                                 "but was not previously bound in the query."));
+      }
+    }
+  }
+  addVisibleVariable(target);
+  return GraphPatternOperation{Bind{std::move(expression), std::move(target)}};
 }
 
 // ____________________________________________________________________________________

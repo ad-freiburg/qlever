@@ -73,6 +73,8 @@ class SparqlQleverVisitor {
   using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
   using IntOrDouble = std::variant<int64_t, double>;
 
+  enum struct DisableSomeChecksOnlyForTesting { False, True };
+
  private:
   size_t _blankNodeCounter = 0;
   int64_t numInternalVariables_ = 0;
@@ -87,9 +89,16 @@ class SparqlQleverVisitor {
   // prologue, this string simply remains empty.
   std::string prologueString_;
 
+  DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting_;
+
  public:
   SparqlQleverVisitor() = default;
-  SparqlQleverVisitor(PrefixMap prefixMap) : prefixMap_{std::move(prefixMap)} {}
+  SparqlQleverVisitor(
+      PrefixMap prefixMap,
+      DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
+          DisableSomeChecksOnlyForTesting::False)
+      : prefixMap_{std::move(prefixMap)},
+        disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {}
 
   const PrefixMap& prefixMap() const { return prefixMap_; }
   void setPrefixMapManually(PrefixMap map) { prefixMap_ = std::move(map); }
