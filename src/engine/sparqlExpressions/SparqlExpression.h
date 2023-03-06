@@ -153,6 +153,7 @@ class SparqlExpression {
     // Default implementation: This expression adds no strings or variables.
     return {};
   }
+
  protected:
   bool isInsideAlias_ = false;
   virtual void setIsInsideAlias() final {
@@ -160,7 +161,6 @@ class SparqlExpression {
     for (auto& child : children()) {
       child->setIsInsideAlias();
     }
-
   }
 };
 }  // namespace sparqlExpression
