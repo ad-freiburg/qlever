@@ -13,6 +13,12 @@
 
 namespace ad_utility {
 
+namespace detail {
+[[maybe_unused]] static constexpr auto callStdTerminate = []() noexcept {
+  std::terminate();
+};
+}
+
 /// A simple type that executes a specified action at the time it is destroyed
 /// F must be callable without arguments return void. If F throws an exception,
 /// then the destructor of `OnDestruction` is `noexcept(false)`. This is the
@@ -23,10 +29,17 @@ requires std::is_invocable_r_v<void, F>
 class OnDestruction {
  private:
   F f_;
+  static constexpr bool isNoexcept = std::is_nothrow_invocable_v<F>;
 
  public:
+  OnDestruction& operator=(OnDestruction&&) noexcept requires isNoexcept =
+      default;
+  OnDestruction& operator=(OnDestruction&&) noexcept
+      requires(!isNoexcept) = delete;
+  OnDestruction(OnDestruction&&) noexcept requires isNoexcept = default;
+  OnDestruction(OnDestruction&&) noexcept requires(!isNoexcept) = delete;
   explicit OnDestruction(F f) : f_{std::move(f)} {}
-  ~OnDestruction() noexcept(noexcept(f_())) { f_(); }
+  ~OnDestruction() noexcept(isNoexcept) { f_(); }
 };
 
 // Call `f()`. If this call throws, then terminate the program after logging an
@@ -37,12 +50,17 @@ class OnDestruction {
 // also is not easily recovarable. For an example usage see `PatternCreator.h`.
 // The actual termination call can be configured for testing purposes. Note that
 // this function must never throw an exception.
-template <typename F>
-requires std::invocable<std::remove_cvref_t<F>>
-void terminateIfThrows(F&& f, std::string_view message,
-                       void (*terminateAction)() noexcept = &std::terminate,
-                       ad_utility::source_location l =
-                           ad_utility::source_location::current()) noexcept {
+template <typename F,
+          typename TerminateAction = decltype(detail::callStdTerminate)>
+requires(
+    std::invocable<std::remove_cvref_t<F>>&& std::is_nothrow_invocable_v<
+        TerminateAction>) void terminateIfThrows(F&& f,
+                                                 std::string_view message,
+                                                 TerminateAction
+                                                     terminateAction = {},
+                                                 ad_utility::source_location l =
+                                                     ad_utility::source_location::
+                                                         current()) noexcept {
   try {
     std::invoke(AD_FWD(f));
   } catch (const std::exception& e) {
