@@ -96,11 +96,12 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   try {
     // In case of an exception, create the correct runtime info, no matter which
     // exception handler is called.
-    ad_utility::OnDestruction onDestruction{[&]() {
-      if (std::uncaught_exceptions()) {
-        updateRuntimeInformationOnFailure(timer.msecs());
-      }
-    }};
+    auto onDestruction =
+        ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([&]() {
+          if (std::uncaught_exceptions()) {
+            updateRuntimeInformationOnFailure(timer.msecs());
+          }
+        });
     auto computeLambda = [this, &timer] {
       CacheValue val(getExecutionContext()->getAllocator());
       if (_timeoutTimer->wlock()->hasTimedOut()) {
