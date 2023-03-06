@@ -774,13 +774,11 @@ TEST(SparqlParser, HavingCondition) {
 }
 
 TEST(SparqlParser, GroupGraphPattern) {
-  // TODO<joka921> This shouldn't be True, we have to adapt some tests.
-  auto noChecks = SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False;
   auto expectGraphPattern = ExpectCompleteParse<&Parser::groupGraphPattern>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}},
-      noChecks};
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}
+      };
   auto expectGroupGraphPatternFails =
-      ExpectParseFails<&Parser::groupGraphPattern>{{}, noChecks};
+      ExpectParseFails<&Parser::groupGraphPattern>{{} };
   auto DummyTriplesMatcher = m::Triples({{Var{"?x"}, "?y", Var{"?z"}}});
 
   // Empty GraphPatterns are not supported.

@@ -138,7 +138,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
             !additionalVisibleVariables.contains(var)) {
           throw ParseException("Variable " + var.name() + " was used in " +
                                locationDescription +
-                               ", but is not visible in the Query Body.");
+                               ", but is not visible in the query body.");
         }
       };
   auto checkUsedVariablesAreVisible =
@@ -149,7 +149,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
               {}) {
         for (const auto* var : expression.containedVariables()) {
           checkVariableIsVisible(*var,
-                                 locationDescription + " in Expression " +
+                                 locationDescription + " in expression " +
                                      expression.getDescriptor(),
                                  additionalVisibleVariables);
         }
@@ -300,7 +300,8 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
 
     // Check that all the variables that are used in aliases are either visible
     // in the query body or are bound by a previous alias from the same SELECT
-    // clause. Note: Currently the reusage of variables from previous aliases
+    // clause.
+    // Note: Currently the reusage of variables from previous aliases
     // like SELECT (?a AS ?b) (?b AS ?c) is only supported by QLever if there is
     // no GROUP BY in the query. To support this we would also need changes in
     // the `GroupBy` class.
@@ -328,8 +329,8 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
 
       // Check if all selected variables are either aggregated or
       // part of the group by statement.
-      for (const Variable& var : selectClause().getSelectedVariables()) {
         const auto& aliases = selectClause().getAliases();
+        for (const Variable& var : selectClause().getSelectedVariables()) {
         if (auto it = std::ranges::find(aliases, var, &Alias::_target);
             it != aliases.end()) {
           const auto& alias = *it;
