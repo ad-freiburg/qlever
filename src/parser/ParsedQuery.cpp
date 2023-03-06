@@ -281,17 +281,16 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       if (ad_utility::contains(selectClause().getVisibleVariables(),
                                alias._target)) {
         throw ParseException(absl::StrCat(alias._target.name(),
-                                          " is the target of an alias although "
+                                          " is the target of an AS clause although "
                                           "it is also visible in the query "
-                                          "body. This is not allowed."));
+                                          "body."));
       }
 
       // The variable was already added to the selected variables while
       // parsing the alias, thus it should appear exactly once
       if (variable_counts[alias._target] > 1) {
-        throw ParseException("The variable name " + alias._target.name() +
-                             " used in an alias was already prviously used in "
-                             "the SELECT clause.");
+        throw ParseException("The target " + alias._target.name() +
+                             " of an AS clause was already used before in the SELECT clause.");
       }
     }
   };
