@@ -292,7 +292,6 @@ class IdTable {
     return data().at(column).at(row);
   }
 
-
   // Get a reference to the `i`-th row. The returned proxy objects can be
   // implicitly and trivially converted to `row_reference`. For the design
   // rationale behind those proxy types see above for their definition.

@@ -227,7 +227,8 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
       *getExecutionContext(), columnMap, inTable->_idTable,
       getExecutionContext()->getAllocator(), outTable->localVocabNonConst());
 
-  evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{_groupByVariables.begin(), _groupByVariables.end()};
+  evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
+      _groupByVariables.begin(), _groupByVariables.end()};
 
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
     result.emplace_back();
