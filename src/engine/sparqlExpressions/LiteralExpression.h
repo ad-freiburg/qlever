@@ -37,6 +37,13 @@ class LiteralExpression : public SparqlExpression {
         return _value;
       }
       return id;
+    } else if constexpr (std::is_same_v<Variable, T>) {
+      if (context->_groupedVariables.contains(_value)) {
+        auto column = context->getColumnIndexForVariable(_value);
+        return context->_inputTable.at(context->_beginIndex, column);
+      } else {
+        return _value;
+      }
     } else {
       return _value;
     }

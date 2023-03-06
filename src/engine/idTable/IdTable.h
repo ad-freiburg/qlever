@@ -283,6 +283,16 @@ class IdTable {
     return data()[column][row];
   }
 
+  // Get safe access to a single element specified by the row and the column.
+  // Throw if the row or the column is out of bounds
+  T& at(size_t row, size_t column) requires(!isView) {
+    return data().at(column).at(row);
+  }
+  const T& at(size_t row, size_t column) const {
+    return data().at(column).at(row);
+  }
+
+
   // Get a reference to the `i`-th row. The returned proxy objects can be
   // implicitly and trivially converted to `row_reference`. For the design
   // rationale behind those proxy types see above for their definition.
