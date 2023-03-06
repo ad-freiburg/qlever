@@ -40,10 +40,10 @@ class ParseException : public std::exception {
  public:
   ParseException(std::string_view cause,
                  std::optional<ExceptionMetadata> metadata = std::nullopt)
-      : cause_{absl::StrCat("ParseException, cause: ", cause)},
+      : cause_{absl::StrCat("Parse error: ", cause)},
         metadata_{std::move(metadata)} {};
 
-  virtual const char* what() const throw() { return cause_.c_str(); }
+  const char* what() const noexcept override { return cause_.c_str(); }
   [[nodiscard]] const std::optional<ExceptionMetadata>& metadata() const {
     return metadata_;
   }

@@ -270,8 +270,7 @@ GraphPatternOperation Visitor::visit(Parser::BindContext* ctx) {
   Variable target = visit(ctx->var());
   if (ad_utility::contains(visibleVariables_, target)) {
     reportError(ctx, absl::StrCat("The target variable ", target.name(),
-                                  " of a BIND clause is used in the query body "
-                                  "before the BIND. This is not allowed"));
+                                  " of an AS clause was already used before in the query body."));
   }
 
   auto expression = visitExpressionPimpl(ctx->expression());
