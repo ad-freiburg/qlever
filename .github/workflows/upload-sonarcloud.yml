@@ -37,7 +37,7 @@ jobs:
       BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
     steps:
       - name: 'Download artifact'
-        uses: actions/github-script@v3.1.0
+        uses: actions/github-script@v6
         if: github.event.workflow_run.event == 'pull_request'
         # The following script is taken from the link stated at the
         # beginning of this file. It manually downloads an artifact

@@ -28,7 +28,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
     steps:
       - name: 'Download artifact'
-        uses: actions/github-script@v3.1.0
+        uses: actions/github-script@v6
         # The following script is taken from the link stated at the
         # beginning of this file. It manually downloads an artifact
         # from another workflow.
