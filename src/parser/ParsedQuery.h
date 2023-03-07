@@ -163,10 +163,20 @@ class ParsedQuery {
     numInternalVariables_ = numInternalVariables;
   }
 
-  /// Generates an internal bind that binds the given expression using a bind.
-  /// The bind is added to the query as child. The variable that the expression
-  /// is bound to is returned.
+ private:
+  // Add a BIND clause to the body of the query. The second argument determines
+  // whether the `targetVariable` will be part of the visible variables that are
+  // selected by `SELECT *`. For an example usage see `addInternalBind` and
+  // `addSolutionModifiers`.
+  void addBind(sparqlExpression::SparqlExpressionPimpl expression,
+               Variable targetVariable, bool targetIsVisible);
+
+  // Generates an internal BIND that binds the given expression. The BIND is
+  // added to the query as a child. The variable that the expression is bound to
+  // is returned.
   Variable addInternalBind(sparqlExpression::SparqlExpressionPimpl expression);
+
+ public:
   void addSolutionModifiers(SolutionModifiers modifiers);
 
   /**

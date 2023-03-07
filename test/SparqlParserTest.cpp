@@ -122,8 +122,8 @@ TEST(ParserTest, testParse) {
     const auto& triples = pq.children()[0].getBasic()._triples;
     auto filters = pq._rootGraphPattern._filters;
     ASSERT_EQ(2u, filters.size());
-    ASSERT_EQ("(?x!=?y)", filters[0].expression_.getDescriptor());
-    ASSERT_EQ("(?y<?x)", filters[1].expression_.getDescriptor());
+    ASSERT_EQ("(?x != ?y)", filters[0].expression_.getDescriptor());
+    ASSERT_EQ("(?y < ?x)", filters[1].expression_.getDescriptor());
     ASSERT_EQ(2u, triples.size());
   }
 
@@ -135,7 +135,7 @@ TEST(ParserTest, testParse) {
     const auto& triples = pq.children()[0].getBasic()._triples;
     auto filters = pq._rootGraphPattern._filters;
     ASSERT_EQ(1u, filters.size());
-    ASSERT_EQ("(?x!=?y)", filters[0].expression_.getDescriptor());
+    ASSERT_EQ("(?x != ?y)", filters[0].expression_.getDescriptor());
     ASSERT_EQ(2u, triples.size());
   }
 
@@ -148,7 +148,7 @@ TEST(ParserTest, testParse) {
     const auto& triples = pq.children()[0].getBasic()._triples;
     auto filters = pq._rootGraphPattern._filters;
     ASSERT_EQ(1u, filters.size());
-    ASSERT_EQ("(?x!=?y)", filters[0].expression_.getDescriptor());
+    ASSERT_EQ("(?x != ?y)", filters[0].expression_.getDescriptor());
     ASSERT_EQ(4u, triples.size());
     ASSERT_EQ(Var{"?c"}, triples[2]._s);
     ASSERT_EQ(CONTAINS_ENTITY_PREDICATE, triples[2]._p._iri);
@@ -446,7 +446,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, pq._orderBy[0].isDescending_);
     ASSERT_EQ(Var{"?movie"}, pq._orderBy[0].variable_);
 
-    auto sc = get<ParsedQuery::SelectClause>(pq._clause);
+    auto sc = pq.selectClause();
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
@@ -486,7 +486,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, pq._orderBy[0].isDescending_);
     ASSERT_EQ(Var{"?movie"}, pq._orderBy[0].variable_);
 
-    auto sc = get<ParsedQuery::SelectClause>(pq._clause);
+    auto sc = pq.selectClause();
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
@@ -503,7 +503,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(2u, c_subquery._triples.size());
     ASSERT_EQ(1u, parsed_sub_query.get()._rootGraphPattern._filters.size());
     const auto& filter = parsed_sub_query.get()._rootGraphPattern._filters[0];
-    ASSERT_EQ("(?year>\"00-00-2000\")", filter.expression_.getDescriptor());
+    ASSERT_EQ("(?year > \"00-00-2000\")", filter.expression_.getDescriptor());
     ASSERT_EQ(0, parsed_sub_query.get()._limitOffset._offset);
 
     ASSERT_EQ(c_subquery._triples[0]._s, Var{"?movie"});
@@ -519,8 +519,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, parsed_sub_query.get()._orderBy[0].isDescending_);
     ASSERT_EQ(Var{"?director"}, parsed_sub_query.get()._orderBy[0].variable_);
 
-    auto sc_subquery =
-        get<ParsedQuery::SelectClause>(parsed_sub_query.get()._clause);
+    auto sc_subquery = parsed_sub_query.get().selectClause();
     ASSERT_EQ(false, sc_subquery.distinct_);
     ASSERT_EQ(false, sc_subquery.reduced_);
     ASSERT_EQ(true, sc_subquery.isAsterisk());
@@ -565,7 +564,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, pq._orderBy[0].isDescending_);
     ASSERT_EQ(Var{"?movie"}, pq._orderBy[0].variable_);
 
-    auto sc = get<ParsedQuery::SelectClause>(pq._clause);
+    auto sc = pq.selectClause();
     ASSERT_EQ(true, sc.distinct_);
     ASSERT_EQ(true, sc.isAsterisk());
 
@@ -582,7 +581,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(1u, c_subquery._triples.size());
     ASSERT_EQ(1u, parsed_sub_query.get()._rootGraphPattern._filters.size());
     const auto& filter = parsed_sub_query.get()._rootGraphPattern._filters[0];
-    ASSERT_EQ("(?year>\"00-00-2000\")", filter.expression_.getDescriptor());
+    ASSERT_EQ("(?year > \"00-00-2000\")", filter.expression_.getDescriptor());
     ASSERT_EQ(0, parsed_sub_query.get()._limitOffset._offset);
 
     ASSERT_EQ(c_subquery._triples[0]._s, Var{"?movie"});
@@ -594,8 +593,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(true, parsed_sub_query.get()._orderBy[0].isDescending_);
     ASSERT_EQ(Var{"?director"}, parsed_sub_query.get()._orderBy[0].variable_);
 
-    auto sc_subquery =
-        get<ParsedQuery::SelectClause>(parsed_sub_query.get()._clause);
+    auto sc_subquery = parsed_sub_query.get().selectClause();
     ASSERT_EQ(false, sc_subquery.distinct_);
     ASSERT_EQ(false, sc_subquery.reduced_);
     ASSERT_EQ(true, sc_subquery.isAsterisk());
@@ -621,8 +619,7 @@ TEST(ParserTest, testParse) {
               aux_parsed_sub_sub_query._limitOffset._limit);
     ASSERT_EQ(0u, aux_parsed_sub_sub_query._orderBy.size());
 
-    auto sc_sub_subquery =
-        get<ParsedQuery::SelectClause>(aux_parsed_sub_sub_query._clause);
+    auto sc_sub_subquery = aux_parsed_sub_sub_query.selectClause();
     ASSERT_EQ(false, sc_sub_subquery.distinct_);
     ASSERT_EQ(false, sc_sub_subquery.reduced_);
     ASSERT_EQ(false, sc_sub_subquery.isAsterisk());
@@ -706,9 +703,9 @@ TEST(ParserTest, testFilterWithoutDot) {
   ASSERT_EQ(3u, c._triples.size());
   const auto& filters = pq._rootGraphPattern._filters;
   ASSERT_EQ(3u, filters.size());
-  ASSERT_EQ("(?1!=fb:m.0fkvn)", filters[0].expression_.getDescriptor());
-  ASSERT_EQ("(?1!=fb:m.0vmt)", filters[1].expression_.getDescriptor());
-  ASSERT_EQ("(?1!=fb:m.018mts)", filters[2].expression_.getDescriptor());
+  ASSERT_EQ("(?1 != fb:m.0fkvn)", filters[0].expression_.getDescriptor());
+  ASSERT_EQ("(?1 != fb:m.0vmt)", filters[1].expression_.getDescriptor());
+  ASSERT_EQ("(?1 != fb:m.018mts)", filters[2].expression_.getDescriptor());
 }
 
 TEST(ParserTest, testExpandPrefixes) {
@@ -990,7 +987,7 @@ TEST(ParserTest, Bind) {
   ASSERT_TRUE(holds_alternative<p::Bind>(child));
   p::Bind bind = get<p::Bind>(child);
   ASSERT_EQ(bind._target, Var{"?a"});
-  ASSERT_EQ(bind._expression.getDescriptor(), "10-5");
+  ASSERT_EQ(bind._expression.getDescriptor(), "10 - 5");
 }
 
 TEST(ParserTest, Order) {
@@ -1052,7 +1049,7 @@ TEST(ParserTest, Order) {
     auto variant = pq._rootGraphPattern._graphPatterns[1];
     ASSERT_TRUE(holds_alternative<p::Bind>(variant));
     auto helperBind = get<p::Bind>(variant);
-    ASSERT_EQ(helperBind._expression.getDescriptor(), "(?x-?y)");
+    ASSERT_EQ(helperBind._expression.getDescriptor(), "(?x - ?y)");
     ASSERT_EQ(pq._orderBy[0].variable_, helperBind._target);
   }
   {
@@ -1097,7 +1094,7 @@ TEST(ParserTest, Group) {
     auto variant = pq._rootGraphPattern._graphPatterns[1];
     ASSERT_TRUE(holds_alternative<p::Bind>(variant));
     auto helperBind = get<p::Bind>(variant);
-    ASSERT_THAT(helperBind, m::BindExpression("?x-?y"));
+    ASSERT_THAT(helperBind, m::BindExpression("?x - ?y"));
     EXPECT_THAT(pq, m::GroupByVariables({helperBind._target, Var{"?x"}}));
   }
   {
@@ -1106,7 +1103,7 @@ TEST(ParserTest, Group) {
         "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY (?x "
         "- ?y AS ?foo) ?x");
     EXPECT_THAT(pq._rootGraphPattern._graphPatterns[1],
-                m::Bind(Var{"?foo"}, "?x-?y"));
+                m::Bind(Var{"?foo"}, "?x - ?y"));
     EXPECT_THAT(pq, m::GroupByVariables({Var{"?foo"}, Var{"?x"}}));
   }
   {
@@ -1124,7 +1121,7 @@ TEST(ParserTest, Group) {
     ParsedQuery pq = SparqlParser::parseQuery(
         "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY "
         "<http://www.opengis.net/def/function/geosparql/"
-        "latitude> (?y) ?x");
+        "latitude>(?y) ?x");
     auto variant = pq._rootGraphPattern._graphPatterns[1];
     ASSERT_TRUE(holds_alternative<p::Bind>(variant));
     auto helperBind = get<p::Bind>(variant);

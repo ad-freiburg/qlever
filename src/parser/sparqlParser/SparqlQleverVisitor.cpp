@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/cleanup/cleanup.h"
 #include "absl/strings/str_join.h"
 #include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
@@ -51,19 +52,21 @@ std::string Visitor::getOriginalInputForContext(
 
 // ___________________________________________________________________________
 ExpressionPtr Visitor::processIriFunctionCall(
-    const std::string& iri, std::vector<ExpressionPtr> argList) {
+    const std::string& iri, std::vector<ExpressionPtr> argList,
+    antlr4::ParserRuleContext* ctx) {
   // Lambda that checks the number of arguments and throws an error if it's
   // not right.
-  auto checkNumArgs = [&argList](const std::string_view prefix,
-                                 const std::string_view functionName,
-                                 size_t numArgs) {
+  auto checkNumArgs = [&argList, &ctx](const std::string_view prefix,
+                                       const std::string_view functionName,
+                                       size_t numArgs) {
     static std::array<std::string, 6> wordForNumArgs = {
         "no", "one", "two", "three", "four", "five"};
     if (argList.size() != numArgs) {
-      throw ParseException{absl::StrCat(
-          "Function ", prefix, functionName, " takes ",
-          numArgs < 5 ? wordForNumArgs[numArgs] : std::to_string(numArgs),
-          numArgs == 1 ? " argument" : " arguments")};
+      reportError(ctx,
+                  absl::StrCat("Function ", prefix, functionName, " takes ",
+                               numArgs < 5 ? wordForNumArgs[numArgs]
+                                           : std::to_string(numArgs),
+                               numArgs == 1 ? " argument" : " arguments"));
     }
   };
 
@@ -88,7 +91,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
           std::move(argList[0]));
     }
   }
-  throw ParseException{"Function \"" + iri + "\" not supported"};
+  reportNotSupported(ctx, "Function \"" + iri + "\" is");
 }
 
 void Visitor::addVisibleVariable(string var) {
@@ -142,7 +145,7 @@ PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
         }
       }
     }
-    tuples.push_back({predicate, std::move(object)});
+    tuples.emplace_back(predicate, std::move(object));
   }
   return tuples;
 }
@@ -150,7 +153,7 @@ PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
 // ___________________________________________________________________________
 SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx,
                                                     bool allowLanguageFilters) {
-  SparqlExpressionPimpl result{visit(ctx), std::move(ctx->getText())};
+  SparqlExpressionPimpl result{visit(ctx), getOriginalInputForContext(ctx)};
   if (allowLanguageFilters) {
     checkUnsupportedLangOperationAllowFilters(ctx, result);
   } else {
@@ -267,9 +270,29 @@ Variable Visitor::visit(Parser::VarContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphPatternOperation Visitor::visit(Parser::BindContext* ctx) {
-  addVisibleVariable(ctx->var()->getText());
-  return GraphPatternOperation{
-      Bind{visitExpressionPimpl(ctx->expression()), visit(ctx->var())}};
+  Variable target = visit(ctx->var());
+  if (ad_utility::contains(visibleVariables_, target)) {
+    reportError(
+        ctx,
+        absl::StrCat(
+            "The target variable ", target.name(),
+            " of an AS clause was already used before in the query body."));
+  }
+
+  auto expression = visitExpressionPimpl(ctx->expression());
+  if (disableSomeChecksOnlyForTesting_ ==
+      DisableSomeChecksOnlyForTesting::False) {
+    for (const auto& var : expression.containedVariables()) {
+      if (!ad_utility::contains(visibleVariables_, *var)) {
+        reportError(ctx,
+                    absl::StrCat("The variable ", var->name(),
+                                 " was used in the expression of a BIND clause "
+                                 "but was not previously bound in the query."));
+      }
+    }
+  }
+  addVisibleVariable(target);
+  return GraphPatternOperation{Bind{std::move(expression), std::move(target)}};
 }
 
 // ____________________________________________________________________________________
@@ -295,6 +318,18 @@ std::optional<Values> Visitor::visit(Parser::ValuesClauseContext* ctx) {
 // ____________________________________________________________________________________
 GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
   GraphPattern pattern;
+
+  // The following code makes sure that the variables from outside the graph
+  // pattern are NOT visible inside the graph pattern, but the variables from
+  // the graph pattern are visible outside the graph pattern.
+  auto visibleVariablesSoFar = std::move(visibleVariables_);
+  visibleVariables_.clear();
+  absl::Cleanup mergeVariables{[this, &visibleVariablesSoFar]() noexcept {
+    std::swap(visibleVariables_, visibleVariablesSoFar);
+    visibleVariables_.insert(visibleVariables_.end(),
+                             visibleVariablesSoFar.begin(),
+                             visibleVariablesSoFar.end());
+  }};
   pattern._id = numGraphPatterns_++;
   if (ctx->subSelect()) {
     auto [subquery, valuesOpt] = visit(ctx->subSelect());
@@ -808,7 +843,7 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
   } else {
     // TODO implement.
     AD_CORRECTNESS_CHECK(ctx->booleanLiteral());
-    reportError(ctx, "Booleans in VALUES clauses are not supported");
+    reportNotSupported(ctx, "Boolean literals in a VALUES clause are ");
   }
 }
 
@@ -864,7 +899,7 @@ ExpressionPtr Visitor::visit(Parser::ConstraintContext* ctx) {
 
 // ____________________________________________________________________________________
 ExpressionPtr Visitor::visit(Parser::FunctionCallContext* ctx) {
-  return processIriFunctionCall(visit(ctx->iri()), visit(ctx->argList()));
+  return processIriFunctionCall(visit(ctx->iri()), visit(ctx->argList()), ctx);
 }
 
 // ____________________________________________________________________________________
@@ -877,8 +912,8 @@ vector<Visitor::ExpressionPtr> Visitor::visit(Parser::ArgListContext* ctx) {
   // whole list, not the individual arguments), but we currently don't support
   // it.
   if (ctx->DISTINCT()) {
-    reportError(
-        ctx, "DISTINCT for argument lists of IRI functions are not supported");
+    reportNotSupported(
+        ctx, "DISTINCT for the argument lists of an IRI functions is ");
   }
   // Visit the expression of each argument.
   return visitVector(ctx->expression());
@@ -1169,7 +1204,7 @@ PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathNegatedPropertySetContext* ctx) {
-  reportError(ctx, "\"!\" inside a property path is not supported by QLever.");
+  reportNotSupported(ctx, "\"!\" inside a property path is ");
 }
 
 // ____________________________________________________________________________________
@@ -1189,10 +1224,8 @@ uint64_t Visitor::visit(Parser::IntegerContext* ctx) {
     static_assert(sizeof(unsigned long long int) == sizeof(uint64_t));
     return std::stoull(ctx->getText());
   } catch (const std::out_of_range&) {
-    reportError(
-        ctx,
-        "Integer " + ctx->getText() +
-            " does not fit into 64 bits. This is not supported by QLever.");
+    reportNotSupported(ctx, "Integer " + ctx->getText() +
+                                " does not fit into 64 bits. This is ");
   }
 }
 
@@ -1351,9 +1384,7 @@ ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
   auto children = visitVector(ctx->numericExpression());
 
   if (ctx->expressionList()) {
-    reportError(
-        ctx,
-        "IN/ NOT IN in expressions are currently not supported by QLever.");
+    reportNotSupported(ctx, "IN or NOT IN in an expression is ");
   }
   AD_CONTRACT_CHECK(children.size() == 1 || children.size() == 2);
   if (children.size() == 1) {
@@ -1730,7 +1761,7 @@ ExpressionPtr Visitor::visit(Parser::IriOrFunctionContext* ctx) {
         visit(ctx->iri()));
   }
   // Case 2: Function call, where the function name is an IRI.
-  return processIriFunctionCall(visit(ctx->iri()), visit(ctx->argList()));
+  return processIriFunctionCall(visit(ctx->iri()), visit(ctx->argList()), ctx);
 }
 
 // ____________________________________________________________________________________
@@ -1765,8 +1796,9 @@ std::variant<int64_t, double> parseNumericLiteral(Ctx* ctx, bool parseAsInt) {
       return std::stod(ctx->getText());
     }
   } catch (const std::out_of_range& range) {
-    throw ParseException("Could not parse Numeric Literal \"" + ctx->getText() +
-                         "\". It is out of range. Reason: " + range.what());
+    SparqlQleverVisitor::reportError(ctx, "Could not parse numeric literal \"" +
+                                              ctx->getText() +
+                                              "\" because it is out of range.");
   }
 }
 }  // namespace
@@ -1873,38 +1905,37 @@ void Visitor::visitIf(Ctx* ctx) requires voidWhenVisited<Visitor, Ctx> {
 // _____________________________________________________________________________
 void Visitor::reportError(antlr4::ParserRuleContext* ctx,
                           const std::string& msg) {
-  throw ParseException{
-      absl::StrCat("Clause \"", getOriginalInputForContext(ctx), "\" at line ",
-                   ctx->getStart()->getLine(), ":",
-                   ctx->getStart()->getCharPositionInLine(), " ", msg),
-      generateMetadata(ctx)};
+  throw InvalidQueryException{msg, generateMetadata(ctx)};
 }
 
 // _____________________________________________________________________________
 void Visitor::reportNotSupported(antlr4::ParserRuleContext* ctx,
                                  const std::string& feature) {
-  reportError(ctx, feature + " currently not supported by QLever.");
+  throw NotSupportedException{feature + " currently not supported by QLever.",
+                              generateMetadata(ctx)};
 }
 
 // _____________________________________________________________________________
 void Visitor::checkUnsupportedLangOperation(
     antlr4::ParserRuleContext* ctx,
-    SparqlQleverVisitor::SparqlExpressionPimpl expression) {
+    const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
   if (expression.containsLangExpression()) {
-    reportError(ctx,
-                "The `LANG()` function is only supported in the construct "
-                "`FILTER(LANG(?variable) = \"langtag\"`");
+    throw NotSupportedException{
+        "The LANG function is currently only supported in the construct "
+        "FILTER(LANG(?variable) = \"langtag\" by QLever",
+        generateMetadata(ctx)};
   }
 }
 
 // _____________________________________________________________________________
 void Visitor::checkUnsupportedLangOperationAllowFilters(
     antlr4::ParserRuleContext* ctx,
-    SparqlQleverVisitor::SparqlExpressionPimpl expression) {
+    const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
   if (expression.containsLangExpression() &&
       !expression.getLanguageFilterExpression()) {
-    reportError(ctx,
-                "The `LANG()` function is only supported in the construct "
-                "`FILTER(LANG(?variable) = \"langtag\"`");
+    throw NotSupportedException(
+        "The LANG() function is only supported by QLever in the construct "
+        "FILTER(LANG(?variable) = \"langtag\"",
+        generateMetadata(ctx));
   }
 }
