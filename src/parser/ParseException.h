@@ -31,19 +31,36 @@ struct ExceptionMetadata {
 
   bool operator==(const ExceptionMetadata& rhs) const = default;
 
-  // Returns the query with the faulty clause highlighted using ANSI Escape
+  // Return the query with the faulty clause highlighted using ANSI Escape
   // Sequences. The faulty clause is made bold, underlined and red.
   [[nodiscard]] std::string coloredError() const;
+
+  // Return only the faulty clause.
+  std::string_view offendingClause() const;
 };
 
 class ParseException : public std::exception {
  public:
-  ParseException(std::string_view cause,
-                 std::optional<ExceptionMetadata> metadata = std::nullopt)
-      : cause_{absl::StrCat("Parse error: ", cause)},
-        metadata_{std::move(metadata)} {};
+  explicit ParseException(
+      std::string_view cause,
+      std::optional<ExceptionMetadata> metadata = std::nullopt,
+      std::string_view prefix = "")
+      : causeRaw_{cause},
+        cause_{absl::StrCat(prefix, " ", cause)},
+        metadata_{std::move(metadata)} {
+    if (metadata_.has_value()) {
+      causeWithMetadata_ =
+          absl::StrCat(cause_, " in \"", metadata_->offendingClause(),
+                       "\" at line ", metadata_->line_);
+    } else {
+      causeWithMetadata_ = cause_;
+    }
+  };
 
-  const char* what() const noexcept override { return cause_.c_str(); }
+ public:
+  const char* what() const noexcept override {
+    return causeWithMetadata_.c_str();
+  }
   [[nodiscard]] const std::optional<ExceptionMetadata>& metadata() const {
     return metadata_;
   }
@@ -52,7 +69,27 @@ class ParseException : public std::exception {
     return cause_;
   }
 
+  const std::string& errorMessageWithoutPrefix() const { return causeRaw_; }
+
  private:
+  std::string causeRaw_;
   std::string cause_;
   std::optional<ExceptionMetadata> metadata_;
+  std::string causeWithMetadata_;
+};
+
+class InvalidQueryException : public ParseException {
+ public:
+  explicit InvalidQueryException(
+      std::string_view cause,
+      std::optional<ExceptionMetadata> metadata = std::nullopt)
+      : ParseException{cause, std::move(metadata), "Invalid SPARQL query:"} {}
+};
+
+class NotSupportedException : public ParseException {
+ public:
+  explicit NotSupportedException(
+      std::string_view cause,
+      std::optional<ExceptionMetadata> metadata = std::nullopt)
+      : ParseException{cause, std::move(metadata), "Not Supported:"} {}
 };

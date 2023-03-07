@@ -130,17 +130,17 @@ void ParsedQuery::addBind(sparqlExpression::SparqlExpressionPimpl expression,
 
 // ________________________________________________________________________
 void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
-  auto checkVariableIsVisible =
-      [this](const Variable& var, const std::string& locationDescription,
-             const ad_utility::HashSet<Variable>& additionalVisibleVariables =
-                 {}) {
-        if (!ad_utility::contains(getVisibleVariables(), var) &&
-            !additionalVisibleVariables.contains(var)) {
-          throw ParseException("Variable " + var.name() + " was used in " +
-                               locationDescription +
-                               ", but is not visible in the query body.");
-        }
-      };
+  auto checkVariableIsVisible = [this](const Variable& var,
+                                       const std::string& locationDescription,
+                                       const ad_utility::HashSet<Variable>&
+                                           additionalVisibleVariables = {}) {
+    if (!ad_utility::contains(getVisibleVariables(), var) &&
+        !additionalVisibleVariables.contains(var)) {
+      throw InvalidQueryException("Variable " + var.name() + " was used in " +
+                                  locationDescription +
+                                  ", but is not visible in the query body.");
+    }
+  };
   auto checkUsedVariablesAreVisible =
       [&checkVariableIsVisible](
           const sparqlExpression::SparqlExpressionPimpl& expression,
@@ -226,7 +226,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
                                            return alias._target ==
                                                   orderKey.variable_;
                                          }))) {
-      throw ParseException(
+      throw InvalidQueryException(
           "Variable " + orderKey.variable_.name() +
           " was used in an ORDER BY "
           "clause, but is neither grouped, nor created as an alias in the "
@@ -247,7 +247,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
     if (isGroupBy) {
       // TODO<qup42> Implement this by adding a hidden alias in the
       //  SELECT clause.
-      throw ParseException(
+      throw NotSupportedException(
           "Ordering by an expression while grouping is not supported by "
           "QLever. (The expression is \"" +
           orderKey.expression_.getDescriptor() +
@@ -280,17 +280,19 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
     for (const auto& alias : selectClause().getAliases()) {
       if (ad_utility::contains(selectClause().getVisibleVariables(),
                                alias._target)) {
-        throw ParseException(absl::StrCat(alias._target.name(),
-                                          " is the target of an AS clause although "
-                                          "it is also visible in the query "
-                                          "body."));
+        throw InvalidQueryException(
+            absl::StrCat(alias._target.name(),
+                         " is the target of an AS clause although "
+                         "it is also visible in the query "
+                         "body."));
       }
 
       // The variable was already added to the selected variables while
       // parsing the alias, thus it should appear exactly once
       if (variable_counts[alias._target] > 1) {
-        throw ParseException("The target " + alias._target.name() +
-                             " of an AS clause was already used before in the SELECT clause.");
+        throw InvalidQueryException(
+            "The target " + alias._target.name() +
+            " of an AS clause was already used before in the SELECT clause.");
       }
     }
   };
@@ -308,11 +310,29 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
     // TODO<joka921> Implement these changes and support this case.
     ad_utility::HashSet<Variable> variablesBoundInAliases;
     for (const auto& alias : selectClause().getAliases()) {
-      checkUsedVariablesAreVisible(alias._expression, "Alias",
-                                   variablesBoundInAliases);
       if (!isGroupBy) {
-        variablesBoundInAliases.insert(alias._target);
+        checkUsedVariablesAreVisible(alias._expression, "Alias",
+                                     variablesBoundInAliases);
+      } else {
+        try {
+          checkUsedVariablesAreVisible(alias._expression, "Alias", {});
+        } catch (const InvalidQueryException& ex) {
+          // If the variable is neither defined in the query body nor in the
+          // select clause before, then the following call will throw the same
+          // exception that we have just caught. Else we are in the unsupported
+          // case and throw a more useful error message.
+          checkUsedVariablesAreVisible(alias._expression, "Alias",
+                                       variablesBoundInAliases);
+          std::string_view note =
+              " Note: This variable was bound previously in the SELECT clause. "
+              "This is supported by the SPARQL standard, but currently not "
+              "supported by QLever when the query contains a GROUP BY clause.";
+          throw NotSupportedException{
+              absl::StrCat(ex.errorMessageWithoutPrefix(), note),
+              ex.metadata()};
+        }
       }
+      variablesBoundInAliases.insert(alias._target);
     }
 
     if (isGroupBy) {
@@ -322,15 +342,15 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       }
 
       if (selectClause().isAsterisk()) {
-        throw ParseException(
+        throw InvalidQueryException(
             "GROUP BY is not allowed when all variables are selected via "
             "SELECT *");
       }
 
       // Check if all selected variables are either aggregated or
       // part of the group by statement.
-        const auto& aliases = selectClause().getAliases();
-        for (const Variable& var : selectClause().getSelectedVariables()) {
+      const auto& aliases = selectClause().getAliases();
+      for (const Variable& var : selectClause().getSelectedVariables()) {
         if (auto it = std::ranges::find(aliases, var, &Alias::_target);
             it != aliases.end()) {
           const auto& alias = *it;
@@ -339,16 +359,16 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           } else {
             auto unaggregatedVars =
                 alias._expression.getUnaggregatedVariables(groupVariables);
-            throw ParseException(absl::StrCat(
+            throw InvalidQueryException(absl::StrCat(
                 "The expression \"", alias._expression.getDescriptor(),
                 "\" does not aggregate ", absl::StrJoin(unaggregatedVars, ", "),
                 "." + noteForGroupByError));
           }
         }
         if (!ad_utility::contains(_groupByVariables, var)) {
-          throw ParseException(absl::StrCat("Variable ", var.name(),
-                                            " is selected but not aggregated.",
-                                            noteForGroupByError));
+          throw InvalidQueryException(absl::StrCat(
+              "Variable ", var.name(), " is selected but not aggregated.",
+              noteForGroupByError));
         }
       }
     } else {
@@ -378,10 +398,10 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
 
     for (const auto& variable : constructClause().containedVariables()) {
       if (!ad_utility::contains(_groupByVariables, variable)) {
-        throw ParseException("Variable " + variable.name() +
-                             " is used but not "
-                             "aggregated." +
-                             noteForGroupByError);
+        throw InvalidQueryException("Variable " + variable.name() +
+                                    " is used but not "
+                                    "aggregated." +
+                                    noteForGroupByError);
       }
     }
   }

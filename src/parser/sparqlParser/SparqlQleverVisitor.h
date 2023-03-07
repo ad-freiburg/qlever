@@ -441,12 +441,14 @@ class SparqlQleverVisitor {
   // for readability (for example, in an error message), and even more so when
   // using such parts for further processing (like the body of a SERVICE query,
   // which is not valid SPARQL anymore when you remove all whitespace).
-  std::string getOriginalInputForContext(antlr4::ParserRuleContext* context);
+  static std::string getOriginalInputForContext(
+      antlr4::ParserRuleContext* context);
 
   // Process an IRI function call. This is used in both `visitFunctionCall` and
   // `visitIriOrFunction`.
   [[nodiscard]] ExpressionPtr processIriFunctionCall(
-      const std::string& iri, std::vector<ExpressionPtr> argList);
+      const std::string& iri, std::vector<ExpressionPtr> argList,
+      antlr4::ParserRuleContext*);
 
   // TODO: Remove addVisibleVariable(const string&) when all Types use the
   //  strong type `Variable`.
@@ -506,12 +508,14 @@ class SparqlQleverVisitor {
   template <typename Ctx>
   void visitIf(Ctx* ctx) requires voidWhenVisited<SparqlQleverVisitor, Ctx>;
 
-  [[noreturn]] void reportError(antlr4::ParserRuleContext* ctx,
-                                const std::string& msg);
+ public:
+  [[noreturn]] static void reportError(antlr4::ParserRuleContext* ctx,
+                                       const std::string& msg);
 
-  [[noreturn]] void reportNotSupported(antlr4::ParserRuleContext* ctx,
-                                       const std::string& feature);
+  [[noreturn]] static void reportNotSupported(antlr4::ParserRuleContext* ctx,
+                                              const std::string& feature);
 
+ private:
   // Throw an exception if the `expression` contains the `LANG()` function. The
   // `context` will be used to create the exception metadata.
   void checkUnsupportedLangOperation(antlr4::ParserRuleContext* context,
