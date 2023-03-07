@@ -323,9 +323,9 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
                                        variablesBoundInAliases);
           std::string_view note =
               " Note: This variable was defined previously in the SELECT "
-              "clause, "
-              "which is supported by the SPARQL standard, but currently not "
-              "supported by QLever when the query contains a GROUP BY clause.";
+              "clause, which is supported by the SPARQL standard, but "
+              "currently not supported by QLever when the query contains a "
+              "GROUP BY clause.";
           throw NotSupportedException{
               absl::StrCat(ex.errorMessageWithoutPrefix(), note,
                            noteForGroupByError),
