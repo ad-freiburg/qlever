@@ -29,7 +29,7 @@ requires(
 
  private:
   F f_;
-  int numExceptionsDuringConstruction_;
+  int numExceptionsDuringConstruction_ = std::uncaught_exceptions();
 
  public:
   // It is forbidden to copy or move these objects.
@@ -50,7 +50,17 @@ requires(
       // We must not throw, so we simply ignore possible exceptions.
       try {
         std::invoke(f_);
+      } catch (const std::exception& e) {
+        // It is not safe to throw an exception because stack unwinding is in
+        // progress. We thus catch and ignore all possible exceptions.
+        LOG(INFO) << "Ignored an exception because it would have been thrown "
+                     "during stack unwinding. The exception message was:\""
+                  << e.what() << '"' << std::endl;
       } catch (...) {
+        // See the `catch` clause above for details.
+        LOG(INFO) << "Ignored an exception of an unknown type because it would "
+                     "have been thrown during stack unwinding"
+                  << std::endl;
       }
     }
   }
@@ -61,9 +71,7 @@ requires(
   // via the explicit (public) function
   // `makeOnDestructionDontThrowDuringStackUnwinding`. This disables the storing
   // of the objects in all sorts of containers (for details see below).
-  explicit OnDestructionDontThrowDuringStackUnwinding(F f)
-      : f_{std::move(f)},
-        numExceptionsDuringConstruction_{std::uncaught_exceptions()} {}
+  explicit OnDestructionDontThrowDuringStackUnwinding(F f) : f_{std::move(f)} {}
 };
 
 // Part of the implementation of
