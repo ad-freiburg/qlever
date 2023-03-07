@@ -10,6 +10,7 @@
 namespace {
 int mockedTerminateNumCalls = 0;
 }
+
 TEST(OnDestruction, terminateIfThrows) {
   // We need a lambda that is convertible to a function pointer for
   // `ad_utility::terminateIfThrows`, so we have to use a global variable to
@@ -44,4 +45,77 @@ TEST(OnDestruction, terminateIfThrows) {
 
   ad_utility::terminateIfThrows([]() {}, "", terminateReplacement);
   EXPECT_EQ(mockedTerminateNumCalls, 2);
+}
+
+TEST(OnDestruction, OnDestructionDontThrowDuringStackUnwinding) {
+  int i = 0;
+
+  // The basic case: The destructor of `cleanup` (at the end of the {} scope)
+  // sets `i` to 42;
+  {
+    auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+        [&i]() { i = 42; });
+  }
+  ASSERT_EQ(i, 42);
+
+  // The basic throwing case: The destructor of `cleanup` inside the lambda
+  // throws an exception, which is then propagated to the `ASSERT_THROW` macro.
+  auto runCleanup = []() {
+    auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+        []() { throw std::runtime_error("inside cleanup"); });
+  };
+  ASSERT_THROW(runCleanup(), std::runtime_error);
+
+  // First the `out_of_range` is thrown. During the stack unwinding, the
+  // destructor of `cleanup` is called which detects that it is not safe to
+  // throw and thus catches and logs the inner `runtime_error`. Thus the
+  // `ASSERT_THROW` macro sees the `out_of_range` exception.
+  auto runCleanupDuringUnwinding = [&i]() {
+    auto cleanup =
+        ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([&i]() {
+          i = 12;
+          throw std::runtime_error("inside cleanup");
+        });
+    throw std::out_of_range{"outer exception"};
+  };
+  ASSERT_THROW(runCleanupDuringUnwinding(), std::out_of_range);
+  ASSERT_EQ(i, 12);
+
+  auto runCleanupNested = [&i]() {
+    auto innerCleanup =
+        ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([&i]() {
+          try {
+            auto innerCleanup =
+                ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+                    [&i]() {
+                      i = 12;
+                      throw std::runtime_error("inside inner cleanup");
+                    });
+          } catch (const std::runtime_error& rt) {
+            i = 123;
+            throw std::runtime_error("inside outer cleanup");
+          }
+        });
+    throw std::out_of_range("bim");
+  };
+  ASSERT_THROW(runCleanupNested(), std::out_of_range);
+  ASSERT_EQ(i, 123);
+  auto runCleanupNested2 = [&i]() {
+    auto outerCleanup =
+        ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([&i]() {
+          try {
+            auto outerCleanup =
+                ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+                    [&i]() {
+                      i = 18;
+                      throw std::runtime_error("inside inner cleanup");
+                    });
+          } catch (std::out_of_range& rt) {
+            i = 234;
+          }
+        });
+    throw std::out_of_range("bim");
+  };
+  ASSERT_THROW(runCleanupNested2(), std::out_of_range);
+  ASSERT_EQ(i, 18);
 }
