@@ -9,6 +9,7 @@
 #include <iostream>
 
 #include "util/Forward.h"
+#include "util/Log.h"
 #include "util/SourceLocation.h"
 
 namespace ad_utility {
