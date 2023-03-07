@@ -227,7 +227,9 @@ struct [[nodiscard(
       : message_{std::move(message)}, callback_{std::move(callback)} {
     t_.start();
   }
-  // RAII types like this typically should not be copied.
+
+  // The semantics of copying/moving this class are unclear and copying/moving
+  // it is not needed for the typical usage, so those operations are deleted.
   TimeBlockAndLog(const TimeBlockAndLog&) = delete;
   TimeBlockAndLog& operator=(const TimeBlockAndLog&) = delete;
   ~TimeBlockAndLog() {

@@ -72,7 +72,7 @@ VariableToColumnMap CountAvailablePredicates::computeVariableToColumnMap()
 // _____________________________________________________________________________
 float CountAvailablePredicates::getMultiplicity([[maybe_unused]] size_t col) {
   // Determining the multiplicity of the second column (the counts)
-  // is non-trivial (and potentially not possible) without computing
+  // is not trivial (and potentially not possible) without computing
   // at least a part of the result first, so we always return 1.
   return 1.0f;
 }

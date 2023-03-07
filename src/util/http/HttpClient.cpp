@@ -58,12 +58,14 @@ HttpClientImpl<StreamType>::HttpClientImpl(std::string_view host,
 // ____________________________________________________________________________
 template <typename StreamType>
 HttpClientImpl<StreamType>::~HttpClientImpl() {
-  // We are closing the http connection and destroying the client. So it is
+  // We are closing the HTTP connection and destroying the client. So it is
   // neither required nor possible in a safe way to report errors from a
   // destructor and we can simply ignore the error codes.
   [[maybe_unused]] boost::system::error_code ec;
 
-  // Gracefully close the stream. The `if` part is explained on
+  // Close the stream. Ignore the value of `ec` because we don't care
+  // possible errors (we are done with the connection anyway, and there
+  // is no simple and safe way to report errors from a destructor.
   if constexpr (std::is_same_v<StreamType, beast::tcp_stream>) {
     stream_->socket().shutdown(tcp::socket::shutdown_both, ec);
   } else {

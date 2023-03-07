@@ -81,6 +81,7 @@ TEST(OnDestruction, OnDestructionDontThrowDuringStackUnwinding) {
   ASSERT_THROW(runCleanupDuringUnwinding(), std::out_of_range);
   ASSERT_EQ(i, 12);
 
+  // Although the exception from the `innerCleanup` is caught
   auto runCleanupNested = [&i]() {
     auto innerCleanup =
         ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([&i]() {

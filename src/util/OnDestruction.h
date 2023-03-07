@@ -90,11 +90,11 @@ class OnDestructionCreator {
 // is called), execute the function `f`, no matter if the scope exits normally
 // or because of exception handling. This is different from `absl::Cleanup` as
 // it enforces a function `f` that might potentially throw (for non-throwing
-// functions the much simpler `absl::Cleanup` should be used. If `f` throws an
+// functions the much simpler `absl::Cleanup` should be used). If `f` throws an
 // exception and it is safe to rethrow the exception, then the exception is
-// thrown (for example if the scope exits normally). If it is not safe to throw
-// the exception because we are currently handling another exception, then the
-// exception from `f` is ignored. Note that it is not possible to store the
+// thrown (for example if the scope is exited normally). If it is not safe to
+// throw the exception because we are currently handling another exception, then
+// the exception from `f` is ignored. Note that it is not possible to store the
 // return object in a container because all of its constructors are either
 // private or deleted. This is disabled deliberately as it might lead to program
 // termination (for `std::vector`) or to uncalled destructors.
