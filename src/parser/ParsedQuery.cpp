@@ -136,9 +136,9 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
                                            additionalVisibleVariables = {}) {
     if (!ad_utility::contains(getVisibleVariables(), var) &&
         !additionalVisibleVariables.contains(var)) {
-      throw InvalidQueryException("Variable " + var.name() + " was used in " +
+      throw InvalidQueryException("Variable " + var.name() + " was used by " +
                                   locationDescription +
-                                  ", but is not visible in the query body.");
+                                  ", but is not defined in the query body.");
     }
   };
   auto checkUsedVariablesAreVisible =
@@ -149,8 +149,8 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
               {}) {
         for (const auto* var : expression.containedVariables()) {
           checkVariableIsVisible(*var,
-                                 locationDescription + " in expression " +
-                                     expression.getDescriptor(),
+                                 locationDescription + " in expression \"" +
+                                     expression.getDescriptor() + "\"",
                                  additionalVisibleVariables);
         }
       };
@@ -165,7 +165,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   auto processExpression =
       [this, &checkUsedVariablesAreVisible](
           sparqlExpression::SparqlExpressionPimpl groupKey) {
-        checkUsedVariablesAreVisible(groupKey, "Group Key");
+        checkUsedVariablesAreVisible(groupKey, "GROUP BY");
         auto helperTarget = addInternalBind(std::move(groupKey));
         _groupByVariables.emplace_back(helperTarget.name());
       };
@@ -216,7 +216,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
     const vector<Variable>& groupByVariables = _groupByVariables;
 
     if (!isGroupBy) {
-      checkVariableIsVisible(orderKey.variable_, "ORDERY BY");
+      checkVariableIsVisible(orderKey.variable_, "ORDER BY");
     } else if (!ad_utility::contains(groupByVariables, orderKey.variable_) &&
                // `ConstructClause` has no Aliases. So the variable can never be
                // the result of an Alias.
@@ -243,7 +243,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   auto processExpressionOrderKey = [this, &checkUsedVariablesAreVisible,
                                     isGroupBy, &noteForImplicitGroupBy](
                                        ExpressionOrderKey orderKey) {
-    checkUsedVariablesAreVisible(orderKey.expression_, "Order Key");
+    checkUsedVariablesAreVisible(orderKey.expression_, "ORDER BY");
     if (isGroupBy) {
       // TODO<qup42> Implement this by adding a hidden alias in the
       //  SELECT clause.
@@ -280,19 +280,17 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
     for (const auto& alias : selectClause().getAliases()) {
       if (ad_utility::contains(selectClause().getVisibleVariables(),
                                alias._target)) {
-        throw InvalidQueryException(
-            absl::StrCat(alias._target.name(),
-                         " is the target of an AS clause although "
-                         "it is also visible in the query "
-                         "body."));
+        throw InvalidQueryException(absl::StrCat(
+            "The target", alias._target.name(),
+            " of an AS clause was already used in the query body."));
       }
 
       // The variable was already added to the selected variables while
       // parsing the alias, thus it should appear exactly once
       if (variable_counts[alias._target] > 1) {
-        throw InvalidQueryException(
-            "The target " + alias._target.name() +
-            " of an AS clause was already used before in the SELECT clause.");
+        throw InvalidQueryException(absl::StrCat(
+            "The target", alias._target.name(),
+            " of an AS clause was already used before in the SELECT clause."));
       }
     }
   };
@@ -311,24 +309,26 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
     ad_utility::HashSet<Variable> variablesBoundInAliases;
     for (const auto& alias : selectClause().getAliases()) {
       if (!isGroupBy) {
-        checkUsedVariablesAreVisible(alias._expression, "Alias",
+        checkUsedVariablesAreVisible(alias._expression, "SELECT",
                                      variablesBoundInAliases);
       } else {
         try {
-          checkUsedVariablesAreVisible(alias._expression, "Alias", {});
+          checkUsedVariablesAreVisible(alias._expression, "SELECT", {});
         } catch (const InvalidQueryException& ex) {
           // If the variable is neither defined in the query body nor in the
           // select clause before, then the following call will throw the same
           // exception that we have just caught. Else we are in the unsupported
           // case and throw a more useful error message.
-          checkUsedVariablesAreVisible(alias._expression, "Alias",
+          checkUsedVariablesAreVisible(alias._expression, "SELECT",
                                        variablesBoundInAliases);
           std::string_view note =
-              " Note: This variable was bound previously in the SELECT clause. "
-              "This is supported by the SPARQL standard, but currently not "
+              " Note: This variable was defined previously in the SELECT "
+              "clause, "
+              "which is supported by the SPARQL standard, but currently not "
               "supported by QLever when the query contains a GROUP BY clause.";
           throw NotSupportedException{
-              absl::StrCat(ex.errorMessageWithoutPrefix(), note),
+              absl::StrCat(ex.errorMessageWithoutPrefix(), note,
+                           noteForGroupByError),
               ex.metadata()};
         }
       }
@@ -399,8 +399,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
     for (const auto& variable : constructClause().containedVariables()) {
       if (!ad_utility::contains(_groupByVariables, variable)) {
         throw InvalidQueryException("Variable " + variable.name() +
-                                    " is used but not "
-                                    "aggregated." +
+                                    " is used but not aggregated." +
                                     noteForGroupByError);
       }
     }

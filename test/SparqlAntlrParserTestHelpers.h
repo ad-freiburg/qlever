@@ -124,8 +124,8 @@ namespace sparqlExpression {
 
 inline std::ostream& operator<<(
     std::ostream& out,
-    const sparqlExpression::SparqlExpressionPimpl& groupKey) {
-  out << "Expression:" << groupKey.getDescriptor();
+    const sparqlExpression::SparqlExpressionPimpl& expression) {
+  out << "Expression:" << expression.getDescriptor();
   return out;
 }
 }  // namespace sparqlExpression

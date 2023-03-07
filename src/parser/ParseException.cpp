@@ -32,3 +32,19 @@ std::string_view ExceptionMetadata::offendingClause() const {
   return ad_utility::getUTF8Substring(query_, startIndex_,
                                       stopIndex_ + 1 - startIndex_);
 }
+
+// ___________________________________________________________________________
+ParseException::ParseException(std::string_view cause,
+                               std::optional<ExceptionMetadata> metadata,
+                               std::string_view prefix)
+    : causeRaw_{cause},
+      cause_{absl::StrCat(prefix, " ", cause)},
+      metadata_{std::move(metadata)} {
+  if (metadata_.has_value()) {
+    causeWithMetadata_ =
+        absl::StrCat(cause_, " in \"", metadata_->offendingClause(),
+                     "\" at line ", metadata_->line_);
+  } else {
+    causeWithMetadata_ = cause_;
+  }
+};

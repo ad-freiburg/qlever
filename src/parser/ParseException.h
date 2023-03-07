@@ -44,18 +44,7 @@ class ParseException : public std::exception {
   explicit ParseException(
       std::string_view cause,
       std::optional<ExceptionMetadata> metadata = std::nullopt,
-      std::string_view prefix = "")
-      : causeRaw_{cause},
-        cause_{absl::StrCat(prefix, " ", cause)},
-        metadata_{std::move(metadata)} {
-    if (metadata_.has_value()) {
-      causeWithMetadata_ =
-          absl::StrCat(cause_, " in \"", metadata_->offendingClause(),
-                       "\" at line ", metadata_->line_);
-    } else {
-      causeWithMetadata_ = cause_;
-    }
-  };
+      std::string_view prefix = "");
 
  public:
   const char* what() const noexcept override {
@@ -91,5 +80,5 @@ class NotSupportedException : public ParseException {
   explicit NotSupportedException(
       std::string_view cause,
       std::optional<ExceptionMetadata> metadata = std::nullopt)
-      : ParseException{cause, std::move(metadata), "Not Supported:"} {}
+      : ParseException{cause, std::move(metadata), "Not supported:"} {}
 };

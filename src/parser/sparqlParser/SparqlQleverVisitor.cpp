@@ -318,6 +318,10 @@ std::optional<Values> Visitor::visit(Parser::ValuesClauseContext* ctx) {
 // ____________________________________________________________________________________
 GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
   GraphPattern pattern;
+
+  // The following code makes sure that the variables from outside the graph
+  // pattern are NOT visible inside the graph pattern, but the variables from
+  // the graph pattern are visible outside the graph pattern.
   auto visibleVariablesSoFar = std::move(visibleVariables_);
   visibleVariables_.clear();
   absl::Cleanup mergeVariables{[this, &visibleVariablesSoFar]() noexcept {
@@ -839,7 +843,7 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
   } else {
     // TODO implement.
     AD_CORRECTNESS_CHECK(ctx->booleanLiteral());
-    reportNotSupported(ctx, "Booleans in VALUES clauses are ");
+    reportNotSupported(ctx, "Boolean literals in a VALUES clause are ");
   }
 }
 
@@ -908,8 +912,8 @@ vector<Visitor::ExpressionPtr> Visitor::visit(Parser::ArgListContext* ctx) {
   // whole list, not the individual arguments), but we currently don't support
   // it.
   if (ctx->DISTINCT()) {
-    reportNotSupported(ctx,
-                       "DISTINCT for argument lists of IRI functions are ");
+    reportNotSupported(
+        ctx, "DISTINCT for the argument lists of an IRI functions is ");
   }
   // Visit the expression of each argument.
   return visitVector(ctx->expression());
@@ -1380,7 +1384,7 @@ ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
   auto children = visitVector(ctx->numericExpression());
 
   if (ctx->expressionList()) {
-    reportNotSupported(ctx, "IN/ NOT IN in expressions are ");
+    reportNotSupported(ctx, "IN or NOT IN in an expression is ");
   }
   AD_CONTRACT_CHECK(children.size() == 1 || children.size() == 2);
   if (children.size() == 1) {
@@ -1792,9 +1796,9 @@ std::variant<int64_t, double> parseNumericLiteral(Ctx* ctx, bool parseAsInt) {
       return std::stod(ctx->getText());
     }
   } catch (const std::out_of_range& range) {
-    SparqlQleverVisitor::reportError(
-        ctx, "Could not parse Numeric Literal \"" + ctx->getText() +
-                 "\". It is out of range. Reason: " + range.what());
+    SparqlQleverVisitor::reportError(ctx, "Could not parse numeric literal \"" +
+                                              ctx->getText() +
+                                              "\" because it is out of range.");
   }
 }
 }  // namespace
@@ -1914,11 +1918,11 @@ void Visitor::reportNotSupported(antlr4::ParserRuleContext* ctx,
 // _____________________________________________________________________________
 void Visitor::checkUnsupportedLangOperation(
     antlr4::ParserRuleContext* ctx,
-    SparqlQleverVisitor::SparqlExpressionPimpl expression) {
+    const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
   if (expression.containsLangExpression()) {
     throw NotSupportedException{
-        "The `LANG()` function is only supported in the construct "
-        "`FILTER(LANG(?variable) = \"langtag\"` by QLever",
+        "The LANG function is currently only supported in the construct "
+        "FILTER(LANG(?variable) = \"langtag\" by QLever",
         generateMetadata(ctx)};
   }
 }
@@ -1926,12 +1930,12 @@ void Visitor::checkUnsupportedLangOperation(
 // _____________________________________________________________________________
 void Visitor::checkUnsupportedLangOperationAllowFilters(
     antlr4::ParserRuleContext* ctx,
-    SparqlQleverVisitor::SparqlExpressionPimpl expression) {
+    const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
   if (expression.containsLangExpression() &&
       !expression.getLanguageFilterExpression()) {
     throw NotSupportedException(
-        "The `LANG()` function is only supported by QLever in the construct "
-        "`FILTER(LANG(?variable) = \"langtag\"`",
+        "The LANG() function is only supported by QLever in the construct "
+        "FILTER(LANG(?variable) = \"langtag\"",
         generateMetadata(ctx));
   }
 }

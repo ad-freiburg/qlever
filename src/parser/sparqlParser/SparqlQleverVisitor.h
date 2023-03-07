@@ -518,14 +518,15 @@ class SparqlQleverVisitor {
  private:
   // Throw an exception if the `expression` contains the `LANG()` function. The
   // `context` will be used to create the exception metadata.
-  void checkUnsupportedLangOperation(antlr4::ParserRuleContext* context,
-                                     SparqlExpressionPimpl expression);
+  static void checkUnsupportedLangOperation(
+      antlr4::ParserRuleContext* context,
+      const SparqlExpressionPimpl& expression);
 
   // Similar to `checkUnsupportedLangOperation` but doesn't throw for the
   // expression `LANG(?someVariable) = "someLangtag"` which is supported by
   // QLever inside a FILTER clause.
-  void checkUnsupportedLangOperationAllowFilters(
-      antlr4::ParserRuleContext* ctx, SparqlExpressionPimpl expression);
+  static void checkUnsupportedLangOperationAllowFilters(
+      antlr4::ParserRuleContext* ctx, const SparqlExpressionPimpl& expression);
 
   // Parse both `ConstructTriplesContext` and `TriplesTemplateContext` because
   // they have the same structure.

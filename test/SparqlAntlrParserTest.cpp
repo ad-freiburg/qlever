@@ -846,7 +846,7 @@ TEST(SparqlParser, GroupGraphPattern) {
                       {Var{"?c"}, CONTAINS_ENTITY_PREDICATE, Var{"?x"}},
                       {Var{"?c"}, CONTAINS_WORD_PREDICATE, "coca* abuse"}})));
 
-  // Scoping of variables in combination with BIND clauses
+  // Scoping of variables in combination with a BIND clause.
   expectGraphPattern(
       "{?x <is-a> <Actor> . BIND(10 - ?x as ?y) }",
       m::GraphPattern(m::Triples({{Var{"?x"}, "<is-a>", "<Actor>"}}),
