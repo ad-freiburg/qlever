@@ -456,7 +456,7 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
 
   auto convertAndRegisterTriple =
       [&visitVarOrTerm, &visitVarOrPath,
-       &registerIfVariable](TripleWithPropertyPath&& triple) -> SparqlTriple {
+       &registerIfVariable](const TripleWithPropertyPath& triple) -> SparqlTriple {
     registerIfVariable(triple.subject_);
     registerIfVariable(triple.predicate_);
     registerIfVariable(triple.object_);
@@ -1905,7 +1905,7 @@ void Visitor::visitIf(Ctx* ctx) requires voidWhenVisited<Visitor, Ctx> {
   if (ctx) {
     visit(ctx);
   }
-}
+
 
 // _____________________________________________________________________________
 void Visitor::reportError(antlr4::ParserRuleContext* ctx,
