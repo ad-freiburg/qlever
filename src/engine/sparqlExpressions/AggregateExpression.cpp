@@ -16,7 +16,7 @@ AggregateExpression<AggregateOperation, FinalOp>::AggregateExpression(
     : _distinct(distinct),
       _child{std::move(child)},
       _aggregateOp{std::move(aggregateOp)} {
-  setIsInsideAlias();
+  setIsInsideAggregate();
 }
 
 // __________________________________________________________________________

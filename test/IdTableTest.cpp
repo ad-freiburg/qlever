@@ -292,6 +292,31 @@ TEST(IdTable, push_back_and_assign) {
   runTestForDifferentTypes<1>(runTestForIdTable, "idTableTest.pushBackAssign");
 }
 
+// __________________________________________________________________
+TEST(IdTable, at) {
+  // A lambda that is used as the `testCase` argument to the
+  // `runTestForDifferenTypes` function (see above for details).
+  auto runTestForIdTable = []<typename Table>(auto make,
+                                              auto... additionalArgs) {
+    constexpr size_t NUM_ROWS = 30;
+    constexpr size_t NUM_COLS = 4;
+
+    Table t1{NUM_COLS, std::move(additionalArgs.at(0))...};
+    t1.resize(1);
+    t1.at(0, 0) = make(42);
+    ASSERT_EQ(t1.at(0, 0), make(42));
+    ASSERT_EQ(std::as_const(t1).at(0, 0), make(42));
+    // Valid row but invalid column
+    ASSERT_ANY_THROW(t1.at(0, NUM_COLS));
+    ASSERT_ANY_THROW(std::as_const(t1).at(0, NUM_COLS));
+
+    // Valid column but invalid row
+    ASSERT_ANY_THROW(t1.at(NUM_ROWS, 0));
+    ASSERT_ANY_THROW(std::as_const(t1).at(NUM_ROWS, 0));
+  };
+  runTestForDifferentTypes<1>(runTestForIdTable, "idTableTest.at");
+}
+
 TEST(IdTable, insertAtEnd) {
   // A lambda that is used as the `testCase` argument to the
   // `runTestForDifferentTypes` function (see above for details).

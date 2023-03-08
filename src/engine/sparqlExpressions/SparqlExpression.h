@@ -32,6 +32,7 @@ namespace sparqlExpression {
 class SparqlExpression {
  private:
   std::string _descriptor;
+  bool isInsideAggregate_ = false;
 
  public:
   /// ________________________________________________________________________
@@ -164,13 +165,19 @@ class SparqlExpression {
   }
 
  protected:
-  bool isInsideAlias_ = false;
-  virtual void setIsInsideAlias() final {
-    isInsideAlias_ = true;
+  // After calling this function, `isInsideAlias()` (see below) returns true for
+  // this expression as well as for all its descendants. This function must be
+  // called by all child classes that are aggregate expressions.
+  virtual void setIsInsideAggregate() final {
+    isInsideAggregate_ = true;
     for (auto& child : children()) {
-      child->setIsInsideAlias();
+      child->setIsInsideAggregate();
     }
   }
+
+  // Return true if this class or any of its ancestors in the expression tree is
+  // an aggregate. For an example usage see the `LiteralExpression` class.
+  bool isInsideAggregate() const { return isInsideAggregate_; }
 };
 }  // namespace sparqlExpression
 
