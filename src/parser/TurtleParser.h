@@ -206,7 +206,7 @@ class TurtleParser {
       LOG(INFO) << "The next " << num_bytes << " bytes are:\n"
                 << std::string_view(d.data(), s) << std::endl;
     }
-    throw ParseException("Error while parsing turtle input");
+    throw ParseException{"Error while parsing Turtle input"};
   }
 
   // Throw an exception or simply ignore the current triple, depending on the

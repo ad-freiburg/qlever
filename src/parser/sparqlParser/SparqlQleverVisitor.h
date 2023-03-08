@@ -73,6 +73,8 @@ class SparqlQleverVisitor {
   using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
   using IntOrDouble = std::variant<int64_t, double>;
 
+  enum struct DisableSomeChecksOnlyForTesting { False, True };
+
  private:
   size_t _blankNodeCounter = 0;
   int64_t numInternalVariables_ = 0;
@@ -87,9 +89,16 @@ class SparqlQleverVisitor {
   // prologue, this string simply remains empty.
   std::string prologueString_;
 
+  DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting_;
+
  public:
   SparqlQleverVisitor() = default;
-  SparqlQleverVisitor(PrefixMap prefixMap) : prefixMap_{std::move(prefixMap)} {}
+  SparqlQleverVisitor(
+      PrefixMap prefixMap,
+      DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
+          DisableSomeChecksOnlyForTesting::False)
+      : prefixMap_{std::move(prefixMap)},
+        disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {}
 
   const PrefixMap& prefixMap() const { return prefixMap_; }
   void setPrefixMapManually(PrefixMap map) { prefixMap_ = std::move(map); }
@@ -432,12 +441,14 @@ class SparqlQleverVisitor {
   // for readability (for example, in an error message), and even more so when
   // using such parts for further processing (like the body of a SERVICE query,
   // which is not valid SPARQL anymore when you remove all whitespace).
-  std::string getOriginalInputForContext(antlr4::ParserRuleContext* context);
+  static std::string getOriginalInputForContext(
+      antlr4::ParserRuleContext* context);
 
   // Process an IRI function call. This is used in both `visitFunctionCall` and
   // `visitIriOrFunction`.
   [[nodiscard]] ExpressionPtr processIriFunctionCall(
-      const std::string& iri, std::vector<ExpressionPtr> argList);
+      const std::string& iri, std::vector<ExpressionPtr> argList,
+      antlr4::ParserRuleContext*);
 
   // TODO: Remove addVisibleVariable(const string&) when all Types use the
   //  strong type `Variable`.
@@ -497,22 +508,25 @@ class SparqlQleverVisitor {
   template <typename Ctx>
   void visitIf(Ctx* ctx) requires voidWhenVisited<SparqlQleverVisitor, Ctx>;
 
-  [[noreturn]] void reportError(antlr4::ParserRuleContext* ctx,
-                                const std::string& msg);
+ public:
+  [[noreturn]] static void reportError(antlr4::ParserRuleContext* ctx,
+                                       const std::string& msg);
 
-  [[noreturn]] void reportNotSupported(antlr4::ParserRuleContext* ctx,
-                                       const std::string& feature);
+  [[noreturn]] static void reportNotSupported(antlr4::ParserRuleContext* ctx,
+                                              const std::string& feature);
 
+ private:
   // Throw an exception if the `expression` contains the `LANG()` function. The
   // `context` will be used to create the exception metadata.
-  void checkUnsupportedLangOperation(antlr4::ParserRuleContext* context,
-                                     SparqlExpressionPimpl expression);
+  static void checkUnsupportedLangOperation(
+      antlr4::ParserRuleContext* context,
+      const SparqlExpressionPimpl& expression);
 
   // Similar to `checkUnsupportedLangOperation` but doesn't throw for the
   // expression `LANG(?someVariable) = "someLangtag"` which is supported by
   // QLever inside a FILTER clause.
-  void checkUnsupportedLangOperationAllowFilters(
-      antlr4::ParserRuleContext* ctx, SparqlExpressionPimpl expression);
+  static void checkUnsupportedLangOperationAllowFilters(
+      antlr4::ParserRuleContext* ctx, const SparqlExpressionPimpl& expression);
 
   // Parse both `ConstructTriplesContext` and `TriplesTemplateContext` because
   // they have the same structure.

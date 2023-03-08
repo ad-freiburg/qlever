@@ -93,7 +93,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   bool doGroupBy = !pq._groupByVariables.empty() ||
                    patternTrickTuple.has_value() ||
                    std::ranges::any_of(pq.getAliases(), [](const Alias& alias) {
-                     return alias._expression.isAggregate({});
+                     return alias._expression.containsAggregate();
                    });
 
   // Optimize the graph pattern tree

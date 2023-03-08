@@ -73,6 +73,15 @@ class SparqlExpression {
     return result;
   }
 
+  // Return true iff this expression contains an aggregate like SUM, COUNT etc.
+  // This information is needed to check if there is an implicit GROUP BY in a
+  // query because any of the selected aliases contains an aggregate.
+  virtual bool containsAggregate() const {
+    return std::ranges::any_of(children(), [](const Ptr& child) {
+      return child->containsAggregate();
+    });
+  }
+
   /// Get a unique identifier for this expression, used as cache key.
   virtual string getCacheKey(const VariableToColumnMap& varColMap) const = 0;
 

@@ -79,7 +79,28 @@ inline std::ostream& operator<<(std::ostream& out,
       << ::testing::PrintToString(values._inlineValues._values);
   return out;
 }
+
+inline void PrintTo(const parsedQuery::GraphPattern& pattern,
+                    std::ostream* os) {
+  auto& s = *os;
+  s << ::testing::PrintToString(pattern._graphPatterns);
+}
+
+inline void PrintTo(const parsedQuery::GraphPatternOperation& op,
+                    std::ostream* os) {
+  std::ostringstream str;
+  op.toString(str);
+  (*os) << str.str();
+}
 }  // namespace parsedQuery
+
+inline void PrintTo(const ParsedQuery& pq, std::ostream* os) {
+  (*os) << "is select query: " << pq.hasSelectClause() << '\n';
+  (*os) << "Variables: " << ::testing::PrintToString(pq.getVisibleVariables())
+        << '\n';
+  (*os) << "Graph pattern:";
+  PrintTo(pq._rootGraphPattern, os);
+}
 
 // _____________________________________________________________________________
 
@@ -103,8 +124,8 @@ namespace sparqlExpression {
 
 inline std::ostream& operator<<(
     std::ostream& out,
-    const sparqlExpression::SparqlExpressionPimpl& groupKey) {
-  out << "Group by " << groupKey.getDescriptor();
+    const sparqlExpression::SparqlExpressionPimpl& expression) {
+  out << "Expression:" << expression.getDescriptor();
   return out;
 }
 }  // namespace sparqlExpression
