@@ -1,52 +1,11 @@
-//  Copyright 2022, University of Freiburg,
+//  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "util/OnDestruction.h"
+#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 
-// This global constant is needed for the `terminateIfThrows` test.
-namespace {
-int mockedTerminateNumCalls = 0;
-}
-
-TEST(OnDestruction, terminateIfThrows) {
-  // We need a lambda that is convertible to a function pointer for
-  // `ad_utility::terminateIfThrows`, so we have to use a global variable to
-  // communicate that the mocked "termination" was called.
-  auto terminateReplacement = []() noexcept { ++mockedTerminateNumCalls; };
-  auto alwaysThrow = []() { throw 42; };
-
-  // Test the default logic (which calls `std::terminate`
-  EXPECT_DEATH(ad_utility::terminateIfThrows(alwaysThrow, "A function "),
-               "A function that should never throw");
-  // Replace the call to `std::terminate` by a custom exception to correctly
-  // track the coverage.
-  ad_utility::terminateIfThrows(alwaysThrow, "A function ",
-                                terminateReplacement);
-  EXPECT_EQ(mockedTerminateNumCalls, 1);
-
-  auto alwaysThrowException = []() {
-    throw std::runtime_error("throwing in test");
-  };
-  EXPECT_DEATH(ad_utility::terminateIfThrows(alwaysThrowException,
-                                             "test for terminating"),
-               "A function that should never throw");
-  ad_utility::terminateIfThrows(alwaysThrowException, "A function ",
-                                terminateReplacement);
-  EXPECT_EQ(mockedTerminateNumCalls, 2);
-
-  auto noThrowThenExit = []() {
-    ad_utility::terminateIfThrows([]() {}, "");
-    std::exit(42);
-  };
-  EXPECT_EXIT(noThrowThenExit(), ::testing::ExitedWithCode(42), ::testing::_);
-
-  ad_utility::terminateIfThrows([]() {}, "", terminateReplacement);
-  EXPECT_EQ(mockedTerminateNumCalls, 2);
-}
-
+// ________________________________________________________________
 TEST(OnDestruction, OnDestructionDontThrowDuringStackUnwinding) {
   int i = 0;
 
@@ -81,9 +40,16 @@ TEST(OnDestruction, OnDestructionDontThrowDuringStackUnwinding) {
   ASSERT_THROW(runCleanupDuringUnwinding(), std::out_of_range);
   ASSERT_EQ(i, 12);
 
-  // Although the exception from the `innerCleanup` is caught
+  // First the `std::out_of_range` at the end is thrown.
+  // The destructor of `outerCleanup` is called, which again calls the
+  // destructor of `innerCleanup`. This destructor throws an exception, but it
+  // is actually safe to throw this exception (because it is immediately caught
+  // by the `outerCleanup`). That is why we can observe the effect of the catch
+  // clause (`i` is set). This means that the logic of the `OnDestruction...`
+  // object `innerCleanup` does not catch the `runtime_error`, because it is
+  // safe to let it propagate, although stack unwinding is in progress.
   auto runCleanupNested = [&i]() {
-    auto innerCleanup =
+    auto outerCleanup =
         ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([&i]() {
           try {
             auto innerCleanup =
@@ -101,6 +67,12 @@ TEST(OnDestruction, OnDestructionDontThrowDuringStackUnwinding) {
   };
   ASSERT_THROW(runCleanupNested(), std::out_of_range);
   ASSERT_EQ(i, 123);
+
+  // Just for completenesss/ documentation:
+  // Similar to the previous test, but the wrong exception is caught.
+  // This means that the `OnDestructionDont...` object will again catch
+  // the inner `runtime_error` and the program will not terminate, but simply
+  // observe the outer `out_of_range` error.
   auto runCleanupNested2 = [&i]() {
     auto outerCleanup =
         ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([&i]() {

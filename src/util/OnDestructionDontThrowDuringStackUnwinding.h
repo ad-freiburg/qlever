@@ -1,23 +1,12 @@
 //  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#ifndef QLEVER_ONDESTRUCTION_H
-#define QLEVER_ONDESTRUCTION_H
+#pragma once
 
-#include <concepts>
-#include <exception>
-#include <iostream>
-
-#include "util/Forward.h"
-#include "util/Log.h"
-#include "util/SourceLocation.h"
+#include "util/ExceptionHandling.h"
 
 namespace ad_utility {
-
 namespace detail {
-[[maybe_unused]] static constexpr auto callStdTerminate = []() noexcept {
-  std::terminate();
-};
 
 // The implementation of `makeOnDestructionDontThrowDuringStackUnwinding` (see
 // below).
@@ -46,23 +35,13 @@ requires(
     // https://en.cppreference.com/w/cpp/error/uncaught_exception, especially
     // the links at the bottom of the page.
     if (numExceptionsDuringConstruction_ == std::uncaught_exceptions()) {
-      std::invoke(f_);
+      std::invoke(std::move(f_));
     } else {
       // We must not throw, so we simply ignore possible exceptions.
-      try {
-        std::invoke(f_);
-      } catch (const std::exception& e) {
-        // It is not safe to throw an exception because stack unwinding is in
-        // progress. We thus catch and ignore all possible exceptions.
-        LOG(INFO) << "Ignored an exception because it would have been thrown "
-                     "during stack unwinding. The exception message was:\""
-                  << e.what() << '"' << std::endl;
-      } catch (...) {
-        // See the `catch` clause above for details.
-        LOG(INFO) << "Ignored an exception of an unknown type because it would "
-                     "have been thrown during stack unwinding"
-                  << std::endl;
-      }
+      ad_utility::ignoreExceptionIfThrows(
+          std::move(f_),
+          "Note: the exception would have been thrown during stack unwinding "
+          "in a way that would immediately terminate the program.");
     }
   }
   friend class OnDestructionCreator;
@@ -91,7 +70,7 @@ class OnDestructionCreator {
 // or because of exception handling. This is different from `absl::Cleanup` as
 // it enforces a function `f` that might potentially throw (for non-throwing
 // functions the much simpler `absl::Cleanup` should be used). If `f` throws an
-// exception and it is safe to rethrow the exception, then the exception is
+// exception and if it is safe to rethrow that exception, then the exception is
 // thrown (for example if the scope is exited normally). If it is not safe to
 // throw the exception because we are currently handling another exception, then
 // the exception from `f` is ignored. Note that it is not possible to store the
@@ -107,44 +86,4 @@ makeOnDestructionDontThrowDuringStackUnwinding(F f) {
   return detail::OnDestructionCreator::create(std::move(f));
 }
 
-// Call `f()`. If this call throws, then terminate the program after logging an
-// error message that includes the `message`, information on the thrown
-// exception, and the location of the call. This can be used to make destructors
-// `noexcept()` that have to perform some non-trivial logic (e.g. writing a
-// trailer to a file), when such a failure should never occur in practice and
-// also is not easily recovarable. For an example usage see `PatternCreator.h`.
-// The actual termination call can be configured for testing purposes. Note that
-// this function must never throw an exception.
-template <typename F,
-          typename TerminateAction = decltype(detail::callStdTerminate)>
-requires(
-    std::invocable<std::remove_cvref_t<F>>&& std::is_nothrow_invocable_v<
-        TerminateAction>) void terminateIfThrows(F&& f,
-                                                 std::string_view message,
-                                                 TerminateAction
-                                                     terminateAction = {},
-                                                 ad_utility::source_location l =
-                                                     ad_utility::source_location::
-                                                         current()) noexcept {
-  try {
-    std::invoke(AD_FWD(f));
-  } catch (const std::exception& e) {
-    std::cerr << "A function that should never throw has thrown an exception "
-                 "with message \""
-              << e.what() << "\". The function was called in file "
-              << l.file_name() << " on line " << l.line()
-              << ". Additional information: " << message
-              << ". Please report this. Terminating" << std::endl;
-    terminateAction();
-  } catch (...) {
-    std::cerr << "A function that should never throw has thrown an exception. "
-                 "The function was called in file "
-              << l.file_name() << " on line " << l.line()
-              << ". Additional information: " << message
-              << ". Please report this. Terminating" << std::endl;
-    terminateAction();
-  }
-}
 }  // namespace ad_utility
-
-#endif  // QLEVER_ONDESTRUCTION_H

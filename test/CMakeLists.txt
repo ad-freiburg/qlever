@@ -302,4 +302,7 @@ addLinkAndDiscoverTestSerial(ExportQueryExecutionTreeTest index engine parser)
 
 addLinkAndDiscoverTestSerial(AggregateExpressionTest parser sparqlExpressions index engine)
 
-addLinkAndDiscoverTest(OnDestructionTest)
+addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
+
+addLinkAndDiscoverTest(ExceptionHandlingTest)
+

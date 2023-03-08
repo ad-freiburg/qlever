@@ -10,7 +10,7 @@
 #include <thread>
 
 #include "./Generator.h"
-#include "./OnDestruction.h"
+#include "./OnDestructionDontThrowDuringStackUnwinding.h"
 #include "./ThreadSafeQueue.h"
 
 namespace ad_utility::streams {
