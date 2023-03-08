@@ -13,7 +13,7 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/Pattern.h"
-#include "util/ExceptionHandling.h.h"
+#include "util/ExceptionHandling.h"
 #include "util/MmapVector.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
