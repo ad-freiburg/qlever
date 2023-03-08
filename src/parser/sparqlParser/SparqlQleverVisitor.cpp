@@ -455,8 +455,8 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
   };
 
   auto convertAndRegisterTriple =
-      [&visitVarOrTerm, &visitVarOrPath,
-       &registerIfVariable](const TripleWithPropertyPath& triple) -> SparqlTriple {
+      [&visitVarOrTerm, &visitVarOrPath, &registerIfVariable](
+          const TripleWithPropertyPath& triple) -> SparqlTriple {
     registerIfVariable(triple.subject_);
     registerIfVariable(triple.predicate_);
     registerIfVariable(triple.object_);
