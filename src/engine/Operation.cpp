@@ -6,6 +6,7 @@
 
 #include "engine/QueryExecutionTree.h"
 #include "util/TransparentFunctors.h"
+#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 
 template <typename F>
 void Operation::forAllDescendants(F f) {
