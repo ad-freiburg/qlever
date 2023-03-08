@@ -1905,7 +1905,7 @@ void Visitor::visitIf(Ctx* ctx) requires voidWhenVisited<Visitor, Ctx> {
   if (ctx) {
     visit(ctx);
   }
-
+}
 
 // _____________________________________________________________________________
 void Visitor::reportError(antlr4::ParserRuleContext* ctx,
