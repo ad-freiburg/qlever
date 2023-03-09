@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <semaphore>
 
+#include "absl/cleanup/cleanup.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/http/HttpUtils.h"
@@ -197,7 +198,7 @@ class HttpServer {
     beast::flat_buffer buffer;
     beast::tcp_stream stream{std::move(socket)};
 
-    auto releaseConnection = ad_utility::OnDestruction{
+    auto releaseConnection = absl::Cleanup{
 
         [&stream]() noexcept {
           beast::error_code ec;

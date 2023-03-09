@@ -128,7 +128,7 @@ void CompressedRelationReader::scan(
         auto decompressLambda = [&result, rowIndexOfNextBlock, &block,
                                  compressedBuffer =
                                      std::move(compressedBuffer)]() {
-          ad_utility::TimeBlockAndLog("Decompressing a block");
+          ad_utility::TimeBlockAndLog tbl{"Decompressing a block"};
 
           decompressBlockToExistingIdTable(compressedBuffer, block._numRows,
                                            *result, rowIndexOfNextBlock);
@@ -279,7 +279,7 @@ void CompressedRelationReader::scan(
       auto decompressLambda = [rowIndexOfNextBlockStart, &block, result,
                                compressedBuffer =
                                    std::move(compressedBuffer)]() mutable {
-        ad_utility::TimeBlockAndLog("Decompression a block");
+        ad_utility::TimeBlockAndLog tbl{"Decompression a block"};
 
         decompressBlockToExistingIdTable(compressedBuffer, block._numRows,
                                          *result, rowIndexOfNextBlockStart);

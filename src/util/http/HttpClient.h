@@ -35,7 +35,7 @@ class HttpClientImpl {
   HttpClientImpl(std::string_view host, std::string_view port);
 
   // The destructor closes the connection.
-  ~HttpClientImpl() noexcept(false);
+  ~HttpClientImpl();
 
   // Send a request (the first argument must be either `http::verb::get` or
   // `http::verb::post`) and return the body of the reponse (possibly very

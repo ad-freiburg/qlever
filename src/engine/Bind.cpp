@@ -181,7 +181,8 @@ void Bind::computeExpressionBind(
         }
       } else {
         size_t i = 0;
-        for (auto&& resultValue : resultGenerator) {
+        // We deliberately move the values from the generator.
+        for (auto& resultValue : resultGenerator) {
           output(i, inCols) =
               sparqlExpression::detail::constantExpressionResultToId(
                   std::move(resultValue),
