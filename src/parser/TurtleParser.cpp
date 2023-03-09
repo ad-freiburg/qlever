@@ -371,18 +371,19 @@ bool TurtleParser<T>::rdfLiteral() {
   if (!stringParse()) {
     return false;
   }
-  _lastParseResult =
+  RdfEscaping::NormalizedRDFString literalString =
       RdfEscaping::normalizeRDFLiteral(_lastParseResult.getString());
-  std::string literalString = _lastParseResult.getString();
+  _lastParseResult = TripleComponent::Literal{literalString, ""};
   if (langtag()) {
-    _lastParseResult = literalString + _lastParseResult.getString();
+    _lastParseResult =
+        TripleComponent::Literal{literalString, _lastParseResult.getString()};
     return true;
     // TODO<joka921> this allows spaces here since the ^^ is unique in the
     // sparql syntax. is this correct?
   } else if (skip<TurtleTokenId::DoubleCircumflex>() && check(iri())) {
     const auto typeIri = std::move(_lastParseResult.getString());
     auto type = stripAngleBrackets(typeIri);
-    std::string strippedLiteral{stripDoubleQuotes(literalString)};
+    std::string strippedLiteral{stripDoubleQuotes(literalString.get())};
     // TODO<joka921> clean this up by moving the check for the types to a
     // separate module.
     if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE ||
@@ -398,12 +399,13 @@ bool TurtleParser<T>::rdfLiteral() {
                type == XSD_FLOAT_TYPE) {
       parseDoubleConstant(strippedLiteral);
     } else {
-      _lastParseResult = absl::StrCat(literalString, "^^", typeIri);
+      _lastParseResult =
+          TripleComponent::Literal{literalString, absl::StrCat("^^", typeIri)};
       // TODO: remove this once the dates become value IDs, too.
       if (type == XSD_DATETIME_TYPE || type == XSD_DATE_TYPE ||
           type == XSD_GYEAR_TYPE || type == XSD_GYEARMONTH_TYPE) {
         _lastParseResult = ad_utility::convertValueLiteralToIndexWord(
-            _lastParseResult.getString());
+            _lastParseResult.getLiteral().normalizedContent_.get());
       }
     }
     return true;

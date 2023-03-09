@@ -5,7 +5,7 @@
 #ifndef QLEVER_TYPEDINDEX_H
 #define QLEVER_TYPEDINDEX_H
 
-#include "../util/ConstexprSmallString.h"
+#include "util/ConstexprSmallString.h"
 
 namespace ad_utility {
 using IndexTag = ConstexprSmallString<30>;
@@ -23,8 +23,8 @@ struct TypedIndex {
 
   constexpr TypedIndex() = default;
 
-  constexpr bool operator==(const TypedIndex&) const = default;
-  constexpr auto operator<=>(const TypedIndex&) const = default;
+  bool operator==(const TypedIndex&) const = default;
+  auto operator<=>(const TypedIndex&) const = default;
 
   static constexpr TypedIndex max() {
     return {std::numeric_limits<Type>::max()};

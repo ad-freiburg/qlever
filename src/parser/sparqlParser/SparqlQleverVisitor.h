@@ -408,7 +408,8 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] bool visit(Parser::BooleanLiteralContext* ctx);
 
-  [[nodiscard]] string visit(Parser::StringContext* ctx);
+  [[nodiscard]] RdfEscaping::NormalizedRDFString visit(
+      Parser::StringContext* ctx);
 
   [[nodiscard]] string visit(Parser::IriContext* ctx);
 

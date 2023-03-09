@@ -12,6 +12,7 @@
 #include "engine/LocalVocab.h"
 #include "global/Constants.h"
 #include "global/Id.h"
+#include "parser/RdfEscaping.h"
 #include "parser/data/Variable.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -35,9 +36,23 @@ class TripleComponent {
     }
   };
 
+  struct Literal {
+    RdfEscaping::NormalizedRDFString normalizedContent_;
+    // TODO<joka921> This should also be a strong type
+    std::string langtagOrDatatype_;
+
+    bool operator==(const Literal&) const = default;
+    template <typename H>
+    friend H AbslHashValue(H h, [[maybe_unused]] const Literal& l) {
+      return H::combine(std::move(h), l.normalizedContent_.get(),
+                        l.langtagOrDatatype_);
+    }
+  };
+
  private:
   // The underlying variant type.
-  using Variant = std::variant<std::string, double, int64_t, UNDEF, Variable>;
+  using Variant =
+      std::variant<std::string, double, int64_t, UNDEF, Variable, Literal>;
   Variant _variant;
 
  public:
@@ -52,6 +67,11 @@ class TripleComponent {
       // to easily track places where this old behavior is accidentally still
       // in place.
       AD_CONTRACT_CHECK(!getString().starts_with("?"));
+
+      // We also used to store literals as `std::string`, so we use a similar
+      // check here.
+      AD_CONTRACT_CHECK(!getString().starts_with('"'));
+      AD_CONTRACT_CHECK(!getString().starts_with("'"));
     }
   }
 
@@ -63,6 +83,8 @@ class TripleComponent {
     // to easily track places where this old behavior is accidentally still
     // in place.
     AD_CONTRACT_CHECK(!getString().starts_with("?"));
+    AD_CONTRACT_CHECK(!getString().starts_with('"'));
+    AD_CONTRACT_CHECK(!getString().starts_with("'"));
   }
 
   /// Defaulted copy and move constructors.
@@ -78,7 +100,14 @@ class TripleComponent {
     // See the similar check in the constructor for details.
     if (isString()) {
       AD_CONTRACT_CHECK(!getString().starts_with("?"));
+      AD_CONTRACT_CHECK(!getString().starts_with('"'));
+      AD_CONTRACT_CHECK(!getString().starts_with("'"));
     }
+    return *this;
+  }
+
+  TripleComponent& operator=(const Literal& lit) {
+    _variant = lit;
     return *this;
   }
 
@@ -87,6 +116,8 @@ class TripleComponent {
     _variant = std::string{value};
     // See the similar check in the constructor for details.
     AD_CONTRACT_CHECK(!value.starts_with("?"));
+    AD_CONTRACT_CHECK(!getString().starts_with('"'));
+    AD_CONTRACT_CHECK(!getString().starts_with("'"));
     return *this;
   }
 
@@ -123,11 +154,11 @@ class TripleComponent {
     return std::holds_alternative<int64_t>(_variant);
   }
 
-  /// TODO<joka921> This is a hack which has to be replaced once we have a
-  /// proper type for a variable.
   [[nodiscard]] bool isVariable() const {
     return std::holds_alternative<Variable>(_variant);
   }
+
+  bool isLiteral() const { return std::holds_alternative<Literal>(_variant); }
 
   /// Access the value. If one of those methods is called but the variant
   /// doesn't hold the correct type, an exception is thrown.
@@ -149,14 +180,19 @@ class TripleComponent {
     return std::get<Variable>(_variant);
   }
 
+  const Literal& getLiteral() const { return std::get<Literal>(_variant); }
+
   /// Convert to an RDF literal. `std::strings` will be emitted directly,
   /// `int64_t` is converted to a `xsd:integer` literal, and a `double` is
   /// converted to a `xsd:double`.
+  // TODO<joka921> This function should return a `NormalizedRdfLiteral`.
   [[nodiscard]] std::string toRdfLiteral() const {
     if (isString()) {
       return getString();
-    }
-    if (isDouble()) {
+    } else if (isLiteral()) {
+      return absl::StrCat(getLiteral().normalizedContent_.get(),
+                          getLiteral().langtagOrDatatype_);
+    } else if (isDouble()) {
       return absl::StrCat("\"", getDouble(), "\"^^<", XSD_DOUBLE_TYPE, ">");
     } else {
       AD_CONTRACT_CHECK(isInt());
@@ -169,7 +205,8 @@ class TripleComponent {
   /// the index building when we haven't built the vocabulary yet.
   [[nodiscard]] std::optional<Id> toValueIdIfNotString() const {
     auto visitor = []<typename T>(const T& value) -> std::optional<Id> {
-      if constexpr (std::is_same_v<T, std::string>) {
+      if constexpr (std::is_same_v<T, std::string> ||
+                    std::is_same_v<T, Literal>) {
         return std::nullopt;
       } else if constexpr (std::is_same_v<T, int64_t>) {
         return Id::makeFromInt(value);
@@ -200,6 +237,16 @@ class TripleComponent {
       } else {
         return std::nullopt;
       }
+    } else if (isLiteral()) {
+      // TODO<joka921> There is a lot of code duplication.
+      // Additionally the vocabulary should also work on
+      // a strong type that stores normalized literals of some sort.
+      VocabIndex idx;
+      if (vocabulary.getId(toRdfLiteral(), &idx)) {
+        return Id::makeFromVocabIndex(idx);
+      } else {
+        return std::nullopt;
+      }
     } else {
       return toValueIdIfNotString();
     }
@@ -218,17 +265,27 @@ class TripleComponent {
     if (!id) {
       // If `toValueId` could not convert to `Id`, we have a string, which we
       // look up in (and potentially add to) our local vocabulary.
-      AD_CORRECTNESS_CHECK(isString());
-      // NOTE: There is a `&&` version of `getIndexAndAddIfNotContained`.
-      // Otherwise, `newWord` would be copied here despite the `std::move`.
-      std::string& newWord = getString();
-      id = Id::makeFromLocalVocabIndex(
-          localVocab.getIndexAndAddIfNotContained(std::move(newWord)));
+      if (isString()) {
+        // NOTE: There is a `&&` version of `getIndexAndAddIfNotContained`.
+        // Otherwise, `newWord` would be copied here despite the `std::move`.
+        std::string& newWord = getString();
+        id = Id::makeFromLocalVocabIndex(
+            localVocab.getIndexAndAddIfNotContained(std::move(newWord)));
+      } else {
+        AD_CORRECTNESS_CHECK(isLiteral());
+        // TODO<joka921> Get rid of the copy (see TODO below)
+        std::string newWord = toRdfLiteral();
+        id = Id::makeFromLocalVocabIndex(
+            localVocab.getIndexAndAddIfNotContained(std::move(newWord)));
+      }
+
+      // TODO<joka921> The langtag and the string should definitely be stored
+      // together..
     }
     return id.value();
   }
 
-  // Human readable output. Is used for debugging, testing, and for the creation
+  // Human-readable output. Is used for debugging, testing, and for the creation
   // of descriptors and cache keys.
   friend std::ostream& operator<<(std::ostream& stream,
                                   const TripleComponent& obj);

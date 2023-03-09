@@ -10,9 +10,10 @@
 #include <sstream>
 #include <string>
 
-#include "../util/Exception.h"
-#include "../util/HashSet.h"
-#include "../util/StringUtils.h"
+#include "global/TypedIndex.h"
+#include "util/Exception.h"
+#include "util/HashSet.h"
+#include "util/StringUtils.h"
 
 namespace RdfEscaping {
 /// Replaces each newline '\n' by an escaped newline '\\n', and each backslash
@@ -44,7 +45,9 @@ std::string unescapeNewlinesAndBackslashes(std::string_view literal);
  * This is NOT a valid RDF form of literals, but this format is only used
  * inside QLever.
  */
-std::string normalizeRDFLiteral(std::string_view origLiteral);
+using NormalizedRDFString =
+    ad_utility::TypedIndex<std::string, "NormalizedRDFString">;
+NormalizedRDFString normalizeRDFLiteral(std::string_view origLiteral);
 
 /**
  * Convert a literal in the form produced by `normalizeRDFLiteral` into a form

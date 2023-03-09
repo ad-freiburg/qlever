@@ -626,7 +626,7 @@ std::optional<parsedQuery::ConstructClause> Visitor::visit(
 }
 
 // ____________________________________________________________________________________
-string Visitor::visit(Parser::StringContext* ctx) {
+RdfEscaping::NormalizedRDFString Visitor::visit(Parser::StringContext* ctx) {
   return RdfEscaping::normalizeRDFLiteral(ctx->getText());
 }
 
@@ -1738,7 +1738,7 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
       // TODO: The string rule also allow triple quoted strings with different
       //  escaping rules. These are currently not handled. They should be parsed
       //  into a typesafe format with a unique representation.
-      separator = visit(ctx->string());
+      separator = visit(ctx->string()).get();
       // If there was a separator, we have to strip the quotation marks
       AD_CONTRACT_CHECK(separator.size() >= 2);
       separator = separator.substr(1, separator.size() - 2);
