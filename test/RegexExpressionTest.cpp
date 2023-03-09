@@ -14,6 +14,12 @@
 using namespace sparqlExpression;
 using ad_utility::source_location;
 
+namespace {
+auto lit = [](const std::string& s, std::string_view langtagOrDatatype = "") {
+  return TripleComponent::Literal{RdfEscaping::NormalizedRDFString::make(s),
+                                  std::string{langtagOrDatatype}};
+};
+
 RegexExpression makeRegexExpression(
     std::string variable, std::string regex,
     std::optional<std::string> flags = std::nullopt) {
@@ -26,16 +32,17 @@ RegexExpression makeRegexExpression(
   }
   auto variableExpression =
       std::make_unique<VariableExpression>(Variable{std::move(variable)});
-  auto regexExpression = std::make_unique<IriExpression>(std::move(regex));
+  auto regexExpression = std::make_unique<StringLiteralExpression>(lit(regex));
   std::optional<SparqlExpression::Ptr> flagsExpression = std::nullopt;
   if (flags.has_value()) {
     flagsExpression = SparqlExpression::Ptr{
-        std::make_unique<IriExpression>(std::move(flags.value()))};
+        std::make_unique<StringLiteralExpression>(lit(flags.value()))};
   }
 
   return {std::move(variableExpression), std::move(regexExpression),
           std::move(flagsExpression)};
 }
+}  // namespace
 
 // Test that the expression `leftValue Comp rightValue`, when evaluated on the
 // `TestContext` (see above), yields the `expected` result.

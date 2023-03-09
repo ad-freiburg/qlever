@@ -404,7 +404,7 @@ bool TurtleParser<T>::rdfLiteral() {
       if (type == XSD_DATETIME_TYPE || type == XSD_DATE_TYPE ||
           type == XSD_GYEAR_TYPE || type == XSD_GYEARMONTH_TYPE) {
         _lastParseResult = ad_utility::convertValueLiteralToIndexWord(
-            _lastParseResult.getLiteral().normalizedContent_.get());
+            _lastParseResult.toRdfLiteral());
       }
     }
     return true;
@@ -420,7 +420,9 @@ bool TurtleParser<T>::booleanLiteral() {
   if (parseTerminal<TurtleTokenId::True>() ||
       parseTerminal<TurtleTokenId::False>()) {
     _lastParseResult =
-        '"' + _lastParseResult.getString() + "\"^^<" + XSD_BOOLEAN_TYPE + '>';
+        TripleComponent::Literal{RdfEscaping::NormalizedRDFString::make(
+                                     '"' + _lastParseResult.getString() + "\""),
+                                 absl::StrCat("^^<", XSD_BOOLEAN_TYPE, ">")};
     return true;
   } else {
     return false;

@@ -397,13 +397,18 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
   auto getLangFilterData =
       [](const auto& left, const auto& right) -> std::optional<LangFilterData> {
     const auto* varPtr = dynamic_cast<const LangExpression*>(left.get());
-    const auto* langPtr = dynamic_cast<const IriExpression*>(right.get());
+    const auto* langPtr =
+        dynamic_cast<const StringLiteralExpression*>(right.get());
 
     if (!varPtr || !langPtr) {
       return std::nullopt;
     }
 
-    return LangFilterData{varPtr->variable(), langPtr->value()};
+    // TODO<joka921> Check that the language string doesn't contain a datatype
+    // etc.
+    // TODO<joka921> Is this even allowed by the grammar?
+    return LangFilterData{varPtr->variable(),
+                          langPtr->value().normalizedContent_.get()};
   };
 
   const auto& child1 = children_[0];

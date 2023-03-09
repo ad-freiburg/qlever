@@ -932,7 +932,7 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
   if (idIfNotString.has_value()) {
     resultTriple[2] = idIfNotString.value();
   } else {
-    resultTriple[2] = std::move(triple._object.getString());
+    resultTriple[2] = std::move(triple._object).toRdfLiteral();
   }
 
   for (size_t i = 0; i < 3; ++i) {

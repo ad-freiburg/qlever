@@ -14,6 +14,13 @@ using namespace std::literals;
 using Re2Parser = TurtleStringParser<Tokenizer>;
 using CtreParser = TurtleStringParser<TokenizerCtre>;
 
+namespace {
+auto lit = [](const std::string& s, std::string_view langtagOrDatatype = "") {
+  return TripleComponent::Literal{RdfEscaping::NormalizedRDFString::make(s),
+                                  std::string{langtagOrDatatype}};
+};
+}
+
 // TODO<joka921>: Use the following abstractions and the alias `Parser` in all
 // of this file. Set up a `Parser` with the given `input` and call the given
 // `rule` (a member function of `Parser` that returns a bool). Return the
@@ -160,16 +167,20 @@ TEST(TurtleParserTest, prefixID) {
 TEST(TurtleParserTest, stringParse) {
   auto runCommonTests = [](const auto& checker) {
     std::string s1("\"double quote\"");
+    std::string s1Normalized("\"double quote\"");
     std::string s2("\'single quote\'");
+    std::string s2Normalized("\"single quote\"");
     std::string s3("\"\"\"multiline \n double quote\"\"\"");
+    std::string s3Normalized("\"multiline \n double quote\"");
     std::string s4("\'\'\'multiline \n single quote\'\'\'");
+    std::string s4Normalized("\"multiline \n single quote\"");
 
-    checker(s1, s1);
-    checker(s2, s2);
+    checker(s1, lit(s1Normalized));
+    checker(s2, lit(s2Normalized));
     // the main thing to test here is that s3 does not prefix-match the simple
     // string "" but the complex string """..."""
-    checker(s3, s3);
-    checker(s4, s4);
+    checker(s3, lit(s3Normalized));
+    checker(s4, lit(s4Normalized));
   };
   auto checkRe2 = checkParseResult<Re2Parser, &Re2Parser::stringParse>;
   auto checkCtre = checkParseResult<CtreParser, &CtreParser::stringParse>;
@@ -181,11 +192,12 @@ TEST(TurtleParserTest, rdfLiteral) {
   std::vector<string> literals;
   std::vector<TripleComponent> expected;
   literals.emplace_back(R"("simpleString")");
-  expected.emplace_back(R"("simpleString")");
+  expected.emplace_back(lit(R"("simpleString")"));
   literals.emplace_back(R"("langtag"@en-gb)");
-  expected.emplace_back(R"("langtag"@en-gb)");
+  expected.emplace_back(lit(R"("langtag")", "@en-gb"));
   literals.emplace_back("\"valueLong\"^^<www.someunknownType/integer>");
-  expected.emplace_back("\"valueLong\"^^<www.someunknownType/integer>");
+  expected.emplace_back(
+      lit("\"valueLong\"", "^^<www.someunknownType/integer>"));
 
   literals.emplace_back(R"("42.1234"^^)"s + "<" + XSD_DOUBLE_TYPE + ">");
   expected.emplace_back(42.1234);
@@ -209,7 +221,8 @@ TEST(TurtleParserTest, rdfLiteral) {
     string s("\"valuePrefixed\"^^doof:sometype");
     p.setInputStream(s);
     ASSERT_TRUE(p.rdfLiteral());
-    ASSERT_EQ(p._lastParseResult, "\"valuePrefixed\"^^<www.doof.org/sometype>");
+    ASSERT_EQ(p._lastParseResult,
+              lit("\"valuePrefixed\"", "^^<www.doof.org/sometype>"));
     ASSERT_EQ(p.getPosition(), s.size());
   };
   runCommonTests(Re2Parser{});
@@ -273,8 +286,8 @@ TEST(TurtleParserTest, object) {
     string literal = "\"literal\"";
     p.setInputStream(literal);
     ASSERT_TRUE(p.object());
-    ASSERT_EQ(p._lastParseResult, literal);
-    exp = TurtleTriple{sub, pred, literal};
+    ASSERT_EQ(p._lastParseResult, lit(literal));
+    exp = TurtleTriple{sub, pred, lit(literal)};
     ASSERT_EQ(p._triples.back(), exp);
 
     string blank = "_:someblank";
@@ -319,7 +332,7 @@ TEST(TurtleParserTest, predicateObjectList) {
     string predL = "\n <p1> <ob1>;<p2> \"ob2\",\n <ob3>";
     std::vector<TurtleTriple> exp;
     exp.push_back({"<s>", "<p1>", "<ob1>"});
-    exp.push_back({"<s>", "<p2>", "\"ob2\""});
+    exp.push_back({"<s>", "<p2>", lit("\"ob2\"")});
     exp.push_back({"<s>", "<p2>", "<ob3>"});
     parser.setInputStream(predL);
     ASSERT_TRUE(parser.predicateObjectList());
@@ -517,9 +530,10 @@ TEST(TurtleParserTest, DateLiterals) {
 
 TEST(TurtleParserTest, booleanLiteral) {
   auto runCommonTests = [](const auto& ruleChecker, const auto& ruleParser) {
-    ruleChecker("true", "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>");
-    ruleChecker("false",
-                "\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>");
+    ruleChecker("true", lit("\"true\"",
+                            "^^<http://www.w3.org/2001/XMLSchema#boolean>"));
+    ruleChecker("false", lit("\"false\"",
+                             "^^<http://www.w3.org/2001/XMLSchema#boolean>"));
     ASSERT_FALSE(ruleParser("maybe"));
   };
   runCommonTests(checkParseResult<Re2Parser, &Re2Parser::booleanLiteral>,
@@ -543,7 +557,7 @@ TEST(TurtleParserTest, collection) {
                             {"_:g_22_0", rest, "_:g_22_1"},
                             {"_:g_22_1", first, "<alpha>"},
                             {"_:g_22_1", rest, "_:g_22_2"},
-                            {"_:g_22_2", first, "\"me\""},
+                            {"_:g_22_2", first, lit("\"me\"")},
                             {"_:g_22_2", rest, nil}});
   };
   runCommonTests(checkParseResult<Re2Parser, &Re2Parser::collection, 22>);

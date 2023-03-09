@@ -39,6 +39,7 @@ class LiteralExpression : public SparqlExpression {
         // TODO<joka921>:: emit a warning.
         return actualValue;
       }
+      return id;
     } else if constexpr (std::is_same_v<string, T>) {
       Id id;
       bool idWasFound = context->_qec.getIndex().getId(_value, &id);
