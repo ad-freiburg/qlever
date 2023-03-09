@@ -241,7 +241,7 @@ void runTestForDifferentTypes(auto testCase, std::string testCaseName) {
 }
 
 // This helper function has to be used inside the `testCase` lambdas for the
-// `runTestForDifferenTypes` function above whenever a copy of an `IdTable` has
+// `runTestForDifferentTypes` function above whenever a copy of an `IdTable` has
 // to be made. It is necessary because for some `IdTable` instantiations
 // (for example when the data is stored in a `BufferedVector`) the `clone`
 // member function needs additional arguments. Currently, the only additional
@@ -257,7 +257,7 @@ auto clone(const auto& table, auto... args) {
 
 TEST(IdTable, push_back_and_assign) {
   // A lambda that is used as the `testCase` argument to the
-  // `runtTestForDifferenTypes` function (see above for details).
+  // `runTestForDifferentTypes` function (see above for details).
   auto runTestForIdTable = []<typename Table>(auto make,
                                               auto... additionalArgs) {
     constexpr size_t NUM_ROWS = 30;
@@ -295,7 +295,7 @@ TEST(IdTable, push_back_and_assign) {
 // __________________________________________________________________
 TEST(IdTable, at) {
   // A lambda that is used as the `testCase` argument to the
-  // `runTestForDifferenTypes` function (see above for details).
+  // `runTestForDifferentTypes` function (see above for details).
   auto runTestForIdTable = []<typename Table>(auto make,
                                               auto... additionalArgs) {
     constexpr size_t NUM_ROWS = 30;
@@ -347,7 +347,7 @@ TEST(IdTable, insertAtEnd) {
 
 TEST(IdTable, reserve_and_resize) {
   // A lambda that is used as the `testCase` argument to the
-  // `runtTestForDifferenTypes` function (see above for details).
+  // `runTestForDifferentTypes` function (see above for details).
   auto runTestForIdTable = []<typename Table>(auto make,
                                               auto... additionalArgs) {
     constexpr size_t NUM_ROWS = 34;
@@ -396,7 +396,7 @@ TEST(IdTable, reserve_and_resize) {
 
 TEST(IdTable, copyAndMove) {
   // A lambda that is used as the `testCase` argument to the
-  // `runtTestForDifferenTypes` function (see above for details).
+  // `runTestForDifferentTypes` function (see above for details).
   auto runTestForIdTable = []<typename Table>(auto make,
                                               auto... additionalArgs) {
     constexpr size_t NUM_ROWS = 100;
