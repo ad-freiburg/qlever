@@ -28,7 +28,7 @@ using Parser = SparqlAutomaticParser;
 using namespace std::literals;
 using Var = Variable;
 auto lit = [](const std::string& s) {
-  return TripleComponent::Literal{RdfEscaping::NormalizedRDFString::make(s)};
+  return TripleComponent::Literal{RdfEscaping::NormalizedRDFString::make(s), ""};
 };
 
 template <auto F>

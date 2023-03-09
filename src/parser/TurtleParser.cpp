@@ -473,7 +473,7 @@ bool TurtleParser<T>::stringParse() {
   }
   // also include the quotation marks in the word
   _lastParseResult = TripleComponent::Literal{
-      RdfEscaping::normalizeRDFLiteral(view.substr(0, endPos + startPos))};
+      RdfEscaping::normalizeRDFLiteral(view.substr(0, endPos + startPos)), ""};
   _tok.remove_prefix(endPos + startPos);
   return true;
 }
