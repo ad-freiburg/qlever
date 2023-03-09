@@ -5,8 +5,8 @@
 #include "./Operation.h"
 
 #include "engine/QueryExecutionTree.h"
-#include "util/TransparentFunctors.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/TransparentFunctors.h"
 
 template <typename F>
 void Operation::forAllDescendants(F f) {

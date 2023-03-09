@@ -13,7 +13,8 @@ TEST(OnDestruction, OnDestructionDontThrowDuringStackUnwinding) {
   // sets `i` to 42;
   {
     auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
-        [&i]() { i = 42; });
+        [&i]() { i += 32; });
+    i = 10;
   }
   ASSERT_EQ(i, 42);
 
@@ -26,7 +27,7 @@ TEST(OnDestruction, OnDestructionDontThrowDuringStackUnwinding) {
   ASSERT_THROW(runCleanup(), std::runtime_error);
 
   // First the `out_of_range` is thrown. During the stack unwinding, the
-  // destructor of `cleanup` is called which detects that it is not safe to
+  // destructor of `cleanup` is called, which detects that it is not safe to
   // throw and thus catches and logs the inner `runtime_error`. Thus the
   // `ASSERT_THROW` macro sees the `out_of_range` exception.
   auto runCleanupDuringUnwinding = [&i]() {
@@ -40,14 +41,14 @@ TEST(OnDestruction, OnDestructionDontThrowDuringStackUnwinding) {
   ASSERT_THROW(runCleanupDuringUnwinding(), std::out_of_range);
   ASSERT_EQ(i, 12);
 
-  // First the `std::out_of_range` at the end is thrown.
-  // The destructor of `outerCleanup` is called, which again calls the
-  // destructor of `innerCleanup`. This destructor throws an exception, but it
-  // is actually safe to throw this exception (because it is immediately caught
-  // by the `outerCleanup`). That is why we can observe the effect of the catch
-  // clause (`i` is set). This means that the logic of the `OnDestruction...`
-  // object `innerCleanup` does not catch the `runtime_error`, because it is
-  // safe to let it propagate, although stack unwinding is in progress.
+  // First the `std::out_of_range` at the end is thrown. The destructor of
+  // `outerCleanup` is called, which again calls the destructor of
+  // `innerCleanup`. This destructor throws an exception, but it is actually
+  // safe to throw this exception (because it is immediately caught by the
+  // `outerCleanup`). That is why we can observe the effect of the catch clause
+  // (`i` is set). This means that the logic of the `OnDestruction...` object
+  // `innerCleanup` does not catch the `runtime_error`, because it is safe to
+  // let it propagate, although stack unwinding is in progress.
   auto runCleanupNested = [&i]() {
     auto outerCleanup =
         ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([&i]() {

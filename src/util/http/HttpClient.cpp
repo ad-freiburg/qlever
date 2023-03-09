@@ -63,9 +63,9 @@ HttpClientImpl<StreamType>::~HttpClientImpl() {
   // destructor and we can simply ignore the error codes.
   [[maybe_unused]] boost::system::error_code ec;
 
-  // Close the stream. Ignore the value of `ec` because we don't care
+  // Close the stream. Ignore the value of `ec` because we don't care about
   // possible errors (we are done with the connection anyway, and there
-  // is no simple and safe way to report errors from a destructor.
+  // is no simple and safe way to report errors from a destructor).
   if constexpr (std::is_same_v<StreamType, beast::tcp_stream>) {
     stream_->socket().shutdown(tcp::socket::shutdown_both, ec);
   } else {

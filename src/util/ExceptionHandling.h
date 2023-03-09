@@ -1,5 +1,6 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//  Copyright 2023, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -21,8 +22,8 @@ namespace detail {
 }
 // Call `f()`. If this call throws, catch the exception and log it, but do not
 // propagate it. Can be used to make destructors `noexcept` when the destructor
-// has to perform actions that might throw, but when handling
-// these exceptions is not important.
+// has to perform actions that might throw, but when handling these exceptions
+// is not important.
 template <typename F>
 requires std::invocable<std::remove_cvref_t<F>>
 void ignoreExceptionIfThrows(F&& f,

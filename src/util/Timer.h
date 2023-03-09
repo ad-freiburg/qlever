@@ -229,7 +229,7 @@ struct [[nodiscard(
   }
 
   // The semantics of copying/moving this class are unclear and copying/moving
-  // it is not needed for the typical usage, so those operations are deleted.
+  // is not needed for the typical usage, so those operations are deleted.
   TimeBlockAndLog(const TimeBlockAndLog&) = delete;
   TimeBlockAndLog& operator=(const TimeBlockAndLog&) = delete;
   ~TimeBlockAndLog() {

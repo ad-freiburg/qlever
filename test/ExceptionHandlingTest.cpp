@@ -6,20 +6,15 @@
 #include "gtest/gtest.h"
 #include "util/ExceptionHandling.h"
 
-// This global constant is needed for the `terminateIfThrows` test.
-namespace {
-int mockedTerminateNumCalls = 0;
-}
-
 // ________________________________________________________________
 TEST(OnDestruction, terminateIfThrows) {
-  // We need a lambda that is convertible to a function pointer for
-  // `ad_utility::terminateIfThrows`, so we have to use a global variable to
-  // communicate that the mocked "termination" was called.
-  auto terminateReplacement = []() noexcept { ++mockedTerminateNumCalls; };
+  int mockedTerminateNumCalls = 0;
+  auto terminateReplacement = [&mockedTerminateNumCalls]() noexcept {
+    ++mockedTerminateNumCalls;
+  };
   auto alwaysThrow = []() { throw 42; };
 
-  // Test the default logic (which calls `std::terminate`
+  // Test the default logic (which calls `std::terminate`).
   EXPECT_DEATH(ad_utility::terminateIfThrows(alwaysThrow, "A function "),
                "A function that should never throw");
   // Replace the call to `std::terminate` by a custom exception to correctly
