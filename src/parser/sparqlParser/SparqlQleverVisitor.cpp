@@ -520,6 +520,8 @@ parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // when computing the result for this operation.
   std::vector<Variable> visibleVariablesSoFar = std::move(visibleVariables_);
   parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
+  // Note: The `visit` call in the line above has filled the `visibleVariables_`
+  // member with all the variables visible inside the graph pattern.
   std::vector<Variable> visibleVariablesServiceQuery =
       ad_utility::removeDuplicates(visibleVariables_);
   visibleVariables_ = std::move(visibleVariablesSoFar);
