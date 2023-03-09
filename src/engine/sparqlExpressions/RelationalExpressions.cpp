@@ -397,8 +397,7 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
   auto getLangFilterData =
       [](const auto& left, const auto& right) -> std::optional<LangFilterData> {
     const auto* varPtr = dynamic_cast<const LangExpression*>(left.get());
-    const auto* langPtr =
-        dynamic_cast<const StringOrIriExpression*>(right.get());
+    const auto* langPtr = dynamic_cast<const IriExpression*>(right.get());
 
     if (!varPtr || !langPtr) {
       return std::nullopt;

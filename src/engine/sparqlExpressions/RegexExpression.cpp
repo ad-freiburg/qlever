@@ -95,7 +95,7 @@ RegexExpression::RegexExpression(
   }
   std::string regexString;
   std::string originalRegexString;
-  if (auto regexPtr = dynamic_cast<const StringOrIriExpression*>(regex.get())) {
+  if (auto regexPtr = dynamic_cast<const IriExpression*>(regex.get())) {
     originalRegexString = regexPtr->value();
     regexString = detail::removeQuotes(originalRegexString);
   } else {
@@ -104,8 +104,8 @@ RegexExpression::RegexExpression(
         "string literal (which contains the regular expression)");
   }
   if (optionalFlags.has_value()) {
-    if (auto flagsPtr = dynamic_cast<const StringOrIriExpression*>(
-            optionalFlags.value().get())) {
+    if (auto flagsPtr =
+            dynamic_cast<const IriExpression*>(optionalFlags.value().get())) {
       auto flags = detail::removeQuotes(flagsPtr->value());
       auto firstInvalidFlag = flags.find_first_not_of("imsu");
       if (firstInvalidFlag != std::string::npos) {

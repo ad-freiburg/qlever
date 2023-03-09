@@ -1571,7 +1571,9 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
     auto tripleComponent = TurtleStringParser<TokenizerCtre>::parseTripleObject(
         visit(ctx->rdfLiteral()));
     if (tripleComponent.isString()) {
-      return make_unique<StringOrIriExpression>(tripleComponent.getString());
+      return make_unique<IriExpression>(tripleComponent.getString());
+    } else if (tripleComponent.isLiteral()) {
+      return make_unique<StringLiteralExpression>(tripleComponent.getLiteral());
     } else {
       return make_unique<IdExpression>(
           tripleComponent.toValueIdIfNotString().value());
@@ -1757,8 +1759,7 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
 ExpressionPtr Visitor::visit(Parser::IriOrFunctionContext* ctx) {
   // Case 1: Just an IRI.
   if (ctx->argList() == nullptr) {
-    return std::make_unique<sparqlExpression::StringOrIriExpression>(
-        visit(ctx->iri()));
+    return std::make_unique<sparqlExpression::IriExpression>(visit(ctx->iri()));
   }
   // Case 2: Function call, where the function name is an IRI.
   return processIriFunctionCall(visit(ctx->iri()), visit(ctx->argList()), ctx);

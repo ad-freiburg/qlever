@@ -28,7 +28,18 @@ class LiteralExpression : public SparqlExpression {
   // Evaluating just returns the constant/literal value.
   ExpressionResult evaluate(
       [[maybe_unused]] EvaluationContext* context) const override {
-    if constexpr (std::is_same_v<string, T>) {
+    if constexpr (std::is_same_v<TripleComponent::Literal, T>) {
+      // TODO<joka921> This also has to be refactored.
+      std::string actualValue = absl::StrCat(_value.normalizedContent_.get(),
+                                             _value.langtagOrDatatype_);
+      Id id;
+      bool idWasFound = context->_qec.getIndex().getId(actualValue, &id);
+      if (!idWasFound) {
+        // no vocabulary entry found, just use it as a string constant.
+        // TODO<joka921>:: emit a warning.
+        return actualValue;
+      }
+    } else if constexpr (std::is_same_v<string, T>) {
       Id id;
       bool idWasFound = context->_qec.getIndex().getId(_value, &id);
       if (!idWasFound) {
@@ -74,6 +85,9 @@ class LiteralExpression : public SparqlExpression {
       return _value;
     } else if constexpr (std::is_same_v<T, ValueId>) {
       return absl::StrCat("#valueId ", _value.getBits(), "#");
+    } else if constexpr (std::is_same_v<T, TripleComponent::Literal>) {
+      return absl::StrCat(_value.normalizedContent_.get(),
+                          _value.langtagOrDatatype_);
     } else {
       return {std::to_string(_value)};
     }
@@ -103,7 +117,9 @@ using BoolExpression = detail::LiteralExpression<bool>;
 using IntExpression = detail::LiteralExpression<int64_t>;
 using DoubleExpression = detail::LiteralExpression<double>;
 using VariableExpression = detail::LiteralExpression<::Variable>;
-using StringOrIriExpression = detail::LiteralExpression<string>;
+using IriExpression = detail::LiteralExpression<string>;
+using StringLiteralExpression =
+    detail::LiteralExpression<TripleComponent::Literal>;
 using IdExpression = detail::LiteralExpression<ValueId>;
 }  // namespace sparqlExpression
 

@@ -26,12 +26,11 @@ RegexExpression makeRegexExpression(
   }
   auto variableExpression =
       std::make_unique<VariableExpression>(Variable{std::move(variable)});
-  auto regexExpression =
-      std::make_unique<StringOrIriExpression>(std::move(regex));
+  auto regexExpression = std::make_unique<IriExpression>(std::move(regex));
   std::optional<SparqlExpression::Ptr> flagsExpression = std::nullopt;
   if (flags.has_value()) {
     flagsExpression = SparqlExpression::Ptr{
-        std::make_unique<StringOrIriExpression>(std::move(flags.value()))};
+        std::make_unique<IriExpression>(std::move(flags.value()))};
   }
 
   return {std::move(variableExpression), std::move(regexExpression),
@@ -225,7 +224,7 @@ TEST(RegexExpression, getChildren) {
 
 TEST(RegexExpression, invalidConstruction) {
   auto literal = [](std::string literal) {
-    return std::make_unique<StringOrIriExpression>(std::move(literal));
+    return std::make_unique<IriExpression>(std::move(literal));
   };
   auto variable = [](std::string literal) {
     return std::make_unique<VariableExpression>(Variable{std::move(literal)});

@@ -27,6 +27,9 @@ namespace m = matchers;
 using Parser = SparqlAutomaticParser;
 using namespace std::literals;
 using Var = Variable;
+auto lit = [](const std::string& s) {
+  return TripleComponent::Literal{RdfEscaping::NormalizedRDFString::make(s)};
+};
 
 template <auto F>
 auto parse =
@@ -82,6 +85,7 @@ struct ExpectCompleteParse {
                   SparqlQleverVisitor::PrefixMap prefixMap,
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) const {
+    auto tr = generateLocationTrace(l, "succesful parsing was expected here");
     EXPECT_NO_THROW({
       return expectCompleteParse(
           parse<Clause>(input, std::move(prefixMap), disableSomeChecks),
@@ -575,7 +579,7 @@ TEST(SparqlParser, DataBlock) {
   auto expectDataBlock = ExpectCompleteParse<&Parser::dataBlock>{};
   auto expectDataBlockFails = ExpectParseFails<&Parser::dataBlock>();
   expectDataBlock("?test { \"foo\" }",
-                  m::Values({Var{"?test"}}, {{"\"foo\""}}));
+                  m::Values({Var{"?test"}}, {{lit("\"foo\"")}}));
   expectDataBlock("?test { 10.0 }", m::Values({Var{"?test"}}, {{10.0}}));
   expectDataBlock("?test { UNDEF }",
                   m::Values({Var{"?test"}}, {{TripleComponent::UNDEF{}}}));
@@ -583,8 +587,9 @@ TEST(SparqlParser, DataBlock) {
   // (numericLiteral/booleanLiteral)
   // TODO<joka921/qup42> implement.
   expectDataBlockFails("?test { true }");
-  expectDataBlock(R"(?foo { "baz" "bar" })",
-                  m::Values({Var{"?foo"}}, {{"\"baz\""}, {"\"bar\""}}));
+  expectDataBlock(
+      R"(?foo { "baz" "bar" })",
+      m::Values({Var{"?foo"}}, {{lit("\"baz\"")}, {lit("\"bar\"")}}));
   // TODO: Is this semantics correct?
   expectDataBlock(R"(( ) { ( ) })", m::Values({}, {{}}));
   expectDataBlock(R"(( ) { })", m::Values({}, {}));
@@ -594,13 +599,15 @@ TEST(SparqlParser, DataBlock) {
   expectDataBlockFails(R"(( ?foo ?bar ) { (<foo>) (<bar>) })");
   expectDataBlock(R"(( ?foo ?bar ) { (<foo> <bar>) })",
                   m::Values({Var{"?foo"}, Var{"?bar"}}, {{"<foo>", "<bar>"}}));
-  expectDataBlock(R"(( ?foo ?bar ) { (<foo> "m") ("1" <bar>) })",
-                  m::Values({Var{"?foo"}, Var{"?bar"}},
-                            {{"<foo>", "\"m\""}, {"\"1\"", "<bar>"}}));
   expectDataBlock(
-      R"(( ?foo ?bar ) { (<foo> "m") (<bar> <e>) ("1" "f") })",
+      R"(( ?foo ?bar ) { (<foo> "m") ("1" <bar>) })",
       m::Values({Var{"?foo"}, Var{"?bar"}},
-                {{"<foo>", "\"m\""}, {"<bar>", "<e>"}, {"\"1\"", "\"f\""}}));
+                {{"<foo>", lit("\"m\"")}, {lit("\"1\""), "<bar>"}}));
+  expectDataBlock(
+      R"(( ?foo ?bar ) { (<foo> "m") (<bar> <e>) (1 "f") })",
+      m::Values(
+          {Var{"?foo"}, Var{"?bar"}},
+          {{"<foo>", lit("\"m\"")}, {"<bar>", "<e>"}, {1, lit("\"f\"")}}));
   // TODO<joka921/qup42> implement
   expectDataBlockFails(R"(( ) { (<foo>) })");
 }
@@ -609,7 +616,7 @@ TEST(SparqlParser, InlineData) {
   auto expectInlineData = ExpectCompleteParse<&Parser::inlineData>{};
   auto expectInlineDataFails = ExpectParseFails<&Parser::inlineData>();
   expectInlineData("VALUES ?test { \"foo\" }",
-                   m::InlineData({Var{"?test"}}, {{"\"foo\""}}));
+                   m::InlineData({Var{"?test"}}, {{lit("\"foo\"")}}));
   // There must always be a block present for InlineData
   expectInlineDataFails("");
 }

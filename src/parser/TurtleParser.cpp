@@ -372,8 +372,7 @@ bool TurtleParser<T>::rdfLiteral() {
     return false;
   }
   RdfEscaping::NormalizedRDFString literalString =
-      RdfEscaping::normalizeRDFLiteral(_lastParseResult.getString());
-  _lastParseResult = TripleComponent::Literal{literalString, ""};
+      _lastParseResult.getLiteral().normalizedContent_;
   if (langtag()) {
     _lastParseResult =
         TripleComponent::Literal{literalString, _lastParseResult.getString()};
@@ -471,8 +470,8 @@ bool TurtleParser<T>::stringParse() {
     raise("Unterminated string literal");
   }
   // also include the quotation marks in the word
-  // TODO <joka921> how do we have to translate multiline strings for QLever?
-  _lastParseResult = view.substr(0, endPos + startPos);
+  _lastParseResult = TripleComponent::Literal{
+      RdfEscaping::normalizeRDFLiteral(view.substr(0, endPos + startPos))};
   _tok.remove_prefix(endPos + startPos);
   return true;
 }
