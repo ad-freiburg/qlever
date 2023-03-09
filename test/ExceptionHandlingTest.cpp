@@ -8,9 +8,9 @@
 
 // ________________________________________________________________
 TEST(OnDestruction, terminateIfThrows) {
-  int mockedTerminateNumCalls = 0;
-  auto terminateReplacement = [&mockedTerminateNumCalls]() noexcept {
-    ++mockedTerminateNumCalls;
+  int numCallsToMockedTerminate = 0;
+  auto mockedTerminate = [&numCallsToMockedTerminate]() noexcept {
+    ++numCallsToMockedTerminate;
   };
   auto alwaysThrow = []() { throw 42; };
 
@@ -19,9 +19,8 @@ TEST(OnDestruction, terminateIfThrows) {
                "A function that should never throw");
   // Replace the call to `std::terminate` by a custom exception to correctly
   // track the coverage.
-  ad_utility::terminateIfThrows(alwaysThrow, "A function ",
-                                terminateReplacement);
-  EXPECT_EQ(mockedTerminateNumCalls, 1);
+  ad_utility::terminateIfThrows(alwaysThrow, "A function ", mockedTerminate);
+  EXPECT_EQ(numCallsToMockedTerminate, 1);
 
   auto alwaysThrowException = []() {
     throw std::runtime_error("throwing in test");
@@ -30,8 +29,8 @@ TEST(OnDestruction, terminateIfThrows) {
                                              "test for terminating"),
                "A function that should never throw");
   ad_utility::terminateIfThrows(alwaysThrowException, "A function ",
-                                terminateReplacement);
-  EXPECT_EQ(mockedTerminateNumCalls, 2);
+                                mockedTerminate);
+  EXPECT_EQ(numCallsToMockedTerminate, 2);
 
   auto noThrowThenExit = []() {
     ad_utility::terminateIfThrows([]() {}, "");
@@ -39,8 +38,8 @@ TEST(OnDestruction, terminateIfThrows) {
   };
   EXPECT_EXIT(noThrowThenExit(), ::testing::ExitedWithCode(42), ::testing::_);
 
-  ad_utility::terminateIfThrows([]() {}, "", terminateReplacement);
-  EXPECT_EQ(mockedTerminateNumCalls, 2);
+  ad_utility::terminateIfThrows([]() {}, "", mockedTerminate);
+  EXPECT_EQ(numCallsToMockedTerminate, 2);
 }
 
 // ________________________________________________________________
