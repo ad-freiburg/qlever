@@ -57,31 +57,22 @@ HttpClientImpl<StreamType>::HttpClientImpl(std::string_view host,
 
 // ____________________________________________________________________________
 template <typename StreamType>
-HttpClientImpl<StreamType>::~HttpClientImpl() noexcept(false) {
-  boost::system::error_code ec;
+HttpClientImpl<StreamType>::~HttpClientImpl() {
+  // We are closing the HTTP connection and destroying the client. So it is
+  // neither required nor possible in a safe way to report errors from a
+  // destructor and we can simply ignore the error codes.
+  [[maybe_unused]] boost::system::error_code ec;
+
+  // Close the stream. Ignore the value of `ec` because we don't care about
+  // possible errors (we are done with the connection anyway, and there
+  // is no simple and safe way to report errors from a destructor).
   if constexpr (std::is_same_v<StreamType, beast::tcp_stream>) {
     stream_->socket().shutdown(tcp::socket::shutdown_both, ec);
-    // `not_connected` happens sometimes, so don't bother reporting it.
-    if (ec && ec != beast::errc::not_connected) {
-      if (std::uncaught_exceptions() == 0) {
-        throw beast::system_error{ec};
-      }
-    }
   } else {
     static_assert(std::is_same_v<StreamType, ssl::stream<tcp::socket>>,
                   "StreamType must be either boost::beast::tcp_stream or "
                   "boost::asio::ssl::stream<boost::asio::ip::tcp::socket>");
     stream_->shutdown(ec);
-    // Gracefully close the stream. The `if` part is explained on
-    // http://stackoverflow.com/questions/25587403/boost-asio-ssl-async-shutdown-always-finishes-with-an-error
-    if (ec == boost::asio::error::eof) {
-      ec.assign(0, ec.category());
-    }
-    if (ec) {
-      if (std::uncaught_exceptions() == 0) {
-        throw boost::system::system_error{ec};
-      }
-    }
   }
 }
 

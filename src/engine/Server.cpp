@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/cleanup/cleanup.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "util/BoostHelpers/AsyncWaitForFuture.h"
@@ -725,7 +726,7 @@ Awaitable<T> Server::computeInNewThread(Function function) const {
   auto acquireComputeRelease = [this, function = std::move(function)] {
     LOG(DEBUG) << "Acquiring new thread for query processing\n";
     _queryProcessingSemaphore.acquire();
-    ad_utility::OnDestruction f{[this]() noexcept {
+    absl::Cleanup f{[this]() noexcept {
       try {
         _queryProcessingSemaphore.release();
       } catch (...) {

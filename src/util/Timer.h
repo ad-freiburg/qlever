@@ -203,7 +203,8 @@ class TimeoutTimer : public Timer {
   Timer::Duration timeLimit_ = Timer::Duration::zero();
   bool isUnlimited_ = false;  // never times out
   class UnlimitedTag {};
-  TimeoutTimer(UnlimitedTag) : Timer{Timer::Started}, isUnlimited_{true} {}
+  explicit TimeoutTimer(UnlimitedTag)
+      : Timer{Timer::Started}, isUnlimited_{true} {}
 };
 
 namespace detail {
@@ -216,14 +217,21 @@ namespace detail {
   LOG(TIMING) << message << " took " << msecs << "ms" << std::endl;
 };
 template <typename Callback = decltype(defaultLogger)>
-struct TimeBlockAndLog {
+struct [[nodiscard(
+    "TimeBlockAndLog objects are RAII types that always have to be bound to a "
+    "variable")]] TimeBlockAndLog {
   Timer t_{Timer::Started};
   std::string message_;
   Callback callback_;
-  TimeBlockAndLog(std::string message, Callback callback = {})
+  explicit TimeBlockAndLog(std::string message, Callback callback = {})
       : message_{std::move(message)}, callback_{std::move(callback)} {
     t_.start();
   }
+
+  // The semantics of copying/moving this class are unclear and copying/moving
+  // is not needed for the typical usage, so those operations are deleted.
+  TimeBlockAndLog(const TimeBlockAndLog&) = delete;
+  TimeBlockAndLog& operator=(const TimeBlockAndLog&) = delete;
   ~TimeBlockAndLog() {
     auto msecs = Timer::toMilliseconds(t_.value());
     callback_(msecs, message_);

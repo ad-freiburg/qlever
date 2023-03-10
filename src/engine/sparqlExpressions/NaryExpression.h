@@ -77,8 +77,8 @@ requires(isOperation<NaryOperation>) class NaryExpression
         (... && isConstantResult<Operands>);
 
     // The generator for the result of the operation.
-    auto resultGenerator = applyOperation(targetSize, naryOperation, context,
-                                          std::move(operands)...);
+    auto resultGenerator =
+        applyOperation(targetSize, naryOperation, context, AD_FWD(operands)...);
 
     // Compute the result.
     using ResultType = typename decltype(resultGenerator)::value_type;
