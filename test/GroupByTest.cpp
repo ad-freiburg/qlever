@@ -686,17 +686,16 @@ auto make = [](auto&&... args) -> SparqlExpression::Ptr {
 TEST(GroupBy, GroupedVariableInExpressions) {
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
-  /*
-   Test the following expression.
-   Note: The values are chosen s.t. the results are all integers. Otherwise we
-   would get into trouble with floating point comparisons. A check with a
-   similar query but with non-integral inputs and results can be found in the
-   E2E tests.
-
-   SELECT (AVG(?a + ?b) as ?x) (?a + COUNT(?b) AS ?y) WHERE {
-       VALUES (?x ?y) { (1.0 3.0) (1.0 7.0) (5.0 4.0)}
-   } GROUP BY ?x
-   */
+// Test the following SPARQL query:
+//
+// SELECT (AVG(?a + ?b) as ?x) (?a + COUNT(?b) AS ?y) WHERE {
+//   VALUES (?x ?y) { (1.0 3.0) (1.0 7.0) (5.0 4.0)}
+// } GROUP BY ?x
+//
+// Note: The values are chosen such that the results are all integers. Otherwise
+// we would get into trouble with floating point comparisons. A check with a
+// similar query but with non-integral inputs and results can be found in the
+// E2E tests.
 
   Variable varA = Variable{"?a"};
   Variable varB = Variable{"?b"};
@@ -709,14 +708,15 @@ TEST(GroupBy, GroupedVariableInExpressions) {
       ad_utility::testing::getQec(), input);
 
   using namespace sparqlExpression;
-  // Setup `(AVG(?a + ?b) as ?x)`
+
+  // Create `Alias` object for `(AVG(?a + ?b) AS ?x)`.
   auto sum = make<AddExpression>(make<VariableExpression>(varA),
                                  make<VariableExpression>(varB));
   auto avg = make<AvgExpression>(false, std::move(sum));
   auto alias1 = Alias{SparqlExpressionPimpl{std::move(avg), "avg(?a + ?b"},
                       Variable{"?x"}};
 
-  // Setup `(?a + COUNT(?b) AS ?y);
+  // Create `Alias` object for `(?a + COUNT(?b) AS ?y)`.
   auto expr2 = make<AddExpression>(
       make<VariableExpression>(varA),
       make<CountExpression>(false, make<VariableExpression>(varB)));
@@ -731,6 +731,7 @@ TEST(GroupBy, GroupedVariableInExpressions) {
   auto result = groupBy.getResult();
   const auto& table = result->_idTable;
 
+  // Check the result.
   auto d = DoubleId;
   VariableToColumnMap expectedVariables{
       {Variable{"?a"}, 0}, {Variable{"?x"}, 1}, {Variable{"?y"}, 2}};

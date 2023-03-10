@@ -172,8 +172,8 @@ class SparqlExpression {
     isInsideAggregate_ = true;
     // Note: `child` is a `unique_ptr` to a non-const object. So we could
     // technically use `const auto&` in the following loop, but this would be
-    // misleading (while the pointer is used in a `const` manner, the pointee is
-    // not.
+    // misleading (the pointer is used in a `const` manner, but the pointee is
+    // not).
     for (auto& child : children()) {
       child->setIsInsideAggregate();
     }
