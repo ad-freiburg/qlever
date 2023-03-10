@@ -686,16 +686,16 @@ auto make = [](auto&&... args) -> SparqlExpression::Ptr {
 TEST(GroupBy, GroupedVariableInExpressions) {
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
-// Test the following SPARQL query:
-//
-// SELECT (AVG(?a + ?b) as ?x) (?a + COUNT(?b) AS ?y) WHERE {
-//   VALUES (?x ?y) { (1.0 3.0) (1.0 7.0) (5.0 4.0)}
-// } GROUP BY ?x
-//
-// Note: The values are chosen such that the results are all integers. Otherwise
-// we would get into trouble with floating point comparisons. A check with a
-// similar query but with non-integral inputs and results can be found in the
-// E2E tests.
+  // Test the following SPARQL query:
+  //
+  // SELECT (AVG(?a + ?b) as ?x) (?a + COUNT(?b) AS ?y) WHERE {
+  //   VALUES (?x ?y) { (1.0 3.0) (1.0 7.0) (5.0 4.0)}
+  // } GROUP BY ?x
+  //
+  // Note: The values are chosen such that the results are all integers.
+  // Otherwise we would get into trouble with floating point comparisons. A
+  // check with a similar query but with non-integral inputs and results can be
+  // found in the E2E tests.
 
   Variable varA = Variable{"?a"};
   Variable varB = Variable{"?b"};
