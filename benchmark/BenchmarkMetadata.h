@@ -29,4 +29,7 @@ class BenchmarkMetadata{
     std::string asJsonString() const{
       return data_.dump();
     }
+
+    // JSON (d)serialization.
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkMetadata, data_)
 };

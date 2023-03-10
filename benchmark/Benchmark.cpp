@@ -51,14 +51,14 @@ BenchmarkRegister::BenchmarkRegister(
 
 // ____________________________________________________________________________
 auto BenchmarkRecords::getSingleMeasurements() const
-    -> const std::vector<RecordEntry>& {
-  return singleMeasurements_;
+    -> const std::vector<RecordEntry> {
+  return singleMeasurements_.getAllValues();
 }
 
 // ____________________________________________________________________________
 void BenchmarkRecords::addGroup(const std::string& descriptor) {
   recordGroups_.addEntry(std::string(descriptor),
-      BenchmarkRecords::RecordGroup{descriptor, {}});
+      BenchmarkRecords::RecordGroup{descriptor, {}, {}});
 }
 
 // ____________________________________________________________________________

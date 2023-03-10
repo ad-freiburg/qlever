@@ -14,6 +14,7 @@
 #include <util/HashMap.h>
 #include <util/Exception.h>
 #include "../benchmark/util/HashMapWithInsertionOrder.h"
+#include "../benchmark/BenchmarkMetadata.h"
 
 /*
  * Used for measuring the time needed for the execution of a function. It also
@@ -29,18 +30,20 @@ class BenchmarkRecords {
       std::string descriptor_; // Needed, because without it, nobody could tell,
                               // which time belongs to which benchmark.
       float measuredTime_; // The measured time in seconds.
+      BenchmarkMetadata metadata_;
 
-    // JSON (d)serialization for all the created structures in BenchmarkRecords.
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkRecords::RecordEntry, descriptor_, measuredTime_)
+      // JSON (d)serialization for all the created structures in BenchmarkRecords.
+      NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkRecords::RecordEntry, descriptor_, measuredTime_, metadata_)
     };
 
     // Describes a group of measured functions.
     struct RecordGroup {
       std::string descriptor_; // Needed for identifying groups.
       std::vector<RecordEntry> entries_;
+      BenchmarkMetadata metadata_;
 
-    // JSON (d)serialization for all the created structures in BenchmarkRecords.
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkRecords::RecordGroup, descriptor_, entries_)
+      // JSON (d)serialization for all the created structures in BenchmarkRecords.
+      NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkRecords::RecordGroup, descriptor_, entries_, metadata_)
     };
     
     // Describes a table of measured functions.
@@ -54,6 +57,7 @@ class BenchmarkRecords {
       // seconds, or a string.
       using EntryType = std::variant<std::monostate, float, std::string>;
       std::vector<std::vector<EntryType>> entries_;
+      BenchmarkMetadata metadata_;
 
       RecordTable(const std::string& pDescriptor, 
           const std::vector<std::string>& pRowNames,
@@ -64,13 +68,14 @@ class BenchmarkRecords {
               std::vector<EntryType>(pColumnNames.size())) {}
 
       // JSON (d)serialization for all the created structures in BenchmarkRecords.
-      NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkRecords::RecordTable, descriptor_, rowNames_, columnNames_, entries_)
+      NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkRecords::RecordTable, descriptor_, rowNames_, columnNames_, entries_, metadata_)
     };
 
   private:
 
-    // A vector of all single functions measured.
-    std::vector<RecordEntry> singleMeasurements_;
+    // A hash map of all the created single measurements. For faster access.
+    // The key for a record entry is it's descriptor.
+    HashMapWithInsertionOrder<std::string, RecordEntry> singleMeasurements_;
 
     // A hash map of all the created RecordGroups. For faster access.
     // The key for a RecordGroup is it's descriptor.
@@ -145,13 +150,13 @@ class BenchmarkRecords {
       requires std::invocable<Function>
     void addSingleMeasurement(const std::string& descriptor,
         const Function& functionToMeasure) {
-      singleMeasurements_.push_back(RecordEntry{descriptor,
-          measureTimeOfFunction(functionToMeasure)});
+      singleMeasurements_.addEntry(std::string(descriptor),
+          RecordEntry{descriptor, measureTimeOfFunction(functionToMeasure), {}});
     }
 
 
     // Returns a const view of all single recorded times.
-    const std::vector<RecordEntry>& getSingleMeasurements() const;
+    const std::vector<RecordEntry> getSingleMeasurements() const;
 
     /*
      * @brief Creates an empty group, which can
@@ -183,7 +188,7 @@ class BenchmarkRecords {
         // Get the entry of the hash map and add to it.
         auto& groupEntry = recordGroups_.getReferenceToValue(groupDescriptor);
         groupEntry.entries_.push_back(
-            RecordEntry{descriptor, measureTimeOfFunction(functionToMeasure)});
+            RecordEntry{descriptor, measureTimeOfFunction(functionToMeasure), {}});
       } catch(KeyIsntRegisteredException const&) {
         // The exception INSIDE the object, do not know, what they object is
         // called, but that information is helpful for the exception. So we
