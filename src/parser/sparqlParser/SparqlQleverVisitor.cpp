@@ -579,10 +579,7 @@ LimitOffsetClause Visitor::visit(Parser::LimitOffsetClausesContext* ctx) {
 
 // ____________________________________________________________________________________
 vector<SparqlFilter> Visitor::visit(Parser::HavingClauseContext* ctx) {
-  auto expressions = visitVector(ctx->havingCondition());
-  return ad_utility::transform(std::move(expressions), [](auto&& expression) {
-    return SparqlFilter{std::move(expression)};
-  });
+  return visitVector(ctx->havingCondition());
 }
 
 // ____________________________________________________________________________________

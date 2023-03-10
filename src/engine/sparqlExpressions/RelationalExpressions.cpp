@@ -30,7 +30,7 @@ constexpr auto getObjectOfValueTypeHelper(T&& t) {
   if constexpr (ad_utility::similarToInstantiation<T, VectorWithMemoryLimit>) {
     return std::move(t[0]);
   } else {
-    return std::move(t);
+    return AD_FWD(t);
   }
 }
 }  // namespace detail

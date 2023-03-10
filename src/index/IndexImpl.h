@@ -331,8 +331,7 @@ class IndexImpl {
       case Datatype::VocabIndex: {
         auto result = _vocab.indexToOptionalString(id.getVocabIndex());
         if (result.has_value() && result.value().starts_with(VALUE_PREFIX)) {
-          result.value() =
-              ad_utility::convertIndexWordToValueLiteral(result.value());
+          result = ad_utility::convertIndexWordToValueLiteral(result.value());
         }
         return result;
       }

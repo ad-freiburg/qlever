@@ -12,14 +12,15 @@
 #include <string>
 #include <vector>
 
-#include "../util/File.h"
-#include "../util/Generator.h"
-#include "../util/Iterators.h"
-#include "../util/Serializer/FileSerializer.h"
-#include "../util/Serializer/SerializeVector.h"
-#include "../util/TypeTraits.h"
-#include "../util/UninitializedAllocator.h"
-#include "Id.h"
+#include "global/Id.h"
+#include "util/ExceptionHandling.h"
+#include "util/File.h"
+#include "util/Generator.h"
+#include "util/Iterators.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/Serializer/SerializeVector.h"
+#include "util/TypeTraits.h"
+#include "util/UninitializedAllocator.h"
 
 typedef uint32_t PatternID;
 
@@ -250,7 +251,10 @@ struct CompactStringVectorWriter {
 
   ~CompactStringVectorWriter() {
     if (!_finished) {
-      finish();
+      ad_utility::terminateIfThrows(
+          [this]() { finish(); },
+          "Finishing the underlying File of a `CompactStringVectorWriter` "
+          "during destruction failed");
     }
   }
 
