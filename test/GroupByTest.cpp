@@ -5,6 +5,7 @@
 #include <cstdio>
 
 #include "./IndexTestHelpers.h"
+#include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
@@ -12,6 +13,7 @@
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "gtest/gtest.h"
 #include "index/ConstantsIndexBuilding.h"
 
@@ -672,6 +674,71 @@ TEST_F(GroupBySpecialCount, computeGroupByForFullIndexScan) {
   testWithBothInterfaces(false, true);
 
   // TODO<joka921> Add a test with only one column
+}
+
+namespace {
+// A helper function to set up expression trees in the following test.
+template <typename ExprT>
+auto make = [](auto&&... args) -> SparqlExpression::Ptr {
+  return std::make_unique<ExprT>(AD_FWD(args)...);
+};
+}  // namespace
+TEST(GroupBy, GroupedVariableInExpressions) {
+  parsedQuery::SparqlValues input;
+  using TC = TripleComponent;
+  /*
+   Test the following expression.
+   Note: The values are chosen s.t. the results are all integers. Otherwise we
+   would get into trouble with floating point comparisons. A check with a
+   similar query but with non-integral inputs and results can be found in the
+   E2E tests.
+
+   SELECT (AVG(?a + ?b) as ?x) (?a + COUNT(?b) AS ?y) WHERE {
+       VALUES (?x ?y) { (1.0 3.0) (1.0 7.0) (5.0 4.0)}
+   } GROUP BY ?x
+   */
+
+  Variable varA = Variable{"?a"};
+  Variable varB = Variable{"?b"};
+
+  input._variables = std::vector{varA, varB};
+  input._values.push_back(std::vector{TC(1.0), TC(3.0)});
+  input._values.push_back(std::vector{TC(1.0), TC(7.0)});
+  input._values.push_back(std::vector{TC(5.0), TC(4.0)});
+  auto values = ad_utility::makeExecutionTree<Values>(
+      ad_utility::testing::getQec(), input);
+
+  using namespace sparqlExpression;
+  // Setup `(AVG(?a + ?b) as ?x)`
+  auto sum = make<AddExpression>(make<VariableExpression>(varA),
+                                 make<VariableExpression>(varB));
+  auto avg = make<AvgExpression>(false, std::move(sum));
+  auto alias1 = Alias{SparqlExpressionPimpl{std::move(avg), "avg(?a + ?b"},
+                      Variable{"?x"}};
+
+  // Setup `(?a + COUNT(?b) AS ?y);
+  auto expr2 = make<AddExpression>(
+      make<VariableExpression>(varA),
+      make<CountExpression>(false, make<VariableExpression>(varB)));
+  auto alias2 = Alias{SparqlExpressionPimpl{std::move(expr2), "?a + COUNT(?b)"},
+                      Variable{"?y"}};
+
+  // Set up and evaluate the GROUP BY clause.
+  GroupBy groupBy{ad_utility::testing::getQec(),
+                  {Variable{"?a"}},
+                  {std::move(alias1), std::move(alias2)},
+                  std::move(values)};
+  auto result = groupBy.getResult();
+  const auto& table = result->_idTable;
+
+  auto d = DoubleId;
+  VariableToColumnMap expectedVariables{
+      {Variable{"?a"}, 0}, {Variable{"?x"}, 1}, {Variable{"?y"}, 2}};
+  EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVariables));
+  auto expected =
+      makeIdTableFromIdVector({{d(1), d(6), d(3)}, {d(5), d(9), d(6)}});
+  EXPECT_EQ(table, expected);
 }
 
 }  // namespace

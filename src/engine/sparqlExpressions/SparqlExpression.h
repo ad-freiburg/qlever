@@ -170,6 +170,10 @@ class SparqlExpression {
   // called by all child classes that are aggregate expressions.
   virtual void setIsInsideAggregate() final {
     isInsideAggregate_ = true;
+    // Note: `child` is a `unique_ptr` to a non-const object. So we could
+    // technically use `const auto&` in the following loop, but this would be
+    // misleading (while the pointer is used in a `const` manner, the pointee is
+    // not.
     for (auto& child : children()) {
       child->setIsInsideAggregate();
     }
