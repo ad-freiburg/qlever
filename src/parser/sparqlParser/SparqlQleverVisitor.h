@@ -455,9 +455,6 @@ class SparqlQleverVisitor {
       const std::string& iri, std::vector<ExpressionPtr> argList,
       antlr4::ParserRuleContext*);
 
-  // TODO: Remove addVisibleVariable(const string&) when all Types use the
-  //  strong type `Variable`.
-  void addVisibleVariable(string var);
   void addVisibleVariable(Variable var);
 
   [[noreturn]] void throwCollectionsAndBlankNodePathsNotSupported(auto* ctx) {
