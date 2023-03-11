@@ -535,7 +535,7 @@ TEST(SparqlParser, GroupCondition) {
 TEST(SparqlParser, FunctionCall) {
   auto expectFunctionCall = ExpectCompleteParse<&Parser::functionCall>{};
   auto expectFunctionCallFails = ExpectParseFails<&Parser::functionCall>{};
-  
+
   // Correct function calls. Check that the parser picks the correct expression.
   expectFunctionCall(
       "<http://www.opengis.net/def/function/geosparql/latitude>(?a)",
