@@ -535,6 +535,8 @@ TEST(SparqlParser, GroupCondition) {
 TEST(SparqlParser, FunctionCall) {
   auto expectFunctionCall = ExpectCompleteParse<&Parser::functionCall>{};
   auto expectFunctionCallFails = ExpectParseFails<&Parser::functionCall>{};
+  
+  // Correct function calls. Check that the parser picks the correct expression.
   expectFunctionCall(
       "<http://www.opengis.net/def/function/geosparql/latitude>(?a)",
       m::ExpressionWithType<sparqlExpression::LatitudeExpression>());
@@ -545,10 +547,10 @@ TEST(SparqlParser, FunctionCall) {
       "<http://www.opengis.net/def/function/geosparql/distance>(?a, ?b)",
       m::ExpressionWithType<sparqlExpression::DistExpression>());
 
-  // Wrong number of arguments
+  // Wrong number of arguments.
   expectFunctionCallFails(
       "<http://www.opengis.net/def/function/geosparql/distance>(?a)");
-  // Unknown function with the `geof:` prefix
+  // Unknown function with the `geof:` prefix.
   expectFunctionCallFails(
       "<http://www.opengis.net/def/function/geosparql/notExisting>()");
   // Prefix for which no function is known.
