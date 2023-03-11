@@ -110,7 +110,7 @@ class SparqlQleverVisitor {
   void visit(Parser::PrologueContext* ctx);
 
   // ___________________________________________________________________________
-  [[noreturn]] void visit(Parser::BaseDeclContext* ctx);
+  [[noreturn]] static void visit(Parser::BaseDeclContext* ctx);
 
   // ___________________________________________________________________________
   void visit(Parser::PrefixDeclContext* ctx);
@@ -135,17 +135,17 @@ class SparqlQleverVisitor {
   // will always throw an exception because the corresponding feature is not
   // (yet) supported by QLever. If they have return types other than void this
   // is to make the usage of abstractions like `visitAlternative` easier.
-  [[noreturn]] ParsedQuery visit(Parser::DescribeQueryContext* ctx);
+  [[noreturn]] static ParsedQuery visit(Parser::DescribeQueryContext* ctx);
 
-  [[noreturn]] ParsedQuery visit(Parser::AskQueryContext* ctx);
+  [[noreturn]] static ParsedQuery visit(Parser::AskQueryContext* ctx);
 
-  [[noreturn]] void visit(Parser::DatasetClauseContext* ctx);
+  [[noreturn]] static void visit(Parser::DatasetClauseContext* ctx);
 
-  [[noreturn]] void visit(Parser::DefaultGraphClauseContext* ctx);
+  [[noreturn]] static void visit(Parser::DefaultGraphClauseContext* ctx);
 
-  [[noreturn]] void visit(Parser::NamedGraphClauseContext* ctx);
+  [[noreturn]] static void visit(Parser::NamedGraphClauseContext* ctx);
 
-  [[noreturn]] void visit(Parser::SourceSelectorContext* ctx);
+  [[noreturn]] static void visit(Parser::SourceSelectorContext* ctx);
 
   [[nodiscard]] PatternAndVisibleVariables visit(
       Parser::WhereClauseContext* ctx);
@@ -166,11 +166,11 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] LimitOffsetClause visit(Parser::LimitOffsetClausesContext* ctx);
 
-  [[nodiscard]] uint64_t visit(Parser::LimitClauseContext* ctx);
+  [[nodiscard]] static uint64_t visit(Parser::LimitClauseContext* ctx);
 
-  [[nodiscard]] uint64_t visit(Parser::OffsetClauseContext* ctx);
+  [[nodiscard]] static uint64_t visit(Parser::OffsetClauseContext* ctx);
 
-  [[nodiscard]] uint64_t visit(Parser::TextLimitClauseContext* ctx);
+  [[nodiscard]] static uint64_t visit(Parser::TextLimitClauseContext* ctx);
 
   [[nodiscard]] std::optional<parsedQuery::Values> visit(
       Parser::ValuesClauseContext* ctx);
@@ -187,7 +187,7 @@ class SparqlQleverVisitor {
       Parser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx);
 
   [[nodiscard]] parsedQuery::BasicGraphPattern visit(
-      Parser::TriplesBlockContext* ctx);
+      Parser::TriplesBlockContext* graphTerm);
 
   // Filter clauses are no independent graph patterns themselves, but their
   // scope is always the complete graph pattern enclosing them.
@@ -197,7 +197,7 @@ class SparqlQleverVisitor {
   [[nodiscard]] parsedQuery::GraphPatternOperation visit(
       Parser::OptionalGraphPatternContext* ctx);
 
-  [[noreturn]] parsedQuery::GraphPatternOperation visit(
+  [[noreturn]] static parsedQuery::GraphPatternOperation visit(
       Parser::GraphGraphPatternContext* ctx);
 
   [[nodiscard]] parsedQuery::Service visit(
@@ -236,7 +236,7 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] vector<ExpressionPtr> visit(Parser::ArgListContext* ctx);
 
-  [[noreturn]] void visit(Parser::ExpressionListContext* ctx);
+  [[noreturn]] static void visit(Parser::ExpressionListContext* ctx);
 
   [[nodiscard]] std::optional<parsedQuery::ConstructClause> visit(
       Parser::ConstructTemplateContext* ctx);
@@ -265,7 +265,7 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] PropertyPath visit(Parser::VerbPathContext* ctx);
 
-  [[nodiscard]] Variable visit(Parser::VerbSimpleContext* ctx);
+  [[nodiscard]] static Variable visit(Parser::VerbSimpleContext* ctx);
 
   [[nodiscard]] PathTuples visit(Parser::TupleWithoutPathContext* ctx);
 
@@ -288,17 +288,19 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] PropertyPath visit(Parser::PathEltOrInverseContext* ctx);
 
-  [[noreturn]] void visit(Parser::PathModContext* ctx);
+  [[noreturn]] static void visit(Parser::PathModContext* ctx);
 
   [[nodiscard]] PropertyPath visit(Parser::PathPrimaryContext* ctx);
 
-  [[noreturn]] PropertyPath visit(Parser::PathNegatedPropertySetContext*);
+  [[noreturn]] static PropertyPath visit(
+      Parser::PathNegatedPropertySetContext*);
 
-  [[noreturn]] PropertyPath visit(Parser::PathOneInPropertySetContext* ctx);
+  [[noreturn]] static PropertyPath visit(
+      Parser::PathOneInPropertySetContext* ctx);
 
   /// Note that in the SPARQL grammar the INTEGER rule refers to positive
   /// integers without an explicit sign.
-  [[nodiscard]] uint64_t visit(Parser::IntegerContext* ctx);
+  [[nodiscard]] static uint64_t visit(Parser::IntegerContext* ctx);
 
   [[nodiscard]] Node visit(Parser::TriplesNodeContext* ctx);
 
@@ -320,7 +322,7 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] VarOrTerm visit(Parser::VarOrIriContext* ctx);
 
-  [[nodiscard]] Variable visit(Parser::VarContext* ctx);
+  [[nodiscard]] static Variable visit(Parser::VarContext* ctx);
 
   [[nodiscard]] GraphTerm visit(Parser::GraphTermContext* ctx);
 
@@ -384,13 +386,13 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] ExpressionPtr visit(Parser::LangExpressionContext* ctx);
 
-  [[noreturn]] void visit(Parser::SubstringExpressionContext* ctx);
+  [[noreturn]] static void visit(Parser::SubstringExpressionContext* ctx);
 
-  [[noreturn]] void visit(Parser::StrReplaceExpressionContext* ctx);
+  [[noreturn]] static void visit(Parser::StrReplaceExpressionContext* ctx);
 
-  [[noreturn]] void visit(Parser::ExistsFuncContext* ctx);
+  [[noreturn]] static void visit(Parser::ExistsFuncContext* ctx);
 
-  [[noreturn]] void visit(Parser::NotExistsFuncContext* ctx);
+  [[noreturn]] static void visit(Parser::NotExistsFuncContext* ctx);
 
   [[nodiscard]] ExpressionPtr visit(Parser::AggregateContext* ctx);
 
@@ -400,19 +402,22 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] IntOrDouble visit(Parser::NumericLiteralContext* ctx);
 
-  [[nodiscard]] IntOrDouble visit(Parser::NumericLiteralUnsignedContext* ctx);
+  [[nodiscard]] static IntOrDouble visit(
+      Parser::NumericLiteralUnsignedContext* ctx);
 
-  [[nodiscard]] IntOrDouble visit(Parser::NumericLiteralPositiveContext* ctx);
+  [[nodiscard]] static IntOrDouble visit(
+      Parser::NumericLiteralPositiveContext* ctx);
 
-  [[nodiscard]] IntOrDouble visit(Parser::NumericLiteralNegativeContext* ctx);
+  [[nodiscard]] static IntOrDouble visit(
+      Parser::NumericLiteralNegativeContext* ctx);
 
-  [[nodiscard]] bool visit(Parser::BooleanLiteralContext* ctx);
+  [[nodiscard]] static bool visit(Parser::BooleanLiteralContext* ctx);
 
-  [[nodiscard]] string visit(Parser::StringContext* ctx);
+  [[nodiscard]] static string visit(Parser::StringContext* ctx);
 
   [[nodiscard]] string visit(Parser::IriContext* ctx);
 
-  [[nodiscard]] string visit(Parser::IrirefContext* ctx);
+  [[nodiscard]] static string visit(Parser::IrirefContext* ctx);
 
   [[nodiscard]] string visit(Parser::PrefixedNameContext* ctx);
 
@@ -442,7 +447,7 @@ class SparqlQleverVisitor {
   // using such parts for further processing (like the body of a SERVICE query,
   // which is not valid SPARQL anymore when you remove all whitespace).
   static std::string getOriginalInputForContext(
-      antlr4::ParserRuleContext* context);
+      const antlr4::ParserRuleContext* context);
 
   // Process an IRI function call. This is used in both `visitFunctionCall` and
   // `visitIriOrFunction`.
@@ -450,9 +455,6 @@ class SparqlQleverVisitor {
       const std::string& iri, std::vector<ExpressionPtr> argList,
       antlr4::ParserRuleContext*);
 
-  // TODO: Remove addVisibleVariable(const string&) when all Types use the
-  //  strong type `Variable`.
-  void addVisibleVariable(string var);
   void addVisibleVariable(Variable var);
 
   [[noreturn]] void throwCollectionsAndBlankNodePathsNotSupported(auto* ctx) {
