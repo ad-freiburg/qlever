@@ -31,5 +31,8 @@ class BenchmarkMetadata{
     }
 
     // JSON (d)serialization.
+    // TODO This works, but `"data_":null` looks a bit ugly. Is there a way,
+    // to skip the `data_` and just have the content of `data_` as the
+    // serialied form of this class?
     NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkMetadata, data_)
 };
