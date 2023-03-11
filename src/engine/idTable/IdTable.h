@@ -272,6 +272,9 @@ class IdTable {
   auto getAllocator() const { return allocator_; }
 
   // Get access to a single element specified by the row and the column.
+  // Note: Since this class has a column-based layout, the usage of the
+  // column-based interface (`getColumn` and `getColumns`) should be preferred
+  // for performance reason whenever possible.
   // TODO<joka921, C++23> Use the multidimensional subscript operator.
   // TODO<joka921, C++23> Use explicit object parameters ("deducing this").
   T& operator()(size_t row, size_t column) requires(!isView) {
@@ -281,6 +284,16 @@ class IdTable {
   }
   const T& operator()(size_t row, size_t column) const {
     return data()[column][row];
+  }
+
+  // Get safe access to a single element specified by the row and the column.
+  // Throw if the row or the column is out of bounds. See the note for
+  // `operator()` above.
+  T& at(size_t row, size_t column) requires(!isView) {
+    return data().at(column).at(row);
+  }
+  const T& at(size_t row, size_t column) const {
+    return data().at(column).at(row);
   }
 
   // Get a reference to the `i`-th row. The returned proxy objects can be

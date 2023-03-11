@@ -154,7 +154,7 @@ size_t GroupBy::getCostEstimate() {
 template <int OUT_WIDTH>
 void GroupBy::processGroup(
     const GroupBy::Aggregate& aggregate,
-    sparqlExpression::EvaluationContext evaluationContext, size_t blockStart,
+    sparqlExpression::EvaluationContext& evaluationContext, size_t blockStart,
     size_t blockEnd, IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
     size_t resultColumn, ResultTable* outTable,
     ResultTable::ResultType* resultType) const {
@@ -226,6 +226,9 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), columnMap, inTable->_idTable,
       getExecutionContext()->getAllocator(), outTable->localVocabNonConst());
+
+  evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
+      _groupByVariables.begin(), _groupByVariables.end()};
 
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
     result.emplace_back();

@@ -37,6 +37,23 @@ class LiteralExpression : public SparqlExpression {
         return _value;
       }
       return id;
+    } else if constexpr (std::is_same_v<Variable, T>) {
+      // If a variable is grouped, then we know that it always has the same
+      // value and can treat it as a constant. This is not possible however when
+      // we are inside an aggregate, because for example `SUM(?variable)` must
+      // still compute the sum over the whole group.
+      if (context->_groupedVariables.contains(_value) && !isInsideAggregate()) {
+        auto column = context->getColumnIndexForVariable(_value);
+        const auto& table = context->_inputTable;
+        auto constantValue = table.at(context->_beginIndex, column);
+        assert((std::ranges::all_of(
+            table.begin() + context->_beginIndex,
+            table.begin() + context->_endIndex,
+            [&](const auto& row) { return row[column] == constantValue; })));
+        return constantValue;
+      } else {
+        return _value;
+      }
     } else {
       return _value;
     }
