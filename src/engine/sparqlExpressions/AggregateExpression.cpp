@@ -15,7 +15,9 @@ AggregateExpression<AggregateOperation, FinalOp>::AggregateExpression(
     bool distinct, Ptr&& child, AggregateOperation aggregateOp)
     : _distinct(distinct),
       _child{std::move(child)},
-      _aggregateOp{std::move(aggregateOp)} {}
+      _aggregateOp{std::move(aggregateOp)} {
+  setIsInsideAggregate();
+}
 
 // __________________________________________________________________________
 template <typename AggregateOperation, typename FinalOperation>
