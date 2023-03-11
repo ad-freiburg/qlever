@@ -43,7 +43,8 @@ void addGroupsToStringstream(std::stringstream* stringStream,
   addCategoryTitelToStringstream(stringStream, "Group benchmarks");
   for (const auto& group: recordGroups) {
     (*stringStream) << "\n\nGroup '" << group.descriptor_ << "':";
-    addVectorOfRecordEntryToStringstream(stringStream, group.entries_, "\t");
+    addVectorOfRecordEntryToStringstream(stringStream,
+        group.entries_.getAllValues(), "\t");
   }
 }
 

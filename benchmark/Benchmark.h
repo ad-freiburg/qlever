@@ -39,7 +39,8 @@ class BenchmarkRecords {
     // Describes a group of measured functions.
     struct RecordGroup {
       std::string descriptor_; // Needed for identifying groups.
-      std::vector<RecordEntry> entries_;
+      // When accessing members of the group, we need an identifier.
+      HashMapWithInsertionOrder<std::string, RecordEntry> entries_;
       BenchmarkMetadata metadata_;
 
       // JSON (d)serialization for all the created structures in BenchmarkRecords.
@@ -187,7 +188,7 @@ class BenchmarkRecords {
       try {
         // Get the entry of the hash map and add to it.
         auto& groupEntry = recordGroups_.getReferenceToValue(groupDescriptor);
-        groupEntry.entries_.push_back(
+        groupEntry.entries_.addEntry(std::string(descriptor),
             RecordEntry{descriptor, measureTimeOfFunction(functionToMeasure), {}});
       } catch(KeyIsntRegisteredException const&) {
         // The exception INSIDE the object, do not know, what they object is
