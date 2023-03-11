@@ -288,6 +288,18 @@ class BenchmarkRecords {
      * @brief Returns a vector of all the tables.
      */
     const std::vector<RecordTable> getTables() const;
+
+    // For access to the metadata of measurements. So that people can set them,
+    // add to them, whatever.
+    BenchmarkMetadata& getReferenceToMetadataOfSingleMeasurment(
+        const std::string& descriptor);
+    BenchmarkMetadata& getReferenceToMetadataOfGroup(
+        const std::string& descriptor);
+    BenchmarkMetadata& getReferenceToMetadataOfGroupMember(
+        const std::string& groupDescriptor,
+        const std::string& groupMemberDescriptor);
+    BenchmarkMetadata& getReferenceToMetadataOfTable(
+        const std::string& descriptor);
 };
 
 /*

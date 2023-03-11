@@ -80,3 +80,49 @@ auto BenchmarkRecords::getTables() const -> const std::vector<RecordTable> {
   return recordTables_.getAllValues();
 }
 
+/*
+ * @brief Returns the metadata object of an object held by one
+ *  of the HashMapWithInsertionOrder in the BenchmarkRecords class.
+ *  A local helper function to minimize code duplication.
+ *
+ * @tparam Value What kind of object does the HashMapWithInsertionOrder hold?
+ *
+ * @param hMap Where to look for the object with the metadata object.
+ * @param key The identifier for the hMap.
+ */
+template<typename Value>
+BenchmarkMetadata& getReferenceToMetadataOfObjectInHashMapWithInsertionOrder(
+    HashMapWithInsertionOrder<std::string, Value>& hMap,
+    const std::string& key){
+  return hMap.getReferenceToValue(key).metadata_;
+}
+
+// ____________________________________________________________________________
+BenchmarkMetadata& BenchmarkRecords::getReferenceToMetadataOfSingleMeasurment(
+        const std::string& descriptor) {
+  return getReferenceToMetadataOfObjectInHashMapWithInsertionOrder(
+      singleMeasurements_, descriptor);
+}
+
+// ____________________________________________________________________________
+BenchmarkMetadata& BenchmarkRecords::getReferenceToMetadataOfGroup(
+        const std::string& descriptor) {
+  return getReferenceToMetadataOfObjectInHashMapWithInsertionOrder(
+      recordGroups_, descriptor);
+}
+
+// ____________________________________________________________________________
+BenchmarkMetadata& BenchmarkRecords::getReferenceToMetadataOfGroupMember(
+        const std::string& groupDescriptor,
+        const std::string& groupMemberDescriptor){
+  return getReferenceToMetadataOfObjectInHashMapWithInsertionOrder(
+      recordGroups_.getReferenceToValue(groupDescriptor).entries_,
+      groupMemberDescriptor);
+}
+
+// ____________________________________________________________________________
+BenchmarkMetadata& BenchmarkRecords::getReferenceToMetadataOfTable(
+        const std::string& descriptor) {
+  return getReferenceToMetadataOfObjectInHashMapWithInsertionOrder(
+      recordTables_, descriptor);
+}

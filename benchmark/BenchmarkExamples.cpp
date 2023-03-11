@@ -17,7 +17,7 @@ void BM_SingeMeasurements(BenchmarkRecords* records) {
 
   // Measuring functions.
   records->addSingleMeasurement("Exponentiate once", [&](){exponentiate(number);});
-  records->addSingleMeasurement("Recursivly exponentiate ten times", [&](){
+  records->addSingleMeasurement("Recursivly exponentiate multiple times", [&](){
         size_t to_exponentiate = number;
         for (size_t i = 0; i < 10'000'000'000; i++) {
           to_exponentiate = exponentiate(to_exponentiate);
@@ -26,6 +26,11 @@ void BM_SingeMeasurements(BenchmarkRecords* records) {
         // under the `DoNotOptimize(...)` of google benchmark.
         std::cout << to_exponentiate;
       });
+
+  // Adding some basic metadata.
+  records->getReferenceToMetadataOfSingleMeasurment(
+      "Recursivly exponentiate multiple times").addKeyValuePair(
+        "Amount of exponentiations", 10'000'000'000);
 }
 
 // Groups
@@ -61,6 +66,25 @@ void BM_Groups(BenchmarkRecords* records) {
       [&](){loopMultiply(42,69);});
   records->addToExistingGroup("loopMultiply", "10775*24502",
       [&](){loopMultiply(10775, 24502);});
+
+  // Adding some metadata.
+  records->getReferenceToMetadataOfGroup("loopAdd").addKeyValuePair(
+      "Operator", '+');
+  records->getReferenceToMetadataOfGroupMember("loopAdd",
+      "1+1").addKeyValuePair("Result", 2);
+  records->getReferenceToMetadataOfGroupMember("loopAdd",
+      "42+69").addKeyValuePair("Result", 42+69);
+  records->getReferenceToMetadataOfGroupMember("loopAdd",
+      "10775+24502").addKeyValuePair("Result", 10775+24502);
+
+  records->getReferenceToMetadataOfGroup("loopMultiply").addKeyValuePair(
+      "Operator", '*');
+  records->getReferenceToMetadataOfGroupMember("loopMultiply",
+      "1*1").addKeyValuePair("Result", 1);
+  records->getReferenceToMetadataOfGroupMember("loopMultiply",
+      "42*69").addKeyValuePair("Result", 42*69);
+  records->getReferenceToMetadataOfGroupMember("loopMultiply",
+      "10775*24502").addKeyValuePair("Result", 10775*24502);
 }
 
 // Tables
@@ -80,7 +104,7 @@ void BM_Tables(BenchmarkRecords* records) {
   records->addTable("Adding exponents", {"2^10", "2^11", "Values written out"},
       {"2^10", "2^11"});
 
-  // Measuers for calculating the exponents.
+  // Measuere the calculating of the exponents.
   for (int i = 0; i < 5; i++) {
     records->addToExistingTable("Exponents with the given basis", 0, i,
         [&](){exponentiateNTimes(2,i);});
@@ -116,6 +140,10 @@ void BM_Tables(BenchmarkRecords* records) {
       std::string{"1024+1024 and 1024+2048"});
   records->setEntryOfExistingTable("Adding exponents", 2, 1,
       std::string{"1024+2048 and 2048+2048"});
+
+  // Adding some metadata.
+  records->getReferenceToMetadataOfTable("Adding exponents").addKeyValuePair(
+      "Manually set fields", "Row 2");
 }
 
 BenchmarkRegister temp{{BM_SingeMeasurements, BM_Groups, BM_Tables}};
