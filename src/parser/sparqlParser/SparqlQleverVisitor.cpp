@@ -39,7 +39,7 @@ using Parser = SparqlAutomaticParser;
 
 // _____________________________________________________________________________
 std::string Visitor::getOriginalInputForContext(
-    antlr4::ParserRuleContext* context) {
+    const antlr4::ParserRuleContext* context) {
   const auto& fullInput = context->getStart()->getInputStream()->toString();
   size_t posBeg = context->getStart()->getStartIndex();
   size_t posEnd = context->getStop()->getStopIndex();
@@ -72,8 +72,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
 
   constexpr static std::string_view geofPrefix =
       "<http://www.opengis.net/def/function/geosparql/";
-  std::string_view iriView = iri;
-  if (iriView.starts_with(geofPrefix)) {
+  if (std::string_view iriView = iri; iriView.starts_with(geofPrefix)) {
     iriView.remove_prefix(geofPrefix.size());
     AD_CONTRACT_CHECK(iriView.ends_with('>'));
     iriView.remove_suffix(1);
@@ -92,10 +91,6 @@ ExpressionPtr Visitor::processIriFunctionCall(
     }
   }
   reportNotSupported(ctx, "Function \"" + iri + "\" is");
-}
-
-void Visitor::addVisibleVariable(string var) {
-  addVisibleVariable(Variable{std::move(var)});
 }
 
 void Visitor::addVisibleVariable(Variable var) {
@@ -342,8 +337,8 @@ Visitor::OperationsAndFilters Visitor::visit(
   if (ctx->triplesBlock()) {
     ops.emplace_back(visit(ctx->triplesBlock()));
   }
-  auto others = visitVector(ctx->graphPatternNotTriplesAndMaybeTriples());
-  for (auto& [graphPattern, triples] : others) {
+  for (auto& [graphPattern, triples] :
+       visitVector(ctx->graphPatternNotTriplesAndMaybeTriples())) {
     std::visit(ad_utility::OverloadCallOperator{filter, op},
                std::move(graphPattern));
 
@@ -368,33 +363,42 @@ Visitor::OperationOrFilterAndMaybeTriples Visitor::visit(
 
 // ____________________________________________________________________________________
 BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
-  auto iri = [](const Iri& iri) -> TripleComponent { return iri.toSparql(); };
-  auto blankNode = [](const BlankNode& blankNode) -> TripleComponent {
+  auto visitIri = [](const Iri& iri) -> TripleComponent {
+    return iri.toSparql();
+  };
+  auto visitBlankNode = [](const BlankNode& blankNode) -> TripleComponent {
     return blankNode.toSparql();
   };
-  auto literal = [](const Literal& literal) {
+  auto visitLiteral = [](const Literal& literal) {
     return TurtleStringParser<TokenizerCtre>::parseTripleObject(
         literal.toSparql());
   };
-  auto graphTerm = [&iri, &blankNode, &literal](const GraphTerm& term) {
-    return term.visit(
-        ad_utility::OverloadCallOperator{iri, blankNode, literal});
+  auto visitGraphTerm = [&visitIri, &visitBlankNode,
+                         &visitLiteral](const GraphTerm& graphTerm) {
+    return graphTerm.visit(ad_utility::OverloadCallOperator{
+        visitIri, visitBlankNode, visitLiteral});
   };
-  auto varTriple = [](const Variable& var) { return TripleComponent{var}; };
-  auto varOrTerm = [&varTriple, &graphTerm](VarOrTerm varOrTerm) {
+  auto varToTripleComponent = [](const Variable& var) {
+    return TripleComponent{var};
+  };
+  auto visitVarOrTerm = [&varToTripleComponent,
+                         &visitGraphTerm](const VarOrTerm& varOrTerm) {
     return varOrTerm.visit(
-        ad_utility::OverloadCallOperator{varTriple, graphTerm});
+        ad_utility::OverloadCallOperator{varToTripleComponent, visitGraphTerm});
   };
 
-  auto varPath = [](const Variable& var) {
+  auto varToPropertyPath = [](const Variable& var) {
     return PropertyPath::fromVariable(var);
   };
-  auto path = [](const PropertyPath& path) { return path; };
-  auto varOrPath = [&varPath,
-                    &path](ad_utility::sparql_types::VarOrPath varOrPath) {
-    return std::visit(ad_utility::OverloadCallOperator{varPath, path},
-                      std::move(varOrPath));
-  };
+  auto propertyPathIdentity = [](const PropertyPath& path) { return path; };
+  auto visitVarOrPath =
+      [&varToPropertyPath, &propertyPathIdentity](
+          const ad_utility::sparql_types::VarOrPath& varOrPath) {
+        return std::visit(
+            ad_utility::OverloadCallOperator{varToPropertyPath,
+                                             propertyPathIdentity},
+            varOrPath);
+      };
 
   auto registerIfVariable = [this](const auto& variant) {
     if (holds_alternative<Variable>(variant)) {
@@ -403,15 +407,14 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
   };
 
   auto convertAndRegisterTriple =
-      [&varOrTerm, &varOrPath,
-       &registerIfVariable](TripleWithPropertyPath&& triple) -> SparqlTriple {
+      [&visitVarOrTerm, &visitVarOrPath, &registerIfVariable](
+          const TripleWithPropertyPath& triple) -> SparqlTriple {
     registerIfVariable(triple.subject_);
     registerIfVariable(triple.predicate_);
     registerIfVariable(triple.object_);
 
-    return {varOrTerm(std::move(triple.subject_)),
-            varOrPath(std::move(triple.predicate_)),
-            varOrTerm(std::move(triple.object_))};
+    return {visitVarOrTerm(triple.subject_), visitVarOrPath(triple.predicate_),
+            visitVarOrTerm(triple.object_)};
   };
 
   BasicGraphPattern triples = {ad_utility::transform(
@@ -469,8 +472,10 @@ parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // when computing the result for this operation.
   std::vector<Variable> visibleVariablesSoFar = std::move(visibleVariables_);
   parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
+  // Note: The `visit` call in the line above has filled the `visibleVariables_`
+  // member with all the variables visible inside the graph pattern.
   std::vector<Variable> visibleVariablesServiceQuery =
-      ad_utility::removeDuplicates(std::move(visibleVariables_));
+      ad_utility::removeDuplicates(visibleVariables_);
   visibleVariables_ = std::move(visibleVariablesSoFar);
   visibleVariables_.insert(visibleVariables_.end(),
                            visibleVariablesServiceQuery.begin(),
@@ -533,10 +538,7 @@ LimitOffsetClause Visitor::visit(Parser::LimitOffsetClausesContext* ctx) {
 
 // ____________________________________________________________________________________
 vector<SparqlFilter> Visitor::visit(Parser::HavingClauseContext* ctx) {
-  auto expressions = visitVector(ctx->havingCondition());
-  return ad_utility::transform(std::move(expressions), [](auto&& expression) {
-    return SparqlFilter{std::move(expression)};
-  });
+  return visitVector(ctx->havingCondition());
 }
 
 // ____________________________________________________________________________________
@@ -1570,7 +1572,7 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   // the number of arguments like for `processIriFunctionCall`, since the number
   // of arguments is fixed by the grammar and we wouldn't even get here if the
   // number were wrong. Hence only the `AD_CONTRACT_CHECK`s.
-  AD_CONTRACT_CHECK(ctx->children.size() >= 1);
+  AD_CONTRACT_CHECK(!ctx->children.empty());
   auto functionName = ad_utility::getLowercase(ctx->children[0]->getText());
   auto argList = visitVector(ctx->expression());
   using namespace sparqlExpression;

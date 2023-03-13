@@ -36,6 +36,7 @@ class GroupConcatExpression : public SparqlExpression {
     using AGG_EXP = detail::AggregateExpression<OP>;
     _actualExpression = std::make_unique<AGG_EXP>(distinct, std::move(child),
                                                   std::move(groupConcatOp));
+    setIsInsideAggregate();
   }
 
   // __________________________________________________________________________

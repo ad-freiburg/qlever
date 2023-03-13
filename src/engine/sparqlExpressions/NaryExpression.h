@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <concepts>
 #include <cstdlib>
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -39,7 +40,16 @@ requires(isOperation<NaryOperation>) class NaryExpression
   static constexpr size_t N = NaryOperation::N;
   using Children = std::array<SparqlExpression::Ptr, N>;
 
-  NaryExpression(Children&& children);
+  // Construct from an array of `N` child expressions.
+  explicit NaryExpression(Children&& children);
+
+  // Construct from `N` child expressions. Each of the children must have a type
+  // `std::unique_ptr<SubclassOfSparqlExpression>`.
+  explicit NaryExpression(
+      std::convertible_to<
+          SparqlExpression::
+              Ptr> auto... children) requires(sizeof...(children) == N)
+      : NaryExpression{Children{std::move(children)...}} {}
 
  public:
   // __________________________________________________________________________
@@ -77,8 +87,8 @@ requires(isOperation<NaryOperation>) class NaryExpression
         (... && isConstantResult<Operands>);
 
     // The generator for the result of the operation.
-    auto resultGenerator = applyOperation(targetSize, naryOperation, context,
-                                          std::move(operands)...);
+    auto resultGenerator =
+        applyOperation(targetSize, naryOperation, context, AD_FWD(operands)...);
 
     // Compute the result.
     using ResultType = typename decltype(resultGenerator)::value_type;

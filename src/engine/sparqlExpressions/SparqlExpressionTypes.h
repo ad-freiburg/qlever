@@ -124,6 +124,11 @@ struct EvaluationContext {
   /// The local vocabulary of the input.
   const LocalVocab& _localVocab;
 
+  // If the expression is part of a GROUP BY then this member has to be set to
+  // the variables by which the input is grouped. These variables will then be
+  // treated as constants.
+  ad_utility::HashSet<Variable> _groupedVariables;
+
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(
       const QueryExecutionContext& qec,

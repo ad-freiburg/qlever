@@ -172,7 +172,6 @@ float HasPredicateScan::getMultiplicity(size_t col) {
         return _subtree->getMultiplicity(_subtreeJoinColumn) *
                getIndex().getAvgNumDistinctSubjectsPerPredicate();
       }
-      break;
   }
   return 1;
 }

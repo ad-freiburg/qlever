@@ -1412,4 +1412,17 @@ queries:
       - contains_row: [ "<Al_Gore>", 1.87]
       - contains_row: [ "<Granville_Woods>", 2.1336]
 
+  - query: grouped-variables-and-aggregates
+    type: no-text
+    sparql: |
+      SELECT (AVG(?x + ?y) as ?avg) (?x + COUNT(?y) AS ?cnt) WHERE {
+        VALUES (?x ?y) { (0.5 1.5) (0.5 3.5) (1.2 2.8)}
+      } GROUP BY ?x
+    checks:
+      - num_cols: 2
+      - num_rows : 2
+      - selected: [ "?avg", "?cnt"]
+      - contains_row: [ 3.0, 2.5]
+      - contains_row: [ 4.0, 2.2]
+
 

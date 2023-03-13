@@ -10,7 +10,7 @@
 #include <thread>
 
 #include "./Generator.h"
-#include "./OnDestruction.h"
+#include "./OnDestructionDontThrowDuringStackUnwinding.h"
 #include "./ThreadSafeQueue.h"
 
 namespace ad_utility::streams {
@@ -43,17 +43,18 @@ cppcoro::generator<typename Range::value_type> runStreamAsync(
     queue.signalLastElementWasPushed();
   }};
 
-  ad_utility::OnDestruction cleanup{[&] {
-    queue.disablePush();
-    thread.join();
-    // Only throw an exception if no stack unwinding is in progress
-    // to avoid crashes because of multiple active exceptions.
-    if (!std::uncaught_exceptions() && exception) {
-      // This exception will only be thrown once all the values that were
-      // pushed to the queue before the exception occurred.
-      std::rethrow_exception(exception);
-    }
-  }};
+  // Only rethrow an exception from the `thread` if no exception occured in this
+  // thread to avoid crashes because of multiple active exceptions.
+  auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+      [&queue, &thread, &exception] {
+        queue.disablePush();
+        thread.join();
+        // This exception will only be thrown once all the values that were
+        // pushed to the queue before the exception occurred.
+        if (exception) {
+          std::rethrow_exception(exception);
+        }
+      });
 
   while (std::optional<value_type> value = queue.pop()) {
     co_yield value.value();

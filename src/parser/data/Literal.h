@@ -24,11 +24,13 @@ class Literal {
   }
 
  public:
-  template <ad_utility::Streamable T>
-  explicit Literal(T&& t)
+  template <typename T>
+  requires(
+      ad_utility::Streamable<T> &&
+      !std::same_as<std::remove_cvref_t<T>, Literal>) explicit Literal(T&& t)
       : _stringRepresentation(toString(std::forward<T>(t))) {}
 
-  Literal(std::variant<int64_t, double> t) {
+  explicit Literal(std::variant<int64_t, double> t) {
     std::visit([this](auto& x) { _stringRepresentation = toString(x); }, t);
   }
 

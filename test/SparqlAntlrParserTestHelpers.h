@@ -328,6 +328,16 @@ inline auto Expression = [](const std::string& descriptor)
 };
 }
 
+// A matcher that tests whether a `SparqlExpression::Ptr` (a `unique_ptr`)
+// actually (via dynamic cast) stores an element of type `ExpressionT`.
+// `ExpressionT` must be a subclass of `SparqlExpression`.
+template <typename ExpressionT>
+inline auto ExpressionWithType =
+    []() -> Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
+  return testing::Pointer(
+      testing::WhenDynamicCastTo<const ExpressionT*>(testing::NotNull()));
+};
+
 namespace detail {
 template <typename T>
 auto GraphPatternOperation =
