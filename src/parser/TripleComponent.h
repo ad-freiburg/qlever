@@ -37,16 +37,47 @@ class TripleComponent {
   };
 
   struct Literal {
-    RdfEscaping::NormalizedRDFString normalizedContent_;
-    // TODO<joka921> This should also be a strong type
-    std::string langtagOrDatatype_;
+   private:
+    std::string content_;
+    size_t startOfDatatype_ = 0;
+
+   public:
+    explicit Literal(const RdfEscaping::NormalizedRDFString& literal,
+                     std::string_view langtagOrDatatype = "") {
+      [[maybe_unused]] const auto& l = literal.get();
+      assert(l.starts_with('"') && l.ends_with('"') && l.size() >= 2);
+      // TODO<joka921> there also should be a strong type for the
+      // `langtagOrDatatype`.
+      AD_CONTRACT_CHECK(langtagOrDatatype.empty() ||
+                        langtagOrDatatype.starts_with('@') ||
+                        langtagOrDatatype.starts_with("^^"));
+      content_ = absl::StrCat(l, langtagOrDatatype);
+      startOfDatatype_ = l.size();
+    }
+
+    // Get the literal in the form in which it is stored.
+    const std::string& rawContent() const { return content_; }
+
+    // TODO<C++23> use the `deducing this` feature.
+    std::string& rawContent() { return content_; }
+
+    RdfEscaping::NormalizedRDFStringView normalizedLiteralContent() const {
+      return RdfEscaping::NormalizedRDFStringView::make(
+          std::string_view{content_}.substr(0, startOfDatatype_));
+    }
+
+    std::string_view datatypeOrLangtag() const {
+      return std::string_view{content_}.substr(startOfDatatype_);
+    }
 
     bool operator==(const Literal&) const = default;
     template <typename H>
     friend H AbslHashValue(H h, [[maybe_unused]] const Literal& l) {
-      return H::combine(std::move(h), l.normalizedContent_.get(),
-                        l.langtagOrDatatype_);
+      return H::combine(std::move(h), l.content_);
     }
+
+    // The number of characters enclosed in the quotation marks.
+    size_t sizeOfLiteralContent() const { return startOfDatatype_ - 2; }
   };
 
  private:
@@ -181,6 +212,7 @@ class TripleComponent {
   }
 
   const Literal& getLiteral() const { return std::get<Literal>(_variant); }
+  Literal& getLiteral() { return std::get<Literal>(_variant); }
 
   /// Convert to an RDF literal. `std::strings` will be emitted directly,
   /// `int64_t` is converted to a `xsd:integer` literal, and a `double` is
@@ -190,8 +222,7 @@ class TripleComponent {
     if (isString()) {
       return getString();
     } else if (isLiteral()) {
-      return absl::StrCat(getLiteral().normalizedContent_.get(),
-                          getLiteral().langtagOrDatatype_);
+      return getLiteral().rawContent();
     } else if (isDouble()) {
       return absl::StrCat("\"", getDouble(), "\"^^<", XSD_DOUBLE_TYPE, ">");
     } else {
@@ -230,19 +261,11 @@ class TripleComponent {
   template <typename Vocabulary>
   [[nodiscard]] std::optional<Id> toValueId(
       const Vocabulary& vocabulary) const {
-    if (isString()) {
+    if (isString() || isLiteral()) {
       VocabIndex idx;
-      if (vocabulary.getId(getString(), &idx)) {
-        return Id::makeFromVocabIndex(idx);
-      } else {
-        return std::nullopt;
-      }
-    } else if (isLiteral()) {
-      // TODO<joka921> There is a lot of code duplication.
-      // Additionally the vocabulary should also work on
-      // a strong type that stores normalized literals of some sort.
-      VocabIndex idx;
-      if (vocabulary.getId(toRdfLiteral(), &idx)) {
+      const std::string& content =
+          isString() ? getString() : getLiteral().rawContent();
+      if (vocabulary.getId(content, &idx)) {
         return Id::makeFromVocabIndex(idx);
       } else {
         return std::nullopt;
@@ -273,10 +296,9 @@ class TripleComponent {
             localVocab.getIndexAndAddIfNotContained(std::move(newWord)));
       } else {
         AD_CORRECTNESS_CHECK(isLiteral());
-        // TODO<joka921> Get rid of the copy (see TODO below)
-        std::string newWord = toRdfLiteral();
-        id = Id::makeFromLocalVocabIndex(
-            localVocab.getIndexAndAddIfNotContained(std::move(newWord)));
+        id =
+            Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+                std::move(getLiteral().rawContent())));
       }
 
       // TODO<joka921> The langtag and the string should definitely be stored

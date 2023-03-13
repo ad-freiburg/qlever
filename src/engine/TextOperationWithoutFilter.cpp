@@ -18,14 +18,19 @@ size_t TextOperationWithoutFilter::getResultWidth() const {
 
 // _____________________________________________________________________________
 TextOperationWithoutFilter::TextOperationWithoutFilter(
-    QueryExecutionContext* qec, const string& words,
+    QueryExecutionContext* qec, const TripleComponent::Literal& words,
     const SetOfVariables& variables, const Variable& cvar, size_t textLimit)
     : Operation(qec),
-      _words(words),
+      _words(words.normalizedLiteralContent().get()),
       _variables(variables),
       _cvar(cvar),
       _textLimit(textLimit),
-      _sizeEstimate(std::numeric_limits<size_t>::max()) {}
+      _sizeEstimate(std::numeric_limits<size_t>::max()) {
+  // Strip the quotation marks around the `_words` member
+  AD_CONTRACT_CHECK(_words.starts_with('"') && _words.ends_with('"') &&
+                    _words.size() >= 2);
+  _words = _words.substr(1, _words.size() - 2);
+}
 
 // _____________________________________________________________________________
 VariableToColumnMap TextOperationWithoutFilter::computeVariableToColumnMap()

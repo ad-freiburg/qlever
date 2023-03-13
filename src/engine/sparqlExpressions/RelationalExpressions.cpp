@@ -407,8 +407,9 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
     // TODO<joka921> Check that the language string doesn't contain a datatype
     // etc.
     // TODO<joka921> Is this even allowed by the grammar?
-    return LangFilterData{varPtr->variable(),
-                          langPtr->value().normalizedContent_.get()};
+    return LangFilterData{
+        varPtr->variable(),
+        std::string{langPtr->value().normalizedLiteralContent().get()}};
   };
 
   const auto& child1 = children_[0];

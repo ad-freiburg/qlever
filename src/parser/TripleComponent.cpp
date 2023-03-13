@@ -16,8 +16,7 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
         } else if constexpr (std::is_same_v<T, TripleComponent::UNDEF>) {
           stream << "UNDEF";
         } else if constexpr (std::is_same_v<T, TripleComponent::Literal>) {
-          stream << absl::StrCat(value.normalizedContent_.get(),
-                                 value.langtagOrDatatype_);
+          stream << value.rawContent();
         } else {
           stream << value;
         }

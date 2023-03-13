@@ -371,8 +371,8 @@ bool TurtleParser<T>::rdfLiteral() {
   if (!stringParse()) {
     return false;
   }
-  RdfEscaping::NormalizedRDFString literalString =
-      _lastParseResult.getLiteral().normalizedContent_;
+  RdfEscaping::NormalizedRDFString literalString{
+      _lastParseResult.getLiteral().normalizedLiteralContent()};
   if (langtag()) {
     _lastParseResult =
         TripleComponent::Literal{literalString, _lastParseResult.getString()};
@@ -420,7 +420,7 @@ bool TurtleParser<T>::booleanLiteral() {
   if (parseTerminal<TurtleTokenId::True>() ||
       parseTerminal<TurtleTokenId::False>()) {
     _lastParseResult =
-        TripleComponent::Literal{RdfEscaping::NormalizedRDFString::make(
+        TripleComponent::Literal{RdfEscaping::normalizeRDFLiteral(
                                      '"' + _lastParseResult.getString() + "\""),
                                  absl::StrCat("^^<", XSD_BOOLEAN_TYPE, ">")};
     return true;

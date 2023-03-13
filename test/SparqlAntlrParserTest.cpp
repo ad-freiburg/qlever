@@ -27,8 +27,9 @@ namespace m = matchers;
 using Parser = SparqlAutomaticParser;
 using namespace std::literals;
 using Var = Variable;
-auto lit = [](const std::string& s) {
-  return TripleComponent::Literal{RdfEscaping::NormalizedRDFString::make(s), ""};
+auto lit = [](const std::string& s, std::string_view langtagOrDatatype = "") {
+  return TripleComponent::Literal{RdfEscaping::normalizeRDFLiteral(s),
+                                  std::string{langtagOrDatatype}};
 };
 
 template <auto F>
@@ -737,7 +738,7 @@ TEST(SparqlParser, triplesSameSubjectPath) {
   expectTriples(
       "<foo> <QLever-internal-function/contains-word> \"Berlin Freiburg\"",
       {{Iri("<foo>"), PathIri("<QLever-internal-function/contains-word>"),
-        Literal("berlin freiburg")}});
+        Literal("\"Berlin Freiburg\"")}});
 }
 
 TEST(SparqlParser, SelectClause) {
@@ -848,10 +849,11 @@ TEST(SparqlParser, GroupGraphPattern) {
       "ql:contains-entity ?x . ?c ql:contains-word \"coca* abuse\"}",
       m::GraphPattern(
           false, {"(?x != ?y)"},
-          m::Triples({{Var{"?x"}, "<is-a>", "<Actor>"},
-                      {Var{"?y"}, "<is-a>", "<Actor>"},
-                      {Var{"?c"}, CONTAINS_ENTITY_PREDICATE, Var{"?x"}},
-                      {Var{"?c"}, CONTAINS_WORD_PREDICATE, "coca* abuse"}})));
+          m::Triples(
+              {{Var{"?x"}, "<is-a>", "<Actor>"},
+               {Var{"?y"}, "<is-a>", "<Actor>"},
+               {Var{"?c"}, CONTAINS_ENTITY_PREDICATE, Var{"?x"}},
+               {Var{"?c"}, CONTAINS_WORD_PREDICATE, lit("\"coca* abuse\"")}})));
 
   // Scoping of variables in combination with a BIND clause.
   expectGraphPattern(

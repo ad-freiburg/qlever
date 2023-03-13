@@ -40,7 +40,7 @@ class QueryPlanner {
             _triple(t),
             _variables(),
             _cvar(std::nullopt),
-            _wordPart() {
+            _wordPart(std::nullopt) {
         if (isVariable(t._s)) {
           _variables.insert(t._s.getVariable());
         }
@@ -52,7 +52,8 @@ class QueryPlanner {
         }
       }
 
-      Node(size_t id, const Variable& cvar, const string& wordPart,
+      Node(size_t id, const Variable& cvar,
+           const TripleComponent::Literal& wordPart,
            const vector<SparqlTriple>& trips)
           : _id(id),
             _triple(cvar,
@@ -97,7 +98,7 @@ class QueryPlanner {
         // together?
         if (n._cvar.has_value()) {
           out << " cvar " << n._cvar.value().name() << " wordPart "
-              << n._wordPart;
+              << n._wordPart.value();
         }
         return out;
       }
@@ -106,11 +107,12 @@ class QueryPlanner {
       SparqlTriple _triple;
       ad_utility::HashSet<Variable> _variables;
       std::optional<Variable> _cvar = std::nullopt;
-      string _wordPart;
+      std::optional<TripleComponent::Literal> _wordPart = std::nullopt;
     };
 
     // Allows for manually building triple graphs for testing
-    TripleGraph(const std::vector<std::pair<Node, std::vector<size_t>>>& init);
+    explicit TripleGraph(
+        const std::vector<std::pair<Node, std::vector<size_t>>>& init);
 
     // Checks for id and order independent equality
     bool isSimilar(const TripleGraph& other) const;

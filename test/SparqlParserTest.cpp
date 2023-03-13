@@ -18,7 +18,7 @@ namespace p = parsedQuery;
 using Var = Variable;
 namespace {
 auto lit = [](const std::string& s, std::string_view langtagOrDatatype = "") {
-  return TripleComponent::Literal{RdfEscaping::NormalizedRDFString::make(s),
+  return TripleComponent::Literal{RdfEscaping::normalizeRDFLiteral(s),
                                   std::string{langtagOrDatatype}};
 };
 }
@@ -161,8 +161,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(Var{"?x"}, triples[2]._o);
     ASSERT_EQ(Var{"?c"}, triples[3]._s);
     ASSERT_EQ(CONTAINS_WORD_PREDICATE, triples[3]._p._iri);
-    // TODO<joka921> Should be valid literals.
-    ASSERT_EQ("coca* abuse", triples[3]._o);
+    ASSERT_EQ(lit("\"coca* abuse\""), triples[3]._o);
   }
 
   {

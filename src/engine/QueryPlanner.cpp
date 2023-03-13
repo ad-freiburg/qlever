@@ -1160,9 +1160,9 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   SubtreePlan plan(_qec);
   plan._idsOfIncludedNodes |= (size_t(1) << node._id);
   auto& tree = *plan._qet;
-  AD_CONTRACT_CHECK(node._wordPart.size() > 0);
+  AD_CONTRACT_CHECK(node._wordPart.has_value());
   auto textOp = std::make_shared<TextOperationWithoutFilter>(
-      _qec, node._wordPart, node._variables, node._cvar.value());
+      _qec, node._wordPart.value(), node._variables, node._cvar.value());
   tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER,
                     textOp);
   return plan;
@@ -1284,7 +1284,7 @@ string QueryPlanner::TripleGraph::asString() const {
     } else {
       os << i << " {TextOP for "
          << _nodeMap.find(i)->second->_cvar.value().name() << ", wordPart: \""
-         << _nodeMap.find(i)->second->_wordPart << "\"} : (";
+         << _nodeMap.find(i)->second->_wordPart.value() << "\"} : (";
     }
 
     for (size_t j = 0; j < _adjLists[i].size(); ++j) {
@@ -1487,12 +1487,10 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
 
 // _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
-  return _nodeMap.count(i) > 0 && (_nodeMap.find(i)->second->_triple._p._iri ==
-                                       CONTAINS_ENTITY_PREDICATE ||
-                                   _nodeMap.find(i)->second->_triple._p._iri ==
-                                       CONTAINS_WORD_PREDICATE ||
-                                   _nodeMap.find(i)->second->_triple._p._iri ==
-                                       INTERNAL_TEXT_MATCH_PREDICATE);
+  return _nodeMap.count(i) > 0 &&
+         (_nodeMap.find(i)->second->_triple._p._iri ==
+              CONTAINS_ENTITY_PREDICATE ||
+          _nodeMap.find(i)->second->_triple._p._iri == CONTAINS_WORD_PREDICATE);
 }
 
 // _____________________________________________________________________________
@@ -1697,12 +1695,20 @@ QueryPlanner::TripleGraph& QueryPlanner::TripleGraph::operator=(
 QueryPlanner::TripleGraph::TripleGraph()
     : _adjLists(), _nodeMap(), _nodeStorage() {}
 
+// ___________________________________________________________________________
+namespace {
+string stripAndLowercaseKeywordLiteral(std::string_view lit) {
+  if (lit.size() > 2 && lit[0] == '"' && lit.back() == '"') {
+    auto stripped = lit.substr(1, lit.size() - 2);
+    return ad_utility::getLowercaseUtf8(stripped);
+  }
+  return std::string{lit};
+}
+}  // namespace
+
 // _____________________________________________________________________________
 void QueryPlanner::TripleGraph::collapseTextCliques() {
   // TODO: Could use more refactoring.
-  // In Earlier versions there were no ql:contains... predicates but
-  // a symmetric <in-text> predicate. Therefore some parts are still more
-  // complex than need be.
 
   // Create a map from context var to triples it occurs in (the cliques).
   ad_utility::HashMap<Variable, vector<size_t>> cvarsToTextNodes(
@@ -1718,32 +1724,34 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
   vector<std::set<size_t>> tnAdjSetsToOldIds;
   for (auto& cvarsToTextNode : cvarsToTextNodes) {
     auto& cvar = cvarsToTextNode.first;
-    string wordPart;
+    string wordPart = "\"";
     vector<SparqlTriple> trips;
-    tnAdjSetsToOldIds.push_back(std::set<size_t>());
+    tnAdjSetsToOldIds.emplace_back();
     auto& adjNodes = tnAdjSetsToOldIds.back();
     for (auto nid : cvarsToTextNode.second) {
       removedNodeIds[nid] = id;
       adjNodes.insert(_adjLists[nid].begin(), _adjLists[nid].end());
       auto& triple = _nodeMap[nid]->_triple;
       trips.push_back(triple);
-      if (triple._s == cvar && triple._o.isString() &&
+      // TODO<joka921> Add sanity checks that there can be no IRIs etc.
+      // (This error should be reported to the user).
+      if (triple._s == cvar && triple._o.isLiteral() &&
           !triple._o.isVariable()) {
-        if (!wordPart.empty()) {
+        if (wordPart.size() > 1) {
           wordPart += " ";
         }
-        wordPart += triple._o.getString();
-      }
-      // TODO<joka921> Figure out what is going on here... The subject and the
-      // object of a triple are being combined into a string as it seems.
-      if (triple._o == cvar && !isVariable(triple._s)) {
-        if (!wordPart.empty()) {
-          wordPart += " ";
-        }
-        wordPart += triple._s.toString();
+        wordPart += stripAndLowercaseKeywordLiteral(
+            triple._o.getLiteral().normalizedLiteralContent().get());
       }
     }
-    textNodes.emplace_back(Node(id++, cvar, wordPart, trips));
+    wordPart += "\"";
+    textNodes.emplace_back(
+        id++, cvar,
+        TripleComponent::Literal{
+            RdfEscaping::NormalizedRDFString::
+                makeFromPreviouslyNormalizedContent(wordPart),
+            ""},
+        trips);
     assert(tnAdjSetsToOldIds.size() == id);
   }
 

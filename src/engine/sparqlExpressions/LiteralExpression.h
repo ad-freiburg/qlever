@@ -30,8 +30,7 @@ class LiteralExpression : public SparqlExpression {
       [[maybe_unused]] EvaluationContext* context) const override {
     if constexpr (std::is_same_v<TripleComponent::Literal, T>) {
       // TODO<joka921> This also has to be refactored.
-      std::string actualValue = absl::StrCat(_value.normalizedContent_.get(),
-                                             _value.langtagOrDatatype_);
+      std::string actualValue = _value.rawContent();
       Id id;
       bool idWasFound = context->_qec.getIndex().getId(actualValue, &id);
       if (!idWasFound) {
@@ -87,8 +86,7 @@ class LiteralExpression : public SparqlExpression {
     } else if constexpr (std::is_same_v<T, ValueId>) {
       return absl::StrCat("#valueId ", _value.getBits(), "#");
     } else if constexpr (std::is_same_v<T, TripleComponent::Literal>) {
-      return absl::StrCat(_value.normalizedContent_.get(),
-                          _value.langtagOrDatatype_);
+      return absl::StrCat("#literal: ", _value.rawContent());
     } else {
       return {std::to_string(_value)};
     }

@@ -16,7 +16,7 @@ using ad_utility::source_location;
 
 namespace {
 auto lit = [](const std::string& s, std::string_view langtagOrDatatype = "") {
-  return TripleComponent::Literal{RdfEscaping::NormalizedRDFString::make(s),
+  return TripleComponent::Literal{RdfEscaping::normalizeRDFLiteral(s),
                                   std::string{langtagOrDatatype}};
 };
 

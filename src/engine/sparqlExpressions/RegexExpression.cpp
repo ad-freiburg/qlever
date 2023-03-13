@@ -97,8 +97,8 @@ RegexExpression::RegexExpression(
   std::string originalRegexString;
   if (auto regexPtr =
           dynamic_cast<const StringLiteralExpression*>(regex.get())) {
-    originalRegexString = regexPtr->value().normalizedContent_.get();
-    if (!regexPtr->value().langtagOrDatatype_.empty()) {
+    originalRegexString = regexPtr->value().normalizedLiteralContent().get();
+    if (!regexPtr->value().datatypeOrLangtag().empty()) {
       throw std::runtime_error(
           "The second argument to the REGEX function (which contains the "
           "regular expression) must not contain a language tag or a datatype");
@@ -113,8 +113,8 @@ RegexExpression::RegexExpression(
     if (auto flagsPtr = dynamic_cast<const StringLiteralExpression*>(
             optionalFlags.value().get())) {
       std::string_view originalFlags =
-          flagsPtr->value().normalizedContent_.get();
-      if (!flagsPtr->value().langtagOrDatatype_.empty()) {
+          flagsPtr->value().normalizedLiteralContent().get();
+      if (!flagsPtr->value().datatypeOrLangtag().empty()) {
         throw std::runtime_error(
             "The third argument to the REGEX function (which contains optional "
             "flags to configure the evaluation) must not contain a language "

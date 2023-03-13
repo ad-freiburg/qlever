@@ -19,7 +19,7 @@ using namespace ad_utility::testing;
 
 namespace {
 auto lit = [](const std::string& s, std::string_view langtagOrDatatype = "") {
-  return TripleComponent::Literal{RdfEscaping::NormalizedRDFString::make(s),
+  return TripleComponent::Literal{RdfEscaping::normalizeRDFLiteral(s),
                                   std::string{langtagOrDatatype}};
 };
 
@@ -341,7 +341,7 @@ TEST(IndexTest, TripleToInternalRepresentation) {
     index.getNonConstVocabForTesting().initializeExternalizePrefixes(
         std::vector{"<subj"s});
     TurtleTriple turtleTriple{"<subject>", "<predicate>",
-                              lit("\"literal\"@fr")};
+                              lit("\"literal\"", "@fr")};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
     ASSERT_EQ(res._langtag, "fr");

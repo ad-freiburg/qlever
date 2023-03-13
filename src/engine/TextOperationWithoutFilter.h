@@ -18,7 +18,7 @@ class TextOperationWithoutFilter : public Operation {
   using SetOfVariables = ad_utility::HashSet<Variable>;
 
  private:
-  const string _words;
+  string _words;
   const SetOfVariables _variables;
   const Variable _cvar;
 
@@ -28,7 +28,8 @@ class TextOperationWithoutFilter : public Operation {
   vector<float> _multiplicities;
 
  public:
-  TextOperationWithoutFilter(QueryExecutionContext* qec, const string& words,
+  TextOperationWithoutFilter(QueryExecutionContext* qec,
+                             const TripleComponent::Literal& words,
                              const SetOfVariables& variables,
                              const Variable& cvar, size_t textLimit = 1);
 

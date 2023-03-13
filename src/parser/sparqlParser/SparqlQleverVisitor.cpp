@@ -103,48 +103,11 @@ void Visitor::addVisibleVariable(Variable var) {
 }
 
 // ___________________________________________________________________________
-namespace {
-string stripAndLowercaseKeywordLiteral(std::string_view lit) {
-  if (lit.size() > 2 && lit[0] == '"' && lit.back() == '"') {
-    auto stripped = lit.substr(1, lit.size() - 2);
-    return ad_utility::getLowercaseUtf8(stripped);
-  }
-  return std::string{lit};
-}
-
-// ___________________________________________________________________________
-template <typename Current, typename... Others>
-constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
-    const auto& arg) {
-  if constexpr (sizeof...(Others) > 0) {
-    if constexpr (ad_utility::isSimilar<decltype(arg), Current>) {
-      if (const auto ptr = std::get_if<ad_utility::First<Others...>>(&arg)) {
-        return unwrapVariant<Others...>(*ptr);
-      }
-      return nullptr;
-    } else {
-      return unwrapVariant<Others...>(arg);
-    }
-  } else {
-    return &arg;
-  }
-}
-}  // namespace
-
-// ___________________________________________________________________________
-PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
+PathTuples joinPredicateAndObject(const VarOrPath& predicate,
+                                  ObjectList objectList) {
   PathTuples tuples;
+  tuples.reserve(objectList.first.size());
   for (auto& object : objectList.first) {
-    // TODO The fulltext index should perform the splitting of its keywords,
-    //  and not the SparqlParser.
-    if (PropertyPath* path = std::get_if<PropertyPath>(&predicate)) {
-      if (path->asString() == CONTAINS_WORD_PREDICATE) {
-        if (const Literal* literal =
-                unwrapVariant<VarOrTerm, GraphTerm, Literal>(object)) {
-          object = Literal{stripAndLowercaseKeywordLiteral(literal->literal())};
-        }
-      }
-    }
     tuples.emplace_back(predicate, std::move(object));
   }
   return tuples;
@@ -410,17 +373,8 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
     return blankNode.toSparql();
   };
   auto literal = [](const Literal& literal) {
-    // Problem: ql:contains-word causes the " to be stripped.
-    // TODO: Move stripAndLowercaseKeywordLiteral out to this point or
-    //  rewrite the Turtle Parser s.t. this code can be integrated into the
-    //  visitor. In this case the turtle parser should output the
-    //  corresponding modell class.
-    try {
-      return TurtleStringParser<TokenizerCtre>::parseTripleObject(
-          literal.toSparql());
-    } catch (const TurtleStringParser<TokenizerCtre>::ParseException&) {
-      return TripleComponent{literal.toSparql()};
-    }
+    return TurtleStringParser<TokenizerCtre>::parseTripleObject(
+        literal.toSparql());
   };
   auto graphTerm = [&iri, &blankNode, &literal](const GraphTerm& term) {
     return term.visit(

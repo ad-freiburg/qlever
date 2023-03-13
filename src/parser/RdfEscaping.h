@@ -45,8 +45,41 @@ std::string unescapeNewlinesAndBackslashes(std::string_view literal);
  * This is NOT a valid RDF form of literals, but this format is only used
  * inside QLever.
  */
-using NormalizedRDFString =
-    ad_utility::TypedIndex<std::string, "NormalizedRDFString">;
+using NormalizedRDFStringView =
+    ad_utility::TypedIndex<std::string_view, "NormalizedRDFString">;
+
+class NormalizedRDFString
+    : private ad_utility::TypedIndex<std::string, "NormalizedRDFString"> {
+  using Base = ad_utility::TypedIndex<std::string, "NormalizedRDFString">;
+
+ public:
+  using Base::get;
+  operator NormalizedRDFStringView() const {
+    return NormalizedRDFStringView::make(std::string_view{get()});
+  }
+  explicit NormalizedRDFString(NormalizedRDFStringView sv) {
+    static_cast<Base&>(*this) = make(std::string{sv.get()});
+  }
+
+  NormalizedRDFString(const Base& b) : Base{b} {}
+  NormalizedRDFString(Base&& b) : Base{std::move(b)} {}
+
+  void append(const NormalizedRDFString& other) {
+    AD_CORRECTNESS_CHECK(get().ends_with('"') && other.get().starts_with('"'));
+    std::string& s = get();
+    s.reserve(s.size() + other.get().size() - 2);
+    s.insert(s.end() - 1, other.get().begin() + 1, other.get().end());
+  }
+
+  static NormalizedRDFString makeFromPreviouslyNormalizedContent(
+      std::string content) {
+    // TODO<joka921> Assert the preconditions.
+    return make(std::move(content));
+  }
+
+  friend NormalizedRDFString normalizeRDFLiteral(std::string_view);
+};
+
 NormalizedRDFString normalizeRDFLiteral(std::string_view origLiteral);
 
 /**
