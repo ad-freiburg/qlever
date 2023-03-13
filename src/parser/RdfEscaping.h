@@ -73,9 +73,12 @@ class NormalizedRDFString {
 
   // This function just copies the `content` that is passed into the underlying
   // storage. The user must ensure that the `content` indeed represents a valid
-  // normalized string. Therefore, it should be used almost never. Typically,
-  // you just call the free `normalizeRDFLiteral` function below to obtain a
-  // valid `NormalizeRDFString`.
+  // normalized string. Therefore, it should be used almost never. It is
+  // currently used as an implementation detail of the `normalizeRDFLiteral`
+  // function below and inside `QueryPlanner.cpp` to merge several triples with
+  // the `ql:contains_word` predicate. Typically, you just call the free
+  // `normalizeRDFLiteral` function below to obtain a valid
+  // `NormalizeRDFString`.
   static NormalizedRDFString makeFromPreviouslyNormalizedContent(
       std::string content) {
     AD_CONTRACT_CHECK(content.size() >= 2 && content.starts_with('"') &&

@@ -1,9 +1,6 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
-
-//
-// Created by johannes on 29.09.21.
-//
+//  Copyright 2021, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #ifndef QLEVER_LITERALEXPRESSION_H
 #define QLEVER_LITERALEXPRESSION_H
@@ -28,26 +25,20 @@ class LiteralExpression : public SparqlExpression {
   // Evaluating just returns the constant/literal value.
   ExpressionResult evaluate(
       [[maybe_unused]] EvaluationContext* context) const override {
+    // Common code for the `Literal` and `std::string` case.
+    auto getIdOrString = [&context](const std::string& s) -> ExpressionResult {
+      Id id;
+      bool idWasFound = context->_qec.getIndex().getId(s, &id);
+      if (!idWasFound) {
+        // no vocabulary entry found, just use it as a string constant.
+        return s;
+      }
+      return id;
+    };
     if constexpr (std::is_same_v<TripleComponent::Literal, T>) {
-      // TODO<joka921> This also has to be refactored.
-      std::string actualValue = _value.rawContent();
-      Id id;
-      bool idWasFound = context->_qec.getIndex().getId(actualValue, &id);
-      if (!idWasFound) {
-        // no vocabulary entry found, just use it as a string constant.
-        // TODO<joka921>:: emit a warning.
-        return actualValue;
-      }
-      return id;
+      return getIdOrString(_value.rawContent());
     } else if constexpr (std::is_same_v<string, T>) {
-      Id id;
-      bool idWasFound = context->_qec.getIndex().getId(_value, &id);
-      if (!idWasFound) {
-        // no vocabulary entry found, just use it as a string constant.
-        // TODO<joka921>:: emit a warning.
-        return _value;
-      }
-      return id;
+      return getIdOrString(_value);
     } else if constexpr (std::is_same_v<Variable, T>) {
       // If a variable is grouped, then we know that it always has the same
       // value and can treat it as a constant. This is not possible however when

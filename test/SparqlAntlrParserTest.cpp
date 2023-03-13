@@ -12,6 +12,7 @@
 
 #include "./SparqlExpressionTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
 #include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -27,10 +28,8 @@ namespace m = matchers;
 using Parser = SparqlAutomaticParser;
 using namespace std::literals;
 using Var = Variable;
-auto lit = [](const std::string& s, std::string_view langtagOrDatatype = "") {
-  return TripleComponent::Literal{RdfEscaping::normalizeRDFLiteral(s),
-                                  std::string{langtagOrDatatype}};
-};
+
+auto lit = ad_utility::testing::tripleComponentLiteral;
 
 template <auto F>
 auto parse =

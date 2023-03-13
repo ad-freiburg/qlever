@@ -8,6 +8,7 @@
 
 #include <variant>
 
+#include "./util/TripleComponentTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
 #include "global/Constants.h"
 #include "parser/SparqlParser.h"
@@ -17,10 +18,7 @@ namespace p = parsedQuery;
 
 using Var = Variable;
 namespace {
-auto lit = [](const std::string& s, std::string_view langtagOrDatatype = "") {
-  return TripleComponent::Literal{RdfEscaping::normalizeRDFLiteral(s),
-                                  std::string{langtagOrDatatype}};
-};
+auto lit = ad_utility::testing::tripleComponentLiteral;
 }
 
 TEST(ParserTest, testParse) {

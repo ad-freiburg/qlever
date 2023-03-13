@@ -7,6 +7,7 @@
 
 #include "./SparqlExpressionTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "gtest/gtest.h"
@@ -15,9 +16,7 @@ using namespace sparqlExpression;
 using ad_utility::source_location;
 
 namespace {
-auto lit = [](const std::string& s, std::string_view langtagOrDatatype = "") {
-  return TripleComponent::Literal{RdfEscaping::normalizeRDFLiteral(s),
-                                  std::string{langtagOrDatatype}};
+auto lit = ad_utility::testing::tripleComponentLiteral;
 };
 
 RegexExpression makeRegexExpression(

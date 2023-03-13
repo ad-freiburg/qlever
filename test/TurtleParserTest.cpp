@@ -2,12 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
-#include <gtest/gtest.h>
-#include <parser/TurtleParser.h>
-#include <util/Conversions.h>
-
 #include <iostream>
 #include <string>
+
+#include "./util/TripleComponentTestHelpers.h"
+#include "gtest/gtest.h"
+#include "parser/TurtleParser.h"
+#include "util/Conversions.h"
 
 using std::string;
 using namespace std::literals;
@@ -15,10 +16,7 @@ using Re2Parser = TurtleStringParser<Tokenizer>;
 using CtreParser = TurtleStringParser<TokenizerCtre>;
 
 namespace {
-auto lit = [](const std::string& s, std::string_view langtagOrDatatype = "") {
-  return TripleComponent::Literal{RdfEscaping::normalizeRDFLiteral(s),
-                                  std::string{langtagOrDatatype}};
-};
+auto lit = ad_utility::testing::tripleComponentLiteral;
 }
 
 // TODO<joka921>: Use the following abstractions and the alias `Parser` in all

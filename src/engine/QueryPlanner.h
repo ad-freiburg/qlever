@@ -34,21 +34,15 @@ class QueryPlanner {
     TripleGraph(const TripleGraph& other, vector<size_t> keepNodes);
 
     struct Node {
-      Node(size_t id, const SparqlTriple& t)
-          // TODO<joka921> should the `_cvar` be an `optional` or a `variant`.
-          : _id(id),
-            _triple(t),
-            _variables(),
-            _cvar(std::nullopt),
-            _wordPart(std::nullopt) {
-        if (isVariable(t._s)) {
-          _variables.insert(t._s.getVariable());
+      Node(size_t id, SparqlTriple t) : _id(id), _triple(std::move(t)) {
+        if (isVariable(_triple._s)) {
+          _variables.insert(_triple._s.getVariable());
         }
-        if (isVariable(t._p)) {
-          _variables.insert(Variable{t._p._iri});
+        if (isVariable(_triple._p)) {
+          _variables.insert(Variable{_triple._p._iri});
         }
-        if (isVariable(t._o)) {
-          _variables.insert(t._o.getVariable());
+        if (isVariable(_triple._o)) {
+          _variables.insert(_triple._o.getVariable());
         }
       }
 
@@ -60,7 +54,6 @@ class QueryPlanner {
                     PropertyPath(PropertyPath::Operation::IRI, 0,
                                  INTERNAL_TEXT_MATCH_PREDICATE, {}),
                     wordPart),
-            _variables(),
             _cvar(cvar),
             _wordPart(wordPart) {
         _variables.insert(cvar);

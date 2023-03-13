@@ -932,6 +932,7 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
   if (idIfNotString.has_value()) {
     resultTriple[2] = idIfNotString.value();
   } else {
+    // `toRdfLiteral` handles literals as well as IRIs correctly.
     resultTriple[2] = std::move(triple._object).toRdfLiteral();
   }
 

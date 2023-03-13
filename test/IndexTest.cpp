@@ -11,6 +11,7 @@
 #include "./IndexTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "global/Pattern.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
@@ -18,10 +19,7 @@
 using namespace ad_utility::testing;
 
 namespace {
-auto lit = [](const std::string& s, std::string_view langtagOrDatatype = "") {
-  return TripleComponent::Literal{RdfEscaping::normalizeRDFLiteral(s),
-                                  std::string{langtagOrDatatype}};
-};
+auto lit = ad_utility::testing::tripleComponentLiteral;
 
 // Return a lambda that runs a scan for two fixed elements `c0` and `c1`
 // on the `permutation` (e.g. a fixed P and S in the PSO permutation)

@@ -23,8 +23,8 @@ struct TypedIndex {
 
   constexpr TypedIndex() = default;
 
-  bool operator==(const TypedIndex&) const = default;
-  auto operator<=>(const TypedIndex&) const = default;
+  constexpr bool operator==(const TypedIndex&) const = default;
+  constexpr auto operator<=>(const TypedIndex&) const = default;
 
   static constexpr TypedIndex max() {
     return {std::numeric_limits<Type>::max()};

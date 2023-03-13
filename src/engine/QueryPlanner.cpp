@@ -1697,12 +1697,15 @@ QueryPlanner::TripleGraph::TripleGraph()
 
 // ___________________________________________________________________________
 namespace {
-string stripAndLowercaseKeywordLiteral(std::string_view lit) {
-  if (lit.size() > 2 && lit[0] == '"' && lit.back() == '"') {
-    auto stripped = lit.substr(1, lit.size() - 2);
-    return ad_utility::getLowercaseUtf8(stripped);
-  }
-  return std::string{lit};
+
+// Remove the quotation marks around an enquoted literal and convert it to lower
+// case. This is only used in the `collapseTextCliques` function.
+string stripAndLowercaseLiteral(std::string_view lit) {
+  AD_CORRECTNESS_CHECK(lit.size() >= 2 && lit.starts_with('"') &&
+                       lit.ends_with('"'));
+  lit.remove_prefix(1);
+  lit.remove_suffix(1);
+  return ad_utility::getLowercaseUtf8(lit);
 }
 }  // namespace
 
@@ -1733,14 +1736,13 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
       adjNodes.insert(_adjLists[nid].begin(), _adjLists[nid].end());
       auto& triple = _nodeMap[nid]->_triple;
       trips.push_back(triple);
-      // TODO<joka921> Add sanity checks that there can be no IRIs etc.
-      // (This error should be reported to the user).
-      if (triple._s == cvar && triple._o.isLiteral() &&
-          !triple._o.isVariable()) {
+      // TODO<joka921> I think the check "is the predicate ql:contains_word" is
+      // missing. Verify this.
+      if (triple._s == cvar && triple._o.isLiteral()) {
         if (wordPart.size() > 1) {
           wordPart += " ";
         }
-        wordPart += stripAndLowercaseKeywordLiteral(
+        wordPart += stripAndLowercaseLiteral(
             triple._o.getLiteral().normalizedLiteralContent().get());
       }
     }

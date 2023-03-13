@@ -53,7 +53,8 @@ class TripleComponent {
     explicit Literal(const RdfEscaping::NormalizedRDFString& literal,
                      std::string_view langtagOrDatatype = "") {
       const std::string& l = literal.get();
-      assert(l.starts_with('"') && l.ends_with('"') && l.size() >= 2);
+      AD_CORRECTNESS_CHECK(l.starts_with('"') && l.ends_with('"') &&
+                           l.size() >= 2);
       // TODO<joka921> there also should be a strong type for the
       // `langtagOrDatatype`.
       AD_CONTRACT_CHECK(langtagOrDatatype.empty() ||
@@ -64,11 +65,10 @@ class TripleComponent {
     }
 
     // Get the literal in the form in which it is stored (the normalized literal
-    // concatenated with the language tag/datatype). It is only allowed to read
-    // the content or to move it out. That way the `Literal` can never become
-    // invalid via the `rawContent` method.
+    // concatenated with the language tag or datatype). It is only allowed to
+    // read the content or to move it out. That way the `Literal` can never
+    // become invalid via the `rawContent` method.
     const std::string& rawContent() const& { return content_; }
-    // TODO<C++23> use the `deducing this` feature.
     std::string&& rawContent() && { return std::move(content_); }
 
     // Only get the normalized literal without the language tag or datatype.
@@ -85,7 +85,7 @@ class TripleComponent {
     // Equality and hashing are needed to store a `Literal` in a `HashMap`.
     bool operator==(const Literal&) const = default;
     template <typename H>
-    friend H AbslHashValue(H h, [[maybe_unused]] const Literal& l) {
+    friend H AbslHashValue(H h, const Literal& l) {
       return H::combine(std::move(h), l.content_);
     }
   };
@@ -144,11 +144,6 @@ class TripleComponent {
       AD_CONTRACT_CHECK(!getString().starts_with('"'));
       AD_CONTRACT_CHECK(!getString().starts_with("'"));
     }
-    return *this;
-  }
-
-  TripleComponent& operator=(const Literal& lit) {
-    _variant = lit;
     return *this;
   }
 
@@ -227,7 +222,10 @@ class TripleComponent {
   /// Convert to an RDF literal. `std::strings` will be emitted directly,
   /// `int64_t` is converted to a `xsd:integer` literal, and a `double` is
   /// converted to a `xsd:double`.
-  // TODO<joka921> This function should return a `NormalizedRdfLiteral`.
+  // TODO<joka921> This function is used in only few places and  ignores the
+  // strong typing of `Literal`s etc. It should be removed and its calls be
+  // replaced by calls that work on the strongly typed `TripleComponent`
+  // directly.
   [[nodiscard]] std::string toRdfLiteral() const {
     if (isString()) {
       return getString();
@@ -298,18 +296,13 @@ class TripleComponent {
     if (!id) {
       // If `toValueId` could not convert to `Id`, we have a string, which we
       // look up in (and potentially add to) our local vocabulary.
-      if (isString()) {
-        // NOTE: There is a `&&` version of `getIndexAndAddIfNotContained`.
-        // Otherwise, `newWord` would be copied here despite the `std::move`.
-        std::string& newWord = getString();
-        id = Id::makeFromLocalVocabIndex(
-            localVocab.getIndexAndAddIfNotContained(std::move(newWord)));
-      } else {
-        AD_CORRECTNESS_CHECK(isLiteral());
-        id =
-            Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-                std::move(getLiteral()).rawContent()));
-      }
+      AD_CORRECTNESS_CHECK(isString() || isLiteral());
+      // NOTE: There is a `&&` version of `getIndexAndAddIfNotContained`.
+      // Otherwise, `newWord` would be copied here despite the `std::move`.
+      std::string&& newWord = isString() ? std::move(getString())
+                                         : std::move(getLiteral()).rawContent();
+      id = Id::makeFromLocalVocabIndex(
+          localVocab.getIndexAndAddIfNotContained(std::move(newWord)));
     }
     return id.value();
   }
