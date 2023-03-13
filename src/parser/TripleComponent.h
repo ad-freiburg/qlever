@@ -36,15 +36,23 @@ class TripleComponent {
     }
   };
 
+  // A class that stores a normalized RDF literal together with its datatype or
+  // language tag.
   struct Literal {
    private:
+    // The underlying storage. It consists of the normalized RDF literal
+    // concatenated with its datatype or language tag.
     std::string content_;
+    // The index in the `content_` member, where the datatype or language tag
+    // begins.
     size_t startOfDatatype_ = 0;
 
    public:
+    // Construct from a normalized literal and the (possibly empty) language tag
+    // or datatype.
     explicit Literal(const RdfEscaping::NormalizedRDFString& literal,
                      std::string_view langtagOrDatatype = "") {
-      [[maybe_unused]] const auto& l = literal.get();
+      const std::string& l = literal.get();
       assert(l.starts_with('"') && l.ends_with('"') && l.size() >= 2);
       // TODO<joka921> there also should be a strong type for the
       // `langtagOrDatatype`.
@@ -55,29 +63,31 @@ class TripleComponent {
       startOfDatatype_ = l.size();
     }
 
-    // Get the literal in the form in which it is stored.
-    const std::string& rawContent() const { return content_; }
-
+    // Get the literal in the form in which it is stored (the normalized literal
+    // concatenated with the language tag/datatype). It is only allowed to read
+    // the content or to move it out. That way the `Literal` can never become
+    // invalid via the `rawContent` method.
+    const std::string& rawContent() const& { return content_; }
     // TODO<C++23> use the `deducing this` feature.
-    std::string& rawContent() { return content_; }
+    std::string&& rawContent() && { return std::move(content_); }
 
+    // Only get the normalized literal without the language tag or datatype.
     RdfEscaping::NormalizedRDFStringView normalizedLiteralContent() const {
       return RdfEscaping::NormalizedRDFStringView::make(
           std::string_view{content_}.substr(0, startOfDatatype_));
     }
 
+    // Only get the datatype or language tag.
     std::string_view datatypeOrLangtag() const {
       return std::string_view{content_}.substr(startOfDatatype_);
     }
 
+    // Equality and hashing are needed to store a `Literal` in a `HashMap`.
     bool operator==(const Literal&) const = default;
     template <typename H>
     friend H AbslHashValue(H h, [[maybe_unused]] const Literal& l) {
       return H::combine(std::move(h), l.content_);
     }
-
-    // The number of characters enclosed in the quotation marks.
-    size_t sizeOfLiteralContent() const { return startOfDatatype_ - 2; }
   };
 
  private:
@@ -298,11 +308,8 @@ class TripleComponent {
         AD_CORRECTNESS_CHECK(isLiteral());
         id =
             Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-                std::move(getLiteral().rawContent())));
+                std::move(getLiteral()).rawContent()));
       }
-
-      // TODO<joka921> The langtag and the string should definitely be stored
-      // together..
     }
     return id.value();
   }

@@ -45,41 +45,50 @@ std::string unescapeNewlinesAndBackslashes(std::string_view literal);
  * This is NOT a valid RDF form of literals, but this format is only used
  * inside QLever.
  */
+
+// The following two strong typedefs statically keep track of the fact whether a
+// string literal is stored in the normalized form that was described above.
+
+// A strong typedef for a `std::string_view` that stores a normalized RDF
+// literal.
 using NormalizedRDFStringView =
     ad_utility::TypedIndex<std::string_view, "NormalizedRDFString">;
 
-class NormalizedRDFString
-    : private ad_utility::TypedIndex<std::string, "NormalizedRDFString"> {
-  using Base = ad_utility::TypedIndex<std::string, "NormalizedRDFString">;
+// A strong typedef for a `std::string` that stores a normalized RDF literal.
+class NormalizedRDFString {
+  std::string
+      data_;  // The actual string content. Always is enclosed in quotes.
 
  public:
-  using Base::get;
+  // Const access to the underlying data in the normalized form.
+  const std::string& get() const { return data_; }
+
+  // Implicit conversion to and explicit conversion from
+  // `NormalizedRDFStringView`. This is similar to the conversions between
+  // `std::string_view` and `std::string`.
   operator NormalizedRDFStringView() const {
     return NormalizedRDFStringView::make(std::string_view{get()});
   }
-  explicit NormalizedRDFString(NormalizedRDFStringView sv) {
-    static_cast<Base&>(*this) = make(std::string{sv.get()});
-  }
+  explicit NormalizedRDFString(NormalizedRDFStringView sv) : data_{sv.get()} {}
 
-  NormalizedRDFString(const Base& b) : Base{b} {}
-  NormalizedRDFString(Base&& b) : Base{std::move(b)} {}
-
-  void append(const NormalizedRDFString& other) {
-    AD_CORRECTNESS_CHECK(get().ends_with('"') && other.get().starts_with('"'));
-    std::string& s = get();
-    s.reserve(s.size() + other.get().size() - 2);
-    s.insert(s.end() - 1, other.get().begin() + 1, other.get().end());
-  }
-
+  // This function just copies the `content` that is passed into the underlying
+  // storage. The user must ensure that the `content` indeed represents a valid
+  // normalized string. Therefore, it should be used almost never. Typically,
+  // you just call the free `normalizeRDFLiteral` function below to obtain a
+  // valid `NormalizeRDFString`.
   static NormalizedRDFString makeFromPreviouslyNormalizedContent(
       std::string content) {
-    // TODO<joka921> Assert the preconditions.
-    return make(std::move(content));
+    AD_CONTRACT_CHECK(content.size() >= 2 && content.starts_with('"') &&
+                      content.ends_with('"'));
+    return NormalizedRDFString{std::move(content)};
   }
 
-  friend NormalizedRDFString normalizeRDFLiteral(std::string_view);
+ private:
+  explicit NormalizedRDFString(std::string data) : data_{std::move(data)} {}
 };
 
+// The actual function to obtain a `NormalizedRDFString` from any valid form of
+// RDF literals. For details on the normalization format, see above.
 NormalizedRDFString normalizeRDFLiteral(std::string_view origLiteral);
 
 /**
