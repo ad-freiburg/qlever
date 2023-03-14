@@ -128,7 +128,7 @@ Variable ParsedQuery::addInternalAlias(sparqlExpression::SparqlExpressionPimpl e
     numInternalVariables_++;
     // Don't register the targetVariable as visible because it is used
     // internally and should not be visible to the user.
-    selectClause().addAlias(Alias{std::move(expression), targetVariable}, true);
+    selectClause().addAlias(Alias{std::move(expression), targetVariable}, false);
     return targetVariable;
 }
 
@@ -213,30 +213,8 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
     // TODO<joka921> Implement these changes and support this case.
     ad_utility::HashSet<Variable> variablesBoundInAliases;
     for (const auto& alias : selectClause().getAliases()) {
-      if (!isGroupBy) {
         checkUsedVariablesAreVisible(alias._expression, "SELECT",
                                      variablesBoundInAliases);
-      } else {
-        try {
-          checkUsedVariablesAreVisible(alias._expression, "SELECT", {});
-        } catch (const InvalidQueryException& ex) {
-          // If the variable is neither defined in the query body nor in the
-          // select clause before, then the following call will throw the same
-          // exception that we have just caught. Else we are in the unsupported
-          // case and throw a more useful error message.
-          checkUsedVariablesAreVisible(alias._expression, "SELECT",
-                                       variablesBoundInAliases);
-          std::string_view note =
-              " Note: This variable was defined previously in the SELECT "
-              "clause, which is supported by the SPARQL standard, but "
-              "currently not supported by QLever when the query contains a "
-              "GROUP BY clause.";
-          throw NotSupportedException{
-              absl::StrCat(ex.errorMessageWithoutPrefix(), note,
-                           noteForGroupByError),
-              ex.metadata()};
-        }
-      }
       variablesBoundInAliases.insert(alias._target);
     }
 
@@ -259,7 +237,11 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
         if (auto it = std::ranges::find(aliases, var, &Alias::_target);
             it != aliases.end()) {
           const auto& alias = *it;
-          if (alias._expression.isAggregate(groupVariables)) {
+          auto relevantVariables = groupVariables;
+          for (auto i = aliases.begin(); i < it; ++i) {
+            relevantVariables.insert(i->_target.name());
+          }
+          if (alias._expression.isAggregate(relevantVariables)) {
             continue;
           } else {
             auto unaggregatedVars =
@@ -555,7 +537,15 @@ void ParsedQuery::addHavingClause(std::vector<SparqlFilter> havingClauses, bool 
         throw InvalidQueryException("A HAVING clause is only supported in queries with GROUP BY");
     }
 
+    ad_utility::HashSet<Variable> variablesFromAliases;
+    if (hasSelectClause()) {
+        for (const auto& alias : selectClause().getAliases()) {
+            variablesFromAliases.insert(alias._target);
+        }
+    }
     for (auto& havingClause : havingClauses) {
+        // TODO<joka921> better error message for variables that are previously defined.
+        checkUsedVariablesAreVisible(havingClause.expression_, "HAVING", variablesFromAliases);
         auto newVariable = addInternalAlias(std::move(havingClause.expression_));
         // TODO<C++23, Clang16> simply use `emplace_back` to initialize the aggregate `SparqlFilter`.
         _havingClauses.push_back(SparqlFilter{sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(newVariable)});
@@ -598,10 +588,16 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy, std:
     // QLever currently only supports ordering by variables. To allow
     // all `orderConditions`, the corresponding expression is bound to a new
     // internal variable. Ordering is then done by this variable.
+    ad_utility::HashSet<Variable> variablesFromAliases;
+    if (hasSelectClause()) {
+        for (const auto& alias : selectClause().getAliases()) {
+      variablesFromAliases.insert(alias._target);
+        }
+    }
     auto processExpressionOrderKey = [this,
-            isGroupBy](
+            isGroupBy, &variablesFromAliases](
             ExpressionOrderKey orderKey) {
-        checkUsedVariablesAreVisible(orderKey.expression_, "ORDER BY");
+        checkUsedVariablesAreVisible(orderKey.expression_, "ORDER BY", variablesFromAliases);
         if (isGroupBy) {
           auto newVariable = addInternalAlias(std::move(orderKey.expression_));
           _orderBy.emplace_back(std::move(newVariable), orderKey.isDescending_);

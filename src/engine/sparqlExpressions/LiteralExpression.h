@@ -9,6 +9,7 @@
 #define QLEVER_LITERALEXPRESSION_H
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "util/Random.h"
 
 namespace sparqlExpression {
 namespace detail {
@@ -40,7 +41,7 @@ class LiteralExpression : public SparqlExpression {
     } else if constexpr (std::is_same_v<Variable, T>) {
       const Variable* actualValuePtr = &_value;
       auto optionalResultFromSameRow = context->getResultFromPreviousAggregate(_value);
-      if (optionalResultFromSameRow.has_value()) {
+      if (optionalResultFromSameRow.has_value() && !context->_groupedVariables.contains(_value)) {
         if (std::holds_alternative<Variable>(optionalResultFromSameRow.value())) {
           actualValuePtr = &(std::get<Variable>(optionalResultFromSameRow.value()));
         } else {
@@ -65,7 +66,7 @@ class LiteralExpression : public SparqlExpression {
         return value;
       }
     } else {
-      return value;
+      return _value;
     }
   }
 
@@ -94,7 +95,9 @@ class LiteralExpression : public SparqlExpression {
   string getCacheKey(const VariableToColumnMap& varColMap) const override {
     if constexpr (std::is_same_v<T, ::Variable>) {
       if (!varColMap.contains(_value)) {
-        AD_THROW(absl::StrCat("Variable ", _value.name(), " not found"));
+        // AD_THROW(absl::StrCat("Variable ", _value.name(), " not found"));
+        // TODO<joka921> Handle the case where a previous aggregate was reused. Maybe don't cache at all?
+        return {"#variable that was not found:" + std::to_string(SlowRandomIntGenerator<int>{}())};
       }
       return {"#column_" + std::to_string(varColMap.at(_value)) + "#"};
     } else if constexpr (std::is_same_v<T, string>) {
