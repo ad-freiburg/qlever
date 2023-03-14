@@ -33,11 +33,16 @@ class VectorWithMemoryLimit
   // necessary).
   // The copy constructor is not deleted, but private, because it is used
   // for the explicit clone() function.
- private:
+
+ //private:
+ public:
+  // TODO<joka921> make it private again
   VectorWithMemoryLimit(const VectorWithMemoryLimit&) = default;
 
  public:
-  VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = delete;
+  //VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = delete;
+  // TODO<joka921> reinstate this.
+  VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = default;
 
   // Moving is fine.
   VectorWithMemoryLimit(VectorWithMemoryLimit&&) noexcept = default;
@@ -97,91 +102,6 @@ using StrongIdsWithResultType = VectorWithMemoryLimit<ValueId>;
 using VariableToColumnAndResultTypeMap =
     ad_utility::HashMap<Variable, std::pair<size_t, ResultTable::ResultType>>;
 
-/// All the additional information which is needed to evaluate a Sparql
-/// expression.
-struct EvaluationContext {
-  const QueryExecutionContext& _qec;
-  // The VariableToColumnMap of the input
-  const VariableToColumnAndResultTypeMap& _variableToColumnAndResultTypeMap;
-
-  /// The input of the expression.
-  const IdTable& _inputTable;
-
-  /// The indices of the actual range of rows in the _inputTable on which the
-  /// expression is evaluated. For BIND expressions this is always [0,
-  /// _inputTable.size()) but for GROUP BY evaluation we also need only parts
-  /// of the input.
-  size_t _beginIndex = 0;
-  size_t _endIndex = _inputTable.size();
-
-  /// The input is sorted on these columns. This information can be used to
-  /// perform efficient relational operations like `equal` or `less than`
-  std::vector<size_t> _columnsByWhichResultIsSorted;
-
-  /// Let the expression evaluation also respect the memory limit.
-  ad_utility::AllocatorWithLimit<Id> _allocator;
-
-  /// The local vocabulary of the input.
-  const LocalVocab& _localVocab;
-
-  // If the expression is part of a GROUP BY then this member has to be set to
-  // the variables by which the input is grouped. These variables will then be
-  // treated as constants.
-  ad_utility::HashSet<Variable> _groupedVariables;
-
-  /// Constructor for evaluating an expression on the complete input.
-  EvaluationContext(
-      const QueryExecutionContext& qec,
-      const VariableToColumnAndResultTypeMap& variableToColumnAndResultTypeMap,
-      const IdTable& inputTable,
-      const ad_utility::AllocatorWithLimit<Id>& allocator,
-      const LocalVocab& localVocab)
-      : _qec{qec},
-        _variableToColumnAndResultTypeMap{variableToColumnAndResultTypeMap},
-        _inputTable{inputTable},
-        _allocator{allocator},
-        _localVocab{localVocab} {}
-
-  /// Constructor for evaluating an expression on a part of the input
-  /// (only considers the rows [beginIndex, endIndex) from the input.
-  EvaluationContext(const QueryExecutionContext& qec,
-                    const VariableToColumnAndResultTypeMap& map,
-                    const IdTable& inputTable, size_t beginIndex,
-                    size_t endIndex,
-                    const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    const LocalVocab& localVocab)
-      : _qec{qec},
-        _variableToColumnAndResultTypeMap{map},
-        _inputTable{inputTable},
-        _beginIndex{beginIndex},
-        _endIndex{endIndex},
-        _allocator{allocator},
-        _localVocab{localVocab} {}
-
-  bool isResultSortedBy(const Variable& variable) {
-    if (_columnsByWhichResultIsSorted.empty()) {
-      return false;
-    }
-    if (!_variableToColumnAndResultTypeMap.contains(variable)) {
-      return false;
-    }
-
-    return getColumnIndexForVariable(variable) ==
-           _columnsByWhichResultIsSorted[0];
-  }
-  // The size (in number of elements) that this evaluation context refers to.
-  [[nodiscard]] size_t size() const { return _endIndex - _beginIndex; }
-
-  // ____________________________________________________________________________
-  [[nodiscard]] size_t getColumnIndexForVariable(const Variable& var) const {
-    const auto& map = _variableToColumnAndResultTypeMap;
-    if (!map.contains(var)) {
-      throw std::runtime_error(absl::StrCat(
-          "Variable ", var.name(), " was not found in input to expression."));
-    }
-    return map.at(var).first;
-  }
-};
 
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
@@ -389,6 +309,108 @@ size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
 }
 
 }  // namespace detail
+/// All the additional information which is needed to evaluate a Sparql
+/// expression.
+    struct EvaluationContext {
+        const QueryExecutionContext& _qec;
+        // The VariableToColumnMap of the input
+        const VariableToColumnAndResultTypeMap& _variableToColumnAndResultTypeMap;
+
+        /// The input of the expression.
+        const IdTable& _inputTable;
+
+        /// The indices of the actual range of rows in the _inputTable on which the
+        /// expression is evaluated. For BIND expressions this is always [0,
+        /// _inputTable.size()) but for GROUP BY evaluation we also need only parts
+        /// of the input.
+        size_t _beginIndex = 0;
+        size_t _endIndex = _inputTable.size();
+
+        /// The input is sorted on these columns. This information can be used to
+        /// perform efficient relational operations like `equal` or `less than`
+        std::vector<size_t> _columnsByWhichResultIsSorted;
+
+        /// Let the expression evaluation also respect the memory limit.
+        ad_utility::AllocatorWithLimit<Id> _allocator;
+
+        /// The local vocabulary of the input.
+        const LocalVocab& _localVocab;
+
+        // If the expression is part of a GROUP BY then this member has to be set to
+        // the variables by which the input is grouped. These variables will then be
+        // treated as constants.
+        ad_utility::HashSet<Variable> _groupedVariables;
+
+        // Only needed during GROUP BY evaluation.
+        // Stores information about the results from previous expressions of the same line that might be accessed
+        // in the same GROUP.
+        std::vector<ExpressionResult> _previousResultsFromSameGroup;
+        VariableToColumnMap _variableToColumnMapPreviousResults;
+
+        /// Constructor for evaluating an expression on the complete input.
+        EvaluationContext(
+                const QueryExecutionContext& qec,
+                const VariableToColumnAndResultTypeMap& variableToColumnAndResultTypeMap,
+                const IdTable& inputTable,
+                const ad_utility::AllocatorWithLimit<Id>& allocator,
+                const LocalVocab& localVocab)
+                : _qec{qec},
+                  _variableToColumnAndResultTypeMap{variableToColumnAndResultTypeMap},
+                  _inputTable{inputTable},
+                  _allocator{allocator},
+                  _localVocab{localVocab} {}
+
+        /// Constructor for evaluating an expression on a part of the input
+        /// (only considers the rows [beginIndex, endIndex) from the input.
+        EvaluationContext(const QueryExecutionContext& qec,
+                          const VariableToColumnAndResultTypeMap& map,
+                          const IdTable& inputTable, size_t beginIndex,
+                          size_t endIndex,
+                          const ad_utility::AllocatorWithLimit<Id>& allocator,
+                          const LocalVocab& localVocab)
+                : _qec{qec},
+                  _variableToColumnAndResultTypeMap{map},
+                  _inputTable{inputTable},
+                  _beginIndex{beginIndex},
+                  _endIndex{endIndex},
+                  _allocator{allocator},
+                  _localVocab{localVocab} {}
+
+        bool isResultSortedBy(const Variable& variable) {
+            if (_columnsByWhichResultIsSorted.empty()) {
+                return false;
+            }
+            if (!_variableToColumnAndResultTypeMap.contains(variable)) {
+                return false;
+            }
+
+            return getColumnIndexForVariable(variable) ==
+                   _columnsByWhichResultIsSorted[0];
+        }
+        // The size (in number of elements) that this evaluation context refers to.
+        [[nodiscard]] size_t size() const { return _endIndex - _beginIndex; }
+
+        // ____________________________________________________________________________
+        [[nodiscard]] size_t getColumnIndexForVariable(const Variable& var) const {
+            const auto& map = _variableToColumnAndResultTypeMap;
+            if (!map.contains(var)) {
+                throw std::runtime_error(absl::StrCat(
+                        "Variable ", var.name(), " was not found in input to expression."));
+            }
+            return map.at(var).first;
+        }
+
+        // _____________________________________________________________________________
+        std::optional<ExpressionResult> getResultFromPreviousAggregate(const Variable& var) const {
+            const auto& map = _variableToColumnMapPreviousResults;
+            if (!map.contains(var)) {
+                return std::nullopt;
+            }
+            auto idx = map.at(var);
+            AD_CONTRACT_CHECK(idx < _previousResultsFromSameGroup.size());
+            return _previousResultsFromSameGroup.at(idx);
+        }
+};
 }  // namespace sparqlExpression
 
 #endif  // QLEVER_SPARQLEXPRESSIONTYPES_H

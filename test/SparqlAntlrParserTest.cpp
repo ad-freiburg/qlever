@@ -82,6 +82,7 @@ struct ExpectCompleteParse {
                   SparqlQleverVisitor::PrefixMap prefixMap,
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) const {
+    auto trace = generateLocationTrace(l);
     EXPECT_NO_THROW({
       return expectCompleteParse(
           parse<Clause>(input, std::move(prefixMap), disableSomeChecks),
@@ -971,10 +972,10 @@ TEST(SparqlParser, SelectQuery) {
 
   // ORDER BY
   expectSelectQuery(
-      "SELECT ?x WHERE { ?x ?y ?z } HAVING (?x > 5) ORDER BY ?y ",
+      "SELECT ?x WHERE { ?x ?y ?z } ORDER BY ?y ",
       testing::AllOf(
           m::SelectQuery(m::Select({Var{"?x"}}), DummyGraphPatternMatcher),
-          m::pq::Having({"(?x > 5)"}), m::pq::OrderKeys({{Var{"?y"}, false}})));
+          m::pq::OrderKeys({{Var{"?y"}, false}})));
 
   // Ordering by a variable or expression which contains a variable that is not
   // visible in the query body is not allowed.

@@ -116,6 +116,8 @@ class SparqlExpressionPimpl {
     return _pimpl.get();
   }
 
+  static SparqlExpressionPimpl makeVariableExpression(const Variable& variable);
+
  private:
   // TODO<joka921> Why can't this be a unique_ptr.
   std::shared_ptr<SparqlExpression> _pimpl;

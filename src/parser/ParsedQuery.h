@@ -192,6 +192,10 @@ class ParsedQuery {
 
     void addGroupByClause(std::vector<GroupKey> groupKeys);
 
+    void addHavingClause(std::vector<SparqlFilter> havingClause, bool isGroupBy);
+
+    void addOrderByClause(OrderClause orderClause, bool isGroupBy, std::string_view noteForImplicitGroupBy);
+
  public:
   void addSolutionModifiers(SolutionModifiers modifiers);
 

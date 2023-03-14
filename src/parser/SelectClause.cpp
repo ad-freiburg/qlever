@@ -35,19 +35,23 @@ void SelectClause::setAsterisk() { varsAndAliasesOrAsterisk_ = Asterisk{}; }
 void SelectClause::setSelected(std::vector<VarOrAlias> varsOrAliases) {
   varsAndAliasesOrAsterisk_ = VarsAndAliases{};
   for (auto& el : varsOrAliases) {
-    addAlias(std::move(el));
+    // The second argument means that the variables are not internal.
+    addAlias(std::move(el), false);
   }
 }
 
 // ____________________________________________________________________________
-void SelectClause::addAlias(parsedQuery::SelectClause::VarOrAlias varOrAlias) {
+void SelectClause::addAlias(parsedQuery::SelectClause::VarOrAlias varOrAlias, bool isInternal) {
   AD_CORRECTNESS_CHECK(!isAsterisk());
   auto& v = std::get<VarsAndAliases>(varsAndAliasesOrAsterisk_);
-  auto processVariable = [&v](Variable var) {
+  auto processVariable = [&v, isInternal](Variable var) {
+    AD_CONTRACT_CHECK(!isInternal);
     v.vars_.push_back(std::move(var));
   };
-  auto processAlias = [&v](Alias alias) {
-    v.vars_.emplace_back(alias._target);
+  auto processAlias = [&v, isInternal](Alias alias) {
+    if (!isInternal) {
+      v.vars_.emplace_back(alias._target);
+    }
     v.aliases_.push_back(std::move(alias));
   };
   std::visit(ad_utility::OverloadCallOperator{processVariable, processAlias},

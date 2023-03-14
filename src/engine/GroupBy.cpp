@@ -166,6 +166,8 @@ void GroupBy::processGroup(
 
   auto& resultEntry = result->operator()(resultRow, resultColumn);
 
+  evaluationContext._previousResultsFromSameGroup.at(resultColumn) = expressionResult;
+
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
@@ -229,6 +231,10 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
 
   evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
       _groupByVariables.begin(), _groupByVariables.end()};
+
+  evaluationContext._variableToColumnMapPreviousResults = getInternallyVisibleVariableColumns();
+  evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
+
 
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
     result.emplace_back();
