@@ -264,7 +264,7 @@ class TripleComponent {
  private:
   // The `std::string` alternative of the  underlying variant previously
   // was also used for variables and literals, which now have their
-  // own alternative. This function checks, that a stored `std::string` does not
+  // own alternative. This function checks that a stored `std::string` does not
   // store a literal or a variable.
   // TODO<joka921> In most parts of the code, the `std::string` case only stores
   // IRIs and blank nodes. It would be desirable to check that we are indeed in
