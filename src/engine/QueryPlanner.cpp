@@ -1740,7 +1740,7 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
       // TODO<joka921> I think the check "is the predicate ql:contains_word" is
       // missing. Verify this.
       if (triple._s == cvar && triple._o.isLiteral()) {
-        std::vector<std::string_view> newWords = absl::StrSplit(
+        std::vector<std::string> newWords = absl::StrSplit(
             stripAndLowercaseLiteral(
                 triple._o.getLiteral().normalizedLiteralContent().get()),
             ' ');
