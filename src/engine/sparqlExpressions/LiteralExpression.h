@@ -17,7 +17,7 @@ template <typename T>
 class LiteralExpression : public SparqlExpression {
  public:
   // _________________________________________________________________________
-  LiteralExpression(T _value) : _value{std::move(_value)} {}
+  explicit LiteralExpression(T _value) : _value{std::move(_value)} {}
 
   // A simple getter for the stored value.
   const T& value() const { return _value; }

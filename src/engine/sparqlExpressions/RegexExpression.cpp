@@ -67,16 +67,8 @@ std::optional<std::string> getPrefixRegex(std::string regex) {
 // Assert that `input` starts and ends with double quotes `"` and remove those
 // quotes.
 std::string removeQuotes(std::string_view input) {
-  AD_CONTRACT_CHECK(input.size() >= 2);
-  // Currently, IRIs are also passed as strings, but are not allowed here.
-  if (input.starts_with('<')) {
-    AD_CONTRACT_CHECK(input.ends_with('>'));
-    throw std::runtime_error(
-        "An IRI was passed as the second or third argument to the REGEX "
-        "function, but only string literals are allowed.");
-  }
-  AD_CONTRACT_CHECK(input.starts_with('"'));
-  AD_CONTRACT_CHECK(input.ends_with('"'));
+  AD_CORRECTNESS_CHECK(input.size() >= 2 && input.starts_with('"') &&
+                       input.ends_with('"'));
   input.remove_prefix(1);
   input.remove_suffix(1);
   return std::string{input};

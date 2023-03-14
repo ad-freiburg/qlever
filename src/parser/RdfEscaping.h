@@ -63,31 +63,21 @@ class NormalizedRDFString {
   // Const access to the underlying data in the normalized form.
   const std::string& get() const { return data_; }
 
-  // Implicit conversion to and explicit conversion from
-  // `NormalizedRDFStringView`. This is similar to the conversions between
-  // `std::string_view` and `std::string`.
-  operator NormalizedRDFStringView() const {
-    return NormalizedRDFStringView::make(std::string_view{get()});
-  }
+  // Explicit conversion from a `NormalizedRDFStringView`.
+  // Note: Conversion to a `NormalizedRDFStringView` is currently not needed in
+  // QLever, but could be easily implemented using a (possibly implicit)
+  // `operator NormalizedRDFStringView()`
   explicit NormalizedRDFString(NormalizedRDFStringView sv) : data_{sv.get()} {}
 
-  // This function just copies the `content` that is passed into the underlying
-  // storage. The user must ensure that the `content` indeed represents a valid
-  // normalized string. Therefore, it should be used almost never. It is
-  // currently used as an implementation detail of the `normalizeRDFLiteral`
-  // function below and inside `QueryPlanner.cpp` to merge several triples with
-  // the `ql:contains_word` predicate. Typically, you just call the free
-  // `normalizeRDFLiteral` function below to obtain a valid
-  // `NormalizeRDFString`.
-  static NormalizedRDFString makeFromPreviouslyNormalizedContent(
-      std::string content) {
-    AD_CONTRACT_CHECK(content.size() >= 2 && content.starts_with('"') &&
-                      content.ends_with('"'));
-    return NormalizedRDFString{std::move(content)};
-  }
-
  private:
-  explicit NormalizedRDFString(std::string data) : data_{std::move(data)} {}
+  // Construct from the raw `data`. This function can only be called by the
+  // free `normalizeRDFLiteral` function, so that function is the only way to
+  // create a new `NormalizedRDFString`.
+  explicit NormalizedRDFString(std::string data) : data_{std::move(data)} {
+    AD_CORRECTNESS_CHECK(data_.size() >= 2 && data_.starts_with('"') &&
+                         data_.ends_with('"'));
+  }
+  friend NormalizedRDFString normalizeRDFLiteral(std::string_view origLiteral);
 };
 
 // The actual function to obtain a `NormalizedRDFString` from any valid form of

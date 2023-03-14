@@ -29,9 +29,9 @@ class TextOperationWithoutFilter : public Operation {
 
  public:
   TextOperationWithoutFilter(QueryExecutionContext* qec,
-                             const TripleComponent::Literal& words,
-                             const SetOfVariables& variables,
-                             const Variable& cvar, size_t textLimit = 1);
+                             const std::vector<std::string>& words,
+                             SetOfVariables variables, Variable cvar,
+                             size_t textLimit = 1);
 
  protected:
   virtual string asStringImpl(size_t indent = 0) const override;

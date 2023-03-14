@@ -1284,7 +1284,8 @@ string QueryPlanner::TripleGraph::asString() const {
     } else {
       os << i << " {TextOP for "
          << _nodeMap.find(i)->second->_cvar.value().name() << ", wordPart: \""
-         << _nodeMap.find(i)->second->_wordPart.value() << "\"} : (";
+         << absl::StrJoin(_nodeMap.find(i)->second->_wordPart.value(), " ")
+         << "\"} : (";
     }
 
     for (size_t j = 0; j < _adjLists[i].size(); ++j) {
@@ -1727,7 +1728,7 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
   vector<std::set<size_t>> tnAdjSetsToOldIds;
   for (auto& cvarsToTextNode : cvarsToTextNodes) {
     auto& cvar = cvarsToTextNode.first;
-    string wordPart = "\"";
+    std::vector<string> words;
     vector<SparqlTriple> trips;
     tnAdjSetsToOldIds.emplace_back();
     auto& adjNodes = tnAdjSetsToOldIds.back();
@@ -1739,21 +1740,15 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
       // TODO<joka921> I think the check "is the predicate ql:contains_word" is
       // missing. Verify this.
       if (triple._s == cvar && triple._o.isLiteral()) {
-        if (wordPart.size() > 1) {
-          wordPart += " ";
-        }
-        wordPart += stripAndLowercaseLiteral(
-            triple._o.getLiteral().normalizedLiteralContent().get());
+        std::vector<std::string_view> newWords = absl::StrSplit(
+            stripAndLowercaseLiteral(
+                triple._o.getLiteral().normalizedLiteralContent().get()),
+            ' ');
+        words.insert(words.end(), newWords.begin(), newWords.end());
       }
     }
-    wordPart += "\"";
-    textNodes.emplace_back(
-        id++, cvar,
-        TripleComponent::Literal{
-            RdfEscaping::NormalizedRDFString::
-                makeFromPreviouslyNormalizedContent(wordPart),
-            ""},
-        trips);
+    textNodes.emplace_back(id, cvar, std::move(words), trips);
+    ++id;
     assert(tnAdjSetsToOldIds.size() == id);
   }
 

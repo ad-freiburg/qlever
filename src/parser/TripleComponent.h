@@ -51,18 +51,7 @@ class TripleComponent {
     // Construct from a normalized literal and the (possibly empty) language tag
     // or datatype.
     explicit Literal(const RdfEscaping::NormalizedRDFString& literal,
-                     std::string_view langtagOrDatatype = "") {
-      const std::string& l = literal.get();
-      AD_CORRECTNESS_CHECK(l.starts_with('"') && l.ends_with('"') &&
-                           l.size() >= 2);
-      // TODO<joka921> there also should be a strong type for the
-      // `langtagOrDatatype`.
-      AD_CONTRACT_CHECK(langtagOrDatatype.empty() ||
-                        langtagOrDatatype.starts_with('@') ||
-                        langtagOrDatatype.starts_with("^^"));
-      content_ = absl::StrCat(l, langtagOrDatatype);
-      startOfDatatype_ = l.size();
-    }
+                     std::string_view langtagOrDatatype = "");
 
     // Get the literal in the form in which it is stored (the normalized literal
     // concatenated with the language tag or datatype). It is only allowed to
@@ -120,12 +109,7 @@ class TripleComponent {
   /// constructor because  `string_views` are not implicitly convertible to
   /// `std::string`. Note that this constructor is deliberately NOT explicit.
   TripleComponent(std::string_view sv) : _variant{std::string{sv}} {
-    // Previously we stored variables as strings, so this check is a way
-    // to easily track places where this old behavior is accidentally still
-    // in place.
-    AD_CONTRACT_CHECK(!getString().starts_with("?"));
-    AD_CONTRACT_CHECK(!getString().starts_with('"'));
-    AD_CONTRACT_CHECK(!getString().starts_with("'"));
+    checkThatStringIsValid();
   }
 
   /// Defaulted copy and move constructors.
@@ -138,22 +122,14 @@ class TripleComponent {
   requires requires(Variant v, T&& t) { _variant = t; }
   TripleComponent& operator=(T&& value) {
     _variant = AD_FWD(value);
-    // See the similar check in the constructor for details.
-    if (isString()) {
-      AD_CONTRACT_CHECK(!getString().starts_with("?"));
-      AD_CONTRACT_CHECK(!getString().starts_with('"'));
-      AD_CONTRACT_CHECK(!getString().starts_with("'"));
-    }
+    checkThatStringIsValid();
     return *this;
   }
 
   /// Assign a `std::string` to the variant that is constructed from `value`.
   TripleComponent& operator=(std::string_view value) {
     _variant = std::string{value};
-    // See the similar check in the constructor for details.
-    AD_CONTRACT_CHECK(!value.starts_with("?"));
-    AD_CONTRACT_CHECK(!getString().starts_with('"'));
-    AD_CONTRACT_CHECK(!getString().starts_with("'"));
+    checkThatStringIsValid();
     return *this;
   }
 
@@ -226,42 +202,12 @@ class TripleComponent {
   // strong typing of `Literal`s etc. It should be removed and its calls be
   // replaced by calls that work on the strongly typed `TripleComponent`
   // directly.
-  [[nodiscard]] std::string toRdfLiteral() const {
-    if (isString()) {
-      return getString();
-    } else if (isLiteral()) {
-      return getLiteral().rawContent();
-    } else if (isDouble()) {
-      return absl::StrCat("\"", getDouble(), "\"^^<", XSD_DOUBLE_TYPE, ">");
-    } else {
-      AD_CONTRACT_CHECK(isInt());
-      return absl::StrCat("\"", getInt(), "\"^^<", XSD_INTEGER_TYPE, ">");
-    }
-  }
+  [[nodiscard]] std::string toRdfLiteral() const;
 
   /// Convert the `TripleComponent` to an ID if it is not a string. In case of a
   /// string return `std::nullopt`. This is used in `toValueId` below and during
   /// the index building when we haven't built the vocabulary yet.
-  [[nodiscard]] std::optional<Id> toValueIdIfNotString() const {
-    auto visitor = []<typename T>(const T& value) -> std::optional<Id> {
-      if constexpr (std::is_same_v<T, std::string> ||
-                    std::is_same_v<T, Literal>) {
-        return std::nullopt;
-      } else if constexpr (std::is_same_v<T, int64_t>) {
-        return Id::makeFromInt(value);
-      } else if constexpr (std::is_same_v<T, double>) {
-        return Id::makeFromDouble(value);
-      } else if constexpr (std::is_same_v<T, UNDEF>) {
-        return Id::makeUndefined();
-      } else if constexpr (std::is_same_v<T, Variable>) {
-        // Cannot turn a variable into a ValueId.
-        AD_FAIL();
-      } else {
-        static_assert(ad_utility::alwaysFalse<T>);
-      }
-    };
-    return std::visit(visitor, _variant);
-  }
+  [[nodiscard]] std::optional<Id> toValueIdIfNotString() const;
 
   // Convert the `TripleComponent` to an ID. If the `TripleComponent` is a
   // string, the IDs are resolved using the `vocabulary`. If a string is not
@@ -314,4 +260,24 @@ class TripleComponent {
 
   // Return as string.
   [[nodiscard]] std::string toString() const;
+
+ private:
+  // The `std::string` alternative of the  underlying variant previously
+  // was also used for variables and literals, which now have their
+  // own alternative. This function checks, that a stored `std::string` does not
+  // store a literal or a variable.
+  // TODO<joka921> In most parts of the code, the `std::string` case only stores
+  // IRIs and blank nodes. It would be desirable to check that we are indeed in
+  // one of these cases. However, the `TurtleParser` currently uses a
+  // `TripleComponent` to store literals like `true`, `false`, `12.3` etc. in a
+  // TripleComponent as an intermediate step. Change the turtle parser to make
+  // these cases unnecessary.
+  void checkThatStringIsValid() {
+    if (isString()) {
+      const auto& s = getString();
+      AD_CONTRACT_CHECK(!s.starts_with('?'));
+      AD_CONTRACT_CHECK(!s.starts_with('"'));
+      AD_CONTRACT_CHECK(!s.starts_with('\''));
+    }
+  }
 };

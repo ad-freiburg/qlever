@@ -215,7 +215,7 @@ NormalizedRDFString normalizeRDFLiteral(const std::string_view origLiteral) {
   detail::unescapeStringAndNumericEscapes<false, false>(
       literal.begin(), literal.end(), std::back_inserter(res));
   res.push_back('\"');
-  return NormalizedRDFString::makeFromPreviouslyNormalizedContent(res);
+  return NormalizedRDFString{std::move(res)};
 }
 
 // ____________________________________________________________________________

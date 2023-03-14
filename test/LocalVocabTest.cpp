@@ -41,8 +41,6 @@ std::vector<std::string> getTestCollectionOfWords(size_t size) {
   }
   return testCollectionOfWords;
 }
-
-auto lit = ad_utility::testing::tripleComponentLiteral;
 }  // namespace
 
 // _____________________________________________________________________________
@@ -321,9 +319,6 @@ TEST(LocalVocab, propagation) {
   TextOperationWithFilter text1(testQec, "", {}, Variable{"?x"}, qet(values1),
                                 0);
   checkLocalVocab(text1, std::vector<std::string>{"x", "y1", "y2"});
-  TextOperationWithoutFilter text2(
-      testQec,
-      lit("\"bla\"")),
-      {}, Variable{"?x"});
+  TextOperationWithoutFilter text2(testQec, {}, {}, Variable{"?x"});
   checkLocalVocab(text2, {});
 }

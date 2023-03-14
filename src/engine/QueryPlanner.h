@@ -8,6 +8,8 @@
 #include <set>
 #include <vector>
 
+#include "absl/strings/str_join.h"
+#include "absl/strings/str_split.h"
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/Filter.h"
 #include "engine/QueryExecutionTree.h"
@@ -46,16 +48,18 @@ class QueryPlanner {
         }
       }
 
-      Node(size_t id, const Variable& cvar,
-           const TripleComponent::Literal& wordPart,
+      Node(size_t id, const Variable& cvar, std::vector<std::string> words,
            const vector<SparqlTriple>& trips)
           : _id(id),
+            // TODO<joka921> What is this triple used for? If it is just a
+            // dummy, then we can replace it by a `variant<Triple,
+            // TextNodeData>`.
             _triple(cvar,
                     PropertyPath(PropertyPath::Operation::IRI, 0,
                                  INTERNAL_TEXT_MATCH_PREDICATE, {}),
-                    wordPart),
+                    TripleComponent::UNDEF{}),
             _cvar(cvar),
-            _wordPart(wordPart) {
+            _wordPart(std::move(words)) {
         _variables.insert(cvar);
         for (const auto& t : trips) {
           if (isVariable(t._s)) {
@@ -91,7 +95,7 @@ class QueryPlanner {
         // together?
         if (n._cvar.has_value()) {
           out << " cvar " << n._cvar.value().name() << " wordPart "
-              << n._wordPart.value();
+              << absl::StrJoin(n._wordPart.value(), " ");
         }
         return out;
       }
@@ -100,7 +104,7 @@ class QueryPlanner {
       SparqlTriple _triple;
       ad_utility::HashSet<Variable> _variables;
       std::optional<Variable> _cvar = std::nullopt;
-      std::optional<TripleComponent::Literal> _wordPart = std::nullopt;
+      std::optional<std::vector<std::string>> _wordPart = std::nullopt;
     };
 
     // Allows for manually building triple graphs for testing
