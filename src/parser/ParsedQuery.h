@@ -176,6 +176,22 @@ class ParsedQuery {
   // is returned.
   Variable addInternalBind(sparqlExpression::SparqlExpressionPimpl expression);
 
+  // Add an internal AS clause to the SELECT clause that computes the given expression.
+  // This is needed by the `addSolutionModifiers` function to implement aggregating expressions
+  // in the ORDER BY and HAVING clauses of queries with a GROUP BY
+    Variable addInternalAlias(sparqlExpression::SparqlExpressionPimpl expression);
+    void checkVariableIsVisible (const Variable& var,
+                                         const std::string& locationDescription,
+                                         const ad_utility::HashSet<Variable>&
+                                         additionalVisibleVariables = {});
+    void checkUsedVariablesAreVisible (
+                    const sparqlExpression::SparqlExpressionPimpl& expression,
+                    const std::string& locationDescription,
+                    const ad_utility::HashSet<Variable>& additionalVisibleVariables =
+                            {});
+
+    void addGroupByClause(std::vector<GroupKey> groupKeys);
+
  public:
   void addSolutionModifiers(SolutionModifiers modifiers);
 

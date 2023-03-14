@@ -33,7 +33,16 @@ void SelectClause::setAsterisk() { varsAndAliasesOrAsterisk_ = Asterisk{}; }
 
 // ____________________________________________________________________
 void SelectClause::setSelected(std::vector<VarOrAlias> varsOrAliases) {
-  VarsAndAliases v;
+  varsAndAliasesOrAsterisk_ = VarsAndAliases{};
+  for (auto& el : varsOrAliases) {
+    addAlias(std::move(el));
+  }
+}
+
+// ____________________________________________________________________________
+void SelectClause::addAlias(parsedQuery::SelectClause::VarOrAlias varOrAlias) {
+  AD_CORRECTNESS_CHECK(!isAsterisk());
+  auto& v = std::get<VarsAndAliases>(varsAndAliasesOrAsterisk_);
   auto processVariable = [&v](Variable var) {
     v.vars_.push_back(std::move(var));
   };
@@ -41,12 +50,8 @@ void SelectClause::setSelected(std::vector<VarOrAlias> varsOrAliases) {
     v.vars_.emplace_back(alias._target);
     v.aliases_.push_back(std::move(alias));
   };
-
-  for (auto& el : varsOrAliases) {
-    std::visit(ad_utility::OverloadCallOperator{processVariable, processAlias},
-               std::move(el));
-  }
-  varsAndAliasesOrAsterisk_ = std::move(v);
+  std::visit(ad_utility::OverloadCallOperator{processVariable, processAlias},
+             std::move(varOrAlias));
 }
 
 // ____________________________________________________________________
