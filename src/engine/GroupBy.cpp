@@ -41,13 +41,16 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
 string GroupBy::asStringImpl(size_t indent) const {
   const auto& varMap = getInternallyVisibleVariableColumns();
   auto varMapInput = _subtree->getVariableColumns();
+
   // We also have to encode the variables to which alias results are stored in
   // the cache key of the expressions in case they reuse a variable from the
   // previous result.
-
   auto numColumnsInput = _subtree->getResultWidth();
   for (const auto& [var, column] : varMap) {
     if (!varMapInput.contains(var)) {
+      // It is important that the cache keys for the variables from the aliases
+      // do not collide with the query body, and that they are consistent. The
+      // constant `1000` has no deeper meaning but makes debugging easier.
       varMapInput[var] = column + 1000 + numColumnsInput;
     }
   }

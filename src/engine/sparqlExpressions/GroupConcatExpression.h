@@ -52,7 +52,7 @@ class GroupConcatExpression : public SparqlExpression {
 
   // A `GroupConcatExpression` is an aggregate, so it never leaves any
   // unaggregated variables.
-  vector<std::string> getUnaggregatedVariables() override { return {}; }
+  vector<Variable> getUnaggregatedVariables() override { return {}; }
 
   // A `GroupConcatExpression` is an aggregate.
   bool containsAggregate() const override { return true; }

@@ -58,9 +58,9 @@ class LiteralExpression : public SparqlExpression {
   }
 
   // _________________________________________________________________________
-  vector<std::string> getUnaggregatedVariables() override {
+  vector<Variable> getUnaggregatedVariables() override {
     if constexpr (std::is_same_v<T, ::Variable>) {
-      return {_value.name()};
+      return {_value};
     } else {
       return {};
     }

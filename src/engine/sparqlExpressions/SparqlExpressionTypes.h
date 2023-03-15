@@ -23,7 +23,7 @@ namespace sparqlExpression {
 /// and copy assignment. Used in the SparqlExpression module, where we want
 /// no accidental copies of large intermediate results.
 template <typename T>
-requires(!std::is_const_v<T>) class VectorWithMemoryLimit
+class VectorWithMemoryLimit
     : public std::vector<T, ad_utility::AllocatorWithLimit<T>> {
  public:
   using Base = std::vector<T, ad_utility::AllocatorWithLimit<T>>;
@@ -33,7 +33,7 @@ requires(!std::is_const_v<T>) class VectorWithMemoryLimit
   // necessary).
   // The copy constructor is not deleted, but private, because it is used
   // for the explicit clone() function.
-  // private:
+ private:
   VectorWithMemoryLimit(const VectorWithMemoryLimit&) = default;
 
  public:

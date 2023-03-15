@@ -142,7 +142,6 @@ class AllocatorWithLimit {
   detail::AllocationMemoryLeftThreadsafe
       memoryLeft_;                       // shared number of free bytes
   ClearOnAllocation clearOnAllocation_;  // TODO<joka921> comment
-  // std::allocator<std::remove_const_t<T>> allocator_;
   std::allocator<T> allocator_;
 
  public:

@@ -16,13 +16,15 @@ namespace sparqlExpression {
 class SampleExpression : public SparqlExpression {
  public:
   SampleExpression([[maybe_unused]] bool distinct, Ptr&& child)
-      : _child{std::move(child)} {}
+      : _child{std::move(child)} {
+    setIsInsideAggregate();
+  }
 
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
   // _____________________________________________________________________
-  vector<std::string> getUnaggregatedVariables() override {
+  vector<Variable> getUnaggregatedVariables() override {
     // This is an aggregation, so it never leaves any unaggregated variables.
     return {};
   }

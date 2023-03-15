@@ -183,8 +183,8 @@ class ParsedQuery {
   Variable addInternalAlias(sparqlExpression::SparqlExpressionPimpl expression);
 
   // If the `variable` is neither visible in the query body nor contained in the
-  // `additionalVisibleVariables` throw an `InvalidQueryException` that uses the
-  // `locationDescription` inside the message.
+  // `additionalVisibleVariables`, throw an `InvalidQueryException` that uses
+  // the `locationDescription` inside the message.
   void checkVariableIsVisible(
       const Variable& variable, const std::string& locationDescription,
       const ad_utility::HashSet<Variable>& additionalVisibleVariables = {},
@@ -214,6 +214,10 @@ class ParsedQuery {
   // or (in case of a GROUP BY) not grouped or aggregated.
   void addOrderByClause(OrderClause orderClause, bool isGroupBy,
                         std::string_view noteForImplicitGroupBy);
+
+  // Return the next internal variable. Used e.g. by `addInternalBind` and
+  // `addInternalAlias`
+  Variable getNextInternalVariable();
 
  public:
   // Add the `modifiers` (like GROUP BY, HAVING, ORDER BY) to the query. Throw

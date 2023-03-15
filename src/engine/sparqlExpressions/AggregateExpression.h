@@ -35,7 +35,7 @@ class AggregateExpression : public SparqlExpression {
   std::span<SparqlExpression::Ptr> children() override;
 
   // _________________________________________________________________________
-  vector<std::string> getUnaggregatedVariables() override;
+  vector<Variable> getUnaggregatedVariables() override;
 
   // An `AggregateExpression` (obviously) contains an aggregate.
   bool containsAggregate() const override { return true; }

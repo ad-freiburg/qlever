@@ -106,9 +106,7 @@ Variable ParsedQuery::addInternalBind(
     sparqlExpression::SparqlExpressionPimpl expression) {
   // Internal variable name to which the result of the helper bind is
   // assigned.
-  auto targetVariable = Variable{INTERNAL_VARIABLE_PREFIX +
-                                 std::to_string(numInternalVariables_)};
-  numInternalVariables_++;
+  auto targetVariable = getNextInternalVariable();
   // Don't register the targetVariable as visible because it is used
   // internally and should not be selected by SELECT * (this is the `bool`
   // argument to `addBind`).
@@ -124,9 +122,7 @@ Variable ParsedQuery::addInternalAlias(
     sparqlExpression::SparqlExpressionPimpl expression) {
   // Internal variable name to which the result of the helper bind is
   // assigned.
-  auto targetVariable = Variable{INTERNAL_VARIABLE_PREFIX +
-                                 std::to_string(numInternalVariables_)};
-  numInternalVariables_++;
+  auto targetVariable = getNextInternalVariable();
   // Don't register the targetVariable as visible because it is used
   // internally and should not be visible to the user.
   selectClause().addAlias(Alias{std::move(expression), targetVariable}, true);
@@ -215,9 +211,9 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
     }
 
     if (isGroupBy) {
-      ad_utility::HashSet<string> groupVariables{};
+      ad_utility::HashSet<Variable> groupVariables{};
       for (const auto& variable : _groupByVariables) {
-        groupVariables.emplace(variable.toSparql());
+        groupVariables.emplace(variable);
       }
 
       if (selectClause().isAsterisk()) {
@@ -235,7 +231,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           const auto& alias = *it;
           auto relevantVariables = groupVariables;
           for (auto i = aliases.begin(); i < it; ++i) {
-            relevantVariables.insert(i->_target.name());
+            relevantVariables.insert(i->_target);
           }
           if (alias._expression.isAggregate(relevantVariables)) {
             continue;
@@ -244,7 +240,8 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
                 alias._expression.getUnaggregatedVariables(groupVariables);
             throw InvalidQueryException(absl::StrCat(
                 "The expression \"", alias._expression.getDescriptor(),
-                "\" does not aggregate ", absl::StrJoin(unaggregatedVars, ", "),
+                "\" does not aggregate ",
+                absl::StrJoin(unaggregatedVars, ", ", Variable::AbslFormatter),
                 "." + noteForGroupByError));
           }
         }
@@ -509,7 +506,7 @@ void ParsedQuery::addGroupByClause(std::vector<GroupKey> groupKeys) {
   auto processVariable = [this](const Variable& groupKey) {
     checkVariableIsVisible(groupKey, "GROUP BY");
 
-    _groupByVariables.emplace_back(groupKey.name());
+    _groupByVariables.push_back(groupKey);
   };
 
   ad_utility::HashSet<Variable> variablesDefinedInGroupBy;
@@ -520,7 +517,7 @@ void ParsedQuery::addGroupByClause(std::vector<GroupKey> groupKeys) {
                                      variablesDefinedInGroupBy,
                                      " or previously in the same GROUP BY");
         auto helperTarget = addInternalBind(std::move(groupKey));
-        _groupByVariables.emplace_back(helperTarget.name());
+        _groupByVariables.push_back(helperTarget);
       };
 
   auto processAlias = [this, &variablesDefinedInGroupBy](Alias groupKey) {
@@ -529,7 +526,7 @@ void ParsedQuery::addGroupByClause(std::vector<GroupKey> groupKeys) {
                                  " or previously in the same GROUP BY");
     variablesDefinedInGroupBy.insert(groupKey._target);
     addBind(std::move(groupKey._expression), groupKey._target, true);
-    _groupByVariables.emplace_back(groupKey._target);
+    _groupByVariables.push_back(groupKey._target);
   };
 
   for (auto& groupByKey : groupKeys) {
@@ -637,4 +634,12 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
                std::move(orderKey));
   }
   _isInternalSort = orderClause.isInternalSort;
+}
+
+// ________________________________________________________________
+Variable ParsedQuery::getNextInternalVariable() {
+  auto variable = Variable{INTERNAL_VARIABLE_PREFIX +
+                           std::to_string(numInternalVariables_)};
+  numInternalVariables_++;
+  return variable;
 }

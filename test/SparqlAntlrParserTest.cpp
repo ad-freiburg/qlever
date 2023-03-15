@@ -1008,6 +1008,17 @@ TEST(SparqlParser, SelectQuery) {
                                     std::pair{"COUNT(?y) + ?z", Var{"?b"}}}),
                          DummyGraphPatternMatcher)));
 
+  expectSelectQuery(
+      "SELECT (SUM(?x) as ?a)  WHERE { ?x ?y ?z } GROUP "
+      "BY ?z ORDER BY (COUNT(?y) + ?z)",
+      testing::AllOf(
+          m::SelectQuery(
+              m::Select({std::pair{"SUM(?x)", Var{"?a"}}}, false, false,
+                        {std::pair{"(COUNT(?y) + ?z)",
+                                   Var{"?_QLever_internal_variable_0"}}}),
+              DummyGraphPatternMatcher),
+          m::pq::OrderKeys({{Var{"?_QLever_internal_variable_0"}, false}})));
+
   // It is also illegal to reuse a variable from the body of a query with a
   // GROUP BY as the target of an alias, even if it is the aggregated variable
   // itself.
@@ -1074,6 +1085,9 @@ TEST(SparqlParser, SelectQuery) {
   // alias. This is not allowed.
   expectSelectQueryFails("SELECT ?x (?y as ?x) WHERE { ?x ?y ?z }");
 
+  // HAVING is not allowed without GROUP BY
+  expectSelectQueryFails("SELECT ?x WHERE { ?x ?y ?z } HAVING (?x < 3)");
+
   // The target of the alias (`?y`) is already bound in the WHERE clause. This
   // is forbidden by the SPARQL standard.
   expectSelectQueryFails("SELECT (?x AS ?y) WHERE { ?x <is-a> ?y }");
@@ -1118,6 +1132,10 @@ TEST(SparqlParser, ConstructQuery) {
   // Datasets are not supported.
   expectConstructQueryFails("CONSTRUCT { } FROM <foo> WHERE { ?a ?b ?c }");
   expectConstructQueryFails("CONSTRUCT FROM <foo> WHERE { }");
+
+  // GROUP BY and ORDER BY, but the ordered variable is not grouped
+  expectConstructQueryFails(
+      "CONSTRUCT {?a <b> <c> } WHERE { ?a ?b ?c } GROUP BY ?a ORDER BY ?b");
 }
 
 TEST(SparqlParser, Query) {
