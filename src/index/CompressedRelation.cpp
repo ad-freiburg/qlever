@@ -334,12 +334,13 @@ void CompressedRelationWriter::addRelation(Id col0Id,
                                       multC2};
   auto sizeOfRelation =
       col1And2Ids.numRows() * col1And2Ids.numColumns() * sizeof(Id);
+  auto sizeOfBuffer = _buffer.numRows() * _buffer.numColumns() * sizeof(Id);
 
   // If this is a large relation, or the currrently buffered relations +
   // this relation are too large, we will write the buffered relations to file
   // and start a new block.
   if (sizeOfRelation > _numBytesPerBlock * 8 / 10 ||
-      sizeOfRelation + _buffer.numRows() > 1.5 * _numBytesPerBlock) {
+      sizeOfRelation + sizeOfBuffer > 1.5 * _numBytesPerBlock) {
     writeBufferedRelationsToSingleBlock();
   }
 
