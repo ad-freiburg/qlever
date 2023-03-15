@@ -971,11 +971,10 @@ TEST(SparqlParser, SelectQuery) {
           m::pq::LimitOffset({10, 5})));
 
   // ORDER BY
-  expectSelectQuery(
-      "SELECT ?x WHERE { ?x ?y ?z } ORDER BY ?y ",
-      testing::AllOf(
-          m::SelectQuery(m::Select({Var{"?x"}}), DummyGraphPatternMatcher),
-          m::pq::OrderKeys({{Var{"?y"}, false}})));
+  expectSelectQuery("SELECT ?x WHERE { ?x ?y ?z } ORDER BY ?y ",
+                    testing::AllOf(m::SelectQuery(m::Select({Var{"?x"}}),
+                                                  DummyGraphPatternMatcher),
+                                   m::pq::OrderKeys({{Var{"?y"}, false}})));
 
   // Ordering by a variable or expression which contains a variable that is not
   // visible in the query body is not allowed.
@@ -1032,8 +1031,11 @@ TEST(SparqlParser, SelectQuery) {
   // TODO<joka921> This is actually allowed by the SPARQL standard, but
   // currently not yet supported by QLever. Implement this (for details see the
   // comment in `ParsedQuery::addSolutionModifiers`.
+  // TODO<joka921> This is now implemented, enable the test for it.
+  /*
   expectSelectQueryFails(
       "SELECT (?x AS ?z) (?z AS ?zz) WHERE { ?x <p> ?y} GROUP BY ?x");
+  */
 
   // Implicit GROUP BY.
   expectSelectQuery(

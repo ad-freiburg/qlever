@@ -40,10 +40,14 @@ class LiteralExpression : public SparqlExpression {
       return id;
     } else if constexpr (std::is_same_v<Variable, T>) {
       const Variable* actualValuePtr = &_value;
-      auto optionalResultFromSameRow = context->getResultFromPreviousAggregate(_value);
-      if (optionalResultFromSameRow.has_value() && !context->_groupedVariables.contains(_value)) {
-        if (std::holds_alternative<Variable>(optionalResultFromSameRow.value())) {
-          actualValuePtr = &(std::get<Variable>(optionalResultFromSameRow.value()));
+      auto optionalResultFromSameRow =
+          context->getResultFromPreviousAggregate(_value);
+      if (optionalResultFromSameRow.has_value() &&
+          !context->_groupedVariables.contains(_value)) {
+        if (std::holds_alternative<Variable>(
+                optionalResultFromSameRow.value())) {
+          actualValuePtr =
+              &(std::get<Variable>(optionalResultFromSameRow.value()));
         } else {
           return optionalResultFromSameRow.value();
         }
@@ -96,8 +100,10 @@ class LiteralExpression : public SparqlExpression {
     if constexpr (std::is_same_v<T, ::Variable>) {
       if (!varColMap.contains(_value)) {
         // AD_THROW(absl::StrCat("Variable ", _value.name(), " not found"));
-        // TODO<joka921> Handle the case where a previous aggregate was reused. Maybe don't cache at all?
-        return {"#variable that was not found:" + std::to_string(SlowRandomIntGenerator<int>{}())};
+        // TODO<joka921> Handle the case where a previous aggregate was reused.
+        // Maybe don't cache at all?
+        return {"#variable that was not found:" +
+                std::to_string(SlowRandomIntGenerator<int>{}())};
       }
       return {"#column_" + std::to_string(varColMap.at(_value)) + "#"};
     } else if constexpr (std::is_same_v<T, string>) {

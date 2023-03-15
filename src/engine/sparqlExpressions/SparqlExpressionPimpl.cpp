@@ -4,8 +4,8 @@
 
 #include "./SparqlExpressionPimpl.h"
 
-#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 
 namespace sparqlExpression {
 
@@ -103,8 +103,8 @@ bool SparqlExpressionPimpl::containsAggregate() const {
 }
 
 // ______________________________________________________________________________
-SparqlExpressionPimpl SparqlExpressionPimpl::makeVariableExpression(const Variable& variable) {
+SparqlExpressionPimpl SparqlExpressionPimpl::makeVariableExpression(
+    const Variable& variable) {
   return {std::make_unique<VariableExpression>(variable), variable.name()};
-
 }
 }  // namespace sparqlExpression

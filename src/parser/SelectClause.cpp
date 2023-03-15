@@ -41,7 +41,8 @@ void SelectClause::setSelected(std::vector<VarOrAlias> varsOrAliases) {
 }
 
 // ____________________________________________________________________________
-void SelectClause::addAlias(parsedQuery::SelectClause::VarOrAlias varOrAlias, bool isInternal) {
+void SelectClause::addAlias(parsedQuery::SelectClause::VarOrAlias varOrAlias,
+                            bool isInternal) {
   AD_CORRECTNESS_CHECK(!isAsterisk());
   auto& v = std::get<VarsAndAliases>(varsAndAliasesOrAsterisk_);
   auto processVariable = [&v, isInternal](Variable var) {
