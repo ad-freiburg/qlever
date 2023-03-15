@@ -1452,5 +1452,18 @@ queries:
       - contains_row: [ 3.0 ]
       - contains_row: [ 4.0 ]
 
+  - query: variable-from-select-clause-reusage
+    type: no-text
+    sparql: |
+      SELECT (AVG(?x + ?y) as ?avg) (?avg + COUNT(?y) * 0.5 AS ?b) WHERE {
+        VALUES (?x ?y) { (0.5 1.5) (0.5 3.5) (1.2 2.8)}
+      } GROUP BY ?x
+    checks:
+      - num_cols: 2
+      - num_rows : 2
+      - selected: [ "?avg", "?b" ]
+      - contains_row: [ 3.0, 4.0 ]
+      - contains_row: [ 4.0, 4.5 ]
+
 
 

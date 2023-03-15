@@ -33,16 +33,11 @@ class VectorWithMemoryLimit
   // necessary).
   // The copy constructor is not deleted, but private, because it is used
   // for the explicit clone() function.
-
-  // private:
- public:
-  // TODO<joka921> make it private again
+ private:
   VectorWithMemoryLimit(const VectorWithMemoryLimit&) = default;
 
  public:
-  // VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = delete;
-  //  TODO<joka921> reinstate this.
-  VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = default;
+  VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = delete;
 
   // Moving is fine.
   VectorWithMemoryLimit(VectorWithMemoryLimit&&) noexcept = default;
@@ -130,6 +125,27 @@ template <typename T>
 concept SingleExpressionResult =
     ad_utility::isTypeContainedIn<T, ExpressionResult>;
 
+// If the `ExpressionResult` holds a value that is cheap to copy (a constant or
+// a variable), return a copy. Else throw an exception the message of which
+// implies that this is not a valid usage of this function.
+inline ExpressionResult copyExpressionResultIfNotVector(
+    const ExpressionResult& result) {
+  auto copyIfCopyable =
+      []<SingleExpressionResult R>(const R& x) -> ExpressionResult {
+    if constexpr (std::is_copy_assignable_v<R> &&
+                  std::is_copy_constructible_v<R>) {
+      return x;
+    } else {
+      AD_THROW(
+          "Tried to copy an expression result that is a vector. This should "
+          "never happen, as this code should only be called for the results of "
+          "expressions in a GROUP BY clause which all should be aggregates. "
+          "Please report this.");
+    }
+  };
+  return std::visit(copyIfCopyable, result);
+}
+
 /// True iff T represents a constant.
 template <typename T>
 constexpr static bool isConstantResult =
@@ -174,9 +190,14 @@ struct EvaluationContext {
 
   // Only needed during GROUP BY evaluation.
   // Stores information about the results from previous expressions of the same
-  // line that might be accessed in the same GROUP.
-  std::vector<ExpressionResult> _previousResultsFromSameGroup;
+  // SELECT clause line that might be accessed in the same SELECT clause.
+
+  // This map maps variables that are bound in the select clause to indices.
   VariableToColumnMap _variableToColumnMapPreviousResults;
+  // This vector contains the last result of the expressions in the SELECT
+  // clause. The correct index for a given variable is obtained from the
+  // `_variableToColumnMapPreviousResults`.
+  std::vector<ExpressionResult> _previousResultsFromSameGroup;
 
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(
@@ -240,7 +261,9 @@ struct EvaluationContext {
     }
     auto idx = map.at(var);
     AD_CONTRACT_CHECK(idx < _previousResultsFromSameGroup.size());
-    return _previousResultsFromSameGroup.at(idx);
+
+    return copyExpressionResultIfNotVector(
+        _previousResultsFromSameGroup.at(idx));
   }
 };
 

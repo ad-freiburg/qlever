@@ -230,7 +230,9 @@ def test_check(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
             if not found:
                 eprint("contains_row check failed:\n" +
                        "\tdid not find %r" % gold_row)
-                print("some rows of the result are\n", res[:10])
+                print("Printing the first 10 rows of the result:")
+                for row in res[:10]:
+                    print(row)
                 return False
         elif check == 'contains_warning':
             for requested_warning in value:

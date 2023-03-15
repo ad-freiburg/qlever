@@ -101,9 +101,6 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
   ColumnIndicesAndTypes exportColumns;
 
   for (const auto& var : selectClause.getSelectedVariables()) {
-    if (var.name().starts_with(INTERNAL_VARIABLE_PREFIX)) {
-      continue;
-    }
     std::string varString = var.name();
     if (getVariableColumns().contains(var)) {
       auto columnIndex = getVariableColumns().at(var);

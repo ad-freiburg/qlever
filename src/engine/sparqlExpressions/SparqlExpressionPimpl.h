@@ -116,6 +116,7 @@ class SparqlExpressionPimpl {
     return _pimpl.get();
   }
 
+  // Create a `SparqlExpressionPimpl` from a single variable.
   static SparqlExpressionPimpl makeVariableExpression(const Variable& variable);
 
  private:

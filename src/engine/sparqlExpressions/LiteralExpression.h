@@ -1,15 +1,10 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//  Copyright 2021, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-//
-// Created by johannes on 29.09.21.
-//
-
-#ifndef QLEVER_LITERALEXPRESSION_H
-#define QLEVER_LITERALEXPRESSION_H
+#pragma once
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
-#include "util/Random.h"
 
 namespace sparqlExpression {
 namespace detail {
@@ -21,7 +16,7 @@ template <typename T>
 class LiteralExpression : public SparqlExpression {
  public:
   // _________________________________________________________________________
-  LiteralExpression(T _value) : _value{std::move(_value)} {}
+  explicit LiteralExpression(T _value) : _value{std::move(_value)} {}
 
   // A simple getter for the stored value.
   const T& value() const { return _value; }
@@ -33,42 +28,11 @@ class LiteralExpression : public SparqlExpression {
       Id id;
       bool idWasFound = context->_qec.getIndex().getId(_value, &id);
       if (!idWasFound) {
-        // no vocabulary entry found, just use it as a string constant.
-        // TODO<joka921>:: emit a warning.
         return _value;
       }
       return id;
     } else if constexpr (std::is_same_v<Variable, T>) {
-      const Variable* actualValuePtr = &_value;
-      auto optionalResultFromSameRow =
-          context->getResultFromPreviousAggregate(_value);
-      if (optionalResultFromSameRow.has_value() &&
-          !context->_groupedVariables.contains(_value)) {
-        if (std::holds_alternative<Variable>(
-                optionalResultFromSameRow.value())) {
-          actualValuePtr =
-              &(std::get<Variable>(optionalResultFromSameRow.value()));
-        } else {
-          return optionalResultFromSameRow.value();
-        }
-      }
-      const Variable& value = *actualValuePtr;
-      // If a variable is grouped, then we know that it always has the same
-      // value and can treat it as a constant. This is not possible however when
-      // we are inside an aggregate, because for example `SUM(?variable)` must
-      // still compute the sum over the whole group.
-      if (context->_groupedVariables.contains(value) && !isInsideAggregate()) {
-        auto column = context->getColumnIndexForVariable(value);
-        const auto& table = context->_inputTable;
-        auto constantValue = table.at(context->_beginIndex, column);
-        assert((std::ranges::all_of(
-            table.begin() + context->_beginIndex,
-            table.begin() + context->_endIndex,
-            [&](const auto& row) { return row[column] == constantValue; })));
-        return constantValue;
-      } else {
-        return value;
-      }
+      return evaluateIfVariable(context, _value);
     } else {
       return _value;
     }
@@ -99,11 +63,7 @@ class LiteralExpression : public SparqlExpression {
   string getCacheKey(const VariableToColumnMap& varColMap) const override {
     if constexpr (std::is_same_v<T, ::Variable>) {
       if (!varColMap.contains(_value)) {
-        // AD_THROW(absl::StrCat("Variable ", _value.name(), " not found"));
-        // TODO<joka921> Handle the case where a previous aggregate was reused.
-        // Maybe don't cache at all?
-        return {"#variable that was not found:" +
-                std::to_string(SlowRandomIntGenerator<int>{}())};
+        AD_THROW(absl::StrCat("Variable ", _value.name(), " not found"));
       }
       return {"#column_" + std::to_string(varColMap.at(_value)) + "#"};
     } else if constexpr (std::is_same_v<T, string>) {
@@ -131,6 +91,47 @@ class LiteralExpression : public SparqlExpression {
 
  private:
   T _value;
+
+  // Evaluate the expression if it is a variable expression with the given
+  // `variable`. The variable is passed in explicitly because this function
+  // might be called recursively.
+  ExpressionResult evaluateIfVariable(EvaluationContext* context,
+                                      const Variable& variable) const {
+    // If this is a variable that is not visible in the input but was bound by a
+    // previous alias in the same SELECT clause, then read the constant value of
+    // the variable from the data structures dedicated to this case.
+    auto optionalResultFromSameRow =
+        context->getResultFromPreviousAggregate(variable);
+    if (optionalResultFromSameRow.has_value() &&
+        !context->_groupedVariables.contains(variable)) {
+      // If the expression is a simple renaming of a variable `(?x AS ?y)` we
+      // have to recurse to track a possible chain of such renamings in the
+      // SELECT clause.
+      if (const Variable* var =
+              std::get_if<Variable>(&optionalResultFromSameRow.value());
+          var != nullptr) {
+        return evaluateIfVariable(context, *var);
+      } else {
+        return std::move(optionalResultFromSameRow.value());
+      }
+    }
+    // If a variable is grouped, then we know that it always has the same
+    // value and can treat it as a constant. This is not possible however when
+    // we are inside an aggregate, because for example `SUM(?variable)` must
+    // still compute the sum over the whole group.
+    if (context->_groupedVariables.contains(variable) && !isInsideAggregate()) {
+      auto column = context->getColumnIndexForVariable(variable);
+      const auto& table = context->_inputTable;
+      auto constantValue = table.at(context->_beginIndex, column);
+      assert((std::ranges::all_of(
+          table.begin() + context->_beginIndex,
+          table.begin() + context->_endIndex,
+          [&](const auto& row) { return row[column] == constantValue; })));
+      return constantValue;
+    } else {
+      return variable;
+    }
+  }
 };
 }  // namespace detail
 
@@ -142,5 +143,3 @@ using VariableExpression = detail::LiteralExpression<::Variable>;
 using StringOrIriExpression = detail::LiteralExpression<string>;
 using IdExpression = detail::LiteralExpression<ValueId>;
 }  // namespace sparqlExpression
-
-#endif  // QLEVER_LITERALEXPRESSION_H
