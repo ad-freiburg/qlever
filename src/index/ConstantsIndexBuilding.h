@@ -79,6 +79,9 @@ constexpr size_t QUEUE_SIZE_BEFORE_PARALLEL_PARSING = 10;
 // time
 constexpr size_t QUEUE_SIZE_AFTER_PARALLEL_PARSING = 10;
 
-//  The uncompressed size in bytes of a block of the permutations. Currently 8MB
-//   is chosen which is well suited for zstd compression
-constexpr size_t BLOCKSIZE_COMPRESSED_METADATA = 1ul << 23u;
+// The uncompressed size in bytes of a block of the permutations. Currently 8MB
+// is chosen which is well suited for zstd compression
+//
+// NOTE: For playing around with `DeltaTriples`, I am setting this to a
+// deliberately small number.
+constexpr size_t BLOCKSIZE_COMPRESSED_METADATA = 3 * 16;  // 1ul << 23u;

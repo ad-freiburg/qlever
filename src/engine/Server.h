@@ -12,6 +12,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SortPerformanceEstimator.h"
+#include "index/DeltaTriples.h"
 #include "index/Index.h"
 #include "nlohmann/json.hpp"
 #include "parser/ParseException.h"
@@ -58,6 +59,7 @@ class Server {
   ad_utility::AllocatorWithLimit<Id> _allocator;
   SortPerformanceEstimator _sortPerformanceEstimator;
   Index _index;
+  DeltaTriples _deltaTriples;
   Engine _engine;
 
   bool _initialized;

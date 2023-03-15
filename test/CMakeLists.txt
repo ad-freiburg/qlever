@@ -104,6 +104,8 @@ addLinkAndDiscoverTest(IndexMetaDataTest index)
 # TODO<qup42, joka921> fix this
 addLinkAndDiscoverTestSerial(IndexTest index)
 
+addLinkAndDiscoverTestSerial(DeltaTriplesTest index)
+
 addLinkAndDiscoverTest(FTSAlgorithmsTest index)
 
 addLinkAndDiscoverTest(EngineTest engine)
@@ -305,4 +307,3 @@ addLinkAndDiscoverTestSerial(AggregateExpressionTest parser sparqlExpressions in
 addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 
 addLinkAndDiscoverTest(ExceptionHandlingTest)
-

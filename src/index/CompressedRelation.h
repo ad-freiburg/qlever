@@ -304,6 +304,7 @@ class CompressedRelationReader {
   static void decompressColumn(const std::vector<char>& compressedColumn,
                                size_t numRowsToRead, Iterator iterator);
 
+ public:
   // Read the block that is identified by the `blockMetaData` from the `file`,
   // decompress and return it.
   // If `columnIndices` is `nullopt`, then all columns of the block are read,

@@ -1,4 +1,4 @@
-// Copyright 2011 - 2022, University of Freiburg
+// Copyright 2011 - 2023, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors: Björn Buchhold <b.buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
@@ -14,6 +14,7 @@
 #include "absl/cleanup/cleanup.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
+#include "parser/TurtleParser.h"
 #include "util/BoostHelpers/AsyncWaitForFuture.h"
 
 template <typename T>
@@ -34,6 +35,7 @@ Server::Server(const int port, const int numThreads, size_t maxMemGB,
                  }},
       _sortPerformanceEstimator(),
       _index(),
+      _deltaTriples(_index),
       _engine(),
       _initialized(false),
       // The number of server threads currently also is the number of queries
@@ -316,9 +318,56 @@ Awaitable<void> Server::process(
     logCommand(cmd, "clear cache completely (including unpinned elements)");
     _cache.clearAll();
     response = createJsonResponse(composeCacheStatsJson(), request);
+  } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
+    logCommand(cmd, "clear delta triples");
+    _deltaTriples.clear();
+    response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
     response = createJsonResponse(RuntimeParameters().toMap(), request);
+  }
+
+  // Insert or delete triples.
+  //
+  // TODO: This is a preliminary interface for testing. Eventually, this should
+  // be included in our SPARQL grammer (where the line `updateUnit : update;` at
+  // the beginning is currently commented out).
+  //
+  // TODO: For testing purposes, allow insertions and deletions without access
+  // token. Eventually, this should be restricted, of course, which can be
+  // easily done by adding the argument `accessTokenOk` to each of the calls for
+  // `checkParameter`.
+  {
+    bool insertDetected = false;
+    bool deleteDetected = false;
+    std::optional<std::string> parameterValue;
+    if (parameterValue = checkParameter("insert", std::nullopt)) {
+      LOG(INFO) << "INSERT: " << parameterValue.value() << std::endl;
+      insertDetected = true;
+    } else if (parameterValue = checkParameter("delete", std::nullopt)) {
+      LOG(INFO) << "DELETE: " << parameterValue.value() << std::endl;
+      deleteDetected = true;
+    }
+    if (insertDetected || deleteDetected) {
+      AD_CORRECTNESS_CHECK(parameterValue.has_value());
+      TurtleStringParser<Tokenizer> parser;
+      parser.parseUtf8String(parameterValue.value());
+      if (parser.getTriples().size() == 0) {
+        throw std::runtime_error("Triple could not be parsed");
+      } else if (parser.getTriples().size() > 1) {
+        throw std::runtime_error("Only one triple per call please");
+      }
+      TurtleTriple turtleTriple = parser.getTriples()[0];
+      if (insertDetected) {
+        _deltaTriples.insertTriple(std::move(turtleTriple));
+        response = createOkResponse("INSERT operation processed", request,
+                                    ad_utility::MediaType::textPlain);
+      } else {
+        _deltaTriples.deleteTriple(std::move(turtleTriple));
+        response = createOkResponse("DELETE operation processed", request,
+                                    ad_utility::MediaType::textPlain);
+      }
+    }
   }
 
   // Ping with or without messsage.
@@ -461,6 +510,8 @@ json Server::composeStatsJson() const {
   result["num-text-records"] = _index.getNofTextRecords();
   result["num-word-occurrences"] = _index.getNofWordPostings();
   result["num-entity-occurrences"] = _index.getNofEntityPostings();
+  result["num-delta-triples-inserted"] = _deltaTriples.numInserted();
+  result["num-delta-triples-deleted"] = _deltaTriples.numDeleted();
   return result;
 }
 
