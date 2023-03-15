@@ -7,6 +7,7 @@
 
 #include "./IndexTestHelpers.h"
 #include "./util/IdTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "parser/TripleComponent.h"
 
 using namespace std::literals;
@@ -14,6 +15,7 @@ using namespace ad_utility::testing;
 namespace {
 auto I = IntId;
 auto D = DoubleId;
+auto lit = tripleComponentLiteral;
 }  // namespace
 
 TEST(TripleComponent, setAndGetString) {
@@ -73,13 +75,21 @@ TEST(TripleComponent, assignmentOperator) {
   ASSERT_TRUE(object.isInt());
   ASSERT_EQ(object, 483);
 
+  {
+    auto literal = lit("\"a\"", "@en");
+    object = literal;
+    EXPECT_EQ(object, literal);
+    EXPECT_TRUE(object.isLiteral());
+    EXPECT_EQ(object.getLiteral(), literal);
+    EXPECT_EQ(std::as_const(object).getLiteral(), literal);
+  }
+
   auto testString = [&object](auto input) {
     object = input;
     ASSERT_TRUE(object.isString());
     ASSERT_EQ(input, object);
   };
   testString("<someIri>");
-  testString(std::string_view{R"("aLiteral")"});
   testString("aPlainString"s);
 
   object = Variable{"?alpha"};
@@ -88,8 +98,9 @@ TEST(TripleComponent, assignmentOperator) {
 }
 
 TEST(TripleComponent, toRdfLiteral) {
-  std::vector<std::string> strings{"plainString", "<IRI>",
-                                   R"("aTypedLiteral"^^xsd::integer)"};
+  TripleComponent literal{lit("\"aTypedLiteral\"", "^^<someType>")};
+  EXPECT_EQ(literal.toRdfLiteral(), "\"aTypedLiteral\"^^<someType>");
+  std::vector<std::string> strings{"plainString", "<IRI>"};
   for (const auto& s : strings) {
     ASSERT_EQ(s, TripleComponent{s}.toRdfLiteral());
   }
@@ -110,6 +121,8 @@ TEST(TripleComponent, toValueIdIfNotString) {
   ASSERT_EQ(tc.toValueIdIfNotString().value(), D(131.4));
   tc = "<x>";
   ASSERT_FALSE(tc.toValueIdIfNotString().has_value());
+  tc = lit("\"a\"");
+  ASSERT_FALSE(tc.toValueIdIfNotString().has_value());
 
   tc = Variable{"?x"};
   // Note: we cannot simply write `ASSERT_THROW(tc.toValueIdIfNotString(),
@@ -120,13 +133,18 @@ TEST(TripleComponent, toValueIdIfNotString) {
 }
 
 TEST(TripleComponent, toValueId) {
-  auto qec = getQec("<x> <y> <z>");
+  auto qec = getQec("<x> <y> <z>. <x> <y> \"alpha\".");
   const auto& vocab = qec->getIndex().getVocab();
 
   TripleComponent tc = "<x>";
   Id id = I(10293478);
   qec->getIndex().getId("<x>", &id);
   ASSERT_EQ(tc.toValueId(vocab).value(), id);
+
+  tc = lit("\"alpha\"");
+  qec->getIndex().getId("\"alpha\"", &id);
+  EXPECT_EQ(tc.toValueId(vocab).value(), id);
+
   tc = "<notexisting>";
   ASSERT_FALSE(tc.toValueId(vocab).has_value());
   tc = 42;
@@ -143,4 +161,27 @@ TEST(TripleComponent, settingVariablesAsStringsIsIllegal) {
 
   ASSERT_THROW(assignString(), ad_utility::Exception);
   ASSERT_THROW(assignStringView(), ad_utility::Exception);
+}
+
+TEST(TripleComponent, settingLiteralsAsStringsIsIllegal) {
+  ASSERT_THROW(TripleComponent("\"x\""sv), ad_utility::Exception);
+  ASSERT_THROW(TripleComponent("\'x\'"s), ad_utility::Exception);
+  TripleComponent tc{42};
+  auto assignString = [&]() { tc = "'y'"s; };
+  auto assignStringView = [&]() { tc = "\"y\""sv; };
+
+  ASSERT_THROW(assignString(), ad_utility::Exception);
+  ASSERT_THROW(assignStringView(), ad_utility::Exception);
+}
+
+TEST(TripleComponent, invalidDatatypeForLiteral) {
+  // No datatype.
+  ASSERT_NO_THROW(lit("\"alpha\""));
+  // A datatype.
+  ASSERT_NO_THROW(lit("\"alpha\"", "^^<someType>"));
+  // A language tag.
+  ASSERT_NO_THROW(lit("\"alpha\"", "@fr-ca"));
+
+  // Something that is invalid because it is none of the above
+  ASSERT_ANY_THROW(lit("\"alpha\"", "fr-ca"));
 }

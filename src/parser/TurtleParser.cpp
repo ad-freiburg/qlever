@@ -371,18 +371,18 @@ bool TurtleParser<T>::rdfLiteral() {
   if (!stringParse()) {
     return false;
   }
-  _lastParseResult =
-      RdfEscaping::normalizeRDFLiteral(_lastParseResult.getString());
-  std::string literalString = _lastParseResult.getString();
+  RdfEscaping::NormalizedRDFString literalString{
+      _lastParseResult.getLiteral().normalizedLiteralContent()};
   if (langtag()) {
-    _lastParseResult = literalString + _lastParseResult.getString();
+    _lastParseResult =
+        TripleComponent::Literal{literalString, _lastParseResult.getString()};
     return true;
     // TODO<joka921> this allows spaces here since the ^^ is unique in the
     // sparql syntax. is this correct?
   } else if (skip<TurtleTokenId::DoubleCircumflex>() && check(iri())) {
     const auto typeIri = std::move(_lastParseResult.getString());
     auto type = stripAngleBrackets(typeIri);
-    std::string strippedLiteral{stripDoubleQuotes(literalString)};
+    std::string strippedLiteral{stripDoubleQuotes(literalString.get())};
     // TODO<joka921> clean this up by moving the check for the types to a
     // separate module.
     if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE ||
@@ -398,12 +398,13 @@ bool TurtleParser<T>::rdfLiteral() {
                type == XSD_FLOAT_TYPE) {
       parseDoubleConstant(strippedLiteral);
     } else {
-      _lastParseResult = absl::StrCat(literalString, "^^", typeIri);
+      _lastParseResult =
+          TripleComponent::Literal{literalString, absl::StrCat("^^", typeIri)};
       // TODO: remove this once the dates become value IDs, too.
       if (type == XSD_DATETIME_TYPE || type == XSD_DATE_TYPE ||
           type == XSD_GYEAR_TYPE || type == XSD_GYEARMONTH_TYPE) {
         _lastParseResult = ad_utility::convertValueLiteralToIndexWord(
-            _lastParseResult.getString());
+            _lastParseResult.toRdfLiteral());
       }
     }
     return true;
@@ -419,7 +420,9 @@ bool TurtleParser<T>::booleanLiteral() {
   if (parseTerminal<TurtleTokenId::True>() ||
       parseTerminal<TurtleTokenId::False>()) {
     _lastParseResult =
-        '"' + _lastParseResult.getString() + "\"^^<" + XSD_BOOLEAN_TYPE + '>';
+        TripleComponent::Literal{RdfEscaping::normalizeRDFLiteral(
+                                     '"' + _lastParseResult.getString() + "\""),
+                                 absl::StrCat("^^<", XSD_BOOLEAN_TYPE, ">")};
     return true;
   } else {
     return false;
@@ -469,8 +472,8 @@ bool TurtleParser<T>::stringParse() {
     raise("Unterminated string literal");
   }
   // also include the quotation marks in the word
-  // TODO <joka921> how do we have to translate multiline strings for QLever?
-  _lastParseResult = view.substr(0, endPos + startPos);
+  _lastParseResult = TripleComponent::Literal{
+      RdfEscaping::normalizeRDFLiteral(view.substr(0, endPos + startPos)), ""};
   _tok.remove_prefix(endPos + startPos);
   return true;
 }

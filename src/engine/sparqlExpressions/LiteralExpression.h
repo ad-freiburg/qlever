@@ -24,13 +24,20 @@ class LiteralExpression : public SparqlExpression {
   // Evaluating just returns the constant/literal value.
   ExpressionResult evaluate(
       [[maybe_unused]] EvaluationContext* context) const override {
-    if constexpr (std::is_same_v<string, T>) {
+    // Common code for the `Literal` and `std::string` case.
+    auto getIdOrString = [&context](const std::string& s) -> ExpressionResult {
       Id id;
-      bool idWasFound = context->_qec.getIndex().getId(_value, &id);
+      bool idWasFound = context->_qec.getIndex().getId(s, &id);
       if (!idWasFound) {
-        return _value;
+        // no vocabulary entry found, just use it as a string constant.
+        return s;
       }
       return id;
+    };
+    if constexpr (std::is_same_v<TripleComponent::Literal, T>) {
+      return getIdOrString(_value.rawContent());
+    } else if constexpr (std::is_same_v<string, T>) {
+      return getIdOrString(_value);
     } else if constexpr (std::is_same_v<Variable, T>) {
       return evaluateIfVariable(context, _value);
     } else {
@@ -70,6 +77,8 @@ class LiteralExpression : public SparqlExpression {
       return _value;
     } else if constexpr (std::is_same_v<T, ValueId>) {
       return absl::StrCat("#valueId ", _value.getBits(), "#");
+    } else if constexpr (std::is_same_v<T, TripleComponent::Literal>) {
+      return absl::StrCat("#literal: ", _value.rawContent());
     } else {
       return {std::to_string(_value)};
     }
@@ -140,6 +149,8 @@ using BoolExpression = detail::LiteralExpression<bool>;
 using IntExpression = detail::LiteralExpression<int64_t>;
 using DoubleExpression = detail::LiteralExpression<double>;
 using VariableExpression = detail::LiteralExpression<::Variable>;
-using StringOrIriExpression = detail::LiteralExpression<string>;
+using IriExpression = detail::LiteralExpression<string>;
+using StringLiteralExpression =
+    detail::LiteralExpression<TripleComponent::Literal>;
 using IdExpression = detail::LiteralExpression<ValueId>;
 }  // namespace sparqlExpression

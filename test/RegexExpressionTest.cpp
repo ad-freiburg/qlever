@@ -7,12 +7,16 @@
 
 #include "./SparqlExpressionTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "gtest/gtest.h"
 
 using namespace sparqlExpression;
 using ad_utility::source_location;
+
+namespace {
+auto lit = ad_utility::testing::tripleComponentLiteral;
 
 RegexExpression makeRegexExpression(
     std::string variable, std::string regex,
@@ -26,17 +30,17 @@ RegexExpression makeRegexExpression(
   }
   auto variableExpression =
       std::make_unique<VariableExpression>(Variable{std::move(variable)});
-  auto regexExpression =
-      std::make_unique<StringOrIriExpression>(std::move(regex));
+  auto regexExpression = std::make_unique<StringLiteralExpression>(lit(regex));
   std::optional<SparqlExpression::Ptr> flagsExpression = std::nullopt;
   if (flags.has_value()) {
     flagsExpression = SparqlExpression::Ptr{
-        std::make_unique<StringOrIriExpression>(std::move(flags.value()))};
+        std::make_unique<StringLiteralExpression>(lit(flags.value()))};
   }
 
   return {std::move(variableExpression), std::move(regexExpression),
           std::move(flagsExpression)};
 }
+}  // namespace
 
 // Test that the expression `leftValue Comp rightValue`, when evaluated on the
 // `TestContext` (see above), yields the `expected` result.
@@ -224,39 +228,51 @@ TEST(RegexExpression, getChildren) {
 }
 
 TEST(RegexExpression, invalidConstruction) {
-  auto literal = [](std::string literal) {
-    return std::make_unique<StringOrIriExpression>(std::move(literal));
+  auto literal = [](const std::string& literal,
+                    std::string_view langtagOrDatatype = "") {
+    return std::make_unique<StringLiteralExpression>(
+        lit(literal, langtagOrDatatype));
   };
   auto variable = [](std::string literal) {
     return std::make_unique<VariableExpression>(Variable{std::move(literal)});
   };
+
   // The first argument must be a variable.
-  ASSERT_THROW(RegexExpression(literal("a"), literal("\"b\""), std::nullopt),
-               std::runtime_error);
+  EXPECT_THROW(
+      RegexExpression(literal("\"a\""), literal("\"b\""), std::nullopt),
+      std::runtime_error);
 
   // The second argument must be a string literal.
-  ASSERT_THROW(RegexExpression(variable("?a"), variable("?b"), std::nullopt),
+  EXPECT_THROW(RegexExpression(variable("?a"), variable("?b"), std::nullopt),
                std::runtime_error);
 
-  // The regex must not be an IRI.
-  ASSERT_THROW(RegexExpression(variable("?a"), literal("<a>"), std::nullopt),
+  // The second argument must not have a datatype or langtag
+  EXPECT_THROW(
+      RegexExpression(variable("?a"), literal("\"b\"", "@en"), std::nullopt),
+      std::runtime_error);
+  EXPECT_THROW(RegexExpression(variable("?a"), literal("\"b\"", "^^<someType>"),
+                               std::nullopt),
                std::runtime_error);
 
   // The third argument must be a string literal.
-  ASSERT_THROW(
+  EXPECT_THROW(
       RegexExpression(variable("?a"), literal("\"b\""), variable("?b")),
       std::runtime_error);
-  ASSERT_THROW(
-      RegexExpression(variable("?a"), literal("\"b\""), literal("<b>")),
-      std::runtime_error);
+  // The third argument must not have a language tag or datatype
+  EXPECT_THROW(RegexExpression(variable("?a"), literal("\"b\""),
+                               literal("\"i\"", "@en")),
+               std::runtime_error);
+  EXPECT_THROW(RegexExpression(variable("?a"), literal("\"b\""),
+                               literal("\"i\"", "^^<someType>")),
+               std::runtime_error);
 
   // Invalid regex (parentheses that are never closed).
-  ASSERT_THROW(
+  EXPECT_THROW(
       RegexExpression(variable("?a"), literal("\"(open\""), std::nullopt),
       std::runtime_error);
 
   // Invalid option flag.
-  ASSERT_THROW(
+  EXPECT_THROW(
       RegexExpression(variable("?a"), literal("\"a\""), literal("\"x\"")),
       std::runtime_error);
 }

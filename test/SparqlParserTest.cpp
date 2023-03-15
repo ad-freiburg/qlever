@@ -8,6 +8,7 @@
 
 #include <variant>
 
+#include "./util/TripleComponentTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
 #include "global/Constants.h"
 #include "parser/SparqlParser.h"
@@ -16,6 +17,9 @@ namespace m = matchers;
 namespace p = parsedQuery;
 
 using Var = Variable;
+namespace {
+auto lit = ad_utility::testing::tripleComponentLiteral;
+}
 
 TEST(ParserTest, testParse) {
   {
@@ -109,7 +113,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(Var{"?z"}, triples[1]._o);
     ASSERT_EQ(Var{"?y"}, triples[2]._s);
     ASSERT_EQ("<nsx:rel2>", triples[2]._p._iri);
-    ASSERT_EQ("\"Hello... World\"", triples[2]._o);
+    ASSERT_EQ(lit("\"Hello... World\""), triples[2]._o);
     ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);
   }
@@ -155,7 +159,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(Var{"?x"}, triples[2]._o);
     ASSERT_EQ(Var{"?c"}, triples[3]._s);
     ASSERT_EQ(CONTAINS_WORD_PREDICATE, triples[3]._p._iri);
-    ASSERT_EQ("coca* abuse", triples[3]._o);
+    ASSERT_EQ(lit("\"coca* abuse\""), triples[3]._o);
   }
 
   {
@@ -235,8 +239,8 @@ TEST(ParserTest, testParse) {
   {
     auto pq = SparqlParser::parseQuery(
         "SELECT ?a WHERE {\n"
-        "  VALUES ?a { <1> \"2\"}\n"
-        "  VALUES (?b ?c) {(<1> <2>) (\"1\" \"2\")}\n"
+        "  VALUES ?a { <1> 2}\n"
+        "  VALUES (?b ?c) {(<1> <2>) (1 2)}\n"
         "  ?a <rel> ?b ."
         "}");
     ASSERT_EQ(3u, pq._rootGraphPattern._graphPatterns.size());
@@ -248,12 +252,12 @@ TEST(ParserTest, testParse) {
 
     vector<Variable> vvars = {Var{"?a"}};
     ASSERT_EQ(vvars, values1._variables);
-    vector<vector<TripleComponent>> vvals = {{"<1>"}, {"\"2\""}};
+    vector<vector<TripleComponent>> vvals = {{"<1>"}, {2}};
     ASSERT_EQ(vvals, values1._values);
 
     vvars = {Var{"?b"}, Var{"?c"}};
     ASSERT_EQ(vvars, values2._variables);
-    vvals = {{"<1>", "<2>"}, {"\"1\"", "\"2\""}};
+    vvals = {{"<1>", "<2>"}, {1, 2}};
     ASSERT_EQ(vvals, values2._values);
   }
 
@@ -746,7 +750,7 @@ TEST(ParserTest, testLiterals) {
   const auto& c = pq.children()[0].getBasic();
   ASSERT_TRUE(selectClause.isAsterisk());
   ASSERT_EQ(2u, c._triples.size());
-  ASSERT_EQ("\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+  ASSERT_EQ(lit("\"true\"", "^^<http://www.w3.org/2001/XMLSchema#boolean>"),
             c._triples[0]._s);
   ASSERT_EQ("<test:myrel>", c._triples[0]._p._iri);
   ASSERT_EQ(10, c._triples[0]._o);
@@ -899,10 +903,10 @@ TEST(ParserTest, testSolutionModifiers) {
 
   {
     auto pq = SparqlParser::parseQuery(
-        "PREFIX xsd: <http://www.w3.org/2010/XMLSchema#>"
+        "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>"
         "SELECT DISTINCT ?movie WHERE { \n"
         "\n"
-        "?movie <from-year> \"00-00-2000\"^^xsd:date .\n"
+        "?movie <from-year> \"2000-00-00\"^^xsd:date .\n"
         "\n"
         "?movie <directed-by> <Scott%2C%20Ridley> .   }  LIMIT 50");
     ASSERT_TRUE(pq.hasSelectClause());
@@ -914,8 +918,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(2u, c._triples.size());
     ASSERT_EQ(Var{"?movie"}, c._triples[0]._s);
     ASSERT_EQ("<from-year>", c._triples[0]._p._iri);
-    ASSERT_EQ("\"00-00-2000\"^^<http://www.w3.org/2010/XMLSchema#date>",
-              c._triples[0]._o);
+    ASSERT_EQ(":v:date:0000000000000002000-00-00T00:00:00", c._triples[0]._o);
     ASSERT_EQ(Var{"?movie"}, c._triples[1]._s);
     ASSERT_EQ("<directed-by>", c._triples[1]._p._iri);
     ASSERT_EQ("<Scott%2C%20Ridley>", c._triples[1]._o);

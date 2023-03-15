@@ -98,46 +98,11 @@ void Visitor::addVisibleVariable(Variable var) {
 }
 
 // ___________________________________________________________________________
-namespace {
-string stripAndLowercaseKeywordLiteral(std::string_view lit) {
-  if (lit.size() > 2 && lit[0] == '"' && lit.back() == '"') {
-    auto stripped = lit.substr(1, lit.size() - 2);
-    return ad_utility::getLowercaseUtf8(stripped);
-  }
-  return std::string{lit};
-}
-
-// ___________________________________________________________________________
-template <typename Current, typename... Others>
-constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
-    const auto& arg) {
-  if constexpr (sizeof...(Others) == 0) {
-    return &arg;
-  } else if constexpr (ad_utility::isSimilar<decltype(arg), Current>) {
-    if (const auto ptr = std::get_if<ad_utility::First<Others...>>(&arg)) {
-      return unwrapVariant<Others...>(*ptr);
-    }
-    return nullptr;
-  } else {
-    return unwrapVariant<Others...>(arg);
-  }
-}
-}  // namespace
-
-// ___________________________________________________________________________
-PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
+PathTuples joinPredicateAndObject(const VarOrPath& predicate,
+                                  ObjectList objectList) {
   PathTuples tuples;
+  tuples.reserve(objectList.first.size());
   for (auto& object : objectList.first) {
-    // TODO The fulltext index should perform the splitting of its keywords,
-    //  and not the SparqlParser.
-    if (const PropertyPath* path = std::get_if<PropertyPath>(&predicate)) {
-      if (path->asString() == CONTAINS_WORD_PREDICATE) {
-        if (const Literal* literal =
-                unwrapVariant<VarOrTerm, GraphTerm, Literal>(object)) {
-          object = Literal{stripAndLowercaseKeywordLiteral(literal->literal())};
-        }
-      }
-    }
     tuples.emplace_back(predicate, std::move(object));
   }
   return tuples;
@@ -405,17 +370,8 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
     return blankNode.toSparql();
   };
   auto visitLiteral = [](const Literal& literal) {
-    // Problem: ql:contains-word causes the " to be stripped.
-    // TODO: Move stripAndLowercaseKeywordLiteral out to this point or
-    //  rewrite the Turtle Parser s.t. this code can be integrated into the
-    //  visitor. In this case the turtle parser should output the
-    //  corresponding modell class.
-    try {
-      return TurtleStringParser<TokenizerCtre>::parseTripleObject(
-          literal.toSparql());
-    } catch (const TurtleStringParser<TokenizerCtre>::ParseException&) {
-      return TripleComponent{literal.toSparql()};
-    }
+    return TurtleStringParser<TokenizerCtre>::parseTripleObject(
+        literal.toSparql());
   };
   auto visitGraphTerm = [&visitIri, &visitBlankNode,
                          &visitLiteral](const GraphTerm& graphTerm) {
@@ -626,7 +582,7 @@ std::optional<parsedQuery::ConstructClause> Visitor::visit(
 }
 
 // ____________________________________________________________________________________
-string Visitor::visit(Parser::StringContext* ctx) {
+RdfEscaping::NormalizedRDFString Visitor::visit(Parser::StringContext* ctx) {
   return RdfEscaping::normalizeRDFLiteral(ctx->getText());
 }
 
@@ -1571,7 +1527,9 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
     auto tripleComponent = TurtleStringParser<TokenizerCtre>::parseTripleObject(
         visit(ctx->rdfLiteral()));
     if (tripleComponent.isString()) {
-      return make_unique<StringOrIriExpression>(tripleComponent.getString());
+      return make_unique<IriExpression>(tripleComponent.getString());
+    } else if (tripleComponent.isLiteral()) {
+      return make_unique<StringLiteralExpression>(tripleComponent.getLiteral());
     } else {
       return make_unique<IdExpression>(
           tripleComponent.toValueIdIfNotString().value());
@@ -1738,7 +1696,7 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
       // TODO: The string rule also allow triple quoted strings with different
       //  escaping rules. These are currently not handled. They should be parsed
       //  into a typesafe format with a unique representation.
-      separator = visit(ctx->string());
+      separator = visit(ctx->string()).get();
       // If there was a separator, we have to strip the quotation marks
       AD_CONTRACT_CHECK(separator.size() >= 2);
       separator = separator.substr(1, separator.size() - 2);
@@ -1757,8 +1715,7 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
 ExpressionPtr Visitor::visit(Parser::IriOrFunctionContext* ctx) {
   // Case 1: Just an IRI.
   if (ctx->argList() == nullptr) {
-    return std::make_unique<sparqlExpression::StringOrIriExpression>(
-        visit(ctx->iri()));
+    return std::make_unique<sparqlExpression::IriExpression>(visit(ctx->iri()));
   }
   // Case 2: Function call, where the function name is an IRI.
   return processIriFunctionCall(visit(ctx->iri()), visit(ctx->argList()), ctx);

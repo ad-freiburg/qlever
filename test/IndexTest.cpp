@@ -11,6 +11,7 @@
 #include "./IndexTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "global/Pattern.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
@@ -18,6 +19,7 @@
 using namespace ad_utility::testing;
 
 namespace {
+auto lit = ad_utility::testing::tripleComponentLiteral;
 
 // Return a lambda that runs a scan for two fixed elements `c0` and `c1`
 // on the `permutation` (e.g. a fixed P and S in the PSO permutation)
@@ -324,7 +326,7 @@ MATCHER_P2(IsPossiblyExternalString, content, isExternal, "") {
 TEST(IndexTest, TripleToInternalRepresentation) {
   {
     IndexImpl index;
-    TurtleTriple turtleTriple{"<subject>", "<predicate>", "\"literal\""};
+    TurtleTriple turtleTriple{"<subject>", "<predicate>", lit("\"literal\"")};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
     ASSERT_TRUE(res._langtag.empty());
@@ -336,7 +338,8 @@ TEST(IndexTest, TripleToInternalRepresentation) {
     IndexImpl index;
     index.getNonConstVocabForTesting().initializeExternalizePrefixes(
         std::vector{"<subj"s});
-    TurtleTriple turtleTriple{"<subject>", "<predicate>", "\"literal\"@fr"};
+    TurtleTriple turtleTriple{"<subject>", "<predicate>",
+                              lit("\"literal\"", "@fr")};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
     ASSERT_EQ(res._langtag, "fr");
