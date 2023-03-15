@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
+#include "parser/RdfEscaping.h"
+
 #include <absl/strings/str_cat.h>
 #include <ctre/ctre.h>
 #include <unicode/ustream.h>
@@ -190,7 +192,7 @@ std::string escapeNewlinesAndBackslashes(std::string_view literal) {
 }
 
 // ________________________________________________________________________
-std::string normalizeRDFLiteral(const std::string_view origLiteral) {
+NormalizedRDFString normalizeRDFLiteral(const std::string_view origLiteral) {
   auto literal = origLiteral;
 
   // always start with one double quote "
@@ -213,7 +215,7 @@ std::string normalizeRDFLiteral(const std::string_view origLiteral) {
   detail::unescapeStringAndNumericEscapes<false, false>(
       literal.begin(), literal.end(), std::back_inserter(res));
   res.push_back('\"');
-  return res;
+  return NormalizedRDFString{std::move(res)};
 }
 
 // ____________________________________________________________________________

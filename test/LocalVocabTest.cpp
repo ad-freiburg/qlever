@@ -8,6 +8,7 @@
 #include <string>
 
 #include "./IndexTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Distinct.h"
@@ -31,6 +32,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
 
+namespace {
 // Get test collection of words of a given size. The words are all distinct.
 std::vector<std::string> getTestCollectionOfWords(size_t size) {
   std::vector<std::string> testCollectionOfWords(size);
@@ -39,6 +41,7 @@ std::vector<std::string> getTestCollectionOfWords(size_t size) {
   }
   return testCollectionOfWords;
 }
+}  // namespace
 
 // _____________________________________________________________________________
 TEST(LocalVocab, constructionAndAccess) {
@@ -316,6 +319,6 @@ TEST(LocalVocab, propagation) {
   TextOperationWithFilter text1(testQec, "", {}, Variable{"?x"}, qet(values1),
                                 0);
   checkLocalVocab(text1, std::vector<std::string>{"x", "y1", "y2"});
-  TextOperationWithoutFilter text2(testQec, "", {}, Variable{"?x"});
+  TextOperationWithoutFilter text2(testQec, {}, {}, Variable{"?x"});
   checkLocalVocab(text2, {});
 }
