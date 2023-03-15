@@ -1,6 +1,6 @@
 # Re-compiling all the infrastructure all the time is a waste of time, so we
 # pre-compile that part as a library.
-add_library(benchmark Benchmark.cpp Benchmark.h BenchmarkRecordToJson.h BenchmarkRecordToJson.cpp BenchmarkRecordToString.h BenchmarkRecordToString.cpp BenchmarkMain.cpp)
+add_library(benchmark Benchmark.cpp Benchmark.h BenchmarkRecordToJson.h BenchmarkRecordToJson.cpp BenchmarkRecordToString.h BenchmarkRecordToString.cpp BenchmarkConfiguration.h BenchmarkConfiguration.cpp BenchmarkMain.cpp)
 target_link_libraries(benchmark absl::flat_hash_map boost_program_options)
 
 # Link binary ${basename} against the benchmark library,
