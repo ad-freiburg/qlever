@@ -589,14 +589,22 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
 
     checkVariableIsVisible(orderKey.variable_, "ORDER BY", variablesFromAliases,
                            additionalError);
-    if (isGroupBy &&
-        !ad_utility::contains(groupByVariables, orderKey.variable_)) {
-      throw InvalidQueryException(
-          "Variable " + orderKey.variable_.name() +
-          " was used in an ORDER BY "
-          "clause, but is neither grouped, nor created as an alias in the "
-          "SELECT clause." +
-          noteForImplicitGroupBy);
+    if (isGroupBy) {
+      if (!ad_utility::contains(groupByVariables, orderKey.variable_) &&
+          // `ConstructClause` has no Aliases. So the variable can never be
+          // the result of an Alias.
+          (hasConstructClause() ||
+           !ad_utility::contains_if(
+               selectClause().getAliases(), [&orderKey](const Alias& alias) {
+                 return alias._target == orderKey.variable_;
+               }))) {
+        throw InvalidQueryException(
+            "Variable " + orderKey.variable_.name() +
+            " was used in an ORDER BY "
+            "clause, but is neither grouped, nor created as an alias in the "
+            "SELECT clause." +
+            noteForImplicitGroupBy);
+      }
     }
 
     _orderBy.push_back(std::move(orderKey));
