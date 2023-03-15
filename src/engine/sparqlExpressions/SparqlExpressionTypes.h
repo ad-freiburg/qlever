@@ -33,12 +33,12 @@ class VectorWithMemoryLimit
   // necessary).
   // The copy constructor is not deleted, but private, because it is used
   // for the explicit clone() function.
- private:
+  // private:
+ public:
+  VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = default;
   VectorWithMemoryLimit(const VectorWithMemoryLimit&) = default;
 
  public:
-  VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = delete;
-
   // Moving is fine.
   VectorWithMemoryLimit(VectorWithMemoryLimit&&) noexcept = default;
   VectorWithMemoryLimit& operator=(VectorWithMemoryLimit&&) noexcept = default;

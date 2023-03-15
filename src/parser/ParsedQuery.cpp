@@ -187,7 +187,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       if (ad_utility::contains(selectClause().getVisibleVariables(),
                                alias._target)) {
         throw InvalidQueryException(absl::StrCat(
-            "The target", alias._target.name(),
+            "The target ", alias._target.name(),
             " of an AS clause was already used in the query body."));
       }
 
@@ -207,11 +207,6 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
     // Check that all the variables that are used in aliases are either visible
     // in the query body or are bound by a previous alias from the same SELECT
     // clause.
-    // Note: Currently the reusage of variables from previous aliases
-    // like SELECT (?a AS ?b) (?b AS ?c) is only supported by QLever if there is
-    // no GROUP BY in the query. To support this we would also need changes in
-    // the `GroupBy` class.
-    // TODO<joka921> Implement these changes and support this case.
     ad_utility::HashSet<Variable> variablesBoundInAliases;
     for (const auto& alias : selectClause().getAliases()) {
       checkUsedVariablesAreVisible(alias._expression, "SELECT",
@@ -393,8 +388,7 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
 // __________________________________________________________________________
 ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}
 
-// TODO<joka921> Change the first argument to `Variable`, but first merge
-// the filter-PR.
+// __________________________________________________________________________
 void ParsedQuery::GraphPattern::addLanguageFilter(
     const Variable& variable, const std::string& languageInQuotes) {
   auto langTag = languageInQuotes.substr(1, languageInQuotes.size() - 2);
@@ -482,13 +476,15 @@ ParsedQuery::getConstructedOrSelectedVariables() const {
 
 // ____________________________________________________________________________
 void ParsedQuery::checkVariableIsVisible(
-    const Variable& var, const std::string& locationDescription,
-    const ad_utility::HashSet<Variable>& additionalVisibleVariables) {
-  if (!ad_utility::contains(getVisibleVariables(), var) &&
-      !additionalVisibleVariables.contains(var)) {
-    throw InvalidQueryException("Variable " + var.name() + " was used by " +
-                                locationDescription +
-                                ", but is not defined in the query body.");
+    const Variable& variable, const std::string& locationDescription,
+    const ad_utility::HashSet<Variable>& additionalVisibleVariables,
+    std::string_view otherPossibleLocationDescription) const {
+  if (!ad_utility::contains(getVisibleVariables(), variable) &&
+      !additionalVisibleVariables.contains(variable)) {
+    throw InvalidQueryException(absl::StrCat(
+        "Variable ", variable.name(), " was used by " + locationDescription,
+        ", but is not defined in the query body",
+        otherPossibleLocationDescription, "."));
   }
 }
 
@@ -496,12 +492,14 @@ void ParsedQuery::checkVariableIsVisible(
 void ParsedQuery::checkUsedVariablesAreVisible(
     const sparqlExpression::SparqlExpressionPimpl& expression,
     const std::string& locationDescription,
-    const ad_utility::HashSet<Variable>& additionalVisibleVariables) {
+    const ad_utility::HashSet<Variable>& additionalVisibleVariables,
+    std::string_view otherPossibleLocationDescription) const {
   for (const auto* var : expression.containedVariables()) {
     checkVariableIsVisible(*var,
                            locationDescription + " in expression \"" +
                                expression.getDescriptor() + "\"",
-                           additionalVisibleVariables);
+                           additionalVisibleVariables,
+                           otherPossibleLocationDescription);
   }
 }
 
@@ -513,17 +511,24 @@ void ParsedQuery::addGroupByClause(std::vector<GroupKey> groupKeys) {
 
     _groupByVariables.emplace_back(groupKey.name());
   };
+
+  ad_utility::HashSet<Variable> variablesDefinedInGroupBy;
   auto processExpression =
-      [this](sparqlExpression::SparqlExpressionPimpl groupKey) {
-        checkUsedVariablesAreVisible(groupKey, "GROUP BY");
+      [this, &variablesDefinedInGroupBy](
+          sparqlExpression::SparqlExpressionPimpl groupKey) {
+        checkUsedVariablesAreVisible(groupKey, "GROUP BY",
+                                     variablesDefinedInGroupBy,
+                                     " or previously in the same GROUP BY");
         auto helperTarget = addInternalBind(std::move(groupKey));
         _groupByVariables.emplace_back(helperTarget.name());
       };
-  auto processAlias = [this](Alias groupKey) {
-    parsedQuery::Bind helperBind{std::move(groupKey._expression),
-                                 groupKey._target};
-    _rootGraphPattern._graphPatterns.emplace_back(std::move(helperBind));
-    registerVariableVisibleInQueryBody(groupKey._target);
+
+  auto processAlias = [this, &variablesDefinedInGroupBy](Alias groupKey) {
+    checkUsedVariablesAreVisible(groupKey._expression, "GROUP BY",
+                                 variablesDefinedInGroupBy,
+                                 " or previously in the same GROUP BY");
+    variablesDefinedInGroupBy.insert(groupKey._target);
+    addBind(std::move(groupKey._expression), groupKey._target, true);
     _groupByVariables.emplace_back(groupKey._target);
   };
 
@@ -538,7 +543,6 @@ void ParsedQuery::addGroupByClause(std::vector<GroupKey> groupKeys) {
 // ____________________________________________________________________________
 void ParsedQuery::addHavingClause(std::vector<SparqlFilter> havingClauses,
                                   bool isGroupBy) {
-  // TODO<joka921> add Sanity checks here s.t. you get a proper error message.
   if (!isGroupBy && !havingClauses.empty()) {
     throw InvalidQueryException(
         "A HAVING clause is only supported in queries with GROUP BY");
@@ -551,10 +555,9 @@ void ParsedQuery::addHavingClause(std::vector<SparqlFilter> havingClauses,
     }
   }
   for (auto& havingClause : havingClauses) {
-    // TODO<joka921> better error message for variables that are previously
-    // defined.
-    checkUsedVariablesAreVisible(havingClause.expression_, "HAVING",
-                                 variablesFromAliases);
+    checkUsedVariablesAreVisible(
+        havingClause.expression_, "HAVING", variablesFromAliases,
+        " and also not bound inside the SELECT clause");
     auto newVariable = addInternalAlias(std::move(havingClause.expression_));
     // TODO<C++23, Clang16> simply use `emplace_back` to initialize the
     // aggregate `SparqlFilter`.
@@ -567,15 +570,29 @@ void ParsedQuery::addHavingClause(std::vector<SparqlFilter> havingClauses,
 // ____________________________________________________________________________
 void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
                                    std::string_view noteForImplicitGroupBy) {
+  // The variables that are used in the ORDER BY can also come from aliases in
+  // the SELECT clause
+  ad_utility::HashSet<Variable> variablesFromAliases;
+  if (hasSelectClause()) {
+    for (const auto& alias : selectClause().getAliases()) {
+      variablesFromAliases.insert(alias._target);
+    }
+  }
+
+  std::string_view additionalError =
+      " and also not bound inside the SELECT clause";
+
   // Process orderClause
-  auto processVariableOrderKey = [this, isGroupBy, &noteForImplicitGroupBy](
-                                     VariableOrderKey orderKey) {
+  auto processVariableOrderKey = [this, isGroupBy, &noteForImplicitGroupBy,
+                                  &variablesFromAliases,
+                                  additionalError](VariableOrderKey orderKey) {
     // Check whether grouping is done. The variable being ordered by
     // must then be either grouped or the result of an alias in the select.
     const vector<Variable>& groupByVariables = _groupByVariables;
 
     if (!isGroupBy) {
-      checkVariableIsVisible(orderKey.variable_, "ORDER BY");
+      checkVariableIsVisible(orderKey.variable_, "ORDER BY",
+                             variablesFromAliases, additionalError);
     } else if (!ad_utility::contains(groupByVariables, orderKey.variable_) &&
                // `ConstructClause` has no Aliases. So the variable can never be
                // the result of an Alias.
@@ -599,16 +616,11 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
   // QLever currently only supports ordering by variables. To allow
   // all `orderConditions`, the corresponding expression is bound to a new
   // internal variable. Ordering is then done by this variable.
-  ad_utility::HashSet<Variable> variablesFromAliases;
-  if (hasSelectClause()) {
-    for (const auto& alias : selectClause().getAliases()) {
-      variablesFromAliases.insert(alias._target);
-    }
-  }
   auto processExpressionOrderKey =
-      [this, isGroupBy, &variablesFromAliases](ExpressionOrderKey orderKey) {
+      [this, isGroupBy, &variablesFromAliases,
+       additionalError](ExpressionOrderKey orderKey) {
         checkUsedVariablesAreVisible(orderKey.expression_, "ORDER BY",
-                                     variablesFromAliases);
+                                     variablesFromAliases, additionalError);
         if (isGroupBy) {
           auto newVariable = addInternalAlias(std::move(orderKey.expression_));
           _orderBy.emplace_back(std::move(newVariable), orderKey.isDescending_);
