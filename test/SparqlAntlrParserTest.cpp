@@ -1100,8 +1100,10 @@ TEST(SparqlParser, SelectQuery) {
 
   // The target of the alias (`?y`) is already bound in the WHERE clause. This
   // is forbidden by the SPARQL standard.
-  expectSelectQueryFails("SELECT (?x AS ?y) WHERE { ?x <is-a> ?y }",
-                         contains("already used"));
+  expectSelectQueryFails(
+      "SELECT (?x AS ?y) WHERE { ?x <is-a> ?y }",
+      contains(
+          "The target ?y of an AS clause was already used in the query body."));
 
   // Datasets are not supported.
   expectSelectQueryFails("SELECT * FROM <defaultDataset> WHERE { ?x ?y ?z }",
@@ -1109,6 +1111,7 @@ TEST(SparqlParser, SelectQuery) {
 }
 
 TEST(SparqlParser, ConstructQuery) {
+  auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
   auto expectConstructQuery = ExpectCompleteParse<&Parser::constructQuery>{
       {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
   auto expectConstructQueryFails = ExpectParseFails<&Parser::constructQuery>{};
@@ -1142,12 +1145,18 @@ TEST(SparqlParser, ConstructQuery) {
                        m::ConstructQuery({{Var{"?a"}, Iri{"<foo>"}, Var{"?b"}}},
                                          m::GraphPattern()));
   // Datasets are not supported.
-  expectConstructQueryFails("CONSTRUCT { } FROM <foo> WHERE { ?a ?b ?c }");
-  expectConstructQueryFails("CONSTRUCT FROM <foo> WHERE { }");
+  expectConstructQueryFails(
+      "CONSTRUCT { } FROM <foo> WHERE { ?a ?b ?c }",
+      contains("FROM clauses are currently not supported by QLever."));
+  expectConstructQueryFails(
+      "CONSTRUCT FROM <foo> WHERE { }",
+      contains("FROM clauses are currently not supported by QLever."));
 
   // GROUP BY and ORDER BY, but the ordered variable is not grouped
   expectConstructQueryFails(
-      "CONSTRUCT {?a <b> <c> } WHERE { ?a ?b ?c } GROUP BY ?a ORDER BY ?b");
+      "CONSTRUCT {?a <b> <c> } WHERE { ?a ?b ?c } GROUP BY ?a ORDER BY ?b",
+      contains("Variable ?b was used in an ORDER BY clause, but is neither "
+               "grouped nor created as an alias in the SELECT clause"));
 }
 
 TEST(SparqlParser, Query) {

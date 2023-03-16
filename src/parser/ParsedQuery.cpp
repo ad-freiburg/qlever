@@ -106,7 +106,7 @@ Variable ParsedQuery::addInternalBind(
     sparqlExpression::SparqlExpressionPimpl expression) {
   // Internal variable name to which the result of the helper bind is
   // assigned.
-  auto targetVariable = getNextInternalVariable();
+  auto targetVariable = getNewInternalVariable();
   // Don't register the targetVariable as visible because it is used
   // internally and should not be selected by SELECT * (this is the `bool`
   // argument to `addBind`).
@@ -122,7 +122,7 @@ Variable ParsedQuery::addInternalAlias(
     sparqlExpression::SparqlExpressionPimpl expression) {
   // Internal variable name to which the result of the helper bind is
   // assigned.
-  auto targetVariable = getNextInternalVariable();
+  auto targetVariable = getNewInternalVariable();
   // Don't register the targetVariable as visible because it is used
   // internally and should not be visible to the user.
   selectClause().addAlias(Alias{std::move(expression), targetVariable}, true);
@@ -594,7 +594,7 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
         (!variablesFromAliases.contains(orderKey.variable_))) {
       throw InvalidQueryException(
           "Variable " + orderKey.variable_.name() +
-          " was used in an ORDER BY clause, but is neither grouped, nor "
+          " was used in an ORDER BY clause, but is neither grouped nor "
           "created as an alias in the SELECT clause." +
           noteForImplicitGroupBy);
     }
@@ -628,7 +628,7 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
 }
 
 // ________________________________________________________________
-Variable ParsedQuery::getNextInternalVariable() {
+Variable ParsedQuery::getNewInternalVariable() {
   auto variable =
       Variable{absl::StrCat(INTERNAL_VARIABLE_PREFIX, numInternalVariables_)};
   numInternalVariables_++;

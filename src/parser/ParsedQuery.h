@@ -217,7 +217,7 @@ class ParsedQuery {
 
   // Return the next internal variable. Used e.g. by `addInternalBind` and
   // `addInternalAlias`
-  Variable getNextInternalVariable();
+  Variable getNewInternalVariable();
 
  public:
   // Add the `modifiers` (like GROUP BY, HAVING, ORDER BY) to the query. Throw

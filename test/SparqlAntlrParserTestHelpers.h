@@ -585,7 +585,7 @@ MATCHER_P4(Select, distinct, reduced, selection, hiddenAliases, "") {
   size_t i = 0;
   for (const auto& [descriptor, variable] : hiddenAliases) {
     if (alias_counter >= arg.getAliases().size()) {
-      *result_listener << "where selected Variables contain less Aliases ("
+      *result_listener << "where selected variables contain less aliases ("
                        << testing::PrintToString(alias_counter)
                        << ") than provided to matcher";
       return false;
@@ -593,7 +593,7 @@ MATCHER_P4(Select, distinct, reduced, selection, hiddenAliases, "") {
     if (descriptor !=
             arg.getAliases()[alias_counter]._expression.getDescriptor() ||
         variable != arg.getAliases()[alias_counter]._target) {
-      *result_listener << "where hidden Alias#" << i << " = "
+      *result_listener << "where hidden alias#" << i << " = "
                        << testing::PrintToString(
                               arg.getAliases()[alias_counter]);
       return false;
