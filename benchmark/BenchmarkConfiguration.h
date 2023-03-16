@@ -45,7 +45,14 @@ class BenchmarkConfiguration{
    * @brief Parses the given short hand and adds all configuration data, that
    *  was described with valid syntax.
    *
-   * @param shortHandString The valid syntax is: TODO Plan syntax.
+   * @param shortHandString The language of the short hand is a number of
+   *  assigments `variableName = variableContent;` with no seperator.
+   *  `variableName` is the name of the configuration option. As long as it's
+   *  a valid variable name in `C++` everything should be good.
+   *  `variableContent` can a boolean literal, an integer literal, or a list
+   *  of those literals in the form of `{value1, value2, ...}`.
+   *  An example for a short hand string:
+   *  `"isSorted=false;numberOfLoops=2;numberOfItems={4,5,6,7};"`
    */
   void parseShortHand(const std::string& shortHandString);
 
