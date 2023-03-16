@@ -109,19 +109,19 @@ class LiteralExpression : public SparqlExpression {
     // If this is a variable that is not visible in the input but was bound by a
     // previous alias in the same SELECT clause, then read the constant value of
     // the variable from the data structures dedicated to this case.
-    auto optionalResultFromSameRow =
-        context->getResultFromPreviousAggregate(variable);
-    if (optionalResultFromSameRow.has_value() &&
+    if (auto resultFromSameRow =
+            context->getResultFromPreviousAggregate(variable);
+        resultFromSameRow.has_value() &&
         !context->_groupedVariables.contains(variable)) {
       // If the expression is a simple renaming of a variable `(?x AS ?y)` we
       // have to recurse to track a possible chain of such renamings in the
       // SELECT clause.
       if (const Variable* var =
-              std::get_if<Variable>(&optionalResultFromSameRow.value());
+              std::get_if<Variable>(&resultFromSameRow.value());
           var != nullptr) {
         return evaluateIfVariable(context, *var);
       } else {
-        return std::move(optionalResultFromSameRow.value());
+        return std::move(resultFromSameRow.value());
       }
     }
     // If a variable is grouped, then we know that it always has the same

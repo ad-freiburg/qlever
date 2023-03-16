@@ -15,10 +15,9 @@ namespace sparqlExpression::detail {
 
 /// Convert a variable to a vector of all the Ids it is bound to in the
 /// `context`.
-inline std::span<const ValueId> getIdsFromVariable(const ::Variable& variable,
-                                                   EvaluationContext* context,
-                                                   size_t beginIndex,
-                                                   size_t endIndex) {
+inline std::span<const ValueId> getIdsFromVariable(
+    const ::Variable& variable, const EvaluationContext* context,
+    size_t beginIndex, size_t endIndex) {
   const auto& inputTable = context->_inputTable;
 
   if (!context->_variableToColumnAndResultTypeMap.contains(variable)) {
@@ -40,8 +39,8 @@ inline std::span<const ValueId> getIdsFromVariable(const ::Variable& variable,
 
 // Overload that reads the `beginIndex` and the `endIndex` directly from the
 // `context
-inline std::span<const ValueId> getIdsFromVariable(const ::Variable& variable,
-                                                   EvaluationContext* context) {
+inline std::span<const ValueId> getIdsFromVariable(
+    const ::Variable& variable, const EvaluationContext* context) {
   return getIdsFromVariable(variable, context, context->_beginIndex,
                             context->_endIndex);
 }
@@ -90,10 +89,9 @@ inline cppcoro::generator<Bool> resultGenerator(ad_utility::SetOfIntervals set,
 template <SingleExpressionResult Input>
 auto makeGenerator(Input&& input, size_t numItems, EvaluationContext* context) {
   if constexpr (ad_utility::isSimilar<::Variable, Input>) {
-    // TODO: Also directly write a generator that lazily gets the Ids in chunks.
     std::span<const ValueId> inputWithVariableResolved{
         getIdsFromVariable(std::forward<Input>(input), context)};
-    return resultGenerator(std::move(inputWithVariableResolved), numItems);
+    return resultGenerator(inputWithVariableResolved, numItems);
   } else {
     return resultGenerator(std::forward<Input>(input), numItems);
   }

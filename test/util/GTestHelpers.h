@@ -28,15 +28,20 @@
   ::testing::Field(#Member, &Class::Member, Matcher)
 #endif
 
-#define AD_EXPECT_THROW_WITH_MESSAGE(stmt, matcher)                           \
-  try {                                                                       \
-    stmt;                                                                     \
-    FAIL() << "No exception was thrown";                                      \
-  } catch (const std::exception& e) {                                         \
-    EXPECT_THAT(e.what(), matcher) << "The exception message does not match"; \
-  } catch (...) {                                                             \
-    FAIL() << "The thrown exception did not inherit from std::exception";     \
-  }                                                                           \
+// Similar to Gtest's `EXPECT_THROW`. Expect that executing `statement` throws
+// an exception that inherits from `std::exception`, and that the error message
+// of that exception, obtained by the `what()` member function, matches the
+// given `errorMessageMatcher`.
+#define AD_EXPECT_THROW_WITH_MESSAGE(statement, errorMessageMatcher)      \
+  try {                                                                   \
+    statement;                                                            \
+    FAIL() << "No exception was thrown";                                  \
+  } catch (const std::exception& e) {                                     \
+    EXPECT_THAT(e.what(), errorMessageMatcher)                            \
+        << "The exception message does not match";                        \
+  } catch (...) {                                                         \
+    FAIL() << "The thrown exception did not inherit from std::exception"; \
+  }                                                                       \
   void()
 
 // _____________________________________________________________________________

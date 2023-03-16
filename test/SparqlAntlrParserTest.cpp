@@ -957,7 +957,7 @@ TEST(SparqlParser, RDFLiteral) {
 }
 
 TEST(SparqlParser, SelectQuery) {
-  auto starts = [](const std::string& s) { return ::testing::StartsWith(s); };
+  auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
   auto expectSelectQuery = ExpectCompleteParse<&Parser::selectQuery>{
       {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
   auto expectSelectQueryFails = ExpectParseFails<&Parser::selectQuery>{};
@@ -989,8 +989,8 @@ TEST(SparqlParser, SelectQuery) {
   // Ordering by a variable or expression which contains a variable that is not
   // visible in the query body is not allowed.
   expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY ?x",
-                         starts("Invalid SPARQL query: Variable ?x was used by "
-                                "ORDER BY, but is not"));
+                         contains("Variable ?x was used by "
+                                  "ORDER BY, but is not"));
   expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY (?x - 10)");
 
   // Explicit GROUP BY
@@ -1051,14 +1051,12 @@ TEST(SparqlParser, SelectQuery) {
 
   // Explicit GROUP BY but the second alias uses the target of the first alias
   // as input.
-  // TODO<joka921> This is actually allowed by the SPARQL standard, but
-  // currently not yet supported by QLever. Implement this (for details see the
-  // comment in `ParsedQuery::addSolutionModifiers`.
-  // TODO<joka921> This is now implemented, enable the test for it.
-  /*
-  expectSelectQueryFails(
-      "SELECT (?x AS ?z) (?z AS ?zz) WHERE { ?x <p> ?y} GROUP BY ?x");
-  */
+  expectSelectQuery(
+      "SELECT (?x AS ?a) (?a AS ?aa) WHERE { ?x ?y ?z} GROUP BY ?x",
+      testing::AllOf(m::SelectQuery(m::Select({std::pair{"?x", Var{"?a"}},
+                                               std::pair{"?a", Var{"?aa"}}}),
+                                    DummyGraphPatternMatcher),
+                     m::pq::GroupKeys({Var{"?x"}})));
 
   // Implicit GROUP BY.
   expectSelectQuery(
@@ -1084,21 +1082,30 @@ TEST(SparqlParser, SelectQuery) {
                                                    m::Bind(Var{"?z"}, "?y"))));
 
   // No GROUP BY but the target of an alias is used twice.
-  expectSelectQueryFails("SELECT (?x AS ?z) (?x AS ?z) WHERE { ?x <p> ?y}");
+  expectSelectQueryFails("SELECT (?x AS ?z) (?x AS ?z) WHERE { ?x <p> ?y}",
+                         contains("The target ?z of an AS clause was already "
+                                  "used before in the SELECT clause."));
 
   // `?x` is selected twice. Once as variable and once as the result of an
   // alias. This is not allowed.
-  expectSelectQueryFails("SELECT ?x (?y as ?x) WHERE { ?x ?y ?z }");
+  expectSelectQueryFails(
+      "SELECT ?x (?y as ?x) WHERE { ?x ?y ?z }",
+      contains(
+          "The target ?x of an AS clause was already used in the query body."));
 
   // HAVING is not allowed without GROUP BY
-  expectSelectQueryFails("SELECT ?x WHERE { ?x ?y ?z } HAVING (?x < 3)");
+  expectSelectQueryFails(
+      "SELECT ?x WHERE { ?x ?y ?z } HAVING (?x < 3)",
+      contains("HAVING clause is only supported in queries with GROUP BY"));
 
   // The target of the alias (`?y`) is already bound in the WHERE clause. This
   // is forbidden by the SPARQL standard.
-  expectSelectQueryFails("SELECT (?x AS ?y) WHERE { ?x <is-a> ?y }");
+  expectSelectQueryFails("SELECT (?x AS ?y) WHERE { ?x <is-a> ?y }",
+                         contains("already used"));
 
   // Datasets are not supported.
-  expectSelectQueryFails("SELECT * FROM  WHERE <foo> { ?x ?y ?z }");
+  expectSelectQueryFails("SELECT * FROM <defaultDataset> WHERE { ?x ?y ?z }",
+                         contains("FROM clauses are currently not supported"));
 }
 
 TEST(SparqlParser, ConstructQuery) {

@@ -191,7 +191,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       // parsing the alias, thus it should appear exactly once
       if (variable_counts[alias._target] > 1) {
         throw InvalidQueryException(absl::StrCat(
-            "The target", alias._target.name(),
+            "The target ", alias._target.name(),
             " of an AS clause was already used before in the SELECT clause."));
       }
     }
@@ -327,7 +327,7 @@ void ParsedQuery::GraphPattern::toString(std::ostringstream& os,
     for (int j = 0; j < indentation; ++j) os << "  ";
     os << _filters[i].asString() << ',';
   }
-  if (_filters.size() > 0) {
+  if (!_filters.empty()) {
     os << "\n";
     for (int j = 0; j < indentation; ++j) os << "  ";
     os << _filters.back().asString();
@@ -583,30 +583,21 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
   auto processVariableOrderKey = [this, isGroupBy, &noteForImplicitGroupBy,
                                   &variablesFromAliases,
                                   additionalError](VariableOrderKey orderKey) {
-    // Check whether grouping is done. The variable being ordered by
-    // must then be either grouped or the result of an alias in the select.
-    const vector<Variable>& groupByVariables = _groupByVariables;
-
     checkVariableIsVisible(orderKey.variable_, "ORDER BY", variablesFromAliases,
                            additionalError);
-    if (isGroupBy) {
-      if (!ad_utility::contains(groupByVariables, orderKey.variable_) &&
-          // `ConstructClause` has no Aliases. So the variable can never be
-          // the result of an Alias.
-          (hasConstructClause() ||
-           !ad_utility::contains_if(
-               selectClause().getAliases(), [&orderKey](const Alias& alias) {
-                 return alias._target == orderKey.variable_;
-               }))) {
-        throw InvalidQueryException(
-            "Variable " + orderKey.variable_.name() +
-            " was used in an ORDER BY "
-            "clause, but is neither grouped, nor created as an alias in the "
-            "SELECT clause." +
-            noteForImplicitGroupBy);
-      }
-    }
 
+    // Check whether grouping is done. The variable being ordered by
+    // must then be either grouped or the result of an alias in the select
+    // clause.
+    if (isGroupBy &&
+        !ad_utility::contains(_groupByVariables, orderKey.variable_) &&
+        (!variablesFromAliases.contains(orderKey.variable_))) {
+      throw InvalidQueryException(
+          "Variable " + orderKey.variable_.name() +
+          " was used in an ORDER BY clause, but is neither grouped, nor "
+          "created as an alias in the SELECT clause." +
+          noteForImplicitGroupBy);
+    }
     _orderBy.push_back(std::move(orderKey));
   };
 
@@ -638,8 +629,8 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
 
 // ________________________________________________________________
 Variable ParsedQuery::getNextInternalVariable() {
-  auto variable = Variable{INTERNAL_VARIABLE_PREFIX +
-                           std::to_string(numInternalVariables_)};
+  auto variable =
+      Variable{absl::StrCat(INTERNAL_VARIABLE_PREFIX, numInternalVariables_)};
   numInternalVariables_++;
   return variable;
 }
