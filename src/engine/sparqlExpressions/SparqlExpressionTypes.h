@@ -38,7 +38,6 @@ class VectorWithMemoryLimit
 
  public:
   VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = delete;
-
   // Moving is fine.
   VectorWithMemoryLimit(VectorWithMemoryLimit&&) noexcept = default;
   VectorWithMemoryLimit& operator=(VectorWithMemoryLimit&&) noexcept = default;
@@ -97,7 +96,67 @@ using StrongIdsWithResultType = VectorWithMemoryLimit<ValueId>;
 using VariableToColumnAndResultTypeMap =
     ad_utility::HashMap<Variable, std::pair<size_t, ResultTable::ResultType>>;
 
-/// All the additional information which is needed to evaluate a Sparql
+/// The result of an expression can either be a vector of bool/double/int/string
+/// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
+/// the row indices in which a boolean expression evaluates to "true". Constant
+/// results are represented by a vector with only one element.
+namespace detail {
+// For each type T in this tuple, T as well as VectorWithMemoryLimit<T> are
+// possible expression result types.
+using ConstantTypes = std::tuple<double, int64_t, Bool, string, ValueId>;
+using ConstantTypesAsVector =
+    ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
+
+// Each type in this tuple also is a possible expression result type.
+using OtherTypes = std::tuple<ad_utility::SetOfIntervals, ::Variable>;
+
+using AllTypesAsTuple =
+    ad_utility::TupleCat<ConstantTypes, ConstantTypesAsVector, OtherTypes>;
+}  // namespace detail
+
+/// An Expression result is a std::variant of all the different types from
+/// the expressionResultDetail namespace (see above).
+using ExpressionResult = ad_utility::TupleToVariant<detail::AllTypesAsTuple>;
+
+/// Only the different types contained in the variant `ExpressionResult` (above)
+/// match this concept.
+template <typename T>
+concept SingleExpressionResult =
+    ad_utility::isTypeContainedIn<T, ExpressionResult>;
+
+// If the `ExpressionResult` holds a value that is cheap to copy (a constant or
+// a variable), return a copy. Else throw an exception the message of which
+// implies that this is not a valid usage of this function.
+inline ExpressionResult copyExpressionResultIfNotVector(
+    const ExpressionResult& result) {
+  auto copyIfCopyable =
+      []<SingleExpressionResult R>(const R& x) -> ExpressionResult {
+    if constexpr (std::is_copy_assignable_v<R> &&
+                  std::is_copy_constructible_v<R>) {
+      return x;
+    } else {
+      AD_THROW(
+          "Tried to copy an expression result that is a vector. This should "
+          "never happen, as this code should only be called for the results of "
+          "expressions in a GROUP BY clause which all should be aggregates. "
+          "Please report this.");
+    }
+  };
+  return std::visit(copyIfCopyable, result);
+}
+
+/// True iff T represents a constant.
+template <typename T>
+constexpr static bool isConstantResult =
+    ad_utility::isTypeContainedIn<T, detail::ConstantTypes>;
+
+/// True iff T is one of the ConstantTypesAsVector
+template <typename T>
+constexpr static bool isVectorResult =
+    ad_utility::isTypeContainedIn<T, detail::ConstantTypesAsVector> ||
+    ad_utility::isSimilar<T, std::span<const ValueId>>;
+
+/// All the additional information which is needed to evaluate a SPARQL
 /// expression.
 struct EvaluationContext {
   const QueryExecutionContext& _qec;
@@ -128,6 +187,17 @@ struct EvaluationContext {
   // the variables by which the input is grouped. These variables will then be
   // treated as constants.
   ad_utility::HashSet<Variable> _groupedVariables;
+
+  // Only needed during GROUP BY evaluation.
+  // Stores information about the results from previous expressions of the same
+  // SELECT clause line that might be accessed in the same SELECT clause.
+
+  // This map maps variables that are bound in the select clause to indices.
+  VariableToColumnMap _variableToColumnMapPreviousResults;
+  // This vector contains the last result of the expressions in the SELECT
+  // clause. The correct index for a given variable is obtained from the
+  // `_variableToColumnMapPreviousResults`.
+  std::vector<ExpressionResult> _previousResultsFromSameGroup;
 
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(
@@ -181,45 +251,21 @@ struct EvaluationContext {
     }
     return map.at(var).first;
   }
+
+  // _____________________________________________________________________________
+  std::optional<ExpressionResult> getResultFromPreviousAggregate(
+      const Variable& var) const {
+    const auto& map = _variableToColumnMapPreviousResults;
+    if (!map.contains(var)) {
+      return std::nullopt;
+    }
+    auto idx = map.at(var);
+    AD_CONTRACT_CHECK(idx < _previousResultsFromSameGroup.size());
+
+    return copyExpressionResultIfNotVector(
+        _previousResultsFromSameGroup.at(idx));
+  }
 };
-
-/// The result of an expression can either be a vector of bool/double/int/string
-/// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
-/// the row indices in which a boolean expression evaluates to "true". Constant
-/// results are represented by a vector with only one element.
-namespace detail {
-// For each type T in this tuple, T as well as VectorWithMemoryLimit<T> are
-// possible expression result types.
-using ConstantTypes = std::tuple<double, int64_t, Bool, string, ValueId>;
-using ConstantTypesAsVector =
-    ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
-
-// Each type in this tuple also is a possible expression result type.
-using OtherTypes = std::tuple<ad_utility::SetOfIntervals, ::Variable>;
-
-using AllTypesAsTuple =
-    ad_utility::TupleCat<ConstantTypes, ConstantTypesAsVector, OtherTypes>;
-}  // namespace detail
-
-/// An Expression result is a std::variant of all the different types from
-/// the expressionResultDetail namespace (see above).
-using ExpressionResult = ad_utility::TupleToVariant<detail::AllTypesAsTuple>;
-
-/// Only the different types contained in the variant `ExpressionResult` (above)
-/// match this concept.
-template <typename T>
-concept SingleExpressionResult =
-    ad_utility::isTypeContainedIn<T, ExpressionResult>;
-
-/// True iff T represents a constant.
-template <typename T>
-constexpr static bool isConstantResult =
-    ad_utility::isTypeContainedIn<T, detail::ConstantTypes>;
-
-/// True iff T is one of the ConstantTypesAsVector
-template <typename T>
-constexpr static bool isVectorResult =
-    ad_utility::isTypeContainedIn<T, detail::ConstantTypesAsVector>;
 
 namespace detail {
 

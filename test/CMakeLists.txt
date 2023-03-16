@@ -306,3 +306,5 @@ addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 
 addLinkAndDiscoverTest(ExceptionHandlingTest)
 
+addLinkAndDiscoverTest(SparqlExpressionTypesTest)
+

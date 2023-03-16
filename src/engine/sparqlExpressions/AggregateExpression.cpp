@@ -40,7 +40,7 @@ AggregateExpression<AggregateOperation, FinalOperation>::children() {
 
 // _________________________________________________________________________
 template <typename AggregateOperation, typename FinalOperation>
-vector<std::string> AggregateExpression<
+vector<Variable> AggregateExpression<
     AggregateOperation, FinalOperation>::getUnaggregatedVariables() {
   // This is an aggregate, so it never leaves any unaggregated variables.
   return {};

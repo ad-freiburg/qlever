@@ -21,7 +21,7 @@ struct DummyExpression : public SparqlExpression {
   ExpressionResult evaluate(EvaluationContext*) const override {
     return std::move(_result);
   }
-  vector<std::string> getUnaggregatedVariables() override { return {}; }
+  vector<Variable> getUnaggregatedVariables() override { return {}; }
   string getCacheKey(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
     return "DummyDummyDummDumm";

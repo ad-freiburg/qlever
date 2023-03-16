@@ -26,11 +26,11 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
     : Operation{qec},
       _groupByVariables{std::move(groupByVariables)},
       _aliases{std::move(aliases)} {
-  // sort the aliases and groupByVariables to ensure the cache key is order
+  // Sort the groupByVariables to ensure that the cache key is order
   // invariant.
-  std::ranges::sort(_aliases, std::less<>{},
-                    [](const Alias& a) { return a._target.name(); });
-
+  // Note: It is tempting to do the same also for the aliases, but that would
+  // break the case when an alias reuses a variable that was bound by a previous
+  // alias.
   std::ranges::sort(_groupByVariables, std::less<>{}, &Variable::name);
 
   auto sortColumns = computeSortColumns(subtree.get());
@@ -39,8 +39,22 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
 }
 
 string GroupBy::asStringImpl(size_t indent) const {
-  const auto varMap = getInternallyVisibleVariableColumns();
-  const auto varMapInput = _subtree->getVariableColumns();
+  const auto& varMap = getInternallyVisibleVariableColumns();
+  auto varMapInput = _subtree->getVariableColumns();
+
+  // We also have to encode the variables to which alias results are stored in
+  // the cache key of the expressions in case they reuse a variable from the
+  // previous result.
+  auto numColumnsInput = _subtree->getResultWidth();
+  for (const auto& [var, column] : varMap) {
+    if (!varMapInput.contains(var)) {
+      // It is important that the cache keys for the variables from the aliases
+      // do not collide with the query body, and that they are consistent. The
+      // constant `1000` has no deeper meaning but makes debugging easier.
+      varMapInput[var] = column + 1000 + numColumnsInput;
+    }
+  }
+
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
@@ -166,6 +180,11 @@ void GroupBy::processGroup(
 
   auto& resultEntry = result->operator()(resultRow, resultColumn);
 
+  // Copy the result to the evaluation context in case one of the following
+  // aliases has to reuse it.
+  evaluationContext._previousResultsFromSameGroup.at(resultColumn) =
+      sparqlExpression::copyExpressionResultIfNotVector(expressionResult);
+
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
@@ -227,8 +246,15 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
       *getExecutionContext(), columnMap, inTable->_idTable,
       getExecutionContext()->getAllocator(), outTable->localVocabNonConst());
 
+  // In a GROUP BY evaluation, the expressions need to know which variables are
+  // grouped, and to which columns the results of the aliases are written. The
+  // latter information is needed if the expression of an reuses the result
+  // variable from a previous alias as an input.
   evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
       _groupByVariables.begin(), _groupByVariables.end()};
+  evaluationContext._variableToColumnMapPreviousResults =
+      getInternallyVisibleVariableColumns();
+  evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
 
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
     result.emplace_back();

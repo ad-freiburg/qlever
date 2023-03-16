@@ -62,10 +62,10 @@ class SparqlExpression {
 
   /// Return all the variables that occur in the expression, but are not
   /// aggregated.
-  virtual vector<std::string> getUnaggregatedVariables() {
+  virtual vector<Variable> getUnaggregatedVariables() {
     // Default implementation: This expression adds no variables, but all
     // unaggregated variables from the children remain unaggregated.
-    std::vector<string> result;
+    std::vector<Variable> result;
     for (const auto& child : children()) {
       auto childResult = child->getUnaggregatedVariables();
       result.insert(result.end(), std::make_move_iterator(childResult.begin()),

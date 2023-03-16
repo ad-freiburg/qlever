@@ -10,12 +10,14 @@
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/QueryPlanner.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "gtest/gtest.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "parser/SparqlParser.h"
 
 using namespace ad_utility::testing;
 
@@ -742,4 +744,92 @@ TEST(GroupBy, GroupedVariableInExpressions) {
   EXPECT_EQ(table, expected);
 }
 
+TEST(GroupBy, AliasResultReused) {
+  parsedQuery::SparqlValues input;
+  using TC = TripleComponent;
+  // Test the following SPARQL query:
+  //
+  // SELECT (AVG(?a + ?b) as ?x) (?x + COUNT(?b) AS ?y) WHERE {
+  //   VALUES (?a ?b) { (1.0 3.0) (1.0 7.0) (5.0 4.0)}
+  // } GROUP BY ?a
+  //
+  // Note: The values are chosen such that the results are all integers.
+  // Otherwise we would get into trouble with floating point comparisons. A
+  // check with a similar query but with non-integral inputs and results can be
+  // found in the E2E tests.
+
+  Variable varA = Variable{"?a"};
+  Variable varB = Variable{"?b"};
+
+  input._variables = std::vector{varA, varB};
+  input._values.push_back(std::vector{TC(1.0), TC(3.0)});
+  input._values.push_back(std::vector{TC(1.0), TC(7.0)});
+  input._values.push_back(std::vector{TC(5.0), TC(4.0)});
+  auto values = ad_utility::makeExecutionTree<Values>(
+      ad_utility::testing::getQec(), input);
+
+  using namespace sparqlExpression;
+
+  // Create `Alias` object for `(AVG(?a + ?b) AS ?x)`.
+  auto sum = make<AddExpression>(make<VariableExpression>(varA),
+                                 make<VariableExpression>(varB));
+  auto avg = make<AvgExpression>(false, std::move(sum));
+  auto alias1 = Alias{SparqlExpressionPimpl{std::move(avg), "avg(?a + ?b"},
+                      Variable{"?x"}};
+
+  // Create `Alias` object for `(?a + COUNT(?b) AS ?y)`.
+  auto expr2 = make<AddExpression>(
+      make<VariableExpression>(Variable{"?x"}),
+      make<CountExpression>(false, make<VariableExpression>(varB)));
+  auto alias2 = Alias{SparqlExpressionPimpl{std::move(expr2), "?x + COUNT(?b)"},
+                      Variable{"?y"}};
+
+  // Set up and evaluate the GROUP BY clause.
+  GroupBy groupBy{ad_utility::testing::getQec(),
+                  {Variable{"?a"}},
+                  {std::move(alias1), std::move(alias2)},
+                  std::move(values)};
+  auto result = groupBy.getResult();
+  const auto& table = result->_idTable;
+
+  // Check the result.
+  auto d = DoubleId;
+  VariableToColumnMap expectedVariables{
+      {Variable{"?a"}, 0}, {Variable{"?x"}, 1}, {Variable{"?y"}, 2}};
+  EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVariables));
+  auto expected =
+      makeIdTableFromIdVector({{d(1), d(6), d(8)}, {d(5), d(9), d(10)}});
+  EXPECT_EQ(table, expected);
+}
+
 }  // namespace
+
+// Expressions in HAVING clauses are converted to special internal aliases. Test
+// the combination of parsing and evaluating such queries.
+TEST(GroupBy, AddedHavingRows) {
+  auto query =
+      "SELECT ?x (COUNT(?y) as ?count) WHERE {"
+      " VALUES (?x ?y) {(0 1) (0 3) (0 5) (1 4) (1 3) } }"
+      "GROUP BY ?x HAVING (?count > 2)";
+  auto pq = SparqlParser::parseQuery(query);
+  QueryPlanner qp{ad_utility::testing::getQec()};
+  auto tree = qp.createExecutionTree(pq);
+
+  auto res = tree.getResult();
+
+  // The HAVING is implemented as an alias that creates an internal variable
+  // which becomes part of the result, but is not selected by the query.
+  EXPECT_THAT(pq.selectClause().getSelectedVariables(),
+              ::testing::ElementsAre(Variable{"?x"}, Variable{"?count"}));
+  VariableToColumnMap expectedVariables{
+      {Variable{"?x"}, 0},
+      {Variable{"?count"}, 1},
+      {Variable{"?_QLever_internal_variable_0"}, 2}};
+  EXPECT_THAT(tree.getVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVariables));
+  const auto& table = res->_idTable;
+  auto i = IntId;
+  auto expected = makeIdTableFromIdVector({{i(0), i(3), i(1)}});
+  EXPECT_EQ(table, expected);
+}

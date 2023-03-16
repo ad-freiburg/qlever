@@ -176,7 +176,55 @@ class ParsedQuery {
   // is returned.
   Variable addInternalBind(sparqlExpression::SparqlExpressionPimpl expression);
 
+  // Add an internal AS clause to the SELECT clause that computes the given
+  // expression. This is needed by the `addSolutionModifiers` function to
+  // implement aggregating expressions in the ORDER BY and HAVING clauses of
+  // queries with a GROUP BY
+  Variable addInternalAlias(sparqlExpression::SparqlExpressionPimpl expression);
+
+  // If the `variable` is neither visible in the query body nor contained in the
+  // `additionalVisibleVariables`, throw an `InvalidQueryException` that uses
+  // the `locationDescription` inside the message.
+  void checkVariableIsVisible(
+      const Variable& variable, const std::string& locationDescription,
+      const ad_utility::HashSet<Variable>& additionalVisibleVariables = {},
+      std::string_view otherPossibleLocationDescription = "") const;
+
+  // Similar to `checkVariableIsVisible` above, but performs the check for each
+  // of the variables that are used inside the `expression`.
+  void checkUsedVariablesAreVisible(
+      const sparqlExpression::SparqlExpressionPimpl& expression,
+      const std::string& locationDescription,
+      const ad_utility::HashSet<Variable>& additionalVisibleVariables = {},
+      std::string_view otherPossibleLocationDescription = "") const;
+
+  // Add the `groupKeys` (either variables or expressions) to the query and
+  // check whether all the variables are visible inside the query body.
+  void addGroupByClause(std::vector<GroupKey> groupKeys);
+
+  // Add the `havingClause` to the query. The argument `isGroupBy` denotes
+  // whether the query performs a GROUP BY. If it is set to false, then an
+  // exception is thrown (HAVING without GROUP BY is not allowed). The function
+  // also throws if one of the variables that is used in the `havingClause` is
+  // neither grouped nor aggregate by the expression it is contained in.
+  void addHavingClause(std::vector<SparqlFilter> havingClause, bool isGroupBy);
+
+  // Add the `orderClause` to the query. Throw an exception if the `orderClause`
+  // is not valid. This might happen if it uses variables that are not visible
+  // or (in case of a GROUP BY) not grouped or aggregated.
+  void addOrderByClause(OrderClause orderClause, bool isGroupBy,
+                        std::string_view noteForImplicitGroupBy);
+
+  // Return the next internal variable. Used e.g. by `addInternalBind` and
+  // `addInternalAlias`
+  Variable getNewInternalVariable();
+
  public:
+  // Add the `modifiers` (like GROUP BY, HAVING, ORDER BY) to the query. Throw
+  // an `InvalidQueryException` if the modifiers are invalid. This might happen
+  // if one of the modifiers uses a variable that is either not visible in the
+  // query before it is used, or if it uses a variable that is not properly
+  // grouped or aggregated in the presence of a GROUP BY clause.
   void addSolutionModifiers(SolutionModifiers modifiers);
 
   /**

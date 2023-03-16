@@ -94,6 +94,10 @@ inline void PrintTo(const parsedQuery::GraphPatternOperation& op,
 }
 }  // namespace parsedQuery
 
+inline void PrintTo(const Alias& alias, std::ostream* os) {
+  (*os) << alias.getDescriptor();
+}
+
 inline void PrintTo(const ParsedQuery& pq, std::ostream* os) {
   (*os) << "is select query: " << pq.hasSelectClause() << '\n';
   (*os) << "Variables: " << ::testing::PrintToString(pq.getVisibleVariables())
@@ -542,9 +546,14 @@ namespace detail {
 // This matcher cannot be trivially broken down into a combination of existing
 // googletest matchers because of the way how the aliases are stored in the
 // select clause.
-MATCHER_P3(Select, distinct, reduced, selection, "") {
+MATCHER_P4(Select, distinct, reduced, selection, hiddenAliases, "") {
   const auto& selectedVariables = arg.getSelectedVariables();
-  if (selection.size() != selectedVariables.size()) return false;
+  if (selection.size() != selectedVariables.size()) {
+    *result_listener << "where the number of selected variables is "
+                     << selectedVariables.size() << ", but " << selection.size()
+                     << " were expected";
+    return false;
+  }
   size_t alias_counter = 0;
   for (size_t i = 0; i < selection.size(); i++) {
     if (holds_alternative<::Variable>(selection[i])) {
@@ -572,6 +581,26 @@ MATCHER_P3(Select, distinct, reduced, selection, "") {
       }
     }
   }
+
+  size_t i = 0;
+  for (const auto& [descriptor, variable] : hiddenAliases) {
+    if (alias_counter >= arg.getAliases().size()) {
+      *result_listener << "where selected variables contain less aliases ("
+                       << testing::PrintToString(alias_counter)
+                       << ") than provided to matcher";
+      return false;
+    }
+    if (descriptor !=
+            arg.getAliases()[alias_counter]._expression.getDescriptor() ||
+        variable != arg.getAliases()[alias_counter]._target) {
+      *result_listener << "where hidden alias#" << i << " = "
+                       << testing::PrintToString(
+                              arg.getAliases()[alias_counter]);
+      return false;
+    }
+    alias_counter++;
+    i++;
+  }
   return testing::ExplainMatchResult(
       testing::AllOf(
           AD_FIELD(p::SelectClause, distinct_, testing::Eq(distinct)),
@@ -585,10 +614,11 @@ MATCHER_P3(Select, distinct, reduced, selection, "") {
 inline auto Select =
     [](std::vector<std::variant<::Variable, std::pair<string, ::Variable>>>
            selection,
-       bool distinct = false,
-       bool reduced = false) -> Matcher<const p::SelectClause&> {
-  return testing::SafeMatcherCast<const p::SelectClause&>(
-      detail::Select(distinct, reduced, std::move(selection)));
+       bool distinct = false, bool reduced = false,
+       std::vector<std::pair<string, ::Variable>> hiddenAliases = {})
+    -> Matcher<const p::SelectClause&> {
+  return testing::SafeMatcherCast<const p::SelectClause&>(detail::Select(
+      distinct, reduced, std::move(selection), std::move(hiddenAliases)));
 };
 
 // Return a `Matcher` that tests whether the descriptor of the expression of a

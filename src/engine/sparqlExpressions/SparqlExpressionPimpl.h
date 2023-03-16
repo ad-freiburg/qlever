@@ -29,14 +29,14 @@ class SparqlExpressionPimpl {
   // Get the variables that are not aggregated by this expression. The variables
   // in the argument `groupedVariables` are deleted from the result (grouped
   // variables do not have to be aggregated).
-  [[nodiscard]] std::vector<std::string> getUnaggregatedVariables(
-      const ad_utility::HashSet<string>& groupedVariables = {}) const;
+  [[nodiscard]] std::vector<Variable> getUnaggregatedVariables(
+      const ad_utility::HashSet<Variable>& groupedVariables = {}) const;
 
   // Does this expression aggregate over all variables that are not in
   // `groupedVariables`. For example, COUNT(<subex>) always returns true.
   // COUNT(?x) + ?m returns true if and only if ?m is in `groupedVariables`.
   [[nodiscard]] bool isAggregate(
-      const ad_utility::HashSet<string>& groupedVariables) const {
+      const ad_utility::HashSet<Variable>& groupedVariables) const {
     // TODO<joka921> This can be std::ranges::all_of as soon as libc++ supports
     // it, or the combination of clang + libstdc++ + coroutines works.
     auto unaggregatedVariables = getUnaggregatedVariables();
@@ -115,6 +115,9 @@ class SparqlExpressionPimpl {
   [[nodiscard]] const SparqlExpression* getPimpl() const {
     return _pimpl.get();
   }
+
+  // Create a `SparqlExpressionPimpl` from a single variable.
+  static SparqlExpressionPimpl makeVariableExpression(const Variable& variable);
 
  private:
   // TODO<joka921> Why can't this be a unique_ptr.

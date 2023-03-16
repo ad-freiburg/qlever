@@ -2,8 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#ifndef QLEVER_LITERALEXPRESSION_H
-#define QLEVER_LITERALEXPRESSION_H
+#pragma once
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
@@ -40,22 +39,7 @@ class LiteralExpression : public SparqlExpression {
     } else if constexpr (std::is_same_v<string, T>) {
       return getIdOrString(_value);
     } else if constexpr (std::is_same_v<Variable, T>) {
-      // If a variable is grouped, then we know that it always has the same
-      // value and can treat it as a constant. This is not possible however when
-      // we are inside an aggregate, because for example `SUM(?variable)` must
-      // still compute the sum over the whole group.
-      if (context->_groupedVariables.contains(_value) && !isInsideAggregate()) {
-        auto column = context->getColumnIndexForVariable(_value);
-        const auto& table = context->_inputTable;
-        auto constantValue = table.at(context->_beginIndex, column);
-        assert((std::ranges::all_of(
-            table.begin() + context->_beginIndex,
-            table.begin() + context->_endIndex,
-            [&](const auto& row) { return row[column] == constantValue; })));
-        return constantValue;
-      } else {
-        return _value;
-      }
+      return evaluateIfVariable(context, _value);
     } else {
       return _value;
     }
@@ -74,9 +58,9 @@ class LiteralExpression : public SparqlExpression {
   }
 
   // _________________________________________________________________________
-  vector<std::string> getUnaggregatedVariables() override {
+  vector<Variable> getUnaggregatedVariables() override {
     if constexpr (std::is_same_v<T, ::Variable>) {
-      return {_value.name()};
+      return {_value};
     } else {
       return {};
     }
@@ -116,6 +100,47 @@ class LiteralExpression : public SparqlExpression {
 
  private:
   T _value;
+
+  // Evaluate the expression if it is a variable expression with the given
+  // `variable`. The variable is passed in explicitly because this function
+  // might be called recursively.
+  ExpressionResult evaluateIfVariable(EvaluationContext* context,
+                                      const Variable& variable) const {
+    // If this is a variable that is not visible in the input but was bound by a
+    // previous alias in the same SELECT clause, then read the constant value of
+    // the variable from the data structures dedicated to this case.
+    if (auto resultFromSameRow =
+            context->getResultFromPreviousAggregate(variable);
+        resultFromSameRow.has_value() &&
+        !context->_groupedVariables.contains(variable)) {
+      // If the expression is a simple renaming of a variable `(?x AS ?y)` we
+      // have to recurse to track a possible chain of such renamings in the
+      // SELECT clause.
+      if (const Variable* var =
+              std::get_if<Variable>(&resultFromSameRow.value());
+          var != nullptr) {
+        return evaluateIfVariable(context, *var);
+      } else {
+        return std::move(resultFromSameRow.value());
+      }
+    }
+    // If a variable is grouped, then we know that it always has the same
+    // value and can treat it as a constant. This is not possible however when
+    // we are inside an aggregate, because for example `SUM(?variable)` must
+    // still compute the sum over the whole group.
+    if (context->_groupedVariables.contains(variable) && !isInsideAggregate()) {
+      auto column = context->getColumnIndexForVariable(variable);
+      const auto& table = context->_inputTable;
+      auto constantValue = table.at(context->_beginIndex, column);
+      assert((std::ranges::all_of(
+          table.begin() + context->_beginIndex,
+          table.begin() + context->_endIndex,
+          [&](const auto& row) { return row[column] == constantValue; })));
+      return constantValue;
+    } else {
+      return variable;
+    }
+  }
 };
 }  // namespace detail
 
@@ -129,5 +154,3 @@ using StringLiteralExpression =
     detail::LiteralExpression<TripleComponent::Literal>;
 using IdExpression = detail::LiteralExpression<ValueId>;
 }  // namespace sparqlExpression
-
-#endif  // QLEVER_LITERALEXPRESSION_H
