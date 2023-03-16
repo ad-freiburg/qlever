@@ -28,6 +28,17 @@
   ::testing::Field(#Member, &Class::Member, Matcher)
 #endif
 
+#define AD_EXPECT_THROW_WITH_MESSAGE(stmt, matcher)                           \
+  try {                                                                       \
+    stmt;                                                                     \
+    FAIL() << "No exception was thrown";                                      \
+  } catch (const std::exception& e) {                                         \
+    EXPECT_THAT(e.what(), matcher) << "The exception message does not match"; \
+  } catch (...) {                                                             \
+    FAIL() << "The thrown exception did not inherit from std::exception";     \
+  }                                                                           \
+  void()
+
 // _____________________________________________________________________________
 // Add the given `source_location`  to all gtest failure messages that occur,
 // while the return value is still in scope. It is important to bind the return

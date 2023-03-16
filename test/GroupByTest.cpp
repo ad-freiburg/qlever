@@ -805,6 +805,8 @@ TEST(GroupBy, AliasResultReused) {
 
 }  // namespace
 
+// Expressions in HAVING clauses are converted to special internal aliases. Test
+// the combination of parsing and evaluating such queries.
 TEST(GroupBy, AddedHavingRows) {
   auto query =
       "SELECT ?x (COUNT(?y) as ?count) WHERE {"
@@ -815,6 +817,17 @@ TEST(GroupBy, AddedHavingRows) {
   auto tree = qp.createExecutionTree(pq);
 
   auto res = tree.getResult();
+
+  // The HAVING is implemented as an alias that creates an internal variable
+  // which becomes part of the result, but is not selected by the query.
+  EXPECT_THAT(pq.selectClause().getSelectedVariables(),
+              ::testing::ElementsAre(Variable{"?x"}, Variable{"?count"}));
+  VariableToColumnMap expectedVariables{
+      {Variable{"?x"}, 0},
+      {Variable{"?count"}, 1},
+      {Variable{"?_QLever_internal_variable_0"}, 2}};
+  EXPECT_THAT(tree.getVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVariables));
   const auto& table = res->_idTable;
   auto i = IntId;
   auto expected = makeIdTableFromIdVector({{i(0), i(3), i(1)}});

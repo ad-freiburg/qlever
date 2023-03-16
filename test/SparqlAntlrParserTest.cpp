@@ -94,7 +94,7 @@ struct ExpectCompleteParse {
   };
 };
 
-template <auto Clause, typename Exception = ParseException>
+template <auto Clause>
 struct ExpectParseFails {
   SparqlQleverVisitor::PrefixMap prefixMap_ = {};
   SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
@@ -102,17 +102,19 @@ struct ExpectParseFails {
 
   auto operator()(
       const string& input,
+      const testing::Matcher<const std::string&>& messageMatcher = ::testing::_,
       ad_utility::source_location l = ad_utility::source_location::current()) {
-    return operator()(input, prefixMap_, l);
+    return operator()(input, prefixMap_, messageMatcher, l);
   }
 
   auto operator()(
       const string& input, SparqlQleverVisitor::PrefixMap prefixMap,
+      const testing::Matcher<const std::string&>& messageMatcher = ::testing::_,
       ad_utility::source_location l = ad_utility::source_location::current()) {
     auto trace = generateLocationTrace(l);
-    EXPECT_THROW(parse<Clause>(input, std::move(prefixMap), disableSomeChecks),
-                 Exception)
-        << input;
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        parse<Clause>(input, std::move(prefixMap), disableSomeChecks),
+        messageMatcher);
   }
 };
 
@@ -955,6 +957,7 @@ TEST(SparqlParser, RDFLiteral) {
 }
 
 TEST(SparqlParser, SelectQuery) {
+  auto starts = [](const std::string& s) { return ::testing::StartsWith(s); };
   auto expectSelectQuery = ExpectCompleteParse<&Parser::selectQuery>{
       {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
   auto expectSelectQueryFails = ExpectParseFails<&Parser::selectQuery>{};
@@ -985,7 +988,9 @@ TEST(SparqlParser, SelectQuery) {
 
   // Ordering by a variable or expression which contains a variable that is not
   // visible in the query body is not allowed.
-  expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY ?x");
+  expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY ?x",
+                         starts("Invalid SPARQL query: Variable ?x was used by "
+                                "ORDER BY, but is not"));
   expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY (?x - 10)");
 
   // Explicit GROUP BY
