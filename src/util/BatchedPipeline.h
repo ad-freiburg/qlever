@@ -438,9 +438,8 @@ auto setupParallelPipelineRecursive(SoFar&& sofar,
                                     std::tuple<NextTransformer...>&& next,
                                     MoreTransformers&&... transformers) {
   auto lambda = [&sofar](NextTransformer&&... transformers) {
-    return makeBatchedPipeline<NextParallelism>(
-        std::forward<SoFar>(sofar),
-        std::forward<NextTransformer>(transformers)...);
+    return makeBatchedPipeline<NextParallelism>(std::forward<SoFar>(sofar),
+                                                std::move(transformers)...);
   };
 
   return setupParallelPipelineRecursive<Parallelisms...>(

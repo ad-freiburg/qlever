@@ -149,9 +149,9 @@ void Join::computeResult(ResultTable* result) {
                   leftRes->_idTable, _leftJoinCol, rightRes->_idTable,
                   _rightJoinCol, &result->_idTable);
 
-  // If only one of the two operands has a local vocab, pass it on.
-  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
-      leftRes->_localVocab, rightRes->_localVocab);
+  // If only one of the two operands has a non-empty local vocabulary, share
+  // with that one (otherwise, throws an exception).
+  result->shareLocalVocabFromNonEmptyOf(*leftRes, *rightRes);
 
   LOG(DEBUG) << "Join result computation done" << endl;
 }
@@ -538,7 +538,9 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   if (a.size() == 0 || b.size() == 0) {
     return;
   }
+  AD_FAIL();
 
+  /*
   IdTableStatic<OUT_WIDTH> result = std::move(*dynRes).toStatic<OUT_WIDTH>();
   // Cannot just switch l1 and l2 around because the order of
   // items in the result tuples is important.
@@ -569,6 +571,8 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
       return row1[jc2] < row2[jc1];
     };
     // TODO<joka921>
+    AD_FAIL();
+    /*
     auto combineRows = [jcs = std::vector{std::array{jc1, jc2}},
                         jcBitmap = 1ul << jc2,
                         &result](const auto& row1, const auto& row2) {
@@ -610,6 +614,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   LOG(DEBUG) << "Join done.\n";
   LOG(DEBUG) << "Result: width = " << dynRes->numColumns()
              << ", size = " << dynRes->size() << "\n";
+  */
 }
 
 // ______________________________________________________________________________

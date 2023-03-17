@@ -26,11 +26,11 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
     : Operation{qec},
       _groupByVariables{std::move(groupByVariables)},
       _aliases{std::move(aliases)} {
-  // sort the aliases and groupByVariables to ensure the cache key is order
+  // Sort the groupByVariables to ensure that the cache key is order
   // invariant.
-  std::ranges::sort(_aliases, std::less<>{},
-                    [](const Alias& a) { return a._target.name(); });
-
+  // Note: It is tempting to do the same also for the aliases, but that would
+  // break the case when an alias reuses a variable that was bound by a previous
+  // alias.
   std::ranges::sort(_groupByVariables, std::less<>{}, &Variable::name);
 
   auto sortColumns = computeSortColumns(subtree.get());
@@ -39,8 +39,22 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
 }
 
 string GroupBy::asStringImpl(size_t indent) const {
-  const auto varMap = getInternallyVisibleVariableColumns();
-  const auto varMapInput = _subtree->getVariableColumns();
+  const auto& varMap = getInternallyVisibleVariableColumns();
+  auto varMapInput = _subtree->getVariableColumns();
+
+  // We also have to encode the variables to which alias results are stored in
+  // the cache key of the expressions in case they reuse a variable from the
+  // previous result.
+  auto numColumnsInput = _subtree->getResultWidth();
+  for (const auto& [var, column] : varMap) {
+    if (!varMapInput.contains(var)) {
+      // It is important that the cache keys for the variables from the aliases
+      // do not collide with the query body, and that they are consistent. The
+      // constant `1000` has no deeper meaning but makes debugging easier.
+      varMapInput[var] = column + 1000 + numColumnsInput;
+    }
+  }
+
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
@@ -154,7 +168,7 @@ size_t GroupBy::getCostEstimate() {
 template <int OUT_WIDTH>
 void GroupBy::processGroup(
     const GroupBy::Aggregate& aggregate,
-    sparqlExpression::EvaluationContext evaluationContext, size_t blockStart,
+    sparqlExpression::EvaluationContext& evaluationContext, size_t blockStart,
     size_t blockEnd, IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
     size_t resultColumn, ResultTable* outTable,
     ResultTable::ResultType* resultType) const {
@@ -165,6 +179,11 @@ void GroupBy::processGroup(
       aggregate._expression.getPimpl()->evaluate(&evaluationContext);
 
   auto& resultEntry = result->operator()(resultRow, resultColumn);
+
+  // Copy the result to the evaluation context in case one of the following
+  // aliases has to reuse it.
+  evaluationContext._previousResultsFromSameGroup.at(resultColumn) =
+      sparqlExpression::copyExpressionResultIfNotVector(expressionResult);
 
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
@@ -177,7 +196,7 @@ void GroupBy::processGroup(
       *resultType =
           sparqlExpression::detail::expressionResultTypeToQleverResultType<T>();
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
-          singleResult, *(outTable->_localVocab));
+          singleResult, outTable->localVocabNonConst());
     } else {
       // This should never happen since aggregates always return constants.
       AD_FAIL();
@@ -225,7 +244,17 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
 
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), columnMap, inTable->_idTable,
-      getExecutionContext()->getAllocator(), *outTable->_localVocab);
+      getExecutionContext()->getAllocator(), outTable->localVocabNonConst());
+
+  // In a GROUP BY evaluation, the expressions need to know which variables are
+  // grouped, and to which columns the results of the aliases are written. The
+  // latter information is needed if the expression of an reuses the result
+  // variable from a previous alias as an input.
+  evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
+      _groupByVariables.begin(), _groupByVariables.end()};
+  evaluationContext._variableToColumnMapPreviousResults =
+      getInternallyVisibleVariableColumns();
+  evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
 
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
     result.emplace_back();
@@ -285,15 +314,14 @@ void GroupBy::computeResult(ResultTable* result) {
   std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
   LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
 
-  // Make a copy of the local vocab from the sub-result and then add to it (in
-  // case GROUP_CONCAT adds something).
+  // Make a deep copy of the local vocab from `subresult` and then add to it (in
+  // case GROUP_CONCAT adds a new word or words).
   //
-  // NOTE: If we did `result->_localVocab = subresult->_localVocab` here, only a
-  // shared pointer would be copied. The the additions made in this operation
-  // would also affect the `subresult`, which leads to all kinds of unexpected
-  // behavior.
-  result->_localVocab =
-      std::make_shared<LocalVocab>(subresult->_localVocab->clone());
+  // TODO: In most GROUP BY operations, nothing is added to the local
+  // vocabulary, so it would be more efficient to first share the pointer here
+  // (like with `shareLocalVocabFrom`) and only copy it when a new word is about
+  // to be added. Same for BIND.
+  result->getCopyOfLocalVocabFrom(*subresult);
 
   std::vector<size_t> groupByColumns;
 

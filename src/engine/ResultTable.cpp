@@ -1,6 +1,7 @@
-// Copyright 2015 -2022, University of Freiburg
+// Copyright 2015 - 2023, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors: Björn Buchhold <b.buchhold@gmail.com>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include "engine/ResultTable.h"
@@ -8,24 +9,6 @@
 #include <cassert>
 
 #include "engine/LocalVocab.h"
-
-// _____________________________________________________________________________
-ResultTable::ResultTable(ad_utility::AllocatorWithLimit<Id> allocator)
-    : _sortedBy(),
-      _idTable(std::move(allocator)),
-      _resultTypes(),
-      // TODO: Why initialize with a pointer to an empty local vocabulary
-      // instead of with nullptr?
-      _localVocab(std::make_shared<LocalVocab>()) {}
-
-// _____________________________________________________________________________
-void ResultTable::clear() {
-  _localVocab = nullptr;
-  _idTable.clear();
-}
-
-// _____________________________________________________________________________
-ResultTable::~ResultTable() { clear(); }
 
 // _____________________________________________________________________________
 string ResultTable::asDebugString() const {
@@ -41,4 +24,28 @@ string ResultTable::asDebugString() const {
 }
 
 // _____________________________________________________________________________
-size_t ResultTable::size() const { return _idTable.size(); }
+void ResultTable::shareLocalVocabFrom(const ResultTable& resultTable) {
+  // This copies a shared pointer, so both results share the same local
+  // vocabulary.
+  localVocab_ = resultTable.localVocab_;
+  localVocab_->makeReadOnly();
+}
+
+// _____________________________________________________________________________
+void ResultTable::shareLocalVocabFromNonEmptyOf(
+    const ResultTable& resultTable1, const ResultTable& resultTable2) {
+  const auto& localVocab1 = resultTable1.localVocab_;
+  const auto& localVocab2 = resultTable2.localVocab_;
+  if (!localVocab1->empty() && !localVocab2->empty()) {
+    throw std::runtime_error(
+        "Merging of two non-empty local vocabularies is currently not "
+        "supported, please contact the developers");
+  }
+  localVocab_ = localVocab2->empty() ? localVocab1 : localVocab2;
+  localVocab_->makeReadOnly();
+}
+
+// _____________________________________________________________________________
+void ResultTable::getCopyOfLocalVocabFrom(const ResultTable& resultTable) {
+  localVocab_ = std::make_shared<LocalVocab>(resultTable.localVocab_->clone());
+}

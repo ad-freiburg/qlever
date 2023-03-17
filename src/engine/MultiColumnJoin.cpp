@@ -4,7 +4,8 @@
 
 #include "MultiColumnJoin.h"
 
-#include "CallFixedSize.h"
+#include "engine/CallFixedSize.h"
+#include "util/JoinAlgorithms.h"
 
 using std::string;
 
@@ -13,7 +14,11 @@ MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
                                  std::shared_ptr<QueryExecutionTree> t1,
                                  std::shared_ptr<QueryExecutionTree> t2,
                                  const vector<array<ColumnIndex, 2>>& jcs)
-    : Operation(qec), _left(std::move(t1)), _right(std::move(t2)), _joinColumns(jcs), _multiplicitiesComputed(false) {
+    : Operation(qec),
+      _left(std::move(t1)),
+      _right(std::move(t2)),
+      _joinColumns(jcs),
+      _multiplicitiesComputed(false) {
   // Make sure subtrees are ordered so that identical queries can be identified.
   AD_CONTRACT_CHECK(!jcs.empty());
   if (_left->asString() > _right->asString()) {
@@ -109,11 +114,11 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
                   leftResult->_idTable, rightResult->_idTable, _joinColumns,
                   &result->_idTable);
 
-  // If only one of the two operands has a local vocab, pass it on.
-  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
-      leftResult->_localVocab, rightResult->_localVocab);
+  // If only one of the two operands has a non-empty local vocabulary, share
+  // with that one (otherwise, throws an exception).
+  result->shareLocalVocabFromNonEmptyOf(*leftResult, *rightResult);
 
-  LOG(DEBUG) << "MultiColumnJoin result computation done." << endl;
+  LOG(DEBUG) << "MultiColumnJoin result computation done" << endl;
 }
 
 // _____________________________________________________________________________
@@ -259,27 +264,53 @@ void MultiColumnJoin::computeMultiColumnJoin(
   IdTableView<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
 
-  auto lessThanBoth = ad_utility::makeLessThanAndReversed(joinColumns);
-
-  std::vector<size_t> joinColumnsLeft;
-  std::vector<size_t> joinColumnsRight;
-  for (auto [jc1, jc2] : joinColumns) {
-    joinColumnsLeft.push_back(jc1);
-    joinColumnsRight.push_back(jc2);
+  std::vector<size_t> jcsA, jcsB;
+  for (auto [colA, colB] : joinColumns) {
+    jcsA.push_back(colA);
+    jcsB.push_back(colB);
   }
+
+  std::vector<size_t> colsAComplete = jcsA, colsBComplete = jcsB;
+
+  for (size_t i = 0; i < a.numColumns(); ++i) {
+    if (!ad_utility::contains(jcsA, i)) {
+      colsAComplete.push_back(i);
+    }
+  }
+
+  for (size_t i = 0; i < b.numColumns(); ++i) {
+    if (!ad_utility::contains(jcsB, i)) {
+      colsBComplete.push_back(i);
+    }
+  }
+
+  auto dynASubset = dynA.asColumnSubsetView(jcsA);
+  auto dynBSubset = dynB.asColumnSubsetView(jcsB);
+
+  auto dynAPermuted = dynA.asColumnSubsetView(colsAComplete);
+  auto dynBPermuted = dynB.asColumnSubsetView(colsBComplete);
+
+  auto lessThanBoth = std::ranges::lexicographical_compare;
 
   using RowLeft = typename IdTableView<A_WIDTH>::row_type;
   using RowRight = typename IdTableView<B_WIDTH>::row_type;
-  auto smallerUndefRanges =
-      ad_utility::makeSmallerUndefRanges<RowLeft, RowRight>(
-          joinColumns, joinColumnsLeft, joinColumnsRight);
-  // Marks the columns in b that are join columns. Used to skip these
-  // when computing the result of the join
+  auto smallerUndefRanges = [](const auto& row, auto begin, auto end) {
+    return ad_utility::findSmallerUndefRanges(row, std::move(begin),
+                                              std::move(end));
+  };
 
-  auto combineRows = ad_utility::makeCombineRows(joinColumns, result);
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable(result.numColumns());
+  auto addRow = [&, numJoinColumns = joinColumns.size()](const auto& rowA,
+                                                         const auto& rowB) {
+    const auto& a = *(dynAPermuted.begin() + rowA.rowIndex());
+    const auto& b = *(dynBPermuted.begin() + rowB.rowIndex());
+    rowAdder(a, b, numJoinColumns, &result);
+  };
 
-  ad_utility::zipperJoinWithUndef(a, b, lessThanBoth.first, lessThanBoth.second,
-                                  combineRows, smallerUndefRanges.first,
-                                  smallerUndefRanges.second);
+  auto findUndefDispatch = [](const auto& row, auto begin, auto end) {
+    return ad_utility::findSmallerUndefRanges(row, begin, end);
+  };
+  ad_utility::zipperJoinWithUndef(dynASubset, dynBSubset, lessThanBoth, addRow,
+                                  findUndefDispatch, findUndefDispatch);
   *dynResult = std::move(result).toDynamic();
 }

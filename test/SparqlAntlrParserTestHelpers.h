@@ -17,6 +17,7 @@
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/TripleComponent.h"
+#include "parser/data/Iri.h"
 #include "parser/data/OrderKey.h"
 #include "parser/data/VarOrTerm.h"
 #include "parser/data/Variable.h"
@@ -78,7 +79,32 @@ inline std::ostream& operator<<(std::ostream& out,
       << ::testing::PrintToString(values._inlineValues._values);
   return out;
 }
+
+inline void PrintTo(const parsedQuery::GraphPattern& pattern,
+                    std::ostream* os) {
+  auto& s = *os;
+  s << ::testing::PrintToString(pattern._graphPatterns);
+}
+
+inline void PrintTo(const parsedQuery::GraphPatternOperation& op,
+                    std::ostream* os) {
+  std::ostringstream str;
+  op.toString(str);
+  (*os) << str.str();
+}
 }  // namespace parsedQuery
+
+inline void PrintTo(const Alias& alias, std::ostream* os) {
+  (*os) << alias.getDescriptor();
+}
+
+inline void PrintTo(const ParsedQuery& pq, std::ostream* os) {
+  (*os) << "is select query: " << pq.hasSelectClause() << '\n';
+  (*os) << "Variables: " << ::testing::PrintToString(pq.getVisibleVariables())
+        << '\n';
+  (*os) << "Graph pattern:";
+  PrintTo(pq._rootGraphPattern, os);
+}
 
 // _____________________________________________________________________________
 
@@ -102,8 +128,8 @@ namespace sparqlExpression {
 
 inline std::ostream& operator<<(
     std::ostream& out,
-    const sparqlExpression::SparqlExpressionPimpl& groupKey) {
-  out << "Group by " << groupKey.getDescriptor();
+    const sparqlExpression::SparqlExpressionPimpl& expression) {
+  out << "Expression:" << expression.getDescriptor();
   return out;
 }
 }  // namespace sparqlExpression
@@ -306,6 +332,16 @@ inline auto Expression = [](const std::string& descriptor)
 };
 }
 
+// A matcher that tests whether a `SparqlExpression::Ptr` (a `unique_ptr`)
+// actually (via dynamic cast) stores an element of type `ExpressionT`.
+// `ExpressionT` must be a subclass of `SparqlExpression`.
+template <typename ExpressionT>
+inline auto ExpressionWithType =
+    []() -> Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
+  return testing::Pointer(
+      testing::WhenDynamicCastTo<const ExpressionT*>(testing::NotNull()));
+};
+
 namespace detail {
 template <typename T>
 auto GraphPatternOperation =
@@ -369,8 +405,9 @@ inline auto ExpressionOrderKey = [](const string& expr,
 using ExpressionOrderKeyTest = std::pair<std::string, bool>;
 inline auto OrderKeys =
     [](const std::vector<
-        std::variant<::VariableOrderKey, ExpressionOrderKeyTest>>& orderKeys)
-    -> Matcher<const vector<OrderKey>&> {
+           std::variant<::VariableOrderKey, ExpressionOrderKeyTest>>& orderKeys,
+       IsInternalSort isInternalSort =
+           IsInternalSort::False) -> Matcher<const OrderClause&> {
   vector<Matcher<const OrderKey&>> keyMatchers;
   auto variableOrderKey =
       [](const ::VariableOrderKey& key) -> Matcher<const OrderKey&> {
@@ -385,7 +422,9 @@ inline auto OrderKeys =
         ad_utility::OverloadCallOperator{variableOrderKey, expressionOrderKey},
         key));
   }
-  return testing::ElementsAreArray(keyMatchers);
+  return testing::AllOf(
+      AD_FIELD(OrderClause, orderKeys, testing::ElementsAreArray(keyMatchers)),
+      AD_FIELD(OrderClause, isInternalSort, testing::Eq(isInternalSort)));
 };
 
 inline auto VariableGroupKey =
@@ -460,6 +499,20 @@ inline auto InlineData = [](const std::vector<::Variable>& vars,
   return detail::GraphPatternOperation<p::Values>(Values(vars, values));
 };
 
+inline auto Service = [](const ::Iri& iri,
+                         const std::vector<::Variable>& variables,
+                         const std::string& graphPattern,
+                         const std::string& prologue =
+                             "") -> Matcher<const p::GraphPatternOperation&> {
+  auto serviceMatcher = testing::AllOf(
+      AD_FIELD(p::Service, serviceIri_, testing::Eq(iri)),
+      AD_FIELD(p::Service, visibleVariables_,
+               testing::UnorderedElementsAreArray(variables)),
+      AD_FIELD(p::Service, graphPatternAsString_, testing::Eq(graphPattern)),
+      AD_FIELD(p::Service, prologue_, testing::Eq(prologue)));
+  return detail::GraphPatternOperation<p::Service>(serviceMatcher);
+};
+
 namespace detail {
 inline auto SelectBase =
     [](bool distinct,
@@ -493,9 +546,14 @@ namespace detail {
 // This matcher cannot be trivially broken down into a combination of existing
 // googletest matchers because of the way how the aliases are stored in the
 // select clause.
-MATCHER_P3(Select, distinct, reduced, selection, "") {
+MATCHER_P4(Select, distinct, reduced, selection, hiddenAliases, "") {
   const auto& selectedVariables = arg.getSelectedVariables();
-  if (selection.size() != selectedVariables.size()) return false;
+  if (selection.size() != selectedVariables.size()) {
+    *result_listener << "where the number of selected variables is "
+                     << selectedVariables.size() << ", but " << selection.size()
+                     << " were expected";
+    return false;
+  }
   size_t alias_counter = 0;
   for (size_t i = 0; i < selection.size(); i++) {
     if (holds_alternative<::Variable>(selection[i])) {
@@ -523,6 +581,26 @@ MATCHER_P3(Select, distinct, reduced, selection, "") {
       }
     }
   }
+
+  size_t i = 0;
+  for (const auto& [descriptor, variable] : hiddenAliases) {
+    if (alias_counter >= arg.getAliases().size()) {
+      *result_listener << "where selected variables contain less aliases ("
+                       << testing::PrintToString(alias_counter)
+                       << ") than provided to matcher";
+      return false;
+    }
+    if (descriptor !=
+            arg.getAliases()[alias_counter]._expression.getDescriptor() ||
+        variable != arg.getAliases()[alias_counter]._target) {
+      *result_listener << "where hidden alias#" << i << " = "
+                       << testing::PrintToString(
+                              arg.getAliases()[alias_counter]);
+      return false;
+    }
+    alias_counter++;
+    i++;
+  }
   return testing::ExplainMatchResult(
       testing::AllOf(
           AD_FIELD(p::SelectClause, distinct_, testing::Eq(distinct)),
@@ -536,10 +614,11 @@ MATCHER_P3(Select, distinct, reduced, selection, "") {
 inline auto Select =
     [](std::vector<std::variant<::Variable, std::pair<string, ::Variable>>>
            selection,
-       bool distinct = false,
-       bool reduced = false) -> Matcher<const p::SelectClause&> {
-  return testing::SafeMatcherCast<const p::SelectClause&>(
-      detail::Select(distinct, reduced, std::move(selection)));
+       bool distinct = false, bool reduced = false,
+       std::vector<std::pair<string, ::Variable>> hiddenAliases = {})
+    -> Matcher<const p::SelectClause&> {
+  return testing::SafeMatcherCast<const p::SelectClause&>(detail::Select(
+      distinct, reduced, std::move(selection), std::move(hiddenAliases)));
 };
 
 // Return a `Matcher` that tests whether the descriptor of the expression of a
@@ -762,6 +841,3 @@ inline auto VisibleVariables =
 };
 
 }  // namespace matchers
-
-#undef AD_PROPERTY
-#undef AD_FIELD

@@ -23,7 +23,7 @@ auto V = ad_utility::testing::VocabId;
 // demonstrates the correct usage of the proxy references that
 // are returned by the `IdTable` when calling `operator[]` or when dereferencing
 // an iterator.
-TEST(IdTableTest, DocumentationOfIteratorUsage) {
+TEST(IdTable, DocumentationOfIteratorUsage) {
   IdTable t{2, makeAllocator()};
   t.push_back({V(42), V(43)});
 
@@ -132,7 +132,7 @@ TEST(IdTableTest, DocumentationOfIteratorUsage) {
 
 // The following test demonstrates the iterator functionality of a single
 // row.
-TEST(IdTableTest, rowIterators) {
+TEST(IdTable, rowIterators) {
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
   auto testRow = [](auto row) {
     row[0] = 0;
@@ -224,9 +224,14 @@ void runTestForDifferentTypes(auto testCase, std::string testCaseName) {
   // Prepare the vectors of `allocators` and distinct `BufferedVector`s needed
   // for the respective `IdTable` types.
   std::vector<std::decay_t<decltype(makeAllocator())>> allocators;
-  std::vector<Buffer> buffers;
+  std::vector<std::vector<Buffer>> buffers;
   for (size_t i = 0; i < NumIdTables; ++i) {
-    buffers.emplace_back(3, testCaseName + std::to_string(i) + ".dat");
+    buffers.emplace_back();
+    // This makes enough room for IdTables of 20 columns.
+    for (size_t j = 0; j < 20; ++j) {
+      buffers.back().emplace_back(3, testCaseName + std::to_string(i) + "-" +
+                                         std::to_string(j) + ".dat");
+    }
     allocators.emplace_back(makeAllocator());
   }
   testCase.template operator()<IdTable>(V, std::move(allocators));
@@ -236,7 +241,7 @@ void runTestForDifferentTypes(auto testCase, std::string testCaseName) {
 }
 
 // This helper function has to be used inside the `testCase` lambdas for the
-// `runTestForDifferenTypes` function above whenever a copy of an `IdTable` has
+// `runTestForDifferentTypes` function above whenever a copy of an `IdTable` has
 // to be made. It is necessary because for some `IdTable` instantiations
 // (for example when the data is stored in a `BufferedVector`) the `clone`
 // member function needs additional arguments. Currently, the only additional
@@ -250,9 +255,9 @@ auto clone(const auto& table, auto... args) {
   }
 }
 
-TEST(IdTableTest, push_back_and_assign) {
+TEST(IdTable, push_back_and_assign) {
   // A lambda that is used as the `testCase` argument to the
-  // `runtTestForDifferenTypes` function (see above for details).
+  // `runTestForDifferentTypes` function (see above for details).
   auto runTestForIdTable = []<typename Table>(auto make,
                                               auto... additionalArgs) {
     constexpr size_t NUM_ROWS = 30;
@@ -287,7 +292,32 @@ TEST(IdTableTest, push_back_and_assign) {
   runTestForDifferentTypes<1>(runTestForIdTable, "idTableTest.pushBackAssign");
 }
 
-TEST(IdTableTest, insertAtEnd) {
+// __________________________________________________________________
+TEST(IdTable, at) {
+  // A lambda that is used as the `testCase` argument to the
+  // `runTestForDifferentTypes` function (see above for details).
+  auto runTestForIdTable = []<typename Table>(auto make,
+                                              auto... additionalArgs) {
+    constexpr size_t NUM_ROWS = 30;
+    constexpr size_t NUM_COLS = 4;
+
+    Table t1{NUM_COLS, std::move(additionalArgs.at(0))...};
+    t1.resize(1);
+    t1.at(0, 0) = make(42);
+    ASSERT_EQ(t1.at(0, 0), make(42));
+    ASSERT_EQ(std::as_const(t1).at(0, 0), make(42));
+    // Valid row but invalid column
+    ASSERT_ANY_THROW(t1.at(0, NUM_COLS));
+    ASSERT_ANY_THROW(std::as_const(t1).at(0, NUM_COLS));
+
+    // Valid column but invalid row
+    ASSERT_ANY_THROW(t1.at(NUM_ROWS, 0));
+    ASSERT_ANY_THROW(std::as_const(t1).at(NUM_ROWS, 0));
+  };
+  runTestForDifferentTypes<1>(runTestForIdTable, "idTableTest.at");
+}
+
+TEST(IdTable, insertAtEnd) {
   // A lambda that is used as the `testCase` argument to the
   // `runTestForDifferentTypes` function (see above for details).
   auto runTestForIdTable = []<typename Table>(auto make,
@@ -315,9 +345,9 @@ TEST(IdTableTest, insertAtEnd) {
   runTestForDifferentTypes<3>(runTestForIdTable, "idTableTest.insertAtEnd");
 }
 
-TEST(IdTableTest, reserve_and_resize) {
+TEST(IdTable, reserve_and_resize) {
   // A lambda that is used as the `testCase` argument to the
-  // `runtTestForDifferenTypes` function (see above for details).
+  // `runTestForDifferentTypes` function (see above for details).
   auto runTestForIdTable = []<typename Table>(auto make,
                                               auto... additionalArgs) {
     constexpr size_t NUM_ROWS = 34;
@@ -364,9 +394,9 @@ TEST(IdTableTest, reserve_and_resize) {
                               "idTableTest.reserveAndResize");
 }
 
-TEST(IdTableTest, copyAndMove) {
+TEST(IdTable, copyAndMove) {
   // A lambda that is used as the `testCase` argument to the
-  // `runtTestForDifferenTypes` function (see above for details).
+  // `runTestForDifferentTypes` function (see above for details).
   auto runTestForIdTable = []<typename Table>(auto make,
                                               auto... additionalArgs) {
     constexpr size_t NUM_ROWS = 100;
@@ -420,7 +450,7 @@ TEST(IdTableTest, copyAndMove) {
   runTestForDifferentTypes<6>(runTestForIdTable, "idTableTest.copyAndMove");
 }
 
-TEST(IdTableTest, erase) {
+TEST(IdTable, erase) {
   constexpr size_t NUM_ROWS = 12;
   constexpr size_t NUM_COLS = 4;
 
@@ -448,7 +478,7 @@ TEST(IdTableTest, erase) {
   ASSERT_EQ(0u, t1.size());
 }
 
-TEST(IdTableTest, iterating) {
+TEST(IdTable, iterating) {
   constexpr size_t NUM_ROWS = 42;
   constexpr size_t NUM_COLS = 17;
 
@@ -478,7 +508,7 @@ TEST(IdTableTest, iterating) {
   }
 }
 
-TEST(IdTableTest, sortTest) {
+TEST(IdTable, sortTest) {
   IdTable test(2, makeAllocator());
   test.push_back({V(3), V(1)});
   test.push_back({V(8), V(9)});
@@ -733,7 +763,7 @@ TEST(IdTableStaticTest, iterating) {
 // =============================================================================
 // Conversion Tests
 // =============================================================================
-TEST(IdTableTest, conversion) {
+TEST(IdTable, conversion) {
   IdTable table(3, makeAllocator());
   table.push_back({V(4), V(1), V(0)});
   table.push_back({V(1), V(7), V(8)});
@@ -808,7 +838,7 @@ TEST(IdTableTest, conversion) {
   }
 }
 
-TEST(IdTableTest, empty) {
+TEST(IdTable, empty) {
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
   IntTable t{3};
   ASSERT_TRUE(t.empty());
@@ -816,7 +846,7 @@ TEST(IdTableTest, empty) {
   ASSERT_FALSE(t.empty());
 }
 
-TEST(IdTableTest, frontAndBack) {
+TEST(IdTable, frontAndBack) {
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
   IntTable t{1};
   t.resize(3);
@@ -828,7 +858,75 @@ TEST(IdTableTest, frontAndBack) {
   ASSERT_EQ(43, std::as_const(t).back()[0]);
 }
 
-TEST(IdTableTest, staticAsserts) {
+TEST(IdTable, cornerCases) {
+  using Dynamic = columnBasedIdTable::IdTable<int, 0>;
+  {
+    Dynamic dynamic;
+    dynamic.setNumColumns(12);
+    ASSERT_NO_THROW(dynamic.asStaticView<12>());
+    ASSERT_NO_THROW(dynamic.asStaticView<0>());
+    ASSERT_ANY_THROW(dynamic.asStaticView<6>());
+  }
+  {
+    Dynamic dynamic;
+    dynamic.setNumColumns(12);
+    dynamic.emplace_back();
+    dynamic(0, 3) = -24;
+    // `setNumColumns` may only be called on an empty table.
+    ASSERT_ANY_THROW(dynamic.setNumColumns(3));
+    // Wrong number of columns on a non-empty table.
+    ASSERT_ANY_THROW(std::move(dynamic).toStatic<3>());
+    auto dynamic2 = std::move(dynamic).toStatic<0>();
+    ASSERT_EQ(dynamic2.numColumns(), 12u);
+    ASSERT_EQ(dynamic2.numRows(), 1u);
+    ASSERT_EQ(dynamic2(0, 3), -24);
+  }
+
+  using WidthTwo = columnBasedIdTable::IdTable<int, 2>;
+  // Wrong number of columns in the constructor.
+  ASSERT_ANY_THROW(WidthTwo(3));
+
+  {
+    // Test everything that can go wrong when passing in the storage explicitly.
+    // This is `vector<vector<int>>` but with a `default_init_allocator`.
+    Dynamic::Storage columns;
+    columns.resize(2);
+    // Wrong number of columns in the constructor
+    ASSERT_ANY_THROW(WidthTwo(3, columns));
+    // Too few columns.
+    columns.resize(1);
+    ASSERT_ANY_THROW(WidthTwo(2, columns));
+    columns.resize(2);
+    columns[0].push_back(42);
+    // One of the columns isn't empty
+    ASSERT_ANY_THROW(WidthTwo(2, columns));
+  }
+}
+
+TEST(IdTable, shrinkToFit) {
+  // Note: The behavior of the following test case depends on the implementation
+  // of `std::vector::reserve` and `std::vector::push_back`. It might be
+  // necessary to change them if one of our used standard libraries has a
+  // different behavior, but this is unlikely due to ABI stability goals between
+  // library versions.
+  auto memory = ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000);
+  IdTable table{2, ad_utility::AllocatorWithLimit<Id>{memory}};
+  ASSERT_EQ(memory.ptr().get()->wlock()->numFreeBytes(), 1000);
+  table.reserve(20);
+  ASSERT_TRUE(table.empty());
+  // 20 rows * 2 columns * 8 bytes per ID were allocated.
+  ASSERT_EQ(memory.ptr().get()->wlock()->numFreeBytes(), 680);
+  table.emplace_back();
+  table.emplace_back();
+  ASSERT_EQ(table.numRows(), 2u);
+  ASSERT_EQ(memory.ptr().get()->wlock()->numFreeBytes(), 680);
+  table.shrinkToFit();
+  ASSERT_EQ(table.numRows(), 2u);
+  // Now only 2 rows * 2 columns * 8 bytes were allocated.
+  ASSERT_EQ(memory.ptr().get()->wlock()->numFreeBytes(), 968);
+}
+
+TEST(IdTable, staticAsserts) {
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::iterator>);
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
   static_assert(std::ranges::random_access_range<IdTable>);

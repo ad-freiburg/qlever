@@ -6,9 +6,8 @@
 #include <array>
 #include <vector>
 
-#include "./Operation.h"
-#include "./QueryExecutionTree.h"
-#include "util/JoinAlgorithms.h"
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
 
 class MultiColumnJoin : public Operation {
  private:
@@ -74,4 +73,3 @@ class MultiColumnJoin : public Operation {
 
   void computeSizeEstimateAndMultiplicities();
 };
-

@@ -70,15 +70,11 @@ VariableToColumnMap CountAvailablePredicates::computeVariableToColumnMap()
 }
 
 // _____________________________________________________________________________
-float CountAvailablePredicates::getMultiplicity(size_t col) {
-  if (col == 0) {
-    return 1;
-  } else {
-    // Determining the multiplicity of the second column (the counts)
-    // is non trivial (and potentially not possible) without computing
-    // at least a part of the result first.
-    return 1;
-  }
+float CountAvailablePredicates::getMultiplicity([[maybe_unused]] size_t col) {
+  // Determining the multiplicity of the second column (the counts)
+  // is not trivial (and potentially not possible) without computing
+  // at least a part of the result first, so we always return 1.
+  return 1.0f;
 }
 
 // _____________________________________________________________________________
@@ -136,7 +132,7 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
         &result->_idTable, hasPattern, hasPredicate, patterns);
   } else {
     std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
-    result->_localVocab = subresult->_localVocab;
+    result->shareLocalVocabFrom(*subresult);
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
 

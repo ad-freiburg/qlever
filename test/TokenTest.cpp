@@ -103,9 +103,9 @@ TEST(TokenizerTest, StringLiterals) {
   string sQuote1 = "\"this is a quote \"";
   string sQuote2 =
       "\"this is a quote \' $@#ä\u1234 \U000A1234 \\\\ \\n \"";  // $@#\u3344\U00FF00DD\"";
-  string sQuote3 = "\"\\uAB23SomeotherChars\"";
+  string sQuote3 = R"("\uAB23SomeotherChars")";
   string NoSQuote1 = "\"illegalQuoteBecauseOfNewline\n\"";
-  string NoSQuote2 = "\"illegalQuoteBecauseOfBackslash\\  \"";
+  string NoSQuote2 = R"("illegalQuoteBecauseOfBackslash\  ")";
 
   ASSERT_TRUE(RE2::FullMatch(sQuote1, t.StringLiteralQuote, nullptr));
   ASSERT_TRUE(RE2::FullMatch(sQuote2, t.StringLiteralQuote, nullptr));
@@ -123,9 +123,9 @@ TEST(TokenizerTest, StringLiterals) {
   string sSingleQuote1 = "\'this is a quote \'";
   string sSingleQuote2 =
       "\'this is a quote \" $@#ä\u1234 \U000A1234 \\\\ \\n \'";
-  string sSingleQuote3 = "\'\\uAB23SomeotherChars\'";
+  string sSingleQuote3 = R"('\uAB23SomeotherChars')";
   string NoSSingleQuote1 = "\'illegalQuoteBecauseOfNewline\n\'";
-  string NoSSingleQuote2 = "\'illegalQuoteBecauseOfBackslash\\  \'";
+  string NoSSingleQuote2 = R"('illegalQuoteBecauseOfBackslash\  ')";
 
   ASSERT_TRUE(
       RE2::FullMatch(sSingleQuote1, t.StringLiteralSingleQuote, nullptr));
@@ -146,8 +146,8 @@ TEST(TokenizerTest, StringLiterals) {
   string sMultiline2 =
       "\"\"\"MultilineString\' \'\'\'\n\\n\\u00FF\\U0001AB34\"  \"\" "
       "someMore\"\"\"";
-  string sNoMultiline1 = "\"\"\"\\autsch\"\"\"";
-  string sNoMultiline2 = "\"\"\"\"\"\"\"";
+  string sNoMultiline1 = R"("""\autsch""")";
+  string sNoMultiline2 = R"(""""""")";
   ASSERT_TRUE(RE2::FullMatch(sMultiline1, t.StringLiteralLongQuote, nullptr));
   ASSERT_TRUE(RE2::FullMatch(sMultiline2, t.StringLiteralLongQuote, nullptr));
   ASSERT_FALSE(
@@ -164,8 +164,8 @@ TEST(TokenizerTest, StringLiterals) {
   string sSingleMultiline2 =
       "\'\'\'MultilineString\" \"\"\"\n\\n\\u00FF\\U0001AB34\'  \'\' "
       "someMore\'\'\'";
-  string sSingleNoMultiline1 = "\'\'\'\\autsch\'\'\'";
-  string sSingleNoMultiline2 = "\'\'\'\'\'\'\'";
+  string sSingleNoMultiline1 = R"('''\autsch''')";
+  string sSingleNoMultiline2 = R"(''''''')";
   ASSERT_TRUE(RE2::FullMatch(sSingleMultiline1, t.StringLiteralLongSingleQuote,
                              nullptr));
   ASSERT_TRUE(RE2::FullMatch(sSingleMultiline2, t.StringLiteralLongSingleQuote,
@@ -367,22 +367,22 @@ TEST(TokenizerTest, WhitespaceAndComments) {
 TEST(Escaping, normalizeRDFLiteral) {
   {
     std::string l1 = "\"simpleLiteral\"";
-    ASSERT_EQ(l1, RdfEscaping::normalizeRDFLiteral(l1));
+    ASSERT_EQ(l1, RdfEscaping::normalizeRDFLiteral(l1).get());
     std::string l2 = "\'simpleLiteral\'";
-    ASSERT_EQ(l1, RdfEscaping::normalizeRDFLiteral(l2));
+    ASSERT_EQ(l1, RdfEscaping::normalizeRDFLiteral(l2).get());
     std::string l3 = R"('''simpleLiteral''')";
-    ASSERT_EQ(l1, RdfEscaping::normalizeRDFLiteral(l3));
+    ASSERT_EQ(l1, RdfEscaping::normalizeRDFLiteral(l3).get());
     std::string l4 = R"("""simpleLiteral""")";
-    ASSERT_EQ(l1, RdfEscaping::normalizeRDFLiteral(l4));
+    ASSERT_EQ(l1, RdfEscaping::normalizeRDFLiteral(l4).get());
 
     ASSERT_EQ(l1, RdfEscaping::escapeNewlinesAndBackslashes(
-                      RdfEscaping::normalizeRDFLiteral(l1)));
+                      RdfEscaping::normalizeRDFLiteral(l1).get()));
     ASSERT_EQ(l1, RdfEscaping::escapeNewlinesAndBackslashes(
-                      RdfEscaping::normalizeRDFLiteral(l2)));
+                      RdfEscaping::normalizeRDFLiteral(l2).get()));
     ASSERT_EQ(l1, RdfEscaping::escapeNewlinesAndBackslashes(
-                      RdfEscaping::normalizeRDFLiteral(l3)));
+                      RdfEscaping::normalizeRDFLiteral(l3).get()));
     ASSERT_EQ(l1, RdfEscaping::escapeNewlinesAndBackslashes(
-                      RdfEscaping::normalizeRDFLiteral(l4)));
+                      RdfEscaping::normalizeRDFLiteral(l4).get()));
   }
 
   {
@@ -390,23 +390,23 @@ TEST(Escaping, normalizeRDFLiteral) {
     std::string l1 = R"("si\"mple\'Li\n\rt\t\b\fer\\")";
     // only the newline and backslash characters are escaped
     std::string lEscaped = "\"si\"mple\'Li\\n\rt\t\b\fer\\\\\"";
-    ASSERT_EQ(t, RdfEscaping::normalizeRDFLiteral(l1));
+    ASSERT_EQ(t, RdfEscaping::normalizeRDFLiteral(l1).get());
     std::string l2 = R"('si\"mple\'Li\n\rt\t\b\fer\\')";
-    ASSERT_EQ(t, RdfEscaping::normalizeRDFLiteral(l2));
+    ASSERT_EQ(t, RdfEscaping::normalizeRDFLiteral(l2).get());
     std::string l3 = R"('''si\"mple\'Li\n\rt\t\b\fer\\''')";
-    ASSERT_EQ(t, RdfEscaping::normalizeRDFLiteral(l3));
+    ASSERT_EQ(t, RdfEscaping::normalizeRDFLiteral(l3).get());
     std::string l4 = R"("""si\"mple\'Li\n\rt\t\b\fer\\""")";
-    ASSERT_EQ(t, RdfEscaping::normalizeRDFLiteral(l4));
+    ASSERT_EQ(t, RdfEscaping::normalizeRDFLiteral(l4).get());
 
     ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlinesAndBackslashes(t));
     ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlinesAndBackslashes(
-                            RdfEscaping::normalizeRDFLiteral(l1)));
+                            RdfEscaping::normalizeRDFLiteral(l1).get()));
     ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlinesAndBackslashes(
-                            RdfEscaping::normalizeRDFLiteral(l2)));
+                            RdfEscaping::normalizeRDFLiteral(l2).get()));
     ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlinesAndBackslashes(
-                            RdfEscaping::normalizeRDFLiteral(l3)));
+                            RdfEscaping::normalizeRDFLiteral(l3).get()));
     ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlinesAndBackslashes(
-                            RdfEscaping::normalizeRDFLiteral(l4)));
+                            RdfEscaping::normalizeRDFLiteral(l4).get()));
   }
 
   std::string lit = R"(",\")";
@@ -418,12 +418,12 @@ TEST(Escaping, unescapeIriref) {
   // only numeric escapes \uxxxx and \UXoooXooo are allowed
   {
     std::string t = "<si\"mple\'Bärän>";
-    std::string l3 = "<si\"mple\'B\\u00E4r\\U000000E4n>";
+    std::string l3 = R"(<si"mple'B\u00E4r\U000000E4n>)";
     ASSERT_EQ(t, RdfEscaping::unescapeIriref(l3));
   }
   {
     std::string t = "<si\"mple\'Bärä>";
-    std::string l3 = "<si\"mple\'B\\u00E4r\\U000000E4>";
+    std::string l3 = R"(<si"mple'B\u00E4r\U000000E4>)";
     ASSERT_EQ(t, RdfEscaping::unescapeIriref(l3));
   }
   {

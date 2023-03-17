@@ -197,7 +197,7 @@ std::vector<JoinTestCase> createJoinTestSet() {
   rightIdTable = {{1, 3}, {1, 8}, {3, 1}, {4, 2}};
   expectedResult = {{1, 1, 3}, {1, 1, 8}, {1, 3, 3},
                     {1, 3, 8}, {4, 1, 2}, {400000, 200000, 200000}};
-  for (size_t i = 1; i <= 10000; ++i) {
+  for (int64_t i = 1; i <= 10000; ++i) {
     rightIdTable.push_back({4 + i, 2 + i});
   }
   leftIdTable.push_back({400000, 200000});
@@ -210,12 +210,12 @@ std::vector<JoinTestCase> createJoinTestSet() {
   leftIdTable = {};
   rightIdTable = {};
   expectedResult = {{40000, 200000, 200000}, {4000001, 200000, 200000}};
-  for (size_t i = 1; i <= 10000; ++i) {
+  for (int64_t i = 1; i <= 10000; ++i) {
     leftIdTable.push_back({4 + i, 2 + i});
   }
   leftIdTable.push_back({40000, 200000});
   rightIdTable.push_back({40000, 200000});
-  for (size_t i = 1; i <= 10000; ++i) {
+  for (int64_t i = 1; i <= 10000; ++i) {
     leftIdTable.push_back({40000 + i, 2 + i});
   }
   leftIdTable.push_back({4000001, 200000});

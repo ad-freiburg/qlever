@@ -19,6 +19,7 @@
 #include <engine/OptionalJoin.h>
 #include <engine/OrderBy.h>
 #include <engine/QueryPlanner.h>
+#include <engine/Service.h>
 #include <engine/Sort.h>
 #include <engine/TextOperationWithFilter.h>
 #include <engine/TextOperationWithoutFilter.h>
@@ -33,14 +34,8 @@
 
 namespace p = parsedQuery;
 namespace {
-// All the operations take a `QueryExecutionContext` as a first argument.
-// Todo: Continue the comment.
-template <typename Operation>
-std::shared_ptr<QueryExecutionTree> makeExecutionTree(
-    QueryExecutionContext* qec, auto&&... args) {
-  return std::make_shared<QueryExecutionTree>(
-      qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
-}
+
+using ad_utility::makeExecutionTree;
 
 template <typename Operation>
 QueryPlanner::SubtreePlan makeSubtreePlan(QueryExecutionContext* qec,
@@ -98,7 +93,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   bool doGroupBy = !pq._groupByVariables.empty() ||
                    patternTrickTuple.has_value() ||
                    std::ranges::any_of(pq.getAliases(), [](const Alias& alias) {
-                     return alias._expression.isAggregate({});
+                     return alias._expression.containsAggregate();
                    });
 
   // Optimize the graph pattern tree
@@ -451,7 +446,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         SubtreePlan valuesPlan =
             makeSubtreePlan<Values>(_qec, arg._inlineValues);
         joinCandidates(std::vector{std::move(valuesPlan)});
-
+      } else if constexpr (std::is_same_v<T, p::Service>) {
+        SubtreePlan servicePlan = makeSubtreePlan<Service>(_qec, arg);
+        joinCandidates(std::vector{std::move(servicePlan)});
       } else if constexpr (std::is_same_v<T, p::Bind>) {
         // The logic of the BIND operation is implemented in the joinCandidates
         // lambda. Reason: BIND does not add a new join operation like for the
@@ -537,19 +534,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
       distinctPlan._qet =
           makeExecutionTree<Distinct>(_qec, parent._qet, keepIndices);
     } else {
-      if (keepIndices.size() == 1) {
-        auto tree = makeExecutionTree<Sort>(_qec, parent._qet, keepIndices[0]);
-        distinctPlan._qet =
-            makeExecutionTree<Distinct>(_qec, tree, keepIndices);
-      } else {
-        vector<pair<size_t, bool>> obCols;
-        for (auto& i : keepIndices) {
-          obCols.emplace_back(std::make_pair(i, false));
-        }
-        auto tree = makeExecutionTree<OrderBy>(_qec, parent._qet, obCols);
-        distinctPlan._qet =
-            makeExecutionTree<Distinct>(_qec, tree, keepIndices);
-      }
+      auto tree = makeExecutionTree<Sort>(_qec, parent._qet, keepIndices);
+      distinctPlan._qet = makeExecutionTree<Distinct>(_qec, tree, keepIndices);
     }
     added.push_back(distinctPlan);
   }
@@ -645,38 +631,27 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     auto& tree = plan._qet;
     plan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
     plan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
-    if (pq._orderBy.size() == 1 && !pq._orderBy[0].isDescending_) {
-      size_t col = parent._qet->getVariableColumn(pq._orderBy[0].variable_);
-      const std::vector<size_t>& previousSortedOn =
-          parent._qet->resultSortedOn();
-      if (!previousSortedOn.empty() && col == previousSortedOn[0]) {
-        // Already sorted perfectly
-        added.push_back(parent);
-      } else {
-        tree = makeExecutionTree<Sort>(_qec, parent._qet, col);
-        added.push_back(plan);
-      }
-    } else {
-      vector<pair<size_t, bool>> sortIndices;
-      for (auto& ord : pq._orderBy) {
-        sortIndices.emplace_back(parent._qet->getVariableColumn(ord.variable_),
-                                 ord.isDescending_);
-      }
-      const std::vector<size_t>& previousSortedOn =
-          parent._qet->resultSortedOn();
-      bool alreadySorted = previousSortedOn.size() >= sortIndices.size();
-      for (size_t j = 0; alreadySorted && j < sortIndices.size(); j++) {
-        alreadySorted = alreadySorted && !sortIndices[j].second &&
-                        sortIndices[j].first == previousSortedOn[j];
-      }
-      if (alreadySorted) {
-        // Already sorted perfectly
-        added.push_back(parent);
-      } else {
-        tree = makeExecutionTree<OrderBy>(_qec, parent._qet, sortIndices);
-        added.push_back(plan);
-      }
+    vector<pair<size_t, bool>> sortIndices;
+    for (auto& ord : pq._orderBy) {
+      sortIndices.emplace_back(parent._qet->getVariableColumn(ord.variable_),
+                               ord.isDescending_);
     }
+
+    if (pq._isInternalSort == IsInternalSort::True) {
+      std::vector<size_t> sortColumns;
+      for (auto& [index, isDescending] : sortIndices) {
+        AD_CONTRACT_CHECK(!isDescending);
+        sortColumns.push_back(index);
+      }
+      tree = QueryExecutionTree::createSortedTree(parent._qet, sortColumns);
+    } else {
+      AD_CONTRACT_CHECK(pq._isInternalSort == IsInternalSort::False);
+      // Note: As the internal ordering is different from the semantic ordering
+      // needed by `OrderBy`, we always have to instantiate the `OrderBy`
+      // operation.
+      tree = makeExecutionTree<OrderBy>(_qec, parent._qet, sortIndices);
+    }
+    added.push_back(plan);
   }
   return added;
 }
@@ -1185,9 +1160,9 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   SubtreePlan plan(_qec);
   plan._idsOfIncludedNodes |= (size_t(1) << node._id);
   auto& tree = *plan._qet;
-  AD_CONTRACT_CHECK(node._wordPart.size() > 0);
+  AD_CONTRACT_CHECK(node._wordPart.has_value());
   auto textOp = std::make_shared<TextOperationWithoutFilter>(
-      _qec, node._wordPart, node._variables, node._cvar.value());
+      _qec, node._wordPart.value(), node._variables, node._cvar.value());
   tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER,
                     textOp);
   return plan;
@@ -1254,57 +1229,15 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
 // _____________________________________________________________________________
 QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
     const SubtreePlan& a, const SubtreePlan& b) const {
-  // Joining two optional patterns is illegal
-  // TODO<joka921/kramerfl> : actually the second one must be the optional
-  // TODO<joka921> Get rid of the `SubtreePlan::OPTIONAL` completely...
+  // The second tree must be the OPTIONAL tree, OPTIONAL joins are not
+  // symmetric.
   AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL &&
                     b.type == SubtreePlan::OPTIONAL);
-  SubtreePlan plan(_qec);
 
-  std::vector<std::array<ColumnIndex, 2>> jcs = getJoinColumns(a, b);
-
-  const vector<size_t>& aSortedOn = a._qet->resultSortedOn();
-  const vector<size_t>& bSortedOn = b._qet->resultSortedOn();
-
-  bool aSorted = aSortedOn.size() >= jcs.size();
-  // TODO: We could probably also accept permutations of the join columns
-  // as the order of a here and then permute the join columns to match the
-  // sorted columns of a or b (whichever is larger).
-  for (size_t i = 0; aSorted && i < jcs.size(); i++) {
-    aSorted = aSorted && jcs[i][0] == aSortedOn[i];
-  }
-  bool bSorted = bSortedOn.size() >= jcs.size();
-  for (size_t i = 0; bSorted && i < jcs.size(); i++) {
-    bSorted = bSorted && jcs[i][1] == bSortedOn[i];
-  }
-
-  // a and b need to be ordered properly first
-  vector<pair<size_t, bool>> sortIndicesA;
-  vector<pair<size_t, bool>> sortIndicesB;
-  for (array<ColumnIndex, 2>& jc : jcs) {
-    sortIndicesA.push_back(std::make_pair(jc[0], false));
-    sortIndicesB.push_back(std::make_pair(jc[1], false));
-  }
-
-  SubtreePlan orderByPlanA(_qec), orderByPlanB(_qec);
-  auto orderByA = std::make_shared<OrderBy>(_qec, a._qet, sortIndicesA);
-  auto orderByB = std::make_shared<OrderBy>(_qec, b._qet, sortIndicesB);
-
-  if (!aSorted) {
-    orderByPlanA._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByA);
-  }
-  if (!bSorted) {
-    orderByPlanB._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByB);
-  }
-
-  auto join =
-      std::make_shared<OptionalJoin>(_qec, aSorted ? a._qet : orderByPlanA._qet,
-                                     bSorted ? b._qet : orderByPlanB._qet, jcs);
-  QueryExecutionTree& tree = *plan._qet;
-  tree.setOperation(QueryExecutionTree::OPTIONAL_JOIN, join);
-
-  plan.type = SubtreePlan::BASIC;
-  return plan;
+  auto jcs = getJoinColumns(a, b);
+  auto [qetA, qetB] =
+      QueryExecutionTree::createSortedTrees(a._qet, b._qet, jcs);
+  return makeSubtreePlan<OptionalJoin>(_qec, qetA, qetB, jcs);
 }
 
 // _____________________________________________________________________________
@@ -1314,106 +1247,30 @@ QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
                     b.type == SubtreePlan::MINUS);
   std::vector<std::array<ColumnIndex, 2>> jcs = getJoinColumns(a, b);
 
-  const vector<size_t>& aSortedOn = a._qet->resultSortedOn();
-  const vector<size_t>& bSortedOn = b._qet->resultSortedOn();
-
-  bool aSorted = aSortedOn.size() >= jcs.size();
   // TODO: We could probably also accept permutations of the join columns
   // as the order of a here and then permute the join columns to match the
   // sorted columns of a or b (whichever is larger).
-  for (size_t i = 0; aSorted && i < jcs.size(); i++) {
-    aSorted = aSorted && jcs[i][0] == aSortedOn[i];
-  }
-  bool bSorted = bSortedOn.size() >= jcs.size();
-  for (size_t i = 0; bSorted && i < jcs.size(); i++) {
-    bSorted = bSorted && jcs[i][1] == bSortedOn[i];
-  }
-
-  // a and b need to be ordered properly first
-  vector<pair<size_t, bool>> sortIndicesA;
-  vector<pair<size_t, bool>> sortIndicesB;
-  for (const auto& [joinColumnA, joinColumnB] : jcs) {
-    sortIndicesA.push_back(std::make_pair(joinColumnA, false));
-    sortIndicesB.push_back(std::make_pair(joinColumnB, false));
-  }
-
-  SubtreePlan orderByPlanA(_qec), orderByPlanB(_qec);
-  auto orderByA = std::make_shared<OrderBy>(_qec, a._qet, sortIndicesA);
-  auto orderByB = std::make_shared<OrderBy>(_qec, b._qet, sortIndicesB);
-
-  if (!aSorted) {
-    orderByPlanA._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByA);
-  }
-  if (!bSorted) {
-    orderByPlanB._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByB);
-  }
-
-  SubtreePlan plan(_qec);
-
-  auto join =
-      std::make_shared<Minus>(_qec, aSorted ? a._qet : orderByPlanA._qet,
-                              bSorted ? b._qet : orderByPlanB._qet, jcs);
-  QueryExecutionTree& tree = *plan._qet;
-  tree.setOperation(QueryExecutionTree::MINUS, join);
-
-  plan.type = SubtreePlan::BASIC;
-  return plan;
+  auto [qetA, qetB] =
+      QueryExecutionTree::createSortedTrees(a._qet, b._qet, jcs);
+  return makeSubtreePlan<Minus>(_qec, qetA, qetB, jcs);
 }
 
 // _____________________________________________________________________________
 QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
     const SubtreePlan& a, const SubtreePlan& b) const {
-  SubtreePlan plan(_qec);
-
-  std::vector<std::array<ColumnIndex, 2>> jcs = getJoinColumns(a, b);
-
-  const vector<size_t>& aSortedOn = a._qet->resultSortedOn();
-  const vector<size_t>& bSortedOn = b._qet->resultSortedOn();
-
-  bool aSorted = aSortedOn.size() >= jcs.size();
-  // TODO: We could probably also accept permutations of the join columns
-  // as the order of a here and then permute the join columns to match the
-  // sorted columns of a or b (whichever is larger).
-  for (size_t i = 0; aSorted && i < jcs.size(); i++) {
-    aSorted = aSorted && jcs[i][0] == aSortedOn[i];
-  }
-  bool bSorted = bSortedOn.size() >= jcs.size();
-  for (size_t i = 0; bSorted && i < jcs.size(); i++) {
-    bSorted = bSorted && jcs[i][1] == bSortedOn[i];
-  }
-
-  // a and b need to be ordered properly first
-  vector<pair<size_t, bool>> sortIndicesA;
-  vector<pair<size_t, bool>> sortIndicesB;
-  for (const auto& [joinColumnA, joinColumnB] : jcs) {
-    sortIndicesA.push_back(std::make_pair(joinColumnA, false));
-    sortIndicesB.push_back(std::make_pair(joinColumnB, false));
-  }
-
-  SubtreePlan orderByPlanA(_qec), orderByPlanB(_qec);
-  auto orderByA = std::make_shared<OrderBy>(_qec, a._qet, sortIndicesA);
-  auto orderByB = std::make_shared<OrderBy>(_qec, b._qet, sortIndicesB);
-
-  if (!aSorted) {
-    orderByPlanA._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByA);
-  }
-  if (!bSorted) {
-    orderByPlanB._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByB);
-  }
-
-  const auto& actualA = aSorted ? a._qet : orderByPlanA._qet;
-  const auto& actualB = bSorted ? b._qet : orderByPlanB._qet;
   if (Join::isFullScanDummy(a._qet) || Join::isFullScanDummy(b._qet)) {
     throw std::runtime_error(
         "Trying a JOIN between two full scan dummys, this"
         "will be handled by the calling code automatically");
   }
 
-  auto join = std::make_shared<MultiColumnJoin>(_qec, actualA, actualB, jcs);
-  QueryExecutionTree& tree = *plan._qet;
-  tree.setOperation(QueryExecutionTree::MULTICOLUMN_JOIN, join);
-
-  return plan;
+  // TODO: We could probably also accept permutations of the join columns
+  // as the order of a here and then permute the join columns to match the
+  // sorted columns of a or b (whichever is larger).
+  std::vector<std::array<ColumnIndex, 2>> jcs = getJoinColumns(a, b);
+  auto [qetA, qetB] =
+      QueryExecutionTree::createSortedTrees(a._qet, b._qet, jcs);
+  return makeSubtreePlan<MultiColumnJoin>(_qec, qetA, qetB, jcs);
 }
 
 // _____________________________________________________________________________
@@ -1425,7 +1282,8 @@ string QueryPlanner::TripleGraph::asString() const {
     } else {
       os << i << " {TextOP for "
          << _nodeMap.find(i)->second->_cvar.value().name() << ", wordPart: \""
-         << _nodeMap.find(i)->second->_wordPart << "\"} : (";
+         << absl::StrJoin(_nodeMap.find(i)->second->_wordPart.value(), " ")
+         << "\"} : (";
     }
 
     for (size_t j = 0; j < _adjLists[i].size(); ++j) {
@@ -1628,12 +1486,10 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
 
 // _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
-  return _nodeMap.count(i) > 0 && (_nodeMap.find(i)->second->_triple._p._iri ==
-                                       CONTAINS_ENTITY_PREDICATE ||
-                                   _nodeMap.find(i)->second->_triple._p._iri ==
-                                       CONTAINS_WORD_PREDICATE ||
-                                   _nodeMap.find(i)->second->_triple._p._iri ==
-                                       INTERNAL_TEXT_MATCH_PREDICATE);
+  return _nodeMap.count(i) > 0 &&
+         (_nodeMap.find(i)->second->_triple._p._iri ==
+              CONTAINS_ENTITY_PREDICATE ||
+          _nodeMap.find(i)->second->_triple._p._iri == CONTAINS_WORD_PREDICATE);
 }
 
 // _____________________________________________________________________________
@@ -1838,12 +1694,23 @@ QueryPlanner::TripleGraph& QueryPlanner::TripleGraph::operator=(
 QueryPlanner::TripleGraph::TripleGraph()
     : _adjLists(), _nodeMap(), _nodeStorage() {}
 
+// ___________________________________________________________________________
+namespace {
+
+// Remove the quotation marks around an enquoted literal and convert it to lower
+// case. This is only used in the `collapseTextCliques` function.
+string stripAndLowercaseLiteral(std::string_view lit) {
+  AD_CORRECTNESS_CHECK(lit.size() >= 2 && lit.starts_with('"') &&
+                       lit.ends_with('"'));
+  lit.remove_prefix(1);
+  lit.remove_suffix(1);
+  return ad_utility::getLowercaseUtf8(lit);
+}
+}  // namespace
+
 // _____________________________________________________________________________
 void QueryPlanner::TripleGraph::collapseTextCliques() {
   // TODO: Could use more refactoring.
-  // In Earlier versions there were no ql:contains... predicates but
-  // a symmetric <in-text> predicate. Therefore some parts are still more
-  // complex than need be.
 
   // Create a map from context var to triples it occurs in (the cliques).
   ad_utility::HashMap<Variable, vector<size_t>> cvarsToTextNodes(
@@ -1859,32 +1726,27 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
   vector<std::set<size_t>> tnAdjSetsToOldIds;
   for (auto& cvarsToTextNode : cvarsToTextNodes) {
     auto& cvar = cvarsToTextNode.first;
-    string wordPart;
+    std::vector<string> words;
     vector<SparqlTriple> trips;
-    tnAdjSetsToOldIds.push_back(std::set<size_t>());
+    tnAdjSetsToOldIds.emplace_back();
     auto& adjNodes = tnAdjSetsToOldIds.back();
     for (auto nid : cvarsToTextNode.second) {
       removedNodeIds[nid] = id;
       adjNodes.insert(_adjLists[nid].begin(), _adjLists[nid].end());
       auto& triple = _nodeMap[nid]->_triple;
       trips.push_back(triple);
-      if (triple._s == cvar && triple._o.isString() &&
-          !triple._o.isVariable()) {
-        if (!wordPart.empty()) {
-          wordPart += " ";
-        }
-        wordPart += triple._o.getString();
-      }
-      // TODO<joka921> Figure out what is going on here... The subject and the
-      // object of a triple are being combined into a string as it seems.
-      if (triple._o == cvar && !isVariable(triple._s)) {
-        if (!wordPart.empty()) {
-          wordPart += " ";
-        }
-        wordPart += triple._s.toString();
+      // TODO<joka921> I think the check "is the predicate ql:contains_word" is
+      // missing. Verify this.
+      if (triple._s == cvar && triple._o.isLiteral()) {
+        std::vector<std::string> newWords = absl::StrSplit(
+            stripAndLowercaseLiteral(
+                triple._o.getLiteral().normalizedLiteralContent().get()),
+            ' ');
+        words.insert(words.end(), newWords.begin(), newWords.end());
       }
     }
-    textNodes.emplace_back(Node(id++, cvar, wordPart, trips));
+    textNodes.emplace_back(id, cvar, std::move(words), trips);
+    ++id;
     assert(tnAdjSetsToOldIds.size() == id);
   }
 

@@ -4,9 +4,11 @@
 
 #include <gtest/gtest.h>
 
+#include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "index/TriplesView.h"
 
+using ad_utility::testing::makeAllocator;
 namespace {
 auto V = ad_utility::testing::VocabId;
 
@@ -39,9 +41,6 @@ struct DummyPermutation {
   Metadata _meta;
 };
 
-auto allocator = ad_utility::AllocatorWithLimit<Id>{
-    ad_utility::makeAllocationMemoryLeftThreadsafeObject(10000)};
-
 std::vector<std::array<Id, 3>> expectedResult() {
   std::vector<Id> ids{V(1), V(3), V(5), V(7), V(8), V(10), V(13)};
   std::vector<std::array<Id, 3>> result;
@@ -57,7 +56,7 @@ std::vector<std::array<Id, 3>> expectedResult() {
 
 TEST(TriplesView, AllTriples) {
   std::vector<std::array<Id, 3>> result;
-  for (auto triple : TriplesView(DummyPermutation{}, allocator)) {
+  for (auto triple : TriplesView(DummyPermutation{}, makeAllocator())) {
     result.push_back(triple);
   }
   ASSERT_EQ(result, expectedResult());
@@ -73,7 +72,7 @@ TEST(TriplesView, IgnoreRanges) {
   std::vector<std::pair<Id, Id>> ignoredRanges{
       {V(0), V(4)}, {V(7), V(8)}, {V(13), V(87593)}};
   for (auto triple :
-       TriplesView(DummyPermutation{}, allocator, ignoredRanges)) {
+       TriplesView(DummyPermutation{}, makeAllocator(), ignoredRanges)) {
     result.push_back(triple);
   }
   ASSERT_EQ(result, expected);
@@ -87,7 +86,7 @@ TEST(TriplesView, IgnoreTriples) {
   };
   std::erase_if(expected, isTripleIgnored);
   for (auto triple :
-       TriplesView(DummyPermutation{}, allocator, {}, isTripleIgnored)) {
+       TriplesView(DummyPermutation{}, makeAllocator(), {}, isTripleIgnored)) {
     result.push_back(triple);
   }
   ASSERT_EQ(result, expected);

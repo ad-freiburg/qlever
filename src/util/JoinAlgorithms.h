@@ -33,7 +33,7 @@ auto findSmallerUndefRangesForRowsWithoutUndef(const auto& row, auto begin,
                                                auto end)
     -> cppcoro::generator<decltype(begin)> {
   using Row = typename std::iterator_traits<decltype(begin)>::value_type;
-  assert(row.size() == begin->size());
+  assert(row.size() == (*begin).size());
   assert(
       std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
   assert((std::ranges::all_of(
@@ -81,7 +81,7 @@ auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
     -> cppcoro::generator<decltype(begin)> {
   using Row = typename std::iterator_traits<decltype(begin)>::value_type;
   const size_t numJoinColumns = row.size();
-  assert(row.size() == begin->size());
+  assert(row.size() == (*begin).size());
   assert(numJoinColumns >= numLastUndefined);
   assert(
       std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
@@ -140,14 +140,14 @@ auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
 // [begin, end] range not having UNDEF values in some of the columns
 auto findSmallerUndefRangesArbitrary(const auto& row, auto begin, auto end)
     -> cppcoro::generator<decltype(begin)> {
-  assert(row.size() == begin->size());
+  assert(row.size() == (*begin).size());
   assert(
       std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
 
   // To only get smaller entries, we first find a suitable upper bound in the
   // input range. We use `std::lower_bound` because the input row itself is not
   // a valid match.
-  end = std::lower_bound(begin, end, row);
+  end = std::lower_bound(begin, end, row, std::ranges::lexicographical_compare);
 
   const size_t numJoinColumns = row.size();
   auto isCompatible = [&](const auto& otherRow) {
@@ -185,10 +185,18 @@ auto findSmallerUndefRanges(const auto& row, auto begin, auto end)
     }
     ++numLastUndefined;
   }
-  for (; it >= row.begin(); --it) {
+
+  // TODO<joka921> Replace by a proper for loop that reverses, but iterators
+  // that are less than begin() are undefined behavior and currently don't work
+  // with IteratorForAccessOperator.
+  for (;;) {
     if (*it == Id::makeUndefined()) {
       return findSmallerUndefRangesArbitrary(row, begin, end);
     }
+    if (it == row.begin()) {
+      break;
+    }
+    --it;
   }
   if (numLastUndefined == 0) {
     return findSmallerUndefRangesForRowsWithoutUndef(row, begin, end);
@@ -310,7 +318,7 @@ void zipperJoinWithUndef(
           return;
         }
       }
-      while (lessThanReversed(*it2, *it1)) {
+      while (lessThan(*it2, *it1)) {
         mergeWithUndefLeft(*it2, range1.begin(), it1);
         ++it2;
         if (it2 >= end2) {

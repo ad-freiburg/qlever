@@ -105,9 +105,9 @@ void OptionalJoin::computeResult(ResultTable* result) {
                   &OptionalJoin::optionalJoin, leftResult->_idTable,
                   rightResult->_idTable, _joinColumns, &result->_idTable);
 
-  // If only one of the two operands has a local vocab, pass it on.
-  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
-      leftResult->_localVocab, rightResult->_localVocab);
+  // If only one of the two operands has a non-empty local vocabulary, share
+  // with that one (otherwise, throws an exception).
+  result->shareLocalVocabFromNonEmptyOf(*leftResult, *rightResult);
 
   LOG(DEBUG) << "Join result computation done" << endl;
   LOG(DEBUG) << "OptionalJoin result computation done." << endl;
@@ -268,6 +268,8 @@ template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
 void OptionalJoin::optionalJoin(
     const IdTable& dynA, const IdTable& dynB,
     const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* dynResult) {
+  AD_FAIL();
+  /*
   // check for trivial cases
   if (dynA.empty()) {
     return;
@@ -309,4 +311,6 @@ void OptionalJoin::optionalJoin(
                                   notFoundInRightAction);
 
   *dynResult = std::move(result).toDynamic();
+
+   */
 }

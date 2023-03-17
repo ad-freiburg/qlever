@@ -53,7 +53,7 @@ void Filter::computeResult(ResultTable* result) {
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
-  result->_localVocab = subRes->_localVocab;
+  result->shareLocalVocabFrom(*subRes);
 
   int width = result->_idTable.numColumns();
   CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this, result, *subRes);
@@ -74,7 +74,7 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
 
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), columnMap, inputResultTable._idTable,
-      getExecutionContext()->getAllocator(), *inputResultTable._localVocab);
+      getExecutionContext()->getAllocator(), inputResultTable.localVocab());
 
   // TODO<joka921> This should be a mandatory argument to the EvaluationContext
   // constructor.

@@ -8,6 +8,7 @@
 #include <string>
 
 #include "./IndexTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Distinct.h"
@@ -31,6 +32,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
 
+namespace {
 // Get test collection of words of a given size. The words are all distinct.
 std::vector<std::string> getTestCollectionOfWords(size_t size) {
   std::vector<std::string> testCollectionOfWords(size);
@@ -39,6 +41,7 @@ std::vector<std::string> getTestCollectionOfWords(size_t size) {
   }
   return testCollectionOfWords;
 }
+}  // namespace
 
 // _____________________________________________________________________________
 TEST(LocalVocab, constructionAndAccess) {
@@ -50,20 +53,35 @@ TEST(LocalVocab, constructionAndAccess) {
   ASSERT_TRUE(localVocab.empty());
 
   // Add the words from our test vocabulary and check that they get the expected
-  // local IDs.
+  // local vocab indexes.
   for (size_t i = 0; i < testWords.size(); ++i) {
     ASSERT_EQ(localVocab.getIndexAndAddIfNotContained(testWords[i]),
               LocalVocabIndex::make(i));
   }
   ASSERT_EQ(localVocab.size(), testWords.size());
 
-  // Check that we get the same IDs if we do this again, but that no new words
-  // will be added.
+  // Check that we get the same indexes if we do this again, but that no new
+  // words will be added.
   for (size_t i = 0; i < testWords.size(); ++i) {
     ASSERT_EQ(localVocab.getIndexAndAddIfNotContained(testWords[i]),
               LocalVocabIndex::make(i));
   }
   ASSERT_EQ(localVocab.size(), testWords.size());
+
+  // Check again that we get the right indexes, but with `getIndexOrNullopt`.
+  for (size_t i = 0; i < testWords.size(); ++i) {
+    std::optional<LocalVocabIndex> localVocabIndex =
+        localVocab.getIndexOrNullopt(testWords[i]);
+    ASSERT_TRUE(localVocabIndex.has_value());
+    ASSERT_EQ(localVocabIndex.value(), LocalVocabIndex::make(i));
+  }
+
+  // Check that `getIndexOrNullopt` returns `std::nullopt` for words that are
+  // not contained in the local vocab. This makes use of the fact that the words
+  // in our test vocabulary only contain digits as letters, see above.
+  for (size_t i = 0; i < testWords.size(); ++i) {
+    ASSERT_FALSE(localVocab.getIndexOrNullopt(testWords[i] + "A"));
+  }
 
   // Check that the lookup by ID gives the correct words.
   for (size_t i = 0; i < testWords.size(); ++i) {
@@ -119,11 +137,9 @@ TEST(LocalVocab, clone) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, propagation) {
-  // Query execution context (with small test index) and allocator for testing,
-  // see `IndexTestHelpers.h`.
+  // Query execution context (with small test index), see `IndexTestHelpers.h`.
   using ad_utility::AllocatorWithLimit;
   QueryExecutionContext* testQec = ad_utility::testing::getQec();
-  AllocatorWithLimit<Id> testAllocator = ad_utility::testing::makeAllocator();
 
   // Lambda that checks the contents of the local vocabulary after the specified
   // operation.
@@ -136,9 +152,9 @@ TEST(LocalVocab, propagation) {
     ASSERT_TRUE(resultTable)
         << "Operation: " << operation.getDescriptor() << std::endl;
     std::vector<std::string> localVocabWords;
-    for (size_t i = 0; i < resultTable->_localVocab->size(); ++i) {
+    for (size_t i = 0; i < resultTable->localVocab().size(); ++i) {
       localVocabWords.emplace_back(
-          resultTable->_localVocab->getWord(LocalVocabIndex::make(i)));
+          resultTable->localVocab().getWord(LocalVocabIndex::make(i)));
     }
     ASSERT_EQ(localVocabWords, expectedWords)
         << "Operation: " << operation.getDescriptor() << std::endl;
@@ -159,20 +175,27 @@ TEST(LocalVocab, propagation) {
 
   // VALUES operation with two variables and two rows. Adds four new literals.
   //
-  // Note: For literals, the quotes are part of the name, so if we wanted the
+  // Note 1: It is important to pass a copy of `values1` (and `values2` below)
+  // to `checkLocalVocab` because when the operation is executed, the parsed
+  // values are moved out by `Values::writeValues` and would then no longer be
+  // there in the subsequent uses of `values1` and `values2` if it were not
+  // copied.
+  //
+  // Note 2: For literals, the quotes are part of the name, so if we wanted the
   // literal "x", we would have to write TripleComponent{"\"x\""}. For the
   // purposes of this test, we just want something that's not yet in the index,
   // so "x" etc. is just fine (and also different from the "<x>" below).
-  //
   Values values1(testQec, {{Variable{"?x"}, Variable{"?y"}},
                            {{TripleComponent{"x"}, TripleComponent{"y1"}},
                             {TripleComponent{"x"}, TripleComponent{"y2"}}}});
-  checkLocalVocab(values1, std::vector<std::string>{"x", "y1", "y2"});
+  Values values1copy = values1;
+  checkLocalVocab(values1copy, std::vector<std::string>{"x", "y1", "y2"});
 
   // VALUES operation that uses an existing literal (from the test index).
   Values values2(testQec, {{Variable{"?x"}, Variable{"?y"}},
                            {{TripleComponent{"<x>"}, TripleComponent{"<y>"}}}});
-  checkLocalVocab(values2, std::vector<std::string>{});
+  Values values2copy = values2;
+  checkLocalVocab(values2copy, std::vector<std::string>{});
 
   // JOIN operation with exactly one non-empty local vocab and with two
   // non-empty local vocabs (the last two arguments are the two join columns).
@@ -205,7 +228,7 @@ TEST(LocalVocab, propagation) {
   checkLocalVocab(orderBy, std::vector<std::string>{"x", "y1", "y2"});
 
   // SORT operation (the third operation is the sort column).
-  Sort sort(testQec, qet(values1), 0);
+  Sort sort(testQec, qet(values1), {0});
   checkLocalVocab(sort, std::vector<std::string>{"x", "y1", "y2"});
 
   // DISTINCT operation (the third argument are the indices of the input columns
@@ -294,6 +317,6 @@ TEST(LocalVocab, propagation) {
   TextOperationWithFilter text1(testQec, "", {}, Variable{"?x"}, qet(values1),
                                 0);
   checkLocalVocab(text1, std::vector<std::string>{"x", "y1", "y2"});
-  TextOperationWithoutFilter text2(testQec, "", {}, Variable{"?x"});
+  TextOperationWithoutFilter text2(testQec, {}, {}, Variable{"?x"});
   checkLocalVocab(text2, {});
 }

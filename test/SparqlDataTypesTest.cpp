@@ -9,6 +9,7 @@
 
 using namespace std::string_literals;
 using ::testing::Optional;
+using enum PositionInTriple;
 
 namespace {
 struct ContextWrapper {
@@ -17,7 +18,7 @@ struct ContextWrapper {
   // TODO<joka921> `VariableToColumnMap`
   ad_utility::HashMap<Variable, size_t> _hashMap{};
 
-  Context createContextForRow(size_t row) const {
+  ConstructQueryExportContext createContextForRow(size_t row) const {
     return {row, _resultTable, _hashMap, _index};
   }
 };
@@ -39,7 +40,8 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluatesCorrectlyBasedOnContext) {
 
   BlankNode blankNodeA{false, "a"};
   BlankNode blankNodeB{true, "b"};
-  Context context0 = wrapper.createContextForRow(0);
+  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
+  using enum PositionInTriple;
 
   EXPECT_THAT(blankNodeA.evaluate(context0, SUBJECT), Optional("_:u0_a"s));
   EXPECT_THAT(blankNodeA.evaluate(context0, PREDICATE), Optional("_:u0_a"s));
@@ -48,7 +50,7 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluatesCorrectlyBasedOnContext) {
   EXPECT_THAT(blankNodeB.evaluate(context0, PREDICATE), Optional("_:g0_b"s));
   EXPECT_THAT(blankNodeB.evaluate(context0, SUBJECT), Optional("_:g0_b"s));
 
-  Context context10 = wrapper.createContextForRow(10);
+  ConstructQueryExportContext context10 = wrapper.createContextForRow(10);
 
   EXPECT_THAT(blankNodeA.evaluate(context10, SUBJECT), Optional("_:u10_a"s));
   EXPECT_THAT(blankNodeA.evaluate(context10, PREDICATE), Optional("_:u10_a"s));
@@ -62,7 +64,7 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
   BlankNode blankNode{false, "label"};
-  Context context = wrapper.createContextForRow(42);
+  ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
   auto expectedLabel = Optional("_:u42_label"s);
 
@@ -101,13 +103,13 @@ TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
 
   std::string iriString{"<http://some-iri>"};
   Iri iri{iriString};
-  Context context0 = wrapper.createContextForRow(0);
+  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
   EXPECT_THAT(iri.evaluate(context0, SUBJECT), Optional(iriString));
   EXPECT_THAT(iri.evaluate(context0, PREDICATE), Optional(iriString));
   EXPECT_THAT(iri.evaluate(context0, OBJECT), Optional(iriString));
 
-  Context context1337 = wrapper.createContextForRow(1337);
+  ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
 
   EXPECT_THAT(iri.evaluate(context1337, SUBJECT), Optional(iriString));
   EXPECT_THAT(iri.evaluate(context1337, PREDICATE), Optional(iriString));
@@ -118,7 +120,7 @@ TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
   Iri iri{"<http://some-iri>"};
-  Context context = wrapper.createContextForRow(42);
+  ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
   auto expectedString = Optional("<http://some-iri>"s);
 
@@ -150,13 +152,13 @@ TEST(SparqlDataTypesTest, LiteralEvaluatesCorrectlyBasedOnContext) {
 
   std::string literalString{"true"};
   Literal literal{literalString};
-  Context context0 = wrapper.createContextForRow(0);
+  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
   EXPECT_EQ(literal.evaluate(context0, SUBJECT), std::nullopt);
   EXPECT_EQ(literal.evaluate(context0, PREDICATE), std::nullopt);
   EXPECT_THAT(literal.evaluate(context0, OBJECT), Optional(literalString));
 
-  Context context1337 = wrapper.createContextForRow(1337);
+  ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
 
   EXPECT_EQ(literal.evaluate(context1337, SUBJECT), std::nullopt);
   EXPECT_EQ(literal.evaluate(context1337, PREDICATE), std::nullopt);
@@ -167,7 +169,7 @@ TEST(SparqlDataTypesTest, LiteralEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
   Literal literal{"some literal"};
-  Context context = wrapper.createContextForRow(42);
+  ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
   EXPECT_EQ(literal.evaluate(context, SUBJECT), std::nullopt);
   EXPECT_EQ(GraphTerm{literal}.evaluate(context, SUBJECT), std::nullopt);
@@ -210,13 +212,13 @@ TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
   wrapper._resultTable._idTable.push_back({value2});
 
   Variable variable{"?var"};
-  Context context0 = wrapper.createContextForRow(0);
+  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
   EXPECT_THAT(variable.evaluate(context0, SUBJECT), Optional("69"s));
   EXPECT_THAT(variable.evaluate(context0, PREDICATE), Optional("69"s));
   EXPECT_THAT(variable.evaluate(context0, OBJECT), Optional("69"s));
 
-  Context context1 = wrapper.createContextForRow(1);
+  ConstructQueryExportContext context1 = wrapper.createContextForRow(1);
 
   EXPECT_THAT(variable.evaluate(context1, SUBJECT), Optional("420"s));
   EXPECT_THAT(variable.evaluate(context1, PREDICATE), Optional("420"s));
@@ -227,13 +229,13 @@ TEST(SparqlDataTypesTest, VariableEvaluatesNothingForUnusedName) {
   auto wrapper = prepareContext();
 
   Variable variable{"?var"};
-  Context context0 = wrapper.createContextForRow(0);
+  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
   EXPECT_EQ(variable.evaluate(context0, SUBJECT), std::nullopt);
   EXPECT_EQ(variable.evaluate(context0, PREDICATE), std::nullopt);
   EXPECT_EQ(variable.evaluate(context0, OBJECT), std::nullopt);
 
-  Context context1337 = wrapper.createContextForRow(1337);
+  ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
 
   EXPECT_EQ(variable.evaluate(context1337, SUBJECT), std::nullopt);
   EXPECT_EQ(variable.evaluate(context1337, PREDICATE), std::nullopt);
@@ -250,7 +252,7 @@ TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
   wrapper._resultTable._idTable.push_back({value});
 
   Variable variableKnown{"?var"};
-  Context context = wrapper.createContextForRow(0);
+  ConstructQueryExportContext context = wrapper.createContextForRow(0);
 
   EXPECT_THAT(variableKnown.evaluate(context, SUBJECT), Optional("69"s));
   EXPECT_THAT(VarOrTerm{variableKnown}.evaluate(context, SUBJECT),

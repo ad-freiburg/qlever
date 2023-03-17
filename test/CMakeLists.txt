@@ -131,8 +131,13 @@ addLinkAndDiscoverTestSerial(BufferedVectorTest absl::strings)
 
 addLinkAndDiscoverTest(UnionTest engine)
 
-add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
-linkAndDiscoverTest(TokenTest parser re2 util ${ICU_LIBRARIES})
+if (SINGLE_TEST_BINARY)
+    target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
+    target_link_libraries(QLeverAllUnitTestsMain parser re2 util ${ICU_LIBRARIES})
+else()
+    add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
+    linkAndDiscoverTest(TokenTest parser re2 util ${ICU_LIBRARIES})
+endif()
 
 addLinkAndDiscoverTest(TurtleParserTest parser absl::flat_hash_map re2)
 
@@ -152,7 +157,7 @@ addLinkAndDiscoverTest(PriorityQueueTest absl::flat_hash_map ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(SynchronizedTest)
 
-addLinkAndDiscoverTest(LimitedAllocatorTest)
+addLinkAndDiscoverTest(AllocatorWithLimitTest)
 
 addLinkAndDiscoverTest(MinusTest engine)
 
@@ -245,7 +250,7 @@ addLinkAndDiscoverTest(HttpUtilsTest util http)
 
 addLinkAndDiscoverTest(DateTest)
 
-addLinkAndDiscoverTest(TripleObjectTest absl::strings parser)
+addLinkAndDiscoverTest(TripleComponentTest absl::strings parser)
 
 addLinkAndDiscoverTest(ValueIdTest absl::flat_hash_set)
 
@@ -257,13 +262,17 @@ addLinkAndDiscoverTest(TransparentFunctorsTest)
 
 addLinkAndDiscoverTest(SelectClauseTest parser engine)
 
-addLinkAndDiscoverTestSerial(RelationalExpressionTest sparqlExpressions index engine)
+addLinkAndDiscoverTestSerial(RelationalExpressionTest parser sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(CheckUsePatternTrickTest parser engine)
 
-addLinkAndDiscoverTestSerial(RegexExpressionTest sparqlExpressions index engine)
+addLinkAndDiscoverTestSerial(RegexExpressionTest parser sparqlExpressions index engine parser)
 
 addLinkAndDiscoverTestSerial(LocalVocabTest engine)
+
+addLinkAndDiscoverTestSerial(ValuesTest engine)
+
+addLinkAndDiscoverTestSerial(ServiceTest engine)
 
 addLinkAndDiscoverTest(HttpTest boost_iostreams http)
 
@@ -275,10 +284,28 @@ addLinkAndDiscoverTest(ResetWhenMovedTest)
 
 addLinkAndDiscoverTest(TimerTest absl::strings)
 
-addLinkAndDiscoverTest(AlgorithmTest)
+addLinkAndDiscoverTest(AlgorithmTest absl::flat_hash_set)
 
 addLinkAndDiscoverTest(CompressedRelationsTest index)
 
 addLinkAndDiscoverTest(ExceptionTest)
+
+addLinkAndDiscoverTestSerial(RandomExpressionTest absl::flat_hash_map index)
+
+addLinkAndDiscoverTestSerial(SortTest engine)
+
+addLinkAndDiscoverTestSerial(OrderByTest engine)
+
+addLinkAndDiscoverTestSerial(ValuesForTestingTest index)
+
+addLinkAndDiscoverTestSerial(ExportQueryExecutionTreeTest index engine parser)
+
+addLinkAndDiscoverTestSerial(AggregateExpressionTest parser sparqlExpressions index engine)
+
+addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
+
+addLinkAndDiscoverTest(ExceptionHandlingTest)
+
+addLinkAndDiscoverTest(SparqlExpressionTypesTest)
 
 addLinkAndDiscoverTest(JoinAlgorithmsTest)

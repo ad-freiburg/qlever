@@ -56,9 +56,11 @@ static const std::string INTERNAL_ENTITIES_URI_PREFIX =
 static const std::string LANGUAGE_PREDICATE =
     INTERNAL_ENTITIES_URI_PREFIX + "langtag>";
 
+// NOTE: Only `VALUE_DATE_PREFIX` is still in use (until we switch to our new
+// `Date` class).
 static const char VALUE_PREFIX[] = ":v:";
-static const char VALUE_DATE_PREFIX[] = ":v:date:";
 static const char VALUE_FLOAT_PREFIX[] = ":v:float:";
+static const char VALUE_DATE_PREFIX[] = ":v:date:";
 
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.

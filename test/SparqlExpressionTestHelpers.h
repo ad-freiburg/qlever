@@ -12,8 +12,8 @@
 #pragma once
 
 namespace sparqlExpression {
-/// Dummy expression for testing, that for `evaluate` returns the `result`
-/// that is specified in the constructor.
+// Dummy expression for testing, that for `evaluate` returns the `result` that
+// is specified in the constructor.
 struct DummyExpression : public SparqlExpression {
   explicit DummyExpression(ExpressionResult result)
       : _result{std::move(result)} {}
@@ -21,7 +21,7 @@ struct DummyExpression : public SparqlExpression {
   ExpressionResult evaluate(EvaluationContext*) const override {
     return std::move(_result);
   }
-  vector<std::string> getUnaggregatedVariables() override { return {}; }
+  vector<Variable> getUnaggregatedVariables() override { return {}; }
   string getCacheKey(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
     return "DummyDummyDummDumm";

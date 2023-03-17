@@ -24,23 +24,8 @@ TEST(EngineTest, multiColumnJoinTest) {
 
   IdTable a = makeIdTableFromVector(
       {{4, 1, 2}, {2, 1, 3}, {1, 1, 4}, {2, 2, 1}, {1, 3, 1}});
-  /*
-  IdTable a(3, makeAllocator());
-  a.push_back({V(4), V(1), V(2)});
-  a.push_back({V(2), V(1), V(3)});
-  a.push_back({V(1), V(1), V(4)});
-  a.push_back({V(2), V(2), V(1)});
-  a.push_back({V(1), V(3), V(1)});
-   */
   IdTable b =
       makeIdTableFromVector({{3, 3, 1}, {1, 8, 1}, {4, 2, 2}, {1, 1, 3}});
-  /*
-  IdTable b(3, makeAllocator());
-  b.push_back({V(3), V(3), V(1)});
-  b.push_back({V(1), V(8), V(1)});
-  b.push_back({V(4), V(2), V(2)});
-  b.push_back({V(1), V(1), V(3)});
-   */
   IdTable res(4, makeAllocator());
   vector<array<ColumnIndex, 2>> jcls;
   jcls.push_back(array<ColumnIndex, 2>{{1, 2}});
@@ -56,18 +41,6 @@ TEST(EngineTest, multiColumnJoinTest) {
 
   auto expected = makeIdTableFromVector({{2, 1, 3, 3}, {1, 3, 1, 1}});
   ASSERT_EQ(expected, res);
-
-  ASSERT_EQ(2u, res.size());
-
-  ASSERT_EQ(V(2u), res[0][0]);
-  ASSERT_EQ(V(1u), res[0][1]);
-  ASSERT_EQ(V(3u), res[0][2]);
-  ASSERT_EQ(V(3u), res[0][3]);
-
-  ASSERT_EQ(V(1u), res[1][0]);
-  ASSERT_EQ(V(3u), res[1][1]);
-  ASSERT_EQ(V(1u), res[1][2]);
-  ASSERT_EQ(V(1u), res[1][3]);
 
   // Test the multi column join with variable sized data.
   IdTable va(6, makeAllocator());

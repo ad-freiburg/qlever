@@ -75,7 +75,7 @@ void ThrowingErrorListener::syntaxError(antlr4::Recognizer* recognizer,
                                         size_t line, size_t charPositionInLine,
                                         const std::string& msg,
                                         [[maybe_unused]] std::exception_ptr e) {
-  throw ParseException{
+  throw InvalidQueryException{
       generateExceptionMessage(offendingSymbol, msg),
       generateMetadata(recognizer, offendingSymbol, line, charPositionInLine)};
 }
