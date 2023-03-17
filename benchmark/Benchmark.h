@@ -9,6 +9,7 @@
 #include <string>
 #include <variant>
 
+#include "BenchmarkConfiguration.h"
 #include "util/json.h"
 #include "util/Timer.h"
 #include <util/HashMap.h>
@@ -17,9 +18,8 @@
 #include "../benchmark/BenchmarkMetadata.h"
 
 /*
- * Used for measuring the time needed for the execution of a function. It also
- * saves the measured time togehter with a description of the function
- * measured.
+ * Used for measuring the time needed for the execution of a function and
+ * organizing those measured times.
  */
 class BenchmarkRecords {
 
@@ -300,6 +300,27 @@ class BenchmarkRecords {
         const std::string& groupMemberDescriptor);
     BenchmarkMetadata& getReferenceToMetadataOfTable(
         const std::string& descriptor);
+};
+
+/*
+The interface for benchmark classes. More specifically, it's the interface
+between a collection of benchmarks of any type (single, group, table) and
+the processing/management of those benchmarks.
+*/
+class BenchmarkClassInterface{
+  public:
+
+  // Used to transport values, that you want to set at runtime.
+  virtual void parseConfiguration(const BenchmarkConfiguration& config) = 0;
+
+  // Sometimes, there is some overrarching metadata, that you don't want to set
+  // for every single little thing, because it's always the same. You can give
+  // those here.
+  virtual const BenchmarkMetadata getMetadata() const = 0;
+
+  // Run all your benchmarks. For information on how, and what BenchmarkRecords
+  // has to do with it, see the BenchmarkRecords class.
+  virtual void runAllBenchmarks(BenchmarkRecords* records) = 0; 
 };
 
 /*
