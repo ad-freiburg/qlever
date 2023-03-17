@@ -65,6 +65,16 @@ struct CompressedBlockMetadata {
   Id _col1FirstId;
   Id _col1LastId;
 
+  // For `DeltaTriples::findTripleInPermutation`, it helps to know the least
+  // significant ID of the last triple as well.
+  //
+  // NOTE: We don't need that information for the first triple of the block and
+  // as a matter of fact, we don't really need `_col0FirstId` and `_col1FirstId`
+  // above either. It doesn't really harm though because the total size of the
+  // blocks is small (even for Wikidata, we have only 50K block, and as you can
+  // see from the members, a block consumes < 100 bytes).
+  Id _col2LastId;
+
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadata&) const = default;
 };
@@ -83,6 +93,7 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
   serializer | arg._col0LastId;
   serializer | arg._col1FirstId;
   serializer | arg._col1LastId;
+  serializer | arg._col2LastId;
 }
 
 // The metadata of a whole compressed "relation", where relation refers to a

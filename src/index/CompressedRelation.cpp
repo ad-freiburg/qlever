@@ -334,12 +334,13 @@ void CompressedRelationWriter::addRelation(Id col0Id,
                                       multC2};
   auto sizeOfRelation =
       col1And2Ids.numRows() * col1And2Ids.numColumns() * sizeof(Id);
+  auto sizeOfBuffer = _buffer.numRows() * _buffer.numColumns() * sizeof(Id);
 
   // If this is a large relation, or the currrently buffered relations +
   // this relation are too large, we will write the buffered relations to file
   // and start a new block.
   if (sizeOfRelation > _numBytesPerBlock * 8 / 10 ||
-      sizeOfRelation + _buffer.numRows() > 1.5 * _numBytesPerBlock) {
+      sizeOfRelation + sizeOfBuffer > 1.5 * _numBytesPerBlock) {
     writeBufferedRelationsToSingleBlock();
   }
 
@@ -358,6 +359,7 @@ void CompressedRelationWriter::addRelation(Id col0Id,
     }
     _currentBlockData._col0LastId = col0Id;
     _currentBlockData._col1LastId = col1And2Ids(col1And2Ids.numRows() - 1, 0);
+    _currentBlockData._col2LastId = col1And2Ids(col1And2Ids.numRows() - 1, 1);
     AD_CORRECTNESS_CHECK(_buffer.numColumns() == col1And2Ids.numColumns());
     auto bufferOldSize = _buffer.numRows();
     _buffer.resize(_buffer.numRows() + col1And2Ids.numRows());
@@ -387,7 +389,8 @@ void CompressedRelationWriter::writeRelationToExclusiveBlocks(
 
     _blockBuffer.push_back(CompressedBlockMetadata{
         std::move(offsets), actualNumRowsPerBlock, col0Id, col0Id, data[i][0],
-        data[i + actualNumRowsPerBlock - 1][0]});
+        data[i + actualNumRowsPerBlock - 1][0],
+        data[i + actualNumRowsPerBlock - 1][1]});
   }
 }
 

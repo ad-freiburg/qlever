@@ -1,24 +1,33 @@
-// Copyright 2018, University of Freiburg,
+// Copyright 2018 - 2023, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Author: Johannes Kalmbach (johannes.kalmbach@gmail.com)
-//
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
+
 #pragma once
 
 #include <cassert>
 #include <stxxl/vector>
 
-#include "../global/Id.h"
-#include "../util/Exception.h"
-#include "../util/HashMap.h"
-#include "../util/Iterators.h"
-#include "../util/Log.h"
-#include "../util/Serializer/Serializer.h"
-#include "./CompressedRelation.h"
+#include "global/Id.h"
+#include "index/CompressedRelation.h"
+#include "util/Exception.h"
+#include "util/HashMap.h"
+#include "util/Iterators.h"
+#include "util/Log.h"
+#include "util/Serializer/Serializer.h"
 
-// _____________________________________________________________________
+// Class for access to relation metadata stored in a vector. Specifically, our
+// index uses this with `M = MmapVector<CompressedRelationMetadata>>`; see
+// `index/IndexMetaData.h`
 template <class M>
 class MetaDataWrapperDense {
+ private:
+  // A vector of metadata objects.
+  M _vec;
+
  public:
+  // An iterator with an additional method `getId()` that gives the relation ID
+  // of the current metadata object.
   template <typename BaseIterator>
   struct AddGetIdIterator : BaseIterator {
     using BaseIterator::BaseIterator;
@@ -39,6 +48,7 @@ class MetaDataWrapperDense {
   // The underlying array is sorted, so all iterators are ordered iterators
   using ConstOrderedIterator = ConstIterator;
 
+  // The type of the stored metadata objects.
   using value_type = typename M::value_type;
 
   // _________________________________________________________
@@ -120,7 +130,9 @@ class MetaDataWrapperDense {
   // ___________________________________________________________
   std::string getFilename() const { return _vec.getFilename(); }
 
- private:
+  // The following used to be private (because they were only used as
+  // subroutines in the above), but we now need them in
+  // `DeltaTriples::findTripleResult`.
   ConstIterator lower_bound(Id id) const {
     auto cmp = [](const auto& metaData, Id id) {
       return metaData._col0Id < id;
@@ -133,13 +145,24 @@ class MetaDataWrapperDense {
     };
     return std::lower_bound(_vec.begin(), _vec.end(), id, cmp);
   }
-  M _vec;
 };
 
-// _____________________________________________________________________
+// Class for access to relation metadata stored in a hash map. Specifically, our
+// index uses this with `M = HashMap<Id, CompressedRelationMetadata>>`; see
+// `index/IndexMetaData.h`
 template <class hashMap>
 class MetaDataWrapperHashMap {
+ private:
+  // The map that maps each existing relation ID to its metadata object.
+  hashMap _map;
+
+  // The relation IDs in sorted order. This is only computed by the `serialize`
+  // function defined by `AD_SERIALIZE_FRIEND_FUNCTION` below.
+  std::vector<typename hashMap::key_type> _sortedKeys;
+
  public:
+  // An iterator with an additional method `getId()` that gives the relation ID
+  // of the current metadata object.
   template <typename BaseIterator>
   struct AddGetIdIterator : public BaseIterator {
     using BaseIterator::BaseIterator;
@@ -237,6 +260,7 @@ class MetaDataWrapperHashMap {
     return _map.count(id);
   }
 
+  // Defines a friend method `serialize`, see the macro definition for details.
   AD_SERIALIZE_FRIEND_FUNCTION(MetaDataWrapperHashMap) {
     serializer | arg._map;
     if constexpr (ad_utility::serialization::ReadSerializer<S>) {
@@ -252,7 +276,26 @@ class MetaDataWrapperHashMap {
 
   const auto& sortedKeys() const { return _sortedKeys; }
 
- private:
-  hashMap _map;
-  std::vector<typename hashMap::key_type> _sortedKeys;
+  // The following are needed in `DeltaTriples::findTripleResult`, so that we
+  // have a common interface for all permutations. The functionality is as
+  // follows:
+  //
+  // If a metadata object with the given `id` exists, return it (or rather, an
+  // iterator to the corresponding key-value pair in the hash map).  If it is
+  // not contained, return `end()`.
+  //
+  // This makes sense because this class is only used for storing the metadata
+  // of the POS and PSO permutations. If we search an ID of a predicate that
+  // does not exist in the index, it will get an ID from the local vocab, which
+  // is larger than all existing IDs.
+  //
+  // TODO: This is hacky and should be made less hacky.
+  //
+  // (Note that this is different for OPS and OSP, because objects can also be
+  // values and values that did not previously exist in the index get an
+  // ID that can be properly compared with existing IDs. But that works find
+  // because we store the metadata for OPS and OSP, as well as for SOP and SPO,
+  // using a vector, see the class `MetaDataWrapperDense` above.)
+  ConstIterator lower_bound(Id id) const { return _map.find(id); }
+  Iterator lower_bound(Id id) { return _map.find(id); }
 };
