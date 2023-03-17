@@ -5,7 +5,6 @@
 #include <regex>
 #include <string>
 
-#include "nlohmann/json.hpp"
 #include "util/json.h"
 #include "../benchmark/BenchmarkConfiguration.h"
 #include "util/Exception.h"
