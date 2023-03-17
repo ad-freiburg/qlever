@@ -13,20 +13,15 @@ MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
                                  std::shared_ptr<QueryExecutionTree> t1,
                                  std::shared_ptr<QueryExecutionTree> t2,
                                  const vector<array<ColumnIndex, 2>>& jcs)
-    : Operation(qec), _joinColumns(jcs), _multiplicitiesComputed(false) {
+    : Operation(qec), _left(std::move(t1)), _right(std::move(t2)), _joinColumns(jcs), _multiplicitiesComputed(false) {
   // Make sure subtrees are ordered so that identical queries can be identified.
   AD_CONTRACT_CHECK(!jcs.empty());
-  if (t1->asString() < t2->asString()) {
-    _left = t1;
-    _right = t2;
-  } else {
-    // Swap the two subtrees
-    _left = t2;
-    _right = t1;
+  if (_left->asString() > _right->asString()) {
+    std::swap(_left, _right);
     // As the subtrees have been swapped the join columns need to be swapped
     // as well.
-    for (unsigned int i = 0; i < _joinColumns.size(); i++) {
-      std::swap(_joinColumns[i][0], _joinColumns[i][1]);
+    for (auto& [leftCol, rightCol] : _joinColumns) {
+      std::swap(leftCol, rightCol);
     }
   }
 }
@@ -248,4 +243,43 @@ void MultiColumnJoin::computeSizeEstimateAndMultiplicities() {
     _multiplicities.push_back(mult);
   }
   _multiplicitiesComputed = true;
+}
+
+// _______________________________________________________________________
+template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
+void MultiColumnJoin::computeMultiColumnJoin(
+    const IdTable& dynA, const IdTable& dynB,
+    const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* dynResult) {
+  // check for trivial cases
+  if (dynA.size() == 0 || dynB.size() == 0) {
+    return;
+  }
+
+  IdTableView<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
+  IdTableView<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
+  IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
+
+  auto lessThanBoth = ad_utility::makeLessThanAndReversed(joinColumns);
+
+  std::vector<size_t> joinColumnsLeft;
+  std::vector<size_t> joinColumnsRight;
+  for (auto [jc1, jc2] : joinColumns) {
+    joinColumnsLeft.push_back(jc1);
+    joinColumnsRight.push_back(jc2);
+  }
+
+  using RowLeft = typename IdTableView<A_WIDTH>::row_type;
+  using RowRight = typename IdTableView<B_WIDTH>::row_type;
+  auto smallerUndefRanges =
+      ad_utility::makeSmallerUndefRanges<RowLeft, RowRight>(
+          joinColumns, joinColumnsLeft, joinColumnsRight);
+  // Marks the columns in b that are join columns. Used to skip these
+  // when computing the result of the join
+
+  auto combineRows = ad_utility::makeCombineRows(joinColumns, result);
+
+  ad_utility::zipperJoinWithUndef(a, b, lessThanBoth.first, lessThanBoth.second,
+                                  combineRows, smallerUndefRanges.first,
+                                  smallerUndefRanges.second);
+  *dynResult = std::move(result).toDynamic();
 }
