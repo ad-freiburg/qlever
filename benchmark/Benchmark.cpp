@@ -91,7 +91,7 @@ auto BenchmarkRecords::getTables() const -> const std::vector<RecordTable> {
  * @param key The identifier for the hMap.
  */
 template<typename Value>
-BenchmarkMetadata& getReferenceToMetadataOfObjectInHashMapWithInsertionOrder(
+static BenchmarkMetadata& getReferenceToMetadataOfObjectInHashMapWithInsertionOrder(
     HashMapWithInsertionOrder<std::string, Value>& hMap,
     const std::string& key){
   return hMap.getReferenceToValue(key).metadata_;
