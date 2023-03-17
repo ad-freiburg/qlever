@@ -336,7 +336,7 @@ void CompressedRelationWriter::addRelation(Id col0Id,
   // Determine the number of bytes the IDs stored in an IdTable consume.
   // The return type is double because we use the result to compare it with
   // other doubles below.
-  auto sizeInBytes = [](const auto& table) -> double {
+  auto sizeInBytes = [](const auto& table) {
     return static_cast<double>(table.numRows() * table.numColumns() *
                                sizeof(Id));
   };
