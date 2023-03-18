@@ -15,6 +15,12 @@
 void DeltaTriples::clear() {
   triplesInserted_.clear();
   triplesDeleted_.clear();
+  triplesWithPositionsPerBlockInPSO_.clear();
+  triplesWithPositionsPerBlockInPOS_.clear();
+  triplesWithPositionsPerBlockInSPO_.clear();
+  triplesWithPositionsPerBlockInSOP_.clear();
+  triplesWithPositionsPerBlockInOSP_.clear();
+  triplesWithPositionsPerBlockInOPS_.clear();
 }
 
 // ____________________________________________________________________________
@@ -30,6 +36,28 @@ void DeltaTriples::deleteTriple(TurtleTriple turtleTriple) {
 }
 
 // ____________________________________________________________________________
+const DeltaTriples::TriplesWithPositionsPerBlock&
+DeltaTriples::getTriplesWithPositionsPerBlock(
+    Index::Permutation permutation) const {
+  switch (permutation) {
+    case Index::Permutation::PSO:
+      return triplesWithPositionsPerBlockInPSO_;
+    case Index::Permutation::POS:
+      return triplesWithPositionsPerBlockInPOS_;
+    case Index::Permutation::SPO:
+      return triplesWithPositionsPerBlockInSPO_;
+    case Index::Permutation::SOP:
+      return triplesWithPositionsPerBlockInSOP_;
+    case Index::Permutation::OSP:
+      return triplesWithPositionsPerBlockInOSP_;
+    case Index::Permutation::OPS:
+      return triplesWithPositionsPerBlockInOPS_;
+    default:
+      AD_FAIL();
+  }
+}
+
+// ____________________________________________________________________________
 DeltaTriples::IdTriple DeltaTriples::getIdTriple(TurtleTriple turtleTriple) {
   TripleComponent subject = std::move(turtleTriple._subject);
   TripleComponent predicate = std::move(turtleTriple._predicate);
@@ -41,26 +69,43 @@ DeltaTriples::IdTriple DeltaTriples::getIdTriple(TurtleTriple turtleTriple) {
 }
 
 // ____________________________________________________________________________
-void DeltaTriples::findTripleInAllPermutations(const IdTriple& idTriple,
-                                               bool visualize) {
+void DeltaTriples::locateTripleInAllPermutations(const IdTriple& idTriple,
+                                                 bool visualize) {
+  // Helper lambda for adding `tripleWithPosition` to given
+  // `TriplesWithPositionsPerBlock` list.
+  auto addTripleWithPosition =
+      [&](const TripleWithPosition& tripleWithPosition,
+          TriplesWithPositionsPerBlock& triplesWithPositionsPerBlock) {
+        triplesWithPositionsPerBlock.positionMap_[tripleWithPosition.blockIndex]
+            .emplace_back(tripleWithPosition);
+      };
+
+  // Now locate the triple in each permutation and add it to the correct
+  // `TriplesWithPositionsPerBlock` list.
   auto [s, p, o] = idTriple;
-  psoFindTripleResults_.emplace_back(
-      findTripleInPermutation(p, s, o, index_.getImpl().PSO(), visualize));
-  posFindTripleResults_.emplace_back(
-      findTripleInPermutation(p, o, s, index_.getImpl().POS(), visualize));
-  spoFindTripleResults_.emplace_back(
-      findTripleInPermutation(s, p, o, index_.getImpl().SPO(), visualize));
-  sopFindTripleResults_.emplace_back(
-      findTripleInPermutation(s, o, p, index_.getImpl().SOP(), visualize));
-  ospFindTripleResults_.emplace_back(
-      findTripleInPermutation(o, s, p, index_.getImpl().OSP(), visualize));
-  opsFindTripleResults_.emplace_back(
-      findTripleInPermutation(o, p, s, index_.getImpl().OPS(), visualize));
+  addTripleWithPosition(
+      locateTripleInPermutation(p, s, o, index_.getImpl().PSO(), visualize),
+      triplesWithPositionsPerBlockInPSO_);
+  addTripleWithPosition(
+      locateTripleInPermutation(p, o, s, index_.getImpl().POS(), visualize),
+      triplesWithPositionsPerBlockInPOS_);
+  addTripleWithPosition(
+      locateTripleInPermutation(s, p, o, index_.getImpl().SPO(), visualize),
+      triplesWithPositionsPerBlockInSPO_);
+  addTripleWithPosition(
+      locateTripleInPermutation(s, o, p, index_.getImpl().SOP(), visualize),
+      triplesWithPositionsPerBlockInSOP_);
+  addTripleWithPosition(
+      locateTripleInPermutation(o, s, p, index_.getImpl().OSP(), visualize),
+      triplesWithPositionsPerBlockInOSP_);
+  addTripleWithPosition(
+      locateTripleInPermutation(o, p, s, index_.getImpl().OPS(), visualize),
+      triplesWithPositionsPerBlockInOPS_);
 }
 
 // ____________________________________________________________________________
 template <typename Permutation>
-DeltaTriples::FindTripleResult DeltaTriples::findTripleInPermutation(
+DeltaTriples::TripleWithPosition DeltaTriples::locateTripleInPermutation(
     Id id1, Id id2, Id id3, Permutation& permutation, bool visualize) const {
   // Get the internal data structures from the permutation.
   auto& file = permutation._file;
@@ -104,18 +149,30 @@ DeltaTriples::FindTripleResult DeltaTriples::findTripleInPermutation(
       });
   size_t blockIndex = matchingBlock - blocks.begin();
 
+  // Preliminary `FindTripleResult` object with the correct `blockIndex` and
+  // IDs, but still an invalid `rowIndexInBlock` and `existsInIndex` set to
+  // `false`.
+  TripleWithPosition tripleWithPosition{
+      blockIndex, std::numeric_limits<size_t>::max(), id1, id2, id3, false};
+
   // If all IDs from all blocks are smaller, we return the index of the last
   // block plus one (typical "end" semantics) and any position in the block (in
   // the code that uses the result, that position will not be used in this
   // case).
   if (matchingBlock == blocks.end()) {
+    AD_CORRECTNESS_CHECK(blockIndex == blocks.size());
     if (visualize) {
+      std::cout << endl;
       std::cout << "All triples in " << pname << " are smaller than " << tname
                 << std::endl;
     }
-    return FindTripleResult{blocks.size(), std::numeric_limits<size_t>::max(),
-                            id1, id2, id3};
+    return tripleWithPosition;
   }
+  auto showTriple = [](const std::string& prefix,
+                       const std::vector<Id>& triple) {
+    std::cout << prefix << triple[0] << " " << triple[1] << " " << triple[2]
+              << std::endl;
+  };
 
   // Read and decompress the block. Note that we are potentially doing this a
   // second time here (the block has probably already been looked at in the call
@@ -123,61 +180,64 @@ DeltaTriples::FindTripleResult DeltaTriples::findTripleInPermutation(
   DecompressedBlock blockTuples =
       reader.readAndDecompressBlock(*matchingBlock, file, std::nullopt);
 
-  // Get the most significant IDs for this block (might only be one or several,
-  // stored implicitly in the metadata).
-  //
-  // TODO: This is inefficient and not necessary. However, the current interface
-  // of `IndexMetaData` doesn't make it easy to get the most significant IDs for
-  // a block.
-  size_t blockSize = blockTuples.numRows();
-  std::vector<Id> mostSignificantIdsInBlock(blockSize);
-  std::vector<Id> mostSignificantIdsDistinct;
-  for (auto it = meta._data.begin(); it != meta._data.end(); ++it) {
-    const auto& relationMetadata = meta.getMetaData(it.getId());
-    Id id = relationMetadata._col0Id;
-    uint64_t offset = relationMetadata._offsetInBlock;
-    size_t numRows = relationMetadata._numRows;
-    if (offset == std::numeric_limits<uint64_t>::max()) {
-      offset = 0;
-    }
-    if (id >= matchingBlock->_col0FirstId && id <= matchingBlock->_col0LastId) {
-      mostSignificantIdsDistinct.push_back(id);
-      for (size_t i = 0; i < numRows && offset + i < blockSize; ++i) {
-        mostSignificantIdsInBlock[offset + i] = id;
-      }
-    }
+  if (0) {
+    std::vector<Id> ourTriple = {id1, id2, id3};
+    std::vector<Id> lastTripleInBlock = {matchingBlock->_col0LastId,
+                                         matchingBlock->_col1LastId,
+                                         matchingBlock->_col2LastId};
+    std::vector<Id> trueLastTripleInBlock = {
+        Id::makeUndefined(), blockTuples.back()[0], blockTuples.back()[1]};
+    std::cout << std::endl;
+    showTriple("Ours: ", ourTriple);
+    showTriple("Last: ", lastTripleInBlock);
+    showTriple("True: ", trueLastTripleInBlock);
+    AD_CORRECTNESS_CHECK(ourTriple <= lastTripleInBlock);
   }
-  std::sort(mostSignificantIdsDistinct.begin(),
-            mostSignificantIdsDistinct.end());
 
-  // Find the first triple that is not smaller. If the triple is contained in
-  // the block that will be the position of the triple. Otherwise it will be the
-  // position of the first triple that is larger. Since the last triple of this
-  // block is not smaller, this will not be larger than the last valid index in
-  // the block.
+  // Find the smallest "relation" ID that is not smaller than `id1` and get its
+  // metadata and the position of the first and last triple with that ID in the
+  // block.
+  //
+  // IMPORTANT FIX: If relation `id1` exists in the index, but our triple is
+  // larger than all triples of that relation in the index and the last triple
+  // of that relation ends a block, then our block search above (correctly)
+  // landed us at the next block. We can detect this by checking whether the
+  // first relation ID of the block is larger than `id1` and then we should
+  // get the metadata for the ID and not for `id1` (which would pertain to a
+  // previous block).
+  //
+  // TODO: There is still a bug in `MetaDataWrapperHashMap::lower_bound`, which
+  // is relevant in the rare case where a triple is inserted with an `Id` for
+  // predicate that is not a new `Id`, but has not been used for a predicate in
+  // the original index.
+  //
+  // NOTE: Since we have already handled the case, where all IDs in the
+  // permutation are smaller, above, such a relation should exist.
+  Id searchId =
+      matchingBlock->_col0FirstId > id1 ? matchingBlock->_col0FirstId : id1;
+  const auto& it = meta._data.lower_bound(searchId);
+  AD_CORRECTNESS_CHECK(it != meta._data.end());
+  Id id = it.getId();
+  const auto& relationMetadata = meta.getMetaData(id);
+  size_t offsetBegin = relationMetadata._offsetInBlock;
+  size_t offsetEnd = offsetBegin + relationMetadata._numRows;
+  // Note: If the relation spans multiple blocks, we know that the block we
+  // found above contains only triples from that relation.
+  if (offsetBegin == std::numeric_limits<uint64_t>::max()) {
+    offsetBegin = 0;
+    offsetEnd = blockTuples.size();
+  }
+  AD_CORRECTNESS_CHECK(offsetBegin <= blockTuples.size());
+  AD_CORRECTNESS_CHECK(offsetEnd <= blockTuples.size());
 
-  // First check whether `id1` occurs at all in this block. If not, the index we
-  // are searching is just the position of the first ID that is larger.
-  // Otherwise, we can do binary search in the portion of the block with that
-  // ID as most significant ID.
-  size_t rowIndexInBlock = std::numeric_limits<uint64_t>::max();
-  auto mostSignificantIdsMatch =
-      std::lower_bound(mostSignificantIdsDistinct.begin(),
-                       mostSignificantIdsDistinct.end(), id1);
-  if (*mostSignificantIdsMatch > id1) {
-    rowIndexInBlock = meta.getMetaData(*mostSignificantIdsMatch)._offsetInBlock;
-    if (rowIndexInBlock == std::numeric_limits<uint64_t>::max()) {
-      rowIndexInBlock = 0;
-    }
-  } else {
-    AD_CORRECTNESS_CHECK(*mostSignificantIdsMatch == id1);
-    size_t offsetBegin = meta.getMetaData(id1)._offsetInBlock;
-    size_t offsetEnd = offsetBegin + meta.getMetaData(id1)._numRows;
-    if (offsetBegin == std::numeric_limits<uint64_t>::max()) {
-      offsetBegin = 0;
-      offsetEnd = blockTuples.size();
-    }
-    rowIndexInBlock =
+  // If we have found `id1`, we can do a binary search in the portion of the
+  // block that pertains to it (note the special case mentioned above, where we
+  // are already at the beginning of the next block).
+  //
+  // Otherwise, `id` is the next larger ID and the position of the first triple
+  // of that relation is exactly the position we are looking for.
+  if (id == id1) {
+    tripleWithPosition.rowIndexInBlock =
         std::lower_bound(blockTuples.begin() + offsetBegin,
                          blockTuples.begin() + offsetEnd,
                          std::array<Id, 2>{id2, id3},
@@ -185,30 +245,44 @@ DeltaTriples::FindTripleResult DeltaTriples::findTripleInPermutation(
                            return a[0] < b[0] || (a[0] == b[0] && a[1] < b[1]);
                          }) -
         blockTuples.begin();
+    // Check if the triple at the found position is equal to `id1 id2 id3`. Note
+    // that our default for `existsInIndex` was set to `false` above.
+    const size_t& i = tripleWithPosition.rowIndexInBlock;
+    AD_CORRECTNESS_CHECK(i < blockTuples.size());
+    if (i < offsetEnd && blockTuples(i, 0) == id2 && blockTuples(i, 1) == id3) {
+      tripleWithPosition.existsInIndex = true;
+    }
+  } else {
+    AD_CORRECTNESS_CHECK(id1 < id);
+    tripleWithPosition.rowIndexInBlock = offsetBegin;
   }
-  AD_CORRECTNESS_CHECK(rowIndexInBlock != std::numeric_limits<uint64_t>::max());
 
-  // Show the respective block.
+  // Show the respective block. Note that we can show the relation ID only for
+  // a part of the block (maybe the whole block, but not always).
   if (visualize) {
     std::cout << std::endl;
     std::cout << "Block #" << blockIndex << " from " << pname << " (" << tname
               << "):" << std::endl;
     // Now we are ready to write the triples in the block, including the most
     // significant ID.
-    for (size_t i = 0; i < blockSize; ++i) {
+    for (size_t i = 0; i < blockTuples.numRows(); ++i) {
       std::cout << "Row #" << i << ": "
-                << getNameForId(mostSignificantIdsInBlock[i]);
+                << (i >= offsetBegin && i < offsetEnd ? getNameForId(id)
+                                                      : std::string{"*"});
       for (size_t j = 0; j < blockTuples.numColumns(); ++j) {
         std::cout << " " << getNameForId(blockTuples(i, j));
       }
-      if (i == rowIndexInBlock) {
-        std::cout << " <--";
+      if (i == tripleWithPosition.rowIndexInBlock) {
+        std::cout << " <-- "
+                  << (tripleWithPosition.existsInIndex ? "existing triple"
+                                                       : "new triple");
       }
       std::cout << std::endl;
     }
   }
 
-  return FindTripleResult{blockIndex, rowIndexInBlock, id1, id2, id3};
+  // Return the result.
+  return tripleWithPosition;
 }
 
 // ____________________________________________________________________________
@@ -217,5 +291,8 @@ std::string DeltaTriples::getNameForId(Id id) const {
       ExportQueryExecutionTrees::idToStringAndType(index_, id, localVocab_);
   AD_CONTRACT_CHECK(lookupResult.has_value());
   const auto& [value, type] = lookupResult.value();
+  // std::ostringstream os;
+  // os << "[" << id << "]";
   return type ? absl::StrCat("\"", value, "\"^^<", type, ">") : value;
+  // : absl::StrCat(value, " ", os.str());
 };

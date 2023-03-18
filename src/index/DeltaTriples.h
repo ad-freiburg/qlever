@@ -74,25 +74,64 @@ class DeltaTriples {
     return H::combine(std::move(h), triple[0], triple[1], triple[2]);
   }
 
-  // Result record returned by `findTripleInPermutation`, containing: the
-  // reference to the permutation, the index of the matching block, the index of
-  // a position within that block, and the search triple in the right
-  // permutation (for example, for SPO, `id1` is the subject, `id2` is the
-  // predicate, and `id3` is the object).
-  // template <typename Permutation>
-  struct FindTripleResult {
-    // const Permutation& permutation;
+  // Result record returned by `locateTripleInPermutation`.
+  //
+  // NOTE: This is currently more information then we need. In particular, the
+  // `blockIndex` is already implicit in `TriplesWithPositionsPerBlock` and the
+  // bit `existsInOriginalIndex_` can be derived using the information stored in
+  // a block and our metadata. However, both are useful for testing and for a
+  // small nuber of delta triples (think millions), the space efficiency of this
+  // class is not a significant issue.
+  struct TripleWithPosition {
+    // The index of the block and the position within that block, where the
+    // triple "fits".
     size_t blockIndex;
     size_t rowIndexInBlock;
+    // The `Id`s of the triple in the order of the permutation. For example,
+    // for an object pertaining to the SPO permutation: `id1` is the subject,
+    // `id2` is the predicate, and `id3` is the object.
     Id id1;
     Id id2;
     Id id3;
+    // Whether the triple exists in the original index or is new.
+    bool existsInIndex;
   };
 
-  // Data structures with position for a particular table (just an example, this
-  // is not the final data structure).
-  using Position = std::pair<size_t, IdTriple>;
-  using Positions = ad_utility::HashMap<size_t, std::vector<Position>>;
+  // Data structures with positions for a particular permutation.
+  class TriplesWithPositionsPerBlock {
+   private:
+    // A position contains information about the index within the block and the
+    // triple to be inserted (all three `Id`s in the order of the permutation,
+    // including the most significant `Id`).
+    using TriplesWithPositions = std::vector<TripleWithPosition>;
+
+   public:
+    // Map from block index to position list.
+    //
+    // TODO: Keep the position list for each block index sorted (primary key:
+    // row index in block, secondary key: triple order).
+    //
+    // TODO: Should be private, but we want to iterate over it for testing.
+    ad_utility::HashMap<size_t, TriplesWithPositions> positionMap_;
+
+   public:
+    // Get the positions for a given block index. Returns an empty list if there
+    // are no positions for that block index.
+    //
+    // TODO: Check if that is the behavior we want when actually using class
+    // `DeltaTriples` to augment the result of an index scan.
+    TriplesWithPositions getTriplesWithPositionsForBlock(size_t blockIndex) {
+      auto it = positionMap_.find(blockIndex);
+      if (it != positionMap_.end()) {
+        return it->second;
+      } else {
+        return std::vector<TripleWithPosition>{};
+      }
+    }
+
+    // Empty the data structure.
+    void clear() { positionMap_.clear(); }
+  };
 
  private:
   // The index to which these triples are added.
@@ -110,16 +149,15 @@ class DeltaTriples {
   // The local vocabulary of these triples.
   LocalVocab localVocab_;
 
- public:
   // The positions of the delta triples in each of the six permutations.
   //
   // TODO: Do the positions need to know to which permutation they belong?
-  std::vector<FindTripleResult> posFindTripleResults_;
-  std::vector<FindTripleResult> psoFindTripleResults_;
-  std::vector<FindTripleResult> sopFindTripleResults_;
-  std::vector<FindTripleResult> spoFindTripleResults_;
-  std::vector<FindTripleResult> opsFindTripleResults_;
-  std::vector<FindTripleResult> ospFindTripleResults_;
+  TriplesWithPositionsPerBlock triplesWithPositionsPerBlockInPSO_;
+  TriplesWithPositionsPerBlock triplesWithPositionsPerBlockInPOS_;
+  TriplesWithPositionsPerBlock triplesWithPositionsPerBlockInSPO_;
+  TriplesWithPositionsPerBlock triplesWithPositionsPerBlockInSOP_;
+  TriplesWithPositionsPerBlock triplesWithPositionsPerBlockInOSP_;
+  TriplesWithPositionsPerBlock triplesWithPositionsPerBlockInOPS_;
 
  public:
   // Construct for given index.
@@ -139,6 +177,10 @@ class DeltaTriples {
   // Delete triple.
   void deleteTriple(TurtleTriple turtleTriple);
 
+  // Get positions for given permutation.
+  const TriplesWithPositionsPerBlock& getTriplesWithPositionsPerBlock(
+      Index::Permutation permutation) const;
+
   // TODO: made public as long as we are trying to figure out how this works.
  private:
  public:
@@ -153,13 +195,14 @@ class DeltaTriples {
   // Find the position of the given triple in the given permutation (a pair of
   // block index and index within that block; see the documentation of the class
   // above for how exactly that position is defined in all cases).
-  void findTripleInAllPermutations(const IdTriple& idTriple,
-                                   bool visualize = false);
+  void locateTripleInAllPermutations(const IdTriple& idTriple,
+                                     bool visualize = false);
 
   // The implementation of the above function.
   template <typename Permutation>
-  FindTripleResult findTripleInPermutation(
-      Id id1, Id id2, Id id3, Permutation& permutation, bool visualize) const;
+  TripleWithPosition locateTripleInPermutation(Id id1, Id id2, Id id3,
+                                               Permutation& permutation,
+                                               bool visualize) const;
 
   // Resolve ID to name (useful for debugging and testing).
   std::string getNameForId(Id id) const;

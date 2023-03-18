@@ -33,6 +33,7 @@ class MetaDataWrapperDense {
     using BaseIterator::BaseIterator;
     AddGetIdIterator(BaseIterator base) : BaseIterator{base} {}
     [[nodiscard]] Id getId() const { return getIdFromElement(*(*this)); }
+    [[nodiscard]] const auto& getMetaData() const { return *(*this); }
     static Id getIdFromElement(const typename BaseIterator::value_type& v) {
       return v._col0Id;
     }
@@ -168,6 +169,7 @@ class MetaDataWrapperHashMap {
     using BaseIterator::BaseIterator;
     AddGetIdIterator(BaseIterator base) : BaseIterator{base} {}
     [[nodiscard]] Id getId() const { return (*this)->second._col0Id; }
+    [[nodiscard]] const auto& getMetaData() const { return (*this)->second; }
     static Id getIdFromElement(const typename BaseIterator::value_type& v) {
       return v.second._col0Id;
     }
@@ -289,7 +291,12 @@ class MetaDataWrapperHashMap {
   // does not exist in the index, it will get an ID from the local vocab, which
   // is larger than all existing IDs.
   //
-  // TODO: This is hacky and should be made less hacky.
+  // TODO: This is not quite correct. We might insert a triple where the
+  // predicate has an ID that exists in the original index, but it just hasn't
+  // been used for a predicate in the original index. Then `end()` is not the
+  // right answer when searching for that triple, but we indeed need the sorted
+  // sequence of IDs (solution: just use an ordered `std::map` instead of an
+  // unordered `HashMap`).
   //
   // (Note that this is different for OPS and OSP, because objects can also be
   // values and values that did not previously exist in the index get an

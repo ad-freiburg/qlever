@@ -34,7 +34,8 @@ inline Index makeIndexWithTestSettings() {
 // when the files were not deleted after the test).
 inline std::vector<std::string> getAllIndexFilenames(
     const std::string indexBasename) {
-  return {indexBasename + ".index.pos",
+  return {indexBasename + ".ttl",
+          indexBasename + ".index.pos",
           indexBasename + ".index.pso",
           indexBasename + ".index.sop",
           indexBasename + ".index.sop.meta",
@@ -64,7 +65,7 @@ inline Index makeTestIndex(const std::string& indexBasename,
   // these tests.
   static std::ostringstream ignoreLogStream;
   ad_utility::setGlobalLoggingStream(&ignoreLogStream);
-  std::string filename = "relationalExpressionTestIndex.ttl";
+  std::string inputFilename = indexBasename + ".ttl";
   if (turtleInput.empty()) {
     turtleInput =
         "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
@@ -74,14 +75,14 @@ inline Index makeTestIndex(const std::string& indexBasename,
   }
 
   FILE_BUFFER_SIZE() = 1000;
-  std::fstream f(filename, std::ios_base::out);
+  std::fstream f(inputFilename, std::ios_base::out);
   f << turtleInput;
   f.close();
   {
     Index index = makeIndexWithTestSettings();
     index.setOnDiskBase(indexBasename);
     index.setUsePatterns(true);
-    index.createFromFile<TurtleParserAuto>(filename);
+    index.createFromFile<TurtleParserAuto>(inputFilename);
   }
   Index index;
   index.setUsePatterns(true);
