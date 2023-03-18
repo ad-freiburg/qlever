@@ -332,18 +332,27 @@ void CompressedRelationWriter::addRelation(Id col0Id,
   // explicitly below.
   CompressedRelationMetadata metaData{col0Id, col1And2Ids.numRows(), multC1,
                                       multC2};
-  auto sizeOfRelation =
-      col1And2Ids.numRows() * col1And2Ids.numColumns() * sizeof(Id);
+
+  // Determine the number of bytes the IDs stored in an IdTable consume.
+  // The return type is double because we use the result to compare it with
+  // other doubles below.
+  auto sizeInBytes = [](const auto& table) {
+    return static_cast<double>(table.numRows() * table.numColumns() *
+                               sizeof(Id));
+  };
 
   // If this is a large relation, or the currrently buffered relations +
   // this relation are too large, we will write the buffered relations to file
   // and start a new block.
-  if (sizeOfRelation > _numBytesPerBlock * 8 / 10 ||
-      sizeOfRelation + _buffer.numRows() > 1.5 * _numBytesPerBlock) {
+  bool relationHasExclusiveBlocks =
+      sizeInBytes(col1And2Ids) > 0.8 * static_cast<double>(_numBytesPerBlock);
+  if (relationHasExclusiveBlocks ||
+      sizeInBytes(col1And2Ids) + sizeInBytes(_buffer) >
+          static_cast<double>(_numBytesPerBlock) * 1.5) {
     writeBufferedRelationsToSingleBlock();
   }
 
-  if (sizeOfRelation > _numBytesPerBlock * 8 / 10) {
+  if (relationHasExclusiveBlocks) {
     // The relation is large, immediately write the relation to a set of
     // exclusive blocks.
     writeRelationToExclusiveBlocks(col0Id, col1And2Ids);
