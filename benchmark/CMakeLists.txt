@@ -19,5 +19,3 @@ endfunction()
 
 # Add benchmarks after here.
 addAndLinkBenchmark(BenchmarkExamples)
-
-addAndLinkBenchmark(UnsortedAndSortedJoinBenchmark engine)
