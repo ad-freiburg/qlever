@@ -24,6 +24,8 @@ class ErrorReportingHandler(urllib.request.BaseHandler):
     def http_error_default(self, req, fp, code, msg, hdrs):
         if code != 200:
             eprint(f"Status {code} for {req.full_url}")
+            eprint(f"Message {msg} headers {hdrs}")
+            eprint(fp.read())
             return fp
 
 
@@ -228,6 +230,9 @@ def test_check(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
             if not found:
                 eprint("contains_row check failed:\n" +
                        "\tdid not find %r" % gold_row)
+                print("Printing the first 10 rows of the result:")
+                for row in res[:10]:
+                    print(row)
                 return False
         elif check == 'contains_warning':
             for requested_warning in value:

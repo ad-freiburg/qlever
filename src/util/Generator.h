@@ -23,9 +23,12 @@ namespace detail {
 template <typename T>
 class generator_promise {
  public:
-  using value_type = std::remove_reference_t<T>;
+  // Even if the generator only yields `const` values, the `value_type`
+  // shouldn't be `const` because otherwise several static checks when
+  // interacting with the STL fail.
+  using value_type = std::remove_cvref_t<T>;
   using reference_type = std::conditional_t<std::is_reference_v<T>, T, T&>;
-  using pointer_type = value_type*;
+  using pointer_type = std::remove_reference_t<T>*;
 
   generator_promise() = default;
 

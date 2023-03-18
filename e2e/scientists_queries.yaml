@@ -1425,4 +1425,45 @@ queries:
       - contains_row: [ 3.0, 2.5]
       - contains_row: [ 4.0, 2.2]
 
+  - query: aggregate-in-having-clause
+    type: no-text
+    sparql: |
+      SELECT ?x WHERE {
+        VALUES (?x ?y) { (0.5 1.5) (0.5 3.5) (1.2 2.8)}
+      } GROUP BY ?x
+        HAVING (?x + COUNT(?y) > 2.3)
+    checks:
+      - num_cols: 1
+      - num_rows : 1
+      - selected: [ "?x" ]
+      - contains_row: [ 0.5 ]
+
+  - query: aggregate-in-order-by
+    type: no-text
+    sparql: |
+      SELECT (AVG(?x + ?y) as ?avg) WHERE {
+        VALUES (?x ?y) { (0.5 1.5) (0.5 3.5) (1.2 2.8)}
+      } GROUP BY ?x
+        ORDER BY (- SUM(?y))
+    checks:
+      - num_cols: 1
+      - num_rows : 2
+      - selected: [ "?avg" ]
+      - contains_row: [ 3.0 ]
+      - contains_row: [ 4.0 ]
+
+  - query: variable-from-select-clause-reusage
+    type: no-text
+    sparql: |
+      SELECT (AVG(?x + ?y) as ?avg) (?avg + COUNT(?y) * 0.5 AS ?b) WHERE {
+        VALUES (?x ?y) { (0.5 1.5) (0.5 3.5) (1.2 2.8)}
+      } GROUP BY ?x
+    checks:
+      - num_cols: 2
+      - num_rows : 2
+      - selected: [ "?avg", "?b" ]
+      - contains_row: [ 3.0, 4.0 ]
+      - contains_row: [ 4.0, 4.5 ]
+
+
 

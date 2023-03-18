@@ -13,17 +13,12 @@
 
 namespace sparqlExpression::detail {
 
-// Internal implementation of `getIdsFromVariable` (see below).
-// It is required because of the `CALL_FIXED_SIZE` mechanism for the `IdTable`s.
-template <size_t WIDTH>
-void getIdsFromVariableImpl(VectorWithMemoryLimit<ValueId>& result,
-                            const ::Variable& variable,
-                            EvaluationContext* context) {
-  AD_CONTRACT_CHECK(result.empty());
-  const auto inputTable = context->_inputTable.asStaticView<WIDTH>();
-
-  const size_t beginIndex = context->_beginIndex;
-  const size_t endIndex = context->_endIndex;
+/// Convert a variable to a vector of all the Ids it is bound to in the
+/// `context`.
+inline std::span<const ValueId> getIdsFromVariable(
+    const ::Variable& variable, const EvaluationContext* context,
+    size_t beginIndex, size_t endIndex) {
+  const auto& inputTable = context->_inputTable;
 
   if (!context->_variableToColumnAndResultTypeMap.contains(variable)) {
     throw std::runtime_error(
@@ -34,22 +29,20 @@ void getIdsFromVariableImpl(VectorWithMemoryLimit<ValueId>& result,
   const size_t columnIndex =
       context->_variableToColumnAndResultTypeMap.at(variable).first;
 
-  result.reserve(endIndex - beginIndex);
-  for (size_t i = beginIndex; i < endIndex; ++i) {
-    result.push_back(ValueId{inputTable(i, columnIndex)});
-  }
+  std::span<const ValueId> completeColumn = inputTable.getColumn(columnIndex);
+
+  AD_CONTRACT_CHECK(beginIndex <= endIndex &&
+                    endIndex <= completeColumn.size());
+  return {completeColumn.begin() + beginIndex,
+          completeColumn.begin() + endIndex};
 }
 
-/// Convert a variable to a vector of all the Ids it is bound to in the
-/// `context`.
-// TODO<joka921> Restructure QLever to column based design, then this will
-// become a noop;
-inline VectorWithMemoryLimit<ValueId> getIdsFromVariable(
-    const ::Variable& variable, EvaluationContext* context) {
-  auto cols = context->_inputTable.numColumns();
-  VectorWithMemoryLimit<ValueId> result{context->_allocator};
-  CALL_FIXED_SIZE(cols, &getIdsFromVariableImpl, result, variable, context);
-  return result;
+// Overload that reads the `beginIndex` and the `endIndex` directly from the
+// `context
+inline std::span<const ValueId> getIdsFromVariable(
+    const ::Variable& variable, const EvaluationContext* context) {
+  return getIdsFromVariable(variable, context, context->_beginIndex,
+                            context->_endIndex);
 }
 
 /// Generators that yield `numItems` items for the various
@@ -62,12 +55,14 @@ requires isConstantResult<T> cppcoro::generator<T> resultGenerator(
   }
 }
 
-template <SingleExpressionResult T>
-requires isVectorResult<T> cppcoro::generator<typename T::value_type>
-resultGenerator(T vector, size_t numItems) {
+template <typename T>
+requires isVectorResult<T>
+auto resultGenerator(T vector, size_t numItems)
+    -> cppcoro::generator<std::remove_reference_t<decltype(vector[0])>> {
   AD_CONTRACT_CHECK(numItems == vector.size());
   for (auto& element : vector) {
-    co_yield std::move(element);
+    auto cpy = std::move(element);
+    co_yield cpy;
   }
 }
 
@@ -94,10 +89,9 @@ inline cppcoro::generator<Bool> resultGenerator(ad_utility::SetOfIntervals set,
 template <SingleExpressionResult Input>
 auto makeGenerator(Input&& input, size_t numItems, EvaluationContext* context) {
   if constexpr (ad_utility::isSimilar<::Variable, Input>) {
-    // TODO: Also directly write a generator that lazily gets the Ids in chunks.
-    StrongIdsWithResultType inputWithVariableResolved{
+    std::span<const ValueId> inputWithVariableResolved{
         getIdsFromVariable(std::forward<Input>(input), context)};
-    return resultGenerator(std::move(inputWithVariableResolved), numItems);
+    return resultGenerator(inputWithVariableResolved, numItems);
   } else {
     return resultGenerator(std::forward<Input>(input), numItems);
   }

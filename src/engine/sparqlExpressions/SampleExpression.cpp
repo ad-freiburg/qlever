@@ -25,12 +25,9 @@ ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
     } else if constexpr (std::is_same_v<T, ::Variable>) {
       // TODO<joka921> Can't this be a simpler function (getIdAt)
       AD_CONTRACT_CHECK(context->_endIndex > context->_beginIndex);
-      EvaluationContext contextForSingleValue = *context;
-      contextForSingleValue._endIndex = contextForSingleValue._beginIndex + 1;
-      auto idOfFirstAsVector =
-          detail::getIdsFromVariable(childResult, &contextForSingleValue);
-      return idOfFirstAsVector[0];
-      ;
+      std::span<const ValueId> idOfFirstAsVector = detail::getIdsFromVariable(
+          childResult, context, context->_beginIndex, context->_endIndex);
+      return ExpressionResult{idOfFirstAsVector[0]};
     } else {
       static_assert(isConstantResult<T>);
       return childResult;

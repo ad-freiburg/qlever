@@ -307,3 +307,5 @@ addLinkAndDiscoverTestSerial(AggregateExpressionTest parser sparqlExpressions in
 addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 
 addLinkAndDiscoverTest(ExceptionHandlingTest)
+
+addLinkAndDiscoverTest(SparqlExpressionTypesTest)

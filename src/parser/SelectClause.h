@@ -59,6 +59,7 @@ struct SelectClause : ClauseBase {
   // `setSelected`.
   using VarOrAlias = std::variant<Variable, Alias>;
   void setSelected(std::vector<VarOrAlias> varsOrAliases);
+  void addAlias(VarOrAlias varOrAlias, bool isInternal);
 
   // Overload of `setSelected` (see above) for the simple case, where only
   // variables and no aliases are selected.

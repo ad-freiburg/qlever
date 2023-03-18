@@ -33,20 +33,30 @@ void SelectClause::setAsterisk() { varsAndAliasesOrAsterisk_ = Asterisk{}; }
 
 // ____________________________________________________________________
 void SelectClause::setSelected(std::vector<VarOrAlias> varsOrAliases) {
-  VarsAndAliases v;
-  auto processVariable = [&v](Variable var) {
+  varsAndAliasesOrAsterisk_ = VarsAndAliases{};
+  for (auto& el : varsOrAliases) {
+    // The second argument means that the variables are not internal.
+    addAlias(std::move(el), false);
+  }
+}
+
+// ____________________________________________________________________________
+void SelectClause::addAlias(parsedQuery::SelectClause::VarOrAlias varOrAlias,
+                            bool isInternal) {
+  AD_CORRECTNESS_CHECK(!isAsterisk());
+  auto& v = std::get<VarsAndAliases>(varsAndAliasesOrAsterisk_);
+  auto processVariable = [&v, isInternal](Variable var) {
+    AD_CONTRACT_CHECK(!isInternal);
     v.vars_.push_back(std::move(var));
   };
-  auto processAlias = [&v](Alias alias) {
-    v.vars_.emplace_back(alias._target);
+  auto processAlias = [&v, isInternal](Alias alias) {
+    if (!isInternal) {
+      v.vars_.emplace_back(alias._target);
+    }
     v.aliases_.push_back(std::move(alias));
   };
-
-  for (auto& el : varsOrAliases) {
-    std::visit(ad_utility::OverloadCallOperator{processVariable, processAlias},
-               std::move(el));
-  }
-  varsAndAliasesOrAsterisk_ = std::move(v);
+  std::visit(ad_utility::OverloadCallOperator{processVariable, processAlias},
+             std::move(varOrAlias));
 }
 
 // ____________________________________________________________________
