@@ -60,10 +60,20 @@ struct CompressedBlockMetadata {
   // For example, in the PSO permutation, col0 is the P and col1 is the S. The
   // col0 ID is not stored in the block. First and last are meant inclusively,
   // that is, they are both part of the block.
+  //
+  // NOTE: Strictly speaking, we don't need `_col0FirstId` and `_col1FirstId`.
+  // However, they are convenient to have and don't really harm with respect to
+  // space efficiency. For example, for Wikidata, we have only around 50K blocks
+  // with block size 8M and around 5M blocks with block size 80K; even the
+  // latter takes only half a GB in total.
   Id _col0FirstId;
   Id _col0LastId;
   Id _col1FirstId;
   Id _col1LastId;
+
+  // For our `DeltaTriples` (https://github.com/ad-freiburg/qlever/pull/916), we
+  // need to know the least significant `Id` of the last triple as well.
+  Id _col2LastId;
 
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadata&) const = default;
@@ -83,6 +93,7 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
   serializer | arg._col0LastId;
   serializer | arg._col1FirstId;
   serializer | arg._col1LastId;
+  serializer | arg._col2LastId;
 }
 
 // The metadata of a whole compressed "relation", where relation refers to a
@@ -304,6 +315,7 @@ class CompressedRelationReader {
   static void decompressColumn(const std::vector<char>& compressedColumn,
                                size_t numRowsToRead, Iterator iterator);
 
+ public:
   // Read the block that is identified by the `blockMetaData` from the `file`,
   // decompress and return it.
   // If `columnIndices` is `nullopt`, then all columns of the block are read,
