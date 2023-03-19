@@ -50,10 +50,9 @@ void DeltaTriples::insertTriple(TurtleTriple turtleTriple) {
   //
   // TODO: Test this behavior.
   if (triplesInserted_.contains(idTriple)) {
-    throw std::runtime_error(
-        absl::StrCat("Triple \"", turtleTriple.toString(),
-                     "\" was already inserted before",
-                     ", this insertion therefore has no effect"));
+    throw std::runtime_error(absl::StrCat(
+        "Triple \"", turtleTriple.toString(), "\" was already inserted before",
+        ", this insertion therefore has no effect"));
   }
   // When re-inserting a previously deleted triple, we need to remove the triple
   // from `triplesDeleted_` AND remove it from all
@@ -86,10 +85,9 @@ void DeltaTriples::deleteTriple(TurtleTriple turtleTriple) {
   //
   // TODO: Test this behavior.
   if (triplesDeleted_.contains(idTriple)) {
-    throw std::runtime_error(
-        absl::StrCat("Triple \"", turtleTriple.toString(),
-                     "\" was already deleted before",
-                     ", this deletion therefore has no effect"));
+    throw std::runtime_error(absl::StrCat(
+        "Triple \"", turtleTriple.toString(), "\" was already deleted before",
+        ", this deletion therefore has no effect"));
   }
   // When deleting a previously inserted triple (that did not exist in the index
   // before), we need to remove the triple from `triplesInserted_` AND remove it

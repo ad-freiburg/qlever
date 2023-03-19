@@ -447,7 +447,6 @@ TEST_F(DeltaTriplesTest, insertAndDeleteTriples) {
   }
   checkTriplesWithPositionsPerBlockSize(deltaTriples, 2 * testTriples.size());
   checkAllTriplesWithPositionForAllPermutations(deltaTriples);
-
 }
 
 // Visualize the result of `findTripleInPermutation` for one particular
