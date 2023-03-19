@@ -341,10 +341,10 @@ Awaitable<void> Server::process(
     bool insertDetected = false;
     bool deleteDetected = false;
     std::optional<std::string> parameterValue;
-    if (parameterValue = checkParameter("insert", std::nullopt)) {
+    if ((parameterValue = checkParameter("insert", std::nullopt))) {
       LOG(INFO) << "INSERT: " << parameterValue.value() << std::endl;
       insertDetected = true;
-    } else if (parameterValue = checkParameter("delete", std::nullopt)) {
+    } else if ((parameterValue = checkParameter("delete", std::nullopt))) {
       LOG(INFO) << "DELETE: " << parameterValue.value() << std::endl;
       deleteDetected = true;
     }
