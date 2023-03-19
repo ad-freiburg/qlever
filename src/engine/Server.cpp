@@ -350,8 +350,9 @@ Awaitable<void> Server::process(
     }
     if (insertDetected || deleteDetected) {
       AD_CORRECTNESS_CHECK(parameterValue.has_value());
+      const std::string& input = parameterValue.value();
       TurtleStringParser<Tokenizer> parser;
-      parser.parseUtf8String(parameterValue.value());
+      parser.parseUtf8String(input);
       if (parser.getTriples().size() == 0) {
         throw std::runtime_error("Triple could not be parsed");
       } else if (parser.getTriples().size() > 1) {
@@ -360,12 +361,16 @@ Awaitable<void> Server::process(
       TurtleTriple turtleTriple = parser.getTriples()[0];
       if (insertDetected) {
         _deltaTriples.insertTriple(std::move(turtleTriple));
-        response = createOkResponse("INSERT operation processed", request,
-                                    ad_utility::MediaType::textPlain);
+        response =
+            createOkResponse(absl::StrCat("INSERT operation for triple \"",
+                                          input, "\" processed\n"),
+                             request, ad_utility::MediaType::textPlain);
       } else {
         _deltaTriples.deleteTriple(std::move(turtleTriple));
-        response = createOkResponse("DELETE operation processed", request,
-                                    ad_utility::MediaType::textPlain);
+        response =
+            createOkResponse(absl::StrCat("DELETE operation for triple \"",
+                                          input, "\" processed\n"),
+                             request, ad_utility::MediaType::textPlain);
       }
     }
   }

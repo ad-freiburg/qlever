@@ -24,15 +24,94 @@ void DeltaTriples::clear() {
 }
 
 // ____________________________________________________________________________
+void DeltaTriples::eraseTripleInAllPermutations(
+    TriplesWithPositionsIterators& iterators) {
+  // Helper lambda for erasing for one particular permutation.
+  auto erase = [](TriplesWithPositions::iterator tripleWithPosition,
+                  TriplesWithPositionsPerBlock& triplesWithPositionsPerBlock) {
+    size_t blockIndex = tripleWithPosition->blockIndex;
+    triplesWithPositionsPerBlock.positionMap_[blockIndex].erase(
+        tripleWithPosition);
+  };
+  // Now erase for all permutations.
+  erase(iterators.iteratorPSO, triplesWithPositionsPerBlockInPSO_);
+  erase(iterators.iteratorPOS, triplesWithPositionsPerBlockInPOS_);
+  erase(iterators.iteratorSPO, triplesWithPositionsPerBlockInSPO_);
+  erase(iterators.iteratorSOP, triplesWithPositionsPerBlockInSOP_);
+  erase(iterators.iteratorOSP, triplesWithPositionsPerBlockInOSP_);
+  erase(iterators.iteratorOPS, triplesWithPositionsPerBlockInOPS_);
+};
+
+// ____________________________________________________________________________
 void DeltaTriples::insertTriple(TurtleTriple turtleTriple) {
-  IdTriple idTriple = getIdTriple(std::move(turtleTriple));
-  triplesInserted_.insert(idTriple);
+  IdTriple idTriple = getIdTriple(turtleTriple);
+  // Inserting a triple (that does not exist in the original index) a second
+  // time has no effect.
+  //
+  // TODO: Test this behavior.
+  if (triplesInserted_.contains(idTriple)) {
+    throw std::runtime_error(
+        absl::StrCat("Triple \"", turtleTriple.toString(),
+                     "\" was already inserted before",
+                     ", this insertion therefore has no effect"));
+  }
+  // When re-inserting a previously deleted triple, we need to remove the triple
+  // from `triplesDeleted_` AND remove it from all
+  // `triplesWithPositionsPerBlock` (one per permutation) as well.
+  if (triplesDeleted_.contains(idTriple)) {
+    eraseTripleInAllPermutations(triplesDeleted_.at(idTriple));
+    triplesDeleted_.erase(idTriple);
+    return;
+  }
+  // Locate the triple in one of the permutations (it does not matter which one)
+  // to check if it already exists in the index. If it already exists, the
+  // insertion is invalid, otherwise insert it.
+  TripleWithPosition tripleWithPosition = locateTripleInPermutation(
+      idTriple[1], idTriple[0], idTriple[2], index_.getImpl().PSO());
+  if (tripleWithPosition.existsInIndex) {
+    throw std::runtime_error(
+        absl::StrCat("Triple \"", turtleTriple.toString(),
+                     "\" already exists in the original index",
+                     ", this insertion therefore has no effect"));
+  }
+  auto iterators = locateTripleInAllPermutations(idTriple);
+  triplesInserted_.insert({idTriple, iterators});
 }
 
 // ____________________________________________________________________________
 void DeltaTriples::deleteTriple(TurtleTriple turtleTriple) {
-  IdTriple idTriple = getIdTriple(std::move(turtleTriple));
-  triplesDeleted_.insert(idTriple);
+  IdTriple idTriple = getIdTriple(turtleTriple);
+  // Deleting a triple (that does exist in the original index) a second time has
+  // no effect.
+  //
+  // TODO: Test this behavior.
+  if (triplesDeleted_.contains(idTriple)) {
+    throw std::runtime_error(
+        absl::StrCat("Triple \"", turtleTriple.toString(),
+                     "\" was already deleted before",
+                     ", this deletion therefore has no effect"));
+  }
+  // When deleting a previously inserted triple (that did not exist in the index
+  // before), we need to remove the triple from `triplesInserted_` AND remove it
+  // from all `triplesWithPositionsPerBlock` (one per permutation) as well.
+  if (triplesInserted_.contains(idTriple)) {
+    eraseTripleInAllPermutations(triplesInserted_.at(idTriple));
+    triplesInserted_.erase(idTriple);
+    return;
+  }
+  // Locate the triple in one of the permutations (it does not matter which one)
+  // to check if it actually exists in the index. If it does not exist, the
+  // deletion is invalid, otherwise add as deleted triple.
+  TripleWithPosition tripleWithPosition = locateTripleInPermutation(
+      idTriple[1], idTriple[0], idTriple[2], index_.getImpl().PSO());
+  if (!tripleWithPosition.existsInIndex) {
+    throw std::runtime_error(
+        absl::StrCat("Triple \"", turtleTriple.toString(),
+                     "\" does not exist in the original index",
+                     ", the deletion has no effect"));
+  }
+  auto iterators = locateTripleInAllPermutations(idTriple);
+  triplesDeleted_.insert({idTriple, iterators});
 }
 
 // ____________________________________________________________________________
@@ -58,7 +137,8 @@ DeltaTriples::getTriplesWithPositionsPerBlock(
 }
 
 // ____________________________________________________________________________
-DeltaTriples::IdTriple DeltaTriples::getIdTriple(TurtleTriple turtleTriple) {
+DeltaTriples::IdTriple DeltaTriples::getIdTriple(
+    const TurtleTriple& turtleTriple) {
   TripleComponent subject = std::move(turtleTriple._subject);
   TripleComponent predicate = std::move(turtleTriple._predicate);
   TripleComponent object = std::move(turtleTriple._object);
@@ -69,62 +149,60 @@ DeltaTriples::IdTriple DeltaTriples::getIdTriple(TurtleTriple turtleTriple) {
 }
 
 // ____________________________________________________________________________
-void DeltaTriples::locateTripleInAllPermutations(const IdTriple& idTriple,
-                                                 bool visualize) {
+DeltaTriples::TriplesWithPositionsIterators
+DeltaTriples::locateTripleInAllPermutations(const IdTriple& idTriple) {
   // Helper lambda for adding `tripleWithPosition` to given
   // `TriplesWithPositionsPerBlock` list.
   auto addTripleWithPosition =
       [&](const TripleWithPosition& tripleWithPosition,
-          TriplesWithPositionsPerBlock& triplesWithPositionsPerBlock) {
-        triplesWithPositionsPerBlock.positionMap_[tripleWithPosition.blockIndex]
-            .emplace_back(tripleWithPosition);
-      };
+          TriplesWithPositionsPerBlock& triplesWithPositionsPerBlock)
+      -> TriplesWithPositions::iterator {
+    TriplesWithPositions& triplesWithPositions =
+        triplesWithPositionsPerBlock
+            .positionMap_[tripleWithPosition.blockIndex];
+    auto [iterator, wasInserted] =
+        triplesWithPositions.emplace(tripleWithPosition);
+    AD_CORRECTNESS_CHECK(wasInserted == true);
+    AD_CORRECTNESS_CHECK(iterator != triplesWithPositions.end());
+    ++triplesWithPositionsPerBlock.size_;
+    return iterator;
+  };
 
   // Now locate the triple in each permutation and add it to the correct
   // `TriplesWithPositionsPerBlock` list.
   auto [s, p, o] = idTriple;
-  addTripleWithPosition(
-      locateTripleInPermutation(p, s, o, index_.getImpl().PSO(), visualize),
+  TriplesWithPositionsIterators result;
+  result.iteratorPSO = addTripleWithPosition(
+      locateTripleInPermutation(p, s, o, index_.getImpl().PSO()),
       triplesWithPositionsPerBlockInPSO_);
-  addTripleWithPosition(
-      locateTripleInPermutation(p, o, s, index_.getImpl().POS(), visualize),
+  result.iteratorPOS = addTripleWithPosition(
+      locateTripleInPermutation(p, o, s, index_.getImpl().POS()),
       triplesWithPositionsPerBlockInPOS_);
-  addTripleWithPosition(
-      locateTripleInPermutation(s, p, o, index_.getImpl().SPO(), visualize),
+  result.iteratorSPO = addTripleWithPosition(
+      locateTripleInPermutation(s, p, o, index_.getImpl().SPO()),
       triplesWithPositionsPerBlockInSPO_);
-  addTripleWithPosition(
-      locateTripleInPermutation(s, o, p, index_.getImpl().SOP(), visualize),
+  result.iteratorSOP = addTripleWithPosition(
+      locateTripleInPermutation(s, o, p, index_.getImpl().SOP()),
       triplesWithPositionsPerBlockInSOP_);
-  addTripleWithPosition(
-      locateTripleInPermutation(o, s, p, index_.getImpl().OSP(), visualize),
+  result.iteratorOSP = addTripleWithPosition(
+      locateTripleInPermutation(o, s, p, index_.getImpl().OSP()),
       triplesWithPositionsPerBlockInOSP_);
-  addTripleWithPosition(
-      locateTripleInPermutation(o, p, s, index_.getImpl().OPS(), visualize),
+  result.iteratorOPS = addTripleWithPosition(
+      locateTripleInPermutation(o, p, s, index_.getImpl().OPS()),
       triplesWithPositionsPerBlockInOPS_);
+
+  // Return the iterators.
+  return result;
 }
 
 // ____________________________________________________________________________
 template <typename Permutation>
 DeltaTriples::TripleWithPosition DeltaTriples::locateTripleInPermutation(
-    Id id1, Id id2, Id id3, Permutation& permutation, bool visualize) const {
+    Id id1, Id id2, Id id3, Permutation& permutation) const {
   // Get the internal data structures from the permutation.
   auto& file = permutation._file;
   const auto& meta = permutation._meta;
   const auto& reader = permutation._reader;
-  ad_utility::SharedConcurrentTimeoutTimer timer;
-  ad_utility::AllocatorWithLimit<Id> unlimitedAllocator{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<size_t>::max())};
-
-  // Get the name of the permutation and names for the IDs from the triple
-  // (for visualization only, can eventually be deleted).
-  auto& pname = permutation._readableName;
-  std::string name1 = getNameForId(id1);
-  std::string name2 = getNameForId(id2);
-  std::string name3 = getNameForId(id3);
-  std::string tname = absl::StrCat(std::string{pname[0]}, "=", name1, " ",
-                                   std::string{pname[1]}, "=", name2, " ",
-                                   std::string{pname[2]}, "=", name3);
 
   // Find the index of the first block where the last triple is not smaller.
   //
@@ -161,38 +239,14 @@ DeltaTriples::TripleWithPosition DeltaTriples::locateTripleInPermutation(
   // case).
   if (matchingBlock == blocks.end()) {
     AD_CORRECTNESS_CHECK(blockIndex == blocks.size());
-    if (visualize) {
-      std::cout << endl;
-      std::cout << "All triples in " << pname << " are smaller than " << tname
-                << std::endl;
-    }
     return tripleWithPosition;
   }
-  auto showTriple = [](const std::string& prefix,
-                       const std::vector<Id>& triple) {
-    std::cout << prefix << triple[0] << " " << triple[1] << " " << triple[2]
-              << std::endl;
-  };
 
   // Read and decompress the block. Note that we are potentially doing this a
   // second time here (the block has probably already been looked at in the call
   // to `std::lower_bound` above).
   DecompressedBlock blockTuples =
       reader.readAndDecompressBlock(*matchingBlock, file, std::nullopt);
-
-  if (0) {
-    std::vector<Id> ourTriple = {id1, id2, id3};
-    std::vector<Id> lastTripleInBlock = {matchingBlock->_col0LastId,
-                                         matchingBlock->_col1LastId,
-                                         matchingBlock->_col2LastId};
-    std::vector<Id> trueLastTripleInBlock = {
-        Id::makeUndefined(), blockTuples.back()[0], blockTuples.back()[1]};
-    std::cout << std::endl;
-    showTriple("Ours: ", ourTriple);
-    showTriple("Last: ", lastTripleInBlock);
-    showTriple("True: ", trueLastTripleInBlock);
-    AD_CORRECTNESS_CHECK(ourTriple <= lastTripleInBlock);
-  }
 
   // Find the smallest "relation" ID that is not smaller than `id1` and get its
   // metadata and the position of the first and last triple with that ID in the
@@ -255,30 +309,6 @@ DeltaTriples::TripleWithPosition DeltaTriples::locateTripleInPermutation(
   } else {
     AD_CORRECTNESS_CHECK(id1 < id);
     tripleWithPosition.rowIndexInBlock = offsetBegin;
-  }
-
-  // Show the respective block. Note that we can show the relation ID only for
-  // a part of the block (maybe the whole block, but not always).
-  if (visualize) {
-    std::cout << std::endl;
-    std::cout << "Block #" << blockIndex << " from " << pname << " (" << tname
-              << "):" << std::endl;
-    // Now we are ready to write the triples in the block, including the most
-    // significant ID.
-    for (size_t i = 0; i < blockTuples.numRows(); ++i) {
-      std::cout << "Row #" << i << ": "
-                << (i >= offsetBegin && i < offsetEnd ? getNameForId(id)
-                                                      : std::string{"*"});
-      for (size_t j = 0; j < blockTuples.numColumns(); ++j) {
-        std::cout << " " << getNameForId(blockTuples(i, j));
-      }
-      if (i == tripleWithPosition.rowIndexInBlock) {
-        std::cout << " <-- "
-                  << (tripleWithPosition.existsInIndex ? "existing triple"
-                                                       : "new triple");
-      }
-      std::cout << std::endl;
-    }
   }
 
   // Return the result.

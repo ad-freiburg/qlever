@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "./IndexTestHelpers.h"
+#include "./util/GTestHelpers.h"
 #include "absl/strings/str_split.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
@@ -13,6 +14,9 @@
 // Shortcuts to these full type names used frequently in the following.
 // using DeltaTriples::IdTriple;
 // using DeltaTriples::TriplesWithPositionsPerBlock;
+static const std::vector<Index::Permutation> permutationEnums = {
+    Index::Permutation::PSO, Index::Permutation::POS, Index::Permutation::SPO,
+    Index::Permutation::SOP, Index::Permutation::OPS, Index::Permutation::OSP};
 
 // Fixture that sets up a test index.
 class DeltaTriplesTest : public ::testing::Test {
@@ -44,14 +48,14 @@ class DeltaTriplesTest : public ::testing::Test {
   // of type `std::vector<std::string>` in the first place that contains the
   // individual triples and then concatenate them with `absl::StrJoin` for
   // `getQec`, but C++ doesn't allow non-literal static class members.
-  std::vector<std::string_view> testTriples() {
+  std::vector<std::string_view> getTestTriples() {
     return absl::StrSplit(testTurtle, " . ");
   }
 
   // Make `TurtleTriple` from given Turtle input.
-  TurtleTriple makeTurtleTriple(std::string turtle) {
+  TurtleTriple makeTurtleTriple(std::string_view turtle) {
     TurtleStringParser<Tokenizer> parser;
-    parser.parseUtf8String(std::move(turtle));
+    parser.parseUtf8String(std::string{turtle});
     AD_CONTRACT_CHECK(parser.getTriples().size() == 1);
     return parser.getTriples()[0];
   }
@@ -61,6 +65,36 @@ class DeltaTriplesTest : public ::testing::Test {
   DeltaTriples::IdTriple makeIdTriple(DeltaTriples& deltaTriples,
                                       std::string turtle) {
     return deltaTriples.getIdTriple(makeTurtleTriple(std::move(turtle)));
+  }
+
+  // Get human-readable names for the given `permutation` and `idTriple`. This
+  // is needed for proper message when an assert fails in the tests below. The
+  // `idTriple` is assumed to be already in the right permutation (for example,
+  // for POS, `idTriple[0]` is the `Id` of the predicate).
+  template <typename Permutation>
+  std::pair<std::string, std::string> getNicePermutationAndTripleName(
+      const DeltaTriples& deltaTriples, const Permutation& permutation,
+      const DeltaTriples::IdTriple idTriple) {
+    auto& namePermutation = permutation._readableName;
+    std::string nameId1 = deltaTriples.getNameForId(idTriple[0]);
+    std::string nameId2 = deltaTriples.getNameForId(idTriple[1]);
+    std::string nameId3 = deltaTriples.getNameForId(idTriple[2]);
+    std::string nameTriple =
+        absl::StrCat(std::string{namePermutation[0]}, "=", nameId1, " ",
+                     std::string{namePermutation[1]}, "=", nameId2, " ",
+                     std::string{namePermutation[2]}, "=", nameId3);
+    return {namePermutation, nameTriple};
+  }
+
+  // Check that all six `triplesWithPositionsPerBlock` lists have the given
+  // number of `TripleWithPosition` objects.
+  void checkTriplesWithPositionsPerBlockSize(const DeltaTriples& deltaTriples,
+                                             size_t expectedSize) {
+    for (Index::Permutation permutation : permutationEnums) {
+      ASSERT_EQ(
+          deltaTriples.getTriplesWithPositionsPerBlock(permutation).size(),
+          expectedSize);
+    }
   }
 
   // Get the complete sequence of "relation" (most significant) `Id`s for the
@@ -191,26 +225,33 @@ TEST_F(DeltaTriplesTest, constructor) {
 TEST_F(DeltaTriplesTest, clear) {
   // Insert then clear.
   DeltaTriples deltaTriples(testQec->getIndex());
-  deltaTriples.insertTriple(makeTurtleTriple("<a> <b> <c>"));
+  deltaTriples.insertTriple(makeTurtleTriple("<a> <UPP> <A>"));
   ASSERT_EQ(deltaTriples.numInserted(), 1);
   ASSERT_EQ(deltaTriples.numDeleted(), 0);
+  checkTriplesWithPositionsPerBlockSize(deltaTriples, 1);
   deltaTriples.clear();
   ASSERT_EQ(deltaTriples.numInserted(), 0);
   ASSERT_EQ(deltaTriples.numDeleted(), 0);
+  checkTriplesWithPositionsPerBlockSize(deltaTriples, 0);
 
   // Delete then clear.
-  deltaTriples.deleteTriple(makeTurtleTriple("<a> <b> <c>"));
+  deltaTriples.deleteTriple(makeTurtleTriple("<A> <low> <a>"));
   ASSERT_EQ(deltaTriples.numInserted(), 0);
   ASSERT_EQ(deltaTriples.numDeleted(), 1);
+  checkTriplesWithPositionsPerBlockSize(deltaTriples, 1);
   deltaTriples.clear();
   ASSERT_EQ(deltaTriples.numInserted(), 0);
   ASSERT_EQ(deltaTriples.numInserted(), 0);
+  checkTriplesWithPositionsPerBlockSize(deltaTriples, 0);
 }
 
-// Check that `locateTripleInAllPermutations` locates triples correctly in
-// all cases (triples that exist in the index, as well as those that do
-// not).
-TEST_F(DeltaTriplesTest, findTripleInAllPermutations) {
+// Check that insert and delete work as they should. The core of this test is to
+// check that `locateTripleInPermutation` and `locateTripleInAllPermutations`
+// work correctly.
+//
+// TODO: Wouldn't it make more sense to test the mentioned functions instead of
+// `insertTriple` and `deleteTriple`?
+TEST_F(DeltaTriplesTest, insertAndDeleteTriples) {
   const Index& index = testQec->getIndex();
   DeltaTriples deltaTriples(index);
 
@@ -240,17 +281,10 @@ TEST_F(DeltaTriplesTest, findTripleInAllPermutations) {
         const auto& meta = permutation._meta;
         const auto& reader = permutation._reader;
 
-        // Prepare a message for when one of our assertions fails. In
-        // particular, provide the name of the permutation and the triple in
-        // nice human-readable form.
-        auto& namePermutation = permutation._readableName;
-        std::string nameId1 = deltaTriples.getNameForId(deltaTriple[0]);
-        std::string nameId2 = deltaTriples.getNameForId(deltaTriple[1]);
-        std::string nameId3 = deltaTriples.getNameForId(deltaTriple[2]);
-        std::string nameTriple =
-            absl::StrCat(std::string{namePermutation[0]}, "=", nameId1, " ",
-                         std::string{namePermutation[1]}, "=", nameId2, " ",
-                         std::string{namePermutation[2]}, "=", nameId3);
+        // Prepare a message for when one of our assertions fails, with nice
+        // names for the permutation and the `deltaTriple`.
+        auto [namePermutation, nameTriple] = getNicePermutationAndTripleName(
+            deltaTriples, permutation, deltaTriple);
         std::string msg =
             absl::StrCat("Permutation ", namePermutation, ", triple ",
                          nameTriple, ", block index ", blockIndex,
@@ -376,31 +410,54 @@ TEST_F(DeltaTriplesTest, findTripleInAllPermutations) {
   // original index. But let's first get `locateTripleInAllPermutations`
   // correct. Note that to check whether a triple exists or not in the
   // original index, looking at one permutation suffices.
-  [[maybe_unused]] size_t numTriples = 0;
-  for (std::string_view triple : testTriples()) {
-    DeltaTriples::IdTriple idTriple =
-        makeIdTriple(deltaTriples, std::string{triple});
-    deltaTriples.locateTripleInAllPermutations(idTriple);
+  const std::vector<std::string_view>& testTriples = getTestTriples();
+  for (std::string_view triple : testTriples) {
+    deltaTriples.deleteTriple(makeTurtleTriple(triple));
   }
+  checkTriplesWithPositionsPerBlockSize(deltaTriples, testTriples.size());
+  checkAllTriplesWithPositionForAllPermutations(deltaTriples);
+
+  // Inserting the triples a second time should throw an exception (and not
+  // change anything about the internal data structures).
+  for (std::string_view triple : testTriples) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        deltaTriples.deleteTriple(makeTurtleTriple(triple)),
+        ::testing::HasSubstr("this deletion therefore has no effect"));
+  }
+  checkTriplesWithPositionsPerBlockSize(deltaTriples, testTriples.size());
   checkAllTriplesWithPositionForAllPermutations(deltaTriples);
 
   // Check that new triples are located correctly in every permutation.
-  for (std::string_view triple : testTriples()) {
+  for (std::string_view triple : testTriples) {
     std::string newTriple{triple};
     newTriple[1] = 'X';
-    DeltaTriples::IdTriple idTriple = makeIdTriple(deltaTriples, newTriple);
-    deltaTriples.locateTripleInAllPermutations(idTriple);
+    deltaTriples.insertTriple(makeTurtleTriple(newTriple));
   }
+  checkTriplesWithPositionsPerBlockSize(deltaTriples, 2 * testTriples.size());
   checkAllTriplesWithPositionForAllPermutations(deltaTriples);
+
+  // Deleting the triples a second time should throw an exception (and not
+  // change anything about the internal data structures).
+  for (std::string_view triple : testTriples) {
+    std::string newTriple{triple};
+    newTriple[1] = 'X';
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        deltaTriples.insertTriple(makeTurtleTriple(newTriple)),
+        ::testing::HasSubstr("this insertion therefore has no effect"));
+  }
+  checkTriplesWithPositionsPerBlockSize(deltaTriples, 2 * testTriples.size());
+  checkAllTriplesWithPositionForAllPermutations(deltaTriples);
+
 }
 
 // Visualize the result of `findTripleInPermutation` for one particular
 // triple by showing the whole block (for understanding and debugging
 // only, this will eventually be deleted).
 TEST_F(DeltaTriplesTest, findTripleInAllPermutationsVisualize) {
-  DeltaTriples deltaTriples(testQec->getIndex());
-  std::string tripleAsString = "<X> <upp> <A>";
-  // std::string tripleAsString = "<a> <next> <b>";
+  const Index& index = testQec->getIndex();
+  DeltaTriples deltaTriples(index);
+  // std::string tripleAsString = "<X> <upp> <A>";
+  std::string tripleAsString = "<a> <next> <b>";
   // std::string tripleAsString = "<c> <upp> <C>";
   // std::string tripleAsString = "<B> <low> <b>";
   // std::string tripleAsString = "<b> <0> <b>";
@@ -414,6 +471,69 @@ TEST_F(DeltaTriplesTest, findTripleInAllPermutationsVisualize) {
 
   // Search the triple in all permutations.
   DeltaTriples::IdTriple idTriple = makeIdTriple(deltaTriples, tripleAsString);
-  deltaTriples.locateTripleInAllPermutations(idTriple, true);
+  auto iterators = deltaTriples.locateTripleInAllPermutations(idTriple);
+
+  // Helper lambda for showing the block from the given permutation that
+  // contains the given (via an iterator) `TripleWithPosition` object.
+  auto showBlock =
+      [&](DeltaTriples::TriplesWithPositions::iterator& tripleWithPosition,
+          const auto& permutation) {
+        // Shortcuts for the triple and its position.
+        // AD_CORRECTNESS_CHECK(tripleWithPosition != tripleWithPosition.end());
+        const size_t blockIndex = tripleWithPosition->blockIndex;
+        const size_t rowIndexInBlock = tripleWithPosition->rowIndexInBlock;
+        const bool existsInIndex = tripleWithPosition->existsInIndex;
+        const DeltaTriples::IdTriple deltaTriple{tripleWithPosition->id1,
+                                                 tripleWithPosition->id2,
+                                                 tripleWithPosition->id3};
+
+        // Get nice names for the permutation and the triple.
+        auto [namePermutation, nameTriple] = getNicePermutationAndTripleName(
+            deltaTriples, permutation, deltaTriple);
+
+        // If we are beyond the last block, there is nothing to show.
+        const vector<CompressedBlockMetadata>& blockMetas =
+            permutation._meta.blockData();
+        if (blockIndex >= blockMetas.size()) {
+          std::cout << endl;
+          std::cout << "All triples in " << namePermutation
+                    << " are smaller than " << nameTriple << std::endl;
+          return;
+        }
+
+        // Read the block and compute all relation `Id`s.
+        const CompressedBlockMetadata& blockMetadata = blockMetas[blockIndex];
+        DecompressedBlock blockTuples =
+            permutation._reader.readAndDecompressBlock(
+                blockMetadata, permutation._file, std::nullopt);
+        std::vector<Id> blockRelationIds =
+            getAllRelationIdsForPermutation(permutation).at(blockIndex);
+        AD_CORRECTNESS_CHECK(blockRelationIds.size() == blockTuples.size());
+
+        // Show the triples in the block.
+        std::cout << std::endl;
+        std::cout << "Block #" << blockIndex << " from " << namePermutation
+                  << " (" << nameTriple << "):" << std::endl;
+        for (size_t i = 0; i < blockTuples.numRows(); ++i) {
+          std::cout << "Row #" << i << ": "
+                    << deltaTriples.getNameForId(blockRelationIds[i]);
+          for (size_t j = 0; j < blockTuples.numColumns(); ++j) {
+            std::cout << " " << deltaTriples.getNameForId(blockTuples(i, j));
+          }
+          if (i == rowIndexInBlock) {
+            std::cout << " <-- "
+                      << (existsInIndex ? "existing triple" : "new triple");
+          }
+          std::cout << std::endl;
+        }
+      };
+
+  // Show block for each permutation.
+  showBlock(iterators.iteratorPOS, index.getImpl().POS());
+  showBlock(iterators.iteratorPSO, index.getImpl().PSO());
+  showBlock(iterators.iteratorSPO, index.getImpl().SPO());
+  showBlock(iterators.iteratorSOP, index.getImpl().SOP());
+  showBlock(iterators.iteratorOSP, index.getImpl().OSP());
+  showBlock(iterators.iteratorOPS, index.getImpl().OPS());
   std::cout << std::endl;
 }

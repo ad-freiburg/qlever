@@ -42,6 +42,11 @@ struct TurtleTriple {
   TripleComponent _object;
 
   bool operator==(const TurtleTriple&) const = default;
+
+  // Return a string representation (used for error message in `DeltaTriples`).
+  std::string toString() {
+    return absl::StrCat(_subject, " ", _predicate, " ", _object.toString());
+  }
 };
 
 inline std::string_view stripAngleBrackets(std::string_view input) {

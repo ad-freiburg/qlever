@@ -84,4 +84,5 @@ constexpr size_t QUEUE_SIZE_AFTER_PARALLEL_PARSING = 10;
 //
 // NOTE: For playing around with `DeltaTriples`, I am setting this to a
 // deliberately small number.
-constexpr size_t BLOCKSIZE_COMPRESSED_METADATA = 3 * 16;  // 1ul << 23u;
+// constexpr size_t BLOCKSIZE_COMPRESSED_METADATA = 3 * 16;
+constexpr size_t BLOCKSIZE_COMPRESSED_METADATA = 1ul << 23u;

@@ -34,7 +34,7 @@ class Index {
   std::unique_ptr<IndexImpl> pimpl_;
 
  public:
-  /// Identifiers for the six possible permutations.
+  // Identifiers for the six possible permutations.
   enum struct Permutation { PSO, POS, SPO, SOP, OPS, OSP };
 
   // Alongside the actual knowledge graph QLever stores additional triples

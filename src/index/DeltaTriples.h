@@ -97,13 +97,29 @@ class DeltaTriples {
     bool existsInIndex;
   };
 
+  // All delta triples located at the same position in the original index.
+  //
+  // NOTE: A lambda does not work here because it has to be `static constexpr`
+  // and then I get a strange warning about "a field ... whose type uses the
+  // anonymous namespace". I also tried overloading `std::less`, but the
+  // required `namespace std { ... }` does not work at this point in the code,
+  // and I didn't want to have it somewhere else than here.
+  struct TriplesWithPositionsCompare {
+    bool operator()(const TripleWithPosition& x,
+                    const TripleWithPosition& y) const {
+      return IdTriple{x.id1, x.id2, x.id3} < IdTriple{y.id1, y.id2, y.id3};
+    }
+  };
+  using TriplesWithPositions =
+      std::set<TripleWithPosition, TriplesWithPositionsCompare>;
+  using TriplesWithPositionsIterator = TriplesWithPositions::iterator;
+
   // Data structures with positions for a particular permutation.
   class TriplesWithPositionsPerBlock {
    private:
-    // A position contains information about the index within the block and the
-    // triple to be inserted (all three `Id`s in the order of the permutation,
-    // including the most significant `Id`).
-    using TriplesWithPositions = std::vector<TripleWithPosition>;
+    // The number of `TripleWithPosition` objects stored.
+    size_t size_ = 0;
+    friend DeltaTriples;
 
    public:
     // Map from block index to position list.
@@ -125,29 +141,23 @@ class DeltaTriples {
       if (it != positionMap_.end()) {
         return it->second;
       } else {
-        return std::vector<TripleWithPosition>{};
+        return {};
       }
     }
 
+    // Get the number of `TripleWithPosition` objects.
+    size_t size() const { return size_; }
+
     // Empty the data structure.
-    void clear() { positionMap_.clear(); }
+    void clear() {
+      positionMap_.clear();
+      size_ = 0;
+    }
   };
 
  private:
   // The index to which these triples are added.
   const Index& index_;
-
-  // The sets of triples added to and subtracted from the original index
-  //
-  // NOTE: The methods for adding and subtracting should make sure that only
-  // triples are added that are not already contained in the original index and
-  // that only triples are subtracted that are contained in the original index.
-  // In particular, no triple can be in both of these sets.
-  ad_utility::HashSet<IdTriple> triplesInserted_;
-  ad_utility::HashSet<IdTriple> triplesDeleted_;
-
-  // The local vocabulary of these triples.
-  LocalVocab localVocab_;
 
   // The positions of the delta triples in each of the six permutations.
   //
@@ -158,6 +168,29 @@ class DeltaTriples {
   TriplesWithPositionsPerBlock triplesWithPositionsPerBlockInSOP_;
   TriplesWithPositionsPerBlock triplesWithPositionsPerBlockInOSP_;
   TriplesWithPositionsPerBlock triplesWithPositionsPerBlockInOPS_;
+
+  // Each inserted or deleted triple needs to know where it is stored in each of
+  // the six `TriplesWithPositionsPerBlock` above.
+  struct TriplesWithPositionsIterators {
+    TriplesWithPositions::iterator iteratorPSO;
+    TriplesWithPositions::iterator iteratorPOS;
+    TriplesWithPositions::iterator iteratorSPO;
+    TriplesWithPositions::iterator iteratorSOP;
+    TriplesWithPositions::iterator iteratorOSP;
+    TriplesWithPositions::iterator iteratorOPS;
+  };
+
+  // The sets of triples added to and subtracted from the original index
+  //
+  // NOTE: The methods `insertTriple` and `deleteTriple` make sure that only
+  // triples are added that are not already contained in the original index and
+  // that only triples are subtracted that are contained in the original index.
+  // In particular, no triple can be in both of these sets.
+  ad_utility::HashMap<IdTriple, TriplesWithPositionsIterators> triplesInserted_;
+  ad_utility::HashMap<IdTriple, TriplesWithPositionsIterators> triplesDeleted_;
+
+  // The local vocabulary of these triples.
+  LocalVocab localVocab_;
 
  public:
   // Construct for given index.
@@ -177,7 +210,7 @@ class DeltaTriples {
   // Delete triple.
   void deleteTriple(TurtleTriple turtleTriple);
 
-  // Get positions for given permutation.
+  // Get `TripleWithPosition` objects for given permutation.
   const TriplesWithPositionsPerBlock& getTriplesWithPositionsPerBlock(
       Index::Permutation permutation) const;
 
@@ -190,19 +223,31 @@ class DeltaTriples {
   //
   // NOTE: This is not `const` because translating to IDs may augment the local
   // vocabulary.
-  IdTriple getIdTriple(TurtleTriple turtleTriple);
+  IdTriple getIdTriple(const TurtleTriple& turtleTriple);
 
-  // Find the position of the given triple in the given permutation (a pair of
-  // block index and index within that block; see the documentation of the class
-  // above for how exactly that position is defined in all cases).
-  void locateTripleInAllPermutations(const IdTriple& idTriple,
-                                     bool visualize = false);
+  // Find the position of the given triple in the given permutation and add it
+  // to each of the six `TriplesWithPositionsPerBlock` maps (one per
+  // permutation). Return the iterators of where it was added (so that we can
+  // easily delete it again from these maps later).
+  //
+  // TODO: The function is name is misleading, since this method does not only
+  // locate, but also add to the mentioned data structures.
+  TriplesWithPositionsIterators locateTripleInAllPermutations(
+      const IdTriple& idTriple);
 
-  // The implementation of the above function.
+  // The implementation of the above function for a given permutation.
   template <typename Permutation>
   TripleWithPosition locateTripleInPermutation(Id id1, Id id2, Id id3,
-                                               Permutation& permutation,
-                                               bool visualize) const;
+                                               Permutation& permutation) const;
+
+  // Erase `TripleWithPosition` object from each `TriplesWithPositionsPerBlock`
+  // list. The argument are iterators for each list, as returned by the method
+  // `locateTripleInAllPermutations` above.
+  //
+  // NOTE: The iterators are invalid afterwards. That is OK, as long as we also
+  // delete the respective entry in `triplesInserted_` or `triplesDeleted_`,
+  // which stores these iterators.
+  void eraseTripleInAllPermutations(TriplesWithPositionsIterators& iterators);
 
   // Resolve ID to name (useful for debugging and testing).
   std::string getNameForId(Id id) const;
