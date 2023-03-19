@@ -17,7 +17,7 @@ auto V = ad_utility::testing::VocabId;
 
 TEST(RelationMetaDataTest, writeReadTest) {
   CompressedBlockMetadata rmdB{
-      {{12, 34}, {46, 11}}, 5, V(0), V(2), V(13), V(24)};
+      {{12, 34}, {46, 11}}, 5, V(0), V(2), V(13), V(24), V(62)};
   CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
 
   ad_utility::serialization::FileWriteSerializer f("_testtmp.rmd");
@@ -39,9 +39,9 @@ TEST(RelationMetaDataTest, writeReadTest) {
 TEST(IndexMetaDataTest, writeReadTest2Hmap) {
   vector<CompressedBlockMetadata> bs;
   bs.push_back(CompressedBlockMetadata{
-      {{12, 34}, {42, 5}}, 5, V(0), V(2), V(13), V(24)});
+      {{12, 34}, {42, 5}}, 5, V(0), V(2), V(13), V(24), V(62)});
   bs.push_back(CompressedBlockMetadata{
-      {{16, 34}, {165, 3}}, 5, V(0), V(2), V(13), V(24)});
+      {{16, 34}, {165, 3}}, 5, V(0), V(2), V(13), V(24), V(62)});
   CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
   CompressedRelationMetadata rmdF2{V(2), 5, 3.0, 43.0, 10};
   IndexMetaDataHmap imd;
@@ -71,9 +71,9 @@ TEST(IndexMetaDataTest, writeReadTest2Mmap) {
   std::string mmapFilename = imdFilename + ".mmap";
   vector<CompressedBlockMetadata> bs;
   bs.push_back(CompressedBlockMetadata{
-      {{12, 34}, {42, 17}}, 5, V(0), V(2), V(13), V(24)});
+      {{12, 34}, {42, 17}}, 5, V(0), V(2), V(13), V(24), V(62)});
   bs.push_back(CompressedBlockMetadata{
-      {{12, 34}, {16, 12}}, 5, V(0), V(2), V(13), V(24)});
+      {{12, 34}, {16, 12}}, 5, V(0), V(2), V(13), V(24), V(62)});
   CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
   CompressedRelationMetadata rmdF2{V(2), 5, 3.0, 43.0, 10};
   // The index MetaData does not have an explicit clear, so we
