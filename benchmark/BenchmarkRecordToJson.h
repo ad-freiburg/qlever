@@ -14,3 +14,9 @@
  *  about the measurments taken by a BenchmarkRecords.
  */
 nlohmann::json benchmarksToJson(const BenchmarkRecords& records);
+
+/*
+ * @brief Create a nlohmann::json array with all relevant informations
+ *  about the measurments taken by all the BenchmarkRecords.
+ */
+nlohmann::json benchmarksToJson(const std::vector<BenchmarkRecords>& records);

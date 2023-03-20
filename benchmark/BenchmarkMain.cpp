@@ -81,16 +81,18 @@ int main(int argc, char** argv) {
 
   // Measuring the time for all registered benchmarks.
   // For measuring and saving the times.
-  const BenchmarkRecords&
+  const std::vector<BenchmarkRecords>&
     records{BenchmarkRegister::runAllRegisteredBenchmarks()};
 
   // Actually processing the arguments.
   if (vm.count("print")) {
-    std::cout << benchmarkRecordsToString(records) << "\n";
-  };
+    std::ranges::for_each(records, [](const BenchmarkRecords& record){
+      std::cout << benchmarkRecordsToString(record) << "\n";
+    }, {});
+  }
 
   if (vm.count("json")) {
     writeJsonToFile(benchmarksToJson(records), jsonFileName,
         vm.count("append"));
-  };
+  }
 }

@@ -8,6 +8,7 @@
 #include <functional>
 #include <string>
 #include <variant>
+#include <memory>
 
 #include "BenchmarkConfiguration.h"
 #include "util/json.h"
@@ -324,43 +325,57 @@ class BenchmarkClassInterface{
 };
 
 /*
- * This class exists as a round about way, of registering functions as
- * benchmarks before entering the main function.
- */
+Used to register your benchmark classes, so that the benchmarking system can
+access and use them.
+*/
 class BenchmarkRegister {
 
-    // Alias for a type, so that we don't repeat things so often.
-    using BenchmarkFunction = std::function<void(BenchmarkRecords*)>;
- 
-    /*
-     * @brief Returns a reference to the static vector of all registered
-     *  benchmark functions.
-     *  That is, the functions, that do the setup needed for a benchmark and
-     *  then record the execution time with the passed BenchmarkRecords.
-     *  The calling of the registered benchmark functions and the processing of
-     *  the recorded times, will be done in a main function later.
-     */
-    static std::vector<BenchmarkFunction>& getRegister();
+  // Alias for a type, so that we don't repeat things so often.
+  using BenchmarkPointer = std::unique_ptr<BenchmarkClassInterface>;
+
+  /*
+   * @brief Returns a reference to the static vector of all registered
+   *  benchmark classe instances.
+   */
+  static std::vector<BenchmarkPointer>& getRegister();
 
   public:
 
-    /*
-     * @brief Register one, or more, functions as benchmark functions
-     *  by creating a global instance of this class. Shouldn't take up much
-     *  space and I couldn't find a better way of doing it.
-     *
-     * @param benchmarks The functions can be passed as
-     *  `{&functionName1, &functionname2, ...}`. For more information about
-     *  their usage see getRegister . 
-     */
-    BenchmarkRegister(const std::vector<BenchmarkFunction>& benchmarks);
+  /*
+   * @brief Register one, or more, benchmark classes, by creating a global
+   *  instance of this class and passing instances of your classes, that
+   *  implemented the `BenchmarkClassInterface`. Shouldn't take up much space
+   *  and I couldn't find a better way of doing it.
+   *
+   * @param benchmarkClasseInstances The memory managment of the passed
+   *  instances will be taken over by `BenchmarkRegister`.
+   */
+  BenchmarkRegister(const std::vector<BenchmarkClassInterface*>&
+    benchmarkClasseInstances);
 
-    // Return a const view of all registered benchmarks.
-    static const std::vector<BenchmarkFunction>& getRegisteredBenchmarks();
+  /*
+  @brief Passes the `BenchmarkConfiguration` to the `parseConfiguration`
+   function of all the registered instances of benchmark classes.
+  */
+  static void passConfigurationToAllRegisteredBenchmarks(
+    const BenchmarkConfiguration& config = BenchmarkConfiguration{});
 
-    /*
-     * @brief Measures all the benchmarks registered per benchmark functions
-     *  and returns the resulting BenchmarkRecords object.
-     */
-    static const BenchmarkRecords runAllRegisteredBenchmarks();
+  /*
+   * @brief Measures all the registered benchmarks and returns the resulting
+   *  BenchmarkRecords objects.
+   *
+   * @return Every benchmark class get's measured with their own
+   *  `BenchmarkRecords`. They should be in the same order as the
+   *  registrations.
+   */
+  static const std::vector<BenchmarkRecords> runAllRegisteredBenchmarks();
+
+  /*
+   * @brief Returns the general metadata of all the registered benchmarks. As
+   *  in, it collects and return the outputs of all those `getMetadata`
+   *  functions from the interface.
+   *
+   * @return They should be in the same order as the registrations.
+   */
+  static const std::vector<BenchmarkMetadata> getAllGeneralMetadata();
 };

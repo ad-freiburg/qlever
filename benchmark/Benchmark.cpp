@@ -6,47 +6,63 @@
 #include <functional>
 #include <string>
 #include <algorithm>
+#include <iterator>
 
 #include "../benchmark/Benchmark.h"
 #include "util/Timer.h"
+#include <bits/ranges_algo.h>
 #include <util/HashMap.h>
 #include <util/Exception.h>
 #include "../benchmark/util/HashMapWithInsertionOrder.h"
 
 // ____________________________________________________________________________
-auto BenchmarkRegister::getRegister() -> std::vector<BenchmarkFunction>& {
-  static std::vector<BenchmarkRegister::BenchmarkFunction>
-    registeredBenchmarks;
-  return registeredBenchmarks;
+auto BenchmarkRegister::getRegister() -> std::vector<BenchmarkPointer>& {
+    static std::vector<BenchmarkRegister::BenchmarkPointer>
+    registeredBenchmarkClassInstances;
+    return registeredBenchmarkClassInstances;
 }
 
 // ____________________________________________________________________________
-auto BenchmarkRegister::getRegisteredBenchmarks() ->
-    const std::vector<BenchmarkFunction>& {
-  return getRegister();
+void BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(
+    const BenchmarkConfiguration& config){
+    for(BenchmarkRegister::BenchmarkPointer& instance:
+    BenchmarkRegister::getRegister()){
+        instance->parseConfiguration(config);
+    }
 }
 
 // ____________________________________________________________________________
-const BenchmarkRecords BenchmarkRegister::runAllRegisteredBenchmarks(){
-  // For measuring and saving the times.
-  BenchmarkRecords records;
+const std::vector<BenchmarkRecords>
+BenchmarkRegister::runAllRegisteredBenchmarks(){
+    // Access to the static memory of all registerd benchmark class instances.
+    auto& registeredBenchmarkClassInstances = BenchmarkRegister::getRegister();
+        
+    // For measuring and saving the times. We have one entry for every
+    // registered benchmark class instance.
+    std::vector<BenchmarkRecords> records(
+        registeredBenchmarkClassInstances.size());
 
-  // Goes through all registered benchmarks and measures them.
-  for (const auto& benchmarkFunction:
-      BenchmarkRegister::getRegisteredBenchmarks()) {
-    benchmarkFunction(&records);
-  }
+    // Go through all registered benchmarks and measure them.
+    for (size_t i = 0; i < registeredBenchmarkClassInstances.size(); i++) {
+      registeredBenchmarkClassInstances.at(i)->runAllBenchmarks(&(records.at(i)));
+    }
 
-  return records;
+    return records;
 }
 
 // ____________________________________________________________________________
 BenchmarkRegister::BenchmarkRegister(
-    const std::vector<BenchmarkRegister::BenchmarkFunction>& benchmarks) {
-  auto& registeredBenchmarks = getRegister();
-  // Append all the benchmarks to the internal register.
-  registeredBenchmarks.insert(registeredBenchmarks.end(), benchmarks.begin(),
-      benchmarks.end());
+    const std::vector<BenchmarkClassInterface*>& benchmarkClassInstances){
+    auto& registeredBenchmarkClassInstances = BenchmarkRegister::getRegister();
+    // Append all the benchmarks to the internal register.
+    registeredBenchmarkClassInstances.reserve(
+        registeredBenchmarkClassInstances.size() +
+        benchmarkClassInstances.size());
+    std::ranges::transform(benchmarkClassInstances,
+        std::back_inserter(registeredBenchmarkClassInstances),
+        [](auto& instance){
+            return BenchmarkRegister::BenchmarkPointer{instance};
+        }, {});
 }
 
 // ____________________________________________________________________________
