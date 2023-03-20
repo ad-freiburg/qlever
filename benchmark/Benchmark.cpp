@@ -9,8 +9,8 @@
 #include <iterator>
 
 #include "../benchmark/Benchmark.h"
+#include "BenchmarkMetadata.h"
 #include "util/Timer.h"
-#include <bits/ranges_algo.h>
 #include <util/HashMap.h>
 #include <util/Exception.h>
 #include "../benchmark/util/HashMapWithInsertionOrder.h"
@@ -29,6 +29,23 @@ void BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(
     BenchmarkRegister::getRegister()){
         instance->parseConfiguration(config);
     }
+}
+
+const std::vector<BenchmarkMetadata> BenchmarkRegister::getAllGeneralMetadata(){
+    // Access to the static memory of all registerd benchmark class instances.
+    auto& registeredBenchmarkClassInstances = BenchmarkRegister::getRegister();
+
+    std::vector<BenchmarkMetadata> allGeneralMetadata{};
+    allGeneralMetadata.reserve(registeredBenchmarkClassInstances.size());
+
+    std::ranges::transform(registeredBenchmarkClassInstances,
+        std::back_inserter(allGeneralMetadata),
+        [](const auto& instance){
+            return instance->getMetadata();
+        }
+        );
+    
+    return allGeneralMetadata;
 }
 
 // ____________________________________________________________________________

@@ -1,7 +1,6 @@
 // Copyright 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (November of 2022, schlegea@informatik.uni-freiburg.de)
-
 #include <iostream>
 #include <fstream>
 #include <ios>
@@ -92,7 +91,8 @@ int main(int argc, char** argv) {
   }
 
   if (vm.count("json")) {
-    writeJsonToFile(benchmarksToJson(records), jsonFileName,
+    writeJsonToFile(zipGeneralMetadataAndBenchmarkRecordsToJson(
+      BenchmarkRegister::getAllGeneralMetadata(), records), jsonFileName,
         vm.count("append"));
   }
 }
