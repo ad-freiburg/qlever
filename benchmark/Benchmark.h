@@ -322,6 +322,9 @@ class BenchmarkClassInterface{
   // Run all your benchmarks. For information on how, and what BenchmarkRecords
   // has to do with it, see the BenchmarkRecords class.
   virtual void runAllBenchmarks(BenchmarkRecords* records) = 0; 
+  
+  // Without this, we get memory problems.
+  virtual ~BenchmarkClassInterface() = default;
 };
 
 /*
