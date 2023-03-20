@@ -107,8 +107,9 @@ std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
 // used to keep track of which values we have already seen. One of these
 // copies could be avoided, but our current uses of this function are
 // currently not at all performance-critical (small `input` and small `T`).
-template <typename T>
-std::vector<T> removeDuplicates(const std::vector<T>& input) {
+auto removeDuplicates(std::ranges::forward_range auto&& input)
+    -> std::vector<std::remove_cvref_t<decltype(*input.begin())>> {
+  using T = std::remove_cvref_t<decltype(*input.begin())>;
   std::vector<T> result;
   ad_utility::HashSet<T> distinctElements;
   for (const T& element : input) {

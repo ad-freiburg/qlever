@@ -14,6 +14,7 @@
 
 #include "engine/idTable/IdTableRow.h"
 #include "global/Id.h"
+#include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Iterators.h"
 #include "util/LambdaHelpers.h"
@@ -524,6 +525,28 @@ class IdTable {
     }
     return IdTable<T, 0, ColumnStorage, IsView::True>{
         std::move(viewStorage), columnIndices.size(), numRows_, allocator_};
+  }
+
+  // Apply the `permutation` to the columns of the table. The permutation must
+  // be a permutation of the values `[0, 1, ..., numColumns - 1 ]`. The column
+  // with the old index `permutation[i]` will become the `i`-th column after the
+  // permutation. For example, `permuteColumns({1, 2, 0})` rotates the columsn
+  // of a table with three columns left by one element.
+  void permuteColumns(std::span<const size_t> permutation) {
+    // First check that the `permutation` is indeed a permutation of the column
+    // indices.
+    std::vector<size_t> check{permutation.begin(), permutation.end()};
+    std::ranges::sort(check);
+    std::vector<size_t> expected(numColumns());
+    std::iota(expected.begin(), expected.end(), size_t{0});
+    AD_CONTRACT_CHECK(check == expected);
+
+    Data newData;
+    newData.reserve(numColumns());
+    for (size_t colIdx : permutation) {
+      newData.push_back(std::move(data().at(colIdx)));
+    }
+    data() = std::move(newData);
   }
 
   // Helper `struct` that stores a pointer to this table and has an `operator()`

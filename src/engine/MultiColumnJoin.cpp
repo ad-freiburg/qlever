@@ -256,7 +256,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
     const IdTable& dynA, const IdTable& dynB,
     const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* dynResult) {
   // check for trivial cases
-  if (dynA.size() == 0 || dynB.size() == 0) {
+  if (dynA.empty() || dynB.empty()) {
     return;
   }
 
@@ -264,40 +264,16 @@ void MultiColumnJoin::computeMultiColumnJoin(
   IdTableView<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
 
-  std::vector<size_t> jcsA, jcsB;
-  for (auto [colA, colB] : joinColumns) {
-    jcsA.push_back(colA);
-    jcsB.push_back(colB);
-  }
+  auto joinColumnData = ad_utility::prepareJoinColumns(
+      joinColumns, a.numColumns(), b.numColumns());
 
-  std::vector<size_t> colsAComplete = jcsA, colsBComplete = jcsB;
+  auto dynASubset = dynA.asColumnSubsetView(joinColumnData.jcsA_);
+  auto dynBSubset = dynB.asColumnSubsetView(joinColumnData.jcsB_);
 
-  for (size_t i = 0; i < a.numColumns(); ++i) {
-    if (!ad_utility::contains(jcsA, i)) {
-      colsAComplete.push_back(i);
-    }
-  }
-
-  for (size_t i = 0; i < b.numColumns(); ++i) {
-    if (!ad_utility::contains(jcsB, i)) {
-      colsBComplete.push_back(i);
-    }
-  }
-
-  auto dynASubset = dynA.asColumnSubsetView(jcsA);
-  auto dynBSubset = dynB.asColumnSubsetView(jcsB);
-
-  auto dynAPermuted = dynA.asColumnSubsetView(colsAComplete);
-  auto dynBPermuted = dynB.asColumnSubsetView(colsBComplete);
+  auto dynAPermuted = dynA.asColumnSubsetView(joinColumnData.colsCompleteA_);
+  auto dynBPermuted = dynB.asColumnSubsetView(joinColumnData.colsCompleteB_);
 
   auto lessThanBoth = std::ranges::lexicographical_compare;
-
-  using RowLeft = typename IdTableView<A_WIDTH>::row_type;
-  using RowRight = typename IdTableView<B_WIDTH>::row_type;
-  auto smallerUndefRanges = [](const auto& row, auto begin, auto end) {
-    return ad_utility::findSmallerUndefRanges(row, std::move(begin),
-                                              std::move(end));
-  };
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(result.numColumns());
   auto addRow = [&, numJoinColumns = joinColumns.size()](const auto& rowA,
@@ -312,5 +288,13 @@ void MultiColumnJoin::computeMultiColumnJoin(
   };
   ad_utility::zipperJoinWithUndef(dynASubset, dynBSubset, lessThanBoth, addRow,
                                   findUndefDispatch, findUndefDispatch);
+
+  // The column order in the result is now
+  // [joinColumns, non-join-columns-a, non-join-columns-b] (which makes the
+  // algorithms above easier), be the order that is expected by the rest of the
+  // code is [columns-a, non-join-columns-b]. Permute the columns to fix the
+  // order.
+  result.permuteColumns(joinColumnData.permutation_);
+
   *dynResult = std::move(result).toDynamic();
 }

@@ -268,49 +268,54 @@ template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
 void OptionalJoin::optionalJoin(
     const IdTable& dynA, const IdTable& dynB,
     const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* dynResult) {
-  AD_FAIL();
-  /*
   // check for trivial cases
   if (dynA.empty()) {
     return;
   }
-
-  const IdTableView<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
-  const IdTableView<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
+  IdTableView<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
+  IdTableView<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
 
-  // TODO<joka921> There is a lot of code duplication from the multicolumn
-  // join.
-  auto lessThanBoth = ad_utility::makeLessThanAndReversed(joinColumns);
+  auto joinColumnData = ad_utility::prepareJoinColumns(
+      joinColumns, a.numColumns(), b.numColumns());
 
-  std::vector<size_t> joinColumnsLeft;
-  std::vector<size_t> joinColumnsRight;
-  for (auto [jc1, jc2] : joinColumns) {
-    joinColumnsLeft.push_back(jc1);
-    joinColumnsRight.push_back(jc2);
-  }
-  using RowLeft = typename IdTableView<A_WIDTH>::row_type;
-  using RowRight = typename IdTableView<B_WIDTH>::row_type;
-  auto smallerUndefRanges =
-      ad_utility::makeSmallerUndefRanges<RowLeft, RowRight>(
-          joinColumns, joinColumnsLeft, joinColumnsRight);
+  auto dynASubset = dynA.asColumnSubsetView(joinColumnData.jcsA_);
+  auto dynBSubset = dynB.asColumnSubsetView(joinColumnData.jcsB_);
 
-  auto combineRows = ad_utility::makeCombineRows(joinColumns, result);
+  auto dynAPermuted = dynA.asColumnSubsetView(joinColumnData.colsCompleteA_);
+  auto dynBPermuted = dynB.asColumnSubsetView(joinColumnData.colsCompleteB_);
 
-  auto notFoundInRightAction = [&result](const auto& row) {
-    std::cout << "Row for optional";
-    for (auto id : row) {
-      std::cout << id << ' ';
-    }
-    std::cout << '\n' << std::endl;
-    createOptionalResult(row, &result);
+  auto lessThanBoth = std::ranges::lexicographical_compare;
+
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable(result.numColumns());
+  auto addRow = [&, numJoinColumns = joinColumns.size()](const auto& rowA,
+                                                         const auto& rowB) {
+    const auto& a = *(dynAPermuted.begin() + rowA.rowIndex());
+    const auto& b = *(dynBPermuted.begin() + rowB.rowIndex());
+    rowAdder(a, b, numJoinColumns, &result);
   };
-  ad_utility::zipperJoinWithUndef(a, b, lessThanBoth.first, lessThanBoth.second,
-                                  combineRows, smallerUndefRanges.first,
-                                  smallerUndefRanges.second,
-                                  notFoundInRightAction);
+
+  auto optionalRowAdder =
+      ad_utility::AddOptionalRowToIdTable(result.numColumns());
+  auto addOptionalRow = [&dynAPermuted, &result,
+                         &optionalRowAdder](const auto& rowA) {
+    const auto& a = *(dynAPermuted.begin() + rowA.rowIndex());
+    optionalRowAdder(a, &result);
+  };
+
+  auto findUndefDispatch = [](const auto& row, auto begin, auto end) {
+    return ad_utility::findSmallerUndefRanges(row, begin, end);
+  };
+  ad_utility::zipperJoinWithUndef(dynASubset, dynBSubset, lessThanBoth, addRow,
+                                  findUndefDispatch, findUndefDispatch,
+                                  addOptionalRow);
+
+  // The column order in the result is now
+  // [joinColumns, non-join-columns-a, non-join-columns-b] (which makes the
+  // algorithms above easier), be the order that is expected by the rest of the
+  // code is [columns-a, non-join-columns-b]. Permute the columns to fix the
+  // order.
+  result.permuteColumns(joinColumnData.permutation_);
 
   *dynResult = std::move(result).toDynamic();
-
-   */
 }

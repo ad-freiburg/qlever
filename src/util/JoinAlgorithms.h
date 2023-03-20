@@ -14,6 +14,49 @@
 
 namespace ad_utility {
 
+struct JoinColumnData {
+  std::vector<size_t> jcsA_;
+  std::vector<size_t> jcsB_;
+  std::vector<size_t> colsCompleteA_;
+  std::vector<size_t> colsCompleteB_;
+  std::vector<size_t> permutation_;
+};
+
+inline JoinColumnData prepareJoinColumns(
+    const vector<array<ColumnIndex, 2>>& joinColumns, size_t numColsA,
+    size_t numColsB) {
+  std::vector<size_t> permutation;
+  permutation.resize(numColsA + numColsB - joinColumns.size());
+  std::vector<size_t> jcsA, jcsB;
+  for (auto [colA, colB] : joinColumns) {
+    permutation.at(colA) = jcsA.size();
+    jcsA.push_back(colA);
+    jcsB.push_back(colB);
+  }
+
+  std::vector<size_t> colsAComplete = jcsA, colsBComplete = jcsB;
+
+  for (size_t i = 0; i < numColsA; ++i) {
+    if (!ad_utility::contains(jcsA, i)) {
+      permutation.at(i) = colsAComplete.size();
+      colsAComplete.push_back(i);
+    }
+  }
+
+  size_t numSkippedJoinColumns = 0;
+  for (size_t i = 0; i < numColsB; ++i) {
+    if (!ad_utility::contains(jcsB, i)) {
+      permutation.at(i - numSkippedJoinColumns + numColsA) =
+          i - numSkippedJoinColumns + numColsA;
+      colsBComplete.push_back(i);
+    } else {
+      ++numSkippedJoinColumns;
+    }
+  }
+  return {std::move(jcsA), std::move(jcsB), std::move(colsAComplete),
+          std::move(colsBComplete), std::move(permutation)};
+}
+
 // For a single `row` of IDs that doesn't contain any UNDEF values find all the
 // iterators in the sorted range `[begin, end)` that are lexicographically
 // smaller than `row`, are compatible with `row` (meaning that on each position
@@ -178,8 +221,9 @@ auto findSmallerUndefRanges(const auto& row, auto begin, auto end)
     -> cppcoro::generator<decltype(begin)> {
   size_t numLastUndefined = 0;
   assert(row.size() > 0);
-  auto it = row.end() - 1;
-  for (; it >= row.begin(); --it) {
+  auto it = std::ranges::rbegin(row);
+  auto rend = std::ranges::rend(row);
+  for (; it < rend; ++it) {
     if (*it != Id::makeUndefined()) {
       break;
     }
@@ -189,14 +233,10 @@ auto findSmallerUndefRanges(const auto& row, auto begin, auto end)
   // TODO<joka921> Replace by a proper for loop that reverses, but iterators
   // that are less than begin() are undefined behavior and currently don't work
   // with IteratorForAccessOperator.
-  for (;;) {
+  for (; it < rend; ++it) {
     if (*it == Id::makeUndefined()) {
       return findSmallerUndefRangesArbitrary(row, begin, end);
     }
-    if (it == row.begin()) {
-      break;
-    }
-    --it;
   }
   if (numLastUndefined == 0) {
     return findSmallerUndefRangesForRowsWithoutUndef(row, begin, end);
@@ -259,6 +299,52 @@ class AddCombinedRowToIdTable {
   }
 };
 
+// TODO<joka921> Comment and test
+class AddOptionalRowToIdTable {
+  std::vector<size_t> numUndefinedPerColumn_;
+
+ public:
+  explicit AddOptionalRowToIdTable(size_t numColumns)
+      : numUndefinedPerColumn_(numColumns) {}
+
+  const std::vector<size_t>& numUndefinedPerColumn() const {
+    return numUndefinedPerColumn_;
+  }
+
+  // TODO<joka921> Do we need a specialized overload for a single column?
+  template <typename ROW_A, int TABLE_WIDTH>
+  void operator()(const ROW_A& row1, IdTableStatic<TABLE_WIDTH>* table) {
+    assert(numUndefinedPerColumn_.size() == table->numColumns());
+    auto& result = *table;
+    result.emplace_back();
+    size_t backIdx = result.size() - 1;
+
+    auto mergeWithUndefined = [](const ValueId a, const ValueId b) {
+      static_assert(ValueId::makeUndefined().getBits() == 0u);
+      return ValueId::fromBits(a.getBits() | b.getBits());
+    };
+
+    // fill the result
+    size_t rIndex = 0;
+    auto add = [&, this](Id id) {
+      numUndefinedPerColumn_[rIndex] += id == Id::makeUndefined();
+      result(backIdx, rIndex) = id;
+      ++rIndex;
+    };
+
+    // TODO<joka921> We could possibly implement an optimization for the case
+    // where we know that there are no undefined values in at least one of the
+    // inputs, but maybe that doesn't help too much.
+    for (size_t col = 0; col < row1.size(); col++) {
+      add(row1[col]);
+    }
+
+    for (size_t col = row1.size(); col < numUndefinedPerColumn_.size(); col++) {
+      add(Id::makeUndefined());
+    }
+  }
+};
+
 [[maybe_unused]] static inline auto noop = [](auto&&...) {};
 // TODO<joka921> Comment, cleanup, move into header.
 template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
@@ -288,7 +374,7 @@ void zipperJoinWithUndef(
           if constexpr (reversed) {
             compatibleRowAction(el, *it);
           } else {
-            compatibleRowAction(el, *it);
+            compatibleRowAction(*it, el);
             cover(it);
           }
         }

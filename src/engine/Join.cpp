@@ -538,58 +538,57 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   if (a.size() == 0 || b.size() == 0) {
     return;
   }
-  AD_FAIL();
-
-  /*
   IdTableStatic<OUT_WIDTH> result = std::move(*dynRes).toStatic<OUT_WIDTH>();
+  [[maybe_unused]] auto checkTimeoutAfterNCalls =
+      checkTimeoutAfterNCallsFactory();
+  auto joinColumnData = ad_utility::prepareJoinColumns(
+      {{jc1, jc2}}, a.numColumns(), b.numColumns());
+
+  auto dynASubset = dynA.asColumnSubsetView(joinColumnData.jcsA_);
+  auto dynBSubset = dynB.asColumnSubsetView(joinColumnData.jcsB_);
+
+  auto dynAPermuted = dynA.asColumnSubsetView(joinColumnData.colsCompleteA_);
+  auto dynBPermuted = dynB.asColumnSubsetView(joinColumnData.colsCompleteB_);
+
+  auto lessThanBoth = std::ranges::lexicographical_compare;
+
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable(result.numColumns());
+  auto addRow = [&](const auto& rowA, const auto& rowB) {
+    const auto& a = *(dynAPermuted.begin() + rowA.rowIndex());
+    const auto& b = *(dynBPermuted.begin() + rowB.rowIndex());
+    rowAdder(a, b, 1, &result);
+  };
+
+  auto joinColumnL = a.getColumn(jc1);
+  auto joinColumnR = b.getColumn(jc2);
+  auto aUndef = std::equal_range(joinColumnL.begin(), joinColumnL.end(),
+                                 ValueId::makeUndefined());
+  auto bUndef = std::equal_range(joinColumnR.begin(), joinColumnR.end(),
+                                 ValueId::makeUndefined());
+  // The undef values are right at the start, so this simplified calculation
+  // should work.
+  auto numUndefA = aUndef.first - aUndef.second;
+  auto numUndefB = bUndef.first - bUndef.second;
+  std::pair aUnd{dynASubset.begin(), dynASubset.begin() + numUndefA};
+  std::pair bUnd{dynBSubset.begin(), dynBSubset.begin() + numUndefB};
   // Cannot just switch l1 and l2 around because the order of
   // items in the result tuples is important.
-  if (a.size() / b.size() > GALLOP_THRESHOLD) {
-    auto lessThan = [jc1, jc2](const auto& rowSmaller, const auto& rowLarger) {
-      return rowSmaller[jc2] < rowLarger[jc1];
+  if (a.size() / b.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
+      numUndefB == 0) {
+    auto inverseAddRow = [&](const auto& rowA, const auto& rowB) {
+      const auto& a = *(dynBPermuted.begin() + rowA.rowIndex());
+      const auto& b = *(dynAPermuted.begin() + rowB.rowIndex());
+      rowAdder(a, b, 1, &result);
     };
-    auto combineRows = [jc2, &result](const auto& rowSmaller,
-                                      const auto& rowLarger) {
-      addCombinedRowToIdTable(rowLarger, rowSmaller, jc2, &result);
-    };
-    ad_utility::gallopingJoin(b, a, lessThan, combineRows);
-  } else if (b.size() / a.size() > GALLOP_THRESHOLD) {
-    auto lessThan = [jc1, jc2](const auto& row1, const auto& row2) {
-      return row1[jc1] < row2[jc2];
-    };
-    auto combineRows = [jc2, &result](const auto& row1, const auto& row2) {
-      addCombinedRowToIdTable(row1, row2, jc2, &result);
-    };
-    ad_utility::gallopingJoin(a, b, lessThan, combineRows);
+    ad_utility::gallopingJoin(dynBSubset, dynASubset,
+                              std::ranges::lexicographical_compare,
+                              inverseAddRow);
+  } else if (b.size() / a.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
+             numUndefB == 0) {
+    ad_utility::gallopingJoin(dynASubset, dynBSubset,
+                              std::ranges::lexicographical_compare, addRow);
   } else {
-    auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory();
-
-    auto lessThan = [jc1, jc2](const auto& row1, const auto& row2) {
-      return row1[jc1] < row2[jc2];
-    };
-    auto lessThanReversed = [jc1, jc2](const auto& row1, const auto& row2) {
-      return row1[jc2] < row2[jc1];
-    };
-    // TODO<joka921>
-    AD_FAIL();
-    /*
-    auto combineRows = [jcs = std::vector{std::array{jc1, jc2}},
-                        jcBitmap = 1ul << jc2,
-                        &result](const auto& row1, const auto& row2) {
-      ad_utility::addCombinedRowToIdTable(row1, row2, jcs, jcBitmap, &result);
-    };
-    auto joinColumnL = a.getColumn(jc1);
-    auto joinColumnR = b.getColumn(jc2);
-    auto aUndef = std::equal_range(joinColumnL.begin(), joinColumnL.end(),
-                                   ValueId::makeUndefined());
-    auto bUndef = std::equal_range(joinColumnR.begin(), joinColumnR.end(),
-                                   ValueId::makeUndefined());
-    // The undef values are right at the start, so this simplified calculation
-    // should work.
-    auto numUndefA = aUndef.first - aUndef.second;
-    auto numUndefB = bUndef.first - bUndef.second;
-    std::pair aUnd{a.begin(), a.begin() + numUndefA};
-    std::pair bUnd{b.begin(), b.begin() + numUndefB};
+    // TODO<joka921> Reinstate the timeout checks.
     auto findSmallerUndefRangeLeft =
         [=](auto&&...) -> cppcoro::generator<decltype(aUnd.first)> {
       for (auto it = aUnd.first; it != aUnd.second; ++it) {
@@ -603,18 +602,22 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
       }
     };
 
-    // TODO<joka921> This does not yet respect the timeout.
-    // ad_utility::zipperJoin(a, b, lessThan, combineRows);
-    ad_utility::zipperJoinWithUndef(a, b, lessThan, lessThanReversed,
-                                    combineRows, findSmallerUndefRangeLeft,
+    ad_utility::zipperJoinWithUndef(dynASubset, dynBSubset, lessThanBoth,
+                                    addRow, findSmallerUndefRangeLeft,
                                     findSmallerUndefRangeRight);
+
+    // The column order in the result is now
+    // [joinColumns, non-join-columns-a, non-join-columns-b] (which makes the
+    // algorithms above easier), be the order that is expected by the rest of
+    // the code is [columns-a, non-join-columns-b]. Permute the columns to fix
+    // the order.
+    result.permuteColumns(joinColumnData.permutation_);
   }
   *dynRes = std::move(result).toDynamic();
 
   LOG(DEBUG) << "Join done.\n";
   LOG(DEBUG) << "Result: width = " << dynRes->numColumns()
              << ", size = " << dynRes->size() << "\n";
-  */
 }
 
 // ______________________________________________________________________________
