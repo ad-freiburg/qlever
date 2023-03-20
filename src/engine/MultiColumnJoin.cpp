@@ -275,12 +275,11 @@ void MultiColumnJoin::computeMultiColumnJoin(
 
   auto lessThanBoth = std::ranges::lexicographical_compare;
 
-  auto rowAdder = ad_utility::AddCombinedRowToIdTable(result.numColumns());
-  auto addRow = [&, numJoinColumns = joinColumns.size()](const auto& rowA,
-                                                         const auto& rowB) {
-    const auto& a = *(dynAPermuted.begin() + rowA.rowIndex());
-    const auto& b = *(dynBPermuted.begin() + rowB.rowIndex());
-    rowAdder(a, b, numJoinColumns, &result);
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable(
+      result.numColumns(), joinColumns.size(), &dynAPermuted, &dynBPermuted,
+      &result);
+  auto addRow = [&rowAdder](const auto& rowA, const auto& rowB) {
+    rowAdder(rowA.rowIndex(), rowB.rowIndex());
   };
 
   auto findUndefDispatch = [](const auto& row, auto begin, auto end) {
@@ -288,6 +287,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
   };
   ad_utility::zipperJoinWithUndef(dynASubset, dynBSubset, lessThanBoth, addRow,
                                   findUndefDispatch, findUndefDispatch);
+  rowAdder.flush();
 
   // The column order in the result is now
   // [joinColumns, non-join-columns-a, non-join-columns-b] (which makes the

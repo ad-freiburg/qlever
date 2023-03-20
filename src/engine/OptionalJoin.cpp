@@ -287,12 +287,11 @@ void OptionalJoin::optionalJoin(
 
   auto lessThanBoth = std::ranges::lexicographical_compare;
 
-  auto rowAdder = ad_utility::AddCombinedRowToIdTable(result.numColumns());
-  auto addRow = [&, numJoinColumns = joinColumns.size()](const auto& rowA,
-                                                         const auto& rowB) {
-    const auto& a = *(dynAPermuted.begin() + rowA.rowIndex());
-    const auto& b = *(dynBPermuted.begin() + rowB.rowIndex());
-    rowAdder(a, b, numJoinColumns, &result);
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable(
+      result.numColumns(), joinColumns.size(), &dynAPermuted, &dynBPermuted,
+      &result);
+  auto addRow = [&rowAdder](const auto& rowA, const auto& rowB) {
+    rowAdder(rowA.rowIndex(), rowB.rowIndex());
   };
 
   auto optionalRowAdder =
@@ -300,7 +299,7 @@ void OptionalJoin::optionalJoin(
   auto addOptionalRow = [&dynAPermuted, &result,
                          &optionalRowAdder](const auto& rowA) {
     const auto& a = *(dynAPermuted.begin() + rowA.rowIndex());
-    optionalRowAdder(a, &result);
+    std::cout << "pushing" optionalRowAdder(a, &result);
   };
 
   auto findUndefDispatch = [](const auto& row, auto begin, auto end) {
@@ -315,7 +314,7 @@ void OptionalJoin::optionalJoin(
   // algorithms above easier), be the order that is expected by the rest of the
   // code is [columns-a, non-join-columns-b]. Permute the columns to fix the
   // order.
+  rowAdder.flush();
   result.permuteColumns(joinColumnData.permutation_);
-
   *dynResult = std::move(result).toDynamic();
 }

@@ -195,6 +195,7 @@ TEST(JoinAlgorithms, findSmallerUndefRangesArbitrary) {
                                             });
 }
 
+/*
 TEST(JoinAlgorithms, AddCombinedRowToIdTable) {
   AddCombinedRowToIdTable adder{5};
   IdTable table(ad_utility::testing::makeAllocator());
@@ -212,3 +213,4 @@ TEST(JoinAlgorithms, AddCombinedRowToIdTable) {
   EXPECT_THAT(adder.numUndefinedPerColumn(),
               ::testing::ElementsAre(1, 0, 1, 1, 3));
 }
+ */

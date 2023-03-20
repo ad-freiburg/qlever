@@ -552,11 +552,10 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
 
   auto lessThanBoth = std::ranges::lexicographical_compare;
 
-  auto rowAdder = ad_utility::AddCombinedRowToIdTable(result.numColumns());
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable(
+      result.numColumns(), 1, &dynAPermuted, &dynBPermuted, &result);
   auto addRow = [&](const auto& rowA, const auto& rowB) {
-    const auto& a = *(dynAPermuted.begin() + rowA.rowIndex());
-    const auto& b = *(dynBPermuted.begin() + rowB.rowIndex());
-    rowAdder(a, b, 1, &result);
+    rowAdder(rowA.rowIndex(), rowB.rowIndex());
   };
 
   auto joinColumnL = a.getColumn(jc1);
@@ -576,9 +575,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   if (a.size() / b.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
       numUndefB == 0) {
     auto inverseAddRow = [&](const auto& rowA, const auto& rowB) {
-      const auto& a = *(dynBPermuted.begin() + rowA.rowIndex());
-      const auto& b = *(dynAPermuted.begin() + rowB.rowIndex());
-      rowAdder(b, a, 1, &result);
+      rowAdder(rowB.rowIndex(), rowA.rowIndex());
     };
     ad_utility::gallopingJoin(dynBSubset, dynASubset,
                               std::ranges::lexicographical_compare,
@@ -605,14 +602,14 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     ad_utility::zipperJoinWithUndef(dynASubset, dynBSubset, lessThanBoth,
                                     addRow, findSmallerUndefRangeLeft,
                                     findSmallerUndefRangeRight);
-
-    // The column order in the result is now
-    // [joinColumns, non-join-columns-a, non-join-columns-b] (which makes the
-    // algorithms above easier), be the order that is expected by the rest of
-    // the code is [columns-a, non-join-columns-b]. Permute the columns to fix
-    // the order.
-    result.permuteColumns(joinColumnData.permutation_);
   }
+  rowAdder.flush();
+  // The column order in the result is now
+  // [joinColumns, non-join-columns-a, non-join-columns-b] (which makes the
+  // algorithms above easier), be the order that is expected by the rest of
+  // the code is [columns-a, non-join-columns-b]. Permute the columns to fix
+  // the order.
+  result.permuteColumns(joinColumnData.permutation_);
   *dynRes = std::move(result).toDynamic();
 
   LOG(DEBUG) << "Join done.\n";

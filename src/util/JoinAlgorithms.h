@@ -230,9 +230,6 @@ auto findSmallerUndefRanges(const auto& row, auto begin, auto end)
     ++numLastUndefined;
   }
 
-  // TODO<joka921> Replace by a proper for loop that reverses, but iterators
-  // that are less than begin() are undefined behavior and currently don't work
-  // with IteratorForAccessOperator.
   for (; it < rend; ++it) {
     if (*it == Id::makeUndefined()) {
       return findSmallerUndefRangesArbitrary(row, begin, end);
@@ -247,55 +244,99 @@ auto findSmallerUndefRanges(const auto& row, auto begin, auto end)
 }
 
 // TODO<joka921> Comment and test
+template <typename Input1, typename Input2, typename ResultTable>
 class AddCombinedRowToIdTable {
   std::vector<size_t> numUndefinedPerColumn_;
+  size_t numJoinColumns_;
+  const Input1* input1_;
+  const Input2* input2_;
+  ResultTable* resultTable_;
+  std::vector<std::array<size_t, 2>> indexBuffer_;
+
+  size_t bufferSize_ = 100'000;
 
  public:
-  explicit AddCombinedRowToIdTable(size_t numColumns)
-      : numUndefinedPerColumn_(numColumns) {}
+  explicit AddCombinedRowToIdTable(size_t numColumns, size_t numJoinColumns,
+                                   const Input1* input1, const Input2* input2,
+                                   ResultTable* resultTable)
+      : numUndefinedPerColumn_(numColumns),
+        numJoinColumns_{numJoinColumns},
+        input1_{input1},
+        input2_{input2},
+        resultTable_{resultTable} {}
 
   const std::vector<size_t>& numUndefinedPerColumn() const {
     return numUndefinedPerColumn_;
   }
 
-  // TODO<joka921> Do we need a specialized overload for a single column?
-  template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>
-  void operator()(const ROW_A& row1, const ROW_B& row2,
-                  const size_t numJoinColumns,
-                  IdTableStatic<TABLE_WIDTH>* table) {
-    assert(numUndefinedPerColumn_.size() ==
-           row1.size() + row2.size() - numJoinColumns);
-    auto& result = *table;
-    result.emplace_back();
-    size_t backIdx = result.size() - 1;
+  void operator()(size_t rowIndexA, size_t rowIndexB) {
+    indexBuffer_.push_back(std::array{rowIndexA, rowIndexB});
+    std::cout << "pushing indices " << rowIndexA << ' ' << rowIndexB
+              << std::endl;
+    if (indexBuffer_.size() > bufferSize_) {
+      flush();
+    }
+  }
+
+  ~AddCombinedRowToIdTable() {
+    if (!indexBuffer_.empty()) {
+      AD_THROW(
+          "Before destroying an object of type AddCombinedRowToIdTable, the "
+          "`flush` method must be called. Please report this");
+    }
+  }
+
+  void flush() {
+    auto& result = *resultTable_;
+    size_t oldSize = result.size();
+    result.resize(oldSize + indexBuffer_.size());
 
     auto mergeWithUndefined = [](const ValueId a, const ValueId b) {
       static_assert(ValueId::makeUndefined().getBits() == 0u);
       return ValueId::fromBits(a.getBits() | b.getBits());
     };
 
-    // fill the result
-    size_t rIndex = 0;
-    auto add = [&, this](Id id) {
-      numUndefinedPerColumn_[rIndex] += id == Id::makeUndefined();
-      result(backIdx, rIndex) = id;
-      ++rIndex;
-    };
-
-    // TODO<joka921> We could possibly implement an optimization for the case
-    // where we know that there are no undefined values in at least one of the
-    // inputs, but maybe that doesn't help too much.
-    for (size_t col = 0; col < numJoinColumns; col++) {
-      add(mergeWithUndefined(row1[col], row2[col]));
+    size_t resultColIdx = 0;
+    // TODO<joka921> Implement prefetching.
+    // TODO<joka921> Get rid of the code duplication.
+    for (size_t col = 0; col < numJoinColumns_; col++) {
+      const auto& col1 = input1_->getColumn(col);
+      const auto& col2 = input2_->getColumn(col);
+      decltype(auto) resultCol = result.getColumn(resultColIdx);
+      size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
+      for (size_t i = 0; i < indexBuffer_.size(); ++i) {
+        auto [idx1, idx2] = indexBuffer_[i];
+        auto resultId = mergeWithUndefined(col1[idx1], col2[idx2]);
+        numUndef += resultId == Id::makeUndefined();
+        resultCol[oldSize + i] = resultId;
+      }
+      ++resultColIdx;
     }
 
-    for (size_t col = numJoinColumns; col < row1.size(); ++col) {
-      add(row1[col]);
+    for (size_t col = numJoinColumns_; col < input1_->numColumns(); ++col) {
+      const auto& col1 = input1_->getColumn(col);
+      decltype(auto) resultCol = result.getColumn(resultColIdx);
+      size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
+      for (size_t i = 0; i < indexBuffer_.size(); ++i) {
+        Id resultId = col1[indexBuffer_[i][0]];
+        numUndef += resultId == Id::makeUndefined();
+        resultCol[oldSize + i] = resultId;
+      }
+      ++resultColIdx;
     }
 
-    for (size_t col = numJoinColumns; col < row2.size(); col++) {
-      add(row2[col]);
+    for (size_t col = numJoinColumns_; col < input2_->numColumns(); col++) {
+      const auto& col2 = input2_->getColumn(col);
+      decltype(auto) resultCol = result.getColumn(resultColIdx);
+      size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
+      for (size_t i = 0; i < indexBuffer_.size(); ++i) {
+        Id resultId = col2[indexBuffer_[i][1]];
+        numUndef += resultId == Id::makeUndefined();
+        resultCol[oldSize + i] = resultId;
+      }
+      ++resultColIdx;
     }
+    indexBuffer_.clear();
   }
 };
 
@@ -318,11 +359,6 @@ class AddOptionalRowToIdTable {
     auto& result = *table;
     result.emplace_back();
     size_t backIdx = result.size() - 1;
-
-    auto mergeWithUndefined = [](const ValueId a, const ValueId b) {
-      static_assert(ValueId::makeUndefined().getBits() == 0u);
-      return ValueId::fromBits(a.getBits() | b.getBits());
-    };
 
     // fill the result
     size_t rIndex = 0;
