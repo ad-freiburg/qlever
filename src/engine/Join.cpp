@@ -578,7 +578,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     auto inverseAddRow = [&](const auto& rowA, const auto& rowB) {
       const auto& a = *(dynBPermuted.begin() + rowA.rowIndex());
       const auto& b = *(dynAPermuted.begin() + rowB.rowIndex());
-      rowAdder(a, b, 1, &result);
+      rowAdder(b, a, 1, &result);
     };
     ad_utility::gallopingJoin(dynBSubset, dynASubset,
                               std::ranges::lexicographical_compare,
