@@ -14,7 +14,7 @@
 #include "util/json.h"
 #include "util/File.h"
 #include "../benchmark/Benchmark.h"
-#include "../benchmark/BenchmarkRecordToJson.h"
+#include "../benchmark/BenchmarkToJson.h"
 #include "../benchmark/BenchmarkRecordToString.h"
 
 

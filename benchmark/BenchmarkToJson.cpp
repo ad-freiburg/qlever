@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <iterator>
 
-#include "../benchmark/BenchmarkRecordToJson.h"
+#include "../benchmark/BenchmarkToJson.h"
 #include "Benchmark.h"
 
 // ___________________________________________________________________________
