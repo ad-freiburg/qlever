@@ -312,12 +312,19 @@ class BenchmarkClassInterface{
   public:
 
   // Used to transport values, that you want to set at runtime.
-  virtual void parseConfiguration(const BenchmarkConfiguration& config) = 0;
+  virtual void parseConfiguration(
+    [[maybe_unused]] const BenchmarkConfiguration& config){
+    // Default behaviour.
+    return;
+  };
 
   // Sometimes, there is some overrarching metadata, that you don't want to set
   // for every single little thing, because it's always the same. You can give
   // those here.
-  virtual const BenchmarkMetadata getMetadata() const = 0;
+  virtual const BenchmarkMetadata getMetadata() const{
+    // Default behaviour.
+    return BenchmarkMetadata{};
+  }
 
   // Run all your benchmarks. For information on how, and what BenchmarkRecords
   // has to do with it, see the BenchmarkRecords class.
