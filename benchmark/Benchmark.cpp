@@ -39,13 +39,15 @@ BenchmarkRegister::runAllRegisteredBenchmarks(){
         
     // For measuring and saving the times. We have one entry for every
     // registered benchmark class instance.
-    std::vector<BenchmarkRecords> records(
-        registeredBenchmarkClassInstances.size());
+    std::vector<BenchmarkRecords> records{};
+    records.reserve(registeredBenchmarkClassInstances.size());
 
     // Go through all registered benchmarks and measure them.
-    for (size_t i = 0; i < registeredBenchmarkClassInstances.size(); i++) {
-      registeredBenchmarkClassInstances.at(i)->runAllBenchmarks(&(records.at(i)));
-    }
+    std::ranges::transform(registeredBenchmarkClassInstances,
+        std::back_inserter(records),
+        [](BenchmarkRegister::BenchmarkPointer& instance){
+            return instance->runAllBenchmarks();
+        });
 
     return records;
 }

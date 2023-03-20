@@ -326,9 +326,12 @@ class BenchmarkClassInterface{
     return BenchmarkMetadata{};
   }
 
-  // Run all your benchmarks. For information on how, and what BenchmarkRecords
-  // has to do with it, see the BenchmarkRecords class.
-  virtual void runAllBenchmarks(BenchmarkRecords* records) = 0; 
+  /*
+  Run all your benchmarks. The `BenchmarkRecords` class is a management
+  class for measuering the execution time of functions and organizing the
+  results.
+  */
+  virtual BenchmarkRecords runAllBenchmarks() = 0; 
   
   // Without this, we get memory problems.
   virtual ~BenchmarkClassInterface() = default;
