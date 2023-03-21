@@ -17,7 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
-        compiler-version: [11, 12, 13, 14, 15]
+        compiler-version: [11, 12, 13, 14, 15, 16]
         warnings: [  "-Wall -Wextra -Werror " ]
         build-type: [Release]
         exclude:
@@ -27,6 +27,8 @@ jobs:
             compiler-version: 14
           - compiler: gcc
             compiler-version: 15
+          - compiler: gcc
+            compiler-version: 16
           - compiler: clang
             compiler-version: 11
           - compiler: clang
@@ -35,7 +37,7 @@ jobs:
           - compiler: clang
             asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
           - compiler: clang
-            compiler-version: 15
+            compiler-version: 16
             ubsan-flags: " -fsanitize=undefined"
 
     runs-on: ubuntu-22.04
@@ -77,6 +79,16 @@ jobs:
         sudo ./llvm.sh 15 all
         sudo apt install clang-15
       if :  matrix.compiler == 'clang' && matrix.compiler-version == 15
+    - name: Install clang 16
+      # The sed command fixes a bug in `llvm.sh` in combination with the latest version of
+      # `apt-key`. Without it the GPG key for the llvm repository is downloaded but deleted
+      # immediately after.
+      run:  |
+        wget https://apt.llvm.org/llvm.sh
+        sudo chmod +x llvm.sh
+        sed   's/apt-key del/echo/' llvm.sh -iy
+        sudo ./llvm.sh 16 all
+      if :  matrix.compiler == 'clang' && matrix.compiler-version == 16
 
     - name: Python dependencies
       run: sudo apt-get install python3-yaml unzip pkg-config python3-icu

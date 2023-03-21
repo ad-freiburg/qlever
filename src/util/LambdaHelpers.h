@@ -34,14 +34,14 @@ struct AssignableLambdaImpl {
   }
 
   AssignableLambdaImpl& operator=(const AssignableLambdaImpl& other) requires
-      std::is_copy_constructible_v<AssignableLambdaImpl> {
+      std::is_copy_constructible_v<Lambda> {
     std::destroy_at(&_lambda);
     std::construct_at(&_lambda, other._lambda);
     return *this;
   }
 
   AssignableLambdaImpl& operator=(AssignableLambdaImpl&& other) noexcept
-      requires std::is_move_constructible_v<AssignableLambdaImpl> {
+      requires std::is_move_constructible_v<Lambda> {
     std::destroy_at(&_lambda);
     std::construct_at(&_lambda, std::move(other._lambda));
     return *this;
