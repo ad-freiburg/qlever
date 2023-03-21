@@ -14,6 +14,7 @@
 #include <util/HashMap.h>
 #include <util/Exception.h>
 #include "../benchmark/util/HashMapWithInsertionOrder.h"
+#include "../benchmark/util/TransformVector.h"
 
 // ____________________________________________________________________________
 auto BenchmarkRegister::getRegister() -> std::vector<BenchmarkPointer>& {
@@ -32,56 +33,34 @@ void BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(
 }
 
 const std::vector<BenchmarkMetadata> BenchmarkRegister::getAllGeneralMetadata(){
-    // Access to the static memory of all registerd benchmark class instances.
-    auto& registeredBenchmarkClassInstances = BenchmarkRegister::getRegister();
-
-    std::vector<BenchmarkMetadata> allGeneralMetadata{};
-    allGeneralMetadata.reserve(registeredBenchmarkClassInstances.size());
-
-    std::ranges::transform(registeredBenchmarkClassInstances,
-        std::back_inserter(allGeneralMetadata),
-        [](const auto& instance){
-            return instance->getMetadata();
-        }
-        );
-    
-    return allGeneralMetadata;
+    // Go through every registered instance of a benchmark class and collect
+    // their general metadata.
+    return transformVector<BenchmarkRegister::BenchmarkPointer,
+    BenchmarkMetadata>(BenchmarkRegister::getRegister(),
+    [](const auto& instance){return instance->getMetadata();});
 }
 
 // ____________________________________________________________________________
 const std::vector<BenchmarkRecords>
 BenchmarkRegister::runAllRegisteredBenchmarks(){
-    // Access to the static memory of all registerd benchmark class instances.
-    auto& registeredBenchmarkClassInstances = BenchmarkRegister::getRegister();
-        
-    // For measuring and saving the times. We have one entry for every
-    // registered benchmark class instance.
-    std::vector<BenchmarkRecords> records{};
-    records.reserve(registeredBenchmarkClassInstances.size());
-
-    // Go through all registered benchmarks and measure them.
-    std::ranges::transform(registeredBenchmarkClassInstances,
-        std::back_inserter(records),
-        [](BenchmarkRegister::BenchmarkPointer& instance){
-            return instance->runAllBenchmarks();
-        });
-
-    return records;
+    // Go through every registered instance of a benchmark class, measure their
+    // benchmarks and return the resulting `BenchmarkRecords` in a new vector.
+    return transformVector<BenchmarkRegister::BenchmarkPointer,
+    BenchmarkRecords>(BenchmarkRegister::getRegister(),
+    [](BenchmarkRegister::BenchmarkPointer& instance){
+        return instance->runAllBenchmarks();
+    });
 }
 
 // ____________________________________________________________________________
 BenchmarkRegister::BenchmarkRegister(
     const std::vector<BenchmarkClassInterface*>& benchmarkClassInstances){
-    auto& registeredBenchmarkClassInstances = BenchmarkRegister::getRegister();
     // Append all the benchmarks to the internal register.
-    registeredBenchmarkClassInstances.reserve(
-        registeredBenchmarkClassInstances.size() +
-        benchmarkClassInstances.size());
-    std::ranges::transform(benchmarkClassInstances,
-        std::back_inserter(registeredBenchmarkClassInstances),
+    transformVectorAndAppend(benchmarkClassInstances,
+        &BenchmarkRegister::getRegister(),
         [](auto& instance){
             return BenchmarkRegister::BenchmarkPointer{instance};
-        }, {});
+        });
 }
 
 // ____________________________________________________________________________
