@@ -5,7 +5,6 @@
 #include "index/DeltaTriples.h"
 
 #include "absl/strings/str_cat.h"
-#include "engine/ExportQueryExecutionTrees.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "parser/TurtleParser.h"
@@ -15,31 +14,30 @@
 void DeltaTriples::clear() {
   triplesInserted_.clear();
   triplesDeleted_.clear();
-  triplesWithPositionsPerBlockInPSO_.clear();
-  triplesWithPositionsPerBlockInPOS_.clear();
-  triplesWithPositionsPerBlockInSPO_.clear();
-  triplesWithPositionsPerBlockInSOP_.clear();
-  triplesWithPositionsPerBlockInOSP_.clear();
-  triplesWithPositionsPerBlockInOPS_.clear();
+  locatedTriplesPerBlockInPSO_.clear();
+  locatedTriplesPerBlockInPOS_.clear();
+  locatedTriplesPerBlockInSPO_.clear();
+  locatedTriplesPerBlockInSOP_.clear();
+  locatedTriplesPerBlockInOSP_.clear();
+  locatedTriplesPerBlockInOPS_.clear();
 }
 
 // ____________________________________________________________________________
 void DeltaTriples::eraseTripleInAllPermutations(
-    TriplesWithPositionsIterators& iterators) {
+    DeltaTriples::LocatedTripleHandles& handles) {
   // Helper lambda for erasing for one particular permutation.
-  auto erase = [](TriplesWithPositions::iterator tripleWithPosition,
-                  TriplesWithPositionsPerBlock& triplesWithPositionsPerBlock) {
-    size_t blockIndex = tripleWithPosition->blockIndex;
-    triplesWithPositionsPerBlock.positionMap_[blockIndex].erase(
-        tripleWithPosition);
+  auto erase = [](LocatedTriples::iterator locatedTriple,
+                  LocatedTriplesPerBlock& locatedTriplesPerBlock) {
+    size_t blockIndex = locatedTriple->blockIndex;
+    locatedTriplesPerBlock.map_[blockIndex].erase(locatedTriple);
   };
   // Now erase for all permutations.
-  erase(iterators.iteratorPSO, triplesWithPositionsPerBlockInPSO_);
-  erase(iterators.iteratorPOS, triplesWithPositionsPerBlockInPOS_);
-  erase(iterators.iteratorSPO, triplesWithPositionsPerBlockInSPO_);
-  erase(iterators.iteratorSOP, triplesWithPositionsPerBlockInSOP_);
-  erase(iterators.iteratorOSP, triplesWithPositionsPerBlockInOSP_);
-  erase(iterators.iteratorOPS, triplesWithPositionsPerBlockInOPS_);
+  erase(handles.forPSO, locatedTriplesPerBlockInPSO_);
+  erase(handles.forPOS, locatedTriplesPerBlockInPOS_);
+  erase(handles.forSPO, locatedTriplesPerBlockInSPO_);
+  erase(handles.forSOP, locatedTriplesPerBlockInSOP_);
+  erase(handles.forOSP, locatedTriplesPerBlockInOSP_);
+  erase(handles.forOPS, locatedTriplesPerBlockInOPS_);
 };
 
 // ____________________________________________________________________________
@@ -56,7 +54,7 @@ void DeltaTriples::insertTriple(TurtleTriple turtleTriple) {
   }
   // When re-inserting a previously deleted triple, we need to remove the triple
   // from `triplesDeleted_` AND remove it from all
-  // `triplesWithPositionsPerBlock` (one per permutation) as well.
+  // `locatedTriplesPerBlock` (one per permutation) as well.
   if (triplesDeleted_.contains(idTriple)) {
     eraseTripleInAllPermutations(triplesDeleted_.at(idTriple));
     triplesDeleted_.erase(idTriple);
@@ -65,9 +63,9 @@ void DeltaTriples::insertTriple(TurtleTriple turtleTriple) {
   // Locate the triple in one of the permutations (it does not matter which one)
   // to check if it already exists in the index. If it already exists, the
   // insertion is invalid, otherwise insert it.
-  TripleWithPosition tripleWithPosition = locateTripleInPermutation(
+  LocatedTriple locatedTriple = locateTripleInPermutation(
       idTriple[1], idTriple[0], idTriple[2], index_.getImpl().PSO());
-  if (tripleWithPosition.existsInIndex) {
+  if (locatedTriple.existsInIndex) {
     throw std::runtime_error(
         absl::StrCat("Triple \"", turtleTriple.toString(),
                      "\" already exists in the original index",
@@ -91,7 +89,7 @@ void DeltaTriples::deleteTriple(TurtleTriple turtleTriple) {
   }
   // When deleting a previously inserted triple (that did not exist in the index
   // before), we need to remove the triple from `triplesInserted_` AND remove it
-  // from all `triplesWithPositionsPerBlock` (one per permutation) as well.
+  // from all `locatedTriplesPerBlock` (one per permutation) as well.
   if (triplesInserted_.contains(idTriple)) {
     eraseTripleInAllPermutations(triplesInserted_.at(idTriple));
     triplesInserted_.erase(idTriple);
@@ -100,9 +98,9 @@ void DeltaTriples::deleteTriple(TurtleTriple turtleTriple) {
   // Locate the triple in one of the permutations (it does not matter which one)
   // to check if it actually exists in the index. If it does not exist, the
   // deletion is invalid, otherwise add as deleted triple.
-  TripleWithPosition tripleWithPosition = locateTripleInPermutation(
+  LocatedTriple locatedTriple = locateTripleInPermutation(
       idTriple[1], idTriple[0], idTriple[2], index_.getImpl().PSO());
-  if (!tripleWithPosition.existsInIndex) {
+  if (!locatedTriple.existsInIndex) {
     throw std::runtime_error(
         absl::StrCat("Triple \"", turtleTriple.toString(),
                      "\" does not exist in the original index",
@@ -113,30 +111,28 @@ void DeltaTriples::deleteTriple(TurtleTriple turtleTriple) {
 }
 
 // ____________________________________________________________________________
-const DeltaTriples::TriplesWithPositionsPerBlock&
-DeltaTriples::getTriplesWithPositionsPerBlock(
+const LocatedTriplesPerBlock& DeltaTriples::getTriplesWithPositionsPerBlock(
     Index::Permutation permutation) const {
   switch (permutation) {
     case Index::Permutation::PSO:
-      return triplesWithPositionsPerBlockInPSO_;
+      return locatedTriplesPerBlockInPSO_;
     case Index::Permutation::POS:
-      return triplesWithPositionsPerBlockInPOS_;
+      return locatedTriplesPerBlockInPOS_;
     case Index::Permutation::SPO:
-      return triplesWithPositionsPerBlockInSPO_;
+      return locatedTriplesPerBlockInSPO_;
     case Index::Permutation::SOP:
-      return triplesWithPositionsPerBlockInSOP_;
+      return locatedTriplesPerBlockInSOP_;
     case Index::Permutation::OSP:
-      return triplesWithPositionsPerBlockInOSP_;
+      return locatedTriplesPerBlockInOSP_;
     case Index::Permutation::OPS:
-      return triplesWithPositionsPerBlockInOPS_;
+      return locatedTriplesPerBlockInOPS_;
     default:
       AD_FAIL();
   }
 }
 
 // ____________________________________________________________________________
-DeltaTriples::IdTriple DeltaTriples::getIdTriple(
-    const TurtleTriple& turtleTriple) {
+IdTriple DeltaTriples::getIdTriple(const TurtleTriple& turtleTriple) {
   TripleComponent subject = std::move(turtleTriple._subject);
   TripleComponent predicate = std::move(turtleTriple._predicate);
   TripleComponent object = std::move(turtleTriple._object);
@@ -147,55 +143,28 @@ DeltaTriples::IdTriple DeltaTriples::getIdTriple(
 }
 
 // ____________________________________________________________________________
-DeltaTriples::TriplesWithPositionsIterators
-DeltaTriples::locateTripleInAllPermutations(const IdTriple& idTriple) {
-  // Helper lambda for adding `tripleWithPosition` to given
-  // `TriplesWithPositionsPerBlock` list.
-  auto addTripleWithPosition =
-      [&](const TripleWithPosition& tripleWithPosition,
-          TriplesWithPositionsPerBlock& triplesWithPositionsPerBlock)
-      -> TriplesWithPositions::iterator {
-    TriplesWithPositions& triplesWithPositions =
-        triplesWithPositionsPerBlock
-            .positionMap_[tripleWithPosition.blockIndex];
-    auto [iterator, wasInserted] =
-        triplesWithPositions.emplace(tripleWithPosition);
-    AD_CORRECTNESS_CHECK(wasInserted == true);
-    AD_CORRECTNESS_CHECK(iterator != triplesWithPositions.end());
-    ++triplesWithPositionsPerBlock.size_;
-    return iterator;
-  };
-
-  // Now locate the triple in each permutation and add it to the correct
-  // `TriplesWithPositionsPerBlock` list.
+DeltaTriples::LocatedTripleHandles DeltaTriples::locateTripleInAllPermutations(
+    const IdTriple& idTriple) {
   auto [s, p, o] = idTriple;
-  TriplesWithPositionsIterators result;
-  result.iteratorPSO = addTripleWithPosition(
-      locateTripleInPermutation(p, s, o, index_.getImpl().PSO()),
-      triplesWithPositionsPerBlockInPSO_);
-  result.iteratorPOS = addTripleWithPosition(
-      locateTripleInPermutation(p, o, s, index_.getImpl().POS()),
-      triplesWithPositionsPerBlockInPOS_);
-  result.iteratorSPO = addTripleWithPosition(
-      locateTripleInPermutation(s, p, o, index_.getImpl().SPO()),
-      triplesWithPositionsPerBlockInSPO_);
-  result.iteratorSOP = addTripleWithPosition(
-      locateTripleInPermutation(s, o, p, index_.getImpl().SOP()),
-      triplesWithPositionsPerBlockInSOP_);
-  result.iteratorOSP = addTripleWithPosition(
-      locateTripleInPermutation(o, s, p, index_.getImpl().OSP()),
-      triplesWithPositionsPerBlockInOSP_);
-  result.iteratorOPS = addTripleWithPosition(
-      locateTripleInPermutation(o, p, s, index_.getImpl().OPS()),
-      triplesWithPositionsPerBlockInOPS_);
-
-  // Return the iterators.
-  return result;
+  LocatedTripleHandles handles;
+  handles.forPSO = locatedTriplesPerBlockInPSO_.add(
+      locateTripleInPermutation(p, s, o, index_.getImpl().PSO()));
+  handles.forPOS = locatedTriplesPerBlockInPOS_.add(
+      locateTripleInPermutation(p, o, s, index_.getImpl().POS()));
+  handles.forSPO = locatedTriplesPerBlockInSPO_.add(
+      locateTripleInPermutation(s, p, o, index_.getImpl().SPO()));
+  handles.forSOP = locatedTriplesPerBlockInSOP_.add(
+      locateTripleInPermutation(s, o, p, index_.getImpl().SOP()));
+  handles.forOSP = locatedTriplesPerBlockInOSP_.add(
+      locateTripleInPermutation(o, s, p, index_.getImpl().OSP()));
+  handles.forOPS = locatedTriplesPerBlockInOPS_.add(
+      locateTripleInPermutation(o, p, s, index_.getImpl().OPS()));
+  return handles;
 }
 
 // ____________________________________________________________________________
 template <typename Permutation>
-DeltaTriples::TripleWithPosition DeltaTriples::locateTripleInPermutation(
+LocatedTriple DeltaTriples::locateTripleInPermutation(
     Id id1, Id id2, Id id3, Permutation& permutation) const {
   // Get the internal data structures from the permutation.
   auto& file = permutation._file;
@@ -228,7 +197,7 @@ DeltaTriples::TripleWithPosition DeltaTriples::locateTripleInPermutation(
   // Preliminary `FindTripleResult` object with the correct `blockIndex` and
   // IDs, but still an invalid `rowIndexInBlock` and `existsInIndex` set to
   // `false`.
-  TripleWithPosition tripleWithPosition{
+  LocatedTriple locatedTriple{
       blockIndex, std::numeric_limits<size_t>::max(), id1, id2, id3, false};
 
   // If all IDs from all blocks are smaller, we return the index of the last
@@ -237,7 +206,7 @@ DeltaTriples::TripleWithPosition DeltaTriples::locateTripleInPermutation(
   // case).
   if (matchingBlock == blocks.end()) {
     AD_CORRECTNESS_CHECK(blockIndex == blocks.size());
-    return tripleWithPosition;
+    return locatedTriple;
   }
 
   // Read and decompress the block. Note that we are potentially doing this a
@@ -289,7 +258,7 @@ DeltaTriples::TripleWithPosition DeltaTriples::locateTripleInPermutation(
   // Otherwise, `id` is the next larger ID and the position of the first triple
   // of that relation is exactly the position we are looking for.
   if (id == id1) {
-    tripleWithPosition.rowIndexInBlock =
+    locatedTriple.rowIndexInBlock =
         std::lower_bound(blockTuples.begin() + offsetBegin,
                          blockTuples.begin() + offsetEnd,
                          std::array<Id, 2>{id2, id3},
@@ -299,28 +268,16 @@ DeltaTriples::TripleWithPosition DeltaTriples::locateTripleInPermutation(
         blockTuples.begin();
     // Check if the triple at the found position is equal to `id1 id2 id3`. Note
     // that our default for `existsInIndex` was set to `false` above.
-    const size_t& i = tripleWithPosition.rowIndexInBlock;
+    const size_t& i = locatedTriple.rowIndexInBlock;
     AD_CORRECTNESS_CHECK(i < blockTuples.size());
     if (i < offsetEnd && blockTuples(i, 0) == id2 && blockTuples(i, 1) == id3) {
-      tripleWithPosition.existsInIndex = true;
+      locatedTriple.existsInIndex = true;
     }
   } else {
     AD_CORRECTNESS_CHECK(id1 < id);
-    tripleWithPosition.rowIndexInBlock = offsetBegin;
+    locatedTriple.rowIndexInBlock = offsetBegin;
   }
 
   // Return the result.
-  return tripleWithPosition;
+  return locatedTriple;
 }
-
-// ____________________________________________________________________________
-std::string DeltaTriples::getNameForId(Id id) const {
-  auto lookupResult =
-      ExportQueryExecutionTrees::idToStringAndType(index_, id, localVocab_);
-  AD_CONTRACT_CHECK(lookupResult.has_value());
-  const auto& [value, type] = lookupResult.value();
-  // std::ostringstream os;
-  // os << "[" << id << "]";
-  return type ? absl::StrCat("\"", value, "\"^^<", type, ">") : value;
-  // : absl::StrCat(value, " ", os.str());
-};

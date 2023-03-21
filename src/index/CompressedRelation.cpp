@@ -19,8 +19,7 @@ void CompressedRelationReader::scan(
     const vector<CompressedBlockMetadata>& blockMetadata,
     ad_utility::File& file, IdTable* result,
     ad_utility::SharedConcurrentTimeoutTimer timer,
-    const DeltaTriples::TriplesWithPositionsPerBlock&
-        triplesWithPositionsPerBlock) const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
   AD_CONTRACT_CHECK(result->numColumns() == NumColumns);
 
   // get all the blocks where _col0FirstId <= col0Id <= _col0LastId
@@ -48,9 +47,8 @@ void CompressedRelationReader::scan(
   size_t numDeltaTriples = 0;
   for (auto block = beginBlock; block < endBlock; ++block) {
     size_t blockIndex = block - blockMetadata.begin();
-    if (triplesWithPositionsPerBlock.positionMap_.contains(blockIndex)) {
-      numDeltaTriples +=
-          triplesWithPositionsPerBlock.positionMap_.at(blockIndex).size();
+    if (locatedTriplesPerBlock.map_.contains(blockIndex)) {
+      numDeltaTriples += locatedTriplesPerBlock.map_.at(blockIndex).size();
     }
   }
   LOG(INFO) << "Number of delta triples in blocks scanned: " << numDeltaTriples
@@ -171,8 +169,7 @@ void CompressedRelationReader::scan(
     const CompressedRelationMetadata& metaData, Id col1Id,
     const vector<CompressedBlockMetadata>& blocks, ad_utility::File& file,
     IdTable* result, ad_utility::SharedConcurrentTimeoutTimer timer,
-    const DeltaTriples::TriplesWithPositionsPerBlock&
-        triplesWithPositionsPerBlock) const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
   AD_CONTRACT_CHECK(result->numColumns() == 1);
 
   // Get all the blocks  that possibly might contain our pair of col0Id and
@@ -204,9 +201,8 @@ void CompressedRelationReader::scan(
   size_t numDeltaTriples = 0;
   for (auto block = beginBlock; block < endBlock; ++block) {
     size_t blockIndex = block - blocks.begin();
-    if (triplesWithPositionsPerBlock.positionMap_.contains(blockIndex)) {
-      numDeltaTriples +=
-          triplesWithPositionsPerBlock.positionMap_.at(blockIndex).size();
+    if (locatedTriplesPerBlock.map_.contains(blockIndex)) {
+      numDeltaTriples += locatedTriplesPerBlock.map_.at(blockIndex).size();
     }
   }
   LOG(INFO) << "Number of delta triples in blocks scanned: " << numDeltaTriples

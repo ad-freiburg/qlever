@@ -264,9 +264,8 @@ class CompressedRelationReader {
             const vector<CompressedBlockMetadata>& blockMetadata,
             ad_utility::File& file, IdTable* result,
             ad_utility::SharedConcurrentTimeoutTimer timer,
-            const DeltaTriples::TriplesWithPositionsPerBlock&
-                triplesWithPositionsPerBlock =
-                    DeltaTriples::TriplesWithPositionsPerBlock{}) const;
+            const LocatedTriplesPerBlock& locatedTriplesPerBlock =
+                LocatedTriplesPerBlock{}) const;
 
   /**
    * @brief For a permutation XYZ, retrieve all Z for given X and Y.
@@ -287,9 +286,8 @@ class CompressedRelationReader {
             const vector<CompressedBlockMetadata>& blocks,
             ad_utility::File& file, IdTable* result,
             ad_utility::SharedConcurrentTimeoutTimer timer,
-            const DeltaTriples::TriplesWithPositionsPerBlock&
-                triplesWithPositionsPerBlock =
-                    DeltaTriples::TriplesWithPositionsPerBlock{}) const;
+            const LocatedTriplesPerBlock& locatedTriplesPerBlock =
+                LocatedTriplesPerBlock{}) const;
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.

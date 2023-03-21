@@ -7,13 +7,13 @@
 #include "./IndexTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "absl/strings/str_split.h"
+#include "engine/ExportQueryExecutionTrees.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "parser/TurtleParser.h"
 
 // Shortcuts to these full type names used frequently in the following.
-// using DeltaTriples::IdTriple;
-// using DeltaTriples::TriplesWithPositionsPerBlock;
+// using IdTriple;
 static const std::vector<Index::Permutation> permutationEnums = {
     Index::Permutation::PSO, Index::Permutation::POS, Index::Permutation::SPO,
     Index::Permutation::SOP, Index::Permutation::OPS, Index::Permutation::OSP};
@@ -62,10 +62,22 @@ class DeltaTriplesTest : public ::testing::Test {
 
   // Make `IdTriple` from given Turtle input (the first argument is not `const`
   // because we might change the local vocabulary).
-  DeltaTriples::IdTriple makeIdTriple(DeltaTriples& deltaTriples,
-                                      std::string turtle) {
+  IdTriple makeIdTriple(DeltaTriples& deltaTriples, std::string turtle) {
     return deltaTriples.getIdTriple(makeTurtleTriple(std::move(turtle)));
   }
+
+  // Resolve the name for the given `Id` using the `Index` and `LocalVocab` from
+  // the given `deltaTriples` object.
+  std::string getNameForId(Id id, const DeltaTriples& deltaTriples) const {
+    auto lookupResult = ExportQueryExecutionTrees::idToStringAndType(
+        deltaTriples.getIndex(), id, deltaTriples.localVocab());
+    AD_CONTRACT_CHECK(lookupResult.has_value());
+    const auto& [value, type] = lookupResult.value();
+    // std::ostringstream os;
+    // os << "[" << id << "]";
+    return type ? absl::StrCat("\"", value, "\"^^<", type, ">") : value;
+    // : absl::StrCat(value, " ", os.str());
+  };
 
   // Get human-readable names for the given `permutation` and `idTriple`. This
   // is needed for proper message when an assert fails in the tests below. The
@@ -74,11 +86,11 @@ class DeltaTriplesTest : public ::testing::Test {
   template <typename Permutation>
   std::pair<std::string, std::string> getNicePermutationAndTripleName(
       const DeltaTriples& deltaTriples, const Permutation& permutation,
-      const DeltaTriples::IdTriple idTriple) {
+      const IdTriple idTriple) {
     auto& namePermutation = permutation._readableName;
-    std::string nameId1 = deltaTriples.getNameForId(idTriple[0]);
-    std::string nameId2 = deltaTriples.getNameForId(idTriple[1]);
-    std::string nameId3 = deltaTriples.getNameForId(idTriple[2]);
+    std::string nameId1 = getNameForId(idTriple[0], deltaTriples);
+    std::string nameId2 = getNameForId(idTriple[1], deltaTriples);
+    std::string nameId3 = getNameForId(idTriple[2], deltaTriples);
     std::string nameTriple =
         absl::StrCat(std::string{namePermutation[0]}, "=", nameId1, " ",
                      std::string{namePermutation[1]}, "=", nameId2, " ",
@@ -87,7 +99,7 @@ class DeltaTriplesTest : public ::testing::Test {
   }
 
   // Check that all six `triplesWithPositionsPerBlock` lists have the given
-  // number of `TripleWithPosition` objects.
+  // number of `LocatedTriple` objects.
   void checkTriplesWithPositionsPerBlockSize(const DeltaTriples& deltaTriples,
                                              size_t expectedSize) {
     for (Index::Permutation permutation : permutationEnums) {
@@ -204,7 +216,7 @@ TEST_F(DeltaTriplesTest, showAllRelationIdsForPermutation) {
       std::cout << "Block #" << (++blockCount) << ":";
       for (const Id& id : block) {
         std::cout << " "
-                  << (id != Id::makeUndefined() ? deltaTriples.getNameForId(id)
+                  << (id != Id::makeUndefined() ? getNameForId(id, deltaTriples)
                                                 : "UNDEF")
                   << std::flush;
       }
@@ -255,26 +267,24 @@ TEST_F(DeltaTriplesTest, insertAndDeleteTriples) {
   const Index& index = testQec->getIndex();
   DeltaTriples deltaTriples(index);
 
-  // Check the given `tripleWithPosition` (a block index, an index in the
+  // Check the given `locatedTriple` (a block index, an index in the
   // block, and a triple) is correct for the given permutation as follows:
   //
-  // 1. If `tripleWithPosition.existsInIndex == true`, check that the
+  // 1. If `locatedTriple.existsInIndex == true`, check that the
   // triple indeed occurs at that position in the respective triple.
   //
-  // 2. If `tripleWithPosition.existsInIndex == false`, check that the
+  // 2. If `locatedTriple.existsInIndex == false`, check that the
   // triple at the position is larger and the triple at the previous
   // position is smaller.
   auto checkTripleWithPositionInPermutation =
-      [&](const DeltaTriples::TripleWithPosition& tripleWithPosition,
-          const auto& permutation,
+      [&](const LocatedTriple& locatedTriple, const auto& permutation,
           const std::vector<std::vector<Id>>& relationIdsPerBlock) {
         // Shortcuts for the tiples ids and its position.
-        const size_t blockIndex = tripleWithPosition.blockIndex;
-        const size_t rowIndexInBlock = tripleWithPosition.rowIndexInBlock;
-        const bool existsInIndex = tripleWithPosition.existsInIndex;
-        const DeltaTriples::IdTriple deltaTriple{tripleWithPosition.id1,
-                                                 tripleWithPosition.id2,
-                                                 tripleWithPosition.id3};
+        const size_t blockIndex = locatedTriple.blockIndex;
+        const size_t rowIndexInBlock = locatedTriple.rowIndexInBlock;
+        const bool existsInIndex = locatedTriple.existsInIndex;
+        const IdTriple deltaTriple{locatedTriple.id1, locatedTriple.id2,
+                                   locatedTriple.id3};
 
         // Members for accessing the data of a permutation.
         auto& file = permutation._file;
@@ -298,9 +308,9 @@ TEST_F(DeltaTriplesTest, insertAndDeleteTriples) {
         const vector<CompressedBlockMetadata>& metadataPerBlock =
             meta.blockData();
         AD_CONTRACT_CHECK(metadataPerBlock.size() > 0);
-        DeltaTriples::IdTriple lastTriple{metadataPerBlock.back()._col0LastId,
-                                          metadataPerBlock.back()._col1LastId,
-                                          metadataPerBlock.back()._col2LastId};
+        IdTriple lastTriple{metadataPerBlock.back()._col0LastId,
+                            metadataPerBlock.back()._col1LastId,
+                            metadataPerBlock.back()._col2LastId};
         if (blockIndex >= metadataPerBlock.size()) {
           ASSERT_EQ(blockIndex, metadataPerBlock.size()) << msg;
           ASSERT_FALSE(existsInIndex);
@@ -322,23 +332,22 @@ TEST_F(DeltaTriplesTest, insertAndDeleteTriples) {
         const auto& blockTuples =
             reader.readAndDecompressBlock(blockMetadata, file, std::nullopt);
         ASSERT_LT(rowIndexInBlock, blockTuples.size()) << msg;
-        DeltaTriples::IdTriple blockTriple{
-            relationIdsPerBlock[blockIndex][rowIndexInBlock],
-            blockTuples(rowIndexInBlock, 0), blockTuples(rowIndexInBlock, 1)};
-        auto blockTriplePrevious = [&]() -> DeltaTriples::IdTriple {
+        IdTriple blockTriple{relationIdsPerBlock[blockIndex][rowIndexInBlock],
+                             blockTuples(rowIndexInBlock, 0),
+                             blockTuples(rowIndexInBlock, 1)};
+        auto blockTriplePrevious = [&]() -> IdTriple {
           if (rowIndexInBlock > 0) {
-            return DeltaTriples::IdTriple{
+            return IdTriple{
                 relationIdsPerBlock[blockIndex][rowIndexInBlock - 1],
                 blockTuples(rowIndexInBlock - 1, 0),
                 blockTuples(rowIndexInBlock - 1, 1)};
           } else if (blockIndex > 0) {
-            return DeltaTriples::IdTriple{
-                metadataPerBlock[blockIndex - 1]._col0LastId,
-                metadataPerBlock[blockIndex - 1]._col1LastId,
-                metadataPerBlock[blockIndex - 1]._col2LastId};
+            return IdTriple{metadataPerBlock[blockIndex - 1]._col0LastId,
+                            metadataPerBlock[blockIndex - 1]._col1LastId,
+                            metadataPerBlock[blockIndex - 1]._col2LastId};
           } else {
-            return DeltaTriples::IdTriple{
-                Id::makeUndefined(), Id::makeUndefined(), Id::makeUndefined()};
+            return IdTriple{Id::makeUndefined(), Id::makeUndefined(),
+                            Id::makeUndefined()};
           }
         }();
 
@@ -353,24 +362,23 @@ TEST_F(DeltaTriplesTest, insertAndDeleteTriples) {
         }
       };
 
-  // Check that all `tripleWithPosition` in `positionsPerBlock` are
+  // Check that all `locatedTriple` in `positionsPerBlock` are
   // correct for the given permutation.
   auto checkAllTriplesWithPositionsForPermutation =
-      [&](const DeltaTriples::TriplesWithPositionsPerBlock&
-              triplesWithPositionsPerBlock,
+      [&](const LocatedTriplesPerBlock& triplesWithPositionsPerBlock,
           const auto& permutation) {
         std::vector<std::vector<Id>> allRelationIdsForPermutation =
             getAllRelationIdsForPermutation(permutation);
         for (const auto& [blockIndex, triplesWithPositions] :
-             triplesWithPositionsPerBlock.positionMap_) {
-          for (const auto& tripleWithPosition : triplesWithPositions) {
-            checkTripleWithPositionInPermutation(
-                tripleWithPosition, permutation, allRelationIdsForPermutation);
+             triplesWithPositionsPerBlock.map_) {
+          for (const auto& locatedTriple : triplesWithPositions) {
+            checkTripleWithPositionInPermutation(locatedTriple, permutation,
+                                                 allRelationIdsForPermutation);
           }
         }
       };
 
-  // Check that all `tripleWithPosition`s are correct (for all
+  // Check that all `locatedTriple`s are correct (for all
   // permutations). the given permutation.
   auto checkAllTriplesWithPositionForAllPermutations = [&](const DeltaTriples&
                                                                deltaTriples) {
@@ -398,11 +406,11 @@ TEST_F(DeltaTriplesTest, insertAndDeleteTriples) {
   // permutation.
   //
   // TODO: Check that `existsInIndex` was set correctly. Test test routine
-  // above just take it from the tested `TripleWithPosition` objects
+  // above just take it from the tested `LocatedTriple` objects
   // (which might be wrong)
   //
   // TODO: Check that each triple that was located was indeed added to
-  // each of the `TriplesWithPositionsPerBlock` objects.
+  // each of the `LocatedTriplesPerBlock` objects.
   //
   // TODO: Eventually, we should test `insertTriple` and `deleteTriple`,
   // which only insert a triple when it doesn't exist in the original
@@ -469,70 +477,67 @@ TEST_F(DeltaTriplesTest, findTripleInAllPermutationsVisualize) {
             << std::endl;
 
   // Search the triple in all permutations.
-  DeltaTriples::IdTriple idTriple = makeIdTriple(deltaTriples, tripleAsString);
-  auto iterators = deltaTriples.locateTripleInAllPermutations(idTriple);
+  IdTriple idTriple = makeIdTriple(deltaTriples, tripleAsString);
+  auto handles = deltaTriples.locateTripleInAllPermutations(idTriple);
 
   // Helper lambda for showing the block from the given permutation that
-  // contains the given (via an iterator) `TripleWithPosition` object.
-  auto showBlock =
-      [&](DeltaTriples::TriplesWithPositions::iterator& tripleWithPosition,
-          const auto& permutation) {
-        // Shortcuts for the triple and its position.
-        // AD_CORRECTNESS_CHECK(tripleWithPosition != tripleWithPosition.end());
-        const size_t blockIndex = tripleWithPosition->blockIndex;
-        const size_t rowIndexInBlock = tripleWithPosition->rowIndexInBlock;
-        const bool existsInIndex = tripleWithPosition->existsInIndex;
-        const DeltaTriples::IdTriple deltaTriple{tripleWithPosition->id1,
-                                                 tripleWithPosition->id2,
-                                                 tripleWithPosition->id3};
+  // contains the given (via an iterator) `LocatedTriple` object.
+  auto showBlock = [&](LocatedTriples::iterator& locatedTriple,
+                       const auto& permutation) {
+    // Shortcuts for the triple and its position.
+    // AD_CORRECTNESS_CHECK(locatedTriple != locatedTriple.end());
+    const size_t blockIndex = locatedTriple->blockIndex;
+    const size_t rowIndexInBlock = locatedTriple->rowIndexInBlock;
+    const bool existsInIndex = locatedTriple->existsInIndex;
+    const IdTriple deltaTriple{locatedTriple->id1, locatedTriple->id2,
+                               locatedTriple->id3};
 
-        // Get nice names for the permutation and the triple.
-        auto [namePermutation, nameTriple] = getNicePermutationAndTripleName(
-            deltaTriples, permutation, deltaTriple);
+    // Get nice names for the permutation and the triple.
+    auto [namePermutation, nameTriple] =
+        getNicePermutationAndTripleName(deltaTriples, permutation, deltaTriple);
 
-        // If we are beyond the last block, there is nothing to show.
-        const vector<CompressedBlockMetadata>& blockMetas =
-            permutation._meta.blockData();
-        if (blockIndex >= blockMetas.size()) {
-          std::cout << endl;
-          std::cout << "All triples in " << namePermutation
-                    << " are smaller than " << nameTriple << std::endl;
-          return;
-        }
+    // If we are beyond the last block, there is nothing to show.
+    const vector<CompressedBlockMetadata>& blockMetas =
+        permutation._meta.blockData();
+    if (blockIndex >= blockMetas.size()) {
+      std::cout << endl;
+      std::cout << "All triples in " << namePermutation << " are smaller than "
+                << nameTriple << std::endl;
+      return;
+    }
 
-        // Read the block and compute all relation `Id`s.
-        const CompressedBlockMetadata& blockMetadata = blockMetas[blockIndex];
-        DecompressedBlock blockTuples =
-            permutation._reader.readAndDecompressBlock(
-                blockMetadata, permutation._file, std::nullopt);
-        std::vector<Id> blockRelationIds =
-            getAllRelationIdsForPermutation(permutation).at(blockIndex);
-        AD_CORRECTNESS_CHECK(blockRelationIds.size() == blockTuples.size());
+    // Read the block and compute all relation `Id`s.
+    const CompressedBlockMetadata& blockMetadata = blockMetas[blockIndex];
+    DecompressedBlock blockTuples = permutation._reader.readAndDecompressBlock(
+        blockMetadata, permutation._file, std::nullopt);
+    std::vector<Id> blockRelationIds =
+        getAllRelationIdsForPermutation(permutation).at(blockIndex);
+    AD_CORRECTNESS_CHECK(blockRelationIds.size() == blockTuples.size());
 
-        // Show the triples in the block.
-        std::cout << std::endl;
-        std::cout << "Block #" << blockIndex << " from " << namePermutation
-                  << " (" << nameTriple << "):" << std::endl;
-        for (size_t i = 0; i < blockTuples.numRows(); ++i) {
-          std::cout << "Row #" << i << ": "
-                    << deltaTriples.getNameForId(blockRelationIds[i]);
-          for (size_t j = 0; j < blockTuples.numColumns(); ++j) {
-            std::cout << " " << deltaTriples.getNameForId(blockTuples(i, j));
-          }
-          if (i == rowIndexInBlock) {
-            std::cout << " <-- "
-                      << (existsInIndex ? "existing triple" : "new triple");
-          }
-          std::cout << std::endl;
-        }
-      };
+    // Show the triples in the block.
+    std::cout << std::endl;
+    std::cout << "Block #" << blockIndex << " from " << namePermutation << " ("
+              << nameTriple << "):" << std::endl;
+    for (size_t i = 0; i < blockTuples.numRows(); ++i) {
+      std::cout << "Row #" << i << ": "
+                << getNameForId(blockRelationIds[i], deltaTriples);
+      for (size_t j = 0; j < blockTuples.numColumns(); ++j) {
+        std::cout << " " << getNameForId(blockTuples(i, j), deltaTriples);
+      }
+      if (i == rowIndexInBlock) {
+        std::cout << " <-- "
+                  << (existsInIndex ? "existing triple" : "new triple");
+      }
+      std::cout << std::endl;
+    }
+  };
 
   // Show block for each permutation.
-  showBlock(iterators.iteratorPOS, index.getImpl().POS());
-  showBlock(iterators.iteratorPSO, index.getImpl().PSO());
-  showBlock(iterators.iteratorSPO, index.getImpl().SPO());
-  showBlock(iterators.iteratorSOP, index.getImpl().SOP());
-  showBlock(iterators.iteratorOSP, index.getImpl().OSP());
-  showBlock(iterators.iteratorOPS, index.getImpl().OPS());
+  showBlock(handles.forPOS, index.getImpl().POS());
+  showBlock(handles.forPSO, index.getImpl().PSO());
+  showBlock(handles.forSPO, index.getImpl().SPO());
+  showBlock(handles.forSOP, index.getImpl().SOP());
+  showBlock(handles.forOSP, index.getImpl().OSP());
+  showBlock(handles.forOPS, index.getImpl().OPS());
   std::cout << std::endl;
 }

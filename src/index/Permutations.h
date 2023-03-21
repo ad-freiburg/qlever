@@ -25,16 +25,14 @@ template <class Comparator, class MetaDataT>
 class PermutationImpl {
  private:
   // The delta triples and their positions in this permutation.
-  const DeltaTriples::TriplesWithPositionsPerBlock&
-      triplesWithPositionsPerBlock_;
+  const LocatedTriplesPerBlock& locatedTriplesPerBlock_;
 
  public:
   using MetaData = MetaDataT;
   PermutationImpl(const Comparator& comp, string name, string suffix,
                   array<unsigned short, 3> order,
-                  const DeltaTriples::TriplesWithPositionsPerBlock&
-                      triplesWithPositionsPerBlock)
-      : triplesWithPositionsPerBlock_(triplesWithPositionsPerBlock),
+                  const LocatedTriplesPerBlock& locatedTriplesPerBlock)
+      : locatedTriplesPerBlock_(locatedTriplesPerBlock),
         _comp(comp),
         _readableName(std::move(name)),
         _fileSuffix(std::move(suffix)),
@@ -75,7 +73,7 @@ class PermutationImpl {
     }
     const auto& metaData = _meta.getMetaData(col0Id);
     return _reader.scan(metaData, _meta.blockData(), _file, result,
-                        std::move(timer), triplesWithPositionsPerBlock_);
+                        std::move(timer), locatedTriplesPerBlock_);
   }
   /// For given IDs for the first and second column, retrieve all IDs of the
   /// third column, and store them in `result`. This is just a thin wrapper
@@ -89,7 +87,7 @@ class PermutationImpl {
     const auto& metaData = _meta.getMetaData(col0Id);
 
     return _reader.scan(metaData, col1Id, _meta.blockData(), _file, result,
-                        timer, triplesWithPositionsPerBlock_);
+                        timer, locatedTriplesPerBlock_);
   }
 
   // _______________________________________________________
