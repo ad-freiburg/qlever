@@ -69,5 +69,5 @@ class Union : public Operation {
  private:
   virtual void computeResult(ResultTable* result) override;
 
-  VariableToColumnMap computeVariableToColumnMap() const override;
+  VariableToColumnMapWithTypeInfo computeVariableToColumnMap() const override;
 };

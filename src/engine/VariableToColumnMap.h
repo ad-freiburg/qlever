@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "global/Id.h"
 #include "parser/data/Variable.h"
 #include "util/HashMap.h"
 #include "util/TransparentFunctors.h"
@@ -28,6 +29,11 @@ inline auto makeDefinedColumn = [](size_t columnIndex) {
 using VariableToColumnMapWithTypeInfo =
     ad_utility::HashMap<Variable, ColumnIndexAndTypeInfo>;
 
+enum class BinOpType { Join, OptionalJoin, Union };
+VariableToColumnMapWithTypeInfo makeVarToColMapForJoinOperations(
+    const VariableToColumnMapWithTypeInfo& leftVars,
+    const VariableToColumnMapWithTypeInfo& rightVars,
+    std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType);
 // Return a vector that contains the contents of the `VariableToColumnMap` in
 // ascending order of the column indices.
 std::vector<std::pair<Variable, size_t>> copySortedByColumnIndex(

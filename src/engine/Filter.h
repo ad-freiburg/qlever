@@ -54,7 +54,7 @@ class Filter : public Operation {
   }
 
  private:
-  VariableToColumnMap computeVariableToColumnMap() const override {
+  VariableToColumnMapWithTypeInfo computeVariableToColumnMap() const override {
     return _subtree->getVariableColumns();
   }
 

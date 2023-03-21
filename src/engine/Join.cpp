@@ -65,7 +65,7 @@ string Join::asStringImpl(size_t indent) const {
 string Join::getDescriptor() const {
   std::string joinVar = "";
   for (auto p : _left->getVariableColumns()) {
-    if (p.second == _leftJoinCol) {
+    if (p.second.columnIndex_ == _leftJoinCol) {
       joinVar = p.first.name();
       break;
     }
@@ -157,42 +157,19 @@ void Join::computeResult(ResultTable* result) {
 }
 
 // _____________________________________________________________________________
-VariableToColumnMap Join::computeVariableToColumnMap() const {
-  VariableToColumnMap retVal;
+VariableToColumnMapWithTypeInfo Join::computeVariableToColumnMap() const {
+  const auto& leftVars = _left->getVariableColumns();
+  const auto& rightVars = _right->getVariableColumns();
   if (!isFullScanDummy(_left) && !isFullScanDummy(_right)) {
-    retVal = _left->getVariableColumns();
-    size_t leftSize = _left->getResultWidth();
-    for (const auto& [variable, column] : _right->getVariableColumns()) {
-      if (column < _rightJoinCol) {
-        retVal[variable] = leftSize + column;
-      }
-      if (column > _rightJoinCol) {
-        retVal[variable] = leftSize + column - 1;
-      }
-    }
+    return makeVarToColMapForJoinOperations(
+        leftVars, rightVars, {{_leftJoinCol, _rightJoinCol}}, false);
+  } else if (isFullScanDummy(_right)) {
+    return makeVarToColMapForJoinOperations(leftVars, rightVars,
+                                            {{_leftJoinCol, 0u}}, false);
   } else {
-    if (isFullScanDummy(_right)) {
-      retVal = _left->getVariableColumns();
-      size_t leftSize = _left->getResultWidth();
-      for (const auto& [variable, column] : _right->getVariableColumns()) {
-        // Skip the first col for the dummy
-        if (column != 0) {
-          retVal[variable] = leftSize + column - 1;
-        }
-      }
-    } else {
-      for (const auto& [variable, column] : _left->getVariableColumns()) {
-        // Skip+drop the first col for the dummy and subtract one from others.
-        if (column != 0) {
-          retVal[variable] = column - 1;
-        }
-      }
-      for (const auto& [variable, column] : _right->getVariableColumns()) {
-        retVal[variable] = 2 + column;
-      }
-    }
+    return makeVarToColMapForJoinOperations(leftVars, rightVars,
+                                            {{0u, _rightJoinCol}}, false);
   }
-  return retVal;
 }
 
 // _____________________________________________________________________________

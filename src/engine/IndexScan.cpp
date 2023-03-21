@@ -141,26 +141,28 @@ vector<size_t> IndexScan::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
-  VariableToColumnMap res;
+VariableToColumnMapWithTypeInfo IndexScan::computeVariableToColumnMap() const {
+  VariableToColumnMapWithTypeInfo res;
+  // All the columns of an index scan only contain defined values.
+  auto makeCol = makeDefinedColumn;
   size_t col = 0;
 
   // Helper lambdas that add the respective triple component as the next column.
   auto addSubject = [&]() {
     if (_subject.isVariable()) {
-      res[_subject.getVariable()] = col++;
+      res[_subject.getVariable()] = makeCol(col++);
     }
   };
   // TODO<joka921> Refactor the `PropertyPath` class s.t. it also has
   //`isVariable` and `getVariable`, then those three lambdas can become one.
   auto addPredicate = [&]() {
     if (_predicate[0] == '?') {
-      res[Variable{_predicate}] = col++;
+      res[Variable{_predicate}] = makeCol(col++);
     }
   };
   auto addObject = [&]() {
     if (_object.isVariable()) {
-      res[_object.getVariable()] = col++;
+      res[_object.getVariable()] = makeCol(col++);
     }
   };
 
