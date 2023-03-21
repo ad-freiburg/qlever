@@ -20,12 +20,12 @@ void BenchmarkConfiguration::parseShortHand(const std::string& shortHandString){
   // reuse parts of my patterns, I defined some contants here.
 
   // Boolean literal, or integer literal.
-  const std::string valueLiterals{R"(true|false|-?\d+)"};
+  const std::string valueLiterals{R"--(true|false|-?\d+)--"};
   // How a list of `valueLiterals` looks like.
-  const std::string listOfValueLiterals{R"(\{\s*()" + valueLiterals + R"()\s*,)*\s*()" + valueLiterals + R"()\s*\})"};
+  const std::string listOfValueLiterals{R"--(\{\s*()" + valueLiterals + R"()\s*,)*\s*()" + valueLiterals + R"()\s*\})--"};
   // What kind of names can the left side of the assigment
   // `variableName = variableContent;` have?
-  const std::string variableName{R"([\w]+)"};
+  const std::string variableName{R"--([\w]+)--"};
   // What kind of names can the right side of the assigment
   // `variableName = variableContent;` have?
   const std::string variableContent{valueLiterals + R"(|)" + listOfValueLiterals};
@@ -34,11 +34,11 @@ void BenchmarkConfiguration::parseShortHand(const std::string& shortHandString){
   // within regular expressions, because `regex` allows direct access to
   // sub-matches when it found a match. That should make iteration and parsing
   // easier.
-  const std::string assigment{R"(\s*()" + variableName + R"()\s*=\s*()" + variableContent + R"()\s*;)"};
+  const std::string assigment{R"--(\s*()" + variableName + R"()\s*=\s*()" + variableContent + R"()\s*;)--"};
   
   // Use regular expressions to check, if the given string uses the correct
   // grammar/syntax.
-  AD_CHECK(std::regex_match(shortHandString, std::regex{R"(()" + assigment + R"()*)"}));
+  AD_CHECK(std::regex_match(shortHandString, std::regex{R"--(()--" + assigment + R"--()*)--"}));
 
   // Create the regular expression of an assigment.
   std::regex assigmentRegex(assigment);
