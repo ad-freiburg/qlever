@@ -294,12 +294,8 @@ void OptionalJoin::optionalJoin(
     rowAdder(rowA.rowIndex(), rowB.rowIndex());
   };
 
-  auto optionalRowAdder =
-      ad_utility::AddOptionalRowToIdTable(result.numColumns());
-  auto addOptionalRow = [&dynAPermuted, &result,
-                         &optionalRowAdder](const auto& rowA) {
-    const auto& a = *(dynAPermuted.begin() + rowA.rowIndex());
-    std::cout << "pushing" optionalRowAdder(a, &result);
+  auto addOptionalRow = [&rowAdder](const auto& rowA) {
+    rowAdder.addOptionalRow(rowA.rowIndex());
   };
 
   auto findUndefDispatch = [](const auto& row, auto begin, auto end) {

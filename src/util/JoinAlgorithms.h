@@ -251,7 +251,19 @@ class AddCombinedRowToIdTable {
   const Input1* input1_;
   const Input2* input2_;
   ResultTable* resultTable_;
-  std::vector<std::array<size_t, 2>> indexBuffer_;
+
+  struct TargetIndexAndRowIndices {
+    size_t targetIndex;
+    std::array<size_t, 2> rowIndices;
+  };
+  std::vector<TargetIndexAndRowIndices> indexBuffer_;
+
+  struct TargetIndexAndRowIndex {
+    size_t targetIndex_;
+    size_t rowIndex_;
+  };
+  std::vector<TargetIndexAndRowIndex> optionalIndexBuffer_;
+  size_t nextIndex_ = 0ul;
 
   size_t bufferSize_ = 100'000;
 
@@ -270,10 +282,19 @@ class AddCombinedRowToIdTable {
   }
 
   void operator()(size_t rowIndexA, size_t rowIndexB) {
-    indexBuffer_.push_back(std::array{rowIndexA, rowIndexB});
-    std::cout << "pushing indices " << rowIndexA << ' ' << rowIndexB
-              << std::endl;
-    if (indexBuffer_.size() > bufferSize_) {
+    indexBuffer_.push_back(
+        TargetIndexAndRowIndices{nextIndex_, {rowIndexA, rowIndexB}});
+    ++nextIndex_;
+    if (nextIndex_ > bufferSize_) {
+      flush();
+    }
+  }
+
+  void addOptionalRow(size_t rowIndexA) {
+    optionalIndexBuffer_.push_back(
+        TargetIndexAndRowIndex{nextIndex_, rowIndexA});
+    ++nextIndex_;
+    if (nextIndex_ > bufferSize_) {
       flush();
     }
   }
@@ -289,7 +310,9 @@ class AddCombinedRowToIdTable {
   void flush() {
     auto& result = *resultTable_;
     size_t oldSize = result.size();
-    result.resize(oldSize + indexBuffer_.size());
+    AD_CORRECTNESS_CHECK(nextIndex_ ==
+                         indexBuffer_.size() + optionalIndexBuffer_.size());
+    result.resize(oldSize + nextIndex_);
 
     auto mergeWithUndefined = [](const ValueId a, const ValueId b) {
       static_assert(ValueId::makeUndefined().getBits() == 0u);
@@ -297,87 +320,56 @@ class AddCombinedRowToIdTable {
     };
 
     size_t resultColIdx = 0;
-    // TODO<joka921> Implement prefetching.
-    // TODO<joka921> Get rid of the code duplication.
-    for (size_t col = 0; col < numJoinColumns_; col++) {
-      const auto& col1 = input1_->getColumn(col);
-      const auto& col2 = input2_->getColumn(col);
+    auto writeColumn = [&]<size_t idxOfSingleColumn =
+                               std::numeric_limits<size_t>::max()>(
+        size_t column, const auto&... inputs) {
+      static constexpr size_t numInputs = sizeof...(inputs);
+      static_assert(numInputs == 1 || numInputs == 2);
+      static_assert(numInputs == 2 || idxOfSingleColumn < 2);
+      std::tuple<decltype(inputs->getColumn(column))...> cols{
+          inputs->getColumn(column)...};
+      // TODO<joka921> Implement prefetching.
       decltype(auto) resultCol = result.getColumn(resultColIdx);
       size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
       for (size_t i = 0; i < indexBuffer_.size(); ++i) {
-        auto [idx1, idx2] = indexBuffer_[i];
-        auto resultId = mergeWithUndefined(col1[idx1], col2[idx2]);
+        auto [targetIndex, sourceIndices] = indexBuffer_[i];
+        auto resultId = [&]() -> Id {
+          if constexpr (numInputs == 1) {
+            return std::get<0>(
+                cols)[std::get<idxOfSingleColumn>(sourceIndices)];
+          } else {
+            return mergeWithUndefined(std::get<0>(cols)[sourceIndices[0]],
+                                      std::get<1>(cols)[sourceIndices[1]]);
+          }
+          AD_FAIL();
+        }();
         numUndef += resultId == Id::makeUndefined();
-        resultCol[oldSize + i] = resultId;
+        resultCol[oldSize + targetIndex] = resultId;
+      }
+      for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
+        if constexpr (idxOfSingleColumn != 1) {
+          resultCol[oldSize + targetIndex] = std::get<0>(cols)[sourceIndex];
+        } else {
+          resultCol[oldSize + targetIndex] = Id::makeUndefined();
+        }
       }
       ++resultColIdx;
+    };
+
+    for (size_t col = 0; col < numJoinColumns_; col++) {
+      writeColumn(col, input1_, input2_);
     }
 
     for (size_t col = numJoinColumns_; col < input1_->numColumns(); ++col) {
-      const auto& col1 = input1_->getColumn(col);
-      decltype(auto) resultCol = result.getColumn(resultColIdx);
-      size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
-      for (size_t i = 0; i < indexBuffer_.size(); ++i) {
-        Id resultId = col1[indexBuffer_[i][0]];
-        numUndef += resultId == Id::makeUndefined();
-        resultCol[oldSize + i] = resultId;
-      }
-      ++resultColIdx;
+      writeColumn.template operator()<0>(col, input1_);
     }
 
     for (size_t col = numJoinColumns_; col < input2_->numColumns(); col++) {
-      const auto& col2 = input2_->getColumn(col);
-      decltype(auto) resultCol = result.getColumn(resultColIdx);
-      size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
-      for (size_t i = 0; i < indexBuffer_.size(); ++i) {
-        Id resultId = col2[indexBuffer_[i][1]];
-        numUndef += resultId == Id::makeUndefined();
-        resultCol[oldSize + i] = resultId;
-      }
-      ++resultColIdx;
+      writeColumn.template operator()<1>(col, input2_);
     }
     indexBuffer_.clear();
-  }
-};
-
-// TODO<joka921> Comment and test
-class AddOptionalRowToIdTable {
-  std::vector<size_t> numUndefinedPerColumn_;
-
- public:
-  explicit AddOptionalRowToIdTable(size_t numColumns)
-      : numUndefinedPerColumn_(numColumns) {}
-
-  const std::vector<size_t>& numUndefinedPerColumn() const {
-    return numUndefinedPerColumn_;
-  }
-
-  // TODO<joka921> Do we need a specialized overload for a single column?
-  template <typename ROW_A, int TABLE_WIDTH>
-  void operator()(const ROW_A& row1, IdTableStatic<TABLE_WIDTH>* table) {
-    assert(numUndefinedPerColumn_.size() == table->numColumns());
-    auto& result = *table;
-    result.emplace_back();
-    size_t backIdx = result.size() - 1;
-
-    // fill the result
-    size_t rIndex = 0;
-    auto add = [&, this](Id id) {
-      numUndefinedPerColumn_[rIndex] += id == Id::makeUndefined();
-      result(backIdx, rIndex) = id;
-      ++rIndex;
-    };
-
-    // TODO<joka921> We could possibly implement an optimization for the case
-    // where we know that there are no undefined values in at least one of the
-    // inputs, but maybe that doesn't help too much.
-    for (size_t col = 0; col < row1.size(); col++) {
-      add(row1[col]);
-    }
-
-    for (size_t col = row1.size(); col < numUndefinedPerColumn_.size(); col++) {
-      add(Id::makeUndefined());
-    }
+    optionalIndexBuffer_.clear();
+    nextIndex_ = 0ul;
   }
 };
 
@@ -403,7 +395,6 @@ void zipperJoinWithUndef(
       (void)cover;
       bool compatibleWasFound = false;
       auto smallerUndefRanges = findUndef(el, startOfRange, endOfRange);
-      // std::cout << "merging with undef ranges" << '\n';
       for (const auto& it : smallerUndefRanges) {
         if (lt(*it, el)) {
           compatibleWasFound = true;
@@ -423,12 +414,20 @@ void zipperJoinWithUndef(
   auto mergeWithUndefRight = makeMergeWithUndefLeft.template operator()<true>(
       lessThan, findSmallerUndefRangesRight);
 
-  [&]() {
+  auto containsNoUndefined = []<typename T>(const T& row) {
+    if constexpr (std::is_same_v<T, Id>) {
+      return row != Id::makeUndefined();
+    } else {
+      return (std::ranges::none_of(
+          row, [](Id id) { return id == Id::makeUndefined(); }));
+    }
+  };
+
+      [&]() {
     while (it1 < end1 && it2 < end2) {
       while (lessThan(*it1, *it2)) {
         if (!mergeWithUndefRight(*it1, range2.begin(), it2)) {
-          if (std::ranges::none_of(
-                  *it1, [](Id id) { return id == Id::makeUndefined(); })) {
+          if (containsNoUndefined(*it1)) {
             cover(it1);
             elFromFirstNotFoundAction(*it1);
           }

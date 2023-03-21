@@ -544,18 +544,19 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   auto joinColumnData = ad_utility::prepareJoinColumns(
       {{jc1, jc2}}, a.numColumns(), b.numColumns());
 
-  auto dynASubset = dynA.asColumnSubsetView(joinColumnData.jcsA_);
-  auto dynBSubset = dynB.asColumnSubsetView(joinColumnData.jcsB_);
+  auto dynASubset = dynA.getColumn(jc1);
+  auto dynBSubset = dynB.getColumn(jc2);
 
   auto dynAPermuted = dynA.asColumnSubsetView(joinColumnData.colsCompleteA_);
   auto dynBPermuted = dynB.asColumnSubsetView(joinColumnData.colsCompleteB_);
 
-  auto lessThanBoth = std::ranges::lexicographical_compare;
+  auto lessThanBoth = std::ranges::less{};
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
       result.numColumns(), 1, &dynAPermuted, &dynBPermuted, &result);
-  auto addRow = [&](const auto& rowA, const auto& rowB) {
-    rowAdder(rowA.rowIndex(), rowB.rowIndex());
+  auto addRow = [&dynASubset, &dynBSubset, &rowAdder](const auto& rowA,
+                                                      const auto& rowB) {
+    rowAdder(&rowA - dynASubset.data(), &rowB - dynBSubset.data());
   };
 
   auto joinColumnL = a.getColumn(jc1);
@@ -575,15 +576,14 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   if (a.size() / b.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
       numUndefB == 0) {
     auto inverseAddRow = [&](const auto& rowA, const auto& rowB) {
-      rowAdder(rowB.rowIndex(), rowA.rowIndex());
+      rowAdder(&rowB - dynASubset.data(), &rowA - dynBSubset.data());
     };
-    ad_utility::gallopingJoin(dynBSubset, dynASubset,
-                              std::ranges::lexicographical_compare,
+    ad_utility::gallopingJoin(dynBSubset, dynASubset, std::ranges::less{},
                               inverseAddRow);
   } else if (b.size() / a.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
              numUndefB == 0) {
-    ad_utility::gallopingJoin(dynASubset, dynBSubset,
-                              std::ranges::lexicographical_compare, addRow);
+    ad_utility::gallopingJoin(dynASubset, dynBSubset, std::ranges::less{},
+                              addRow);
   } else {
     // TODO<joka921> Reinstate the timeout checks.
     auto findSmallerUndefRangeLeft =

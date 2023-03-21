@@ -43,7 +43,7 @@ constexpr std::string_view toString(Datatype type) {
       return "TextRecordIndex";
   }
   // This line is reachable if we cast an arbitrary invalid int to this enum
-  throw std::runtime_error("should be unreachable");
+  AD_FAIL();
 }
 
 /// Encode values of different types (the types from the `Datatype` enum above)
