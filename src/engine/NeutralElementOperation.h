@@ -40,7 +40,7 @@ class NeutralElementOperation : public Operation {
     result->_idTable.resize(1);
   }
 
-  [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
+  [[nodiscard]] VariableToColumnMapWithTypeInfo computeVariableToColumnMap()
       const override {
     return {};
   };

@@ -45,7 +45,7 @@ string Sort::getDescriptor() const {
   const auto& varCols = subtree_->getVariableColumns();
   for (auto sortColumn : sortColumnIndices_) {
     for (const auto& [var, varIndex] : varCols) {
-      if (sortColumn == varIndex) {
+      if (sortColumn == varIndex.columnIndex_) {
         orderByVars += " " + var.name();
       }
     }

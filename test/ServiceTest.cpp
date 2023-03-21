@@ -100,7 +100,7 @@ TEST_F(ServiceTest, basicMethods) {
   ASSERT_EQ(serviceOp.getMultiplicity(1), 1);
   ASSERT_EQ(serviceOp.getSizeEstimate(), 100'000);
   ASSERT_EQ(serviceOp.getCostEstimate(), 1'000'000);
-  ASSERT_THAT(serviceOp.computeVariableToColumnMap(),
+  ASSERT_THAT(removeTypeInfo(serviceOp.computeVariableToColumnMap()),
               (::testing::UnorderedElementsAreArray(VariableToColumnMap{
                   {Variable{"?x"}, 0}, {Variable{"?y"}, 1}})));
   ASSERT_FALSE(serviceOp.knownEmptyResult());

@@ -40,7 +40,8 @@ TEST(Values, basicMethods) {
   // Out-of-bounds columns always return 1.
   EXPECT_FLOAT_EQ(valuesOp.getMultiplicity(4), 1.0f);
 
-  auto varToCol = valuesOp.getExternallyVisibleVariableColumns();
+  auto varToCol =
+      removeTypeInfo(valuesOp.getExternallyVisibleVariableColumns());
   ASSERT_EQ(varToCol.size(), 3u);
   ASSERT_EQ(varToCol.at(Variable{"?x"}), 0);
   ASSERT_EQ(varToCol.at(Variable{"?y"}), 1);

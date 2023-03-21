@@ -80,10 +80,12 @@ class ValuesForTesting : public Operation {
   bool knownEmptyResult() override { return table_.empty(); }
 
  private:
-  VariableToColumnMap computeVariableToColumnMap() const override {
-    VariableToColumnMap m;
+  VariableToColumnMapWithTypeInfo computeVariableToColumnMap() const override {
+    VariableToColumnMapWithTypeInfo m;
     for (size_t i = 0; i < variables_.size(); ++i) {
-      m[variables_.at(i)] = i;
+      bool containsUndef =
+          ad_utility::contains(table_.getColumn(i), Id::makeUndefined());
+      m[variables_.at(i)] = ColumnIndexAndTypeInfo{i, containsUndef};
     }
     return m;
   }

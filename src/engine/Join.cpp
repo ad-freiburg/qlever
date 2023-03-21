@@ -162,13 +162,13 @@ VariableToColumnMapWithTypeInfo Join::computeVariableToColumnMap() const {
   const auto& rightVars = _right->getVariableColumns();
   if (!isFullScanDummy(_left) && !isFullScanDummy(_right)) {
     return makeVarToColMapForJoinOperations(
-        leftVars, rightVars, {{_leftJoinCol, _rightJoinCol}}, false);
+        leftVars, rightVars, {{_leftJoinCol, _rightJoinCol}}, BinOpType::Join);
   } else if (isFullScanDummy(_right)) {
-    return makeVarToColMapForJoinOperations(leftVars, rightVars,
-                                            {{_leftJoinCol, 0u}}, false);
+    return makeVarToColMapForJoinOperations(
+        leftVars, rightVars, {{_leftJoinCol, 0u}}, BinOpType::Join);
   } else {
-    return makeVarToColMapForJoinOperations(leftVars, rightVars,
-                                            {{0u, _rightJoinCol}}, false);
+    return makeVarToColMapForJoinOperations(
+        leftVars, rightVars, {{0u, _rightJoinCol}}, BinOpType::Join);
   }
 }
 

@@ -735,8 +735,10 @@ TEST(GroupBy, GroupedVariableInExpressions) {
 
   // Check the result.
   auto d = DoubleId;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, 0}, {Variable{"?x"}, 1}, {Variable{"?y"}, 2}};
+  VariableToColumnMapWithTypeInfo expectedVariables{
+      {Variable{"?a"}, {0, false}},
+      {Variable{"?x"}, {1, true}},
+      {Variable{"?y"}, {2, true}}};
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected =
@@ -794,8 +796,10 @@ TEST(GroupBy, AliasResultReused) {
 
   // Check the result.
   auto d = DoubleId;
-  VariableToColumnMap expectedVariables{
-      {Variable{"?a"}, 0}, {Variable{"?x"}, 1}, {Variable{"?y"}, 2}};
+  VariableToColumnMapWithTypeInfo expectedVariables{
+      {Variable{"?a"}, {0, false}},
+      {Variable{"?x"}, {1, true}},
+      {Variable{"?y"}, {2, true}}};
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected =
@@ -822,10 +826,10 @@ TEST(GroupBy, AddedHavingRows) {
   // which becomes part of the result, but is not selected by the query.
   EXPECT_THAT(pq.selectClause().getSelectedVariables(),
               ::testing::ElementsAre(Variable{"?x"}, Variable{"?count"}));
-  VariableToColumnMap expectedVariables{
-      {Variable{"?x"}, 0},
-      {Variable{"?count"}, 1},
-      {Variable{"?_QLever_internal_variable_0"}, 2}};
+  VariableToColumnMapWithTypeInfo expectedVariables{
+      {Variable{"?x"}, {0, false}},
+      {Variable{"?count"}, {1, true}},
+      {Variable{"?_QLever_internal_variable_0"}, {2, true}}};
   EXPECT_THAT(tree.getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   const auto& table = res->_idTable;

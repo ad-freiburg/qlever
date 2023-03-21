@@ -58,16 +58,23 @@ string Bind::asStringImpl(size_t indent) const {
   }
 
   os << "BIND ";
-  os << _bind._expression.getCacheKey(_subtree->getVariableColumns());
+  os << _bind._expression.getCacheKey(
+      removeTypeInfo(_subtree->getVariableColumns()));
   os << "\n" << _subtree->asString(indent);
   return std::move(os).str();
 }
 
 // _____________________________________________________________________________
-VariableToColumnMap Bind::computeVariableToColumnMap() const {
+VariableToColumnMapWithTypeInfo Bind::computeVariableToColumnMap() const {
   auto res = _subtree->getVariableColumns();
   // The new variable is always appended at the end.
-  res[_bind._target] = getResultWidth() - 1;
+  // TODO<joka921> This currently pessimistically assumes that all (aggregate)
+  // expressions can produce undefined values. This might pessimize the
+  // performance when the result of this GROUP BY is joined on one or more of
+  // the aggregating columns. Implement an interface in the expressions that
+  // allows to check, whether an expression can never produce an undefined
+  // value.
+  res[_bind._target] = ColumnIndexAndTypeInfo{getResultWidth() - 1, true};
   return res;
 }
 
@@ -117,9 +124,11 @@ void Bind::computeExpressionBind(
     const ResultTable& inputResultTable,
     sparqlExpression::SparqlExpression* expression) const {
   sparqlExpression::VariableToColumnAndResultTypeMap columnMap;
-  for (const auto& [variable, columnIndex] : _subtree->getVariableColumns()) {
-    columnMap[variable] =
-        std::pair(columnIndex, inputResultTable.getResultType(columnIndex));
+  for (const auto& [variable, columnIndexWithTypeInfo] :
+       _subtree->getVariableColumns()) {
+    columnMap[variable] = std::pair(
+        columnIndexWithTypeInfo.columnIndex_,
+        inputResultTable.getResultType(columnIndexWithTypeInfo.columnIndex_));
   }
 
   sparqlExpression::EvaluationContext evaluationContext(
@@ -149,7 +158,8 @@ void Bind::computeExpressionBind(
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
     if constexpr (isVariable) {
-      auto column = getInternallyVisibleVariableColumns().at(singleResult);
+      auto column =
+          getInternallyVisibleVariableColumns().at(singleResult).columnIndex_;
       for (size_t i = 0; i < inSize; ++i) {
         output(i, inCols) = output(i, column);
       }

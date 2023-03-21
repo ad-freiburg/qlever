@@ -46,3 +46,13 @@ VariableToColumnMapWithTypeInfo makeVarToColMapForJoinOperations(
   }
   return retVal;
 }
+
+// ___________________________________________________________________
+VariableToColumnMap removeTypeInfo(
+    const VariableToColumnMapWithTypeInfo& varColMap) {
+  VariableToColumnMap result;
+  for (const auto& [variable, colIdxAndTypeInfo] : varColMap) {
+    result[variable] = colIdxAndTypeInfo.columnIndex_;
+  }
+  return result;
+}

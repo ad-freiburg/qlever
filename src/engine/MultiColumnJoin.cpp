@@ -126,7 +126,7 @@ VariableToColumnMapWithTypeInfo MultiColumnJoin::computeVariableToColumnMap()
     const {
   return makeVarToColMapForJoinOperations(_left->getVariableColumns(),
                                           _right->getVariableColumns(),
-                                          _joinColumns, false);
+                                          _joinColumns, BinOpType::Join);
 }
 
 // _____________________________________________________________________________

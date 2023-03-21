@@ -89,5 +89,6 @@ class TextOperationWithFilter : public Operation {
 
   virtual void computeResult(ResultTable* result) override;
 
-  virtual VariableToColumnMap computeVariableToColumnMap() const override;
+  virtual VariableToColumnMapWithTypeInfo computeVariableToColumnMap()
+      const override;
 };

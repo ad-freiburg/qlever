@@ -19,15 +19,22 @@ using VariableToColumnMap = ad_utility::HashMap<Variable, size_t>;
 struct ColumnIndexAndTypeInfo {
   size_t columnIndex_;
   bool mightContainUndef_;
+  bool operator==(const ColumnIndexAndTypeInfo&) const = default;
 };
 
 // TODO<joka921> Comment the helper function
 inline auto makeDefinedColumn = [](size_t columnIndex) {
   return ColumnIndexAndTypeInfo{columnIndex, false};
 };
+inline auto makeUndefinedColumn = [](size_t columnIndex) {
+  return ColumnIndexAndTypeInfo{columnIndex, true};
+};
 
 using VariableToColumnMapWithTypeInfo =
     ad_utility::HashMap<Variable, ColumnIndexAndTypeInfo>;
+
+VariableToColumnMap removeTypeInfo(
+    const VariableToColumnMapWithTypeInfo& varColMap);
 
 enum class BinOpType { Join, OptionalJoin, Union };
 VariableToColumnMapWithTypeInfo makeVarToColMapForJoinOperations(

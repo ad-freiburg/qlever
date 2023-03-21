@@ -87,5 +87,6 @@ class TextOperationWithoutFilter : public Operation {
 
   void computeResultMultVars(ResultTable* result) const;
 
-  virtual VariableToColumnMap computeVariableToColumnMap() const override;
+  virtual VariableToColumnMapWithTypeInfo computeVariableToColumnMap()
+      const override;
 };

@@ -68,7 +68,7 @@ class Sort : public Operation {
  private:
   virtual void computeResult(ResultTable* result) override;
 
-  [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
+  [[nodiscard]] VariableToColumnMapWithTypeInfo computeVariableToColumnMap()
       const override {
     return subtree_->getVariableColumns();
   }

@@ -45,11 +45,17 @@ size_t Values::getResultWidth() const {
 vector<size_t> Values::resultSortedOn() const { return {}; }
 
 // ____________________________________________________________________________
-VariableToColumnMap Values::computeVariableToColumnMap() const {
-  VariableToColumnMap map;
+VariableToColumnMapWithTypeInfo Values::computeVariableToColumnMap() const {
+  std::vector<char> colContainsUndef(parsedValues_._variables.size(), char{0});
+  for (const auto& row : parsedValues_._values) {
+    for (size_t i = 0; i < row.size(); ++i) {
+      colContainsUndef.at(i) |= static_cast<char>(row[i].isUndef());
+    }
+  }
+  VariableToColumnMapWithTypeInfo map;
   for (size_t i = 0; i < parsedValues_._variables.size(); i++) {
-    // TODO<joka921> Make the `_variables` also `Variable`s
-    map[Variable{parsedValues_._variables[i]}] = i;
+    map[parsedValues_._variables[i]] =
+        ColumnIndexAndTypeInfo{i, static_cast<bool>(colContainsUndef.at(i))};
   }
   return map;
 }

@@ -36,7 +36,8 @@ string Filter::asStringImpl(size_t indent) const {
     os << " ";
   }
   os << "FILTER " << _subtree->asString(indent);
-  os << " with " << _expression.getCacheKey(_subtree->getVariableColumns());
+  os << " with "
+     << _expression.getCacheKey(removeTypeInfo(_subtree->getVariableColumns()));
   return std::move(os).str();
 }
 
@@ -65,11 +66,13 @@ template <int WIDTH>
 void Filter::computeFilterImpl(ResultTable* outputResultTable,
                                const ResultTable& inputResultTable) {
   sparqlExpression::VariableToColumnAndResultTypeMap columnMap;
-  for (const auto& [variable, columnIndex] : _subtree->getVariableColumns()) {
+  for (const auto& [variable, columnIndexAndType] :
+       _subtree->getVariableColumns()) {
     // TODO<joka921> The "ResultType" is currently unused, but we can use it in
     // the future for optimizations (in the style of "we know that this complete
     // column consists of floats").
-    columnMap[variable] = std::pair(columnIndex, qlever::ResultType::KB);
+    columnMap[variable] =
+        std::pair(columnIndexAndType.columnIndex_, qlever::ResultType::KB);
   }
 
   sparqlExpression::EvaluationContext evaluationContext(

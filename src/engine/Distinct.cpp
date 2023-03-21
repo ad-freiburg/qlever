@@ -34,7 +34,7 @@ string Distinct::asStringImpl(size_t indent) const {
 string Distinct::getDescriptor() const { return "Distinct"; }
 
 // _____________________________________________________________________________
-VariableToColumnMap Distinct::computeVariableToColumnMap() const {
+VariableToColumnMapWithTypeInfo Distinct::computeVariableToColumnMap() const {
   return _subtree->getVariableColumns();
 }
 

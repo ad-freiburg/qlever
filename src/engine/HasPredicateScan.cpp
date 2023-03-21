@@ -132,7 +132,7 @@ VariableToColumnMapWithTypeInfo HasPredicateScan::computeVariableToColumnMap()
       break;
     case ScanType::SUBQUERY_S:
       varCols = _subtree->getVariableColumns();
-      varCols.insert(std::make_pair(V{_object}, col(getResultWidth() - 1));
+      varCols.insert(std::make_pair(V{_object}, col(getResultWidth() - 1)));
       break;
   }
   return varCols;

@@ -40,7 +40,7 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
 
 string GroupBy::asStringImpl(size_t indent) const {
   const auto& varMap = getInternallyVisibleVariableColumns();
-  auto varMapInput = _subtree->getVariableColumns();
+  auto varMapInput = removeTypeInfo(_subtree->getVariableColumns());
 
   // We also have to encode the variables to which alias results are stored in
   // the cache key of the expressions in case they reuse a variable from the
@@ -51,7 +51,7 @@ string GroupBy::asStringImpl(size_t indent) const {
       // It is important that the cache keys for the variables from the aliases
       // do not collide with the query body, and that they are consistent. The
       // constant `1000` has no deeper meaning but makes debugging easier.
-      varMapInput[var] = column + 1000 + numColumnsInput;
+      varMapInput[var] = column.columnIndex_ + 1000 + numColumnsInput;
     }
   }
 
@@ -61,11 +61,11 @@ string GroupBy::asStringImpl(size_t indent) const {
   }
   os << "GROUP_BY ";
   for (const auto& var : _groupByVariables) {
-    os << varMap.at(var) << ", ";
+    os << varMap.at(var).columnIndex_ << ", ";
   }
   for (const auto& alias : _aliases) {
     os << alias._expression.getCacheKey(varMapInput) << " AS "
-       << varMap.at(alias._target);
+       << varMap.at(alias._target).columnIndex_;
   }
   os << std::endl;
   os << _subtree->asString(indent);
@@ -90,7 +90,7 @@ vector<size_t> GroupBy::resultSortedOn() const {
   vector<size_t> sortedOn;
   sortedOn.reserve(_groupByVariables.size());
   for (const auto& var : _groupByVariables) {
-    sortedOn.push_back(varCols[var]);
+    sortedOn.push_back(varCols[var].columnIndex_);
   }
   return sortedOn;
 }
@@ -107,7 +107,7 @@ vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
   std::unordered_set<size_t> sortColSet;
 
   for (const auto& var : _groupByVariables) {
-    size_t col = inVarColMap.at(var);
+    size_t col = inVarColMap.at(var).columnIndex_;
     // avoid sorting by a column twice
     if (sortColSet.find(col) == sortColSet.end()) {
       sortColSet.insert(col);
@@ -117,16 +117,25 @@ vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
   return cols;
 }
 
-VariableToColumnMap GroupBy::computeVariableToColumnMap() const {
-  VariableToColumnMap result;
+// ____________________________________________________________________
+VariableToColumnMapWithTypeInfo GroupBy::computeVariableToColumnMap() const {
+  VariableToColumnMapWithTypeInfo result;
   // The returned columns are all groupByVariables followed by aggregrates.
+  const auto& subtreeVars = _subtree->getVariableColumns();
   size_t colIndex = 0;
   for (const auto& var : _groupByVariables) {
-    result[var] = colIndex;
+    result[var] = ColumnIndexAndTypeInfo{
+        colIndex, subtreeVars.at(var).mightContainUndef_};
     colIndex++;
   }
   for (const Alias& a : _aliases) {
-    result[a._target] = colIndex;
+    // TODO<joka921> This currently pessimistically assumes that all (aggregate)
+    // expressions can produce undefined values. This might pessimize the
+    // performance when the result of this GROUP BY is joined on one or more of
+    // the aggregating columns. Implement an interface in the expressions that
+    // allows to check, whether an expression can never produce an undefined
+    // value.
+    result[a._target] = ColumnIndexAndTypeInfo{colIndex, true};
     colIndex++;
   }
   return result;
@@ -237,7 +246,9 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
 
   sparqlExpression::VariableToColumnAndResultTypeMap columnMap;
-  for (const auto& [variable, columnIndex] : _subtree->getVariableColumns()) {
+  for (const auto& [variable, columnIndexWithType] :
+       _subtree->getVariableColumns()) {
+    ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
     columnMap[variable] =
         std::pair(columnIndex, inTable->getResultType(columnIndex));
   }
@@ -253,7 +264,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
       _groupByVariables.begin(), _groupByVariables.end()};
   evaluationContext._variableToColumnMapPreviousResults =
-      getInternallyVisibleVariableColumns();
+      removeTypeInfo(getInternallyVisibleVariableColumns());
   evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
 
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
@@ -339,14 +350,14 @@ void GroupBy::computeResult(ResultTable* result) {
       AD_THROW("Groupby variable " + var.name() + " is not groupable");
     }
 
-    groupByColumns.push_back(it->second);
+    groupByColumns.push_back(it->second.columnIndex_);
   }
 
   // parse the aggregate aliases
   const auto& varColMap = getInternallyVisibleVariableColumns();
   for (const Alias& alias : _aliases) {
     aggregates.push_back(
-        Aggregate{alias._expression, varColMap.at(alias._target)});
+        Aggregate{alias._expression, varColMap.at(alias._target).columnIndex_});
   }
 
   // populate the result type vector
@@ -356,14 +367,14 @@ void GroupBy::computeResult(ResultTable* result) {
   // also copied. The result type of the other columns is set when the
   // values are computed.
   for (const auto& var : _groupByVariables) {
-    result->_resultTypes[varColMap.at(var)] =
-        subresult->getResultType(subtreeVarCols.at(var));
+    result->_resultTypes[varColMap.at(var).columnIndex_] =
+        subresult->getResultType(subtreeVarCols.at(var).columnIndex_);
   }
 
   std::vector<size_t> groupByCols;
   groupByCols.reserve(_groupByVariables.size());
   for (const auto& var : _groupByVariables) {
-    groupByCols.push_back(subtreeVarCols.at(var));
+    groupByCols.push_back(subtreeVarCols.at(var).columnIndex_);
   }
 
   std::vector<ResultTable::ResultType> inputResultTypes;

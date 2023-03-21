@@ -50,7 +50,7 @@ class Values : public Operation {
   // These two are also used by class `Service`, hence public.
   virtual void computeResult(ResultTable* result) override;
 
-  VariableToColumnMap computeVariableToColumnMap() const override;
+  VariableToColumnMapWithTypeInfo computeVariableToColumnMap() const override;
 
  private:
   // Compute the per-column multiplicity of the parsed values.
