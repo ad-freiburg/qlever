@@ -84,5 +84,7 @@ constexpr size_t QUEUE_SIZE_AFTER_PARALLEL_PARSING = 10;
 // NOTE: This used to be `1 << 23` (over 8M), which is fairly large (we always
 // need to decompress at least one whole block, even when reading only few
 // triples). With 100K, the total space for all the `CompressedBlockMetadata` is
-// still small compared to the rest of the index.
-constexpr size_t BLOCKSIZE_COMPRESSED_METADATA = 100'000;
+// still small compared to the rest of the index. However, with 100K, and single
+// block is just 10K compresse, which might result in sub-optimal IO-efficiency
+// when reading many blocks. We take 1M as a compromise.
+constexpr size_t BLOCKSIZE_COMPRESSED_METADATA = 1'000'000;
