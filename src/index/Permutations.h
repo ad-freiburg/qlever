@@ -1,16 +1,18 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+
 #pragma once
 
 #include <array>
 #include <string>
 
-#include "../global/Constants.h"
-#include "../util/File.h"
-#include "../util/Log.h"
-#include "./IndexMetaData.h"
-#include "./StxxlSortFunctors.h"
+#include "global/Constants.h"
+#include "index/DeltaTriples.h"
+#include "index/IndexMetaData.h"
+#include "index/StxxlSortFunctors.h"
+#include "util/File.h"
+#include "util/Log.h"
 
 namespace Permutation {
 using std::array;
@@ -21,11 +23,19 @@ using std::string;
 // STXXL.
 template <class Comparator, class MetaDataT>
 class PermutationImpl {
+ private:
+  // The delta triples and their positions in this permutation.
+  const DeltaTriples::TriplesWithPositionsPerBlock&
+      triplesWithPositionsPerBlock_;
+
  public:
   using MetaData = MetaDataT;
   PermutationImpl(const Comparator& comp, string name, string suffix,
-                  array<unsigned short, 3> order)
-      : _comp(comp),
+                  array<unsigned short, 3> order,
+                  const DeltaTriples::TriplesWithPositionsPerBlock&
+                      triplesWithPositionsPerBlock)
+      : triplesWithPositionsPerBlock_(triplesWithPositionsPerBlock),
+        _comp(comp),
         _readableName(std::move(name)),
         _fileSuffix(std::move(suffix)),
         _keyOrder(order) {}
@@ -65,7 +75,7 @@ class PermutationImpl {
     }
     const auto& metaData = _meta.getMetaData(col0Id);
     return _reader.scan(metaData, _meta.blockData(), _file, result,
-                        std::move(timer));
+                        std::move(timer), triplesWithPositionsPerBlock_);
   }
   /// For given IDs for the first and second column, retrieve all IDs of the
   /// third column, and store them in `result`. This is just a thin wrapper
@@ -79,7 +89,7 @@ class PermutationImpl {
     const auto& metaData = _meta.getMetaData(col0Id);
 
     return _reader.scan(metaData, col1Id, _meta.blockData(), _file, result,
-                        timer);
+                        timer, triplesWithPositionsPerBlock_);
   }
 
   // _______________________________________________________

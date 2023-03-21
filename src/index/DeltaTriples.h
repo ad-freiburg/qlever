@@ -5,11 +5,18 @@
 #pragma once
 
 #include "engine/LocalVocab.h"
-#include "global/Id.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "parser/TurtleParser.h"
 #include "util/HashSet.h"
+
+// The `DeltaTriples` class needs to know the `Index` to which it belongs (for
+// translating the components of a Turtle triple to `Id`s and for locating `Id`s
+// in the permutations). However, the `Index` class also needs to know the
+// `DeltaTriples` (in order to consider these triples when scanning a
+// permutation). To avoid a circular include, and since we only need an `Index&`
+// here, we can use a forward declaration.
+// class Index;
 
 // A class for maintaining triples that were inserted or deleted after index
 // building.
@@ -160,8 +167,6 @@ class DeltaTriples {
   const Index& index_;
 
   // The positions of the delta triples in each of the six permutations.
-  //
-  // TODO: Do the positions need to know to which permutation they belong?
   TriplesWithPositionsPerBlock triplesWithPositionsPerBlockInPSO_;
   TriplesWithPositionsPerBlock triplesWithPositionsPerBlockInPOS_;
   TriplesWithPositionsPerBlock triplesWithPositionsPerBlockInSPO_;

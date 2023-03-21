@@ -18,7 +18,9 @@ void CompressedRelationReader::scan(
     const CompressedRelationMetadata& metadata,
     const vector<CompressedBlockMetadata>& blockMetadata,
     ad_utility::File& file, IdTable* result,
-    ad_utility::SharedConcurrentTimeoutTimer timer) const {
+    ad_utility::SharedConcurrentTimeoutTimer timer,
+    const DeltaTriples::TriplesWithPositionsPerBlock&
+        triplesWithPositionsPerBlock) const {
   AD_CONTRACT_CHECK(result->numColumns() == NumColumns);
 
   // get all the blocks where _col0FirstId <= col0Id <= _col0LastId
@@ -41,6 +43,18 @@ void CompressedRelationReader::scan(
       [](const auto& a, const auto& b) {
         return a._col0FirstId < b._col0FirstId && a._col0LastId < b._col0LastId;
       });
+
+  // PRELIMINARY: Say how many delta triples are contained in those blocks.
+  size_t numDeltaTriples = 0;
+  for (auto block = beginBlock; block < endBlock; ++block) {
+    size_t blockIndex = block - blockMetadata.begin();
+    if (triplesWithPositionsPerBlock.positionMap_.contains(blockIndex)) {
+      numDeltaTriples +=
+          triplesWithPositionsPerBlock.positionMap_.at(blockIndex).size();
+    }
+  }
+  LOG(INFO) << "Number of delta triples in blocks scanned: " << numDeltaTriples
+            << std::endl;
 
   // The total size of the result is now known.
   result->resize(metadata.getNofElements());
@@ -156,7 +170,9 @@ void CompressedRelationReader::scan(
 void CompressedRelationReader::scan(
     const CompressedRelationMetadata& metaData, Id col1Id,
     const vector<CompressedBlockMetadata>& blocks, ad_utility::File& file,
-    IdTable* result, ad_utility::SharedConcurrentTimeoutTimer timer) const {
+    IdTable* result, ad_utility::SharedConcurrentTimeoutTimer timer,
+    const DeltaTriples::TriplesWithPositionsPerBlock&
+        triplesWithPositionsPerBlock) const {
   AD_CONTRACT_CHECK(result->numColumns() == 1);
 
   // Get all the blocks  that possibly might contain our pair of col0Id and
@@ -183,6 +199,18 @@ void CompressedRelationReader::scan(
   std::tie(beginBlock, endBlock) =
       std::equal_range(blocks.begin(), blocks.end(),
                        KeyLhs{col0Id, col0Id, col1Id, col1Id}, comp);
+
+  // PRELIMINARY: Say how many delta triples are contained in those blocks.
+  size_t numDeltaTriples = 0;
+  for (auto block = beginBlock; block < endBlock; ++block) {
+    size_t blockIndex = block - blocks.begin();
+    if (triplesWithPositionsPerBlock.positionMap_.contains(blockIndex)) {
+      numDeltaTriples +=
+          triplesWithPositionsPerBlock.positionMap_.at(blockIndex).size();
+    }
+  }
+  LOG(INFO) << "Number of delta triples in blocks scanned: " << numDeltaTriples
+            << std::endl;
 
   // Invariant: The col0Id is completely stored in a single block, or it is
   // contained in multiple blocks that only contain this col0Id,

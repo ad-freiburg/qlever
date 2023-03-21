@@ -5,33 +5,6 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 #pragma once
 
-#include <engine/ResultTable.h>
-#include <global/Pattern.h>
-#include <index/CompressedRelation.h>
-#include <index/ConstantsIndexBuilding.h>
-#include <index/DocsDB.h>
-#include <index/Index.h>
-#include <index/IndexBuilderTypes.h>
-#include <index/IndexMetaData.h>
-#include <index/PatternCreator.h>
-#include <index/Permutations.h>
-#include <index/StxxlSortFunctors.h>
-#include <index/TextMetaData.h>
-#include <index/Vocabulary.h>
-#include <index/VocabularyGenerator.h>
-#include <parser/ContextFileParser.h>
-#include <parser/TripleComponent.h>
-#include <parser/TurtleParser.h>
-#include <util/BackgroundStxxlSorter.h>
-#include <util/BufferedVector.h>
-#include <util/CompressionUsingZstd/ZstdWrapper.h>
-#include <util/File.h>
-#include <util/Forward.h>
-#include <util/HashMap.h>
-#include <util/MmapVector.h>
-#include <util/Timer.h>
-#include <util/json.h>
-
 #include <array>
 #include <fstream>
 #include <memory>
@@ -41,6 +14,34 @@
 #include <stxxl/stream>
 #include <stxxl/vector>
 #include <vector>
+
+#include "engine/ResultTable.h"
+#include "global/Pattern.h"
+#include "index/CompressedRelation.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/DeltaTriples.h"
+#include "index/DocsDB.h"
+#include "index/Index.h"
+#include "index/IndexBuilderTypes.h"
+#include "index/IndexMetaData.h"
+#include "index/PatternCreator.h"
+#include "index/Permutations.h"
+#include "index/StxxlSortFunctors.h"
+#include "index/TextMetaData.h"
+#include "index/Vocabulary.h"
+#include "index/VocabularyGenerator.h"
+#include "parser/ContextFileParser.h"
+#include "parser/TripleComponent.h"
+#include "parser/TurtleParser.h"
+#include "util/BackgroundStxxlSorter.h"
+#include "util/BufferedVector.h"
+#include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/File.h"
+#include "util/Forward.h"
+#include "util/HashMap.h"
+#include "util/MmapVector.h"
+#include "util/Timer.h"
+#include "util/json.h"
 
 using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
@@ -132,6 +133,10 @@ class IndexImpl {
   off_t _currentoff_t;
   mutable ad_utility::File _textIndexFile;
 
+  // Reference to the delta triples from the `Index` class of which this class
+  // is the implementation.
+  std::unique_ptr<DeltaTriples> deltaTriples_;
+
   // If false, only PSO and POS permutations are loaded and expected.
   bool _loadAllPermutations = true;
 
@@ -167,15 +172,46 @@ class IndexImpl {
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
-  Permutation::POS_T _POS{SortByPOS(), "POS", ".pos", {1, 2, 0}};
-  Permutation::PSO_T _PSO{SortByPSO(), "PSO", ".pso", {1, 0, 2}};
-  Permutation::SOP_T _SOP{SortBySOP(), "SOP", ".sop", {0, 2, 1}};
-  Permutation::SPO_T _SPO{SortBySPO(), "SPO", ".spo", {0, 1, 2}};
-  Permutation::OPS_T _OPS{SortByOPS(), "OPS", ".ops", {2, 1, 0}};
-  Permutation::OSP_T _OSP{SortByOSP(), "OSP", ".osp", {2, 0, 1}};
+  Permutation::POS_T _POS{
+      SortByPOS(),
+      "POS",
+      ".pos",
+      {1, 2, 0},
+      deltaTriples_->getTriplesWithPositionsPerBlock(Index::Permutation::POS)};
+  Permutation::PSO_T _PSO{
+      SortByPSO(),
+      "PSO",
+      ".pso",
+      {1, 0, 2},
+      deltaTriples_->getTriplesWithPositionsPerBlock(Index::Permutation::PSO)};
+  Permutation::SOP_T _SOP{
+      SortBySOP(),
+      "SOP",
+      ".sop",
+      {0, 2, 1},
+      deltaTriples_->getTriplesWithPositionsPerBlock(Index::Permutation::SOP)};
+  Permutation::SPO_T _SPO{
+      SortBySPO(),
+      "SPO",
+      ".spo",
+      {0, 1, 2},
+      deltaTriples_->getTriplesWithPositionsPerBlock(Index::Permutation::SPO)};
+  Permutation::OPS_T _OPS{
+      SortByOPS(),
+      "OPS",
+      ".ops",
+      {2, 1, 0},
+      deltaTriples_->getTriplesWithPositionsPerBlock(Index::Permutation::OPS)};
+  Permutation::OSP_T _OSP{
+      SortByOSP(),
+      "OSP",
+      ".osp",
+      {2, 0, 1},
+      deltaTriples_->getTriplesWithPositionsPerBlock(Index::Permutation::OSP)};
 
  public:
-  IndexImpl();
+  IndexImpl(std::unique_ptr<DeltaTriples> deltaTriples =
+                std::unique_ptr<DeltaTriples>());
 
   /// Forbid copy and assignment.
   IndexImpl& operator=(const IndexImpl&) = delete;
@@ -196,6 +232,8 @@ class IndexImpl {
   auto& OPS() { return _OPS; }
   const auto& OSP() const { return _OSP; }
   auto& OSP() { return _OSP; }
+  const DeltaTriples& deltaTriples() const { return *deltaTriples_; }
+  DeltaTriples& deltaTriples() { return *deltaTriples_; }
 
   // Creates an index from a file. Parameter Parser must be able to split the
   // file's format into triples.

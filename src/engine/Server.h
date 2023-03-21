@@ -59,7 +59,6 @@ class Server {
   ad_utility::AllocatorWithLimit<Id> _allocator;
   SortPerformanceEstimator _sortPerformanceEstimator;
   Index _index;
-  DeltaTriples _deltaTriples;
   Engine _engine;
 
   bool _initialized;

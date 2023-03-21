@@ -20,6 +20,7 @@
 class IdTable;
 class TextBlockMetaData;
 class IndexImpl;
+class DeltaTriples;
 
 /**
  * Used as a template argument to the `createFromFile` method, when we do not
@@ -30,6 +31,18 @@ class TurtleParserAuto {};
 
 class Index {
  private:
+  // A unique `DeltaTriples` object will be created when this `Index` object is
+  // constructed and then immediately passed on to the `IndexImpl` (see the next
+  // member). This order is important because the `DeltaTriples` object needs to
+  // know the `Index` to which it pertains, and the `IndexImpl` needs access to
+  // the `DeltaTriples` when scanning permutations.
+  //
+  // NOTE: The `Index` and `IndexImpl` class could also share a pointer to the
+  // same `DeltaTriples` object, but it seems more correct to have a unique
+  // pointer, which only `IndexImpl` owns. Note how the `deltaTriples` getter
+  // below accesses the object via `pimpl_`.
+  std::unique_ptr<DeltaTriples> deltaTriples_;
+
   // Pimpl to reduce compile times.
   std::unique_ptr<IndexImpl> pimpl_;
 
@@ -59,6 +72,9 @@ class Index {
 
   // Get underlying access to the Pimpl where necessary.
   const IndexImpl& getPimpl() const { return *pimpl_; }
+
+  // Use delta triples (the default is not to use them).
+  void useDeltaTriples();
 
   // Create an index from a file. Will write vocabulary and on-disk index data.
   // NOTE: The index can not directly be used after this call, but has to be
@@ -301,6 +317,10 @@ class Index {
 
   // Get access to the implementation. This should be used rarely as it
   // requires including the rather expensive `IndexImpl.h` header
-  IndexImpl& getImpl() { return *pimpl_; }
-  [[nodiscard]] const IndexImpl& getImpl() const { return *pimpl_; }
+  IndexImpl& getImpl();
+  [[nodiscard]] const IndexImpl& getImpl() const;
+
+  // Get acces to the delta triples.
+  [[nodiscard]] DeltaTriples& deltaTriples();
+  [[nodiscard]] const DeltaTriples& deltaTriples() const;
 };

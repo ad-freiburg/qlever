@@ -35,7 +35,6 @@ Server::Server(const int port, const int numThreads, size_t maxMemGB,
                  }},
       _sortPerformanceEstimator(),
       _index(),
-      _deltaTriples(_index),
       _engine(),
       _initialized(false),
       // The number of server threads currently also is the number of queries
@@ -320,8 +319,8 @@ Awaitable<void> Server::process(
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
     logCommand(cmd, "clear delta triples");
-    _deltaTriples.clear();
-    response = createJsonResponse(composeCacheStatsJson(), request);
+    _index.deltaTriples().clear();
+    response = createJsonResponse(composeStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
     response = createJsonResponse(RuntimeParameters().toMap(), request);
@@ -360,13 +359,13 @@ Awaitable<void> Server::process(
       }
       TurtleTriple turtleTriple = parser.getTriples()[0];
       if (insertDetected) {
-        _deltaTriples.insertTriple(std::move(turtleTriple));
+        _index.deltaTriples().insertTriple(std::move(turtleTriple));
         response =
             createOkResponse(absl::StrCat("INSERT operation for triple \"",
                                           input, "\" processed\n"),
                              request, ad_utility::MediaType::textPlain);
       } else {
-        _deltaTriples.deleteTriple(std::move(turtleTriple));
+        _index.deltaTriples().deleteTriple(std::move(turtleTriple));
         response =
             createOkResponse(absl::StrCat("DELETE operation for triple \"",
                                           input, "\" processed\n"),
@@ -515,8 +514,8 @@ json Server::composeStatsJson() const {
   result["num-text-records"] = _index.getNofTextRecords();
   result["num-word-occurrences"] = _index.getNofWordPostings();
   result["num-entity-occurrences"] = _index.getNofEntityPostings();
-  result["num-delta-triples-inserted"] = _deltaTriples.numInserted();
-  result["num-delta-triples-deleted"] = _deltaTriples.numDeleted();
+  result["num-delta-triples-inserted"] = _index.deltaTriples().numInserted();
+  result["num-delta-triples-deleted"] = _index.deltaTriples().numDeleted();
   return result;
 }
 

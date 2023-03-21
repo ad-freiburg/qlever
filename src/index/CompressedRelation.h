@@ -11,6 +11,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/DeltaTriples.h"
 #include "util/BufferedVector.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
@@ -262,7 +263,10 @@ class CompressedRelationReader {
   void scan(const CompressedRelationMetadata& metadata,
             const vector<CompressedBlockMetadata>& blockMetadata,
             ad_utility::File& file, IdTable* result,
-            ad_utility::SharedConcurrentTimeoutTimer timer) const;
+            ad_utility::SharedConcurrentTimeoutTimer timer,
+            const DeltaTriples::TriplesWithPositionsPerBlock&
+                triplesWithPositionsPerBlock =
+                    DeltaTriples::TriplesWithPositionsPerBlock{}) const;
 
   /**
    * @brief For a permutation XYZ, retrieve all Z for given X and Y.
@@ -282,7 +286,10 @@ class CompressedRelationReader {
   void scan(const CompressedRelationMetadata& metaData, Id col1Id,
             const vector<CompressedBlockMetadata>& blocks,
             ad_utility::File& file, IdTable* result,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+            ad_utility::SharedConcurrentTimeoutTimer timer,
+            const DeltaTriples::TriplesWithPositionsPerBlock&
+                triplesWithPositionsPerBlock =
+                    DeltaTriples::TriplesWithPositionsPerBlock{}) const;
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
