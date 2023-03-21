@@ -322,8 +322,8 @@ void Operation::createRuntimeInfoFromEstimates() {
 }
 
 // ___________________________________________________________________________
-const VariableToColumnMap& Operation::getInternallyVisibleVariableColumns()
-    const {
+const VariableToColumnMapWithTypeInfo&
+Operation::getInternallyVisibleVariableColumns() const {
   // TODO<joka921> Once the operation class is based on a variant rather than
   // on inheritance, we can get rid of the locking here because we can enforce
   // that `computeVariableToColumnMap` is always called in the constructor of
@@ -336,8 +336,8 @@ const VariableToColumnMap& Operation::getInternallyVisibleVariableColumns()
 }
 
 // ___________________________________________________________________________
-const VariableToColumnMap& Operation::getExternallyVisibleVariableColumns()
-    const {
+const VariableToColumnMapWithTypeInfo&
+Operation::getExternallyVisibleVariableColumns() const {
   // TODO<joka921> Once the operation class is based on a variant rather than
   // on inheritance, we can get rid of the locking here because we can enforce
   // that `computeVariableToColumnMap` is always called in the constructor of
@@ -371,14 +371,13 @@ std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
     return std::nullopt;
   }
 
-  // TODO<joka921> Can be simplified using views once they are properly
-  // supported inside clang.
-  auto it =
-      std::ranges::find(varToColMap, sortedIndices.front(), ad_utility::second);
+  auto it = std::ranges::find(
+      varToColMap, sortedIndices.front(),
+      [](const auto& keyValue) { return keyValue.second.columnIndex_; });
   if (it == varToColMap.end()) {
     return std::nullopt;
   }
-  return Variable{it->first};
+  return it->first;
 }
 
 // ___________________________________________________________________________

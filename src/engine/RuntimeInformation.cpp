@@ -83,17 +83,21 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
 }
 
 // ________________________________________________________________________________________________________________
-void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
+void RuntimeInformation::setColumnNames(
+    const VariableToColumnMapWithTypeInfo& columnMap) {
   if (columnMap.empty()) {
     return;
   }
   // Resize the `columnNames_` vector such that we can use the keys from
   // columnMap (which are not necessarily consecutive) as indexes.
-  auto maxColumnIndex =
-      std::ranges::max_element(columnMap, {}, ad_utility::second)->second;
+  namespace stdv = std::views;
+  ColumnIndex maxColumnIndex =
+      std::ranges::max(columnMap | stdv::values |
+                       stdv::transform(&ColumnIndexAndTypeInfo::columnIndex_));
   columnNames_.resize(maxColumnIndex + 1);
   // Now copy the (variable, index) pairs to the vector.
-  for (const auto& [variable, columnIndex] : columnMap) {
+  for (const auto& [variable, columnIndexAndType] : columnMap) {
+    ColumnIndex columnIndex = columnIndexAndType.columnIndex_;
     AD_CONTRACT_CHECK(columnIndex < columnNames_.size());
     columnNames_[columnIndex] = variable.name();
   }

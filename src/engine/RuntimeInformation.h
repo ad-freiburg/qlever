@@ -85,7 +85,7 @@ class RuntimeInformation {
 
   /// Set the names of the columns from the HashMap format that is used in the
   /// rest of the Qlever code.
-  void setColumnNames(const VariableToColumnMap& columnMap);
+  void setColumnNames(const VariableToColumnMapWithTypeInfo& columnMap);
 
   /// Get the time spent computing the operation. This is the total time minus
   /// the time spent computing the children.

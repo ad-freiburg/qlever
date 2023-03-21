@@ -6,9 +6,9 @@
 
 #include <limits>
 
-#include "../util/Exception.h"
-#include "CallFixedSize.h"
-#include "IndexScan.h"
+#include "engine/CallFixedSize.h"
+#include "engine/IndexScan.h"
+#include "util/Exception.h"
 
 // _____________________________________________________________________________
 TransitivePath::TransitivePath(
@@ -133,7 +133,8 @@ vector<size_t> TransitivePath::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-VariableToColumnMap TransitivePath::computeVariableToColumnMap() const {
+VariableToColumnMapWithTypeInfo TransitivePath::computeVariableToColumnMap()
+    const {
   return _variableColumns;
 }
 
@@ -746,12 +747,15 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
   p->_leftSideTree = leftop;
   p->_leftSideCol = inputCol;
   const auto& var = leftop->getVariableColumns();
-  for (const auto& [variable, columnIndex] : var) {
+  for (auto [variable, columnIndexWithType] : var) {
+    ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
     if (columnIndex != inputCol) {
       if (columnIndex > inputCol) {
-        p->_variableColumns[variable] = columnIndex + 1;
+        columnIndexWithType.columnIndex_++;
+        p->_variableColumns[std::move(variable)] = columnIndexWithType;
       } else {
-        p->_variableColumns[variable] = columnIndex + 2;
+        columnIndexWithType.columnIndex_ += 2;
+        p->_variableColumns[std::move(variable)] = columnIndexWithType;
       }
       p->_resultWidth++;
     }

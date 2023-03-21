@@ -61,11 +61,12 @@ vector<size_t> CountAvailablePredicates::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-VariableToColumnMap CountAvailablePredicates::computeVariableToColumnMap()
-    const {
-  VariableToColumnMap varCols;
-  varCols[_predicateVariable] = 0;
-  varCols[_countVariable] = 1;
+VariableToColumnMapWithTypeInfo
+CountAvailablePredicates::computeVariableToColumnMap() const {
+  VariableToColumnMapWithTypeInfo varCols;
+  auto col = makeDefinedColumn;
+  varCols[_predicateVariable] = col(0);
+  varCols[_countVariable] = col(1);
   return varCols;
 }
 

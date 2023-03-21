@@ -69,7 +69,7 @@ class QueryExecutionTree {
 
   const QueryExecutionContext* getQec() const { return _qec; }
 
-  const VariableToColumnMap& getVariableColumns() const {
+  const VariableToColumnMapWithTypeInfo& getVariableColumns() const {
     AD_CONTRACT_CHECK(_rootOperation);
     return _rootOperation->getExternallyVisibleVariableColumns();
   }

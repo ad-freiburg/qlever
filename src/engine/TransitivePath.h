@@ -23,7 +23,7 @@ class TransitivePath : public Operation {
   size_t _rightSideCol;
 
   size_t _resultWidth;
-  VariableToColumnMap _variableColumns;
+  VariableToColumnMapWithTypeInfo _variableColumns;
 
   std::shared_ptr<QueryExecutionTree> _subtree;
   bool _leftIsVar;
@@ -138,5 +138,5 @@ class TransitivePath : public Operation {
  private:
   virtual void computeResult(ResultTable* result) override;
 
-  VariableToColumnMap computeVariableToColumnMap() const override;
+  VariableToColumnMapWithTypeInfo computeVariableToColumnMap() const override;
 };

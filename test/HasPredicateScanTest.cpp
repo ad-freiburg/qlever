@@ -61,10 +61,12 @@ class DummyOperation : public Operation {
   virtual bool knownEmptyResult() override { return false; }
 
  private:
-  virtual VariableToColumnMap computeVariableToColumnMap() const override {
-    VariableToColumnMap m;
-    m[Variable{"?a"}] = 0;
-    m[Variable{"?b"}] = 1;
+  virtual VariableToColumnMapWithTypeInfo computeVariableToColumnMap()
+      const override {
+    VariableToColumnMapWithTypeInfo m;
+    auto col = makeDefinedColumn;
+    m[Variable{"?a"}] = col(0);
+    m[Variable{"?b"}] = col(1);
     return m;
   }
 };
