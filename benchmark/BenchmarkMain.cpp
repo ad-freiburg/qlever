@@ -1,6 +1,7 @@
 // Copyright 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (November of 2022, schlegea@informatik.uni-freiburg.de)
+#include <boost/program_options/value_semantic.hpp>
 #include <iostream>
 #include <fstream>
 #include <ios>
@@ -10,6 +11,7 @@
 #include <vector>
 
 #include <boost/program_options.hpp>
+#include "BenchmarkConfiguration.h"
 #include "util/json.h"
 #include "util/File.h"
 #include "../benchmark/Benchmark.h"
@@ -38,6 +40,8 @@ void writeJsonToFile(nlohmann::json j, std::string fileName,
 int main(int argc, char** argv) {
   // The filename, should the json option be choosen.
   std::string jsonFileName = "";
+  // The short hand, or json string, for the benchmark configuration.
+  std::string benchmarkConfigurationString = "";
 
   // Declaring the supported options.
   boost::program_options::options_description options("Options for the"
@@ -45,11 +49,15 @@ int main(int argc, char** argv) {
   options.add_options()
       ("help,h", "Print the help message.")
       ("print,p", "Roughly prints all benchmarks.")
-      ("json,j", boost::program_options::value<std::string>(&jsonFileName),
+      ("write,w", boost::program_options::value<std::string>(&jsonFileName),
        "Writes the benchmarks as json to a file, overriding the previous"
        " content of the file.")
       ("append,a", "Causes the json option to append to the end of the"
       " file, instead of overriding the previous content of the file.")
+      ("configuration-shorthand,s",
+      boost::program_options::value<std::string>(&benchmarkConfigurationString),
+      "Allows you to add options to configuration of the benchmarks using the"
+      " short hand described in `BenchmarkConfiguration.h:parseShortHand`.")
   ;
 
   // Prints how to use the file correctly and exits.
@@ -72,11 +80,19 @@ int main(int argc, char** argv) {
       boost::program_options::parse_command_line(argc, argv, options), vm);
   boost::program_options::notify(vm);
 
-  // Did they want the help option?
-  if (vm.count("help")) {printUsageAndExit();}
+  // Did they set any option, that would require anything to actually happen?
+  // If not, don't do anything. This should also happen, if they explicitly
+  // wanted to see the `help` option.
+  if (vm.count("help") || !(vm.count("print") || vm.count("write"))){
+    printUsageAndExit();
+  }
 
-  // We got at least one argument at this point and all options need all the
-  // benchmarks measured, so time to do that.
+  // Did we get configuration short hand?
+  if (vm.count("configuration-shorthand")){
+    BenchmarkConfiguration config{};
+    config.parseShortHand(benchmarkConfigurationString);
+    BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(config);
+  }
 
   // Measuring the time for all registered benchmarks.
   // For measuring and saving the times.
@@ -90,7 +106,7 @@ int main(int argc, char** argv) {
     }, {});
   }
 
-  if (vm.count("json")) {
+  if (vm.count("write")) {
     writeJsonToFile(zipGeneralMetadataAndBenchmarkRecordsToJson(
       BenchmarkRegister::getAllGeneralMetadata(), records), jsonFileName,
         vm.count("append"));
