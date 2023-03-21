@@ -13,7 +13,7 @@ include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag(-fcoroutines HAS_COROUTINES)
 if (HAS_COROUTINES)
     add_compile_options(-fcoroutines)
-else()
+elseif((CMAKE_CXX_COMPILER_ID STREQUAL "Clang") AND (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0"))
     add_compile_options(-fcoroutines-ts)
 endif()
 
