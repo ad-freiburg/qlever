@@ -138,8 +138,6 @@ class Join : public Operation {
   ScanMethodType getScanMethod(
       std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const;
 
-  void doComputeJoinWithFullScanDummyLeft(const IdTable& v, IdTable* r) const;
-
   void doComputeJoinWithFullScanDummyRight(const IdTable& v, IdTable* r) const;
 
   void appendCrossProduct(const IdTable::const_iterator& leftBegin,
