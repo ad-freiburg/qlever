@@ -14,6 +14,30 @@ void BenchmarkConfiguration::parseJsonString(const std::string& jsonString){
   data_ = nlohmann::json::parse(jsonString);
 }
 
+/*
+@brief A custom exception for `parseShortHand`, for when the short hand
+syntax wasn't followed.
+*/
+class ShortHandSyntaxException : public std::exception {
+  private:
+  // The error message.
+  std::string message_;
+
+  public:
+  /*
+  @param shortHandString The string, that was parsed string.
+  */
+  ShortHandSyntaxException(const std::string& shortHandString){
+    message_ =
+      "The following string doesn't follow short hand string syntax "
+      "and couldn't be parsed:\n" + shortHandString;
+  }
+
+  const char * what () const throw () {
+    return message_.c_str();
+  }
+};
+
 // ____________________________________________________________________________
 void BenchmarkConfiguration::parseShortHand(const std::string& shortHandString){
   // I use regular expressions to parse the short hand. In order to easier
@@ -38,7 +62,9 @@ void BenchmarkConfiguration::parseShortHand(const std::string& shortHandString){
   
   // Use regular expressions to check, if the given string uses the correct
   // grammar/syntax.
-  AD_CHECK(std::regex_match(shortHandString, std::regex{R"--(()--" + assigment + R"--()*)--"}));
+  if (!std::regex_match(shortHandString, std::regex{R"--(()--" + assigment + R"--()*)--"})){
+    throw ShortHandSyntaxException{shortHandString};
+  }
 
   // Create the regular expression of an assigment.
   std::regex assigmentRegex(assigment);
