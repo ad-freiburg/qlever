@@ -5,6 +5,7 @@
 #include <cstdio>
 
 #include "./IndexTestHelpers.h"
+#include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/GroupBy.h"
@@ -484,7 +485,11 @@ TEST_F(GroupBySpecialCount, computeGroupByForJoinWithFullScan) {
   // `chooseInterface == true` means "use the dedicated
   // `computeGroupByForJoinWithFullScan` method", `chooseInterface == false`
   // means use the general `computeOptimizedGroupByIfPossible` function.
-  auto testWithBothInterfaces = [&](bool chooseInterface) {
+  using ad_utility::source_location;
+  auto testWithBothInterfaces = [&](bool chooseInterface,
+                                    source_location l =
+                                        source_location::current()) {
+    auto trace = generateLocationTrace(l);
     // Set up a `VALUES` clause with three values for `?x`, two of which (`<x>`
     // and `<y>`) actually appear in the test knowledge graph.
     parsedQuery::SparqlValues sparqlValues;

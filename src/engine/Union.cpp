@@ -67,9 +67,31 @@ vector<size_t> Union::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
 VariableToColumnMapWithTypeInfo Union::computeVariableToColumnMap() const {
-  return makeVarToColMapForJoinOperations(_subtrees[0]->getVariableColumns(),
-                                          _subtrees[1]->getVariableColumns(),
-                                          _columnOrigins, BinOpType::Union);
+  using VarAndIndex = std::pair<Variable, size_t>;
+
+  VariableToColumnMapWithTypeInfo variableColumns;
+  size_t column = 0;
+
+  auto addVariableColumnIfNotExists = [&variableColumns, &column](
+                                          const VarAndIndex& varAndIndex) {
+    if (!variableColumns.contains(varAndIndex.first)) {
+      // TODO<joka921> Not all the columns might contain UNDEF values. If a
+      // variable exists in both the inputs, and is bound in both the inputs,
+      // the we might set this to false, but this requires additional code.
+      variableColumns[varAndIndex.first] = ColumnIndexAndTypeInfo{column, true};
+      column++;
+    }
+  };
+
+  auto addVariablesForSubtree = [&addVariableColumnIfNotExists](
+                                    const auto& subtree) {
+    std::ranges::for_each(
+        copySortedByColumnIndex(removeTypeInfo(subtree->getVariableColumns())),
+        addVariableColumnIfNotExists);
+  };
+
+  std::ranges::for_each(_subtrees, addVariablesForSubtree);
+  return variableColumns;
 }
 
 void Union::setTextLimit(size_t limit) {

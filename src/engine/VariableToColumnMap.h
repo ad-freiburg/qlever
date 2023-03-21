@@ -41,7 +41,10 @@ VariableToColumnMapWithTypeInfo makeVarToColMapForJoinOperations(
     const VariableToColumnMapWithTypeInfo& leftVars,
     const VariableToColumnMapWithTypeInfo& rightVars,
     std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType);
+
 // Return a vector that contains the contents of the `VariableToColumnMap` in
 // ascending order of the column indices.
 std::vector<std::pair<Variable, size_t>> copySortedByColumnIndex(
     VariableToColumnMap map);
+std::vector<std::pair<Variable, ColumnIndexAndTypeInfo>>
+copySortedByColumnIndex(VariableToColumnMapWithTypeInfo map);

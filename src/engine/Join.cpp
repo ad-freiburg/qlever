@@ -35,6 +35,11 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
     std::swap(t1, t2);
     std::swap(t1JoinCol, t2JoinCol);
   }
+  if (isFullScanDummy(t1)) {
+    AD_CONTRACT_CHECK(!isFullScanDummy(t2));
+    std::swap(t1, t2);
+    std::swap(t1JoinCol, t2JoinCol);
+  }
   _left = std::move(t1);
   _leftJoinCol = t1JoinCol;
   _right = std::move(t2);

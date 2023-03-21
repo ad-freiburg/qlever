@@ -14,6 +14,15 @@ copySortedByColumnIndex(VariableToColumnMapWithTypeInfo map) {
   return result;
 }
 
+// _____________________________________________________________________________
+std::vector<std::pair<Variable, size_t>> copySortedByColumnIndex(
+    VariableToColumnMap map) {
+  std::vector<std::pair<Variable, size_t>> result{
+      std::make_move_iterator(map.begin()), std::make_move_iterator(map.end())};
+  std::ranges::sort(result, std::less{}, ad_utility::second);
+  return result;
+}
+
 // ______________________________________________________________________________
 VariableToColumnMapWithTypeInfo makeVarToColMapForJoinOperations(
     const VariableToColumnMapWithTypeInfo& leftVars,
@@ -21,6 +30,7 @@ VariableToColumnMapWithTypeInfo makeVarToColMapForJoinOperations(
     std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType) {
   VariableToColumnMapWithTypeInfo retVal(leftVars);
   // TODO<joka921> Does this work with the `No column` stuff in the Union.cpp?
+  // Yes, it does, but please comment it.
   bool isOptionalJoin = binOpType == BinOpType::OptionalJoin;
   bool isUnion = binOpType == BinOpType::Union;
   size_t columnIndex = retVal.size();
