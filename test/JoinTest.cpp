@@ -288,6 +288,6 @@ TEST(JoinTest, joinWithFullScanPSO) {
   EXPECT_THAT(join.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 
-  // two full scans are not allowed
+  // A `Join` of two full scans is not supported.
   EXPECT_ANY_THROW(Join(qec, fullScanPSO, fullScanPSO, 0, 0));
 }
