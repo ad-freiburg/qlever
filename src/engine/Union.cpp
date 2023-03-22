@@ -77,7 +77,9 @@ VariableToColumnMapWithTypeInfo Union::computeVariableToColumnMap() const {
     return std::ranges::any_of(
         _subtrees, [&](const shared_ptr<QueryExecutionTree>& subtree) {
           const auto& varCols = subtree->getVariableColumns();
-          return !varCols.contains(var) || varCols.at(var).mightContainUndef_;
+          return !varCols.contains(var) ||
+                 (varCols.at(var).mightContainUndef_ ==
+                  ColumnIndexAndTypeInfo::PossiblyUndefined);
         });
   };
 
@@ -86,8 +88,10 @@ VariableToColumnMapWithTypeInfo Union::computeVariableToColumnMap() const {
        nextColumnIndex = 0u](const VarAndIndex& varAndIndex) mutable {
         const auto& variable = varAndIndex.first;
         if (!variableColumns.contains(variable)) {
+          using enum ColumnIndexAndTypeInfo::UndefStatus;
           variableColumns[variable] = ColumnIndexAndTypeInfo{
-              nextColumnIndex, mightContainUndef(variable)};
+              nextColumnIndex,
+              mightContainUndef(variable) ? PossiblyUndefined : AlwaysDefined};
           nextColumnIndex++;
         }
       };

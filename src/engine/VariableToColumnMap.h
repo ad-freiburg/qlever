@@ -15,17 +15,27 @@
 using VariableToColumnMap = ad_utility::HashMap<Variable, size_t>;
 
 struct ColumnIndexAndTypeInfo {
+  enum struct UndefStatus { AlwaysDefined, PossiblyUndefined };
+  // In GCC there is a bug in the `using enum` feature, so we manually export
+  // the values
+  static constexpr auto AlwaysDefined = UndefStatus::AlwaysDefined;
+  static constexpr auto PossiblyUndefined = UndefStatus::PossiblyUndefined;
+  static_assert(static_cast<bool>(AlwaysDefined) == false);
+  static_assert(static_cast<bool>(PossiblyUndefined) == true);
+
   size_t columnIndex_;
-  bool mightContainUndef_;
+  UndefStatus mightContainUndef_;
   bool operator==(const ColumnIndexAndTypeInfo&) const = default;
 };
 
 // TODO<joka921> Comment the helper function
 inline auto makeDefinedColumn = [](size_t columnIndex) {
-  return ColumnIndexAndTypeInfo{columnIndex, false};
+  return ColumnIndexAndTypeInfo{
+      columnIndex, ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined};
 };
 inline auto makeUndefinedColumn = [](size_t columnIndex) {
-  return ColumnIndexAndTypeInfo{columnIndex, true};
+  return ColumnIndexAndTypeInfo{
+      columnIndex, ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined};
 };
 
 using VariableToColumnMapWithTypeInfo =

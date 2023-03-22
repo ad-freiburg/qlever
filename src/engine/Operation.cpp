@@ -134,7 +134,9 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
         bool hasUndefined =
             datatypesPerColumn.at(columnIndex)
                 .at(static_cast<size_t>(Datatype::Undefined)) != 0;
-        AD_CONTRACT_CHECK(mightContainUndef || !hasUndefined);
+        AD_CONTRACT_CHECK(mightContainUndef ==
+                              ColumnIndexAndTypeInfo::PossiblyUndefined ||
+                          !hasUndefined);
       }
       _runtimeInfo.addDetail("time-compute-datatypes-ms",
                              computeDatatypesTimer.msecs());

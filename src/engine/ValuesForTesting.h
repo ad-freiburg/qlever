@@ -85,7 +85,9 @@ class ValuesForTesting : public Operation {
     for (size_t i = 0; i < variables_.size(); ++i) {
       bool containsUndef =
           ad_utility::contains(table_.getColumn(i), Id::makeUndefined());
-      m[variables_.at(i)] = ColumnIndexAndTypeInfo{i, containsUndef};
+      using enum ColumnIndexAndTypeInfo::UndefStatus;
+      m[variables_.at(i)] = ColumnIndexAndTypeInfo{
+          i, containsUndef ? PossiblyUndefined : AlwaysDefined};
     }
     return m;
   }

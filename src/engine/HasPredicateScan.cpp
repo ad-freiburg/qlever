@@ -112,10 +112,11 @@ VariableToColumnMapWithTypeInfo HasPredicateScan::computeVariableToColumnMap()
     const {
   VariableToColumnMapWithTypeInfo varCols;
   using V = Variable;
-  // All the columns that are newly created by this operations contain no
+  // All the columns that are newly created by this operation contain no
   // undefined values.
   auto col = [](size_t colIdx) {
-    return ColumnIndexAndTypeInfo{colIdx, false};
+    return ColumnIndexAndTypeInfo{colIdx,
+                                  ColumnIndexAndTypeInfo::AlwaysDefined};
   };
 
   switch (_type) {

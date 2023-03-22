@@ -39,12 +39,16 @@ VariableToColumnMapWithTypeInfo makeVarToColMapForJoinOperations(
 
     if (joinColumnIt != joinColumns.end()) {
       auto& undef = retVal.at(variable).mightContainUndef_;
-      undef =
-          undef && (isOptionalJoin || columnIndexWithType.mightContainUndef_);
+      undef = static_cast<ColumnIndexAndTypeInfo::UndefStatus>(
+          static_cast<bool>(undef) &&
+          (isOptionalJoin ||
+           static_cast<bool>(columnIndexWithType.mightContainUndef_)));
     } else {
-      retVal[it.first] = ColumnIndexAndTypeInfo{
+      retVal[variable] = ColumnIndexAndTypeInfo{
           columnIndex,
-          columnIndexWithType.mightContainUndef_ || isOptionalJoin};
+          static_cast<ColumnIndexAndTypeInfo::UndefStatus>(
+              static_cast<bool>(columnIndexWithType.mightContainUndef_) ||
+              isOptionalJoin)};
       columnIndex++;
     }
   }

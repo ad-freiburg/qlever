@@ -58,8 +58,11 @@ VariableToColumnMapWithTypeInfo Values::computeVariableToColumnMap() const {
   }
   VariableToColumnMapWithTypeInfo map;
   for (size_t i = 0; i < parsedValues_._variables.size(); i++) {
-    map[parsedValues_._variables[i]] =
-        ColumnIndexAndTypeInfo{i, static_cast<bool>(colContainsUndef.at(i))};
+    using enum ColumnIndexAndTypeInfo::UndefStatus;
+    auto undefStatus = static_cast<bool>(colContainsUndef.at(i))
+                           ? PossiblyUndefined
+                           : AlwaysDefined;
+    map[parsedValues_._variables[i]] = ColumnIndexAndTypeInfo{i, undefStatus};
   }
   return map;
 }

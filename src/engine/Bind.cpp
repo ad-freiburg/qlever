@@ -74,7 +74,7 @@ VariableToColumnMapWithTypeInfo Bind::computeVariableToColumnMap() const {
   // the aggregating columns. Implement an interface in the expressions that
   // allows to check, whether an expression can never produce an undefined
   // value.
-  res[_bind._target] = ColumnIndexAndTypeInfo{getResultWidth() - 1, true};
+  res[_bind._target] = makeUndefinedColumn(getResultWidth() - 1);
   return res;
 }
 

@@ -135,7 +135,7 @@ VariableToColumnMapWithTypeInfo GroupBy::computeVariableToColumnMap() const {
     // the aggregating columns. Implement an interface in the expressions that
     // allows to check, whether an expression can never produce an undefined
     // value.
-    result[a._target] = ColumnIndexAndTypeInfo{colIndex, true};
+    result[a._target] = makeUndefinedColumn(colIndex);
     colIndex++;
   }
   return result;
