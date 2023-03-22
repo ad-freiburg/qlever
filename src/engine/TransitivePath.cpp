@@ -782,3 +782,9 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
   }
   return p;
 }
+
+// _____________________________________________________________________________
+bool TransitivePath::isBound() const {
+  return _leftSideTree != nullptr || _rightSideTree != nullptr || !_leftIsVar ||
+         !_rightIsVar;
+}
