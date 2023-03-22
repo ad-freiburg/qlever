@@ -730,8 +730,28 @@ void TransitivePath::computeResult(ResultTable* result) {
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
     std::shared_ptr<QueryExecutionTree> leftop, size_t inputCol) const {
-  // Enforce required sorting of `leftop`.
-  leftop = QueryExecutionTree::createSortedTree(std::move(leftop), {inputCol});
+  return bindLeftOrRightSide(std::move(leftop), inputCol, true);
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<TransitivePath> TransitivePath::bindRightSide(
+    std::shared_ptr<QueryExecutionTree> rightop, size_t inputCol) const {
+  return bindLeftOrRightSide(std::move(rightop), inputCol, false);
+}
+
+// _____________________________________________________________________________
+bool TransitivePath::isBound() const {
+  return _leftSideTree != nullptr || _rightSideTree != nullptr || !_leftIsVar ||
+         !_rightIsVar;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
+    std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
+    bool isLeft) const {
+  // Enforce required sorting of `leftOrRightOp`.
+  leftOrRightOp = QueryExecutionTree::createSortedTree(std::move(leftOrRightOp),
+                                                       {inputCol});
   // Create a copy of this.
   //
   // NOTE: The RHS used to be `std::make_shared<TransitivePath>()`, which is
@@ -743,9 +763,14 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
       getExecutionContext(), _subtree, _leftIsVar, _rightIsVar, _leftSubCol,
       _rightSubCol, _leftValue, _rightValue, Variable{_leftColName},
       Variable{_rightColName}, _minDist, _maxDist);
-  p->_leftSideTree = leftop;
-  p->_leftSideCol = inputCol;
-  const auto& var = leftop->getVariableColumns();
+  if (isLeft) {
+    p->_leftSideTree = leftOrRightOp;
+    p->_leftSideCol = inputCol;
+  } else {
+    p->_rightSideTree = leftOrRightOp;
+    p->_rightSideCol = inputCol;
+  }
+  const auto& var = leftOrRightOp->getVariableColumns();
   for (const auto& [variable, columnIndex] : var) {
     if (columnIndex != inputCol) {
       if (columnIndex > inputCol) {
@@ -757,41 +782,4 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
     }
   }
   return p;
-}
-
-// _____________________________________________________________________________
-std::shared_ptr<TransitivePath> TransitivePath::bindRightSide(
-    std::shared_ptr<QueryExecutionTree> rightop, size_t inputCol) const {
-  // TODO<joka921> `bindRightSide` and `bindLeftSide` are almost the same,
-  // could and should this be made generic? It probably requires refactoring
-  // quite a lot of this class though.
-  // Enforce required sorting of `rightop`.
-  rightop =
-      QueryExecutionTree::createSortedTree(std::move(rightop), {inputCol});
-  // Create a copy of this. For a detailed explanation, see the analogous
-  // comment in `bindLeftSide` above.
-  std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(
-      getExecutionContext(), _subtree, _leftIsVar, _rightIsVar, _leftSubCol,
-      _rightSubCol, _leftValue, _rightValue, Variable{_leftColName},
-      Variable{_rightColName}, _minDist, _maxDist);
-  p->_rightSideTree = rightop;
-  p->_rightSideCol = inputCol;
-  const auto& var = rightop->getVariableColumns();
-  for (const auto& [variable, columnIndex] : var) {
-    if (columnIndex != inputCol) {
-      if (columnIndex > inputCol) {
-        p->_variableColumns[variable] = columnIndex + 1;
-      } else {
-        p->_variableColumns[variable] = columnIndex + 2;
-      }
-      p->_resultWidth++;
-    }
-  }
-  return p;
-}
-
-// _____________________________________________________________________________
-bool TransitivePath::isBound() const {
-  return _leftSideTree != nullptr || _rightSideTree != nullptr || !_leftIsVar ||
-         !_rightIsVar;
 }
