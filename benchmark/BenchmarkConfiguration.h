@@ -79,6 +79,31 @@ public:
  }
 
  /*
+  * @brief Returns a value held by the configuration. Returns the given
+  *  default value, if it doesn't hold a value at the place described by
+  *  the indeces.
+  *
+  * @tparam ReturnType The type of the value, that you want to have later.
+  * @tparam Index,Indexes The types of the keys, that you gave. Deduction
+  *  should be able to handle it.
+  * 
+  * @param defaultValue The value to return, if the searched for value
+  *  wasn't set in the configuration.
+  * @param index,indexes The keys for getting the value out of the
+  *  configuration. Look at the documentation of `nlohmann::basic_json::at`
+  *  , if you want to see, what's possible.
+  */
+ template<typename ReturnType, typename Index, typename... Indexes>
+ ReturnType getValueOrDefault(const ReturnType& defaultValue,
+  const Index& index, const Indexes&... indexes) const{
+  if (!isOptionSet(index, indexes...)){
+   return defaultValue;
+  } else {
+   return getValue<ReturnType>(index, indexes...);
+  }
+ }
+
+ /*
   * @brief Sets the configuration based on the given json string. This
   *  overwrites all previous held configuration data.
   */
