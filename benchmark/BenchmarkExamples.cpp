@@ -5,6 +5,7 @@
 #include <string>
 
 #include "../benchmark/Benchmark.h"
+#include "BenchmarkConfiguration.h"
 #include "BenchmarkMetadata.h"
 #include "util/Random.h"
 
@@ -198,6 +199,52 @@ class BM_Tables: public BenchmarkClassInterface{
   } 
 };
 
+// A simple example of the usage of the `BenchmarkConfiguration` and the
+// general `BenchmarkMetadata`.
+class BM_ConfigurationAndMetadataExample: public BenchmarkClassInterface{
+  // This class will simply transcribe specific configuration options
+  // to this `BenchmarkMetadta` object and return it later with the
+  // `getMetadata()` function.
+  BenchmarkMetadata generalMetadata_;
+
+  public:
+  void parseConfiguration(const BenchmarkConfiguration& config){
+    // Collect some arbitrary values.
+    std::string dateString{config.getValueOrDefault<std::string>("22.3.2023",
+      "exampleDate")};
+    size_t numberOfStreetSigns{
+      config.getValueOrDefault<size_t>(10, "numSigns")};
+
+    std::vector<bool> wonOnTryX{};
+    wonOnTryX.reserve(5);
+    for (size_t i = 0; i < 5; i++){
+      wonOnTryX.push_back(config.getValueOrDefault(false, "Coin_flip_try", i));
+    }
+
+    float balanceOnStevesSavingAccount{config.getValueOrDefault<float>(-41.9,
+      "Accounts", "Personal", "Steve")};
+
+    // Transcribe the collected values.
+    generalMetadata_.addKeyValuePair("date", dateString);
+    generalMetadata_.addKeyValuePair("numberOfStreetSigns",
+      numberOfStreetSigns);
+    generalMetadata_.addKeyValuePair("wonOnTryX", wonOnTryX);
+    generalMetadata_.addKeyValuePair("Balance on Steves saving account",
+      balanceOnStevesSavingAccount);
+  }
+
+  
+  const BenchmarkMetadata getMetadata() const{
+    return generalMetadata_;
+  }
+
+  // This is just a dummy, because this class is only an example for other
+  // features of the benchmark infrastructure.
+  BenchmarkRecords runAllBenchmarks(){
+    return BenchmarkRecords{};
+  }
+};
+
 
 BenchmarkRegister temp{{new BM_SingeMeasurements, new BM_Groups,
-  new BM_Tables}};
+  new BM_Tables, new BM_ConfigurationAndMetadataExample}};
