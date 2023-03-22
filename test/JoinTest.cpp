@@ -285,7 +285,7 @@ TEST(JoinTest, joinWithFullScanPSO) {
   EXPECT_EQ(res->_idTable, expected);
   VariableToColumnMap expectedVariables{
       {Variable{"?p"}, 0}, {Variable{"?s"}, 1}, {Variable{"?o"}, 2}};
-  EXPECT_THAT(join.getExternallyVisibleVariableColumns(),
+  EXPECT_THAT(removeTypeInfo(join.getExternallyVisibleVariableColumns()),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 
   // A `Join` of two full scans is not supported.
