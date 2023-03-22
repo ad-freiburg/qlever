@@ -46,7 +46,8 @@ void BenchmarkConfiguration::parseShortHand(const std::string& shortHandString){
   // Boolean literal, or integer literal.
   const std::string valueLiterals{R"--(true|false|-?\d+)--"};
   // How a list of `valueLiterals` looks like.
-  const std::string listOfValueLiterals{R"--(\{\s*()" + valueLiterals + R"()\s*,)*\s*()" + valueLiterals + R"()\s*\})--"};
+  const std::string listOfValueLiterals{R"--(\{(\s*()--" + valueLiterals +
+    R"--()\s*,)*\s*()--" + valueLiterals + R"--()\s*\})--"};
   // What kind of names can the left side of the assigment
   // `variableName = variableContent;` have?
   const std::string variableName{R"--([\w]+)--"};
@@ -58,7 +59,8 @@ void BenchmarkConfiguration::parseShortHand(const std::string& shortHandString){
   // within regular expressions, because `regex` allows direct access to
   // sub-matches when it found a match. That should make iteration and parsing
   // easier.
-  const std::string assigment{R"--(\s*()" + variableName + R"()\s*=\s*()" + variableContent + R"()\s*;)--"};
+  const std::string assigment{R"--(\s*()--" + variableName +
+    R"--()\s*=\s*()--" + variableContent + R"--()\s*;)--"};
   
   // Use regular expressions to check, if the given string uses the correct
   // grammar/syntax.
@@ -94,7 +96,7 @@ void BenchmarkConfiguration::parseShortHand(const std::string& shortHandString){
       // We got a list. Change it to the json syntax.
       assigmentVariableContentUninterpreted.replace(0, 1, R"([)");
       assigmentVariableContentUninterpreted.replace(
-        assigmentVariableName.length() - 1, 1, R"(])");
+        assigmentVariableContentUninterpreted.length() - 1, 1, R"(])");
     }
     data_[assigmentVariableName] =
       nlohmann::json::parse(assigmentVariableContentUninterpreted);
