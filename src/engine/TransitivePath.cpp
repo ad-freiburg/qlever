@@ -766,16 +766,19 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
     p->_rightSideCol = inputCol;
   }
 
-  const auto& var = leftOrRightOp->getVariableColumns();
-  for (auto [variable, columnIndexWithType] : var) {
+  // Note: The `variable` in the following structured binding is `const`, even
+  // if we bind by value. We deliberately make one unnecessary copy of the
+  // `variable` to keep the code simpler.
+  for (auto [variable, columnIndexWithType] :
+       leftOrRightOp->getVariableColumns()) {
     ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
     if (columnIndex != inputCol) {
       if (columnIndex > inputCol) {
         columnIndexWithType.columnIndex_++;
-        p->_variableColumns[std::move(variable)] = columnIndexWithType;
+        p->_variableColumns[variable] = columnIndexWithType;
       } else {
         columnIndexWithType.columnIndex_ += 2;
-        p->_variableColumns[std::move(variable)] = columnIndexWithType;
+        p->_variableColumns[variable] = columnIndexWithType;
       }
       p->_resultWidth++;
     }

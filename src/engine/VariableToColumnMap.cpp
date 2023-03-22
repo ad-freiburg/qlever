@@ -29,28 +29,22 @@ VariableToColumnMapWithTypeInfo makeVarToColMapForJoinOperations(
     const VariableToColumnMapWithTypeInfo& rightVars,
     std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType) {
   VariableToColumnMapWithTypeInfo retVal(leftVars);
-  // TODO<joka921> Does this work with the `No column` stuff in the Union.cpp?
-  // Yes, it does, but please comment it.
   bool isOptionalJoin = binOpType == BinOpType::OptionalJoin;
-  bool isUnion = binOpType == BinOpType::Union;
   size_t columnIndex = retVal.size();
-  const auto variableColumnsRightSorted = copySortedByColumnIndex(rightVars);
-  for (const auto& it : variableColumnsRightSorted) {
-    const auto& colIdxRight = it.second.columnIndex_;
+  for (const auto& [variable, columnIndexWithType] :
+       copySortedByColumnIndex(rightVars)) {
+    const auto& colIdxRight = columnIndexWithType.columnIndex_;
     auto joinColumnIt =
         std::ranges::find(joinColumns, colIdxRight, ad_utility::second);
 
     if (joinColumnIt != joinColumns.end()) {
-      auto& undef = retVal.at(it.first).mightContainUndef_;
-      if (isUnion) {
-        undef = undef || it.second.mightContainUndef_;
-      } else {
-        undef = undef && (isOptionalJoin || it.second.mightContainUndef_);
-      }
+      auto& undef = retVal.at(variable).mightContainUndef_;
+      undef =
+          undef && (isOptionalJoin || columnIndexWithType.mightContainUndef_);
     } else {
-      retVal[it.first] =
-          ColumnIndexAndTypeInfo{columnIndex, it.second.mightContainUndef_ ||
-                                                  isOptionalJoin || isUnion};
+      retVal[it.first] = ColumnIndexAndTypeInfo{
+          columnIndex,
+          columnIndexWithType.mightContainUndef_ || isOptionalJoin};
       columnIndex++;
     }
   }

@@ -70,18 +70,27 @@ VariableToColumnMapWithTypeInfo Union::computeVariableToColumnMap() const {
   using VarAndIndex = std::pair<Variable, size_t>;
 
   VariableToColumnMapWithTypeInfo variableColumns;
-  size_t column = 0;
 
-  auto addVariableColumnIfNotExists = [&variableColumns, &column](
-                                          const VarAndIndex& varAndIndex) {
-    if (!variableColumns.contains(varAndIndex.first)) {
-      // TODO<joka921> Not all the columns might contain UNDEF values. If a
-      // variable exists in both the inputs, and is bound in both the inputs,
-      // the we might set this to false, but this requires additional code.
-      variableColumns[varAndIndex.first] = ColumnIndexAndTypeInfo{column, true};
-      column++;
-    }
+  // A variable is only guaranteed to always be bound if it exists in all the
+  // subtrees and if it is guaranteed to be bound in all the subrees.
+  auto mightContainUndef = [this](const Variable& var) {
+    return std::ranges::any_of(
+        _subtrees, [&](const shared_ptr<QueryExecutionTree>& subtree) {
+          const auto& varCols = subtree->getVariableColumns();
+          return !varCols.contains(var) || varCols.at(var).mightContainUndef_;
+        });
   };
+
+  auto addVariableColumnIfNotExists =
+      [&mightContainUndef, &variableColumns,
+       nextColumnIndex = 0u](const VarAndIndex& varAndIndex) mutable {
+        const auto& variable = varAndIndex.first;
+        if (!variableColumns.contains(variable)) {
+          variableColumns[variable] = ColumnIndexAndTypeInfo{
+              nextColumnIndex, mightContainUndef(variable)};
+          nextColumnIndex++;
+        }
+      };
 
   auto addVariablesForSubtree = [&addVariableColumnIfNotExists](
                                     const auto& subtree) {

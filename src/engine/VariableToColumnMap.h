@@ -9,8 +9,6 @@
 #include "util/HashMap.h"
 #include "util/TransparentFunctors.h"
 
-// TODO<joka921> Possibly move this inside a namespace.
-
 // A hash map from variables to the column index of that variable in a table,
 // used in several places (e.g. the `Operation` class, the `SparqlExpression`
 // module, etc.).
@@ -36,7 +34,7 @@ using VariableToColumnMapWithTypeInfo =
 VariableToColumnMap removeTypeInfo(
     const VariableToColumnMapWithTypeInfo& varColMap);
 
-enum class BinOpType { Join, OptionalJoin, Union };
+enum class BinOpType { Join, OptionalJoin };
 VariableToColumnMapWithTypeInfo makeVarToColMapForJoinOperations(
     const VariableToColumnMapWithTypeInfo& leftVars,
     const VariableToColumnMapWithTypeInfo& rightVars,
