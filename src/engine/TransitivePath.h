@@ -140,9 +140,9 @@ class TransitivePath : public Operation {
 
   VariableToColumnMapWithTypeInfo computeVariableToColumnMap() const override;
 
-  // The internal implementation of ``bindLeftSide` and `bindRightSide` which
+  // The internal implementation of `bindLeftSide` and `bindRightSide` which
   // share a lot of code.
   std::shared_ptr<TransitivePath> bindLeftOrRightSide(
-      std::shared_ptr<QueryExecutionTree> leftop, size_t inputCol,
+      std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
       bool isLeft) const;
 };

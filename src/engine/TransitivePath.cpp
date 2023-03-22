@@ -744,10 +744,16 @@ std::shared_ptr<TransitivePath> TransitivePath::bindRightSide(
 std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
     std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
     bool isLeft) const {
+  // Enforce required sorting of `leftOrRightOp`.
   leftOrRightOp = QueryExecutionTree::createSortedTree(std::move(leftOrRightOp),
                                                        {inputCol});
-  // Create a copy of this. For a detailed explanation, see the analogous
-  // comment in `bindLeftSide` above.
+  // Create a copy of this.
+  //
+  // NOTE: The RHS used to be `std::make_shared<TransitivePath>()`, which is
+  // wrong because it first calls the copy constructor of the base class
+  // `Operation`, which  would then ignore the changes in `variableColumnMap_`
+  // made below (see `Operation::getInternallyVisibleVariableColumns` and
+  // `Operation::getExternallyVariableColumns`).
   std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(
       getExecutionContext(), _subtree, _leftIsVar, _rightIsVar, _leftSubCol,
       _rightSubCol, _leftValue, _rightValue, Variable{_leftColName},
@@ -775,10 +781,4 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
     }
   }
   return p;
-}
-
-// _____________________________________________________________________________
-bool TransitivePath::isBound() const {
-  return _leftSideTree != nullptr || _rightSideTree != nullptr || !_leftIsVar ||
-         !_rightIsVar;
 }

@@ -12,14 +12,17 @@
 #include <sstream>
 #include <tuple>
 
+#include "./IndexTestHelpers.h"
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
+#include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/Values.h"
 #include "engine/idTable/IdTable.h"
 #include "util/Forward.h"
 #include "util/Random.h"
@@ -254,3 +257,37 @@ std::vector<JoinTestCase> createJoinTestSet() {
 TEST(JoinTest, joinTest) {
   runTestCasesForAllJoinAlgorithms(createJoinTestSet());
 };
+
+TEST(JoinTest, joinWithFullScanPSO) {
+  auto qec = ad_utility::testing::getQec("<x> <p> 1. <x> <o> 2. <x> <a> 3.");
+  // Expressions in HAVING clauses are converted to special internal aliases.
+  // Test the combination of parsing and evaluating such queries.
+  auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
+      qec, IndexScan::FULL_INDEX_SCAN_PSO,
+      SparqlTriple{Variable{"?s"}, "?p", Variable{"?o"}});
+  parsedQuery::SparqlValues values;
+  values._variables.emplace_back("?p");
+  values._values.push_back({TripleComponent{"<o>"}});
+  values._values.push_back({TripleComponent{"<a>"}});
+  auto valuesTree = ad_utility::makeExecutionTree<Values>(qec, values);
+
+  auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
+
+  auto res = join.getResult();
+
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  auto idX = getId("<x>");
+  auto idA = getId("<a>");
+  auto idO = getId("<o>");
+  auto I = ad_utility::testing::IntId;
+  auto expected = makeIdTableFromIdVector({{idA, idX, I(3)}, {idO, idX, I(2)}});
+  EXPECT_EQ(res->_idTable, expected);
+  VariableToColumnMap expectedVariables{
+      {Variable{"?p"}, 0}, {Variable{"?s"}, 1}, {Variable{"?o"}, 2}};
+  EXPECT_THAT(join.getExternallyVisibleVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVariables));
+
+  // A `Join` of two full scans is not supported.
+  EXPECT_ANY_THROW(Join(qec, fullScanPSO, fullScanPSO, 0, 0));
+}
