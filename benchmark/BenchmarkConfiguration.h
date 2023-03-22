@@ -5,6 +5,7 @@
 #pragma once
 
 #include "util/json.h"
+#include <type_traits>
 
 /*
  * A rather basic wrapper for nlohmann::json, which only allows reading of
@@ -30,20 +31,25 @@ public:
  template<typename Index, typename... Indexes>
  bool isOptionSet(const Index& index, const Indexes&... indexes) const{
   // To reduce duplication. Is a key held by a given json object?
-  auto isKeyValid = [](const auto& jsonObject, const auto& key){
-   // If the json object is an array, the key has to be a number, otherwise
-   // the request doesn't make much sense.
-   return (jsonObject.is_array() && (key < jsonObject.size())) ||
-   jsonObject.contains(key);
+  auto isKeyValid = []<typename Key>(const auto& jsonObject, const Key& key){
+   // If `Key` is a number, it can only be a valid key for the `jsonObject`
+   // , if the `jsonObject` is an array.
+   if constexpr (std::is_integral<Key>::value){
+    return jsonObject.is_array() && (key < jsonObject.size());
+   }else{
+    return jsonObject.contains(key);
+   }
   };
   
   // Is there json object with index as it's valid key? If yes, we have a
   // starting point for our recursive check.
   if (!isKeyValid(data_, index)){return false;}
-  nlohmann::json::reference currentJsonObject = data_.at(index);
+  auto currentJsonObject = data_.at(index);
 
   // Check if the key is valid and assign the json object, it is the key of.
-  auto checkAndAssign = [&currentJsonObject, &isKeyValid](auto const& key){
+  // The `[[maybe_unused]]` is for cases, where indexes is empty.
+  [[maybe_unused]] auto checkAndAssign = [&currentJsonObject, &isKeyValid](
+   auto const& key){
    if (isKeyValid(currentJsonObject, key)){
     // The side effect, for which this whole things exists for.
     currentJsonObject = currentJsonObject.at(key);
