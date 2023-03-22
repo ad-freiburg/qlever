@@ -3,6 +3,7 @@
 // Author: Andre Schlegel (November of 2022, schlegea@informatik.uni-freiburg.de)
 #include <boost/program_options/value_semantic.hpp>
 #include <iostream>
+#include <ostream>
 #include <fstream>
 #include <ios>
 #include <iomanip>
@@ -33,15 +34,30 @@ void writeJsonToFile(nlohmann::json j, std::string fileName,
       (std::ios::out | std::ios::app) : (std::ios::out)) << j;
 }
 
+std::string transcribeFileToString(std::string fileName){
+  // The string gets build using a string stream.
+  std::ostringstream transchribedString{};
+
+  // Adding a buffer using `<<` causes the content of the buffer to be
+  // individually added to the string stream. In other words: The entire
+  // content of the opened file will be added.
+  transchribedString << ad_utility::makeIfstream(fileName).rdbuf();
+
+  return transchribedString.str();
+}
+
 /*
  * @brief Goes through all types of registered benchmarks, measures their time
  * and prints their measured time in a fitting format.
  */
 int main(int argc, char** argv) {
-  // The filename, should the json option be choosen.
-  std::string jsonFileName = "";
-  // The short hand, or json string, for the benchmark configuration.
-  std::string benchmarkConfigurationString = "";
+  // The filename, should the write option be choosen.
+  std::string writeFileName = "";
+  // The short hand, for the benchmark configuration.
+  std::string shortHandConfigurationString = "";
+  // Should the user decide, to load a configuration from a json file,
+  // this will hold the file name.
+  std::string jsonConfigurationFileName = "";
 
   // Declaring the supported options.
   boost::program_options::options_description options("Options for the"
@@ -49,13 +65,16 @@ int main(int argc, char** argv) {
   options.add_options()
       ("help,h", "Print the help message.")
       ("print,p", "Roughly prints all benchmarks.")
-      ("write,w", boost::program_options::value<std::string>(&jsonFileName),
+      ("write,w", boost::program_options::value<std::string>(&writeFileName),
        "Writes the benchmarks as json to a file, overriding the previous"
        " content of the file.")
       ("append,a", "Causes the json option to append to the end of the"
       " file, instead of overriding the previous content of the file.")
+      ("configuration-json,j",
+      boost::program_options::value<std::string>(&jsonConfigurationFileName),
+      "Set the configuration of benchmarks as described in a json file.")
       ("configuration-shorthand,s",
-      boost::program_options::value<std::string>(&benchmarkConfigurationString),
+      boost::program_options::value<std::string>(&shortHandConfigurationString),
       "Allows you to add options to configuration of the benchmarks using the"
       " short hand described in `BenchmarkConfiguration.h:parseShortHand`.")
   ;
@@ -87,12 +106,21 @@ int main(int argc, char** argv) {
     printUsageAndExit();
   }
 
-  // Did we get configuration short hand?
-  if (vm.count("configuration-shorthand")){
-    BenchmarkConfiguration config{};
-    config.parseShortHand(benchmarkConfigurationString);
-    BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(config);
+  // Did we get any configuration?
+  BenchmarkConfiguration config{};
+
+  // The order of first parsing the json and then parsing the short hand is
+  // important, because `parseJsonString` resets and then sets the
+  // configuration. `parseShortHand` however just sets, or overwrites, things.
+  if (vm.count("configuration-json")){
+    config.parseJsonString(transcribeFileToString(jsonConfigurationFileName));
   }
+  if (vm.count("configuration-shorthand")){
+    config.parseShortHand(shortHandConfigurationString);
+  }
+
+  // Pass the configuration, even if it is empty.
+  BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(config);
 
   // Measuring the time for all registered benchmarks.
   // For measuring and saving the times.
@@ -108,7 +136,7 @@ int main(int argc, char** argv) {
 
   if (vm.count("write")) {
     writeJsonToFile(zipGeneralMetadataAndBenchmarkRecordsToJson(
-      BenchmarkRegister::getAllGeneralMetadata(), records), jsonFileName,
+      BenchmarkRegister::getAllGeneralMetadata(), records), writeFileName,
         vm.count("append"));
   }
 }
