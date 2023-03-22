@@ -50,7 +50,8 @@ TextOperationWithFilter::computeVariableToColumnMap() const {
       // TODO<joka921> These variables seem to be newly created an never contain
       // undefined values. However I currently don't understand their semantics
       // which should be documented.
-      vcmap[var] = makeDefinedColumn(colN++);
+      vcmap[var] = makeDefinedColumn(colN);
+      ++colN;
     }
   }
   for (const auto& varcol : filterColumns) {

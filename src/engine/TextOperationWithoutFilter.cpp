@@ -31,9 +31,12 @@ TextOperationWithoutFilter::TextOperationWithoutFilter(
 VariableToColumnMapWithTypeInfo
 TextOperationWithoutFilter::computeVariableToColumnMap() const {
   VariableToColumnMapWithTypeInfo vcmap;
-  size_t index = 0;
-  vcmap[_cvar] = makeDefinedColumn(index++);
-  vcmap[_cvar.getTextScoreVariable()] = makeDefinedColumn(index++);
+  auto addDefinedVar = [&vcmap, index = 0](const Variable& var) mutable {
+    vcmap[var] = makeDefinedColumn(index);
+    ++index;
+  };
+  addDefinedVar(_cvar);
+  addDefinedVar(_cvar.getTextScoreVariable());
   // TODO<joka921> The order of the variables is not deterministic, check
   // whether this is correct.
   // TODO<joka921> These variables seem to be newly created an never contain
@@ -41,7 +44,7 @@ TextOperationWithoutFilter::computeVariableToColumnMap() const {
   // which should be documented.
   for (const auto& var : _variables) {
     if (var != _cvar) {
-      vcmap[var] = makeDefinedColumn(index++);
+      addDefinedVar(var);
     }
   }
   return vcmap;

@@ -8,8 +8,6 @@
 #include <util/Log.h>
 #include <util/TransparentFunctors.h>
 
-#include <ranges>
-
 // ________________________________________________________________________________________________________________
 std::string RuntimeInformation::toString() const {
   std::ostringstream buffer;
@@ -90,10 +88,13 @@ void RuntimeInformation::setColumnNames(
   }
   // Resize the `columnNames_` vector such that we can use the keys from
   // columnMap (which are not necessarily consecutive) as indexes.
-  namespace stdv = std::views;
+
+  // TODO<joka921, Clang16> This is `stdr::max(columnMap | stdv::values |
+  // stdv::transform(&ColumnIndexAndTypeInfo::columnIndex_)`
   ColumnIndex maxColumnIndex =
-      std::ranges::max(columnMap | stdv::values |
-                       stdv::transform(&ColumnIndexAndTypeInfo::columnIndex_));
+      std::ranges::max_element(columnMap, std::less{}, [](const auto& pair) {
+        return pair.second.columnIndex_;
+      })->second.columnIndex_;
   columnNames_.resize(maxColumnIndex + 1);
   // Now copy the (variable, index) pairs to the vector.
   for (const auto& [variable, columnIndexAndType] : columnMap) {

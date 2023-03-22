@@ -4,8 +4,6 @@
 
 #include "./Operation.h"
 
-#include <ranges>
-
 #include "engine/QueryExecutionTree.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
@@ -130,8 +128,9 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       ad_utility::Timer computeDatatypesTimer{ad_utility::Timer::Started};
       const auto& datatypesPerColumn =
           resultTable->getOrComputeDatatypesPerColumn();
-      for (const auto& [columnIndex, mightContainUndef] :
-           getExternallyVisibleVariableColumns() | std::views::values) {
+      for (const auto& [var, columnAndTypes] :
+           getExternallyVisibleVariableColumns()) {
+        const auto& [columnIndex, mightContainUndef] = columnAndTypes;
         bool hasUndefined =
             datatypesPerColumn.at(columnIndex)
                 .at(static_cast<size_t>(Datatype::Undefined)) != 0;

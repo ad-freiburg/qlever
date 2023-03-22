@@ -6,9 +6,6 @@
 
 #include "engine/ResultTable.h"
 
-#include <cassert>
-#include <ranges>
-
 #include "engine/LocalVocab.h"
 
 // _____________________________________________________________________________
@@ -61,7 +58,7 @@ auto ResultTable::getOrComputeDatatypesPerColumn()
   datatypesPerColumn_.emplace();
   auto& types = datatypesPerColumn_.value();
   types.resize(_idTable.numColumns());
-  for (size_t i : std::views::iota(0ul, _idTable.numColumns())) {
+  for (size_t i = 0; i < _idTable.numColumns(); ++i) {
     const auto& col = _idTable.getColumn(i);
     auto& datatypes = types.at(i);
     for (Id id : col) {
