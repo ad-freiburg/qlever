@@ -4,6 +4,8 @@
 
 #include "./Operation.h"
 
+#include <ranges>
+
 #include "engine/QueryExecutionTree.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
@@ -115,7 +117,28 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
             "functionality, before " +
             getDescriptor());
       }
-      computeResult(val._resultTable.get());
+      auto* resultTable = val._resultTable.get();
+      computeResult(resultTable);
+
+      // Compute the number datatypes that occur in each column of the result.
+      // Measure and report the time that this computation takes. Also assert,
+      // that if a column contains UNDEF values, then the `mightContainUndef`
+      // flag for that columns is set.
+      // TODO<joka921> It is cheaper to move this calculation into the
+      // individual results, but that requires changes in each individual
+      // operation.
+      ad_utility::Timer computeDatatypesTimer{ad_utility::Timer::Started};
+      const auto& datatypesPerColumn =
+          resultTable->getOrComputeDatatypesPerColumn();
+      for (const auto& [columnIndex, mightContainUndef] :
+           getExternallyVisibleVariableColumns() | std::views::values) {
+        bool hasUndefined =
+            datatypesPerColumn.at(columnIndex)
+                .at(static_cast<size_t>(Datatype::Undefined)) != 0;
+        AD_CONTRACT_CHECK(mightContainUndef || !hasUndefined);
+      }
+      _runtimeInfo.addDetail("time-compute-datatypes-ms",
+                             computeDatatypesTimer.msecs());
       if (_timeoutTimer->wlock()->hasTimedOut()) {
         throw ad_utility::TimeoutException(
             "Timeout in " + getDescriptor() +

@@ -7,6 +7,7 @@
 #include "engine/ResultTable.h"
 
 #include <cassert>
+#include <ranges>
 
 #include "engine/LocalVocab.h"
 
@@ -48,4 +49,24 @@ void ResultTable::shareLocalVocabFromNonEmptyOf(
 // _____________________________________________________________________________
 void ResultTable::getCopyOfLocalVocabFrom(const ResultTable& resultTable) {
   localVocab_ = std::make_shared<LocalVocab>(resultTable.localVocab_->clone());
+}
+
+// _____________________________________________________________________________
+auto ResultTable::getOrComputeDatatypesPerColumn()
+    -> const DatatypesPerColumn& {
+  if (datatypesPerColumn_.has_value()) {
+    return datatypesPerColumn_.value();
+  }
+  // Compute the datatypes
+  datatypesPerColumn_.emplace();
+  auto& types = datatypesPerColumn_.value();
+  types.resize(_idTable.numColumns());
+  for (size_t i : std::views::iota(0ul, _idTable.numColumns())) {
+    const auto& col = _idTable.getColumn(i);
+    auto& datatypes = types.at(i);
+    for (Id id : col) {
+      ++datatypes[static_cast<size_t>(id.getDatatype())];
+    }
+  }
+  return types;
 }

@@ -65,6 +65,10 @@ class ResultTable {
   // The local vocabulary of the result.
   std::shared_ptr<LocalVocab> localVocab_ = std::make_shared<LocalVocab>();
 
+  using DatatypesPerColumn = std::vector<
+      std::array<size_t, static_cast<size_t>(Datatype::MaxValue) + 1>>;
+  std::optional<DatatypesPerColumn> datatypesPerColumn_;
+
  public:
   // Construct with given allocator.
   explicit ResultTable(ad_utility::AllocatorWithLimit<Id> allocator)
@@ -155,4 +159,6 @@ class ResultTable {
   ResultType getResultType(size_t col) const {
     return col < _resultTypes.size() ? _resultTypes[col] : ResultType::KB;
   }
+
+  const DatatypesPerColumn& getOrComputeDatatypesPerColumn();
 };
