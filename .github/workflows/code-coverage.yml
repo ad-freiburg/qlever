@@ -21,7 +21,7 @@ on:
 jobs:
   build:
     env:
-          compiler: clang-16
+          compiler: "clang-16"
           build-type: Debug
           warnings: "-Wall -Wextra "
           # we disable the `assert()` macro as it messes with the coverage reports
