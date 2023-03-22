@@ -41,6 +41,9 @@ Union::Union(QueryExecutionContext* qec,
       _columnOrigins[it.second.columnIndex_][1] = NO_COLUMN;
     }
   }
+  AD_CORRECTNESS_CHECK(std::ranges::all_of(_columnOrigins, [](const auto& el) {
+    return el[0] != NO_COLUMN || el[1] != NO_COLUMN;
+  }));
 }
 
 string Union::asStringImpl(size_t indent) const {
@@ -83,9 +86,14 @@ VariableToColumnMapWithTypeInfo Union::computeVariableToColumnMap() const {
         });
   };
 
+  // Note: it is tempting to declare `nextColumnIndex` inside the lambda
+  // `addVariableColumnIfNotExists`, but that doesn't work because
+  // `std::ranges::for_each` takes the lambda by value and creates a new
+  // variable at every invocation.
+  size_t nextColumnIndex = 0;
   auto addVariableColumnIfNotExists =
       [&mightContainUndef, &variableColumns,
-       nextColumnIndex = 0u](const VarAndIndex& varAndIndex) mutable {
+       &nextColumnIndex](const VarAndIndex& varAndIndex) mutable {
         const auto& variable = varAndIndex.first;
         if (!variableColumns.contains(variable)) {
           using enum ColumnIndexAndTypeInfo::UndefStatus;
