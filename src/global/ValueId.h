@@ -78,17 +78,21 @@ class ValueId {
 
       T _tooBigValue;
 
+      std::string _errorMessage;
+
     public:
 
       IndexTooLargeException(T tooBigValue,
           ad_utility::source_location s = ad_utility::source_location::current()):
-          _location(s), _tooBigValue(tooBigValue) {}
-
-      const char* what() const noexcept override {
+          _location(s), _tooBigValue(tooBigValue) {
         std::stringstream exceptionMessage;
         exceptionMessage << _location.file_name() << ", line " << _location.line()
           << ": The given value " << _tooBigValue << " is bigger than what the maxIndex of ValueId allows.";
-        return exceptionMessage.str().c_str();
+        _errorMessage = exceptionMessage.str();
+      }
+
+      const char* what() const noexcept override {
+        return _errorMessage.c_str();
       }
   };
 
