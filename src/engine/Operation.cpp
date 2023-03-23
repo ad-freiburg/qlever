@@ -124,11 +124,14 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       // flag for that columns is set.
       // TODO<joka921> It is cheaper to move this calculation into the
       // individual results, but that requires changes in each individual
-      // operation.
+      // operation, therefore we currently only perform this expensive
+      // change in the DEBUG builds.
+#ifndef NDEBUG
       ad_utility::Timer computeDatatypeCountsTimer{ad_utility::Timer::Started};
       resultTable->checkDefinedness(getExternallyVisibleVariableColumns());
       _runtimeInfo.addDetail("time-compute-datatypes-ms",
                              computeDatatypeCountsTimer.msecs());
+#endif
       if (_timeoutTimer->wlock()->hasTimedOut()) {
         throw ad_utility::TimeoutException(
             "Timeout in " + getDescriptor() +
