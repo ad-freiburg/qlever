@@ -61,7 +61,7 @@ class Service : public Operation {
   float getMultiplicity(size_t col) override;
   size_t getSizeEstimate() override;
   size_t getCostEstimate() override;
-  VariableToColumnMapWithTypeInfo computeVariableToColumnMap() const override;
+  VariableToColumnMap computeVariableToColumnMap() const override;
 
   // Not relevant for SERVICE.
   void setTextLimit([[maybe_unused]] size_t limit) override {}

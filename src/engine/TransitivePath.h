@@ -23,7 +23,7 @@ class TransitivePath : public Operation {
   size_t _rightSideCol;
 
   size_t _resultWidth;
-  VariableToColumnMapWithTypeInfo _variableColumns;
+  VariableToColumnMap _variableColumns;
 
   std::shared_ptr<QueryExecutionTree> _subtree;
   bool _leftIsVar;
@@ -138,7 +138,7 @@ class TransitivePath : public Operation {
  private:
   virtual void computeResult(ResultTable* result) override;
 
-  VariableToColumnMapWithTypeInfo computeVariableToColumnMap() const override;
+  VariableToColumnMap computeVariableToColumnMap() const override;
 
   // The internal implementation of `bindLeftSide` and `bindRightSide` which
   // share a lot of code.

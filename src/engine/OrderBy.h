@@ -72,7 +72,7 @@ class OrderBy : public Operation {
  private:
   void computeResult(ResultTable* result) override;
 
-  VariableToColumnMapWithTypeInfo computeVariableToColumnMap() const override {
+  VariableToColumnMap computeVariableToColumnMap() const override {
     return subtree_->getVariableColumns();
   }
 };

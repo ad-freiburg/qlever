@@ -119,8 +119,8 @@ vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
 }
 
 // ____________________________________________________________________
-VariableToColumnMapWithTypeInfo GroupBy::computeVariableToColumnMap() const {
-  VariableToColumnMapWithTypeInfo result;
+VariableToColumnMap GroupBy::computeVariableToColumnMap() const {
+  VariableToColumnMap result;
   // The returned columns are all groupByVariables followed by aggregrates.
   const auto& subtreeVars = _subtree->getVariableColumns();
   size_t colIndex = 0;

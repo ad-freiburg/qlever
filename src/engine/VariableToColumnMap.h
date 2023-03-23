@@ -56,14 +56,12 @@ inline auto makePossiblyUndefinedColumn =
 
 // Similar to `VariableToColumnMap` but stores additional information together
 // with the column index.
-using VariableToColumnMapWithTypeInfo =
+using VariableToColumnMap =
     ad_utility::HashMap<Variable, ColumnIndexAndTypeInfo>;
-
-using VariableToColumnMap = VariableToColumnMapWithTypeInfo;
 
 // The same function, but works on `VariableToColumnMapWithTypeInfo`
 std::vector<std::pair<Variable, ColumnIndexAndTypeInfo>>
-copySortedByColumnIndex(VariableToColumnMapWithTypeInfo map);
+copySortedByColumnIndex(VariableToColumnMap map);
 
 // Compute the `VariableToColumnMapWithTypeInfo` for a binary JOIN operation.
 // The order of the columns will be as follows: first the columns from the left
@@ -72,7 +70,6 @@ copySortedByColumnIndex(VariableToColumnMapWithTypeInfo map);
 // need the information whether the JOIN is optional, because then additional
 // columns might contain undefined values.
 enum class BinOpType { Join, OptionalJoin };
-VariableToColumnMapWithTypeInfo makeVarToColMapForJoinOperation(
-    const VariableToColumnMapWithTypeInfo& leftVars,
-    const VariableToColumnMapWithTypeInfo& rightVars,
+VariableToColumnMap makeVarToColMapForJoinOperation(
+    const VariableToColumnMap& leftVars, const VariableToColumnMap& rightVars,
     std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType);

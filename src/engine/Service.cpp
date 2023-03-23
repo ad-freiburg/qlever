@@ -49,8 +49,8 @@ size_t Service::getResultWidth() const {
 }
 
 // ____________________________________________________________________________
-VariableToColumnMapWithTypeInfo Service::computeVariableToColumnMap() const {
-  VariableToColumnMapWithTypeInfo map;
+VariableToColumnMap Service::computeVariableToColumnMap() const {
+  VariableToColumnMap map;
   const auto& visibleVariables = parsedServiceClause_.visibleVariables_;
   for (size_t i = 0; i < visibleVariables.size(); i++) {
     // We do not know which of the columns in the subresult contain undefined

@@ -41,7 +41,7 @@ TEST(Values, basicMethods) {
   EXPECT_FLOAT_EQ(valuesOp.getMultiplicity(4), 1.0f);
 
   using V = Variable;
-  VariableToColumnMapWithTypeInfo expectedVariables{
+  VariableToColumnMap expectedVariables{
       {V{"?x"}, makeAlwaysDefinedColumn(0)},
       {V{"?y"}, makeAlwaysDefinedColumn(1)},
       {V{"?z"}, makePossiblyUndefinedColumn(2)}};

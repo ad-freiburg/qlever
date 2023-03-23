@@ -141,8 +141,8 @@ vector<size_t> IndexScan::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-VariableToColumnMapWithTypeInfo IndexScan::computeVariableToColumnMap() const {
-  VariableToColumnMapWithTypeInfo res;
+VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
+  VariableToColumnMap res;
   // All the columns of an index scan only contain defined values.
   auto makeCol = makeAlwaysDefinedColumn;
   size_t col = 0;

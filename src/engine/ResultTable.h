@@ -177,5 +177,5 @@ class ResultTable {
   // Check that if the `varColMap` guarantees that a column is always defined
   // (i.e. that is contains no single undefined value) that there are indeed no
   // undefined values in the `_idTable` of this result.
-  void checkDefinedness(const VariableToColumnMapWithTypeInfo& varColMap) const;
+  void checkDefinedness(const VariableToColumnMap& varColMap) const;
 };

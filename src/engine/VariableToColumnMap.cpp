@@ -6,7 +6,7 @@
 
 // _____________________________________________________________________________
 std::vector<std::pair<Variable, ColumnIndexAndTypeInfo>>
-copySortedByColumnIndex(VariableToColumnMapWithTypeInfo map) {
+copySortedByColumnIndex(VariableToColumnMap map) {
   std::vector<std::pair<Variable, ColumnIndexAndTypeInfo>> result{
       std::make_move_iterator(map.begin()), std::make_move_iterator(map.end())};
   std::ranges::sort(result, std::less<>{},
@@ -15,14 +15,13 @@ copySortedByColumnIndex(VariableToColumnMapWithTypeInfo map) {
 }
 
 // ______________________________________________________________________________
-VariableToColumnMapWithTypeInfo makeVarToColMapForJoinOperation(
-    const VariableToColumnMapWithTypeInfo& leftVars,
-    const VariableToColumnMapWithTypeInfo& rightVars,
+VariableToColumnMap makeVarToColMapForJoinOperation(
+    const VariableToColumnMap& leftVars, const VariableToColumnMap& rightVars,
     std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType) {
   // First come all the variables from the left input. Variables that only
   // appear in the left input always have the same definedness as in the input.
   // For join columns we might override it below.
-  VariableToColumnMapWithTypeInfo result{leftVars};
+  VariableToColumnMap result{leftVars};
   bool isOptionalJoin = binOpType == BinOpType::OptionalJoin;
   size_t nextColumnIndex = result.size();
 

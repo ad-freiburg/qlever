@@ -741,7 +741,7 @@ TEST(GroupBy, GroupedVariableInExpressions) {
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMapWithTypeInfo expectedVariables{
+  VariableToColumnMap expectedVariables{
       {Variable{"?a"}, {0, AlwaysDefined}},
       {Variable{"?x"}, {1, PossiblyUndefined}},
       {Variable{"?y"}, {2, PossiblyUndefined}}};
@@ -803,7 +803,7 @@ TEST(GroupBy, AliasResultReused) {
   // Check the result.
   auto d = DoubleId;
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMapWithTypeInfo expectedVariables{
+  VariableToColumnMap expectedVariables{
       {Variable{"?a"}, {0, AlwaysDefined}},
       {Variable{"?x"}, {1, PossiblyUndefined}},
       {Variable{"?y"}, {2, PossiblyUndefined}}};
@@ -834,7 +834,7 @@ TEST(GroupBy, AddedHavingRows) {
   EXPECT_THAT(pq.selectClause().getSelectedVariables(),
               ::testing::ElementsAre(Variable{"?x"}, Variable{"?count"}));
   using enum ColumnIndexAndTypeInfo::UndefStatus;
-  VariableToColumnMapWithTypeInfo expectedVariables{
+  VariableToColumnMap expectedVariables{
       {Variable{"?x"}, {0, AlwaysDefined}},
       {Variable{"?count"}, {1, PossiblyUndefined}},
       {Variable{"?_QLever_internal_variable_0"}, {2, PossiblyUndefined}}};

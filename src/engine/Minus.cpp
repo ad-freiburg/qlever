@@ -77,7 +77,7 @@ void Minus::computeResult(ResultTable* result) {
 }
 
 // _____________________________________________________________________________
-VariableToColumnMapWithTypeInfo Minus::computeVariableToColumnMap() const {
+VariableToColumnMap Minus::computeVariableToColumnMap() const {
   return _left->getVariableColumns();
 }
 

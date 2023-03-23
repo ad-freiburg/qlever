@@ -112,6 +112,5 @@ class CountAvailablePredicates : public Operation {
 
  private:
   void computeResult(ResultTable* result) override;
-  [[nodiscard]] VariableToColumnMapWithTypeInfo computeVariableToColumnMap()
-      const override;
+  [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };

@@ -133,8 +133,7 @@ vector<size_t> TransitivePath::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-VariableToColumnMapWithTypeInfo TransitivePath::computeVariableToColumnMap()
-    const {
+VariableToColumnMap TransitivePath::computeVariableToColumnMap() const {
   return _variableColumns;
 }
 

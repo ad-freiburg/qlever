@@ -82,7 +82,7 @@ class GroupBy : public Operation {
   }
 
  private:
-  VariableToColumnMapWithTypeInfo computeVariableToColumnMap() const override;
+  VariableToColumnMap computeVariableToColumnMap() const override;
 
   virtual void computeResult(ResultTable* result) override;
 

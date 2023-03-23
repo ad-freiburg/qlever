@@ -45,7 +45,7 @@ size_t Values::getResultWidth() const {
 vector<size_t> Values::resultSortedOn() const { return {}; }
 
 // ____________________________________________________________________________
-VariableToColumnMapWithTypeInfo Values::computeVariableToColumnMap() const {
+VariableToColumnMap Values::computeVariableToColumnMap() const {
   // we use `unsigned char` instead of `bool` because of the strange
   // specialization of `std::vector<bool>`
   std::vector<unsigned char> colContainsUndef(parsedValues_._variables.size(),
@@ -56,7 +56,7 @@ VariableToColumnMapWithTypeInfo Values::computeVariableToColumnMap() const {
       isUndef = static_cast<bool>(isUndef) || row[i].isUndef();
     }
   }
-  VariableToColumnMapWithTypeInfo map;
+  VariableToColumnMap map;
   for (size_t i = 0; i < parsedValues_._variables.size(); i++) {
     using enum ColumnIndexAndTypeInfo::UndefStatus;
     auto undefStatus = static_cast<bool>(colContainsUndef.at(i))

@@ -64,7 +64,7 @@ string Bind::asStringImpl(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-VariableToColumnMapWithTypeInfo Bind::computeVariableToColumnMap() const {
+VariableToColumnMap Bind::computeVariableToColumnMap() const {
   auto res = _subtree->getVariableColumns();
   // The new variable is always appended at the end.
   // TODO<joka921> This currently pessimistically assumes that all (aggregate)

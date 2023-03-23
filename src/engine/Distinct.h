@@ -63,5 +63,5 @@ class Distinct : public Operation {
  private:
   virtual void computeResult(ResultTable* result) override;
 
-  VariableToColumnMapWithTypeInfo computeVariableToColumnMap() const override;
+  VariableToColumnMap computeVariableToColumnMap() const override;
 };

@@ -80,8 +80,8 @@ class ValuesForTesting : public Operation {
   bool knownEmptyResult() override { return table_.empty(); }
 
  private:
-  VariableToColumnMapWithTypeInfo computeVariableToColumnMap() const override {
-    VariableToColumnMapWithTypeInfo m;
+  VariableToColumnMap computeVariableToColumnMap() const override {
+    VariableToColumnMap m;
     for (size_t i = 0; i < variables_.size(); ++i) {
       bool containsUndef =
           ad_utility::contains(table_.getColumn(i), Id::makeUndefined());

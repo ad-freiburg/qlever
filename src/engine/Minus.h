@@ -78,5 +78,5 @@ class Minus : public Operation {
 
   void computeResult(ResultTable* result) override;
 
-  VariableToColumnMapWithTypeInfo computeVariableToColumnMap() const override;
+  VariableToColumnMap computeVariableToColumnMap() const override;
 };

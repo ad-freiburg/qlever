@@ -81,8 +81,7 @@ auto ResultTable::getOrComputeDatatypeCountsPerColumn() const
 }
 
 // _____________________________________________________________
-void ResultTable::checkDefinedness(
-    const VariableToColumnMapWithTypeInfo& varColMap) const {
+void ResultTable::checkDefinedness(const VariableToColumnMap& varColMap) const {
   const auto& datatypesPerColumn = getOrComputeDatatypeCountsPerColumn();
   for (const auto& [var, columnAndTypes] : varColMap) {
     const auto& [columnIndex, mightContainUndef] = columnAndTypes;

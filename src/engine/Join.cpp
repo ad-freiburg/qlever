@@ -162,7 +162,7 @@ void Join::computeResult(ResultTable* result) {
 }
 
 // _____________________________________________________________________________
-VariableToColumnMapWithTypeInfo Join::computeVariableToColumnMap() const {
+VariableToColumnMap Join::computeVariableToColumnMap() const {
   AD_CORRECTNESS_CHECK(!isFullScanDummy(_left));
   if (isFullScanDummy(_right)) {
     AD_CORRECTNESS_CHECK(_rightJoinCol == 0u);

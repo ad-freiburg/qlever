@@ -19,7 +19,7 @@ Union::Union(QueryExecutionContext* qec,
   _subtrees[1] = t2;
 
   // compute the column origins
-  const VariableToColumnMapWithTypeInfo& variableColumns =
+  const VariableToColumnMap& variableColumns =
       getInternallyVisibleVariableColumns();
   _columnOrigins.resize(variableColumns.size(), {NO_COLUMN, NO_COLUMN});
   const auto& t1VarCols = t1->getVariableColumns();
@@ -69,10 +69,10 @@ size_t Union::getResultWidth() const {
 vector<size_t> Union::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
-VariableToColumnMapWithTypeInfo Union::computeVariableToColumnMap() const {
+VariableToColumnMap Union::computeVariableToColumnMap() const {
   using VarAndTypeInfo = std::pair<Variable, ColumnIndexAndTypeInfo>;
 
-  VariableToColumnMapWithTypeInfo variableColumns;
+  VariableToColumnMap variableColumns;
 
   // A variable is only guaranteed to always be bound if it exists in all the
   // subtrees and if it is guaranteed to be bound in all the subrees.

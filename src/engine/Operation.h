@@ -93,8 +93,8 @@ class Operation {
   // Get the mapping from variables to columns but without the variables that
   // are not visible to the outside because they were not selected by a
   // subquery.
-  virtual const VariableToColumnMapWithTypeInfo&
-  getExternallyVisibleVariableColumns() const final;
+  virtual const VariableToColumnMap& getExternallyVisibleVariableColumns()
+      const final;
   virtual void setSelectedVariablesForSubquery(
       const std::vector<Variable>& selectedVariables) final;
 
@@ -213,8 +213,8 @@ class Operation {
   // Get the mapping from variables to column indices. This mapping may only be
   // used internally, because the actually visible variables might be different
   // in case of a subquery.
-  virtual const VariableToColumnMapWithTypeInfo&
-  getInternallyVisibleVariableColumns() const final;
+  virtual const VariableToColumnMap& getInternallyVisibleVariableColumns()
+      const final;
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
@@ -262,8 +262,7 @@ class Operation {
 
   // Compute the variable to column index mapping. Is used internally by
   // `getInternallyVisibleVariableColumns`.
-  virtual VariableToColumnMapWithTypeInfo computeVariableToColumnMap()
-      const = 0;
+  virtual VariableToColumnMap computeVariableToColumnMap() const = 0;
 
   // Recursively call a function on all children.
   template <typename F>
@@ -298,12 +297,12 @@ class Operation {
   // this map has not yet been computed. This computation is typically performed
   // in the const member function `getInternallyVisibleVariableColumns`, so we
   // have to make it threadsafe.
-  mutable std::optional<VariableToColumnMapWithTypeInfo> variableToColumnMap_;
+  mutable std::optional<VariableToColumnMap> variableToColumnMap_;
 
   // Store the mapping from variables to column indices that is externally
   // visible. This might be different from the `variableToColumnMap_` in case of
   // a subquery that doesn't select all variables.
-  mutable std::optional<VariableToColumnMapWithTypeInfo>
+  mutable std::optional<VariableToColumnMap>
       externallyVisibleVariableToColumnMap_;
 
   // Mutex that protects the `_resultSortedColumns` below.

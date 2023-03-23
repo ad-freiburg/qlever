@@ -335,8 +335,8 @@ void Operation::createRuntimeInfoFromEstimates() {
 }
 
 // ___________________________________________________________________________
-const VariableToColumnMapWithTypeInfo&
-Operation::getInternallyVisibleVariableColumns() const {
+const VariableToColumnMap& Operation::getInternallyVisibleVariableColumns()
+    const {
   // TODO<joka921> Once the operation class is based on a variant rather than
   // on inheritance, we can get rid of the locking here because we can enforce
   // that `computeVariableToColumnMap` is always called in the constructor of
@@ -349,8 +349,8 @@ Operation::getInternallyVisibleVariableColumns() const {
 }
 
 // ___________________________________________________________________________
-const VariableToColumnMapWithTypeInfo&
-Operation::getExternallyVisibleVariableColumns() const {
+const VariableToColumnMap& Operation::getExternallyVisibleVariableColumns()
+    const {
   // TODO<joka921> Once the operation class is based on a variant rather than
   // on inheritance, we can get rid of the locking here because we can enforce
   // that `computeVariableToColumnMap` is always called in the constructor of

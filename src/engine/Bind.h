@@ -51,8 +51,7 @@ class Bind : public Operation {
       const ResultTable& inputResultTable,
       sparqlExpression::SparqlExpression* expression) const;
 
-  [[nodiscard]] VariableToColumnMapWithTypeInfo computeVariableToColumnMap()
-      const override;
+  [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
 
 #endif  // QLEVER_BIND_H

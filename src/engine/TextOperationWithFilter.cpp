@@ -31,9 +31,9 @@ TextOperationWithFilter::TextOperationWithFilter(
 }
 
 // _____________________________________________________________________________
-VariableToColumnMapWithTypeInfo
-TextOperationWithFilter::computeVariableToColumnMap() const {
-  VariableToColumnMapWithTypeInfo vcmap;
+VariableToColumnMap TextOperationWithFilter::computeVariableToColumnMap()
+    const {
+  VariableToColumnMap vcmap;
   // Subtract one because the entity that we filtered on
   // is provided by the filter table and still has the same place there.
   vcmap[_cvar] = makeAlwaysDefinedColumn(0);

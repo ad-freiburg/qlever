@@ -28,9 +28,9 @@ TextOperationWithoutFilter::TextOperationWithoutFilter(
       _sizeEstimate(std::numeric_limits<size_t>::max()) {}
 
 // _____________________________________________________________________________
-VariableToColumnMapWithTypeInfo
-TextOperationWithoutFilter::computeVariableToColumnMap() const {
-  VariableToColumnMapWithTypeInfo vcmap;
+VariableToColumnMap TextOperationWithoutFilter::computeVariableToColumnMap()
+    const {
+  VariableToColumnMap vcmap;
   auto addDefinedVar = [&vcmap, index = 0](const Variable& var) mutable {
     vcmap[var] = makeAlwaysDefinedColumn(index);
     ++index;

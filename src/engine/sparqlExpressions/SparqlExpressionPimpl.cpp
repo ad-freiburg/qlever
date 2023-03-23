@@ -56,7 +56,7 @@ std::optional<::Variable> SparqlExpressionPimpl::getVariableOrNullopt() const {
 
 // ___________________________________________________________________________
 std::string SparqlExpressionPimpl::getCacheKey(
-    const VariableToColumnMapWithTypeInfo& variableToColumnMap) const {
+    const VariableToColumnMap& variableToColumnMap) const {
   return _pimpl->getCacheKey(variableToColumnMap);
 }
 

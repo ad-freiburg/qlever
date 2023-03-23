@@ -108,9 +108,8 @@ vector<size_t> HasPredicateScan::resultSortedOn() const {
   return {};
 }
 
-VariableToColumnMapWithTypeInfo HasPredicateScan::computeVariableToColumnMap()
-    const {
-  VariableToColumnMapWithTypeInfo varCols;
+VariableToColumnMap HasPredicateScan::computeVariableToColumnMap() const {
+  VariableToColumnMap varCols;
   using V = Variable;
   // All the columns that are newly created by this operation contain no
   // undefined values.

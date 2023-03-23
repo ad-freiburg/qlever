@@ -54,12 +54,11 @@ class Filter : public Operation {
   }
 
  private:
-  VariableToColumnMapWithTypeInfo computeVariableToColumnMap() const override {
+  VariableToColumnMap computeVariableToColumnMap() const override {
     return _subtree->getVariableColumns();
   }
 
   void computeResult(ResultTable* result) override;
-
   template <int WIDTH>
   void computeFilterImpl(ResultTable* outputResultTable,
                          const ResultTable& inputResultTable);
