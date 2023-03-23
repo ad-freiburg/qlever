@@ -12,57 +12,55 @@
 // most notably to std::string.
 #define JSON_USE_IMPLICIT_CONVERSIONS 0
 
+#include <concepts>
 #include <nlohmann/json.hpp>
 #include <optional>
-#include <variant>
 #include <utility>
-#include <concepts>
+#include <variant>
 
 #include "util/DisableWarningsClang13.h"
 
 // Added support for serializing `std::optional` using `nlohmann::json`.
 namespace nlohmann {
-    template <typename T>
-    struct adl_serializer<std::optional<T>> {
-        static void to_json(nlohmann::json& j, const std::optional<T>& opt) {
-          if (opt.has_value()) {
-            j = opt.value();
-          } else {
-            j = nullptr;
-          }
-        }
+template <typename T>
+struct adl_serializer<std::optional<T>> {
+  static void to_json(nlohmann::json& j, const std::optional<T>& opt) {
+    if (opt.has_value()) {
+      j = opt.value();
+    } else {
+      j = nullptr;
+    }
+  }
 
-        static void from_json(const nlohmann::json& j, std::optional<T>& opt) {
-          if (j.is_null()){
-            opt = std::nullopt;
-          } else {
-            opt = j.get<T>();
-          }
-        }
-    };
-}
+  static void from_json(const nlohmann::json& j, std::optional<T>& opt) {
+    if (j.is_null()) {
+      opt = std::nullopt;
+    } else {
+      opt = j.get<T>();
+    }
+  }
+};
+}  // namespace nlohmann
 
 // Added support for serializing `std::monostate` using `nlohmann::json`.
 namespace nlohmann {
-    template<>
-    struct adl_serializer<std::monostate>{
-        static void to_json(nlohmann::json& j,
-            const std::monostate&) {
-          // Monostate is just an empty placeholder value.
-          j = nullptr;
-        }
+template <>
+struct adl_serializer<std::monostate> {
+  static void to_json(nlohmann::json& j, const std::monostate&) {
+    // Monostate is just an empty placeholder value.
+    j = nullptr;
+  }
 
-        static void from_json(const nlohmann::json&,
-            std::monostate&) {
-          // Monostate holds no values, so the given monostate is already
-          // identical to the serialized one.
-          // TODO Add an exception here, if the j doesn't contain a nullptr.
-          // I mean, there is literally no sense in trying to convert any actual
-          // value to a std::monostate, so there must be a bug, if somebody tries
-          // to!
-        }
-    };
-}
+  static void from_json(const nlohmann::json&, std::monostate&) {
+    // Monostate holds no values, so the given monostate is already
+    // identical to the serialized one.
+    // TODO Add an exception here, if the j doesn't contain a nullptr.
+    // I mean, there is literally no sense in trying to convert any actual
+    // value to a std::monostate, so there must be a bug, if somebody tries
+    // to!
+  }
+};
+}  // namespace nlohmann
 
 /*
  * @brief A compile time for loop, which passes the loop index to the
@@ -78,7 +76,7 @@ namespace nlohmann {
  */
 template <typename Function, size_t... ForLoopIndexes>
 void ConstExprForLoop(const std::index_sequence<ForLoopIndexes...>&,
-    const Function& loopBody){
+                      const Function& loopBody) {
   ((loopBody.template operator()<ForLoopIndexes>()), ...);
 }
 
@@ -100,55 +98,54 @@ void ConstExprForLoop(const std::index_sequence<ForLoopIndexes...>&,
  * @param functionBody The templated function, which you wish to execute.
  */
 template <size_t MaxValue, typename Function>
-void RuntimeValueToCompileTimeValue(const size_t& value, const Function& functionBody){
-  ConstExprForLoop(std::make_index_sequence<MaxValue>{}, [&functionBody, &value]
-      <size_t Index>(){
-        if (Index == value) {functionBody.template operator()<Index>();}
-      }
-  );
+void RuntimeValueToCompileTimeValue(const size_t& value,
+                                    const Function& functionBody) {
+  ConstExprForLoop(std::make_index_sequence<MaxValue>{},
+                   [&functionBody, &value]<size_t Index>() {
+                     if (Index == value) {
+                       functionBody.template operator()<Index>();
+                     }
+                   });
 }
 
 // Added support for serializing `std::variant` using `nlohmann::json`.
 namespace nlohmann {
-    template <typename... Types>
-    struct adl_serializer<std::variant<Types...>> {
-        static void to_json(nlohmann::json& j,
-            const std::variant<Types...>& var) {
-          // We need to save, which of the types the std::variant actually
-          // uses.
-          size_t index = var.index();
-          j["index"] = index;
+template <typename... Types>
+struct adl_serializer<std::variant<Types...>> {
+  static void to_json(nlohmann::json& j, const std::variant<Types...>& var) {
+    // We need to save, which of the types the std::variant actually
+    // uses.
+    size_t index = var.index();
+    j["index"] = index;
 
-          // 'Translate' the runtime variable index to a compile time value,
-          // so that we can get the currently used value. This is needed,
-          // because `var` is only known at compile time. And by extension, so
-          // is `var.index()`.
-          DISABLE_WARNINGS_CLANG_13
-          RuntimeValueToCompileTimeValue<sizeof...(Types)>(index, [&j, &var]
-              <size_t Index>(){
-                ENABLE_WARNINGS_CLANG_13
-                j["value"] = std::get<Index>(var);
-              }
-          );
-        }
+    // 'Translate' the runtime variable index to a compile time value,
+    // so that we can get the currently used value. This is needed,
+    // because `var` is only known at compile time. And by extension, so
+    // is `var.index()`.
+    DISABLE_WARNINGS_CLANG_13
+    RuntimeValueToCompileTimeValue<sizeof...(Types)>(
+        index, [&j, &var]<size_t Index>() {
+          ENABLE_WARNINGS_CLANG_13
+          j["value"] = std::get<Index>(var);
+        });
+  }
 
-        static void from_json(const nlohmann::json& j,
-            std::variant<Types...>& var) {
-          // Which of the `sizeof...(Types)` possible value types, was the
-          // serialized std::variant using?
-          size_t index = j["index"].get<size_t>();
+  static void from_json(const nlohmann::json& j, std::variant<Types...>& var) {
+    // Which of the `sizeof...(Types)` possible value types, was the
+    // serialized std::variant using?
+    size_t index = j["index"].get<size_t>();
 
-          // Interpreting the value based on its type.
-          DISABLE_WARNINGS_CLANG_13
-          RuntimeValueToCompileTimeValue<sizeof...(Types)>(index, [&j, &var]
-              <size_t Index>(){
-                ENABLE_WARNINGS_CLANG_13
-                var = j["value"].get<std::variant_alternative_t<Index,
-                  std::variant<Types...>>>();
-              }
-          );
-        }
-    };
-}
+    // Interpreting the value based on its type.
+    DISABLE_WARNINGS_CLANG_13
+    RuntimeValueToCompileTimeValue<sizeof...(
+        Types)>(index, [&j, &var]<size_t Index>() {
+      ENABLE_WARNINGS_CLANG_13
+      var =
+          j["value"]
+              .get<std::variant_alternative_t<Index, std::variant<Types...>>>();
+    });
+  }
+};
+}  // namespace nlohmann
 
 #endif  // QLEVER_JSON_H

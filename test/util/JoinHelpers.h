@@ -1,20 +1,21 @@
 // Copyright 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Andre Schlegel (November of 2022, schlegea@informatik.uni-freiburg.de)
+// Author: Andre Schlegel (November of 2022,
+// schlegea@informatik.uni-freiburg.de)
 
 #pragma once
 
 #include <algorithm>
 
+#include "../test/IndexTestHelpers.h"
+#include "../test/util/IdTableHelpers.h"
 #include "AllocatorTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/Join.h"
-#include "util/Random.h"
 #include "engine/idTable/IdTable.h"
-#include "../test/util/IdTableHelpers.h"
 #include "util/Forward.h"
-#include "../test/IndexTestHelpers.h"
+#include "util/Random.h"
 
 /*
  * @brief Join two IdTables using the given join function and return
@@ -37,7 +38,7 @@ IdTable useJoinFunctionOnIdTables(const IdTableAndJoinColumn& tableA,
   int resultWidth{static_cast<int>(tableA.idTable.numColumns() +
                                    tableB.idTable.numColumns() - 1)};
   IdTable result{static_cast<size_t>(resultWidth),
-    ad_utility::testing::makeAllocator()};
+                 ad_utility::testing::makeAllocator()};
 
   // You need to use this special function for executing lambdas. The normal
   // function for functions won't work.

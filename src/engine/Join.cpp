@@ -9,6 +9,7 @@
 #include <engine/Join.h>
 #include <global/Constants.h>
 #include <global/Id.h>
+#include <util/Exception.h>
 #include <util/HashMap.h>
 
 #include <functional>
@@ -16,7 +17,6 @@
 #include <type_traits>
 #include <unordered_set>
 #include <vector>
-#include <util/Exception.h>
 
 using std::string;
 
@@ -54,7 +54,8 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
 }
 
 // _____________________________________________________________________________
-Join::Join(InvalidOnlyForTestingJoinTag, QueryExecutionContext* qec) : Operation(qec){
+Join::Join(InvalidOnlyForTestingJoinTag, QueryExecutionContext* qec)
+    : Operation(qec) {
   // Needed, so that the time out checker in Join::join doesn't create a seg
   // fault if it tries to create a message about the time out.
   _left = std::make_shared<QueryExecutionTree>(qec);

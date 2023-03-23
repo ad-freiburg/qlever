@@ -14,8 +14,8 @@
 #include "../util/BitUtils.h"
 #include "../util/NBitInteger.h"
 #include "../util/Serializer/Serializer.h"
-#include "./IndexTypes.h"
 #include "../util/SourceLocation.h"
+#include "./IndexTypes.h"
 
 /// The different Datatypes that a `ValueId` (see below) can encode.
 enum struct Datatype {
@@ -72,28 +72,27 @@ class ValueId {
   /// (VocabIndex, LocalVocabIndex, TextRecordIndex) that is larger than
   /// `maxIndex`.
   struct IndexTooLargeException : public std::exception {
-    private:
-      
-      ad_utility::source_location _location;
+   private:
+    ad_utility::source_location _location;
 
-      T _tooBigValue;
+    T _tooBigValue;
 
-      std::string _errorMessage;
+    std::string _errorMessage;
 
-    public:
+   public:
+    IndexTooLargeException(
+        T tooBigValue,
+        ad_utility::source_location s = ad_utility::source_location::current())
+        : _location(s), _tooBigValue(tooBigValue) {
+      std::stringstream exceptionMessage;
+      exceptionMessage
+          << _location.file_name() << ", line " << _location.line()
+          << ": The given value " << _tooBigValue
+          << " is bigger than what the maxIndex of ValueId allows.";
+      _errorMessage = exceptionMessage.str();
+    }
 
-      IndexTooLargeException(T tooBigValue,
-          ad_utility::source_location s = ad_utility::source_location::current()):
-          _location(s), _tooBigValue(tooBigValue) {
-        std::stringstream exceptionMessage;
-        exceptionMessage << _location.file_name() << ", line " << _location.line()
-          << ": The given value " << _tooBigValue << " is bigger than what the maxIndex of ValueId allows.";
-        _errorMessage = exceptionMessage.str();
-      }
-
-      const char* what() const noexcept override {
-        return _errorMessage.c_str();
-      }
+    const char* what() const noexcept override { return _errorMessage.c_str(); }
   };
 
   /// A struct that represents the single undefined value. This is required for
