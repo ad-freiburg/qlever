@@ -36,8 +36,8 @@ TextOperationWithFilter::computeVariableToColumnMap() const {
   VariableToColumnMapWithTypeInfo vcmap;
   // Subtract one because the entity that we filtered on
   // is provided by the filter table and still has the same place there.
-  vcmap[_cvar] = makeDefinedColumn(0);
-  vcmap[_cvar.getTextScoreVariable()] = makeDefinedColumn(1);
+  vcmap[_cvar] = makeAlwaysDefinedColumn(0);
+  vcmap[_cvar.getTextScoreVariable()] = makeAlwaysDefinedColumn(1);
   size_t colN = 2;
   const auto& filterColumns = _filterResult->getVariableColumns();
   // TODO<joka921> The order of the `_variables` is not deterministic,
@@ -50,7 +50,7 @@ TextOperationWithFilter::computeVariableToColumnMap() const {
       // TODO<joka921> These variables seem to be newly created an never contain
       // undefined values. However I currently don't understand their semantics
       // which should be documented.
-      vcmap[var] = makeDefinedColumn(colN);
+      vcmap[var] = makeAlwaysDefinedColumn(colN);
       ++colN;
     }
   }

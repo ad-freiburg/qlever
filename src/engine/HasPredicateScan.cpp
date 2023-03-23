@@ -114,7 +114,7 @@ VariableToColumnMapWithTypeInfo HasPredicateScan::computeVariableToColumnMap()
   using V = Variable;
   // All the columns that are newly created by this operation contain no
   // undefined values.
-  auto col = makeDefinedColumn;
+  auto col = makeAlwaysDefinedColumn;
 
   switch (_type) {
     case ScanType::FREE_S:

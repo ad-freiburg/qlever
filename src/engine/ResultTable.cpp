@@ -49,10 +49,10 @@ void ResultTable::getCopyOfLocalVocabFrom(const ResultTable& resultTable) {
 }
 
 // _____________________________________________________________________________
-auto ResultTable::getOrComputeDatatypesPerColumn() const
-    -> const DatatypesPerColumn& {
+auto ResultTable::getOrComputeDatatypeCountsPerColumn() const
+    -> const DatatypeCountsPerColumn& {
   {
-    auto rlock = datatypesPerColumn_.rlock();
+    auto rlock = datatypeCountsPerColumn_.rlock();
     if (rlock->has_value()) {
       return rlock->value();
     }
@@ -60,7 +60,7 @@ auto ResultTable::getOrComputeDatatypesPerColumn() const
   }
 
   // Compute the datatypes
-  auto wlock = datatypesPerColumn_.wlock();
+  auto wlock = datatypeCountsPerColumn_.wlock();
 
   // We have to check again, someone might (at least in theory) have computed
   // the value in the meantime.
@@ -83,7 +83,7 @@ auto ResultTable::getOrComputeDatatypesPerColumn() const
 // _____________________________________________________________
 void ResultTable::checkDefinedness(
     const VariableToColumnMapWithTypeInfo& varColMap) const {
-  const auto& datatypesPerColumn = getOrComputeDatatypesPerColumn();
+  const auto& datatypesPerColumn = getOrComputeDatatypeCountsPerColumn();
   for (const auto& [var, columnAndTypes] : varColMap) {
     const auto& [columnIndex, mightContainUndef] = columnAndTypes;
     bool hasUndefined = datatypesPerColumn.at(columnIndex)

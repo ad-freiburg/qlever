@@ -167,7 +167,7 @@ VariableToColumnMapWithTypeInfo Join::computeVariableToColumnMap() const {
   if (isFullScanDummy(_right)) {
     AD_CORRECTNESS_CHECK(_rightJoinCol == 0u);
   }
-  return makeVarToColMapForJoinOperations(
+  return makeVarToColMapForJoinOperation(
       _left->getVariableColumns(), _right->getVariableColumns(),
       {{_leftJoinCol, _rightJoinCol}}, BinOpType::Join);
 }

@@ -63,12 +63,12 @@ class DummyOperation : public Operation {
  private:
   virtual VariableToColumnMapWithTypeInfo computeVariableToColumnMap()
       const override {
-    return {{Variable{"?a"}, makeDefinedColumn(0)},
-            {Variable{"?b"}, makeDefinedColumn(1)}};
+    return {{Variable{"?a"}, makeAlwaysDefinedColumn(0)},
+            {Variable{"?b"}, makeAlwaysDefinedColumn(1)}};
     /*
     VariableToColumnMapWithTypeInfo m;
-    m[Variable{"?a"}] = makeDefinedColumn(0);
-    m[Variable{"?b"}] = makeDefinedColumn(1);
+    m[Variable{"?a"}] = makeAlwaysDefinedColumn(0);
+    m[Variable{"?b"}] = makeAlwaysDefinedColumn(1);
     return m;
      */
   }

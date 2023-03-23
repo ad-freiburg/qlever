@@ -68,13 +68,13 @@ class ResultTable {
   std::shared_ptr<LocalVocab> localVocab_ = std::make_shared<LocalVocab>();
 
   // For each column in the result (the entries in the outer `vector`) and for
-  // each `Datatype` (the entries of the inner `array`, store the information,
+  // each `Datatype` (the entries of the inner `array`), store the information
   // how many entries of that datatype are stored in the column.
-  using DatatypesPerColumn = std::vector<
+  using DatatypeCountsPerColumn = std::vector<
       std::array<size_t, static_cast<size_t>(Datatype::MaxValue) + 1>>;
-  mutable ad_utility::Synchronized<std::optional<DatatypesPerColumn>,
+  mutable ad_utility::Synchronized<std::optional<DatatypeCountsPerColumn>,
                                    std::shared_mutex>
-      datatypesPerColumn_;
+      datatypeCountsPerColumn_;
 
  public:
   // Construct with given allocator.
@@ -172,7 +172,7 @@ class ResultTable {
   // Get the information, which columns stores how many entries of each
   // datatype. This information is computed on the first call to this function
   // `O(num-entries-in-table)` and then cached for subsequent usages.
-  const DatatypesPerColumn& getOrComputeDatatypesPerColumn() const;
+  const DatatypeCountsPerColumn& getOrComputeDatatypeCountsPerColumn() const;
 
   // Check that if the `varColMap` guarantees that a column is always defined
   // (i.e. that is contains no single undefined value) that there are indeed no

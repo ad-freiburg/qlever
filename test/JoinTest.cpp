@@ -284,9 +284,9 @@ TEST(JoinTest, joinWithFullScanPSO) {
   auto expected = makeIdTableFromIdVector({{idA, idX, I(3)}, {idO, idX, I(2)}});
   EXPECT_EQ(res->_idTable, expected);
   VariableToColumnMapWithTypeInfo expectedVariables{
-      {Variable{"?p"}, makeDefinedColumn(0)},
-      {Variable{"?s"}, makeDefinedColumn(1)},
-      {Variable{"?o"}, makeDefinedColumn(2)}};
+      {Variable{"?p"}, makeAlwaysDefinedColumn(0)},
+      {Variable{"?s"}, makeAlwaysDefinedColumn(1)},
+      {Variable{"?o"}, makeAlwaysDefinedColumn(2)}};
   EXPECT_THAT(join.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 

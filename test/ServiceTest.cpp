@@ -103,9 +103,9 @@ TEST_F(ServiceTest, basicMethods) {
   using V = Variable;
   ASSERT_THAT(
       serviceOp.computeVariableToColumnMap(),
-      ::testing::UnorderedElementsAreArray(
-          VariableToColumnMapWithTypeInfo{{V{"?x"}, makeUndefinedColumn(0)},
-                                          {V{"?y"}, makeUndefinedColumn(1)}}));
+      ::testing::UnorderedElementsAreArray(VariableToColumnMapWithTypeInfo{
+          {V{"?x"}, makePossiblyUndefinedColumn(0)},
+          {V{"?y"}, makePossiblyUndefinedColumn(1)}}));
   ASSERT_FALSE(serviceOp.knownEmptyResult());
   ASSERT_TRUE(serviceOp.getChildren().empty());
 }

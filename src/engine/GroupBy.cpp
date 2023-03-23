@@ -130,12 +130,12 @@ VariableToColumnMapWithTypeInfo GroupBy::computeVariableToColumnMap() const {
   }
   for (const Alias& a : _aliases) {
     // TODO<joka921> This currently pessimistically assumes that all (aggregate)
-    // expressions can produce undefined values. This might pessimize the
+    // expressions can produce undefined values. This might impact the
     // performance when the result of this GROUP BY is joined on one or more of
     // the aggregating columns. Implement an interface in the expressions that
     // allows to check, whether an expression can never produce an undefined
     // value.
-    result[a._target] = makeUndefinedColumn(colIndex);
+    result[a._target] = makePossiblyUndefinedColumn(colIndex);
     colIndex++;
   }
   return result;

@@ -57,7 +57,7 @@ VariableToColumnMapWithTypeInfo Service::computeVariableToColumnMap() const {
     // VALUES.
     // TODO<joka921> We could parse the contained graph pattern to extract this
     // information.
-    map[visibleVariables[i]] = makeUndefinedColumn(i);
+    map[visibleVariables[i]] = makePossiblyUndefinedColumn(i);
   }
   return map;
 }

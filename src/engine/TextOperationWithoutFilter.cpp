@@ -32,7 +32,7 @@ VariableToColumnMapWithTypeInfo
 TextOperationWithoutFilter::computeVariableToColumnMap() const {
   VariableToColumnMapWithTypeInfo vcmap;
   auto addDefinedVar = [&vcmap, index = 0](const Variable& var) mutable {
-    vcmap[var] = makeDefinedColumn(index);
+    vcmap[var] = makeAlwaysDefinedColumn(index);
     ++index;
   };
   addDefinedVar(_cvar);

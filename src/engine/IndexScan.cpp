@@ -144,7 +144,7 @@ vector<size_t> IndexScan::resultSortedOn() const {
 VariableToColumnMapWithTypeInfo IndexScan::computeVariableToColumnMap() const {
   VariableToColumnMapWithTypeInfo res;
   // All the columns of an index scan only contain defined values.
-  auto makeCol = makeDefinedColumn;
+  auto makeCol = makeAlwaysDefinedColumn;
   size_t col = 0;
 
   // Helper lambdas that add the respective triple component as the next column.

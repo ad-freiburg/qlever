@@ -34,8 +34,8 @@ TransitivePath::TransitivePath(
       _rightColName(rightColName.name()),
       _minDist(minDist),
       _maxDist(maxDist) {
-  _variableColumns[leftColName] = makeDefinedColumn(0);
-  _variableColumns[rightColName] = makeDefinedColumn(1);
+  _variableColumns[leftColName] = makeAlwaysDefinedColumn(0);
+  _variableColumns[rightColName] = makeAlwaysDefinedColumn(1);
 }
 
 // _____________________________________________________________________________

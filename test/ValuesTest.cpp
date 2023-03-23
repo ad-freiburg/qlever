@@ -42,9 +42,9 @@ TEST(Values, basicMethods) {
 
   using V = Variable;
   VariableToColumnMapWithTypeInfo expectedVariables{
-      {V{"?x"}, makeDefinedColumn(0)},
-      {V{"?y"}, makeDefinedColumn(1)},
-      {V{"?z"}, makeUndefinedColumn(2)}};
+      {V{"?x"}, makeAlwaysDefinedColumn(0)},
+      {V{"?y"}, makeAlwaysDefinedColumn(1)},
+      {V{"?z"}, makePossiblyUndefinedColumn(2)}};
   EXPECT_THAT(valuesOp.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 }
