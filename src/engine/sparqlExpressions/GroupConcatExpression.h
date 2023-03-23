@@ -36,6 +36,7 @@ class GroupConcatExpression : public SparqlExpression {
     using AGG_EXP = detail::AggregateExpression<OP>;
     _actualExpression = std::make_unique<AGG_EXP>(distinct, std::move(child),
                                                   std::move(groupConcatOp));
+    setIsInsideAggregate();
   }
 
   // __________________________________________________________________________
@@ -49,10 +50,12 @@ class GroupConcatExpression : public SparqlExpression {
     return {&_actualExpression, 1};
   }
 
-  vector<std::string> getUnaggregatedVariables() override {
-    // This is an aggregation, so it never leaves any unaggregated variables.
-    return {};
-  }
+  // A `GroupConcatExpression` is an aggregate, so it never leaves any
+  // unaggregated variables.
+  vector<Variable> getUnaggregatedVariables() override { return {}; }
+
+  // A `GroupConcatExpression` is an aggregate.
+  bool containsAggregate() const override { return true; }
 
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override {

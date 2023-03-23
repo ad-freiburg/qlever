@@ -51,7 +51,7 @@ class VocabularyInMemory {
   /// Return the highest ID (= index) that occurs in this vocabulary. May only
   /// becalled if size() > 0.
   [[nodiscard]] uint64_t getHighestId() const {
-    AD_CHECK(size() > 0);
+    AD_CONTRACT_CHECK(size() > 0);
     return size() - 1;
   }
 

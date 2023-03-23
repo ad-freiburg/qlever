@@ -23,7 +23,7 @@ const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
     ad_utility::HashMap<MediaType, MediaTypeImpl> t;
     auto add = [&t](MediaType type, std::string typeString,
                     std::string subtypeString, std::vector<std::string> v) {
-      AD_CHECK(!t.contains(type));
+      AD_CONTRACT_CHECK(!t.contains(type));
       t.insert(std::make_pair(
           type, MediaTypeImpl(type, std::move(typeString),
                               std::move(subtypeString), std::move(v))));
@@ -63,7 +63,7 @@ const auto& getSuffixToMediaTypeStringMap() {
     ad_utility::HashMap<std::string, std::string> map;
     for (const auto& [type, impl] : types) {
       for (const auto& suffix : impl._fileSuffixes) {
-        AD_CHECK(!map.contains(suffix));
+        AD_CONTRACT_CHECK(!map.contains(suffix));
         map[suffix] = impl._asString;
       }
     }
@@ -109,14 +109,14 @@ const string& mediaTypeForFilename(std::string_view filename) {
 // _______________________________________________________________________
 const std::string& toString(MediaType t) {
   const auto& m = detail::getAllMediaTypes();
-  AD_CHECK(m.contains(t));
+  AD_CONTRACT_CHECK(m.contains(t));
   return m.at(t)._asString;
 }
 
 // _______________________________________________________________________
 const std::string& getType(MediaType t) {
   const auto& m = detail::getAllMediaTypes();
-  AD_CHECK(m.contains(t));
+  AD_CONTRACT_CHECK(m.contains(t));
   return m.at(t)._type;
 }
 
@@ -175,7 +175,7 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
 std::optional<MediaType> getMediaTypeFromAcceptHeader(
     std::string_view acceptHeader,
     const std::vector<MediaType>& supportedMediaTypes) {
-  AD_CHECK(!supportedMediaTypes.empty());
+  AD_CONTRACT_CHECK(!supportedMediaTypes.empty());
   // empty accept Header means "any type is allowed", so simply choose one.
   if (acceptHeader.empty()) {
     return *supportedMediaTypes.begin();

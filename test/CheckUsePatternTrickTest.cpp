@@ -49,10 +49,10 @@ auto expectNotContained = [](const std::string& whereClause,
 // clause doesn't start with a triple, throw an exception.
 const SparqlTriple& getFirstTriple(const ParsedQuery& parsedQuery) {
   const auto& children = parsedQuery._rootGraphPattern._graphPatterns;
-  AD_CHECK_GE(children.size(), 1);
+  AD_CONTRACT_CHECK(children.size() >= 1);
   const auto& firstChild =
       std::get<parsedQuery::BasicGraphPattern>(children[0]);
-  AD_CHECK_GE(firstChild._triples.size(), 1);
+  AD_CONTRACT_CHECK(firstChild._triples.size() >= 1);
   return firstChild._triples[0];
 }
 
@@ -77,9 +77,10 @@ TEST(CheckUsePatternTrick, isVariableContainedInGraphPattern) {
   expectXYZContained("{?x <is-a> ?y} UNION {?z <is-a> <something>}");
   expectXYZContained("?x <is-a> ?y {SELECT ?z WHERE {?z <is-a> ?not}}");
   expectXYZContained("BIND (3 AS ?x) . ?y <is-a> ?z");
-  expectXYZContained("?x <is-a> ?z. BIND(?y AS ?t)");
+  expectXYZContained("?x <is-a> ?z. BIND(?z AS ?y)");
   expectXYZContained("VALUES ?x {<a> <b>}. ?y <is-a> ?z");
   expectXYZContained("VALUES ?x {<a> <b>}. ?y <is-a> ?z");
+  expectXYZContained("?x <is-a> ?y { SERVICE <endpoint> { ?x ?y ?z } }");
 }
 
 TEST(CheckUsePatternTrick, isVariableContainedInGraphPatternIgnoredTriple) {

@@ -177,8 +177,9 @@ class LocaleManager {
     static_assert(sizeof(uint8_t) == sizeof(std::string::value_type));
     sz = col.getSortKey(utf16, reinterpret_cast<uint8_t*>(res.data()),
                         res.size());
-    AD_CHECK(sz == static_cast<decltype(sz)>(
-                       res.size()))  // this is save by the way we obtained sz
+    AD_CONTRACT_CHECK(
+        sz == static_cast<decltype(sz)>(
+                  res.size()));  // this is save by the way we obtained sz
     // since this is a c-api we still have a trailing '\0'. Trimming this is
     // necessary for the prefix range to work correct.
     res.resize(res.size() - 1);
@@ -443,7 +444,7 @@ class SimpleStringComparator {
    */
   [[nodiscard]] LocaleManager::SortKey transformToFirstPossibleBiggerValue(
       std::string_view s, const Level level) const {
-    AD_CHECK(level == Level::PRIMARY)
+    AD_CONTRACT_CHECK(level == Level::PRIMARY);
     auto transformed = _locManager.getSortKey(s, Level::PRIMARY);
     unsigned char last = transformed.get().back();
     if (last < std::numeric_limits<unsigned char>::max()) {
@@ -641,11 +642,12 @@ class TripleComponentComparator {
    */
   [[nodiscard]] SplitVal transformToFirstPossibleBiggerValue(
       std::string_view s, const Level level) const {
-    AD_CHECK(level == Level::PRIMARY)
+    AD_CONTRACT_CHECK(level == Level::PRIMARY);
     auto transformed = extractAndTransformComparable(s, Level::PRIMARY, false);
     // The `firstOriginalChar` is either " or < or @
-    AD_CHECK(static_cast<unsigned char>(transformed.firstOriginalChar) <
-             std::numeric_limits<unsigned char>::max())
+    AD_CONTRACT_CHECK(
+        static_cast<unsigned char>(transformed.firstOriginalChar) <
+        std::numeric_limits<unsigned char>::max());
     if (transformed.transformedVal.get().empty()) {
       transformed.firstOriginalChar += 1;
     } else {

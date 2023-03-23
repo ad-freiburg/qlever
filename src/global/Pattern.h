@@ -12,14 +12,15 @@
 #include <string>
 #include <vector>
 
-#include "../util/File.h"
-#include "../util/Generator.h"
-#include "../util/Iterators.h"
-#include "../util/Serializer/FileSerializer.h"
-#include "../util/Serializer/SerializeVector.h"
-#include "../util/TypeTraits.h"
-#include "../util/UninitializedAllocator.h"
-#include "Id.h"
+#include "global/Id.h"
+#include "util/ExceptionHandling.h"
+#include "util/File.h"
+#include "util/Generator.h"
+#include "util/Iterators.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/Serializer/SerializeVector.h"
+#include "util/TypeTraits.h"
+#include "util/UninitializedAllocator.h"
 
 typedef uint32_t PatternID;
 
@@ -225,7 +226,7 @@ struct CompactStringVectorWriter {
   }
 
   void push(const data_type* data, size_t elementSize) {
-    AD_CHECK(!_finished);
+    AD_CONTRACT_CHECK(!_finished);
     _offsets.push_back(_nextOffset);
     _nextOffset += elementSize;
     _file.write(data, elementSize * sizeof(data_type));
@@ -250,14 +251,17 @@ struct CompactStringVectorWriter {
 
   ~CompactStringVectorWriter() {
     if (!_finished) {
-      finish();
+      ad_utility::terminateIfThrows(
+          [this]() { finish(); },
+          "Finishing the underlying File of a `CompactStringVectorWriter` "
+          "during destruction failed");
     }
   }
 
  private:
   // Has to be run by all the constructors
   void commonInitialization() {
-    AD_CHECK(_file.isOpen());
+    AD_CONTRACT_CHECK(_file.isOpen());
     // We don't known the data size yet.
     _startOfFile = _file.tell();
     size_t dataSizeDummy = 0;
@@ -273,8 +277,8 @@ cppcoro::generator<typename CompactVectorOfStrings<DataT>::vector_type>
 CompactVectorOfStrings<DataT>::diskIterator(string filename) {
   ad_utility::File dataFile{filename, "r"};
   ad_utility::File indexFile{filename, "r"};
-  AD_CHECK(dataFile.isOpen());
-  AD_CHECK(indexFile.isOpen());
+  AD_CONTRACT_CHECK(dataFile.isOpen());
+  AD_CONTRACT_CHECK(indexFile.isOpen());
 
   const size_t dataSizeInBytes = [&]() {
     size_t dataSize;

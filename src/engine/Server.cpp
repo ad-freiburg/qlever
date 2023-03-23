@@ -11,6 +11,8 @@
 #include <string>
 #include <vector>
 
+#include "absl/cleanup/cleanup.h"
+#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "util/BoostHelpers/AsyncWaitForFuture.h"
 
@@ -222,8 +224,7 @@ Awaitable<void> Server::process(
             << std::endl;
 
   // Start timing.
-  ad_utility::Timer requestTimer;
-  requestTimer.start();
+  ad_utility::Timer requestTimer{ad_utility::Timer::Started};
 
   // Parse the path and the URL parameters from the given request. Works for GET
   // requests as well as the two kinds of POST requests allowed by the SPARQL
@@ -410,151 +411,17 @@ Awaitable<void> Server::process(
 }
 
 // _____________________________________________________________________________
-Awaitable<json> Server::composeResponseQleverJson(
-    const ParsedQuery& query, const QueryExecutionTree& qet,
-    ad_utility::Timer& requestTimer, size_t maxSend) const {
-  auto compute = [&, maxSend] {
-    shared_ptr<const ResultTable> resultTable = qet.getResult();
-    requestTimer.stop();
-    resultTable->logResultSize();
-    off_t compResultUsecs = requestTimer.usecs();
-    size_t resultSize = resultTable->size();
-
-    nlohmann::json j;
-
-    j["query"] = query._originalString;
-    j["status"] = "OK";
-    j["warnings"] = qet.collectWarnings();
-    if (query.hasSelectClause()) {
-      j["selected"] = query.selectClause().getSelectedVariablesAsStrings();
-    } else {
-      j["selected"] =
-          std::vector<std::string>{"?subject", "?predicate", "?object"};
-    }
-
-    j["runtimeInformation"]["meta"] = nlohmann::ordered_json(
-        qet.getRootOperation()->getRuntimeInfoWholeQuery());
-    j["runtimeInformation"]["query_execution_tree"] =
-        nlohmann::ordered_json(qet.getRootOperation()->getRuntimeInfo());
-
-    {
-      size_t limit = std::min(query._limitOffset._limit, maxSend);
-      size_t offset = query._limitOffset._offset;
-      requestTimer.cont();
-      j["res"] =
-          query.hasSelectClause()
-              ? qet.writeResultAsQLeverJson(query.selectClause(), limit, offset,
-                                            std::move(resultTable))
-              : qet.writeRdfGraphJson(query.constructClause().triples_, limit,
-                                      offset, std::move(resultTable));
-      requestTimer.stop();
-    }
-    j["resultsize"] = query.hasSelectClause() ? resultSize : j["res"].size();
-
-    requestTimer.stop();
-    j["time"]["total"] =
-        std::to_string(static_cast<double>(requestTimer.usecs()) / 1000.0) +
-        "ms";
-    j["time"]["computeResult"] =
-        std::to_string(static_cast<double>(compResultUsecs) / 1000.0) + "ms";
-
-    return j;
-  };
-  return computeInNewThread(compute);
-}
-
-// _____________________________________________________________________________
-Awaitable<json> Server::composeResponseSparqlJson(
-    const ParsedQuery& query, const QueryExecutionTree& qet,
-    ad_utility::Timer& requestTimer, size_t maxSend) const {
-  if (!query.hasSelectClause()) {
-    throw std::runtime_error{
-        "SPARQL-compliant JSON format is only supported for SELECT queries"};
-  }
-  auto compute = [&, maxSend] {
-    shared_ptr<const ResultTable> resultTable = qet.getResult();
-    resultTable->logResultSize();
-    requestTimer.stop();
-    nlohmann::json j;
-    size_t limit = std::min(query._limitOffset._limit, maxSend);
-    size_t offset = query._limitOffset._offset;
-    requestTimer.cont();
-    j = qet.writeResultAsSparqlJson(query.selectClause(), limit, offset,
-                                    std::move(resultTable));
-
-    requestTimer.stop();
-    return j;
-  };
-  return computeInNewThread(compute);
-}
-
-// _______________________________________________________________________
-Awaitable<ad_utility::streams::stream_generator>
-Server::composeStreamableResponse(ad_utility::MediaType type,
-                                  const ParsedQuery& query,
-                                  const QueryExecutionTree& qet) const {
-  // TODO<joka921> Clean this up by removing the (unused) `ExportSubFormat`
-  // enum, And maybe by a `switch-constexpr`-abstraction
-  if (type == ad_utility::MediaType::csv) {
-    co_return co_await composeResponseSepValues<
-        QueryExecutionTree::ExportSubFormat::CSV>(query, qet);
-  } else if (type == ad_utility::MediaType::tsv) {
-    co_return co_await composeResponseSepValues<
-        QueryExecutionTree::ExportSubFormat::TSV>(query, qet);
-  } else if (type == ad_utility::MediaType::octetStream) {
-    co_return co_await composeResponseSepValues<
-        QueryExecutionTree::ExportSubFormat::BINARY>(query, qet);
-  } else if (type == ad_utility::MediaType::turtle) {
-    co_return composeTurtleResponse(query, qet);
-  }
-  AD_FAIL();
-}
-
-// _____________________________________________________________________________
-template <QueryExecutionTree::ExportSubFormat format>
-Awaitable<ad_utility::streams::stream_generator>
-Server::composeResponseSepValues(const ParsedQuery& query,
-                                 const QueryExecutionTree& qet) const {
-  auto compute = [&] {
-    size_t limit = query._limitOffset._limit;
-    size_t offset = query._limitOffset._offset;
-    return query.hasSelectClause() ? qet.generateResults<format>(
-                                         query.selectClause(), limit, offset)
-                                   : qet.writeRdfGraphSeparatedValues<format>(
-                                         query.constructClause().triples_,
-                                         limit, offset, qet.getResult());
-  };
-  return computeInNewThread(compute);
-}
-
-// _____________________________________________________________________________
-
-ad_utility::streams::stream_generator Server::composeTurtleResponse(
-    const ParsedQuery& query, const QueryExecutionTree& qet) {
-  if (!query.hasConstructClause()) {
-    throw std::runtime_error{
-        "RDF Turtle as an export format is only supported for CONSTRUCT "
-        "queries"};
-  }
-  size_t limit = query._limitOffset._limit;
-  size_t offset = query._limitOffset._offset;
-  return qet.writeRdfGraphTurtle(query.constructClause().triples_, limit,
-                                 offset, qet.getResult());
-}
-
-// _____________________________________________________________________________
 json Server::composeErrorResponseJson(
     const string& query, const std::string& errorMsg,
     ad_utility::Timer& requestTimer,
     const std::optional<ExceptionMetadata>& metadata) {
-  requestTimer.stop();
-
   json j;
+  using ad_utility::Timer;
   j["query"] = query;
   j["status"] = "ERROR";
   j["resultsize"] = 0;
-  j["time"]["total"] = requestTimer.msecs();
-  j["time"]["computeResult"] = requestTimer.msecs();
+  j["time"]["total"] = Timer::toMilliseconds(requestTimer.value());
+  j["time"]["computeResult"] = Timer::toMilliseconds(requestTimer.value());
   j["exception"] = errorMsg;
 
   if (metadata.has_value()) {
@@ -613,9 +480,9 @@ boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
   using namespace ad_utility::httpUtils;
-  AD_CHECK(params.contains("query"));
+  AD_CONTRACT_CHECK(params.contains("query"));
   const auto& query = params.at("query");
-  AD_CHECK(!query.empty());
+  AD_CONTRACT_CHECK(!query.empty());
 
   auto sendJson = [&request, &send](
                       const json& jsonString,
@@ -635,14 +502,14 @@ boost::asio::awaitable<void> Server::processQuery(
   // access to the runtimeInformation in the case of an error.
   std::optional<QueryExecutionTree> queryExecutionTree;
   try {
-    ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
-        std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
-            ad_utility::TimeoutTimer::unlimited());
-    if (params.contains("timeout")) {
-      timeoutTimer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
-          ad_utility::TimeoutTimer::fromSeconds(
-              std::stof(params.at("timeout"))));
-    }
+    ad_utility::SharedConcurrentTimeoutTimer timeoutTimer = [&]() {
+      auto t = ad_utility::TimeoutTimer::unlimited();
+      if (params.contains("timeout")) {
+        ad_utility::Timer::Seconds timeout{std::stof(params.at("timeout"))};
+        t = ad_utility::TimeoutTimer{timeout, ad_utility::Timer::Started};
+      }
+      return std::make_shared<ad_utility::ConcurrentTimeoutTimer>(std::move(t));
+    }();
 
     auto containsParam = [&params](const std::string& param,
                                    const std::string& expected) {
@@ -712,7 +579,7 @@ boost::asio::awaitable<void> Server::processQuery(
                   supportedMediaTypes()),
           request));
     }
-    AD_CHECK(mediaType.has_value());
+    AD_CONTRACT_CHECK(mediaType.has_value());
     LOG(INFO) << "Requested media type of result is \""
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
 
@@ -720,11 +587,10 @@ boost::asio::awaitable<void> Server::processQuery(
     // then be used to process the query. Start the shared `timeoutTimer` here
     // to also include the query planning.
     //
-    // NOTE: This should come after determining the media type. Otherwise it
+    // NOTE: This should come after determining the media type. Otherwise, it
     // might happen that the query planner runs for a while (recall that it many
     // do index scans) and then we get an error message afterwards that a
     // certain media type is not supported.
-    timeoutTimer->wlock()->start();
     QueryExecutionContext qec(_index, _engine, &_cache, _allocator,
                               _sortPerformanceEstimator, pinSubtrees,
                               pinResult);
@@ -735,7 +601,6 @@ boost::asio::awaitable<void> Server::processQuery(
     qet.isRoot() = true;  // allow pinning of the final result
     qet.recursivelySetTimeoutTimer(timeoutTimer);
     qet.getRootOperation()->createRuntimeInfoFromEstimates();
-    requestTimer.stop();
     size_t timeForIndexScansInQueryPlanning =
         qet.getRootOperation()->getTotalExecutionTimeDuringQueryPlanning();
     size_t timeForQueryPlanning =
@@ -749,15 +614,16 @@ boost::asio::awaitable<void> Server::processQuery(
         << "Query planning done in " << timeForQueryPlanning << " ms"
         << ", additional time spend on index scans during query planning: "
         << timeForIndexScansInQueryPlanning << " ms" << std::endl;
-    requestTimer.cont();
     LOG(TRACE) << qet.asString() << std::endl;
 
     // Common code for sending responses for the streamable media types
     // (tsv, csv, octet-stream, turtle).
     auto sendStreamableResponse =
         [&](ad_utility::MediaType mediaType) -> Awaitable<void> {
-      auto responseGenerator =
-          co_await composeStreamableResponse(mediaType, pq, qet);
+      auto responseGenerator = co_await computeInNewThread([&] {
+        return ExportQueryExecutionTrees::computeResultAsStream(pq, qet,
+                                                                mediaType);
+      });
 
       // The `streamable_body` that is used internally turns all exceptions that
       // occur while generating the rults into "broken pipe". We store the
@@ -788,15 +654,13 @@ boost::asio::awaitable<void> Server::processQuery(
       case ad_utility::MediaType::turtle: {
         co_await sendStreamableResponse(mediaType.value());
       } break;
-      case ad_utility::MediaType::qleverJson: {
-        // Normal case: JSON response
-        auto responseString =
-            co_await composeResponseQleverJson(pq, qet, requestTimer, maxSend);
-        co_await sendJson(std::move(responseString));
-      } break;
+      case ad_utility::MediaType::qleverJson:
       case ad_utility::MediaType::sparqlJson: {
-        auto responseString =
-            co_await composeResponseSparqlJson(pq, qet, requestTimer, maxSend);
+        // Normal case: JSON response
+        auto responseString = co_await computeInNewThread([&, maxSend] {
+          return ExportQueryExecutionTrees::computeResultAsJSON(
+              pq, qet, requestTimer, maxSend, mediaType.value());
+        });
         co_await sendJson(std::move(responseString));
       } break;
       default:
@@ -815,7 +679,6 @@ boost::asio::awaitable<void> Server::processQuery(
     // contain timing information).
     //
     // TODO<joka921> Also log an identifier of the query.
-    requestTimer.stop();
     LOG(INFO) << "Done processing query and sending result"
               << ", total time was " << requestTimer.msecs() << " ms"
               << std::endl;
@@ -863,7 +726,7 @@ Awaitable<T> Server::computeInNewThread(Function function) const {
   auto acquireComputeRelease = [this, function = std::move(function)] {
     LOG(DEBUG) << "Acquiring new thread for query processing\n";
     _queryProcessingSemaphore.acquire();
-    ad_utility::OnDestruction f{[this]() noexcept {
+    absl::Cleanup f{[this]() noexcept {
       try {
         _queryProcessingSemaphore.release();
       } catch (...) {

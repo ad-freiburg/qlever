@@ -18,12 +18,12 @@ size_t TextOperationWithoutFilter::getResultWidth() const {
 
 // _____________________________________________________________________________
 TextOperationWithoutFilter::TextOperationWithoutFilter(
-    QueryExecutionContext* qec, const string& words,
-    const SetOfVariables& variables, const Variable& cvar, size_t textLimit)
+    QueryExecutionContext* qec, const std::vector<std::string>& words,
+    SetOfVariables variables, Variable cvar, size_t textLimit)
     : Operation(qec),
-      _words(words),
-      _variables(variables),
-      _cvar(cvar),
+      _words(absl::StrJoin(words, " ")),
+      _variables(std::move(variables)),
+      _cvar(std::move(cvar)),
       _textLimit(textLimit),
       _sizeEstimate(std::numeric_limits<size_t>::max()) {}
 
@@ -144,7 +144,7 @@ float TextOperationWithoutFilter::getMultiplicity(size_t col) {
   if (_multiplicities.size() == 0) {
     computeMultiplicities();
   }
-  AD_CHECK_LT(col, _multiplicities.size());
+  AD_CONTRACT_CHECK(col < _multiplicities.size());
   return _multiplicities[col];
 }
 

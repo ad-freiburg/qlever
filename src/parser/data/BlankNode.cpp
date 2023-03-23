@@ -14,12 +14,13 @@ BlankNode::BlankNode(bool generated, std::string label)
   // roughly check allowed characters as blank node labels.
   // Weaker than the SPARQL grammar, but good
   // enough so that it will likely never be an issue
-  AD_CHECK(ctre::match<"\\w(?:(?:\\w|-|\\.)*\\w)?">(_label));
+  AD_CONTRACT_CHECK(ctre::match<"\\w(?:(?:\\w|-|\\.)*\\w)?">(_label));
 }
 
 // ___________________________________________________________________________
 std::optional<std::string> BlankNode::evaluate(
-    const Context& context, [[maybe_unused]] ContextRole role) const {
+    const ConstructQueryExportContext& context,
+    [[maybe_unused]] PositionInTriple positionInTriple) const {
   std::ostringstream stream;
   stream << "_:";
   // generated or user-defined

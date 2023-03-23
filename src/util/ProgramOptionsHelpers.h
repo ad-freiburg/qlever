@@ -56,7 +56,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   validate(v, values, dummy, 0);
 
   // Wrap the T inside std::optional
-  AD_CHECK(!v.empty());
+  AD_CONTRACT_CHECK(!v.empty());
   v = std::optional<T>(boost::any_cast<T>(v));
 }
 
@@ -71,7 +71,7 @@ class ParameterToProgramOptionFactory {
   // Construct from a pointer to `ad_utility::Parameters`
   explicit ParameterToProgramOptionFactory(Parameters* parameters)
       : _parameters{parameters} {
-    AD_CHECK(_parameters != nullptr);
+    AD_CONTRACT_CHECK(_parameters != nullptr);
   }
 
   /**

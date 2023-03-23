@@ -5,6 +5,7 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  merge_group:
 
 jobs:
   build:
@@ -12,16 +13,17 @@ jobs:
     # well on Windows or Mac.  You can convert this to a matrix build if you need
     # cross-platform coverage.
     # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       fail-fast: false
       matrix:
-        #dockerfile: [ Dockerfile, Dockerfiles/Dockerfile.Ubuntu18.04, Dockerfiles/Dockerfile.Ubuntu20.04]
         dockerfile: [ Dockerfile]
-        os: [ ubuntu-latest ]
+        os: [ ubuntu-20.04 ]
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
       - name: Install dependencies
         run: |
           sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
@@ -33,9 +35,6 @@ jobs:
 
       - name: Prepare folders
         run:  mkdir -p ${{github.workspace}}/e2e_data/scientist-collection/ && sudo chmod -R o+rwx ${{github.workspace}}/e2e_data
-
-      - name: Checkout submodules
-        run: git submodule update --init --recursive
 
       - name: Docker build
         run: sudo docker build -t qlever ${{github.workspace}} -f ${{github.workspace}}/${{matrix.dockerfile}}

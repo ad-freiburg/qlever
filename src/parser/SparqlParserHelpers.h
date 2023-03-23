@@ -37,8 +37,14 @@ struct ParserAndVisitor {
  public:
   SparqlAutomaticParser parser_{&tokens_};
   SparqlQleverVisitor visitor_;
-  explicit ParserAndVisitor(string input);
-  ParserAndVisitor(string input, SparqlQleverVisitor::PrefixMap prefixes);
+  explicit ParserAndVisitor(
+      string input,
+      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
+          SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
+  ParserAndVisitor(
+      string input, SparqlQleverVisitor::PrefixMap prefixes,
+      SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
+          SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
 
   template <typename ContextType>
   auto parseTypesafe(ContextType* (SparqlAutomaticParser::*F)(void)) {

@@ -11,6 +11,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/GraphPattern.h"
 #include "parser/TripleComponent.h"
+#include "parser/data/VarOrTerm.h"
 #include "parser/data/Variable.h"
 #include "util/Algorithm.h"
 #include "util/VisitMixin.h"
@@ -35,11 +36,24 @@ struct SparqlValues {
   std::vector<Variable> _variables;
   // A table storing the values in their string form
   std::vector<std::vector<TripleComponent>> _values;
-  // The `_variable` as a string, in the format like so: "?x ?y ?z".
+  // The `_variables` as a string, in the format like so: "?x ?y ?z".
   std::string variablesToString() const;
   // The `_values` as a string, in the format like so: "(<v12> <v12> <v13>)
   // (<v21> <v22> <v23>)".
   std::string valuesToString() const;
+};
+
+/// A `SERVICE` clause.
+struct Service {
+ public:
+  // The visible variables of the service clause.
+  std::vector<Variable> visibleVariables_;
+  // The URL of the service clause.
+  Iri serviceIri_;
+  // The prologue (prefix definitions).
+  std::string prologue_;
+  // The body of the SPARQL query for the remote endpoint.
+  std::string graphPatternAsString_;
 };
 
 /// A `BasicGraphPattern` represents a consecutive block of triples.
@@ -147,7 +161,7 @@ struct Bind {
 // class actually becomes `using GraphPatternOperation = std::variant<...>`
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-                 Values, Minus, GroupGraphPattern>;
+                 Values, Service, Minus, GroupGraphPattern>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {

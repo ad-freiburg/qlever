@@ -4,11 +4,14 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/global/ValueIdComparators.h"
-#include "../src/util/Random.h"
 #include "./ValueIdTestHelpers.h"
+#include "./util/GTestHelpers.h"
+#include "./util/IdTestHelpers.h"
+#include "global/ValueIdComparators.h"
+#include "util/Random.h"
 
 using namespace valueIdComparators;
+using ad_utility::source_location;
 
 TEST(ValueIdComparators, GetRangeForDatatype) {
   std::vector<Datatype> datatypes{Datatype::Int,
@@ -57,7 +60,9 @@ auto getComparisonFunctor() {
 // (`isMatchingDatatype(a) and `isMatchingDatatype(b)` both are true when
 // `applyComparator` is called.
 auto testGetRangesForId(auto begin, auto end, ValueId id,
-                        auto isMatchingDatatype, auto applyComparator) {
+                        auto isMatchingDatatype, auto applyComparator,
+                        source_location l = source_location::current()) {
+  auto trage = generateLocationTrace(l);
   // Perform the testing for a single `Comparison`
   auto testImpl = [&]<Comparison comparison>() {
     auto ranges = getRangesForId(begin, end, id, comparison);
@@ -65,27 +70,23 @@ auto testGetRangesForId(auto begin, auto end, ValueId id,
     auto it = begin;
 
     auto isMatching = [&](ValueId a, ValueId b) {
-      if (comparison == Comparison::NE && !isMatchingDatatype(a)) {
-        return true;
-      } else {
-        return isMatchingDatatype(a) && applyComparator(comparator, a, b);
-      }
+      return isMatchingDatatype(a) && applyComparator(comparator, a, b);
     };
     for (auto [rangeBegin, rangeEnd] : ranges) {
       while (it != rangeBegin) {
         ASSERT_FALSE(isMatching(*it, id)) << *it << ' ' << id;
-        ASSERT_FALSE(compareIds(*it, id, comparison));
+        ASSERT_FALSE(compareIds(*it, id, comparison)) << *it << ' ' << id;
         ++it;
       }
       while (it != rangeEnd) {
         ASSERT_TRUE(isMatching(*it, id)) << *it << ' ' << id;
-        ASSERT_TRUE(compareIds(*it, id, comparison));
+        ASSERT_TRUE(compareIds(*it, id, comparison)) << *it << ' ' << id;
         ++it;
       }
     }
     while (it != end) {
       ASSERT_FALSE(isMatching(*it, id));
-      ASSERT_FALSE(compareIds(*it, id, comparison));
+      ASSERT_FALSE(compareIds(*it, id, comparison)) << *it << ' ' << id;
       ++it;
     }
   };
@@ -107,7 +108,7 @@ TEST(ValueIdComparators, NumericTypes) {
     auto [beginOfDatatype, endOfDatatype] =
         getRangeForDatatype(ids.begin(), ids.end(), datatype);
     auto numEntries = endOfDatatype - beginOfDatatype;
-    AD_CHECK(numEntries > 0);
+    AD_CONTRACT_CHECK(numEntries > 0);
     auto getRandomIndex = SlowRandomIntGenerator<uint64_t>(0, numEntries - 1);
 
     for (size_t i = 0; i < 200; ++i) {
@@ -148,26 +149,11 @@ TEST(ValueIdComparators, Undefined) {
   std::sort(ids.begin(), ids.end(), compareByBits);
   auto undefined = ValueId::makeUndefined();
 
-  auto undefinedRange =
-      getRangeForDatatype(ids.begin(), ids.end(), Datatype::Undefined);
-
-  for (auto comparison : {Comparison::EQ, Comparison::LE, Comparison::GE}) {
+  for (auto comparison : {Comparison::EQ, Comparison::LE, Comparison::GE,
+                          Comparison::GT, Comparison::LT, Comparison::NE}) {
     auto equalRange =
         getRangesForId(ids.begin(), ids.end(), undefined, comparison);
-    ASSERT_EQ(equalRange.size(), 1);
-    ASSERT_EQ(equalRange[0], undefinedRange);
-  }
-  {
-    auto equalRange =
-        getRangesForId(ids.begin(), ids.end(), undefined, Comparison::NE);
-    ASSERT_EQ(equalRange.size(), 1);
-    ASSERT_EQ(equalRange[0].first, undefinedRange.second);
-    ASSERT_EQ(equalRange[0].second, ids.end());
-  }
-  for (auto comparison : {Comparison::GT, Comparison::LT}) {
-    auto equalRange =
-        getRangesForId(ids.begin(), ids.end(), undefined, comparison);
-    ASSERT_TRUE(equalRange.empty());
+    ASSERT_EQ(equalRange.size(), 0);
   }
 }
 
@@ -222,7 +208,7 @@ TEST(ValueIdComparators, IndexTypes) {
     auto [beginOfDatatype, endOfDatatype] =
         getRangeForDatatype(ids.begin(), ids.end(), datatype);
     auto numEntries = endOfDatatype - beginOfDatatype;
-    AD_CHECK(numEntries > 0);
+    AD_CONTRACT_CHECK(numEntries > 0);
     auto getRandomIndex = SlowRandomIntGenerator<uint64_t>(0, numEntries - 1);
 
     auto isTypeMatching = [&](ValueId id) {
@@ -252,4 +238,28 @@ TEST(ValueIdComparators, IndexTypes) {
   testImpl.operator()<Datatype::VocabIndex>(&getVocabIndex);
   testImpl.operator()<Datatype::TextRecordIndex>(&getTextRecordIndex);
   testImpl.operator()<Datatype::LocalVocabIndex>(&getLocalVocabIndex);
+}
+
+// _______________________________________________________________________
+TEST(ValueIdComparators, undefinedWithItself) {
+  auto u = ValueId::makeUndefined();
+  ASSERT_FALSE(valueIdComparators::compareIds(u, u, Comparison::LT));
+  ASSERT_FALSE(valueIdComparators::compareIds(u, u, Comparison::LE));
+  ASSERT_FALSE(valueIdComparators::compareIds(u, u, Comparison::EQ));
+  ASSERT_FALSE(valueIdComparators::compareIds(u, u, Comparison::NE));
+  ASSERT_FALSE(valueIdComparators::compareIds(u, u, Comparison::GT));
+  ASSERT_FALSE(valueIdComparators::compareIds(u, u, Comparison::GE));
+}
+
+// _______________________________________________________________________
+TEST(ValueIdComparators, contractViolations) {
+  auto u = ValueId::makeUndefined();
+  auto I = ad_utility::testing::IntId;
+  // Invalid value for the `Comparison` enum.
+  ASSERT_ANY_THROW((compareIds(u, u, static_cast<Comparison>(542))));
+  ASSERT_ANY_THROW(
+      (compareWithEqualIds(u, u, u, static_cast<Comparison>(542))));
+
+  // The third argument must be >= the second.
+  ASSERT_ANY_THROW((compareWithEqualIds(I(3), I(25), I(12), Comparison::LE)));
 }

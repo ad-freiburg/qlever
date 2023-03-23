@@ -31,7 +31,7 @@ LocalVocab LocalVocab::clone() const {
   const size_t localVocabSize = this->size();
   localVocabClone.indexesToWordsMap_.resize(localVocabSize);
   for (const auto& [wordInMap, index] : localVocabClone.wordsToIndexesMap_) {
-    AD_CHECK(index.get() < localVocabSize);
+    AD_CONTRACT_CHECK(index.get() < localVocabSize);
     localVocabClone.indexesToWordsMap_[index.get()] = std::addressof(wordInMap);
   }
   // Return the clone.
@@ -57,6 +57,7 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
       wordsToIndexesMap_.insert({std::forward<WordT>(word), nextFreeIndex_});
   const auto& [wordInMap, index] = *wordInMapAndIndex;
   if (isNewWord) {
+    AD_CONTRACT_CHECK(!readOnly_);
     indexesToWordsMap_.push_back(&wordInMap);
     nextFreeIndex_ = LocalVocabIndex::make(indexesToWordsMap_.size());
   }
@@ -75,6 +76,17 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(std::string&& word) {
 }
 
 // _____________________________________________________________________________
+std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
+    const std::string& word) const {
+  auto localVocabIndex = wordsToIndexesMap_.find(word);
+  if (localVocabIndex != wordsToIndexesMap_.end()) {
+    return localVocabIndex->second;
+  } else {
+    return std::nullopt;
+  }
+}
+
+// _____________________________________________________________________________
 const std::string& LocalVocab::getWord(LocalVocabIndex localVocabIndex) const {
   if (localVocabIndex.get() >= indexesToWordsMap_.size()) {
     throw std::runtime_error(absl::StrCat(
@@ -83,20 +95,4 @@ const std::string& LocalVocab::getWord(LocalVocabIndex localVocabIndex) const {
         indexesToWordsMap_.size(), ", please contact the developers"));
   }
   return *(indexesToWordsMap_.at(localVocabIndex.get()));
-}
-
-// _____________________________________________________________________________
-std::shared_ptr<LocalVocab> LocalVocab::mergeLocalVocabsIfOneIsEmpty(
-    const std::shared_ptr<LocalVocab>& localVocab1,
-    const std::shared_ptr<LocalVocab>& localVocab2) {
-  AD_CHECK(localVocab1 != nullptr);
-  AD_CHECK(localVocab2 != nullptr);
-  bool isLocalVocab1Empty = localVocab1->empty();
-  bool isLocalVocab2Empty = localVocab2->empty();
-  if (!isLocalVocab1Empty && !isLocalVocab2Empty) {
-    throw std::runtime_error(
-        "Merging of two non-empty local vocabularies is currently not "
-        "supported, please contact the developers");
-  }
-  return !isLocalVocab1Empty ? localVocab1 : localVocab2;
 }

@@ -15,7 +15,9 @@ AggregateExpression<AggregateOperation, FinalOp>::AggregateExpression(
     bool distinct, Ptr&& child, AggregateOperation aggregateOp)
     : _distinct(distinct),
       _child{std::move(child)},
-      _aggregateOp{std::move(aggregateOp)} {}
+      _aggregateOp{std::move(aggregateOp)} {
+  setIsInsideAggregate();
+}
 
 // __________________________________________________________________________
 template <typename AggregateOperation, typename FinalOperation>
@@ -38,7 +40,7 @@ AggregateExpression<AggregateOperation, FinalOperation>::children() {
 
 // _________________________________________________________________________
 template <typename AggregateOperation, typename FinalOperation>
-vector<std::string> AggregateExpression<
+vector<Variable> AggregateExpression<
     AggregateOperation, FinalOperation>::getUnaggregatedVariables() {
   // This is an aggregate, so it never leaves any unaggregated variables.
   return {};

@@ -9,6 +9,7 @@
 
 #include <util/HashMap.h>
 #include <util/Exception.h>
+#include "util/json.h"
 
 /*
  * @brief A custom exception for HashMapWithInsertionOrder, for when a key
@@ -62,7 +63,7 @@ class HashMapWithInsertionOrder{
    */
   void addEntry(const Key& key, const Value& value){
     // It is not allowed to have two entires with the same key.
-    AD_CHECK(!hashMap_.contains(key));
+    AD_CONTRACT_CHECK(!hashMap_.contains(key));
 
     // Directly insert the given value into the table and note,
     // when it was inserted.

@@ -21,11 +21,11 @@ Minus::Minus(QueryExecutionContext* qec,
   // Check that the invariant (inputs are sorted on the matched columns) holds.
   auto l = _left->resultSortedOn();
   auto r = _right->resultSortedOn();
-  AD_CHECK(_matchedColumns.size() <= l.size());
-  AD_CHECK(_matchedColumns.size() <= r.size());
+  AD_CONTRACT_CHECK(_matchedColumns.size() <= l.size());
+  AD_CONTRACT_CHECK(_matchedColumns.size() <= r.size());
   for (size_t i = 0; i < _matchedColumns.size(); ++i) {
-    AD_CHECK(_matchedColumns[i][0] == l[i]);
-    AD_CHECK(_matchedColumns[i][1] == r[i]);
+    AD_CONTRACT_CHECK(_matchedColumns[i][0] == l[i]);
+    AD_CONTRACT_CHECK(_matchedColumns[i][1] == r[i]);
   }
 }
 
@@ -45,7 +45,7 @@ string Minus::getDescriptor() const { return "Minus"; }
 
 // _____________________________________________________________________________
 void Minus::computeResult(ResultTable* result) {
-  AD_CHECK(result);
+  AD_CONTRACT_CHECK(result);
   LOG(DEBUG) << "Minus result computation..." << endl;
 
   result->_sortedBy = resultSortedOn();
@@ -54,7 +54,7 @@ void Minus::computeResult(ResultTable* result) {
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
 
-  LOG(DEBUG) << "Minus subresult computation done." << std::endl;
+  LOG(DEBUG) << "Minus subresult computation done" << std::endl;
 
   // We have the same output columns as the left input, so we also
   // have the same output column types.
@@ -69,11 +69,11 @@ void Minus::computeResult(ResultTable* result) {
                   this, leftResult->_idTable, rightResult->_idTable,
                   _matchedColumns, &result->_idTable);
 
-  // If only one of the two operands has a local vocab, pass it on.
-  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
-      leftResult->_localVocab, rightResult->_localVocab);
+  // If only one of the two operands has a non-empty local vocabulary, share
+  // with that one (otherwise, throws an exception).
+  result->shareLocalVocabFromNonEmptyOf(*leftResult, *rightResult);
 
-  LOG(DEBUG) << "Minus result computation done." << endl;
+  LOG(DEBUG) << "Minus result computation done" << endl;
 }
 
 // _____________________________________________________________________________

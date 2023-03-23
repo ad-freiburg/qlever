@@ -53,7 +53,7 @@ void Filter::computeResult(ResultTable* result) {
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
-  result->_localVocab = subRes->_localVocab;
+  result->shareLocalVocabFrom(*subRes);
 
   int width = result->_idTable.numColumns();
   CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this, result, *subRes);
@@ -74,7 +74,7 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
 
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), columnMap, inputResultTable._idTable,
-      getExecutionContext()->getAllocator(), *inputResultTable._localVocab);
+      getExecutionContext()->getAllocator(), inputResultTable.localVocab());
 
   // TODO<joka921> This should be a mandatory argument to the EvaluationContext
   // constructor.
@@ -90,7 +90,7 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
       [&]<sparqlExpression::SingleExpressionResult T>(T&& singleResult) {
         if constexpr (std::is_same_v<T, sparqlExpression::VectorWithMemoryLimit<
                                             sparqlExpression::Bool>>) {
-          AD_CHECK(singleResult.size() == input.size());
+          AD_CONTRACT_CHECK(singleResult.size() == input.size());
           auto totalSize =
               std::accumulate(singleResult.begin(), singleResult.end(), 0ul);
           output.reserve(totalSize);
@@ -99,7 +99,7 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
               output.push_back(input[i]);
             }
           }
-          AD_CHECK_EQ(output.size(), totalSize);
+          AD_CONTRACT_CHECK(output.size() == totalSize);
         } else if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
           auto totalSize = std::accumulate(
               singleResult._intervals.begin(), singleResult._intervals.end(),
@@ -108,10 +108,10 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
               });
           output.reserve(totalSize);
           for (auto [beg, end] : singleResult._intervals) {
-            AD_CHECK(end <= input.size());
+            AD_CONTRACT_CHECK(end <= input.size());
             output.insertAtEnd(input.cbegin() + beg, input.cbegin() + end);
           }
-          AD_CHECK_EQ(output.size(), totalSize);
+          AD_CONTRACT_CHECK(output.size() == totalSize);
         } else {
           // Default case for all other types. We currently implicitly convert
           // all kinds of results (strings, doubles, ints) to bools inside a

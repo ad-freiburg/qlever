@@ -151,7 +151,6 @@ int main(int argc, char** argv) {
       case 'h':
         printUsage(argv[0]);
         return 0;
-        break;
       case 'i':
         inputFile = optarg;
         break;

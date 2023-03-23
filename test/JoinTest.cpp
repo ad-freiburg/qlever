@@ -12,19 +12,25 @@
 #include <sstream>
 #include <tuple>
 
+#include "./IndexTestHelpers.h"
+#include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/JoinHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
+#include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/Values.h"
 #include "engine/idTable/IdTable.h"
 #include "util/Forward.h"
 #include "util/Random.h"
 #include "util/SourceLocation.h"
-#include "../test/IndexTestHelpers.h"
+
+using ad_utility::testing::makeAllocator;
+namespace {
 
 /*
  * A structure containing all information needed for a normal join test. A
@@ -38,65 +44,6 @@ struct JoinTestCase {
   IdTable expectedResult;
   bool resultMustBeSortedByJoinColumn;
 };
-
-/*
- * @brief Tests, whether the given IdTable has the same content as the sample
- * solution and, if the option was choosen, if the IdTable is sorted by
- * the join column.
- *
- * @param table The IdTable that should be tested.
- * @param expectedContent The sample solution. Doesn't need to be sorted,
- *  or the same order of rows as the table.
- * @param resultMustBeSortedByJoinColumn If this is true, it will also be
- * tested, if the table is sorted by the join column.
- * @param joinColumn The join column of the table.
- * @param l Ignore it. It's only here for being able to make better messages,
- *  if a IdTable fails the comparison.
- */
-void compareIdTableWithExpectedContent(
-    const IdTable& table, const IdTable& expectedContent,
-    const bool resultMustBeSortedByJoinColumn = false,
-    const size_t joinColumn = 0,
-    ad_utility::source_location l = ad_utility::source_location::current()) {
-  // For generating more informative messages, when failing the comparison.
-  std::stringstream traceMessage{};
-
-  auto writeIdTableToStream = [&traceMessage](const IdTable& idTable) {
-    std::ranges::for_each(idTable,
-                          [&traceMessage](const auto& row) {
-                            // TODO<C++23> Use std::views::join_with for both
-                            // loops.
-                            for (size_t i = 0; i < row.numColumns(); i++) {
-                              traceMessage << row[i] << " ";
-                            }
-                            traceMessage << "\n";
-                          },
-                          {});
-  };
-
-  traceMessage << "compareIdTableWithExpectedContent comparing IdTable\n";
-  writeIdTableToStream(table);
-  traceMessage << "with IdTable \n";
-  writeIdTableToStream(expectedContent);
-  auto trace{generateLocationTrace(l, traceMessage.str())};
-
-  // Because we compare tables later by sorting them, so that every table has
-  // one definit form, we need to create local copies.
-  IdTable localTable{table.clone()};
-  IdTable localExpectedContent{expectedContent.clone()};
-
-  if (resultMustBeSortedByJoinColumn) {
-    // Is the table sorted by join column?
-    ASSERT_TRUE(std::ranges::is_sorted(localTable.getColumn(joinColumn)));
-  }
-
-  // Sort both the table and the expectedContent, so that both have a definite
-  // form for comparison.
-  std::ranges::sort(localTable, std::ranges::lexicographical_compare);
-  std::ranges::sort(localExpectedContent, std::ranges::lexicographical_compare);
-
-  ASSERT_EQ(localTable, localExpectedContent);
-}
 
 /*
  * @brief Goes through the sets of tests, joins them together with the given
@@ -202,7 +149,7 @@ std::vector<JoinTestCase> createJoinTestSet() {
   rightIdTable = {{1, 3}, {1, 8}, {3, 1}, {4, 2}};
   expectedResult = {{1, 1, 3}, {1, 1, 8}, {1, 3, 3},
                     {1, 3, 8}, {4, 1, 2}, {400000, 200000, 200000}};
-  for (size_t i = 1; i <= 10000; ++i) {
+  for (int64_t i = 1; i <= 10000; ++i) {
     rightIdTable.push_back({4 + i, 2 + i});
   }
   leftIdTable.push_back({400000, 200000});
@@ -215,12 +162,12 @@ std::vector<JoinTestCase> createJoinTestSet() {
   leftIdTable = {};
   rightIdTable = {};
   expectedResult = {{40000, 200000, 200000}, {4000001, 200000, 200000}};
-  for (size_t i = 1; i <= 10000; ++i) {
+  for (int64_t i = 1; i <= 10000; ++i) {
     leftIdTable.push_back({4 + i, 2 + i});
   }
   leftIdTable.push_back({40000, 200000});
   rightIdTable.push_back({40000, 200000});
-  for (size_t i = 1; i <= 10000; ++i) {
+  for (int64_t i = 1; i <= 10000; ++i) {
     leftIdTable.push_back({40000 + i, 2 + i});
   }
   leftIdTable.push_back({4000001, 200000});
@@ -254,7 +201,42 @@ std::vector<JoinTestCase> createJoinTestSet() {
 
   return myTestSet;
 }
+}  // namespace
 
 TEST(JoinTest, joinTest) {
   runTestCasesForAllJoinAlgorithms(createJoinTestSet());
 };
+
+TEST(JoinTest, joinWithFullScanPSO) {
+  auto qec = ad_utility::testing::getQec("<x> <p> 1. <x> <o> 2. <x> <a> 3.");
+  // Expressions in HAVING clauses are converted to special internal aliases.
+  // Test the combination of parsing and evaluating such queries.
+  auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
+      qec, IndexScan::FULL_INDEX_SCAN_PSO,
+      SparqlTriple{Variable{"?s"}, "?p", Variable{"?o"}});
+  parsedQuery::SparqlValues values;
+  values._variables.emplace_back("?p");
+  values._values.push_back({TripleComponent{"<o>"}});
+  values._values.push_back({TripleComponent{"<a>"}});
+  auto valuesTree = ad_utility::makeExecutionTree<Values>(qec, values);
+
+  auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
+
+  auto res = join.getResult();
+
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  auto idX = getId("<x>");
+  auto idA = getId("<a>");
+  auto idO = getId("<o>");
+  auto I = ad_utility::testing::IntId;
+  auto expected = makeIdTableFromIdVector({{idA, idX, I(3)}, {idO, idX, I(2)}});
+  EXPECT_EQ(res->_idTable, expected);
+  VariableToColumnMap expectedVariables{
+      {Variable{"?p"}, 0}, {Variable{"?s"}, 1}, {Variable{"?o"}, 2}};
+  EXPECT_THAT(join.getExternallyVisibleVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVariables));
+
+  // A `Join` of two full scans is not supported.
+  EXPECT_ANY_THROW(Join(qec, fullScanPSO, fullScanPSO, 0, 0));
+}

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "AllocatorTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/Join.h"
@@ -35,7 +36,8 @@ IdTable useJoinFunctionOnIdTables(const IdTableAndJoinColumn& tableA,
                                   JOIN_FUNCTION func) {
   int resultWidth{static_cast<int>(tableA.idTable.numColumns() +
                                    tableB.idTable.numColumns() - 1)};
-  IdTable result{static_cast<size_t>(resultWidth), allocator()};
+  IdTable result{static_cast<size_t>(resultWidth),
+    ad_utility::testing::makeAllocator()};
 
   // You need to use this special function for executing lambdas. The normal
   // function for functions won't work.

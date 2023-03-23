@@ -4,6 +4,7 @@
 
 #include "./SparqlExpressionPimpl.h"
 
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
 namespace sparqlExpression {
@@ -34,9 +35,12 @@ SparqlExpressionPimpl& SparqlExpressionPimpl::operator=(
     const SparqlExpressionPimpl&) = default;
 
 // ____________________________________________________________________________
-std::vector<std::string> SparqlExpressionPimpl::getUnaggregatedVariables()
-    const {
-  return _pimpl->getUnaggregatedVariables();
+std::vector<Variable> SparqlExpressionPimpl::getUnaggregatedVariables(
+    const ad_utility::HashSet<Variable>& groupedVariables) const {
+  auto vars = _pimpl->getUnaggregatedVariables();
+  std::erase_if(
+      vars, [&](const auto& var) { return groupedVariables.contains(var); });
+  return vars;
 }
 
 // ___________________________________________________________________________
@@ -91,5 +95,16 @@ auto SparqlExpressionPimpl::getEstimatesForFilterExpression(
 // _____________________________________________________________________________
 bool SparqlExpressionPimpl::containsLangExpression() const {
   return _pimpl->containsLangExpression();
+}
+
+// _____________________________________________________________________________
+bool SparqlExpressionPimpl::containsAggregate() const {
+  return _pimpl->containsAggregate();
+}
+
+// ______________________________________________________________________________
+SparqlExpressionPimpl SparqlExpressionPimpl::makeVariableExpression(
+    const Variable& variable) {
+  return {std::make_unique<VariableExpression>(variable), variable.name()};
 }
 }  // namespace sparqlExpression

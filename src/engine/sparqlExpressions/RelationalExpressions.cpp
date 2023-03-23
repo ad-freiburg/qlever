@@ -27,11 +27,10 @@ namespace detail {
 // doesn't compile with G++11. Find out, why.
 template <typename T>
 constexpr auto getObjectOfValueTypeHelper(T&& t) {
-  if constexpr (ad_utility::similarToInstantiation<VectorWithMemoryLimit,
-                                                   std::decay_t<T>>) {
+  if constexpr (ad_utility::similarToInstantiation<T, VectorWithMemoryLimit>) {
     return std::move(t[0]);
   } else {
-    return std::move(t);
+    return AD_FWD(t);
   }
 }
 }  // namespace detail
@@ -177,7 +176,7 @@ template <SingleExpressionResult S>
 requires isVectorResult<S>
 auto idGenerator(S values, size_t targetSize, EvaluationContext* context)
     -> cppcoro::generator<decltype(makeValueId(values[0], context))> {
-  AD_CHECK(targetSize == values.size());
+  AD_CONTRACT_CHECK(targetSize == values.size());
   for (const auto& el : values) {
     auto id = makeValueId(el, context);
     co_yield id;
@@ -312,7 +311,7 @@ evaluateRelationalExpression(S1 value1, S2 value2, EvaluationContext* context) {
   }
 
   if constexpr (resultIsConstant) {
-    AD_CHECK(result.size() == 1);
+    AD_CONTRACT_CHECK(result.size() == 1);
     return result[0];
   } else {
     return result;
@@ -399,13 +398,18 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
       [](const auto& left, const auto& right) -> std::optional<LangFilterData> {
     const auto* varPtr = dynamic_cast<const LangExpression*>(left.get());
     const auto* langPtr =
-        dynamic_cast<const StringOrIriExpression*>(right.get());
+        dynamic_cast<const StringLiteralExpression*>(right.get());
 
     if (!varPtr || !langPtr) {
       return std::nullopt;
     }
 
-    return LangFilterData{varPtr->variable(), langPtr->value()};
+    // TODO<joka921> Check that the language string doesn't contain a datatype
+    // etc.
+    // TODO<joka921> Is this even allowed by the grammar?
+    return LangFilterData{
+        varPtr->variable(),
+        std::string{langPtr->value().normalizedLiteralContent().get()}};
   };
 
   const auto& child1 = children_[0];

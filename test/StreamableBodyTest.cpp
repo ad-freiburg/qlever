@@ -11,6 +11,7 @@ using namespace ad_utility::httpUtils::httpStreams;
 using ad_utility::streams::basic_stream_generator;
 using ad_utility::streams::stream_generator;
 
+namespace {
 cppcoro::generator<std::string> toGenerator(stream_generator generator) {
   for (auto& value : generator) {
     co_yield value;
@@ -21,16 +22,17 @@ std::string_view toStringView(
     const streamable_body::writer::const_buffers_type& buffer) {
   return {static_cast<const char*>(buffer.data()), buffer.size()};
 }
+}  // namespace
 
 namespace boost {
 // When using ASSERT_EQ/ASSERT_NE GTest always needs operator<< to print the
 // arguments in case of a mismatch, which are not provided by default for
 // the following boost parameters:
-std::ostream& operator<<(std::ostream& out, none_t) {
+static std::ostream& operator<<(std::ostream& out, none_t) {
   out << "boost::none";
   return out;
 }
-std::ostream& operator<<(
+static std::ostream& operator<<(
     std::ostream& out,
     const optional<std::pair<asio::const_buffer, bool>>& optionalBuffer) {
   if (!optionalBuffer.has_value()) {
@@ -45,7 +47,9 @@ std::ostream& operator<<(
 }
 }  // namespace boost
 
+namespace {
 constexpr size_t BUFFER_SIZE = 1u << 20;
+}
 
 TEST(StreamableBodyTest, TestInitReturnsNoErrorCode) {
   auto generator = toGenerator(stream_generator{});
@@ -57,10 +61,12 @@ TEST(StreamableBodyTest, TestInitReturnsNoErrorCode) {
   ASSERT_EQ(errorCode, boost::system::error_code());
 }
 
+namespace {
 stream_generator generateException() {
   throw std::runtime_error("Test Exception");
   co_return;
 }
+}  // namespace
 
 TEST(StreamableBodyTest, TestGeneratorExceptionResultsInErrorCode) {
   auto generator = toGenerator(generateException());
@@ -73,7 +79,9 @@ TEST(StreamableBodyTest, TestGeneratorExceptionResultsInErrorCode) {
   ASSERT_EQ(result, boost::none);
 }
 
+namespace {
 stream_generator generateNothing() { co_return; }
+}  // namespace
 
 TEST(StreamableBodyTest, TestEmptyGeneratorReturnsEmptyResult) {
   auto generator = toGenerator(generateNothing());
@@ -86,11 +94,13 @@ TEST(StreamableBodyTest, TestEmptyGeneratorReturnsEmptyResult) {
   ASSERT_EQ(result, boost::none);
 }
 
+namespace {
 stream_generator generateMultipleElements() {
   co_yield std::string(BUFFER_SIZE, 'A');
   co_yield 1;
   co_yield "Abc";
 }
+}  // namespace
 
 TEST(StreamableBodyTest, TestGeneratorReturnsBufferedResults) {
   auto generator = toGenerator(generateMultipleElements());

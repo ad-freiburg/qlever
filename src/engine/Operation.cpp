@@ -5,6 +5,7 @@
 #include "./Operation.h"
 
 #include "engine/QueryExecutionTree.h"
+#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
 template <typename F>
@@ -60,8 +61,7 @@ void Operation::recursivelySetTimeoutTimer(
 // Get the result for the subtree rooted at this element. Use existing results
 // if they are already available, otherwise trigger computation.
 shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
-  ad_utility::Timer timer;
-  timer.start();
+  ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {
     // Start with an estimated runtime info which will be updated as we go.
@@ -97,12 +97,16 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   try {
     // In case of an exception, create the correct runtime info, no matter which
     // exception handler is called.
-    ad_utility::OnDestruction onDestruction{[&]() {
-      if (std::uncaught_exceptions()) {
-        timer.stop();
-        updateRuntimeInformationOnFailure(timer.msecs());
-      }
-    }};
+    // We cannot simply use `absl::Cleanup` because
+    // `updateRuntimeInformationOnFailure` might (at least theoretically) throw
+    // an exception.
+    auto onDestruction =
+        ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+            [this, &timer]() {
+              if (std::uncaught_exceptions()) {
+                updateRuntimeInformationOnFailure(timer.msecs());
+              }
+            });
     auto computeLambda = [this, &timer] {
       CacheValue val(getExecutionContext()->getAllocator());
       if (_timeoutTimer->wlock()->hasTimedOut()) {
@@ -122,11 +126,9 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       // correct runtimeInfo. The children of the runtime info are already set
       // correctly because the result was computed, so we can pass `nullopt` as
       // the last argument.
-      timer.stop();
       updateRuntimeInformationOnSuccess(*val._resultTable,
                                         ad_utility::CacheStatus::computed,
                                         timer.msecs(), std::nullopt);
-      timer.cont();
       val._runtimeInfo = getRuntimeInfo();
       return val;
     };
@@ -144,14 +146,13 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda)
                               : cache.computeOnce(cacheKey, computeLambda);
 
-    timer.stop();
     updateRuntimeInformationOnSuccess(result, timer.msecs());
     auto resultNumRows = result._resultPointer->_resultTable->size();
     auto resultNumCols = result._resultPointer->_resultTable->width();
     LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
                << resultNumCols << std::endl;
     return result._resultPointer->_resultTable;
-  } catch (const ad_semsearch::AbortException& e) {
+  } catch (const ad_utility::AbortException& e) {
     // A child Operation was aborted, do not print the information again.
     _runtimeInfo.status_ = RuntimeInformation::Status::failedBecauseChildFailed;
     throw;
@@ -163,21 +164,21 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     LOG(ERROR) << "Waited for a result from another thread which then failed"
                << endl;
     LOG(DEBUG) << asString();
-    throw ad_semsearch::AbortException(e);
+    throw ad_utility::AbortException(e);
   } catch (const std::exception& e) {
     // We are in the innermost level of the exception, so print
     LOG(ERROR) << "Aborted Operation" << endl;
     LOG(DEBUG) << asString() << endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
-    throw ad_semsearch::AbortException(e);
+    throw ad_utility::AbortException(e);
   } catch (...) {
     // We are in the innermost level of the exception, so print
     LOG(ERROR) << "Aborted Operation" << endl;
     LOG(DEBUG) << asString() << endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
-    throw ad_semsearch::AbortException(
+    throw ad_utility::AbortException(
         "Unexpected expection that is not a subclass of std::exception");
   }
 }
@@ -202,7 +203,7 @@ void Operation::updateRuntimeInformationOnSuccess(
   bool wasCached = cacheStatus != ad_utility::CacheStatus::computed;
   // If the result was read from the cache, then we need the additional
   // runtime info for the correct child information etc.
-  AD_CHECK(!wasCached || runtimeInfo.has_value());
+  AD_CONTRACT_CHECK(!wasCached || runtimeInfo.has_value());
 
   if (runtimeInfo.has_value()) {
     if (wasCached) {
@@ -219,7 +220,7 @@ void Operation::updateRuntimeInformationOnSuccess(
     // available.
     _runtimeInfo.children_.clear();
     for (auto* child : getChildren()) {
-      AD_CHECK(child);
+      AD_CONTRACT_CHECK(child);
       _runtimeInfo.children_.push_back(
           child->getRootOperation()->getRuntimeInfo());
     }
@@ -285,7 +286,7 @@ void Operation::createRuntimeInfoFromEstimates() {
   _runtimeInfo.descriptor_ = getDescriptor();
 
   for (const auto& child : getChildren()) {
-    AD_CHECK(child);
+    AD_CONTRACT_CHECK(child);
     child->getRootOperation()->createRuntimeInfoFromEstimates();
     _runtimeInfo.children_.push_back(
         child->getRootOperation()->getRuntimeInfo());

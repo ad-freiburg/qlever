@@ -22,12 +22,13 @@ class AllocationExceedsLimitException : public std::exception {
   AllocationExceedsLimitException(size_t requestedBytes, size_t freeBytes)
       : _message{"Tried to allocate " + std::to_string(requestedBytes >> 20) +
                  "MB, but only " + std::to_string(freeBytes >> 20) +
-                 "MB  were available. " +
+                 "MB were available. " +
                  "Clear the cache or allow more memory for QLever during "
                  "startup"} {};
 
- private:
   const char* what() const noexcept override { return _message.c_str(); }
+
+ private:
   const std::string _message;
 };
 
@@ -206,11 +207,11 @@ class AllocatorWithLimit {
   // memory pool. For us, they are hence equal if they use the same
   // AllocationMemoryLeft object.00
   template <typename V>
-  bool operator==(const AllocatorWithLimit<V>& v) {
+  bool operator==(const AllocatorWithLimit<V>& v) const {
     return memoryLeft_ == v.memoryLeft_;
   }
   template <typename V>
-  bool operator!=(const AllocatorWithLimit<V>& v) {
+  bool operator!=(const AllocatorWithLimit<V>& v) const {
     return !(*this == v);
   }
 };

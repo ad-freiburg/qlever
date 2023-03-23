@@ -97,13 +97,14 @@ class BenchmarkRecords {
     template<typename Function>
       requires std::invocable<Function>
     float measureTimeOfFunction(const Function& functionToMeasure) const{
-      ad_utility::Timer benchmarkTimer;
+      ad_utility::timer::Timer
+      benchmarkTimer(ad_utility::timer::Timer::Started);
          
       benchmarkTimer.start();
       functionToMeasure();
       benchmarkTimer.stop();
 
-      return benchmarkTimer.secs();
+      return ad_utility::timer::Timer::toSeconds(benchmarkTimer.value());
     }
 
     /*
@@ -120,7 +121,7 @@ class BenchmarkRecords {
 
         // Are the given row and column number inside the table range?
         // size_t is unsigned, so we only need to check, that they are not to big.
-        AD_CHECK(row < table.rowNames_.size() &&
+        AD_CONTRACT_CHECK(row < table.rowNames_.size() &&
             column < table.columnNames_.size());
         
         // Return  the reference to the table entry.

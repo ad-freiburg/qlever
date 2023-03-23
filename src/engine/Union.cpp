@@ -14,7 +14,7 @@ Union::Union(QueryExecutionContext* qec,
              const std::shared_ptr<QueryExecutionTree>& t1,
              const std::shared_ptr<QueryExecutionTree>& t2)
     : Operation(qec) {
-  AD_CHECK(t1 && t2);
+  AD_CONTRACT_CHECK(t1 && t2);
   _subtrees[0] = t1;
   _subtrees[1] = t2;
 
@@ -166,11 +166,11 @@ void Union::computeResult(ResultTable* result) {
                   &Union::computeUnion, this, &result->_idTable,
                   subRes1->_idTable, subRes2->_idTable, _columnOrigins);
 
-  // If only one of the two operands has a local vocab, pass it on.
-  result->_localVocab = LocalVocab::mergeLocalVocabsIfOneIsEmpty(
-      subRes1->_localVocab, subRes2->_localVocab);
+  // If only one of the two operands has a non-empty local vocabulary, share
+  // with that one (otherwise, throws an exception).
+  result->shareLocalVocabFromNonEmptyOf(*subRes1, *subRes2);
 
-  LOG(DEBUG) << "Union result computation done." << std::endl;
+  LOG(DEBUG) << "Union result computation done" << std::endl;
 }
 
 template <int LEFT_WIDTH, int RIGHT_WIDTH, int OUT_WIDTH>
@@ -229,7 +229,7 @@ void Union::computeUnion(
       // This if clause is only here to avoid creating the call to insert when
       // it would not be possible to call the function due to not matching
       // columns.
-      AD_CHECK(WIDTH == OUT_WIDTH);
+      AD_CONTRACT_CHECK(WIDTH == OUT_WIDTH);
       if constexpr (WIDTH == OUT_WIDTH) {
         appendToResultChunked(inputTable);
       }
