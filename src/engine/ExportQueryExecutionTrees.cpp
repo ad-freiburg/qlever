@@ -20,7 +20,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
 
   // Note: The `ConstructQueryExportContext` takes a reference to the
   // `varColMap`, so we have to bind it to a variable.
-  auto varColMap = removeTypeInfo(qet.getVariableColumns());
+  auto varColMap = qet.getVariableColumns();
   for (size_t i = limitAndOffset._offset; i < upperBound; i++) {
     ConstructQueryExportContext context{i, *res, varColMap,
                                         qet.getQec()->getIndex()};

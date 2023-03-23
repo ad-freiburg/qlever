@@ -70,7 +70,7 @@ vector<size_t> Union::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
 VariableToColumnMapWithTypeInfo Union::computeVariableToColumnMap() const {
-  using VarAndIndex = std::pair<Variable, size_t>;
+  using VarAndTypeInfo = std::pair<Variable, ColumnIndexAndTypeInfo>;
 
   VariableToColumnMapWithTypeInfo variableColumns;
 
@@ -93,7 +93,7 @@ VariableToColumnMapWithTypeInfo Union::computeVariableToColumnMap() const {
   size_t nextColumnIndex = 0;
   auto addVariableColumnIfNotExists =
       [&mightContainUndef, &variableColumns,
-       &nextColumnIndex](const VarAndIndex& varAndIndex) mutable {
+       &nextColumnIndex](const VarAndTypeInfo& varAndIndex) mutable {
         const auto& variable = varAndIndex.first;
         if (!variableColumns.contains(variable)) {
           using enum ColumnIndexAndTypeInfo::UndefStatus;
@@ -104,12 +104,12 @@ VariableToColumnMapWithTypeInfo Union::computeVariableToColumnMap() const {
         }
       };
 
-  auto addVariablesForSubtree = [&addVariableColumnIfNotExists](
-                                    const auto& subtree) {
-    std::ranges::for_each(
-        copySortedByColumnIndex(removeTypeInfo(subtree->getVariableColumns())),
-        addVariableColumnIfNotExists);
-  };
+  auto addVariablesForSubtree =
+      [&addVariableColumnIfNotExists](const auto& subtree) {
+        std::ranges::for_each(
+            copySortedByColumnIndex(subtree->getVariableColumns()),
+            addVariableColumnIfNotExists);
+      };
 
   std::ranges::for_each(_subtrees, addVariablesForSubtree);
   return variableColumns;

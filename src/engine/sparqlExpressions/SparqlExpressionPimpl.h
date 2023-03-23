@@ -73,11 +73,7 @@ class SparqlExpressionPimpl {
   // has to be in the .cpp file because `SparqlExpression` is only forward
   // declared.
   [[nodiscard]] std::string getCacheKey(
-      const VariableToColumnMap& variableToColumnMap) const;
-  std::string getCacheKey(
-      const VariableToColumnMapWithTypeInfo& variableToColumnMap) const {
-    return getCacheKey(removeTypeInfo(variableToColumnMap));
-  }
+      const VariableToColumnMapWithTypeInfo& variableToColumnMap) const;
   SparqlExpressionPimpl(std::shared_ptr<SparqlExpression>&& pimpl,
                         std::string descriptor);
   ~SparqlExpressionPimpl();

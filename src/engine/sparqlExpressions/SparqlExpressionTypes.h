@@ -259,7 +259,7 @@ struct EvaluationContext {
     if (!map.contains(var)) {
       return std::nullopt;
     }
-    auto idx = map.at(var);
+    ColumnIndex idx = map.at(var).columnIndex_;
     AD_CONTRACT_CHECK(idx < _previousResultsFromSameGroup.size());
 
     return copyExpressionResultIfNotVector(

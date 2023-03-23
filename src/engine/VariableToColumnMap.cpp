@@ -14,25 +14,6 @@ copySortedByColumnIndex(VariableToColumnMapWithTypeInfo map) {
   return result;
 }
 
-// _____________________________________________________________________________
-std::vector<std::pair<Variable, size_t>> copySortedByColumnIndex(
-    VariableToColumnMap map) {
-  std::vector<std::pair<Variable, size_t>> result{
-      std::make_move_iterator(map.begin()), std::make_move_iterator(map.end())};
-  std::ranges::sort(result, std::less{}, ad_utility::second);
-  return result;
-}
-
-// ___________________________________________________________________
-VariableToColumnMap removeTypeInfo(
-    const VariableToColumnMapWithTypeInfo& varColMap) {
-  VariableToColumnMap result;
-  for (const auto& [variable, colIdxAndTypeInfo] : varColMap) {
-    result[variable] = colIdxAndTypeInfo.columnIndex_;
-  }
-  return result;
-}
-
 // ______________________________________________________________________________
 VariableToColumnMapWithTypeInfo makeVarToColMapForJoinOperation(
     const VariableToColumnMapWithTypeInfo& leftVars,

@@ -143,9 +143,9 @@ TEST(Sort, SimpleMemberFunctions) {
 
     EXPECT_THAT(s.asString(),
                 ::testing::StartsWith("SORT(internal) on columns:asc(0) \n"));
-    auto varColMap = removeTypeInfo(s.getExternallyVisibleVariableColumns());
+    auto varColMap = s.getExternallyVisibleVariableColumns();
     ASSERT_EQ(1u, varColMap.size());
-    ASSERT_EQ(0u, varColMap.at(Variable{"?0"}));
+    ASSERT_EQ(0u, varColMap.at(Variable{"?0"}).columnIndex_);
     EXPECT_FALSE(s.knownEmptyResult());
     EXPECT_EQ(42.0, s.getMultiplicity(0));
 
@@ -165,10 +165,10 @@ TEST(Sort, SimpleMemberFunctions) {
     EXPECT_THAT(
         s.asString(),
         ::testing::StartsWith("SORT(internal) on columns:asc(1) asc(0) \n"));
-    auto varColMap = removeTypeInfo(s.getExternallyVisibleVariableColumns());
+    const auto& varColMap = s.getExternallyVisibleVariableColumns();
     ASSERT_EQ(2u, varColMap.size());
-    ASSERT_EQ(0u, varColMap.at(Variable{"?0"}));
-    ASSERT_EQ(1u, varColMap.at(Variable{"?1"}));
+    ASSERT_EQ(0u, varColMap.at(Variable{"?0"}).columnIndex_);
+    ASSERT_EQ(1u, varColMap.at(Variable{"?1"}).columnIndex_);
     EXPECT_FALSE(s.knownEmptyResult());
     EXPECT_EQ(42.0, s.getMultiplicity(0));
     EXPECT_EQ(84.0, s.getMultiplicity(1));

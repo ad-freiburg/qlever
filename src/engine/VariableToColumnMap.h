@@ -53,22 +53,13 @@ inline auto makePossiblyUndefinedColumn =
 // A hash map from variables to the column index of that variable in a table,
 // used in several places (e.g. the `Operation` class, the `SparqlExpression`
 // module, etc.).
-using VariableToColumnMap = ad_utility::HashMap<Variable, size_t>;
 
 // Similar to `VariableToColumnMap` but stores additional information together
 // with the column index.
 using VariableToColumnMapWithTypeInfo =
     ad_utility::HashMap<Variable, ColumnIndexAndTypeInfo>;
 
-// Convert a `VariableToColumnMapWithTypeInfo` to a `VariableToColumnMap` by
-// just storing the column indices without the additional information.
-VariableToColumnMap removeTypeInfo(
-    const VariableToColumnMapWithTypeInfo& varColMap);
-
-// Return a vector that contains the contents of the `VariableToColumnMap` in
-// ascending order of the column indices.
-std::vector<std::pair<Variable, size_t>> copySortedByColumnIndex(
-    VariableToColumnMap map);
+using VariableToColumnMap = VariableToColumnMapWithTypeInfo;
 
 // The same function, but works on `VariableToColumnMapWithTypeInfo`
 std::vector<std::pair<Variable, ColumnIndexAndTypeInfo>>
@@ -84,4 +75,4 @@ enum class BinOpType { Join, OptionalJoin };
 VariableToColumnMapWithTypeInfo makeVarToColMapForJoinOperation(
     const VariableToColumnMapWithTypeInfo& leftVars,
     const VariableToColumnMapWithTypeInfo& rightVars,
-    std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpTypebinOpType);
+    std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType);

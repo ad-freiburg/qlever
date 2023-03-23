@@ -40,7 +40,7 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
 
 string GroupBy::asStringImpl(size_t indent) const {
   const auto& varMap = getInternallyVisibleVariableColumns();
-  auto varMapInput = removeTypeInfo(_subtree->getVariableColumns());
+  auto varMapInput = _subtree->getVariableColumns();
 
   // We also have to encode the variables to which alias results are stored in
   // the cache key of the expressions in case they reuse a variable from the
@@ -51,7 +51,8 @@ string GroupBy::asStringImpl(size_t indent) const {
       // It is important that the cache keys for the variables from the aliases
       // do not collide with the query body, and that they are consistent. The
       // constant `1000` has no deeper meaning but makes debugging easier.
-      varMapInput[var] = column.columnIndex_ + 1000 + numColumnsInput;
+      varMapInput[var].columnIndex_ =
+          column.columnIndex_ + 1000 + numColumnsInput;
     }
   }
 
@@ -264,7 +265,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
       _groupByVariables.begin(), _groupByVariables.end()};
   evaluationContext._variableToColumnMapPreviousResults =
-      removeTypeInfo(getInternallyVisibleVariableColumns());
+      getInternallyVisibleVariableColumns();
   evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
 
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {

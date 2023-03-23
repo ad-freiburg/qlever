@@ -19,6 +19,6 @@ enum struct PositionInTriple : int { SUBJECT, PREDICATE, OBJECT };
 struct ConstructQueryExportContext {
   const size_t _row;
   const ResultTable& _res;
-  const VariableToColumnMap& _variableColumns;
+  const VariableToColumnMapWithTypeInfo& _variableColumns;
   const Index& _qecIndex;
 };
