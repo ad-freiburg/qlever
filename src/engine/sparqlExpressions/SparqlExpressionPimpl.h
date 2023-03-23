@@ -74,6 +74,10 @@ class SparqlExpressionPimpl {
   // declared.
   [[nodiscard]] std::string getCacheKey(
       const VariableToColumnMap& variableToColumnMap) const;
+  std::string getCacheKey(
+      const VariableToColumnMapWithTypeInfo& variableToColumnMap) const {
+    return getCacheKey(removeTypeInfo(variableToColumnMap));
+  }
   SparqlExpressionPimpl(std::shared_ptr<SparqlExpression>&& pimpl,
                         std::string descriptor);
   ~SparqlExpressionPimpl();

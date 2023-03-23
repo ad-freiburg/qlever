@@ -118,7 +118,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       auto* resultTable = val._resultTable.get();
       computeResult(resultTable);
 
-      // Compute the number datatypes that occur in each column of the result.
+      // Compute the datatypes that occur in each column of the result.
       // Measure and report the time that this computation takes. Also assert,
       // that if a column contains UNDEF values, then the `mightContainUndef`
       // flag for that columns is set.
@@ -126,18 +126,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       // individual results, but that requires changes in each individual
       // operation.
       ad_utility::Timer computeDatatypesTimer{ad_utility::Timer::Started};
-      const auto& datatypesPerColumn =
-          resultTable->getOrComputeDatatypesPerColumn();
-      for (const auto& [var, columnAndTypes] :
-           getExternallyVisibleVariableColumns()) {
-        const auto& [columnIndex, mightContainUndef] = columnAndTypes;
-        bool hasUndefined =
-            datatypesPerColumn.at(columnIndex)
-                .at(static_cast<size_t>(Datatype::Undefined)) != 0;
-        AD_CONTRACT_CHECK(mightContainUndef ==
-                              ColumnIndexAndTypeInfo::PossiblyUndefined ||
-                          !hasUndefined);
-      }
+      resultTable->checkDefinedness(getExternallyVisibleVariableColumns());
       _runtimeInfo.addDetail("time-compute-datatypes-ms",
                              computeDatatypesTimer.msecs());
       if (_timeoutTimer->wlock()->hasTimedOut()) {

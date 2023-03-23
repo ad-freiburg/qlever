@@ -49,14 +49,26 @@ void ResultTable::getCopyOfLocalVocabFrom(const ResultTable& resultTable) {
 }
 
 // _____________________________________________________________________________
-auto ResultTable::getOrComputeDatatypesPerColumn()
+auto ResultTable::getOrComputeDatatypesPerColumn() const
     -> const DatatypesPerColumn& {
-  if (datatypesPerColumn_.has_value()) {
-    return datatypesPerColumn_.value();
+  {
+    auto rlock = datatypesPerColumn_.rlock();
+    if (rlock->has_value()) {
+      return rlock->value();
+    }
+    // `rlock` goes out of scope, and the lock is released.
   }
+
   // Compute the datatypes
-  datatypesPerColumn_.emplace();
-  auto& types = datatypesPerColumn_.value();
+  auto wlock = datatypesPerColumn_.wlock();
+
+  // We have to check again, someone might (at least in theory) have computed
+  // the value in the meantime.
+  // TODO<joka921> implement lock-upgrades in the Synchronized class.
+  if (wlock->has_value()) {
+    return wlock->value();
+  }
+  auto& types = wlock->emplace();
   types.resize(_idTable.numColumns());
   for (size_t i = 0; i < _idTable.numColumns(); ++i) {
     const auto& col = _idTable.getColumn(i);
@@ -66,4 +78,18 @@ auto ResultTable::getOrComputeDatatypesPerColumn()
     }
   }
   return types;
+}
+
+// _____________________________________________________________
+void ResultTable::checkDefinedness(
+    const VariableToColumnMapWithTypeInfo& varColMap) const {
+  const auto& datatypesPerColumn = getOrComputeDatatypesPerColumn();
+  for (const auto& [var, columnAndTypes] : varColMap) {
+    const auto& [columnIndex, mightContainUndef] = columnAndTypes;
+    bool hasUndefined = datatypesPerColumn.at(columnIndex)
+                            .at(static_cast<size_t>(Datatype::Undefined)) != 0;
+    AD_CONTRACT_CHECK(mightContainUndef ==
+                          ColumnIndexAndTypeInfo::PossiblyUndefined ||
+                      !hasUndefined);
+  }
 }

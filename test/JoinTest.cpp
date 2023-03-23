@@ -283,9 +283,11 @@ TEST(JoinTest, joinWithFullScanPSO) {
   auto I = ad_utility::testing::IntId;
   auto expected = makeIdTableFromIdVector({{idA, idX, I(3)}, {idO, idX, I(2)}});
   EXPECT_EQ(res->_idTable, expected);
-  VariableToColumnMap expectedVariables{
-      {Variable{"?p"}, 0}, {Variable{"?s"}, 1}, {Variable{"?o"}, 2}};
-  EXPECT_THAT(removeTypeInfo(join.getExternallyVisibleVariableColumns()),
+  VariableToColumnMapWithTypeInfo expectedVariables{
+      {Variable{"?p"}, makeDefinedColumn(0)},
+      {Variable{"?s"}, makeDefinedColumn(1)},
+      {Variable{"?o"}, makeDefinedColumn(2)}};
+  EXPECT_THAT(join.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 
   // A `Join` of two full scans is not supported.

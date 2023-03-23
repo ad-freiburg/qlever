@@ -14,12 +14,14 @@
 
 #include "engine/LocalVocab.h"
 #include "engine/ResultType.h"
+#include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "global/ValueId.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/Log.h"
+#include "util/Synchronized.h"
 
 using std::array;
 using std::condition_variable;
@@ -65,9 +67,14 @@ class ResultTable {
   // The local vocabulary of the result.
   std::shared_ptr<LocalVocab> localVocab_ = std::make_shared<LocalVocab>();
 
+  // For each column in the result (the entries in the outer `vector`) and for
+  // each `Datatype` (the entries of the inner `array`, store the information,
+  // how many entries of that datatype are stored in the column.
   using DatatypesPerColumn = std::vector<
       std::array<size_t, static_cast<size_t>(Datatype::MaxValue) + 1>>;
-  std::optional<DatatypesPerColumn> datatypesPerColumn_;
+  mutable ad_utility::Synchronized<std::optional<DatatypesPerColumn>,
+                                   std::shared_mutex>
+      datatypesPerColumn_;
 
  public:
   // Construct with given allocator.
@@ -78,9 +85,11 @@ class ResultTable {
   ResultTable(const ResultTable& other) = delete;
   ResultTable& operator=(const ResultTable& other) = delete;
 
-  // Moving of a result table is OK.
-  ResultTable(ResultTable&& other) = default;
-  ResultTable& operator=(ResultTable&& other) = default;
+  // Moving of a result table is OK, but currently not supported because it
+  // contains mutexes in the `ad_utility::Synchronized`. This class can be made
+  // movable should this ever become necessary.
+  ResultTable(ResultTable&& other) = delete;
+  ResultTable& operator=(ResultTable&& other) = delete;
 
   // Default destructor.
   virtual ~ResultTable() = default;
@@ -160,5 +169,13 @@ class ResultTable {
     return col < _resultTypes.size() ? _resultTypes[col] : ResultType::KB;
   }
 
-  const DatatypesPerColumn& getOrComputeDatatypesPerColumn();
+  // Get the information, which columns stores how many entries of each
+  // datatype. This information is computed on the first call to this function
+  // `O(num-entries-in-table)` and then cached for subsequent usages.
+  const DatatypesPerColumn& getOrComputeDatatypesPerColumn() const;
+
+  // Check that if the `varColMap` guarantees that a column is always defined
+  // (i.e. that is contains no single undefined value) that there are indeed no
+  // undefined values in the `_idTable` of this result.
+  void checkDefinedness(const VariableToColumnMapWithTypeInfo& varColMap) const;
 };

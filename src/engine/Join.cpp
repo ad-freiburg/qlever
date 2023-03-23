@@ -163,18 +163,13 @@ void Join::computeResult(ResultTable* result) {
 
 // _____________________________________________________________________________
 VariableToColumnMapWithTypeInfo Join::computeVariableToColumnMap() const {
-  const auto& leftVars = _left->getVariableColumns();
-  const auto& rightVars = _right->getVariableColumns();
-  if (!isFullScanDummy(_left) && !isFullScanDummy(_right)) {
-    return makeVarToColMapForJoinOperations(
-        leftVars, rightVars, {{_leftJoinCol, _rightJoinCol}}, BinOpType::Join);
-  } else if (isFullScanDummy(_right)) {
-    return makeVarToColMapForJoinOperations(
-        leftVars, rightVars, {{_leftJoinCol, 0u}}, BinOpType::Join);
-  } else {
-    return makeVarToColMapForJoinOperations(
-        leftVars, rightVars, {{0u, _rightJoinCol}}, BinOpType::Join);
+  AD_CORRECTNESS_CHECK(!isFullScanDummy(_left));
+  if (isFullScanDummy(_right)) {
+    AD_CORRECTNESS_CHECK(_rightJoinCol == 0u);
   }
+  return makeVarToColMapForJoinOperations(
+      _left->getVariableColumns(), _right->getVariableColumns(),
+      {{_leftJoinCol, _rightJoinCol}}, BinOpType::Join);
 }
 
 // _____________________________________________________________________________

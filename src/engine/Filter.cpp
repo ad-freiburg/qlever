@@ -36,8 +36,7 @@ string Filter::asStringImpl(size_t indent) const {
     os << " ";
   }
   os << "FILTER " << _subtree->asString(indent);
-  os << " with "
-     << _expression.getCacheKey(removeTypeInfo(_subtree->getVariableColumns()));
+  os << " with " << _expression.getCacheKey(_subtree->getVariableColumns());
   return std::move(os).str();
 }
 

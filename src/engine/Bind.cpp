@@ -58,8 +58,7 @@ string Bind::asStringImpl(size_t indent) const {
   }
 
   os << "BIND ";
-  os << _bind._expression.getCacheKey(
-      removeTypeInfo(_subtree->getVariableColumns()));
+  os << _bind._expression.getCacheKey(_subtree->getVariableColumns());
   os << "\n" << _subtree->asString(indent);
   return std::move(os).str();
 }
@@ -126,9 +125,9 @@ void Bind::computeExpressionBind(
   sparqlExpression::VariableToColumnAndResultTypeMap columnMap;
   for (const auto& [variable, columnIndexWithTypeInfo] :
        _subtree->getVariableColumns()) {
-    columnMap[variable] = std::pair(
-        columnIndexWithTypeInfo.columnIndex_,
-        inputResultTable.getResultType(columnIndexWithTypeInfo.columnIndex_));
+    const auto& columnIndex = columnIndexWithTypeInfo.columnIndex_;
+    columnMap[variable] =
+        std::pair(columnIndex, inputResultTable.getResultType(columnIndex));
   }
 
   sparqlExpression::EvaluationContext evaluationContext(

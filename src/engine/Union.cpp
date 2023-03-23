@@ -19,7 +19,7 @@ Union::Union(QueryExecutionContext* qec,
   _subtrees[1] = t2;
 
   // compute the column origins
-  VariableToColumnMapWithTypeInfo variableColumns =
+  const VariableToColumnMapWithTypeInfo& variableColumns =
       getInternallyVisibleVariableColumns();
   _columnOrigins.resize(variableColumns.size(), {NO_COLUMN, NO_COLUMN});
   const auto& t1VarCols = t1->getVariableColumns();

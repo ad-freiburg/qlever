@@ -17,6 +17,9 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
   // `upperBound` code.
   size_t upperBound = std::min<size_t>(
       limitAndOffset._limit + limitAndOffset._offset, res->_idTable.size());
+
+  // Note: The `ConstructQueryExportContext` takes a reference to the
+  // `varColMap`, so we have to bind it to a variable.
   auto varColMap = removeTypeInfo(qet.getVariableColumns());
   for (size_t i = limitAndOffset._offset; i < upperBound; i++) {
     ConstructQueryExportContext context{i, *res, varColMap,
