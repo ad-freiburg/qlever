@@ -87,8 +87,7 @@ void addTablesToStringstream(std::stringstream* stringStream,
 
     return ss.str();
   };
-  auto recordTableEntryToString = [&exactNumberOfDecimals,
-       &recordTableEntryToStringVisitor](const
+  auto recordTableEntryToString = [&recordTableEntryToStringVisitor](const
       RecordTableEntryType& entry)->std::string{
     // The std::visit checks which type a std::variant is and calls our
     // visitor function with the right template parameter.
