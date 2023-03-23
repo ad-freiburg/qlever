@@ -18,6 +18,8 @@
 #include <utility>
 #include <concepts>
 
+#include "util/DisableWarningsClang13.h"
+
 // Added support for serializing `std::optional` using `nlohmann::json`.
 namespace nlohmann {
     template <typename T>
@@ -121,8 +123,10 @@ namespace nlohmann {
           // so that we can get the currently used value. This is needed,
           // because `var` is only known at compile time. And by extension, so
           // is `var.index()`.
+          DISABLE_WARNINGS_CLANG_13
           RuntimeValueToCompileTimeValue<sizeof...(Types)>(index, [&j, &var]
               <size_t Index>(){
+                ENABLE_WARNINGS_CLANG_13
                 j["value"] = std::get<Index>(var);
               }
           );
@@ -135,8 +139,10 @@ namespace nlohmann {
           size_t index = j["index"].get<size_t>();
 
           // Interpreting the value based on its type.
+          DISABLE_WARNINGS_CLANG_13
           RuntimeValueToCompileTimeValue<sizeof...(Types)>(index, [&j, &var]
               <size_t Index>(){
+                ENABLE_WARNINGS_CLANG_13
                 var = j["value"].get<std::variant_alternative_t<Index,
                   std::variant<Types...>>>();
               }
