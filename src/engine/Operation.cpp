@@ -125,10 +125,10 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       // TODO<joka921> It is cheaper to move this calculation into the
       // individual results, but that requires changes in each individual
       // operation.
-      ad_utility::Timer computeDatatypesTimer{ad_utility::Timer::Started};
+      ad_utility::Timer computeDatatypeCountsTimer{ad_utility::Timer::Started};
       resultTable->checkDefinedness(getExternallyVisibleVariableColumns());
       _runtimeInfo.addDetail("time-compute-datatypes-ms",
-                             computeDatatypesTimer.msecs());
+                             computeDatatypeCountsTimer.msecs());
       if (_timeoutTimer->wlock()->hasTimedOut()) {
         throw ad_utility::TimeoutException(
             "Timeout in " + getDescriptor() +

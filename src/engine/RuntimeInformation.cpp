@@ -89,7 +89,7 @@ void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
   // columnMap (which are not necessarily consecutive) as indexes.
 
   // TODO<joka921, Clang16> This is `stdr::max(columnMap | stdv::values |
-  // stdv::transform(&ColumnIndexAndTypeInfo::columnIndex_)`
+  // stdv::transform(&ColumnIndexAndTypeInfo::columnIndex_))`
   ColumnIndex maxColumnIndex =
       std::ranges::max_element(columnMap, std::less{}, [](const auto& pair) {
         return pair.second.columnIndex_;

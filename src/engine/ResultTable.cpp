@@ -49,26 +49,12 @@ void ResultTable::getCopyOfLocalVocabFrom(const ResultTable& resultTable) {
 }
 
 // _____________________________________________________________________________
-auto ResultTable::getOrComputeDatatypeCountsPerColumn() const
+auto ResultTable::getOrComputeDatatypeCountsPerColumn()
     -> const DatatypeCountsPerColumn& {
-  {
-    auto rlock = datatypeCountsPerColumn_.rlock();
-    if (rlock->has_value()) {
-      return rlock->value();
-    }
-    // `rlock` goes out of scope, and the lock is released.
+  if (datatypeCountsPerColumn_.has_value()) {
+    return datatypeCountsPerColumn_.value();
   }
-
-  // Compute the datatypes
-  auto wlock = datatypeCountsPerColumn_.wlock();
-
-  // We have to check again, someone might (at least in theory) have computed
-  // the value in the meantime.
-  // TODO<joka921> implement lock-upgrades in the Synchronized class.
-  if (wlock->has_value()) {
-    return wlock->value();
-  }
-  auto& types = wlock->emplace();
+  auto& types = datatypeCountsPerColumn_.emplace();
   types.resize(_idTable.numColumns());
   for (size_t i = 0; i < _idTable.numColumns(); ++i) {
     const auto& col = _idTable.getColumn(i);
@@ -81,7 +67,7 @@ auto ResultTable::getOrComputeDatatypeCountsPerColumn() const
 }
 
 // _____________________________________________________________
-void ResultTable::checkDefinedness(const VariableToColumnMap& varColMap) const {
+void ResultTable::checkDefinedness(const VariableToColumnMap& varColMap) {
   const auto& datatypesPerColumn = getOrComputeDatatypeCountsPerColumn();
   for (const auto& [var, columnAndTypes] : varColMap) {
     const auto& [columnIndex, mightContainUndef] = columnAndTypes;
