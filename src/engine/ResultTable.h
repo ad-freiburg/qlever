@@ -59,8 +59,10 @@ class ResultTable {
 
  public:
   // Construct with given allocator.
+  /*
   explicit ResultTable(ad_utility::AllocatorWithLimit<Id> allocator)
       : _idTable(std::move(allocator)) {}
+      */
   ResultTable(IdTable idTable, vector<size_t> sortedBy,
               std::shared_ptr<const LocalVocab> localVocab)
       : _idTable{std::move(idTable)},
@@ -84,7 +86,6 @@ class ResultTable {
   // Get the number of columns of this result.
   size_t width() const { return _idTable.numColumns(); }
 
-
   // Like `shareLocalVocabFrom`, but takes *two* results and assumes that one of
   // their local vocabularies is empty and shares the the result with the
   // non-empty one (if both are empty, arbitrarily share with the first one).
@@ -94,6 +95,10 @@ class ResultTable {
   // (from the previous separate local vocabularies to the new merged one).
   static std::shared_ptr<const LocalVocab> getSharedLocalVocabFromNonEmptyOf(
       const ResultTable& resultTable1, const ResultTable& resultTable2);
+
+  std::shared_ptr<const LocalVocab> getSharedLocalVocab() const {
+    return localVocab_;
+  }
 
   // Get a (deep) copy of the local vocabulary from the given result. Use this
   // when you want to (potentially) add further words to the local vocabulary

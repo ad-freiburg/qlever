@@ -221,8 +221,8 @@ TEST(HasPredicateScan, fullScan) {
 
 TEST(HasPredicateScan, subtreeS) {
   // Used to store the result.
-  ResultTable resultTable{makeAllocator()};
-  resultTable._idTable.setNumColumns(3);
+  IdTable result{makeAllocator()};
+  result.setNumColumns(3);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
@@ -258,10 +258,8 @@ TEST(HasPredicateScan, subtreeS) {
   int in_width = 2;
   int out_width = 3;
   CALL_FIXED_SIZE((std::array{in_width, out_width}),
-                  HasPredicateScan::computeSubqueryS, &resultTable._idTable,
+                  HasPredicateScan::computeSubqueryS, &result,
                   subresult->_idTable, 1, hasPattern, hasRelation, patterns);
-
-  IdTable& result = resultTable._idTable;
 
   // the sum of the count of every second entities relations
   ASSERT_EQ(10u, result.size());

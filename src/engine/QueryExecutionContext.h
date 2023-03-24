@@ -28,10 +28,12 @@ using std::string;
 using std::vector;
 
 struct CacheValue {
-  explicit CacheValue(ad_utility::AllocatorWithLimit<Id> allocator)
-      : _resultTable(std::make_shared<ResultTable>(std::move(allocator))),
-        _runtimeInfo() {}
-  std::shared_ptr<ResultTable> _resultTable;
+  explicit CacheValue(ResultTable resultTable, RuntimeInformation runtimeInfo)
+      : _resultTable(
+            std::make_shared<const ResultTable>(std::move(resultTable))),
+        _runtimeInfo(std::move(runtimeInfo)) {}
+  std::shared_ptr<const ResultTable> _resultTable;
+  // TODO<joka921> Make the runtime Info also const.
   RuntimeInformation _runtimeInfo;
   [[nodiscard]] size_t size() const {
     return _resultTable ? _resultTable->size() * _resultTable->width() : 0;

@@ -108,14 +108,13 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
               }
             });
     auto computeLambda = [this, &timer] {
-      CacheValue val(getExecutionContext()->getAllocator());
       if (_timeoutTimer->wlock()->hasTimedOut()) {
         throw ad_utility::TimeoutException(
             "Timeout in operation with no or insufficient timeout "
             "functionality, before " +
             getDescriptor());
       }
-      *val._resultTable = computeResult();
+      ResultTable result = computeResult();
       if (_timeoutTimer->wlock()->hasTimedOut()) {
         throw ad_utility::TimeoutException(
             "Timeout in " + getDescriptor() +
@@ -126,11 +125,10 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       // correct runtimeInfo. The children of the runtime info are already set
       // correctly because the result was computed, so we can pass `nullopt` as
       // the last argument.
-      updateRuntimeInformationOnSuccess(*val._resultTable,
+      updateRuntimeInformationOnSuccess(result,
                                         ad_utility::CacheStatus::computed,
                                         timer.msecs(), std::nullopt);
-      val._runtimeInfo = getRuntimeInfo();
-      return val;
+      return CacheValue{std::move(result), getRuntimeInfo()};
     };
 
     // If the result was already computed during the query planning, then
