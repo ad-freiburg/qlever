@@ -58,6 +58,7 @@ struct adl_serializer<std::optional<T>> {
 }  // namespace nlohmann
 
 // Added support for serializing `std::monostate` using `nlohmann::json`.
+// This is needed to serialize `std::variant`.
 namespace nlohmann {
 template <>
 struct adl_serializer<std::monostate> {
@@ -96,12 +97,9 @@ void ConstExprForLoop(const std::index_sequence<ForLoopIndexes...>&,
 }
 
 /*
- * @brief 'Converts' a run time value of size_t to a compile time value, as
- *  long as the maximal value of this value is known at compile time, and
- *  passes it to a given function. However, it doesn't really convert anything,
- *  but simply creates all templated version in `[0, MaxValue]` and only
- *  executes the one, where the template parameter and given run time value are
- *  the same.
+ * @brief 'Converts' a run time value of `size_t` to a compile time value and
+ * then calls `function.template operator()<value>()`. `value < MaxValue` must
+ * be true, else an exception is thrown. *
  *
  * @tparam MaxValue The maximal value, that the function parameter value could
  *  take.
@@ -110,15 +108,17 @@ void ConstExprForLoop(const std::index_sequence<ForLoopIndexes...>&,
  *  arguments. This parameter should be passed per deduction.
  *
  * @param value Value that you need as a compile time value.
- * @param functionBody The templated function, which you wish to execute.
+ * @param function The templated function, which you wish to execute. Must be
+ *  a function object (for example a lambda expression) that has an
+ *  `operator()` which is templated on a single `size_t`.
  */
 template <size_t MaxValue, typename Function>
 void RuntimeValueToCompileTimeValue(const size_t& value,
-                                    const Function& functionBody) {
+                                    const Function& function) {
   ConstExprForLoop(std::make_index_sequence<MaxValue>{},
-                   [&functionBody, &value]<size_t Index>() {
+                   [&function, &value]<size_t Index>() {
                      if (Index == value) {
-                       functionBody.template operator()<Index>();
+                       function.template operator()<Index>();
                      }
                    });
 }
