@@ -146,8 +146,7 @@ struct adl_serializer<std::variant<Types...>> {
   static void to_json(nlohmann::json& j, const std::variant<Types...>& var) {
     // We need to save, which of the types the std::variant actually
     // uses.
-    size_t index = var.index();
-    j["index"] = index;
+    j["index"] = var.index();
 
     // 'Translate' the runtime variable index to a compile time value,
     // so that we can get the currently used value. This is needed,
@@ -155,7 +154,7 @@ struct adl_serializer<std::variant<Types...>> {
     // is `var.index()`.
     DISABLE_WARNINGS_CLANG_13
     RuntimeValueToCompileTimeValue<sizeof...(Types)>(
-        index, [&j, &var]<size_t Index>() {
+        var.index(), [&j, &var]<size_t Index>() {
           ENABLE_WARNINGS_CLANG_13
           j["value"] = std::get<Index>(var);
         });
