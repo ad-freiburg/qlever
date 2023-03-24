@@ -21,6 +21,7 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #include <variant>
 
 #include "util/DisableWarningsClang13.h"
+#include "util/Exception.h"
 
 /*
 Added support for serializing `std::optional` using `nlohmann::json`.
@@ -123,6 +124,7 @@ void ConstExprForLoop(const std::index_sequence<ForLoopIndexes...>&,
 template <size_t MaxValue, typename Function>
 void RuntimeValueToCompileTimeValue(const size_t& value,
                                     const Function& function) {
+  AD_CONTRACT_CHECK(value <= MaxValue); // Is the value valid?
   ConstExprForLoop(std::make_index_sequence<MaxValue>{},
                    [&function, &value]<size_t Index>() {
                      if (Index == value) {
@@ -161,10 +163,16 @@ struct adl_serializer<std::variant<Types...>> {
     // serialized std::variant using?
     size_t index = j["index"].get<size_t>();
 
+    // Quick check, if the index is even a possible value.
+    if (index >= sizeof...(Types)){
+      throw nlohmann::json::out_of_range::create(401,
+      "The given index for a std::variant was out of range.");
+    }
+
     // Interpreting the value based on its type.
     DISABLE_WARNINGS_CLANG_13
     RuntimeValueToCompileTimeValue<sizeof...(
-        Types)>(index, [&j, &var]<size_t Index>() {
+        Types) - 1>(index, [&j, &var]<size_t Index>() {
       ENABLE_WARNINGS_CLANG_13
       var =
           j["value"]
