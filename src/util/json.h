@@ -133,7 +133,12 @@ void RuntimeValueToCompileTimeValue(const size_t& value,
 
 /*
 Added support for serializing `std::variant` using `nlohmann::json`.
-
+The serialized format for `std::variant<Type0, Type1, ...>` is a json string
+with the json object literal keys `index` and `value`.
+`index` is the number of the type, that the `std::variant<Type0, Type1, ...>`
+contains the value of. `value` is the value, that the `std::variant` contains.
+Example: The serialized format for a `std::variant<int, float>` containing a
+`3.5` would be `{"index":1, "value":3.5}`
 */
 namespace nlohmann {
 template <typename... Types>
