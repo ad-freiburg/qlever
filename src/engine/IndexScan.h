@@ -104,7 +104,7 @@ class IndexScan : public Operation {
   ScanType getType() const { return _type; }
 
  private:
-  virtual void computeResult(ResultTable* result) override;
+  virtual ResultTable computeResult() override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 

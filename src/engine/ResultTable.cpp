@@ -28,7 +28,6 @@ void ResultTable::shareLocalVocabFrom(const ResultTable& resultTable) {
   // This copies a shared pointer, so both results share the same local
   // vocabulary.
   localVocab_ = resultTable.localVocab_;
-  localVocab_->makeReadOnly();
 }
 
 // _____________________________________________________________________________
@@ -42,7 +41,6 @@ void ResultTable::shareLocalVocabFromNonEmptyOf(
         "supported, please contact the developers");
   }
   localVocab_ = localVocab2->empty() ? localVocab1 : localVocab2;
-  localVocab_->makeReadOnly();
 }
 
 // _____________________________________________________________________________

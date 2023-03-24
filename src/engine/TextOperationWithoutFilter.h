@@ -79,7 +79,7 @@ class TextOperationWithoutFilter : public Operation {
  private:
   void computeMultiplicities();
 
-  virtual void computeResult(ResultTable* result) override;
+  virtual ResultTable computeResult() override;
 
   void computeResultNoVar(ResultTable* result) const;
 

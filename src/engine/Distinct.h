@@ -61,7 +61,7 @@ class Distinct : public Operation {
   [[nodiscard]] string asStringImpl(size_t indent = 0) const override;
 
  private:
-  virtual void computeResult(ResultTable* result) override;
+  virtual ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };

@@ -58,7 +58,7 @@ class Filter : public Operation {
     return _subtree->getVariableColumns();
   }
 
-  void computeResult(ResultTable* result) override;
+  ResultTable computeResult() override;
 
   template <int WIDTH>
   void computeFilterImpl(ResultTable* outputResultTable,

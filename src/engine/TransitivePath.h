@@ -136,7 +136,7 @@ class TransitivePath : public Operation {
                                        size_t maxDist, size_t resWidth);
 
  private:
-  virtual void computeResult(ResultTable* result) override;
+  virtual ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

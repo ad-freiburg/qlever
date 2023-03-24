@@ -75,30 +75,18 @@ string OptionalJoin::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-void OptionalJoin::computeResult(ResultTable* result) {
-  AD_CONTRACT_CHECK(result);
+ResultTable OptionalJoin::computeResult() {
   LOG(DEBUG) << "OptionalJoin result computation..." << endl;
 
-  result->_sortedBy = resultSortedOn();
-  result->_idTable.setNumColumns(getResultWidth());
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(getResultWidth());
 
-  AD_CONTRACT_CHECK(result->_idTable.numColumns() >= _joinColumns.size());
+  AD_CONTRACT_CHECK(idTable.numColumns() >= _joinColumns.size());
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
 
   LOG(DEBUG) << "OptionalJoin subresult computation done." << std::endl;
-
-  // compute the result types
-  for (size_t col = 0; col < rightResult->_idTable.numColumns(); col++) {
-    bool isJoinColumn = false;
-    for (const std::array<ColumnIndex, 2>& a : _joinColumns) {
-      if (a[1] == col) {
-        isJoinColumn = true;
-        break;
-      }
-    }
-  }
 
   LOG(DEBUG) << "Computing optional join between results of size "
              << leftResult->size() << " and " << rightResult->size() << endl;
@@ -107,18 +95,18 @@ void OptionalJoin::computeResult(ResultTable* result) {
 
   int leftWidth = leftResult->_idTable.numColumns();
   int rightWidth = rightResult->_idTable.numColumns();
-  int resWidth = result->_idTable.numColumns();
+  int resWidth = idTable.numColumns();
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, resWidth}),
                   &OptionalJoin::optionalJoin, leftResult->_idTable,
                   rightResult->_idTable, _leftOptional, _rightOptional,
-                  _joinColumns, &result->_idTable);
+                  _joinColumns, &idTable);
 
+  LOG(DEBUG) << "OptionalJoin result computation done." << endl;
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
-  result->shareLocalVocabFromNonEmptyOf(*leftResult, *rightResult);
-
-  LOG(DEBUG) << "Join result computation done" << endl;
-  LOG(DEBUG) << "OptionalJoin result computation done." << endl;
+  return {std::move(idTable), resultSortedOn(),
+          ResultTable::getSharedLocalVocabFromNonEmptyOf(*leftResult,
+                                                         *rightResult)};
 }
 
 // _____________________________________________________________________________

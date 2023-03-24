@@ -87,7 +87,7 @@ class TextOperationWithFilter : public Operation {
  private:
   void computeMultiplicities();
 
-  virtual void computeResult(ResultTable* result) override;
+  virtual ResultTable computeResult() override;
 
   virtual VariableToColumnMap computeVariableToColumnMap() const override;
 };

@@ -100,7 +100,7 @@ class OptionalJoin : public Operation {
       const std::vector<ColumnIndex>& joinColumnAToB,
       IdTableStatic<OUT_WIDTH>* res);
 
-  virtual void computeResult(ResultTable* result) override;
+  virtual ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };

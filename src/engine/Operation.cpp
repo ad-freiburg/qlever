@@ -115,7 +115,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
             "functionality, before " +
             getDescriptor());
       }
-      computeResult(val._resultTable.get());
+      *val._resultTable = computeResult();
       if (_timeoutTimer->wlock()->hasTimedOut()) {
         throw ad_utility::TimeoutException(
             "Timeout in " + getDescriptor() +

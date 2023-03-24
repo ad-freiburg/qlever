@@ -141,27 +141,29 @@ size_t Union::getCostEstimate() {
          getSizeEstimate();
 }
 
-void Union::computeResult(ResultTable* result) {
+ResultTable Union::computeResult() {
   LOG(DEBUG) << "Union result computation..." << std::endl;
   shared_ptr<const ResultTable> subRes1 = _subtrees[0]->getResult();
   shared_ptr<const ResultTable> subRes2 = _subtrees[1]->getResult();
   LOG(DEBUG) << "Union subresult computation done." << std::endl;
 
-  result->_sortedBy = resultSortedOn();
-  result->_idTable.setNumColumns(getResultWidth());
+  IdTable idTable{getExecutionContext()->getAllocator()};
+
+  idTable.setNumColumns(getResultWidth());
   int leftWidth = subRes1->_idTable.numColumns();
   int rightWidth = subRes2->_idTable.numColumns();
-  int outWidth = result->_idTable.numColumns();
+  int outWidth = idTable.numColumns();
 
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, outWidth}),
-                  &Union::computeUnion, this, &result->_idTable,
-                  subRes1->_idTable, subRes2->_idTable, _columnOrigins);
-
-  // If only one of the two operands has a non-empty local vocabulary, share
-  // with that one (otherwise, throws an exception).
-  result->shareLocalVocabFromNonEmptyOf(*subRes1, *subRes2);
+                  &Union::computeUnion, this, &idTable, subRes1->_idTable,
+                  subRes2->_idTable, _columnOrigins);
 
   LOG(DEBUG) << "Union result computation done" << std::endl;
+  // If only one of the two operands has a non-empty local vocabulary, share
+  // with that one (otherwise, throws an exception).
+  return ResultTable{
+      std::move(idTable), resultSortedOn(),
+      ResultTable::getSharedLocalVocabFromNonEmptyOf(*subRes1, *subRes2)};
 }
 
 template <int LEFT_WIDTH, int RIGHT_WIDTH, int OUT_WIDTH>

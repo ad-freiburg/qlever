@@ -30,8 +30,8 @@ class ValuesForTesting : public Operation {
   }
 
   // ___________________________________________________________________________
-  void computeResult(ResultTable* result) override {
-    result->_idTable = table_.clone();
+  ResultTable computeResult() override {
+    return {table_.clone(), resultSortedOn(), std::make_shared<LocalVocab>()};
   }
 
  private:

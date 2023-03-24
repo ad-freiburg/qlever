@@ -67,7 +67,7 @@ class MultiColumnJoin : public Operation {
       const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* result);
 
  private:
-  virtual void computeResult(ResultTable* result) override;
+  virtual ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

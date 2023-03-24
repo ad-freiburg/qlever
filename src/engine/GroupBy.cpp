@@ -170,7 +170,7 @@ void GroupBy::processGroup(
     const GroupBy::Aggregate& aggregate,
     sparqlExpression::EvaluationContext& evaluationContext, size_t blockStart,
     size_t blockEnd, IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
-    size_t resultColumn, ResultTable* outTable) const {
+    size_t resultColumn, LocalVocab* localVocab) const {
   evaluationContext._beginIndex = blockStart;
   evaluationContext._endIndex = blockEnd;
 
@@ -192,7 +192,7 @@ void GroupBy::processGroup(
       resultEntry = singleResult;
     } else if constexpr (sparqlExpression::isConstantResult<T>) {
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
-          singleResult, outTable->localVocabNonConst());
+          singleResult, *localVocab);
     } else {
       // This should never happen since aggregates always return constants.
       AD_FAIL();
@@ -223,8 +223,8 @@ template <int IN_WIDTH, int OUT_WIDTH>
 void GroupBy::doGroupBy(const IdTable& dynInput,
                         const vector<size_t>& groupByCols,
                         const vector<GroupBy::Aggregate>& aggregates,
-                        IdTable* dynResult, const ResultTable* inTable,
-                        ResultTable* outTable) const {
+                        IdTable* dynResult, const IdTable* inTable,
+                        IdTable* outTable, LocalVocab* outLocalVocab) const {
   LOG(DEBUG) << "Group by input size " << dynInput.size() << std::endl;
   if (dynInput.size() == 0) {
     return;
@@ -233,8 +233,8 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
 
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(), inTable->_idTable,
-      getExecutionContext()->getAllocator(), outTable->localVocabNonConst());
+      *getExecutionContext(), _subtree->getVariableColumns(), *inTable,
+      getExecutionContext()->getAllocator(), outLocalVocab);
 
   // In a GROUP BY evaluation, the expressions need to know which variables are
   // grouped, and to which columns the results of the aliases are written. The
@@ -294,11 +294,11 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   *dynResult = std::move(result).toDynamic();
 }
 
-void GroupBy::computeResult(ResultTable* result) {
+ResultTable GroupBy::computeResult() {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
-  if (computeOptimizedGroupByIfPossible(result)) {
-    return;
+  if (auto optionalResult = computeOptimizedGroupByIfPossible()) {
+    return optionalResult.value();
   }
 
   std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
@@ -311,12 +311,13 @@ void GroupBy::computeResult(ResultTable* result) {
   // vocabulary, so it would be more efficient to first share the pointer here
   // (like with `shareLocalVocabFrom`) and only copy it when a new word is about
   // to be added. Same for BIND.
-  result->getCopyOfLocalVocabFrom(*subresult);
+
+  auto localVocab = subresult->getCopyOfLocalVocab();
 
   std::vector<size_t> groupByColumns;
 
-  result->_sortedBy = resultSortedOn();
-  result->_idTable.setNumColumns(getResultWidth());
+  IdTable idTable{getExecutionContext->(getAllocator())};
+  idTable.setNumColumns(getResultWidth());
 
   std::vector<Aggregate> aggregates;
   aggregates.reserve(_aliases.size() + _groupByVariables.size());
@@ -346,13 +347,14 @@ void GroupBy::computeResult(ResultTable* result) {
   }
 
   int inWidth = subresult->_idTable.numColumns();
-  int outWidth = result->_idTable.numColumns();
+  int outWidth = idTable.numColumns();
 
   CALL_FIXED_SIZE((std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
-                  subresult->_idTable, groupByCols, aggregates,
-                  &result->_idTable, subresult.get(), result);
+                  subresult->_idTable, groupByCols, aggregates, &idTable,
+                  &(subresult->_idTable), &idTable, localVocab.get());
 
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
+  return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
 // _____________________________________________________________________________
