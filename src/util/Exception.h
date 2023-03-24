@@ -66,6 +66,7 @@ class Exception : public std::exception {
   throw ad_utility::Exception{std::string{message}, location};
 }
 
+
 // --------------------------------------------------------------------------
 // Macros for assertions that will throw Exceptions.
 // --------------------------------------------------------------------------
