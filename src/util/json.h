@@ -2,8 +2,10 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-// Convenience header for Nlohmann::Json that sets the default options. Also
-// adds support for std::optional.
+/*
+Convenience header for Nlohmann::Json that sets the default options. Also
+ adds support for `std::optional` and `std::variant`.
+*/
 
 #ifndef QLEVER_JSON_H
 #define QLEVER_JSON_H
@@ -20,7 +22,20 @@
 
 #include "util/DisableWarningsClang13.h"
 
-// Added support for serializing `std::optional` using `nlohmann::json`.
+/*
+Added support for serializing `std::optional` using `nlohmann::json`.
+The serialized format of a `std::optional<T>` is simply the serialized format
+of the contained value of type `T`, if `std::optional<T>` contains a value.
+In the case, that `std::optional<T>` contains no value, it is serialized as a
+`nullptr`.
+
+Note: In the case, that the contained value of `std::optional` converts to a
+`nullptr` in the json representation, it will not be possible to distinguish
+between the json representation of a `std::optional`, that contains this
+value, and the json representation of a `std::optional`, that doesn't
+contain a value. Because of this, the deserialization of `std::optional`
+in such cases will always return a `std::optional`, that contains no value.
+*/
 namespace nlohmann {
 template <typename T>
 struct adl_serializer<std::optional<T>> {
