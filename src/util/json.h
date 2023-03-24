@@ -148,16 +148,12 @@ struct adl_serializer<std::variant<Types...>> {
     // uses.
     j["index"] = var.index();
 
-    // 'Translate' the runtime variable index to a compile time value,
-    // so that we can get the currently used value. This is needed,
-    // because `var` is only known at compile time. And by extension, so
-    // is `var.index()`.
-    DISABLE_WARNINGS_CLANG_13
-    RuntimeValueToCompileTimeValue<sizeof...(Types)>(
-        var.index(), [&j, &var]<size_t Index>() {
-          ENABLE_WARNINGS_CLANG_13
-          j["value"] = std::get<Index>(var);
-        });
+    /*
+    This is needed, because `var` is only known at compile time. And by
+    extension, so is `var.index()`, which means we can't simply assign it
+    and have to go over `std::visit`.
+    */
+    std::visit([&j](const auto& value){j["value"] = value;}, var);
   }
 
   static void from_json(const nlohmann::json& j, std::variant<Types...>& var) {
