@@ -103,10 +103,10 @@ TEST_F(GroupByTest, doGroupBy) {
   vocab.createFromSet(s);
 
   // Create an input result table with a local vocabulary.
-  ResultTable inTable{makeAllocator()};
-  inTable.localVocabNonConst().getIndexAndAddIfNotContained("<local1>");
-  inTable.localVocabNonConst().getIndexAndAddIfNotContained("<local2>");
-  inTable.localVocabNonConst().getIndexAndAddIfNotContained("<local3>");
+  auto localVocab = std::make_shared<LocalVocab>();
+  localVocab->getIndexAndAddIfNotContained("<local1>");
+  localVocab->getIndexAndAddIfNotContained("<local2>");
+  localVocab->getIndexAndAddIfNotContained("<local3>");
 
   IdTable inputData(6, makeAllocator());
   // The input data types are KB, KB, VERBATIM, TEXT, FLOAT, STRING.

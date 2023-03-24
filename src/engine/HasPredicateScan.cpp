@@ -208,10 +208,11 @@ size_t HasPredicateScan::getCostEstimate() {
   return 0;
 }
 
-void HasPredicateScan::computeResult(ResultTable* result) {
+ResultTable HasPredicateScan::computeResult() {
   LOG(DEBUG) << "HasPredicateScan result computation..." << std::endl;
-  result->_idTable.setNumColumns(getResultWidth());
-  result->_sortedBy = resultSortedOn();
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(getResultWidth());
+  auto localVocab = std::make_shared<const LocalVocab>();
 
   const std::vector<PatternID>& hasPattern = getIndex().getHasPattern();
   const CompactVectorOfStrings<Id>& hasPredicate = getIndex().getHasPredicate();
@@ -223,44 +224,44 @@ void HasPredicateScan::computeResult(ResultTable* result) {
       if (!getIndex().getId(_object, &objectId)) {
         AD_THROW("The predicate '" + _object + "' is not in the vocabulary.");
       }
-      HasPredicateScan::computeFreeS(result, objectId, hasPattern, hasPredicate,
-                                     patterns);
+      HasPredicateScan::computeFreeS(&idTable, objectId, hasPattern,
+                                     hasPredicate, patterns);
     } break;
     case ScanType::FREE_O: {
       Id subjectId;
       if (!getIndex().getId(_subject, &subjectId)) {
         AD_THROW("The subject " + _subject + " is not in the vocabulary.");
       }
-      HasPredicateScan::computeFreeO(result, subjectId, hasPattern,
+      HasPredicateScan::computeFreeO(&idTable, subjectId, hasPattern,
                                      hasPredicate, patterns);
     } break;
     case ScanType::FULL_SCAN:
       HasPredicateScan::computeFullScan(
-          result, hasPattern, hasPredicate, patterns,
+          &idTable, hasPattern, hasPredicate, patterns,
           getIndex().getNumDistinctSubjectPredicatePairs());
       break;
     case ScanType::SUBQUERY_S:
 
       std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
-      result->shareLocalVocabFrom(*subresult);
+      localVocab = subresult->getSharedLocalVocab();
       int inWidth = subresult->_idTable.numColumns();
-      int outWidth = result->_idTable.numColumns();
+      int outWidth = idTable.numColumns();
       CALL_FIXED_SIZE((std::array{inWidth, outWidth}),
-                      HasPredicateScan::computeSubqueryS, &result->_idTable,
+                      HasPredicateScan::computeSubqueryS, &idTable,
                       subresult->_idTable, _subtreeJoinColumn, hasPattern,
                       hasPredicate, patterns);
       break;
   }
 
   LOG(DEBUG) << "HasPredicateScan result compuation done." << std::endl;
+  return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
 void HasPredicateScan::computeFreeS(
-    ResultTable* resultTable, Id objectId,
-    const std::vector<PatternID>& hasPattern,
+    IdTable* resultTable, Id objectId, const std::vector<PatternID>& hasPattern,
     const CompactVectorOfStrings<Id>& hasPredicate,
     const CompactVectorOfStrings<Id>& patterns) {
-  IdTableStatic<1> result = std::move(resultTable->_idTable).toStatic<1>();
+  IdTableStatic<1> result = std::move(*resultTable).toStatic<1>();
   uint64_t entityIndex = 0;
   while (entityIndex < hasPattern.size() || entityIndex < hasPredicate.size()) {
     if (entityIndex < hasPattern.size() &&
@@ -284,11 +285,11 @@ void HasPredicateScan::computeFreeS(
     }
     entityIndex++;
   }
-  resultTable->_idTable = std::move(result).toDynamic();
+  *resultTable = std::move(result).toDynamic();
 }
 
 void HasPredicateScan::computeFreeO(
-    ResultTable* resultTable, Id subjectAsId,
+    IdTable* resultTable, Id subjectAsId,
     const std::vector<PatternID>& hasPattern,
     const CompactVectorOfStrings<Id>& hasPredicate,
     const CompactVectorOfStrings<Id>& patterns) {
@@ -296,7 +297,7 @@ void HasPredicateScan::computeFreeO(
   if (subjectAsId.getDatatype() != Datatype::VocabIndex) {
     return;
   }
-  IdTableStatic<1> result = std::move(resultTable->_idTable).toStatic<1>();
+  IdTableStatic<1> result = std::move(*resultTable).toStatic<1>();
 
   auto subjectIndex = subjectAsId.getVocabIndex().get();
   if (subjectIndex < hasPattern.size() &&
@@ -312,14 +313,14 @@ void HasPredicateScan::computeFreeO(
       result.push_back({predicate});
     }
   }
-  resultTable->_idTable = std::move(result).toDynamic();
+  *resultTable = std::move(result).toDynamic();
 }
 
 void HasPredicateScan::computeFullScan(
-    ResultTable* resultTable, const std::vector<PatternID>& hasPattern,
+    IdTable* resultTable, const std::vector<PatternID>& hasPattern,
     const CompactVectorOfStrings<Id>& hasPredicate,
     const CompactVectorOfStrings<Id>& patterns, size_t resultSize) {
-  IdTableStatic<2> result = std::move(resultTable->_idTable).toStatic<2>();
+  IdTableStatic<2> result = std::move(*resultTable).toStatic<2>();
   result.reserve(resultSize);
 
   uint64_t subjectIndex = 0;
@@ -343,7 +344,7 @@ void HasPredicateScan::computeFullScan(
     }
     subjectIndex++;
   }
-  resultTable->_idTable = std::move(result).toDynamic();
+  *resultTable = std::move(result).toDynamic();
 }
 
 template <int IN_WIDTH, int OUT_WIDTH>

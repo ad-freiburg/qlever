@@ -44,12 +44,11 @@ string Minus::asStringImpl(size_t indent) const {
 string Minus::getDescriptor() const { return "Minus"; }
 
 // _____________________________________________________________________________
-void Minus::computeResult(ResultTable* result) {
-  AD_CONTRACT_CHECK(result);
+ResultTable Minus::computeResult() {
   LOG(DEBUG) << "Minus result computation..." << endl;
 
-  result->_sortedBy = resultSortedOn();
-  result->_idTable.setNumColumns(getResultWidth());
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(getResultWidth());
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
@@ -63,13 +62,14 @@ void Minus::computeResult(ResultTable* result) {
   int rightWidth = rightResult->_idTable.numColumns();
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth}), &Minus::computeMinus,
                   this, leftResult->_idTable, rightResult->_idTable,
-                  _matchedColumns, &result->_idTable);
-
-  // If only one of the two operands has a non-empty local vocabulary, share
-  // with that one (otherwise, throws an exception).
-  result->shareLocalVocabFromNonEmptyOf(*leftResult, *rightResult);
+                  _matchedColumns, &idTable);
 
   LOG(DEBUG) << "Minus result computation done" << endl;
+  // If only one of the two operands has a non-empty local vocabulary, share
+  // with that one (otherwise, throws an exception).
+  return {std::move(idTable), resultSortedOn(),
+          ResultTable::getSharedLocalVocabFromNonEmptyOf(*leftResult,
+                                                         *rightResult)};
 }
 
 // _____________________________________________________________________________

@@ -99,7 +99,7 @@ ResultTable Values::computeResult() {
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
 
-  auto localVocab = std::make_share<LocalVocab>();
+  auto localVocab = std::make_shared<LocalVocab>();
 
   // Fill the result table using the `writeValues` method below.
   size_t resWidth = getResultWidth();

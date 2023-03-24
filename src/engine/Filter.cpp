@@ -45,21 +45,24 @@ string Filter::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-void Filter::computeResult(ResultTable* result) {
+ResultTable Filter::computeResult() {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Filter result computation..." << endl;
-  result->_idTable.setNumColumns(subRes->_idTable.numColumns());
-  result->shareLocalVocabFrom(*subRes);
 
-  int width = result->_idTable.numColumns();
-  CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this, result, *subRes);
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(subRes->_idTable.numColumns());
+
+  int width = idTable.numColumns();
+  CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this, &idTable, *subRes);
   LOG(DEBUG) << "Filter result computation done." << endl;
+
+  return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
 
 // _____________________________________________________________________________
 template <int WIDTH>
-void Filter::computeFilterImpl(ResultTable* outputResultTable,
+void Filter::computeFilterImpl(IdTable* outputIdTable,
                                const ResultTable& inputResultTable) {
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),
@@ -74,7 +77,7 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
       _expression.getPimpl()->evaluate(&evaluationContext);
 
   const auto input = inputResultTable._idTable.asStaticView<WIDTH>();
-  auto output = std::move(outputResultTable->_idTable).toStatic<WIDTH>();
+  auto output = std::move(*outputIdTable).toStatic<WIDTH>();
 
   auto visitor =
       [&]<sparqlExpression::SingleExpressionResult T>(T&& singleResult) {
@@ -127,7 +130,7 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
 
   std::visit(visitor, std::move(expressionResult));
 
-  outputResultTable->_idTable = std::move(output).toDynamic();
+  outputIdTable = std::move(output).toDynamic();
 }
 
 // _____________________________________________________________________________
