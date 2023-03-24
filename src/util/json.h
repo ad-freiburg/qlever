@@ -165,6 +165,10 @@ struct adl_serializer<std::variant<Types...>> {
 
     // Quick check, if the index is even a possible value.
     if (index >= sizeof...(Types)){
+      /*
+      TODO Add more information, using `absl::StrCat` to create the error
+      message. (It has besser performance than the alternatives.)
+      */
       throw nlohmann::json::out_of_range::create(401,
       "The given index for a std::variant was out of range.");
     }
