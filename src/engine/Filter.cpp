@@ -130,7 +130,7 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
 
   std::visit(visitor, std::move(expressionResult));
 
-  outputIdTable = std::move(output).toDynamic();
+  *outputIdTable = std::move(output).toDynamic();
 }
 
 // _____________________________________________________________________________

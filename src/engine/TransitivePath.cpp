@@ -664,19 +664,14 @@ void TransitivePath::computeTransitivePathRightBound(
 }
 
 // _____________________________________________________________________________
-void TransitivePath::computeResult(ResultTable* result) {
+ResultTable TransitivePath::computeResult() {
   LOG(DEBUG) << "TransitivePath result computation..." << std::endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "TransitivePath subresult computation done." << std::endl;
 
-  // NOTE: The only place, where the input to a transitive path operation is not
-  // an index scan (which has an empty local vocabulary by default) is the
-  // `LocalVocabTest`. But it doesn't harm to propagate the local vocab here
-  // either.
-  result->shareLocalVocabFrom(*subRes);
+  IdTable idTable{getExecutionContext()->getAllocator()};
 
-  result->_sortedBy = resultSortedOn();
-  result->_idTable.setNumColumns(getResultWidth());
+  idTable.setNumColumns(getResultWidth());
 
   int subWidth = subRes->_idTable.numColumns();
   if (_leftSideTree != nullptr) {
@@ -684,27 +679,32 @@ void TransitivePath::computeResult(ResultTable* result) {
     int leftWidth = leftRes->_idTable.numColumns();
     CALL_FIXED_SIZE(
         (std::array{subWidth, leftWidth, static_cast<int>(_resultWidth)}),
-        &TransitivePath::computeTransitivePathLeftBound, this,
-        &result->_idTable, subRes->_idTable, leftRes->_idTable, _leftSideCol,
-        _rightIsVar, _leftSubCol, _rightSubCol, _rightValue, _minDist, _maxDist,
+        &TransitivePath::computeTransitivePathLeftBound, this, &idTable,
+        subRes->_idTable, leftRes->_idTable, _leftSideCol, _rightIsVar,
+        _leftSubCol, _rightSubCol, _rightValue, _minDist, _maxDist,
         _resultWidth);
   } else if (_rightSideTree != nullptr) {
     shared_ptr<const ResultTable> rightRes = _rightSideTree->getResult();
     int rightWidth = rightRes->_idTable.numColumns();
     CALL_FIXED_SIZE(
         (std::array{subWidth, rightWidth, static_cast<int>(_resultWidth)}),
-        &TransitivePath::computeTransitivePathRightBound, this,
-        &result->_idTable, subRes->_idTable, rightRes->_idTable, _rightSideCol,
-        _leftIsVar, _leftSubCol, _rightSubCol, _leftValue, _minDist, _maxDist,
+        &TransitivePath::computeTransitivePathRightBound, this, &idTable,
+        subRes->_idTable, rightRes->_idTable, _rightSideCol, _leftIsVar,
+        _leftSubCol, _rightSubCol, _leftValue, _minDist, _maxDist,
         _resultWidth);
   } else {
     CALL_FIXED_SIZE(subWidth, &TransitivePath::computeTransitivePath, this,
-                    &result->_idTable, subRes->_idTable, _leftIsVar,
-                    _rightIsVar, _leftSubCol, _rightSubCol, _leftValue,
-                    _rightValue, _minDist, _maxDist);
+                    &idTable, subRes->_idTable, _leftIsVar, _rightIsVar,
+                    _leftSubCol, _rightSubCol, _leftValue, _rightValue,
+                    _minDist, _maxDist);
   }
 
   LOG(DEBUG) << "TransitivePath result computation done." << std::endl;
+  // NOTE: The only place, where the input to a transitive path operation is not
+  // an index scan (which has an empty local vocabulary by default) is the
+  // `LocalVocabTest`. But it doesn't harm to propagate the local vocab here
+  // either.
+  return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
 
 // _____________________________________________________________________________

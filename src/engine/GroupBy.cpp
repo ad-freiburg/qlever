@@ -234,7 +234,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
 
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), *inTable,
-      getExecutionContext()->getAllocator(), outLocalVocab);
+      getExecutionContext()->getAllocator(), *outLocalVocab);
 
   // In a GROUP BY evaluation, the expressions need to know which variables are
   // grouped, and to which columns the results of the aliases are written. The
@@ -254,7 +254,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
     }
     for (const GroupBy::Aggregate& a : aggregates) {
       processGroup(a, evaluationContext, blockStart, blockEnd, &result, rowIdx,
-                   a._outCol, outTable);
+                   a._outCol, outLocalVocab);
     }
   };
 
@@ -297,8 +297,14 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
 ResultTable GroupBy::computeResult() {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
-  if (auto optionalResult = computeOptimizedGroupByIfPossible()) {
-    return optionalResult.value();
+  IdTable idTable{getExecutionContext()->getAllocator()};
+
+  if (computeOptimizedGroupByIfPossible(&idTable)) {
+    // Note: The optimized group bys currently all include index scans and thus
+    // can never produce local vocab entries. If this should ever change, then
+    // we also have to take care of the local vocab here.
+    return {std::move(idTable), resultSortedOn(),
+            std::make_shared<LocalVocab>()};
   }
 
   std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
@@ -316,7 +322,6 @@ ResultTable GroupBy::computeResult() {
 
   std::vector<size_t> groupByColumns;
 
-  IdTable idTable{getExecutionContext->(getAllocator())};
   idTable.setNumColumns(getResultWidth());
 
   std::vector<Aggregate> aggregates;
@@ -358,7 +363,7 @@ ResultTable GroupBy::computeResult() {
 }
 
 // _____________________________________________________________________________
-bool GroupBy::computeGroupByForSingleIndexScan(ResultTable* result) {
+bool GroupBy::computeGroupByForSingleIndexScan(IdTable* result) {
   // The child must be an `IndexScan` for this optimization.
   auto* indexScan =
       dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get());
@@ -383,8 +388,9 @@ bool GroupBy::computeGroupByForSingleIndexScan(ResultTable* result) {
     return false;
   }
 
-  result->_idTable.setNumColumns(1);
-  result->_idTable.emplace_back();
+  auto& table = *result;
+  table.setNumColumns(1);
+  table.emplace_back();
   // For `IndexScan`s with at least two variables the size estimates are
   // exact as they are read directly from the index metadata.
   if (indexScan->getResultWidth() == 3) {
@@ -393,21 +399,21 @@ bool GroupBy::computeGroupByForSingleIndexScan(ResultTable* result) {
       auto permutation =
           getPermutationForThreeVariableTriple(*_subtree, var, var);
       AD_CONTRACT_CHECK(permutation.has_value());
-      result->_idTable(0, 0) = Id::makeFromInt(
+      table(0, 0) = Id::makeFromInt(
           getIndex().getImpl().numDistinctCol0(permutation.value()).normal_);
     } else {
-      result->_idTable(0, 0) = Id::makeFromInt(getIndex().numTriples().normal_);
+      table(0, 0) = Id::makeFromInt(getIndex().numTriples().normal_);
     }
   } else {
     // TODO<joka921> The two variables IndexScans should also account for the
     // additionally added triples.
-    result->_idTable(0, 0) = Id::makeFromInt(indexScan->getSizeEstimate());
+    table(0, 0) = Id::makeFromInt(indexScan->getSizeEstimate());
   }
   return true;
 }
 
 // _____________________________________________________________________________
-bool GroupBy::computeGroupByForFullIndexScan(ResultTable* result) {
+bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
   if (_groupByVariables.size() != 1) {
     return false;
   }
@@ -448,7 +454,7 @@ bool GroupBy::computeGroupByForFullIndexScan(ResultTable* result) {
 
   // Prepare the `result`
   size_t numCols = numCounts + 1;
-  result->_idTable.setNumColumns(numCols);
+  result->setNumColumns(numCols);
   _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
 
   // A nested lambda that computes the actual result. The outer lambda is
@@ -510,8 +516,7 @@ bool GroupBy::computeGroupByForFullIndexScan(ResultTable* result) {
     getExecutionContext()->getIndex().getPimpl().applyToPermutation(
         permutation.value(), applyForPermutation);
   };
-  ad_utility::callFixedSize(numCols, doComputationForNumberOfColumns,
-                            &result->_idTable);
+  ad_utility::callFixedSize(numCols, doComputationForNumberOfColumns, result);
 
   // TODO<joka921> This optimization should probably also apply if
   // the query is `SELECT DISTINCT ?s WHERE {?s ?p ?o} ` without a
@@ -593,7 +598,7 @@ std::optional<GroupBy::OptimizedGroupByData> GroupBy::checkIfJoinWithFullScan(
 }
 
 // _____________________________________________________________________________
-bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
+bool GroupBy::computeGroupByForJoinWithFullScan(IdTable* result) {
   auto join = dynamic_cast<Join*>(_subtree->getRootOperation().get());
   if (!join) {
     return false;
@@ -613,12 +618,12 @@ bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
   join->updateRuntimeInformationWhenOptimizedOut(
       {subtree.getRootOperation()->getRuntimeInfo(),
        threeVarSubtree.getRootOperation()->getRuntimeInfo()});
-  result->_idTable.setNumColumns(2);
+  result->setNumColumns(2);
   if (subresult->_idTable.size() == 0) {
     return true;
   }
 
-  auto idTable = std::move(result->_idTable).toStatic<2>();
+  auto idTable = std::move(*result).toStatic<2>();
   const auto& index = getExecutionContext()->getIndex();
 
   // TODO<joka921, C++23> Simplify the following pattern by using
@@ -655,12 +660,12 @@ bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
     currentCount += currentCardinality;
   }
   pushRow();
-  result->_idTable = std::move(idTable).toDynamic();
+  *result = std::move(idTable).toDynamic();
   return true;
 }
 
 // _____________________________________________________________________________
-bool GroupBy::computeOptimizedGroupByIfPossible(ResultTable* result) {
+bool GroupBy::computeOptimizedGroupByIfPossible(IdTable* result) {
   if (computeGroupByForSingleIndexScan(result)) {
     return true;
   } else if (computeGroupByForFullIndexScan(result)) {

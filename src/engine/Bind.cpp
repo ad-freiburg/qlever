@@ -80,12 +80,13 @@ std::vector<QueryExecutionTree*> Bind::getChildren() {
 }
 
 // _____________________________________________________________________________
-void Bind::computeResult(ResultTable* result) {
+ResultTable Bind::computeResult() {
   LOG(DEBUG) << "Get input to BIND operation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Got input to Bind operation." << endl;
+  IdTable idTable{getExecutionContext()->getAllocator()};
 
-  result->_idTable.setNumColumns(getResultWidth());
+  idTable.setNumColumns(getResultWidth());
 
   // Make a deep copy of the local vocab from `subRes` and then add to it (in
   // case BIND adds a new word or words).
@@ -94,23 +95,24 @@ void Bind::computeResult(ResultTable* result) {
   // it would be more efficient to first share the pointer here (like with
   // `shareLocalVocabFrom`) and only copy it when a new word is about to be
   // added. Same for GROUP BY.
-  result->getCopyOfLocalVocabFrom(*subRes);
+  auto localVocab = subRes->getCopyOfLocalVocab();
 
   int inwidth = subRes->_idTable.numColumns();
   int outwidth = getResultWidth();
 
   CALL_FIXED_SIZE((std::array{inwidth, outwidth}), &Bind::computeExpressionBind,
-                  this, result, *subRes, _bind._expression.getPimpl());
-
-  result->_sortedBy = resultSortedOn();
+                  this, &idTable, localVocab.get(), *subRes,
+                  _bind._expression.getPimpl());
 
   LOG(DEBUG) << "BIND result computation done." << endl;
+  return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
 // _____________________________________________________________________________
 template <int IN_WIDTH, int OUT_WIDTH>
 void Bind::computeExpressionBind(
-    ResultTable* outputResultTable, const ResultTable& inputResultTable,
+    IdTable* outputIdTable, LocalVocab* outputLocalVocab,
+    const ResultTable& inputResultTable,
     sparqlExpression::SparqlExpression* expression) const {
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),
@@ -121,7 +123,7 @@ void Bind::computeExpressionBind(
       expression->evaluate(&evaluationContext);
 
   const auto input = inputResultTable._idTable.asStaticView<IN_WIDTH>();
-  auto output = std::move(outputResultTable->_idTable).toStatic<OUT_WIDTH>();
+  auto output = std::move(*outputIdTable).toStatic<OUT_WIDTH>();
 
   // first initialize the first columns (they remain identical)
   const auto inSize = input.size();
@@ -159,7 +161,7 @@ void Bind::computeExpressionBind(
         if (it != resultGenerator.end()) {
           Id constantId =
               sparqlExpression::detail::constantExpressionResultToId(
-                  std::move(*it), outputResultTable->localVocabNonConst());
+                  std::move(*it), *outputLocalVocab);
           for (size_t i = 0; i < inSize; ++i) {
             output(i, inCols) = constantId;
           }
@@ -170,8 +172,7 @@ void Bind::computeExpressionBind(
         for (auto& resultValue : resultGenerator) {
           output(i, inCols) =
               sparqlExpression::detail::constantExpressionResultToId(
-                  std::move(resultValue),
-                  outputResultTable->localVocabNonConst());
+                  std::move(resultValue), *outputLocalVocab);
           i++;
         }
       }
@@ -180,5 +181,5 @@ void Bind::computeExpressionBind(
 
   std::visit(visitor, std::move(expressionResult));
 
-  outputResultTable->_idTable = std::move(output).toDynamic();
+  *outputIdTable = std::move(output).toDynamic();
 }

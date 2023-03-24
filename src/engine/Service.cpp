@@ -140,7 +140,7 @@ ResultTable Service::computeResult() {
   // Fill the result table using the `writeTsvResult` method below.
   size_t resWidth = getResultWidth();
   CALL_FIXED_SIZE(resWidth, &Service::writeTsvResult, this,
-                  std::move(tsvResult), &idTable, &localVocab);
+                  std::move(tsvResult), &idTable, localVocab.get());
 
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }

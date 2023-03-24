@@ -116,7 +116,7 @@ class GroupBy : public Operation {
   // is computed and stored in `result` and `true` is returned. If no such case
   // applies, `false` is returned and the `result` is untouched. Precondition:
   // The `result` must be empty.
-  std::optional<ResultTable> computeOptimizedGroupByIfPossible();
+  bool computeOptimizedGroupByIfPossible(IdTable*);
 
   // First, check if the query represented by this GROUP BY is of the following
   // form:
@@ -129,7 +129,7 @@ class GroupBy : public Operation {
   // query has that form, the result of the query (which consists of one line)
   // is computed and stored in the `result` and `true` is returned. If not, the
   // `result` is left untouched, and `false` is returned.
-  std::optional<ResultTable> computeGroupByForSingleIndexScan();
+  bool computeGroupByForSingleIndexScan(IdTable* result);
 
   // First, check if the query represented by this GROUP BY is of the following
   // form:
@@ -141,7 +141,7 @@ class GroupBy : public Operation {
   // or `?z`. In the SELECT clause, both of the elements may be omitted, so in
   // the example it is possible to only select `?x` or to only select the
   // `COUNT`.
-  std::optional<ResultTable> computeGroupByForFullIndexScan();
+  bool computeGroupByForFullIndexScan(IdTable* result);
 
   // First, check if the query represented by this GROUP BY is of the following
   // form:
@@ -152,7 +152,7 @@ class GroupBy : public Operation {
   // Note that `?x` can also be the predicate or object of the three variable
   // triple, and that the COUNT may be by any of the variables `?x`, `?y`, or
   // `?z`.
-  std::optional<ResultTable> computeGroupByForJoinWithFullScan();
+  bool computeGroupByForJoinWithFullScan(IdTable* result);
 
   // The check whether the optimization just described can be applied and its
   // actual computation are split up in two functions. This struct contains
