@@ -133,13 +133,9 @@ void Service::computeResult(ResultTable* result) {
         "\", but expected \"", expectedHeaderRow, "\""));
   }
 
-  // Set basic properties of the result table (the `_resultTypes` don't matter,
-  // as long as they have the right size, see `ResultTypes.h`).
+  // Set basic properties of the result table.
   result->_sortedBy = resultSortedOn();
   result->_idTable.setNumColumns(getResultWidth());
-  result->_resultTypes.resize(parsedServiceClause_.visibleVariables_.size(),
-                              ResultTable::ResultType::KB);
-
   // Fill the result table using the `writeTsvResult` method below.
   size_t resWidth = getResultWidth();
   CALL_FIXED_SIZE(resWidth, &Service::writeTsvResult, this,

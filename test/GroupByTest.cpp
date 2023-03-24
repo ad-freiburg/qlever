@@ -120,11 +120,6 @@ TEST_F(GroupByTest, doGroupBy) {
   inputData.push_back({I(3), I(8), I(0), I(1), floatBuffers[1], I(1)});
   inputData.push_back({I(3), I(9), I(41223), I(2), floatBuffers[2], I(2)});
 
-  std::vector<ResultTable::ResultType> inputTypes = {
-      ResultTable::ResultType::KB,       ResultTable::ResultType::KB,
-      ResultTable::ResultType::VERBATIM, ResultTable::ResultType::TEXT,
-      ResultTable::ResultType::FLOAT,    ResultTable::ResultType::LOCAL_VOCAB};
-
   /*
     COUNT,
     GROUP_CONCAT,

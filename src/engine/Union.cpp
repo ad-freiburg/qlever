@@ -148,15 +148,6 @@ void Union::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Union subresult computation done." << std::endl;
 
   result->_sortedBy = resultSortedOn();
-  for (const std::array<size_t, 2>& o : _columnOrigins) {
-    if (o[0] != NO_COLUMN) {
-      result->_resultTypes.push_back(subRes1->getResultType(o[0]));
-    } else if (o[1] != NO_COLUMN) {
-      result->_resultTypes.push_back(subRes2->getResultType(o[1]));
-    } else {
-      result->_resultTypes.push_back(ResultTable::ResultType::KB);
-    }
-  }
   result->_idTable.setNumColumns(getResultWidth());
   int leftWidth = subRes1->_idTable.numColumns();
   int rightWidth = subRes2->_idTable.numColumns();

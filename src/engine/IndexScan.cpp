@@ -266,7 +266,6 @@ void IndexScan::computeResult(ResultTable* result) {
 // _____________________________________________________________________________
 void IndexScan::computePSOboundS(ResultTable* result) const {
   result->_idTable.setNumColumns(1);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
   idx.scan(_predicate, _subject, &result->_idTable, Index::Permutation::PSO,
@@ -276,8 +275,6 @@ void IndexScan::computePSOboundS(ResultTable* result) const {
 // _____________________________________________________________________________
 void IndexScan::computePSOfreeS(ResultTable* result) const {
   result->_idTable.setNumColumns(2);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
   idx.scan(_predicate, &result->_idTable, Index::Permutation::PSO,
@@ -287,7 +284,6 @@ void IndexScan::computePSOfreeS(ResultTable* result) const {
 // _____________________________________________________________________________
 void IndexScan::computePOSboundO(ResultTable* result) const {
   result->_idTable.setNumColumns(1);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
   idx.scan(_predicate, _object, &result->_idTable, Index::Permutation::POS,
@@ -297,8 +293,6 @@ void IndexScan::computePOSboundO(ResultTable* result) const {
 // _____________________________________________________________________________
 void IndexScan::computePOSfreeO(ResultTable* result) const {
   result->_idTable.setNumColumns(2);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
   idx.scan(_predicate, &result->_idTable, Index::Permutation::POS,
@@ -395,8 +389,6 @@ size_t IndexScan::getCostEstimate() {
 // _____________________________________________________________________________
 void IndexScan::computeSPOfreeP(ResultTable* result) const {
   result->_idTable.setNumColumns(2);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
   idx.scan(_subject, &result->_idTable, Index::Permutation::SPO, _timeoutTimer);
@@ -405,7 +397,6 @@ void IndexScan::computeSPOfreeP(ResultTable* result) const {
 // _____________________________________________________________________________
 void IndexScan::computeSOPboundO(ResultTable* result) const {
   result->_idTable.setNumColumns(1);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
   idx.scan(_subject, _object, &result->_idTable, Index::Permutation::SOP,
@@ -415,8 +406,6 @@ void IndexScan::computeSOPboundO(ResultTable* result) const {
 // _____________________________________________________________________________
 void IndexScan::computeSOPfreeO(ResultTable* result) const {
   result->_idTable.setNumColumns(2);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
   idx.scan(_subject, &result->_idTable, Index::Permutation::SOP, _timeoutTimer);
@@ -425,8 +414,6 @@ void IndexScan::computeSOPfreeO(ResultTable* result) const {
 // _____________________________________________________________________________
 void IndexScan::computeOPSfreeP(ResultTable* result) const {
   result->_idTable.setNumColumns(2);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
   idx.scan(_object, &result->_idTable, Index::Permutation::OPS, _timeoutTimer);
@@ -435,8 +422,6 @@ void IndexScan::computeOPSfreeP(ResultTable* result) const {
 // _____________________________________________________________________________
 void IndexScan::computeOSPfreeS(ResultTable* result) const {
   result->_idTable.setNumColumns(2);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
   idx.scan(_object, &result->_idTable, Index::Permutation::OSP, _timeoutTimer);
@@ -513,9 +498,6 @@ void IndexScan::computeFullScan(ResultTable* result,
       getIndex().getImpl().getIgnoredIdRanges(permutation);
 
   result->_idTable.setNumColumns(3);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1, 2};
 
   // This implementation computes the complete knowledge graph, except the

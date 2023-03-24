@@ -99,7 +99,6 @@ class QueryExecutionTree {
   struct VariableAndColumnIndex {
     std::string _variable;
     size_t _columnIndex;
-    ResultTable::ResultType _resultType;
   };
 
   using ColumnIndicesAndTypes = vector<std::optional<VariableAndColumnIndex>>;

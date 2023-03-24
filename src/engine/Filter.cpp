@@ -50,9 +50,6 @@ void Filter::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Filter result computation..." << endl;
   result->_idTable.setNumColumns(subRes->_idTable.numColumns());
-  result->_resultTypes.insert(result->_resultTypes.end(),
-                              subRes->_resultTypes.begin(),
-                              subRes->_resultTypes.end());
   result->shareLocalVocabFrom(*subRes);
 
   int width = result->_idTable.numColumns();
@@ -64,17 +61,10 @@ void Filter::computeResult(ResultTable* result) {
 template <int WIDTH>
 void Filter::computeFilterImpl(ResultTable* outputResultTable,
                                const ResultTable& inputResultTable) {
-  sparqlExpression::VariableToColumnAndResultTypeMap columnMap;
-  for (const auto& [variable, columnIndex] : _subtree->getVariableColumns()) {
-    // TODO<joka921> The "ResultType" is currently unused, but we can use it in
-    // the future for optimizations (in the style of "we know that this complete
-    // column consists of floats").
-    columnMap[variable] = std::pair(columnIndex, qlever::ResultType::KB);
-  }
-
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), columnMap, inputResultTable._idTable,
-      getExecutionContext()->getAllocator(), inputResultTable.localVocab());
+      *getExecutionContext(), _subtree->getVariableColumns(),
+      inputResultTable._idTable, getExecutionContext()->getAllocator(),
+      inputResultTable.localVocab());
 
   // TODO<joka921> This should be a mandatory argument to the EvaluationContext
   // constructor.

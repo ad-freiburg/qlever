@@ -56,10 +56,6 @@ void Minus::computeResult(ResultTable* result) {
 
   LOG(DEBUG) << "Minus subresult computation done" << std::endl;
 
-  // We have the same output columns as the left input, so we also
-  // have the same output column types.
-  result->_resultTypes = leftResult->_resultTypes;
-
   LOG(DEBUG) << "Computing minus of results of size " << leftResult->size()
              << " and " << rightResult->size() << endl;
 

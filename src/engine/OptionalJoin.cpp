@@ -90,10 +90,6 @@ void OptionalJoin::computeResult(ResultTable* result) {
   LOG(DEBUG) << "OptionalJoin subresult computation done." << std::endl;
 
   // compute the result types
-  result->_resultTypes.reserve(result->_idTable.numColumns());
-  result->_resultTypes.insert(result->_resultTypes.end(),
-                              leftResult->_resultTypes.begin(),
-                              leftResult->_resultTypes.end());
   for (size_t col = 0; col < rightResult->_idTable.numColumns(); col++) {
     bool isJoinColumn = false;
     for (const std::array<ColumnIndex, 2>& a : _joinColumns) {
@@ -101,9 +97,6 @@ void OptionalJoin::computeResult(ResultTable* result) {
         isJoinColumn = true;
         break;
       }
-    }
-    if (!isJoinColumn) {
-      result->_resultTypes.push_back(rightResult->_resultTypes[col]);
     }
   }
 

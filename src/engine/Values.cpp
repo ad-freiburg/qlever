@@ -98,8 +98,6 @@ void Values::computeResult(ResultTable* result) {
   // Set basic properties of the result table.
   result->_sortedBy = resultSortedOn();
   result->_idTable.setNumColumns(getResultWidth());
-  result->_resultTypes.resize(parsedValues_._variables.size(),
-                              ResultTable::ResultType::KB);
 
   // Fill the result table using the `writeValues` method below.
   size_t resWidth = getResultWidth();

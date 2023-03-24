@@ -243,10 +243,6 @@ void HasPredicateScan::computeResult(ResultTable* result) {
 
       std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
       result->shareLocalVocabFrom(*subresult);
-      result->_resultTypes.insert(result->_resultTypes.begin(),
-                                  subresult->_resultTypes.begin(),
-                                  subresult->_resultTypes.end());
-      result->_resultTypes.push_back(ResultTable::ResultType::KB);
       int inWidth = subresult->_idTable.numColumns();
       int outWidth = result->_idTable.numColumns();
       CALL_FIXED_SIZE((std::array{inWidth, outWidth}),
@@ -265,7 +261,6 @@ void HasPredicateScan::computeFreeS(
     const CompactVectorOfStrings<Id>& hasPredicate,
     const CompactVectorOfStrings<Id>& patterns) {
   IdTableStatic<1> result = std::move(resultTable->_idTable).toStatic<1>();
-  resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
   uint64_t entityIndex = 0;
   while (entityIndex < hasPattern.size() || entityIndex < hasPredicate.size()) {
     if (entityIndex < hasPattern.size() &&
@@ -297,7 +292,6 @@ void HasPredicateScan::computeFreeO(
     const std::vector<PatternID>& hasPattern,
     const CompactVectorOfStrings<Id>& hasPredicate,
     const CompactVectorOfStrings<Id>& patterns) {
-  resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
   // Subjects always have to be from the vocabulary
   if (subjectAsId.getDatatype() != Datatype::VocabIndex) {
     return;
@@ -325,8 +319,6 @@ void HasPredicateScan::computeFullScan(
     ResultTable* resultTable, const std::vector<PatternID>& hasPattern,
     const CompactVectorOfStrings<Id>& hasPredicate,
     const CompactVectorOfStrings<Id>& patterns, size_t resultSize) {
-  resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
-  resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
   IdTableStatic<2> result = std::move(resultTable->_idTable).toStatic<2>();
   result.reserve(resultSize);
 

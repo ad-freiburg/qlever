@@ -109,8 +109,7 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
         varString = varString.substr(1);
       }
       exportColumns.push_back(
-          VariableAndColumnIndex{std::move(varString), columnIndex,
-                                 resultTable.getResultType(columnIndex)});
+          VariableAndColumnIndex{std::move(varString), columnIndex});
     } else {
       exportColumns.emplace_back(std::nullopt);
       LOG(WARN) << "The variable \"" << varString

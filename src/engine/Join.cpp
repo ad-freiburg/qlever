@@ -137,15 +137,6 @@ void Join::computeResult(ResultTable* result) {
   AD_CONTRACT_CHECK(result);
 
   result->_idTable.setNumColumns(leftWidth + rightWidth - 1);
-  result->_resultTypes.reserve(result->_idTable.numColumns());
-  result->_resultTypes.insert(result->_resultTypes.end(),
-                              leftRes->_resultTypes.begin(),
-                              leftRes->_resultTypes.end());
-  for (size_t i = 0; i < rightRes->_idTable.numColumns(); i++) {
-    if (i != _rightJoinCol) {
-      result->_resultTypes.push_back(rightRes->_resultTypes[i]);
-    }
-  }
   result->_sortedBy = {_leftJoinCol};
 
   int lwidth = leftRes->_idTable.numColumns();
@@ -271,12 +262,6 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
   result->_sortedBy = {_leftJoinCol};
 
   shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
-  result->_resultTypes.reserve(result->_idTable.numColumns());
-  result->_resultTypes.insert(result->_resultTypes.end(),
-                              nonDummyRes->_resultTypes.begin(),
-                              nonDummyRes->_resultTypes.end());
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
 
   doComputeJoinWithFullScanDummyRight(nonDummyRes->_idTable, &result->_idTable);
   LOG(DEBUG) << "Join (with dummy) done. Size: " << result->size() << endl;

@@ -170,8 +170,7 @@ void GroupBy::processGroup(
     const GroupBy::Aggregate& aggregate,
     sparqlExpression::EvaluationContext& evaluationContext, size_t blockStart,
     size_t blockEnd, IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
-    size_t resultColumn, ResultTable* outTable,
-    ResultTable::ResultType* resultType) const {
+    size_t resultColumn, ResultTable* outTable) const {
   evaluationContext._beginIndex = blockStart;
   evaluationContext._endIndex = blockEnd;
 
@@ -191,10 +190,7 @@ void GroupBy::processGroup(
     AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<T>);
     if constexpr (isStrongId) {
       resultEntry = singleResult;
-      *resultType = qlever::ResultType::KB;
     } else if constexpr (sparqlExpression::isConstantResult<T>) {
-      *resultType =
-          sparqlExpression::detail::expressionResultTypeToQleverResultType<T>();
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
           singleResult, outTable->localVocabNonConst());
     } else {
@@ -236,14 +232,8 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   const IdTableView<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
 
-  sparqlExpression::VariableToColumnAndResultTypeMap columnMap;
-  for (const auto& [variable, columnIndex] : _subtree->getVariableColumns()) {
-    columnMap[variable] =
-        std::pair(columnIndex, inTable->getResultType(columnIndex));
-  }
-
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), columnMap, inTable->_idTable,
+      *getExecutionContext(), _subtree->getVariableColumns(), inTable->_idTable,
       getExecutionContext()->getAllocator(), outTable->localVocabNonConst());
 
   // In a GROUP BY evaluation, the expressions need to know which variables are
@@ -264,7 +254,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
     }
     for (const GroupBy::Aggregate& a : aggregates) {
       processGroup(a, evaluationContext, blockStart, blockEnd, &result, rowIdx,
-                   a._outCol, outTable, &outTable->_resultTypes[a._outCol]);
+                   a._outCol, outTable);
     }
   };
 
@@ -349,27 +339,10 @@ void GroupBy::computeResult(ResultTable* result) {
         Aggregate{alias._expression, varColMap.at(alias._target)});
   }
 
-  // populate the result type vector
-  result->_resultTypes.resize(result->_idTable.numColumns());
-
-  // The `_groupByVariables` are simply copied, so their result type is
-  // also copied. The result type of the other columns is set when the
-  // values are computed.
-  for (const auto& var : _groupByVariables) {
-    result->_resultTypes[varColMap.at(var)] =
-        subresult->getResultType(subtreeVarCols.at(var));
-  }
-
   std::vector<size_t> groupByCols;
   groupByCols.reserve(_groupByVariables.size());
   for (const auto& var : _groupByVariables) {
     groupByCols.push_back(subtreeVarCols.at(var));
-  }
-
-  std::vector<ResultTable::ResultType> inputResultTypes;
-  inputResultTypes.reserve(subresult->_idTable.numColumns());
-  for (size_t i = 0; i < subresult->_idTable.numColumns(); i++) {
-    inputResultTypes.push_back(subresult->getResultType(i));
   }
 
   int inWidth = subresult->_idTable.numColumns();
@@ -409,9 +382,6 @@ bool GroupBy::computeGroupByForSingleIndexScan(ResultTable* result) {
   }
 
   result->_idTable.setNumColumns(1);
-  // TODO<joka921> The `resultTypes` are not really in use, but if they are
-  // not present, segfaults might occur in upstream `Operation`s.
-  result->_resultTypes.push_back(qlever::ResultType::VERBATIM);
   result->_idTable.emplace_back();
   // For `IndexScan`s with at least two variables the size estimates are
   // exact as they are read directly from the index metadata.
@@ -477,9 +447,6 @@ bool GroupBy::computeGroupByForFullIndexScan(ResultTable* result) {
   // Prepare the `result`
   size_t numCols = numCounts + 1;
   result->_idTable.setNumColumns(numCols);
-  for (size_t i = 0; i < numCols; ++i) {
-    result->_resultTypes.push_back(qlever::ResultType::VERBATIM);
-  }
   _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
 
   // A nested lambda that computes the actual result. The outer lambda is
@@ -489,8 +456,6 @@ bool GroupBy::computeGroupByForFullIndexScan(ResultTable* result) {
   auto doComputationForNumberOfColumns = [&]<int NUM_COLS>(
                                              IdTable* idTable) mutable {
     ENABLE_WARNINGS_CLANG_13
-    // TODO<joka921> The `resultTypes` are not really in use, but if they
-    // are not present, segfaults might occur in upstream `Operation`s.
     auto ignoredRanges =
         getIndex().getImpl().getIgnoredIdRanges(permutation.value()).first;
     // The permutations in the `Index` class have different types, so we
@@ -647,10 +612,6 @@ bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
       {subtree.getRootOperation()->getRuntimeInfo(),
        threeVarSubtree.getRootOperation()->getRuntimeInfo()});
   result->_idTable.setNumColumns(2);
-  // TODO<joka921> The `resultTypes` are not really in use, but if they are
-  // not present, segfaults might occur in upstream `Operation`s.
-  result->_resultTypes.push_back(qlever::ResultType::KB);
-  result->_resultTypes.push_back(qlever::ResultType::VERBATIM);
   if (subresult->_idTable.size() == 0) {
     return true;
   }

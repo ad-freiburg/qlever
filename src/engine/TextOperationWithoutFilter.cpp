@@ -79,8 +79,6 @@ void TextOperationWithoutFilter::computeResult(ResultTable* result) {
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultNoVar(ResultTable* result) const {
   result->_idTable.setNumColumns(2);
-  result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
-  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
   getExecutionContext()->getIndex().getContextListForWords(_words,
                                                            &result->_idTable);
 }
@@ -89,9 +87,6 @@ void TextOperationWithoutFilter::computeResultNoVar(ResultTable* result) const {
 void TextOperationWithoutFilter::computeResultOneVar(
     ResultTable* result) const {
   result->_idTable.setNumColumns(3);
-  result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
-  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   getExecutionContext()->getIndex().getECListForWordsOneVar(_words, _textLimit,
                                                             &result->_idTable);
 }
@@ -100,12 +95,6 @@ void TextOperationWithoutFilter::computeResultOneVar(
 void TextOperationWithoutFilter::computeResultMultVars(
     ResultTable* result) const {
   result->_idTable.setNumColumns(getNofVars() + 2);
-  result->_resultTypes.reserve(result->_idTable.numColumns());
-  result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
-  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-  for (size_t i = 2; i < result->_idTable.numColumns(); i++) {
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  }
   getExecutionContext()->getIndex().getECListForWords(
       _words, getNofVars(), _textLimit, &result->_idTable);
 }

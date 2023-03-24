@@ -86,12 +86,6 @@ void TextOperationWithFilter::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> filterResult = _filterResult->getResult();
   result->shareLocalVocabFrom(*filterResult);
 
-  result->_resultTypes.reserve(result->_idTable.numColumns());
-  result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
-  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-  for (size_t i = 2; i < result->_idTable.numColumns(); i++) {
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  }
   if (filterResult->_idTable.numColumns() == 1) {
     getExecutionContext()->getIndex().getFilteredECListForWordsWidthOne(
         _words, filterResult->_idTable, getNofVars(), _textLimit,

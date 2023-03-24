@@ -114,8 +114,6 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
   LOG(DEBUG) << "CountAvailablePredicates result computation..." << std::endl;
   result->_idTable.setNumColumns(2);
   result->_sortedBy = resultSortedOn();
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
 

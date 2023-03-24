@@ -129,9 +129,6 @@ void Sort::computeResult(ResultTable* result) {
   }
 
   LOG(DEBUG) << "Sort result computation..." << endl;
-  result->_resultTypes.insert(result->_resultTypes.end(),
-                              subRes->_resultTypes.begin(),
-                              subRes->_resultTypes.end());
   result->shareLocalVocabFrom(*subRes);
   result->_idTable = subRes->_idTable.clone();
   result->_sortedBy = resultSortedOn();

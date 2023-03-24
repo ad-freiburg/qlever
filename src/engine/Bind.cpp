@@ -86,7 +86,6 @@ void Bind::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Got input to Bind operation." << endl;
 
   result->_idTable.setNumColumns(getResultWidth());
-  result->_resultTypes = subRes->_resultTypes;
 
   // Make a deep copy of the local vocab from `subRes` and then add to it (in
   // case BIND adds a new word or words).
@@ -100,10 +99,8 @@ void Bind::computeResult(ResultTable* result) {
   int inwidth = subRes->_idTable.numColumns();
   int outwidth = getResultWidth();
 
-  result->_resultTypes.emplace_back();
   CALL_FIXED_SIZE((std::array{inwidth, outwidth}), &Bind::computeExpressionBind,
-                  this, result, &(result->_resultTypes.back()), *subRes,
-                  _bind._expression.getPimpl());
+                  this, result, *subRes, _bind._expression.getPimpl());
 
   result->_sortedBy = resultSortedOn();
 
@@ -113,18 +110,12 @@ void Bind::computeResult(ResultTable* result) {
 // _____________________________________________________________________________
 template <int IN_WIDTH, int OUT_WIDTH>
 void Bind::computeExpressionBind(
-    ResultTable* outputResultTable, ResultTable::ResultType* resultType,
-    const ResultTable& inputResultTable,
+    ResultTable* outputResultTable, const ResultTable& inputResultTable,
     sparqlExpression::SparqlExpression* expression) const {
-  sparqlExpression::VariableToColumnAndResultTypeMap columnMap;
-  for (const auto& [variable, columnIndex] : _subtree->getVariableColumns()) {
-    columnMap[variable] =
-        std::pair(columnIndex, inputResultTable.getResultType(columnIndex));
-  }
-
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), columnMap, inputResultTable._idTable,
-      getExecutionContext()->getAllocator(), inputResultTable.localVocab());
+      *getExecutionContext(), _subtree->getVariableColumns(),
+      inputResultTable._idTable, getExecutionContext()->getAllocator(),
+      inputResultTable.localVocab());
 
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);
@@ -153,21 +144,15 @@ void Bind::computeExpressionBind(
       for (size_t i = 0; i < inSize; ++i) {
         output(i, inCols) = output(i, column);
       }
-      *resultType =
-          evaluationContext._variableToColumnAndResultTypeMap.at(singleResult)
-              .second;
     } else if constexpr (isStrongId) {
       for (size_t i = 0; i < inSize; ++i) {
         output(i, inCols) = singleResult;
       }
-      *resultType = qlever::ResultType::KB;
     } else {
       bool isConstant = sparqlExpression::isConstantResult<T>;
 
       auto resultGenerator = sparqlExpression::detail::makeGenerator(
           std::forward<T>(singleResult), inSize, &evaluationContext);
-      *resultType =
-          sparqlExpression::detail::expressionResultTypeToQleverResultType<T>();
 
       if (isConstant) {
         auto it = resultGenerator.begin();

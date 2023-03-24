@@ -676,26 +676,11 @@ void TransitivePath::computeResult(ResultTable* result) {
   result->shareLocalVocabFrom(*subRes);
 
   result->_sortedBy = resultSortedOn();
-  if (_leftIsVar || _leftSideTree != nullptr) {
-    result->_resultTypes.push_back(subRes->getResultType(_leftSubCol));
-  } else {
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  }
-  if (_rightIsVar || _rightSideTree != nullptr) {
-    result->_resultTypes.push_back(subRes->getResultType(_rightSubCol));
-  } else {
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  }
   result->_idTable.setNumColumns(getResultWidth());
 
   int subWidth = subRes->_idTable.numColumns();
   if (_leftSideTree != nullptr) {
     shared_ptr<const ResultTable> leftRes = _leftSideTree->getResult();
-    for (size_t c = 0; c < leftRes->_idTable.numColumns(); c++) {
-      if (c != _leftSideCol) {
-        result->_resultTypes.push_back(leftRes->getResultType(c));
-      }
-    }
     int leftWidth = leftRes->_idTable.numColumns();
     CALL_FIXED_SIZE(
         (std::array{subWidth, leftWidth, static_cast<int>(_resultWidth)}),
@@ -705,11 +690,6 @@ void TransitivePath::computeResult(ResultTable* result) {
         _resultWidth);
   } else if (_rightSideTree != nullptr) {
     shared_ptr<const ResultTable> rightRes = _rightSideTree->getResult();
-    for (size_t c = 0; c < rightRes->_idTable.numColumns(); c++) {
-      if (c != _rightSideCol) {
-        result->_resultTypes.push_back(rightRes->getResultType(c));
-      }
-    }
     int rightWidth = rightRes->_idTable.numColumns();
     CALL_FIXED_SIZE(
         (std::array{subWidth, rightWidth, static_cast<int>(_resultWidth)}),

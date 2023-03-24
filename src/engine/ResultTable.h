@@ -48,15 +48,6 @@ class ResultTable {
   // The actual entries.
   IdTable _idTable;
 
-  // The semantics of `_resultTypes` is not not used anymore in the QLever code,
-  // see the comment in `ResultType.h`. We still need the declaration though
-  // because it is checked, at various places, that this vector has the same
-  // size as the number of columns of the table.
-  //
-  // TODO: Refactor this code according to the comment in `ResultType.h`.
-  using ResultType = qlever::ResultType;
-  vector<ResultType> _resultTypes;
-
   // The column indices by which the result is sorted (primary sort key first).
   // Empty if the result is not sorted on any column.
   vector<size_t> _sortedBy;
@@ -149,10 +140,4 @@ class ResultTable {
 
   // The first rows of the result and its total size (for debugging).
   string asDebugString() const;
-
-  // Get the result type for the given column if provided (default:
-  // ResultType::KB).
-  ResultType getResultType(size_t col) const {
-    return col < _resultTypes.size() ? _resultTypes[col] : ResultType::KB;
-  }
 };

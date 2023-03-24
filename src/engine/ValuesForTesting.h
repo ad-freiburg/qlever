@@ -31,9 +31,6 @@ class ValuesForTesting : public Operation {
 
   // ___________________________________________________________________________
   void computeResult(ResultTable* result) override {
-    for (size_t i = 0; i < table_.numColumns(); ++i) {
-      result->_resultTypes.push_back(ResultTable::ResultType::KB);
-    }
     result->_idTable = table_.clone();
   }
 

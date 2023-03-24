@@ -24,8 +24,6 @@ class DummyOperation : public Operation {
  public:
   DummyOperation(QueryExecutionContext* ctx) : Operation(ctx) {}
   virtual void computeResult(ResultTable* result) override {
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_idTable.setNumColumns(2);
     for (size_t i = 0; i < 10; i++) {
       result->_idTable.push_back({V(10 - i), V(2 * i)});
