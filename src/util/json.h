@@ -67,13 +67,21 @@ struct adl_serializer<std::monostate> {
     j = nullptr;
   }
 
-  static void from_json(const nlohmann::json&, std::monostate&) {
-    // Monostate holds no values, so the given monostate is already
-    // identical to the serialized one.
-    // TODO Add an exception here, if the j doesn't contain a nullptr.
-    // I mean, there is literally no sense in trying to convert any actual
-    // value to a std::monostate, so there must be a bug, if somebody tries
-    // to!
+  static void from_json(const nlohmann::json& j, std::monostate&) {
+    /*
+    Monostate holds no values, so the given monostate is already identical to
+    the serialized one.
+    However, because of this, there also must be an error/mistake, if anybody
+    tries to interpret an actual value as a `std::monostate`.
+    */
+    if (!j.is_null()){
+      // We have no ID (the `-1`), because this is custom. We also do not know
+      // the actual position, where the error happend, so I just put `1` as a
+      // placeholder.
+      throw nlohmann::json::parse_error::create(-1, 1,
+      "error while parsing value - any value other than nullptr can't"
+      " be interpreted as a valid std::monostate.");
+    }
   }
 };
 }  // namespace nlohmann
@@ -123,7 +131,10 @@ void RuntimeValueToCompileTimeValue(const size_t& value,
                    });
 }
 
-// Added support for serializing `std::variant` using `nlohmann::json`.
+/*
+Added support for serializing `std::variant` using `nlohmann::json`.
+
+*/
 namespace nlohmann {
 template <typename... Types>
 struct adl_serializer<std::variant<Types...>> {
