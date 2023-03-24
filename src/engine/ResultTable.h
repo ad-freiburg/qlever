@@ -84,17 +84,6 @@ class ResultTable {
   // Get the number of columns of this result.
   size_t width() const { return _idTable.numColumns(); }
 
-  // Share the local vocabulary with the given other result. After this is
-  // called, the (shared) local vocabulary is set to read only (because adding
-  // to it further would affect earlier results, which might be cached, which
-  // can give all sort of unexpected behavior or even wrong results).
-  //
-  // NOTE: In order to make a deep copy, use LocalVocab::clone(); see
-  // `GroupBy.cpp` for an example.
-  void shareLocalVocabFrom(const ResultTable& resultTable);
-  std::shared_ptr<const LocalVocab> getSharedLocalVocab() const {
-    return localVocab_;
-  }
 
   // Like `shareLocalVocabFrom`, but takes *two* results and assumes that one of
   // their local vocabularies is empty and shares the the result with the
@@ -103,15 +92,12 @@ class ResultTable {
   // TODO: Eventually, we want to be able to merge two non-empty local
   // vocabularies, but that requires more work since we have to rewrite IDs then
   // (from the previous separate local vocabularies to the new merged one).
-  void shareLocalVocabFromNonEmptyOf(const ResultTable& resultTable1,
-                                     const ResultTable& resultTable2);
   static std::shared_ptr<const LocalVocab> getSharedLocalVocabFromNonEmptyOf(
       const ResultTable& resultTable1, const ResultTable& resultTable2);
 
   // Get a (deep) copy of the local vocabulary from the given result. Use this
   // when you want to (potentially) add further words to the local vocabulary
   // (which is not possible with `shareLocalVocabFrom`).
-  void getCopyOfLocalVocabFrom(const ResultTable& resultTable);
   std::shared_ptr<LocalVocab> getCopyOfLocalVocab() const;
 
   // Get the local vocabulary of this result, used for lookup only.
