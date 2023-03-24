@@ -96,8 +96,7 @@ size_t QueryExecutionTree::getVariableColumn(const Variable& variable) const {
 // ___________________________________________________________________________
 QueryExecutionTree::ColumnIndicesAndTypes
 QueryExecutionTree::selectedVariablesToColumnIndices(
-    const SelectClause& selectClause, const ResultTable& resultTable,
-    bool includeQuestionMark) const {
+    const SelectClause& selectClause, bool includeQuestionMark) const {
   ColumnIndicesAndTypes exportColumns;
 
   for (const auto& var : selectClause.getSelectedVariables()) {

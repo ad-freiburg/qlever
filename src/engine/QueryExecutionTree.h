@@ -107,7 +107,7 @@ class QueryExecutionTree {
   // `ResultType` of the i-th `selectVariable` in the `resultTable`
   ColumnIndicesAndTypes selectedVariablesToColumnIndices(
       const parsedQuery::SelectClause& selectClause,
-      const ResultTable& resultTable, bool includeQuestionMark = true) const;
+      bool includeQuestionMark = true) const;
 
   const std::vector<size_t>& resultSortedOn() const {
     return _rootOperation->getResultSortedOn();

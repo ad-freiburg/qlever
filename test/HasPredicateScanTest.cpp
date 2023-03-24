@@ -24,10 +24,13 @@ class DummyOperation : public Operation {
  public:
   DummyOperation(QueryExecutionContext* ctx) : Operation(ctx) {}
   virtual ResultTable computeResult() override {
-    result->_idTable.setNumColumns(2);
+    IdTable result{getExecutionContext()->getAllocator()};
+    result.setNumColumns(2);
     for (size_t i = 0; i < 10; i++) {
-      result->_idTable.push_back({V(10 - i), V(2 * i)});
+      result.push_back({V(10 - i), V(2 * i)});
     }
+    return {std::move(result), resultSortedOn(),
+            std::make_shared<const LocalVocab>()};
   }
 
  private:
@@ -70,8 +73,8 @@ class DummyOperation : public Operation {
 
 TEST(HasPredicateScan, freeS) {
   // Used to store the result.
-  ResultTable resultTable{makeAllocator()};
-  resultTable._idTable.setNumColumns(1);
+  IdTable idTable{makeAllocator()};
+  idTable.setNumColumns(1);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
@@ -90,9 +93,9 @@ TEST(HasPredicateScan, freeS) {
   CompactVectorOfStrings<Id> patterns(patternsSrc);
 
   // Find all entities that are in a triple with predicate 3
-  HasPredicateScan::computeFreeS(&resultTable, V(3), hasPattern, hasRelation,
+  HasPredicateScan::computeFreeS(&idTable, V(3), hasPattern, hasRelation,
                                  patterns);
-  IdTable& result = resultTable._idTable;
+  IdTable& result = idTable;
 
   // the result set does not guarantee any sorting so we have to sort manually
   std::sort(result.begin(), result.end(),
@@ -112,8 +115,8 @@ TEST(HasPredicateScan, freeS) {
 
 TEST(HasPredicateScan, freeO) {
   // Used to store the result.
-  ResultTable resultTable{makeAllocator()};
-  resultTable._idTable.setNumColumns(1);
+  IdTable result{makeAllocator()};
+  result.setNumColumns(1);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
@@ -132,9 +135,8 @@ TEST(HasPredicateScan, freeO) {
   CompactVectorOfStrings<Id> patterns(patternsSrc);
 
   // Find all predicates for entity 3 (pattern 1)
-  HasPredicateScan::computeFreeO(&resultTable, V(3), hasPattern, hasRelation,
+  HasPredicateScan::computeFreeO(&result, V(3), hasPattern, hasRelation,
                                  patterns);
-  IdTable& result = resultTable._idTable;
 
   ASSERT_EQ(5u, result.size());
   ASSERT_EQ(V(1u), result[0][0]);
@@ -143,10 +145,10 @@ TEST(HasPredicateScan, freeO) {
   ASSERT_EQ(V(2u), result[3][0]);
   ASSERT_EQ(V(0u), result[4][0]);
 
-  resultTable._idTable.clear();
+  result.clear();
 
   // Find all predicates for entity 6 (has-relation entry 6)
-  HasPredicateScan::computeFreeO(&resultTable, V(6), hasPattern, hasRelation,
+  HasPredicateScan::computeFreeO(&result, V(6), hasPattern, hasRelation,
                                  patterns);
 
   ASSERT_EQ(2u, result.size());
@@ -156,8 +158,8 @@ TEST(HasPredicateScan, freeO) {
 
 TEST(HasPredicateScan, fullScan) {
   // Used to store the result.
-  ResultTable resultTable{makeAllocator()};
-  resultTable._idTable.setNumColumns(2);
+  IdTable result{makeAllocator()};
+  result.setNumColumns(2);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
@@ -175,9 +177,8 @@ TEST(HasPredicateScan, fullScan) {
   CompactVectorOfStrings<Id> patterns(patternsSrc);
 
   // Query for all relations
-  HasPredicateScan::computeFullScan(&resultTable, hasPattern, hasRelation,
-                                    patterns, 16);
-  IdTable& result = resultTable._idTable;
+  HasPredicateScan::computeFullScan(&result, hasPattern, hasRelation, patterns,
+                                    16);
 
   ASSERT_EQ(16u, result.size());
 

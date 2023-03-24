@@ -44,6 +44,25 @@ void ResultTable::shareLocalVocabFromNonEmptyOf(
 }
 
 // _____________________________________________________________________________
+std::shared_ptr<const LocalVocab>
+ResultTable::getSharedLocalVocabFromNonEmptyOf(
+    const ResultTable& resultTable1, const ResultTable& resultTable2) {
+  const auto& localVocab1 = resultTable1.localVocab_;
+  const auto& localVocab2 = resultTable2.localVocab_;
+  if (!localVocab1->empty() && !localVocab2->empty()) {
+    throw std::runtime_error(
+        "Merging of two non-empty local vocabularies is currently not "
+        "supported, please contact the developers");
+  }
+  return localVocab2->empty() ? localVocab1 : localVocab2;
+}
+
+// _____________________________________________________________________________
 void ResultTable::getCopyOfLocalVocabFrom(const ResultTable& resultTable) {
   localVocab_ = std::make_shared<LocalVocab>(resultTable.localVocab_->clone());
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<LocalVocab> ResultTable::getCopyOfLocalVocab() const {
+  return std::make_shared<LocalVocab>(localVocab_->clone());
 }

@@ -224,7 +224,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
                         const vector<size_t>& groupByCols,
                         const vector<GroupBy::Aggregate>& aggregates,
                         IdTable* dynResult, const IdTable* inTable,
-                        IdTable* outTable, LocalVocab* outLocalVocab) const {
+                        LocalVocab* outLocalVocab) const {
   LOG(DEBUG) << "Group by input size " << dynInput.size() << std::endl;
   if (dynInput.size() == 0) {
     return;
@@ -356,7 +356,7 @@ ResultTable GroupBy::computeResult() {
 
   CALL_FIXED_SIZE((std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
                   subresult->_idTable, groupByCols, aggregates, &idTable,
-                  &(subresult->_idTable), &idTable, localVocab.get());
+                  &(subresult->_idTable), localVocab.get());
 
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};

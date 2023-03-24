@@ -96,7 +96,7 @@ class GroupBy : public Operation {
   template <int IN_WIDTH, int OUT_WIDTH>
   void doGroupBy(const IdTable& dynInput, const vector<size_t>& groupByCols,
                  const vector<GroupBy::Aggregate>& aggregates,
-                 IdTable* dynResult, const IdTable* inTable, IdTable* outTable,
+                 IdTable* dynResult, const IdTable* inTable,
                  LocalVocab* outLocalVocab) const;
 
   FRIEND_TEST(GroupByTest, doGroupBy);

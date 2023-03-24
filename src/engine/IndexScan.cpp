@@ -262,6 +262,8 @@ ResultTable IndexScan::computeResult() {
       break;
   }
   LOG(DEBUG) << "IndexScan result computation done.\n";
+
+  return {std::move(idTable), resultSortedOn(), std::make_shared<LocalVocab>()};
 }
 
 // _____________________________________________________________________________

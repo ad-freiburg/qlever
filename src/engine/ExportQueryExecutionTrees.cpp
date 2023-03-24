@@ -190,7 +190,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
   // The `false` means "Don't include the question mark in the variable names".
   // TODO<joka921> Use a strong enum, and get rid of the comment.
   QueryExecutionTree::ColumnIndicesAndTypes columns =
-      qet.selectedVariablesToColumnIndices(selectClause, *resultTable, false);
+      qet.selectedVariablesToColumnIndices(selectClause, false);
 
   std::erase(columns, std::nullopt);
 
@@ -304,7 +304,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
   AD_CORRECTNESS_CHECK(resultTable != nullptr);
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   QueryExecutionTree::ColumnIndicesAndTypes selectedColumnIndices =
-      qet.selectedVariablesToColumnIndices(selectClause, *resultTable, true);
+      qet.selectedVariablesToColumnIndices(selectClause, true);
 
   // TODO<joka921> Also add a warning to the exported result.
   if (selectedColumnIndices.empty()) {
@@ -337,7 +337,7 @@ ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary(
   LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
              << std::endl;
   auto selectedColumnIndices =
-      qet.selectedVariablesToColumnIndices(selectClause, *resultTable, true);
+      qet.selectedVariablesToColumnIndices(selectClause, true);
   // This case should only fail if we have no variables selected at all.
   // This case should be handled earlier by the parser.
   // TODO<joka921, hannahbast> What do we want to do for variables that don't

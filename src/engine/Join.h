@@ -131,7 +131,7 @@ class Join : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  void computeResultForJoinWithFullScanDummy(ResultTable* result);
+  ResultTable computeResultForJoinWithFullScanDummy();
 
   using ScanMethodType = std::function<void(Id, IdTable*)>;
 
