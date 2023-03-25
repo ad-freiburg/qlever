@@ -7,8 +7,8 @@
 #include <vector>
 #include <string>
 
-#include <util/HashMap.h>
-#include <util/Exception.h>
+#include "util/HashMap.h"
+#include "util/Exception.h"
 #include "util/json.h"
 
 /*

@@ -11,8 +11,8 @@
 #include "../benchmark/Benchmark.h"
 #include "BenchmarkMetadata.h"
 #include "util/Timer.h"
-#include <util/HashMap.h>
-#include <util/Exception.h>
+#include "util/HashMap.h"
+#include "util/Exception.h"
 #include "../benchmark/util/HashMapWithInsertionOrder.h"
 #include "../benchmark/util/TransformVector.h"
 
