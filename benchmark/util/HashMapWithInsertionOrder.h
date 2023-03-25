@@ -49,26 +49,24 @@ class KeyIsntRegisteredException : public std::exception {
 template<typename Key, typename Value>
 class HashMapWithInsertionOrder{
 
-  // The hash map.
-  ad_utility::HashMap<Key, Value> hashMap_;
+  // Holds all the values.
+  std::vector<Value> values_;
 
-  // The order of insertion.
-  std::vector<Key> insertionOrder_;
+  // Translates the key to the index of the value in `values_`.
+  ad_utility::HashMap<Key, size_t> keyToValueIndex_;
 
   public:
 
   /*
-   * @brief Add a new key, value pair to the hash map. Warning:
-   *  The value and key do NOT get copied.
+   * @brief Add a new key, value pair to the hash map.
    */
   void addEntry(const Key& key, const Value& value){
     // It is not allowed to have two entires with the same key.
-    AD_CONTRACT_CHECK(!hashMap_.contains(key));
+    AD_CONTRACT_CHECK(!keyToValueIndex_.contains(key));
 
-    // Directly insert the given value into the table and note,
-    // when it was inserted.
-    hashMap_.insert(std::make_pair(key, value));
-    insertionOrder_.push_back(key);
+    // Note the values index and add it.
+    keyToValueIndex_.insert(std::make_pair(key, values_.size()));
+    values_.push_back(value);
   }
 
   /*
@@ -77,7 +75,7 @@ class HashMapWithInsertionOrder{
    */
   Value& getReferenceToValue(const Key& key){
     try {
-      return hashMap_.at(key);
+      return values_.at(keyToValueIndex_.at(key));
     } catch (std::out_of_range const&) {
       // Instead of the the default error, when a key doesn't exist in a hash
       // map, we use our own custom one. Makes things easier to understand.
@@ -94,28 +92,9 @@ class HashMapWithInsertionOrder{
    *  hash map.
    */
   const std::vector<Value> getAllValues() const{
-    // The new vector containing the values for the keys in hashMapKeys in the
-    // same order.
-    std::vector<Value> hashMapValues;
-
-    // The end size of hashMapValues is exactly the size of insertionOrder_. So
-    // we can already allocate all memory, that it will use, making all the
-    // following calls of push_back cheap.
-    hashMapValues.reserve(insertionOrder_.size());
-
-    // Copying the values into hashMapValues.
-    std::ranges::for_each(insertionOrder_,
-        [&hashMapValues, this](const Key& key)
-        mutable{
-          // I can't use getReferenceToValue, because that function is not
-          // const.
-          hashMapValues.push_back(hashMap_.at(key));
-        },
-        {});
-
-    return hashMapValues;
+    return values_;
   }
-
+  
   // Functions for json serialization.
   void to_json(nlohmann::json& j) const{
     // Making sure, that j is an array.
@@ -123,9 +102,9 @@ class HashMapWithInsertionOrder{
 
     // Adding key value pairs to the json object in the form of arrays
     // `[key, value]`.
-    std::ranges::for_each(insertionOrder_,
-        [&j, this](const Key& key){
-          j.push_back({key, hashMap_.at(key)});
+    std::ranges::for_each(keyToValueIndex_,
+        [&j, this](const auto& keyValuePair){
+          j.push_back({keyValuePair.first, values_.at(keyValuePair.second)});
         }, {});
   }
 
