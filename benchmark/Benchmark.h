@@ -116,7 +116,7 @@ class BenchmarkRecords {
 
     /*
      * @brief Measures the time needed for the execution of the given function and
-     * saves it, together with a description, in a normal list.
+     * saves it, together with a description, as a single measurement.
      *
      * @tparam Function Best left to type inference.
      *
@@ -297,9 +297,17 @@ class BenchmarkClassInterface{
     return;
   };
 
-  // Sometimes, there is some overrarching metadata, that you don't want to set
-  // for every single little thing, because it's always the same. You can give
-  // those here.
+  /*
+  For the general metadata of a class. Mostly information, that is the same
+  for every benchmark, so that every entry of the `BenchmarkRecords` doesn't
+  repeat the same thing over and over again.
+  For example: Let's say, you are measuring the same benchmarks for different
+  versions of an algorithm. You could add the metadata information, which
+  version it is, to every `RecordGroup`, `RecordTable`, etc., but that is a bit
+  clunky. Instead, you make one `BenchmarkClassInterface` instance for every
+  version and simply return which version you are using as metadata through
+  `getMetadata`.
+  */
   virtual const BenchmarkMetadata getMetadata() const{
     // Default behaviour.
     return BenchmarkMetadata{};
