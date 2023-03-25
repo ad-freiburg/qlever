@@ -44,7 +44,7 @@ class BM_SingeMeasurements: public BenchmarkClassInterface{
         });
 
     // Adding some basic metadata.
-    records.getReferenceToMetadataOfSingleMeasurment(
+    records.getMetadataOfSingleMeasurment(
         "Recursivly exponentiate multiple times").addKeyValuePair(
           "Amount of exponentiations", 10'000'000'000);
 
@@ -101,22 +101,22 @@ class BM_Groups: public BenchmarkClassInterface{
         [&](){loopMultiply(10775, 24502);});
 
     // Adding some metadata.
-    records.getReferenceToMetadataOfGroup("loopAdd").addKeyValuePair(
+    records.getMetadataOfGroup("loopAdd").addKeyValuePair(
         "Operator", '+');
-    records.getReferenceToMetadataOfGroupMember("loopAdd",
+    records.getMetadataOfGroupMember("loopAdd",
         "1+1").addKeyValuePair("Result", 2);
-    records.getReferenceToMetadataOfGroupMember("loopAdd",
+    records.getMetadataOfGroupMember("loopAdd",
         "42+69").addKeyValuePair("Result", 42+69);
-    records.getReferenceToMetadataOfGroupMember("loopAdd",
+    records.getMetadataOfGroupMember("loopAdd",
         "10775+24502").addKeyValuePair("Result", 10775+24502);
 
-    records.getReferenceToMetadataOfGroup("loopMultiply").addKeyValuePair(
+    records.getMetadataOfGroup("loopMultiply").addKeyValuePair(
         "Operator", '*');
-    records.getReferenceToMetadataOfGroupMember("loopMultiply",
+    records.getMetadataOfGroupMember("loopMultiply",
         "1*1").addKeyValuePair("Result", 1);
-    records.getReferenceToMetadataOfGroupMember("loopMultiply",
+    records.getMetadataOfGroupMember("loopMultiply",
         "42*69").addKeyValuePair("Result", 42*69);
-    records.getReferenceToMetadataOfGroupMember("loopMultiply",
+    records.getMetadataOfGroupMember("loopMultiply",
         "10775*24502").addKeyValuePair("Result", 10775*24502);
     
     return records;
@@ -192,7 +192,7 @@ class BM_Tables: public BenchmarkClassInterface{
         std::string{"1024+2048 and 2048+2048"});
 
     // Adding some metadata.
-    records.getReferenceToMetadataOfTable("Adding exponents").addKeyValuePair(
+    records.getMetadataOfTable("Adding exponents").addKeyValuePair(
         "Manually set fields", "Row 2");
     
     return records;

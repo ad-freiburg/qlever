@@ -79,7 +79,7 @@ class HashMapWithInsertionOrder{
    * @brief Return a reference to the value of the key, value pair. Creates an
    *  exception, if there is no entry with key.
    */
-  Value& getReferenceToValue(const Key& key){
+  Value& getValue(const Key& key){
     try {
       return values_.at(keyToValueIndex_.at(key));
     } catch (std::out_of_range const&) {

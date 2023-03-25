@@ -21,7 +21,7 @@ auto BenchmarkRecords::getHashMapTableEntry(const std::string& tableDescriptor,
   // Adding more details to a possible exception.
   try {
     // Get the entry of the hash map.
-    auto& table = recordTables_.getReferenceToValue(tableDescriptor);
+    auto& table = recordTables_.getValue(tableDescriptor);
 
     // Are the given row and column number inside the table range?
     // size_t is unsigned, so we only need to check, that they are not to big.
@@ -126,38 +126,38 @@ auto BenchmarkRecords::getTables() const -> const std::vector<RecordTable> {
  * @param key The identifier for the hMap.
  */
 template<typename Value>
-static BenchmarkMetadata& getReferenceToMetadataOfObjectInHashMapWithInsertionOrder(
+static BenchmarkMetadata& getMetadataOfObjectInHashMapWithInsertionOrder(
     HashMapWithInsertionOrder<std::string, Value>& hMap,
     const std::string& key){
-  return hMap.getReferenceToValue(key).metadata_;
+  return hMap.getValue(key).metadata_;
 }
 
 // ____________________________________________________________________________
-BenchmarkMetadata& BenchmarkRecords::getReferenceToMetadataOfSingleMeasurment(
+BenchmarkMetadata& BenchmarkRecords::getMetadataOfSingleMeasurment(
         const std::string& descriptor) {
-  return getReferenceToMetadataOfObjectInHashMapWithInsertionOrder(
+  return getMetadataOfObjectInHashMapWithInsertionOrder(
       singleMeasurements_, descriptor);
 }
 
 // ____________________________________________________________________________
-BenchmarkMetadata& BenchmarkRecords::getReferenceToMetadataOfGroup(
+BenchmarkMetadata& BenchmarkRecords::getMetadataOfGroup(
         const std::string& descriptor) {
-  return getReferenceToMetadataOfObjectInHashMapWithInsertionOrder(
+  return getMetadataOfObjectInHashMapWithInsertionOrder(
       recordGroups_, descriptor);
 }
 
 // ____________________________________________________________________________
-BenchmarkMetadata& BenchmarkRecords::getReferenceToMetadataOfGroupMember(
+BenchmarkMetadata& BenchmarkRecords::getMetadataOfGroupMember(
         const std::string& groupDescriptor,
         const std::string& groupMemberDescriptor){
-  return getReferenceToMetadataOfObjectInHashMapWithInsertionOrder(
-      recordGroups_.getReferenceToValue(groupDescriptor).entries_,
+  return getMetadataOfObjectInHashMapWithInsertionOrder(
+      recordGroups_.getValue(groupDescriptor).entries_,
       groupMemberDescriptor);
 }
 
 // ____________________________________________________________________________
-BenchmarkMetadata& BenchmarkRecords::getReferenceToMetadataOfTable(
+BenchmarkMetadata& BenchmarkRecords::getMetadataOfTable(
         const std::string& descriptor) {
-  return getReferenceToMetadataOfObjectInHashMapWithInsertionOrder(
+  return getMetadataOfObjectInHashMapWithInsertionOrder(
       recordTables_, descriptor);
 }

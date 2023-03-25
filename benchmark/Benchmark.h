@@ -167,7 +167,7 @@ class BenchmarkRecords {
       // Adding more details to a possible exception.
       try {
         // Get the entry of the hash map and add to it.
-        auto& groupEntry = recordGroups_.getReferenceToValue(groupDescriptor);
+        auto& groupEntry = recordGroups_.getValue(groupDescriptor);
         groupEntry.entries_.addEntry(std::string(descriptor),
             RecordEntry{descriptor, measureTimeOfFunction(functionToMeasure), {}});
       } catch(KeyIsntRegisteredException const&) {
@@ -271,14 +271,14 @@ class BenchmarkRecords {
 
     // For access to the metadata of measurements. So that people can set them,
     // add to them, whatever.
-    BenchmarkMetadata& getReferenceToMetadataOfSingleMeasurment(
+    BenchmarkMetadata& getMetadataOfSingleMeasurment(
         const std::string& descriptor);
-    BenchmarkMetadata& getReferenceToMetadataOfGroup(
+    BenchmarkMetadata& getMetadataOfGroup(
         const std::string& descriptor);
-    BenchmarkMetadata& getReferenceToMetadataOfGroupMember(
+    BenchmarkMetadata& getMetadataOfGroupMember(
         const std::string& groupDescriptor,
         const std::string& groupMemberDescriptor);
-    BenchmarkMetadata& getReferenceToMetadataOfTable(
+    BenchmarkMetadata& getMetadataOfTable(
         const std::string& descriptor);
 };
 
