@@ -99,8 +99,6 @@ class BenchmarkRecords {
     float measureTimeOfFunction(const Function& functionToMeasure) const{
       ad_utility::timer::Timer
       benchmarkTimer(ad_utility::timer::Timer::Started);
-         
-      benchmarkTimer.start();
       functionToMeasure();
       benchmarkTimer.stop();
 
