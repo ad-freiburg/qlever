@@ -16,6 +16,28 @@
 #include "../benchmark/util/HashMapWithInsertionOrder.h"
 #include "../benchmark/util/TransformVector.h"
 
+auto BenchmarkRecords::getHashMapTableEntry(const std::string& tableDescriptor,
+    const size_t row, const size_t column) -> RecordTable::EntryType&{
+  // Adding more details to a possible exception.
+  try {
+    // Get the entry of the hash map.
+    auto& table = recordTables_.getReferenceToValue(tableDescriptor);
+
+    // Are the given row and column number inside the table range?
+    // size_t is unsigned, so we only need to check, that they are not to big.
+    AD_CONTRACT_CHECK(row < table.rowNames_.size() &&
+        column < table.columnNames_.size());
+    
+    // Return  the reference to the table entry.
+    return table.entries_[row][column];
+  } catch(KeyIsntRegisteredException const&) {
+    // The exception INSIDE the object, do not know, what they object is
+    // called, but that information is helpful for the exception. So we
+    // do it here.
+    throw KeyIsntRegisteredException(tableDescriptor, "recordTables_");
+  }
+}
+
 // ____________________________________________________________________________
 auto BenchmarkRegister::getRegister() -> std::vector<BenchmarkPointer>& {
     static std::vector<BenchmarkRegister::BenchmarkPointer>
