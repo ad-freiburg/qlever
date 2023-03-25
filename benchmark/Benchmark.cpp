@@ -40,20 +40,19 @@ auto BenchmarkRecords::getHashMapTableEntry(const std::string& tableDescriptor,
 
 // ____________________________________________________________________________
 auto BenchmarkRegister::getRegister() -> std::vector<BenchmarkPointer>& {
-    static std::vector<BenchmarkRegister::BenchmarkPointer>
-    registeredBenchmarkClassInstances;
-    return registeredBenchmarkClassInstances;
+    static std::vector<BenchmarkPointer> registeredBenchmarks;
+    return registeredBenchmarks;
 }
 
 // ____________________________________________________________________________
 void BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(
     const BenchmarkConfiguration& config){
-    for(BenchmarkRegister::BenchmarkPointer& instance:
-    BenchmarkRegister::getRegister()){
+    for(BenchmarkPointer& instance: getRegister()){
         instance->parseConfiguration(config);
     }
 }
 
+// ____________________________________________________________________________
 const std::vector<BenchmarkMetadata> BenchmarkRegister::getAllGeneralMetadata(){
     // Go through every registered instance of a benchmark class and collect
     // their general metadata.
