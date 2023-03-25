@@ -56,7 +56,7 @@ class BenchmarkRecords {
       std::vector<std::string> rowNames_;
       std::vector<std::string> columnNames_;
       // The entries in the table. Access is [row, column]. Can be the time in
-      // seconds, or a string.
+      // seconds, a string, or nothing.
       using EntryType = std::variant<std::monostate, float, std::string>;
       std::vector<std::vector<EntryType>> entries_;
       BenchmarkMetadata metadata_;
