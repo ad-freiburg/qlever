@@ -41,6 +41,12 @@ class KeyIsntRegisteredException : public std::exception {
     }
 };
 
+// Forward declarations needed for making the function a friend of the class.
+template<typename Key, typename Value>
+class HashMapWithInsertionOrder;
+template<typename Key, typename Value>
+void to_json(nlohmann::json& j, const HashMapWithInsertionOrder<Key, Value>& hMap);
+
 /*
  * @brief A basic hash map, that saves the order of inserted elements.
  *
@@ -94,47 +100,39 @@ class HashMapWithInsertionOrder{
   const std::vector<Value> getAllValues() const{
     return values_;
   }
-  
-  // Functions for json serialization.
-  void to_json(nlohmann::json& j) const{
-    // Making sure, that j is an array.
-    j = nlohmann::json::array();
 
-    // Adding key value pairs to the json object in the form of arrays
-    // `[key, value]`.
-    std::ranges::for_each(keyToValueIndex_,
-        [&j, this](const auto& keyValuePair){
-          j.push_back({keyValuePair.first, values_.at(keyValuePair.second)});
-        }, {});
-  }
-
-  // Functions for json deserialization.
-  void from_json(const nlohmann::json& j){
-    // Nothing to do, if there are no values.
-    if (!j.empty()){
-      // Adding all the key value pairs. Every entry in the json array should be
-      // an array of the form `[key, value]`.
-      std::ranges::for_each(j, [this](const auto& arrayEntry){
-            addEntry(arrayEntry.at(0).template get<Key>(),
-              arrayEntry.at(1).template get<Value>());
-          }, {});
-    }
-  }
+  // We want this class to be serialized in a specific way, but for that,
+  // the json serialization function needs access to private member values.
+  friend void to_json<Key, Value>(nlohmann::json& j,
+    const HashMapWithInsertionOrder<Key, Value>& hMap);
 };
 
 
-// Functions for json (d)serialization. These just call the required member
-// functions of the HashMapWithInsertionOrder. I would remove them, but they
-// have to be in the same namespace, so...
-
+// Functions for json (d)serialization.
 template<typename Key, typename Value>
-void to_json(nlohmann::json& j, const HashMapWithInsertionOrder<Key, Value>& HMap){
-  HMap.to_json(j);
+void to_json(nlohmann::json& j, const HashMapWithInsertionOrder<Key, Value>& hMap){
+  // Making sure, that j is an array.
+  j = nlohmann::json::array();
+
+  // Adding key value pairs to the json object in the form of arrays
+  // `[key, value]`.
+  std::ranges::for_each(hMap.keyToValueIndex_,
+      [&j, &hMap](const auto& keyValuePair){
+        j.push_back({keyValuePair.first, hMap.values_.at(keyValuePair.second)});
+      }, {});
 }
 
 template<typename Key, typename Value>
 void from_json(const nlohmann::json& j,
-    HashMapWithInsertionOrder<Key, Value>& HMap){
-  HMap.from_json(j);
+    HashMapWithInsertionOrder<Key, Value>& hMap){
+  // Nothing to do, if there are no values.
+  if (!j.empty()){
+    // Adding all the key value pairs. Every entry in the json array should be
+    // an array of the form `[key, value]`.
+    std::ranges::for_each(j, [&hMap](const auto& arrayEntry)mutable{
+          hMap.addEntry(arrayEntry.at(0).template get<Key>(),
+            arrayEntry.at(1).template get<Value>());
+        }, {});
+  }
 }
 
