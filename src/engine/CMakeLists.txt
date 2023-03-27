@@ -42,4 +42,3 @@ add_library(engine
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp )
 
 qlever_target_link_libraries(engine index parser sparqlExpressions http SortPerformanceEstimator ${ICU_LIBRARIES} boost_iostreams)
-qlever_target_link_libraries(engine)
