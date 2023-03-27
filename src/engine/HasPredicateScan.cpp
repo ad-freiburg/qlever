@@ -244,11 +244,11 @@ ResultTable HasPredicateScan::computeResult() {
 
       std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
       localVocab = subresult->getSharedLocalVocab();
-      int inWidth = subresult->_idTable.numColumns();
+      int inWidth = subresult->idTable().numColumns();
       int outWidth = idTable.numColumns();
       CALL_FIXED_SIZE((std::array{inWidth, outWidth}),
                       HasPredicateScan::computeSubqueryS, &idTable,
-                      subresult->_idTable, _subtreeJoinColumn, hasPattern,
+                      subresult->idTable(), _subtreeJoinColumn, hasPattern,
                       hasPredicate, patterns);
       break;
   }

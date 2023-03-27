@@ -136,12 +136,12 @@ ResultTable Join::computeResult() {
 
   idTable.setNumColumns(leftWidth + rightWidth - 1);
 
-  int lwidth = leftRes->_idTable.numColumns();
-  int rwidth = rightRes->_idTable.numColumns();
+  int lwidth = leftRes->idTable().numColumns();
+  int rwidth = rightRes->idTable().numColumns();
   int reswidth = idTable.numColumns();
 
   CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::join, this,
-                  leftRes->_idTable, _leftJoinCol, rightRes->_idTable,
+                  leftRes->idTable(), _leftJoinCol, rightRes->idTable(),
                   _rightJoinCol, &idTable);
 
   LOG(DEBUG) << "Join result computation done" << endl;
@@ -261,7 +261,7 @@ ResultTable Join::computeResultForJoinWithFullScanDummy() {
 
   shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
 
-  doComputeJoinWithFullScanDummyRight(nonDummyRes->_idTable, &idTable);
+  doComputeJoinWithFullScanDummyRight(nonDummyRes->idTable(), &idTable);
   LOG(DEBUG) << "Join (with dummy) done. Size: " << idTable.size() << endl;
   return {std::move(idTable), resultSortedOn(),
           nonDummyRes->getSharedLocalVocab()};

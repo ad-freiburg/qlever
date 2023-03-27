@@ -97,7 +97,7 @@ ResultTable Bind::computeResult() {
   // added. Same for GROUP BY.
   auto localVocab = subRes->getCopyOfLocalVocab();
 
-  int inwidth = subRes->_idTable.numColumns();
+  int inwidth = subRes->idTable().numColumns();
   int outwidth = getResultWidth();
 
   CALL_FIXED_SIZE((std::array{inwidth, outwidth}), &Bind::computeExpressionBind,
@@ -116,13 +116,13 @@ void Bind::computeExpressionBind(
     sparqlExpression::SparqlExpression* expression) const {
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),
-      inputResultTable._idTable, getExecutionContext()->getAllocator(),
+      inputResultTable.idTable(), getExecutionContext()->getAllocator(),
       inputResultTable.localVocab());
 
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);
 
-  const auto input = inputResultTable._idTable.asStaticView<IN_WIDTH>();
+  const auto input = inputResultTable.idTable().asStaticView<IN_WIDTH>();
   auto output = std::move(*outputIdTable).toStatic<OUT_WIDTH>();
 
   // first initialize the first columns (they remain identical)

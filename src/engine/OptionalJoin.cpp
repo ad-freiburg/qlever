@@ -93,12 +93,12 @@ ResultTable OptionalJoin::computeResult() {
   LOG(DEBUG) << "Left side optional: " << _leftOptional
              << " right side optional: " << _rightOptional << endl;
 
-  int leftWidth = leftResult->_idTable.numColumns();
-  int rightWidth = rightResult->_idTable.numColumns();
+  int leftWidth = leftResult->idTable().numColumns();
+  int rightWidth = rightResult->idTable().numColumns();
   int resWidth = idTable.numColumns();
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, resWidth}),
-                  &OptionalJoin::optionalJoin, leftResult->_idTable,
-                  rightResult->_idTable, _leftOptional, _rightOptional,
+                  &OptionalJoin::optionalJoin, leftResult->idTable(),
+                  rightResult->idTable(), _leftOptional, _rightOptional,
                   _joinColumns, &idTable);
 
   LOG(DEBUG) << "OptionalJoin result computation done." << endl;

@@ -86,13 +86,13 @@ ResultTable TextOperationWithFilter::computeResult() {
   idTable.setNumColumns(getResultWidth());
   shared_ptr<const ResultTable> filterResult = _filterResult->getResult();
 
-  if (filterResult->_idTable.numColumns() == 1) {
+  if (filterResult->idTable().numColumns() == 1) {
     getExecutionContext()->getIndex().getFilteredECListForWordsWidthOne(
-        _words, filterResult->_idTable, getNofVars(), _textLimit, &idTable);
+        _words, filterResult->idTable(), getNofVars(), _textLimit, &idTable);
   } else {
     getExecutionContext()->getIndex().getFilteredECListForWords(
-        _words, filterResult->_idTable, _filterColumn, getNofVars(), _textLimit,
-        &idTable);
+        _words, filterResult->idTable(), _filterColumn, getNofVars(),
+        _textLimit, &idTable);
   }
 
   LOG(DEBUG) << "TextOperationWithFilter result computation done." << endl;

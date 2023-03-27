@@ -725,7 +725,7 @@ TEST(GroupBy, GroupedVariableInExpressions) {
                   {std::move(alias1), std::move(alias2)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->_idTable;
+  const auto& table = result->idTable();
 
   // Check the result.
   auto d = DoubleId;
@@ -784,7 +784,7 @@ TEST(GroupBy, AliasResultReused) {
                   {std::move(alias1), std::move(alias2)},
                   std::move(values)};
   auto result = groupBy.getResult();
-  const auto& table = result->_idTable;
+  const auto& table = result->idTable();
 
   // Check the result.
   auto d = DoubleId;
@@ -822,7 +822,7 @@ TEST(GroupBy, AddedHavingRows) {
       {Variable{"?_QLever_internal_variable_0"}, 2}};
   EXPECT_THAT(tree.getVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
-  const auto& table = res->_idTable;
+  const auto& table = res->idTable();
   auto i = IntId;
   auto expected = makeIdTableFromIdVector({{i(0), i(3), i(1)}});
   EXPECT_EQ(table, expected);

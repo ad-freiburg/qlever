@@ -58,10 +58,10 @@ ResultTable Minus::computeResult() {
   LOG(DEBUG) << "Computing minus of results of size " << leftResult->size()
              << " and " << rightResult->size() << endl;
 
-  int leftWidth = leftResult->_idTable.numColumns();
-  int rightWidth = rightResult->_idTable.numColumns();
+  int leftWidth = leftResult->idTable().numColumns();
+  int rightWidth = rightResult->idTable().numColumns();
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth}), &Minus::computeMinus,
-                  this, leftResult->_idTable, rightResult->_idTable,
+                  this, leftResult->idTable(), rightResult->idTable(),
                   _matchedColumns, &idTable);
 
   LOG(DEBUG) << "Minus result computation done" << endl;

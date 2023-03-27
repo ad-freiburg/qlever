@@ -51,7 +51,7 @@ ResultTable Filter::computeResult() {
   LOG(DEBUG) << "Filter result computation..." << endl;
 
   IdTable idTable{getExecutionContext()->getAllocator()};
-  idTable.setNumColumns(subRes->_idTable.numColumns());
+  idTable.setNumColumns(subRes->idTable().numColumns());
 
   int width = idTable.numColumns();
   CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this, &idTable, *subRes);
@@ -66,17 +66,17 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
                                const ResultTable& inputResultTable) {
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),
-      inputResultTable._idTable, getExecutionContext()->getAllocator(),
+      inputResultTable.idTable(), getExecutionContext()->getAllocator(),
       inputResultTable.localVocab());
 
   // TODO<joka921> This should be a mandatory argument to the EvaluationContext
   // constructor.
-  evaluationContext._columnsByWhichResultIsSorted = inputResultTable._sortedBy;
+  evaluationContext._columnsByWhichResultIsSorted = inputResultTable.sortedBy();
 
   sparqlExpression::ExpressionResult expressionResult =
       _expression.getPimpl()->evaluate(&evaluationContext);
 
-  const auto input = inputResultTable._idTable.asStaticView<WIDTH>();
+  const auto input = inputResultTable.idTable().asStaticView<WIDTH>();
   auto output = std::move(*outputIdTable).toStatic<WIDTH>();
 
   auto visitor =

@@ -135,8 +135,8 @@ ResultTable CountAvailablePredicates::computeResult() {
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
 
-    int width = subresult->_idTable.numColumns();
-    CALL_FIXED_SIZE(width, &computePatternTrick, subresult->_idTable, &idTable,
+    int width = subresult->idTable().numColumns();
+    CALL_FIXED_SIZE(width, &computePatternTrick, subresult->idTable(), &idTable,
                     hasPattern, hasPredicate, patterns, _subjectColumnIndex,
                     &runtimeInfo);
     return {std::move(idTable), resultSortedOn(),

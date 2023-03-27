@@ -86,7 +86,7 @@ ResultTable OrderBy::computeResult() {
   }
 
   LOG(DEBUG) << "OrderBy result computation..." << endl;
-  IdTable idTable = subRes->_idTable.clone();
+  IdTable idTable = subRes->idTable().clone();
 
   int width = idTable.numColumns();
 

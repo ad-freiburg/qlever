@@ -16,7 +16,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
   // TODO<C++20, Clang16> Use views to create an abstraction for the repeated
   // `upperBound` code.
   size_t upperBound = std::min<size_t>(
-      limitAndOffset._limit + limitAndOffset._offset, res->_idTable.size());
+      limitAndOffset._limit + limitAndOffset._offset, res->idTable().size());
   for (size_t i = limitAndOffset._offset; i < upperBound; i++) {
     ConstructQueryExportContext context{i, *res, qet.getVariableColumns(),
                                         qet.getQec()->getIndex()};
@@ -91,7 +91,7 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
     const QueryExecutionTree::ColumnIndicesAndTypes& columns,
     std::shared_ptr<const ResultTable> resultTable) {
   AD_CORRECTNESS_CHECK(resultTable != nullptr);
-  const IdTable& data = resultTable->_idTable;
+  const IdTable& data = resultTable->idTable();
   nlohmann::json json = nlohmann::json::array();
 
   const auto limit = limitAndOffset._limit;
@@ -194,7 +194,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
 
   std::erase(columns, std::nullopt);
 
-  const IdTable& idTable = resultTable->_idTable;
+  const IdTable& idTable = resultTable->idTable();
 
   json result;
   std::vector<std::string> selectedVars =
@@ -344,7 +344,7 @@ ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary(
   // appear in the query body?
   AD_CONTRACT_CHECK(!selectedColumnIndices.empty());
 
-  const auto& idTable = resultTable->_idTable;
+  const auto& idTable = resultTable->idTable();
   // TODO<C++20/Clang16> There are a lot of redundant computations of
   // `upperBound` in this file. Those can be abstracted away using
   // `std::views::iota`: `for (auto i : getRangeFromLimitOffset(limitAndOffset,

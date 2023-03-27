@@ -87,12 +87,12 @@ ResultTable MultiColumnJoin::computeResult() {
   LOG(DEBUG) << "Computing a multi column join between results of size "
              << leftResult->size() << " and " << rightResult->size() << endl;
 
-  int leftWidth = leftResult->_idTable.numColumns();
-  int rightWidth = rightResult->_idTable.numColumns();
+  int leftWidth = leftResult->idTable().numColumns();
+  int rightWidth = rightResult->idTable().numColumns();
   int resWidth = idTable.numColumns();
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, resWidth}),
                   &MultiColumnJoin::computeMultiColumnJoin,
-                  leftResult->_idTable, rightResult->_idTable, _joinColumns,
+                  leftResult->idTable(), rightResult->idTable(), _joinColumns,
                   &idTable);
 
   LOG(DEBUG) << "MultiColumnJoin result computation done" << endl;

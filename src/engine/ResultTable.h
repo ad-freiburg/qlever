@@ -40,11 +40,7 @@ class ResultTable {
   // The status of the result.
   enum Status { IN_PROGRESS = 0, FINISHED = 1, ABORTED = 2 };
 
- public:
-  // TODO: I think that none of these member variables should be public. They
-  // probably are for historical reasons. I already added a `localVocab`
-  // method.
-
+ private:
   // The actual entries.
   IdTable _idTable;
 
@@ -52,17 +48,11 @@ class ResultTable {
   // Empty if the result is not sorted on any column.
   vector<size_t> _sortedBy;
 
- private:
   // The local vocabulary of the result.
   std::shared_ptr<const LocalVocab> localVocab_ =
       std::make_shared<const LocalVocab>();
 
  public:
-  // Construct with given allocator.
-  /*
-  explicit ResultTable(ad_utility::AllocatorWithLimit<Id> allocator)
-      : _idTable(std::move(allocator)) {}
-      */
   ResultTable(IdTable idTable, vector<size_t> sortedBy,
               std::shared_ptr<const LocalVocab> localVocab)
       : _idTable{std::move(idTable)},
@@ -117,6 +107,10 @@ class ResultTable {
   // Variable::evaluate (idToStringAndType)
   //
   const LocalVocab& localVocab() const { return *localVocab_; }
+
+  const IdTable& idTable() const { return _idTable; }
+
+  const std::vector<size_t>& sortedBy() const { return _sortedBy; }
 
   // Log the size of this result. We call this at several places in
   // `Server::processQuery`. Ideally, this should only be called in one

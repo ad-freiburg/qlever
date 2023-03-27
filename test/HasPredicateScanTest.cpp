@@ -259,7 +259,7 @@ TEST(HasPredicateScan, subtreeS) {
   int out_width = 3;
   CALL_FIXED_SIZE((std::array{in_width, out_width}),
                   HasPredicateScan::computeSubqueryS, &result,
-                  subresult->_idTable, 1, hasPattern, hasRelation, patterns);
+                  subresult->idTable(), 1, hasPattern, hasRelation, patterns);
 
   // the sum of the count of every second entities relations
   ASSERT_EQ(10u, result.size());

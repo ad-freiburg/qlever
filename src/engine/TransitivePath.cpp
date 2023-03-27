@@ -673,28 +673,28 @@ ResultTable TransitivePath::computeResult() {
 
   idTable.setNumColumns(getResultWidth());
 
-  int subWidth = subRes->_idTable.numColumns();
+  int subWidth = subRes->idTable().numColumns();
   if (_leftSideTree != nullptr) {
     shared_ptr<const ResultTable> leftRes = _leftSideTree->getResult();
-    int leftWidth = leftRes->_idTable.numColumns();
+    int leftWidth = leftRes->idTable().numColumns();
     CALL_FIXED_SIZE(
         (std::array{subWidth, leftWidth, static_cast<int>(_resultWidth)}),
         &TransitivePath::computeTransitivePathLeftBound, this, &idTable,
-        subRes->_idTable, leftRes->_idTable, _leftSideCol, _rightIsVar,
+        subRes->idTable(), leftRes->idTable(), _leftSideCol, _rightIsVar,
         _leftSubCol, _rightSubCol, _rightValue, _minDist, _maxDist,
         _resultWidth);
   } else if (_rightSideTree != nullptr) {
     shared_ptr<const ResultTable> rightRes = _rightSideTree->getResult();
-    int rightWidth = rightRes->_idTable.numColumns();
+    int rightWidth = rightRes->idTable().numColumns();
     CALL_FIXED_SIZE(
         (std::array{subWidth, rightWidth, static_cast<int>(_resultWidth)}),
         &TransitivePath::computeTransitivePathRightBound, this, &idTable,
-        subRes->_idTable, rightRes->_idTable, _rightSideCol, _leftIsVar,
+        subRes->idTable(), rightRes->idTable(), _rightSideCol, _leftIsVar,
         _leftSubCol, _rightSubCol, _leftValue, _minDist, _maxDist,
         _resultWidth);
   } else {
     CALL_FIXED_SIZE(subWidth, &TransitivePath::computeTransitivePath, this,
-                    &idTable, subRes->_idTable, _leftIsVar, _rightIsVar,
+                    &idTable, subRes->idTable(), _leftIsVar, _rightIsVar,
                     _leftSubCol, _rightSubCol, _leftValue, _rightValue,
                     _minDist, _maxDist);
   }

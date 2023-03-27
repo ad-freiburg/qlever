@@ -45,9 +45,9 @@ ResultTable Distinct::computeResult() {
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
 
   LOG(DEBUG) << "Distinct result computation..." << endl;
-  idTable.setNumColumns(subRes->_idTable.numColumns());
-  int width = subRes->_idTable.numColumns();
-  CALL_FIXED_SIZE(width, &Engine::distinct, subRes->_idTable, _keepIndices,
+  idTable.setNumColumns(subRes->idTable().numColumns());
+  int width = subRes->idTable().numColumns();
+  CALL_FIXED_SIZE(width, &Engine::distinct, subRes->idTable(), _keepIndices,
                   &idTable);
   LOG(DEBUG) << "Distinct result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};

@@ -150,13 +150,13 @@ ResultTable Union::computeResult() {
   IdTable idTable{getExecutionContext()->getAllocator()};
 
   idTable.setNumColumns(getResultWidth());
-  int leftWidth = subRes1->_idTable.numColumns();
-  int rightWidth = subRes2->_idTable.numColumns();
+  int leftWidth = subRes1->idTable().numColumns();
+  int rightWidth = subRes2->idTable().numColumns();
   int outWidth = idTable.numColumns();
 
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, outWidth}),
-                  &Union::computeUnion, this, &idTable, subRes1->_idTable,
-                  subRes2->_idTable, _columnOrigins);
+                  &Union::computeUnion, this, &idTable, subRes1->idTable(),
+                  subRes2->idTable(), _columnOrigins);
 
   LOG(DEBUG) << "Union result computation done" << std::endl;
   // If only one of the two operands has a non-empty local vocabulary, share

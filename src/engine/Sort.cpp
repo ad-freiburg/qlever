@@ -129,7 +129,7 @@ ResultTable Sort::computeResult() {
   }
 
   LOG(DEBUG) << "Sort result computation..." << endl;
-  IdTable idTable = subRes->_idTable.clone();
+  IdTable idTable = subRes->idTable().clone();
   sortImpl(idTable, sortColumnIndices_);
 
   LOG(DEBUG) << "Sort result computation done." << endl;

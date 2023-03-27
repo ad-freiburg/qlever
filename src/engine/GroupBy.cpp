@@ -351,12 +351,12 @@ ResultTable GroupBy::computeResult() {
     groupByCols.push_back(subtreeVarCols.at(var));
   }
 
-  int inWidth = subresult->_idTable.numColumns();
+  int inWidth = subresult->idTable().numColumns();
   int outWidth = idTable.numColumns();
 
   CALL_FIXED_SIZE((std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
-                  subresult->_idTable, groupByCols, aggregates, &idTable,
-                  &(subresult->_idTable), localVocab.get());
+                  subresult->idTable(), groupByCols, aggregates, &idTable,
+                  &(subresult->idTable()), localVocab.get());
 
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
@@ -619,7 +619,7 @@ bool GroupBy::computeGroupByForJoinWithFullScan(IdTable* result) {
       {subtree.getRootOperation()->getRuntimeInfo(),
        threeVarSubtree.getRootOperation()->getRuntimeInfo()});
   result->setNumColumns(2);
-  if (subresult->_idTable.size() == 0) {
+  if (subresult->idTable().size() == 0) {
     return true;
   }
 
@@ -631,7 +631,7 @@ bool GroupBy::computeGroupByForJoinWithFullScan(IdTable* result) {
   // iterators.
 
   // Take care of duplicate values in the input.
-  Id currentId = subresult->_idTable(0, columnIndex);
+  Id currentId = subresult->idTable()(0, columnIndex);
   size_t currentCount = 0;
   size_t currentCardinality = index.getCardinality(currentId, permutation);
 
@@ -646,8 +646,8 @@ bool GroupBy::computeGroupByForJoinWithFullScan(IdTable* result) {
       idTable.push_back({currentId, Id::makeFromInt(currentCount)});
     }
   };
-  for (size_t i = 0; i < subresult->_idTable.size(); ++i) {
-    auto id = subresult->_idTable(i, columnIndex);
+  for (size_t i = 0; i < subresult->idTable().size(); ++i) {
+    auto id = subresult->idTable()(i, columnIndex);
     if (id != currentId) {
       pushRow();
       currentId = id;
