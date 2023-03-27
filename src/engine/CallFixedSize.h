@@ -9,7 +9,6 @@
 
 #include "global/Constants.h"
 #include "util/ConstexprUtils.h"
-#include "util/DisableWarningsClang13.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 
@@ -72,9 +71,7 @@ auto callLambdaForIntArray(std::array<Int, NumValues> array, auto&& lambda, auto
   // Lambda: If the compile time parameter `I` and the runtime parameter `array`
   // are equal, then call the `lambda` with `I` as a template parameter and
   // store the result in `result` (unless it is `void`).
-  DISABLE_WARNINGS_CLANG_13
   auto applyIf = [&]<ArrayType Array>() mutable {
-    ENABLE_WARNINGS_CLANG_13
     if (array == Array) {
       if constexpr (resultIsVoid) {
         applyOnIntegerSequence(ad_utility::toIntegerSequence<Array>());
