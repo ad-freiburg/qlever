@@ -13,7 +13,6 @@
 #include "global/Id.h"
 #include "util/Log.h"
 
-using std::condition_variable;
 using std::vector;
 
 // The result of an `Operation`. This is the class QLever uses for all
@@ -30,7 +29,7 @@ class ResultTable {
 
   // The column indices by which the result is sorted (primary sort key first).
   // Empty if the result is not sorted on any column.
-  vector<size_t> _sortedBy;
+  std::vector<size_t> _sortedBy;
 
   // The local vocabulary of the result.
   std::shared_ptr<const LocalVocab> localVocab_ =
@@ -43,7 +42,7 @@ class ResultTable {
   // `idTable` is sorted by the columns specified by `sortedBy` is only checked,
   // if expensive checks are enabled, for example by not defining the `NDEBUG`
   // macro.
-  ResultTable(IdTable idTable, vector<size_t> sortedBy,
+  ResultTable(IdTable idTable, std::vector<size_t> sortedBy,
               std::shared_ptr<const LocalVocab> localVocab);
 
   // Prevent accidental copying of a result table.
