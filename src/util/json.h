@@ -23,6 +23,7 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #include "util/DisableWarningsClang13.h"
 #include "util/Exception.h"
 #include "util/ConstexprUtils.h"
+#include "util/SourceLocation.h"
 
 /*
 Added support for serializing `std::optional` using `nlohmann::json`.
@@ -77,12 +78,10 @@ struct adl_serializer<std::monostate> {
     tries to interpret an actual value as a `std::monostate`.
     */
     if (!j.is_null()){
-      // We have no ID (the `-1`), because this is custom. We also do not know
-      // the actual position, where the error happend, so I just put `1` as a
-      // placeholder.
-      throw nlohmann::json::parse_error::create(-1, 1,
-      "error while parsing value - any value other than nullptr can't"
-      " be interpreted as a valid std::monostate.");
+      throw nlohmann::json::type_error::create(302,
+      std::string{"Custom type converter (see `"} +
+      ad_utility::source_location::current().file_name() + "`) from json" +
+      " to `std::monostate`: type must be null, but wasn't.");
     }
   }
 };
