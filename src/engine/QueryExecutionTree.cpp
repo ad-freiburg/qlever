@@ -170,7 +170,7 @@ void QueryExecutionTree::readFromCache() {
   auto& cache = _qec->getQueryTreeCache();
   auto res = cache.getIfContained(asString());
   if (res.has_value()) {
-    _cachedResult = res->_resultPointer->_resultTable;
+    _cachedResult = res->_resultPointer->resultTable();
   }
 }
 

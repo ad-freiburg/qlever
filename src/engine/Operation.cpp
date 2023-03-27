@@ -145,11 +145,11 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
                               : cache.computeOnce(cacheKey, computeLambda);
 
     updateRuntimeInformationOnSuccess(result, timer.msecs());
-    auto resultNumRows = result._resultPointer->_resultTable->size();
-    auto resultNumCols = result._resultPointer->_resultTable->width();
+    auto resultNumRows = result._resultPointer->resultTable()->size();
+    auto resultNumCols = result._resultPointer->resultTable()->width();
     LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
                << resultNumCols << std::endl;
-    return result._resultPointer->_resultTable;
+    return result._resultPointer->resultTable();
   } catch (const ad_utility::AbortException& e) {
     // A child Operation was aborted, do not print the information again.
     _runtimeInfo.status_ = RuntimeInformation::Status::failedBecauseChildFailed;
@@ -230,9 +230,9 @@ void Operation::updateRuntimeInformationOnSuccess(
     const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
     size_t timeInMilliseconds) {
   updateRuntimeInformationOnSuccess(
-      *resultAndCacheStatus._resultPointer->_resultTable,
+      *resultAndCacheStatus._resultPointer->resultTable(),
       resultAndCacheStatus._cacheStatus, timeInMilliseconds,
-      resultAndCacheStatus._resultPointer->_runtimeInfo);
+      resultAndCacheStatus._resultPointer->runtimeInfo());
 }
 
 // _____________________________________________________________________________
@@ -305,7 +305,7 @@ void Operation::createRuntimeInfoFromEstimates() {
   if (cachedResult.has_value()) {
     const auto& [resultPointer, cacheStatus] = cachedResult.value();
     _runtimeInfo.cacheStatus_ = cacheStatus;
-    const auto& rtiFromCache = resultPointer->_runtimeInfo;
+    const auto& rtiFromCache = resultPointer->runtimeInfo();
 
     _runtimeInfo.numRows_ = rtiFromCache.numRows_;
     _runtimeInfo.originalTotalTime_ = rtiFromCache.totalTime_;

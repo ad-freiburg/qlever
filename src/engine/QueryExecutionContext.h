@@ -27,14 +27,25 @@ using std::shared_ptr;
 using std::string;
 using std::vector;
 
-struct CacheValue {
+class CacheValue {
+ private:
+  std::shared_ptr<const ResultTable> _resultTable;
+  RuntimeInformation _runtimeInfo;
+ public:
+
   explicit CacheValue(ResultTable resultTable, RuntimeInformation runtimeInfo)
       : _resultTable(
-            std::make_shared<const ResultTable>(std::move(resultTable))),
+      std::make_shared<const ResultTable>(std::move(resultTable))),
         _runtimeInfo(std::move(runtimeInfo)) {}
-  std::shared_ptr<const ResultTable> _resultTable;
-  // TODO<joka921> Make the runtime Info also const.
-  RuntimeInformation _runtimeInfo;
+
+  const shared_ptr<const ResultTable>& resultTable() const {
+    return _resultTable;
+  }
+
+  const RuntimeInformation& runtimeInfo() const {
+    return _runtimeInfo;
+  }
+
   [[nodiscard]] size_t size() const {
     return _resultTable ? _resultTable->size() * _resultTable->width() : 0;
   }
