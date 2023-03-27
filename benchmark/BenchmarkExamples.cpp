@@ -3,6 +3,7 @@
 // Author: Andre Schlegel (January of 2023, schlegea@informatik.uni-freiburg.de)
 #include <cmath>
 #include <string>
+#include <memory>
 
 #include "../benchmark/Benchmark.h"
 #include "BenchmarkConfiguration.h"
@@ -247,5 +248,8 @@ class BM_ConfigurationAndMetadataExample: public BenchmarkClassInterface{
 };
 
 
-BenchmarkRegister temp{{new BM_SingeMeasurements, new BM_Groups,
-  new BM_Tables, new BM_ConfigurationAndMetadataExample}};
+// Registering the benchmarks.
+BenchmarkRegister temp1{std::make_unique<BM_SingeMeasurements>()};
+BenchmarkRegister temp2{std::make_unique<BM_Groups>()};
+BenchmarkRegister temp3{std::make_unique<BM_Tables>()};
+BenchmarkRegister temp4{std::make_unique<BM_ConfigurationAndMetadataExample>()};

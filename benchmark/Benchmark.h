@@ -342,16 +342,15 @@ class BenchmarkRegister {
   public:
 
   /*
-   * @brief Register one, or more, benchmark classes, by creating a global
-   *  instance of this class and passing instances of your classes, that
+   * @brief Register one benchmark class, by creating a global
+   *  instance of this class and passing the instances of your class, that
    *  implemented the `BenchmarkClassInterface`. Shouldn't take up much space
    *  and I couldn't find a better way of doing it.
    *
-   * @param benchmarkClasseInstances The memory managment of the passed
+   * @param benchmarkClasseInstance The memory managment of the passed
    *  instances will be taken over by `BenchmarkRegister`.
    */
-  BenchmarkRegister(const std::vector<BenchmarkClassInterface*>&
-    benchmarkClasseInstances);
+  BenchmarkRegister(BenchmarkPointer&& benchmarkClasseInstance);
 
   /*
   @brief Passes the `BenchmarkConfiguration` to the `parseConfiguration`

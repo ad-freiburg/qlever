@@ -7,6 +7,7 @@
 #include <string>
 #include <algorithm>
 #include <iterator>
+#include <utility>
 
 #include "../benchmark/Benchmark.h"
 #include "BenchmarkMetadata.h"
@@ -15,6 +16,7 @@
 #include "util/Exception.h"
 #include "../benchmark/util/HashMapWithInsertionOrder.h"
 #include "../benchmark/util/TransformVector.h"
+#include "util/Algorithm.h"
 
 auto BenchmarkRecords::getHashMapTableEntry(const std::string& tableDescriptor,
     const size_t row, const size_t column) -> RecordTable::EntryType&{
@@ -75,13 +77,9 @@ BenchmarkRegister::runAllRegisteredBenchmarks(){
 
 // ____________________________________________________________________________
 BenchmarkRegister::BenchmarkRegister(
-    const std::vector<BenchmarkClassInterface*>& benchmarkClassInstances){
-    // Append all the benchmarks to the internal register.
-    transformVectorAndAppend(benchmarkClassInstances,
-        &BenchmarkRegister::getRegister(),
-        [](auto& instance){
-            return BenchmarkRegister::BenchmarkPointer{instance};
-        });
+    BenchmarkPointer&& benchmarkClassInstance){
+    // Append the benchmark to the internal register.
+    getRegister().push_back(std::move(benchmarkClassInstance));
 }
 
 // ____________________________________________________________________________
