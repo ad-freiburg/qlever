@@ -44,17 +44,20 @@ public:
   // To reduce duplication. Is a key held by a given json object?
   auto isKeyValid = []<typename Key>(ConstJsonPointer jsonObject,
    const Key& key){
-   /*
-   If `Key` is convertible to type `nlohmann::json::size_type`, it can only be
-   a valid key for the `jsonObject`, if the `jsonObject` is an array, according
-   to the documentation.
-   */
-   if constexpr (std::is_convertible<Key, nlohmann::json::size_type>::value){
-    return jsonObject->is_array() && (key < jsonObject->size());
-   }else{
-    return jsonObject->contains(key);
-   }
-  };
+    /*
+    If `Key` is integral, it can only be a valid key for the `jsonObject`, if the
+   `jsonObject` is an array, according to the documentation.
+    A more detailed explanation: In json an object element always has a string
+    as a key. No exception. However, array elements have positive, whole
+    numbers as their keys. Follwing that logic backwards, a number can only
+    ever be a valid key in json, if we are looking at a json array.
+    */
+    if constexpr (std::is_integral<Key>::value){
+     return jsonObject->is_array() && (0 <= key) && (key < jsonObject->size());
+    }else{
+     return jsonObject->contains(key);
+    }
+   };
   
   // Check if the key is valid and assign the json object, it is the key of.
   auto checkAndAssign = [&currentJsonObject, &isKeyValid](
