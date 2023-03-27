@@ -15,7 +15,6 @@
 #include "util/HashMap.h"
 #include "util/Exception.h"
 #include "../benchmark/util/HashMapWithInsertionOrder.h"
-#include "../benchmark/util/TransformVector.h"
 #include "util/Algorithm.h"
 
 auto BenchmarkRecords::getHashMapTableEntry(const std::string& tableDescriptor,
@@ -58,8 +57,7 @@ void BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(
 const std::vector<BenchmarkMetadata> BenchmarkRegister::getAllGeneralMetadata(){
     // Go through every registered instance of a benchmark class and collect
     // their general metadata.
-    return transformVector<BenchmarkRegister::BenchmarkPointer,
-    BenchmarkMetadata>(BenchmarkRegister::getRegister(),
+    return ad_utility::transform(getRegister(),
     [](const auto& instance){return instance->getMetadata();});
 }
 
@@ -68,9 +66,7 @@ const std::vector<BenchmarkRecords>
 BenchmarkRegister::runAllRegisteredBenchmarks(){
     // Go through every registered instance of a benchmark class, measure their
     // benchmarks and return the resulting `BenchmarkRecords` in a new vector.
-    return transformVector<BenchmarkRegister::BenchmarkPointer,
-    BenchmarkRecords>(BenchmarkRegister::getRegister(),
-    [](BenchmarkRegister::BenchmarkPointer& instance){
+    return ad_utility::transform(getRegister(), [](BenchmarkPointer& instance){
         return instance->runAllBenchmarks();
     });
 }
