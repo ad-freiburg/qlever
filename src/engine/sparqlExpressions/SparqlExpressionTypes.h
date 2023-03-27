@@ -261,27 +261,6 @@ struct EvaluationContext {
 };
 
 namespace detail {
-
-/*
-/// Convert expression result type T to corresponding qlever ResultType.
-/// TODO<joka921>: currently all constants are floats.
-template <SingleExpressionResult T>
-constexpr static qlever::ResultType expressionResultTypeToQleverResultType() {
-  if constexpr (ad_utility::isSimilar<T, string> ||
-                ad_utility::isSimilar<T, VectorWithMemoryLimit<string>>) {
-    return qlever::ResultType::LOCAL_VOCAB;
-  } else if constexpr (isConstantResult<T> || isVectorResult<T>) {
-    return qlever::ResultType::FLOAT;
-  } else if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
-    return qlever::ResultType::VERBATIM;
-  } else {
-    // for Variables and StrongIdWithDatatypes we cannot get the result type at
-    // compile time.
-    static_assert(ad_utility::alwaysFalse<T>);
-  }
-}
- */
-
 /// Get Id of constant result of type T.
 template <SingleExpressionResult T, typename LocalVocabT>
 Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
