@@ -36,9 +36,11 @@ using std::vector;
 // Otherwise, it's not clear from the names what the difference between a
 // `ResultTable` and an `IdTable` is.
 class ResultTable {
+  /*
  public:
   // The status of the result.
   enum Status { IN_PROGRESS = 0, FINISHED = 1, ABORTED = 2 };
+   */
 
  private:
   // The actual entries.
@@ -53,11 +55,9 @@ class ResultTable {
       std::make_shared<const LocalVocab>();
 
  public:
+  // TODO<joka921> Comment the constructor.
   ResultTable(IdTable idTable, vector<size_t> sortedBy,
-              std::shared_ptr<const LocalVocab> localVocab)
-      : _idTable{std::move(idTable)},
-        _sortedBy{std::move(sortedBy)},
-        localVocab_{std::move(localVocab)} {}
+              std::shared_ptr<const LocalVocab> localVocab);
 
   // Prevent accidental copying of a result table.
   ResultTable(const ResultTable& other) = delete;
@@ -76,24 +76,11 @@ class ResultTable {
   // Get the number of columns of this result.
   size_t width() const { return _idTable.numColumns(); }
 
-  // Like `shareLocalVocabFrom`, but takes *two* results and assumes that one of
-  // their local vocabularies is empty and shares the the result with the
-  // non-empty one (if both are empty, arbitrarily share with the first one).
-  //
-  // TODO: Eventually, we want to be able to merge two non-empty local
-  // vocabularies, but that requires more work since we have to rewrite IDs then
-  // (from the previous separate local vocabularies to the new merged one).
-  static std::shared_ptr<const LocalVocab> getSharedLocalVocabFromNonEmptyOf(
-      const ResultTable& resultTable1, const ResultTable& resultTable2);
+  // Const access to the underlying `IdTable`.
+  const IdTable& idTable() const { return _idTable; }
 
-  std::shared_ptr<const LocalVocab> getSharedLocalVocab() const {
-    return localVocab_;
-  }
-
-  // Get a (deep) copy of the local vocabulary from the given result. Use this
-  // when you want to (potentially) add further words to the local vocabulary
-  // (which is not possible with `shareLocalVocabFrom`).
-  std::shared_ptr<LocalVocab> getCopyOfLocalVocab() const;
+  // Const access to the columns by which the `idTable()` is sorted.
+  const std::vector<size_t>& sortedBy() const { return _sortedBy; }
 
   // Get the local vocabulary of this result, used for lookup only.
   //
@@ -108,9 +95,27 @@ class ResultTable {
   //
   const LocalVocab& localVocab() const { return *localVocab_; }
 
-  const IdTable& idTable() const { return _idTable; }
+  // Get the local vocab as a shared pointer to const. This can be used if one
+  // result has the same local vocab as one of its child results.
+  std::shared_ptr<const LocalVocab> getSharedLocalVocab() const {
+    return localVocab_;
+  }
 
-  const std::vector<size_t>& sortedBy() const { return _sortedBy; }
+  // Like `getSharedLocalVocabFrom`, but takes *two* results and assumes that
+  // one of the local vocabularies is empty and gets the shared local vocab from
+  // the non-empty one (if both are empty, arbitrarily share with the first
+  // one).
+  //
+  // TODO: Eventually, we want to be able to merge two non-empty local
+  // vocabularies, but that requires more work since we have to rewrite IDs then
+  // (from the previous separate local vocabularies to the new merged one).
+  static std::shared_ptr<const LocalVocab> getSharedLocalVocabFromNonEmptyOf(
+      const ResultTable& resultTable1, const ResultTable& resultTable2);
+
+  // Get a (deep) copy of the local vocabulary from the given result. Use this
+  // when you want to (potentially) add further words to the local vocabulary
+  // (which is not possible with `shareLocalVocabFrom`).
+  std::shared_ptr<LocalVocab> getCopyOfLocalVocab() const;
 
   // Log the size of this result. We call this at several places in
   // `Server::processQuery`. Ideally, this should only be called in one
