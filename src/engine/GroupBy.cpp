@@ -485,10 +485,8 @@ bool GroupBy::computeGroupByForFullIndexScan(ResultTable* result) {
   // A nested lambda that computes the actual result. The outer lambda is
   // templated on the number of columns (1 or 2) and will be passed to
   // `callFixedSize`.
-  DISABLE_WARNINGS_CLANG_13
   auto doComputationForNumberOfColumns = [&]<int NUM_COLS>(
                                              IdTable* idTable) mutable {
-    ENABLE_WARNINGS_CLANG_13
     // TODO<joka921> The `resultTypes` are not really in use, but if they
     // are not present, segfaults might occur in upstream `Operation`s.
     auto ignoredRanges =

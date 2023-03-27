@@ -17,12 +17,10 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
-        compiler-version: [11, 12, 13, 14, 15, 16]
+        compiler-version: [11, 12, 14, 15, 16]
         warnings: [  "-Wall -Wextra -Werror " ]
         build-type: [Release]
         exclude:
-          - compiler: gcc
-            compiler-version: 13
           - compiler: gcc
             compiler-version: 14
           - compiler: gcc
@@ -58,13 +56,6 @@ jobs:
     - name: Install gcc 12
       run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-12 g++-12
       if :  matrix.compiler == 'gcc' && matrix.compiler-version == 12
-    - name: Install clang 13
-      run:  sudo apt install clang-13
-      if :  matrix.compiler == 'clang' && matrix.compiler-version == 13
-    # Currently not needed, because we are not building against libc++
-    #- name: Install libc++-13
-    #  run : sudo apt install -y libunwind-13-dev libc++abi-13-dev libc++-13-dev
-    #  if:  matrix.compiler == 'clang13'
     - name: Install clang 14
       run : sudo apt install clang-14
       if :  matrix.compiler == 'clang' && matrix.compiler-version == 14
