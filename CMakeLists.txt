@@ -182,7 +182,7 @@ if (RUN_EXPENSIVE_TESTS)
 endif()
 
 if (ENABLE_EXPENSIVE_CHECKS)
-    message(STATUS "Enabling checks that have a measurable runtime overhead")
+    message(STATUS "Enabling checks that potentially have a significant runtime overhead")
     add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")
 endif()
 

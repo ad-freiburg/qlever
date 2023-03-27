@@ -88,3 +88,9 @@ TEST(Exception, AD_FAIL) {
                 ::testing::StartsWith("This code should be unreachable."));
   }
 }
+
+TEST(Excpetion, AD_EXPENSIVE_CHECK) {
+  if constexpr (AD_EXPENSIVE_CHECKS_ENABLED) {
+    ASSERT_ANY_THROW(AD_EXPENSIVE_CHECK(3 > 5));
+  }
+}
