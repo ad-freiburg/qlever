@@ -210,19 +210,21 @@ class BM_ConfigurationAndMetadataExample: public BenchmarkClassInterface{
   public:
   void parseConfiguration(const BenchmarkConfiguration& config){
     // Collect some arbitrary values.
-    std::string dateString{config.getValueOrDefault<std::string>("22.3.2023",
-      "exampleDate")};
+    std::string dateString{
+      config.getValueByNestedKeys<std::string>("exampleDate").value_or(
+      "22.3.2023")};
     size_t numberOfStreetSigns{
-      config.getValueOrDefault<size_t>(10, "numSigns")};
+      config.getValueByNestedKeys<size_t>("numSigns").value_or(10)};
 
     std::vector<bool> wonOnTryX{};
     wonOnTryX.reserve(5);
     for (size_t i = 0; i < 5; i++){
-      wonOnTryX.push_back(config.getValueOrDefault(false, "Coin_flip_try", i));
+      wonOnTryX.push_back(config.getValueByNestedKeys<bool>("Coin_flip_try",
+        i).value_or(false));
     }
 
-    float balanceOnStevesSavingAccount{config.getValueOrDefault<float>(-41.9,
-      "Accounts", "Personal", "Steve")};
+    float balanceOnStevesSavingAccount{config.getValueByNestedKeys<float>(
+      "Accounts", "Personal", "Steve").value_or(-41.9)};
 
     // Transcribe the collected values.
     generalMetadata_.addKeyValuePair("date", dateString);
@@ -233,7 +235,6 @@ class BM_ConfigurationAndMetadataExample: public BenchmarkClassInterface{
       balanceOnStevesSavingAccount);
   }
 
-  
   const BenchmarkMetadata getMetadata() const{
     return generalMetadata_;
   }

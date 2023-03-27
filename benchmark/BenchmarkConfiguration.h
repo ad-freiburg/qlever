@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <optional>
+
 #include "util/json.h"
 #include <type_traits>
 
@@ -19,93 +21,57 @@ class BenchmarkConfiguration{
 public:
 
  /*
-  * @brief Returns, if an configuration option was set.
-  *
-  * @tparam Index,Indexes The types of the keys, that you gave. Deduction
-  *  should be able to handle it.
-  * 
-  * @param index,indexes The keys for looking up the configuration option.
-  *  Look at the documentation of `nlohmann::basic_json::at`, if you want
-  *  to see, what's possible.
-  */
- template<typename Index, typename... Indexes>
- bool isOptionSet(const Index& index, const Indexes&... indexes) const{
+ @brief If the underlying JSON can be accessed with
+ `data_[firstKey][secondKey][....]` the return the resulting value of this
+ recursive access, interpreted as a given type. Else return an empty
+ `std::optional`.
+
+ @tparam ReturnType The type the resulting value should be interpreted as.
+ 
+ @param key, keys The keys for looking up the configuration option.
+  Look at the documentation of `nlohmann::basic_json::at`, if you want
+  to see, what's possible.
+ */
+ template<typename ReturnType>
+ std::optional<ReturnType> getValueByNestedKeys(const auto& key,
+  const auto&... keys)const{
+  // Easier usage. 
+  using ConstJsonPointer = const nlohmann::json::value_type*;
+
+  // For recursively walking over the json objects in `data_`.
+  ConstJsonPointer currentJsonObject{&data_};
+  
   // To reduce duplication. Is a key held by a given json object?
-  auto isKeyValid = []<typename Key>(const auto& jsonObject, const Key& key){
-   // If `Key` is a number, it can only be a valid key for the `jsonObject`
-   // , if the `jsonObject` is an array.
-   if constexpr (std::is_integral<Key>::value){
-    return jsonObject.is_array() && (key < jsonObject.size());
+  auto isKeyValid = []<typename Key>(ConstJsonPointer jsonObject,
+   const Key& key){
+   /*
+   If `Key` is convertible to type `nlohmann::json::size_type`, it can only be
+   a valid key for the `jsonObject`, if the `jsonObject` is an array, according
+   to the documentation.
+   */
+   if constexpr (std::is_convertible<Key, nlohmann::json::size_type>::value){
+    return jsonObject->is_array() && (key < jsonObject->size());
    }else{
-    return jsonObject.contains(key);
+    return jsonObject->contains(key);
    }
   };
   
-  // Is there json object with index as it's valid key? If yes, we have a
-  // starting point for our recursive check.
-  if (!isKeyValid(data_, index)){return false;}
-  auto currentJsonObject = data_.at(index);
-
   // Check if the key is valid and assign the json object, it is the key of.
-  // The `[[maybe_unused]]` is for cases, where indexes is empty.
-  [[maybe_unused]] auto checkAndAssign = [&currentJsonObject, &isKeyValid](
+  auto checkAndAssign = [&currentJsonObject, &isKeyValid](
    auto const& key){
    if (isKeyValid(currentJsonObject, key)){
     // The side effect, for which this whole things exists for.
-    currentJsonObject = currentJsonObject.at(key);
+    currentJsonObject = &(currentJsonObject->at(key));
     return true;
    } else {
     return false;
    }
   };
 
-  // Checking, if all the given indexes are valid in their contexts.
-  // The initial `true` is for the initial test of `data_`. Because, if we
-  // reached this point, it must have been true, otherwise we already would
-  // have returned `false`.
-  return (true && ... && checkAndAssign(indexes));
- }
-
- /*
-  * @brief Returns a value held by the configuration.
-  *
-  * @tparam ReturnType The type of the value, that you want to have later.
-  * @tparam Index,Indexes The types of the keys, that you gave. Deduction
-  *  should be able to handle it.
-  * 
-  * @param index,indexes The keys for getting the value out of the
-  *  configuration. Look at the documentation of `nlohmann::basic_json::at`
-  *  , if you want to see, what's possible.
-  */
- template<typename ReturnType, typename Index, typename... Indexes>
- ReturnType getValue(const Index& index, const Indexes&... indexes) const{
-   auto toReturn = data_.at(index);
-   ((toReturn = toReturn.at(indexes)), ...);
-   return toReturn.template get<ReturnType>();
- }
-
- /*
-  * @brief Returns a value held by the configuration. Returns the given
-  *  default value, if it doesn't hold a value at the place described by
-  *  the indeces.
-  *
-  * @tparam ReturnType The type of the value, that you want to have later.
-  * @tparam Index,Indexes The types of the keys, that you gave. Deduction
-  *  should be able to handle it.
-  * 
-  * @param defaultValue The value to return, if the searched for value
-  *  wasn't set in the configuration.
-  * @param index,indexes The keys for getting the value out of the
-  *  configuration. Look at the documentation of `nlohmann::basic_json::at`
-  *  , if you want to see, what's possible.
-  */
- template<typename ReturnType, typename Index, typename... Indexes>
- ReturnType getValueOrDefault(const ReturnType& defaultValue,
-  const Index& index, const Indexes&... indexes) const{
-  if (!isOptionSet(index, indexes...)){
-   return defaultValue;
-  } else {
-   return getValue<ReturnType>(index, indexes...);
+  if ((checkAndAssign(key) && ... && checkAndAssign(keys))){
+   return {currentJsonObject->get<ReturnType>()};
+  }else{
+   return {std::nullopt};
   }
  }
 
