@@ -9,6 +9,7 @@
 #include <cassert>
 
 #include "engine/LocalVocab.h"
+#include "util/Exception.h"
 
 // _____________________________________________________________________________
 string ResultTable::asDebugString() const {
@@ -48,7 +49,7 @@ ResultTable::ResultTable(IdTable idTable, vector<size_t> sortedBy,
     : _idTable{std::move(idTable)},
       _sortedBy{std::move(sortedBy)},
       localVocab_{std::move(localVocab)} {
-  AD_CONTRACT_CHECK(localVocab != nullptr);
+  AD_CONTRACT_CHECK(localVocab_ != nullptr);
   AD_CONTRACT_CHECK(std::ranges::all_of(_sortedBy, [this](size_t numCols) {
     return numCols < this->idTable().numColumns();
   }));

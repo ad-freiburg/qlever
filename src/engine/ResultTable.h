@@ -6,42 +6,24 @@
 
 #pragma once
 
-#include <array>
-#include <condition_variable>
-#include <mutex>
-#include <optional>
 #include <vector>
 
 #include "engine/LocalVocab.h"
-#include "engine/ResultType.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
-#include "global/ValueId.h"
-#include "util/Exception.h"
-#include "util/HashMap.h"
 #include "util/Log.h"
 
-using std::array;
 using std::condition_variable;
-using std::lock_guard;
-using std::mutex;
-using std::unique_lock;
 using std::vector;
 
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
-// is always a table and contained in the member `_idTable`.
+// is always a table and contained in the member `idTable()`.
 //
 // TODO: I would find it more appropriate to simply call this class `Result`.
 // Otherwise, it's not clear from the names what the difference between a
 // `ResultTable` and an `IdTable` is.
 class ResultTable {
-  /*
- public:
-  // The status of the result.
-  enum Status { IN_PROGRESS = 0, FINISHED = 1, ABORTED = 2 };
-   */
-
  private:
   // The actual entries.
   IdTable _idTable;
@@ -55,7 +37,12 @@ class ResultTable {
       std::make_shared<const LocalVocab>();
 
  public:
-  // TODO<joka921> Comment the constructor.
+  // Construct from the given arguments (see above) and check the following
+  // invariants: `localVocab` must not be `nullptr` and each entry of `sortedBy`
+  // must be a valid column index for the `idTable`. The invariant that the
+  // `idTable` is sorted by the columns specified by `sortedBy` is only checked,
+  // if expensive checks are enabled, for example by not defining the `NDEBUG`
+  // macro.
   ResultTable(IdTable idTable, vector<size_t> sortedBy,
               std::shared_ptr<const LocalVocab> localVocab);
 

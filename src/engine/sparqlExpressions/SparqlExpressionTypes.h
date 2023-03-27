@@ -262,6 +262,7 @@ struct EvaluationContext {
 
 namespace detail {
 
+/*
 /// Convert expression result type T to corresponding qlever ResultType.
 /// TODO<joka921>: currently all constants are floats.
 template <SingleExpressionResult T>
@@ -279,6 +280,7 @@ constexpr static qlever::ResultType expressionResultTypeToQleverResultType() {
     static_assert(ad_utility::alwaysFalse<T>);
   }
 }
+ */
 
 /// Get Id of constant result of type T.
 template <SingleExpressionResult T, typename LocalVocabT>

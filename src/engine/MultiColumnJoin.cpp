@@ -9,10 +9,10 @@
 using std::string;
 
 // _____________________________________________________________________________
-MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
-                                 std::shared_ptr<QueryExecutionTree> t1,
-                                 std::shared_ptr<QueryExecutionTree> t2,
-                                 const vector<array<ColumnIndex, 2>>& jcs)
+MultiColumnJoin::MultiColumnJoin(
+    QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
+    std::shared_ptr<QueryExecutionTree> t2,
+    const std::vector<std::array<ColumnIndex, 2>>& jcs)
     : Operation(qec), _joinColumns(jcs), _multiplicitiesComputed(false) {
   // Make sure subtrees are ordered so that identical queries can be identified.
   AD_CONTRACT_CHECK(!jcs.empty());

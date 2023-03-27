@@ -272,7 +272,8 @@ class QueryPlanner {
   // (see `TransitivePath.cpp` for details), then returns that bound transitive
   // path. Else returns `std::nullopt`
   [[nodiscard]] static std::optional<SubtreePlan> createJoinWithTransitivePath(
-      SubtreePlan a, SubtreePlan b, const vector<array<ColumnIndex, 2>>& jcs);
+      SubtreePlan a, SubtreePlan b,
+      const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
   // Used internally by `createJoinCandidates`. If  `a` or `b` is a
   // `HasPredicateScan` with a variable as a subject (`?x ql:has-predicate
@@ -280,21 +281,25 @@ class QueryPlanner {
   // then returns a `HasPredicateScan` that takes the other input as a subtree.
   // Else returns `std::nullopt`.
   [[nodiscard]] static std::optional<SubtreePlan>
-  createJoinWithHasPredicateScan(SubtreePlan a, SubtreePlan b,
-                                 const vector<array<ColumnIndex, 2>>& jcs);
+  createJoinWithHasPredicateScan(
+      SubtreePlan a, SubtreePlan b,
+      const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
   // Used internally by `createJoinCandidates`. If  `a` or `b` is a
   // `TextOperationWithoutFilter` create a `TextOperationWithFilter` that takes
   // the result of the other input as the filter input. Else return
   // `std::nullopt`.
   [[nodiscard]] static std::optional<SubtreePlan> createJoinAsTextFilter(
-      SubtreePlan a, SubtreePlan b, const vector<array<ColumnIndex, 2>>& jcs);
+      SubtreePlan a, SubtreePlan b,
+      const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
   [[nodiscard]] vector<SubtreePlan> getOrderByRow(
-      const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
+      const ParsedQuery& pq,
+      const std::vector<std::vector<SubtreePlan>>& dpTab) const;
 
   [[nodiscard]] vector<SubtreePlan> getGroupByRow(
-      const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
+      const ParsedQuery& pq,
+      const std::vector<std::vector<SubtreePlan>>& dpTab) const;
 
   [[nodiscard]] vector<SubtreePlan> getDistinctRow(
       const parsedQuery::SelectClause& selectClause,
@@ -311,14 +316,14 @@ class QueryPlanner {
   [[nodiscard]] bool connected(const SubtreePlan& a, const SubtreePlan& b,
                                const TripleGraph& graph) const;
 
-  [[nodiscard]] vector<array<ColumnIndex, 2>> getJoinColumns(
+  [[nodiscard]] std::vector<std::array<ColumnIndex, 2>> getJoinColumns(
       const SubtreePlan& a, const SubtreePlan& b) const;
 
   [[nodiscard]] string getPruningKey(
       const SubtreePlan& plan, const vector<size_t>& orderedOnColumns) const;
 
   [[nodiscard]] void applyFiltersIfPossible(
-      vector<SubtreePlan>& row, const vector<SparqlFilter>& filters,
+      std::vector<SubtreePlan>& row, const std::vector<SparqlFilter>& filters,
       bool replaceInsteadOfAddPlans) const;
 
   /**
