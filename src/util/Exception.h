@@ -118,3 +118,21 @@ inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
   ad_utility::detail::adCorrectnessCheckImpl(            \
       static_cast<bool>(condition), __STRING(condition), \
       ad_utility::source_location::current())
+
+#if (!defined(NDEBUG) || defined(AD_ENABLE_EXPENSIVE_CHECKS))
+#define AD_EXPENSIVE_CHECKS_ENABLED true
+#else
+#define AD_EXPENSIVE_CHECKS_ENABLED false
+#endif
+
+// This check is similar to `AD_CORRECTNESS_CHECK` (see above), but the check is
+// only compiled and executed when either the `NDEBUG` constant is NOT defined
+// (which also enables the classic `assert()` macro), or the constant
+// `AD_ENABLE_EXPENSIVE_CHECKS` is enabled (which can be set via cmake). This
+// check should be used when checking has a significant and measurable runtime
+// overhead, but is still feasible for a release build on a large dataset.
+#define AD_EXPENSIVE_CHECK(condition)          \
+  if constexpr (AD_EXPENSIVE_CHECKS_ENABLED) { \
+    AD_CORRECTNESS_CHECK(condition);           \
+  }                                            \
+  void(0)

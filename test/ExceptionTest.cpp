@@ -60,7 +60,7 @@ TEST(Exception, AD_CONTRACT_CHECK) {
   }
 }
 
-TEST(Exception, AD_UNSATISFIABLE) {
+TEST(Exception, AD_CORRECTNESS_CHECK) {
   ad_utility::source_location l;
   ASSERT_NO_THROW(AD_CORRECTNESS_CHECK(3 < 5));
   std::vector<int> v;

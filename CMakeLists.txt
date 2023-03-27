@@ -178,7 +178,11 @@ endif()
 
 if (RUN_EXPENSIVE_TESTS)
     message(STATUS "Running expensive unit tests. This is only recommended in release builds")
-    add_definitions("-DQLEVER_RUN_EXPENSIVE_TESTS")
+    add_definitions("-DAD_EXPENSIVE_CHECKS_ENABLED")
+endif()
+
+if (ENABLE_EXPENSIVE_CHECKS)
+    message(STATUS "Enabling checks that have a measurable runtime overhead")
 endif()
 
 ################################
