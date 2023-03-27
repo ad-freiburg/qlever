@@ -28,13 +28,13 @@
  * @param appendToFile Should the json informationen be appended to the end
  *  of the file, or should the previous content be overwritten?
  */
-void writeJsonToFile(nlohmann::json j, std::string fileName,
+static void writeJsonToFile(nlohmann::json j, std::string fileName,
     bool appendToFile = false) {
   ad_utility::makeOfstream(fileName, (appendToFile) ?
       (std::ios::out | std::ios::app) : (std::ios::out)) << j;
 }
 
-std::string transcribeFileToString(std::string fileName){
+static std::string readFileToString(std::string fileName){
   // The string gets build using a string stream.
   std::ostringstream transchribedString{};
 
@@ -59,22 +59,24 @@ int main(int argc, char** argv) {
   // this will hold the file name.
   std::string jsonConfigurationFileName = "";
 
+  // For easier usage.
+  namespace po = boost::program_options;
+  
   // Declaring the supported options.
-  boost::program_options::options_description options("Options for the"
-      " benchmark");
+  po::options_description options("Options for the benchmark");
   options.add_options()
       ("help,h", "Print the help message.")
       ("print,p", "Roughly prints all benchmarks.")
-      ("write,w", boost::program_options::value<std::string>(&writeFileName),
+      ("write,w", po::value<std::string>(&writeFileName),
        "Writes the benchmarks as json to a file, overriding the previous"
        " content of the file.")
       ("append,a", "Causes the json option to append to the end of the"
       " file, instead of overriding the previous content of the file.")
       ("configuration-json,j",
-      boost::program_options::value<std::string>(&jsonConfigurationFileName),
+      po::value<std::string>(&jsonConfigurationFileName),
       "Set the configuration of benchmarks as described in a json file.")
       ("configuration-shorthand,s",
-      boost::program_options::value<std::string>(&shortHandConfigurationString),
+      po::value<std::string>(&shortHandConfigurationString),
       "Allows you to add options to configuration of the benchmarks using the"
       " short hand described in `BenchmarkConfiguration.h:parseShortHand`.")
   ;
@@ -87,17 +89,15 @@ int main(int argc, char** argv) {
 
   // Calling without using ANY arguments makes no sense.
   if (argc == 1) {
-    std::cerr << "You have to specify at least one of the options of print,"
-      " or json. Running the benchmarks without outputting their resulsts,"
-      " is just a waste of time.\n";
+    std::cerr << "You have to specify at least one of the options of `--print`,"
+      " or `--write`.\n";
     printUsageAndExit();
   }
 
   // Parsing the given arguments.
-  boost::program_options::variables_map vm;
-  boost::program_options::store(
-      boost::program_options::parse_command_line(argc, argv, options), vm);
-  boost::program_options::notify(vm);
+  po::variables_map vm;
+  po::store(po::parse_command_line(argc, argv, options), vm);
+  po::notify(vm);
 
   // Did they set any option, that would require anything to actually happen?
   // If not, don't do anything. This should also happen, if they explicitly
@@ -113,7 +113,7 @@ int main(int argc, char** argv) {
   // important, because `parseJsonString` resets and then sets the
   // configuration. `parseShortHand` however just sets, or overwrites, things.
   if (vm.count("configuration-json")){
-    config.parseJsonString(transcribeFileToString(jsonConfigurationFileName));
+    config.parseJsonString(readFileToString(jsonConfigurationFileName));
   }
   if (vm.count("configuration-shorthand")){
     config.parseShortHand(shortHandConfigurationString);
