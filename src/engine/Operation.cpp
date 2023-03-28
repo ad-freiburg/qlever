@@ -116,6 +116,10 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
             getDescriptor());
       }
       computeResult(val._resultTable.get());
+      auto& idTable = val._resultTable->_idTable;
+      if (_limit.has_value() && idTable.numRows() > _limit.value()) {
+        idTable.resize(_limit.value());
+      }
       if (_timeoutTimer->wlock()->hasTimedOut()) {
         throw ad_utility::TimeoutException(
             "Timeout in " + getDescriptor() +

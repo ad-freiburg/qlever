@@ -67,7 +67,7 @@ class Operation {
   // Calls  `asStringImpl` and adds the information about the `LIMIT` clause.
   virtual string asString(size_t indent = 0) const final {
     auto result = asStringImpl(indent);
-    if (supportsLimit() && _limit.has_value()) {
+    if (_limit.has_value()) {
       result +=
           " LIMIT (as part of operation) " + std::to_string(_limit.value());
     }
@@ -114,15 +114,9 @@ class Operation {
   void recursivelySetTimeoutTimer(
       const ad_utility::SharedConcurrentTimeoutTimer& timer);
 
-  // True iff this operation directly implement a `LIMIT` clause on its result.
-  [[nodiscard]] virtual bool supportsLimit() const { return false; }
-
   // Set the value of the `LIMIT` clause that will be applied to the result of
-  // this operation. May only be called if `supportsLimit` returns true.
-  void setLimit(uint64_t limit) {
-    AD_CONTRACT_CHECK(supportsLimit());
-    _limit = limit;
-  }
+  // this operation.
+  void setLimit(uint64_t limit) { _limit = limit; }
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.
