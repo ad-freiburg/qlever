@@ -15,8 +15,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res) {
   // TODO<C++20, Clang16> Use views to create an abstraction for the repeated
   // `upperBound` code.
-  size_t upperBound =
-      std::min<size_t>(limitAndOffset.upperBound(), res->_idTable.size());
+  size_t upperBound = limitAndOffset.upperBound(res->_idTable.size());
   for (size_t i = limitAndOffset._offset; i < upperBound; i++) {
     ConstructQueryExportContext context{i, *res, qet.getVariableColumns(),
                                         qet.getQec()->getIndex()};
@@ -95,7 +94,7 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
   nlohmann::json json = nlohmann::json::array();
 
   const auto offset = limitAndOffset._offset;
-  const auto upperBound = std::min(data.size(), limitAndOffset.upperBound());
+  const auto upperBound = limitAndOffset.upperBound(data.size());
 
   for (size_t rowIndex = offset; rowIndex < upperBound; ++rowIndex) {
     json.emplace_back();
@@ -261,7 +260,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
     return b;
   };
 
-  const auto upperBound = std::min(idTable.size(), limitAndOffset.upperBound());
+  const auto upperBound = limitAndOffset.upperBound(idTable.size());
   for (size_t rowIndex = limitAndOffset._offset; rowIndex < upperBound;
        ++rowIndex) {
     // TODO: ordered_json` entries are ordered alphabetically, but insertion
@@ -347,8 +346,7 @@ ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary(
   // `upperBound` in this file. Those can be abstracted away using
   // `std::views::iota`: `for (auto i : getRangeFromLimitOffset(limitAndOffset,
   // idTable)` Or maybe even use a view that iterates over the idTable directly.
-  size_t upperBound =
-      std::min<size_t>(limitAndOffset.upperBound(), idTable.size());
+  size_t upperBound = limitAndOffset.upperBound(idTable.size());
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
     for (size_t i = limitAndOffset._offset; i < upperBound; ++i) {

@@ -521,8 +521,8 @@ void IndexScan::computeFullScan(ResultTable* result,
   // This implementation computes the complete knowledge graph, except the
   // internal triples.
   uint64_t resultSize = getIndex().numTriples().normal_;
-  if (getLimit().has_value() && getLimit() < resultSize) {
-    resultSize = getLimit().value();
+  if (getLimit()._limit.has_value() && getLimit()._limit < resultSize) {
+    resultSize = getLimit()._limit.value();
   }
   result->_idTable.reserve(resultSize);
   auto table = std::move(result->_idTable).toStatic<3>();

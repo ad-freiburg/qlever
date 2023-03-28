@@ -19,11 +19,23 @@ struct LimitOffsetClause {
     return _limit.value_or(std::numeric_limits<uint64_t>::max());
   }
 
-  uint64_t upperBound() const {
+  uint64_t upperBound(uint64_t inputSize) const {
     auto val = limitOrDefault() + _offset;
-    return val >= std::max(limitOrDefault(), _offset)
-               ? val
-               : std::numeric_limits<uint64_t>::max();
+    val = val >= std::max(limitOrDefault(), _offset)
+              ? val
+              : std::numeric_limits<uint64_t>::max();
+    return std::min(val, inputSize);
+  }
+
+  uint64_t actualOffset(uint64_t inputSize) const {
+    return std::min(inputSize, _offset);
+  }
+
+  uint64_t actualSize(uint64_t inputSize) const {
+    auto upper = upperBound(inputSize);
+    auto offset = actualOffset(inputSize);
+    AD_CORRECTNESS_CHECK(upper >= offset);
+    return upper - offset;
   }
 
   bool operator==(const LimitOffsetClause&) const = default;

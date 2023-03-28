@@ -15,6 +15,7 @@
 #include "engine/ResultTable.h"
 #include "engine/RuntimeInformation.h"
 #include "engine/VariableToColumnMap.h"
+#include "parser/data/LimitOffsetClause.h"
 #include "parser/data/Variable.h"
 #include "util/Exception.h"
 #include "util/Log.h"
@@ -67,9 +68,11 @@ class Operation {
   // Calls  `asStringImpl` and adds the information about the `LIMIT` clause.
   virtual string asString(size_t indent = 0) const final {
     auto result = asStringImpl(indent);
-    if (_limit.has_value()) {
-      result +=
-          " LIMIT (as part of operation) " + std::to_string(_limit.value());
+    if (_limit._limit.has_value()) {
+      result += " LIMIT " + std::to_string(_limit._limit.value());
+    }
+    if (_limit._offset != 0) {
+      result += " OFFSET " + std::to_string(_limit._offset);
     }
     return result;
   }
@@ -116,7 +119,11 @@ class Operation {
 
   // Set the value of the `LIMIT` clause that will be applied to the result of
   // this operation.
-  void setLimit(uint64_t limit) { _limit = limit; }
+  void setLimit(LimitOffsetClause limitOffsetClause) {
+    _limit = limitOffsetClause;
+  }
+
+  virtual bool supportsLimit() const { return false; }
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.
@@ -274,7 +281,7 @@ class Operation {
   std::vector<std::string> _warnings;
 
   // The limit from a SPARQL `LIMIT` clause.
-  std::optional<uint64_t> _limit;
+  LimitOffsetClause _limit;
 
   // A mutex that can be "copied". The semantics are, that copying will create
   // a new mutex. This is sufficient for applications like in
