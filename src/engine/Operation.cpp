@@ -119,19 +119,14 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       computeResult(resultTable);
 
       // Compute the datatypes that occur in each column of the result.
-      // Measure and report the time that this computation takes. Also assert,
-      // that if a column contains UNDEF values, then the `mightContainUndef`
-      // flag for that columns is set.
+      // Also assert, that if a column contains UNDEF values, then the
+      // `mightContainUndef` flag for that columns is set.
       // TODO<joka921> It is cheaper to move this calculation into the
       // individual results, but that requires changes in each individual
       // operation, therefore we currently only perform this expensive
       // change in the DEBUG builds.
-#ifndef NDEBUG
-      ad_utility::Timer computeDatatypeCountsTimer{ad_utility::Timer::Started};
-      resultTable->checkDefinedness(getExternallyVisibleVariableColumns());
-      _runtimeInfo.addDetail("time-compute-datatypes-ms",
-                             computeDatatypeCountsTimer.msecs());
-#endif
+      AD_EXPENSIVE_CHECK(
+          resultTable->checkDefinedness(getExternallyVisibleVariableColumns()));
       if (_timeoutTimer->wlock()->hasTimedOut()) {
         throw ad_utility::TimeoutException(
             "Timeout in " + getDescriptor() +

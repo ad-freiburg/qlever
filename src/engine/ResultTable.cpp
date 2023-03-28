@@ -67,14 +67,13 @@ auto ResultTable::getOrComputeDatatypeCountsPerColumn()
 }
 
 // _____________________________________________________________
-void ResultTable::checkDefinedness(const VariableToColumnMap& varColMap) {
+bool ResultTable::checkDefinedness(const VariableToColumnMap& varColMap) {
   const auto& datatypesPerColumn = getOrComputeDatatypeCountsPerColumn();
-  for (const auto& [var, columnAndTypes] : varColMap) {
-    const auto& [columnIndex, mightContainUndef] = columnAndTypes;
+  return std::ranges::all_of(varColMap, [&](const auto& varAndCol) {
+    const auto& [columnIndex, mightContainUndef] = varAndCol.second;
     bool hasUndefined = datatypesPerColumn.at(columnIndex)
                             .at(static_cast<size_t>(Datatype::Undefined)) != 0;
-    AD_CONTRACT_CHECK(mightContainUndef ==
-                          ColumnIndexAndTypeInfo::PossiblyUndefined ||
-                      !hasUndefined);
-  }
+    return mightContainUndef == ColumnIndexAndTypeInfo::PossiblyUndefined ||
+           !hasUndefined;
+  });
 }
