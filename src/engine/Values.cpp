@@ -99,12 +99,11 @@ ResultTable Values::computeResult() {
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
 
-  auto localVocab = std::make_shared<LocalVocab>();
+  LocalVocab localVocab{};
 
   // Fill the result table using the `writeValues` method below.
   size_t resWidth = getResultWidth();
-  CALL_FIXED_SIZE(resWidth, &Values::writeValues, this, &idTable,
-                  localVocab.get());
+  CALL_FIXED_SIZE(resWidth, &Values::writeValues, this, &idTable, &localVocab);
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 

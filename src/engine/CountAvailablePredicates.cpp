@@ -128,8 +128,7 @@ ResultTable CountAvailablePredicates::computeResult() {
     // Compute the predicates for all entities
     CountAvailablePredicates::computePatternTrickAllEntities(
         &idTable, hasPattern, hasPredicate, patterns);
-    return {std::move(idTable), resultSortedOn(),
-            std::make_shared<LocalVocab>()};
+    return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   } else {
     std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."

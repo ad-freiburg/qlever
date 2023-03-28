@@ -136,11 +136,11 @@ ResultTable Service::computeResult() {
   // Set basic properties of the result table.
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
-  auto localVocab = std::make_shared<LocalVocab>();
+  auto localVocab = LocalVocab{};
   // Fill the result table using the `writeTsvResult` method below.
   size_t resWidth = getResultWidth();
   CALL_FIXED_SIZE(resWidth, &Service::writeTsvResult, this,
-                  std::move(tsvResult), &idTable, localVocab.get());
+                  std::move(tsvResult), &idTable, &localVocab);
 
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }

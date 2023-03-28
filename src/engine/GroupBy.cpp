@@ -303,8 +303,7 @@ ResultTable GroupBy::computeResult() {
     // Note: The optimized group bys currently all include index scans and thus
     // can never produce local vocab entries. If this should ever change, then
     // we also have to take care of the local vocab here.
-    return {std::move(idTable), resultSortedOn(),
-            std::make_shared<LocalVocab>()};
+    return {std::move(idTable), resultSortedOn(), LocalVocab()};
   }
 
   std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
@@ -356,7 +355,7 @@ ResultTable GroupBy::computeResult() {
 
   CALL_FIXED_SIZE((std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
                   subresult->idTable(), groupByCols, aggregates, &idTable,
-                  &(subresult->idTable()), localVocab.get());
+                  &(subresult->idTable()), &localVocab);
 
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};

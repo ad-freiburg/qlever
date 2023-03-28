@@ -31,9 +31,39 @@ class ResultTable {
   // Empty if the result is not sorted on any column.
   std::vector<size_t> _sortedBy;
 
+  using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
   // The local vocabulary of the result.
-  std::shared_ptr<const LocalVocab> localVocab_ =
-      std::make_shared<const LocalVocab>();
+  LocalVocabPtr localVocab_ = std::make_shared<const LocalVocab>();
+
+  // This class is used to enforce the invariant, that the `localVocab_` (which
+  // is stored in a shared_ptr) is only shared between instances of the
+  // `ResultTable` class (where it is `const`). This gives a provable guarantee
+  // that the `localVocab_` is not mutated through some other code that still
+  // owns a pointer to the same local vocab.
+  class SharedLocalVocabWrapper {
+   private:
+    // Only the `ResultTable` class is allowed to read or write the stored
+    // `shared_ptr`. Other code can obtain a `SharedLocalVocabWrapper` from a
+    // `ResultTable` and pass this wrapper into another `ResultTable`, but it
+    // can never access the `shared_ptr` directly.
+    std::shared_ptr<const LocalVocab> localVocab_ =
+        std::make_shared<const LocalVocab>();
+    // Note: The constructor is deliberately implicit to make the usage of
+    // `ResultTable`'s constructor simpler.
+    SharedLocalVocabWrapper(LocalVocabPtr localVocab)
+        : localVocab_{std::move(localVocab)} {}
+    friend class ResultTable;
+
+   public:
+    // Create a wrapper from a `LocalVocab`. This is safe to call also from
+    // external code, as the local vocab is passed by value and not by (shared)
+    // pointer, so it is exclusive to this wrapper. Note: The constructor is
+    // deliberately implicit to make the usage of `ResultTable`'s constructor
+    // simpler.
+    SharedLocalVocabWrapper(LocalVocab localVocab)
+        : localVocab_{
+              std::make_shared<const LocalVocab>(std::move(localVocab))} {}
+  };
 
  public:
   // Construct from the given arguments (see above) and check the following
@@ -42,8 +72,11 @@ class ResultTable {
   // `idTable` is sorted by the columns specified by `sortedBy` is only checked,
   // if expensive checks are enabled, for example by not defining the `NDEBUG`
   // macro.
+  // Note: The third argument can either be a `SharedLocalVocabWrapper` that is
+  // obtained from other `ResultTable`s via one of the `getSharedLocalVocab...`
+  // methods below, or an instance of `LocalVocab` (by value).
   ResultTable(IdTable idTable, std::vector<size_t> sortedBy,
-              std::shared_ptr<const LocalVocab> localVocab);
+              SharedLocalVocabWrapper localVocab);
 
   // Prevent accidental copying of a result table.
   ResultTable(const ResultTable& other) = delete;
@@ -83,9 +116,7 @@ class ResultTable {
 
   // Get the local vocab as a shared pointer to const. This can be used if one
   // result has the same local vocab as one of its child results.
-  std::shared_ptr<const LocalVocab> getSharedLocalVocab() const {
-    return localVocab_;
-  }
+  SharedLocalVocabWrapper getSharedLocalVocab() const { return localVocab_; }
 
   // Like `getSharedLocalVocabFrom`, but takes *two* results and assumes that
   // one of the local vocabularies is empty and gets the shared local vocab from
@@ -95,13 +126,13 @@ class ResultTable {
   // TODO: Eventually, we want to be able to merge two non-empty local
   // vocabularies, but that requires more work since we have to rewrite IDs then
   // (from the previous separate local vocabularies to the new merged one).
-  static std::shared_ptr<const LocalVocab> getSharedLocalVocabFromNonEmptyOf(
+  static SharedLocalVocabWrapper getSharedLocalVocabFromNonEmptyOf(
       const ResultTable& resultTable1, const ResultTable& resultTable2);
 
   // Get a (deep) copy of the local vocabulary from the given result. Use this
   // when you want to (potentially) add further words to the local vocabulary
   // (which is not possible with `shareLocalVocabFrom`).
-  std::shared_ptr<LocalVocab> getCopyOfLocalVocab() const;
+  LocalVocab getCopyOfLocalVocab() const;
 
   // Log the size of this result. We call this at several places in
   // `Server::processQuery`. Ideally, this should only be called in one

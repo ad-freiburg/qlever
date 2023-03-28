@@ -212,7 +212,6 @@ ResultTable HasPredicateScan::computeResult() {
   LOG(DEBUG) << "HasPredicateScan result computation..." << std::endl;
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
-  auto localVocab = std::make_shared<const LocalVocab>();
 
   const std::vector<PatternID>& hasPattern = getIndex().getHasPattern();
   const CompactVectorOfStrings<Id>& hasPredicate = getIndex().getHasPredicate();
@@ -226,7 +225,8 @@ ResultTable HasPredicateScan::computeResult() {
       }
       HasPredicateScan::computeFreeS(&idTable, objectId, hasPattern,
                                      hasPredicate, patterns);
-    } break;
+      return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+    };
     case ScanType::FREE_O: {
       Id subjectId;
       if (!getIndex().getId(_subject, &subjectId)) {
@@ -234,27 +234,25 @@ ResultTable HasPredicateScan::computeResult() {
       }
       HasPredicateScan::computeFreeO(&idTable, subjectId, hasPattern,
                                      hasPredicate, patterns);
-    } break;
+      return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+    };
     case ScanType::FULL_SCAN:
       HasPredicateScan::computeFullScan(
           &idTable, hasPattern, hasPredicate, patterns,
           getIndex().getNumDistinctSubjectPredicatePairs());
-      break;
+      return {std::move(idTable), resultSortedOn(), LocalVocab{}};
     case ScanType::SUBQUERY_S:
 
       std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
-      localVocab = subresult->getSharedLocalVocab();
       int inWidth = subresult->idTable().numColumns();
       int outWidth = idTable.numColumns();
       CALL_FIXED_SIZE((std::array{inWidth, outWidth}),
                       HasPredicateScan::computeSubqueryS, &idTable,
                       subresult->idTable(), _subtreeJoinColumn, hasPattern,
                       hasPredicate, patterns);
-      break;
+      return {std::move(idTable), resultSortedOn(),
+              subresult->getSharedLocalVocab()};
   }
-
-  LOG(DEBUG) << "HasPredicateScan result compuation done." << std::endl;
-  return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
 void HasPredicateScan::computeFreeS(

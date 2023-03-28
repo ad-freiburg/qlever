@@ -14,9 +14,8 @@ using enum PositionInTriple;
 namespace {
 struct ContextWrapper {
   Index _index{};
-  ResultTable _resultTable{IdTable{ad_utility::testing::makeAllocator()},
-                           {},
-                           std::make_shared<const LocalVocab>()};
+  ResultTable _resultTable{
+      IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}};
   // TODO<joka921> `VariableToColumnMap`
   ad_utility::HashMap<Variable, size_t> _hashMap{};
 

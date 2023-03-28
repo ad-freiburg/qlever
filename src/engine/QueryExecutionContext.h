@@ -31,20 +31,18 @@ class CacheValue {
  private:
   std::shared_ptr<const ResultTable> _resultTable;
   RuntimeInformation _runtimeInfo;
- public:
 
+ public:
   explicit CacheValue(ResultTable resultTable, RuntimeInformation runtimeInfo)
       : _resultTable(
-      std::make_shared<const ResultTable>(std::move(resultTable))),
+            std::make_shared<const ResultTable>(std::move(resultTable))),
         _runtimeInfo(std::move(runtimeInfo)) {}
 
   const shared_ptr<const ResultTable>& resultTable() const {
     return _resultTable;
   }
 
-  const RuntimeInformation& runtimeInfo() const {
-    return _runtimeInfo;
-  }
+  const RuntimeInformation& runtimeInfo() const { return _runtimeInfo; }
 
   [[nodiscard]] size_t size() const {
     return _resultTable ? _resultTable->size() * _resultTable->width() : 0;

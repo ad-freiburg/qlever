@@ -29,8 +29,7 @@ class DummyOperation : public Operation {
     for (size_t i = 0; i < 10; i++) {
       result.push_back({V(10 - i), V(2 * i)});
     }
-    return {std::move(result), resultSortedOn(),
-            std::make_shared<const LocalVocab>()};
+    return {std::move(result), resultSortedOn(), LocalVocab{}};
   }
 
  private:

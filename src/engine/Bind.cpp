@@ -101,7 +101,7 @@ ResultTable Bind::computeResult() {
   int outwidth = getResultWidth();
 
   CALL_FIXED_SIZE((std::array{inwidth, outwidth}), &Bind::computeExpressionBind,
-                  this, &idTable, localVocab.get(), *subRes,
+                  this, &idTable, &localVocab, *subRes,
                   _bind._expression.getPimpl());
 
   LOG(DEBUG) << "BIND result computation done." << endl;

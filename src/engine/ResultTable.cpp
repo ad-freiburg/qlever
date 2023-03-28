@@ -25,9 +25,9 @@ string ResultTable::asDebugString() const {
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<const LocalVocab>
-ResultTable::getSharedLocalVocabFromNonEmptyOf(
-    const ResultTable& resultTable1, const ResultTable& resultTable2) {
+auto ResultTable::getSharedLocalVocabFromNonEmptyOf(
+    const ResultTable& resultTable1, const ResultTable& resultTable2)
+    -> SharedLocalVocabWrapper {
   const auto& localVocab1 = resultTable1.localVocab_;
   const auto& localVocab2 = resultTable2.localVocab_;
   if (!localVocab1->empty() && !localVocab2->empty()) {
@@ -39,16 +39,16 @@ ResultTable::getSharedLocalVocabFromNonEmptyOf(
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<LocalVocab> ResultTable::getCopyOfLocalVocab() const {
-  return std::make_shared<LocalVocab>(localVocab_->clone());
+LocalVocab ResultTable::getCopyOfLocalVocab() const {
+  return localVocab().clone();
 }
 
 // _____________________________________________________________________________
 ResultTable::ResultTable(IdTable idTable, vector<size_t> sortedBy,
-                         std::shared_ptr<const LocalVocab> localVocab)
+                         SharedLocalVocabWrapper localVocab)
     : _idTable{std::move(idTable)},
       _sortedBy{std::move(sortedBy)},
-      localVocab_{std::move(localVocab)} {
+      localVocab_{std::move(localVocab.localVocab_)} {
   AD_CONTRACT_CHECK(localVocab_ != nullptr);
   AD_CONTRACT_CHECK(std::ranges::all_of(_sortedBy, [this](size_t numCols) {
     return numCols < this->idTable().numColumns();

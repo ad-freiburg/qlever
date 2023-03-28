@@ -74,7 +74,7 @@ ResultTable TextOperationWithoutFilter::computeResult() {
     computeResultMultVars(&table);
   }
   LOG(DEBUG) << "TextOperationWithoutFilter result computation done." << endl;
-  return {std::move(table), resultSortedOn(), std::make_shared<LocalVocab>()};
+  return {std::move(table), resultSortedOn(), LocalVocab{}};
 }
 
 // _____________________________________________________________________________
