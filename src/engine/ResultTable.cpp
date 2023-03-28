@@ -54,7 +54,8 @@ ResultTable::ResultTable(IdTable idTable, vector<size_t> sortedBy,
     return numCols < this->idTable().numColumns();
   }));
 
-  [[maybe_unused]] auto compareRowsByJoinColumns = [this](const auto& row1, const auto& row2) {
+  [[maybe_unused]] auto compareRowsByJoinColumns = [this](const auto& row1,
+                                                          const auto& row2) {
     for (size_t col : this->sortedBy()) {
       if (row1[col] != row2[col]) {
         return row1[col] < row2[col];

@@ -253,6 +253,7 @@ ResultTable HasPredicateScan::computeResult() {
       return {std::move(idTable), resultSortedOn(),
               subresult->getSharedLocalVocab()};
   }
+  AD_FAIL();
 }
 
 void HasPredicateScan::computeFreeS(
