@@ -35,7 +35,8 @@ auto ResultTable::getSharedLocalVocabFromNonEmptyOf(
         "Merging of two non-empty local vocabularies is currently not "
         "supported, please contact the developers");
   }
-  return localVocab2->empty() ? localVocab1 : localVocab2;
+  return SharedLocalVocabWrapper{localVocab2->empty() ? localVocab1
+                                                      : localVocab2};
 }
 
 // _____________________________________________________________________________
@@ -66,3 +67,9 @@ ResultTable::ResultTable(IdTable idTable, vector<size_t> sortedBy,
   AD_EXPENSIVE_CHECK(
       std::ranges::is_sorted(this->idTable(), compareRowsByJoinColumns));
 }
+
+// _____________________________________________________________________________
+ResultTable::ResultTable(IdTable idTable, vector<size_t> sortedBy,
+                         LocalVocab&& localVocab)
+    : ResultTable(std::move(idTable), std::move(sortedBy),
+                  SharedLocalVocabWrapper{std::move(localVocab)}) {}

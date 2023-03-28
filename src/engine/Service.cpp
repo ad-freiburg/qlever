@@ -136,7 +136,7 @@ ResultTable Service::computeResult() {
   // Set basic properties of the result table.
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
-  auto localVocab = LocalVocab{};
+  LocalVocab localVocab{};
   // Fill the result table using the `writeTsvResult` method below.
   size_t resWidth = getResultWidth();
   CALL_FIXED_SIZE(resWidth, &Service::writeTsvResult, this,

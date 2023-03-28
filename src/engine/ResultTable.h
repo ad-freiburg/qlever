@@ -48,19 +48,15 @@ class ResultTable {
     // can never access the `shared_ptr` directly.
     std::shared_ptr<const LocalVocab> localVocab_ =
         std::make_shared<const LocalVocab>();
-    // Note: The constructor is deliberately implicit to make the usage of
-    // `ResultTable`'s constructor simpler.
-    SharedLocalVocabWrapper(LocalVocabPtr localVocab)
+    explicit SharedLocalVocabWrapper(LocalVocabPtr localVocab)
         : localVocab_{std::move(localVocab)} {}
     friend class ResultTable;
 
    public:
     // Create a wrapper from a `LocalVocab`. This is safe to call also from
     // external code, as the local vocab is passed by value and not by (shared)
-    // pointer, so it is exclusive to this wrapper. Note: The constructor is
-    // deliberately implicit to make the usage of `ResultTable`'s constructor
-    // simpler.
-    SharedLocalVocabWrapper(LocalVocab localVocab)
+    // pointer, so it is exclusive to this wrapper.
+    explicit SharedLocalVocabWrapper(LocalVocab localVocab)
         : localVocab_{
               std::make_shared<const LocalVocab>(std::move(localVocab))} {}
   };
@@ -72,11 +68,13 @@ class ResultTable {
   // `idTable` is sorted by the columns specified by `sortedBy` is only checked,
   // if expensive checks are enabled, for example by not defining the `NDEBUG`
   // macro.
-  // Note: The third argument can either be a `SharedLocalVocabWrapper` that is
-  // obtained from other `ResultTable`s via one of the `getSharedLocalVocab...`
-  // methods below, or an instance of `LocalVocab` (by value).
+  // The first overload of the constructor is for local vocabs that are shared
+  // with another `ResultTable` via the `getSharedLocalVocab...` methods below.
+  // The second overload is for newly created local vocabularies.
   ResultTable(IdTable idTable, std::vector<size_t> sortedBy,
               SharedLocalVocabWrapper localVocab);
+  ResultTable(IdTable idTable, std::vector<size_t> sortedBy,
+              LocalVocab&& localVocab);
 
   // Prevent accidental copying of a result table.
   ResultTable(const ResultTable& other) = delete;
@@ -116,7 +114,9 @@ class ResultTable {
 
   // Get the local vocab as a shared pointer to const. This can be used if one
   // result has the same local vocab as one of its child results.
-  SharedLocalVocabWrapper getSharedLocalVocab() const { return localVocab_; }
+  SharedLocalVocabWrapper getSharedLocalVocab() const {
+    return SharedLocalVocabWrapper{localVocab_};
+  }
 
   // Like `getSharedLocalVocabFrom`, but takes *two* results and assumes that
   // one of the local vocabularies is empty and gets the shared local vocab from

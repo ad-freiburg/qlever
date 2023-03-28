@@ -209,7 +209,6 @@ size_t HasPredicateScan::getCostEstimate() {
 }
 
 ResultTable HasPredicateScan::computeResult() {
-  LOG(DEBUG) << "HasPredicateScan result computation..." << std::endl;
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
 
