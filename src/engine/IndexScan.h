@@ -86,6 +86,21 @@ class IndexScan : public Operation {
 
   virtual bool knownEmptyResult() override { return getSizeEstimate() == 0; }
 
+  // Currently only the full scans support a limit clause.
+  [[nodiscard]] bool supportsLimit() const override {
+    switch (_type) {
+      case FULL_INDEX_SCAN_SPO:
+      case FULL_INDEX_SCAN_SOP:
+      case FULL_INDEX_SCAN_PSO:
+      case FULL_INDEX_SCAN_POS:
+      case FULL_INDEX_SCAN_OSP:
+      case FULL_INDEX_SCAN_OPS:
+        return true;
+      default:
+        return false;
+    }
+  }
+
   ScanType getType() const { return _type; }
 
  private:

@@ -524,6 +524,13 @@ void IndexScan::computeFullScan(ResultTable* result,
   if (getLimit()._limit.has_value() && getLimit()._limit < resultSize) {
     resultSize = getLimit()._limit.value();
   }
+
+  // TODO<joka921> Implement OFFSET
+  if (getLimit()._offset != 0) {
+    throw NotSupportedException{
+        "Scanning the complete index with an OFFSET clause is currently not "
+        "supported by QLever"};
+  }
   result->_idTable.reserve(resultSize);
   auto table = std::move(result->_idTable).toStatic<3>();
   size_t i = 0;
