@@ -170,8 +170,7 @@ void GroupBy::processGroup(
     const GroupBy::Aggregate& aggregate,
     sparqlExpression::EvaluationContext& evaluationContext, size_t blockStart,
     size_t blockEnd, IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
-    size_t resultColumn, ResultTable* outTable,
-    ResultTable::ResultType* resultType) const {
+    size_t resultColumn, LocalVocab* localVocab) const {
   evaluationContext._beginIndex = blockStart;
   evaluationContext._endIndex = blockEnd;
 
@@ -191,12 +190,9 @@ void GroupBy::processGroup(
     AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<T>);
     if constexpr (isStrongId) {
       resultEntry = singleResult;
-      *resultType = qlever::ResultType::KB;
     } else if constexpr (sparqlExpression::isConstantResult<T>) {
-      *resultType =
-          sparqlExpression::detail::expressionResultTypeToQleverResultType<T>();
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
-          singleResult, outTable->localVocabNonConst());
+          singleResult, *localVocab);
     } else {
       // This should never happen since aggregates always return constants.
       AD_FAIL();
@@ -227,8 +223,8 @@ template <int IN_WIDTH, int OUT_WIDTH>
 void GroupBy::doGroupBy(const IdTable& dynInput,
                         const vector<size_t>& groupByCols,
                         const vector<GroupBy::Aggregate>& aggregates,
-                        IdTable* dynResult, const ResultTable* inTable,
-                        ResultTable* outTable) const {
+                        IdTable* dynResult, const IdTable* inTable,
+                        LocalVocab* outLocalVocab) const {
   LOG(DEBUG) << "Group by input size " << dynInput.size() << std::endl;
   if (dynInput.size() == 0) {
     return;
@@ -236,15 +232,9 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   const IdTableView<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
 
-  sparqlExpression::VariableToColumnAndResultTypeMap columnMap;
-  for (const auto& [variable, columnIndex] : _subtree->getVariableColumns()) {
-    columnMap[variable] =
-        std::pair(columnIndex, inTable->getResultType(columnIndex));
-  }
-
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), columnMap, inTable->_idTable,
-      getExecutionContext()->getAllocator(), outTable->localVocabNonConst());
+      *getExecutionContext(), _subtree->getVariableColumns(), *inTable,
+      getExecutionContext()->getAllocator(), *outLocalVocab);
 
   // In a GROUP BY evaluation, the expressions need to know which variables are
   // grouped, and to which columns the results of the aliases are written. The
@@ -264,7 +254,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
     }
     for (const GroupBy::Aggregate& a : aggregates) {
       processGroup(a, evaluationContext, blockStart, blockEnd, &result, rowIdx,
-                   a._outCol, outTable, &outTable->_resultTypes[a._outCol]);
+                   a._outCol, outLocalVocab);
     }
   };
 
@@ -304,11 +294,16 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   *dynResult = std::move(result).toDynamic();
 }
 
-void GroupBy::computeResult(ResultTable* result) {
+ResultTable GroupBy::computeResult() {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
-  if (computeOptimizedGroupByIfPossible(result)) {
-    return;
+  IdTable idTable{getExecutionContext()->getAllocator()};
+
+  if (computeOptimizedGroupByIfPossible(&idTable)) {
+    // Note: The optimized group bys currently all include index scans and thus
+    // can never produce local vocab entries. If this should ever change, then
+    // we also have to take care of the local vocab here.
+    return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   }
 
   std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
@@ -321,12 +316,12 @@ void GroupBy::computeResult(ResultTable* result) {
   // vocabulary, so it would be more efficient to first share the pointer here
   // (like with `shareLocalVocabFrom`) and only copy it when a new word is about
   // to be added. Same for BIND.
-  result->getCopyOfLocalVocabFrom(*subresult);
+
+  auto localVocab = subresult->getCopyOfLocalVocab();
 
   std::vector<size_t> groupByColumns;
 
-  result->_sortedBy = resultSortedOn();
-  result->_idTable.setNumColumns(getResultWidth());
+  idTable.setNumColumns(getResultWidth());
 
   std::vector<Aggregate> aggregates;
   aggregates.reserve(_aliases.size() + _groupByVariables.size());
@@ -349,41 +344,25 @@ void GroupBy::computeResult(ResultTable* result) {
         Aggregate{alias._expression, varColMap.at(alias._target)});
   }
 
-  // populate the result type vector
-  result->_resultTypes.resize(result->_idTable.numColumns());
-
-  // The `_groupByVariables` are simply copied, so their result type is
-  // also copied. The result type of the other columns is set when the
-  // values are computed.
-  for (const auto& var : _groupByVariables) {
-    result->_resultTypes[varColMap.at(var)] =
-        subresult->getResultType(subtreeVarCols.at(var));
-  }
-
   std::vector<size_t> groupByCols;
   groupByCols.reserve(_groupByVariables.size());
   for (const auto& var : _groupByVariables) {
     groupByCols.push_back(subtreeVarCols.at(var));
   }
 
-  std::vector<ResultTable::ResultType> inputResultTypes;
-  inputResultTypes.reserve(subresult->_idTable.numColumns());
-  for (size_t i = 0; i < subresult->_idTable.numColumns(); i++) {
-    inputResultTypes.push_back(subresult->getResultType(i));
-  }
-
-  int inWidth = subresult->_idTable.numColumns();
-  int outWidth = result->_idTable.numColumns();
+  int inWidth = subresult->idTable().numColumns();
+  int outWidth = idTable.numColumns();
 
   CALL_FIXED_SIZE((std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
-                  subresult->_idTable, groupByCols, aggregates,
-                  &result->_idTable, subresult.get(), result);
+                  subresult->idTable(), groupByCols, aggregates, &idTable,
+                  &(subresult->idTable()), &localVocab);
 
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
+  return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
 // _____________________________________________________________________________
-bool GroupBy::computeGroupByForSingleIndexScan(ResultTable* result) {
+bool GroupBy::computeGroupByForSingleIndexScan(IdTable* result) {
   // The child must be an `IndexScan` for this optimization.
   auto* indexScan =
       dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get());
@@ -408,11 +387,9 @@ bool GroupBy::computeGroupByForSingleIndexScan(ResultTable* result) {
     return false;
   }
 
-  result->_idTable.setNumColumns(1);
-  // TODO<joka921> The `resultTypes` are not really in use, but if they are
-  // not present, segfaults might occur in upstream `Operation`s.
-  result->_resultTypes.push_back(qlever::ResultType::VERBATIM);
-  result->_idTable.emplace_back();
+  auto& table = *result;
+  table.setNumColumns(1);
+  table.emplace_back();
   // For `IndexScan`s with at least two variables the size estimates are
   // exact as they are read directly from the index metadata.
   if (indexScan->getResultWidth() == 3) {
@@ -421,21 +398,21 @@ bool GroupBy::computeGroupByForSingleIndexScan(ResultTable* result) {
       auto permutation =
           getPermutationForThreeVariableTriple(*_subtree, var, var);
       AD_CONTRACT_CHECK(permutation.has_value());
-      result->_idTable(0, 0) = Id::makeFromInt(
+      table(0, 0) = Id::makeFromInt(
           getIndex().getImpl().numDistinctCol0(permutation.value()).normal_);
     } else {
-      result->_idTable(0, 0) = Id::makeFromInt(getIndex().numTriples().normal_);
+      table(0, 0) = Id::makeFromInt(getIndex().numTriples().normal_);
     }
   } else {
     // TODO<joka921> The two variables IndexScans should also account for the
     // additionally added triples.
-    result->_idTable(0, 0) = Id::makeFromInt(indexScan->getSizeEstimate());
+    table(0, 0) = Id::makeFromInt(indexScan->getSizeEstimate());
   }
   return true;
 }
 
 // _____________________________________________________________________________
-bool GroupBy::computeGroupByForFullIndexScan(ResultTable* result) {
+bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
   if (_groupByVariables.size() != 1) {
     return false;
   }
@@ -476,10 +453,7 @@ bool GroupBy::computeGroupByForFullIndexScan(ResultTable* result) {
 
   // Prepare the `result`
   size_t numCols = numCounts + 1;
-  result->_idTable.setNumColumns(numCols);
-  for (size_t i = 0; i < numCols; ++i) {
-    result->_resultTypes.push_back(qlever::ResultType::VERBATIM);
-  }
+  result->setNumColumns(numCols);
   _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
 
   // A nested lambda that computes the actual result. The outer lambda is
@@ -487,8 +461,6 @@ bool GroupBy::computeGroupByForFullIndexScan(ResultTable* result) {
   // `callFixedSize`.
   auto doComputationForNumberOfColumns = [&]<int NUM_COLS>(
                                              IdTable* idTable) mutable {
-    // TODO<joka921> The `resultTypes` are not really in use, but if they
-    // are not present, segfaults might occur in upstream `Operation`s.
     auto ignoredRanges =
         getIndex().getImpl().getIgnoredIdRanges(permutation.value()).first;
     // The permutations in the `Index` class have different types, so we
@@ -541,8 +513,7 @@ bool GroupBy::computeGroupByForFullIndexScan(ResultTable* result) {
     getExecutionContext()->getIndex().getPimpl().applyToPermutation(
         permutation.value(), applyForPermutation);
   };
-  ad_utility::callFixedSize(numCols, doComputationForNumberOfColumns,
-                            &result->_idTable);
+  ad_utility::callFixedSize(numCols, doComputationForNumberOfColumns, result);
 
   // TODO<joka921> This optimization should probably also apply if
   // the query is `SELECT DISTINCT ?s WHERE {?s ?p ?o} ` without a
@@ -624,7 +595,7 @@ std::optional<GroupBy::OptimizedGroupByData> GroupBy::checkIfJoinWithFullScan(
 }
 
 // _____________________________________________________________________________
-bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
+bool GroupBy::computeGroupByForJoinWithFullScan(IdTable* result) {
   auto join = dynamic_cast<Join*>(_subtree->getRootOperation().get());
   if (!join) {
     return false;
@@ -644,16 +615,12 @@ bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
   join->updateRuntimeInformationWhenOptimizedOut(
       {subtree.getRootOperation()->getRuntimeInfo(),
        threeVarSubtree.getRootOperation()->getRuntimeInfo()});
-  result->_idTable.setNumColumns(2);
-  // TODO<joka921> The `resultTypes` are not really in use, but if they are
-  // not present, segfaults might occur in upstream `Operation`s.
-  result->_resultTypes.push_back(qlever::ResultType::KB);
-  result->_resultTypes.push_back(qlever::ResultType::VERBATIM);
-  if (subresult->_idTable.size() == 0) {
+  result->setNumColumns(2);
+  if (subresult->idTable().size() == 0) {
     return true;
   }
 
-  auto idTable = std::move(result->_idTable).toStatic<2>();
+  auto idTable = std::move(*result).toStatic<2>();
   const auto& index = getExecutionContext()->getIndex();
 
   // TODO<joka921, C++23> Simplify the following pattern by using
@@ -661,7 +628,7 @@ bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
   // iterators.
 
   // Take care of duplicate values in the input.
-  Id currentId = subresult->_idTable(0, columnIndex);
+  Id currentId = subresult->idTable()(0, columnIndex);
   size_t currentCount = 0;
   size_t currentCardinality = index.getCardinality(currentId, permutation);
 
@@ -676,8 +643,8 @@ bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
       idTable.push_back({currentId, Id::makeFromInt(currentCount)});
     }
   };
-  for (size_t i = 0; i < subresult->_idTable.size(); ++i) {
-    auto id = subresult->_idTable(i, columnIndex);
+  for (size_t i = 0; i < subresult->idTable().size(); ++i) {
+    auto id = subresult->idTable()(i, columnIndex);
     if (id != currentId) {
       pushRow();
       currentId = id;
@@ -690,12 +657,12 @@ bool GroupBy::computeGroupByForJoinWithFullScan(ResultTable* result) {
     currentCount += currentCardinality;
   }
   pushRow();
-  result->_idTable = std::move(idTable).toDynamic();
+  *result = std::move(idTable).toDynamic();
   return true;
 }
 
 // _____________________________________________________________________________
-bool GroupBy::computeOptimizedGroupByIfPossible(ResultTable* result) {
+bool GroupBy::computeOptimizedGroupByIfPossible(IdTable* result) {
   if (computeGroupByForSingleIndexScan(result)) {
     return true;
   } else if (computeGroupByForFullIndexScan(result)) {

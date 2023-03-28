@@ -27,12 +27,23 @@ using std::shared_ptr;
 using std::string;
 using std::vector;
 
-struct CacheValue {
-  explicit CacheValue(ad_utility::AllocatorWithLimit<Id> allocator)
-      : _resultTable(std::make_shared<ResultTable>(std::move(allocator))),
-        _runtimeInfo() {}
-  std::shared_ptr<ResultTable> _resultTable;
+class CacheValue {
+ private:
+  std::shared_ptr<const ResultTable> _resultTable;
   RuntimeInformation _runtimeInfo;
+
+ public:
+  explicit CacheValue(ResultTable resultTable, RuntimeInformation runtimeInfo)
+      : _resultTable(
+            std::make_shared<const ResultTable>(std::move(resultTable))),
+        _runtimeInfo(std::move(runtimeInfo)) {}
+
+  const shared_ptr<const ResultTable>& resultTable() const {
+    return _resultTable;
+  }
+
+  const RuntimeInformation& runtimeInfo() const { return _runtimeInfo; }
+
   [[nodiscard]] size_t size() const {
     return _resultTable ? _resultTable->size() * _resultTable->width() : 0;
   }

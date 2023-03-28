@@ -64,10 +64,11 @@ class MultiColumnJoin : public Operation {
   template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
   static void computeMultiColumnJoin(
       const IdTable& a, const IdTable& b,
-      const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* result);
+      const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+      IdTable* result);
 
  private:
-  virtual void computeResult(ResultTable* result) override;
+  virtual ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
@@ -77,7 +78,8 @@ class MultiColumnJoin : public Operation {
 template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
 void MultiColumnJoin::computeMultiColumnJoin(
     const IdTable& dynA, const IdTable& dynB,
-    const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* dynResult) {
+    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+    IdTable* dynResult) {
   // check for trivial cases
   if (dynA.size() == 0 || dynB.size() == 0) {
     return;
@@ -86,7 +88,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // Marks the columns in b that are join columns. Used to skip these
   // when computing the result of the join
   int joinColumnBitmap_b = 0;
-  for (const array<ColumnIndex, 2>& jc : joinColumns) {
+  for (const std::array<ColumnIndex, 2>& jc : joinColumns) {
     joinColumnBitmap_b |= (1 << jc[1]);
   }
 
@@ -115,7 +117,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
     matched = true;
     for (size_t joinColIndex = 0; joinColIndex < joinColumns.size();
          joinColIndex++) {
-      const array<ColumnIndex, 2>& joinColumn = joinColumns[joinColIndex];
+      const std::array<ColumnIndex, 2>& joinColumn = joinColumns[joinColIndex];
       if (a(ia, joinColumn[0]) < b(ib, joinColumn[1])) {
         ia++;
         matched = false;
@@ -154,7 +156,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
         ib++;
 
         // do the rows still match?
-        for (const array<ColumnIndex, 2>& jc : joinColumns) {
+        for (const std::array<ColumnIndex, 2>& jc : joinColumns) {
           if (ib >= b.size() || a(ia, jc[0]) != b(ib, jc[1])) {
             matched = false;
             break;
@@ -164,7 +166,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
       ia++;
       // Check if the next row in a also matches the initial row in b
       matched = true;
-      for (const array<ColumnIndex, 2>& jc : joinColumns) {
+      for (const std::array<ColumnIndex, 2>& jc : joinColumns) {
         if (ia >= a.size() || a(ia, jc[0]) != b(initIb, jc[1])) {
           matched = false;
           break;

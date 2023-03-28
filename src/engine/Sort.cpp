@@ -107,7 +107,7 @@ void sortImpl(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
 }  // namespace
 
 // _____________________________________________________________________________
-void Sort::computeResult(ResultTable* result) {
+ResultTable Sort::computeResult() {
   LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
   shared_ptr<const ResultTable> subRes = subtree_->getResult();
 
@@ -127,13 +127,9 @@ void Sort::computeResult(ResultTable* result) {
   }
 
   LOG(DEBUG) << "Sort result computation..." << endl;
-  result->_resultTypes.insert(result->_resultTypes.end(),
-                              subRes->_resultTypes.begin(),
-                              subRes->_resultTypes.end());
-  result->shareLocalVocabFrom(*subRes);
-  result->_idTable = subRes->_idTable.clone();
-  result->_sortedBy = resultSortedOn();
-  sortImpl(result->_idTable, sortColumnIndices_);
+  IdTable idTable = subRes->idTable().clone();
+  sortImpl(idTable, sortColumnIndices_);
 
   LOG(DEBUG) << "Sort result computation done." << endl;
+  return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
