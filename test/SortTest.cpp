@@ -25,7 +25,7 @@ Sort makeSort(IdTable input, const std::vector<size_t>& sortColumns) {
   }
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       ad_utility::testing::getQec(), std::move(input), vars);
-  return Sort{qec, subtree, sortColumns};
+  return Sort::makeSortOnlyForTesting(qec, subtree, sortColumns);
 }
 
 // Test that the `input`, when being sorted by its 0-th column as its primary

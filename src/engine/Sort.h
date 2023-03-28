@@ -21,11 +21,17 @@ class Sort : public Operation {
   std::shared_ptr<QueryExecutionTree> subtree_;
   std::vector<ColumnIndex> sortColumnIndices_;
 
- public:
+ private:
   Sort(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
        std::vector<ColumnIndex> sortColumnIndices);
+  friend class QueryExecutionTree;
 
  public:
+  static Sort makeSortOnlyForTesting(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
+                                     std::vector<ColumnIndex> sortColumnIndices) {
+    return Sort{qec, std::move(subtree), std::move(sortColumnIndices)};
+  }
+
   virtual string getDescriptor() const override;
 
   virtual vector<size_t> resultSortedOn() const override {

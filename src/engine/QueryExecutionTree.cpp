@@ -230,7 +230,7 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
 template void QueryExecutionTree::setOperation(std::shared_ptr<IndexScan>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Union>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Bind>);
-template void QueryExecutionTree::setOperation(std::shared_ptr<Sort>);
+//template void QueryExecutionTree::setOperation(std::shared_ptr<Sort>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Distinct>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Values>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Service>);
@@ -264,6 +264,7 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     inputSorted = sortColumns[i] == inputSortedOn[i];
   }
   if (sortColumns.empty() || inputSorted) {
+    qet->getRootOperation()->sortingIsRequired() = true;
     return qet;
   }
 
