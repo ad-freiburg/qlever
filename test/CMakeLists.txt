@@ -308,3 +308,6 @@ addLinkAndDiscoverTest(ExceptionHandlingTest)
 
 addLinkAndDiscoverTest(SparqlExpressionTypesTest)
 
+addLinkAndDiscoverTest(LimitOffsetClauseTest)
+
+addLinkAndDiscoverTest(OperationTest engine)

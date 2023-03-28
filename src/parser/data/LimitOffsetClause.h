@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <limits>
 
+#include "util/Exception.h"
+
 // Represents the data returned by a limitOffsetClause.
 struct LimitOffsetClause {
   std::optional<uint64_t> _limit;
@@ -19,21 +21,32 @@ struct LimitOffsetClause {
     return _limit.value_or(std::numeric_limits<uint64_t>::max());
   }
 
-  uint64_t upperBound(uint64_t inputSize) const {
+  // Return the minimum of the offset and the `actualSize` of a query result.
+  // That way, if the offset is too large, the result after applying it will be
+  // empty, but there will be no out of bounds errors when using the result of
+  // this function to resize a result.
+  uint64_t actualOffset(uint64_t actualSize) const {
+    return std::min(actualSize, _offset);
+  }
+
+  // When applying the limit and offset to a table of `actualSize`, what is the
+  // actual upper bound (as an index into the table) for the resulting elements.
+  // In the most simple case this is `limit + offset`, but this function handles
+  // all possible overflows. The result will always be `<= actualSize`.
+  uint64_t upperBound(uint64_t actualSize) const {
     auto val = limitOrDefault() + _offset;
     val = val >= std::max(limitOrDefault(), _offset)
               ? val
               : std::numeric_limits<uint64_t>::max();
-    return std::min(val, inputSize);
+    return std::min(val, actualSize);
   }
 
-  uint64_t actualOffset(uint64_t inputSize) const {
-    return std::min(inputSize, _offset);
-  }
-
-  uint64_t actualSize(uint64_t inputSize) const {
-    auto upper = upperBound(inputSize);
-    auto offset = actualOffset(inputSize);
+  // Return the resulting number of elements when applying the limit and offset
+  // to a table of `actualSize`. This is exactly `upperBound(actualSize) -
+  // actualOffset(actualSize)`.
+  uint64_t actualSize(uint64_t actualSize) const {
+    auto upper = upperBound(actualSize);
+    auto offset = actualOffset(actualSize);
     AD_CORRECTNESS_CHECK(upper >= offset);
     return upper - offset;
   }

@@ -117,13 +117,14 @@ class Operation {
   void recursivelySetTimeoutTimer(
       const ad_utility::SharedConcurrentTimeoutTimer& timer);
 
+  // True iff this operation directly implement a `LIMIT` clause on its result.
+  [[nodiscard]] virtual bool supportsLimit() const { return false; }
+
   // Set the value of the `LIMIT` clause that will be applied to the result of
   // this operation.
   void setLimit(LimitOffsetClause limitOffsetClause) {
     _limit = limitOffsetClause;
   }
-
-  virtual bool supportsLimit() const { return false; }
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.
@@ -158,15 +159,6 @@ class Operation {
   // The QueryExecutionContext for this particular element.
   // No ownership.
   QueryExecutionContext* _executionContext;
-
-  /**
-   * @brief Allows for updating of the sorted columns of an operation. This
-   *        has to be used by an operation if it's sort columns change during
-   *        the operations lifetime.
-   */
-  void setResultSortedOn(const vector<size_t>& sortedColumns) {
-    _resultSortedColumns = sortedColumns;
-  }
 
   /**
    * @brief Compute and return the columns on which the result will be sorted
