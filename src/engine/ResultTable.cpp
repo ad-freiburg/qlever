@@ -54,8 +54,7 @@ ResultTable::ResultTable(IdTable idTable, vector<size_t> sortedBy,
     return numCols < this->idTable().numColumns();
   }));
 
-#ifndef NDEBUG
-  auto compareRowsByJoinColumns = [this](const auto& row1, const auto& row2) {
+  [[maybe_unused]] auto compareRowsByJoinColumns = [this](const auto& row1, const auto& row2) {
     for (size_t col : this->sortedBy()) {
       if (row1[col] != row2[col]) {
         return row1[col] < row2[col];
@@ -63,7 +62,6 @@ ResultTable::ResultTable(IdTable idTable, vector<size_t> sortedBy,
     }
     return false;
   };
-  AD_CONTRACT_CHECK(
+  AD_EXPENSIVE_CHECK(
       std::ranges::is_sorted(this->idTable(), compareRowsByJoinColumns));
-#endif
 }
