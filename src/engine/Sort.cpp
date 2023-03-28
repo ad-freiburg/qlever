@@ -61,12 +61,10 @@ namespace {
 // TODO<joka921, future compilers> Check if this problem goes away in future
 // compiler versions as soon as we don't support Clang 13 anymore.
 void callFixedSizeForSort(auto& idTable, auto comparison) {
-  DISABLE_WARNINGS_CLANG_13
   ad_utility::callFixedSize(idTable.numColumns(),
                             [&idTable, comparison]<int I>() {
                               Engine::sort<I>(&idTable, comparison);
                             });
-  ENABLE_WARNINGS_CLANG_13
 }
 
 // The actual implementation of sorting an `IdTable` according to the

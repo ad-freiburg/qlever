@@ -132,11 +132,9 @@ void OrderBy::computeResult(ResultTable* result) {
   // We cannot use the `CALL_FIXED_SIZE` macro here because the `sort` function
   // is templated not only on the integer `I` (which the `callFixedSize`
   // function deals with) but also on the `comparison`.
-  DISABLE_WARNINGS_CLANG_13
   ad_utility::callFixedSize(width, [&result, &comparison]<int I>() {
     Engine::sort<I>(&result->_idTable, comparison);
   });
-  ENABLE_WARNINGS_CLANG_13
   result->_sortedBy = resultSortedOn();
 
   LOG(DEBUG) << "OrderBy result computation done." << endl;
