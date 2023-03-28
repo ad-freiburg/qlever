@@ -564,9 +564,9 @@ class IdTable {
     auto startIndex = beginIt - begin();
     auto endIndex = endIt - begin();
     auto numErasedElements = endIndex - startIndex;
-    for (auto& column : data()) {
+    std::ranges::for_each(data(), [&](auto& column) {
       column.erase(column.begin() + startIndex, column.begin() + endIndex);
-    }
+    });
     numRows_ -= numErasedElements;
   }
 
