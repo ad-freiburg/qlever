@@ -9,12 +9,22 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
-include(CheckCXXCompilerFlag)
-check_cxx_compiler_flag(-fcoroutines HAS_COROUTINES)
-if (HAS_COROUTINES)
-    add_compile_options(-fcoroutines)
-elseif((CMAKE_CXX_COMPILER_ID STREQUAL "Clang") AND (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0"))
-    add_compile_options(-fcoroutines-ts)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0")
+      MESSAGE(FATAL_ERROR, "G++ versions older than 11.0 are not supported by QLever")
+  else()
+      add_compile_options(-fcoroutines)
+  endif()
+
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "14.0.0")
+        MESSAGE(FATAL_ERROR, "Clang++ versions older than 14.0 are not supported by QLever")
+    elseif(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
+        add_compile_options(-fcoroutines-ts)
+        # starting from Clang 16, coroutines are enabled by default for C++ 20
+    endif()
+else()
+    MESSAGE(FATAL_ERROR, "QLever currently only supports the G++ or LLVM-Clang++ compilers")
 endif()
 
 ## Build targets for address sanitizer
