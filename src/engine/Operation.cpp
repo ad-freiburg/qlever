@@ -117,19 +117,24 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       }
       computeResult(val._resultTable.get());
       auto& idTable = val._resultTable->_idTable;
-      if (_limit._offset > 0) {
+      // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
+      // already perform it.
+      if (!supportsLimit()) {
+        // Apply the OFFSET clause. If the offset is `0` or the offset is larger
+        // than the size of the `IdTable`, then this has no effect and runtime
+        // `O(1)` (see the docs for `std::shift_left`).
+        std::ranges::for_each(idTable.getColumns(), [offset = _limit._offset](
+                                                        std::span<Id> column) {
+          std::shift_left(column.begin(), column.end(), offset);
+        });
+        // Resize the `IdTable` if necessary.
+        size_t targetSize = _limit.actualSize(idTable.numRows());
+        AD_CORRECTNESS_CHECK(targetSize <= idTable.numRows());
+        idTable.resize(targetSize);
+      } else {
+        AD_CONTRACT_CHECK(idTable.numRows() ==
+                          _limit.actualSize(idTable.numRows()));
       }
-      // Apply the OFFSET clause. If the offset is `0` or the offset is larger
-      // than the size of the `IdTable`, then this has no effect and runtime
-      // `O(1)` (see the docs for `std::shift_left`).
-      std::ranges::for_each(idTable.getColumns(), [offset = _limit._offset](
-                                                      std::span<Id> column) {
-        std::shift_left(column.begin(), column.end(), offset);
-      });
-      // Resize the `IdTable` if necessary.
-      size_t targetSize = _limit.actualSize(idTable.numRows());
-      AD_CORRECTNESS_CHECK(targetSize <= idTable.numRows());
-      idTable.resize(targetSize);
       if (_timeoutTimer->wlock()->hasTimedOut()) {
         throw ad_utility::TimeoutException(
             "Timeout in " + getDescriptor() +

@@ -1479,7 +1479,7 @@ queries:
       - selected: [ "?sum" ]
       - contains_row: [ 9.0 ]
 
-  - query: limit-offset- on-subquery
+  - query: limit-offset-on-subquery
     type: no-text
     sparql: |
       SELECT (SUM(?x) as ?sum) WHERE {
