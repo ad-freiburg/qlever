@@ -278,8 +278,8 @@ class IdTable {
   // TODO<joka921, C++23> Use the multidimensional subscript operator.
   // TODO<joka921, C++23> Use explicit object parameters ("deducing this").
   T& operator()(size_t row, size_t column) requires(!isView) {
-    assert(column < data().size());
-    assert(row < data().at(column).size());
+    AD_EXPENSIVE_CHECK(column < data().size());
+    AD_EXPENSIVE_CHECK(row < data().at(column).size());
     return data()[column][row];
   }
   const T& operator()(size_t row, size_t column) const {
@@ -377,7 +377,7 @@ class IdTable {
   // this check cannot be performed, a wrong size of `newRow` will lead to
   // undefined behavior which is caught by an `assert` in Debug builds.
   void push_back(const std::initializer_list<T>& newRow) requires(!isView) {
-    assert(newRow.size() == numColumns());
+    AD_EXPENSIVE_CHECK(newRow.size() == numColumns());
     ++numRows_;
     for (size_t i = 0; i < numColumns(); ++i) {
       data()[i].push_back(*(newRow.begin() + i));
@@ -392,7 +392,7 @@ class IdTable {
                                                           (isDynamic ||
                                                            NumColumns == N)) {
     if constexpr (isDynamic) {
-      assert(newRow.size() == numColumns());
+      AD_EXPENSIVE_CHECK(newRow.size() == numColumns());
     }
     ++numRows_;
     for (size_t i = 0; i < numColumns(); ++i) {
@@ -413,7 +413,7 @@ class IdTable {
                        const_row_reference_view_restricted>>
   void push_back(const RowT& newRow) requires(!isView) {
     if constexpr (isDynamic) {
-      assert(newRow.numColumns() == numColumns());
+      AD_EXPENSIVE_CHECK(newRow.numColumns() == numColumns());
     }
     ++numRows_;
     for (size_t i = 0; i < numColumns(); ++i) {
@@ -560,7 +560,8 @@ class IdTable {
   // out-of-place algorithm that only writes the distinct elements. The the
   // follwing two functions can be deleted.
   void erase(const iterator& beginIt, const iterator& endIt) requires(!isView) {
-    assert(begin() <= beginIt && beginIt <= endIt && endIt <= end());
+    AD_EXPENSIVE_CHECK(begin() <= beginIt && beginIt <= endIt &&
+                       endIt <= end());
     auto startIndex = beginIt - begin();
     auto endIndex = endIt - begin();
     auto numErasedElements = endIndex - startIndex;
