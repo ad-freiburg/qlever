@@ -90,7 +90,7 @@ TEST(Exception, AD_FAIL) {
 }
 
 TEST(Excpetion, AD_EXPENSIVE_CHECK) {
-  if constexpr (AD_EXPENSIVE_CHECKS_ENABLED) {
-    ASSERT_ANY_THROW(AD_EXPENSIVE_CHECK(3 > 5));
-  }
+#if (!defined(NDEBUG) || defined(AD_ENABLE_EXPENSIVE_CHECKS))
+  ASSERT_ANY_THROW(AD_EXPENSIVE_CHECK(3 > 5));
+#endif
 }
