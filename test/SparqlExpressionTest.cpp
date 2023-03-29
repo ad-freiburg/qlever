@@ -56,7 +56,7 @@ template <typename NaryExpression>
 auto testNaryExpression = [](const auto& expected, auto&&... operands) {
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
-  sparqlExpression::VariableToColumnAndResultTypeMap map;
+  VariableToColumnMap map;
   LocalVocab localVocab;
   IdTable table{alloc};
 

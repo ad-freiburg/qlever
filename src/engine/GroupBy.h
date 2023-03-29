@@ -84,21 +84,20 @@ class GroupBy : public Operation {
  private:
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  virtual void computeResult(ResultTable* result) override;
+  ResultTable computeResult() override;
 
   template <int OUT_WIDTH>
   void processGroup(const Aggregate& expression,
                     sparqlExpression::EvaluationContext& evaluationContext,
                     size_t blockStart, size_t blockEnd,
                     IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
-                    size_t resultColumn, ResultTable* outTable,
-                    ResultTable::ResultType* resultType) const;
+                    size_t resultColumn, LocalVocab* localVocab) const;
 
   template <int IN_WIDTH, int OUT_WIDTH>
   void doGroupBy(const IdTable& dynInput, const vector<size_t>& groupByCols,
                  const vector<GroupBy::Aggregate>& aggregates,
-                 IdTable* dynResult, const ResultTable* inTable,
-                 ResultTable* outTable) const;
+                 IdTable* dynResult, const IdTable* inTable,
+                 LocalVocab* outLocalVocab) const;
 
   FRIEND_TEST(GroupByTest, doGroupBy);
 
@@ -117,9 +116,7 @@ class GroupBy : public Operation {
   // is computed and stored in `result` and `true` is returned. If no such case
   // applies, `false` is returned and the `result` is untouched. Precondition:
   // The `result` must be empty.
-  // TODO<joka921> Check whether we can simply return
-  // `std::optional<ResultTable>` (also for all the other functions).
-  bool computeOptimizedGroupByIfPossible(ResultTable* result);
+  bool computeOptimizedGroupByIfPossible(IdTable*);
 
   // First, check if the query represented by this GROUP BY is of the following
   // form:
@@ -132,7 +129,7 @@ class GroupBy : public Operation {
   // query has that form, the result of the query (which consists of one line)
   // is computed and stored in the `result` and `true` is returned. If not, the
   // `result` is left untouched, and `false` is returned.
-  bool computeGroupByForSingleIndexScan(ResultTable* result);
+  bool computeGroupByForSingleIndexScan(IdTable* result);
 
   // First, check if the query represented by this GROUP BY is of the following
   // form:
@@ -144,7 +141,7 @@ class GroupBy : public Operation {
   // or `?z`. In the SELECT clause, both of the elements may be omitted, so in
   // the example it is possible to only select `?x` or to only select the
   // `COUNT`.
-  bool computeGroupByForFullIndexScan(ResultTable* result);
+  bool computeGroupByForFullIndexScan(IdTable* result);
 
   // First, check if the query represented by this GROUP BY is of the following
   // form:
@@ -155,7 +152,7 @@ class GroupBy : public Operation {
   // Note that `?x` can also be the predicate or object of the three variable
   // triple, and that the COUNT may be by any of the variables `?x`, `?y`, or
   // `?z`.
-  bool computeGroupByForJoinWithFullScan(ResultTable* result);
+  bool computeGroupByForJoinWithFullScan(IdTable* result);
 
   // The check whether the optimization just described can be applied and its
   // actual computation are split up in two functions. This struct contains

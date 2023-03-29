@@ -127,14 +127,10 @@ void runTestCasesForAllJoinAlgorithms(
   // All normal join algorithm defined as lambda functions for easier handing
   // over to helper functions.
   Join J{Join::InvalidOnlyForTestingJoinTag{}};
-  DISABLE_WARNINGS_CLANG_13
   auto hashJoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
-    ENABLE_WARNINGS_CLANG_13
     return J.hashJoin(AD_FWD(args)...);
   };
-  DISABLE_WARNINGS_CLANG_13
   auto joinLambda = [&J]<int A, int B, int C>(auto&&... args) {
-    ENABLE_WARNINGS_CLANG_13
     return J.join<A, B, C>(AD_FWD(args)...);
   };
 
@@ -282,7 +278,7 @@ TEST(JoinTest, joinWithFullScanPSO) {
   auto idO = getId("<o>");
   auto I = ad_utility::testing::IntId;
   auto expected = makeIdTableFromIdVector({{idA, idX, I(3)}, {idO, idX, I(2)}});
-  EXPECT_EQ(res->_idTable, expected);
+  EXPECT_EQ(res->idTable(), expected);
   VariableToColumnMap expectedVariables{
       {Variable{"?p"}, 0}, {Variable{"?s"}, 1}, {Variable{"?o"}, 2}};
   EXPECT_THAT(join.getExternallyVisibleVariableColumns(),

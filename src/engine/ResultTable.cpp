@@ -9,14 +9,15 @@
 #include <cassert>
 
 #include "engine/LocalVocab.h"
+#include "util/Exception.h"
 
 // _____________________________________________________________________________
 string ResultTable::asDebugString() const {
   std::ostringstream os;
   os << "First (up to) 5 rows of result with size:\n";
-  for (size_t i = 0; i < std::min<size_t>(5, _idTable.size()); ++i) {
-    for (size_t j = 0; j < _idTable.numColumns(); ++j) {
-      os << _idTable(i, j) << '\t';
+  for (size_t i = 0; i < std::min<size_t>(5, idTable().size()); ++i) {
+    for (size_t j = 0; j < idTable().numColumns(); ++j) {
+      os << idTable()(i, j) << '\t';
     }
     os << '\n';
   }
@@ -24,16 +25,9 @@ string ResultTable::asDebugString() const {
 }
 
 // _____________________________________________________________________________
-void ResultTable::shareLocalVocabFrom(const ResultTable& resultTable) {
-  // This copies a shared pointer, so both results share the same local
-  // vocabulary.
-  localVocab_ = resultTable.localVocab_;
-  localVocab_->makeReadOnly();
-}
-
-// _____________________________________________________________________________
-void ResultTable::shareLocalVocabFromNonEmptyOf(
-    const ResultTable& resultTable1, const ResultTable& resultTable2) {
+auto ResultTable::getSharedLocalVocabFromNonEmptyOf(
+    const ResultTable& resultTable1, const ResultTable& resultTable2)
+    -> SharedLocalVocabWrapper {
   const auto& localVocab1 = resultTable1.localVocab_;
   const auto& localVocab2 = resultTable2.localVocab_;
   if (!localVocab1->empty() && !localVocab2->empty()) {
@@ -41,11 +35,41 @@ void ResultTable::shareLocalVocabFromNonEmptyOf(
         "Merging of two non-empty local vocabularies is currently not "
         "supported, please contact the developers");
   }
-  localVocab_ = localVocab2->empty() ? localVocab1 : localVocab2;
-  localVocab_->makeReadOnly();
+  return SharedLocalVocabWrapper{localVocab2->empty() ? localVocab1
+                                                      : localVocab2};
 }
 
 // _____________________________________________________________________________
-void ResultTable::getCopyOfLocalVocabFrom(const ResultTable& resultTable) {
-  localVocab_ = std::make_shared<LocalVocab>(resultTable.localVocab_->clone());
+LocalVocab ResultTable::getCopyOfLocalVocab() const {
+  return localVocab().clone();
 }
+
+// _____________________________________________________________________________
+ResultTable::ResultTable(IdTable idTable, vector<size_t> sortedBy,
+                         SharedLocalVocabWrapper localVocab)
+    : _idTable{std::move(idTable)},
+      _sortedBy{std::move(sortedBy)},
+      localVocab_{std::move(localVocab.localVocab_)} {
+  AD_CONTRACT_CHECK(localVocab_ != nullptr);
+  AD_CONTRACT_CHECK(std::ranges::all_of(_sortedBy, [this](size_t numCols) {
+    return numCols < this->idTable().numColumns();
+  }));
+
+  [[maybe_unused]] auto compareRowsByJoinColumns = [this](const auto& row1,
+                                                          const auto& row2) {
+    for (size_t col : this->sortedBy()) {
+      if (row1[col] != row2[col]) {
+        return row1[col] < row2[col];
+      }
+    }
+    return false;
+  };
+  AD_EXPENSIVE_CHECK(
+      std::ranges::is_sorted(this->idTable(), compareRowsByJoinColumns));
+}
+
+// _____________________________________________________________________________
+ResultTable::ResultTable(IdTable idTable, vector<size_t> sortedBy,
+                         LocalVocab&& localVocab)
+    : ResultTable(std::move(idTable), std::move(sortedBy),
+                  SharedLocalVocabWrapper{std::move(localVocab)}) {}

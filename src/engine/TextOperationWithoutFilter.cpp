@@ -63,51 +63,38 @@ string TextOperationWithoutFilter::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-void TextOperationWithoutFilter::computeResult(ResultTable* result) {
+ResultTable TextOperationWithoutFilter::computeResult() {
   LOG(DEBUG) << "TextOperationWithoutFilter result computation..." << endl;
+  IdTable table{getExecutionContext()->getAllocator()};
   if (getNofVars() == 0) {
-    computeResultNoVar(result);
+    computeResultNoVar(&table);
   } else if (getNofVars() == 1) {
-    computeResultOneVar(result);
+    computeResultOneVar(&table);
   } else {
-    computeResultMultVars(result);
+    computeResultMultVars(&table);
   }
-
   LOG(DEBUG) << "TextOperationWithoutFilter result computation done." << endl;
+  return {std::move(table), resultSortedOn(), LocalVocab{}};
 }
 
 // _____________________________________________________________________________
-void TextOperationWithoutFilter::computeResultNoVar(ResultTable* result) const {
-  result->_idTable.setNumColumns(2);
-  result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
-  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-  getExecutionContext()->getIndex().getContextListForWords(_words,
-                                                           &result->_idTable);
+void TextOperationWithoutFilter::computeResultNoVar(IdTable* idTable) const {
+  idTable->setNumColumns(2);
+  getExecutionContext()->getIndex().getContextListForWords(_words, idTable);
 }
 
 // _____________________________________________________________________________
-void TextOperationWithoutFilter::computeResultOneVar(
-    ResultTable* result) const {
-  result->_idTable.setNumColumns(3);
-  result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
-  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
+void TextOperationWithoutFilter::computeResultOneVar(IdTable* idTable) const {
+  idTable->setNumColumns(3);
   getExecutionContext()->getIndex().getECListForWordsOneVar(_words, _textLimit,
-                                                            &result->_idTable);
+                                                            idTable);
 }
 
 // _____________________________________________________________________________
-void TextOperationWithoutFilter::computeResultMultVars(
-    ResultTable* result) const {
-  result->_idTable.setNumColumns(getNofVars() + 2);
-  result->_resultTypes.reserve(result->_idTable.numColumns());
-  result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
-  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-  for (size_t i = 2; i < result->_idTable.numColumns(); i++) {
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  }
-  getExecutionContext()->getIndex().getECListForWords(
-      _words, getNofVars(), _textLimit, &result->_idTable);
+void TextOperationWithoutFilter::computeResultMultVars(IdTable* idTable) const {
+  idTable->setNumColumns(getNofVars() + 2);
+  getExecutionContext()->getIndex().getECListForWords(_words, getNofVars(),
+                                                      _textLimit, idTable);
 }
 
 // _____________________________________________________________________________

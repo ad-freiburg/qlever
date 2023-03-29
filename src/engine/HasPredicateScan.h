@@ -82,17 +82,17 @@ class HasPredicateScan : public Operation {
   }
 
   // These are made static and public mainly for easier testing
-  static void computeFreeS(ResultTable* result, Id objectId,
+  static void computeFreeS(IdTable* resultTable, Id objectId,
                            const std::vector<PatternID>& hasPattern,
                            const CompactVectorOfStrings<Id>& hasPredicate,
                            const CompactVectorOfStrings<Id>& patterns);
 
-  static void computeFreeO(ResultTable* result, Id subjectId,
+  static void computeFreeO(IdTable* resultTable, Id subjectAsId,
                            const std::vector<PatternID>& hasPattern,
                            const CompactVectorOfStrings<Id>& hasPredicate,
                            const CompactVectorOfStrings<Id>& patterns);
 
-  static void computeFullScan(ResultTable* result,
+  static void computeFullScan(IdTable* resultTable,
                               const std::vector<PatternID>& hasPattern,
                               const CompactVectorOfStrings<Id>& hasPredicate,
                               const CompactVectorOfStrings<Id>& patterns,
@@ -106,7 +106,7 @@ class HasPredicateScan : public Operation {
                                const CompactVectorOfStrings<Id>& patterns);
 
  private:
-  void computeResult(ResultTable* result) override;
+  ResultTable computeResult() override;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
