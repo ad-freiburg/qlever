@@ -1,5 +1,5 @@
 add_library(rdfEscaping RdfEscaping.h RdfEscaping.cpp)
-target_link_libraries(rdfEscaping absl::flat_hash_map ${ICU_LIBRARIES})
+qlever_target_link_libraries(rdfEscaping ${ICU_LIBRARIES})
 
 add_subdirectory(sparqlParser)
 add_subdirectory(data)
@@ -24,5 +24,5 @@ add_library(parser
         SelectClause.h GraphPatternOperation.cpp GraphPatternOperation.h
         # The `Variable.cpp` from the subdirectory is linked here because otherwise we get linking errors.
         GraphPattern.cpp GraphPattern.h ConstructClause.h data/Variable.cpp)
-target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2 absl::flat_hash_map util engine)
+qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2 util engine)
 

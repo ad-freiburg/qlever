@@ -120,6 +120,18 @@ include_directories(${Boost_INCLUDE_DIR})
 ######################################
 find_package(OpenSSL REQUIRED)
 
+##############################################
+# Define a set of common third-party libraries that are used almost as
+# frequently as the standard library or as a  drop-in replacement for
+# some of its functionality.To enable the usage in all parts of QLever,
+# call the following function `qlever_target_link_libraries` for all
+# libraries and executables. It is a drop-in replacement for
+# `target_link_libraries` that additionally links against the common
+# libraries.
+function (qlever_target_link_libraries target)
+    target_link_libraries(${target} ${ARGN} absl::flat_hash_map absl::flat_hash_set absl::strings)
+endfunction()
+
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -298,23 +310,23 @@ configure_file(src/web/script.js script.js)
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
-target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
+qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
 
 add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp src/util/ConstexprSmallString.h)
-target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
+qlever_target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(ServerMain src/ServerMain.cpp)
-target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
+qlever_target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
 target_precompile_headers(ServerMain REUSE_FROM engine)
 
 add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
-target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
+qlever_target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(TurtleParserMain src/TurtleParserMain.cpp)
-target_link_libraries(TurtleParserMain parser ${CMAKE_THREAD_LIBS_INIT} absl::flat_hash_map)
+qlever_target_link_libraries(TurtleParserMain parser ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
-target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
+qlever_target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PermutationExporterMain src/index/PermutationExporterMain.cpp)
-target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_INIT})
+qlever_target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_INIT})
