@@ -36,6 +36,13 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
     std::swap(t1, t2);
     std::swap(t1JoinCol, t2JoinCol);
   }
+
+  // TODO<joka921> Combine the trees and the join columns in the interface.
+  if (isFullScanDummy(t1)) {
+    AD_CONTRACT_CHECK(!isFullScanDummy(t2));
+    std::swap(t1, t2);
+    std::swap(t1JoinCol, t2JoinCol);
+  }
   _left = std::move(t1);
   _leftJoinCol = t1JoinCol;
   _right = std::move(t2);
@@ -75,10 +82,11 @@ string Join::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-void Join::computeResult(ResultTable* result) {
+ResultTable Join::computeResult() {
   LOG(DEBUG) << "Getting sub-results for join result computation..." << endl;
   size_t leftWidth = _left->getResultWidth();
   size_t rightWidth = _right->getResultWidth();
+  IdTable idTable{getExecutionContext()->getAllocator()};
 
   // TODO<joka921> Currently the _resultTypes are set incorrectly in case
   // of early stopping. For now, early stopping is thus disabled.
@@ -98,10 +106,9 @@ void Join::computeResult(ResultTable* result) {
    */
 
   // Check for joins with dummy
-  if (isFullScanDummy(_left) || isFullScanDummy(_right)) {
-    LOG(TRACE) << "Either side is Full Scan Dummy" << endl;
-    computeResultForJoinWithFullScanDummy(result);
-    return;
+  AD_CORRECTNESS_CHECK(!isFullScanDummy(_left));
+  if (isFullScanDummy(_right)) {
+    return computeResultForJoinWithFullScanDummy();
   }
 
   LOG(TRACE) << "Computing left side..." << endl;
@@ -128,33 +135,22 @@ void Join::computeResult(ResultTable* result) {
 
   LOG(DEBUG) << "Computing Join result..." << endl;
 
-  AD_CONTRACT_CHECK(result);
+  idTable.setNumColumns(leftWidth + rightWidth - 1);
 
-  result->_idTable.setNumColumns(leftWidth + rightWidth - 1);
-  result->_resultTypes.reserve(result->_idTable.numColumns());
-  result->_resultTypes.insert(result->_resultTypes.end(),
-                              leftRes->_resultTypes.begin(),
-                              leftRes->_resultTypes.end());
-  for (size_t i = 0; i < rightRes->_idTable.numColumns(); i++) {
-    if (i != _rightJoinCol) {
-      result->_resultTypes.push_back(rightRes->_resultTypes[i]);
-    }
-  }
-  result->_sortedBy = {_leftJoinCol};
-
-  int lwidth = leftRes->_idTable.numColumns();
-  int rwidth = rightRes->_idTable.numColumns();
-  int reswidth = result->_idTable.numColumns();
+  int lwidth = leftRes->idTable().numColumns();
+  int rwidth = rightRes->idTable().numColumns();
+  int reswidth = idTable.numColumns();
 
   CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::join, this,
-                  leftRes->_idTable, _leftJoinCol, rightRes->_idTable,
-                  _rightJoinCol, &result->_idTable);
+                  leftRes->idTable(), _leftJoinCol, rightRes->idTable(),
+                  _rightJoinCol, &idTable);
+
+  LOG(DEBUG) << "Join result computation done" << endl;
 
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
-  result->shareLocalVocabFromNonEmptyOf(*leftRes, *rightRes);
-
-  LOG(DEBUG) << "Join result computation done" << endl;
+  return {std::move(idTable), resultSortedOn(),
+          ResultTable::getSharedLocalVocabFromNonEmptyOf(*leftRes, *rightRes)};
 }
 
 // _____________________________________________________________________________
@@ -257,41 +253,19 @@ size_t Join::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
+ResultTable Join::computeResultForJoinWithFullScanDummy() {
+  IdTable idTable{getExecutionContext()->getAllocator()};
   LOG(DEBUG) << "Join by making multiple scans..." << endl;
-  if (isFullScanDummy(_left)) {
-    AD_CONTRACT_CHECK(!isFullScanDummy(_right));
-    _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
-    result->_idTable.setNumColumns(_right->getResultWidth() + 2);
-    result->_sortedBy = {2 + _rightJoinCol};
-    shared_ptr<const ResultTable> nonDummyRes = _right->getResult();
-    result->_resultTypes.reserve(result->_idTable.numColumns());
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-    result->_resultTypes.insert(result->_resultTypes.end(),
-                                nonDummyRes->_resultTypes.begin(),
-                                nonDummyRes->_resultTypes.end());
-    doComputeJoinWithFullScanDummyLeft(nonDummyRes->_idTable,
-                                       &result->_idTable);
-  } else {
-    AD_CONTRACT_CHECK(!isFullScanDummy(_left));
-    _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
-    result->_idTable.setNumColumns(_left->getResultWidth() + 2);
-    result->_sortedBy = {_leftJoinCol};
+  AD_CORRECTNESS_CHECK(!isFullScanDummy(_left) && isFullScanDummy(_right));
+  _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
+  idTable.setNumColumns(_left->getResultWidth() + 2);
 
-    shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
-    result->_resultTypes.reserve(result->_idTable.numColumns());
-    result->_resultTypes.insert(result->_resultTypes.end(),
-                                nonDummyRes->_resultTypes.begin(),
-                                nonDummyRes->_resultTypes.end());
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
 
-    doComputeJoinWithFullScanDummyRight(nonDummyRes->_idTable,
-                                        &result->_idTable);
-  }
-
-  LOG(DEBUG) << "Join (with dummy) done. Size: " << result->size() << endl;
+  doComputeJoinWithFullScanDummyRight(nonDummyRes->idTable(), &idTable);
+  LOG(DEBUG) << "Join (with dummy) done. Size: " << idTable.size() << endl;
+  return {std::move(idTable), resultSortedOn(),
+          nonDummyRes->getSharedLocalVocab()};
 }
 
 // _____________________________________________________________________________
@@ -336,55 +310,9 @@ Join::ScanMethodType Join::getScanMethod(
 }
 
 // _____________________________________________________________________________
-void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
-                                              IdTable* res) const {
-  LOG(TRACE) << "Dummy on left side, other join op size: " << ndr.size()
-             << endl;
-  if (ndr.size() == 0) {
-    return;
-  }
-  const ScanMethodType scan = getScanMethod(_left);
-  // Iterate through non-dummy.
-  Id currentJoinId = ndr(0, _rightJoinCol);
-  auto joinItemFrom = ndr.begin();
-  auto joinItemEnd = ndr.begin();
-  for (size_t i = 0; i < ndr.size(); ++i) {
-    // For each different element in the join column.
-    if (ndr(i, _rightJoinCol) == currentJoinId) {
-      ++joinItemEnd;
-    } else {
-      // Do a scan.
-      LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
-      IdTable jr(2, _executionContext->getAllocator());
-      // The scan is a relatively expensive disk operation, so we can afford to
-      // check for timeouts before each call.
-      checkTimeout();
-      scan(currentJoinId, &jr);
-      LOG(TRACE) << "Got #items: " << jr.size() << endl;
-      // Build the cross product.
-      appendCrossProduct(jr.cbegin(), jr.cend(), joinItemFrom, joinItemEnd,
-                         res);
-      // Reset
-      currentJoinId = ndr(i, _rightJoinCol);
-      joinItemFrom = joinItemEnd;
-      ++joinItemEnd;
-    }
-  }
-  // Do the scan for the final element.
-  LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
-  IdTable jr(2, _executionContext->getAllocator());
-  scan(currentJoinId, &jr);
-  LOG(TRACE) << "Got #items: " << jr.size() << endl;
-  // Build the cross product.
-  appendCrossProduct(jr.cbegin(), jr.cend(), joinItemFrom, joinItemEnd, res);
-}
-
-// _____________________________________________________________________________
 void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
                                                IdTable* res) const {
-  LOG(TRACE) << "Dummy on right side, other join op size: " << ndr.size()
-             << endl;
-  if (ndr.size() == 0) {
+  if (ndr.empty()) {
     return;
   }
   // Get the scan method (depends on type of dummy tree), use a function ptr.

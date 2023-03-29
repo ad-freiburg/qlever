@@ -57,7 +57,6 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
       wordsToIndexesMap_.insert({std::forward<WordT>(word), nextFreeIndex_});
   const auto& [wordInMap, index] = *wordInMapAndIndex;
   if (isNewWord) {
-    AD_CONTRACT_CHECK(!readOnly_);
     indexesToWordsMap_.push_back(&wordInMap);
     nextFreeIndex_ = LocalVocabIndex::make(indexesToWordsMap_.size());
   }

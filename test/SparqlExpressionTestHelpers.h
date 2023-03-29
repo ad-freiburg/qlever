@@ -42,7 +42,7 @@ using ad_utility::testing::IntId;
 // various types. For details see the constructor.
 struct TestContext {
   QueryExecutionContext* qec = ad_utility::testing::getQec();
-  sparqlExpression::VariableToColumnAndResultTypeMap varToColMap;
+  VariableToColumnMap varToColMap;
   LocalVocab localVocab;
   IdTable table{qec->getAllocator()};
   sparqlExpression::EvaluationContext context{*qec, varToColMap, table,
@@ -79,18 +79,18 @@ struct TestContext {
     context._endIndex = table.size();
     // Define the mapping from variable names to column indices.
     using V = Variable;
-    varToColMap[V{"?ints"}] = {0, qlever::ResultType::KB};
-    varToColMap[V{"?doubles"}] = {1, qlever::ResultType::KB};
-    varToColMap[V{"?numeric"}] = {2, qlever::ResultType::KB};
-    varToColMap[V{"?vocab"}] = {3, qlever::ResultType::KB};
-    varToColMap[V{"?mixed"}] = {4, qlever::ResultType::KB};
+    varToColMap[V{"?ints"}] = {0};
+    varToColMap[V{"?doubles"}] = {1};
+    varToColMap[V{"?numeric"}] = {2};
+    varToColMap[V{"?vocab"}] = {3};
+    varToColMap[V{"?mixed"}] = {4};
   }
 
   // Get a test context where the rows are the same as by default, but sorted by
   // `variable`
   static TestContext sortedBy(const Variable& variable) {
     TestContext result;
-    auto columnIndex = result.varToColMap.at(variable).first;
+    ColumnIndex columnIndex = result.varToColMap.at(variable);
     std::sort(result.table.begin(), result.table.end(),
               [columnIndex](const auto& a, const auto& b) {
                 return valueIdComparators::compareByBits(a[columnIndex],

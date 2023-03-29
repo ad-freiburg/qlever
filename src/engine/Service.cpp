@@ -80,7 +80,7 @@ size_t Service::getCostEstimate() {
 }
 
 // ____________________________________________________________________________
-void Service::computeResult(ResultTable* result) {
+ResultTable Service::computeResult() {
   // Get the URL of the SPARQL endpoint.
   std::string_view serviceIriString = parsedServiceClause_.serviceIri_.iri();
   AD_CONTRACT_CHECK(serviceIriString.starts_with("<") &&
@@ -133,24 +133,23 @@ void Service::computeResult(ResultTable* result) {
         "\", but expected \"", expectedHeaderRow, "\""));
   }
 
-  // Set basic properties of the result table (the `_resultTypes` don't matter,
-  // as long as they have the right size, see `ResultTypes.h`).
-  result->_sortedBy = resultSortedOn();
-  result->_idTable.setNumColumns(getResultWidth());
-  result->_resultTypes.resize(parsedServiceClause_.visibleVariables_.size(),
-                              ResultTable::ResultType::KB);
-
+  // Set basic properties of the result table.
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(getResultWidth());
+  LocalVocab localVocab{};
   // Fill the result table using the `writeTsvResult` method below.
   size_t resWidth = getResultWidth();
   CALL_FIXED_SIZE(resWidth, &Service::writeTsvResult, this,
-                  std::move(tsvResult), result);
+                  std::move(tsvResult), &idTable, &localVocab);
+
+  return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
 // ____________________________________________________________________________
 template <size_t I>
-void Service::writeTsvResult(std::istringstream tsvResult,
-                             ResultTable* result) {
-  IdTableStatic<I> idTable = std::move(result->_idTable).toStatic<I>();
+void Service::writeTsvResult(std::istringstream tsvResult, IdTable* idTablePtr,
+                             LocalVocab* localVocab) {
+  IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
   size_t rowIdx = 0;
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
   std::string line;
@@ -172,8 +171,7 @@ void Service::writeTsvResult(std::istringstream tsvResult,
     for (size_t colIdx = 0; colIdx < valueStrings.size(); colIdx++) {
       TripleComponent tc = TurtleStringParser<TokenizerCtre>::parseTripleObject(
           valueStrings[colIdx]);
-      Id id = std::move(tc).toValueId(getIndex().getVocab(),
-                                      result->localVocabNonConst());
+      Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
       idTable(rowIdx, colIdx) = id;
       if (id.getDatatype() == Datatype::LocalVocabIndex) {
         ++numLocalVocabPerColumn[colIdx];
@@ -188,5 +186,5 @@ void Service::writeTsvResult(std::istringstream tsvResult,
   LOG(INFO) << "Number of rows in result: " << idTable.size() << std::endl;
   LOG(INFO) << "Number of entries in local vocabulary per column: "
             << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
-  result->_idTable = std::move(idTable).toDynamic();
+  *idTablePtr = std::move(idTable).toDynamic();
 }

@@ -64,10 +64,11 @@ class MultiColumnJoin : public Operation {
   template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
   static void computeMultiColumnJoin(
       const IdTable& a, const IdTable& b,
-      const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* result);
+      const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+      IdTable* result);
 
  private:
-  virtual void computeResult(ResultTable* result) override;
+  virtual ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

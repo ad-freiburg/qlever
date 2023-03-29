@@ -196,7 +196,7 @@ TEST(SparqlExpressionParser, First) {
   EXPECT_EQ(resultofParse.remainingText_.length(), 6);
   auto resultAsExpression = std::move(resultofParse.resultOfParse_);
 
-  sparqlExpression::VariableToColumnAndResultTypeMap map;
+  VariableToColumnMap map;
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   IdTable table{alloc};

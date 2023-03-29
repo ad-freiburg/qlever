@@ -401,7 +401,7 @@ auto testNotComparableHelper(T leftValue, U rightValue,
       l, "testLessThanGreaterThanEqualMultipleValuesHelper was called here");
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
-  sparqlExpression::VariableToColumnAndResultTypeMap map;
+  VariableToColumnMap map;
   LocalVocab localVocab;
   IdTable table{alloc};
   sparqlExpression::EvaluationContext context{*getQec(), map, table, alloc,

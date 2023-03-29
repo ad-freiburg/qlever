@@ -63,7 +63,7 @@ TEST(Values, computeResult) {
   ValuesComponents values{{TC{12}, TC{"<x>"}}, {TC::UNDEF{}, TC{"<y>"}}};
   Values valuesOperation(testQec, {{Variable{"?x"}, Variable{"?y"}}, values});
   auto result = valuesOperation.getResult();
-  const auto& table = result->_idTable;
+  const auto& table = result->idTable();
   Id x;
   bool success = testQec->getIndex().getId("<x>", &x);
   AD_CORRECTNESS_CHECK(success);

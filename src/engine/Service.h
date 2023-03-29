@@ -77,7 +77,7 @@ class Service : public Operation {
   std::string asStringImpl(size_t indent = 0) const override;
 
   // Compute the result using `getTsvFunction_`.
-  void computeResult(ResultTable* result) override;
+  ResultTable computeResult() override;
 
   // Write the given TSV result to the given result object. The `I` is the width
   // of the result table.
@@ -87,5 +87,6 @@ class Service : public Operation {
   // `tsvResult` is not `const` here is because the method iterates over the
   // `std::istringstream` and thus changes it.
   template <size_t I>
-  void writeTsvResult(std::istringstream tsvResult, ResultTable* result);
+  void writeTsvResult(std::istringstream tsvResult, IdTable* idTable,
+                      LocalVocab* localVocab);
 };

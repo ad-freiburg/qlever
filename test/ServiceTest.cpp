@@ -177,5 +177,5 @@ TEST_F(ServiceTest, computeResult) {
   EXPECT_TRUE(result);
   IdTable expectedIdTable = makeIdTableFromIdVector(
       {{idX, idY}, {idBla, idBli}, {idBlu, idBla}, {idBli, idBlu}});
-  EXPECT_EQ(result->_idTable, expectedIdTable);
+  EXPECT_EQ(result->idTable(), expectedIdTable);
 }
