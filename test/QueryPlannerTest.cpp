@@ -517,9 +517,11 @@ TEST(QueryPlannerTest, testSPX_SPX) {
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
-      "{\n  JOIN\n  {\n    SCAN PSO with P = \"<pre/r>\", S = \"<pre/s1>\"\n "
+      "{\n  JOIN\n  {\n    SCAN PSO with P = \"<pre/r>\", S = \"<pre/s1>\" "
+      "IMPLICIT SORTING REQUIRED\n "
       "   qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n    S"
-      "CAN PSO with P = \"<pre/r>\", S = \"<pre/s2>\"\n    qet-w"
+      "CAN PSO with P = \"<pre/r>\", S = \"<pre/s2>\" IMPLICIT SORTING "
+      "REQUIRED\n    qet-w"
       "idth: 1 \n  } join-column: [0]\n  qet-width: 1 \n}",
       qet.asString());
 }
@@ -532,9 +534,11 @@ TEST(QueryPlannerTest, test_free_PX_SPX) {
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
-      "{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/r>\"\n    "
+      "{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/r>\" IMPLICIT SORTING "
+      "REQUIRED\n    "
       "qet-width: 2 \n  } join-column: [0]\n  |X|\n  {\n   "
-      " SCAN PSO with P = \"<pre/r>\", S = \"<pre/s2>\"\n  "
+      " SCAN PSO with P = \"<pre/r>\", S = \"<pre/s2>\" IMPLICIT SORTING "
+      "REQUIRED\n  "
       "  qet-width: 1 \n  } join-column: [0]\n  qet-width: 2 \n}",
       qet.asString());
 }
@@ -547,9 +551,11 @@ TEST(QueryPlannerTest, test_free_PX__free_PX) {
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
-      "{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/r>\"\n    "
+      "{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/r>\" IMPLICIT SORTING "
+      "REQUIRED\n    "
       "qet-width: 2 \n  } join-column: [0]\n  |X|\n  {\n    "
-      "SCAN POS with P = \"<pre/r>\"\n    qet-width: 2 \n"
+      "SCAN POS with P = \"<pre/r>\" IMPLICIT SORTING REQUIRED\n    qet-width: "
+      "2 \n"
       "  } join-column: [0]\n  qet-width: 3 \n}",
       qet.asString());
 }
@@ -565,12 +571,15 @@ TEST(QueryPlannerTest, testActorsBornInEurope) {
   ASSERT_EQ(27493u, qet.getCostEstimate());
   ASSERT_EQ(
       "{\n  ORDER BY on columns:asc(0) \n  {\n    JOIN\n    {\n      SCAN "
-      "POS with P = \"<pre/profession>\", O = \"<pre/Actor>\"\n      "
+      "POS with P = \"<pre/profession>\", O = \"<pre/Actor>\" IMPLICIT SORTING "
+      "REQUIRED\n      "
       "qet-width: 1 \n    } join-column: [0]\n    |X|\n    {\n      "
       "SORT(internal) on columns:asc(1) \n      {\n        JOIN\n        {\n "
-      "         SCAN POS with P = \"<pre/born-in>\"\n          qet-width: 2 "
+      "         SCAN POS with P = \"<pre/born-in>\" IMPLICIT SORTING "
+      "REQUIRED\n          qet-width: 2 "
       "\n        } join-column: [0]\n        |X|\n        {\n          SCAN "
-      "POS with P = \"<pre/in>\", O = \"<pre/Europe>\"\n          qet-width: "
+      "POS with P = \"<pre/in>\", O = \"<pre/Europe>\" IMPLICIT SORTING "
+      "REQUIRED\n          qet-width: "
       "1 \n        } join-column: [0]\n        qet-width: 2 \n      }\n      "
       "qet-width: 2 \n    } join-column: [1]\n    qet-width: 2 \n  }\n  "
       "qet-width: 2 \n}",
@@ -590,12 +599,16 @@ TEST(QueryPlannerTest, testStarTwoFree) {
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  JOIN\n  {\n    JOIN\n    {\n      SCAN POS with P = "
-        "\"<http://rdf.myprefix.com/myrel>\"\n      qet-width: 2 \n    } "
+        "\"<http://rdf.myprefix.com/myrel>\" IMPLICIT SORTING REQUIRED\n      "
+        "qet-width: 2 \n    } "
         "join-column: [0]\n    |X|\n    {\n      SCAN POS with P = "
-        "\"<http://rdf.myprefix.com/xxx/rel2>\", O = \"<http://abc.de>\"\n   "
-        "   qet-width: 1 \n    } join-column: [0]\n    qet-width: 2 \n  } "
+        "\"<http://rdf.myprefix.com/xxx/rel2>\", O = \"<http://abc.de>\" "
+        "IMPLICIT SORTING REQUIRED\n   "
+        "   qet-width: 1 \n    } join-column: [0] IMPLICIT SORTING REQUIRED\n  "
+        "  qet-width: 2 \n  } "
         "join-column: [0]\n  |X|\n  {\n    SCAN PSO with P = "
-        "\"<http://rdf.myprefix.com/ns/myrel>\"\n    qet-width: 2 \n  } "
+        "\"<http://rdf.myprefix.com/ns/myrel>\" IMPLICIT SORTING REQUIRED\n    "
+        "qet-width: 2 \n  } "
         "join-column: [0]\n  qet-width: 3 \n}",
         qet.asString());
   }
@@ -609,9 +622,11 @@ TEST(QueryPlannerTest, testFilterAfterSeed) {
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
-      "{\n  FILTER   {\n    JOIN\n    {\n      SCAN POS with P = \"<r>\"\n   "
+      "{\n  FILTER   {\n    JOIN\n    {\n      SCAN POS with P = \"<r>\" "
+      "IMPLICIT SORTING REQUIRED\n   "
       "   qet-width: 2 \n    } join-column: [0]\n    |X|\n    {\n      SCAN "
-      "PSO with P = \"<r>\"\n      qet-width: 2 \n    } join-column: [0]\n   "
+      "PSO with P = \"<r>\" IMPLICIT SORTING REQUIRED\n      qet-width: 2 \n   "
+      " } join-column: [0]\n   "
       " qet-width: 3 \n  } with "
       "N16sparqlExpression10relational20RelationalExpressionILN18valueIdCompa"
       "rators10ComparisonE3EEE#column_1##column_0#\n  qet-width: 3 \n}",
@@ -626,9 +641,11 @@ TEST(QueryPlannerTest, testFilterAfterJoin) {
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
-      "{\n  FILTER   {\n    JOIN\n    {\n      SCAN POS with P = \"<r>\"\n   "
+      "{\n  FILTER   {\n    JOIN\n    {\n      SCAN POS with P = \"<r>\" "
+      "IMPLICIT SORTING REQUIRED\n   "
       "   qet-width: 2 \n    } join-column: [0]\n    |X|\n    {\n      SCAN "
-      "PSO with P = \"<r>\"\n      qet-width: 2 \n    } join-column: [0]\n   "
+      "PSO with P = \"<r>\" IMPLICIT SORTING REQUIRED\n      qet-width: 2 \n   "
+      " } join-column: [0]\n   "
       " qet-width: 3 \n  } with "
       "N16sparqlExpression10relational20RelationalExpressionILN18valueIdCompa"
       "rators10ComparisonE3EEE#column_1##column_2#\n  qet-width: 3 \n}",
@@ -643,7 +660,8 @@ TEST(QueryPlannerTest, threeVarTriples) {
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SCAN PSO with P = \"<p>\", S = \"<s>\"\n    "
+        "{\n  JOIN\n  {\n    SCAN PSO with P = \"<p>\", S = \"<s>\" IMPLICIT "
+        "SORTING REQUIRED\n    "
         "qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n    SORT(internal) "
         "on columns:asc(1) \n    {\n      SCAN FOR FULL INDEX OSP (DUMMY "
         "OPERATION)\n      qet-width: 3 \n    }\n    qet-width: 3 \n  } "
@@ -657,7 +675,8 @@ TEST(QueryPlannerTest, threeVarTriples) {
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SCAN SOP with S = \"<s>\", O = \"<o>\"\n    "
+        "{\n  JOIN\n  {\n    SCAN SOP with S = \"<s>\", O = \"<o>\" IMPLICIT "
+        "SORTING REQUIRED\n    "
         "qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n    SORT(internal) "
         "on columns:asc(1) \n    {\n      SCAN FOR FULL INDEX OSP (DUMMY "
         "OPERATION)\n      qet-width: 3 \n    }\n    qet-width: 3 \n  } "
@@ -671,7 +690,8 @@ TEST(QueryPlannerTest, threeVarTriples) {
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SCAN PSO with P = \"<p>\", S = \"<s>\"\n    "
+        "{\n  JOIN\n  {\n    SCAN PSO with P = \"<p>\", S = \"<s>\" IMPLICIT "
+        "SORTING REQUIRED\n    "
         "qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n    SORT(internal) "
         "on columns:asc(1) \n    {\n      SCAN FOR FULL INDEX OPS (DUMMY "
         "OPERATION)\n      qet-width: 3 \n    }\n    qet-width: 3 \n  } "
@@ -727,9 +747,11 @@ TEST(QueryExecutionTreeTest, testBooksbyNewman) {
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
       "{\n  JOIN\n  {\n    SCAN POS with "
-      "P = \"<Author>\", O = \"<Anthony_Newman_(Author)>\"\n   "
+      "P = \"<Author>\", O = \"<Anthony_Newman_(Author)>\" IMPLICIT SORTING "
+      "REQUIRED\n   "
       " qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n  "
-      "  SCAN POS with P = \"<is-a>\", O = \"<Book>\"\n  "
+      "  SCAN POS with P = \"<is-a>\", O = \"<Book>\" IMPLICIT SORTING "
+      "REQUIRED\n  "
       "  qet-width: 1 \n  } join-column: [0]\n  qet-width: 1 \n}",
       qet.asString());
 }
@@ -761,7 +783,8 @@ TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
       "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
       "\"edible leaves\" and 1 variables with textLimit = 5 "
       "filtered by\n  {\n    SCAN POS with P = \"<is-a>\", "
-      "O = \"<Plant>\"\n    qet-width: 1 \n  }\n   filtered on "
+      "O = \"<Plant>\" IMPLICIT SORTING REQUIRED\n    qet-width: 1 \n  }\n   "
+      "filtered on "
       "column 0\n  qet-width: 3 \n}",
       qet.asString());
 }
@@ -795,8 +818,10 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
       "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
       "\"cocaine\" and 1 variables with textLimit = 1 filtered by\n  "
       "{\n    JOIN\n    {\n      SCAN POS with P = \"<Contained_by>\", "
-      "O = \"<Europe>\"\n      qet-width: 1 \n    } join-column: [0]\n"
-      "    |X|\n    {\n      SCAN POS with P = \"<Place_of_birth>\"\n"
+      "O = \"<Europe>\" IMPLICIT SORTING REQUIRED\n      qet-width: 1 \n    } "
+      "join-column: [0]\n"
+      "    |X|\n    {\n      SCAN POS with P = \"<Place_of_birth>\" IMPLICIT "
+      "SORTING REQUIRED\n"
       "      qet-width: 2 \n    } join-column: [0]\n    qet-width: 2 \n"
       "  }\n   filtered on column 1\n  qet-width: 4 \n}",
       qet.asString());
@@ -820,8 +845,9 @@ TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
   ASSERT_EQ(
       "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
       "\"friend*\" and 2 variables with textLimit = 1 filtered by\n"
-      "  {\n    SCAN POS with P = \"<is-a>\", O = \"<Politician>"
-      "\"\n    qet-width: 1 \n  }\n   filtered on column 0\n "
+      "  {\n    SCAN POS with P = \"<is-a>\", O = \"<Politician>\" IMPLICIT "
+      "SORTING REQUIRED"
+      "\n    qet-width: 1 \n  }\n   filtered on column 0\n "
       " qet-width: 4 \n}",
       qet.asString());
 }
@@ -844,14 +870,17 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
       "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
       "\"manhattan project\" and 1 variables with textLimit = 1 filtered "
       "by\n  {\n    JOIN\n    {\n      SCAN POS with P = \"<is-a>\", O = "
-      "\"<Scientist>\"\n      qet-width: 1 \n    } join-column: [0]\n    "
+      "\"<Scientist>\" IMPLICIT SORTING REQUIRED\n      qet-width: 1 \n    } "
+      "join-column: [0]\n    "
       "|X|\n    {\n      SORT(internal) on columns:asc(2) \n      {\n       "
       " TEXT OPERATION "
       "WITH FILTER: co-occurrence with words: \"friend*\" and 2 variables "
       "with textLimit = 1 filtered by\n        {\n          SCAN POS with P "
-      "= \"<is-a>\", O = \"<Politician>\"\n          qet-width: 1 \n        "
+      "= \"<is-a>\", O = \"<Politician>\" IMPLICIT SORTING REQUIRED\n          "
+      "qet-width: 1 \n        "
       "}\n         filtered on column 0\n        qet-width: 4 \n      }\n    "
-      "  qet-width: 4 \n    } join-column: [2]\n    qet-width: 4 \n  }\n   "
+      "  qet-width: 4 \n    } join-column: [2] IMPLICIT SORTING REQUIRED\n    "
+      "qet-width: 4 \n  }\n   "
       "filtered on column 0\n  qet-width: 6 \n}",
       qet.asString());
 }
@@ -995,9 +1024,11 @@ TEST(QueryPlannerTest, testSimpleOptional) {
       "WHERE  {?a <rel1> ?b . OPTIONAL { ?a <rel2> ?c }}");
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
-      "{\n  OPTIONAL_JOIN\n  {\n    SCAN PSO with P = \"<rel1>\"\n    "
+      "{\n  OPTIONAL_JOIN\n  {\n    SCAN PSO with P = \"<rel1>\" IMPLICIT "
+      "SORTING REQUIRED\n    "
       "qet-width: 2 \n  } join-columns: [0]\n  |X|\n  {\n    SCAN PSO with P "
-      "= \"<rel2>\"\n    qet-width: 2 \n  } join-columns: [0]\n  qet-width: "
+      "= \"<rel2>\" IMPLICIT SORTING REQUIRED\n    qet-width: 2 \n  } "
+      "join-columns: [0]\n  qet-width: "
       "3 \n}",
 
       qet.asString());
@@ -1009,9 +1040,11 @@ TEST(QueryPlannerTest, testSimpleOptional) {
   QueryExecutionTree qet2 = qp.createExecutionTree(pq2);
   ASSERT_EQ(
       "{\n  ORDER BY on columns:asc(1) \n  {\n    OPTIONAL_JOIN\n    "
-      "{\n      SCAN PSO with P = \"<rel1>\"\n      qet-width: 2 \n    } "
+      "{\n      SCAN PSO with P = \"<rel1>\" IMPLICIT SORTING REQUIRED\n      "
+      "qet-width: 2 \n    } "
       "join-columns: [0]\n    |X|\n    {\n      SCAN PSO with P = "
-      "\"<rel2>\"\n      qet-width: 2 \n    } join-columns: [0]\n    "
+      "\"<rel2>\" IMPLICIT SORTING REQUIRED\n      qet-width: 2 \n    } "
+      "join-columns: [0]\n    "
       "qet-width: 3 \n  }\n  qet-width: 3 \n}",
       qet2.asString());
 }

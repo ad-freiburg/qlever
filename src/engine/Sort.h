@@ -27,8 +27,9 @@ class Sort : public Operation {
   friend class QueryExecutionTree;
 
  public:
-  static Sort makeSortOnlyForTesting(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
-                                     std::vector<ColumnIndex> sortColumnIndices) {
+  static Sort makeSortOnlyForTesting(
+      QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
+      std::vector<ColumnIndex> sortColumnIndices) {
     return Sort{qec, std::move(subtree), std::move(sortColumnIndices)};
   }
 

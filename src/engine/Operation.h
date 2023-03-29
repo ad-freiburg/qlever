@@ -71,6 +71,10 @@ class Operation {
       result +=
           " LIMIT (as part of operation) " + std::to_string(_limit.value());
     }
+
+    if (!getResultSortedOn().empty() && _sortingIsRequired) {
+      result += " IMPLICIT SORTING REQUIRED";
+    }
     return result;
   }
 
@@ -257,9 +261,7 @@ class Operation {
 
   // Access to the `_sortingIsRequired` member, see the documentation of that
   // member for details
-  bool& sortingIsRequired()  {
-    return _sortingIsRequired;
-  }
+  bool& sortingIsRequired() { return _sortingIsRequired; }
 
  private:
   // Create the runtime information in case the evaluation of this operation has
@@ -288,9 +290,10 @@ class Operation {
   // The limit from a SPARQL `LIMIT` clause.
   std::optional<uint64_t> _limit;
 
-  // Is the sorting of the result that is promised via `resultSortedOn()` actually required.
-  // If `false` then a cheaper implementation that doesn't sort the result may be chosen.
-  // Is set to true by `ad_utility::createSortedTree
+  // Is the sorting of the result that is promised via `resultSortedOn()`
+  // actually required. If `false` then a cheaper implementation that doesn't
+  // sort the result may be chosen. Is set to true by
+  // `ad_utility::createSortedTree
   bool _sortingIsRequired = false;
 
   // A mutex that can be "copied". The semantics are, that copying will create
