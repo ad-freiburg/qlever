@@ -216,7 +216,15 @@ auto findSmallerUndefRangesArbitrary(const auto& row, auto begin, auto end)
   co_return;
 }
 
-// TODO<joka921> Comment, this is the dispatcher.
+// For a single `row` of IDs
+// find all the iterators in the sorted range `[begin, end)` that are
+// lexicographically smaller than `row`, are compatible with `row` (meaning that
+// on each position they have either the same value, or one of them is UNDEF),
+// and contain at least one UNDEF entry.
+// This function first checks whether the `row` contains `UNDEF` values and if
+// so in which position, and then calls the cheapest of the
+// `findSmallerUndefRanges...` functions above for which the `row` contains the
+// preconditions.
 auto findSmallerUndefRanges(const auto& row, auto begin, auto end)
     -> cppcoro::generator<decltype(begin)> {
   size_t numLastUndefined = 0;
@@ -243,140 +251,10 @@ auto findSmallerUndefRanges(const auto& row, auto begin, auto end)
   }
 }
 
-// TODO<joka921> Comment and test
-template <typename Input1, typename Input2, typename ResultTable>
-class AddCombinedRowToIdTable {
-  std::vector<size_t> numUndefinedPerColumn_;
-  size_t numJoinColumns_;
-  const Input1* input1_;
-  const Input2* input2_;
-  ResultTable* resultTable_;
-
-  struct TargetIndexAndRowIndices {
-    size_t targetIndex;
-    std::array<size_t, 2> rowIndices;
-  };
-  std::vector<TargetIndexAndRowIndices> indexBuffer_;
-
-  struct TargetIndexAndRowIndex {
-    size_t targetIndex_;
-    size_t rowIndex_;
-  };
-  std::vector<TargetIndexAndRowIndex> optionalIndexBuffer_;
-  size_t nextIndex_ = 0ul;
-
-  size_t bufferSize_ = 100'000;
-
- public:
-  explicit AddCombinedRowToIdTable(size_t numColumns, size_t numJoinColumns,
-                                   const Input1* input1, const Input2* input2,
-                                   ResultTable* resultTable)
-      : numUndefinedPerColumn_(numColumns),
-        numJoinColumns_{numJoinColumns},
-        input1_{input1},
-        input2_{input2},
-        resultTable_{resultTable} {}
-
-  const std::vector<size_t>& numUndefinedPerColumn() const {
-    return numUndefinedPerColumn_;
-  }
-
-  void operator()(size_t rowIndexA, size_t rowIndexB) {
-    indexBuffer_.push_back(
-        TargetIndexAndRowIndices{nextIndex_, {rowIndexA, rowIndexB}});
-    ++nextIndex_;
-    if (nextIndex_ > bufferSize_) {
-      flush();
-    }
-  }
-
-  void addOptionalRow(size_t rowIndexA) {
-    optionalIndexBuffer_.push_back(
-        TargetIndexAndRowIndex{nextIndex_, rowIndexA});
-    ++nextIndex_;
-    if (nextIndex_ > bufferSize_) {
-      flush();
-    }
-  }
-
-  ~AddCombinedRowToIdTable() {
-    if (!indexBuffer_.empty()) {
-      AD_THROW(
-          "Before destroying an object of type AddCombinedRowToIdTable, the "
-          "`flush` method must be called. Please report this");
-    }
-  }
-
-  void flush() {
-    auto& result = *resultTable_;
-    size_t oldSize = result.size();
-    AD_CORRECTNESS_CHECK(nextIndex_ ==
-                         indexBuffer_.size() + optionalIndexBuffer_.size());
-    result.resize(oldSize + nextIndex_);
-
-    auto mergeWithUndefined = [](const ValueId a, const ValueId b) {
-      static_assert(ValueId::makeUndefined().getBits() == 0u);
-      return ValueId::fromBits(a.getBits() | b.getBits());
-    };
-
-    size_t resultColIdx = 0;
-    auto writeColumn = [&]<size_t idxOfSingleColumn =
-                               std::numeric_limits<size_t>::max()>(
-        size_t column, const auto&... inputs) {
-      static constexpr size_t numInputs = sizeof...(inputs);
-      static_assert(numInputs == 1 || numInputs == 2);
-      static_assert(numInputs == 2 || idxOfSingleColumn < 2);
-      std::tuple<decltype(inputs->getColumn(column))...> cols{
-          inputs->getColumn(column)...};
-      // TODO<joka921> Implement prefetching.
-      decltype(auto) resultCol = result.getColumn(resultColIdx);
-      size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
-      for (size_t i = 0; i < indexBuffer_.size(); ++i) {
-        auto [targetIndex, sourceIndices] = indexBuffer_[i];
-        auto resultId = [&]() -> Id {
-          if constexpr (numInputs == 1) {
-            return std::get<0>(
-                cols)[std::get<idxOfSingleColumn>(sourceIndices)];
-          } else {
-            return mergeWithUndefined(std::get<0>(cols)[sourceIndices[0]],
-                                      std::get<1>(cols)[sourceIndices[1]]);
-          }
-          AD_FAIL();
-        }();
-        numUndef += resultId == Id::makeUndefined();
-        resultCol[oldSize + targetIndex] = resultId;
-      }
-      for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
-        if constexpr (idxOfSingleColumn != 1) {
-          resultCol[oldSize + targetIndex] = std::get<0>(cols)[sourceIndex];
-        } else {
-          resultCol[oldSize + targetIndex] = Id::makeUndefined();
-        }
-      }
-      ++resultColIdx;
-    };
-
-    for (size_t col = 0; col < numJoinColumns_; col++) {
-      writeColumn(col, input1_, input2_);
-    }
-
-    for (size_t col = numJoinColumns_; col < input1_->numColumns(); ++col) {
-      writeColumn.template operator()<0>(col, input1_);
-    }
-
-    for (size_t col = numJoinColumns_; col < input2_->numColumns(); col++) {
-      writeColumn.template operator()<1>(col, input2_);
-    }
-    indexBuffer_.clear();
-    optionalIndexBuffer_.clear();
-    nextIndex_ = 0ul;
-  }
-};
-
 [[maybe_unused]] static inline auto noop = [](auto&&...) {};
 // TODO<joka921> Comment, cleanup, move into header.
 template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
-void zipperJoinWithUndef(
+size_t zipperJoinWithUndef(
     Range&& range1, Range&& range2, auto&& lessThan, auto&& compatibleRowAction,
     auto&& findSmallerUndefRangesLeft, auto&& findSmallerUndefRangesRight,
     ElFromFirstNotFoundAction elFromFirstNotFoundAction = {}) {
@@ -423,7 +301,7 @@ void zipperJoinWithUndef(
     }
   };
 
-      [&]() {
+  [&]() {
     while (it1 < end1 && it2 < end2) {
       while (lessThan(*it1, *it2)) {
         if (!mergeWithUndefRight(*it1, range2.begin(), it2)) {
@@ -487,12 +365,15 @@ void zipperJoinWithUndef(
     }
   }
 
+  size_t numOutOfOrderAtEnd = 0;
   // TODO<joka921> These will be out of order;
   for (size_t i = 0; i < coveredFromLeft.size(); ++i) {
     if (!coveredFromLeft[i]) {
       elFromFirstNotFoundAction(*(range1.begin() + i));
+      ++numOutOfOrderAtEnd;
     }
   }
+  return numOutOfOrderAtEnd;
 }
 
 // _____________________________________________________________________________

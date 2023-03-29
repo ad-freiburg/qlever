@@ -4,6 +4,7 @@
 
 #include "MultiColumnJoin.h"
 
+#include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "util/JoinAlgorithms.h"
 
@@ -254,7 +255,7 @@ void MultiColumnJoin::computeSizeEstimateAndMultiplicities() {
 template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
 void MultiColumnJoin::computeMultiColumnJoin(
     const IdTable& dynA, const IdTable& dynB,
-    const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* dynResult) {
+    const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* result) {
   // check for trivial cases
   if (dynA.empty() || dynB.empty()) {
     return;
@@ -262,7 +263,6 @@ void MultiColumnJoin::computeMultiColumnJoin(
 
   IdTableView<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
   IdTableView<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
-  IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
 
   auto joinColumnData = ad_utility::prepareJoinColumns(
       joinColumns, a.numColumns(), b.numColumns());
@@ -276,10 +276,9 @@ void MultiColumnJoin::computeMultiColumnJoin(
   auto lessThanBoth = std::ranges::lexicographical_compare;
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      result.numColumns(), joinColumns.size(), &dynAPermuted, &dynBPermuted,
-      &result);
+      joinColumns.size(), dynAPermuted, dynBPermuted, result);
   auto addRow = [&rowAdder](const auto& rowA, const auto& rowB) {
-    rowAdder(rowA.rowIndex(), rowB.rowIndex());
+    rowAdder.addRow(rowA.rowIndex(), rowB.rowIndex());
   };
 
   auto findUndefDispatch = [](const auto& row, auto begin, auto end) {
@@ -294,7 +293,5 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // algorithms above easier), be the order that is expected by the rest of the
   // code is [columns-a, non-join-columns-b]. Permute the columns to fix the
   // order.
-  result.permuteColumns(joinColumnData.permutation_);
-
-  *dynResult = std::move(result).toDynamic();
+  result->permuteColumns(joinColumnData.permutation_);
 }

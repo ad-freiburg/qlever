@@ -4,6 +4,7 @@
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
+#include <engine/AddCombinedRowToTable.h>
 #include <engine/CallFixedSize.h>
 #include <engine/IndexScan.h>
 #include <engine/Join.h>
@@ -524,7 +525,7 @@ void Join::appendCrossProduct(const IdTable::const_iterator& leftBegin,
 
 template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
 void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
-                size_t jc2, IdTable* dynRes) {
+                size_t jc2, IdTable* result) {
   const IdTableView<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
   const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
 
@@ -538,7 +539,6 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   if (a.size() == 0 || b.size() == 0) {
     return;
   }
-  IdTableStatic<OUT_WIDTH> result = std::move(*dynRes).toStatic<OUT_WIDTH>();
   [[maybe_unused]] auto checkTimeoutAfterNCalls =
       checkTimeoutAfterNCallsFactory();
   auto joinColumnData = ad_utility::prepareJoinColumns(
@@ -552,11 +552,11 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
 
   auto lessThanBoth = std::ranges::less{};
 
-  auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      result.numColumns(), 1, &dynAPermuted, &dynBPermuted, &result);
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable(1, dynAPermuted,
+                                                      dynBPermuted, result);
   auto addRow = [&dynASubset, &dynBSubset, &rowAdder](const auto& rowA,
                                                       const auto& rowB) {
-    rowAdder(&rowA - dynASubset.data(), &rowB - dynBSubset.data());
+    rowAdder.addRow(&rowA - dynASubset.data(), &rowB - dynBSubset.data());
   };
 
   auto joinColumnL = a.getColumn(jc1);
@@ -576,7 +576,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   if (a.size() / b.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
       numUndefB == 0) {
     auto inverseAddRow = [&](const auto& rowA, const auto& rowB) {
-      rowAdder(&rowB - dynASubset.data(), &rowA - dynBSubset.data());
+      rowAdder.addRow(&rowB - dynASubset.data(), &rowA - dynBSubset.data());
     };
     ad_utility::gallopingJoin(dynBSubset, dynASubset, std::ranges::less{},
                               inverseAddRow);
@@ -609,12 +609,11 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   // algorithms above easier), be the order that is expected by the rest of
   // the code is [columns-a, non-join-columns-b]. Permute the columns to fix
   // the order.
-  result.permuteColumns(joinColumnData.permutation_);
-  *dynRes = std::move(result).toDynamic();
+  result->permuteColumns(joinColumnData.permutation_);
 
   LOG(DEBUG) << "Join done.\n";
-  LOG(DEBUG) << "Result: width = " << dynRes->numColumns()
-             << ", size = " << dynRes->size() << "\n";
+  LOG(DEBUG) << "Result: width = " << result->numColumns()
+             << ", size = " << result->size() << "\n";
 }
 
 // ______________________________________________________________________________
