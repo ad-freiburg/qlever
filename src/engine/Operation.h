@@ -69,10 +69,10 @@ class Operation {
   virtual string asString(size_t indent = 0) const final {
     auto result = asStringImpl(indent);
     if (_limit._limit.has_value()) {
-      result += " LIMIT " + std::to_string(_limit._limit.value());
+      absl::StrAppend(&result, " LIMIT ", _limit._limit.value());
     }
     if (_limit._offset != 0) {
-      result += " OFFSET " + std::to_string(_limit._offset);
+      absl::StrAppend(&result, " OFFSET ", _limit._offset);
     }
     return result;
   }
@@ -122,7 +122,7 @@ class Operation {
 
   // Set the value of the `LIMIT` clause that will be applied to the result of
   // this operation.
-  void setLimit(LimitOffsetClause limitOffsetClause) {
+  void setLimit(const LimitOffsetClause& limitOffsetClause) {
     _limit = limitOffsetClause;
   }
 

@@ -115,26 +115,6 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
             getDescriptor());
       }
       ResultTable result = computeResult();
-      computeResult(val._resultTable.get());
-      auto& idTable = val._resultTable->_idTable;
-      // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
-      // already perform it.
-      if (!supportsLimit()) {
-        // Apply the OFFSET clause. If the offset is `0` or the offset is larger
-        // than the size of the `IdTable`, then this has no effect and runtime
-        // `O(1)` (see the docs for `std::shift_left`).
-        std::ranges::for_each(idTable.getColumns(), [offset = _limit._offset](
-                                                        std::span<Id> column) {
-          std::shift_left(column.begin(), column.end(), offset);
-        });
-        // Resize the `IdTable` if necessary.
-        size_t targetSize = _limit.actualSize(idTable.numRows());
-        AD_CORRECTNESS_CHECK(targetSize <= idTable.numRows());
-        idTable.resize(targetSize);
-      } else {
-        AD_CONTRACT_CHECK(idTable.numRows() ==
-                          _limit.actualSize(idTable.numRows()));
-      }
       if (_timeoutTimer->wlock()->hasTimedOut()) {
         throw ad_utility::TimeoutException(
             "Timeout in " + getDescriptor() +
@@ -148,6 +128,18 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       updateRuntimeInformationOnSuccess(result,
                                         ad_utility::CacheStatus::computed,
                                         timer.msecs(), std::nullopt);
+      // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
+      // already perform it.
+      if (!supportsLimit()) {
+        ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
+        // Note: both of the following calls have no effect and runtime O(1) if
+        // neither a LIMIT nor an OFFSET were specified.
+        result.applyLimitOffset(_limit);
+        _runtimeInfo.addLimitRow(_limit, limitTimer.msecs(), true);
+      } else {
+        AD_CONTRACT_CHECK(result.idTable().numRows() ==
+                          _limit.actualSize(result.idTable().numRows()));
+      }
       return CacheValue{std::move(result), getRuntimeInfo()};
     };
 

@@ -73,3 +73,18 @@ ResultTable::ResultTable(IdTable idTable, vector<size_t> sortedBy,
                          LocalVocab&& localVocab)
     : ResultTable(std::move(idTable), std::move(sortedBy),
                   SharedLocalVocabWrapper{std::move(localVocab)}) {}
+
+// _____________________________________________________________________________
+void ResultTable::applyLimitOffset(const LimitOffsetClause& limitOffset) {
+  // Apply the OFFSET clause. If the offset is `0` or the offset is larger
+  // than the size of the `IdTable`, then this has no effect and runtime
+  // `O(1)` (see the docs for `std::shift_left`).
+  std::ranges::for_each(_idTable.getColumns(),
+                        [offset = limitOffset._offset](std::span<Id> column) {
+                          std::shift_left(column.begin(), column.end(), offset);
+                        });
+  // Resize the `IdTable` if necessary.
+  size_t targetSize = limitOffset.actualSize(_idTable.numRows());
+  AD_CORRECTNESS_CHECK(targetSize <= _idTable.numRows());
+  _idTable.resize(targetSize);
+}

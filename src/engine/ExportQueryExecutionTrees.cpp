@@ -72,7 +72,8 @@ nlohmann::json
 ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
-    LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res) {
+    const LimitOffsetClause& limitAndOffset,
+    std::shared_ptr<const ResultTable> res) {
   auto generator = constructQueryResultToTriples(
       qet, constructTriples, limitAndOffset, std::move(res));
   std::vector<std::array<std::string, 3>> jsonArray;
@@ -86,7 +87,7 @@ ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
 
 // __________________________________________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
-    const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
+    const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
     const QueryExecutionTree::ColumnIndicesAndTypes& columns,
     std::shared_ptr<const ResultTable> resultTable) {
   AD_CORRECTNESS_CHECK(resultTable != nullptr);
@@ -177,7 +178,7 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
 nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
-    LimitOffsetClause limitAndOffset,
+    const LimitOffsetClause& limitAndOffset,
     shared_ptr<const ResultTable> resultTable) {
   using nlohmann::json;
 
@@ -296,7 +297,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
 nlohmann::json ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
-    LimitOffsetClause limitAndOffset,
+    const LimitOffsetClause& limitAndOffset,
     shared_ptr<const ResultTable> resultTable) {
   AD_CORRECTNESS_CHECK(resultTable != nullptr);
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
@@ -444,8 +445,12 @@ nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
 
   j["runtimeInformation"]["meta"] = nlohmann::ordered_json(
       qet.getRootOperation()->getRuntimeInfoWholeQuery());
+  RuntimeInformation runtimeInformation =
+      qet.getRootOperation()->getRuntimeInfo();
+  runtimeInformation.addLimitRow(query._limitOffset, 0, false);
+  runtimeInformation.addDetail("executed-implicitly-during-query-export", true);
   j["runtimeInformation"]["query_execution_tree"] =
-      nlohmann::ordered_json(qet.getRootOperation()->getRuntimeInfo());
+      nlohmann::ordered_json(runtimeInformation);
 
   {
     auto limitAndOffset = query._limitOffset;
