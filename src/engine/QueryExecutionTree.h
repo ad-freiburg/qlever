@@ -34,6 +34,10 @@ class QueryExecutionTree {
       : QueryExecutionTree(qec) {
     setOperation(std::move(operation));
   }
+  template <typename Op>
+  QueryExecutionTree(QueryExecutionContext* const qec,
+                     std::unique_ptr<Op> operation)
+      : QueryExecutionTree(qec, std::shared_ptr<Op>{std::move(operation)}) {}
 
   enum OperationType {
     UNDEFINED,

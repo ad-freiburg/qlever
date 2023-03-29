@@ -269,7 +269,7 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
   }
 
   QueryExecutionContext* qec = qet->getRootOperation()->getExecutionContext();
-  auto sort = std::make_shared<Sort>(qec, std::move(qet), sortColumns);
+  auto sort = absl::WrapUnique(new Sort(qec, std::move(qet), sortColumns));
   return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
 }
 
