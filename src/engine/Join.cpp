@@ -527,9 +527,10 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
       }
     };
 
-    ad_utility::zipperJoinWithUndef(dynASubset, dynBSubset, lessThanBoth,
-                                    addRow, findSmallerUndefRangeLeft,
-                                    findSmallerUndefRangeRight);
+    auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
+        dynASubset, dynBSubset, lessThanBoth, addRow, findSmallerUndefRangeLeft,
+        findSmallerUndefRangeRight);
+    AD_CORRECTNESS_CHECK(numOutOfOrder == 0);
   }
   rowAdder.flush();
   // The column order in the result is now

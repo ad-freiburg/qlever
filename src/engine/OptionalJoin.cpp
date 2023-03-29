@@ -246,10 +246,63 @@ void OptionalJoin::createOptionalResult(const auto& row,
   }
 }
 
+namespace {
+// TODO<joka921> This is a duplication with Sort.cpp
+
+// The call to `callFixedSize` is put into a separate function to get rid
+// of an internal compiler error in Clang 13.
+// TODO<joka921, future compilers> Check if this problem goes away in future
+// compiler versions as soon as we don't support Clang 13 anymore.
+void callFixedSizeForSort(auto& idTable, auto comparison) {
+  ad_utility::callFixedSize(idTable.numColumns(),
+                            [&idTable, comparison]<int I>() {
+                              Engine::sort<I>(&idTable, comparison);
+                            });
+}
+// The actual implementation of sorting an `IdTable` according to the
+// `sortCols`.
+void sortImpl(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
+  int width = idTable.numColumns();
+
+  // Instantiate specialized comparison lambdas for one and two sort columns
+  // and use a generic comparison for a higher number of sort columns.
+  // TODO<joka921> As soon as we have merged the benchmark, measure whether
+  // this is in fact beneficial and whether it should also be applied for a
+  // higher number of columns, maybe even using `CALL_FIXED_SIZE` for the
+  // number of sort columns.
+  // TODO<joka921> Also experiment with sorting algorithms that take the
+  // column-based structure of the `IdTable` into account.
+  if (sortCols.size() == 1) {
+    CALL_FIXED_SIZE(width, &Engine::sort, &idTable, sortCols.at(0));
+  } else if (sortCols.size() == 2) {
+    auto comparison = [c0 = sortCols[0], c1 = sortCols[1]](const auto& row1,
+                                                           const auto& row2) {
+      if (row1[c0] != row2[c0]) {
+        return row1[c0] < row2[c0];
+      } else {
+        return row1[c1] < row2[c1];
+      }
+    };
+    callFixedSizeForSort(idTable, comparison);
+  } else {
+    auto comparison = [&sortCols](const auto& row1, const auto& row2) {
+      for (auto& col : sortCols) {
+        if (row1[col] != row2[col]) {
+          return row1[col] < row2[col];
+        }
+      }
+      return false;
+    };
+    callFixedSizeForSort(idTable, comparison);
+  }
+}
+}  // namespace
+
 template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
 void OptionalJoin::optionalJoin(
     const IdTable& dynA, const IdTable& dynB,
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns, IdTable* result) {
+    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+    IdTable* result) {
   // check for trivial cases
   if (dynA.empty()) {
     return;
@@ -281,9 +334,9 @@ void OptionalJoin::optionalJoin(
   auto findUndefDispatch = [](const auto& row, auto begin, auto end) {
     return ad_utility::findSmallerUndefRanges(row, begin, end);
   };
-  ad_utility::zipperJoinWithUndef(dynASubset, dynBSubset, lessThanBoth, addRow,
-                                  findUndefDispatch, findUndefDispatch,
-                                  addOptionalRow);
+  auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
+      dynASubset, dynBSubset, lessThanBoth, addRow, findUndefDispatch,
+      findUndefDispatch, addOptionalRow);
 
   // The column order in the result is now
   // [joinColumns, non-join-columns-a, non-join-columns-b] (which makes the
@@ -291,5 +344,17 @@ void OptionalJoin::optionalJoin(
   // code is [columns-a, non-join-columns-b]. Permute the columns to fix the
   // order.
   rowAdder.flush();
+
+  // TODO<joka921> We have two sorted ranges, a simple merge would suffice
+  // (possibly even in-place), or we could even lazily pass them on to the
+  // upstream operation.
+  // TODO<joka921> We only have to do this if the sorting is required.
+  if (numOutOfOrder > 0) {
+    std::vector<ColumnIndex> cols;
+    for (size_t i = 0; i < joinColumns.size(); ++i) {
+      cols.push_back(i);
+    }
+    sortImpl(*result, cols);
+  }
   result->permuteColumns(joinColumnData.permutation_);
 }

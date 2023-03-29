@@ -64,9 +64,10 @@ class OptionalJoin : public Operation {
    * @param result
    */
   template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
-  static void optionalJoin(const IdTable& dynA, const IdTable& dynB,
-                           const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
-                           IdTable* dynResult);
+  static void optionalJoin(
+      const IdTable& dynA, const IdTable& dynB,
+      const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+      IdTable* dynResult);
 
  private:
   void computeSizeEstimateAndMultiplicities();

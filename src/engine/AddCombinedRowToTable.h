@@ -171,7 +171,7 @@ class AddCombinedRowToIdTable {
       // Write the optional rows. For the second input those are always
       // undefined.
       for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
-        if constexpr (idxOfSingleColumn == 0) {
+        if constexpr (idxOfSingleColumn != 1) {
           resultCol[oldSize + targetIndex] = std::get<0>(cols)[sourceIndex];
         } else {
           resultCol[oldSize + targetIndex] = Id::makeUndefined();

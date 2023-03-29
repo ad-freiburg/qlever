@@ -11,10 +11,10 @@
 using std::string;
 
 // _____________________________________________________________________________
-MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
-                                 std::shared_ptr<QueryExecutionTree> t1,
-                                 std::shared_ptr<QueryExecutionTree> t2,
-                                 const std::vector<std::array<ColumnIndex, 2>>& jcs)
+MultiColumnJoin::MultiColumnJoin(
+    QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
+    std::shared_ptr<QueryExecutionTree> t2,
+    const std::vector<std::array<ColumnIndex, 2>>& jcs)
     : Operation(qec),
       _left(std::move(t1)),
       _right(std::move(t2)),
@@ -237,7 +237,8 @@ void MultiColumnJoin::computeSizeEstimateAndMultiplicities() {
 template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
 void MultiColumnJoin::computeMultiColumnJoin(
     const IdTable& dynA, const IdTable& dynB,
-    const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* result) {
+    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+    IdTable* result) {
   // check for trivial cases
   if (dynA.empty() || dynB.empty()) {
     return;
@@ -266,8 +267,10 @@ void MultiColumnJoin::computeMultiColumnJoin(
   auto findUndefDispatch = [](const auto& row, auto begin, auto end) {
     return ad_utility::findSmallerUndefRanges(row, begin, end);
   };
-  ad_utility::zipperJoinWithUndef(dynASubset, dynBSubset, lessThanBoth, addRow,
-                                  findUndefDispatch, findUndefDispatch);
+  auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
+      dynASubset, dynBSubset, lessThanBoth, addRow, findUndefDispatch,
+      findUndefDispatch);
+  AD_CORRECTNESS_CHECK(numOutOfOrder == 0);
   rowAdder.flush();
 
   // The column order in the result is now

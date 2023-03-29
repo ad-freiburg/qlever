@@ -171,10 +171,18 @@ TEST(OptionalJoin, twoColumnsPreexistingUndefLeft) {
                          {18, U}});
     auto b =
         makeTableV({{0, 0}, {0, 1}, {0, 1}, {3, 3}, {5, 2}, {6, 12}, {20, 3}});
+    // TODO<joka921> This is the result for the case that the sorting is not
+    // corrected.
+    /*
     auto expected = makeTableV({{0, 0},  {0, 1},  {0, 1},   {0, 1},  {0, 1},
                                 {3, 3},  {3, 3},  {3, 3},   {3, 3},  {3, 7},
                                 {5, 2},  {5, 2},  {5, 2},   {6, 12}, {6, 12},
                                 {20, 3}, {20, 3}, {U, 123}, {4, U},  {18, U}});
+                                */
+    auto expected = makeTableV({{U, 123}, {0, 0},  {0, 1},  {0, 1},  {0, 1},
+                                {0, 1},   {3, 3},  {3, 3},  {3, 3},  {3, 3},
+                                {3, 7},   {4, U},  {5, 2},  {5, 2},  {5, 2},
+                                {6, 12},  {6, 12}, {18, U}, {20, 3}, {20, 3}});
     testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
   }
 }
@@ -224,26 +232,28 @@ TEST(OptionalJoin, twoColumnsPreexistingUndefBoth) {
 
     testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
   }
-  /*
   {
-    auto a =
-        makeTableV({{0, 0}, {0, 1}, {0, 1}, {3, 3}, {5, U}, {6, 12}, {12, U},
-  {20, 3}}); auto b = makeTableV({{U, U}, {U, 2}, {U, 3}, {U, 123}, {0, 1}, {3,
-  U}, {3, U}, {3, 7}, {4, U}, {5, 2}, {6, U}, {18, U}}); auto expected =
-  makeTableV({{0, 0}, {0, 1}, {0, 1}, {0, 1}, {0, 1}, {3, 3}, {3, 3}, {3, 3},
-                                {3, 3},
-                                {5, U},
-                                {5, 2},
-                                {6, 12},
-                                {6, 12},
-                                {12, U},
-                                {12, 123},
-                                {20, 3},
-                                {20, 3}});
+    auto a = makeTableV(
+        {{0, 0}, {0, 1}, {0, 1}, {3, 3}, {5, U}, {6, 12}, {12, U}, {20, 3}});
+    auto b = makeTableV({{U, U},
+                         {U, 2},
+                         {U, 3},
+                         {U, 123},
+                         {0, 1},
+                         {3, U},
+                         {3, U},
+                         {3, 7},
+                         {4, U},
+                         {5, 2},
+                         {6, U},
+                         {18, U}});
+    auto expected = makeTableV(
+        {{0, 0},  {0, 1},  {0, 1},  {0, 1},  {0, 1},    {3, 3},   {3, 3},
+         {3, 3},  {3, 3},  {5, U},  {5, 2},  {5, 3},    {5, 123}, {6, 12},
+         {6, 12}, {12, U}, {12, 2}, {12, 3}, {12, 123}, {20, 3},  {20, 3}});
 
     testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
   }
-   */
 }
 
 TEST(OptionalJoin, multipleColumnsNoUndef) {

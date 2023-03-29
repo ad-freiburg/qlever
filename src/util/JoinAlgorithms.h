@@ -23,7 +23,7 @@ struct JoinColumnData {
 };
 
 inline JoinColumnData prepareJoinColumns(
-    const vector<array<ColumnIndex, 2>>& joinColumns, size_t numColsA,
+    const std::vector<std::array<ColumnIndex, 2>>& joinColumns, size_t numColsA,
     size_t numColsB) {
   std::vector<size_t> permutation;
   permutation.resize(numColsA + numColsB - joinColumns.size());
@@ -254,7 +254,7 @@ auto findSmallerUndefRanges(const auto& row, auto begin, auto end)
 [[maybe_unused]] static inline auto noop = [](auto&&...) {};
 // TODO<joka921> Comment, cleanup, move into header.
 template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
-size_t zipperJoinWithUndef(
+[[nodiscard]] size_t zipperJoinWithUndef(
     Range&& range1, Range&& range2, auto&& lessThan, auto&& compatibleRowAction,
     auto&& findSmallerUndefRangesLeft, auto&& findSmallerUndefRangesRight,
     ElFromFirstNotFoundAction elFromFirstNotFoundAction = {}) {
