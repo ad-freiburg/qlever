@@ -200,3 +200,20 @@ void to_json(nlohmann::ordered_json& j,
       {"time_query_planning", rti.timeQueryPlanning},
       {"time_index_scans_query_planning", rti.timeIndexScansQueryPlanning}};
 }
+
+// ___________________________________________________________________________________
+void RuntimeInformation::addLimitRow(const LimitOffsetClause& l,
+                                     size_t timeForLimit,
+                                     bool fullResultIsNotCached) {
+  if (l._limit.has_value() || l._offset != 0) {
+    children_ = std::vector{*this};
+    descriptor_ = "LIMIT and OFFSET";
+    auto& actualOperation = children_.at(0);
+    numRows_ = l.actualSize(actualOperation.numRows_);
+    details_.clear();
+    totalTime_ += static_cast<double>(timeForLimit);
+    actualOperation.addDetail("not-written-to-cache-because-child-of-limit",
+                              fullResultIsNotCached);
+    sizeEstimate_ = l.actualSize(sizeEstimate_);
+  }
+}

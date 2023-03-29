@@ -109,19 +109,13 @@ class RuntimeInformation {
     details_[key] = value;
   }
 
+  // Set the runtime information for a LIMIT or OFFSET operation as the new root
+  // of the tree and make the old root the only child of the LIMIT operation.
+  // The details of the LIMIT/OFFSET, the time (in ms) that was spent computing
+  // it, and the information whether the `actual` operation (the old root of the
+  // runtime information) is written to the cache are passed in as arguments.
   void addLimitRow(const LimitOffsetClause& l, size_t timeForLimit,
-                   bool fullResultIsNotCached) {
-    if (l._limit.has_value() || l._offset != 0) {
-      children_ = std::vector{*this};
-      descriptor_ = "LIMIT and OFFSET";
-      auto& actualOperation = children_.at(0);
-      numRows_ = l.actualSize(actualOperation.numRows_);
-      details_.clear();
-      totalTime_ += static_cast<double>(timeForLimit);
-      actualOperation.addDetail("not-written-to-cache-because-child-of-limit",
-                                fullResultIsNotCached);
-    }
-  }
+                   bool fullResultIsNotCached);
 
  private:
   static std::string_view toString(Status status);
