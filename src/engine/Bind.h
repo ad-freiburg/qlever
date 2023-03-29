@@ -29,7 +29,11 @@ class Bind : public Operation {
   std::vector<QueryExecutionTree*> getChildren() override;
   void setTextLimit(size_t limit) override;
   size_t getCostEstimate() override;
+
+ private:
   size_t getSizeEstimateImpl() override;
+
+ public:
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
 

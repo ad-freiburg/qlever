@@ -26,7 +26,7 @@ TEST(Values, basicMethods) {
   Values valuesOp(testQec,
                   {{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}}, values});
   EXPECT_FALSE(valuesOp.knownEmptyResult());
-  EXPECT_EQ(valuesOp.getSizeEstimateImpl(), 4u);
+  EXPECT_EQ(valuesOp.getSizeEstimate(), 4u);
   EXPECT_EQ(valuesOp.getCostEstimate(), 4u);
   EXPECT_EQ(valuesOp.getDescriptor(), "Values with variables ?x\t?y\t?z");
   EXPECT_TRUE(valuesOp.resultSortedOn().empty());

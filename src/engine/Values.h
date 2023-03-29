@@ -40,8 +40,10 @@ class Values : public Operation {
 
   virtual float getMultiplicity(size_t col) override;
 
+ private:
   virtual size_t getSizeEstimateImpl() override;
 
+ public:
   virtual size_t getCostEstimate() override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }

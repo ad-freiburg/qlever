@@ -171,7 +171,8 @@ size_t OptionalJoin::getSizeEstimateImpl() {
 
 // _____________________________________________________________________________
 size_t OptionalJoin::getCostEstimate() {
-  size_t costEstimate = getSizeEstimateImpl() + _left->getSizeEstimate() + _right->getSizeEstimate();
+  size_t costEstimate = getSizeEstimateImpl() + _left->getSizeEstimate() +
+                        _right->getSizeEstimate();
   // The optional join is about 3-7 times slower than a normal join, due to
   // its increased complexity
   costEstimate *= 4;

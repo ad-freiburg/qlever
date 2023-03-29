@@ -64,8 +64,10 @@ class HasPredicateScan : public Operation {
 
   float getMultiplicity(size_t col) override;
 
+ private:
   size_t getSizeEstimateImpl() override;
 
+ public:
   size_t getCostEstimate() override;
 
  public:

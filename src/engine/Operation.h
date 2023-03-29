@@ -97,8 +97,10 @@ class Operation {
       return getSizeEstimateImpl();
     }
   }
+
  private:
   virtual size_t getSizeEstimateImpl() = 0;
+
  public:
   virtual float getMultiplicity(size_t col) = 0;
   virtual bool knownEmptyResult() = 0;

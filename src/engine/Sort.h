@@ -36,10 +36,12 @@ class Sort : public Operation {
     subtree_->setTextLimit(limit);
   }
 
+ private:
   virtual size_t getSizeEstimateImpl() override {
     return subtree_->getSizeEstimate();
   }
 
+ public:
   virtual float getMultiplicity(size_t col) override {
     return subtree_->getMultiplicity(col);
   }

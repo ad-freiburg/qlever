@@ -45,8 +45,10 @@ class OrderBy : public Operation {
 
   void setTextLimit(size_t limit) override { subtree_->setTextLimit(limit); }
 
+ private:
   size_t getSizeEstimateImpl() override { return subtree_->getSizeEstimate(); }
 
+ public:
   float getMultiplicity(size_t col) override {
     return subtree_->getMultiplicity(col);
   }

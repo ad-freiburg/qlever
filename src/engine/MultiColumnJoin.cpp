@@ -161,7 +161,8 @@ size_t MultiColumnJoin::getSizeEstimateImpl() {
 
 // _____________________________________________________________________________
 size_t MultiColumnJoin::getCostEstimate() {
-  size_t costEstimate = getSizeEstimateImpl() + _left->getSizeEstimate() + _right->getSizeEstimate();
+  size_t costEstimate = getSizeEstimateImpl() + _left->getSizeEstimate() +
+                        _right->getSizeEstimate();
   // This join is slower than a normal join, due to
   // its increased complexity
   costEstimate *= 2;

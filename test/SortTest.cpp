@@ -138,7 +138,7 @@ TEST(Sort, SimpleMemberFunctions) {
     auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
     Sort s = makeSort(std::move(inputTable), {0});
     EXPECT_EQ(1u, s.getResultWidth());
-    EXPECT_EQ(8u, s.getSizeEstimateImpl());
+    EXPECT_EQ(8u, s.getSizeEstimate());
     EXPECT_EQ("Sort (internal order) on ?0", s.getDescriptor());
 
     EXPECT_THAT(s.asString(),
@@ -158,7 +158,7 @@ TEST(Sort, SimpleMemberFunctions) {
     auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
     Sort s = makeSort(std::move(inputTable), {1, 0});
     EXPECT_EQ(2u, s.getResultWidth());
-    EXPECT_EQ(2u, s.getSizeEstimateImpl());
+    EXPECT_EQ(2u, s.getSizeEstimate());
     EXPECT_FALSE(s.knownEmptyResult());
     EXPECT_EQ("Sort (internal order) on ?1 ?0", s.getDescriptor());
 

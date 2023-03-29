@@ -27,7 +27,11 @@ class NeutralElementOperation : public Operation {
   [[nodiscard]] size_t getResultWidth() const override { return 0; };
   void setTextLimit(size_t) override{};
   size_t getCostEstimate() override { return 0; }
+
+ private:
   size_t getSizeEstimateImpl() override { return 1; }
+
+ public:
   float getMultiplicity(size_t) override { return 0; };
   bool knownEmptyResult() override { return false; };
 

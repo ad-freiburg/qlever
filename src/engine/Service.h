@@ -59,7 +59,11 @@ class Service : public Operation {
   size_t getResultWidth() const override;
   std::vector<size_t> resultSortedOn() const override { return {}; }
   float getMultiplicity(size_t col) override;
+
+ private:
   size_t getSizeEstimateImpl() override;
+
+ public:
   size_t getCostEstimate() override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 
