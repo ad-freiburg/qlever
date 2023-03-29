@@ -21,7 +21,6 @@ class Sort : public Operation {
   std::shared_ptr<QueryExecutionTree> subtree_;
   std::vector<ColumnIndex> sortColumnIndices_;
 
- private:
   // The constructor is private. The only way to create a `Sort` operation is
   // via `ad_utility::createSortedTree` (in `QueryExecutionTree.h`). The reason
   // for this is that the `createdSortedTree` function has an optimization if
@@ -38,27 +37,27 @@ class Sort : public Operation {
       const vector<size_t>& sortColumns);
 
  public:
-  virtual string getDescriptor() const override;
+  string getDescriptor() const override;
 
-  virtual vector<size_t> resultSortedOn() const override {
+  vector<size_t> resultSortedOn() const override {
     return sortColumnIndices_;
   }
 
-  virtual void setTextLimit(size_t limit) override {
+  void setTextLimit(size_t limit) override {
     subtree_->setTextLimit(limit);
   }
 
-  virtual size_t getSizeEstimate() override {
+  size_t getSizeEstimate() override {
     return subtree_->getSizeEstimate();
   }
 
-  virtual float getMultiplicity(size_t col) override {
+  float getMultiplicity(size_t col) override {
     return subtree_->getMultiplicity(col);
   }
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return subtree_; }
 
-  virtual size_t getCostEstimate() override {
+  size_t getCostEstimate() override {
     size_t size = getSizeEstimate();
     size_t logSize = std::max(
         size_t(2), static_cast<size_t>(logb(static_cast<double>(size))));
@@ -67,7 +66,7 @@ class Sort : public Operation {
     return nlogn + subcost;
   }
 
-  virtual bool knownEmptyResult() override {
+  bool knownEmptyResult() override {
     return subtree_->knownEmptyResult();
   }
 
@@ -78,12 +77,12 @@ class Sort : public Operation {
   }
 
  private:
-  virtual void computeResult(ResultTable* result) override;
+  void computeResult(ResultTable* result) override;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
       const override {
     return subtree_->getVariableColumns();
   }
 
-  virtual string asStringImpl(size_t indent = 0) const override;
+  string asStringImpl(size_t indent = 0) const override;
 };
