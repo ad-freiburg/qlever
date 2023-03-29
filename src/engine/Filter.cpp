@@ -53,7 +53,7 @@ ResultTable Filter::computeResult() {
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(subRes->idTable().numColumns());
 
-  int width = idTable.numColumns();
+  size_t width = idTable.numColumns();
   CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this, &idTable, *subRes);
   LOG(DEBUG) << "Filter result computation done." << endl;
 
@@ -61,7 +61,7 @@ ResultTable Filter::computeResult() {
 }
 
 // _____________________________________________________________________________
-template <int WIDTH>
+template <size_t WIDTH>
 void Filter::computeFilterImpl(IdTable* outputIdTable,
                                const ResultTable& inputResultTable) {
   sparqlExpression::EvaluationContext evaluationContext(
