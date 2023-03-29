@@ -229,9 +229,10 @@ TEST(LocalVocab, propagation) {
   OrderBy orderBy(testQec, qet(values1), {{0, true}, {1, true}});
   checkLocalVocab(orderBy, std::vector<std::string>{"x", "y1", "y2"});
 
-  // SORT operation (the third operation is the sort column).
-  Sort sort = Sort::makeSortOnlyForTesting(testQec, qet(values1), {0});
-  checkLocalVocab(sort, std::vector<std::string>{"x", "y1", "y2"});
+  // SORT operation (the second argument is the sort column).
+  auto sortPointer = ad_utility::createSortedTree(qet(values1), {0});
+  checkLocalVocab(*sortPointer->getRootOperation(),
+                  std::vector<std::string>{"x", "y1", "y2"});
 
   // DISTINCT operation (the third argument are the indices of the input columns
   // that are considered for the output; not important for this test).

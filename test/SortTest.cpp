@@ -17,15 +17,15 @@ using ad_utility::source_location;
 namespace {
 
 // Create a `Sort` operation that sorts the `input` by the `sortColumns`.
-Sort makeSort(IdTable input, const std::vector<size_t>& sortColumns) {
+std::shared_ptr<QueryExecutionTree> makeSort(
+    IdTable input, const std::vector<size_t>& sortColumns) {
   std::vector<Variable> vars;
-  auto qec = ad_utility::testing::getQec();
   for (size_t i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));
   }
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       ad_utility::testing::getQec(), std::move(input), vars);
-  return Sort::makeSortOnlyForTesting(qec, subtree, sortColumns);
+  return ad_utility::createSortedTree(subtree, sortColumns);
 }
 
 // Test that the `input`, when being sorted by its 0-th column as its primary
@@ -61,7 +61,8 @@ void testSort(IdTable input, const IdTable& expected,
 
     for (size_t i = 0; i < 5; ++i) {
       randomShuffle(permutedInput.begin(), permutedInput.end());
-      Sort s = makeSort(permutedInput.clone(), sortColumns);
+      auto sortPointer = makeSort(permutedInput.clone(), sortColumns);
+      Sort& s = dynamic_cast<Sort&>(*sortPointer->getRootOperation());
       auto result = s.getResult();
       const auto& resultTable = result->_idTable;
       ASSERT_EQ(resultTable, permutedExpected);
@@ -136,7 +137,8 @@ TEST(Sort, SimpleMemberFunctions) {
     VectorTable input{{0},   {1},       {-1},  {3},
                       {-17}, {1230957}, {123}, {-1249867132}};
     auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
-    Sort s = makeSort(std::move(inputTable), {0});
+    auto sortPointer = makeSort(std::move(inputTable), {0});
+    Sort& s = dynamic_cast<Sort&>(*sortPointer->getRootOperation());
     EXPECT_EQ(1u, s.getResultWidth());
     EXPECT_EQ(8u, s.getSizeEstimate());
     EXPECT_EQ("Sort (internal order) on ?0", s.getDescriptor());
@@ -156,7 +158,8 @@ TEST(Sort, SimpleMemberFunctions) {
   {
     VectorTable input{{0, 1}, {0, 2}};
     auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
-    Sort s = makeSort(std::move(inputTable), {1, 0});
+    auto sortPointer = makeSort(std::move(inputTable), {1, 0});
+    Sort& s = dynamic_cast<Sort&>(*sortPointer->getRootOperation());
     EXPECT_EQ(2u, s.getResultWidth());
     EXPECT_EQ(2u, s.getSizeEstimate());
     EXPECT_FALSE(s.knownEmptyResult());

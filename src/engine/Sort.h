@@ -22,17 +22,22 @@ class Sort : public Operation {
   std::vector<ColumnIndex> sortColumnIndices_;
 
  private:
+  // The constructor is private. The only way to create a `Sort` operation is
+  // via `ad_utility::createSortedTree` (in `QueryExecutionTree.h`). The reason
+  // for this is that the `createdSortedTree` function has an optimization if
+  // the argument is already (implicitly) sorted, but has to perform additional
+  // operations on the argument if this optimization applies. So calling the
+  // constructor of `Sort` without going through `createSortedTree` would very
+  // likely be a bug.
   Sort(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
        std::vector<ColumnIndex> sortColumnIndices);
-  friend class QueryExecutionTree;
+  // The actual way to create a `Sort` operation. Declared and defined in
+  // `QueryExecutionTree.h/.cpp`.
+  friend std::shared_ptr<QueryExecutionTree> ad_utility::createSortedTree(
+      std::shared_ptr<QueryExecutionTree> qet,
+      const vector<size_t>& sortColumns);
 
  public:
-  static Sort makeSortOnlyForTesting(
-      QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
-      std::vector<ColumnIndex> sortColumnIndices) {
-    return Sort{qec, std::move(subtree), std::move(sortColumnIndices)};
-  }
-
   virtual string getDescriptor() const override;
 
   virtual vector<size_t> resultSortedOn() const override {

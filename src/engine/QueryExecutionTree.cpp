@@ -230,7 +230,6 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
 template void QueryExecutionTree::setOperation(std::shared_ptr<IndexScan>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Union>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Bind>);
-// template void QueryExecutionTree::setOperation(std::shared_ptr<Sort>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Distinct>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Values>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Service>);
@@ -254,8 +253,9 @@ template void QueryExecutionTree::setOperation(
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<ValuesForTesting>);
 
+namespace ad_utility {
 // ________________________________________________________________________________________________________________
-std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
+std::shared_ptr<QueryExecutionTree> createSortedTree(
     std::shared_ptr<QueryExecutionTree> qet,
     const vector<size_t>& sortColumns) {
   auto inputSortedOn = qet->resultSortedOn();
@@ -265,6 +265,11 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
   }
   if (sortColumns.empty() || inputSorted) {
     qet->getRootOperation()->sortingIsRequired() = true;
+    // The result from the cache might be invalidated because we have changed
+    // the sorting requirements, so we have to reload.
+    // TODO<joka921> Refactor the cache as well as the `QueryExecutionTree` to
+    // make their interfaces more robust against such changes.
+    qet->readFromCache();
     return qet;
   }
 
@@ -274,8 +279,7 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
 }
 
 // ________________________________________________________________________________________________________________
-std::array<std::shared_ptr<QueryExecutionTree>, 2>
-QueryExecutionTree::createSortedTrees(
+std::array<std::shared_ptr<QueryExecutionTree>, 2> createSortedTrees(
     std::shared_ptr<QueryExecutionTree> qetA,
     std::shared_ptr<QueryExecutionTree> qetB,
     const vector<std::array<size_t, 2>>& sortColumns) {
@@ -288,3 +292,4 @@ QueryExecutionTree::createSortedTrees(
   return {createSortedTree(std::move(qetA), sortColumnsA),
           createSortedTree(std::move(qetB), sortColumnsB)};
 }
+}  // namespace ad_utility

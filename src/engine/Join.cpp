@@ -27,8 +27,8 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   AD_CONTRACT_CHECK(t1 && t2);
   // Currently all join algorithms require both inputs to be sorted, so we
   // enforce the sorting here.
-  t1 = QueryExecutionTree::createSortedTree(std::move(t1), {t1JoinCol});
-  t2 = QueryExecutionTree::createSortedTree(std::move(t2), {t2JoinCol});
+  t1 = ad_utility::createSortedTree(std::move(t1), {t1JoinCol});
+  t2 = ad_utility::createSortedTree(std::move(t2), {t2JoinCol});
 
   // Make sure subtrees are ordered so that identical queries can be identified.
   if (t1->asString() > t2->asString()) {

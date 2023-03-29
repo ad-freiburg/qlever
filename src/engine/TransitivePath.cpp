@@ -750,8 +750,8 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
     std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
     bool isLeft) const {
   // Enforce required sorting of `leftOrRightOp`.
-  leftOrRightOp = QueryExecutionTree::createSortedTree(std::move(leftOrRightOp),
-                                                       {inputCol});
+  leftOrRightOp =
+      ad_utility::createSortedTree(std::move(leftOrRightOp), {inputCol});
   // Create a copy of this.
   //
   // NOTE: The RHS used to be `std::make_shared<TransitivePath>()`, which is

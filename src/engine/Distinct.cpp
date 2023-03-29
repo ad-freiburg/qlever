@@ -19,8 +19,7 @@ Distinct::Distinct(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,
                    const vector<size_t>& keepIndices)
     : Operation(qec),
-      _subtree(QueryExecutionTree::createSortedTree(std::move(subtree),
-                                                    keepIndices)),
+      _subtree(ad_utility::createSortedTree(std::move(subtree), keepIndices)),
       _keepIndices(keepIndices) {}
 
 // _____________________________________________________________________________

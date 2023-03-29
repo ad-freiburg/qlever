@@ -627,7 +627,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
         AD_CONTRACT_CHECK(!isDescending);
         sortColumns.push_back(index);
       }
-      tree = QueryExecutionTree::createSortedTree(parent._qet, sortColumns);
+      tree = ad_utility::createSortedTree(parent._qet, sortColumns);
     } else {
       AD_CONTRACT_CHECK(pq._isInternalSort == IsInternalSort::False);
       // Note: As the internal ordering is different from the semantic ordering
@@ -1219,8 +1219,7 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
                     b.type != SubtreePlan::OPTIONAL);
 
   auto jcs = getJoinColumns(a, b);
-  auto [qetA, qetB] =
-      QueryExecutionTree::createSortedTrees(a._qet, b._qet, jcs);
+  auto [qetA, qetB] = ad_utility::createSortedTrees(a._qet, b._qet, jcs);
   return makeSubtreePlan<OptionalJoin>(_qec, qetA,
                                        a.type == SubtreePlan::OPTIONAL, qetB,
                                        b.type == SubtreePlan::OPTIONAL, jcs);
@@ -1236,8 +1235,7 @@ QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
   // TODO: We could probably also accept permutations of the join columns
   // as the order of a here and then permute the join columns to match the
   // sorted columns of a or b (whichever is larger).
-  auto [qetA, qetB] =
-      QueryExecutionTree::createSortedTrees(a._qet, b._qet, jcs);
+  auto [qetA, qetB] = ad_utility::createSortedTrees(a._qet, b._qet, jcs);
   return makeSubtreePlan<Minus>(_qec, qetA, qetB, jcs);
 }
 
@@ -1254,8 +1252,7 @@ QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
   // as the order of a here and then permute the join columns to match the
   // sorted columns of a or b (whichever is larger).
   std::vector<std::array<ColumnIndex, 2>> jcs = getJoinColumns(a, b);
-  auto [qetA, qetB] =
-      QueryExecutionTree::createSortedTrees(a._qet, b._qet, jcs);
+  auto [qetA, qetB] = ad_utility::createSortedTrees(a._qet, b._qet, jcs);
   return makeSubtreePlan<MultiColumnJoin>(_qec, qetA, qetB, jcs);
 }
 

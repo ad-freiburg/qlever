@@ -22,8 +22,8 @@ CountAvailablePredicates::CountAvailablePredicates(
     size_t subjectColumnIndex, Variable predicateVariable,
     Variable countVariable)
     : Operation(qec),
-      _subtree(QueryExecutionTree::createSortedTree(std::move(subtree),
-                                                    {subjectColumnIndex})),
+      _subtree(ad_utility::createSortedTree(std::move(subtree),
+                                            {subjectColumnIndex})),
       _subjectColumnIndex(subjectColumnIndex),
       _predicateVariable(std::move(predicateVariable)),
       _countVariable(std::move(countVariable)) {}
