@@ -94,30 +94,30 @@ void Values::computeMultiplicities() {
 }
 
 // ____________________________________________________________________________
-void Values::computeResult(ResultTable* result) {
+ResultTable Values::computeResult() {
   // Set basic properties of the result table.
-  result->_sortedBy = resultSortedOn();
-  result->_idTable.setNumColumns(getResultWidth());
-  result->_resultTypes.resize(parsedValues_._variables.size(),
-                              ResultTable::ResultType::KB);
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(getResultWidth());
+
+  LocalVocab localVocab{};
 
   // Fill the result table using the `writeValues` method below.
   size_t resWidth = getResultWidth();
-  CALL_FIXED_SIZE(resWidth, &Values::writeValues, this, result);
+  CALL_FIXED_SIZE(resWidth, &Values::writeValues, this, &idTable, &localVocab);
+  return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
 // ____________________________________________________________________________
 template <size_t I>
-void Values::writeValues(ResultTable* result) {
-  IdTableStatic<I> idTable = std::move(result->_idTable).toStatic<I>();
+void Values::writeValues(IdTable* idTablePtr, LocalVocab* localVocab) {
+  IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
   idTable.resize(parsedValues_._values.size());
   size_t rowIdx = 0;
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
   for (auto& row : parsedValues_._values) {
     for (size_t colIdx = 0; colIdx < idTable.numColumns(); colIdx++) {
       TripleComponent& tc = row[colIdx];
-      Id id = std::move(tc).toValueId(getIndex().getVocab(),
-                                      result->localVocabNonConst());
+      Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
       idTable(rowIdx, colIdx) = id;
       if (id.getDatatype() == Datatype::LocalVocabIndex) {
         ++numLocalVocabPerColumn[colIdx];
@@ -129,5 +129,5 @@ void Values::writeValues(ResultTable* result) {
   LOG(INFO) << "Number of tuples in VALUES clause: " << rowIdx << std::endl;
   LOG(INFO) << "Number of entries in local vocabulary per column: "
             << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
-  result->_idTable = std::move(idTable).toDynamic();
+  *idTablePtr = std::move(idTable).toDynamic();
 }

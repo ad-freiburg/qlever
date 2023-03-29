@@ -20,14 +20,13 @@ inline std::span<const ValueId> getIdsFromVariable(
     size_t beginIndex, size_t endIndex) {
   const auto& inputTable = context->_inputTable;
 
-  if (!context->_variableToColumnAndResultTypeMap.contains(variable)) {
+  if (!context->_variableToColumnMap.contains(variable)) {
     throw std::runtime_error(
         "Variable " + variable.name() +
         " could not be mapped to context column of expression evaluation");
   }
 
-  const size_t columnIndex =
-      context->_variableToColumnAndResultTypeMap.at(variable).first;
+  const size_t columnIndex = context->_variableToColumnMap.at(variable);
 
   std::span<const ValueId> completeColumn = inputTable.getColumn(columnIndex);
 

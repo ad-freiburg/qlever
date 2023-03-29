@@ -14,12 +14,18 @@ using enum PositionInTriple;
 namespace {
 struct ContextWrapper {
   Index _index{};
-  ResultTable _resultTable{ad_utility::testing::makeAllocator()};
+  ResultTable _resultTable{
+      IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}};
   // TODO<joka921> `VariableToColumnMap`
   ad_utility::HashMap<Variable, size_t> _hashMap{};
 
   ConstructQueryExportContext createContextForRow(size_t row) const {
     return {row, _resultTable, _hashMap, _index};
+  }
+
+  void setIdTable(IdTable&& table) {
+    _resultTable =
+        ResultTable{std::move(table), {}, _resultTable.getSharedLocalVocab()};
   }
 };
 
@@ -204,12 +210,14 @@ TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
   auto wrapper = prepareContext();
 
   wrapper._hashMap[Variable{"?var"}] = 0;
-  wrapper._resultTable._resultTypes.push_back(qlever::ResultType::VERBATIM);
-  wrapper._resultTable._idTable.setNumColumns(1);
+  IdTable table{ad_utility::testing::makeAllocator()};
+  table.setNumColumns(1);
   Id value1 = Id::makeFromInt(69);
   Id value2 = Id::makeFromInt(420);
-  wrapper._resultTable._idTable.push_back({value1});
-  wrapper._resultTable._idTable.push_back({value2});
+  table.push_back({value1});
+  table.push_back({value2});
+
+  wrapper.setIdTable(std::move(table));
 
   Variable variable{"?var"};
   ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
@@ -246,10 +254,11 @@ TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
   wrapper._hashMap[Variable{"?var"}] = 0;
-  wrapper._resultTable._resultTypes.push_back(qlever::ResultType::VERBATIM);
-  wrapper._resultTable._idTable.setNumColumns(1);
+  IdTable table{ad_utility::testing::makeAllocator()};
+  table.setNumColumns(1);
   Id value = Id::makeFromInt(69);
-  wrapper._resultTable._idTable.push_back({value});
+  table.push_back({value});
+  wrapper.setIdTable(std::move(table));
 
   Variable variableKnown{"?var"};
   ConstructQueryExportContext context = wrapper.createContextForRow(0);

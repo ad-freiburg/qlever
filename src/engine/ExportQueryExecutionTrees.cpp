@@ -15,7 +15,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res) {
   // TODO<C++20, Clang16> Use views to create an abstraction for the repeated
   // `upperBound` code.
-  size_t upperBound = limitAndOffset.upperBound(res->_idTable.size());
+  size_t upperBound = limitAndOffset.upperBound(res->idTable().size());
   for (size_t i = limitAndOffset._offset; i < upperBound; i++) {
     ConstructQueryExportContext context{i, *res, qet.getVariableColumns(),
                                         qet.getQec()->getIndex()};
@@ -90,7 +90,7 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
     const QueryExecutionTree::ColumnIndicesAndTypes& columns,
     std::shared_ptr<const ResultTable> resultTable) {
   AD_CORRECTNESS_CHECK(resultTable != nullptr);
-  const IdTable& data = resultTable->_idTable;
+  const IdTable& data = resultTable->idTable();
   nlohmann::json json = nlohmann::json::array();
 
   const auto offset = limitAndOffset._offset;
@@ -188,11 +188,11 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
   // The `false` means "Don't include the question mark in the variable names".
   // TODO<joka921> Use a strong enum, and get rid of the comment.
   QueryExecutionTree::ColumnIndicesAndTypes columns =
-      qet.selectedVariablesToColumnIndices(selectClause, *resultTable, false);
+      qet.selectedVariablesToColumnIndices(selectClause, false);
 
   std::erase(columns, std::nullopt);
 
-  const IdTable& idTable = resultTable->_idTable;
+  const IdTable& idTable = resultTable->idTable();
 
   json result;
   std::vector<std::string> selectedVars =
@@ -301,7 +301,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
   AD_CORRECTNESS_CHECK(resultTable != nullptr);
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   QueryExecutionTree::ColumnIndicesAndTypes selectedColumnIndices =
-      qet.selectedVariablesToColumnIndices(selectClause, *resultTable, true);
+      qet.selectedVariablesToColumnIndices(selectClause, true);
 
   // TODO<joka921> Also add a warning to the exported result.
   if (selectedColumnIndices.empty()) {
@@ -334,14 +334,14 @@ ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary(
   LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
              << std::endl;
   auto selectedColumnIndices =
-      qet.selectedVariablesToColumnIndices(selectClause, *resultTable, true);
+      qet.selectedVariablesToColumnIndices(selectClause, true);
   // This case should only fail if we have no variables selected at all.
   // This case should be handled earlier by the parser.
   // TODO<joka921, hannahbast> What do we want to do for variables that don't
   // appear in the query body?
   AD_CONTRACT_CHECK(!selectedColumnIndices.empty());
 
-  const auto& idTable = resultTable->_idTable;
+  const auto& idTable = resultTable->idTable();
   // TODO<C++20/Clang16> There are a lot of redundant computations of
   // `upperBound` in this file. Those can be abstracted away using
   // `std::views::iota`: `for (auto i : getRangeFromLimitOffset(limitAndOffset,

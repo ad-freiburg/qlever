@@ -39,18 +39,16 @@ VariableToColumnMap Distinct::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-void Distinct::computeResult(ResultTable* result) {
+ResultTable Distinct::computeResult() {
+  IdTable idTable{getExecutionContext()->getAllocator()};
   LOG(DEBUG) << "Getting sub-result for distinct result computation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
 
   LOG(DEBUG) << "Distinct result computation..." << endl;
-  result->_idTable.setNumColumns(subRes->_idTable.numColumns());
-  result->_resultTypes.insert(result->_resultTypes.end(),
-                              subRes->_resultTypes.begin(),
-                              subRes->_resultTypes.end());
-  result->shareLocalVocabFrom(*subRes);
-  int width = subRes->_idTable.numColumns();
-  CALL_FIXED_SIZE(width, &Engine::distinct, subRes->_idTable, _keepIndices,
-                  &result->_idTable);
+  idTable.setNumColumns(subRes->idTable().numColumns());
+  int width = subRes->idTable().numColumns();
+  CALL_FIXED_SIZE(width, &Engine::distinct, subRes->idTable(), _keepIndices,
+                  &idTable);
   LOG(DEBUG) << "Distinct result computation done." << endl;
+  return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
