@@ -13,9 +13,11 @@
 #include "absl/strings/str_join.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/data/Variable.h"
+#include "parser/data/LimitOffsetClause.h"
 #include "util/ConcurrentCache.h"
 #include "util/HashMap.h"
 #include "util/json.h"
+
 
 /// A class to store information about the status of an operation (result size,
 /// time to compute, status, etc.). Also contains the functionality to print
@@ -106,6 +108,15 @@ class RuntimeInformation {
   template <typename T>
   void addDetail(const std::string& key, const T& value) {
     details_[key] = value;
+  }
+
+  void addLimitRow(const LimitOffsetClause& l, bool fullResultIsCached) {
+    children_ = std::vector{*this};
+    descriptor_ = "LIMIT and OFFSET";
+    auto& actualOperation = children_.at(0);
+    numRows_ = l.actualSize(actualOperation.numRows_);
+    details_.clear();
+    actualOperation.addDetail("not-written-to-cache-because-child-of-limit", fullResultIsCached);
   }
 
  private:
