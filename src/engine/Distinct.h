@@ -39,12 +39,12 @@ class Distinct : public Operation {
     _subtree->setTextLimit(limit);
   }
 
-  virtual size_t getSizeEstimate() override {
+  virtual size_t getSizeEstimateImpl() override {
     return _subtree->getSizeEstimate();
   }
 
   virtual size_t getCostEstimate() override {
-    return getSizeEstimate() + _subtree->getCostEstimate();
+    return getSizeEstimateImpl() + _subtree->getCostEstimate();
   }
 
   virtual float getMultiplicity(size_t col) override {

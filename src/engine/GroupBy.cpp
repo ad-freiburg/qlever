@@ -140,7 +140,7 @@ float GroupBy::getMultiplicity(size_t col) {
   return 1;
 }
 
-size_t GroupBy::getSizeEstimate() {
+size_t GroupBy::getSizeEstimateImpl() {
   if (_groupByVariables.empty()) {
     return 1;
   }

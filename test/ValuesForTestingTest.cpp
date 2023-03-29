@@ -21,7 +21,7 @@ TEST(ValuesForTesting, valuesForTesting) {
   // implementations for such boilerplate methods in the `Operation` base class.
   v.setTextLimit(12340);
   ASSERT_EQ(v.getResultWidth(), 2u);
-  ASSERT_EQ(v.getSizeEstimate(), 3u);
+  ASSERT_EQ(v.getSizeEstimateImpl(), 3u);
   ASSERT_EQ(v.getCostEstimate(), 3u);
   ASSERT_EQ(v.getMultiplicity(0), 42.0);
   ASSERT_EQ(v.getMultiplicity(1), 84.0);

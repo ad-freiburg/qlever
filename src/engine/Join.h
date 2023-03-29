@@ -54,7 +54,7 @@ class Join : public Operation {
     _sizeEstimateComputed = false;
   }
 
-  virtual size_t getSizeEstimate() override {
+  virtual size_t getSizeEstimateImpl() override {
     if (!_sizeEstimateComputed) {
       computeSizeEstimateAndMultiplicities();
       _sizeEstimateComputed = true;

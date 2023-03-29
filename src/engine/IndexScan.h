@@ -64,9 +64,9 @@ class IndexScan : public Operation {
 
   size_t getSizeEstimate() const { return _sizeEstimate; }
 
-  // TODO<joka921> Make the `getSizeEstimate()` function `const` for ALL the
+  // TODO<joka921> Make the `getSizeEstimateImpl()` function `const` for ALL the
   // `Operations`.
-  size_t getSizeEstimate() override {
+  size_t getSizeEstimateImpl() override {
     return const_cast<const IndexScan*>(this)->getSizeEstimate();
   }
 
@@ -84,7 +84,7 @@ class IndexScan : public Operation {
 
   void precomputeSizeEstimate() { _sizeEstimate = computeSizeEstimate(); }
 
-  virtual bool knownEmptyResult() override { return getSizeEstimate() == 0; }
+  virtual bool knownEmptyResult() override { return getSizeEstimateImpl() == 0; }
 
   // Currently only the full scans support a limit clause.
   [[nodiscard]] bool supportsLimit() const override {

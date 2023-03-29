@@ -176,7 +176,7 @@ float HasPredicateScan::getMultiplicity(size_t col) {
   return 1;
 }
 
-size_t HasPredicateScan::getSizeEstimate() {
+size_t HasPredicateScan::getSizeEstimateImpl() {
   switch (_type) {
     case ScanType::FREE_S:
       return static_cast<size_t>(
@@ -197,13 +197,13 @@ size_t HasPredicateScan::getCostEstimate() {
   // TODO: these size estimates only work if all predicates are functional
   switch (_type) {
     case ScanType::FREE_S:
-      return getSizeEstimate();
+      return getSizeEstimateImpl();
     case ScanType::FREE_O:
-      return getSizeEstimate();
+      return getSizeEstimateImpl();
     case ScanType::FULL_SCAN:
-      return getSizeEstimate();
+      return getSizeEstimateImpl();
     case ScanType::SUBQUERY_S:
-      return _subtree->getCostEstimate() + getSizeEstimate();
+      return _subtree->getCostEstimate() + getSizeEstimateImpl();
   }
   return 0;
 }

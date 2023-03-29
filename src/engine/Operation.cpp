@@ -303,7 +303,7 @@ void Operation::createRuntimeInfoFromEstimates() {
   }
 
   _runtimeInfo.costEstimate_ = getCostEstimate();
-  _runtimeInfo.sizeEstimate_ = getSizeEstimate();
+  _runtimeInfo.sizeEstimate_ = getSizeEstimateImpl();
 
   std::vector<float> multiplicityEstimates;
   multiplicityEstimates.reserve(numCols);

@@ -52,7 +52,7 @@ class TextOperationWithoutFilter : public Operation {
     _sizeEstimate = std::numeric_limits<size_t>::max();
   }
 
-  virtual size_t getSizeEstimate() override;
+  virtual size_t getSizeEstimateImpl() override;
 
   virtual size_t getCostEstimate() override;
 

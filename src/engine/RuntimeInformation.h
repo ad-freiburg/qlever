@@ -117,7 +117,7 @@ class RuntimeInformation {
       auto& actualOperation = children_.at(0);
       numRows_ = l.actualSize(actualOperation.numRows_);
       details_.clear();
-      totalTime_ += timeForLimit;
+      totalTime_ += static_cast<double>(timeForLimit);
       actualOperation.addDetail("not-written-to-cache-because-child-of-limit",
                                 fullResultIsNotCached);
     }

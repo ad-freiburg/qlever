@@ -58,7 +58,7 @@ class TextOperationWithFilter : public Operation {
     _multiplicities.clear();
   }
 
-  virtual size_t getSizeEstimate() override;
+  virtual size_t getSizeEstimateImpl() override;
   virtual size_t getCostEstimate() override;
 
   const string& getWordPart() const { return _words; }

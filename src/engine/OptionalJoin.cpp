@@ -162,7 +162,7 @@ float OptionalJoin::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t OptionalJoin::getSizeEstimate() {
+size_t OptionalJoin::getSizeEstimateImpl() {
   if (!_multiplicitiesComputed) {
     computeSizeEstimateAndMultiplicities();
   }
@@ -171,8 +171,7 @@ size_t OptionalJoin::getSizeEstimate() {
 
 // _____________________________________________________________________________
 size_t OptionalJoin::getCostEstimate() {
-  size_t costEstimate =
-      getSizeEstimate() + _left->getSizeEstimate() + _right->getSizeEstimate();
+  size_t costEstimate = getSizeEstimateImpl() + _left->getSizeEstimate() + _right->getSizeEstimate();
   // The optional join is about 3-7 times slower than a normal join, due to
   // its increased complexity
   costEstimate *= 4;

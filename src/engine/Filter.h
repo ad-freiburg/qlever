@@ -38,7 +38,7 @@ class Filter : public Operation {
 
   void setTextLimit(size_t limit) override { _subtree->setTextLimit(limit); }
 
-  size_t getSizeEstimate() override;
+  size_t getSizeEstimateImpl() override;
 
   size_t getCostEstimate() override;
 

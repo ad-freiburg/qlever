@@ -63,7 +63,7 @@ class ValuesForTesting : public Operation {
 
   size_t getCostEstimate() override { return table_.numRows(); }
 
-  size_t getSizeEstimate() override { return table_.numRows(); }
+  size_t getSizeEstimateImpl() override { return table_.numRows(); }
 
   // For unit testing purposes it is useful that the columns have different
   // multiplicities to find bugs in functions that use the multiplicity.

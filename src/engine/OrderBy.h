@@ -45,17 +45,17 @@ class OrderBy : public Operation {
 
   void setTextLimit(size_t limit) override { subtree_->setTextLimit(limit); }
 
-  size_t getSizeEstimate() override { return subtree_->getSizeEstimate(); }
+  size_t getSizeEstimateImpl() override { return subtree_->getSizeEstimate(); }
 
   float getMultiplicity(size_t col) override {
     return subtree_->getMultiplicity(col);
   }
 
   size_t getCostEstimate() override {
-    size_t size = getSizeEstimate();
+    size_t size = getSizeEstimateImpl();
     size_t logSize = std::max(
         size_t(1),
-        static_cast<size_t>(logb(static_cast<double>(getSizeEstimate()))));
+        static_cast<size_t>(logb(static_cast<double>(getSizeEstimateImpl()))));
     size_t nlogn = size * logSize;
     size_t subcost = subtree_->getCostEstimate();
     return nlogn + subcost;

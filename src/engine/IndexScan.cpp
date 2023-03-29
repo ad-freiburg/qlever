@@ -358,7 +358,7 @@ size_t IndexScan::computeSizeEstimate() {
 // _____________________________________________________________________________
 size_t IndexScan::getCostEstimate() {
   if (getResultWidth() != 3) {
-    return getSizeEstimate();
+    return getSizeEstimateImpl();
   } else {
     // The computation of the `full scan` estimate must be consistent with the
     // full scan dummy joins in `Join.cpp` for correct query planning.
@@ -378,7 +378,7 @@ size_t IndexScan::getCostEstimate() {
     // estimate a tuple `(numFullIndexScans, costEstimateForRemainder)`.
     // Implement this functionality.
 
-    return getSizeEstimate() * 10'000;
+    return getSizeEstimateImpl() * 10'000;
   }
 }
 

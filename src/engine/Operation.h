@@ -89,7 +89,17 @@ class Operation {
   virtual size_t getResultWidth() const = 0;
   virtual void setTextLimit(size_t limit) = 0;
   virtual size_t getCostEstimate() = 0;
-  virtual size_t getSizeEstimate() = 0;
+
+  virtual size_t getSizeEstimate() final {
+    if (_limit._limit.has_value()) {
+      return std::min(_limit._limit.value(), getSizeEstimateImpl());
+    } else {
+      return getSizeEstimateImpl();
+    }
+  }
+ private:
+  virtual size_t getSizeEstimateImpl() = 0;
+ public:
   virtual float getMultiplicity(size_t col) = 0;
   virtual bool knownEmptyResult() = 0;
 

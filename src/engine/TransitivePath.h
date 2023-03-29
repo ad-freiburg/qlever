@@ -89,7 +89,7 @@ class TransitivePath : public Operation {
 
   virtual float getMultiplicity(size_t col) override;
 
-  virtual size_t getSizeEstimate() override;
+  virtual size_t getSizeEstimateImpl() override;
 
   virtual size_t getCostEstimate() override;
 

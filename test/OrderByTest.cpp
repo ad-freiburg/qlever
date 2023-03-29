@@ -188,7 +188,7 @@ TEST(OrderBy, simpleMemberFunctions) {
     auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
     OrderBy s = makeOrderBy(std::move(inputTable), {{0, false}});
     EXPECT_EQ(1u, s.getResultWidth());
-    EXPECT_EQ(8u, s.getSizeEstimate());
+    EXPECT_EQ(8u, s.getSizeEstimateImpl());
     EXPECT_EQ("OrderBy on ASC(?0)", s.getDescriptor());
 
     EXPECT_THAT(s.asString(),
@@ -204,7 +204,7 @@ TEST(OrderBy, simpleMemberFunctions) {
     auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
     OrderBy s = makeOrderBy(std::move(inputTable), {{1, false}, {0, true}});
     EXPECT_EQ(2u, s.getResultWidth());
-    EXPECT_EQ(2u, s.getSizeEstimate());
+    EXPECT_EQ(2u, s.getSizeEstimateImpl());
     EXPECT_FALSE(s.knownEmptyResult());
     EXPECT_EQ("OrderBy on ASC(?1) DESC(?0)", s.getDescriptor());
 

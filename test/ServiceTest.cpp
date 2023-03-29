@@ -98,7 +98,7 @@ TEST_F(ServiceTest, basicMethods) {
   ASSERT_EQ(serviceOp.getResultWidth(), 2);
   ASSERT_EQ(serviceOp.getMultiplicity(0), 1);
   ASSERT_EQ(serviceOp.getMultiplicity(1), 1);
-  ASSERT_EQ(serviceOp.getSizeEstimate(), 100'000);
+  ASSERT_EQ(serviceOp.getSizeEstimateImpl(), 100'000);
   ASSERT_EQ(serviceOp.getCostEstimate(), 1'000'000);
   ASSERT_THAT(serviceOp.computeVariableToColumnMap(),
               (::testing::UnorderedElementsAreArray(VariableToColumnMap{

@@ -49,7 +49,7 @@ class DummyOperation : public Operation {
 
   virtual size_t getCostEstimate() override { return 10; }
 
-  virtual size_t getSizeEstimate() override { return 10; }
+  virtual size_t getSizeEstimateImpl() override { return 10; }
 
   virtual float getMultiplicity(size_t col) override {
     (void)col;
