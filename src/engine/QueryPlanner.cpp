@@ -2049,7 +2049,8 @@ auto QueryPlanner::createJoinWithTransitivePath(
 
 // ______________________________________________________________________________________
 auto QueryPlanner::createJoinWithHasPredicateScan(
-    const SubtreePlan& a, const SubtreePlan& b, const std::vector<std::array<ColumnIndex, 2>>& jcs)
+    const SubtreePlan& a, const SubtreePlan& b,
+    const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
   // Check if one of the two operations is a HAS_PREDICATE_SCAN.
   // If the join column corresponds to the has-predicate scan's
@@ -2083,7 +2084,8 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
 
 // ______________________________________________________________________________________
 auto QueryPlanner::createJoinAsTextFilter(
-    const SubtreePlan& a, const SubtreePlan& b, const std::vector<std::array<ColumnIndex, 2>>& jcs)
+    const SubtreePlan& a, const SubtreePlan& b,
+    const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
   using enum QueryExecutionTree::OperationType;
   if (!(a._qet->getType() == TEXT_WITHOUT_FILTER ||

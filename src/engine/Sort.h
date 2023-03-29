@@ -39,17 +39,11 @@ class Sort : public Operation {
  public:
   string getDescriptor() const override;
 
-  vector<size_t> resultSortedOn() const override {
-    return sortColumnIndices_;
-  }
+  vector<size_t> resultSortedOn() const override { return sortColumnIndices_; }
 
-  void setTextLimit(size_t limit) override {
-    subtree_->setTextLimit(limit);
-  }
+  void setTextLimit(size_t limit) override { subtree_->setTextLimit(limit); }
 
-  size_t getSizeEstimate() override {
-    return subtree_->getSizeEstimate();
-  }
+  size_t getSizeEstimate() override { return subtree_->getSizeEstimate(); }
 
   float getMultiplicity(size_t col) override {
     return subtree_->getMultiplicity(col);
@@ -66,9 +60,7 @@ class Sort : public Operation {
     return nlogn + subcost;
   }
 
-  bool knownEmptyResult() override {
-    return subtree_->knownEmptyResult();
-  }
+  bool knownEmptyResult() override { return subtree_->knownEmptyResult(); }
 
   [[nodiscard]] size_t getResultWidth() const override;
 
