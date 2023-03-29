@@ -111,6 +111,6 @@ class CountAvailablePredicates : public Operation {
       const CompactVectorOfStrings<Id>& patterns);
 
  private:
-  void computeResult(ResultTable* result) override;
+  ResultTable computeResult() override;
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };

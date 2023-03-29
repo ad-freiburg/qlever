@@ -278,7 +278,7 @@ TEST(JoinTest, joinWithFullScanPSO) {
   auto idO = getId("<o>");
   auto I = ad_utility::testing::IntId;
   auto expected = makeIdTableFromIdVector({{idA, idX, I(3)}, {idO, idX, I(2)}});
-  EXPECT_EQ(res->_idTable, expected);
+  EXPECT_EQ(res->idTable(), expected);
   VariableToColumnMap expectedVariables{
       {Variable{"?p"}, 0}, {Variable{"?s"}, 1}, {Variable{"?o"}, 2}};
   EXPECT_THAT(join.getExternallyVisibleVariableColumns(),

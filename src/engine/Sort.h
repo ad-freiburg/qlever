@@ -77,7 +77,7 @@ class Sort : public Operation {
   }
 
  private:
-  void computeResult(ResultTable* result) override;
+  ResultTable computeResult() override;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
       const override {

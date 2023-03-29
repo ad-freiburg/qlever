@@ -15,7 +15,7 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
                            bool t1Optional,
                            std::shared_ptr<QueryExecutionTree> t2,
                            bool t2Optional,
-                           const vector<array<ColumnIndex, 2>>& jcs)
+                           const std::vector<std::array<ColumnIndex, 2>>& jcs)
     : Operation(qec), _joinColumns(jcs), _multiplicitiesComputed(false) {
   // Make sure subtrees are ordered so that identical queries can be identified.
   AD_CONTRACT_CHECK(jcs.size() > 0);
@@ -75,57 +75,38 @@ string OptionalJoin::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-void OptionalJoin::computeResult(ResultTable* result) {
-  AD_CONTRACT_CHECK(result);
+ResultTable OptionalJoin::computeResult() {
   LOG(DEBUG) << "OptionalJoin result computation..." << endl;
 
-  result->_sortedBy = resultSortedOn();
-  result->_idTable.setNumColumns(getResultWidth());
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(getResultWidth());
 
-  AD_CONTRACT_CHECK(result->_idTable.numColumns() >= _joinColumns.size());
+  AD_CONTRACT_CHECK(idTable.numColumns() >= _joinColumns.size());
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
 
   LOG(DEBUG) << "OptionalJoin subresult computation done." << std::endl;
 
-  // compute the result types
-  result->_resultTypes.reserve(result->_idTable.numColumns());
-  result->_resultTypes.insert(result->_resultTypes.end(),
-                              leftResult->_resultTypes.begin(),
-                              leftResult->_resultTypes.end());
-  for (size_t col = 0; col < rightResult->_idTable.numColumns(); col++) {
-    bool isJoinColumn = false;
-    for (const std::array<ColumnIndex, 2>& a : _joinColumns) {
-      if (a[1] == col) {
-        isJoinColumn = true;
-        break;
-      }
-    }
-    if (!isJoinColumn) {
-      result->_resultTypes.push_back(rightResult->_resultTypes[col]);
-    }
-  }
-
   LOG(DEBUG) << "Computing optional join between results of size "
              << leftResult->size() << " and " << rightResult->size() << endl;
   LOG(DEBUG) << "Left side optional: " << _leftOptional
              << " right side optional: " << _rightOptional << endl;
 
-  int leftWidth = leftResult->_idTable.numColumns();
-  int rightWidth = rightResult->_idTable.numColumns();
-  int resWidth = result->_idTable.numColumns();
+  int leftWidth = leftResult->idTable().numColumns();
+  int rightWidth = rightResult->idTable().numColumns();
+  int resWidth = idTable.numColumns();
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, resWidth}),
-                  &OptionalJoin::optionalJoin, leftResult->_idTable,
-                  rightResult->_idTable, _leftOptional, _rightOptional,
-                  _joinColumns, &result->_idTable);
+                  &OptionalJoin::optionalJoin, leftResult->idTable(),
+                  rightResult->idTable(), _leftOptional, _rightOptional,
+                  _joinColumns, &idTable);
 
+  LOG(DEBUG) << "OptionalJoin result computation done." << endl;
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
-  result->shareLocalVocabFromNonEmptyOf(*leftResult, *rightResult);
-
-  LOG(DEBUG) << "Join result computation done" << endl;
-  LOG(DEBUG) << "OptionalJoin result computation done." << endl;
+  return {std::move(idTable), resultSortedOn(),
+          ResultTable::getSharedLocalVocabFromNonEmptyOf(*leftResult,
+                                                         *rightResult)};
 }
 
 // _____________________________________________________________________________
@@ -334,7 +315,8 @@ void OptionalJoin::createOptionalResult(
 template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
 void OptionalJoin::optionalJoin(
     const IdTable& dynA, const IdTable& dynB, bool aOptional, bool bOptional,
-    const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* dynResult) {
+    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+    IdTable* dynResult) {
   // check for trivial cases
   if ((dynA.size() == 0 && dynB.size() == 0) ||
       (dynA.size() == 0 && !aOptional) || (dynB.size() == 0 && !bOptional)) {

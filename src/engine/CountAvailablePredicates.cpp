@@ -110,12 +110,10 @@ size_t CountAvailablePredicates::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-void CountAvailablePredicates::computeResult(ResultTable* result) {
+ResultTable CountAvailablePredicates::computeResult() {
   LOG(DEBUG) << "CountAvailablePredicates result computation..." << std::endl;
-  result->_idTable.setNumColumns(2);
-  result->_sortedBy = resultSortedOn();
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(2);
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
 
@@ -129,20 +127,20 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
   if (_subtree == nullptr) {
     // Compute the predicates for all entities
     CountAvailablePredicates::computePatternTrickAllEntities(
-        &result->_idTable, hasPattern, hasPredicate, patterns);
+        &idTable, hasPattern, hasPredicate, patterns);
+    return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   } else {
     std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
-    result->shareLocalVocabFrom(*subresult);
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
 
-    int width = subresult->_idTable.numColumns();
-    CALL_FIXED_SIZE(width, &computePatternTrick, subresult->_idTable,
-                    &result->_idTable, hasPattern, hasPredicate, patterns,
-                    _subjectColumnIndex, &runtimeInfo);
+    int width = subresult->idTable().numColumns();
+    CALL_FIXED_SIZE(width, &computePatternTrick, subresult->idTable(), &idTable,
+                    hasPattern, hasPredicate, patterns, _subjectColumnIndex,
+                    &runtimeInfo);
+    return {std::move(idTable), resultSortedOn(),
+            subresult->getSharedLocalVocab()};
   }
-  LOG(DEBUG) << "CountAvailablePredicates result computation done."
-             << std::endl;
 }
 
 void CountAvailablePredicates::computePatternTrickAllEntities(

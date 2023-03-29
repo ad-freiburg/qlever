@@ -37,11 +37,6 @@ class LocalVocab {
   // word).
   LocalVocabIndex nextFreeIndex_ = LocalVocabIndex::make(0);
 
-  // Indicator that the local vocabulary is read only. This will be set once the
-  // local vocabulary is shared between more than one result; see the respective
-  // methods in `ResultTable`.
-  bool readOnly_ = false;
-
  public:
   // Create a new, empty local vocabulary.
   LocalVocab() = default;
@@ -57,9 +52,6 @@ class LocalVocab {
   // in our code is to copy shared pointers to local vocabularies).
   LocalVocab(LocalVocab&&) = default;
   LocalVocab& operator=(LocalVocab&&) = default;
-
-  // Make the local vocabulary read only.
-  void makeReadOnly() { readOnly_ = true; }
 
   // Get the index of a word in the local vocabulary. If the word was already
   // contained, return the already existing index. If the word was not yet

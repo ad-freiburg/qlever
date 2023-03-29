@@ -64,7 +64,7 @@ void testSort(IdTable input, const IdTable& expected,
       auto sortPointer = makeSort(permutedInput.clone(), sortColumns);
       Sort& s = dynamic_cast<Sort&>(*sortPointer->getRootOperation());
       auto result = s.getResult();
-      const auto& resultTable = result->_idTable;
+      const auto& resultTable = result->idTable();
       ASSERT_EQ(resultTable, permutedExpected);
     }
   } while (std::next_permutation(sortColumns.begin(), sortColumns.end()));

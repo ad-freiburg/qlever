@@ -1329,16 +1329,16 @@ bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
 }
 
 // _____________________________________________________________________________
-vector<array<ColumnIndex, 2>> QueryPlanner::getJoinColumns(
+std::vector<std::array<ColumnIndex, 2>> QueryPlanner::getJoinColumns(
     const QueryPlanner::SubtreePlan& a,
     const QueryPlanner::SubtreePlan& b) const {
-  vector<array<ColumnIndex, 2>> jcs;
+  std::vector<std::array<ColumnIndex, 2>> jcs;
   const auto& aVarCols = a._qet->getVariableColumns();
   const auto& bVarCols = b._qet->getVariableColumns();
   for (const auto& aVarCol : aVarCols) {
     auto itt = bVarCols.find(aVarCol.first);
     if (itt != bVarCols.end()) {
-      jcs.push_back(array<ColumnIndex, 2>{{aVarCol.second, itt->second}});
+      jcs.push_back(std::array<ColumnIndex, 2>{{aVarCol.second, itt->second}});
     }
   }
   return jcs;
@@ -1913,7 +1913,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   // TODO<joka921> find out, what is ACTUALLY the use case for the triple
   // graph. Is it only meant for (questionable) performance reasons
   // or does it change the meaning.
-  vector<array<ColumnIndex, 2>> jcs;
+  std::vector<std::array<ColumnIndex, 2>> jcs;
   if (tg) {
     if (connected(a, b, *tg)) {
       jcs = getJoinColumns(a, b);
@@ -2008,7 +2008,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
 
 // __________________________________________________________________________________________________________________
 auto QueryPlanner::createJoinWithTransitivePath(
-    SubtreePlan a, SubtreePlan b, const vector<array<ColumnIndex, 2>>& jcs)
+    SubtreePlan a, SubtreePlan b,
+    const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
   using enum QueryExecutionTree::OperationType;
   const bool aIsTransPath = a._qet->getType() == TRANSITIVE_PATH;
@@ -2048,7 +2049,7 @@ auto QueryPlanner::createJoinWithTransitivePath(
 
 // ______________________________________________________________________________________
 auto QueryPlanner::createJoinWithHasPredicateScan(
-    const SubtreePlan& a, const SubtreePlan& b, const vector<array<ColumnIndex, 2>>& jcs)
+    const SubtreePlan& a, const SubtreePlan& b, const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
   // Check if one of the two operations is a HAS_PREDICATE_SCAN.
   // If the join column corresponds to the has-predicate scan's
@@ -2082,7 +2083,7 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
 
 // ______________________________________________________________________________________
 auto QueryPlanner::createJoinAsTextFilter(
-    const SubtreePlan& a, const SubtreePlan& b, const vector<array<ColumnIndex, 2>>& jcs)
+    const SubtreePlan& a, const SubtreePlan& b, const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
   using enum QueryExecutionTree::OperationType;
   if (!(a._qet->getType() == TEXT_WITHOUT_FILTER ||
