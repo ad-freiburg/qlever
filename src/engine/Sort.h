@@ -30,7 +30,7 @@ class Sort : public Operation {
   // likely be a bug.
   Sort(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
        std::vector<ColumnIndex> sortColumnIndices);
-  
+
   // The actual way to create a `Sort` operation. Declared and defined in
   // `QueryExecutionTree.h/.cpp`.
   friend std::shared_ptr<QueryExecutionTree> ad_utility::createSortedTree(
