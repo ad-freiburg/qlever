@@ -10,8 +10,8 @@
 #include <utility>
 
 #include "util/HashMap.h"
-#include "util/Synchronized.h"
 #include "util/Log.h"
+#include "util/Synchronized.h"
 
 namespace ad_utility {
 

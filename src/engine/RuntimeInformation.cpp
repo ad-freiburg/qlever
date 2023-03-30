@@ -210,14 +210,6 @@ void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
   if (!(hasLimit || hasOffset)) {
     return;
   }
-  descriptor_.clear();
-  if (hasLimit) {
-    descriptor_ = absl::StrCat("LIMIT ", l._limit.value());
-  }
-
-  if (hasOffset) {
-    absl::StrAppend(&descriptor_, hasLimit ? " " : "", "OFFSET ", l._offset);
-  }
   children_ = std::vector{*this};
   auto& actualOperation = children_.at(0);
   numRows_ = l.actualSize(actualOperation.numRows_);
@@ -226,4 +218,14 @@ void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
   actualOperation.addDetail("not-written-to-cache-because-child-of-limit",
                             fullResultIsNotCached);
   sizeEstimate_ = l.actualSize(sizeEstimate_);
+
+  // Update the
+  descriptor_.clear();
+  if (hasLimit) {
+    descriptor_ = absl::StrCat("LIMIT ", l._limit.value());
+  }
+
+  if (hasOffset) {
+    absl::StrAppend(&descriptor_, hasLimit ? " " : "", "OFFSET ", l._offset);
+  }
 }
