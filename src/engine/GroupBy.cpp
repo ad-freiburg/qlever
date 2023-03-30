@@ -406,7 +406,7 @@ bool GroupBy::computeGroupByForSingleIndexScan(IdTable* result) {
   } else {
     // TODO<joka921> The two variables IndexScans should also account for the
     // additionally added triples.
-    table(0, 0) = Id::makeFromInt(indexScan->getSizeEstimate());
+    table(0, 0) = Id::makeFromInt(indexScan->getExactSize());
   }
   return true;
 }

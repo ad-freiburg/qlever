@@ -202,18 +202,29 @@ void to_json(nlohmann::ordered_json& j,
 }
 
 // ___________________________________________________________________________________
-void RuntimeInformation::addLimitRow(const LimitOffsetClause& l,
-                                     size_t timeForLimit,
-                                     bool fullResultIsNotCached) {
-  if (l._limit.has_value() || l._offset != 0) {
-    children_ = std::vector{*this};
-    descriptor_ = "LIMIT and OFFSET";
-    auto& actualOperation = children_.at(0);
-    numRows_ = l.actualSize(actualOperation.numRows_);
-    details_.clear();
-    totalTime_ += static_cast<double>(timeForLimit);
-    actualOperation.addDetail("not-written-to-cache-because-child-of-limit",
-                              fullResultIsNotCached);
-    sizeEstimate_ = l.actualSize(sizeEstimate_);
+void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
+                                           size_t timeForLimit,
+                                           bool fullResultIsNotCached) {
+  bool hasLimit = l._limit.has_value();
+  bool hasOffset = l._offset != 0;
+  if (!(hasLimit || hasOffset)) {
+    return;
   }
+  descriptor_.clear();
+  if (hasLimit) {
+    descriptor_ = absl::StrCat("LIMIT ", l._limit.value());
+  }
+
+  if (hasLimit) {
+    absl::StrAppend(&descriptor_, hasLimit ? " " : "", "OFFSET ", l._offset);
+  }
+  children_ = std::vector{*this};
+  descriptor_ = "LIMIT and OFFSET";
+  auto& actualOperation = children_.at(0);
+  numRows_ = l.actualSize(actualOperation.numRows_);
+  details_.clear();
+  totalTime_ += static_cast<double>(timeForLimit);
+  actualOperation.addDetail("not-written-to-cache-because-child-of-limit",
+                            fullResultIsNotCached);
+  sizeEstimate_ = l.actualSize(sizeEstimate_);
 }

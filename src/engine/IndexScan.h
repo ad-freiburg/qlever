@@ -62,14 +62,14 @@ class IndexScan : public Operation {
     // Do nothing.
   }
 
-  size_t getSizeEstimate() const { return _sizeEstimate; }
+  // Return the exact result size of the index scan. This is always known as it
+  // can be read from the Metadata.
+  size_t getExactSize() const { return _sizeEstimate; }
 
  private:
   // TODO<joka921> Make the `getSizeEstimateImpl()` function `const` for ALL the
   // `Operations`.
-  size_t getSizeEstimateImpl() override {
-    return const_cast<const IndexScan*>(this)->getSizeEstimate();
-  }
+  size_t getSizeEstimateImpl() override { return getExactSize(); }
 
  public:
   virtual size_t getCostEstimate() override;

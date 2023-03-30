@@ -135,7 +135,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
         // Note: both of the following calls have no effect and runtime O(1) if
         // neither a LIMIT nor an OFFSET were specified.
         result.applyLimitOffset(_limit);
-        _runtimeInfo.addLimitRow(_limit, limitTimer.msecs(), true);
+        _runtimeInfo.addLimitOffsetRow(_limit, limitTimer.msecs(), true);
       } else {
         AD_CONTRACT_CHECK(result.idTable().numRows() ==
                           _limit.actualSize(result.idTable().numRows()));
