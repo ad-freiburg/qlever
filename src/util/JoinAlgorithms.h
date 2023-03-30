@@ -57,21 +57,29 @@ inline JoinColumnData prepareJoinColumns(
           std::move(colsBComplete), std::move(permutation)};
 }
 
-// For a single `row` of IDs that doesn't contain any UNDEF values find all the
-// iterators in the sorted range `[begin, end)` that are lexicographically
-// smaller than `row`, are compatible with `row` (meaning that on each position
-// they have either the same value, or one of them is UNDEF), and contain at
-// least one UNDEF entry. This function runs in `O(2^C * log(N) + R)` where C is
-// the number of columns, N is the size of the range `[begin, end)` and `R` is
-// the number of matching elements.
-
-// Preconditions (all checked via `assert()` macros):
+// The following functions `findSmallerUndefRanges...` have the following in
+// common: For a single `row` of IDs find all the iterators in the sorted range
+// `[begin, end)` that are lexicographically smaller than `row`, are compatible
+// with `row` (meaning that on each position they have either the same value, or
+// one of them is UNDEF), and contain at least one UNDEF entry. They all have to
+// following preconditions (checked via `assert()` macros):
 //   - The `row` must have the same number of entries than the elements in the
-//   range `[begin, end)`
+//     range `[begin, end)`
 //   - The range `[begin, end)` must be lexicographically sorted.
-//   - None of the entries of `row` must be `UNDEF`.
-// TODO<joka921> We could also implement a version that is optimized on the
-// [begin, end] range not having UNDEF values in some of the columns
+// The resulting rows are returned via a generator of iterators. The boolean
+// argument `outOfOrderElementFound` is set to true if the `row` contains at
+// least one undefined entry, and one of the compatible rows form `[begin, end)`
+// contains at least one undefined entry in a column in which `row` is defined.
+// It is in general not possible for a zipper-style join algorithm to determine
+// the correct position in the sorted output for such an element, so we have to
+// keep track of this information.
+
+// This function has the additional precondition that none of the entries of
+// `row` may be undefined. This function runs in `O(2^C * log(N) + R)` where C
+// is the number of columns, N is the size of the range `[begin, end)` and `R`
+// is the number of matching elements.
+// TODO<joka921> This can be optimized when we also know which columns of
+// `[begin, end)` can possibly contain undefined values.
 auto findSmallerUndefRangesForRowsWithoutUndef(
     const auto& row, auto begin, auto end,
     [[maybe_unused]] bool& outOfOrderElementFound)
@@ -102,22 +110,12 @@ auto findSmallerUndefRangesForRowsWithoutUndef(
   }
 }
 
-// For a single `row` of IDs that contains UNDEF values in all the last
-// `numLastUndefined` columns, and no UNDEF values in any of the other columns,
-// find all the iterators in the sorted range `[begin, end)` that are
-// lexicographically smaller than `row`, are compatible with `row` (meaning that
-// on each position they have either the same value, or one of them is UNDEF),
-// and contain at least one UNDEF entry. This function runs in `O(2^C * log(N) +
-// R)` where C is the number of  defined columns (`numColumns -
-// numLastUndefined`), N is the size of the range `[begin, end)` and `R` is the
-// number of matching elements.
+// This function has the additional precondition, that the `row` contains
+// UNDEF values in all the last `numLastUndefined` columns and no UNDEF values
+// in the remaining columns. This function runs in `O(2^C * log(N) + R)` where C
+// is the number of  defined columns (`numColumns - numLastUndefined`), N is the
+// size of the range `[begin, end)` and `R` is the number of matching elements.
 
-// Preconditions (all checked via `assert()` macros):
-//   - The `row` must have the same number of entries than the elements in the
-//   range `[begin, end)`
-//   - The range `[begin, end)` must be lexicographically sorted.
-//   - The last `numLastUndefined` entries of `row` must be `UNDEF`, none of the
-//   other entries of `row` mayb be UNDEF
 // TODO<joka921> We could also implement a version that is optimized on the
 // [begin, end] range not having UNDEF values in some of the columns
 auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
@@ -167,22 +165,8 @@ auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
   }
 }
 
-// The (very expensive) general case:
-// For a single arbitrary `row` of IDs that may contain UNDEF values in any
-// entry, find all the iterators in the sorted range `[begin, end)` that are
-// lexicographically smaller than `row`, are compatible with `row` (meaning that
-// on each position they have either the same value, or one of them is UNDEF),
-// and contain at least one UNDEF entry. This function runs in `O(C * N)` where
-// C is the number of  columns and N is the size of the range `[begin, end)`.
-
-// Preconditions (all checked via `assert()` macros):
-//   - The `row` must have the same number of entries than the elements in the
-//   range `[begin, end)`
-//   - The range `[begin, end)` must be lexicographically sorted.
-//   - The last `numLastUndefined` entries of `row` must be `UNDEF`, none of the
-//   other entries of `row` mayb be UNDEF
-// TODO<joka921> We could also implement a version that is optimized on the
-// [begin, end] range not having UNDEF values in some of the columns
+// This function has no additional preconditions, but runs in `O((end - begin) *
+// numColumns)`.
 auto findSmallerUndefRangesArbitrary(const auto& row, auto begin, auto end,
                                      bool& outOfOrderElementFound)
     -> cppcoro::generator<decltype(begin)> {
@@ -220,15 +204,8 @@ auto findSmallerUndefRangesArbitrary(const auto& row, auto begin, auto end,
   co_return;
 }
 
-// For a single `row` of IDs
-// find all the iterators in the sorted range `[begin, end)` that are
-// lexicographically smaller than `row`, are compatible with `row` (meaning that
-// on each position they have either the same value, or one of them is UNDEF),
-// and contain at least one UNDEF entry.
-// This function first checks whether the `row` contains `UNDEF` values and if
-// so in which position, and then calls the cheapest of the
-// `findSmallerUndefRanges...` functions above for which the `row` contains the
-// preconditions.
+// This function first checks in which positions the `row` has UNDEF values, and
+// then calls the cheapest possible of the functions defined above.
 auto findSmallerUndefRanges(const auto& row, auto begin, auto end,
                             bool& outOfOrderFound)
     -> cppcoro::generator<decltype(begin)> {
