@@ -72,8 +72,9 @@ inline JoinColumnData prepareJoinColumns(
 //   - None of the entries of `row` must be `UNDEF`.
 // TODO<joka921> We could also implement a version that is optimized on the
 // [begin, end] range not having UNDEF values in some of the columns
-auto findSmallerUndefRangesForRowsWithoutUndef(const auto& row, auto begin,
-                                               auto end)
+auto findSmallerUndefRangesForRowsWithoutUndef(
+    const auto& row, auto begin, auto end,
+    [[maybe_unused]] bool& outOfOrderElementFound)
     -> cppcoro::generator<decltype(begin)> {
   using Row = typename std::iterator_traits<decltype(begin)>::value_type;
   assert(row.size() == (*begin).size());
@@ -120,8 +121,8 @@ auto findSmallerUndefRangesForRowsWithoutUndef(const auto& row, auto begin,
 // TODO<joka921> We could also implement a version that is optimized on the
 // [begin, end] range not having UNDEF values in some of the columns
 auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
-    const auto& row, const size_t numLastUndefined, auto begin, auto end)
-    -> cppcoro::generator<decltype(begin)> {
+    const auto& row, const size_t numLastUndefined, auto begin, auto end,
+    bool& outOfOrderElementFound) -> cppcoro::generator<decltype(begin)> {
   using Row = typename std::iterator_traits<decltype(begin)>::value_type;
   const size_t numJoinColumns = row.size();
   assert(row.size() == (*begin).size());
@@ -160,6 +161,7 @@ auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
     auto endOfUndef = std::lower_bound(begin, end, rowLower,
                                        std::ranges::lexicographical_compare);
     for (; begOfUndef != endOfUndef; ++begOfUndef) {
+      outOfOrderElementFound = true;
       co_yield begOfUndef;
     }
   }
@@ -181,7 +183,8 @@ auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
 //   other entries of `row` mayb be UNDEF
 // TODO<joka921> We could also implement a version that is optimized on the
 // [begin, end] range not having UNDEF values in some of the columns
-auto findSmallerUndefRangesArbitrary(const auto& row, auto begin, auto end)
+auto findSmallerUndefRangesArbitrary(const auto& row, auto begin, auto end,
+                                     bool& outOfOrderElementFound)
     -> cppcoro::generator<decltype(begin)> {
   assert(row.size() == (*begin).size());
   assert(
@@ -210,6 +213,7 @@ auto findSmallerUndefRangesArbitrary(const auto& row, auto begin, auto end)
 
   for (auto it = begin; it != end; ++it) {
     if (isCompatible(*it)) {
+      outOfOrderElementFound = true;
       co_yield it;
     }
   }
@@ -225,7 +229,8 @@ auto findSmallerUndefRangesArbitrary(const auto& row, auto begin, auto end)
 // so in which position, and then calls the cheapest of the
 // `findSmallerUndefRanges...` functions above for which the `row` contains the
 // preconditions.
-auto findSmallerUndefRanges(const auto& row, auto begin, auto end)
+auto findSmallerUndefRanges(const auto& row, auto begin, auto end,
+                            bool& outOfOrderFound)
     -> cppcoro::generator<decltype(begin)> {
   size_t numLastUndefined = 0;
   assert(row.size() > 0);
@@ -240,14 +245,15 @@ auto findSmallerUndefRanges(const auto& row, auto begin, auto end)
 
   for (; it < rend; ++it) {
     if (*it == Id::makeUndefined()) {
-      return findSmallerUndefRangesArbitrary(row, begin, end);
+      return findSmallerUndefRangesArbitrary(row, begin, end, outOfOrderFound);
     }
   }
   if (numLastUndefined == 0) {
-    return findSmallerUndefRangesForRowsWithoutUndef(row, begin, end);
+    return findSmallerUndefRangesForRowsWithoutUndef(row, begin, end,
+                                                     outOfOrderFound);
   } else {
     return findSmallerUndefRangesForRowsWithUndefInLastColumns(
-        row, numLastUndefined, begin, end);
+        row, numLastUndefined, begin, end, outOfOrderFound);
   }
 }
 
@@ -266,13 +272,17 @@ template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
   std::vector<bool> coveredFromLeft(end1 - it1);
   auto cover = [&](auto it) { coveredFromLeft[it - range1.begin()] = true; };
 
-  auto makeMergeWithUndefLeft = [&cover, &compatibleRowAction]<bool reversed>(
+  bool outOfOrderFound = false;
+
+  auto makeMergeWithUndefLeft = [&cover, &compatibleRowAction,
+                                 &outOfOrderFound]<bool reversed>(
                                     const auto& lt, const auto& findUndef) {
-    return [&cover, &lt, &findUndef, &compatibleRowAction](
+    return [&cover, &lt, &findUndef, &compatibleRowAction, &outOfOrderFound](
                const auto& el, auto startOfRange, auto endOfRange) {
       (void)cover;
       bool compatibleWasFound = false;
-      auto smallerUndefRanges = findUndef(el, startOfRange, endOfRange);
+      auto smallerUndefRanges =
+          findUndef(el, startOfRange, endOfRange, outOfOrderFound);
       for (const auto& it : smallerUndefRanges) {
         if (lt(*it, el)) {
           compatibleWasFound = true;
@@ -373,7 +383,8 @@ template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
       ++numOutOfOrderAtEnd;
     }
   }
-  return numOutOfOrderAtEnd;
+  return outOfOrderFound ? std::numeric_limits<size_t>::max()
+                         : numOutOfOrderAtEnd;
 }
 
 // _____________________________________________________________________________

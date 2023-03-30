@@ -1,7 +1,7 @@
 add_subdirectory(sparqlExpressions)
 add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp SortPerformanceEstimator.h)
 add_library(engine
-        Engine.h
+        Engine.cpp
         IndexSequence.h
         QueryExecutionTree.h QueryExecutionTree.cpp
         Operation.h Operation.cpp

@@ -35,12 +35,14 @@ void testSmallerUndefRangesForArbitraryRows(
     const std::vector<size_t>& positions,
     source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
+  // TODO<joka921> also actually test the bool;
+  [[maybe_unused]] bool outOfOrder;
   EXPECT_THAT(toPositions(findSmallerUndefRangesArbitrary<std::array<Id, I>>(
-                              row, range.begin(), range.end()),
+                              row, range.begin(), range.end(), outOfOrder),
                           range),
               ::testing::ElementsAreArray(positions));
   EXPECT_THAT(toPositions(findSmallerUndefRanges<std::array<Id, I>>(
-                              row, range.begin(), range.end()),
+                              row, range.begin(), range.end(), outOfOrder),
                           range),
               ::testing::ElementsAreArray(positions));
 }
@@ -53,8 +55,10 @@ void testSmallerUndefRangesForRowsWithoutUndef(
   auto t = generateLocationTrace(l);
   ASSERT_TRUE(std::ranges::is_sorted(range));
   std::vector<int64_t> foundPositions;
+  // TODO<joka921> also actually test the bool;
+  [[maybe_unused]] bool outOfOrder;
   for (auto it : findSmallerUndefRangesForRowsWithoutUndef<std::array<Id, I>>(
-           row, range.begin(), range.end())) {
+           row, range.begin(), range.end(), outOfOrder)) {
     foundPositions.push_back(it - range.begin());
   }
   EXPECT_THAT(foundPositions, ::testing::ElementsAreArray(positions));
@@ -95,8 +99,10 @@ void testSmallerUndefRangesForRowsWithUndefInLastColumns(
   auto t = generateLocationTrace(l);
   ASSERT_TRUE(std::ranges::is_sorted(range));
   std::vector<int64_t> foundPositions;
+  // TODO<joka921> also actually test the bool;
+  [[maybe_unused]] bool outOfOrder;
   for (auto it : findSmallerUndefRangesForRowsWithUndefInLastColumns(
-           row, numLastUndef, range.begin(), range.end())) {
+           row, numLastUndef, range.begin(), range.end(), outOfOrder)) {
     foundPositions.push_back(it - range.begin());
   }
   EXPECT_THAT(foundPositions, ::testing::ElementsAreArray(positions));

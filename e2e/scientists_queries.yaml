@@ -1465,5 +1465,20 @@ queries:
       - contains_row: [ 3.0, 4.0 ]
       - contains_row: [ 4.0, 4.5 ]
 
+  - query: optional-join-set-default-value
+    type: no-text
+    sparql: |
+      SELECT ?x ?y WHERE {
+        VALUES (?x ?y) { (1 UNDEF) (2 2) (3 UNDEF)}
+        OPTIONAL {VALUES (?x ?y) { (1 5) }}
+        OPTIONAL { VALUES ?y { 34 }}
+      }
+    checks:
+      - num_cols: 2
+      - num_rows : 3
+      - selected: [ "?x", "?y" ]
+      - contains_row: [ 1, 5 ]
+      - contains_row: [ 2, 2 ]
+      - contains_row: [ 3, 34 ]
 
 

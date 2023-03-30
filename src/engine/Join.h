@@ -92,7 +92,6 @@ class Join : public Operation {
    * TODO Move the merge join into it's own function and make this function
    * a proper switch.
    **/
-  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
   void join(const IdTable& dynA, size_t jc1, const IdTable& dynB, size_t jc2,
             IdTable* dynRes);
 

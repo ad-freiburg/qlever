@@ -264,14 +264,27 @@ void MultiColumnJoin::computeMultiColumnJoin(
     rowAdder.addRow(rowA.rowIndex(), rowB.rowIndex());
   };
 
-  auto findUndefDispatch = [](const auto& row, auto begin, auto end) {
-    return ad_utility::findSmallerUndefRanges(row, begin, end);
+  auto findUndefDispatch = [](const auto& row, auto begin, auto end,
+                              bool& outOfOrder) {
+    return ad_utility::findSmallerUndefRanges(row, begin, end, outOfOrder);
   };
   auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
       dynASubset, dynBSubset, lessThanBoth, addRow, findUndefDispatch,
       findUndefDispatch);
-  AD_CORRECTNESS_CHECK(numOutOfOrder == 0);
   rowAdder.flush();
+  // TODO<joka921> We have two sorted ranges, a simple merge would suffice
+  // (possibly even in-place), or we could even lazily pass them on to the
+  // upstream operation.
+  // Note: the merging only works if we don't have the arbitrary out of order
+  // case.
+  // TODO<joka921> We only have to do this if the sorting is required.
+  if (numOutOfOrder > 0) {
+    std::vector<ColumnIndex> cols;
+    for (size_t i = 0; i < joinColumns.size(); ++i) {
+      cols.push_back(i);
+    }
+    Engine::sort(*result, cols);
+  }
 
   // The column order in the result is now
   // [joinColumns, non-join-columns-a, non-join-columns-b] (which makes the

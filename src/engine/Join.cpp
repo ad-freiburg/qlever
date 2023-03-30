@@ -137,13 +137,14 @@ ResultTable Join::computeResult() {
 
   idTable.setNumColumns(leftWidth + rightWidth - 1);
 
-  int lwidth = leftRes->idTable().numColumns();
-  int rwidth = rightRes->idTable().numColumns();
-  int reswidth = idTable.numColumns();
+  join(leftRes->idTable(), _leftJoinCol, rightRes->idTable(), _rightJoinCol,
+       &idTable);
 
+  /*
   CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::join, this,
                   leftRes->idTable(), _leftJoinCol, rightRes->idTable(),
                   _rightJoinCol, &idTable);
+  */
 
   LOG(DEBUG) << "Join result computation done" << endl;
 
@@ -451,11 +452,10 @@ void Join::appendCrossProduct(const IdTable::const_iterator& leftBegin,
 
 // ______________________________________________________________________________
 
-template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
 void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
                 size_t jc2, IdTable* result) {
-  const IdTableView<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
-  const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
+  const auto& a = dynA;
+  const auto& b = dynB;
 
   LOG(DEBUG) << "Performing join between two tables.\n";
   LOG(DEBUG) << "A: width = " << a.numColumns() << ", size = " << a.size()
@@ -464,7 +464,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
              << "\n";
 
   // Check trivial case.
-  if (a.size() == 0 || b.size() == 0) {
+  if (dynA.empty() || dynB.empty()) {
     return;
   }
   [[maybe_unused]] auto checkTimeoutAfterNCalls =
