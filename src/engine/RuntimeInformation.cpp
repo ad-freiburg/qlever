@@ -215,11 +215,10 @@ void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
     descriptor_ = absl::StrCat("LIMIT ", l._limit.value());
   }
 
-  if (hasLimit) {
+  if (hasOffset) {
     absl::StrAppend(&descriptor_, hasLimit ? " " : "", "OFFSET ", l._offset);
   }
   children_ = std::vector{*this};
-  descriptor_ = "LIMIT and OFFSET";
   auto& actualOperation = children_.at(0);
   numRows_ = l.actualSize(actualOperation.numRows_);
   details_.clear();

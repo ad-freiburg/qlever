@@ -9,8 +9,9 @@
 #include <mutex>
 #include <utility>
 
-#include "../util/HashMap.h"
-#include "./Synchronized.h"
+#include "util/HashMap.h"
+#include "util/Synchronized.h"
+#include "util/Log.h"
 
 namespace ad_utility {
 
