@@ -155,7 +155,9 @@ class AddCombinedRowToIdTable {
       // Write the matching rows. For join columns (numInputs == 2) the inputs
       // are combined, for non-join-columns, the (single) input is just copied.
       for (auto [targetIndex, sourceIndices] : indexBuffer_) {
-        auto resultId = [&]() -> Id {
+        // The explicit capturing of the structured binding is required for
+        // Clang <= 15.
+        auto resultId = [&, sourceIndices = sourceIndices]() -> Id {
           if constexpr (numInputs == 1) {
             return std::get<0>(
                 cols)[std::get<idxOfSingleColumn>(sourceIndices)];
