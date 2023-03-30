@@ -29,29 +29,29 @@ class Minus : public Operation {
   Minus(OnlyForTestingTag){};
 
  protected:
-  virtual string asStringImpl(size_t indent = 0) const override;
+  string asStringImpl(size_t indent = 0) const override;
 
  public:
-  virtual string getDescriptor() const override;
+  string getDescriptor() const override;
 
-  virtual size_t getResultWidth() const override;
+  size_t getResultWidth() const override;
 
-  virtual vector<size_t> resultSortedOn() const override;
+  vector<size_t> resultSortedOn() const override;
 
-  virtual void setTextLimit(size_t limit) override {
+  void setTextLimit(size_t limit) override {
     _left->setTextLimit(limit);
     _right->setTextLimit(limit);
   }
 
-  virtual bool knownEmptyResult() override { return _left->knownEmptyResult(); }
+  bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 
-  virtual float getMultiplicity(size_t col) override;
+  float getMultiplicity(size_t col) override;
 
  private:
-  virtual size_t getSizeEstimateImpl() override;
+  size_t getSizeEstimateBeforeLimit() override;
 
  public:
-  virtual size_t getCostEstimate() override;
+  size_t getCostEstimate() override;
 
   vector<QueryExecutionTree*> getChildren() override {
     return {_left.get(), _right.get()};
@@ -78,7 +78,7 @@ class Minus : public Operation {
       const IdTableView<A_WIDTH>& a, const IdTableView<B_WIDTH>& b, size_t ia,
       size_t ib, const vector<std::array<size_t, 2>>& matchedColumns);
 
-  virtual ResultTable computeResult() override;
+  ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };

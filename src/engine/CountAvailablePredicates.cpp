@@ -78,7 +78,7 @@ float CountAvailablePredicates::getMultiplicity([[maybe_unused]] size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t CountAvailablePredicates::getSizeEstimateImpl() {
+size_t CountAvailablePredicates::getSizeEstimateBeforeLimit() {
   if (_subtree.get() != nullptr) {
     // Predicates are only computed for entities in the subtrees result.
 
@@ -105,7 +105,7 @@ size_t CountAvailablePredicates::getCostEstimate() {
     return _subtree->getCostEstimate() + _subtree->getSizeEstimate();
   } else {
     // the cost is proportional to the number of elements we need to write.
-    return getSizeEstimateImpl();
+    return getSizeEstimateBeforeLimit();
   }
 }
 

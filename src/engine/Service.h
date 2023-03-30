@@ -61,7 +61,7 @@ class Service : public Operation {
   float getMultiplicity(size_t col) override;
 
  private:
-  size_t getSizeEstimateImpl() override;
+  size_t getSizeEstimateBeforeLimit() override;
 
  public:
   size_t getCostEstimate() override;

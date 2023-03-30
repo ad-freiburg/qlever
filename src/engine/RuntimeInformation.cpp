@@ -219,7 +219,7 @@ void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
                             fullResultIsNotCached);
   sizeEstimate_ = l.actualSize(sizeEstimate_);
 
-  // Update the
+  // Update the descriptor.
   descriptor_.clear();
   if (hasLimit) {
     descriptor_ = absl::StrCat("LIMIT ", l._limit.value());

@@ -46,7 +46,9 @@ class OrderBy : public Operation {
   void setTextLimit(size_t limit) override { subtree_->setTextLimit(limit); }
 
  private:
-  size_t getSizeEstimateImpl() override { return subtree_->getSizeEstimate(); }
+  size_t getSizeEstimateBeforeLimit() override {
+    return subtree_->getSizeEstimate();
+  }
 
  public:
   float getMultiplicity(size_t col) override {
@@ -54,10 +56,10 @@ class OrderBy : public Operation {
   }
 
   size_t getCostEstimate() override {
-    size_t size = getSizeEstimateImpl();
+    size_t size = getSizeEstimateBeforeLimit();
     size_t logSize = std::max(
-        size_t(1),
-        static_cast<size_t>(logb(static_cast<double>(getSizeEstimateImpl()))));
+        size_t(1), static_cast<size_t>(logb(
+                       static_cast<double>(getSizeEstimateBeforeLimit()))));
     size_t nlogn = size * logSize;
     size_t subcost = subtree_->getCostEstimate();
     return nlogn + subcost;

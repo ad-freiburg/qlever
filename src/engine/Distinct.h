@@ -40,13 +40,13 @@ class Distinct : public Operation {
   }
 
  private:
-  virtual size_t getSizeEstimateImpl() override {
+  size_t getSizeEstimateBeforeLimit() override {
     return _subtree->getSizeEstimate();
   }
 
  public:
   virtual size_t getCostEstimate() override {
-    return getSizeEstimateImpl() + _subtree->getCostEstimate();
+    return getSizeEstimateBeforeLimit() + _subtree->getCostEstimate();
   }
 
   virtual float getMultiplicity(size_t col) override {

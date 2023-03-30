@@ -41,7 +41,7 @@ class Values : public Operation {
   virtual float getMultiplicity(size_t col) override;
 
  private:
-  virtual size_t getSizeEstimateImpl() override;
+  size_t getSizeEstimateBeforeLimit() override;
 
  public:
   virtual size_t getCostEstimate() override;

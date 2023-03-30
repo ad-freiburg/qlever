@@ -92,14 +92,14 @@ class Operation {
 
   virtual size_t getSizeEstimate() final {
     if (_limit._limit.has_value()) {
-      return std::min(_limit._limit.value(), getSizeEstimateImpl());
+      return std::min(_limit._limit.value(), getSizeEstimateBeforeLimit());
     } else {
-      return getSizeEstimateImpl();
+      return getSizeEstimateBeforeLimit();
     }
   }
 
  private:
-  virtual size_t getSizeEstimateImpl() = 0;
+  virtual size_t getSizeEstimateBeforeLimit() = 0;
 
  public:
   virtual float getMultiplicity(size_t col) = 0;
@@ -284,6 +284,14 @@ class Operation {
   std::vector<std::string> _warnings;
 
   // The limit from a SPARQL `LIMIT` clause.
+  // Note: This limit will only be set in the following cases:
+  // 1. This operation is the last operation of a subquery
+  // 2. This operation is the last operation of a query AND it supports an
+  // efficient calculation of the limit
+  //    ( see also the `supportsLimit()` function).
+  // We have chosen this design (in contrast to a dedicated
+  // `LimitOffsetOperation`) to favor such efficient implementations of a limit
+  // in the future.
   LimitOffsetClause _limit;
 
   // A mutex that can be "copied". The semantics are, that copying will create
