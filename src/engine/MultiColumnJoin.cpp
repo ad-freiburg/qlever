@@ -88,13 +88,8 @@ ResultTable MultiColumnJoin::computeResult() {
   LOG(DEBUG) << "Computing a multi column join between results of size "
              << leftResult->size() << " and " << rightResult->size() << endl;
 
-  int leftWidth = leftResult->idTable().numColumns();
-  int rightWidth = rightResult->idTable().numColumns();
-  int resWidth = idTable.numColumns();
-  CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, resWidth}),
-                  &MultiColumnJoin::computeMultiColumnJoin,
-                  leftResult->idTable(), rightResult->idTable(), _joinColumns,
-                  &idTable);
+  computeMultiColumnJoin(leftResult->idTable(), rightResult->idTable(),
+                         _joinColumns, &idTable);
 
   LOG(DEBUG) << "MultiColumnJoin result computation done" << endl;
   // If only one of the two operands has a non-empty local vocabulary, share
@@ -234,7 +229,6 @@ void MultiColumnJoin::computeSizeEstimateAndMultiplicities() {
 }
 
 // _______________________________________________________________________
-template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
 void MultiColumnJoin::computeMultiColumnJoin(
     const IdTable& dynA, const IdTable& dynB,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
@@ -244,8 +238,8 @@ void MultiColumnJoin::computeMultiColumnJoin(
     return;
   }
 
-  IdTableView<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
-  IdTableView<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
+  const auto& a = dynA;
+  const auto& b = dynB;
 
   auto joinColumnData = ad_utility::prepareJoinColumns(
       joinColumns, a.numColumns(), b.numColumns());

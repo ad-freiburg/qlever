@@ -74,10 +74,6 @@ IdTable useJoinFunctionOnIdTables(const IdTableAndJoinColumn& tableA,
                                    tableB.idTable.numColumns() - 1)};
   IdTable result{static_cast<size_t>(resultWidth), makeAllocator()};
 
-  // You need to use this special function for executing lambdas. The normal
-  // function for functions won't work.
-  // Additionaly, we need to cast the two size_t, because callFixedSize only
-  // takes arrays of int.
   ad_utility::callFixedSize(
       (std::array{static_cast<int>(tableA.idTable.numColumns()),
                   static_cast<int>(tableB.idTable.numColumns()), resultWidth}),
@@ -130,8 +126,8 @@ void runTestCasesForAllJoinAlgorithms(
   auto hashJoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
     return J.hashJoin(AD_FWD(args)...);
   };
-  auto joinLambda = [&J]<int A, int B, int C>(auto&&... args) {
-    return J.join<A, B, C>(AD_FWD(args)...);
+  auto joinLambda = [&J]<int, int, int>(auto&&... args) {
+    return J.join(AD_FWD(args)...);
   };
 
   // For sorting IdTableAndJoinColumn by their join column.

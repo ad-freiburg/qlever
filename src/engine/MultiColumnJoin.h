@@ -61,7 +61,6 @@ class MultiColumnJoin : public Operation {
    *        that should have resultWidth entries).
    *        This method is made public here for unit testing purposes.
    **/
-  template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
   static void computeMultiColumnJoin(
       const IdTable& a, const IdTable& b,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
