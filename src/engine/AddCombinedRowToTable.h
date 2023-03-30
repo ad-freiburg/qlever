@@ -103,7 +103,7 @@ class AddCombinedRowToIdTable {
   ~AddCombinedRowToIdTable() {
     // TODO<joka921> Change this to an
     // `OnDestructionDontThrowDuringStackUnwinding` to make it safe.
-    if (!indexBuffer_.empty()) {
+    if (!indexBuffer_.empty() && std::uncaught_exceptions() == 0) {
       AD_THROW(
           "Before destroying an object of type AddCombinedRowToIdTable, the "
           "`flush` method must be called. Please report this");
