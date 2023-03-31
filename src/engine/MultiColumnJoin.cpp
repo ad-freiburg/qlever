@@ -9,10 +9,10 @@
 using std::string;
 
 // _____________________________________________________________________________
-MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
-                                 std::shared_ptr<QueryExecutionTree> t1,
-                                 std::shared_ptr<QueryExecutionTree> t2,
-                                 const vector<array<ColumnIndex, 2>>& jcs)
+MultiColumnJoin::MultiColumnJoin(
+    QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
+    std::shared_ptr<QueryExecutionTree> t2,
+    const std::vector<std::array<ColumnIndex, 2>>& jcs)
     : Operation(qec), _joinColumns(jcs), _multiplicitiesComputed(false) {
   // Make sure subtrees are ordered so that identical queries can be identified.
   AD_CONTRACT_CHECK(!jcs.empty());
@@ -71,54 +71,36 @@ string MultiColumnJoin::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-void MultiColumnJoin::computeResult(ResultTable* result) {
-  AD_CONTRACT_CHECK(result);
+ResultTable MultiColumnJoin::computeResult() {
   LOG(DEBUG) << "MultiColumnJoin result computation..." << endl;
 
-  result->_sortedBy = resultSortedOn();
-  result->_idTable.setNumColumns(getResultWidth());
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(getResultWidth());
 
-  AD_CONTRACT_CHECK(result->_idTable.numColumns() >= _joinColumns.size());
+  AD_CONTRACT_CHECK(idTable.numColumns() >= _joinColumns.size());
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
 
   LOG(DEBUG) << "MultiColumnJoin subresult computation done." << std::endl;
 
-  // compute the result types
-  result->_resultTypes.reserve(result->_idTable.numColumns());
-  result->_resultTypes.insert(result->_resultTypes.end(),
-                              leftResult->_resultTypes.begin(),
-                              leftResult->_resultTypes.end());
-  for (size_t col = 0; col < rightResult->_idTable.numColumns(); col++) {
-    bool isJoinColumn = false;
-    for (const std::array<ColumnIndex, 2>& a : _joinColumns) {
-      if (a[1] == col) {
-        isJoinColumn = true;
-        break;
-      }
-    }
-    if (!isJoinColumn) {
-      result->_resultTypes.push_back(rightResult->_resultTypes[col]);
-    }
-  }
-
   LOG(DEBUG) << "Computing a multi column join between results of size "
              << leftResult->size() << " and " << rightResult->size() << endl;
 
-  int leftWidth = leftResult->_idTable.numColumns();
-  int rightWidth = rightResult->_idTable.numColumns();
-  int resWidth = result->_idTable.numColumns();
+  int leftWidth = leftResult->idTable().numColumns();
+  int rightWidth = rightResult->idTable().numColumns();
+  int resWidth = idTable.numColumns();
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, resWidth}),
                   &MultiColumnJoin::computeMultiColumnJoin,
-                  leftResult->_idTable, rightResult->_idTable, _joinColumns,
-                  &result->_idTable);
-
-  // If only one of the two operands has a non-empty local vocabulary, share
-  // with that one (otherwise, throws an exception).
-  result->shareLocalVocabFromNonEmptyOf(*leftResult, *rightResult);
+                  leftResult->idTable(), rightResult->idTable(), _joinColumns,
+                  &idTable);
 
   LOG(DEBUG) << "MultiColumnJoin result computation done" << endl;
+  // If only one of the two operands has a non-empty local vocabulary, share
+  // with that one (otherwise, throws an exception).
+  return {std::move(idTable), resultSortedOn(),
+          ResultTable::getSharedLocalVocabFromNonEmptyOf(*leftResult,
+                                                         *rightResult)};
 }
 
 // _____________________________________________________________________________

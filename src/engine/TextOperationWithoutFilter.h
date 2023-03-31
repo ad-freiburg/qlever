@@ -79,13 +79,13 @@ class TextOperationWithoutFilter : public Operation {
  private:
   void computeMultiplicities();
 
-  virtual void computeResult(ResultTable* result) override;
+  ResultTable computeResult() override;
 
-  void computeResultNoVar(ResultTable* result) const;
+  void computeResultNoVar(IdTable* idTable) const;
 
-  void computeResultOneVar(ResultTable* result) const;
+  void computeResultOneVar(IdTable* idTable) const;
 
-  void computeResultMultVars(ResultTable* result) const;
+  void computeResultMultVars(IdTable* idTable) const;
 
-  virtual VariableToColumnMap computeVariableToColumnMap() const override;
+  VariableToColumnMap computeVariableToColumnMap() const override;
 };

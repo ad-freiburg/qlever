@@ -104,29 +104,29 @@ class IndexScan : public Operation {
   ScanType getType() const { return _type; }
 
  private:
-  virtual void computeResult(ResultTable* result) override;
+  virtual ResultTable computeResult() override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
-  void computePSOboundS(ResultTable* result) const;
+  void computePSOboundS(IdTable* result) const;
 
-  void computePSOfreeS(ResultTable* result) const;
+  void computePSOfreeS(IdTable* result) const;
 
-  void computePOSboundO(ResultTable* result) const;
+  void computePOSboundO(IdTable* result) const;
 
-  void computePOSfreeO(ResultTable* result) const;
+  void computePOSfreeO(IdTable* result) const;
 
-  void computeSPOfreeP(ResultTable* result) const;
+  void computeSPOfreeP(IdTable* result) const;
 
-  void computeSOPboundO(ResultTable* result) const;
+  void computeSOPboundO(IdTable* result) const;
 
-  void computeSOPfreeO(ResultTable* result) const;
+  void computeSOPfreeO(IdTable* result) const;
 
-  void computeOPSfreeP(ResultTable* result) const;
+  void computeOPSfreeP(IdTable* result) const;
 
-  void computeOSPfreeS(ResultTable* result) const;
+  void computeOSPfreeS(IdTable* result) const;
 
-  void computeFullScan(ResultTable* result,
+  void computeFullScan(IdTable* result,
                        const Index::Permutation permutation) const;
 
   size_t computeSizeEstimate();
