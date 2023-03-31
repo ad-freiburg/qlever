@@ -18,7 +18,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
   size_t upperBound = std::min<size_t>(
       limitAndOffset._limit + limitAndOffset._offset, res->idTable().size());
   for (size_t i = limitAndOffset._offset; i < upperBound; i++) {
-    ConstructQueryExportContext context{i, *res, varColMap,
+    ConstructQueryExportContext context{i, *res, qet.getVariableColumns(),
                                         qet.getQec()->getIndex()};
     using enum PositionInTriple;
     for (const auto& triple : constructTriples) {

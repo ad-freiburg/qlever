@@ -79,18 +79,18 @@ struct TestContext {
     context._endIndex = table.size();
     // Define the mapping from variable names to column indices.
     using V = Variable;
-    varToColMap[V{"?ints"}] = {0};
-    varToColMap[V{"?doubles"}] = {1};
-    varToColMap[V{"?numeric"}] = {2};
-    varToColMap[V{"?vocab"}] = {3};
-    varToColMap[V{"?mixed"}] = {4};
+    varToColMap[V{"?ints"}] = makeAlwaysDefinedColumn(0);
+    varToColMap[V{"?doubles"}] = makeAlwaysDefinedColumn(1);
+    varToColMap[V{"?numeric"}] = makeAlwaysDefinedColumn(2);
+    varToColMap[V{"?vocab"}] = makeAlwaysDefinedColumn(3);
+    varToColMap[V{"?mixed"}] = makeAlwaysDefinedColumn(4);
   }
 
   // Get a test context where the rows are the same as by default, but sorted by
   // `variable`
   static TestContext sortedBy(const Variable& variable) {
     TestContext result;
-    ColumnIndex columnIndex = result.varToColMap.at(variable);
+    ColumnIndex columnIndex = result.varToColMap.at(variable).columnIndex_;
     std::sort(result.table.begin(), result.table.end(),
               [columnIndex](const auto& a, const auto& b) {
                 return valueIdComparators::compareByBits(a[columnIndex],

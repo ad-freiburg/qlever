@@ -124,7 +124,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       // operation, therefore we currently only perform this expensive
       // change in the DEBUG builds.
       AD_EXPENSIVE_CHECK(
-          result->checkDefinedness(getExternallyVisibleVariableColumns()));
+          result.checkDefinedness(getExternallyVisibleVariableColumns()));
       if (_timeoutTimer->wlock()->hasTimedOut()) {
         throw ad_utility::TimeoutException(
             "Timeout in " + getDescriptor() +

@@ -26,7 +26,8 @@ inline std::span<const ValueId> getIdsFromVariable(
         " could not be mapped to context column of expression evaluation");
   }
 
-  const size_t columnIndex = context->_variableToColumnMap.at(variable);
+  const size_t columnIndex =
+      context->_variableToColumnMap.at(variable).columnIndex_;
 
   std::span<const ValueId> completeColumn = inputTable.getColumn(columnIndex);
 

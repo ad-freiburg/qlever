@@ -88,11 +88,9 @@ class ResultTable {
   ResultTable(const ResultTable& other) = delete;
   ResultTable& operator=(const ResultTable& other) = delete;
 
-  // Moving of a result table is OK, but currently not supported because it
-  // contains mutexes in the `ad_utility::Synchronized`. This class can be made
-  // movable should this ever become necessary.
-  ResultTable(ResultTable&& other) = delete;
-  ResultTable& operator=(ResultTable&& other) = delete;
+  // Moving of a result table is OK.
+  ResultTable(ResultTable&& other) = default;
+  ResultTable& operator=(ResultTable&& other) = default;
 
   // Default destructor.
   virtual ~ResultTable() = default;

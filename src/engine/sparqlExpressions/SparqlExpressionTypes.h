@@ -242,7 +242,7 @@ struct EvaluationContext {
       throw std::runtime_error(absl::StrCat(
           "Variable ", var.name(), " was not found in input to expression."));
     }
-    return map.at(var);
+    return map.at(var).columnIndex_;
   }
 
   // _____________________________________________________________________________
