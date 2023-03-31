@@ -9,13 +9,11 @@
 
 #include "./IndexTestHelpers.h"
 #include "./engine/ValuesForTesting.h"
-#include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/Union.h"
 #include "global/Id.h"
 
-using ad_utility::testing::makeAllocator;
 namespace {
 auto V = ad_utility::testing::VocabId;
 }
