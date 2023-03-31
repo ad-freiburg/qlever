@@ -8,7 +8,6 @@
 #include "./util/IdTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "index/FTSAlgorithms.h"
-#include "util/DisableWarningsClang13.h"
 
 using namespace ad_utility::testing;
 
@@ -296,13 +295,11 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
 
   // In the following there are many similar calls to `callFixedSize`.
   // We use a lambda to reduce code duplication.
-  DISABLE_WARNINGS_CLANG_13
   auto callFixed = [](int width, auto&&... args) {
     ad_utility::callFixedSize(width, [&]<int WIDTH>() {
       FTSAlgorithms::aggScoresAndTakeTopContext<WIDTH>(AD_FWD(args)...);
     });
   };
-  ENABLE_WARNINGS_CLANG_13
 
   callFixed(width, cids, eids, scores, &result);
 
@@ -345,10 +342,8 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   eids.push_back(V(0));
   scores.push_back(10);
 
-  DISABLE_WARNINGS_CLANG_13
   ad_utility::callFixedSize(
       width, [&cids, &eids, &scores, &result]<int WIDTH>() mutable {
-        ENABLE_WARNINGS_CLANG_13
         FTSAlgorithms::aggScoresAndTakeTopContext<WIDTH>(cids, eids, scores,
                                                          &result);
       });
@@ -458,12 +453,10 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithTwoW1Test) {
 
 TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
   auto callFixed = [](int width, auto&&... args) {
-    ad_utility::callFixedSize(
-        DISABLE_WARNINGS_CLANG_13 width, [&]<int WIDTH>() mutable {
-          ENABLE_WARNINGS_CLANG_13
-          FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<WIDTH>(
-              AD_FWD(args)...);
-        });
+    ad_utility::callFixedSize(width, [&]<int WIDTH>() mutable {
+      FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<WIDTH>(
+          AD_FWD(args)...);
+    });
   };
 
   vector<TextRecordIndex> cids;
@@ -683,12 +676,10 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
   // to use an explicit lambda to pass to `callFixedSize`.
 
   auto test = [&](int width, auto&&... args) {
-    ad_utility::callFixedSize(
-        DISABLE_WARNINGS_CLANG_13 width, [&]<int V>() mutable {
-          ENABLE_WARNINGS_CLANG_13
-          FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<V>(
-              AD_FWD(args)...);
-        });
+    ad_utility::callFixedSize(width, [&]<int V>() mutable {
+      FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<V>(
+          AD_FWD(args)...);
+    });
   };
   test(width, cids, eids, scores, fMap1, nofVars, k, &resW4);
   ASSERT_EQ(0u, resW4.size());

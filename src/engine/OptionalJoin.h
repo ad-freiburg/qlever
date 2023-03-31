@@ -20,7 +20,7 @@ class OptionalJoin : public Operation {
 
   std::vector<std::array<ColumnIndex, 2>> _joinColumns;
 
-  vector<float> _multiplicities;
+  std::vector<float> _multiplicities;
   size_t _sizeEstimate;
   bool _multiplicitiesComputed;
 
@@ -28,7 +28,7 @@ class OptionalJoin : public Operation {
   OptionalJoin(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> t1, bool t1Optional,
                std::shared_ptr<QueryExecutionTree> t2, bool t2Optional,
-               const std::vector<array<ColumnIndex, 2>>& joinCols);
+               const std::vector<std::array<ColumnIndex, 2>>& joinCols);
 
  private:
   virtual string asStringImpl(size_t indent = 0) const override;
@@ -72,10 +72,10 @@ class OptionalJoin : public Operation {
    * @param result
    */
   template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
-  static void optionalJoin(const IdTable& dynA, const IdTable& dynB,
-                           bool aOptional, bool bOptional,
-                           const vector<array<ColumnIndex, 2>>& joinColumns,
-                           IdTable* dynResult);
+  static void optionalJoin(
+      const IdTable& dynA, const IdTable& dynB, bool aOptional, bool bOptional,
+      const vector<std::array<ColumnIndex, 2>>& joinColumns,
+      IdTable* dynResult);
 
  private:
   void computeSizeEstimateAndMultiplicities();
@@ -100,7 +100,7 @@ class OptionalJoin : public Operation {
       const std::vector<ColumnIndex>& joinColumnAToB,
       IdTableStatic<OUT_WIDTH>* res);
 
-  virtual void computeResult(ResultTable* result) override;
+  virtual ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };

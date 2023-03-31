@@ -48,7 +48,7 @@ class Values : public Operation {
 
  public:
   // These two are also used by class `Service`, hence public.
-  virtual void computeResult(ResultTable* result) override;
+  virtual ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
@@ -61,5 +61,5 @@ class Values : public Operation {
   // NOTE: this moves the values out of `parsedValues_` (to save a string copy
   // for those values that end up in the local vocabulary).
   template <size_t I>
-  void writeValues(ResultTable* result);
+  void writeValues(IdTable* idTablePtr, LocalVocab* localVocab);
 };

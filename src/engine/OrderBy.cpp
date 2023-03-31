@@ -55,7 +55,7 @@ string OrderBy::getDescriptor() const {
   const auto& varCols = subtree_->getVariableColumns();
   for (auto [sortIndex, isDescending] : sortIndices_) {
     for (const auto& [var, varIndex] : varCols) {
-      if (sortIndex == varIndex) {
+      if (sortIndex == varIndex.columnIndex_) {
         using namespace std::string_literals;
         std::string s = isDescending ? " DESC("s : " ASC("s;
         orderByVars += s + var.name() + ")";
@@ -66,7 +66,7 @@ string OrderBy::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-void OrderBy::computeResult(ResultTable* result) {
+ResultTable OrderBy::computeResult() {
   LOG(DEBUG) << "Getting sub-result for OrderBy result computation..." << endl;
   shared_ptr<const ResultTable> subRes = subtree_->getResult();
 
@@ -86,13 +86,9 @@ void OrderBy::computeResult(ResultTable* result) {
   }
 
   LOG(DEBUG) << "OrderBy result computation..." << endl;
-  result->_resultTypes.insert(result->_resultTypes.end(),
-                              subRes->_resultTypes.begin(),
-                              subRes->_resultTypes.end());
-  result->shareLocalVocabFrom(*subRes);
-  result->_idTable = subRes->_idTable.clone();
+  IdTable idTable = subRes->idTable().clone();
 
-  int width = result->_idTable.numColumns();
+  int width = idTable.numColumns();
 
   // TODO<joka921> Measure (as soon as we have the benchmark merged)
   // whether it is beneficial to manually instantiate the comparison when
@@ -132,12 +128,9 @@ void OrderBy::computeResult(ResultTable* result) {
   // We cannot use the `CALL_FIXED_SIZE` macro here because the `sort` function
   // is templated not only on the integer `I` (which the `callFixedSize`
   // function deals with) but also on the `comparison`.
-  DISABLE_WARNINGS_CLANG_13
-  ad_utility::callFixedSize(width, [&result, &comparison]<int I>() {
-    Engine::sort<I>(&result->_idTable, comparison);
+  ad_utility::callFixedSize(width, [&idTable, &comparison]<int I>() {
+    Engine::sort<I>(&idTable, comparison);
   });
-  ENABLE_WARNINGS_CLANG_13
-  result->_sortedBy = resultSortedOn();
-
   LOG(DEBUG) << "OrderBy result computation done." << endl;
+  return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }

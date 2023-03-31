@@ -42,12 +42,12 @@ class Bind : public Operation {
   [[nodiscard]] vector<size_t> resultSortedOn() const override;
 
  private:
-  void computeResult(ResultTable* result) override;
+  ResultTable computeResult() override;
 
   // Implementation for the binding of arbitrary expressions.
   template <int IN_WIDTH, int OUT_WIDTH>
   void computeExpressionBind(
-      ResultTable* outputResultTable, ResultTable::ResultType* resultType,
+      IdTable* outputIdTable, LocalVocab* outputLocalVocab,
       const ResultTable& inputResultTable,
       sparqlExpression::SparqlExpression* expression) const;
 
