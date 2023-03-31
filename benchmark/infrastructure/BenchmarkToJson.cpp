@@ -6,8 +6,8 @@
 #include <concepts>
 #include <utility>
 
-#include "../benchmark/BenchmarkToJson.h"
-#include "Benchmark.h"
+#include "../benchmark/infrastructure/BenchmarkToJson.h"
+#include "../benchmark/infrastructure/Benchmark.h"
 #include "nlohmann/json.hpp"
 
 // ___________________________________________________________________________

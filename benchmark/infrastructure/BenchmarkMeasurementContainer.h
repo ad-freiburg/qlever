@@ -11,7 +11,7 @@
 
 #include "util/Timer.h"
 #include "util/json.h"
-#include "../benchmark/BenchmarkMetadata.h"
+#include "../benchmark/infrastructure/BenchmarkMetadata.h"
 
 // All the classes, that hold the measurements of measured benchmarks.
 namespace BenchmarkMeasurementContainer{

@@ -7,8 +7,8 @@
 #include <sstream>
 #include <algorithm>
 
-#include "../benchmark/BenchmarkMeasurementContainer.h"
-#include "../benchmark/BenchmarkRecordToString.h"
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
+#include "../benchmark/infrastructure/BenchmarkRecordToString.h"
 #include "util/Algorithm.h"
 
 // ____________________________________________________________________________

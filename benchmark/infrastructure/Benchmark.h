@@ -11,14 +11,14 @@
 #include <memory>
 #include <utility>
 
-#include "BenchmarkConfiguration.h"
+#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "util/json.h"
 #include "util/Timer.h"
 #include "util/HashMap.h"
 #include "util/Exception.h"
 #include "../benchmark/util/HashMapWithInsertionOrder.h"
-#include "../benchmark/BenchmarkMetadata.h"
-#include "../benchmark/BenchmarkMeasurementContainer.h"
+#include "../benchmark/infrastructure/BenchmarkMetadata.h"
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 
 /*
  * Used for measuring the time needed for the execution of a function and

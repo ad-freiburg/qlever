@@ -6,7 +6,7 @@
 #include <string>
 
 #include "util/json.h"
-#include "../benchmark/BenchmarkConfiguration.h"
+#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "util/Exception.h"
 
 // ____________________________________________________________________________

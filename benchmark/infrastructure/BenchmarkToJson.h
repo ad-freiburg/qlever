@@ -7,9 +7,9 @@
 #include <vector>
 #include <utility>
 
-#include "BenchmarkMetadata.h"
+#include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "util/json.h"
-#include "../benchmark/Benchmark.h"
+#include "../benchmark/infrastructure/Benchmark.h"
 
 /*
  * @brief Create a nlohmann::json object with all relevant informations

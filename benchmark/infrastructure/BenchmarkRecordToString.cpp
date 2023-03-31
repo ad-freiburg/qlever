@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel February of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/BenchmarkRecordToString.h"
+#include "../benchmark/infrastructure/BenchmarkRecordToString.h"
 
 // ___________________________________________________________________________
 void addCategoryTitelToOStringstream(std::ostringstream* stream,

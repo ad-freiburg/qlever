@@ -12,12 +12,12 @@
 #include <vector>
 
 #include <boost/program_options.hpp>
-#include "BenchmarkConfiguration.h"
+#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "util/json.h"
 #include "util/File.h"
-#include "../benchmark/Benchmark.h"
-#include "../benchmark/BenchmarkToJson.h"
-#include "../benchmark/BenchmarkRecordToString.h"
+#include "../benchmark/infrastructure/Benchmark.h"
+#include "../benchmark/infrastructure/BenchmarkToJson.h"
+#include "../benchmark/infrastructure/BenchmarkRecordToString.h"
 
 
 /*

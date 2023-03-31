@@ -5,10 +5,10 @@
 #include <string>
 #include <memory>
 
-#include "../benchmark/Benchmark.h"
-#include "BenchmarkConfiguration.h"
-#include "BenchmarkMeasurementContainer.h"
-#include "BenchmarkMetadata.h"
+#include "../benchmark/infrastructure/Benchmark.h"
+#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
+#include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "util/Random.h"
 
 // Single Measurements

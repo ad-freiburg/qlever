@@ -9,9 +9,9 @@
 #include <vector>
 
 #include "util/json.h"
-#include "../benchmark/Benchmark.h"
-#include "../benchmark/BenchmarkMeasurementContainer.h"
-#include "../benchmark/BenchmarkRecordToString.h"
+#include "../benchmark/infrastructure/Benchmark.h"
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
+#include "../benchmark/infrastructure/BenchmarkRecordToString.h"
 
 /*
  * @brief Add a string of the form

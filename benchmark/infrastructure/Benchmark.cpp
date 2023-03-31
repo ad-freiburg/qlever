@@ -10,9 +10,9 @@
 #include <iterator>
 #include <utility>
 
-#include "../benchmark/Benchmark.h"
-#include "BenchmarkMeasurementContainer.h"
-#include "BenchmarkMetadata.h"
+#include "../benchmark/infrastructure/Benchmark.h"
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
+#include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "util/Timer.h"
 #include "util/HashMap.h"
 #include "util/Exception.h"
