@@ -10,6 +10,7 @@
 
 #include "util/json.h"
 #include "../benchmark/Benchmark.h"
+#include "../benchmark/BenchmarkMeasurementContainer.h"
 #include "../benchmark/BenchmarkRecordToString.h"
 
 /*
@@ -20,31 +21,31 @@
  *  #################
  *
  *  "
- *  to the stringStream.
+ *  to the stream.
  */
-void addCategoryTitelToStringstream(std::stringstream* stringStream,
+void addCategoryTitelToOStringstream(std::ostringstream* stream,
     const std::string categoryTitel);
 
-// Default conversion from BenchmarkRecords::RecordEntry to string.
-std::string recordEntryToString(const BenchmarkRecords::RecordEntry& recordEntry);
-
-// Default way of adding a vector of RecordEntrys to a stringstream with
+// Default way of adding a vector of RecordEntrys to a `ostringstream` with
 // optional prefix.
-void addVectorOfRecordEntryToStringstream(std::stringstream* stringStream,
-    const std::vector<BenchmarkRecords::RecordEntry>& entries,
+void addVectorOfRecordEntryToOStringstream(std::ostringstream* stream,
+    const std::vector<BenchmarkMeasurementContainer::RecordEntry>& entries,
     const std::string& prefix = "");
 
 // Visualization for single measurments.
-void addSingleMeasurementsToStringstream(std::stringstream* stringStream,
-    const std::vector<BenchmarkRecords::RecordEntry>& recordEntries);
+void addSingleMeasurementsToOStringstream(std::ostringstream* stream,
+    const std::vector<BenchmarkMeasurementContainer::RecordEntry>&
+    recordEntries);
 
 // Visualization for groups.
-void addGroupsToStringstream(std::stringstream* stringStream,
-    const std::vector<BenchmarkRecords::RecordGroup>& recordGroups);
+void addGroupsToOStringstream(std::ostringstream* stream,
+    const std::vector<BenchmarkMeasurementContainer::RecordGroup>&
+    recordGroups);
 
 // Visualization for tables.
-void addTablesToStringstream(std::stringstream* stringStream,
-    const std::vector<BenchmarkRecords::RecordTable>& recordTables);
+void addTablesToOStringstream(std::ostringstream* stream,
+    const std::vector<BenchmarkMeasurementContainer::RecordTable>&
+    recordTables);
 
 /*
  * @brief Returns a formated string containing all benchmark information.

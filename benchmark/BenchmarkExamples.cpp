@@ -7,6 +7,7 @@
 
 #include "../benchmark/Benchmark.h"
 #include "BenchmarkConfiguration.h"
+#include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
 #include "util/Random.h"
 
@@ -34,7 +35,9 @@ class BM_SingeMeasurements: public BenchmarkClassInterface{
 
     // Measuring functions.
     records.addSingleMeasurement("Exponentiate once", [&](){exponentiate(number);});
-    records.addSingleMeasurement("Recursivly exponentiate multiple times", [&](){
+    auto& multipleTimes =
+      records.addSingleMeasurement("Recursivly exponentiate multiple times",
+      [&](){
           size_t to_exponentiate = number;
           for (size_t i = 0; i < 10'000'000'000; i++) {
             to_exponentiate = exponentiate(to_exponentiate);
@@ -45,9 +48,8 @@ class BM_SingeMeasurements: public BenchmarkClassInterface{
         });
 
     // Adding some basic metadata.
-    records.getMetadataOfSingleMeasurment(
-        "Recursivly exponentiate multiple times").addKeyValuePair(
-          "Amount of exponentiations", 10'000'000'000);
+    multipleTimes.metadata_.addKeyValuePair("Amount of exponentiations",
+      10'000'000'000);
 
     return records;
   } 
@@ -87,38 +89,39 @@ class BM_Groups: public BenchmarkClassInterface{
     };
 
     // Measuring functions.
-    records.addGroup("loopAdd");
-    records.addGroup("loopMultiply");
+    auto& loopAddGroup{records.addGroup("loopAdd")};
+    auto& loopMultiplyGroup{records.addGroup("loopMultiply")};
 
-    records.addToExistingGroup("loopAdd", "1+1", [&](){loopAdd(1,1);});
-    records.addToExistingGroup("loopAdd", "42+69", [&](){loopAdd(42,69);});
-    records.addToExistingGroup("loopAdd", "10775+24502",
-        [&](){loopAdd(10775, 24502);});
+    auto& addMember1{loopAddGroup.addGroupMember(
+      std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
+      "1+1", [&](){loopAdd(1,1);}))};
+    auto& addMember2{loopAddGroup.addGroupMember(
+      std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
+      "42+69", [&](){loopAdd(42,69);}))};
+    auto& addMember3{loopAddGroup.addGroupMember(
+      std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
+      "10775+24502", [&](){loopAdd(10775, 24502);}))};
 
-    records.addToExistingGroup("loopMultiply", "1*1", [&](){loopMultiply(1,1);});
-    records.addToExistingGroup("loopMultiply", "42*69",
-        [&](){loopMultiply(42,69);});
-    records.addToExistingGroup("loopMultiply", "10775*24502",
-        [&](){loopMultiply(10775, 24502);});
+    auto& multiplicationMember1{loopMultiplyGroup.addGroupMember(
+      std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
+      "1*1", [&](){loopMultiply(1,1);}))};
+    auto& multiplicationMember2{loopMultiplyGroup.addGroupMember(
+      std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
+      "42*69", [&](){loopMultiply(42,69);}))};
+    auto& multiplicationMember3{loopMultiplyGroup.addGroupMember(
+      std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
+      "10775*24502", [&](){loopMultiply(10775, 24502);}))};
 
     // Adding some metadata.
-    records.getMetadataOfGroup("loopAdd").addKeyValuePair(
-        "Operator", '+');
-    records.getMetadataOfGroupMember("loopAdd",
-        "1+1").addKeyValuePair("Result", 2);
-    records.getMetadataOfGroupMember("loopAdd",
-        "42+69").addKeyValuePair("Result", 42+69);
-    records.getMetadataOfGroupMember("loopAdd",
-        "10775+24502").addKeyValuePair("Result", 10775+24502);
+    loopAddGroup.metadata_.addKeyValuePair("Operator", '+');
+    addMember1.metadata_.addKeyValuePair("Result", 2);
+    addMember2.metadata_.addKeyValuePair("Result", 42+69);
+    addMember3.metadata_.addKeyValuePair("Result", 10775+24502);
 
-    records.getMetadataOfGroup("loopMultiply").addKeyValuePair(
-        "Operator", '*');
-    records.getMetadataOfGroupMember("loopMultiply",
-        "1*1").addKeyValuePair("Result", 1);
-    records.getMetadataOfGroupMember("loopMultiply",
-        "42*69").addKeyValuePair("Result", 42*69);
-    records.getMetadataOfGroupMember("loopMultiply",
-        "10775*24502").addKeyValuePair("Result", 10775*24502);
+    loopMultiplyGroup.metadata_.addKeyValuePair("Operator", '*');
+    multiplicationMember1.metadata_.addKeyValuePair("Result", 1);
+    multiplicationMember2.metadata_.addKeyValuePair("Result", 42*69);
+    multiplicationMember3.metadata_.addKeyValuePair("Result", 10775*24502);
     
     return records;
   } 
@@ -150,51 +153,48 @@ class BM_Tables: public BenchmarkClassInterface{
     };
 
     // Measuring functions.
-    records.addTable("Exponents with the given basis",
-        {"2", "3", "Time difference"}, {"0", "1", "2", "3", "4"});
-    records.addTable("Adding exponents", {"2^10", "2^11", "Values written out"},
-        {"2^10", "2^11"});
+    auto& tableExponentsWithBasis{records.addTable(
+      "Exponents with the given basis", {"2", "3", "Time difference"},
+      {"0", "1", "2", "3", "4"})};
+    auto& tableAddingExponents{records.addTable("Adding exponents",
+      {"2^10", "2^11", "Values written out"}, {"2^10", "2^11"})};
 
     // Measuere the calculating of the exponents.
     for (int i = 0; i < 5; i++) {
-      records.addToExistingTable("Exponents with the given basis", 0, i,
-          [&](){exponentiateNTimes(2,i);});
+      tableExponentsWithBasis.addFunctionMeasurement(0, i,
+        [&](){exponentiateNTimes(2,i);});
     }
     for (int i = 0; i < 5; i++) {
-      records.addToExistingTable("Exponents with the given basis", 1, i,
-          [&](){exponentiateNTimes(3,i);});
+      tableExponentsWithBasis.addFunctionMeasurement(1, i,
+        [&](){exponentiateNTimes(3,i);});
     }
     // Calculating the time differnce between them.
     for (size_t column = 0; column < 5; column++){
-      float entryWithBasis2 =
-        records.getEntryOfExistingTable<float>("Exponents with the given basis",
-            0, column);
-      float entryWithBasis3 =
-        records.getEntryOfExistingTable<float>("Exponents with the given basis",
-            1, column);
-      records.setEntryOfExistingTable("Exponents with the given basis",
-            2, column, std::abs(entryWithBasis3 - entryWithBasis2));
+      float entryWithBasis2 = tableExponentsWithBasis.getEntry<float>(0,
+        column);
+      float entryWithBasis3 = tableExponentsWithBasis.getEntry<float>(1,
+        column);
+      tableExponentsWithBasis.setEntry(2, column,
+        std::abs(entryWithBasis3 - entryWithBasis2));
     }
 
     // Measuers for calculating and adding the exponents.
     for (int row = 0; row < 2; row++) {
       for (int column = 0; column < 2; column++) {
-        records.addToExistingTable("Adding exponents", row, column,
-            [&](){size_t temp __attribute__((unused));
+        tableAddingExponents.addFunctionMeasurement(row, column,
+          [&](){size_t temp __attribute__((unused));
             temp =
             exponentiateNTimes(2, row+10)+exponentiateNTimes(2, column+10);});
       }
     }
 
     // Manually setting strings.
-    records.setEntryOfExistingTable("Adding exponents", 2, 0,
-        std::string{"1024+1024 and 1024+2048"});
-    records.setEntryOfExistingTable("Adding exponents", 2, 1,
-        std::string{"1024+2048 and 2048+2048"});
+    tableAddingExponents.setEntry(2, 0, "1024+1024 and 1024+2048");
+    tableAddingExponents.setEntry(2, 1, "1024+2048 and 2048+2048");
 
     // Adding some metadata.
-    records.getMetadataOfTable("Adding exponents").addKeyValuePair(
-        "Manually set fields", "Row 2");
+    tableAddingExponents.metadata_.addKeyValuePair("Manually set fields",
+      "Row 2");
     
     return records;
   } 

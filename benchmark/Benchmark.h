@@ -9,6 +9,7 @@
 #include <string>
 #include <variant>
 #include <memory>
+#include <utility>
 
 #include "BenchmarkConfiguration.h"
 #include "util/json.h"
@@ -17,100 +18,51 @@
 #include "util/Exception.h"
 #include "../benchmark/util/HashMapWithInsertionOrder.h"
 #include "../benchmark/BenchmarkMetadata.h"
+#include "../benchmark/BenchmarkMeasurementContainer.h"
 
 /*
  * Used for measuring the time needed for the execution of a function and
  * organizing those measured times.
  */
 class BenchmarkRecords {
+    template<typename T>
+    using PointerVector = std::vector<std::unique_ptr<T>>;
 
-  public:
+    // A vector of all the created single measurements.
+    PointerVector<BenchmarkMeasurementContainer::RecordEntry>
+    singleMeasurements_;
 
-    // Describes a measured function.
-    struct RecordEntry {
-      std::string descriptor_; // Needed, because without it, nobody could tell,
-                              // which time belongs to which benchmark.
-      float measuredTime_; // The measured time in seconds.
-      BenchmarkMetadata metadata_;
-
-      // JSON (d)serialization for all the created structures in BenchmarkRecords.
-      NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkRecords::RecordEntry, descriptor_, measuredTime_, metadata_)
-    };
-
-    // Describes a group of measured functions.
-    struct RecordGroup {
-      std::string descriptor_; // Needed for identifying groups.
-      // When accessing members of the group, we need an identifier.
-      HashMapWithInsertionOrder<std::string, RecordEntry> entries_;
-      BenchmarkMetadata metadata_;
-
-      // JSON (d)serialization for all the created structures in BenchmarkRecords.
-      NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkRecords::RecordGroup, descriptor_, entries_, metadata_)
-    };
-    
-    // Describes a table of measured functions.
-    struct RecordTable {
-      // For identification.
-      std::string descriptor_;
-      // The names of the columns and rows.
-      std::vector<std::string> rowNames_;
-      std::vector<std::string> columnNames_;
-      // The entries in the table. Access is [row, column]. Can be the time in
-      // seconds, a string, or nothing.
-      using EntryType = std::variant<std::monostate, float, std::string>;
-      std::vector<std::vector<EntryType>> entries_;
-      BenchmarkMetadata metadata_;
-
-      RecordTable(const std::string& pDescriptor, 
-          const std::vector<std::string>& pRowNames,
-          const std::vector<std::string>& pColumnNames):
-          descriptor_{pDescriptor}, rowNames_{pRowNames},
-          columnNames_{pColumnNames},
-          entries_(pRowNames.size(),
-              std::vector<EntryType>(pColumnNames.size())) {}
-
-      // JSON (d)serialization for all the created structures in BenchmarkRecords.
-      NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkRecords::RecordTable, descriptor_, rowNames_, columnNames_, entries_, metadata_)
-    };
-
-  private:
-
-    // A hash map of all the created single measurements. For faster access.
-    // The key for a record entry is it's descriptor.
-    HashMapWithInsertionOrder<std::string, RecordEntry> singleMeasurements_;
-
-    // A hash map of all the created RecordGroups. For faster access.
-    // The key for a RecordGroup is it's descriptor.
-    HashMapWithInsertionOrder<std::string, RecordGroup> recordGroups_;
+    // A vector of all the created RecordGroups.
+    PointerVector<BenchmarkMeasurementContainer::RecordGroup>
+    recordGroups_;
   
     // A hash map of all the created RecordTables. For faster access.
     // The key for a RecordTable is it's descriptor.
-    HashMapWithInsertionOrder<std::string, RecordTable> recordTables_;
+    PointerVector<BenchmarkMeasurementContainer::RecordTable>
+    recordTables_;
 
     /*
-     * @brief Return execution time of function in seconds.
-     *
-     * @tparam Function Best left to type inference.
-     *
-     * @param functionToMeasure Must be a function, or callable.
-     */
-    template<typename Function>
-      requires std::invocable<Function>
-    float measureTimeOfFunction(const Function& functionToMeasure) const{
-      ad_utility::timer::Timer
-      benchmarkTimer(ad_utility::timer::Timer::Started);
-      functionToMeasure();
-      benchmarkTimer.stop();
+    @brief Adds an entry to the given vector, by creating an instance of
+    `std::unique_ptr` for the given type and appending it. Strictly an
+    internal helper function.
 
-      return ad_utility::timer::Timer::toSeconds(benchmarkTimer.value());
+    @tparam EntryType The type, that the `std::unique_ptr` in the vector points
+    to.
+    @tparam ConstructorArgs Types for the constructor arguments for creating
+    a new instance of `EntryType`.
+
+    @param targetVector A vector of `std::unique_ptr`, that own values.
+    @param constructorArgs Arguments to pass to the constructor of the object,
+    that the new `std::unique_ptr` will own.
+    */
+    template<typename EntryType, typename... ConstructorArgs>
+    static EntryType& addEntryToContainerVector(
+      PointerVector<EntryType>& targetVector,
+      ConstructorArgs&&... constructorArgs){
+      targetVector.push_back(std::make_unique<EntryType>(
+        std::forward<ConstructorArgs>(constructorArgs)...));
+      return (*targetVector.back());
     }
-
-    /*
-     * @brief Returns a reference to an entry in a recordTable of the hash map
-     *  recordTables_. Strictly a helper function.
-     */
-    auto getHashMapTableEntry(const std::string& tableDescriptor,
-    const size_t row, const size_t column) -> RecordTable::EntryType&;
 
   public:
 
@@ -129,59 +81,29 @@ class BenchmarkRecords {
      */
     template<typename Function>
       requires std::invocable<Function>
-    void addSingleMeasurement(const std::string& descriptor,
-        const Function& functionToMeasure) {
-      singleMeasurements_.addEntry(std::string(descriptor),
-          RecordEntry{descriptor, measureTimeOfFunction(functionToMeasure), {}});
+    BenchmarkMeasurementContainer::RecordEntry& addSingleMeasurement(
+      const std::string& descriptor, const Function& functionToMeasure){
+      return addEntryToContainerVector(singleMeasurements_, descriptor,
+      functionToMeasure);
     }
 
-
-    // Returns a const view of all single recorded times.
-    const std::vector<RecordEntry> getSingleMeasurements() const;
+    /*
+     * @brief Returns a vector of all the singe measurements.
+     */
+    const std::vector<BenchmarkMeasurementContainer::RecordEntry>
+    getSingleMeasurements() const;
 
     /*
-     * @brief Creates an empty group, which can
-     *  be accesed/identified using the descriptor.
+     * @brief Creates an empty group with the given descriptor.
      */
-    void addGroup(const std::string& descriptor);
-
-    /*
-     * @brief Measures the time needed for the execution of the given function and
-     * saves it, together with a description, as an item in a group.
-     *
-     * @tparam Function Best left to type inference.
-     *
-     * @param groupDescriptor The identification of the group.
-     * @param descriptor A description, of what kind of benchmark case is
-     *  getting measured. Needed, because otherwise nobody would be able to
-     *  tell, which time corresponds to which benchmark.
-     * @param functionToMeasure The function, that represents the benchmark.
-     *  Most of the time a lambda, that calls the actual function to benchmark
-     *  with the needed parameters.
-     */
-    template<typename Function>
-      requires std::invocable<Function>
-    void addToExistingGroup(const std::string& groupDescriptor,
-        const std::string& descriptor,
-        const Function& functionToMeasure) {
-      // Adding more details to a possible exception.
-      try {
-        // Get the entry of the hash map and add to it.
-        auto& groupEntry = recordGroups_.getValue(groupDescriptor);
-        groupEntry.entries_.addEntry(std::string(descriptor),
-            RecordEntry{descriptor, measureTimeOfFunction(functionToMeasure), {}});
-      } catch(KeyIsntRegisteredException const&) {
-        // The exception INSIDE the object, do not know, what they object is
-        // called, but that information is helpful for the exception. So we
-        // do it here.
-        throw KeyIsntRegisteredException(groupDescriptor, "recordGroups_");
-      }
-    }
+    BenchmarkMeasurementContainer::RecordGroup& addGroup(
+      const std::string& descriptor);
 
     /*
      * @brief Returns a vector of all the groups.
      */
-    const std::vector<BenchmarkRecords::RecordGroup> getGroups() const;
+    const std::vector<BenchmarkMeasurementContainer::RecordGroup> getGroups()
+    const;
 
     /*
      * @brief Creates an empty table, which can be accesed/identified using the
@@ -190,96 +112,22 @@ class BenchmarkRecords {
      * @param descriptor The name/identifier of the table.
      * @param rowNames,columnNames The names for the rows/columns.
      */
-    void addTable(const std::string& descriptor,
+    BenchmarkMeasurementContainer::RecordTable& addTable(
+        const std::string& descriptor,
         const std::vector<std::string>& rowNames,
         const std::vector<std::string>& columnNames);
-
-    /*
-     * @brief Measures the time needed for the execution of the given function and
-     * saves it as an entry in the table.
-     *
-     * @tparam Function Best left to type inference.
-     *
-     * @param tableDescriptor The identification of the table.
-     * @param row, column Where in the tables to write the measured time.
-     *  Starts with (0,0).
-     * @param functionToMeasure The function, that represents the benchmark.
-     *  Most of the time a lambda, that calls the actual function to benchmark
-     *  with the needed parameters.
-     */
-    template<typename Function>
-      requires std::invocable<Function>
-    void addToExistingTable(const std::string& tableDescriptor,
-        const size_t row, const size_t column,
-        const Function& functionToMeasure) {
-      // Add the measured time to the table.
-      RecordTable::EntryType& entry =
-        getHashMapTableEntry(tableDescriptor, row, column);
-      entry = measureTimeOfFunction(functionToMeasure);
-    }
-
-    /*
-     * @brief Manually set the entry of an existing table.
-     *
-     * @tparam T Must be either float, or string.
-     *
-     * @param tableDescriptor The identification of the table.
-     * @param row, column Where in the tables to write the measured time.
-     *  Starts with (0,0).
-     * @param newEntryContent What to set the entry to.
-     */
-    template<typename T>
-      requires std::is_same<T, float>::value ||
-      std::is_same<T, std::string>::value
-    void setEntryOfExistingTable(const std::string& tableDescriptor,
-        const size_t row, const size_t column,
-        const T& newEntryContent) {
-      RecordTable::EntryType& entry =
-        getHashMapTableEntry(tableDescriptor, row, column);
-      entry = newEntryContent;
-    }
-
-    /*
-     * @brief Returns the content of a table entry, if the entry holds a value.
-     *
-     * @tparam T What type the entry has. Must be either float, or string. If
-     *  you give the wrong one, or the entry was never set/added, then this
-     *  function will cause an exception.
-     *
-     * @param tableDescriptor The identification of the table.
-     * @param row, column Where in the tables to write the measured time.
-     *  Starts with (0,0).
-     */
-    template<typename T>
-      requires std::is_same<T, float>::value ||
-      std::is_same<T, std::string>::value
-    const T getEntryOfExistingTable(const std::string& tableDescriptor,
-        const size_t row, const size_t column){
-      RecordTable::EntryType& entry =
-        getHashMapTableEntry(tableDescriptor, row, column);
-
-      // There is a chance, that the entry of the table does NOT have type T,
-      // in which case this will cause an error. As this is a mistake on the
-      // side of the user, we don't really care.
-      return std::get<T>(entry);
-    }
-
+    
     /*
      * @brief Returns a vector of all the tables.
      */
-    const std::vector<RecordTable> getTables() const;
+    const std::vector<BenchmarkMeasurementContainer::RecordTable>
+    getTables() const;
 
-    // For access to the metadata of measurements. So that people can set them,
-    // add to them, whatever.
-    BenchmarkMetadata& getMetadataOfSingleMeasurment(
-        const std::string& descriptor);
-    BenchmarkMetadata& getMetadataOfGroup(
-        const std::string& descriptor);
-    BenchmarkMetadata& getMetadataOfGroupMember(
-        const std::string& groupDescriptor,
-        const std::string& groupMemberDescriptor);
-    BenchmarkMetadata& getMetadataOfTable(
-        const std::string& descriptor);
+    // Default constructor.
+    BenchmarkRecords() = default;
+
+    // Custom copy constructor because of the vectors of unique pointers.
+    BenchmarkRecords(const BenchmarkRecords& records);
 };
 
 /*

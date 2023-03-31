@@ -19,6 +19,8 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #include <optional>
 #include <utility>
 #include <variant>
+#include <memory>
+#include <type_traits>
 
 #include "util/DisableWarningsClang13.h"
 #include "util/Exception.h"
@@ -78,6 +80,8 @@ struct adl_serializer<std::monostate> {
     tries to interpret an actual value as a `std::monostate`.
     */
     if (!j.is_null()){
+      // TODO Use `absl::StrCat()` for creating the string, once the abseil
+      // string library can be linked generally.
       throw nlohmann::json::type_error::create(302,
       std::string{"Custom type converter (see `"} +
       ad_utility::source_location::current().file_name() + "`) from json" +
@@ -136,6 +140,62 @@ struct adl_serializer<std::variant<Types...>> {
           j["value"]
               .get<std::variant_alternative_t<Index, std::variant<Types...>>>();
     });
+  }
+};
+}  // namespace nlohmann
+
+/*
+Added support for serializing `std::unique_ptr` using `nlohmann::json`.
+The serialized format for `std::variant<Type0, Type1, ...>` is a json string
+with the json object literal keys `index` and `value`.
+*/
+namespace nlohmann {
+template <typename T>
+struct adl_serializer<std::unique_ptr<T>> {
+  static void to_json(nlohmann::json& j, const std::unique_ptr<T>& ptr) {
+    // Does the `unique_ptr` hold anything? If yes, save the dereferenced
+    // object, if no, save a `nullptr`.
+    if (ptr){
+      j = *ptr;
+    }else{
+      j = nullptr;
+    }
+  }
+
+  static void from_json(const nlohmann::json& j, std::unique_ptr<T>& ptr) {
+    if (j.is_null()){
+      // If `json` is null, we just release the content of ptr, because it
+      // should be an empty `unique_ptr`.
+      ptr.release();
+    }else if (ptr){
+      // If `ptr` already owns an object, we should be able to overwrite it.
+      (*ptr) = j.get<T>();
+    } else if constexpr (std::is_copy_constructible<T>::value){
+      // It's possible to create a new unique pointer by using `T`s copy
+      // constructor, because one needs only to pass the deserializied `j` to
+      // set the new `T` correctly, without having to know anything about how
+      // the normal constructor of `T` looks like.
+      ptr = std::make_unique<T>(j.get<T>());
+    } else {
+      /*
+      We do not know, how the constructor of `T` looks like, so we
+      can't create a new object at runtime based on the deserialized object.
+      And all other ways of deserializing `T` can only create an object, which
+      lifetime ends with the `from_json` function, so we can't use their
+      addresses.
+      In other words: A general way of deserialization in this case is not
+      possible.
+      */
+      // TODO Use `absl::StrCat()` for creating the string, once the abseil
+      // string library can be linked generally.
+      throw nlohmann::json::type_error::create(302,
+      std::string{"Custom type converter (see `"} +
+      ad_utility::source_location::current().file_name() + "`) from json" +
+      " to general `std::unique_ptr`: Can only convert from `null` to pointer,"
+      + ", when the contained type has a copy constructor, or when the pointer"
+      + " already holds a value. Otherwise, a custom converter must be"
+      + " written.");
+    }
   }
 };
 }  // namespace nlohmann
