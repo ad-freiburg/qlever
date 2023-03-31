@@ -43,7 +43,7 @@ class IndexScan : public Operation {
       std::nullopt;
 
  public:
-  virtual string getDescriptor() const override;
+  string getDescriptor() const override;
 
   IndexScan(QueryExecutionContext* qec, ScanType type,
             const SparqlTriple& triple);
@@ -54,11 +54,11 @@ class IndexScan : public Operation {
   const TripleComponent& getSubject() const { return _subject; }
   const TripleComponent& getObject() const { return _object; }
 
-  virtual size_t getResultWidth() const override;
+  size_t getResultWidth() const override;
 
-  virtual vector<size_t> resultSortedOn() const override;
+  vector<size_t> resultSortedOn() const override;
 
-  virtual void setTextLimit(size_t) override {
+  void setTextLimit(size_t) override {
     // Do nothing.
   }
 
@@ -72,12 +72,12 @@ class IndexScan : public Operation {
   size_t getSizeEstimateBeforeLimit() override { return getExactSize(); }
 
  public:
-  virtual size_t getCostEstimate() override;
+  size_t getCostEstimate() override;
 
   void determineMultiplicities();
 
-  virtual float getMultiplicity(size_t col) override {
-    if (_multiplicity.size() == 0) {
+  float getMultiplicity(size_t col) override {
+    if (_multiplicity.empty()) {
       determineMultiplicities();
     }
     assert(col < _multiplicity.size());
@@ -86,9 +86,7 @@ class IndexScan : public Operation {
 
   void precomputeSizeEstimate() { _sizeEstimate = computeSizeEstimate(); }
 
-  virtual bool knownEmptyResult() override {
-    return getSizeEstimateBeforeLimit() == 0;
-  }
+  bool knownEmptyResult() override { return getSizeEstimateBeforeLimit() == 0; }
 
   // Currently only the full scans support a limit clause.
   [[nodiscard]] bool supportsLimit() const override {
@@ -108,7 +106,7 @@ class IndexScan : public Operation {
   ScanType getType() const { return _type; }
 
  private:
-  virtual ResultTable computeResult() override;
+  ResultTable computeResult() override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
@@ -130,14 +128,13 @@ class IndexScan : public Operation {
 
   void computeOSPfreeS(IdTable* result) const;
 
-  void computeFullScan(IdTable* result,
-                       const Index::Permutation permutation) const;
+  void computeFullScan(IdTable* result, Index::Permutation permutation) const;
 
   size_t computeSizeEstimate();
 
-  virtual string asStringImpl(size_t indent = 0) const override;
+  string asStringImpl(size_t indent) const override;
 
-  virtual VariableToColumnMap computeVariableToColumnMap() const override;
+  VariableToColumnMap computeVariableToColumnMap() const override;
 
   std::optional<std::shared_ptr<const ResultTable>>
   getPrecomputedResultFromQueryPlanning() override {

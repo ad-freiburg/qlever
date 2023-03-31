@@ -284,14 +284,14 @@ class Operation {
   std::vector<std::string> _warnings;
 
   // The limit from a SPARQL `LIMIT` clause.
+
   // Note: This limit will only be set in the following cases:
   // 1. This operation is the last operation of a subquery
   // 2. This operation is the last operation of a query AND it supports an
-  // efficient calculation of the limit
-  //    ( see also the `supportsLimit()` function).
-  // We have chosen this design (in contrast to a dedicated
-  // `LimitOffsetOperation`) to favor such efficient implementations of a limit
-  // in the future.
+  // efficient calculation of the limit ( see also the `supportsLimit()`
+  // function). We have chosen this design (in contrast to a dedicated subclass
+  // of `Operation`) to favor such efficient implementations of a limit in the
+  // future.
   LimitOffsetClause _limit;
 
   // A mutex that can be "copied". The semantics are, that copying will create
