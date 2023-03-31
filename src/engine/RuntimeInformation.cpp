@@ -214,6 +214,7 @@ void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
   auto& actualOperation = children_.at(0);
   numRows_ = l.actualSize(actualOperation.numRows_);
   details_.clear();
+  cacheStatus_ = ad_utility::CacheStatus::computed;
   totalTime_ += static_cast<double>(timeForLimit);
   actualOperation.addDetail("not-written-to-cache-because-child-of-limit",
                             fullResultIsNotCached);
