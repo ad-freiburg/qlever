@@ -115,6 +115,16 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
             getDescriptor());
       }
       ResultTable result = computeResult();
+
+      // Compute the datatypes that occur in each column of the result.
+      // Also assert, that if a column contains UNDEF values, then the
+      // `mightContainUndef` flag for that columns is set.
+      // TODO<joka921> It is cheaper to move this calculation into the
+      // individual results, but that requires changes in each individual
+      // operation, therefore we currently only perform this expensive
+      // change in the DEBUG builds.
+      AD_EXPENSIVE_CHECK(
+          result.checkDefinedness(getExternallyVisibleVariableColumns()));
       if (_timeoutTimer->wlock()->hasTimedOut()) {
         throw ad_utility::TimeoutException(
             "Timeout in " + getDescriptor() +
@@ -369,14 +379,13 @@ std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
     return std::nullopt;
   }
 
-  // TODO<joka921> Can be simplified using views once they are properly
-  // supported inside clang.
-  auto it =
-      std::ranges::find(varToColMap, sortedIndices.front(), ad_utility::second);
+  auto it = std::ranges::find(
+      varToColMap, sortedIndices.front(),
+      [](const auto& keyValue) { return keyValue.second.columnIndex_; });
   if (it == varToColMap.end()) {
     return std::nullopt;
   }
-  return Variable{it->first};
+  return it->first;
 }
 
 // ___________________________________________________________________________

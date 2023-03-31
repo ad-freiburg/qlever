@@ -242,7 +242,7 @@ struct EvaluationContext {
       throw std::runtime_error(absl::StrCat(
           "Variable ", var.name(), " was not found in input to expression."));
     }
-    return map.at(var);
+    return map.at(var).columnIndex_;
   }
 
   // _____________________________________________________________________________
@@ -252,7 +252,7 @@ struct EvaluationContext {
     if (!map.contains(var)) {
       return std::nullopt;
     }
-    auto idx = map.at(var);
+    ColumnIndex idx = map.at(var).columnIndex_;
     AD_CONTRACT_CHECK(idx < _previousResultsFromSameGroup.size());
 
     return copyExpressionResultIfNotVector(

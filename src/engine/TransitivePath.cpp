@@ -6,9 +6,9 @@
 
 #include <limits>
 
-#include "../util/Exception.h"
-#include "CallFixedSize.h"
-#include "IndexScan.h"
+#include "engine/CallFixedSize.h"
+#include "engine/IndexScan.h"
+#include "util/Exception.h"
 
 // _____________________________________________________________________________
 TransitivePath::TransitivePath(
@@ -22,7 +22,7 @@ TransitivePath::TransitivePath(
       _rightSideTree(nullptr),
       _rightSideCol(-1),
       _resultWidth(2),
-      _subtree(child),
+      _subtree(std::move(child)),
       _leftIsVar(leftIsVar),
       _rightIsVar(rightIsVar),
       _leftSubCol(leftSubCol),
@@ -34,8 +34,8 @@ TransitivePath::TransitivePath(
       _rightColName(rightColName.name()),
       _minDist(minDist),
       _maxDist(maxDist) {
-  _variableColumns[leftColName] = 0;
-  _variableColumns[rightColName] = 1;
+  _variableColumns[leftColName] = makeAlwaysDefinedColumn(0);
+  _variableColumns[rightColName] = makeAlwaysDefinedColumn(1);
 }
 
 // _____________________________________________________________________________
@@ -720,12 +720,6 @@ std::shared_ptr<TransitivePath> TransitivePath::bindRightSide(
 }
 
 // _____________________________________________________________________________
-bool TransitivePath::isBound() const {
-  return _leftSideTree != nullptr || _rightSideTree != nullptr || !_leftIsVar ||
-         !_rightIsVar;
-}
-
-// _____________________________________________________________________________
 std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
     std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
     bool isLeft) const {
@@ -750,16 +744,29 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
     p->_rightSideTree = leftOrRightOp;
     p->_rightSideCol = inputCol;
   }
-  const auto& var = leftOrRightOp->getVariableColumns();
-  for (const auto& [variable, columnIndex] : var) {
+
+  // Note: The `variable` in the following structured binding is `const`, even
+  // if we bind by value. We deliberately make one unnecessary copy of the
+  // `variable` to keep the code simpler.
+  for (auto [variable, columnIndexWithType] :
+       leftOrRightOp->getVariableColumns()) {
+    ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
     if (columnIndex != inputCol) {
       if (columnIndex > inputCol) {
-        p->_variableColumns[variable] = columnIndex + 1;
+        columnIndexWithType.columnIndex_++;
+        p->_variableColumns[variable] = columnIndexWithType;
       } else {
-        p->_variableColumns[variable] = columnIndex + 2;
+        columnIndexWithType.columnIndex_ += 2;
+        p->_variableColumns[variable] = columnIndexWithType;
       }
       p->_resultWidth++;
     }
   }
   return p;
+}
+
+// _____________________________________________________________________________
+bool TransitivePath::isBound() const {
+  return _leftSideTree != nullptr || _rightSideTree != nullptr || !_leftIsVar ||
+         !_rightIsVar;
 }

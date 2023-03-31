@@ -55,7 +55,7 @@ string OrderBy::getDescriptor() const {
   const auto& varCols = subtree_->getVariableColumns();
   for (auto [sortIndex, isDescending] : sortIndices_) {
     for (const auto& [var, varIndex] : varCols) {
-      if (sortIndex == varIndex) {
+      if (sortIndex == varIndex.columnIndex_) {
         using namespace std::string_literals;
         std::string s = isDescending ? " DESC("s : " ASC("s;
         orderByVars += s + var.name() + ")";

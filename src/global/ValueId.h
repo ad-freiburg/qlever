@@ -23,7 +23,12 @@ enum struct Datatype {
   VocabIndex,
   LocalVocabIndex,
   TextRecordIndex,
+  MaxValue = TextRecordIndex
   // TODO<joka921> At least "date" is missing and not yet folded.
+  // Note: Unfortunately we cannot easily get the size of an enum.
+  // If members are added to this enum, then the `MaxValue`
+  // alias must always be equal to the last member,
+  // else other code breaks with out-of-bounds accesses.
 };
 
 /// Convert the `Datatype` enum to the corresponding string

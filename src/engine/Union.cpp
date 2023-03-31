@@ -19,7 +19,8 @@ Union::Union(QueryExecutionContext* qec,
   _subtrees[1] = t2;
 
   // compute the column origins
-  VariableToColumnMap variableColumns = getInternallyVisibleVariableColumns();
+  const VariableToColumnMap& variableColumns =
+      getInternallyVisibleVariableColumns();
   _columnOrigins.resize(variableColumns.size(), {NO_COLUMN, NO_COLUMN});
   const auto& t1VarCols = t1->getVariableColumns();
   const auto& t2VarCols = t2->getVariableColumns();
@@ -27,19 +28,22 @@ Union::Union(QueryExecutionContext* qec,
     // look for the corresponding column in t1
     auto it1 = t1VarCols.find(it.first);
     if (it1 != t1VarCols.end()) {
-      _columnOrigins[it.second][0] = it1->second;
+      _columnOrigins[it.second.columnIndex_][0] = it1->second.columnIndex_;
     } else {
-      _columnOrigins[it.second][0] = NO_COLUMN;
+      _columnOrigins[it.second.columnIndex_][0] = NO_COLUMN;
     }
 
     // look for the corresponding column in t2
     const auto it2 = t2VarCols.find(it.first);
     if (it2 != t2VarCols.end()) {
-      _columnOrigins[it.second][1] = it2->second;
+      _columnOrigins[it.second.columnIndex_][1] = it2->second.columnIndex_;
     } else {
-      _columnOrigins[it.second][1] = NO_COLUMN;
+      _columnOrigins[it.second.columnIndex_][1] = NO_COLUMN;
     }
   }
+  AD_CORRECTNESS_CHECK(std::ranges::all_of(_columnOrigins, [](const auto& el) {
+    return el[0] != NO_COLUMN || el[1] != NO_COLUMN;
+  }));
 }
 
 string Union::asStringImpl(size_t indent) const {
@@ -66,16 +70,37 @@ vector<size_t> Union::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
 VariableToColumnMap Union::computeVariableToColumnMap() const {
-  using VarAndIndex = std::pair<Variable, size_t>;
+  using VarAndTypeInfo = std::pair<Variable, ColumnIndexAndTypeInfo>;
 
   VariableToColumnMap variableColumns;
-  size_t column = 0;
 
+  // A variable is only guaranteed to always be bound if it exists in all the
+  // subtrees and if it is guaranteed to be bound in all the subrees.
+  auto mightContainUndef = [this](const Variable& var) {
+    return std::ranges::any_of(
+        _subtrees, [&](const shared_ptr<QueryExecutionTree>& subtree) {
+          const auto& varCols = subtree->getVariableColumns();
+          return !varCols.contains(var) ||
+                 (varCols.at(var).mightContainUndef_ ==
+                  ColumnIndexAndTypeInfo::PossiblyUndefined);
+        });
+  };
+
+  // Note: it is tempting to declare `nextColumnIndex` inside the lambda
+  // `addVariableColumnIfNotExists`, but that doesn't work because
+  // `std::ranges::for_each` takes the lambda by value and creates a new
+  // variable at every invocation.
+  size_t nextColumnIndex = 0;
   auto addVariableColumnIfNotExists =
-      [&variableColumns, &column](const VarAndIndex& varAndIndex) {
-        if (!variableColumns.contains(varAndIndex.first)) {
-          variableColumns[varAndIndex.first] = column;
-          column++;
+      [&mightContainUndef, &variableColumns,
+       &nextColumnIndex](const VarAndTypeInfo& varAndIndex) mutable {
+        const auto& variable = varAndIndex.first;
+        if (!variableColumns.contains(variable)) {
+          using enum ColumnIndexAndTypeInfo::UndefStatus;
+          variableColumns[variable] = ColumnIndexAndTypeInfo{
+              nextColumnIndex,
+              mightContainUndef(variable) ? PossiblyUndefined : AlwaysDefined};
+          nextColumnIndex++;
         }
       };
 

@@ -133,7 +133,7 @@ class IndexScan : public Operation {
 
   virtual string asStringImpl(size_t indent = 0) const override;
 
-  virtual VariableToColumnMap computeVariableToColumnMap() const override;
+  VariableToColumnMap computeVariableToColumnMap() const override;
 
   std::optional<std::shared_ptr<const ResultTable>>
   getPrecomputedResultFromQueryPlanning() override {

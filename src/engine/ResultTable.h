@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "engine/LocalVocab.h"
+#include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/Log.h"
@@ -60,6 +61,13 @@ class ResultTable {
         : localVocab_{
               std::make_shared<const LocalVocab>(std::move(localVocab))} {}
   };
+
+  // For each column in the result (the entries in the outer `vector`) and for
+  // each `Datatype` (the entries of the inner `array`), store the information
+  // how many entries of that datatype are stored in the column.
+  using DatatypeCountsPerColumn = std::vector<
+      std::array<size_t, static_cast<size_t>(Datatype::MaxValue) + 1>>;
+  std::optional<DatatypeCountsPerColumn> datatypeCountsPerColumn_;
 
  public:
   // Construct from the given arguments (see above) and check the following
@@ -144,4 +152,15 @@ class ResultTable {
 
   // The first rows of the result and its total size (for debugging).
   string asDebugString() const;
+
+  // Get the information, which columns stores how many entries of each
+  // datatype. This information is computed on the first call to this function
+  // `O(num-entries-in-table)` and then cached for subsequent usages.
+  const DatatypeCountsPerColumn& getOrComputeDatatypeCountsPerColumn();
+
+  // Check that if the `varColMap` guarantees that a column is always defined
+  // (i.e. that is contains no single undefined value) that there are indeed no
+  // undefined values in the `_idTable` of this result. Return `true` iff the
+  // check is succesful.
+  bool checkDefinedness(const VariableToColumnMap& varColMap);
 };
