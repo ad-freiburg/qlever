@@ -8,7 +8,7 @@
 #include "global/IdTriple.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
-#include "index/LocatedTriple.h"
+#include "index/LocatedTriples.h"
 #include "parser/TurtleParser.h"
 #include "util/HashSet.h"
 
@@ -102,18 +102,13 @@ class DeltaTriples {
   IdTriple getIdTriple(const TurtleTriple& turtleTriple);
 
   // Find the position of the given triple in the given permutation and add it
-  // to each of the six `LocatedTriplesPerBlock` maps (one per
-  // permutation). Return the iterators of where it was added (so that we can
-  // easily delete it again from these maps later).
+  // to each of the six `LocatedTriplesPerBlock` maps (one per permutation).
+  // Return the iterators of where it was added (so that we can easily delete it
+  // again from these maps later).
   //
   // TODO: The function is name is misleading, since this method does not only
   // locate, but also add to the mentioned data structures.
   LocatedTripleHandles locateTripleInAllPermutations(const IdTriple& idTriple);
-
-  // The implementation of the above function for a given permutation.
-  template <typename Permutation>
-  LocatedTriple locateTripleInPermutation(Id id1, Id id2, Id id3,
-                                          Permutation& permutation) const;
 
   // Erase `LocatedTriple` object from each `LocatedTriplesPerBlock` list. The
   // argument are iterators for each list, as returned by the method

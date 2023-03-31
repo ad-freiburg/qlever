@@ -8,6 +8,7 @@ add_library(index
         VocabularyOnDisk.h VocabularyOnDisk.cpp
         IndexMetaData.h IndexMetaDataImpl.h
         MetaDataHandler.h
+        LocatedTriples.h LocatedTriples.cpp
         DeltaTriples.h DeltaTriples.cpp
         StxxlSortFunctors.h
         TextMetaData.cpp TextMetaData.h

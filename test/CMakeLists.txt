@@ -106,6 +106,8 @@ addLinkAndDiscoverTestSerial(IndexTest index)
 
 addLinkAndDiscoverTestSerial(DeltaTriplesTest index)
 
+addLinkAndDiscoverTestSerial(LocatedTriplesTest index)
+
 addLinkAndDiscoverTest(FTSAlgorithmsTest index)
 
 addLinkAndDiscoverTest(EngineTest engine)

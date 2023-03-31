@@ -103,9 +103,9 @@ class DeltaTriplesTest : public ::testing::Test {
   void checkTriplesWithPositionsPerBlockSize(const DeltaTriples& deltaTriples,
                                              size_t expectedSize) {
     for (Index::Permutation permutation : permutationEnums) {
-      ASSERT_EQ(
-          deltaTriples.getTriplesWithPositionsPerBlock(permutation).size(),
-          expectedSize);
+      ASSERT_EQ(deltaTriples.getTriplesWithPositionsPerBlock(permutation)
+                    .numTriples(),
+                expectedSize);
     }
   }
 
