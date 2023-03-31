@@ -76,13 +76,13 @@ class ValueId {
     std::string _errorMessage;
 
    public:
-    IndexTooLargeException(
-        T tooBigValue,
-        ad_utility::source_location s = ad_utility::source_location::current()){
+    IndexTooLargeException(T tooBigValue,
+                           ad_utility::source_location s =
+                               ad_utility::source_location::current()) {
       std::stringstream exceptionMessage;
       exceptionMessage
-          << s.file_name() << ", line " << s.line()
-          << ": The given value " << tooBigValue
+          << s.file_name() << ", line " << s.line() << ": The given value "
+          << tooBigValue
           << " is bigger than what the maxIndex of ValueId allows.";
       _errorMessage = exceptionMessage.str();
       /*

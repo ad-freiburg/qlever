@@ -35,9 +35,11 @@ class NeutralElementOperation : public Operation {
   [[nodiscard]] vector<size_t> resultSortedOn() const override { return {}; };
 
  private:
-  void computeResult(ResultTable* result) override {
-    result->_idTable.setNumColumns(0);
-    result->_idTable.resize(1);
+  ResultTable computeResult() override {
+    IdTable idTable{getExecutionContext()->getAllocator()};
+    idTable.setNumColumns(0);
+    idTable.resize(1);
+    return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   }
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()

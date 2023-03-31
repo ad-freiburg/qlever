@@ -60,7 +60,7 @@ TEST(Exception, AD_CONTRACT_CHECK) {
   }
 }
 
-TEST(Exception, AD_UNSATISFIABLE) {
+TEST(Exception, AD_CORRECTNESS_CHECK) {
   ad_utility::source_location l;
   ASSERT_NO_THROW(AD_CORRECTNESS_CHECK(3 < 5));
   std::vector<int> v;
@@ -87,4 +87,10 @@ TEST(Exception, AD_FAIL) {
     ASSERT_THAT(e.what(),
                 ::testing::StartsWith("This code should be unreachable."));
   }
+}
+
+TEST(Excpetion, AD_EXPENSIVE_CHECK) {
+#if (!defined(NDEBUG) || defined(AD_ENABLE_EXPENSIVE_CHECKS))
+  ASSERT_ANY_THROW(AD_EXPENSIVE_CHECK(3 > 5));
+#endif
 }

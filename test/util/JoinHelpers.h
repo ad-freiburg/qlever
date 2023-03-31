@@ -59,9 +59,7 @@ IdTable useJoinFunctionOnIdTables(const IdTableAndJoinColumn& tableA,
  */
 auto makeHashJoinLambda() {
   Join J{Join::InvalidOnlyForTestingJoinTag{}, ad_utility::testing::getQec()};
-  DISABLE_WARNINGS_CLANG_13
   return [J = std::move(J)]<int A, int B, int C>(auto&&... args) mutable {
-    ENABLE_WARNINGS_CLANG_13
     return J.hashJoin(AD_FWD(args)...);
   };
 }
@@ -72,9 +70,7 @@ auto makeHashJoinLambda() {
  */
 auto makeJoinLambda() {
   Join J{Join::InvalidOnlyForTestingJoinTag{}, ad_utility::testing::getQec()};
-  DISABLE_WARNINGS_CLANG_13
   return [J = std::move(J)]<int A, int B, int C>(auto&&... args) mutable {
-    ENABLE_WARNINGS_CLANG_13
     return J.join<A, B, C>(AD_FWD(args)...);
   };
 }

@@ -79,30 +79,25 @@ string TextOperationWithFilter::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-void TextOperationWithFilter::computeResult(ResultTable* result) {
+ResultTable TextOperationWithFilter::computeResult() {
   LOG(DEBUG) << "TextOperationWithFilter result computation..." << endl;
   AD_CONTRACT_CHECK(getNofVars() >= 1);
-  result->_idTable.setNumColumns(getResultWidth());
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(getResultWidth());
   shared_ptr<const ResultTable> filterResult = _filterResult->getResult();
-  result->shareLocalVocabFrom(*filterResult);
 
-  result->_resultTypes.reserve(result->_idTable.numColumns());
-  result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
-  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-  for (size_t i = 2; i < result->_idTable.numColumns(); i++) {
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  }
-  if (filterResult->_idTable.numColumns() == 1) {
+  if (filterResult->idTable().numColumns() == 1) {
     getExecutionContext()->getIndex().getFilteredECListForWordsWidthOne(
-        _words, filterResult->_idTable, getNofVars(), _textLimit,
-        &result->_idTable);
+        _words, filterResult->idTable(), getNofVars(), _textLimit, &idTable);
   } else {
     getExecutionContext()->getIndex().getFilteredECListForWords(
-        _words, filterResult->_idTable, _filterColumn, getNofVars(), _textLimit,
-        &result->_idTable);
+        _words, filterResult->idTable(), _filterColumn, getNofVars(),
+        _textLimit, &idTable);
   }
 
   LOG(DEBUG) << "TextOperationWithFilter result computation done." << endl;
+  return {std::move(idTable), resultSortedOn(),
+          filterResult->getSharedLocalVocab()};
 }
 
 // _____________________________________________________________________________

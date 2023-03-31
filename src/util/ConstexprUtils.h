@@ -63,7 +63,7 @@ void ConstExprForLoop(const std::index_sequence<ForLoopIndexes...>&,
 template <size_t MaxValue, typename Function>
 void RuntimeValueToCompileTimeValue(const size_t& value,
                                     const Function& function) {
-  AD_CONTRACT_CHECK(value <= MaxValue); // Is the value valid?
+  AD_CONTRACT_CHECK(value <= MaxValue);  // Is the value valid?
   ConstExprForLoop(std::make_index_sequence<MaxValue>{},
                    [&function, &value]<size_t Index>() {
                      if (Index == value) {

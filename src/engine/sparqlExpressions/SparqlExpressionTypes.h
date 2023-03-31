@@ -91,11 +91,6 @@ namespace sparqlExpression {
 /// A list of StrongIds that all have the same datatype.
 using StrongIdsWithResultType = VectorWithMemoryLimit<ValueId>;
 
-/// Typedef for a map from variables names to (input column, type of input
-/// column.
-using VariableToColumnAndResultTypeMap =
-    ad_utility::HashMap<Variable, std::pair<size_t, ResultTable::ResultType>>;
-
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
 /// the row indices in which a boolean expression evaluates to "true". Constant
@@ -161,7 +156,7 @@ constexpr static bool isVectorResult =
 struct EvaluationContext {
   const QueryExecutionContext& _qec;
   // The VariableToColumnMap of the input
-  const VariableToColumnAndResultTypeMap& _variableToColumnAndResultTypeMap;
+  const VariableToColumnMap& _variableToColumnMap;
 
   /// The input of the expression.
   const IdTable& _inputTable;
@@ -200,14 +195,13 @@ struct EvaluationContext {
   std::vector<ExpressionResult> _previousResultsFromSameGroup;
 
   /// Constructor for evaluating an expression on the complete input.
-  EvaluationContext(
-      const QueryExecutionContext& qec,
-      const VariableToColumnAndResultTypeMap& variableToColumnAndResultTypeMap,
-      const IdTable& inputTable,
-      const ad_utility::AllocatorWithLimit<Id>& allocator,
-      const LocalVocab& localVocab)
+  EvaluationContext(const QueryExecutionContext& qec,
+                    const VariableToColumnMap& variableToColumnMap,
+                    const IdTable& inputTable,
+                    const ad_utility::AllocatorWithLimit<Id>& allocator,
+                    const LocalVocab& localVocab)
       : _qec{qec},
-        _variableToColumnAndResultTypeMap{variableToColumnAndResultTypeMap},
+        _variableToColumnMap{variableToColumnMap},
         _inputTable{inputTable},
         _allocator{allocator},
         _localVocab{localVocab} {}
@@ -215,13 +209,12 @@ struct EvaluationContext {
   /// Constructor for evaluating an expression on a part of the input
   /// (only considers the rows [beginIndex, endIndex) from the input.
   EvaluationContext(const QueryExecutionContext& qec,
-                    const VariableToColumnAndResultTypeMap& map,
-                    const IdTable& inputTable, size_t beginIndex,
-                    size_t endIndex,
+                    const VariableToColumnMap& map, const IdTable& inputTable,
+                    size_t beginIndex, size_t endIndex,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
                     const LocalVocab& localVocab)
       : _qec{qec},
-        _variableToColumnAndResultTypeMap{map},
+        _variableToColumnMap{map},
         _inputTable{inputTable},
         _beginIndex{beginIndex},
         _endIndex{endIndex},
@@ -232,7 +225,7 @@ struct EvaluationContext {
     if (_columnsByWhichResultIsSorted.empty()) {
       return false;
     }
-    if (!_variableToColumnAndResultTypeMap.contains(variable)) {
+    if (!_variableToColumnMap.contains(variable)) {
       return false;
     }
 
@@ -244,12 +237,12 @@ struct EvaluationContext {
 
   // ____________________________________________________________________________
   [[nodiscard]] size_t getColumnIndexForVariable(const Variable& var) const {
-    const auto& map = _variableToColumnAndResultTypeMap;
+    const auto& map = _variableToColumnMap;
     if (!map.contains(var)) {
       throw std::runtime_error(absl::StrCat(
           "Variable ", var.name(), " was not found in input to expression."));
     }
-    return map.at(var).first;
+    return map.at(var);
   }
 
   // _____________________________________________________________________________
@@ -268,25 +261,6 @@ struct EvaluationContext {
 };
 
 namespace detail {
-
-/// Convert expression result type T to corresponding qlever ResultType.
-/// TODO<joka921>: currently all constants are floats.
-template <SingleExpressionResult T>
-constexpr static qlever::ResultType expressionResultTypeToQleverResultType() {
-  if constexpr (ad_utility::isSimilar<T, string> ||
-                ad_utility::isSimilar<T, VectorWithMemoryLimit<string>>) {
-    return qlever::ResultType::LOCAL_VOCAB;
-  } else if constexpr (isConstantResult<T> || isVectorResult<T>) {
-    return qlever::ResultType::FLOAT;
-  } else if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
-    return qlever::ResultType::VERBATIM;
-  } else {
-    // for Variables and StrongIdWithDatatypes we cannot get the result type at
-    // compile time.
-    static_assert(ad_utility::alwaysFalse<T>);
-  }
-}
-
 /// Get Id of constant result of type T.
 template <SingleExpressionResult T, typename LocalVocabT>
 Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {

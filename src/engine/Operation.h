@@ -218,8 +218,7 @@ class Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  //! Computes both, an EntityList and a HitList.
-  virtual void computeResult(ResultTable* result) = 0;
+  virtual ResultTable computeResult() = 0;
 
   // Create and store the complete runtime information for this operation after
   // it has either been succesfully computed or read from the cache.

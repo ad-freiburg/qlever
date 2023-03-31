@@ -15,16 +15,15 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #define JSON_USE_IMPLICIT_CONVERSIONS 0
 
 #include <concepts>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <type_traits>
 #include <utility>
 #include <variant>
-#include <memory>
-#include <type_traits>
 
-#include "util/DisableWarningsClang13.h"
-#include "util/Exception.h"
 #include "util/ConstexprUtils.h"
+#include "util/Exception.h"
 #include "util/SourceLocation.h"
 
 /*
@@ -79,13 +78,14 @@ struct adl_serializer<std::monostate> {
     However, because of this, there also must be an error/mistake, if anybody
     tries to interpret an actual value as a `std::monostate`.
     */
-    if (!j.is_null()){
+    if (!j.is_null()) {
       // TODO Use `absl::StrCat()` for creating the string, once the abseil
       // string library can be linked generally.
-      throw nlohmann::json::type_error::create(302,
-      std::string{"Custom type converter (see `"} +
-      ad_utility::source_location::current().file_name() + "`) from json" +
-      " to `std::monostate`: type must be null, but wasn't.");
+      throw nlohmann::json::type_error::create(
+          302, std::string{"Custom type converter (see `"} +
+                   ad_utility::source_location::current().file_name() +
+                   "`) from json" +
+                   " to `std::monostate`: type must be null, but wasn't.");
     }
   }
 };
@@ -113,7 +113,7 @@ struct adl_serializer<std::variant<Types...>> {
     extension, so is `var.index()`, which means we can't simply assign it
     and have to go over `std::visit`.
     */
-    std::visit([&j](const auto& value){j["value"] = value;}, var);
+    std::visit([&j](const auto& value) { j["value"] = value; }, var);
   }
 
   static void from_json(const nlohmann::json& j, std::variant<Types...>& var) {
@@ -122,20 +122,18 @@ struct adl_serializer<std::variant<Types...>> {
     size_t index = j["index"].get<size_t>();
 
     // Quick check, if the index is even a possible value.
-    if (index >= sizeof...(Types)){
+    if (index >= sizeof...(Types)) {
       /*
       TODO Add more information, using `absl::StrCat` to create the error
       message. (It has besser performance than the alternatives.)
       */
-      throw nlohmann::json::out_of_range::create(401,
-      "The given index for a std::variant was out of range.");
+      throw nlohmann::json::out_of_range::create(
+          401, "The given index for a std::variant was out of range.");
     }
 
     // Interpreting the value based on its type.
-    DISABLE_WARNINGS_CLANG_13
-    ad_utility::RuntimeValueToCompileTimeValue<sizeof...(
-        Types) - 1>(index, [&j, &var]<size_t Index>() {
-      ENABLE_WARNINGS_CLANG_13
+    ad_utility::RuntimeValueToCompileTimeValue<
+        sizeof...(Types) - 1>(index, [&j, &var]<size_t Index>() {
       var =
           j["value"]
               .get<std::variant_alternative_t<Index, std::variant<Types...>>>();
@@ -155,22 +153,22 @@ struct adl_serializer<std::unique_ptr<T>> {
   static void to_json(nlohmann::json& j, const std::unique_ptr<T>& ptr) {
     // Does the `unique_ptr` hold anything? If yes, save the dereferenced
     // object, if no, save a `nullptr`.
-    if (ptr){
+    if (ptr) {
       j = *ptr;
-    }else{
+    } else {
       j = nullptr;
     }
   }
 
   static void from_json(const nlohmann::json& j, std::unique_ptr<T>& ptr) {
-    if (j.is_null()){
+    if (j.is_null()) {
       // If `json` is null, we just release the content of ptr, because it
       // should be an empty `unique_ptr`.
       ptr.release();
-    }else if (ptr){
+    } else if (ptr) {
       // If `ptr` already owns an object, we should be able to overwrite it.
       (*ptr) = j.get<T>();
-    } else if constexpr (std::is_copy_constructible<T>::value){
+    } else if constexpr (std::is_copy_constructible<T>::value) {
       // It's possible to create a new unique pointer by using `T`s copy
       // constructor, because one needs only to pass the deserializied `j` to
       // set the new `T` correctly, without having to know anything about how
@@ -188,13 +186,17 @@ struct adl_serializer<std::unique_ptr<T>> {
       */
       // TODO Use `absl::StrCat()` for creating the string, once the abseil
       // string library can be linked generally.
-      throw nlohmann::json::type_error::create(302,
-      std::string{"Custom type converter (see `"} +
-      ad_utility::source_location::current().file_name() + "`) from json" +
-      " to general `std::unique_ptr`: Can only convert from `null` to pointer,"
-      + ", when the contained type has a copy constructor, or when the pointer"
-      + " already holds a value. Otherwise, a custom converter must be"
-      + " written.");
+      throw nlohmann::json::type_error::create(
+          302,
+          std::string{"Custom type converter (see `"} +
+              ad_utility::source_location::current().file_name() +
+              "`) from json" +
+              " to general `std::unique_ptr`: Can only convert from `null` to "
+              "pointer," +
+              ", when the contained type has a copy constructor, or when the "
+              "pointer" +
+              " already holds a value. Otherwise, a custom converter must be" +
+              " written.");
     }
   }
 };
