@@ -289,10 +289,14 @@ class Operation {
   // The limit from a SPARQL `LIMIT` clause.
   std::optional<uint64_t> _limit;
 
-  // Is the sorting of the result that is promised via `resultSortedOn()`
-  // actually required. If `false` then a cheaper implementation that doesn't
-  // sort the result may be chosen. Is set to true by
-  // `ad_utility::createSortedTree
+  // If this member is set to `true` then it is required that the result of
+  // `computeResult` is sorted by the columns that `resultSortedOn()` returns.
+  // This happens if the parent operation relies on this sorting.
+  // If this member is set to `false` then the `computeResult` method might
+  // choose a cheaper algorithm that doesn't ensure the sorting of the result
+  // (for example a hash join instead of a merge join). This happens if the
+  // parent operation needs a different sorting or no sorting at all to work
+  // properly. This member is set to true by `ad_utility::createSortedTree`.
   bool _sortingIsRequired = false;
 
   // A mutex that can be "copied". The semantics are, that copying will create

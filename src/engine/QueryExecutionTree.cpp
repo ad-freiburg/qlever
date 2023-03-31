@@ -272,6 +272,13 @@ std::shared_ptr<QueryExecutionTree> createSortedTree(
   }
 
   QueryExecutionContext* qec = qet->getRootOperation()->getExecutionContext();
+  // The constructor of `Sort` is private and this function (`createSorted`) is
+  // a friend of `Sort`. That way we ensure that in the case that no explicit
+  // sorting has to be done (see above), the `sortingIsRequired()` member is
+  // always set. Because  the constructor is private we cannot use `make_unique`
+  // or `make_shared` and have to resort to an explicit `new` which is then
+  // immediately passed on to a smart pointer. See also
+  // https://abseil.io/tips/126 for details of this usage of `WrapUnique`.
   auto sort = absl::WrapUnique(new Sort(qec, std::move(qet), sortColumns));
   return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
 }
