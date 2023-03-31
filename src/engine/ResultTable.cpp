@@ -6,8 +6,6 @@
 
 #include "engine/ResultTable.h"
 
-#include <cassert>
-
 #include "engine/LocalVocab.h"
 #include "util/Exception.h"
 
@@ -91,4 +89,34 @@ void ResultTable::applyLimitOffset(const LimitOffsetClause& limitOffset) {
   AD_CORRECTNESS_CHECK(targetSize <= _idTable.numRows());
   _idTable.resize(targetSize);
   _idTable.shrinkToFit();
+}
+
+// _____________________________________________________________________________
+auto ResultTable::getOrComputeDatatypeCountsPerColumn()
+    -> const DatatypeCountsPerColumn& {
+  if (datatypeCountsPerColumn_.has_value()) {
+    return datatypeCountsPerColumn_.value();
+  }
+  auto& types = datatypeCountsPerColumn_.emplace();
+  types.resize(_idTable.numColumns());
+  for (size_t i = 0; i < _idTable.numColumns(); ++i) {
+    const auto& col = _idTable.getColumn(i);
+    auto& datatypes = types.at(i);
+    for (Id id : col) {
+      ++datatypes[static_cast<size_t>(id.getDatatype())];
+    }
+  }
+  return types;
+}
+
+// _____________________________________________________________
+bool ResultTable::checkDefinedness(const VariableToColumnMap& varColMap) {
+  const auto& datatypesPerColumn = getOrComputeDatatypeCountsPerColumn();
+  return std::ranges::all_of(varColMap, [&](const auto& varAndCol) {
+    const auto& [columnIndex, mightContainUndef] = varAndCol.second;
+    bool hasUndefined = datatypesPerColumn.at(columnIndex)
+                            .at(static_cast<size_t>(Datatype::Undefined)) != 0;
+    return mightContainUndef == ColumnIndexAndTypeInfo::PossiblyUndefined ||
+           !hasUndefined;
+  });
 }

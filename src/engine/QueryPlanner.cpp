@@ -519,7 +519,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
       // There used to be a special treatment for `?ql_textscore_` variables
       // which was considered a bug.
       if (auto it = colMap.find(var); it != colMap.end()) {
-        auto ind = it->second;
+        auto ind = it->second.columnIndex_;
         if (indDone.count(ind) == 0) {
           keepIndices.push_back(ind);
           indDone.insert(ind);
@@ -1361,7 +1361,8 @@ std::vector<std::array<ColumnIndex, 2>> QueryPlanner::getJoinColumns(
   for (const auto& aVarCol : aVarCols) {
     auto itt = bVarCols.find(aVarCol.first);
     if (itt != bVarCols.end()) {
-      jcs.push_back(std::array<ColumnIndex, 2>{{aVarCol.second, itt->second}});
+      jcs.push_back(std::array<ColumnIndex, 2>{
+          {aVarCol.second.columnIndex_, itt->second.columnIndex_}});
     }
   }
   return jcs;
@@ -1375,8 +1376,8 @@ string QueryPlanner::getPruningKey(
   std::ostringstream os;
   const auto& varCols = plan._qet->getVariableColumns();
   for (size_t orderedOnCol : orderedOnColumns) {
-    for (const auto& [variable, columnIndex] : varCols) {
-      if (columnIndex == orderedOnCol) {
+    for (const auto& [variable, columnIndexWithType] : varCols) {
+      if (columnIndexWithType.columnIndex_ == orderedOnCol) {
         os << variable.name() << ", ";
         break;
       }

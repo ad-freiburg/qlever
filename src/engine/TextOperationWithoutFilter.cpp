@@ -31,14 +31,20 @@ TextOperationWithoutFilter::TextOperationWithoutFilter(
 VariableToColumnMap TextOperationWithoutFilter::computeVariableToColumnMap()
     const {
   VariableToColumnMap vcmap;
-  size_t index = 0;
-  vcmap[_cvar] = index++;
-  vcmap[_cvar.getTextScoreVariable()] = index++;
+  auto addDefinedVar = [&vcmap, index = 0](const Variable& var) mutable {
+    vcmap[var] = makeAlwaysDefinedColumn(index);
+    ++index;
+  };
+  addDefinedVar(_cvar);
+  addDefinedVar(_cvar.getTextScoreVariable());
   // TODO<joka921> The order of the variables is not deterministic, check
   // whether this is correct.
+  // TODO<joka921> These variables seem to be newly created an never contain
+  // undefined values. However I currently don't understand their semantics
+  // which should be documented.
   for (const auto& var : _variables) {
     if (var != _cvar) {
-      vcmap[var] = index++;
+      addDefinedVar(var);
     }
   }
   return vcmap;

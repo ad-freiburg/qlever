@@ -2,8 +2,6 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include <ranges>
-
 #include "engine/CallFixedSize.h"
 #include "gtest/gtest.h"
 

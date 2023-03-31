@@ -17,7 +17,7 @@ struct ContextWrapper {
   ResultTable _resultTable{
       IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}};
   // TODO<joka921> `VariableToColumnMap`
-  ad_utility::HashMap<Variable, size_t> _hashMap{};
+  VariableToColumnMap _hashMap{};
 
   ConstructQueryExportContext createContextForRow(size_t row) const {
     return {row, _resultTable, _hashMap, _index};
@@ -209,7 +209,7 @@ TEST(SparqlDataTypesTest, VariableInvalidNamesThrowException) {
 TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
   auto wrapper = prepareContext();
 
-  wrapper._hashMap[Variable{"?var"}] = 0;
+  wrapper._hashMap[Variable{"?var"}] = makeAlwaysDefinedColumn(0);
   IdTable table{ad_utility::testing::makeAllocator()};
   table.setNumColumns(1);
   Id value1 = Id::makeFromInt(69);
@@ -253,7 +253,7 @@ TEST(SparqlDataTypesTest, VariableEvaluatesNothingForUnusedName) {
 TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
-  wrapper._hashMap[Variable{"?var"}] = 0;
+  wrapper._hashMap[Variable{"?var"}] = makeAlwaysDefinedColumn(0);
   IdTable table{ad_utility::testing::makeAllocator()};
   table.setNumColumns(1);
   Id value = Id::makeFromInt(69);

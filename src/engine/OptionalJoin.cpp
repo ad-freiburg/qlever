@@ -66,7 +66,7 @@ string OptionalJoin::getDescriptor() const {
     for (auto jc : _joinColumns) {
       // If the left join column matches the index of a variable in the left
       // subresult.
-      if (jc[0] == p.second) {
+      if (jc[0] == p.second.columnIndex_) {
         joinVars += p.first.name() + " ";
       }
     }
@@ -111,27 +111,9 @@ ResultTable OptionalJoin::computeResult() {
 
 // _____________________________________________________________________________
 VariableToColumnMap OptionalJoin::computeVariableToColumnMap() const {
-  VariableToColumnMap retVal(_left->getVariableColumns());
-  size_t leftSize = _left->getResultWidth();
-  for (const auto& [variable, columnIndexRight] :
-       _right->getVariableColumns()) {
-    size_t columnIndex = leftSize + columnIndexRight;
-    bool isJoinColumn = false;
-    // Reduce the index for every column of _right that is beeing joined on,
-    // and the index of which is smaller than the index of it.
-    for (const std::array<ColumnIndex, 2>& a : _joinColumns) {
-      if (a[1] < columnIndexRight) {
-        columnIndex--;
-      } else if (a[1] == columnIndexRight) {
-        isJoinColumn = true;
-        break;
-      }
-    }
-    if (!isJoinColumn) {
-      retVal[variable] = columnIndex;
-    }
-  }
-  return retVal;
+  return makeVarToColMapForJoinOperation(_left->getVariableColumns(),
+                                         _right->getVariableColumns(),
+                                         _joinColumns, BinOpType::OptionalJoin);
 }
 
 // _____________________________________________________________________________

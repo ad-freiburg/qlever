@@ -46,10 +46,23 @@ vector<size_t> Values::resultSortedOn() const { return {}; }
 
 // ____________________________________________________________________________
 VariableToColumnMap Values::computeVariableToColumnMap() const {
+  // we use `unsigned char` instead of `bool` because of the strange
+  // specialization of `std::vector<bool>`
+  std::vector<unsigned char> colContainsUndef(parsedValues_._variables.size(),
+                                              char{0});
+  for (const auto& row : parsedValues_._values) {
+    for (size_t i = 0; i < row.size(); ++i) {
+      unsigned char& isUndef = colContainsUndef.at(i);
+      isUndef = static_cast<bool>(isUndef) || row[i].isUndef();
+    }
+  }
   VariableToColumnMap map;
   for (size_t i = 0; i < parsedValues_._variables.size(); i++) {
-    // TODO<joka921> Make the `_variables` also `Variable`s
-    map[Variable{parsedValues_._variables[i]}] = i;
+    using enum ColumnIndexAndTypeInfo::UndefStatus;
+    auto undefStatus = static_cast<bool>(colContainsUndef.at(i))
+                           ? PossiblyUndefined
+                           : AlwaysDefined;
+    map[parsedValues_._variables[i]] = ColumnIndexAndTypeInfo{i, undefStatus};
   }
   return map;
 }

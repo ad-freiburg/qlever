@@ -26,7 +26,7 @@ class Minus : public Operation {
 
   // Uninitialized Object for testing the computeMinus method
   struct OnlyForTestingTag {};
-  Minus(OnlyForTestingTag){};
+  explicit Minus(OnlyForTestingTag){};
 
  protected:
   string asStringImpl(size_t indent = 0) const override;

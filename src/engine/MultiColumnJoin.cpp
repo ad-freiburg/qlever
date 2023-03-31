@@ -62,7 +62,7 @@ string MultiColumnJoin::getDescriptor() const {
     for (auto jc : _joinColumns) {
       // If the left join column matches the index of a variable in the left
       // subresult.
-      if (jc[0] == p.second) {
+      if (jc[0] == p.second.columnIndex_) {
         joinVars += p.first.name() + " ";
       }
     }
@@ -105,24 +105,9 @@ ResultTable MultiColumnJoin::computeResult() {
 
 // _____________________________________________________________________________
 VariableToColumnMap MultiColumnJoin::computeVariableToColumnMap() const {
-  VariableToColumnMap retVal(_left->getVariableColumns());
-  size_t columnIndex = retVal.size();
-  const auto variableColumnsRightSorted =
-      copySortedByColumnIndex(_right->getVariableColumns());
-  for (const auto& it : variableColumnsRightSorted) {
-    bool isJoinColumn = false;
-    for (const std::array<ColumnIndex, 2>& a : _joinColumns) {
-      if (a[1] == it.second) {
-        isJoinColumn = true;
-        break;
-      }
-    }
-    if (!isJoinColumn) {
-      retVal[it.first] = columnIndex;
-      columnIndex++;
-    }
-  }
-  return retVal;
+  return makeVarToColMapForJoinOperation(_left->getVariableColumns(),
+                                         _right->getVariableColumns(),
+                                         _joinColumns, BinOpType::Join);
 }
 
 // _____________________________________________________________________________
