@@ -14,6 +14,8 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 // most notably to std::string.
 #define JSON_USE_IMPLICIT_CONVERSIONS 0
 
+#include <absl/strings/str_cat.h>
+
 #include <concepts>
 #include <memory>
 #include <nlohmann/json.hpp>
@@ -21,7 +23,6 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #include <type_traits>
 #include <utility>
 #include <variant>
-#include <absl/strings/str_cat.h>
 
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
@@ -81,10 +82,11 @@ struct adl_serializer<std::monostate> {
     */
     if (!j.is_null()) {
       throw nlohmann::json::type_error::create(
-          302, absl::StrCat("Custom type converter (see `",
-                   ad_utility::source_location::current().file_name(),
-                   "`) from json", 
-                   " to `std::monostate`: type must be null, but wasn't."));
+          302,
+          absl::StrCat("Custom type converter (see `",
+                       ad_utility::source_location::current().file_name(),
+                       "`) from json",
+                       " to `std::monostate`: type must be null, but wasn't."));
     }
   }
 };
@@ -123,9 +125,11 @@ struct adl_serializer<std::variant<Types...>> {
     // Quick check, if the index is even a possible value.
     if (index >= sizeof...(Types)) {
       throw nlohmann::json::out_of_range::create(
-          401, absl::StrCat("The given index ", index, " for a std::variant was"
-      " out of range, because the biggest possible index was ",
-      sizeof...(Types) - 1, "."));
+          401,
+          absl::StrCat("The given index ", index,
+                       " for a std::variant was"
+                       " out of range, because the biggest possible index was ",
+                       sizeof...(Types) - 1, "."));
     }
 
     // Interpreting the value based on its type.
@@ -183,7 +187,8 @@ struct adl_serializer<std::unique_ptr<T>> {
       */
       throw nlohmann::json::type_error::create(
           302,
-          absl::StrCat("Custom type converter (see `",
+          absl::StrCat(
+              "Custom type converter (see `",
               ad_utility::source_location::current().file_name(),
               "`) from json"
               " to general `std::unique_ptr`: Can only convert from `null` to "
