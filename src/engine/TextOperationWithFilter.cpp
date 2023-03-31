@@ -36,10 +36,10 @@ VariableToColumnMap TextOperationWithFilter::computeVariableToColumnMap()
   VariableToColumnMap vcmap;
   // Subtract one because the entity that we filtered on
   // is provided by the filter table and still has the same place there.
-  vcmap[_cvar] = 0;
-  vcmap[_cvar.getTextScoreVariable()] = 1;
+  vcmap[_cvar] = makeAlwaysDefinedColumn(0);
+  vcmap[_cvar.getTextScoreVariable()] = makeAlwaysDefinedColumn(1);
   size_t colN = 2;
-  const auto& filterColumns = _filterResult.get()->getVariableColumns();
+  const auto& filterColumns = _filterResult->getVariableColumns();
   // TODO<joka921> The order of the `_variables` is not deterministic,
   // check whether this is correct (especially in the presence of caching).
   for (const auto& var : _variables) {
@@ -47,11 +47,18 @@ VariableToColumnMap TextOperationWithFilter::computeVariableToColumnMap()
       continue;
     }
     if (!filterColumns.contains(var)) {
-      vcmap[var] = colN++;
+      // TODO<joka921> These variables seem to be newly created an never contain
+      // undefined values. However I currently don't understand their semantics
+      // which should be documented.
+      vcmap[var] = makeAlwaysDefinedColumn(colN);
+      ++colN;
     }
   }
   for (const auto& varcol : filterColumns) {
-    vcmap[varcol.first] = colN + varcol.second;
+    // TODO<joka921> It is possible that UNDEF values in the filter are never
+    // propagated to the  result, but this has to be further examined.
+    vcmap[varcol.first] = ColumnIndexAndTypeInfo{
+        colN + varcol.second.columnIndex_, varcol.second.mightContainUndef_};
   }
   return vcmap;
 }
@@ -79,30 +86,25 @@ string TextOperationWithFilter::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-void TextOperationWithFilter::computeResult(ResultTable* result) {
+ResultTable TextOperationWithFilter::computeResult() {
   LOG(DEBUG) << "TextOperationWithFilter result computation..." << endl;
   AD_CONTRACT_CHECK(getNofVars() >= 1);
-  result->_idTable.setNumColumns(getResultWidth());
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(getResultWidth());
   shared_ptr<const ResultTable> filterResult = _filterResult->getResult();
-  result->shareLocalVocabFrom(*filterResult);
 
-  result->_resultTypes.reserve(result->_idTable.numColumns());
-  result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
-  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-  for (size_t i = 2; i < result->_idTable.numColumns(); i++) {
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  }
-  if (filterResult->_idTable.numColumns() == 1) {
+  if (filterResult->idTable().numColumns() == 1) {
     getExecutionContext()->getIndex().getFilteredECListForWordsWidthOne(
-        _words, filterResult->_idTable, getNofVars(), _textLimit,
-        &result->_idTable);
+        _words, filterResult->idTable(), getNofVars(), _textLimit, &idTable);
   } else {
     getExecutionContext()->getIndex().getFilteredECListForWords(
-        _words, filterResult->_idTable, _filterColumn, getNofVars(), _textLimit,
-        &result->_idTable);
+        _words, filterResult->idTable(), _filterColumn, getNofVars(),
+        _textLimit, &idTable);
   }
 
   LOG(DEBUG) << "TextOperationWithFilter result computation done." << endl;
+  return {std::move(idTable), resultSortedOn(),
+          filterResult->getSharedLocalVocab()};
 }
 
 // _____________________________________________________________________________

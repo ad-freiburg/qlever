@@ -48,9 +48,9 @@ TEST(JoinTest, optionalJoinTest) {
   IdTable b{
       makeIdTableFromVector({{3, 3, 1}, {1, 8, 1}, {4, 2, 2}, {1, 1, 3}})};
   IdTable result{4, makeAllocator()};
-  vector<array<ColumnIndex, 2>> jcls{};
-  jcls.push_back(array<ColumnIndex, 2>{{1, 2}});
-  jcls.push_back(array<ColumnIndex, 2>{{2, 1}});
+  std::vector<std::array<ColumnIndex, 2>> jcls{};
+  jcls.push_back(std::array<ColumnIndex, 2>{{1, 2}});
+  jcls.push_back(std::array<ColumnIndex, 2>{{2, 1}});
 
   // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
   // a have to equal those of column 2 of b and vice versa).
@@ -77,8 +77,8 @@ TEST(JoinTest, optionalJoinTest) {
 
   IdTable vresult{7, makeAllocator()};
   jcls.clear();
-  jcls.push_back(array<ColumnIndex, 2>{{1, 0}});
-  jcls.push_back(array<ColumnIndex, 2>{{2, 1}});
+  jcls.push_back(std::array<ColumnIndex, 2>{{1, 0}});
+  jcls.push_back(std::array<ColumnIndex, 2>{{2, 1}});
 
   aWidth = va.numColumns();
   bWidth = vb.numColumns();

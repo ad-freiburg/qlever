@@ -70,7 +70,7 @@ class OrderBy : public Operation {
   }
 
  private:
-  void computeResult(ResultTable* result) override;
+  ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override {
     return subtree_->getVariableColumns();

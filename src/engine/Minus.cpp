@@ -13,7 +13,7 @@ using std::string;
 Minus::Minus(QueryExecutionContext* qec,
              std::shared_ptr<QueryExecutionTree> left,
              std::shared_ptr<QueryExecutionTree> right,
-             std::vector<array<size_t, 2>> matchedColumns)
+             std::vector<std::array<size_t, 2>> matchedColumns)
     : Operation{qec},
       _left{std::move(left)},
       _right{std::move(right)},
@@ -44,36 +44,32 @@ string Minus::asStringImpl(size_t indent) const {
 string Minus::getDescriptor() const { return "Minus"; }
 
 // _____________________________________________________________________________
-void Minus::computeResult(ResultTable* result) {
-  AD_CONTRACT_CHECK(result);
+ResultTable Minus::computeResult() {
   LOG(DEBUG) << "Minus result computation..." << endl;
 
-  result->_sortedBy = resultSortedOn();
-  result->_idTable.setNumColumns(getResultWidth());
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(getResultWidth());
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
 
   LOG(DEBUG) << "Minus subresult computation done" << std::endl;
 
-  // We have the same output columns as the left input, so we also
-  // have the same output column types.
-  result->_resultTypes = leftResult->_resultTypes;
-
   LOG(DEBUG) << "Computing minus of results of size " << leftResult->size()
              << " and " << rightResult->size() << endl;
 
-  int leftWidth = leftResult->_idTable.numColumns();
-  int rightWidth = rightResult->_idTable.numColumns();
+  int leftWidth = leftResult->idTable().numColumns();
+  int rightWidth = rightResult->idTable().numColumns();
   CALL_FIXED_SIZE((std::array{leftWidth, rightWidth}), &Minus::computeMinus,
-                  this, leftResult->_idTable, rightResult->_idTable,
-                  _matchedColumns, &result->_idTable);
-
-  // If only one of the two operands has a non-empty local vocabulary, share
-  // with that one (otherwise, throws an exception).
-  result->shareLocalVocabFromNonEmptyOf(*leftResult, *rightResult);
+                  this, leftResult->idTable(), rightResult->idTable(),
+                  _matchedColumns, &idTable);
 
   LOG(DEBUG) << "Minus result computation done" << endl;
+  // If only one of the two operands has a non-empty local vocabulary, share
+  // with that one (otherwise, throws an exception).
+  return {std::move(idTable), resultSortedOn(),
+          ResultTable::getSharedLocalVocabFromNonEmptyOf(*leftResult,
+                                                         *rightResult)};
 }
 
 // _____________________________________________________________________________
@@ -109,9 +105,10 @@ size_t Minus::getCostEstimate() {
 
 // _____________________________________________________________________________
 template <int A_WIDTH, int B_WIDTH>
-void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
-                         const vector<array<ColumnIndex, 2>>& joinColumns,
-                         IdTable* dynResult) const {
+void Minus::computeMinus(
+    const IdTable& dynA, const IdTable& dynB,
+    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+    IdTable* dynResult) const {
   // Substract dynB from dynA. The result should be all result mappings mu
   // for which all result mappings mu' in dynB are not compatible (one value
   // for a variable defined in both differs) or the domain of mu and mu' are
@@ -215,7 +212,7 @@ finish:
 template <int A_WIDTH, int B_WIDTH>
 Minus::RowComparison Minus::isRowEqSkipFirst(
     const IdTableView<A_WIDTH>& a, const IdTableView<B_WIDTH>& b, size_t ia,
-    size_t ib, const vector<array<size_t, 2>>& joinColumns) {
+    size_t ib, const std::vector<std::array<size_t, 2>>& joinColumns) {
   for (size_t i = 1; i < joinColumns.size(); ++i) {
     Id va{a(ia, joinColumns[i][0])};
     Id vb{b(ib, joinColumns[i][1])};

@@ -30,9 +30,9 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
   const ResultTable& res = context._res;
   const auto& variableColumns = context._variableColumns;
   const Index& qecIndex = context._qecIndex;
-  const auto& idTable = res._idTable;
+  const auto& idTable = res.idTable();
   if (variableColumns.contains(*this)) {
-    size_t index = variableColumns.at(*this);
+    size_t index = variableColumns.at(*this).columnIndex_;
     auto id = idTable(row, index);
     auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType(
         qecIndex, id, res.localVocab());

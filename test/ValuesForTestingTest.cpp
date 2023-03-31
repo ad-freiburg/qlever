@@ -34,5 +34,5 @@ TEST(ValuesForTesting, valuesForTesting) {
   ASSERT_TRUE(v.getChildren().empty());
 
   auto result = v.getResult();
-  ASSERT_EQ(result->_idTable, table);
+  ASSERT_EQ(result->idTable(), table);
 }

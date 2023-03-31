@@ -127,18 +127,16 @@ class Join : public Operation {
   virtual string asStringImpl(size_t indent = 0) const override;
 
  private:
-  void computeResult(ResultTable* result) override;
+  ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  void computeResultForJoinWithFullScanDummy(ResultTable* result);
+  ResultTable computeResultForJoinWithFullScanDummy();
 
   using ScanMethodType = std::function<void(Id, IdTable*)>;
 
   ScanMethodType getScanMethod(
       std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const;
-
-  void doComputeJoinWithFullScanDummyLeft(const IdTable& v, IdTable* r) const;
 
   void doComputeJoinWithFullScanDummyRight(const IdTable& v, IdTable* r) const;
 

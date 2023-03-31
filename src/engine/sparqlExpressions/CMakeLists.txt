@@ -13,4 +13,4 @@ add_library(sparqlExpressions
         RelationalExpressions.cpp AggregateExpression.cpp RegexExpression.cpp
         LangExpression.cpp)
 
-target_link_libraries(sparqlExpressions index)
+qlever_target_link_libraries(sparqlExpressions index)

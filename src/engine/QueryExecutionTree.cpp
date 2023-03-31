@@ -90,27 +90,25 @@ size_t QueryExecutionTree::getVariableColumn(const Variable& variable) const {
     AD_THROW("Variable could not be mapped to result column. Var: " +
              variable.name());
   }
-  return varCols.at(variable);
+  return varCols.at(variable).columnIndex_;
 }
 
 // ___________________________________________________________________________
 QueryExecutionTree::ColumnIndicesAndTypes
 QueryExecutionTree::selectedVariablesToColumnIndices(
-    const SelectClause& selectClause, const ResultTable& resultTable,
-    bool includeQuestionMark) const {
+    const SelectClause& selectClause, bool includeQuestionMark) const {
   ColumnIndicesAndTypes exportColumns;
 
   for (const auto& var : selectClause.getSelectedVariables()) {
     std::string varString = var.name();
     if (getVariableColumns().contains(var)) {
-      auto columnIndex = getVariableColumns().at(var);
+      auto columnIndex = getVariableColumns().at(var).columnIndex_;
       // Remove the question mark from the variable name if requested.
       if (!includeQuestionMark && varString.starts_with('?')) {
         varString = varString.substr(1);
       }
       exportColumns.push_back(
-          VariableAndColumnIndex{std::move(varString), columnIndex,
-                                 resultTable.getResultType(columnIndex)});
+          VariableAndColumnIndex{std::move(varString), columnIndex});
     } else {
       exportColumns.emplace_back(std::nullopt);
       LOG(WARN) << "The variable \"" << varString
@@ -172,7 +170,7 @@ void QueryExecutionTree::readFromCache() {
   auto& cache = _qec->getQueryTreeCache();
   auto res = cache.getIfContained(asString());
   if (res.has_value()) {
-    _cachedResult = res->_resultPointer->_resultTable;
+    _cachedResult = res->_resultPointer->resultTable();
   }
 }
 

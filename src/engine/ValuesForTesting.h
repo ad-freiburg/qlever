@@ -30,11 +30,8 @@ class ValuesForTesting : public Operation {
   }
 
   // ___________________________________________________________________________
-  void computeResult(ResultTable* result) override {
-    for (size_t i = 0; i < table_.numColumns(); ++i) {
-      result->_resultTypes.push_back(ResultTable::ResultType::KB);
-    }
-    result->_idTable = table_.clone();
+  ResultTable computeResult() override {
+    return {table_.clone(), resultSortedOn(), LocalVocab{}};
   }
 
  private:
@@ -83,7 +80,11 @@ class ValuesForTesting : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override {
     VariableToColumnMap m;
     for (size_t i = 0; i < variables_.size(); ++i) {
-      m[variables_.at(i)] = i;
+      bool containsUndef =
+          ad_utility::contains(table_.getColumn(i), Id::makeUndefined());
+      using enum ColumnIndexAndTypeInfo::UndefStatus;
+      m[variables_.at(i)] = ColumnIndexAndTypeInfo{
+          i, containsUndef ? PossiblyUndefined : AlwaysDefined};
     }
     return m;
   }

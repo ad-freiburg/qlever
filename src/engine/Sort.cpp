@@ -45,7 +45,7 @@ string Sort::getDescriptor() const {
   const auto& varCols = subtree_->getVariableColumns();
   for (auto sortColumn : sortColumnIndices_) {
     for (const auto& [var, varIndex] : varCols) {
-      if (sortColumn == varIndex) {
+      if (sortColumn == varIndex.columnIndex_) {
         orderByVars += " " + var.name();
       }
     }
@@ -61,12 +61,10 @@ namespace {
 // TODO<joka921, future compilers> Check if this problem goes away in future
 // compiler versions as soon as we don't support Clang 13 anymore.
 void callFixedSizeForSort(auto& idTable, auto comparison) {
-  DISABLE_WARNINGS_CLANG_13
   ad_utility::callFixedSize(idTable.numColumns(),
                             [&idTable, comparison]<int I>() {
                               Engine::sort<I>(&idTable, comparison);
                             });
-  ENABLE_WARNINGS_CLANG_13
 }
 
 // The actual implementation of sorting an `IdTable` according to the
@@ -109,7 +107,7 @@ void sortImpl(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
 }  // namespace
 
 // _____________________________________________________________________________
-void Sort::computeResult(ResultTable* result) {
+ResultTable Sort::computeResult() {
   LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
   shared_ptr<const ResultTable> subRes = subtree_->getResult();
 
@@ -129,13 +127,9 @@ void Sort::computeResult(ResultTable* result) {
   }
 
   LOG(DEBUG) << "Sort result computation..." << endl;
-  result->_resultTypes.insert(result->_resultTypes.end(),
-                              subRes->_resultTypes.begin(),
-                              subRes->_resultTypes.end());
-  result->shareLocalVocabFrom(*subRes);
-  result->_idTable = subRes->_idTable.clone();
-  result->_sortedBy = resultSortedOn();
-  sortImpl(result->_idTable, sortColumnIndices_);
+  IdTable idTable = subRes->idTable().clone();
+  sortImpl(idTable, sortColumnIndices_);
 
   LOG(DEBUG) << "Sort result computation done." << endl;
+  return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
