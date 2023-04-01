@@ -12,8 +12,8 @@
 
 // ____________________________________________________________________________
 template <LocatedTriplesPerBlock::MatchMode matchMode>
-size_t LocatedTriplesPerBlock::numTriplesInBlockImpl(size_t blockIndex, Id id1,
-                                                     Id id2) const {
+size_t LocatedTriplesPerBlock::numTriplesImpl(size_t blockIndex, Id id1,
+                                              Id id2) const {
   size_t count = 0;
   for (const LocatedTriple& locatedTriple : map_.at(blockIndex)) {
     if constexpr (matchMode == MatchMode::MatchAll) {
@@ -28,137 +28,117 @@ size_t LocatedTriplesPerBlock::numTriplesInBlockImpl(size_t blockIndex, Id id1,
 }
 
 // ____________________________________________________________________________
-size_t LocatedTriplesPerBlock::numTriplesInBlock(size_t blockIndex) const {
-  return numTriplesInBlockImpl<MatchMode::MatchAll>(blockIndex);
+size_t LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
+  return numTriplesImpl<MatchMode::MatchAll>(blockIndex);
 }
 
 // ____________________________________________________________________________
-size_t LocatedTriplesPerBlock::numTriplesInBlock(size_t blockIndex,
-                                                 Id id1) const {
-  return numTriplesInBlockImpl<MatchMode::MatchId1>(blockIndex, id1);
+size_t LocatedTriplesPerBlock::numTriples(size_t blockIndex, Id id1) const {
+  return numTriplesImpl<MatchMode::MatchId1>(blockIndex, id1);
 }
 
 // ____________________________________________________________________________
-size_t LocatedTriplesPerBlock::numTriplesInBlock(size_t blockIndex, Id id1,
-                                                 Id id2) const {
-  return numTriplesInBlockImpl<MatchMode::MatchId1AndId2>(blockIndex, id1, id2);
+size_t LocatedTriplesPerBlock::numTriples(size_t blockIndex, Id id1,
+                                          Id id2) const {
+  return numTriplesImpl<MatchMode::MatchId1AndId2>(blockIndex, id1, id2);
 }
 
 // ____________________________________________________________________________
-void LocatedTriplesPerBlock::mergeTriplesIntoBlock(size_t blockIndex,
-                                                   IdTable& idTable, size_t pos,
-                                                   size_t len, int netGrowth) {
-  // If there are no triples in the given block, there is nothing to do.
-  if (!map_.contains(blockIndex)) {
-    AD_CONTRACT_CHECK(netGrowth == 0);
-    return;
-  }
-  const size_t numColumns = idTable.numColumns();
+template <LocatedTriplesPerBlock::MatchMode matchMode>
+void LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
+                                          const IdTable& block, IdTable& result,
+                                          size_t offsetInResult,
+                                          size_t offsetOfBlock, Id id1,
+                                          Id id2) const {
+  // This method should only be called, if located triples in that block exist.
+  AD_CONTRACT_CHECK(map_.contains(blockIndex));
 
-  // Iterate backwards over the triples from the given block and process in
-  // groups of triples with the same `rowIndexInBlock`.
-  //
-  // NOTE: We have to keep track of the positions separately, since pointer
-  // arithmetic does not work on `LocatedTriples`, which is a `std::set`. That's
-  // also why we can't use `upper_bound` for searching.
-  const LocatedTriples& locatedTriples = map_.at(blockIndex);
-  auto locatedTriple = locatedTriples.rbegin();
-  int shift = netGrowth;
-  size_t previousRowIndex = len;
-  while (locatedTriple != locatedTriples.rend()) {
-    // Search backwards for the next triple with a new `rowIndexInBlock`. Check
-    // that only the last triple in a group may already exist in the index (all
-    // triples with the same row index are <= the triple at that position in
-    // `idTable').
-    size_t rowIndex = locatedTriple->rowIndexInBlock;
-    int groupNetGrowth = locatedTriple->existsInIndex ? -1 : 0;
-    auto nextLocatedTriple = locatedTriple;
-    ++nextLocatedTriple;
-    while (nextLocatedTriple != locatedTriples.rend() &&
-           nextLocatedTriple->rowIndexInBlock == rowIndex) {
-      AD_CORRECTNESS_CHECK(nextLocatedTriple->existsInIndex == false);
-      ++groupNetGrowth;
-      ++nextLocatedTriple;
+  // TODO: For now, only implemented for two columns (easy to extend).
+  AD_CORRECTNESS_CHECK(block.numColumns() == 2);
+
+  AD_CONTRACT_CHECK(block.numColumns() == result.numColumns());
+  auto resultEntry = result.begin() + offsetInResult;
+  const auto& locatedTriples = map_.at(blockIndex);
+  auto locatedTriple = locatedTriples.begin();
+
+  // Helper lambda that checks whether the given located triple should be
+  // considered, given the `matchMode`.
+  auto locatedTripleMatches = [&]() {
+    if constexpr (matchMode == MatchMode::MatchAll) {
+      return true;
+    } else if constexpr (matchMode == MatchMode::MatchId1) {
+      return locatedTriple->id1 == id1;
+    } else if constexpr (matchMode == MatchMode::MatchId1AndId2) {
+      return locatedTriple->id1 == id1 && locatedTriple->id2 == id2;
     }
-    std::transform(locatedTriple, nextLocatedTriple,
-                   std::ostream_iterator<std::string>(std::cout, " "),
-                   [](const LocatedTriple& lt) {
-                     return absl::StrCat(lt.rowIndexInBlock, "[",
-                                         lt.existsInIndex, "]");
-                   });
-    std::cout << "... shift = " << shift << ", net growth = " << groupNetGrowth
-              << std::endl;
+  };
 
-    // If the last triple in the group exists in the index, don't copy that
-    // (recall that we are iterating in reverse order). By the way how `shift`
-    // is updated (see the `shift -= groupNetGrowth` below), the matching
-    // entry in `idTable` will be be overwritten.
-    if (locatedTriple->existsInIndex) {
+  // Skip located triples that come before `offsetOfBlock` because this may be a
+  // partial block.
+  while (locatedTriple != locatedTriples.end() &&
+         locatedTriple->rowIndexInBlock < offsetOfBlock) {
+    ++locatedTriple;
+  }
+
+  // Iterate over the input block. Keep track of the row index, which is
+  // `offsetInBlock` for the first element of the block.
+  size_t rowIndex = offsetOfBlock;
+  for (const auto& blockEntry : block) {
+    // Append triples that are marked for insertion at this position to the
+    // result.
+    while (locatedTriple != locatedTriples.end() &&
+           locatedTriple->rowIndexInBlock == rowIndex &&
+           locatedTriple->existsInIndex == false) {
+      if (locatedTripleMatches()) {
+        (*resultEntry)[0] = locatedTriple->id2;
+        (*resultEntry)[1] = locatedTriple->id3;
+        ++resultEntry;
+      }
       ++locatedTriple;
     }
 
-    // Make space in `idTable` at the right place for the new group of triples
-    // and insert the new `Id`s (and overwrite those of the deleted triples).
-    //
-    // NOTE: If the `idTable` has two columns, we write `id2` and `id3`. If it
-    // has only one column, we only write `id3`.
-    AD_CONTRACT_CHECK(numColumns == 1 || numColumns == 2);
-    for (size_t colIndex = 0; colIndex < numColumns; ++colIndex) {
-      std::span<Id> column = idTable.getColumn(colIndex);
-      // Shifting left or right requires two different functions.
-      if (shift >= 0) {
-        std::shift_right(column.begin() + pos + rowIndex,
-                         column.begin() + pos + previousRowIndex + shift,
-                         shift);
-      } else {
-        std::shift_left(column.begin() + pos + rowIndex,
-                        column.begin() + pos + previousRowIndex - shift,
-                        -shift);
-      }
-      // Show the changed column after the shift.
-      if (1) {
-        std::cout << "Col #" << colIndex << ": ";
-        std::copy(column.begin(), column.end(),
-                  std::ostream_iterator<Id>(std::cout, " "));
-        std::cout << " [after shift]" << std::endl;
-      }
-      // Add the new triples.
-      std::transform(
-          locatedTriple, nextLocatedTriple,
-          column.rbegin() + column.size() - pos - previousRowIndex - shift,
-          [&colIndex, &numColumns](const LocatedTriple& lt) {
-            return colIndex + 1 < numColumns ? lt.id2 : lt.id3;
-          });
-      // For debugging only: null the gaps.
-      if (0) {
-        if (shift > 0 && shift > groupNetGrowth) {
-          for (int i = 0; i < shift - groupNetGrowth; ++i) {
-            column[pos + rowIndex + i] = Id::makeUndefined();
-          }
-        }
-      }
-      // Show the changed column.
-      if (0) {
-        std::cout << "Col #" << colIndex << ": ";
-        std::copy(column.begin(), column.end(),
-                  std::ostream_iterator<Id>(std::cout, " "));
-        std::cout << " [after add]" << std::endl;
-      }
+    // Append the triple at this position to the result if and only if it is
+    // marked for deletion and matches (also skip it if it doesn't match).
+    bool deleteBlockEntry = false;
+    if (locatedTriple != locatedTriples.end() &&
+        locatedTriple->rowIndexInBlock == rowIndex &&
+        locatedTriple->existsInIndex == true) {
+      deleteBlockEntry = locatedTripleMatches();
+      ++locatedTriple;
+    }
+    if (!deleteBlockEntry) {
+      *resultEntry++ = blockEntry;
     }
 
-    // Update for the next iteration.
-    previousRowIndex = rowIndex;
-    shift -= groupNetGrowth;
-    locatedTriple = nextLocatedTriple;
-  }
-  // AD_CORRECTNESS_CHECK(shift == 0);
-  // AD_CORRECTNESS_CHECK(std::is_sorted(
-  //     idTable.begin() + pos, idTable.begin() + pos + len + numNewTriples));
+    // Update `rowIndex` for the next `blockEntry`.
+    ++rowIndex;
+  };
+}
 
-  // Do something to `idTable` to make the compiler happy.
-  // std::shift_right(idTable.begin() + pos,
-  //                  idTable.begin() + pos + len + numNewTriples,
-  //                  numNewTriples);
+// ____________________________________________________________________________
+void LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
+                                          const IdTable& block, IdTable& result,
+                                          size_t offsetInResult) const {
+  mergeTriples<MatchMode::MatchAll>(blockIndex, block, result, offsetInResult);
+}
+
+// ____________________________________________________________________________
+void LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
+                                          const IdTable& block, IdTable& result,
+                                          size_t offsetInResult,
+                                          size_t rowIndexOffset, Id id1) const {
+  mergeTriples<MatchMode::MatchId1>(blockIndex, block, result, offsetInResult,
+                                    rowIndexOffset, id1);
+}
+
+// ____________________________________________________________________________
+void LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
+                                          const IdTable& block, IdTable& result,
+                                          size_t offsetInResult,
+                                          size_t rowIndexOffset, Id id1,
+                                          Id id2) const {
+  mergeTriples<MatchMode::MatchId1AndId2>(
+      blockIndex, block, result, offsetInResult, rowIndexOffset, id1, id2);
 }
 
 // ____________________________________________________________________________

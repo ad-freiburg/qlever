@@ -60,23 +60,30 @@ class LocatedTriplesPerBlock {
  public:
   // Get the number of located triples for the given block and that match the
   // `id1` (if provided) and `id2` (if provided).
-  size_t numTriplesInBlock(size_t blockIndex) const;
-  size_t numTriplesInBlock(size_t blockIndex, Id id1) const;
-  size_t numTriplesInBlock(size_t blockIndex, Id id1, Id id2) const;
+  size_t numTriples(size_t blockIndex) const;
+  size_t numTriples(size_t blockIndex, Id id1) const;
+  size_t numTriples(size_t blockIndex, Id id1, Id id2) const;
 
-  // Merge the located triples for the given block into the given `IdTable`
-  // segment. It is the resposibility of the caller that there is space for
-  // `numNewTriples` triples starting from `end`. Like for `numTriplesInBlock`
-  // above, consider only triples that match `id1` (if provided) and `id2` (if
-  // provided).
-  void mergeTriplesIntoBlock(size_t blockIndex, IdTable& idTable, size_t pos,
-                             size_t len, int netGrowth);
-  void mergeTriplesIntoBlock(size_t blockIndex, size_t rowIndexOffset, Id id1,
-                             IdTable& idTable, size_t pos, size_t end,
-                             int netGrowth);
-  void mergeTriplesIntoBlock(size_t blockIndex, size_t rowIndexOffset, Id id1,
-                             Id id2, IdTable& idTable, size_t pos, size_t end,
-                             int netGrowth);
+  // Merge the located triples for `blockIndex` into the given `block` (which
+  // might be the whole block with that index or just a part of it) and write
+  // the result to `result`, starting from position `offsetInResult`.
+  //
+  // It is the resposibility of the caller that there is enough space or the
+  // result starting from that offset. Like for `numTriplesInBlock` above,
+  // consider only triples that match `id1` (if provided) and `id2` (if
+  // provided). If `block` is just a part of an index block, the first triple of
+  // block has row index `rowIndexOffset` in the original block.
+  //
+  // TODO: Beware of triples inserted at the end of the block, they are found in
+  // the `LocatedTriples` for `blockIndex + 1`. It's up to `CompressedRelation`
+  // to handle that correctly.
+  void mergeTriples(size_t blockIndex, const IdTable& block, IdTable& result,
+                    size_t offsetInResult) const;
+  void mergeTriples(size_t blockIndex, const IdTable& block, IdTable& result,
+                    size_t offsetInResult, size_t rowIndexOffset, Id id1) const;
+  void mergeTriples(size_t blockIndex, const IdTable& block, IdTable& result,
+                    size_t offsetInResult, size_t rowIndexOffset, Id id1,
+                    Id id2) const;
 
   // Add the given `locatedTriple` to the given `LocatedTriplesPerBlock`.
   // Returns a handle to where it was added (via which we can easily remove it
@@ -108,16 +115,15 @@ class LocatedTriplesPerBlock {
 
   // The Implementation behind the public method `numTriplesInBlock` above.
   template <MatchMode matchMode>
-  size_t numTriplesInBlockImpl(size_t blockIndex, Id id1 = Id::makeUndefined(),
-                               Id id2 = Id::makeUndefined()) const;
+  size_t numTriplesImpl(size_t blockIndex, Id id1 = Id::makeUndefined(),
+                        Id id2 = Id::makeUndefined()) const;
 
   // The Implementation behind the public method `mergeTriplesIntoBlock` above.
   // The only reason that the arguments `id1` and `id2` come at the end here is
   // so that we can give them default values.
   template <MatchMode matchMode>
-  void mergeTriplesIntoBlock(size_t blockIndex, IdTable::iterator begin,
-                             IdTable::iterator end, size_t numNewTriples,
-                             size_t rowIndexOffset = 0,
-                             Id id1 = Id::makeUndefined(),
-                             Id id2 = Id::makeUndefined()) const;
+  void mergeTriples(size_t blockIndex, const IdTable& block, IdTable& result,
+                    size_t offsetInResult, size_t rowIndexOffset = 0,
+                    Id id1 = Id::makeUndefined(),
+                    Id id2 = Id::makeUndefined()) const;
 };
