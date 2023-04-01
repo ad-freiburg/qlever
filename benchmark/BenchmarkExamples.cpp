@@ -12,6 +12,19 @@
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "util/Random.h"
 
+/*
+TODO Currently there is no way to prevent the result of expressions from being
+discarded, if it's not used, which sabotages the measured execution times of
+benchmarks. Because an expression, who's result got discarded and which has no
+side effects, can also be safely discarded, if the compiler optimizes.
+One solution would be to use the functons in google benchmark, that prevent
+optimization:
+`https://github.com/google/benchmark/blob/main/docs/user_guide.md#preventing-optimization`
+
+For that however, we first would have to include their benchmarking system as
+third party.
+*/
+
 // Single Measurements
 class BM_SingeMeasurements: public BenchmarkClassInterface{
   public:
