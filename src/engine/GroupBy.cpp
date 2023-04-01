@@ -150,7 +150,7 @@ float GroupBy::getMultiplicity(size_t col) {
   return 1;
 }
 
-size_t GroupBy::getSizeEstimate() {
+size_t GroupBy::getSizeEstimateBeforeLimit() {
   if (_groupByVariables.empty()) {
     return 1;
   }
@@ -416,7 +416,7 @@ bool GroupBy::computeGroupByForSingleIndexScan(IdTable* result) {
   } else {
     // TODO<joka921> The two variables IndexScans should also account for the
     // additionally added triples.
-    table(0, 0) = Id::makeFromInt(indexScan->getSizeEstimate());
+    table(0, 0) = Id::makeFromInt(indexScan->getExactSize());
   }
   return true;
 }

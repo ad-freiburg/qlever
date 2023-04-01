@@ -49,8 +49,10 @@ class DummyOperation : public Operation {
 
   virtual size_t getCostEstimate() override { return 10; }
 
-  virtual size_t getSizeEstimate() override { return 10; }
+ private:
+  virtual size_t getSizeEstimateBeforeLimit() override { return 10; }
 
+ public:
   virtual float getMultiplicity(size_t col) override {
     (void)col;
     return 1;

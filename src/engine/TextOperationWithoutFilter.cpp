@@ -104,7 +104,7 @@ void TextOperationWithoutFilter::computeResultMultVars(IdTable* idTable) const {
 }
 
 // _____________________________________________________________________________
-size_t TextOperationWithoutFilter::getSizeEstimate() {
+size_t TextOperationWithoutFilter::getSizeEstimateBeforeLimit() {
   if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
     double nofEntitiesSingleVar;
     if (_executionContext) {
@@ -126,9 +126,9 @@ size_t TextOperationWithoutFilter::getCostEstimate() {
   if (_executionContext) {
     return static_cast<size_t>(
         _executionContext->getCostFactor("NO_FILTER_PUNISH") *
-        (getSizeEstimate() * getNofVars()));
+        (getSizeEstimateBeforeLimit() * getNofVars()));
   } else {
-    return getSizeEstimate() * getNofVars();
+    return getSizeEstimateBeforeLimit() * getNofVars();
   }
 }
 

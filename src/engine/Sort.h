@@ -36,10 +36,12 @@ class Sort : public Operation {
     subtree_->setTextLimit(limit);
   }
 
-  virtual size_t getSizeEstimate() override {
+ private:
+  size_t getSizeEstimateBeforeLimit() override {
     return subtree_->getSizeEstimate();
   }
 
+ public:
   virtual float getMultiplicity(size_t col) override {
     return subtree_->getMultiplicity(col);
   }
@@ -47,7 +49,7 @@ class Sort : public Operation {
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return subtree_; }
 
   virtual size_t getCostEstimate() override {
-    size_t size = getSizeEstimate();
+    size_t size = getSizeEstimateBeforeLimit();
     size_t logSize = std::max(
         size_t(2), static_cast<size_t>(logb(static_cast<double>(size))));
     size_t nlogn = size * logSize;

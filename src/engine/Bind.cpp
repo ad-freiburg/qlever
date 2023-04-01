@@ -14,7 +14,9 @@
 size_t Bind::getResultWidth() const { return _subtree->getResultWidth() + 1; }
 
 // BIND doesn't change the number of result rows
-size_t Bind::getSizeEstimate() { return _subtree->getSizeEstimate(); }
+size_t Bind::getSizeEstimateBeforeLimit() {
+  return _subtree->getSizeEstimate();
+}
 
 // BIND has cost linear in the size of the input. Note that BIND operations are
 // currently always executed at their position in the SPARQL query, so that this

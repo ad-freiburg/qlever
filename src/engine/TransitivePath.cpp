@@ -159,7 +159,7 @@ float TransitivePath::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t TransitivePath::getSizeEstimate() {
+size_t TransitivePath::getSizeEstimateBeforeLimit() {
   if (!_leftIsVar || !_rightIsVar) {
     // If the subject or object is fixed, assume that the number of matching
     // triples is 1000. This will usually be an overestimate, but it will do the
@@ -180,8 +180,8 @@ size_t TransitivePath::getSizeEstimate() {
   // other way, so that the only possible query plan is to compute the complete
   // transitive hull).
   //
-  // NOTE: _subtree->getSizeEstimate() is the number of triples of the
-  // predicate, for which the transitive hull operator (+) is specified. On
+  // NOTE: _subtree->getSizeEstimateBeforeLimit() is the number of triples of
+  // the predicate, for which the transitive hull operator (+) is specified. On
   // Wikidata, the predicate with the largest blowup when taking the
   // transitive hull is wdt:P2789 (connects with). The blowup is then from 90K
   // (without +) to 110M (with +), so about 1000 times larger.
@@ -199,7 +199,7 @@ size_t TransitivePath::getSizeEstimate() {
 size_t TransitivePath::getCostEstimate() {
   // We assume that the cost of computing the transitive path is proportional to
   // the result size.
-  auto costEstimate = getSizeEstimate();
+  auto costEstimate = getSizeEstimateBeforeLimit();
   // Add the cost for the index scan of the predicate involved.
   for (auto* ptr : getChildren()) {
     if (ptr) {
