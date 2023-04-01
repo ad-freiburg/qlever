@@ -204,3 +204,33 @@ void to_json(nlohmann::ordered_json& j,
       {"time_query_planning", rti.timeQueryPlanning},
       {"time_index_scans_query_planning", rti.timeIndexScansQueryPlanning}};
 }
+
+// ___________________________________________________________________________________
+void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
+                                           size_t timeForLimit,
+                                           bool fullResultIsNotCached) {
+  bool hasLimit = l._limit.has_value();
+  bool hasOffset = l._offset != 0;
+  if (!(hasLimit || hasOffset)) {
+    return;
+  }
+  children_ = std::vector{*this};
+  auto& actualOperation = children_.at(0);
+  numRows_ = l.actualSize(actualOperation.numRows_);
+  details_.clear();
+  cacheStatus_ = ad_utility::CacheStatus::computed;
+  totalTime_ += static_cast<double>(timeForLimit);
+  actualOperation.addDetail("not-written-to-cache-because-child-of-limit",
+                            fullResultIsNotCached);
+  sizeEstimate_ = l.actualSize(sizeEstimate_);
+
+  // Update the descriptor.
+  descriptor_.clear();
+  if (hasLimit) {
+    descriptor_ = absl::StrCat("LIMIT ", l._limit.value());
+  }
+
+  if (hasOffset) {
+    absl::StrAppend(&descriptor_, hasLimit ? " " : "", "OFFSET ", l._offset);
+  }
+}

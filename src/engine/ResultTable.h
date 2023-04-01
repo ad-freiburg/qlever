@@ -12,6 +12,7 @@
 #include "engine/VariableToColumnMap.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "parser/data/LimitOffsetClause.h"
 #include "util/Log.h"
 
 using std::vector;
@@ -35,6 +36,11 @@ class ResultTable {
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
   // The local vocabulary of the result.
   LocalVocabPtr localVocab_ = std::make_shared<const LocalVocab>();
+
+  // Note: If additional members and invariants are added to the class (for
+  // example information about the datatypes in each column) make sure that
+  // those remain valid after calling non-const function like
+  // `applyLimitOffset`.
 
   // This class is used to enforce the invariant, that the `localVocab_` (which
   // is stored in a shared_ptr) is only shared between instances of the
@@ -152,6 +158,12 @@ class ResultTable {
 
   // The first rows of the result and its total size (for debugging).
   string asDebugString() const;
+
+  // Apply the `limitOffset` clause by shifting and then resizing the `IdTable`.
+  // Note: If additional members and invariants are added to the class (for
+  // example information about the datatypes in each column) make sure that
+  // those are still correct after performing this operation.
+  void applyLimitOffset(const LimitOffsetClause& limitOffset);
 
   // Get the information, which columns stores how many entries of each
   // datatype. This information is computed on the first call to this function

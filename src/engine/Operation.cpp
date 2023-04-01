@@ -138,6 +138,19 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       updateRuntimeInformationOnSuccess(result,
                                         ad_utility::CacheStatus::computed,
                                         timer.msecs(), std::nullopt);
+      // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
+      // already perform it. An example for an operation that directly computes
+      // the Limit is a full index scan with three variables.
+      if (!supportsLimit()) {
+        ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
+        // Note: both of the following calls have no effect and negligible
+        // runtime if neither a LIMIT nor an OFFSET were specified.
+        result.applyLimitOffset(_limit);
+        _runtimeInfo.addLimitOffsetRow(_limit, limitTimer.msecs(), true);
+      } else {
+        AD_CONTRACT_CHECK(result.idTable().numRows() ==
+                          _limit.actualSize(result.idTable().numRows()));
+      }
       return CacheValue{std::move(result), getRuntimeInfo()};
     };
 
@@ -301,7 +314,7 @@ void Operation::createRuntimeInfoFromEstimates() {
   }
 
   _runtimeInfo.costEstimate_ = getCostEstimate();
-  _runtimeInfo.sizeEstimate_ = getSizeEstimate();
+  _runtimeInfo.sizeEstimate_ = getSizeEstimateBeforeLimit();
 
   std::vector<float> multiplicityEstimates;
   multiplicityEstimates.reserve(numCols);

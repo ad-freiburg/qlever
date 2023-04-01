@@ -79,7 +79,9 @@ float Values::getMultiplicity(size_t col) {
 }
 
 // ____________________________________________________________________________
-size_t Values::getSizeEstimate() { return parsedValues_._values.size(); }
+size_t Values::getSizeEstimateBeforeLimit() {
+  return parsedValues_._values.size();
+}
 
 // ____________________________________________________________________________
 size_t Values::getCostEstimate() { return parsedValues_._values.size(); }

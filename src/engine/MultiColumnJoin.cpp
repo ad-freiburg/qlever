@@ -137,7 +137,7 @@ float MultiColumnJoin::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t MultiColumnJoin::getSizeEstimate() {
+size_t MultiColumnJoin::getSizeEstimateBeforeLimit() {
   if (!_multiplicitiesComputed) {
     computeSizeEstimateAndMultiplicities();
   }
@@ -146,8 +146,8 @@ size_t MultiColumnJoin::getSizeEstimate() {
 
 // _____________________________________________________________________________
 size_t MultiColumnJoin::getCostEstimate() {
-  size_t costEstimate =
-      getSizeEstimate() + _left->getSizeEstimate() + _right->getSizeEstimate();
+  size_t costEstimate = getSizeEstimateBeforeLimit() +
+                        _left->getSizeEstimate() + _right->getSizeEstimate();
   // This join is slower than a normal join, due to
   // its increased complexity
   costEstimate *= 2;

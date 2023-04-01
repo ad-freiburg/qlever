@@ -217,7 +217,7 @@ size_t Join::getCostEstimate() {
     return isFullScanDummy(subtree) ? size_t{0} : subtree->getCostEstimate();
   };
 
-  return getSizeEstimate() + costJoin + costIfNotFullScan(_left) +
+  return getSizeEstimateBeforeLimit() + costJoin + costIfNotFullScan(_left) +
          costIfNotFullScan(_right);
 }
 

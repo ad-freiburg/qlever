@@ -363,7 +363,7 @@ size_t IndexScan::computeSizeEstimate() {
 // _____________________________________________________________________________
 size_t IndexScan::getCostEstimate() {
   if (getResultWidth() != 3) {
-    return getSizeEstimate();
+    return getSizeEstimateBeforeLimit();
   } else {
     // The computation of the `full scan` estimate must be consistent with the
     // full scan dummy joins in `Join.cpp` for correct query planning.
@@ -383,7 +383,7 @@ size_t IndexScan::getCostEstimate() {
     // estimate a tuple `(numFullIndexScans, costEstimateForRemainder)`.
     // Implement this functionality.
 
-    return getSizeEstimate() * 10'000;
+    return getSizeEstimateBeforeLimit() * 10'000;
   }
 }
 
@@ -498,8 +498,15 @@ void IndexScan::computeFullScan(IdTable* result,
   // This implementation computes the complete knowledge graph, except the
   // internal triples.
   uint64_t resultSize = getIndex().numTriples().normal_;
-  if (getLimit().has_value() && getLimit() < resultSize) {
-    resultSize = getLimit().value();
+  if (getLimit()._limit.has_value() && getLimit()._limit < resultSize) {
+    resultSize = getLimit()._limit.value();
+  }
+
+  // TODO<joka921> Implement OFFSET
+  if (getLimit()._offset != 0) {
+    throw NotSupportedException{
+        "Scanning the complete index with an OFFSET clause is currently not "
+        "supported by QLever"};
   }
   result->reserve(resultSize);
   auto table = std::move(*result).toStatic<3>();

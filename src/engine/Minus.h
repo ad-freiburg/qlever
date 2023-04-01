@@ -29,7 +29,7 @@ class Minus : public Operation {
   explicit Minus(OnlyForTestingTag){};
 
  protected:
-  string asStringImpl(size_t indent) const override;
+  string asStringImpl(size_t indent = 0) const override;
 
  public:
   string getDescriptor() const override;
@@ -47,8 +47,10 @@ class Minus : public Operation {
 
   float getMultiplicity(size_t col) override;
 
-  size_t getSizeEstimate() override;
+ private:
+  size_t getSizeEstimateBeforeLimit() override;
 
+ public:
   size_t getCostEstimate() override;
 
   vector<QueryExecutionTree*> getChildren() override {

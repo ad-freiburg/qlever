@@ -311,3 +311,9 @@ addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 addLinkAndDiscoverTest(ExceptionHandlingTest)
 
 addLinkAndDiscoverTest(SparqlExpressionTypesTest)
+
+addLinkAndDiscoverTest(LimitOffsetClauseTest)
+
+addLinkAndDiscoverTest(OperationTest engine)
+
+addLinkAndDiscoverTest(RuntimeInformationTest engine)

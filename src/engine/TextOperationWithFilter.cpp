@@ -164,7 +164,7 @@ void TextOperationWithFilter::computeMultiplicities() {
 }
 
 // _____________________________________________________________________________
-size_t TextOperationWithFilter::getSizeEstimate() {
+size_t TextOperationWithFilter::getSizeEstimateBeforeLimit() {
   if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
     if (_executionContext) {
       // NEW at 05 Dec 2016:
@@ -206,7 +206,7 @@ size_t TextOperationWithFilter::getCostEstimate() {
   if (_executionContext) {
     return static_cast<size_t>(
         _executionContext->getCostFactor("FILTER_PUNISH") *
-        (getSizeEstimate() * getNofVars() +
+        (getSizeEstimateBeforeLimit() * getNofVars() +
          _filterResult->getSizeEstimate() *
              _executionContext->getCostFactor("HASH_MAP_OPERATION_COST") +
          _filterResult->getCostEstimate()));

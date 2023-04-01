@@ -52,8 +52,10 @@ class TextOperationWithoutFilter : public Operation {
     _sizeEstimate = std::numeric_limits<size_t>::max();
   }
 
-  virtual size_t getSizeEstimate() override;
+ private:
+  size_t getSizeEstimateBeforeLimit() override;
 
+ public:
   virtual size_t getCostEstimate() override;
 
   virtual float getMultiplicity(size_t col) override;

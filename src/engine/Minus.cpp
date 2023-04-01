@@ -91,7 +91,7 @@ float Minus::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t Minus::getSizeEstimate() {
+size_t Minus::getSizeEstimateBeforeLimit() {
   // This is an upper bound on the size as an arbitrary number
   // of rows might be deleted in this operation.
   return _left->getSizeEstimate();

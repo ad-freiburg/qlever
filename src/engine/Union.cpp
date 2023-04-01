@@ -142,7 +142,7 @@ float Union::getMultiplicity(size_t col) {
                          static_cast<double>(_subtrees[0]->getMultiplicity(
                              _columnOrigins[col][0]));
     numDistinct += 1;
-    return getSizeEstimate() / numDistinct;
+    return getSizeEstimateBeforeLimit() / numDistinct;
   } else if (_columnOrigins[col][1] != NO_COLUMN) {
     // Compute the number of distinct elements in the input, add one new element
     // for the unbound variables, then divide it by the number of elements in
@@ -152,18 +152,18 @@ float Union::getMultiplicity(size_t col) {
                          static_cast<double>(_subtrees[1]->getMultiplicity(
                              _columnOrigins[col][1]));
     numDistinct += 1;
-    return getSizeEstimate() / numDistinct;
+    return getSizeEstimateBeforeLimit() / numDistinct;
   }
   return 1;
 }
 
-size_t Union::getSizeEstimate() {
+size_t Union::getSizeEstimateBeforeLimit() {
   return _subtrees[0]->getSizeEstimate() + _subtrees[1]->getSizeEstimate();
 }
 
 size_t Union::getCostEstimate() {
   return _subtrees[0]->getCostEstimate() + _subtrees[1]->getCostEstimate() +
-         getSizeEstimate();
+         getSizeEstimateBeforeLimit();
 }
 
 ResultTable Union::computeResult() {
