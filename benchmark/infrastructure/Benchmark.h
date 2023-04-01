@@ -16,6 +16,7 @@
 #include "util/Timer.h"
 #include "util/HashMap.h"
 #include "util/Exception.h"
+#include "util/SourceLocation.h"
 #include "../benchmark/util/HashMapWithInsertionOrder.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
@@ -226,3 +227,25 @@ class BenchmarkRegister {
    */
   static const std::vector<BenchmarkMetadata> getAllGeneralMetadata();
 };
+
+/*
+Macros for easier registering of benchmark classes.
+`declareRegisterVariable` and `declareRegisterVariableHidden` are needed for
+the implementation. Only `registerBenchmark` needs to be 'called', when one
+want's to register a benchmark class.
+*/
+#define declareRegisterVariableHidden(line, benchmarkClass, ...) BenchmarkRegister gRegisterVariable##line{std::make_unique<benchmarkClass>(__VA_ARGS__)};
+#define declareRegisterVariable(line, benchmarkClass, ...) declareRegisterVariableHidden(line, benchmarkClass __VA_OPT__(,) __VA_ARGS__)
+
+/*
+@brief Registers a benchmark class with `BenchmarkRegister`. Very important:
+Every call has to be in it's own line in a file, otherwise you will get an
+error.
+
+@param benchmarkClass The class, that you wish to register. Not an instance
+of the class, just the type.
+@param `...` Should your class not be default constructible, or you want to
+pass some arguments to a special constructor, you can pass any extra
+constructor arguments here. Just treat it like a variadic template function.
+*/
+#define registerBenchmark(benchmarkClass, ...) declareRegisterVariable(__LINE__, benchmarkClass __VA_OPT__(,) __VA_ARGS__)

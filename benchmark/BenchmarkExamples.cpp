@@ -4,6 +4,7 @@
 #include <cmath>
 #include <string>
 #include <memory>
+#include <vector>
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
@@ -249,7 +250,7 @@ class BM_ConfigurationAndMetadataExample: public BenchmarkClassInterface{
 
 
 // Registering the benchmarks.
-BenchmarkRegister temp1{std::make_unique<BM_SingeMeasurements>()};
-BenchmarkRegister temp2{std::make_unique<BM_Groups>()};
-BenchmarkRegister temp3{std::make_unique<BM_Tables>()};
-BenchmarkRegister temp4{std::make_unique<BM_ConfigurationAndMetadataExample>()};
+registerBenchmark(BM_SingeMeasurements);
+registerBenchmark(BM_Groups);
+registerBenchmark(BM_Tables);
+registerBenchmark(BM_ConfigurationAndMetadataExample);
