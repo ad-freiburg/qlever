@@ -36,8 +36,6 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
     std::swap(t1, t2);
     std::swap(t1JoinCol, t2JoinCol);
   }
-
-  // TODO<joka921> Combine the trees and the join columns in the interface.
   if (isFullScanDummy(t1)) {
     AD_CONTRACT_CHECK(!isFullScanDummy(t2));
     std::swap(t1, t2);
@@ -82,7 +80,7 @@ string Join::asStringImpl(size_t indent) const {
 string Join::getDescriptor() const {
   std::string joinVar = "";
   for (auto p : _left->getVariableColumns()) {
-    if (p.second == _leftJoinCol) {
+    if (p.second.columnIndex_ == _leftJoinCol) {
       joinVar = p.first.name();
       break;
     }
@@ -164,41 +162,13 @@ ResultTable Join::computeResult() {
 
 // _____________________________________________________________________________
 VariableToColumnMap Join::computeVariableToColumnMap() const {
-  VariableToColumnMap retVal;
-  if (!isFullScanDummy(_left) && !isFullScanDummy(_right)) {
-    retVal = _left->getVariableColumns();
-    size_t leftSize = _left->getResultWidth();
-    for (const auto& [variable, column] : _right->getVariableColumns()) {
-      if (column < _rightJoinCol) {
-        retVal[variable] = leftSize + column;
-      }
-      if (column > _rightJoinCol) {
-        retVal[variable] = leftSize + column - 1;
-      }
-    }
-  } else {
-    if (isFullScanDummy(_right)) {
-      retVal = _left->getVariableColumns();
-      size_t leftSize = _left->getResultWidth();
-      for (const auto& [variable, column] : _right->getVariableColumns()) {
-        // Skip the first col for the dummy
-        if (column != 0) {
-          retVal[variable] = leftSize + column - 1;
-        }
-      }
-    } else {
-      for (const auto& [variable, column] : _left->getVariableColumns()) {
-        // Skip+drop the first col for the dummy and subtract one from others.
-        if (column != 0) {
-          retVal[variable] = column - 1;
-        }
-      }
-      for (const auto& [variable, column] : _right->getVariableColumns()) {
-        retVal[variable] = 2 + column;
-      }
-    }
+  AD_CORRECTNESS_CHECK(!isFullScanDummy(_left));
+  if (isFullScanDummy(_right)) {
+    AD_CORRECTNESS_CHECK(_rightJoinCol == 0u);
   }
-  return retVal;
+  return makeVarToColMapForJoinOperation(
+      _left->getVariableColumns(), _right->getVariableColumns(),
+      {{_leftJoinCol, _rightJoinCol}}, BinOpType::Join);
 }
 
 // _____________________________________________________________________________
@@ -257,7 +227,7 @@ size_t Join::getCostEstimate() {
     return isFullScanDummy(subtree) ? size_t{0} : subtree->getCostEstimate();
   };
 
-  return getSizeEstimate() + costJoin + costIfNotFullScan(_left) +
+  return getSizeEstimateBeforeLimit() + costJoin + costIfNotFullScan(_left) +
          costIfNotFullScan(_right);
 }
 

@@ -64,8 +64,9 @@ vector<size_t> CountAvailablePredicates::resultSortedOn() const {
 VariableToColumnMap CountAvailablePredicates::computeVariableToColumnMap()
     const {
   VariableToColumnMap varCols;
-  varCols[_predicateVariable] = 0;
-  varCols[_countVariable] = 1;
+  auto col = makeAlwaysDefinedColumn;
+  varCols[_predicateVariable] = col(0);
+  varCols[_countVariable] = col(1);
   return varCols;
 }
 
@@ -78,7 +79,7 @@ float CountAvailablePredicates::getMultiplicity([[maybe_unused]] size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t CountAvailablePredicates::getSizeEstimate() {
+size_t CountAvailablePredicates::getSizeEstimateBeforeLimit() {
   if (_subtree.get() != nullptr) {
     // Predicates are only computed for entities in the subtrees result.
 
@@ -105,7 +106,7 @@ size_t CountAvailablePredicates::getCostEstimate() {
     return _subtree->getCostEstimate() + _subtree->getSizeEstimate();
   } else {
     // the cost is proportional to the number of elements we need to write.
-    return getSizeEstimate();
+    return getSizeEstimateBeforeLimit();
   }
 }
 

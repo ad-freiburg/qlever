@@ -105,7 +105,7 @@ class ExportQueryExecutionTrees {
   static nlohmann::json selectQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
-      LimitOffsetClause limitAndOffset,
+      const LimitOffsetClause& limitAndOffset,
       shared_ptr<const ResultTable> resultTable);
 
   /**
@@ -124,7 +124,7 @@ class ExportQueryExecutionTrees {
    * @return a 2D-Json array corresponding to the IdTable given the arguments
    */
   static nlohmann::json idTableToQLeverJSONArray(
-      const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
+      const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
       const QueryExecutionTree::ColumnIndicesAndTypes& columns,
       std::shared_ptr<const ResultTable> resultTable = nullptr);
 
@@ -132,7 +132,8 @@ class ExportQueryExecutionTrees {
   static nlohmann::json constructQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
-      LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res);
+      const LimitOffsetClause& limitAndOffset,
+      std::shared_ptr<const ResultTable> res);
 
   // Generate an RDF graph for a CONSTRUCT query.
   static cppcoro::generator<QueryExecutionTree::StringTriple>
@@ -152,7 +153,7 @@ class ExportQueryExecutionTrees {
   static nlohmann::json selectQueryResultToSparqlJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
-      LimitOffsetClause limitAndOffset,
+      const LimitOffsetClause& limitAndOffset,
       shared_ptr<const ResultTable> resultTable);
 
   // ___________________________________________________________________________
