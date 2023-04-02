@@ -58,11 +58,12 @@ class LocatedTriplesPerBlock {
   ad_utility::HashMap<size_t, LocatedTriples> map_;
 
  public:
-  // Get the number of located triples for the given block and that match the
-  // `id1` (if provided) and `id2` (if provided).
-  size_t numTriples(size_t blockIndex) const;
-  size_t numTriples(size_t blockIndex, Id id1) const;
-  size_t numTriples(size_t blockIndex, Id id1, Id id2) const;
+  // Get the number of to-be-inserted (first) and to-be-deleted (second) triples
+  // for the given block and that match the `id1` (if provided) and `id2` (if
+  // provided).
+  std::pair<size_t, size_t> numTriples(size_t blockIndex) const;
+  std::pair<size_t, size_t> numTriples(size_t blockIndex, Id id1) const;
+  std::pair<size_t, size_t> numTriples(size_t blockIndex, Id id1, Id id2) const;
 
   // Merge the located triples for `blockIndex` into the given `block` (which
   // might be the whole block with that index or just a part of it) and write
@@ -115,8 +116,9 @@ class LocatedTriplesPerBlock {
 
   // The Implementation behind the public method `numTriplesInBlock` above.
   template <MatchMode matchMode>
-  size_t numTriplesImpl(size_t blockIndex, Id id1 = Id::makeUndefined(),
-                        Id id2 = Id::makeUndefined()) const;
+  std::pair<size_t, size_t> numTriplesImpl(size_t blockIndex,
+                                           Id id1 = Id::makeUndefined(),
+                                           Id id2 = Id::makeUndefined()) const;
 
   // The Implementation behind the public method `mergeTriplesIntoBlock` above.
   // The only reason that the arguments `id1` and `id2` come at the end here is

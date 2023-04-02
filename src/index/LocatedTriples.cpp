@@ -12,34 +12,56 @@
 
 // ____________________________________________________________________________
 template <LocatedTriplesPerBlock::MatchMode matchMode>
-size_t LocatedTriplesPerBlock::numTriplesImpl(size_t blockIndex, Id id1,
-                                              Id id2) const {
-  size_t count = 0;
+std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriplesImpl(
+    size_t blockIndex, Id id1, Id id2) const {
+  // If no located triples for `blockIndex` exist, there are no delta triples
+  // for that block.
+  if (!map_.contains(blockIndex)) {
+    return {0, 0};
+  }
+
+  // Otherwise iterate over all entries and count.
+  size_t countInserted = 0;
+  size_t countDeleted = 0;
   for (const LocatedTriple& locatedTriple : map_.at(blockIndex)) {
+    // Helper lambda for increasing the right counter.
+    auto increaseCountIf = [&](bool increase) {
+      if (increase) {
+        if (locatedTriple.existsInIndex) {
+          ++countDeleted;
+        } else {
+          ++countInserted;
+        }
+      }
+    };
+    // Increase depending on the mode.
     if constexpr (matchMode == MatchMode::MatchAll) {
-      ++count;
+      increaseCountIf(true);
     } else if constexpr (matchMode == MatchMode::MatchId1) {
-      count += (locatedTriple.id1 == id1);
+      increaseCountIf(locatedTriple.id1 == id1);
     } else if constexpr (matchMode == MatchMode::MatchId1AndId2) {
-      count += (locatedTriple.id1 == id1 && locatedTriple.id2 == id2);
+      increaseCountIf(locatedTriple.id1 == id1 && locatedTriple.id2 == id2);
     }
   }
-  return count;
+  return {countInserted, countDeleted};
 }
 
 // ____________________________________________________________________________
-size_t LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
+std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriples(
+    size_t blockIndex) const {
   return numTriplesImpl<MatchMode::MatchAll>(blockIndex);
 }
 
 // ____________________________________________________________________________
-size_t LocatedTriplesPerBlock::numTriples(size_t blockIndex, Id id1) const {
+std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriples(size_t blockIndex,
+                                                             Id id1) const {
   return numTriplesImpl<MatchMode::MatchId1>(blockIndex, id1);
 }
 
 // ____________________________________________________________________________
-size_t LocatedTriplesPerBlock::numTriples(size_t blockIndex, Id id1,
-                                          Id id2) const {
+std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriples(size_t blockIndex,
+                                                             Id id1,
+                                                             Id id2) const {
   return numTriplesImpl<MatchMode::MatchId1AndId2>(blockIndex, id1, id2);
 }
 
@@ -50,11 +72,10 @@ void LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
                                           size_t offsetInResult,
                                           size_t offsetOfBlock, Id id1,
                                           Id id2) const {
-  // This method should only be called, if located triples in that block exist.
+  // This method should only be called, if located triples in that block exist
+  // and for blocks with one or two columns.
   AD_CONTRACT_CHECK(map_.contains(blockIndex));
-
-  // TODO: For now, only implemented for two columns (easy to extend).
-  AD_CORRECTNESS_CHECK(block.numColumns() == 2);
+  AD_CONTRACT_CHECK(block.numColumns() == 1 || block.numColumns() == 2);
 
   AD_CONTRACT_CHECK(block.numColumns() == result.numColumns());
   auto resultEntry = result.begin() + offsetInResult;
@@ -90,8 +111,12 @@ void LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
            locatedTriple->rowIndexInBlock == rowIndex &&
            locatedTriple->existsInIndex == false) {
       if (locatedTripleMatches()) {
-        (*resultEntry)[0] = locatedTriple->id2;
-        (*resultEntry)[1] = locatedTriple->id3;
+        if (result.numColumns() == 2) {
+          (*resultEntry)[0] = locatedTriple->id2;
+          (*resultEntry)[1] = locatedTriple->id3;
+        } else {
+          (*resultEntry)[0] = locatedTriple->id3;
+        }
         ++resultEntry;
       }
       ++locatedTriple;

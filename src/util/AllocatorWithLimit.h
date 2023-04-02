@@ -89,8 +89,8 @@ class AllocationMemoryLeftThreadsafe {
 };
 }  // namespace detail
 
-// setup a shared Allocation state. For the usage see documentation of the
-// Limited Allocator class
+// Setup a shared Allocation state. For the usage see documentation of the
+// `AllocatorWithLimit` class.
 inline detail::AllocationMemoryLeftThreadsafe
 makeAllocationMemoryLeftThreadsafeObject(size_t n) {
   return detail::AllocationMemoryLeftThreadsafe{std::make_shared<

@@ -310,7 +310,10 @@ class CompressedRelationReader {
   // must have at least `numRowsToRead + offsetInTable` rows.
   static void decompressBlockToExistingIdTable(
       const CompressedBlock& compressedBlock, size_t numRowsToRead,
-      IdTable& table, size_t offsetInTable);
+      IdTable& table, size_t offsetInTable,
+      std::pair<size_t, size_t> numInsAndDel = {0, 0},
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock = {},
+      size_t blockIndex = 0);
 
   // Helper function used by `decompressBlock` and
   // `decompressBlockToExistingIdTable`. Decompress the `compressedColumn` and

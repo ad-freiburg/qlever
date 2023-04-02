@@ -38,7 +38,9 @@ class PermutationImpl {
         _fileSuffix(std::move(suffix)),
         _keyOrder(order) {}
 
-  // everything that has to be done when reading an index from disk
+  // Initialize this permutation based on its index file(s) on disk. For PSO and
+  // PSO, this is one file named `.index.pos` or `.index.pso`, respectively. For
+  // the other permutations, there is also a `.meta` file.
   void loadFromDisk(const std::string& onDiskBase) {
     if constexpr (MetaData::_isMmapBased) {
       _meta.setup(onDiskBase + ".index" + _fileSuffix + MMAP_FILE_SUFFIX,
@@ -58,9 +60,9 @@ class PermutationImpl {
     _isLoaded = true;
   }
 
-  /// For a given ID for the first column, retrieve all IDs of the second and
-  /// third column, and store them in `result`. This is just a thin wrapper
-  /// around `CompressedRelationMetaData::scan`.
+  // For a given relation `Id` (first column), retrieve all `Id`s of the second
+  // and third column, and store them in `result`. This is just a thin wrapper
+  // around the corresponding `CompressedRelationMetaData::scan`.
   template <typename IdTableImpl>
   void scan(Id col0Id, IdTableImpl* result,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
@@ -71,23 +73,25 @@ class PermutationImpl {
     if (!_meta.col0IdExists(col0Id)) {
       return;
     }
-    const auto& metaData = _meta.getMetaData(col0Id);
-    return _reader.scan(metaData, _meta.blockData(), _file, result,
-                        std::move(timer), locatedTriplesPerBlock_);
+    const auto& metadataForRelation = _meta.getMetaData(col0Id);
+    const auto& metadataForAllBlocks = _meta.blockData();
+    return _reader.scan(metadataForRelation, metadataForAllBlocks, _file,
+                        result, std::move(timer), locatedTriplesPerBlock_);
   }
-  /// For given IDs for the first and second column, retrieve all IDs of the
-  /// third column, and store them in `result`. This is just a thin wrapper
-  /// around `CompressedRelationMetaData::scan`.
+
+  // For a given relation `Id` (first column) and `Id` for the second column,
+  // retrieve all `Id`s of the third column, and store them in `result`. Also
+  // just a wrapper around the corresponding `CompressedRelationMetaData::scan`.
   template <typename IdTableImpl>
   void scan(Id col0Id, Id col1Id, IdTableImpl* result,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
     if (!_meta.col0IdExists(col0Id)) {
       return;
     }
-    const auto& metaData = _meta.getMetaData(col0Id);
-
-    return _reader.scan(metaData, col1Id, _meta.blockData(), _file, result,
-                        timer, locatedTriplesPerBlock_);
+    const auto& metadataForRelation = _meta.getMetaData(col0Id);
+    const auto& metadataForAllBlocks = _meta.blockData();
+    return _reader.scan(metadataForRelation, col1Id, metadataForAllBlocks,
+                        _file, result, timer, locatedTriplesPerBlock_);
   }
 
   // _______________________________________________________
