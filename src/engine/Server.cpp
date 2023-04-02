@@ -25,11 +25,13 @@ Server::Server(unsigned short port, int numThreads, size_t maxMemGB,
     : _numThreads(numThreads),
       _port(port),
       accessToken_(std::move(accessToken)),
-      _allocator{ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-                     maxMemGB * (1ull << 30u)),
-                 [this](size_t numBytesToAllocate) {
-                   _cache.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR * numBytesToAllocate / sizeof(Id));
-                 }},
+      _allocator{
+          ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMemGB *
+                                                               (1ull << 30u)),
+          [this](size_t numBytesToAllocate) {
+            _cache.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
+                                            numBytesToAllocate / sizeof(Id));
+          }},
       _sortPerformanceEstimator(),
       _index(),
       _engine(),
@@ -136,8 +138,8 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 
   // First set up the HTTP server, so that it binds to the socket, and
   // the "socket already in use" error appears quickly.
-  auto httpServer = HttpServer{_port, "0.0.0.0",
-                               _numThreads, std::move(httpSessionHandler)};
+  auto httpServer =
+      HttpServer{_port, "0.0.0.0", _numThreads, std::move(httpSessionHandler)};
 
   // Initialize the index
   initialize(indexBaseName, useText, usePatterns, loadAllPermutations);

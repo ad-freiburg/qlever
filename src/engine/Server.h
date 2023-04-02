@@ -38,8 +38,7 @@ class Server {
  private:
   //! Initialize the server.
   void initialize(const string& indexBaseName, bool useText,
-                  bool usePatterns = true,
-                  bool loadAllPermutations = true);
+                  bool usePatterns = true, bool loadAllPermutations = true);
 
  public:
   //! First initialize the server. Then loop, wait for requests and trigger
