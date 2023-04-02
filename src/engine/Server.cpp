@@ -20,22 +20,20 @@ template <typename T>
 using Awaitable = Server::Awaitable<T>;
 
 // __________________________________________________________________________
-Server::Server(const int port, const int numThreads, size_t maxMemGB,
-               std::string accessToken)
+Server::Server(unsigned short port, int numThreads, size_t maxMemGB,
+               std::string&& accessToken, bool usePatternTrick)
     : _numThreads(numThreads),
       _port(port),
-      accessToken_(accessToken),
+      accessToken_(std::move(accessToken)),
       _allocator{ad_utility::makeAllocationMemoryLeftThreadsafeObject(
                      maxMemGB * (1ull << 30u)),
                  [this](size_t numBytesToAllocate) {
-                   _cache.makeRoomAsMuchAsPossible(
-                       static_cast<double>(numBytesToAllocate) / sizeof(Id) *
-                       MAKE_ROOM_SLACK_FACTOR);
+                   _cache.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR * numBytesToAllocate / sizeof(Id));
                  }},
       _sortPerformanceEstimator(),
       _index(),
       _engine(),
-      _initialized(false),
+      _enablePatternTrick(usePatternTrick),
       // The number of server threads currently also is the number of queries
       // that can be processed simultaneously.
       _queryProcessingSemaphore(numThreads) {
@@ -62,11 +60,9 @@ Server::Server(const int port, const int numThreads, size_t maxMemGB,
 
 // __________________________________________________________________________
 void Server::initialize(const string& indexBaseName, bool useText,
-                        bool usePatterns, bool usePatternTrick,
-                        bool loadAllPermutations) {
+                        bool usePatterns, bool loadAllPermutations) {
   LOG(INFO) << "Initializing server ..." << std::endl;
 
-  _enablePatternTrick = usePatternTrick;
   _index.setUsePatterns(usePatterns);
   _index.setLoadAllPermutations(loadAllPermutations);
 
@@ -80,8 +76,6 @@ void Server::initialize(const string& indexBaseName, bool useText,
       _allocator, _index.numTriples().normalAndInternal_() *
                       PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
 
-  // Set flag.
-  _initialized = true;
   LOG(INFO) << "Access token for restricted API calls is \"" << accessToken_
             << "\"" << std::endl;
   LOG(INFO) << "The server is ready, listening for requests on port "
@@ -90,7 +84,7 @@ void Server::initialize(const string& indexBaseName, bool useText,
 
 // _____________________________________________________________________________
 void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
-                 bool usePatternTrick, bool loadAllPermutations) {
+                 bool loadAllPermutations) {
   using namespace ad_utility::httpUtils;
 
   // Function that handles a request asynchronously, will be passed as argument
@@ -128,7 +122,7 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
     // in the catch block, hence the workaround with the `exceptionErrorMsg`.
     std::optional<std::string> exceptionErrorMsg;
     try {
-      co_await process(std::move(request), sendWithAccessControlHeaders);
+      co_await process(request, sendWithAccessControlHeaders);
     } catch (const std::exception& e) {
       exceptionErrorMsg = e.what();
     }
@@ -142,12 +136,11 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 
   // First set up the HTTP server, so that it binds to the socket, and
   // the "socket already in use" error appears quickly.
-  auto httpServer = HttpServer{static_cast<unsigned short>(_port), "0.0.0.0",
+  auto httpServer = HttpServer{_port, "0.0.0.0",
                                _numThreads, std::move(httpSessionHandler)};
 
   // Initialize the index
-  initialize(indexBaseName, useText, usePatterns, usePatternTrick,
-             loadAllPermutations);
+  initialize(indexBaseName, useText, usePatterns, loadAllPermutations);
 
   // Start listening for connections on the server.
   httpServer.run();

@@ -21,7 +21,7 @@ namespace net = boost::asio;       // from <boost/asio.hpp>
 using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
 
 /*
- * \brief A Simple HttpServer, based on Boost::Beast. Its can be configured via
+ * \brief A Simple HttpServer, based on Boost::Beast. It can be configured via
  * the mandatory HttpHandler parameter.
  *
  * \tparam HttpHandler A callable type that takes two parameters, a
@@ -44,7 +44,7 @@ using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
 template <typename HttpHandler>
 class HttpServer {
  private:
-  const net::ip::address _ipAdress;
+  const net::ip::address _ipAddress;
   const short unsigned int _port;
   HttpHandler _httpHandler;
   int _numServerThreads;
@@ -66,7 +66,7 @@ class HttpServer {
                       const std::string& ipAdress = "0.0.0.0",
                       int numServerThreads = 1,
                       HttpHandler handler = HttpHandler{})
-      : _ipAdress{net::ip::make_address(ipAdress)},
+      : _ipAddress{net::ip::make_address(ipAdress)},
         _port{port},
         _httpHandler{std::move(handler)},
         // We need at least two threads to avoid blocking.
@@ -75,7 +75,7 @@ class HttpServer {
         _ioContext{_numServerThreads},
         _acceptor{_ioContext} {
     try {
-      tcp::endpoint endpoint{_ipAdress, _port};
+      tcp::endpoint endpoint{_ipAddress, _port};
       // Open the acceptor.
       _acceptor.open(endpoint.protocol());
       boost::asio::socket_base::reuse_address option{true};
@@ -114,38 +114,38 @@ class HttpServer {
   }
 
   // Get the server port.
-  short unsigned int getPort() const { return _port; }
+  [[nodiscard]] unsigned short getPort() const { return _port; }
 
   // Is the server ready yet? We need this in `test/HttpTest.cpp` so that our
   // test can wait for the server to be ready and continue with its test
   // queries.
-  bool serverIsReady() const { return _serverIsReady; }
+  [[nodiscard]] bool serverIsReady() const { return _serverIsReady; }
 
   // Shut down the server. Http sessions that are still active are still allowed
   // to finish, even after this call, but all outstanding new connections will
   // fail. This interface is currently only used for testing. In the typical use
   // case, the server runs forever.
   void shutDown() {
-    std::atomic_flag shutdownWasSuccesful;
-    shutdownWasSuccesful.clear();
+    std::atomic_flag shutdownWasSuccessful;
+    shutdownWasSuccessful.clear();
     // The actual code for the shutdown is being executed on the same `strand`
     // as the `listener`. By the way strands work, there will then be no
     // concurrent access to `_acceptor`.
-    net::post(_acceptorStrand, [&shutdownWasSuccesful, this]() {
+    net::post(_acceptorStrand, [&shutdownWasSuccessful, this]() {
       _acceptor.close();
-      shutdownWasSuccesful.test_and_set();
-      shutdownWasSuccesful.notify_all();
+      shutdownWasSuccessful.test_and_set();
+      shutdownWasSuccessful.notify_all();
     });
 
-    // Wait until the posted task has succesfully executed and notified us via
+    // Wait until the posted task has successfully executed and notified us via
     // the flag.
     //
     // NOTE: The while loop is needed because notifications can also occur
     // spuriously (without being triggered explicitly by our code). The argument
     // of the `wait` is `false` because the semantics is to wait for a change in
     // the specified value.
-    while (!shutdownWasSuccesful.test()) {
-      shutdownWasSuccesful.wait(false);
+    while (!shutdownWasSuccessful.test()) {
+      shutdownWasSuccessful.wait(false);
     }
   }
 

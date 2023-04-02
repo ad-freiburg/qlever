@@ -127,9 +127,8 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, static_cast<int>(numSimultaneousQueries),
-                  memoryMaxSizeGb, std::move(accessToken));
-    server.run(indexBasename, text, !noPatterns, !noPatternTrick,
-               !onlyPsoAndPosPermutations);
+                  memoryMaxSizeGb, std::move(accessToken), !noPatternTrick);
+    server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
     // within server.run()

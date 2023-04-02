@@ -28,8 +28,8 @@ using std::vector;
 //! The HTTP Server used.
 class Server {
  public:
-  explicit Server(const int port, const int numThreads, size_t maxMemGB,
-                  std::string accessToken);
+  explicit Server(unsigned short port, int numThreads, size_t maxMemGB,
+                  std::string&& accessToken, bool usePatternTrick = true);
 
   virtual ~Server() = default;
 
@@ -38,21 +38,21 @@ class Server {
  private:
   //! Initialize the server.
   void initialize(const string& indexBaseName, bool useText,
-                  bool usePatterns = true, bool usePatternTrick = true,
+                  bool usePatterns = true,
                   bool loadAllPermutations = true);
 
  public:
   //! First initialize the server. Then loop, wait for requests and trigger
   //! processing. This method never returns except when throwing an exception.
   void run(const string& indexBaseName, bool useText, bool usePatterns = true,
-           bool usePatternTrick = true, bool loadAllPermutations = true);
+           bool loadAllPermutations = true);
 
   Index& index() { return _index; }
   const Index& index() const { return _index; }
 
  private:
   const int _numThreads;
-  int _port;
+  unsigned short _port;
   std::string accessToken_;
   QueryResultCache _cache;
   ad_utility::AllocatorWithLimit<Id> _allocator;
@@ -60,7 +60,6 @@ class Server {
   Index _index;
   Engine _engine;
 
-  bool _initialized;
   bool _enablePatternTrick;
 
   // Semaphore for the number of queries that can be processed at once.
@@ -101,9 +100,6 @@ class Server {
       const string& query, const std::string& errorMsg,
       ad_utility::Timer& requestTimer,
       const std::optional<ExceptionMetadata>& metadata = std::nullopt);
-
-  static ad_utility::streams::stream_generator composeTurtleResponse(
-      const ParsedQuery& query, const QueryExecutionTree& qet);
 
   json composeStatsJson() const;
 
