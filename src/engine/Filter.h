@@ -62,7 +62,7 @@ class Filter : public Operation {
 
   ResultTable computeResult() override;
 
-  template <int WIDTH>
+  template <size_t WIDTH>
   void computeFilterImpl(IdTable* outputIdTable,
                          const ResultTable& inputResultTable);
 };
