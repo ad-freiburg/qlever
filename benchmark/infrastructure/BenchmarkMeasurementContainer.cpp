@@ -38,7 +38,7 @@ RecordGroup::RecordGroup(const RecordGroup& group){
 }
 
 // ____________________________________________________________________________
-RecordEntry& RecordGroup::addGroupMember(
+RecordEntry& RecordGroup::addMeasurement(
   std::unique_ptr<RecordEntry>&& newMember){
   entries_.push_back(std::move(newMember));
   return (*entries_.back());

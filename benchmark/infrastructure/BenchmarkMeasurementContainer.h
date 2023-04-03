@@ -94,7 +94,7 @@ class RecordGroup {
   /*
   @brief Adds a new member to the group.
   */
-  RecordEntry& addGroupMember(std::unique_ptr<RecordEntry>&& newMember);
+  RecordEntry& addMeasurement(std::unique_ptr<RecordEntry>&& newMember);
 
   // User defined conversion to `std::string`.
   explicit operator std::string() const;
@@ -147,7 +147,7 @@ class RecordTable {
   */
   template<typename Function>
     requires std::invocable<Function>
-  void addFunctionMeasurement(const size_t& row, const size_t& column,
+  void addMeasurement(const size_t& row, const size_t& column,
     const Function& functionToMeasure){
     entries_.at(row).at(column) = measureTimeOfFunction(functionToMeasure);
   }

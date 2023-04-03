@@ -48,9 +48,9 @@ class BM_SingeMeasurements: public BenchmarkClassInterface{
     };
 
     // Measuring functions.
-    records.addSingleMeasurement("Exponentiate once", [&](){exponentiate(number);});
+    records.addMeasurement("Exponentiate once", [&](){exponentiate(number);});
     auto& multipleTimes =
-      records.addSingleMeasurement("Recursivly exponentiate multiple times",
+      records.addMeasurement("Recursivly exponentiate multiple times",
       [&](){
           size_t to_exponentiate = number;
           for (size_t i = 0; i < 10'000'000'000; i++) {
@@ -106,23 +106,23 @@ class BM_Groups: public BenchmarkClassInterface{
     auto& loopAddGroup{records.addGroup("loopAdd")};
     auto& loopMultiplyGroup{records.addGroup("loopMultiply")};
 
-    auto& addMember1{loopAddGroup.addGroupMember(
+    auto& addMember1{loopAddGroup.addMeasurement(
       std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
       "1+1", [&](){loopAdd(1,1);}))};
-    auto& addMember2{loopAddGroup.addGroupMember(
+    auto& addMember2{loopAddGroup.addMeasurement(
       std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
       "42+69", [&](){loopAdd(42,69);}))};
-    auto& addMember3{loopAddGroup.addGroupMember(
+    auto& addMember3{loopAddGroup.addMeasurement(
       std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
       "10775+24502", [&](){loopAdd(10775, 24502);}))};
 
-    auto& multiplicationMember1{loopMultiplyGroup.addGroupMember(
+    auto& multiplicationMember1{loopMultiplyGroup.addMeasurement(
       std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
       "1*1", [&](){loopMultiply(1,1);}))};
-    auto& multiplicationMember2{loopMultiplyGroup.addGroupMember(
+    auto& multiplicationMember2{loopMultiplyGroup.addMeasurement(
       std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
       "42*69", [&](){loopMultiply(42,69);}))};
-    auto& multiplicationMember3{loopMultiplyGroup.addGroupMember(
+    auto& multiplicationMember3{loopMultiplyGroup.addMeasurement(
       std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
       "10775*24502", [&](){loopMultiply(10775, 24502);}))};
 
@@ -175,11 +175,11 @@ class BM_Tables: public BenchmarkClassInterface{
 
     // Measuere the calculating of the exponents.
     for (int i = 0; i < 5; i++) {
-      tableExponentsWithBasis.addFunctionMeasurement(0, i,
+      tableExponentsWithBasis.addMeasurement(0, i,
         [&](){exponentiateNTimes(2,i);});
     }
     for (int i = 0; i < 5; i++) {
-      tableExponentsWithBasis.addFunctionMeasurement(1, i,
+      tableExponentsWithBasis.addMeasurement(1, i,
         [&](){exponentiateNTimes(3,i);});
     }
     // Calculating the time differnce between them.
@@ -195,7 +195,7 @@ class BM_Tables: public BenchmarkClassInterface{
     // Measuers for calculating and adding the exponents.
     for (int row = 0; row < 2; row++) {
       for (int column = 0; column < 2; column++) {
-        tableAddingExponents.addFunctionMeasurement(row, column,
+        tableAddingExponents.addMeasurement(row, column,
           [&](){size_t temp __attribute__((unused));
             temp =
             exponentiateNTimes(2, row+10)+exponentiateNTimes(2, column+10);});

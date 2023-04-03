@@ -82,7 +82,7 @@ class BenchmarkRecords {
      */
     template<typename Function>
       requires std::invocable<Function>
-    BenchmarkMeasurementContainer::RecordEntry& addSingleMeasurement(
+    BenchmarkMeasurementContainer::RecordEntry& addMeasurement(
       const std::string& descriptor, const Function& functionToMeasure){
       return addEntryToContainerVector(singleMeasurements_, descriptor,
       functionToMeasure);
