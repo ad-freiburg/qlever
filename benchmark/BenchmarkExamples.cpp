@@ -106,31 +106,33 @@ class BM_Groups: public BenchmarkClassInterface{
 
     // Measuring functions.
     auto& loopAddGroup{records.addGroup("loopAdd")};
+    loopAddGroup.metadata_.addKeyValuePair("Operator", '+');
+
     auto& loopMultiplyGroup{records.addGroup("loopMultiply")};
+    loopMultiplyGroup.metadata_.addKeyValuePair("Operator", '*');
 
     auto& addMember1{loopAddGroup.addMeasurement(
       "1+1", [&](){loopAdd(1,1);})};
+    addMember1.metadata_.addKeyValuePair("Result", 2);
+
     auto& addMember2{loopAddGroup.addMeasurement(
       "42+69", [&](){loopAdd(42,69);})};
+    addMember2.metadata_.addKeyValuePair("Result", 42+69);
+
     auto& addMember3{loopAddGroup.addMeasurement(
       "10775+24502", [&](){loopAdd(10775, 24502);})};
+    addMember3.metadata_.addKeyValuePair("Result", 10775+24502);
 
     auto& multiplicationMember1{loopMultiplyGroup.addMeasurement(
       "1*1", [&](){loopMultiply(1,1);})};
+    multiplicationMember1.metadata_.addKeyValuePair("Result", 1);
+
     auto& multiplicationMember2{loopMultiplyGroup.addMeasurement(
       "42*69", [&](){loopMultiply(42,69);})};
+    multiplicationMember2.metadata_.addKeyValuePair("Result", 42*69);
+
     auto& multiplicationMember3{loopMultiplyGroup.addMeasurement(
       "10775*24502", [&](){loopMultiply(10775, 24502);})};
-
-    // Adding some metadata.
-    loopAddGroup.metadata_.addKeyValuePair("Operator", '+');
-    addMember1.metadata_.addKeyValuePair("Result", 2);
-    addMember2.metadata_.addKeyValuePair("Result", 42+69);
-    addMember3.metadata_.addKeyValuePair("Result", 10775+24502);
-
-    loopMultiplyGroup.metadata_.addKeyValuePair("Operator", '*');
-    multiplicationMember1.metadata_.addKeyValuePair("Result", 1);
-    multiplicationMember2.metadata_.addKeyValuePair("Result", 42*69);
     multiplicationMember3.metadata_.addKeyValuePair("Result", 10775*24502);
     
     return records;
@@ -166,8 +168,12 @@ class BM_Tables: public BenchmarkClassInterface{
     auto& tableExponentsWithBasis{records.addTable(
       "Exponents with the given basis", {"2", "3", "Time difference"},
       {"0", "1", "2", "3", "4"})};
+
     auto& tableAddingExponents{records.addTable("Adding exponents",
       {"2^10", "2^11", "Values written out"}, {"2^10", "2^11"})};
+    // Adding some metadata.
+    tableAddingExponents.metadata_.addKeyValuePair("Manually set fields",
+      "Row 2");
 
     // Measuere the calculating of the exponents.
     for (int i = 0; i < 5; i++) {
@@ -202,10 +208,6 @@ class BM_Tables: public BenchmarkClassInterface{
     tableAddingExponents.setEntry(2, 0, "1024+1024 and 1024+2048");
     tableAddingExponents.setEntry(2, 1, "1024+2048 and 2048+2048");
 
-    // Adding some metadata.
-    tableAddingExponents.metadata_.addKeyValuePair("Manually set fields",
-      "Row 2");
-    
     return records;
   } 
 };
