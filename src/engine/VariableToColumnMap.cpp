@@ -17,15 +17,16 @@ copySortedByColumnIndex(VariableToColumnMap map) {
 // ______________________________________________________________________________
 VariableToColumnMap makeVarToColMapForJoinOperation(
     const VariableToColumnMap& leftVars, const VariableToColumnMap& rightVars,
-    std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType) {
+    std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType,
+    size_t leftResultWidth) {
   // First come all the variables from the left input. Variables that only
   // appear in the left input always have the same definedness as in the input.
   // For join columns we might override it below.
   VariableToColumnMap result{leftVars};
   bool isOptionalJoin = binOpType == BinOpType::OptionalJoin;
-  size_t nextColumnIndex = result.size();
 
   // Add the variables from the right operand.
+  size_t numJoinColumnsBefore = 0;
   for (const auto& [variable, columnIndexWithType] :
        copySortedByColumnIndex(rightVars)) {
     const auto& colIdxRight = columnIndexWithType.columnIndex_;
@@ -41,17 +42,18 @@ VariableToColumnMap makeVarToColMapForJoinOperation(
           static_cast<bool>(undef) &&
           (isOptionalJoin ||
            static_cast<bool>(columnIndexWithType.mightContainUndef_)));
+      ++numJoinColumnsBefore;
     } else {
       // The column is not a join column. For non-optional joins it keeps its
       // definedness, but for optional joins, it is `PossiblyUndefined` if
       // there is a row in the left operand that has no match in the right
       // input.
       result[variable] = ColumnIndexAndTypeInfo{
-          nextColumnIndex,
+          leftResultWidth + columnIndexWithType.columnIndex_ -
+              numJoinColumnsBefore,
           static_cast<ColumnIndexAndTypeInfo::UndefStatus>(
               static_cast<bool>(columnIndexWithType.mightContainUndef_) ||
               isOptionalJoin)};
-      nextColumnIndex++;
     }
   }
   return result;

@@ -105,9 +105,9 @@ ResultTable MultiColumnJoin::computeResult() {
 
 // _____________________________________________________________________________
 VariableToColumnMap MultiColumnJoin::computeVariableToColumnMap() const {
-  return makeVarToColMapForJoinOperation(_left->getVariableColumns(),
-                                         _right->getVariableColumns(),
-                                         _joinColumns, BinOpType::Join);
+  return makeVarToColMapForJoinOperation(
+      _left->getVariableColumns(), _right->getVariableColumns(), _joinColumns,
+      BinOpType::Join, _left->getResultWidth());
 }
 
 // _____________________________________________________________________________
