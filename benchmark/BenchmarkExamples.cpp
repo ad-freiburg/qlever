@@ -175,7 +175,7 @@ class BM_Tables: public BenchmarkClassInterface{
     tableAddingExponents.metadata_.addKeyValuePair("Manually set fields",
       "Row 2");
 
-    // Measuere the calculating of the exponents.
+    // Measure the calculating of the exponents.
     for (int i = 0; i < 5; i++) {
       tableExponentsWithBasis.addMeasurement(0, i,
         [&](){exponentiateNTimes(2,i);});
