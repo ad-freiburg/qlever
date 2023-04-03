@@ -7,6 +7,7 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/ResultTable.h"
+#include "util/Algorithm.h"
 #include "util/Random.h"
 
 // An operation that yields a given `IdTable` as its result. It is used for
