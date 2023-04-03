@@ -234,7 +234,7 @@ Macros for easier registering of benchmark classes.
 the implementation. Only `registerBenchmark` needs to be 'called', when one
 want's to register a benchmark class.
 */
-#define AD_DECLARE_REGISTER_VARIABLE_HIDDEN(line, benchmarkClass, ...) BenchmarkRegister gRegisterVariable##line{std::make_unique<benchmarkClass>(__VA_ARGS__)};
+#define AD_DECLARE_REGISTER_VARIABLE_HIDDEN(line, benchmarkClass, ...) static BenchmarkRegister gRegisterVariable##benchmarkClass##line{std::make_unique<benchmarkClass>(__VA_ARGS__)};
 #define AD_DECLARE_REGISTER_VARIABLE(line, benchmarkClass, ...) AD_DECLARE_REGISTER_VARIABLE_HIDDEN(line, benchmarkClass __VA_OPT__(,) __VA_ARGS__)
 
 /*
