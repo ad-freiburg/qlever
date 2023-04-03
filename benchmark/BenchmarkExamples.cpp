@@ -262,7 +262,7 @@ class BM_ConfigurationAndMetadataExample: public BenchmarkClassInterface{
 
 
 // Registering the benchmarks.
-registerBenchmark(BM_SingeMeasurements);
-registerBenchmark(BM_Groups);
-registerBenchmark(BM_Tables);
-registerBenchmark(BM_ConfigurationAndMetadataExample);
+AD_REGISTER_BENCHMARK(BM_SingeMeasurements);
+AD_REGISTER_BENCHMARK(BM_Groups);
+AD_REGISTER_BENCHMARK(BM_Tables);
+AD_REGISTER_BENCHMARK(BM_ConfigurationAndMetadataExample);
