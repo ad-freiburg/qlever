@@ -75,7 +75,7 @@ VariableToColumnMap Union::computeVariableToColumnMap() const {
   VariableToColumnMap variableColumns;
 
   // A variable is only guaranteed to always be bound if it exists in all the
-  // subtrees and if it is guaranteed to be bound in all the subrees.
+  // subtrees and if it is guaranteed to be bound in all the subtrees.
   auto mightContainUndef = [this](const Variable& var) {
     return std::ranges::any_of(
         _subtrees, [&](const shared_ptr<QueryExecutionTree>& subtree) {
@@ -93,7 +93,7 @@ VariableToColumnMap Union::computeVariableToColumnMap() const {
   size_t nextColumnIndex = 0;
   auto addVariableColumnIfNotExists =
       [&mightContainUndef, &variableColumns,
-       &nextColumnIndex](const VarAndTypeInfo& varAndIndex) mutable {
+       &nextColumnIndex](const VarAndTypeInfo& varAndIndex) {
         const auto& variable = varAndIndex.first;
         if (!variableColumns.contains(variable)) {
           using enum ColumnIndexAndTypeInfo::UndefStatus;
