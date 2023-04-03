@@ -13,16 +13,18 @@
 #include "util/Random.h"
 
 /*
-TODO Currently there is no way to prevent the result of expressions from being
-discarded, if it's not used, which sabotages the measured execution times of
-benchmarks. Because an expression, who's result got discarded and which has no
-side effects, can also be safely discarded, if the compiler optimizes.
-One solution would be to use the functons in google benchmark, that prevent
-optimization:
-`https://github.com/google/benchmark/blob/main/docs/user_guide.md#preventing-optimization`
+TODO: A typical problem in benchmarking is that the result of a computation is
+not used and thus the whole computation gets optimized out by the compiler.
+To avoid this, the `BM_SingeMeasurements` example prints the result of a
+computation to the screen.
 
-For that however, we first would have to include their benchmarking system as
-third party.
+A more elegant solution, to prevent such unwanted compiler optimizations, can be
+found in google benchmark:
+`https://github.com/google/benchmark/blob/main/docs/user_guide.md#preventing-
+optimization`.
+
+Using the functions described there would require including
+`Google Benchmark` as a  third-party library.
 */
 
 // Single Measurements
