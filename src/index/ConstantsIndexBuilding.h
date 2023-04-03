@@ -87,4 +87,4 @@ constexpr size_t QUEUE_SIZE_AFTER_PARALLEL_PARSING = 10;
 // still small compared to the rest of the index. However, with 100K, and single
 // block is just 10K compresse, which might result in sub-optimal IO-efficiency
 // when reading many blocks. We take 1M as a compromise.
-constexpr size_t BLOCKSIZE_COMPRESSED_METADATA = 1'000'000;
+constexpr size_t BLOCKSIZE_COMPRESSED_METADATA = 500'000;
