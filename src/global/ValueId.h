@@ -10,6 +10,7 @@
 #include <functional>
 #include <limits>
 #include <sstream>
+#include <absl/strings/str_cat.h>
 
 #include "../util/BitUtils.h"
 #include "../util/NBitInteger.h"
@@ -84,20 +85,9 @@ class ValueId {
     IndexTooLargeException(T tooBigValue,
                            ad_utility::source_location s =
                                ad_utility::source_location::current()) {
-      std::stringstream exceptionMessage;
-      exceptionMessage
-          << s.file_name() << ", line " << s.line() << ": The given value "
-          << tooBigValue
-          << " is bigger than what the maxIndex of ValueId allows.";
-      _errorMessage = exceptionMessage.str();
-      /*
-      TODO LLnk all files, that want to use this, with `absl::strings`. It
-      should has way better performance. Don't forget to add
-      `#include "absl/strings/str_cat.h"` to this file too.
-      _errorMessage = absl::StrCat(s.file_name(), ", line",
+      _errorMessage = absl::StrCat(s.file_name(), ", line ",
         s.line(), ": The given value ", tooBigValue,
         " is bigger than what the maxIndex of ValueId allows.");
-      */
     }
 
     const char* what() const noexcept override { return _errorMessage.c_str(); }
