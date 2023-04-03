@@ -49,8 +49,10 @@ class DummyOperation : public Operation {
 
   virtual size_t getCostEstimate() override { return 10; }
 
-  virtual size_t getSizeEstimate() override { return 10; }
+ private:
+  virtual size_t getSizeEstimateBeforeLimit() override { return 10; }
 
+ public:
   virtual float getMultiplicity(size_t col) override {
     (void)col;
     return 1;
@@ -62,10 +64,14 @@ class DummyOperation : public Operation {
 
  private:
   virtual VariableToColumnMap computeVariableToColumnMap() const override {
+    return {{Variable{"?a"}, makeAlwaysDefinedColumn(0)},
+            {Variable{"?b"}, makeAlwaysDefinedColumn(1)}};
+    /*
     VariableToColumnMap m;
-    m[Variable{"?a"}] = 0;
-    m[Variable{"?b"}] = 1;
+    m[Variable{"?a"}] = makeAlwaysDefinedColumn(0);
+    m[Variable{"?b"}] = makeAlwaysDefinedColumn(1);
     return m;
+     */
   }
 };
 }  // namespace

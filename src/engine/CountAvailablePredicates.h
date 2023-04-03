@@ -80,8 +80,10 @@ class CountAvailablePredicates : public Operation {
 
   float getMultiplicity(size_t col) override;
 
-  size_t getSizeEstimate() override;
+ private:
+  size_t getSizeEstimateBeforeLimit() override;
 
+ public:
   size_t getCostEstimate() override;
 
   // This method is declared here solely for unit testing purposes

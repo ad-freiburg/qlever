@@ -31,31 +31,33 @@ class OptionalJoin : public Operation {
                const std::vector<std::array<ColumnIndex, 2>>& joinCols);
 
  private:
-  virtual string asStringImpl(size_t indent = 0) const override;
+  string asStringImpl(size_t indent = 0) const override;
 
  public:
-  virtual string getDescriptor() const override;
+  string getDescriptor() const override;
 
-  virtual size_t getResultWidth() const override;
+  size_t getResultWidth() const override;
 
-  virtual vector<size_t> resultSortedOn() const override;
+  vector<size_t> resultSortedOn() const override;
 
-  virtual void setTextLimit(size_t limit) override {
+  void setTextLimit(size_t limit) override {
     _left->setTextLimit(limit);
     _right->setTextLimit(limit);
   }
 
-  virtual bool knownEmptyResult() override {
+  bool knownEmptyResult() override {
     return (_left->knownEmptyResult() && !_leftOptional) ||
            (_right->knownEmptyResult() && !_rightOptional) ||
            (_left->knownEmptyResult() && _right->knownEmptyResult());
   }
 
-  virtual float getMultiplicity(size_t col) override;
+  float getMultiplicity(size_t col) override;
 
-  virtual size_t getSizeEstimate() override;
+ private:
+  size_t getSizeEstimateBeforeLimit() override;
 
-  virtual size_t getCostEstimate() override;
+ public:
+  size_t getCostEstimate() override;
 
   vector<QueryExecutionTree*> getChildren() override {
     return {_left.get(), _right.get()};
@@ -100,7 +102,7 @@ class OptionalJoin : public Operation {
       const std::vector<ColumnIndex>& joinColumnAToB,
       IdTableStatic<OUT_WIDTH>* res);
 
-  virtual ResultTable computeResult() override;
+  ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };

@@ -1,1 +1,2 @@
 add_library(vocabulary VocabularyInMemory.h VocabularyInMemory.cpp)
+qlever_target_link_libraries(vocabulary)

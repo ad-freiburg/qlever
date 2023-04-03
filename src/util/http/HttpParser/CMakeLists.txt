@@ -4,4 +4,4 @@ add_library(httpParser AcceptHeaderQleverVisitor.h AcceptHeaderQleverVisitor.cpp
         generated/AcceptHeaderListener.h generated/AcceptHeaderListener.cpp
         generated/AcceptHeaderParser.h generated/AcceptHeaderParser.cpp
         generated/AcceptHeaderVisitor.h generated/AcceptHeaderVisitor.cpp)
-target_link_libraries(httpParser antlr4_static util)
+qlever_target_link_libraries(httpParser antlr4_static util)

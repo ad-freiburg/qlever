@@ -50,7 +50,8 @@ string GroupBy::asStringImpl(size_t indent) const {
       // It is important that the cache keys for the variables from the aliases
       // do not collide with the query body, and that they are consistent. The
       // constant `1000` has no deeper meaning but makes debugging easier.
-      varMapInput[var] = column + 1000 + numColumnsInput;
+      varMapInput[var].columnIndex_ =
+          column.columnIndex_ + 1000 + numColumnsInput;
     }
   }
 
@@ -60,11 +61,11 @@ string GroupBy::asStringImpl(size_t indent) const {
   }
   os << "GROUP_BY ";
   for (const auto& var : _groupByVariables) {
-    os << varMap.at(var) << ", ";
+    os << varMap.at(var).columnIndex_ << ", ";
   }
   for (const auto& alias : _aliases) {
     os << alias._expression.getCacheKey(varMapInput) << " AS "
-       << varMap.at(alias._target);
+       << varMap.at(alias._target).columnIndex_;
   }
   os << std::endl;
   os << _subtree->asString(indent);
@@ -89,7 +90,7 @@ vector<size_t> GroupBy::resultSortedOn() const {
   vector<size_t> sortedOn;
   sortedOn.reserve(_groupByVariables.size());
   for (const auto& var : _groupByVariables) {
-    sortedOn.push_back(varCols[var]);
+    sortedOn.push_back(varCols[var].columnIndex_);
   }
   return sortedOn;
 }
@@ -106,7 +107,7 @@ vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
   std::unordered_set<size_t> sortColSet;
 
   for (const auto& var : _groupByVariables) {
-    size_t col = inVarColMap.at(var);
+    size_t col = inVarColMap.at(var).columnIndex_;
     // avoid sorting by a column twice
     if (sortColSet.find(col) == sortColSet.end()) {
       sortColSet.insert(col);
@@ -116,16 +117,25 @@ vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
   return cols;
 }
 
+// ____________________________________________________________________
 VariableToColumnMap GroupBy::computeVariableToColumnMap() const {
   VariableToColumnMap result;
   // The returned columns are all groupByVariables followed by aggregrates.
+  const auto& subtreeVars = _subtree->getVariableColumns();
   size_t colIndex = 0;
   for (const auto& var : _groupByVariables) {
-    result[var] = colIndex;
+    result[var] = ColumnIndexAndTypeInfo{
+        colIndex, subtreeVars.at(var).mightContainUndef_};
     colIndex++;
   }
   for (const Alias& a : _aliases) {
-    result[a._target] = colIndex;
+    // TODO<joka921> This currently pessimistically assumes that all (aggregate)
+    // expressions can produce undefined values. This might impact the
+    // performance when the result of this GROUP BY is joined on one or more of
+    // the aggregating columns. Implement an interface in the expressions that
+    // allows to check, whether an expression can never produce an undefined
+    // value.
+    result[a._target] = makePossiblyUndefinedColumn(colIndex);
     colIndex++;
   }
   return result;
@@ -139,7 +149,7 @@ float GroupBy::getMultiplicity(size_t col) {
   return 1;
 }
 
-size_t GroupBy::getSizeEstimate() {
+size_t GroupBy::getSizeEstimateBeforeLimit() {
   if (_groupByVariables.empty()) {
     return 1;
   }
@@ -333,20 +343,20 @@ ResultTable GroupBy::computeResult() {
       AD_THROW("Groupby variable " + var.name() + " is not groupable");
     }
 
-    groupByColumns.push_back(it->second);
+    groupByColumns.push_back(it->second.columnIndex_);
   }
 
   // parse the aggregate aliases
   const auto& varColMap = getInternallyVisibleVariableColumns();
   for (const Alias& alias : _aliases) {
     aggregates.push_back(
-        Aggregate{alias._expression, varColMap.at(alias._target)});
+        Aggregate{alias._expression, varColMap.at(alias._target).columnIndex_});
   }
 
   std::vector<size_t> groupByCols;
   groupByCols.reserve(_groupByVariables.size());
   for (const auto& var : _groupByVariables) {
-    groupByCols.push_back(subtreeVarCols.at(var));
+    groupByCols.push_back(subtreeVarCols.at(var).columnIndex_);
   }
 
   int inWidth = subresult->idTable().numColumns();
@@ -405,7 +415,7 @@ bool GroupBy::computeGroupByForSingleIndexScan(IdTable* result) {
   } else {
     // TODO<joka921> The two variables IndexScans should also account for the
     // additionally added triples.
-    table(0, 0) = Id::makeFromInt(indexScan->getSizeEstimate());
+    table(0, 0) = Id::makeFromInt(indexScan->getExactSize());
   }
   return true;
 }

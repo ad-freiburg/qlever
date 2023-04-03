@@ -143,24 +143,29 @@ vector<size_t> IndexScan::resultSortedOn() const {
 // _____________________________________________________________________________
 VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   VariableToColumnMap res;
+  // All the columns of an index scan only contain defined values.
+  auto makeCol = makeAlwaysDefinedColumn;
   size_t col = 0;
 
   // Helper lambdas that add the respective triple component as the next column.
   auto addSubject = [&]() {
     if (_subject.isVariable()) {
-      res[_subject.getVariable()] = col++;
+      res[_subject.getVariable()] = makeCol(col);
+      ++col;
     }
   };
   // TODO<joka921> Refactor the `PropertyPath` class s.t. it also has
   //`isVariable` and `getVariable`, then those three lambdas can become one.
   auto addPredicate = [&]() {
     if (_predicate[0] == '?') {
-      res[Variable{_predicate}] = col++;
+      res[Variable{_predicate}] = makeCol(col);
+      ++col;
     }
   };
   auto addObject = [&]() {
     if (_object.isVariable()) {
-      res[_object.getVariable()] = col++;
+      res[_object.getVariable()] = makeCol(col);
+      ++col;
     }
   };
 
@@ -358,7 +363,7 @@ size_t IndexScan::computeSizeEstimate() {
 // _____________________________________________________________________________
 size_t IndexScan::getCostEstimate() {
   if (getResultWidth() != 3) {
-    return getSizeEstimate();
+    return getSizeEstimateBeforeLimit();
   } else {
     // The computation of the `full scan` estimate must be consistent with the
     // full scan dummy joins in `Join.cpp` for correct query planning.
@@ -378,7 +383,7 @@ size_t IndexScan::getCostEstimate() {
     // estimate a tuple `(numFullIndexScans, costEstimateForRemainder)`.
     // Implement this functionality.
 
-    return getSizeEstimate() * 10'000;
+    return getSizeEstimateBeforeLimit() * 10'000;
   }
 }
 
@@ -493,8 +498,15 @@ void IndexScan::computeFullScan(IdTable* result,
   // This implementation computes the complete knowledge graph, except the
   // internal triples.
   uint64_t resultSize = getIndex().numTriples().normal_;
-  if (getLimit().has_value() && getLimit() < resultSize) {
-    resultSize = getLimit().value();
+  if (getLimit()._limit.has_value() && getLimit()._limit < resultSize) {
+    resultSize = getLimit()._limit.value();
+  }
+
+  // TODO<joka921> Implement OFFSET
+  if (getLimit()._offset != 0) {
+    throw NotSupportedException{
+        "Scanning the complete index with an OFFSET clause is currently not "
+        "supported by QLever"};
   }
   result->reserve(resultSize);
   auto table = std::move(*result).toStatic<3>();

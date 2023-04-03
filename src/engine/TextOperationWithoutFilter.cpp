@@ -31,14 +31,20 @@ TextOperationWithoutFilter::TextOperationWithoutFilter(
 VariableToColumnMap TextOperationWithoutFilter::computeVariableToColumnMap()
     const {
   VariableToColumnMap vcmap;
-  size_t index = 0;
-  vcmap[_cvar] = index++;
-  vcmap[_cvar.getTextScoreVariable()] = index++;
+  auto addDefinedVar = [&vcmap, index = 0](const Variable& var) mutable {
+    vcmap[var] = makeAlwaysDefinedColumn(index);
+    ++index;
+  };
+  addDefinedVar(_cvar);
+  addDefinedVar(_cvar.getTextScoreVariable());
   // TODO<joka921> The order of the variables is not deterministic, check
   // whether this is correct.
+  // TODO<joka921> These variables seem to be newly created an never contain
+  // undefined values. However I currently don't understand their semantics
+  // which should be documented.
   for (const auto& var : _variables) {
     if (var != _cvar) {
-      vcmap[var] = index++;
+      addDefinedVar(var);
     }
   }
   return vcmap;
@@ -98,7 +104,7 @@ void TextOperationWithoutFilter::computeResultMultVars(IdTable* idTable) const {
 }
 
 // _____________________________________________________________________________
-size_t TextOperationWithoutFilter::getSizeEstimate() {
+size_t TextOperationWithoutFilter::getSizeEstimateBeforeLimit() {
   if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
     double nofEntitiesSingleVar;
     if (_executionContext) {
@@ -120,9 +126,9 @@ size_t TextOperationWithoutFilter::getCostEstimate() {
   if (_executionContext) {
     return static_cast<size_t>(
         _executionContext->getCostFactor("NO_FILTER_PUNISH") *
-        (getSizeEstimate() * getNofVars()));
+        (getSizeEstimateBeforeLimit() * getNofVars()));
   } else {
-    return getSizeEstimate() * getNofVars();
+    return getSizeEstimateBeforeLimit() * getNofVars();
   }
 }
 
