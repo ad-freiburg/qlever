@@ -163,9 +163,9 @@ struct adl_serializer<std::unique_ptr<T>> {
 
   static void from_json(const nlohmann::json& j, std::unique_ptr<T>& ptr) {
     if (j.is_null()) {
-      // If `json` is null, we just release the content of ptr, because it
+      // If `json` is null, we just delete the content of ptr, because it
       // should be an empty `unique_ptr`.
-      ptr.release();
+      ptr = nullptr;
     } else if (ptr) {
       // If `ptr` already owns an object, we should be able to overwrite it.
       (*ptr) = j.get<T>();
