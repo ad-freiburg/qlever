@@ -89,7 +89,7 @@ void CompressedRelationReader::scan(
 
   // TODO: For now only consider delta triples in complete blocks.
   if (firstBlockIsIncomplete) {
-    AD_CORRECTNESS_CHECK(numInsAndDelPerBlock.size() == 1);
+    AD_CORRECTNESS_CHECK(numInsAndDelPerBlock.size() == 2);
     numInsTotal = 0;
     numDelTotal = 0;
     LOG(WARN) << "Delta triples in incomplete block ignored!" << std::endl;
@@ -101,7 +101,7 @@ void CompressedRelationReader::scan(
 
   // The position in the result to which the next block is being
   // decompressed.
-  size_t rowIndexOfNextBlock = 0;
+  size_t offsetInResult = 0;
 
   // The number of rows for which we still have space
   // in the result (only needed for checking of invariants).
@@ -112,6 +112,10 @@ void CompressedRelationReader::scan(
   // the result.
   auto readIncompleteBlock = [&](const auto& block) {
     // A block is uniquely identified by its start position in the file.
+    //
+    // NOTE: We read these blocks via a cache in order to speed up the unit
+    // tests (which make many requests to the same block, so we don't want to
+    // decompress it again and again).
     auto cacheKey = block._offsetsAndCompressedSize.at(0)._offsetInFile;
     auto uncompressedBuffer = blockCache_
                                   .computeOnce(cacheKey,
@@ -132,14 +136,16 @@ void CompressedRelationReader::scan(
       AD_CORRECTNESS_CHECK(numElements <= spaceLeft);
       std::copy(begin, begin + numElements, resultColumn.begin());
     }
-    rowIndexOfNextBlock += numElements;
+    offsetInResult += numElements;
     spaceLeft -= numElements;
   };
 
   // Read the first block if it is incomplete
+  auto completeBlocksBegin = beginBlock;
+  auto completeBlocksEnd = endBlock;
   if (firstBlockIsIncomplete) {
     readIncompleteBlock(*beginBlock);
-    ++beginBlock;
+    ++completeBlocksBegin;
     if (timer) {
       timer->wlock()->checkTimeoutAndThrow("IndexScan :");
     }
@@ -147,99 +153,68 @@ void CompressedRelationReader::scan(
 
   // Process all the other (complete) blocks. The compressed blocks are read
   // sequentially from disk and then decompressed in parallel.
-  const size_t blockIndexBegin = beginBlock - metadataForAllBlocks.begin();
-  size_t blockIndex = blockIndexBegin;
-  if (beginBlock < endBlock) {
+  if (completeBlocksBegin < completeBlocksEnd) {
 #pragma omp parallel
 #pragma omp single
-    {
-      for (; beginBlock < endBlock; ++beginBlock) {
-        const auto& block = *beginBlock;
-        std::pair<size_t, size_t> numInsAndDel =
-            numInsAndDelPerBlock.at(blockIndex - blockIndexBegin);
+    for (auto block = completeBlocksBegin; block < completeBlocksEnd; ++block) {
+      size_t blockIndex = block - metadataForAllBlocks.begin();
+      auto numInsAndDel = numInsAndDelPerBlock.at(block - beginBlock);
 
-        // Read the compressed block from disk (sequentially).
-        CompressedBlock compressedBuffer =
-            readCompressedBlockFromFile(block, file, std::nullopt);
+      // Read the compressed block from disk (both columns).
+      CompressedBlock compressedBuffer =
+          readCompressedBlockFromFile(*block, file, std::nullopt);
 
-        // This lambda decompresses the block that was just read to the
-        // correct position in the result.
-        auto decompressLambda = [&result, rowIndexOfNextBlock, &block,
-                                 &numInsAndDel, &locatedTriplesPerBlock,
-                                 &blockIndex,
-                                 compressedBuffer =
-                                     std::move(compressedBuffer)]() {
-          ad_utility::TimeBlockAndLog tbl{"Decompressing a block"};
+      // This lambda decompresses the block that was just read to the
+      // correct position in the result.
+      auto decompressLambda = [&result, &locatedTriplesPerBlock, &block,
+                               numInsAndDel, offsetInResult, blockIndex,
+                               compressedBuffer =
+                                   std::move(compressedBuffer)]() {
+        ad_utility::TimeBlockAndLog tbl{"Decompressing a block"};
 
-          decompressBlockToExistingIdTable(
-              compressedBuffer, block._numRows, *result, rowIndexOfNextBlock,
-              numInsAndDel, locatedTriplesPerBlock, blockIndex);
-        };
+        decompressBlockToExistingIdTable(compressedBuffer, block->_numRows,
+                                         *result, offsetInResult, numInsAndDel,
+                                         locatedTriplesPerBlock, blockIndex);
+      };
 
-        // This `decompressLambda` can run concurrently.
+      // This `decompressLambda` can run concurrently.
 #pragma omp task
-        {
-          if (!timer || !timer->wlock()->hasTimedOut()) {
-            decompressLambda();
-          };
-        }
-
-        // This is again serial code, which sets up the correct pointers for the
-        // next block.
-        AD_CORRECTNESS_CHECK(numInsAndDel.second <= block._numRows);
-        size_t numRowsOfThisBlock =
-            block._numRows + numInsAndDel.first - numInsAndDel.second;
-        AD_CORRECTNESS_CHECK(numRowsOfThisBlock <= spaceLeft);
-        spaceLeft -= numRowsOfThisBlock;
-        rowIndexOfNextBlock += numRowsOfThisBlock;
-        ++blockIndex;
+      {
+        if (!timer || !timer->wlock()->hasTimedOut()) {
+          decompressLambda();
+        };
       }
+
+      // Update the counters.
+      AD_CORRECTNESS_CHECK(numInsAndDel.second <= block->_numRows);
+      size_t numRowsOfThisBlock =
+          block->_numRows + numInsAndDel.first - numInsAndDel.second;
+      AD_CORRECTNESS_CHECK(numRowsOfThisBlock <= spaceLeft);
+      spaceLeft -= numRowsOfThisBlock;
+      offsetInResult += numRowsOfThisBlock;
     }
     // End of omp parallel region, all blocks are decompressed now.
   }
 
-  // Check whether there are relevant delta triples in the next block. If yes,
-  // these must all come contiguously at the very beginning of that block, have
-  // `rowIndexInBlock == std::numeric_limits<size_t>::max()` and `id1 == col0Id`
-  // and must all be inserts.
-  //
-  // TODO: This should be a separate function (of `LocatedTriplesPerBlock`?).
-  AD_CORRECTNESS_CHECK(numInsAndDelPerBlock.size() >= 1);
-  size_t numIns = numInsAndDelPerBlock.back().first;
-  if (numIns > 0) {
-    // LOG(INFO) << "Triples to be inserted after last block" << std::endl;
-    // LOG(INFO) << "numInsAndDel.first: " << numIns << std::endl;
-    AD_CORRECTNESS_CHECK(result->numRows() >= rowIndexOfNextBlock + numIns);
-    AD_CORRECTNESS_CHECK(locatedTriplesPerBlock.map_.contains(blockIndex));
-    size_t rowIndex = rowIndexOfNextBlock;
-    const LocatedTriples& locatedTriples =
-        locatedTriplesPerBlock.map_.at(blockIndex);
-    AD_CORRECTNESS_CHECK(locatedTriples.size() >= numIns);
-    for (const auto& locatedTriple : locatedTriples) {
-      // LOG(INFO) << "Located triple: " << locatedTriple.id1 << " "
-      //           << locatedTriple.id2 << " " << locatedTriple.id3
-      //           << " rowIndexInBlock = " << locatedTriple.rowIndexInBlock
-      //           << std::endl;
-      if (locatedTriple.id1 == col0Id) {
-        AD_CORRECTNESS_CHECK(locatedTriple.rowIndexInBlock ==
-                             std::numeric_limits<size_t>::max());
-        (*result)(rowIndex, 0) = locatedTriple.id2;
-        (*result)(rowIndex, 1) = locatedTriple.id3;
-        ++rowIndex;
-        --spaceLeft;
-      } else {
-        break;
-      }
-    }
+  // Add delta triples from beyond last block, if any.
+  AD_CORRECTNESS_CHECK(numInsAndDelPerBlock.size() > 0);
+  auto numInsBeyondLastBlock = numInsAndDelPerBlock.back().first;
+  if (numInsBeyondLastBlock > 0) {
+    size_t blockIndex = endBlock - metadataForAllBlocks.begin();
+    size_t numRowsWrittenToResult = locatedTriplesPerBlock.mergeTriples(
+        blockIndex, std::nullopt, *result, offsetInResult, col0Id);
+    AD_CORRECTNESS_CHECK(numRowsWrittenToResult == numInsBeyondLastBlock);
+    spaceLeft -= numRowsWrittenToResult;
   }
   AD_CORRECTNESS_CHECK(spaceLeft == 0);
 }
 
 // _____________________________________________________________________________
 void CompressedRelationReader::scan(
-    const CompressedRelationMetadata& metaData, Id col1Id,
-    const vector<CompressedBlockMetadata>& blocks, ad_utility::File& file,
-    IdTable* result, ad_utility::SharedConcurrentTimeoutTimer timer,
+    const CompressedRelationMetadata& metadataForRelation, Id col1Id,
+    const vector<CompressedBlockMetadata>& metadataForAllBlocks,
+    ad_utility::File& file, IdTable* result,
+    ad_utility::SharedConcurrentTimeoutTimer timer,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
   AD_CONTRACT_CHECK(result->numColumns() == 1);
 
@@ -259,125 +234,221 @@ void CompressedRelationReader::scan(
     return endBeforeBegin;
   };
 
-  Id col0Id = metaData._col0Id;
+  Id col0Id = metadataForRelation._col0Id;
 
   // Note: See the comment in the other overload for `scan` above for the
   // reason why we (currently) can't use a structured binding here.
-  decltype(blocks.begin()) beginBlock, endBlock;
+  decltype(metadataForAllBlocks.begin()) beginBlock, endBlock;
   std::tie(beginBlock, endBlock) =
-      std::equal_range(blocks.begin(), blocks.end(),
+      std::equal_range(metadataForAllBlocks.begin(), metadataForAllBlocks.end(),
                        KeyLhs{col0Id, col0Id, col1Id, col1Id}, comp);
 
-  // PRELIMINARY: Say how many delta triples are contained in those blocks.
-  size_t numDeltaTriples = 0;
-  for (auto block = beginBlock; block < endBlock; ++block) {
-    size_t blockIndex = block - blocks.begin();
-    if (locatedTriplesPerBlock.map_.contains(blockIndex)) {
-      numDeltaTriples += locatedTriplesPerBlock.map_.at(blockIndex).size();
-    }
+  // Compute the number of inserted and deleted triples per block and overall.
+  // note the `<=` so that we don't forget the block beyond the last (which may
+  // have information about delta triples at the vey end of a relation).
+  std::vector<std::pair<size_t, size_t>> numInsAndDelPerBlock;
+  size_t numInsTotal = 0;
+  size_t numDelTotal = 0;
+  for (auto block = beginBlock; block <= endBlock; ++block) {
+    size_t blockIndex = block - metadataForAllBlocks.begin();
+    auto [numIns, numDel] =
+        block == beginBlock || block == endBlock - 1 || block == endBlock
+            ? locatedTriplesPerBlock.numTriples(blockIndex, col0Id, col1Id)
+            : locatedTriplesPerBlock.numTriples(blockIndex);
+    numInsTotal += numIns;
+    numDelTotal += numDel;
+    numInsAndDelPerBlock.push_back({numIns, numDel});
   }
-  LOG(INFO) << "Number of delta triples in blocks scanned: " << numDeltaTriples
-            << std::endl;
+  if (numInsTotal > 0 || numDelTotal > 0) {
+    LOG(INFO) << "Index scan with delta triples: #inserts = " << numInsTotal
+              << ", #deletes = " << numDelTotal
+              << ", #blocks = " << (endBlock - beginBlock) << std::endl;
+    AD_CORRECTNESS_CHECK(numDelTotal < metadataForRelation.getNofElements());
+  }
 
   // Invariant: The col0Id is completely stored in a single block, or it is
   // contained in multiple blocks that only contain this col0Id,
-  bool col0IdHasExclusiveBlocks =
-      metaData._offsetInBlock == std::numeric_limits<uint64_t>::max();
+  bool col0IdHasExclusiveBlocks = metadataForRelation._offsetInBlock ==
+                                  std::numeric_limits<uint64_t>::max();
   if (!col0IdHasExclusiveBlocks) {
     // This might also be zero if no block was found at all.
     AD_CORRECTNESS_CHECK(endBlock - beginBlock <= 1);
   }
 
-  // The first and the last block might be incomplete (that is, only
-  // a part of these blocks is actually part of the result,
-  // set up a lambda which allows us to read these blocks, and returns
-  // the result as a vector.
-  auto readPossiblyIncompleteBlock = [&](const auto& block) {
-    DecompressedBlock uncompressedBuffer =
-        readAndDecompressBlock(block, file, std::nullopt);
-    AD_CORRECTNESS_CHECK(uncompressedBuffer.numColumns() == 2);
-    const auto& col1Column = uncompressedBuffer.getColumn(0);
-    const auto& col2Column = uncompressedBuffer.getColumn(1);
-    AD_CORRECTNESS_CHECK(col1Column.size() == col2Column.size());
-
-    // Find the range in the block, that belongs to the same relation `col0Id`
-    bool containedInOnlyOneBlock =
-        metaData._offsetInBlock != std::numeric_limits<uint64_t>::max();
-    auto begin = col1Column.begin();
-    if (containedInOnlyOneBlock) {
-      begin += metaData._offsetInBlock;
-    }
-    auto end =
-        containedInOnlyOneBlock ? begin + metaData._numRows : col1Column.end();
-
-    // Find the range in the block, where also the col1Id matches (the second
-    // ID in the `std::array` does not matter).
-    std::tie(begin, end) = std::equal_range(begin, end, col1Id);
-
-    size_t beginIndex = begin - col1Column.begin();
-    size_t endIndex = end - col1Column.begin();
-
-    // Only extract the relevant portion of the second column.
-    std::vector<Id> result(col2Column.begin() + beginIndex,
-                           col2Column.begin() + endIndex);
-    return result;
+  // Helper class for a part of a block (needed for the first and last block in
+  // the following). These are small objects, so an unlimited allocator is OK.
+  struct BlockPart {
+    std::unique_ptr<IdTable> idTable = nullptr;
+    size_t rowIndexBegin = 0;
+    size_t rowIndexEnd = 0;
+    size_t blockIndex = 0;
+    std::pair<size_t, size_t> numInsAndDel;
+    size_t size() const { return rowIndexEnd - rowIndexBegin; }
   };
 
-  // The first and the last block might be incomplete, compute
-  // and store the partial results from them.
-  std::vector<Id> firstBlockResult, lastBlockResult;
+  // Helper lambda that extracts the relevant `Id`s from the given
+  // `blockMetadata` iterator. Returns the corresponding part and its (row
+  // index) begin and end index in the original block.
+  //
+  // NOTE: This is used for the first and last block below because these may
+  // contain triples that do not match `col0Id` and `col1Id`. We cannot directly
+  // merge these into `result` because we first need to know its total size and
+  // resize it before we can write to it.
+  auto getBlockPart = [&](auto blockMetadata) -> BlockPart {
+    DecompressedBlock block =
+        readAndDecompressBlock(*blockMetadata, file, std::nullopt);
+
+    // First find the range with matching `col0Id`. The `if` condition asks if
+    // the relation is contained in a single block (this one).
+    auto blockPartBegin = block.begin();
+    auto blockPartEnd = block.end();
+    if (metadataForRelation._offsetInBlock !=
+        std::numeric_limits<uint64_t>::max()) {
+      blockPartBegin += metadataForRelation._offsetInBlock;
+      blockPartEnd = blockPartBegin + metadataForRelation._numRows;
+      AD_CORRECTNESS_CHECK(blockPartBegin < block.end());
+      AD_CORRECTNESS_CHECK(blockPartEnd <= block.end());
+    }
+
+    // Within that range find the subrange, where also `col1Id` matches.
+    std::tie(blockPartBegin, blockPartEnd) = std::equal_range(
+        blockPartBegin, blockPartEnd, std::array<Id, 1>{col1Id},
+        [](const auto& x, const auto& y) { return x[0] < y[0]; });
+    // std::cout << "Block part: ";
+    // std::transform(blockPartBegin, blockPartEnd,
+    //                std::ostream_iterator<std::string>(std::cout, " "),
+    //                [](const auto& row) {
+    //                  return absl::StrCat("{", row[0], " ", row[1], "}");
+    //                });
+    // std::cout << std::endl;
+
+    // Variables for the index of this block and the range.
+    //
+    // TODO: `IndexTest.scanTest` failes if we check `rowIndexEnd >
+    // rowIndexBegin` instead of just `>='. Can this really happen?
+    size_t rowIndexBegin = blockPartBegin - block.begin();
+    size_t rowIndexEnd = blockPartEnd - block.begin();
+    AD_CORRECTNESS_CHECK(rowIndexBegin < block.size());
+    AD_CORRECTNESS_CHECK(rowIndexEnd <= block.size());
+    AD_CORRECTNESS_CHECK(rowIndexEnd >= rowIndexBegin);
+    size_t blockIndex = blockMetadata - metadataForAllBlocks.begin();
+    auto numInsAndDel = numInsAndDelPerBlock.at(blockMetadata - beginBlock);
+
+    // Copy `block` to an `IdTable`.
+    //
+    // TODO: This is an unecessary copy. Extend the `IdTable` class so that we
+    // can move the data from the second column of `block` to `blockAsIdTable`.
+    ad_utility::AllocatorWithLimit<Id> allocator{
+        ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+            std::numeric_limits<size_t>::max())};
+    IdTable result(1, allocator);
+    result.resize(block.size());
+    for (size_t i = 0; i < block.size(); ++i) {
+      result(i, 0) = block(i, 1);
+    }
+    return {std::make_unique<IdTable>(std::move(result)), rowIndexBegin,
+            rowIndexEnd, blockIndex, numInsAndDel};
+  };
+
+  // The first and the last block might be incomplete. We process them
+  // separately from the complete blocks inbetween.
+  BlockPart firstBlockPart;
+  BlockPart lastBlockPart;
+  auto completeBlocksBegin = beginBlock;
+  auto completeBlocksEnd = endBlock;
   if (beginBlock < endBlock) {
-    firstBlockResult = readPossiblyIncompleteBlock(*beginBlock);
-    ++beginBlock;
+    firstBlockPart = getBlockPart(beginBlock);
+    ++completeBlocksBegin;
     if (timer) {
       timer->wlock()->checkTimeoutAndThrow("IndexScan: ");
     }
   }
-  if (beginBlock < endBlock) {
-    lastBlockResult = readPossiblyIncompleteBlock(*(endBlock - 1));
-    endBlock--;
+  if (completeBlocksBegin < endBlock) {
+    --completeBlocksEnd;
+    lastBlockPart = getBlockPart(completeBlocksEnd);
     if (timer) {
       timer->wlock()->checkTimeoutAndThrow("IndexScan: ");
     }
   }
 
-  // Determine the total size of the result.
-  // First accumulate the complete blocks in the "middle"
-  auto totalResultSize = std::accumulate(
-      beginBlock, endBlock, 0ul, [](const auto& count, const auto& block) {
-        return count + block._numRows;
-      });
-  // Add the possibly incomplete blocks from the beginning and end;
-  totalResultSize += firstBlockResult.size() + lastBlockResult.size();
-
+  // The total result size is the size of complete blocks plus the size of the
+  // possibly incomplete blocks at the beginning and end, plus the number of
+  // inserted triples minus the number of deleted triples.
+  auto totalResultSize =
+      std::accumulate(completeBlocksBegin, completeBlocksEnd, 0ul,
+                      [](const auto& count, const auto& block) {
+                        return count + block._numRows;
+                      });
+  totalResultSize += firstBlockPart.size() + lastBlockPart.size();
+  AD_CORRECTNESS_CHECK(numDelTotal <= totalResultSize);
+  totalResultSize += numInsTotal - numDelTotal;
   result->resize(totalResultSize);
+  size_t spaceLeft = result->size();
+  size_t offsetInResult = 0;
 
-  // Insert the first block into the result;
-  std::copy(firstBlockResult.begin(), firstBlockResult.end(),
-            result->getColumn(0).data());
-  size_t rowIndexOfNextBlockStart = firstBlockResult.size();
+  // Helper lambda for processing the first or last block.
+  //
+  // NOTE: This should only be called once for a given `BlockPart` because the
+  // `idTable` is moved away from it.
+  auto processBlockPart = [&](BlockPart& blockPart) {
+    if (blockPart.idTable) {
+      size_t numRowsWrittenToResult = 0;
+      // If there are no delta triples, copy directly to the result, otherwise
+      // use (the slightly more expensive) `mergeTriples`.
+      if (blockPart.numInsAndDel == std::pair<size_t, size_t>{0, 0}) {
+        for (size_t i = 0; i < blockPart.size(); ++i) {
+          (*result)(offsetInResult + i, 0) =
+              (*blockPart.idTable)(blockPart.rowIndexBegin + i, 0);
+        }
+        numRowsWrittenToResult = blockPart.size();
+      } else {
+        numRowsWrittenToResult = locatedTriplesPerBlock.mergeTriples(
+            blockPart.blockIndex, std::move(*(blockPart.idTable)), *result,
+            offsetInResult, col0Id, col1Id, blockPart.rowIndexBegin,
+            blockPart.rowIndexEnd);
+      }
+      // Check that `numRowsWrittenToResult` is as expected.
+      {
+        size_t expected = blockPart.size();
+        AD_CORRECTNESS_CHECK(blockPart.numInsAndDel.second <= expected);
+        expected += blockPart.numInsAndDel.first;
+        expected -= blockPart.numInsAndDel.second;
+        AD_CORRECTNESS_CHECK(numRowsWrittenToResult == expected);
+      }
+      AD_CORRECTNESS_CHECK(numRowsWrittenToResult <= spaceLeft);
+      offsetInResult += numRowsWrittenToResult;
+      spaceLeft -= numRowsWrittenToResult;
+    }
+  };
 
-  // Insert the complete blocks from the middle in parallel
-  if (beginBlock < endBlock) {
+  // Process the first block part, then all the complete blocks, then the last
+  // block part. The complete blocks are read sequentially from disk and then
+  // (after we know their position in `result`) decompressed and merged into
+  // `result` in parallel.
+  processBlockPart(firstBlockPart);
+  if (completeBlocksBegin < completeBlocksEnd) {
 #pragma omp parallel
 #pragma omp single
-    for (; beginBlock < endBlock; ++beginBlock) {
-      const auto& block = *beginBlock;
+    for (auto block = completeBlocksBegin; block < completeBlocksEnd; ++block) {
+      size_t blockIndex = block - metadataForAllBlocks.begin();
+      auto numInsAndDel = numInsAndDelPerBlock.at(block - beginBlock);
 
-      // Read the block serially, only read the second column.
-      AD_CORRECTNESS_CHECK(block._offsetsAndCompressedSize.size() == 2);
+      // Read the compressed block from disk (second column only).
+      AD_CORRECTNESS_CHECK(block->_offsetsAndCompressedSize.size() == 2);
       CompressedBlock compressedBuffer =
-          readCompressedBlockFromFile(block, file, std::vector{1ul});
+          readCompressedBlockFromFile(*block, file, std::vector{1ul});
 
       // A lambda that owns the compressed block decompresses it to the
       // correct position in the result. It may safely be run in parallel
-      auto decompressLambda = [rowIndexOfNextBlockStart, &block, result,
+      auto decompressLambda = [&result, &block, &locatedTriplesPerBlock,
+                               offsetInResult, numInsAndDel, blockIndex,
                                compressedBuffer =
                                    std::move(compressedBuffer)]() mutable {
         ad_utility::TimeBlockAndLog tbl{"Decompression a block"};
 
-        decompressBlockToExistingIdTable(compressedBuffer, block._numRows,
-                                         *result, rowIndexOfNextBlockStart);
+        decompressBlockToExistingIdTable(compressedBuffer, block->_numRows,
+                                         *result, offsetInResult, numInsAndDel,
+                                         locatedTriplesPerBlock, blockIndex);
       };
 
       // Register an OpenMP task that performs the decompression of this
@@ -389,15 +460,29 @@ void CompressedRelationReader::scan(
         }
       }
 
-      // update the pointers
-      rowIndexOfNextBlockStart += block._numRows;
-    }  // end of parallel region
+      // Update the counters.
+      AD_CORRECTNESS_CHECK(numInsAndDel.second <= block->_numRows);
+      size_t numRowsOfThisBlock =
+          block->_numRows + numInsAndDel.first - numInsAndDel.second;
+      AD_CORRECTNESS_CHECK(numRowsOfThisBlock <= spaceLeft);
+      spaceLeft -= numRowsOfThisBlock;
+      offsetInResult += numRowsOfThisBlock;
+    }
+    // End of omp parallel region, all blocks are decompressed now.
   }
-  // Add the last block.
-  std::copy(lastBlockResult.begin(), lastBlockResult.end(),
-            result->getColumn(0).data() + rowIndexOfNextBlockStart);
-  AD_CORRECTNESS_CHECK(rowIndexOfNextBlockStart + lastBlockResult.size() ==
-                       result->size());
+  processBlockPart(lastBlockPart);
+
+  // Add delta triples from beyond last block, if any.
+  AD_CORRECTNESS_CHECK(numInsAndDelPerBlock.size() > 0);
+  auto numInsBeyondLastBlock = numInsAndDelPerBlock.back().first;
+  if (numInsBeyondLastBlock > 0) {
+    size_t blockIndex = endBlock - metadataForAllBlocks.begin();
+    size_t numRowsWrittenToResult = locatedTriplesPerBlock.mergeTriples(
+        blockIndex, std::nullopt, *result, offsetInResult, col0Id, col1Id);
+    AD_CORRECTNESS_CHECK(numRowsWrittenToResult == numInsBeyondLastBlock);
+    spaceLeft -= numRowsWrittenToResult;
+  }
+  AD_CORRECTNESS_CHECK(spaceLeft == 0);
 }
 
 // _____________________________________________________________________________
@@ -616,8 +701,8 @@ void CompressedRelationReader::decompressBlockToExistingIdTable(
     IdTable decompressedBlock(compressedBlock.size(), allocator);
     decompressedBlock.resize(numRowsToRead);
     decompressToIdTable(decompressedBlock, 0);
-    locatedTriplesPerBlock.mergeTriples(blockIndex, decompressedBlock, result,
-                                        offsetInResult);
+    locatedTriplesPerBlock.mergeTriples(
+        blockIndex, std::move(decompressedBlock), result, offsetInResult);
   }
 }
 

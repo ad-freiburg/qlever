@@ -103,9 +103,9 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                                     {20, 10},    // Row 4
                                                     {21, 11},    // Row 5
                                                     {30, 10}});  // Row 6
-    IdTable result(block.numColumns(), ad_utility::testing::makeAllocator());
+    IdTable result(2, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
-    locatedTriplesPerBlock.mergeTriples(1, block, result, 0);
+    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0);
     ASSERT_EQ(result, resultExpected);
   }
 
@@ -120,163 +120,184 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                                     {21, 11},    // Row 5
                                                     {30, 10},    // Row 6
                                                     {30, 30}});  // Row 7
-    IdTable result(block.numColumns(), ad_utility::testing::makeAllocator());
+    IdTable result(2, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
-    locatedTriplesPerBlock.mergeTriples(1, block, result, 0, 0, V(2));
+    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0, V(2));
     ASSERT_EQ(result, resultExpected);
   }
 
   // Repeat but with a partial block that leaves out the first two elements of
-  // `block` (and correspondingly `offsetOfBlock == 2` in `mergeTriples`).
+  // `block`.
   {
-    IdTable blockTruncated = block.clone();
-    std::shift_left(blockTruncated.begin(), blockTruncated.end(), 2);
-    blockTruncated.resize(block.size() - 2);
     IdTable resultExpected = makeIdTableFromVector({{15, 30},    // Row 0
                                                     {20, 10},    // Row 1
                                                     {21, 11},    // Row 2
                                                     {30, 10},    // Row 3
                                                     {30, 30}});  // Row 4
-    IdTable result(block.numColumns(), ad_utility::testing::makeAllocator());
+    IdTable result(2, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
-    locatedTriplesPerBlock.mergeTriples(1, blockTruncated, result, 0, 2, V(2));
+    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0, V(2), 2);
     ASSERT_EQ(result, resultExpected);
   }
 
   // Merge only the triples with `id1 == V(2)` and `id2 == V(30)` into the
   // corresponding partial block (one triple inserted, one triple deleted).
-  //
-  // TODO: I don't think this case can actually occur in our code. When `id1`
-  // and `id2` are specified, we are only interesting in `id3` for result.
   {
-    IdTable blockTruncated = makeIdTableFromVector({{30, 20}, {30, 30}});
-    IdTable resultExpected = makeIdTableFromVector({{30, 10}, {30, 30}});
-    IdTable result(blockTruncated.numColumns(),
-                   ad_utility::testing::makeAllocator());
+    IdTable blockColumnId3(1, ad_utility::testing::makeAllocator());
+    blockColumnId3.resize(block.size());
+    for (size_t i = 0; i < block.size(); ++i) {
+      blockColumnId3(i, 0) = block(i, 1);
+    }
+    IdTable resultExpected = makeIdTableFromVector({{10}, {30}});
+    IdTable result(1, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
-    locatedTriplesPerBlock.mergeTriples(1, blockTruncated, result, 0, 4, V(2),
-                                        V(30));
+    locatedTriplesPerBlock.mergeTriples(1, std::move(blockColumnId3), result, 0,
+                                        V(2), V(30), 4, 6);
     ASSERT_EQ(result, resultExpected);
   }
 
-  // Same, but only with the last column.
+  // Merge special triples.
   {
-    IdTable blockTruncated = makeIdTableFromVector({{20}, {30}});
-    IdTable resultExpected = makeIdTableFromVector({{10}, {30}});
-    IdTable result(blockTruncated.numColumns(),
-                   ad_utility::testing::makeAllocator());
+    size_t NRI = LocatedTriple::NO_ROW_INDEX;
+    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
+        {LocatedTriple{2, NRI, V(1), V(30), V(40), true},
+         LocatedTriple{2, NRI, V(1), V(30), V(50), true},
+         LocatedTriple{2, NRI, V(1), V(40), V(10), true}});
+    IdTable resultExpected = makeIdTableFromVector({{30, 40},    // Row 0
+                                                    {30, 50},    // Row 1
+                                                    {40, 10}});  // Row 2
+    IdTable result(2, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
-    locatedTriplesPerBlock.mergeTriples(1, blockTruncated, result, 0, 4, V(2),
-                                        V(30));
-    ASSERT_EQ(result, resultExpected);
+    locatedTriplesPerBlock.mergeTriples(2, std::nullopt, result, 0, V(1));
   }
 }
 
 // Test `Permutation::scan` (and hence also `CompressedRelation::scan`) with
 // triples merged from a `locatedTriplesPerBlock` object.
 TEST_F(LocatedTriplesTest, scanWithMergeTriples) {
-  // TODO: Test with multiple block sizes.
-  size_t blockSizeInBytes = 32;
-  std::string basename = "LocatedTriplesTest.scanWithMergeTriples";
-  std::string permutationFilename = basename + ".index.pso";
+  // The actual test, for a given block size.
+  auto testWithGivenBlockSize = [](const size_t blockSizeInBytes) {
+    std::string basename = "LocatedTriplesTest.scanWithMergeTriples";
+    std::string permutationFilename = basename + ".index.pso";
 
-  // Helper lambda for creating a `BufferedIdTable` (which we need for
-  // `CompressedRelationWriter` from an ordinary `IdTable` with two columns).
-  //
-  // TODO: Something like this is also used in `CompressedRelationsTest`, so it
-  // should be in a helper class.
-  auto getBufferedIdTable = [](const IdTable& idTable) -> BufferedIdTable {
-    // Note that these files are never created because we set the threshold for
-    // writing to disk so large.
-    std::string bufferFilename1 = "compressedRelationWriter.buffer1.dat";
-    std::string bufferFilename2 = "compressedRelationWriter.buffer2.dat";
-    AD_CONTRACT_CHECK(idTable.numColumns() == 2);
-    BufferedIdTable bufferedIdTable{
-        2,
-        std::array{ad_utility::BufferedVector<Id>{
-                       std::numeric_limits<size_t>::max(), bufferFilename1},
-                   ad_utility::BufferedVector<Id>{
-                       std::numeric_limits<size_t>::max(), bufferFilename2}}};
-    for (size_t i = 0; i < idTable.size(); ++i) {
-      bufferedIdTable.push_back({idTable(i, 0), idTable(i, 1)});
+    // Helper lambda for creating a `BufferedIdTable` (which we need for
+    // `CompressedRelationWriter` from an ordinary `IdTable` with two columns).
+    //
+    // TODO: Something like this is also used in `CompressedRelationsTest`, so
+    // it should be in a helper class.
+    auto getBufferedIdTable = [](const IdTable& idTable) -> BufferedIdTable {
+      // Note that these files are never created because we set the threshold
+      // for writing to disk so large.
+      std::string bufferFilename1 = "compressedRelationWriter.buffer1.dat";
+      std::string bufferFilename2 = "compressedRelationWriter.buffer2.dat";
+      AD_CONTRACT_CHECK(idTable.numColumns() == 2);
+      BufferedIdTable bufferedIdTable{
+          2,
+          std::array{ad_utility::BufferedVector<Id>{
+                         std::numeric_limits<size_t>::max(), bufferFilename1},
+                     ad_utility::BufferedVector<Id>{
+                         std::numeric_limits<size_t>::max(), bufferFilename2}}};
+      for (size_t i = 0; i < idTable.size(); ++i) {
+        bufferedIdTable.push_back({idTable(i, 0), idTable(i, 1)});
+      }
+      return bufferedIdTable;
+    };
+
+    // Our test relation.
+    Id relationId = V(1);
+    IdTable relation = makeIdTableFromVector({{10, 10},    // Row 0
+                                              {15, 20},    // Row 1
+                                              {15, 30},    // Row 2
+                                              {20, 10},    // Row 3
+                                              {30, 20},    // Row 4
+                                              {30, 30}});  // Row 5
+
+    // Write it to disk (adapted from `CompressedRelationsTest`). The last value
+    // of the call to `addRelation` is the number of distinct elements.
+    ad_utility::File permutationFileForWritingRelations{permutationFilename,
+                                                        "w"};
+    CompressedRelationWriter writer{
+        std::move(permutationFileForWritingRelations), blockSizeInBytes};
+    writer.addRelation(relationId, getBufferedIdTable(relation),
+                       relation.size());
+    writer.finish();
+    auto metadataPerRelation = writer.getFinishedMetaData();
+    auto metadataPerBlock = writer.getFinishedBlocks();
+    AD_CORRECTNESS_CHECK(metadataPerRelation.size() == 1);
+
+    // Append the metadata to the index file.
+    IndexMetaDataHmap metadata;
+    std::ranges::for_each(metadataPerRelation,
+                          [&metadata](auto& md) { metadata.add(md); });
+    metadata.blockData() = metadataPerBlock;
+    ad_utility::File permutationFileForWritingMetadata{permutationFilename,
+                                                       "r+"};
+    metadata.appendToFile(&permutationFileForWritingMetadata);
+    permutationFileForWritingMetadata.close();
+
+    // Create a permutation based on this.
+    LocatedTriplesPerBlock locatedTriplesPerBlock;
+    Permutation::PermutationImpl<SortByPSO, IndexMetaDataHmap> permutation{
+        SortByPSO(), "PSO", ".pso", {1, 0, 2}, locatedTriplesPerBlock};
+    permutation.loadFromDisk(basename);
+    // ad_utility::File permutationFileForReading{permutationFilename, "r"};
+    // permutation._file = std::move(permutationFileForReading);
+    // permutation._meta = metadata;
+    // permutation._isLoaded = true;
+
+    // Read the (for this test: first and only) relation from disk and check
+    // that it is the same.
+    {
+      IdTable result(2, ad_utility::testing::makeAllocator());
+      permutation.scan(relationId, &result);
+      ASSERT_EQ(result, relation);
     }
-    return bufferedIdTable;
+
+    // Helper lambda for adding to `locatedTriplesPerBlock`.
+    auto locatedTriplesPerBlockAdd = [&locatedTriplesPerBlock, &relationId,
+                                      &permutation](Id id2, Id id3) {
+      locatedTriplesPerBlock.add(LocatedTriple::locateTripleInPermutation(
+          relationId, id2, id3, permutation));
+    };
+
+    // Again, but with some located triples merged (three inserts, four
+    // deletes).
+    locatedTriplesPerBlockAdd(V(15), V(20));  // Delete.
+    locatedTriplesPerBlockAdd(V(14), V(20));  // Insert.
+    locatedTriplesPerBlockAdd(V(20), V(10));  // Delete.
+    locatedTriplesPerBlockAdd(V(30), V(20));  // Delete.
+    locatedTriplesPerBlockAdd(V(30), V(30));  // Delete.
+    locatedTriplesPerBlockAdd(V(30), V(31));  // Insert at very end.
+    locatedTriplesPerBlockAdd(V(30), V(32));  // Insert at very end.
+    std::cout << locatedTriplesPerBlock;
+    {
+      IdTable result(2, ad_utility::testing::makeAllocator());
+      permutation.scan(relationId, &result);
+      IdTable resultExpected = makeIdTableFromVector({{10, 10},    // Row 0
+                                                      {14, 20},    // Row 1
+                                                      {15, 30},    // Row 2
+                                                      {30, 31},    // Row 3
+                                                      {30, 32}});  // Row 4
+      ASSERT_EQ(result, resultExpected);
+    }
+
+    // Now a scan where two `Id`s are fixed.
+    {
+      IdTable result(1, ad_utility::testing::makeAllocator());
+      result.resize(2);
+      permutation.scan(relationId, V(30), &result);
+      IdTable resultExpected = makeIdTableFromVector({{31}, {32}});
+      ASSERT_EQ(result, resultExpected);
+    }
+
+    // Delete the file with the compressed relations.
+    ad_utility::deleteFile(permutationFilename);
   };
 
-  // Our test relation.
-  Id relationId = V(1);
-  IdTable relation = makeIdTableFromVector({{10, 10},    // Row 0
-                                            {15, 20},    // Row 1
-                                            {15, 30},    // Row 2
-                                            {20, 10},    // Row 3
-                                            {30, 20},    // Row 4
-                                            {30, 30}});  // Row 5
-
-  // Write it to disk (adapted from `CompressedRelationsTest`). The last value
-  // of the call to `addRelation` is the number of distinct elements.
-  ad_utility::File permutationFileForWritingRelations{permutationFilename, "w"};
-  CompressedRelationWriter writer{std::move(permutationFileForWritingRelations),
-                                  blockSizeInBytes};
-  writer.addRelation(relationId, getBufferedIdTable(relation), relation.size());
-  writer.finish();
-  auto metadataPerRelation = writer.getFinishedMetaData();
-  auto metadataPerBlock = writer.getFinishedBlocks();
-  AD_CORRECTNESS_CHECK(metadataPerRelation.size() == 1);
-
-  // Append the metadata to the index file.
-  IndexMetaDataHmap metadata;
-  std::ranges::for_each(metadataPerRelation,
-                        [&metadata](auto& md) { metadata.add(md); });
-  metadata.blockData() = metadataPerBlock;
-  ad_utility::File permutationFileForWritingMetadata{permutationFilename, "r+"};
-  metadata.appendToFile(&permutationFileForWritingMetadata);
-  permutationFileForWritingMetadata.close();
-
-  // Create a permutation based on this.
-  LocatedTriplesPerBlock locatedTriplesPerBlock;
-  Permutation::PermutationImpl<SortByPSO, IndexMetaDataHmap> permutation{
-      SortByPSO(), "PSO", ".pso", {1, 0, 2}, locatedTriplesPerBlock};
-  permutation.loadFromDisk(basename);
-  // ad_utility::File permutationFileForReading{permutationFilename, "r"};
-  // permutation._file = std::move(permutationFileForReading);
-  // permutation._meta = metadata;
-  // permutation._isLoaded = true;
-
-  // Read the (for this test: first and only) relation from disk and check that
-  // it is the same.
-  IdTable result(relation.numColumns(), ad_utility::testing::makeAllocator());
-  permutation.scan(relationId, &result);
-  // CompressedRelationReader reader;
-  // reader.scan(metadataPerRelation[0], metadataPerBlock, permutation._file,
-  //             &result, ad_utility::SharedConcurrentTimeoutTimer{});
-  ASSERT_EQ(result, relation);
-
-  // Helper lambda for adding to `locatedTriplesPerBlock`.
-  auto locatedTriplesPerBlockAdd = [&locatedTriplesPerBlock, &relationId,
-                                    &permutation](Id id2, Id id3) {
-    locatedTriplesPerBlock.add(LocatedTriple::locateTripleInPermutation(
-        relationId, id2, id3, permutation));
-  };
-
-  // Again, but with some located triples merged (three inserts, four deletes).
-  locatedTriplesPerBlockAdd(V(15), V(20));  // Delete.
-  locatedTriplesPerBlockAdd(V(14), V(20));  // Insert.
-  locatedTriplesPerBlockAdd(V(20), V(10));  // Delete.
-  locatedTriplesPerBlockAdd(V(30), V(20));  // Delete.
-  locatedTriplesPerBlockAdd(V(30), V(30));  // Delete.
-  locatedTriplesPerBlockAdd(V(30), V(31));  // Insert at very end.
-  locatedTriplesPerBlockAdd(V(30), V(32));  // Insert at very end.
-  permutation.scan(relationId, &result);
-  // reader.scan(metadataPerRelation[0], metadataPerBlock, permutation._file,
-  //             &result, ad_utility::SharedConcurrentTimeoutTimer{},
-  //             locatedTriplesPerBlock);
-  IdTable resultExpected = makeIdTableFromVector({{10, 10},    // Row 0
-                                                  {14, 20},    // Row 1
-                                                  {15, 30},    // Row 2
-                                                  {30, 31},    // Row 3
-                                                  {30, 32}});  // Row 4
-  ASSERT_EQ(result, resultExpected);
-
-  // Delete the file with the compressed relations.
-  ad_utility::deleteFile(permutationFilename);
+  // Now test for multiple block sizes (16 bytes is the minimum).
+  testWithGivenBlockSize(16);
+  testWithGivenBlockSize(32);
+  testWithGivenBlockSize(48);
+  testWithGivenBlockSize(64);
+  testWithGivenBlockSize(100'000);
 }

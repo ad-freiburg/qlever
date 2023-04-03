@@ -33,6 +33,10 @@ struct LocatedTriple {
   template <typename Permutation>
   static LocatedTriple locateTripleInPermutation(
       Id id1, Id id2, Id id3, const Permutation& permutation);
+
+  // Special row index for triples that belong to previous block. It is
+  // important that this value plus one is actually greater.
+  static const size_t NO_ROW_INDEX = std::numeric_limits<size_t>::max() - 1;
 };
 
 // A sorted set of triples located at the same position in a particular
@@ -65,26 +69,31 @@ class LocatedTriplesPerBlock {
   std::pair<size_t, size_t> numTriples(size_t blockIndex, Id id1) const;
   std::pair<size_t, size_t> numTriples(size_t blockIndex, Id id1, Id id2) const;
 
-  // Merge the located triples for `blockIndex` into the given `block` (which
-  // might be the whole block with that index or just a part of it) and write
-  // the result to `result`, starting from position `offsetInResult`.
+  // Merge the located triples for `blockIndex` into the given `blockPart` and
+  // write the result to `result`, starting from position `offsetInResult`. If
+  // `blockPart` is a whole index block, `offsetInBlock` is zero, otherwise it's
+  // the offset in the full block, where the part starts.
   //
-  // It is the resposibility of the caller that there is enough space or the
+  // It is the resposibility of the caller that there is enough space for the
   // result starting from that offset. Like for `numTriplesInBlock` above,
   // consider only triples that match `id1` (if provided) and `id2` (if
-  // provided). If `block` is just a part of an index block, the first triple of
-  // block has row index `rowIndexOffset` in the original block.
+  // provided).
   //
-  // TODO: Beware of triples inserted at the end of the block, they are found in
-  // the `LocatedTriples` for `blockIndex + 1`. It's up to `CompressedRelation`
-  // to handle that correctly.
-  void mergeTriples(size_t blockIndex, const IdTable& block, IdTable& result,
-                    size_t offsetInResult) const;
-  void mergeTriples(size_t blockIndex, const IdTable& block, IdTable& result,
-                    size_t offsetInResult, size_t rowIndexOffset, Id id1) const;
-  void mergeTriples(size_t blockIndex, const IdTable& block, IdTable& result,
-                    size_t offsetInResult, size_t rowIndexOffset, Id id1,
-                    Id id2) const;
+  // In the special case where `block == std::nullopt`, we are just inserting
+  // the located triples for block `blockIndex` where the `rowIndexInBlock` is
+  // `NO_ROW_INDEX`. These actually belong to the previous block, but were
+  // larger than all triples there.
+  //
+  // Returns the number of rows written to `result`.
+  size_t mergeTriples(size_t blockIndex, std::optional<IdTable> block,
+                      IdTable& result, size_t offsetInResult) const;
+  size_t mergeTriples(size_t blockIndex, std::optional<IdTable> block,
+                      IdTable& result, size_t offsetInResult, Id id1,
+                      size_t rowIndexInBlockBegin = 0) const;
+  size_t mergeTriples(
+      size_t blockIndex, std::optional<IdTable> block, IdTable& result,
+      size_t offsetInResult, Id id1, Id id2, size_t rowIndexInBlockBegin = 0,
+      size_t rowIndexInBlockEnd = LocatedTriple::NO_ROW_INDEX) const;
 
   // Add the given `locatedTriple` to the given `LocatedTriplesPerBlock`.
   // Returns a handle to where it was added (via which we can easily remove it
@@ -124,8 +133,15 @@ class LocatedTriplesPerBlock {
   // The only reason that the arguments `id1` and `id2` come at the end here is
   // so that we can give them default values.
   template <MatchMode matchMode>
-  void mergeTriples(size_t blockIndex, const IdTable& block, IdTable& result,
-                    size_t offsetInResult, size_t rowIndexOffset = 0,
-                    Id id1 = Id::makeUndefined(),
-                    Id id2 = Id::makeUndefined()) const;
+  size_t mergeTriples(
+      size_t blockIndex, std::optional<IdTable> block, IdTable& result,
+      size_t offsetInResult, Id id1 = Id::makeUndefined(),
+      Id id2 = Id::makeUndefined(), size_t rowIndexInBlockBegin = 0,
+      size_t rowIndexInBlockEnd = LocatedTriple::NO_ROW_INDEX) const;
 };
+
+// Human-readable representation of `LocatedTriple`, `LocatedTriples`, and
+// `LocatedTriplesPerBlock` that are very useful for debugging.
+std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt);
+std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts);
+std::ostream& operator<<(std::ostream& os, const LocatedTriplesPerBlock& ltpb);
