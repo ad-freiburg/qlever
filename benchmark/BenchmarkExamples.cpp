@@ -184,7 +184,8 @@ class BM_Tables: public BenchmarkClassInterface{
       tableExponentsWithBasis.addMeasurement(1, i,
         [&](){exponentiateNTimes(3,i);});
     }
-    // Calculating the time differnce between them.
+    // Manually adding the entries of the third column by computing the timing
+    // difference between the first two columns.
     for (size_t column = 0; column < 5; column++){
       float entryWithBasis2 = tableExponentsWithBasis.getEntry<float>(0,
         column);
