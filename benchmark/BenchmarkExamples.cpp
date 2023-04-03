@@ -109,24 +109,18 @@ class BM_Groups: public BenchmarkClassInterface{
     auto& loopMultiplyGroup{records.addGroup("loopMultiply")};
 
     auto& addMember1{loopAddGroup.addMeasurement(
-      std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
-      "1+1", [&](){loopAdd(1,1);}))};
+      "1+1", [&](){loopAdd(1,1);})};
     auto& addMember2{loopAddGroup.addMeasurement(
-      std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
-      "42+69", [&](){loopAdd(42,69);}))};
+      "42+69", [&](){loopAdd(42,69);})};
     auto& addMember3{loopAddGroup.addMeasurement(
-      std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
-      "10775+24502", [&](){loopAdd(10775, 24502);}))};
+      "10775+24502", [&](){loopAdd(10775, 24502);})};
 
     auto& multiplicationMember1{loopMultiplyGroup.addMeasurement(
-      std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
-      "1*1", [&](){loopMultiply(1,1);}))};
+      "1*1", [&](){loopMultiply(1,1);})};
     auto& multiplicationMember2{loopMultiplyGroup.addMeasurement(
-      std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
-      "42*69", [&](){loopMultiply(42,69);}))};
+      "42*69", [&](){loopMultiply(42,69);})};
     auto& multiplicationMember3{loopMultiplyGroup.addMeasurement(
-      std::make_unique<BenchmarkMeasurementContainer::RecordEntry>(
-      "10775*24502", [&](){loopMultiply(10775, 24502);}))};
+      "10775*24502", [&](){loopMultiply(10775, 24502);})};
 
     // Adding some metadata.
     loopAddGroup.metadata_.addKeyValuePair("Operator", '+');

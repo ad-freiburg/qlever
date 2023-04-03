@@ -38,13 +38,6 @@ RecordGroup::RecordGroup(const RecordGroup& group){
 }
 
 // ____________________________________________________________________________
-RecordEntry& RecordGroup::addMeasurement(
-  std::unique_ptr<RecordEntry>&& newMember){
-  entries_.push_back(std::move(newMember));
-  return (*entries_.back());
-}
-
-// ____________________________________________________________________________
 RecordGroup::operator std::string() const{
   // We need to add all the string representations of the group members,
   // so doing everything using a stream is the best idea.

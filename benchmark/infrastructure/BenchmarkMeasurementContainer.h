@@ -92,9 +92,22 @@ class RecordGroup {
   RecordGroup(const RecordGroup& group);
 
   /*
-  @brief Adds a new member to the group.
+  @brief Adds a new instance of `RecordEntry` to the group.
+
+  @tparam Function Lambda function with no function arguments and returns void.
+
+  @param descriptor A string to identify this instance in json format later.
+  @param functionToMeasure The function, who's execution time will be
+  measured and saved.
   */
-  RecordEntry& addMeasurement(std::unique_ptr<RecordEntry>&& newMember);
+  template<typename Function>
+    requires std::invocable<Function>
+  RecordEntry& addMeasurement(const std::string& descriptor,
+      const Function& functionToMeasure){
+      entries_.push_back(std::make_unique<RecordEntry>(descriptor,
+        functionToMeasure));
+      return (*entries_.back());
+    }
 
   // User defined conversion to `std::string`.
   explicit operator std::string() const;
