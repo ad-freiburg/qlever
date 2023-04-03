@@ -11,7 +11,6 @@
 #include <string>
 #include <vector>
 
-#include "absl/cleanup/cleanup.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "util/BoostHelpers/AsyncWaitForFuture.h"
@@ -21,13 +20,13 @@ using Awaitable = Server::Awaitable<T>;
 
 // __________________________________________________________________________
 Server::Server(unsigned short port, int numThreads, size_t maxMemGB,
-               std::string&& accessToken, bool usePatternTrick)
+               std::string accessToken, bool usePatternTrick)
     : _numThreads(numThreads),
       _port(port),
       accessToken_(std::move(accessToken)),
       _allocator{
           ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMemGB *
-                                                               (1ull << 30u)),
+                                                               (1ULL << 30U)),
           [this](size_t numBytesToAllocate) {
             _cache.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
                                             numBytesToAllocate / sizeof(Id));

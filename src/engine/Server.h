@@ -29,7 +29,7 @@ using std::vector;
 class Server {
  public:
   explicit Server(unsigned short port, int numThreads, size_t maxMemGB,
-                  std::string&& accessToken, bool usePatternTrick = true);
+                  std::string accessToken, bool usePatternTrick = true);
 
   virtual ~Server() = default;
 
