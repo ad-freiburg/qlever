@@ -75,7 +75,7 @@ RecordTable::operator std::string() const{
 
   // Convert an `EntryType` of `RecordTable` to a screen friendly
   // format.
-  auto entryToStringVisitor = [&exactNumberOfDecimals]<typename T>(
+  auto entryToStringVisitor = []<typename T>(
       const T& entry)->std::string{
     // We may need formating.
     std::ostringstream ss;
