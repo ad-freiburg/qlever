@@ -89,19 +89,19 @@ class BMGroups: public BenchmarkClassInterface{
 
     // Setup.
     auto loopAdd = [](const size_t a, const size_t b) {
-      size_t to_return = a;
+      size_t toReturn = a;
       for (size_t i = 0; i < b; i++) {
-        to_return += 1;
+        toReturn += 1;
       }
-      return to_return;
+      return toReturn;
     };
 
     auto loopMultiply = [](const size_t a, const size_t b) {
-      size_t to_return = a;
+      size_t toReturn = a;
       for (size_t i = 0; i < b; i++) {
-        to_return += a;
+        toReturn += a;
       }
-      return to_return;
+      return toReturn;
     };
 
     // Measuring functions.
@@ -112,27 +112,27 @@ class BMGroups: public BenchmarkClassInterface{
     loopMultiplyGroup.metadata_.addKeyValuePair("Operator", '*');
 
     auto& addMember1{loopAddGroup.addMeasurement(
-      "1+1", [&](){loopAdd(1,1);})};
+      "1+1", [&loopAdd](){loopAdd(1,1);})};
     addMember1.metadata_.addKeyValuePair("Result", 2);
 
     auto& addMember2{loopAddGroup.addMeasurement(
-      "42+69", [&](){loopAdd(42,69);})};
+      "42+69", [&loopAdd](){loopAdd(42,69);})};
     addMember2.metadata_.addKeyValuePair("Result", 42+69);
 
     auto& addMember3{loopAddGroup.addMeasurement(
-      "10775+24502", [&](){loopAdd(10775, 24502);})};
+      "10775+24502", [&loopAdd](){loopAdd(10775, 24502);})};
     addMember3.metadata_.addKeyValuePair("Result", 10775+24502);
 
     auto& multiplicationMember1{loopMultiplyGroup.addMeasurement(
-      "1*1", [&](){loopMultiply(1,1);})};
+      "1*1", [&loopMultiply](){loopMultiply(1,1);})};
     multiplicationMember1.metadata_.addKeyValuePair("Result", 1);
 
     auto& multiplicationMember2{loopMultiplyGroup.addMeasurement(
-      "42*69", [&](){loopMultiply(42,69);})};
+      "42*69", [&loopMultiply](){loopMultiply(42,69);})};
     multiplicationMember2.metadata_.addKeyValuePair("Result", 42*69);
 
     auto& multiplicationMember3{loopMultiplyGroup.addMeasurement(
-      "10775*24502", [&](){loopMultiply(10775, 24502);})};
+      "10775*24502", [&loopMultiply](){loopMultiply(10775, 24502);})};
     multiplicationMember3.metadata_.addKeyValuePair("Result", 10775*24502);
     
     return records;
