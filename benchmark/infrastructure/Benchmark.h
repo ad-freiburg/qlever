@@ -127,6 +127,16 @@ class BenchmarkRecords {
     // Default constructor.
     BenchmarkRecords() = default;
 
+    // Default destructor.
+    ~BenchmarkRecords() = default;
+
+    /*
+    This class holds unique pointers, so the default copy assignment operator
+    will not work. We also newer use it, so there was no real reason, to write a
+    custom one.
+    */
+    BenchmarkRecords& operator=(const BenchmarkRecords&) = delete;
+
     // Custom copy constructor because of the vectors of unique pointers.
     BenchmarkRecords(const BenchmarkRecords& records);
 
