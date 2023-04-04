@@ -1493,6 +1493,22 @@ queries:
       - selected: [ "?sum" ]
       - contains_row: [ 7.0 ]
 
+  - query: join-columns-in-the-presence-of-subqueries
+    type: no-text
+    sparql: |
+      SELECT ?a ?b WHERE {
+        VALUES ?a { 1 }
+        { SELECT ?a ?b WHERE {
+      	{ VALUES ?c { 42} }
+          UNION
+          { VALUES (?a ?b) { (1 3) } }
+        } }
+      }
+    checks:
+      - num_cols: 2
+      - num_rows : 1
+      - selected: [ "?a", "?b" ]
+      - contains_row: [ 1, 3 ]
 
 
 

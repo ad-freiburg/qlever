@@ -62,7 +62,7 @@ namespace {
 // compiler versions as soon as we don't support Clang 13 anymore.
 void callFixedSizeForSort(auto& idTable, auto comparison) {
   ad_utility::callFixedSize(idTable.numColumns(),
-                            [&idTable, comparison]<int I>() {
+                            [&idTable, comparison]<size_t I>() {
                               Engine::sort<I>(&idTable, comparison);
                             });
 }
@@ -70,7 +70,7 @@ void callFixedSizeForSort(auto& idTable, auto comparison) {
 // The actual implementation of sorting an `IdTable` according to the
 // `sortCols`.
 void sortImpl(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
-  int width = idTable.numColumns();
+  size_t width = idTable.numColumns();
 
   // Instantiate specialized comparison lambdas for one and two sort columns
   // and use a generic comparison for a higher number of sort columns.

@@ -111,9 +111,9 @@ ResultTable OptionalJoin::computeResult() {
 
 // _____________________________________________________________________________
 VariableToColumnMap OptionalJoin::computeVariableToColumnMap() const {
-  return makeVarToColMapForJoinOperation(_left->getVariableColumns(),
-                                         _right->getVariableColumns(),
-                                         _joinColumns, BinOpType::OptionalJoin);
+  return makeVarToColMapForJoinOperation(
+      _left->getVariableColumns(), _right->getVariableColumns(), _joinColumns,
+      BinOpType::OptionalJoin, _left->getResultWidth());
 }
 
 // _____________________________________________________________________________

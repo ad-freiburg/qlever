@@ -109,19 +109,19 @@ class TransitivePath : public Operation {
 
   // The method is declared here to make it unit testable
 
-  template <int SUB_WIDTH, bool leftIsVar, bool rightIsVar>
+  template <size_t SUB_WIDTH, bool leftIsVar, bool rightIsVar>
   void computeTransitivePath(IdTable* res, const IdTable& sub,
                              size_t leftSubCol, size_t rightSubCol,
                              Id leftValue, Id rightValue, size_t minDist,
                              size_t maxDist);
 
-  template <int SUB_WIDTH>
+  template <size_t SUB_WIDTH>
   void computeTransitivePath(IdTable* res, const IdTable& sub, bool leftIsVar,
                              bool rightIsVar, size_t leftSubCol,
                              size_t rightSubCol, Id leftValue, Id rightValue,
                              size_t minDist, size_t maxDist);
 
-  template <int SUB_WIDTH, int LEFT_WIDTH, int RES_WIDTH>
+  template <size_t SUB_WIDTH, size_t LEFT_WIDTH, size_t RES_WIDTH>
   void computeTransitivePathLeftBound(IdTable* res, const IdTable& sub,
                                       const IdTable& left, size_t leftSideCol,
                                       bool rightIsVar, size_t leftSubCol,

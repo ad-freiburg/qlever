@@ -68,8 +68,12 @@ copySortedByColumnIndex(VariableToColumnMap map);
 // operand (in the same order as in the input, including the join columns), then
 // the columns of the right operand without the join columns. We additionally
 // need the information whether the JOIN is optional, because then additional
-// columns might contain undefined values.
+// columns might contain undefined values. We also need the total width of the
+// left input, because there might be columns that are not represented in the
+// `VariableToColumnMap` (e.g. because they are not visible because of subquery
+// scoping).
 enum class BinOpType { Join, OptionalJoin };
 VariableToColumnMap makeVarToColMapForJoinOperation(
     const VariableToColumnMap& leftVars, const VariableToColumnMap& rightVars,
-    std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType);
+    std::vector<std::array<ColumnIndex, 2>> joinColumns, BinOpType binOpType,
+    size_t leftResultWidth);

@@ -49,7 +49,7 @@ class Bind : public Operation {
   ResultTable computeResult() override;
 
   // Implementation for the binding of arbitrary expressions.
-  template <int IN_WIDTH, int OUT_WIDTH>
+  template <size_t IN_WIDTH, size_t OUT_WIDTH>
   void computeExpressionBind(
       IdTable* outputIdTable, LocalVocab* outputLocalVocab,
       const ResultTable& inputResultTable,
