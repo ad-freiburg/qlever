@@ -31,16 +31,16 @@ Using the functions described there would require including
 class BMSingleMeasurements: public BenchmarkClassInterface{
   public:
 
-  void parseConfiguration(const BenchmarkConfiguration&){
+  void parseConfiguration(const BenchmarkConfiguration&) final{
     // Nothing to actually do here.
   }
 
-  virtual const BenchmarkMetadata getMetadata() const{
+  virtual BenchmarkMetadata getMetadata() const final{
     // Again, nothing to really do here.
     return BenchmarkMetadata{};
   }
 
-  virtual BenchmarkRecords runAllBenchmarks(){
+  virtual BenchmarkRecords runAllBenchmarks() final{
     BenchmarkRecords records{};
     
     // Setup.
@@ -75,16 +75,16 @@ class BMSingleMeasurements: public BenchmarkClassInterface{
 class BMGroups: public BenchmarkClassInterface{
   public:
 
-  void parseConfiguration(const BenchmarkConfiguration&){
+  void parseConfiguration(const BenchmarkConfiguration&) final{
     // Nothing to actually do here.
   }
 
-  virtual const BenchmarkMetadata getMetadata() const{
+  virtual BenchmarkMetadata getMetadata() const final{
     // Again, nothing to really do here.
     return BenchmarkMetadata{};
   }
 
-  virtual BenchmarkRecords runAllBenchmarks(){
+  virtual BenchmarkRecords runAllBenchmarks() final{
     BenchmarkRecords records{};
 
     // Setup.
@@ -143,16 +143,16 @@ class BMGroups: public BenchmarkClassInterface{
 class BMTables: public BenchmarkClassInterface{
   public:
 
-  void parseConfiguration(const BenchmarkConfiguration&){
+  void parseConfiguration(const BenchmarkConfiguration&) final{
     // Nothing to actually do here.
   }
 
-  virtual const BenchmarkMetadata getMetadata() const{
+  virtual BenchmarkMetadata getMetadata() const final{
     // Again, nothing to really do here.
     return BenchmarkMetadata{};
   }
 
-  virtual BenchmarkRecords runAllBenchmarks(){
+  virtual BenchmarkRecords runAllBenchmarks() final{
     BenchmarkRecords records{};
 
     // Setup.
@@ -222,7 +222,7 @@ class BMConfigurationAndMetadataExample: public BenchmarkClassInterface{
   BenchmarkMetadata generalMetadata_;
 
   public:
-  void parseConfiguration(const BenchmarkConfiguration& config){
+  void parseConfiguration(const BenchmarkConfiguration& config) final{
     // Collect some arbitrary values.
     std::string dateString{
       config.getValueByNestedKeys<std::string>("exampleDate").value_or(
@@ -249,13 +249,13 @@ class BMConfigurationAndMetadataExample: public BenchmarkClassInterface{
       balanceOnStevesSavingAccount);
   }
 
-  const BenchmarkMetadata getMetadata() const{
+  BenchmarkMetadata getMetadata() const final{
     return generalMetadata_;
   }
 
   // This is just a dummy, because this class is only an example for other
   // features of the benchmark infrastructure.
-  BenchmarkRecords runAllBenchmarks(){
+  BenchmarkRecords runAllBenchmarks() final{
     return BenchmarkRecords{};
   }
 };

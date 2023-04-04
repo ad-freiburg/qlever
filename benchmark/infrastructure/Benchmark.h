@@ -161,7 +161,7 @@ class BenchmarkClassInterface{
   version and simply return which version you are using as metadata through
   `getMetadata`.
   */
-  virtual const BenchmarkMetadata getMetadata() const{
+  virtual BenchmarkMetadata getMetadata() const{
     // Default behaviour.
     return BenchmarkMetadata{};
   }
