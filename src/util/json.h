@@ -150,6 +150,7 @@ with the json object literal keys `index` and `value`.
 */
 namespace nlohmann {
 template <typename T>
+requires std::is_copy_constructible<T>::value
 struct adl_serializer<std::unique_ptr<T>> {
   static void to_json(nlohmann::json& j, const std::unique_ptr<T>& ptr) {
     // Does the `unique_ptr` hold anything? If yes, save the dereferenced
@@ -166,37 +167,8 @@ struct adl_serializer<std::unique_ptr<T>> {
       // If `json` is null, we just delete the content of ptr, because it
       // should be an empty `unique_ptr`.
       ptr = nullptr;
-    } else if (ptr) {
-      // If `ptr` already owns an object, we should be able to overwrite it.
-      (*ptr) = j.get<T>();
-    } else if constexpr (std::is_copy_constructible<T>::value) {
-      // It's possible to create a new unique pointer by using `T`s copy
-      // constructor, because one needs only to pass the deserializied `j` to
-      // set the new `T` correctly, without having to know anything about how
-      // the normal constructor of `T` looks like.
+    } else{
       ptr = std::make_unique<T>(j.get<T>());
-    } else {
-      /*
-      We do not know, how the constructor of `T` looks like, so we
-      can't create a new object at runtime based on the deserialized object.
-      And all other ways of deserializing `T` can only create an object, which
-      lifetime ends with the `from_json` function, so we can't use their
-      addresses.
-      In other words: A general way of deserialization in this case is not
-      possible.
-      */
-      throw nlohmann::json::type_error::create(
-          302,
-          absl::StrCat(
-              "Custom type converter (see `",
-              ad_utility::source_location::current().file_name(),
-              "`) from json"
-              " to general `std::unique_ptr`: Can only convert from `null` to "
-              "pointer,"
-              ", when the contained type has a copy constructor, or when the "
-              "pointer"
-              " already holds a value. Otherwise, a custom converter must be"
-              " written."));
     }
   }
 };
