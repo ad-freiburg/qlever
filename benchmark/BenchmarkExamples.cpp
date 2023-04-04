@@ -157,11 +157,11 @@ class BMTables: public BenchmarkClassInterface{
 
     // Setup.
     auto exponentiateNTimes = [](const size_t number, const size_t n){
-      size_t to_return = 1;
+      size_t toReturn = 1;
       for (size_t i = 0; i < n; i++) {
-        to_return *= number;
+        toReturn *= number;
       }
-      return to_return;
+      return toReturn;
     };
 
     // Measuring functions.
@@ -178,11 +178,11 @@ class BMTables: public BenchmarkClassInterface{
     // Measure the calculating of the exponents.
     for (int i = 0; i < 5; i++) {
       tableExponentsWithBasis.addMeasurement(0, i,
-        [&](){exponentiateNTimes(2,i);});
+        [&exponentiateNTimes, &i](){exponentiateNTimes(2,i);});
     }
     for (int i = 0; i < 5; i++) {
       tableExponentsWithBasis.addMeasurement(1, i,
-        [&](){exponentiateNTimes(3,i);});
+        [&exponentiateNTimes, &i](){exponentiateNTimes(3,i);});
     }
     // Manually adding the entries of the third column by computing the timing
     // difference between the first two columns.
@@ -199,7 +199,8 @@ class BMTables: public BenchmarkClassInterface{
     for (int row = 0; row < 2; row++) {
       for (int column = 0; column < 2; column++) {
         tableAddingExponents.addMeasurement(row, column,
-          [&](){size_t temp __attribute__((unused));
+          [&exponentiateNTimes, &row, &column](){
+            size_t temp __attribute__((unused));
             temp =
             exponentiateNTimes(2, row+10)+exponentiateNTimes(2, column+10);});
       }
