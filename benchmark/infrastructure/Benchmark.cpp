@@ -70,12 +70,6 @@ BenchmarkMeasurementContainer::RecordGroup& BenchmarkRecords::addGroup(
 // ____________________________________________________________________________
 auto BenchmarkRecords::getGroups() const
     -> std::vector<BenchmarkMeasurementContainer::RecordGroup> {
-  /*
-  std::vector<BenchmarkMeasurementContainer::RecordGroup> toReturn;
-  toReturn.reserve(recordGroups_.size());
-  std::transform(recordGroups_.begin(), recordGroups_.end(), std::back_inserter(toReturn), [](const auto& pointer){return *pointer;});
-  return toReturn;
-  */
   return ad_utility::transform(recordGroups_,
   [](const auto& pointer)->BenchmarkMeasurementContainer::RecordGroup{
       return (*pointer);
