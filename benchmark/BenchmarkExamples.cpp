@@ -50,7 +50,8 @@ class BMSingleMeasurements: public BenchmarkClassInterface{
     };
 
     // Measuring functions.
-    records.addMeasurement("Exponentiate once", [&](){exponentiate(number);});
+    records.addMeasurement("Exponentiate once",
+      [&exponentiate, &number](){exponentiate(number);});
     auto& multipleTimes =
       records.addMeasurement("Recursivly exponentiate multiple times",
       [&number, &exponentiate](){

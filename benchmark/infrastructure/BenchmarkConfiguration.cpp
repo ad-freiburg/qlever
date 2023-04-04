@@ -27,7 +27,7 @@ class ShortHandSyntaxException : public std::exception {
   /*
   @param shortHandString The string, that was parsed string.
   */
-  ShortHandSyntaxException(const std::string& shortHandString){
+  explicit ShortHandSyntaxException(const std::string& shortHandString){
     message_ =
       "The following string doesn't follow short hand string syntax "
       "and couldn't be parsed:\n" + shortHandString;
