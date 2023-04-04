@@ -288,3 +288,56 @@ void OptionalJoin::optionalJoin(
   }
   result->permuteColumns(joinColumnData.permutation_);
 }
+
+// ______________________________________________________________
+void OptionalJoin::specialOptionalJoin(
+    const IdTable& dynA, const IdTable& dynB,
+    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+    IdTable* result) {
+  // check for trivial cases
+  if (dynA.empty()) {
+    return;
+  }
+
+  const auto& a = dynA;
+  const auto& b = dynB;
+
+  auto joinColumnData = ad_utility::prepareJoinColumns(
+      joinColumns, a.numColumns(), b.numColumns());
+
+  auto dynASubset = dynA.asColumnSubsetView(joinColumnData.jcsA_);
+  auto dynBSubset = dynB.asColumnSubsetView(joinColumnData.jcsB_);
+
+  auto dynAPermuted = dynA.asColumnSubsetView(joinColumnData.colsCompleteA_);
+  auto dynBPermuted = dynB.asColumnSubsetView(joinColumnData.colsCompleteB_);
+
+  auto lessThanBoth = std::ranges::lexicographical_compare;
+
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable(
+      joinColumns.size(), dynAPermuted, dynBPermuted, result);
+  auto addRow = [&rowAdder](const auto& rowA, const auto& rowB) {
+    rowAdder.addRow(rowA.rowIndex(), rowB.rowIndex());
+    std::cout << "Adding rows " << rowA.rowIndex() << ' ' << rowB.rowIndex() << std::endl;
+  };
+
+  auto addOptionalRow = [&rowAdder](const auto& rowA) {
+    rowAdder.addOptionalRow(rowA.rowIndex());
+    std::cout << "Adding optional rows " << rowA.rowIndex() << std::endl;
+  };
+
+  auto findUndefDispatch = [](const auto& row, auto begin, auto end,
+                              bool& outOfOrder) {
+    return ad_utility::findSmallerUndefRanges(row, begin, end, outOfOrder);
+  };
+  ad_utility::specialOptionalJoin(
+      dynASubset, dynBSubset, lessThanBoth, addRow, addOptionalRow);
+
+  // The column order in the result is now
+  // [joinColumns, non-join-columns-a, non-join-columns-b] (which makes the
+  // algorithms above easier), be the order that is expected by the rest of the
+  // code is [columns-a, non-join-columns-b]. Permute the columns to fix the
+  // order.
+  rowAdder.flush();
+
+  result->permuteColumns(joinColumnData.permutation_);
+}

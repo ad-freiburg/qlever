@@ -69,6 +69,10 @@ class OptionalJoin : public Operation {
       const IdTable& dynA, const IdTable& dynB,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
       IdTable* dynResult);
+  static void specialOptionalJoin(
+      const IdTable& dynA, const IdTable& dynB,
+      const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+      IdTable* dynResult);
 
  private:
   void computeSizeEstimateAndMultiplicities();

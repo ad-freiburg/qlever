@@ -660,7 +660,7 @@ class IdTable {
   }
 
   // Get the `i`-th column. It is stored contiguously in memory.
-  std::span<T> getColumn(size_t i) { return {data().at(i)}; }
+  std::span<T> getColumn(size_t i) requires (!isView) { return {data().at(i)}; }
   std::span<const T> getColumn(size_t i) const { return {data().at(i)}; }
 
   // Return all the columns as a `std::vector` (if `isDynamic`) or as a
