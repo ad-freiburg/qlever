@@ -61,7 +61,7 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
 }
 
 void testSpecialOptionalJoin(const IdTable& inputA, const IdTable& inputB,
-                      JoinColumns jcls, const IdTable& expectedResult) {
+                             JoinColumns jcls, const IdTable& expectedResult) {
   // TODO<joka921> Let this use the proper constructor of OptionalJoin.
   IdTable result{inputA.numColumns() + inputB.numColumns() - jcls.size(),
                  makeAllocator()};
@@ -302,8 +302,11 @@ TEST(OptionalJoin, multipleColumnsNoUndef) {
 
 TEST(OptionalJoin, specialOptionalJoinTwoColumns) {
   {
-    IdTable a{makeIdTableFromIdVector(
-        {{V(4), V(1), V(2)}, {V(2), V(1), V(3)}, {V(1), V(1), V(4)}, {V(2), V(2), U}, {V(1), V(3), V(1)}})};
+    IdTable a{makeIdTableFromIdVector({{V(4), V(1), V(2)},
+                                       {V(2), V(1), V(3)},
+                                       {V(1), V(1), V(4)},
+                                       {V(2), V(2), U},
+                                       {V(1), V(3), V(1)}})};
     IdTable b{
         makeIdTableFromVector({{3, 3, 1}, {1, 8, 1}, {4, 2, 2}, {1, 1, 3}})};
     // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
@@ -311,9 +314,8 @@ TEST(OptionalJoin, specialOptionalJoinTwoColumns) {
     JoinColumns jcls{{1, 2}, {2, 1}};
 
     IdTable expectedResult = makeTableV(
-        {{4, 1, 2, U}, {2, 1, 3, 3}, {1, 1, 4, U}, {2, 2, 1, U}, {1, 3, 1, 1}});
+        {{4, 1, 2, U}, {2, 1, 3, 3}, {1, 1, 4, U}, {2, 2, 2, 4}, {1, 3, 1, 1}});
 
     testSpecialOptionalJoin(a, b, jcls, expectedResult);
   }
-
 }

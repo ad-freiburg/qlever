@@ -20,6 +20,7 @@ class OptionalJoin : public Operation {
 
   std::vector<float> _multiplicities;
   size_t _sizeEstimate;
+  std::optional<size_t> _costEstimate;
   bool _multiplicitiesComputed;
 
  public:

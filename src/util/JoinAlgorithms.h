@@ -264,8 +264,11 @@ template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
         return
             [&cover, &lt, &findUndef, &compatibleRowAction, &outOfOrderFound](
                 const auto& el, auto startOfRange, auto endOfRange) {
+              (void)findUndef;
+              (void)compatibleRowAction;
               (void)cover;
-              (void) outOfOrderFound;
+              (void)lt;
+              (void)outOfOrderFound;
               if constexpr (ad_utility::isSimilar<FindUndef, decltype(noop)>) {
                 return false;
               } else {
@@ -360,23 +363,23 @@ template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
   });
 
   if constexpr (hasNotFoundAction) {
-      for (; it1 < end1; ++it1) {
-        cover(it1);
-        if (!mergeWithUndefRight(*it1, range2.begin(), range2.end())) {
-          elFromFirstNotFoundAction(*it1);
-        }
+    for (; it1 < end1; ++it1) {
+      cover(it1);
+      if (!mergeWithUndefRight(*it1, range2.begin(), range2.end())) {
+        elFromFirstNotFoundAction(*it1);
       }
+    }
   }
 
   size_t numOutOfOrderAtEnd = 0;
   // TODO<joka921> These will be out of order;
   if constexpr (hasNotFoundAction) {
-      for (size_t i = 0; i < coveredFromLeft.size(); ++i) {
-        if (!coveredFromLeft[i]) {
-          elFromFirstNotFoundAction(*(range1.begin() + i));
-          ++numOutOfOrderAtEnd;
-        }
+    for (size_t i = 0; i < coveredFromLeft.size(); ++i) {
+      if (!coveredFromLeft[i]) {
+        elFromFirstNotFoundAction(*(range1.begin() + i));
+        ++numOutOfOrderAtEnd;
       }
+    }
   }
   return outOfOrderFound ? std::numeric_limits<size_t>::max()
                          : numOutOfOrderAtEnd;
@@ -450,15 +453,15 @@ void gallopingJoin(auto&& smaller, auto&& larger, auto&& lessThan,
 
 // TODO<joka921> Comment this abstraction
 template <typename Range>
-void specialOptionalJoin(
-    Range&& range1, Range&& range2, auto&& lessThan, auto&& compatibleRowAction, auto&& elFromFirstNotFoundAction) {
+void specialOptionalJoin(Range&& range1, Range&& range2, auto&& lessThan,
+                         auto&& compatibleRowAction,
+                         auto&& elFromFirstNotFoundAction) {
   auto it1 = range1.begin();
   auto begUndef = range1.begin();
   auto endUndef = range1.begin();
   auto end1 = range1.end();
   auto it2 = range2.begin();
   auto end2 = range2.end();
-
 
   if (range1.begin() == range1.end()) {
     return;
@@ -488,54 +491,64 @@ void specialOptionalJoin(
   std::span<const Id> lastColumn2 = range2.getColumn(range1.numColumns() - 1);
 
   while (it1 < end1 && it2 < end2) {
-    it2 = std::find_if_not(it2, end2, [&](const auto& row) {return lessThan(row, *it1);});
+    it2 = std::find_if_not(
+        it2, end2, [&](const auto& row) { return lessThan(row, *it1); });
     if (it2 == end2) {
       break;
       // TODO<joka921> add the remaining elements from (it1 to end1).
     }
 
-    auto next1 = std::find_if_not(it1, end1, [&](const auto& row) { return compareAllButLast(row, *it2);});
+    auto next1 = std::find_if_not(it1, end1, [&](const auto& row) {
+      return compareAllButLast(row, *it2);
+    });
 
-    std::for_each(it1, next1, [&](const auto& row) { elFromFirstNotFoundAction(row);});
+    std::for_each(it1, next1,
+                  [&](const auto& row) { elFromFirstNotFoundAction(row); });
     it1 = next1;
-    auto endSame1 = std::find_if_not(
-        it1, end1, [&](const auto& row) { return compareEqButLast(row, *it2); });
-    auto endSame2 = std::find_if_not(
-        it2, end2, [&](const auto& row) { return compareEqButLast(*it1, row);});
+    auto endSame1 = std::find_if_not(it1, end1, [&](const auto& row) {
+      return compareEqButLast(row, *it2);
+    });
+    auto endSame2 = std::find_if_not(it2, end2, [&](const auto& row) {
+      return compareEqButLast(*it1, row);
+    });
     if (endSame1 == it1) {
       continue;
     }
 
     auto beg = it1 - range1.begin();
     auto end = endSame1 - range1.begin();
-    std::span<const Id> leftSub{lastColumn1.begin() + beg, lastColumn1.begin() + end};
+    std::span<const Id> leftSub{lastColumn1.begin() + beg,
+                                lastColumn1.begin() + end};
     beg = it2 - range2.begin();
     end = endSame2 - range2.begin();
-    std::span<const Id> rightSub{lastColumn2.begin() + beg, lastColumn2.begin() + end};
+    std::span<const Id> rightSub{lastColumn2.begin() + beg,
+                                 lastColumn2.begin() + end};
 
-    auto endOfUndef = std::find_if(leftSub.begin(), leftSub.end(), [](Id id){return id != Id::makeUndefined();});
-    std::cout << "num undef " << endOfUndef - leftSub.begin() << std::endl;
+    auto endOfUndef = std::find_if(leftSub.begin(), leftSub.end(), [](Id id) {
+      return id != Id::makeUndefined();
+    });
     auto findSmallerUndefRangeLeft =
         [=](auto&&...) -> cppcoro::generator<decltype(endOfUndef)> {
-          for (auto it = leftSub.begin(); it != endOfUndef; ++it) {
-            co_yield it;
-          }
-        };
+      for (auto it = leftSub.begin(); it != endOfUndef; ++it) {
+        co_yield it;
+      }
+    };
 
     auto compAction = [&](const Id& id1, const Id& id2) {
-      compatibleRowAction(*(it1 + (&id1 - leftSub.data())), *(it2 + (&id2 - rightSub.data())));
+      compatibleRowAction(*(it1 + (&id1 - leftSub.data())),
+                          *(it2 + (&id2 - rightSub.data())));
     };
     auto notFoundAction = [&](const Id& id1) {
       elFromFirstNotFoundAction(*(it1 + (&id1 - leftSub.data())));
     };
 
-    std::cout << "Start join from " <<  (it1 - range1.begin()) <<  " to " << (endSame1 - range1.begin()) << std::endl;
-    std::cout << "Right input from " <<  (it2 - range2.begin()) <<  " to " << (endSame2 - range2.begin()) << std::endl;
-    ad_utility::zipperJoinWithUndef(leftSub, rightSub, std::less<>{}, compAction, findSmallerUndefRangeLeft, noop, notFoundAction);
-    std::cout << "finished inner join" <<  std::endl;
+    ad_utility::zipperJoinWithUndef(leftSub, rightSub, std::less<>{},
+                                    compAction, findSmallerUndefRangeLeft, noop,
+                                    notFoundAction);
     it1 = endSame1;
     it2 = endSame2;
   }
-  std::for_each(it1, end1, [&](const auto& row) { elFromFirstNotFoundAction(row);});
+  std::for_each(it1, end1,
+                [&](const auto& row) { elFromFirstNotFoundAction(row); });
 }
 }  // namespace ad_utility

@@ -498,17 +498,16 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
       }
     };
 
-
     auto numOutOfOrder = [&]() {
       if (numUndefB == 0 && numUndefA == 0) {
-        return ad_utility::zipperJoinWithUndef(dynASubset, dynBSubset, lessThanBoth,
-                                        addRow, ad_utility::noop,
-                                        ad_utility::noop);
+        return ad_utility::zipperJoinWithUndef(
+            dynASubset, dynBSubset, lessThanBoth, addRow, ad_utility::noop,
+            ad_utility::noop);
 
       } else {
-        return ad_utility::zipperJoinWithUndef(dynASubset, dynBSubset, lessThanBoth,
-                                        addRow, findSmallerUndefRangeLeft,
-                                        findSmallerUndefRangeRight);
+        return ad_utility::zipperJoinWithUndef(
+            dynASubset, dynBSubset, lessThanBoth, addRow,
+            findSmallerUndefRangeLeft, findSmallerUndefRangeRight);
       }
     }();
     AD_CORRECTNESS_CHECK(numOutOfOrder == 0);

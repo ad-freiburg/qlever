@@ -127,6 +127,7 @@ class ValueId {
   /// single undefined value correctly, but it is very useful for generic code
   /// like the `visit` member function.
   [[nodiscard]] UndefinedType getUndefined() const noexcept { return {}; }
+  bool isUndefined() const noexcept { return *this == makeUndefined(); }
 
   /// Create a `ValueId` for a double value. The conversion will reduce the
   /// precision of the mantissa of an IEEE double precision floating point

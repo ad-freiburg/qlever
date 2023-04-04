@@ -135,14 +135,43 @@ size_t OptionalJoin::getSizeEstimateBeforeLimit() {
 
 // _____________________________________________________________________________
 size_t OptionalJoin::getCostEstimate() {
-  size_t costEstimate = getSizeEstimateBeforeLimit() +
-                        _left->getSizeEstimate() + _right->getSizeEstimate();
-  // The optional join is about 3-7 times slower than a normal join, due to
-  // its increased complexity
-  costEstimate *= 4;
-  // Make the join 7% more expensive per join column
-  costEstimate *= (1 + (_joinColumns.size() - 1) * 0.07);
-  return _left->getCostEstimate() + _right->getCostEstimate() + costEstimate;
+  if (!_costEstimate.has_value()) {
+    size_t costEstimate = getSizeEstimateBeforeLimit() +
+                          _left->getSizeEstimate() + _right->getSizeEstimate();
+    // The optional join is about 3-7 times slower than a normal join, due to
+    // its increased complexity
+    costEstimate *= 4;
+    // Make the join 7% more expensive per join column
+    costEstimate *= (1 + (_joinColumns.size() - 1) * 0.07);
+
+    const auto& leftVars = _left->getVariableColumns();
+    const auto& rightVars = _right->getVariableColumns();
+
+    bool isCheap = true;
+    for (size_t i = 0; i < _joinColumns.size(); ++i) {
+      auto [leftCol, rightCol] = _joinColumns.at(i);
+      auto leftIt =
+          std::ranges::find_if(leftVars, [leftCol = leftCol](const auto& el) {
+            return el.second.columnIndex_ == leftCol;
+          });
+      auto rightIt = std::ranges::find_if(
+          rightVars, [rightCol = rightCol](const auto& el) {
+            return el.second.columnIndex_ == rightCol;
+          });
+      AD_CORRECTNESS_CHECK(leftIt != leftVars.end() &&
+                           rightIt != rightVars.end());
+      bool leftUndef = leftIt->second.mightContainUndef_ ==
+                       ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
+      bool rightUndef = rightIt->second.mightContainUndef_ ==
+                        ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
+      isCheap = isCheap && (!rightUndef);
+      isCheap = isCheap && (!leftUndef || i == _joinColumns.size() - 1);
+    }
+    size_t factor = isCheap ? 1 : 100;
+    _costEstimate = _left->getCostEstimate() + _right->getCostEstimate() +
+                    factor * costEstimate;
+  }
+  return _costEstimate.value();
 }
 
 // _____________________________________________________________________________
@@ -234,6 +263,24 @@ void OptionalJoin::optionalJoin(
     return;
   }
 
+  bool isCheap = true;
+  for (size_t i = 0; i < joinColumns.size(); ++i) {
+    auto [leftCol, rightCol] = joinColumns.at(0);
+    if (std::ranges::any_of(dynB.getColumn(rightCol),
+                            [](Id id) { return id.isUndefined(); })) {
+      isCheap = false;
+    }
+    if ((i != joinColumns.size() - 1) &&
+        std::ranges::any_of(dynA.getColumn(leftCol),
+                            [](Id id) { return id.isUndefined(); })) {
+      isCheap = false;
+    }
+  }
+
+  if (isCheap) {
+    return specialOptionalJoin(dynA, dynB, joinColumns, result);
+  }
+
   const auto& a = dynA;
   const auto& b = dynB;
 
@@ -317,20 +364,18 @@ void OptionalJoin::specialOptionalJoin(
       joinColumns.size(), dynAPermuted, dynBPermuted, result);
   auto addRow = [&rowAdder](const auto& rowA, const auto& rowB) {
     rowAdder.addRow(rowA.rowIndex(), rowB.rowIndex());
-    std::cout << "Adding rows " << rowA.rowIndex() << ' ' << rowB.rowIndex() << std::endl;
   };
 
   auto addOptionalRow = [&rowAdder](const auto& rowA) {
     rowAdder.addOptionalRow(rowA.rowIndex());
-    std::cout << "Adding optional rows " << rowA.rowIndex() << std::endl;
   };
 
   auto findUndefDispatch = [](const auto& row, auto begin, auto end,
                               bool& outOfOrder) {
     return ad_utility::findSmallerUndefRanges(row, begin, end, outOfOrder);
   };
-  ad_utility::specialOptionalJoin(
-      dynASubset, dynBSubset, lessThanBoth, addRow, addOptionalRow);
+  ad_utility::specialOptionalJoin(dynASubset, dynBSubset, lessThanBoth, addRow,
+                                  addOptionalRow);
 
   // The column order in the result is now
   // [joinColumns, non-join-columns-a, non-join-columns-b] (which makes the
