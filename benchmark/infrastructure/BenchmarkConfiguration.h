@@ -43,7 +43,7 @@ public:
   
   // To reduce duplication. Is a key held by a given json object?
   auto isKeyValid = []<typename Key>(ConstJsonPointer jsonObject,
-   const Key& key){
+   const Key& keyToCheck){
     /*
     If `Key` is integral, it can only be a valid key for the `jsonObject`, if the
    `jsonObject` is an array, according to the documentation.
@@ -53,18 +53,19 @@ public:
     ever be a valid key in json, if we are looking at a json array.
     */
     if constexpr (std::is_integral<Key>::value){
-     return jsonObject->is_array() && (0 <= key) && (key < jsonObject->size());
+     return jsonObject->is_array() && (0 <= keyToCheck) &&
+     (keyToCheck < jsonObject->size());
     }else{
-     return jsonObject->contains(key);
+     return jsonObject->contains(keyToCheck);
     }
    };
   
   // Check if the key is valid and assign the json object, it is the key of.
   auto checkAndAssign = [&currentJsonObject, &isKeyValid](
-   auto const& key){
-   if (isKeyValid(currentJsonObject, key)){
+   auto const& currentKey){
+   if (isKeyValid(currentJsonObject, currentKey)){
     // The side effect, for which this whole things exists for.
-    currentJsonObject = &(currentJsonObject->at(key));
+    currentJsonObject = &(currentJsonObject->at(currentKey));
     return true;
    } else {
     return false;
