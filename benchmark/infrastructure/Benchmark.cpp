@@ -28,7 +28,7 @@ void BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(
 }
 
 // ____________________________________________________________________________
-const std::vector<BenchmarkMetadata> BenchmarkRegister::getAllGeneralMetadata(){
+std::vector<BenchmarkMetadata> BenchmarkRegister::getAllGeneralMetadata(){
   // Go through every registered instance of a benchmark class and collect
   // their general metadata.
   return ad_utility::transform(registeredBenchmarks,
@@ -36,7 +36,7 @@ const std::vector<BenchmarkMetadata> BenchmarkRegister::getAllGeneralMetadata(){
 }
 
 // ____________________________________________________________________________
-const std::vector<BenchmarkRecords>
+std::vector<BenchmarkRecords>
 BenchmarkRegister::runAllRegisteredBenchmarks(){
   // Go through every registered instance of a benchmark class, measure their
   // benchmarks and return the resulting `BenchmarkRecords` in a new vector.

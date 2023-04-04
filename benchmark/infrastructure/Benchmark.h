@@ -219,7 +219,7 @@ class BenchmarkRegister {
    *  `BenchmarkRecords`. They should be in the same order as the
    *  registrations.
    */
-  static const std::vector<BenchmarkRecords> runAllRegisteredBenchmarks();
+  static std::vector<BenchmarkRecords> runAllRegisteredBenchmarks();
 
   /*
    * @brief Returns the general metadata of all the registered benchmarks. As
@@ -228,7 +228,7 @@ class BenchmarkRegister {
    *
    * @return They should be in the same order as the registrations.
    */
-  static const std::vector<BenchmarkMetadata> getAllGeneralMetadata();
+  static std::vector<BenchmarkMetadata> getAllGeneralMetadata();
 };
 
 /*
