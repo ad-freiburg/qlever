@@ -28,7 +28,7 @@
  * @param appendToFile Should the json informationen be appended to the end
  *  of the file, or should the previous content be overwritten?
  */
-static void writeJsonToFile(nlohmann::json j, std::string fileName,
+static void writeJsonToFile(nlohmann::json j, const std::string& fileName,
     bool appendToFile = false) {
   ad_utility::makeOfstream(fileName, (appendToFile) ?
       (std::ios::out | std::ios::app) : (std::ios::out)) << j;
