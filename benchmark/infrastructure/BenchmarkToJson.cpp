@@ -11,11 +11,11 @@
 #include "nlohmann/json.hpp"
 
 // ___________________________________________________________________________
-nlohmann::json benchmarkRecordsToJson(const BenchmarkRecords& records){
+void to_json(nlohmann::json& j, const BenchmarkRecords& records){
   // Creating the json object. We actually don't want BenchmarkRecords to
-  // be serilized, because that is the management class for measured
+  // be serialized, because that is the management class for measured
   // benchmarks. We just want the measured benchmarks.
-  return nlohmann::json{{"singleMeasurements", records.getSingleMeasurements()},
+  j = nlohmann::json{{"singleMeasurements", records.getSingleMeasurements()},
     {"recordGroups", records.getGroups()},
     {"recordTables", records.getTables()}};
 }
@@ -50,7 +50,7 @@ static nlohmann::json transformIntoJsonArray(const std::vector<VectorType>& vec,
 // ___________________________________________________________________________
 nlohmann::json benchmarkRecordsToJson(const std::vector<BenchmarkRecords>& records){
   return transformIntoJsonArray(records, [](const BenchmarkRecords& record){
-    return benchmarkRecordsToJson(record);
+    return nlohmann::json{record};
   });
 }
 
@@ -62,7 +62,7 @@ nlohmann::json zipGeneralMetadataAndBenchmarkRecordsToJson(
   return transformIntoJsonArray(generalMetadataAndBenchmarkRecords,
   [](const auto& pair){
     return nlohmann::json{{"general metadata", pair.first},
-    {"measurements", benchmarkRecordsToJson(pair.second)}};
+    {"measurements", pair.second}};
   });
 }
 

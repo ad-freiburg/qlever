@@ -129,6 +129,10 @@ class BenchmarkRecords {
 
     // Custom copy constructor because of the vectors of unique pointers.
     BenchmarkRecords(const BenchmarkRecords& records);
+
+    // Json serialization. The implementation can be found in
+    // `BenchmarkToJson`.
+    friend void to_json(nlohmann::json& j, const BenchmarkRecords& records);
 };
 
 /*
