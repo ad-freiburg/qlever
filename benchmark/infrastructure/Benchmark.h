@@ -212,7 +212,7 @@ class BenchmarkRegister {
    * @param benchmarkClasseInstance The memory managment of the passed
    *  instances will be taken over by `BenchmarkRegister`.
    */
-  BenchmarkRegister(BenchmarkPointer&& benchmarkClasseInstance);
+  explicit BenchmarkRegister(BenchmarkPointer&& benchmarkClasseInstance);
 
   /*
   @brief Passes the `BenchmarkConfiguration` to the `parseConfiguration`
