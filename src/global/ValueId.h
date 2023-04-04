@@ -5,12 +5,13 @@
 #ifndef QLEVER_VALUEID_H
 #define QLEVER_VALUEID_H
 
+#include <absl/strings/str_cat.h>
+
 #include <bit>
 #include <cstdint>
 #include <functional>
 #include <limits>
 #include <sstream>
-#include <absl/strings/str_cat.h>
 
 #include "../util/BitUtils.h"
 #include "../util/NBitInteger.h"
@@ -85,9 +86,9 @@ class ValueId {
     IndexTooLargeException(T tooBigValue,
                            ad_utility::source_location s =
                                ad_utility::source_location::current()) {
-      _errorMessage = absl::StrCat(s.file_name(), ", line ",
-        s.line(), ": The given value ", tooBigValue,
-        " is bigger than what the maxIndex of ValueId allows.");
+      _errorMessage = absl::StrCat(
+          s.file_name(), ", line ", s.line(), ": The given value ", tooBigValue,
+          " is bigger than what the maxIndex of ValueId allows.");
     }
 
     const char* what() const noexcept override { return _errorMessage.c_str(); }
