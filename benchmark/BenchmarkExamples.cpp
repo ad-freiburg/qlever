@@ -35,12 +35,12 @@ class BMSingleMeasurements: public BenchmarkClassInterface{
     // Nothing to actually do here.
   }
 
-  virtual BenchmarkMetadata getMetadata() const final{
+  BenchmarkMetadata getMetadata() const final{
     // Again, nothing to really do here.
     return BenchmarkMetadata{};
   }
 
-  virtual BenchmarkRecords runAllBenchmarks() final{
+  BenchmarkRecords runAllBenchmarks() final{
     BenchmarkRecords records{};
     
     // Setup.
@@ -79,12 +79,12 @@ class BMGroups: public BenchmarkClassInterface{
     // Nothing to actually do here.
   }
 
-  virtual BenchmarkMetadata getMetadata() const final{
+  BenchmarkMetadata getMetadata() const final{
     // Again, nothing to really do here.
     return BenchmarkMetadata{};
   }
 
-  virtual BenchmarkRecords runAllBenchmarks() final{
+  BenchmarkRecords runAllBenchmarks() final{
     BenchmarkRecords records{};
 
     // Setup.
@@ -147,12 +147,12 @@ class BMTables: public BenchmarkClassInterface{
     // Nothing to actually do here.
   }
 
-  virtual BenchmarkMetadata getMetadata() const final{
+  BenchmarkMetadata getMetadata() const final{
     // Again, nothing to really do here.
     return BenchmarkMetadata{};
   }
 
-  virtual BenchmarkRecords runAllBenchmarks() final{
+  BenchmarkRecords runAllBenchmarks() final{
     BenchmarkRecords records{};
 
     // Setup.
