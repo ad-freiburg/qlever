@@ -91,7 +91,7 @@ class BenchmarkRecords {
     /*
      * @brief Returns a vector of all the singe measurements.
      */
-    const std::vector<BenchmarkMeasurementContainer::RecordEntry>
+    std::vector<BenchmarkMeasurementContainer::RecordEntry>
     getSingleMeasurements() const;
 
     /*
@@ -103,7 +103,7 @@ class BenchmarkRecords {
     /*
      * @brief Returns a vector of all the groups.
      */
-    const std::vector<BenchmarkMeasurementContainer::RecordGroup> getGroups()
+    std::vector<BenchmarkMeasurementContainer::RecordGroup> getGroups()
     const;
 
     /*
@@ -121,7 +121,7 @@ class BenchmarkRecords {
     /*
      * @brief Returns a vector of all the tables.
      */
-    const std::vector<BenchmarkMeasurementContainer::RecordTable>
+    std::vector<BenchmarkMeasurementContainer::RecordTable>
     getTables() const;
 
     // Default constructor.

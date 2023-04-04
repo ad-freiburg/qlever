@@ -54,7 +54,7 @@ BenchmarkRegister::BenchmarkRegister(
 
 // ____________________________________________________________________________
 auto BenchmarkRecords::getSingleMeasurements() const
--> const std::vector<BenchmarkMeasurementContainer::RecordEntry> {
+-> std::vector<BenchmarkMeasurementContainer::RecordEntry> {
   return ad_utility::transform(singleMeasurements_,
   [](const auto& pointer)->BenchmarkMeasurementContainer::RecordEntry{
       return (*pointer);
@@ -69,7 +69,7 @@ BenchmarkMeasurementContainer::RecordGroup& BenchmarkRecords::addGroup(
 
 // ____________________________________________________________________________
 auto BenchmarkRecords::getGroups() const
-    -> const std::vector<BenchmarkMeasurementContainer::RecordGroup> {
+    -> std::vector<BenchmarkMeasurementContainer::RecordGroup> {
   /*
   std::vector<BenchmarkMeasurementContainer::RecordGroup> toReturn;
   toReturn.reserve(recordGroups_.size());
@@ -93,7 +93,7 @@ BenchmarkMeasurementContainer::RecordTable& BenchmarkRecords::addTable(
 
 // ____________________________________________________________________________
 auto BenchmarkRecords::getTables() const ->
-const std::vector<BenchmarkMeasurementContainer::RecordTable> {
+std::vector<BenchmarkMeasurementContainer::RecordTable> {
   return ad_utility::transform(recordTables_,
   [](const auto& pointer)->BenchmarkMeasurementContainer::RecordTable{
       return (*pointer);
