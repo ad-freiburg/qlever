@@ -20,15 +20,9 @@
 #include "util/Algorithm.h"
 
 // ____________________________________________________________________________
-auto BenchmarkRegister::getRegister() -> std::vector<BenchmarkPointer>& {
-  static std::vector<BenchmarkPointer> registeredBenchmarks;
-  return registeredBenchmarks;
-}
-
-// ____________________________________________________________________________
 void BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(
   const BenchmarkConfiguration& config){
-  for(BenchmarkPointer& instance: getRegister()){
+  for(BenchmarkPointer& instance: registeredBenchmarks){
       instance->parseConfiguration(config);
   }
 }
@@ -37,7 +31,7 @@ void BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(
 const std::vector<BenchmarkMetadata> BenchmarkRegister::getAllGeneralMetadata(){
   // Go through every registered instance of a benchmark class and collect
   // their general metadata.
-  return ad_utility::transform(getRegister(),
+  return ad_utility::transform(registeredBenchmarks,
   [](const auto& instance){return instance->getMetadata();});
 }
 
@@ -46,7 +40,7 @@ const std::vector<BenchmarkRecords>
 BenchmarkRegister::runAllRegisteredBenchmarks(){
   // Go through every registered instance of a benchmark class, measure their
   // benchmarks and return the resulting `BenchmarkRecords` in a new vector.
-  return ad_utility::transform(getRegister(), [](BenchmarkPointer& instance){
+  return ad_utility::transform(registeredBenchmarks, [](BenchmarkPointer& instance){
       return instance->runAllBenchmarks();
   });
 }
@@ -55,7 +49,7 @@ BenchmarkRegister::runAllRegisteredBenchmarks(){
 BenchmarkRegister::BenchmarkRegister(
   BenchmarkPointer&& benchmarkClassInstance){
   // Append the benchmark to the internal register.
-  getRegister().push_back(std::move(benchmarkClassInstance));
+  registeredBenchmarks.push_back(std::move(benchmarkClassInstance));
 }
 
 // ____________________________________________________________________________
