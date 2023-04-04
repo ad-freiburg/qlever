@@ -466,8 +466,8 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
                                  ValueId::makeUndefined());
   // The undef values are right at the start, so this simplified calculation
   // should work.
-  auto numUndefA = aUndef.first - aUndef.second;
-  auto numUndefB = bUndef.first - bUndef.second;
+  auto numUndefA = aUndef.second - aUndef.first;
+  auto numUndefB = bUndef.second - bUndef.first;
   std::pair aUnd{dynASubset.begin(), dynASubset.begin() + numUndefA};
   std::pair bUnd{dynBSubset.begin(), dynBSubset.begin() + numUndefB};
   // Cannot just switch l1 and l2 around because the order of
@@ -498,9 +498,19 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
       }
     };
 
-    auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
-        dynASubset, dynBSubset, lessThanBoth, addRow, findSmallerUndefRangeLeft,
-        findSmallerUndefRangeRight);
+
+    auto numOutOfOrder = [&]() {
+      if (numUndefB == 0 && numUndefA == 0) {
+        return ad_utility::zipperJoinWithUndef(dynASubset, dynBSubset, lessThanBoth,
+                                        addRow, ad_utility::noop,
+                                        ad_utility::noop);
+
+      } else {
+        return ad_utility::zipperJoinWithUndef(dynASubset, dynBSubset, lessThanBoth,
+                                        addRow, findSmallerUndefRangeLeft,
+                                        findSmallerUndefRangeRight);
+      }
+    }();
     AD_CORRECTNESS_CHECK(numOutOfOrder == 0);
   }
   rowAdder.flush();

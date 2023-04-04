@@ -241,39 +241,51 @@ template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
     Range&& range1, Range&& range2, auto&& lessThan, auto&& compatibleRowAction,
     auto&& findSmallerUndefRangesLeft, auto&& findSmallerUndefRangesRight,
     ElFromFirstNotFoundAction elFromFirstNotFoundAction = {}) {
+  static constexpr bool hasNotFoundAction =
+      !ad_utility::isSimilar<ElFromFirstNotFoundAction, decltype(noop)>;
   auto it1 = range1.begin();
   auto end1 = range1.end();
   auto it2 = range2.begin();
   auto end2 = range2.end();
 
   std::vector<bool> coveredFromLeft(end1 - it1);
-  auto cover = [&](auto it) { coveredFromLeft[it - range1.begin()] = true; };
+  auto cover = [&](auto it) {
+    if constexpr (hasNotFoundAction) {
+      coveredFromLeft[it - range1.begin()] = true;
+    }
+  };
 
   bool outOfOrderFound = false;
 
-  auto makeMergeWithUndefLeft = [&cover, &compatibleRowAction,
-                                 &outOfOrderFound]<bool reversed>(
-                                    const auto& lt, const auto& findUndef) {
-    return [&cover, &lt, &findUndef, &compatibleRowAction, &outOfOrderFound](
-               const auto& el, auto startOfRange, auto endOfRange) {
-      (void)cover;
-      bool compatibleWasFound = false;
-      auto smallerUndefRanges =
-          findUndef(el, startOfRange, endOfRange, outOfOrderFound);
-      for (const auto& it : smallerUndefRanges) {
-        if (lt(*it, el)) {
-          compatibleWasFound = true;
-          if constexpr (reversed) {
-            compatibleRowAction(el, *it);
-          } else {
-            compatibleRowAction(*it, el);
-            cover(it);
-          }
-        }
-      }
-      return compatibleWasFound;
-    };
-  };
+  auto makeMergeWithUndefLeft =
+      [&cover, &compatibleRowAction,
+       &outOfOrderFound]<bool reversed, typename FindUndef>(
+          const auto& lt, const FindUndef& findUndef) {
+        return
+            [&cover, &lt, &findUndef, &compatibleRowAction, &outOfOrderFound](
+                const auto& el, auto startOfRange, auto endOfRange) {
+              (void)cover;
+              if constexpr (ad_utility::isSimilar<FindUndef, decltype(noop)>) {
+                return false;
+              } else {
+                bool compatibleWasFound = false;
+                auto smallerUndefRanges =
+                    findUndef(el, startOfRange, endOfRange, outOfOrderFound);
+                for (const auto& it : smallerUndefRanges) {
+                  if (lt(*it, el)) {
+                    compatibleWasFound = true;
+                    if constexpr (reversed) {
+                      compatibleRowAction(el, *it);
+                    } else {
+                      compatibleRowAction(*it, el);
+                      cover(it);
+                    }
+                  }
+                }
+                return compatibleWasFound;
+              }
+            };
+      };
   auto mergeWithUndefLeft = makeMergeWithUndefLeft.template operator()<false>(
       lessThan, findSmallerUndefRangesLeft);
   auto mergeWithUndefRight = makeMergeWithUndefLeft.template operator()<true>(
@@ -291,13 +303,15 @@ template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
   [&]() {
     while (it1 < end1 && it2 < end2) {
       while (lessThan(*it1, *it2)) {
-        if (!mergeWithUndefRight(*it1, range2.begin(), it2)) {
-          if (containsNoUndefined(*it1)) {
+        if constexpr (hasNotFoundAction) {
+          if (!mergeWithUndefRight(*it1, range2.begin(), it2)) {
+            if (containsNoUndefined(*it1)) {
+              cover(it1);
+              elFromFirstNotFoundAction(*it1);
+            }
+          } else {
             cover(it1);
-            elFromFirstNotFoundAction(*it1);
           }
-        } else {
-          cover(it1);
         }
         ++it1;
         if (it1 >= end1) {
@@ -344,21 +358,24 @@ template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
     mergeWithUndefLeft(row, range1.begin(), range1.end());
   });
 
-  for (; it1 < end1; ++it1) {
-    cover(it1);
-    if (!mergeWithUndefRight(*it1, range2.begin(), range2.end())) {
-      elFromFirstNotFoundAction(*it1);
-    } else {
-    }
+  if constexpr (hasNotFoundAction) {
+      for (; it1 < end1; ++it1) {
+        cover(it1);
+        if (!mergeWithUndefRight(*it1, range2.begin(), range2.end())) {
+          elFromFirstNotFoundAction(*it1);
+        }
+      }
   }
 
   size_t numOutOfOrderAtEnd = 0;
   // TODO<joka921> These will be out of order;
-  for (size_t i = 0; i < coveredFromLeft.size(); ++i) {
-    if (!coveredFromLeft[i]) {
-      elFromFirstNotFoundAction(*(range1.begin() + i));
-      ++numOutOfOrderAtEnd;
-    }
+  if constexpr (hasNotFoundAction) {
+      for (size_t i = 0; i < coveredFromLeft.size(); ++i) {
+        if (!coveredFromLeft[i]) {
+          elFromFirstNotFoundAction(*(range1.begin() + i));
+          ++numOutOfOrderAtEnd;
+        }
+      }
   }
   return outOfOrderFound ? std::numeric_limits<size_t>::max()
                          : numOutOfOrderAtEnd;
@@ -428,5 +445,25 @@ void gallopingJoin(auto&& smaller, auto&& larger, auto&& lessThan,
     itSmall = endSameSmall;
     itLarge = endSameLarge;
   }
+}
+
+// TODO<joka921> Comment this abstraction
+template <typename Range>
+[[nodiscard]] size_t specialOptionalJoin(
+    Range&& range1, Range&& range2, auto&& lessThan, auto&& compatibleRowAction) {
+  auto it1 = range1.begin();
+  auto begUndef = range1.begin();
+  auto endUndef = range1.begin();
+  auto end1 = range1.end();
+  auto it2 = range2.begin();
+  auto end2 = range2.end();
+
+
+  while (it1 < end1 && it2 < end2) {
+    while (lessThan(*it1, *it2))
+  }
+
+
+
 }
 }  // namespace ad_utility
