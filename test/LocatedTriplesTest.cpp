@@ -176,7 +176,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
 // triples merged from a `locatedTriplesPerBlock` object.
 TEST_F(LocatedTriplesTest, scanWithMergeTriples) {
   // The actual test, for a given block size.
-  auto testWithGivenBlockSize = [](const size_t blockSizeInBytes) {
+  auto testWithGivenBlockSize = [](const size_t blockSizeInBytes,
+                                   size_t numRelations, Id relationId) {
     std::string basename = "LocatedTriplesTest.scanWithMergeTriples";
     std::string permutationFilename = basename + ".index.pso";
 
@@ -204,7 +205,6 @@ TEST_F(LocatedTriplesTest, scanWithMergeTriples) {
     };
 
     // Our test relation.
-    Id relationId = V(1);
     IdTable relation = makeIdTableFromVector({{10, 10},    // Row 0
                                               {15, 20},    // Row 1
                                               {15, 30},    // Row 2
@@ -218,12 +218,13 @@ TEST_F(LocatedTriplesTest, scanWithMergeTriples) {
                                                         "w"};
     CompressedRelationWriter writer{
         std::move(permutationFileForWritingRelations), blockSizeInBytes};
-    writer.addRelation(relationId, getBufferedIdTable(relation),
-                       relation.size());
+    for (size_t i = 1; i <= numRelations; ++i) {
+      writer.addRelation(V(i), getBufferedIdTable(relation), relation.size());
+    }
     writer.finish();
     auto metadataPerRelation = writer.getFinishedMetaData();
     auto metadataPerBlock = writer.getFinishedBlocks();
-    AD_CORRECTNESS_CHECK(metadataPerRelation.size() == 1);
+    AD_CORRECTNESS_CHECK(metadataPerRelation.size() == numRelations);
 
     // Append the metadata to the index file.
     IndexMetaDataHmap metadata;
@@ -294,10 +295,16 @@ TEST_F(LocatedTriplesTest, scanWithMergeTriples) {
     ad_utility::deleteFile(permutationFilename);
   };
 
-  // Now test for multiple block sizes (16 bytes is the minimum).
-  testWithGivenBlockSize(16);
-  testWithGivenBlockSize(32);
-  testWithGivenBlockSize(48);
-  testWithGivenBlockSize(64);
-  testWithGivenBlockSize(100'000);
+  // Now test for multiple block sizes (16 bytes is the minimum), relation
+  // sizes, and relations.
+  //
+  // TODO: Currently fails if `numRelations > 1`.
+  size_t numRelations = 1;
+  for (size_t i = 1; i <= numRelations; ++i) {
+    testWithGivenBlockSize(16, numRelations, V(i));
+    testWithGivenBlockSize(32, numRelations, V(i));
+    testWithGivenBlockSize(48, numRelations, V(i));
+    testWithGivenBlockSize(64, numRelations, V(i));
+    testWithGivenBlockSize(100'000, numRelations, V(i));
+  }
 }

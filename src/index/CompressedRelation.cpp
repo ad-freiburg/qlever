@@ -87,14 +87,6 @@ void CompressedRelationReader::scan(
     AD_CORRECTNESS_CHECK(numDelTotal < metadataForRelation.getNofElements());
   }
 
-  // TODO: For now only consider delta triples in complete blocks.
-  if (firstBlockIsIncomplete) {
-    AD_CORRECTNESS_CHECK(numInsAndDelPerBlock.size() == 2);
-    numInsTotal = 0;
-    numDelTotal = 0;
-    LOG(WARN) << "Delta triples in incomplete block ignored!" << std::endl;
-  }
-
   // The total size of the result is now known.
   result->resize(metadataForRelation.getNofElements() + numInsTotal -
                  numDelTotal);
@@ -110,49 +102,81 @@ void CompressedRelationReader::scan(
   // We have at most one block that is incomplete and thus requires trimming.
   // Set up a lambda, that reads this block and decompresses it to
   // the result.
-  auto readIncompleteBlock = [&](const auto& block) {
+  auto processIncompleteBlock = [&](const auto& blockMetadata) {
     // A block is uniquely identified by its start position in the file.
     //
     // NOTE: We read these blocks via a cache in order to speed up the unit
-    // tests (which make many requests to the same block, so we don't want to
-    // decompress it again and again).
-    auto cacheKey = block._offsetsAndCompressedSize.at(0)._offsetInFile;
-    auto uncompressedBuffer = blockCache_
-                                  .computeOnce(cacheKey,
-                                               [&]() {
-                                                 return readAndDecompressBlock(
-                                                     block, file, std::nullopt);
-                                               })
-                                  ._resultPointer;
+    // tests (which make many requests to the same block, so we don't want
+    // to decompress it again and again).
+    auto cacheKey =
+        blockMetadata->_offsetsAndCompressedSize.at(0)._offsetInFile;
+    auto block = blockCache_
+                     .computeOnce(cacheKey,
+                                  [&]() {
+                                    return readAndDecompressBlock(
+                                        *blockMetadata, file, std::nullopt);
+                                  })
+                     ._resultPointer;
 
-    // Extract the part of the block that actually belongs to the relation
-    auto numElements = metadataForRelation._numRows;
-    AD_CORRECTNESS_CHECK(uncompressedBuffer->numColumns() ==
+    // Determine (via the metadata for the relation), exactly which part of the
+    // block belongs to the relation.
+    auto numInsAndDel = numInsAndDelPerBlock.at(blockMetadata - beginBlock);
+    size_t rowIndexBegin = metadataForRelation._offsetInBlock;
+    size_t rowIndexEnd = rowIndexBegin + metadataForRelation._numRows;
+    AD_CORRECTNESS_CHECK(rowIndexBegin < block->size());
+    AD_CORRECTNESS_CHECK(rowIndexEnd <= block->size());
+    AD_CORRECTNESS_CHECK(block->numColumns() ==
                          metadataForRelation.numColumns());
-    for (size_t i = 0; i < uncompressedBuffer->numColumns(); ++i) {
-      const auto& inputCol = uncompressedBuffer->getColumn(i);
-      auto begin = inputCol.begin() + metadataForRelation._offsetInBlock;
-      auto resultColumn = result->getColumn(i);
-      AD_CORRECTNESS_CHECK(numElements <= spaceLeft);
-      std::copy(begin, begin + numElements, resultColumn.begin());
+    size_t numRowsWrittenToResult = rowIndexEnd - rowIndexBegin;
+
+    // Without delta triples, just copy the part of the block to `result`.
+    // Otherwise use `mergeTriples`.
+    if (numInsAndDel == std::pair<size_t, size_t>{0, 0}) {
+      for (size_t i = 0; i < numRowsWrittenToResult; ++i) {
+        (*result)(offsetInResult + i, 0) = (*block)(rowIndexBegin + i, 0);
+        (*result)(offsetInResult + i, 1) = (*block)(rowIndexBegin + i, 1);
+      }
+    } else {
+      // TODO: First copy `*block` to an object of class `IdTable`. This copy
+      // would be avoidable, see the related comment in `getBlockPart` in the
+      // other `CompressedRelationReader::scan` below.
+      ad_utility::AllocatorWithLimit<Id> allocator{
+          ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+              std::numeric_limits<size_t>::max())};
+      IdTable blockAsIdTable(2, allocator);
+      blockAsIdTable.resize(block->size());
+      for (size_t i = 0; i < block->size(); ++i) {
+        blockAsIdTable(i, 0) = (*block)(i, 0);
+        blockAsIdTable(i, 1) = (*block)(i, 1);
+      }
+      // Now call `mergeTriples` on `blockAsIdTable`.
+      size_t blockIndex = blockMetadata - metadataForAllBlocks.begin();
+      size_t numRowsWrittenExpected = numRowsWrittenToResult;
+      numRowsWrittenExpected += numInsAndDel.first - numInsAndDel.second;
+      numRowsWrittenToResult = locatedTriplesPerBlock.mergeTriples(
+          blockIndex, std::move(blockAsIdTable), *result, offsetInResult,
+          col0Id, rowIndexBegin);
+      AD_CORRECTNESS_CHECK(numRowsWrittenToResult == numRowsWrittenExpected);
     }
-    offsetInResult += numElements;
-    spaceLeft -= numElements;
+
+    AD_CORRECTNESS_CHECK(numRowsWrittenToResult <= spaceLeft);
+    offsetInResult += numRowsWrittenToResult;
+    spaceLeft -= numRowsWrittenToResult;
   };
 
   // Read the first block if it is incomplete
   auto completeBlocksBegin = beginBlock;
   auto completeBlocksEnd = endBlock;
   if (firstBlockIsIncomplete) {
-    readIncompleteBlock(*beginBlock);
+    processIncompleteBlock(beginBlock);
     ++completeBlocksBegin;
     if (timer) {
       timer->wlock()->checkTimeoutAndThrow("IndexScan :");
     }
   }
 
-  // Process all the other (complete) blocks. The compressed blocks are read
-  // sequentially from disk and then decompressed in parallel.
+  // Process all the other (complete) blocks. The compressed blocks are
+  // read sequentially from disk and then decompressed in parallel.
   if (completeBlocksBegin < completeBlocksEnd) {
 #pragma omp parallel
 #pragma omp single
@@ -244,8 +268,8 @@ void CompressedRelationReader::scan(
                        KeyLhs{col0Id, col0Id, col1Id, col1Id}, comp);
 
   // Compute the number of inserted and deleted triples per block and overall.
-  // note the `<=` so that we don't forget the block beyond the last (which may
-  // have information about delta triples at the vey end of a relation).
+  // note the `<=` so that we don't forget the block beyond the last (which
+  // may have information about delta triples at the vey end of a relation).
   std::vector<std::pair<size_t, size_t>> numInsAndDelPerBlock;
   size_t numInsTotal = 0;
   size_t numDelTotal = 0;
@@ -275,8 +299,9 @@ void CompressedRelationReader::scan(
     AD_CORRECTNESS_CHECK(endBlock - beginBlock <= 1);
   }
 
-  // Helper class for a part of a block (needed for the first and last block in
-  // the following). These are small objects, so an unlimited allocator is OK.
+  // Helper class for a part of a block (needed for the first and last block
+  // in the following). These are small objects, so an unlimited allocator is
+  // OK.
   struct BlockPart {
     std::unique_ptr<IdTable> idTable = nullptr;
     size_t rowIndexBegin = 0;
@@ -291,9 +316,9 @@ void CompressedRelationReader::scan(
   // index) begin and end index in the original block.
   //
   // NOTE: This is used for the first and last block below because these may
-  // contain triples that do not match `col0Id` and `col1Id`. We cannot directly
-  // merge these into `result` because we first need to know its total size and
-  // resize it before we can write to it.
+  // contain triples that do not match `col0Id` and `col1Id`. We cannot
+  // directly merge these into `result` because we first need to know its
+  // total size and resize it before we can write to it.
   auto getBlockPart = [&](auto blockMetadata) -> BlockPart {
     DecompressedBlock block =
         readAndDecompressBlock(*blockMetadata, file, std::nullopt);
@@ -337,7 +362,8 @@ void CompressedRelationReader::scan(
     // Copy `block` to an `IdTable`.
     //
     // TODO: This is an unecessary copy. Extend the `IdTable` class so that we
-    // can move the data from the second column of `block` to `blockAsIdTable`.
+    // can move the data from the second column of `block` to
+    // `blockAsIdTable`.
     ad_utility::AllocatorWithLimit<Id> allocator{
         ad_utility::makeAllocationMemoryLeftThreadsafeObject(
             std::numeric_limits<size_t>::max())};
@@ -492,8 +518,8 @@ float CompressedRelationWriter::computeMultiplicity(
   float multiplicity =
       functional ? 1.0f
                  : static_cast<float>(numElements) / float(numDistinctElements);
-  // Ensure that the multiplicity is only exactly 1.0 if the relation is indeed
-  // functional to prevent numerical instabilities;
+  // Ensure that the multiplicity is only exactly 1.0 if the relation is
+  // indeed functional to prevent numerical instabilities;
   if (!functional && multiplicity == 1.0f) [[unlikely]] {
     multiplicity = std::nextafter(1.0f, 2.0f);
   }
@@ -656,11 +682,11 @@ void CompressedRelationReader::decompressBlockToExistingIdTable(
     IdTable& result, size_t offsetInResult,
     std::pair<size_t, size_t> numInsAndDel,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock, size_t blockIndex) {
-  // Check that the given arguments are consistent (they should always be, given
-  // that this method is `private`).
-  // LOG(INFO) << "numRowsToRead: " << numRowsToRead << std::endl;
-  // LOG(INFO) << "numInsAndDel.first: " << numInsAndDel.first << std::endl;
-  // LOG(INFO) << "numInsAndDel.second: " << numInsAndDel.second << std::endl;
+  // Check that the given arguments are consistent (they should always be,
+  // given that this method is `private`). LOG(INFO) << "numRowsToRead: " <<
+  // numRowsToRead << std::endl; LOG(INFO) << "numInsAndDel.first: " <<
+  // numInsAndDel.first << std::endl; LOG(INFO) << "numInsAndDel.second: " <<
+  // numInsAndDel.second << std::endl;
   AD_CORRECTNESS_CHECK(numInsAndDel.second <= numRowsToRead);
   AD_CORRECTNESS_CHECK(result.numRows() + numInsAndDel.second >=
                        offsetInResult + numRowsToRead + numInsAndDel.first);
@@ -669,8 +695,9 @@ void CompressedRelationReader::decompressBlockToExistingIdTable(
   // Helper lambda that decompresses `numRowsToRead` from `compressedBlock`
   // to the given `IdTable` iterator.
   //
-  // TODO: It would be more natural to pass an `IdTable::iterator` here, but it
-  // seems that we can't get from that an iterator into an `IdTable` column.
+  // TODO: It would be more natural to pass an `IdTable::iterator` here, but
+  // it seems that we can't get from that an iterator into an `IdTable`
+  // column.
   //
   // TODO<joka921, C++23> use zip_view.
   auto decompressToIdTable = [&compressedBlock, &numRowsToRead](
@@ -685,24 +712,24 @@ void CompressedRelationReader::decompressBlockToExistingIdTable(
   };
 
   // If there are no delta triples for this block, just decompress directly to
-  // the `result` table. Otherwise decompress to an intermediate table and merge
-  // from there to `result`.
+  // the `result` table. Otherwise decompress to an intermediate table and
+  // merge from there to `result`.
   //
   // TODO: In the second case, we use an unlimited allocator for the space
-  // allocation for the intermediate table. This looks OK because our blocks are
-  // small, but it might be better to allocate also this table from the memory
-  // pool available to the server (to which we don't have acces here).
+  // allocation for the intermediate table. This looks OK because our blocks
+  // are small, but it might be better to allocate also this table from the
+  // memory pool available to the server (to which we don't have acces here).
   if (numInsAndDel == std::pair<size_t, size_t>{0, 0}) {
     decompressToIdTable(result, offsetInResult);
   } else {
     ad_utility::AllocatorWithLimit<Id> allocator{
         ad_utility::makeAllocationMemoryLeftThreadsafeObject(
             std::numeric_limits<size_t>::max())};
-    IdTable decompressedBlock(compressedBlock.size(), allocator);
-    decompressedBlock.resize(numRowsToRead);
-    decompressToIdTable(decompressedBlock, 0);
-    locatedTriplesPerBlock.mergeTriples(
-        blockIndex, std::move(decompressedBlock), result, offsetInResult);
+    IdTable blockAsIdTable(compressedBlock.size(), allocator);
+    blockAsIdTable.resize(numRowsToRead);
+    decompressToIdTable(blockAsIdTable, 0);
+    locatedTriplesPerBlock.mergeTriples(blockIndex, std::move(blockAsIdTable),
+                                        result, offsetInResult);
   }
 }
 
