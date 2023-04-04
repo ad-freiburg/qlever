@@ -30,8 +30,8 @@
  */
 static void writeJsonToFile(nlohmann::json j, const std::string& fileName,
     bool appendToFile = false) {
-  ad_utility::makeOfstream(fileName, (appendToFile) ?
-      (std::ios::out | std::ios::app) : (std::ios::out)) << j;
+  ad_utility::makeOfstream(fileName, appendToFile ?
+      (std::ios::out | std::ios::app) : std::ios::out) << j;
 }
 
 static std::string readFileToString(std::string fileName){
