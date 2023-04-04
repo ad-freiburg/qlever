@@ -3,6 +3,8 @@
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_format.h>
+#include <absl/strings/string_view.h>
 #include <memory>
 #include <sstream>
 #include <algorithm>
@@ -67,35 +69,31 @@ void RecordTable::setEntry(const size_t& row, const size_t& column,
 
 // ____________________________________________________________________________
 RecordTable::operator std::string() const{
-  // Used for the formating of numbers in the table.
-  constexpr size_t exactNumberOfDecimals = 4;
+  // Used for the formating of numbers in the table. They will always be
+  // formated as having 4 values after the decimal point.
+  constexpr absl::string_view floatFormatSpecifier = "%.4f";
 
   // What should be printed between columns. Used for nicer formating.
   const std::string columnSeperator = " | ";
 
   // Convert an `EntryType` of `RecordTable` to a screen friendly
   // format.
-  auto entryToStringVisitor = []<typename T>(
-      const T& entry)->std::string{
-    // We may need formating.
-    std::ostringstream ss;
-
+  auto entryToStringVisitor = [&floatFormatSpecifier]<typename T>(
+      const T& entry){
     // We have 3 possible types, because `EntryType` has three distinct possible
     // types, that all need different handeling.
     // Fortunaly, we can decide the handeling at compile time and throw the
     // others away, using `if constexpr(std::is_same<...,...>::value)`.
     if constexpr(std::is_same<T, std::monostate>::value) {
       // No value, print it as NA.
-      ss << "NA";
+      return (std::string)"NA";
     } else if constexpr(std::is_same<T, float>::value) {
-      // There is a value, print it with exactNumberOfDecimals decimals.
-      ss << std::fixed << std::setprecision(exactNumberOfDecimals) << entry;
+      // There is a value, format it as specified.
+      return absl::StrFormat(floatFormatSpecifier, entry);
     } else {
       // Only other possible type is a string, which needs no formating.
-      ss << entry;
+      return entry;
     }
-
-    return ss.str();
   };
   auto entryToString = [&entryToStringVisitor](const
       EntryType& entry)->std::string{
