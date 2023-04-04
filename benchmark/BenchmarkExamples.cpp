@@ -45,8 +45,8 @@ class BMSingleMeasurements: public BenchmarkClassInterface{
     
     // Setup.
     const size_t number = SlowRandomIntGenerator<size_t>(10,1'000)();
-    auto exponentiate = [](const size_t number){
-      return number*number;
+    auto exponentiate = [](const size_t numbertoExponentiate){
+      return numbertoExponentiate*numbertoExponentiate;
     };
 
     // Measuring functions.
