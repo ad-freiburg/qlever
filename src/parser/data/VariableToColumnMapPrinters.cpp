@@ -2,12 +2,11 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "parser/data/Variable.h"
-
 #include "ctre/ctre.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/Index.h"
 #include "parser/data/ConstructQueryExportContext.h"
+#include "parser/data/Variable.h"
 
 // ___________________________________________________________________________
 Variable::Variable(std::string name) : _name{std::move(name)} {
@@ -32,7 +31,7 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
   const Index& qecIndex = context._qecIndex;
   const auto& idTable = res.idTable();
   if (variableColumns.contains(*this)) {
-    size_t index = variableColumns.at(*this);
+    size_t index = variableColumns.at(*this).columnIndex_;
     auto id = idTable(row, index);
     auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType(
         qecIndex, id, res.localVocab());

@@ -22,7 +22,7 @@ TEST(Values, basicMethods) {
   ValuesComponents values{{TC{1}, TC{2}, TC{3}},
                           {TC{5}, TC{2}, TC{3}},
                           {TC{7}, TC{42}, TC{3}},
-                          {TC{7}, TC{42}, TC{3}}};
+                          {TC{7}, TC{42}, TC::UNDEF{}}};
   Values valuesOp(testQec,
                   {{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}}, values});
   EXPECT_FALSE(valuesOp.knownEmptyResult());
@@ -36,15 +36,17 @@ TEST(Values, basicMethods) {
   // Col 2: 2, 2, 3, 3
   EXPECT_FLOAT_EQ(valuesOp.getMultiplicity(1), 2.0f);
   // Col 3: always `3`.
-  EXPECT_FLOAT_EQ(valuesOp.getMultiplicity(2), 4.0f);
+  EXPECT_FLOAT_EQ(valuesOp.getMultiplicity(2), 2.0f);
   // Out-of-bounds columns always return 1.
   EXPECT_FLOAT_EQ(valuesOp.getMultiplicity(4), 1.0f);
 
-  auto varToCol = valuesOp.getExternallyVisibleVariableColumns();
-  ASSERT_EQ(varToCol.size(), 3u);
-  ASSERT_EQ(varToCol.at(Variable{"?x"}), 0);
-  ASSERT_EQ(varToCol.at(Variable{"?y"}), 1);
-  ASSERT_EQ(varToCol.at(Variable{"?z"}), 2);
+  using V = Variable;
+  VariableToColumnMap expectedVariables{
+      {V{"?x"}, makeAlwaysDefinedColumn(0)},
+      {V{"?y"}, makeAlwaysDefinedColumn(1)},
+      {V{"?z"}, makePossiblyUndefinedColumn(2)}};
+  EXPECT_THAT(valuesOp.getExternallyVisibleVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVariables));
 }
 
 // Check some corner cases for an empty VALUES clause.

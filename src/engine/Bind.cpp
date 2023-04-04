@@ -14,7 +14,9 @@
 size_t Bind::getResultWidth() const { return _subtree->getResultWidth() + 1; }
 
 // BIND doesn't change the number of result rows
-size_t Bind::getSizeEstimate() { return _subtree->getSizeEstimate(); }
+size_t Bind::getSizeEstimateBeforeLimit() {
+  return _subtree->getSizeEstimate();
+}
 
 // BIND has cost linear in the size of the input. Note that BIND operations are
 // currently always executed at their position in the SPARQL query, so that this
@@ -67,7 +69,13 @@ string Bind::asStringImpl(size_t indent) const {
 VariableToColumnMap Bind::computeVariableToColumnMap() const {
   auto res = _subtree->getVariableColumns();
   // The new variable is always appended at the end.
-  res[_bind._target] = getResultWidth() - 1;
+  // TODO<joka921> This currently pessimistically assumes that all (aggregate)
+  // expressions can produce undefined values. This might impact the
+  // performance when the result of this GROUP BY is joined on one or more of
+  // the aggregating columns. Implement an interface in the expressions that
+  // allows to check, whether an expression can never produce an undefined
+  // value.
+  res[_bind._target] = makePossiblyUndefinedColumn(getResultWidth() - 1);
   return res;
 }
 
@@ -97,8 +105,8 @@ ResultTable Bind::computeResult() {
   // added. Same for GROUP BY.
   auto localVocab = subRes->getCopyOfLocalVocab();
 
-  int inwidth = subRes->idTable().numColumns();
-  int outwidth = getResultWidth();
+  size_t inwidth = subRes->idTable().numColumns();
+  size_t outwidth = getResultWidth();
 
   CALL_FIXED_SIZE((std::array{inwidth, outwidth}), &Bind::computeExpressionBind,
                   this, &idTable, &localVocab, *subRes,
@@ -109,7 +117,7 @@ ResultTable Bind::computeResult() {
 }
 
 // _____________________________________________________________________________
-template <int IN_WIDTH, int OUT_WIDTH>
+template <size_t IN_WIDTH, size_t OUT_WIDTH>
 void Bind::computeExpressionBind(
     IdTable* outputIdTable, LocalVocab* outputLocalVocab,
     const ResultTable& inputResultTable,
@@ -142,7 +150,8 @@ void Bind::computeExpressionBind(
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
     if constexpr (isVariable) {
-      auto column = getInternallyVisibleVariableColumns().at(singleResult);
+      auto column =
+          getInternallyVisibleVariableColumns().at(singleResult).columnIndex_;
       for (size_t i = 0; i < inSize; ++i) {
         output(i, inCols) = output(i, column);
       }

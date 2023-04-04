@@ -63,7 +63,7 @@ string MultiColumnJoin::getDescriptor() const {
     for (auto jc : _joinColumns) {
       // If the left join column matches the index of a variable in the left
       // subresult.
-      if (jc[0] == p.second) {
+      if (jc[0] == p.second.columnIndex_) {
         joinVars += p.first.name() + " ";
       }
     }
@@ -101,24 +101,9 @@ ResultTable MultiColumnJoin::computeResult() {
 
 // _____________________________________________________________________________
 VariableToColumnMap MultiColumnJoin::computeVariableToColumnMap() const {
-  VariableToColumnMap retVal(_left->getVariableColumns());
-  size_t columnIndex = retVal.size();
-  const auto variableColumnsRightSorted =
-      copySortedByColumnIndex(_right->getVariableColumns());
-  for (const auto& it : variableColumnsRightSorted) {
-    bool isJoinColumn = false;
-    for (const std::array<ColumnIndex, 2>& a : _joinColumns) {
-      if (a[1] == it.second) {
-        isJoinColumn = true;
-        break;
-      }
-    }
-    if (!isJoinColumn) {
-      retVal[it.first] = columnIndex;
-      columnIndex++;
-    }
-  }
-  return retVal;
+  return makeVarToColMapForJoinOperation(
+      _left->getVariableColumns(), _right->getVariableColumns(), _joinColumns,
+      BinOpType::Join, _left->getResultWidth());
 }
 
 // _____________________________________________________________________________
@@ -148,7 +133,7 @@ float MultiColumnJoin::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t MultiColumnJoin::getSizeEstimate() {
+size_t MultiColumnJoin::getSizeEstimateBeforeLimit() {
   if (!_multiplicitiesComputed) {
     computeSizeEstimateAndMultiplicities();
   }
@@ -157,8 +142,8 @@ size_t MultiColumnJoin::getSizeEstimate() {
 
 // _____________________________________________________________________________
 size_t MultiColumnJoin::getCostEstimate() {
-  size_t costEstimate =
-      getSizeEstimate() + _left->getSizeEstimate() + _right->getSizeEstimate();
+  size_t costEstimate = getSizeEstimateBeforeLimit() +
+                        _left->getSizeEstimate() + _right->getSizeEstimate();
   // This join is slower than a normal join, due to
   // its increased complexity
   costEstimate *= 2;

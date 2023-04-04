@@ -172,6 +172,8 @@ class TripleComponent {
 
   bool isLiteral() const { return std::holds_alternative<Literal>(_variant); }
 
+  bool isUndef() const { return std::holds_alternative<UNDEF>(_variant); }
+
   /// Access the value. If one of those methods is called but the variant
   /// doesn't hold the correct type, an exception is thrown.
   [[nodiscard]] const std::string& getString() const {

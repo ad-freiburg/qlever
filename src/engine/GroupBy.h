@@ -65,8 +65,10 @@ class GroupBy : public Operation {
 
   virtual float getMultiplicity(size_t col) override;
 
-  virtual size_t getSizeEstimate() override;
+ private:
+  size_t getSizeEstimateBeforeLimit() override;
 
+ public:
   virtual size_t getCostEstimate() override;
 
   /**
@@ -86,14 +88,14 @@ class GroupBy : public Operation {
 
   ResultTable computeResult() override;
 
-  template <int OUT_WIDTH>
+  template <size_t OUT_WIDTH>
   void processGroup(const Aggregate& expression,
                     sparqlExpression::EvaluationContext& evaluationContext,
                     size_t blockStart, size_t blockEnd,
                     IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
                     size_t resultColumn, LocalVocab* localVocab) const;
 
-  template <int IN_WIDTH, int OUT_WIDTH>
+  template <size_t IN_WIDTH, size_t OUT_WIDTH>
   void doGroupBy(const IdTable& dynInput, const vector<size_t>& groupByCols,
                  const vector<GroupBy::Aggregate>& aggregates,
                  IdTable* dynResult, const IdTable* inTable,

@@ -7,6 +7,7 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/ResultTable.h"
+#include "util/Algorithm.h"
 #include "util/Random.h"
 
 // An operation that yields a given `IdTable` as its result. It is used for
@@ -63,8 +64,10 @@ class ValuesForTesting : public Operation {
 
   size_t getCostEstimate() override { return table_.numRows(); }
 
-  size_t getSizeEstimate() override { return table_.numRows(); }
+ private:
+  size_t getSizeEstimateBeforeLimit() override { return table_.numRows(); }
 
+ public:
   // For unit testing purposes it is useful that the columns have different
   // multiplicities to find bugs in functions that use the multiplicity.
   float getMultiplicity(size_t col) override {
@@ -80,7 +83,11 @@ class ValuesForTesting : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override {
     VariableToColumnMap m;
     for (size_t i = 0; i < variables_.size(); ++i) {
-      m[variables_.at(i)] = i;
+      bool containsUndef =
+          ad_utility::contains(table_.getColumn(i), Id::makeUndefined());
+      using enum ColumnIndexAndTypeInfo::UndefStatus;
+      m[variables_.at(i)] = ColumnIndexAndTypeInfo{
+          i, containsUndef ? PossiblyUndefined : AlwaysDefined};
     }
     return m;
   }

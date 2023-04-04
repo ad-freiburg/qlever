@@ -64,7 +64,7 @@ string ParsedQuery::asString() const {
   os << "\nWHERE: \n";
   _rootGraphPattern.toString(os, 1);
 
-  os << "\nLIMIT: " << (_limitOffset._limit);
+  os << "\nLIMIT: " << (_limitOffset.limitOrDefault());
   os << "\nTEXTLIMIT: " << (_limitOffset._textLimit);
   os << "\nOFFSET: " << (_limitOffset._offset);
   if (usesSelect) {

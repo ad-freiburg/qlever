@@ -53,7 +53,11 @@ VariableToColumnMap Service::computeVariableToColumnMap() const {
   VariableToColumnMap map;
   const auto& visibleVariables = parsedServiceClause_.visibleVariables_;
   for (size_t i = 0; i < visibleVariables.size(); i++) {
-    map[visibleVariables[i]] = i;
+    // We do not know which of the columns in the subresult contain undefined
+    // VALUES.
+    // TODO<joka921> We could parse the contained graph pattern to extract this
+    // information.
+    map[visibleVariables[i]] = makePossiblyUndefinedColumn(i);
   }
   return map;
 }
@@ -66,7 +70,7 @@ float Service::getMultiplicity([[maybe_unused]] size_t col) {
 }
 
 // ____________________________________________________________________________
-size_t Service::getSizeEstimate() {
+size_t Service::getSizeEstimateBeforeLimit() {
   // TODO: For now, we don't have any information about the result size at
   // query planning time, so we just return `100'000`.
   return 100'000;
@@ -76,7 +80,7 @@ size_t Service::getSizeEstimate() {
 size_t Service::getCostEstimate() {
   // TODO: For now, we don't have any information about the cost at query
   // planning time, so we just return ten times the estimated size.
-  return 10 * getSizeEstimate();
+  return 10 * getSizeEstimateBeforeLimit();
 }
 
 // ____________________________________________________________________________

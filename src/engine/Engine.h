@@ -96,7 +96,7 @@ class Engine {
                << " elements.\n";
   }
 
-  template <int WIDTH>
+  template <size_t WIDTH>
   static void sort(IdTable* tab, const size_t keyColumn) {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements ..." << std::endl;
     IdTableStatic<WIDTH> stab = std::move(*tab).toStatic<WIDTH>();
@@ -145,7 +145,7 @@ class Engine {
    *        in keepIndices. The input needs to be sorted on the keep indices,
    *        otherwise the result of this function is undefined.
    **/
-  template <int WIDTH>
+  template <size_t WIDTH>
   static void distinct(const IdTable& dynInput,
                        const std::vector<size_t>& keepIndices,
                        IdTable* dynResult) {

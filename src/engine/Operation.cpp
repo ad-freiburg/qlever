@@ -115,6 +115,16 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
             getDescriptor());
       }
       ResultTable result = computeResult();
+
+      // Compute the datatypes that occur in each column of the result.
+      // Also assert, that if a column contains UNDEF values, then the
+      // `mightContainUndef` flag for that columns is set.
+      // TODO<joka921> It is cheaper to move this calculation into the
+      // individual results, but that requires changes in each individual
+      // operation, therefore we currently only perform this expensive
+      // change in the DEBUG builds.
+      AD_EXPENSIVE_CHECK(
+          result.checkDefinedness(getExternallyVisibleVariableColumns()));
       if (_timeoutTimer->wlock()->hasTimedOut()) {
         throw ad_utility::TimeoutException(
             "Timeout in " + getDescriptor() +
@@ -128,6 +138,19 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       updateRuntimeInformationOnSuccess(result,
                                         ad_utility::CacheStatus::computed,
                                         timer.msecs(), std::nullopt);
+      // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
+      // already perform it. An example for an operation that directly computes
+      // the Limit is a full index scan with three variables.
+      if (!supportsLimit()) {
+        ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
+        // Note: both of the following calls have no effect and negligible
+        // runtime if neither a LIMIT nor an OFFSET were specified.
+        result.applyLimitOffset(_limit);
+        _runtimeInfo.addLimitOffsetRow(_limit, limitTimer.msecs(), true);
+      } else {
+        AD_CONTRACT_CHECK(result.idTable().numRows() ==
+                          _limit.actualSize(result.idTable().numRows()));
+      }
       return CacheValue{std::move(result), getRuntimeInfo()};
     };
 
@@ -291,7 +314,7 @@ void Operation::createRuntimeInfoFromEstimates() {
   }
 
   _runtimeInfo.costEstimate_ = getCostEstimate();
-  _runtimeInfo.sizeEstimate_ = getSizeEstimate();
+  _runtimeInfo.sizeEstimate_ = getSizeEstimateBeforeLimit();
 
   std::vector<float> multiplicityEstimates;
   multiplicityEstimates.reserve(numCols);
@@ -369,14 +392,13 @@ std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
     return std::nullopt;
   }
 
-  // TODO<joka921> Can be simplified using views once they are properly
-  // supported inside clang.
-  auto it =
-      std::ranges::find(varToColMap, sortedIndices.front(), ad_utility::second);
+  auto it = std::ranges::find(
+      varToColMap, sortedIndices.front(),
+      [](const auto& keyValue) { return keyValue.second.columnIndex_; });
   if (it == varToColMap.end()) {
     return std::nullopt;
   }
-  return Variable{it->first};
+  return it->first;
 }
 
 // ___________________________________________________________________________

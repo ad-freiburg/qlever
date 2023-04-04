@@ -57,7 +57,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(Var{"?y"}, triples[2]._s);
     ASSERT_EQ("<nsx:rel2>", triples[2]._p._iri);
     ASSERT_EQ("<http://abc.de>", triples[2]._o);
-    ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
+    ASSERT_EQ(std::nullopt, pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);
   }
 
@@ -86,7 +86,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(Var{"?y"}, triples[2]._s);
     ASSERT_EQ("<nsx:rel2>", triples[2]._p._iri);
     ASSERT_EQ("<http://abc.de>", triples[2]._o);
-    ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
+    ASSERT_EQ(std::nullopt, pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);
   }
 
@@ -114,7 +114,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(Var{"?y"}, triples[2]._s);
     ASSERT_EQ("<nsx:rel2>", triples[2]._p._iri);
     ASSERT_EQ(lit("\"Hello... World\""), triples[2]._o);
-    ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
+    ASSERT_EQ(std::nullopt, pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);
   }
 
@@ -518,8 +518,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(c_subquery._triples[1]._p._iri, "<from-year>");
     ASSERT_EQ(c_subquery._triples[1]._o, Var{"?year"});
 
-    ASSERT_EQ(std::numeric_limits<uint64_t>::max(),
-              parsed_sub_query.get()._limitOffset._limit);
+    ASSERT_EQ(std::nullopt, parsed_sub_query.get()._limitOffset._limit);
     ASSERT_EQ(true, parsed_sub_query.get()._orderBy[0].isDescending_);
     ASSERT_EQ(Var{"?director"}, parsed_sub_query.get()._orderBy[0].variable_);
 
@@ -592,8 +591,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(c_subquery._triples[0]._p._iri, "<directed-by>");
     ASSERT_EQ(c_subquery._triples[0]._o, Var{"?director"});
 
-    ASSERT_EQ(std::numeric_limits<uint64_t>::max(),
-              parsed_sub_query.get()._limitOffset._limit);
+    ASSERT_EQ(std::nullopt, parsed_sub_query.get()._limitOffset._limit);
     ASSERT_EQ(true, parsed_sub_query.get()._orderBy[0].isDescending_);
     ASSERT_EQ(Var{"?director"}, parsed_sub_query.get()._orderBy[0].variable_);
 
@@ -619,8 +617,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(c_sub_subquery._triples[0]._p._iri, "<from-year>");
     ASSERT_EQ(c_sub_subquery._triples[0]._o, Var{"?year"});
 
-    ASSERT_EQ(std::numeric_limits<uint64_t>::max(),
-              aux_parsed_sub_sub_query._limitOffset._limit);
+    ASSERT_EQ(std::nullopt, aux_parsed_sub_sub_query._limitOffset._limit);
     ASSERT_EQ(0u, aux_parsed_sub_sub_query._orderBy.size());
 
     auto sc_sub_subquery = aux_parsed_sub_sub_query.selectClause();
@@ -736,7 +733,7 @@ TEST(ParserTest, testExpandPrefixes) {
   ASSERT_EQ(Var{"?y"}, c._triples[2]._s);
   ASSERT_EQ("<nsx:rel2>", c._triples[2]._p._iri);
   ASSERT_EQ("<http://abc.de>", c._triples[2]._o);
-  ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
+  ASSERT_EQ(std::nullopt, pq._limitOffset._limit);
   ASSERT_EQ(0, pq._limitOffset._offset);
 }
 
@@ -769,7 +766,7 @@ TEST(ParserTest, testSolutionModifiers) {
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(1u, selectClause.getSelectedVariables().size());
     ASSERT_EQ(1u, c._triples.size());
-    ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
+    ASSERT_EQ(std::nullopt, pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);
     ASSERT_EQ(size_t(0), pq._orderBy.size());
     ASSERT_FALSE(selectClause.distinct_);
