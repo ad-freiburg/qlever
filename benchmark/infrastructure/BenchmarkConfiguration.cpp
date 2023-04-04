@@ -33,7 +33,7 @@ class ShortHandSyntaxException : public std::exception {
       "and couldn't be parsed:\n" + shortHandString;
   }
 
-  const char * what () const throw () {
+  const char * what () const throw () override {
     return message_.c_str();
   }
 };
