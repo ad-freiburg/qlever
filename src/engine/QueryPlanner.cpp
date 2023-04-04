@@ -137,7 +137,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
 
   for (auto& plan : lastRow) {
     if (plan._qet->getRootOperation()->supportsLimit()) {
-      (plan._qet->getRootOperation()->setLimit(pq._limitOffset._limit));
+      plan._qet->getRootOperation()->setLimit(pq._limitOffset);
     }
   }
 
@@ -384,6 +384,10 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
               arg.get().selectClause().getSelectedVariables());
         };
         std::ranges::for_each(candidatesForSubquery, setSelectedVariables);
+        // A subquery must also respect LIMIT and OFFSET clauses
+        std::ranges::for_each(candidatesForSubquery, [&](SubtreePlan& plan) {
+          plan._qet->getRootOperation()->setLimit(arg.get()._limitOffset);
+        });
         joinCandidates(std::move(candidatesForSubquery));
       } else if constexpr (std::is_same_v<T, p::TransPath>) {
         // TODO<kramerfl> This is obviously how you set up transitive paths.

@@ -88,7 +88,7 @@ ResultTable OrderBy::computeResult() {
   LOG(DEBUG) << "OrderBy result computation..." << endl;
   IdTable idTable = subRes->idTable().clone();
 
-  int width = idTable.numColumns();
+  size_t width = idTable.numColumns();
 
   // TODO<joka921> Measure (as soon as we have the benchmark merged)
   // whether it is beneficial to manually instantiate the comparison when
@@ -128,7 +128,7 @@ ResultTable OrderBy::computeResult() {
   // We cannot use the `CALL_FIXED_SIZE` macro here because the `sort` function
   // is templated not only on the integer `I` (which the `callFixedSize`
   // function deals with) but also on the `comparison`.
-  ad_utility::callFixedSize(width, [&idTable, &comparison]<int I>() {
+  ad_utility::callFixedSize(width, [&idTable, &comparison]<size_t I>() {
     Engine::sort<I>(&idTable, comparison);
   });
   LOG(DEBUG) << "OrderBy result computation done." << endl;

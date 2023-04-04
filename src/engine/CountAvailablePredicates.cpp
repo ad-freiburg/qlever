@@ -79,7 +79,7 @@ float CountAvailablePredicates::getMultiplicity([[maybe_unused]] size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t CountAvailablePredicates::getSizeEstimate() {
+size_t CountAvailablePredicates::getSizeEstimateBeforeLimit() {
   if (_subtree.get() != nullptr) {
     // Predicates are only computed for entities in the subtrees result.
 
@@ -106,7 +106,7 @@ size_t CountAvailablePredicates::getCostEstimate() {
     return _subtree->getCostEstimate() + _subtree->getSizeEstimate();
   } else {
     // the cost is proportional to the number of elements we need to write.
-    return getSizeEstimate();
+    return getSizeEstimateBeforeLimit();
   }
 }
 
@@ -135,7 +135,7 @@ ResultTable CountAvailablePredicates::computeResult() {
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
 
-    int width = subresult->idTable().numColumns();
+    size_t width = subresult->idTable().numColumns();
     CALL_FIXED_SIZE(width, &computePatternTrick, subresult->idTable(), &idTable,
                     hasPattern, hasPredicate, patterns, _subjectColumnIndex,
                     &runtimeInfo);
@@ -204,7 +204,7 @@ class MergeableHashMap : public ad_utility::HashMap<T, size_t> {
   }
 };
 
-template <int WIDTH>
+template <size_t WIDTH>
 void CountAvailablePredicates::computePatternTrick(
     const IdTable& dynInput, IdTable* dynResult,
     const vector<PatternID>& hasPattern,

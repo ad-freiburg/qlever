@@ -29,7 +29,11 @@ class Bind : public Operation {
   std::vector<QueryExecutionTree*> getChildren() override;
   void setTextLimit(size_t limit) override;
   size_t getCostEstimate() override;
-  size_t getSizeEstimate() override;
+
+ private:
+  size_t getSizeEstimateBeforeLimit() override;
+
+ public:
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
 
@@ -45,7 +49,7 @@ class Bind : public Operation {
   ResultTable computeResult() override;
 
   // Implementation for the binding of arbitrary expressions.
-  template <int IN_WIDTH, int OUT_WIDTH>
+  template <size_t IN_WIDTH, size_t OUT_WIDTH>
   void computeExpressionBind(
       IdTable* outputIdTable, LocalVocab* outputLocalVocab,
       const ResultTable& inputResultTable,

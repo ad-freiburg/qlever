@@ -158,7 +158,8 @@ VariableToColumnMap Join::computeVariableToColumnMap() const {
   }
   return makeVarToColMapForJoinOperation(
       _left->getVariableColumns(), _right->getVariableColumns(),
-      {{_leftJoinCol, _rightJoinCol}}, BinOpType::Join);
+      {{_leftJoinCol, _rightJoinCol}}, BinOpType::Join,
+      _left->getResultWidth());
 }
 
 // _____________________________________________________________________________
@@ -217,7 +218,7 @@ size_t Join::getCostEstimate() {
     return isFullScanDummy(subtree) ? size_t{0} : subtree->getCostEstimate();
   };
 
-  return getSizeEstimate() + costJoin + costIfNotFullScan(_left) +
+  return getSizeEstimateBeforeLimit() + costJoin + costIfNotFullScan(_left) +
          costIfNotFullScan(_right);
 }
 

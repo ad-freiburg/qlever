@@ -159,7 +159,7 @@ float TransitivePath::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t TransitivePath::getSizeEstimate() {
+size_t TransitivePath::getSizeEstimateBeforeLimit() {
   if (!_leftIsVar || !_rightIsVar) {
     // If the subject or object is fixed, assume that the number of matching
     // triples is 1000. This will usually be an overestimate, but it will do the
@@ -180,8 +180,8 @@ size_t TransitivePath::getSizeEstimate() {
   // other way, so that the only possible query plan is to compute the complete
   // transitive hull).
   //
-  // NOTE: _subtree->getSizeEstimate() is the number of triples of the
-  // predicate, for which the transitive hull operator (+) is specified. On
+  // NOTE: _subtree->getSizeEstimateBeforeLimit() is the number of triples of
+  // the predicate, for which the transitive hull operator (+) is specified. On
   // Wikidata, the predicate with the largest blowup when taking the
   // transitive hull is wdt:P2789 (connects with). The blowup is then from 90K
   // (without +) to 110M (with +), so about 1000 times larger.
@@ -199,7 +199,7 @@ size_t TransitivePath::getSizeEstimate() {
 size_t TransitivePath::getCostEstimate() {
   // We assume that the cost of computing the transitive path is proportional to
   // the result size.
-  auto costEstimate = getSizeEstimate();
+  auto costEstimate = getSizeEstimateBeforeLimit();
   // Add the cost for the index scan of the predicate involved.
   for (auto* ptr : getChildren()) {
     if (ptr) {
@@ -210,7 +210,7 @@ size_t TransitivePath::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-template <int SUB_WIDTH>
+template <size_t SUB_WIDTH>
 void TransitivePath::computeTransitivePath(IdTable* res, const IdTable& sub,
                                            bool leftIsVar, bool rightIsVar,
                                            size_t leftSubCol,
@@ -247,7 +247,7 @@ template void TransitivePath::computeTransitivePath<2>(
     size_t minDist, size_t maxDist);
 
 // _____________________________________________________________________________
-template <int SUB_WIDTH, bool leftIsVar, bool rightIsVar>
+template <size_t SUB_WIDTH, bool leftIsVar, bool rightIsVar>
 void TransitivePath::computeTransitivePath(IdTable* dynRes,
                                            const IdTable& dynSub,
                                            size_t leftSubCol,
@@ -390,7 +390,7 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
   *dynRes = std::move(res).toDynamic();
 }
 
-template <int SUB_WIDTH, int LEFT_WIDTH, int RES_WIDTH>
+template <size_t SUB_WIDTH, size_t LEFT_WIDTH, size_t RES_WIDTH>
 void TransitivePath::computeTransitivePathLeftBound(
     IdTable* dynRes, const IdTable& dynSub, const IdTable& dynLeft,
     size_t leftSideCol, bool rightIsVar, size_t leftSubCol, size_t rightSubCol,
@@ -673,25 +673,23 @@ ResultTable TransitivePath::computeResult() {
 
   idTable.setNumColumns(getResultWidth());
 
-  int subWidth = subRes->idTable().numColumns();
+  size_t subWidth = subRes->idTable().numColumns();
   if (_leftSideTree != nullptr) {
     shared_ptr<const ResultTable> leftRes = _leftSideTree->getResult();
-    int leftWidth = leftRes->idTable().numColumns();
-    CALL_FIXED_SIZE(
-        (std::array{subWidth, leftWidth, static_cast<int>(_resultWidth)}),
-        &TransitivePath::computeTransitivePathLeftBound, this, &idTable,
-        subRes->idTable(), leftRes->idTable(), _leftSideCol, _rightIsVar,
-        _leftSubCol, _rightSubCol, _rightValue, _minDist, _maxDist,
-        _resultWidth);
+    size_t leftWidth = leftRes->idTable().numColumns();
+    CALL_FIXED_SIZE((std::array{subWidth, leftWidth, _resultWidth}),
+                    &TransitivePath::computeTransitivePathLeftBound, this,
+                    &idTable, subRes->idTable(), leftRes->idTable(),
+                    _leftSideCol, _rightIsVar, _leftSubCol, _rightSubCol,
+                    _rightValue, _minDist, _maxDist, _resultWidth);
   } else if (_rightSideTree != nullptr) {
     shared_ptr<const ResultTable> rightRes = _rightSideTree->getResult();
-    int rightWidth = rightRes->idTable().numColumns();
-    CALL_FIXED_SIZE(
-        (std::array{subWidth, rightWidth, static_cast<int>(_resultWidth)}),
-        &TransitivePath::computeTransitivePathRightBound, this, &idTable,
-        subRes->idTable(), rightRes->idTable(), _rightSideCol, _leftIsVar,
-        _leftSubCol, _rightSubCol, _leftValue, _minDist, _maxDist,
-        _resultWidth);
+    size_t rightWidth = rightRes->idTable().numColumns();
+    CALL_FIXED_SIZE((std::array{subWidth, rightWidth, _resultWidth}),
+                    &TransitivePath::computeTransitivePathRightBound, this,
+                    &idTable, subRes->idTable(), rightRes->idTable(),
+                    _rightSideCol, _leftIsVar, _leftSubCol, _rightSubCol,
+                    _leftValue, _minDist, _maxDist, _resultWidth);
   } else {
     CALL_FIXED_SIZE(subWidth, &TransitivePath::computeTransitivePath, this,
                     &idTable, subRes->idTable(), _leftIsVar, _rightIsVar,

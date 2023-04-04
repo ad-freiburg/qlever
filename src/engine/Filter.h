@@ -38,8 +38,10 @@ class Filter : public Operation {
 
   void setTextLimit(size_t limit) override { _subtree->setTextLimit(limit); }
 
-  size_t getSizeEstimate() override;
+ private:
+  size_t getSizeEstimateBeforeLimit() override;
 
+ public:
   size_t getCostEstimate() override;
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; };
@@ -60,7 +62,7 @@ class Filter : public Operation {
 
   ResultTable computeResult() override;
 
-  template <int WIDTH>
+  template <size_t WIDTH>
   void computeFilterImpl(IdTable* outputIdTable,
                          const ResultTable& inputResultTable);
 };

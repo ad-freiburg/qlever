@@ -70,7 +70,7 @@ float Service::getMultiplicity([[maybe_unused]] size_t col) {
 }
 
 // ____________________________________________________________________________
-size_t Service::getSizeEstimate() {
+size_t Service::getSizeEstimateBeforeLimit() {
   // TODO: For now, we don't have any information about the result size at
   // query planning time, so we just return `100'000`.
   return 100'000;
@@ -80,7 +80,7 @@ size_t Service::getSizeEstimate() {
 size_t Service::getCostEstimate() {
   // TODO: For now, we don't have any information about the cost at query
   // planning time, so we just return ten times the estimated size.
-  return 10 * getSizeEstimate();
+  return 10 * getSizeEstimateBeforeLimit();
 }
 
 // ____________________________________________________________________________
