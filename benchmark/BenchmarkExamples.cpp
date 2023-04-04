@@ -15,7 +15,7 @@
 /*
 TODO: A typical problem in benchmarking is that the result of a computation is
 not used and thus the whole computation gets optimized out by the compiler.
-To avoid this, the `BM_SingeMeasurements` example prints the result of a
+To avoid this, the `BMSingleMeasurements` example prints the result of a
 computation to the screen.
 
 A more elegant solution, to prevent such unwanted compiler optimizations, can be
@@ -28,7 +28,7 @@ Using the functions described there would require including
 */
 
 // Single Measurements
-class BM_SingeMeasurements: public BenchmarkClassInterface{
+class BMSingleMeasurements: public BenchmarkClassInterface{
   public:
 
   void parseConfiguration(const BenchmarkConfiguration&){
@@ -72,7 +72,7 @@ class BM_SingeMeasurements: public BenchmarkClassInterface{
 };
 
 // Groups
-class BM_Groups: public BenchmarkClassInterface{
+class BMGroups: public BenchmarkClassInterface{
   public:
 
   void parseConfiguration(const BenchmarkConfiguration&){
@@ -140,7 +140,7 @@ class BM_Groups: public BenchmarkClassInterface{
 };
 
 // Tables
-class BM_Tables: public BenchmarkClassInterface{
+class BMTables: public BenchmarkClassInterface{
   public:
 
   void parseConfiguration(const BenchmarkConfiguration&){
@@ -215,7 +215,7 @@ class BM_Tables: public BenchmarkClassInterface{
 
 // A simple example of the usage of the `BenchmarkConfiguration` and the
 // general `BenchmarkMetadata`.
-class BM_ConfigurationAndMetadataExample: public BenchmarkClassInterface{
+class BMConfigurationAndMetadataExample: public BenchmarkClassInterface{
   // This class will simply transcribe specific configuration options
   // to this `BenchmarkMetadta` object and return it later with the
   // `getMetadata()` function.
@@ -262,7 +262,7 @@ class BM_ConfigurationAndMetadataExample: public BenchmarkClassInterface{
 
 
 // Registering the benchmarks.
-AD_REGISTER_BENCHMARK(BM_SingeMeasurements);
-AD_REGISTER_BENCHMARK(BM_Groups);
-AD_REGISTER_BENCHMARK(BM_Tables);
-AD_REGISTER_BENCHMARK(BM_ConfigurationAndMetadataExample);
+AD_REGISTER_BENCHMARK(BMSingleMeasurements);
+AD_REGISTER_BENCHMARK(BMGroups);
+AD_REGISTER_BENCHMARK(BMTables);
+AD_REGISTER_BENCHMARK(BMConfigurationAndMetadataExample);
