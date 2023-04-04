@@ -457,8 +457,6 @@ void specialOptionalJoin(Range&& range1, Range&& range2, auto&& lessThan,
                          auto&& compatibleRowAction,
                          auto&& elFromFirstNotFoundAction) {
   auto it1 = range1.begin();
-  auto begUndef = range1.begin();
-  auto endUndef = range1.begin();
   auto end1 = range1.end();
   auto it2 = range2.begin();
   auto end2 = range2.end();
@@ -542,9 +540,10 @@ void specialOptionalJoin(Range&& range1, Range&& range2, auto&& lessThan,
       elFromFirstNotFoundAction(*(it1 + (&id1 - leftSub.data())));
     };
 
-    ad_utility::zipperJoinWithUndef(leftSub, rightSub, std::less<>{},
-                                    compAction, findSmallerUndefRangeLeft, noop,
-                                    notFoundAction);
+    size_t numOutOfOrder = ad_utility::zipperJoinWithUndef(
+        leftSub, rightSub, std::less<>{}, compAction, findSmallerUndefRangeLeft,
+        noop, notFoundAction);
+    AD_CORRECTNESS_CHECK(numOutOfOrder == 0);
     it1 = endSame1;
     it2 = endSame2;
   }

@@ -370,10 +370,6 @@ void OptionalJoin::specialOptionalJoin(
     rowAdder.addOptionalRow(rowA.rowIndex());
   };
 
-  auto findUndefDispatch = [](const auto& row, auto begin, auto end,
-                              bool& outOfOrder) {
-    return ad_utility::findSmallerUndefRanges(row, begin, end, outOfOrder);
-  };
   ad_utility::specialOptionalJoin(dynASubset, dynBSubset, lessThanBoth, addRow,
                                   addOptionalRow);
 

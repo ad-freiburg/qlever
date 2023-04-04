@@ -108,7 +108,6 @@ def check_row_sparql_json(variables: List[str], gold_row: List[Any],
         if var not in actual_row and var.startswith("TEXT(?"):
             var = var[6:-1]
         if var not in actual_row:
-            eprint("{} not contained in row {}".format(var, actual_row))
             return False
         actual = actual_row[var]
         # from literals only take the part in quotes stripping
