@@ -53,14 +53,14 @@ class BMSingleMeasurements: public BenchmarkClassInterface{
     records.addMeasurement("Exponentiate once", [&](){exponentiate(number);});
     auto& multipleTimes =
       records.addMeasurement("Recursivly exponentiate multiple times",
-      [&](){
-          size_t to_exponentiate = number;
+      [&number, &exponentiate](){
+          size_t toExponentiate = number;
           for (size_t i = 0; i < 10'000'000'000; i++) {
-            to_exponentiate = exponentiate(to_exponentiate);
+            toExponentiate = exponentiate(toExponentiate);
           }
           // TODO Too much optimization without the line. Alternative can be found
           // under the `DoNotOptimize(...)` of google benchmark.
-          std::cout << to_exponentiate;
+          std::cout << toExponentiate;
         });
 
     // Adding some basic metadata.
