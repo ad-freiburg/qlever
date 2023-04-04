@@ -96,7 +96,7 @@ RecordTable::operator std::string() const{
     }
   };
   auto entryToString = [&entryToStringVisitor](const
-      EntryType& entry)->std::string{
+      EntryType& entry){
     // The std::visit checks which type a std::variant is and calls our
     // visitor function with the right template parameter.
     return std::visit(entryToStringVisitor, entry);
