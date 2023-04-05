@@ -19,17 +19,17 @@ namespace ad_utility {
 class AddCombinedRowToIdTable {
   std::vector<size_t> numUndefinedPerColumn_;
   size_t numJoinColumns_;
-  IdTableView<0> input1_;
-  IdTableView<0> input2_;
+  IdTableView<0> inputLeft_;
+  IdTableView<0> inputRight_;
   IdTable* resultTable_;
 
   // This struct stores the information, which row indices from the input are
   // combined into a given row index in the output, i.e. "To obtain the
-  // `targetIndex`-th row in the output, you have to combine
-  // `input1_[rowIndices[0]]` and and `input2_[rowIndices[1]]`.
+  // `targetIndex_`-th row in the output, you have to combine
+  // `inputLeft_[rowIndices_[0]]` and and `inputRight_[rowIndices_[1]]`.
   struct TargetIndexAndRowIndices {
-    size_t targetIndex;
-    std::array<size_t, 2> rowIndices;
+    size_t targetIndex_;
+    std::array<size_t, 2> rowIndices_;
   };
   // Store the indices that have not yet been written.
   std::vector<TargetIndexAndRowIndices> indexBuffer_;
@@ -45,10 +45,10 @@ class AddCombinedRowToIdTable {
   // Store the indices of OPTIONAL inputs that have not yet been written.
   std::vector<TargetIndexAndRowIndex> optionalIndexBuffer_;
 
-  // The first row index in the output for which a result has neither been
-  // written nor stored in one of the buffers.
-  // TODO<joka921> This comment is out of date, write what this actually
-  // represents.
+  // The total number of optional and non-optional rows that are currently
+  // buffered but not yet written to the result. The first row index in the
+  // output for which a result has neither been written nor stored in one of the
+  // buffers can be calculated by `result_.numRows() + nextIndex_`.
   size_t nextIndex_ = 0;
 
   // The number of rows for which the indices are buffered until they are
@@ -63,12 +63,14 @@ class AddCombinedRowToIdTable {
                                    IdTable* output)
       : numUndefinedPerColumn_(output->numColumns()),
         numJoinColumns_{numJoinColumns},
-        input1_{input1},
-        input2_{input2},
+        inputLeft_{input1},
+        inputRight_{input2},
         resultTable_{output} {
-    AD_CONTRACT_CHECK(output->numColumns() == input1.numColumns() +
-                                                  input2.numColumns() -
-                                                  numJoinColumns);
+    AD_CORRECTNESS_CHECK(output->numColumns() == input1.numColumns() +
+                                                     input2.numColumns() -
+                                                     numJoinColumns);
+    AD_CORRECTNESS_CHECK(input1.numColumns() >= numJoinColumns &&
+                         input2.numColumns() >= numJoinColumns);
   }
 
   // Return the number of UNDEF values per column. The result is only valid
@@ -77,8 +79,8 @@ class AddCombinedRowToIdTable {
     return numUndefinedPerColumn_;
   }
 
-  // The next free row in the output will be created from `input1_[rowIndexA]`
-  // and `input2_[rowIndexB]`.
+  // The next free row in the output will be created from
+  // `inputLeft_[rowIndexA]` and `inputRight_[rowIndexB]`.
   void addRow(size_t rowIndexA, size_t rowIndexB) {
     indexBuffer_.push_back(
         TargetIndexAndRowIndices{nextIndex_, {rowIndexA, rowIndexB}});
@@ -88,8 +90,9 @@ class AddCombinedRowToIdTable {
     }
   }
 
-  // The next free row in the output will be created from `input1_[rowIndexA]`.
-  // The columns from `input2_` will all be set to UNDEF
+  // The next free row in the output will be created from
+  // `inputLeft_[rowIndexA]`. The columns from `inputRight_` will all be set to
+  // UNDEF
   void addOptionalRow(size_t rowIndexA) {
     optionalIndexBuffer_.push_back(
         TargetIndexAndRowIndex{nextIndex_, rowIndexA});
@@ -139,40 +142,52 @@ class AddCombinedRowToIdTable {
 
     size_t resultColIdx = 0;
 
-    // Write the next column of the result. There are two ways to call this
-    // function:
-    // 1. For columns that appear in both inputs (join columns). In this case,
-    // `input1` and `input2` must be specified as `inputs...` and
-    // `idxOfSingleColumn` is ignored.
-    // 2. only one of the inputs. Then `idxOfSingleColumn` must be `0` for
-    // `input1` and `1` for `input2`.
-    auto writeColumn = [&]<size_t idxOfSingleColumn =
-                               std::numeric_limits<size_t>::max()>(
-        size_t column, const std::same_as<IdTableView<0>> auto&... inputs) {
-      static constexpr size_t numInputs = sizeof...(inputs);
-      static_assert(numInputs == 1 || numInputs == 2);
-      static_assert(numInputs == 2 || idxOfSingleColumn < 2);
-      AD_CORRECTNESS_CHECK((numInputs == 1) || column < numJoinColumns_);
-      std::tuple<decltype(inputs.getColumn(column))...> cols{
-          inputs.getColumn(column)...};
+    // A lambda that writes the join column with the given `colIdx` to the
+    // `resultColIdx`-th column of the result.
+    auto writeJoinColumn = [&result, &mergeWithUndefined, oldSize, this](
+                               size_t colIdx, size_t resultColIdx) {
+      const auto& colLeft = inputLeft_.getColumn(colIdx);
+      const auto& colRight = inputRight_.getColumn(colIdx);
       // TODO<joka921> Implement prefetching.
       decltype(auto) resultCol = result.getColumn(resultColIdx);
       size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
 
-      // Write the matching rows. For join columns (numInputs == 2) the inputs
-      // are combined, for non-join-columns, the (single) input is just copied.
+      // Write the matching rows.
       for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
-        // The explicit capturing of the structured binding is required for
-        // Clang <= 15.
-        auto resultId = [&, sourceIndices = sourceIndices]() -> Id {
-          if constexpr (numInputs == 1) {
-            return std::get<0>(
-                cols)[std::get<idxOfSingleColumn>(sourceIndices)];
-          } else {
-            return mergeWithUndefined(std::get<0>(cols)[sourceIndices[0]],
-                                      std::get<1>(cols)[sourceIndices[1]]);
-          }
-        }();
+        auto resultId = mergeWithUndefined(colLeft[sourceIndices[0]],
+                                           colRight[sourceIndices[1]]);
+        numUndef += static_cast<size_t>(resultId.isUndefined());
+        resultCol[oldSize + targetIndex] = resultId;
+      }
+
+      // Write the optional rows. For the second input those are always
+      // undefined.
+      for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
+        Id id = colLeft[sourceIndex];
+        resultCol[oldSize + targetIndex] = id;
+        numUndef += static_cast<size_t>(id.isUndefined());
+      }
+    };
+
+    // A lambda that writes the non-join-column `colIdx` to the
+    // `resultColIdx`-th column of the result. the bool `isColFromLeft`
+    // determines whether the input is taken from the left or the right input.
+    // Note: There is quite some code duplication between this lambda and the
+    // previous one. I have tried to unify them but this lead to template-heavy
+    // code that was very hard to read for humans.
+    auto writeNonJoinColumn = [&result, &mergeWithUndefined, oldSize,
+                               this]<bool isColFromLeft>(size_t colIdx,
+                                                         size_t resultColIdx) {
+      decltype(auto) col = isColFromLeft ? inputLeft_.getColumn(colIdx)
+                                         : inputRight_.getColumn(colIdx);
+      // TODO<joka921> Implement prefetching.
+      decltype(auto) resultCol = result.getColumn(resultColIdx);
+      size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
+
+      // Write the matching rows.
+      static constexpr size_t idx = isColFromLeft ? 0 : 1;
+      for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
+        auto resultId = col[sourceIndices[idx]];
         numUndef += static_cast<size_t>(resultId == Id::makeUndefined());
         resultCol[oldSize + targetIndex] = resultId;
       }
@@ -180,28 +195,36 @@ class AddCombinedRowToIdTable {
       // Write the optional rows. For the second input those are always
       // undefined.
       for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
-        if constexpr (idxOfSingleColumn != 1) {
-          resultCol[oldSize + targetIndex] = std::get<0>(cols)[sourceIndex];
-        } else {
-          resultCol[oldSize + targetIndex] = Id::makeUndefined();
-        }
+        Id id = [&col, sourceIndex]() {
+          if constexpr (isColFromLeft) {
+            return col[sourceIndex];
+          } else {
+            (void)col;
+            (void)sourceIndex;
+            return Id::makeUndefined();
+          }
+        }();
+        resultCol[oldSize + targetIndex] = id;
+        numUndef += static_cast<size_t>(id.isUndefined());
       }
-      ++resultColIdx;
     };
 
     // First write all the join columns.
     for (size_t col = 0; col < numJoinColumns_; col++) {
-      writeColumn(col, input1_, input2_);
+      writeJoinColumn(col, resultColIdx);
+      ++resultColIdx;
     }
 
     // Then the remaining columns from the first input.
-    for (size_t col = numJoinColumns_; col < input1_.numColumns(); ++col) {
-      writeColumn.template operator()<0>(col, input1_);
+    for (size_t col = numJoinColumns_; col < inputLeft_.numColumns(); ++col) {
+      writeNonJoinColumn.operator()<true>(col, resultColIdx);
+      ++resultColIdx;
     }
 
     // Then the remaining columns from the second input.
-    for (size_t col = numJoinColumns_; col < input2_.numColumns(); col++) {
-      writeColumn.template operator()<1>(col, input2_);
+    for (size_t col = numJoinColumns_; col < inputRight_.numColumns(); col++) {
+      writeNonJoinColumn.operator()<false>(col, resultColIdx);
+      ++resultColIdx;
     }
 
     indexBuffer_.clear();

@@ -410,26 +410,19 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
       checkTimeoutAfterNCallsFactory();
   auto joinColumnData = ad_utility::prepareJoinColumns(
       {{jc1, jc2}}, a.numColumns(), b.numColumns());
-
-  auto dynASubset = dynA.getColumn(jc1);
-  auto dynBSubset = dynB.getColumn(jc2);
+  auto joinColumnL = a.getColumn(jc1);
+  auto joinColumnR = b.getColumn(jc2);
 
   auto dynAPermuted = dynA.asColumnSubsetView(joinColumnData.colsCompleteA_);
   auto dynBPermuted = dynB.asColumnSubsetView(joinColumnData.colsCompleteB_);
 
-  auto lessThanBoth = std::ranges::less{};
-
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(1, dynAPermuted,
                                                       dynBPermuted, result);
-  auto addRow = [&dynASubset, &dynBSubset, &rowAdder](const auto& rowA,
-                                                      const auto& rowB) {
-    rowAdder.addRow(&rowA - dynASubset.data(), &rowB - dynBSubset.data());
+  auto addRow = [&joinColumnL, &joinColumnR, &rowAdder](const auto& rowA,
+                                                        const auto& rowB) {
+    rowAdder.addRow(&rowA - joinColumnL.data(), &rowB - joinColumnR.data());
   };
 
-  // TODO<joka921> `joinColumnL` and `dynASubset` are exactly the same thing for
-  // the case of one column.
-  auto joinColumnL = a.getColumn(jc1);
-  auto joinColumnR = b.getColumn(jc2);
   // The undef values are right at the start, so this calculation works.
   size_t numUndefA =
       std::ranges::upper_bound(joinColumnL, ValueId::makeUndefined()) -
@@ -437,20 +430,22 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   size_t numUndefB =
       std::ranges::upper_bound(joinColumnR, ValueId::makeUndefined()) -
       joinColumnR.begin();
-  std::pair aUnd{dynASubset.begin(), dynASubset.begin() + numUndefA};
-  std::pair bUnd{dynBSubset.begin(), dynBSubset.begin() + numUndefB};
-  // Cannot just switch l1 and l2 around because the order of
-  // items in the result tuples is important.
+  std::pair aUnd{joinColumnL.begin(), joinColumnL.begin() + numUndefA};
+  std::pair bUnd{joinColumnR.begin(), joinColumnR.begin() + numUndefB};
+
+  // Determine whether we should use the galloping join optimization.
   if (a.size() / b.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
       numUndefB == 0) {
-    auto inverseAddRow = [&](const auto& rowA, const auto& rowB) {
-      rowAdder.addRow(&rowB - dynASubset.data(), &rowA - dynBSubset.data());
+    // The first argument to the galloping join will always be the smaller
+    // input, so we need to switch the rows when adding them.
+    auto inverseAddRow = [&addRow](const auto& rowA, const auto& rowB) {
+      addRow(rowB, rowA);
     };
-    ad_utility::gallopingJoin(dynBSubset, dynASubset, std::ranges::less{},
+    ad_utility::gallopingJoin(joinColumnR, joinColumnL, std::ranges::less{},
                               inverseAddRow);
   } else if (b.size() / a.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
              numUndefB == 0) {
-    ad_utility::gallopingJoin(dynASubset, dynBSubset, std::ranges::less{},
+    ad_utility::gallopingJoin(joinColumnL, joinColumnR, std::ranges::less{},
                               addRow);
   } else {
     // TODO<joka921> Reinstate the timeout checks.
@@ -470,12 +465,12 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     auto numOutOfOrder = [&]() {
       if (numUndefB == 0 && numUndefA == 0) {
         return ad_utility::zipperJoinWithUndef(
-            dynASubset, dynBSubset, lessThanBoth, addRow, ad_utility::noop,
-            ad_utility::noop);
+            joinColumnL, joinColumnR, std::ranges::less{}, addRow,
+            ad_utility::noop, ad_utility::noop);
 
       } else {
         return ad_utility::zipperJoinWithUndef(
-            dynASubset, dynBSubset, lessThanBoth, addRow,
+            joinColumnL, joinColumnR, std::ranges::less{}, addRow,
             findSmallerUndefRangeLeft, findSmallerUndefRangeRight);
       }
     }();
