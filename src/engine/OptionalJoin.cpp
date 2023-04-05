@@ -298,8 +298,10 @@ void OptionalJoin::optionalJoin(
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
       joinColumns.size(), dynAPermuted, dynBPermuted, result);
-  auto addRow = [&rowAdder](const auto& rowA, const auto& rowB) {
-    rowAdder.addRow(rowA.rowIndex(), rowB.rowIndex());
+  auto addRow = [&rowAdder, beginLeft = dynASubset.begin(),
+                 beginRight = dynBSubset.begin()](const auto& itLeft,
+                                                  const auto& itRight) {
+    rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
   };
 
   auto addOptionalRow = [&rowAdder,
@@ -365,8 +367,10 @@ void OptionalJoin::specialOptionalJoin(
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
       joinColumns.size(), dynAPermuted, dynBPermuted, result);
-  auto addRow = [&rowAdder](const auto& rowA, const auto& rowB) {
-    rowAdder.addRow(rowA.rowIndex(), rowB.rowIndex());
+  auto addRow = [&rowAdder, beginLeft = dynASubset.begin(),
+                 beginRight = dynBSubset.begin()](const auto& itLeft,
+                                                  const auto& itRight) {
+    rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
   };
 
   auto addOptionalRow = [&rowAdder,

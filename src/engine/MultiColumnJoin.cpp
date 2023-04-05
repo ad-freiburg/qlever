@@ -237,8 +237,10 @@ void MultiColumnJoin::computeMultiColumnJoin(
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
       joinColumns.size(), leftPermuted, rightPermuted, result);
-  auto addRow = [&rowAdder](const auto& rowA, const auto& rowB) {
-    rowAdder.addRow(rowA.rowIndex(), rowB.rowIndex());
+  auto addRow = [&rowAdder, beginLeft = leftJoinColumns.begin(),
+                 beginRight = rightJoinColumns.begin()](const auto& itLeft,
+                                                        const auto& itRight) {
+    rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
   };
 
   auto findUndef = [](const auto& row, auto begin, auto end, bool& outOfOrder) {

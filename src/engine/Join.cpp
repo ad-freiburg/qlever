@@ -419,9 +419,10 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(1, dynAPermuted,
                                                       dynBPermuted, result);
-  auto addRow = [&joinColumnL, &joinColumnR, &rowAdder](const auto& rowA,
-                                                        const auto& rowB) {
-    rowAdder.addRow(&rowA - joinColumnL.data(), &rowB - joinColumnR.data());
+  auto addRow = [beginLeft = joinColumnL.begin(),
+                 beginRight = joinColumnR.begin(),
+                 &rowAdder](const auto& itLeft, const auto& itRight) {
+    rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
   };
 
   // The undef values are right at the start, so this calculation works.

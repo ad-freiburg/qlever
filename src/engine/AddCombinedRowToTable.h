@@ -194,7 +194,7 @@ class AddCombinedRowToIdTable {
       // Write the optional rows. For the second input those are always
       // undefined.
       for (const auto& [targetIndex, sourceIndex] : optionalIndexBuffer_) {
-        Id id = [&col, sourceIndex]() {
+        Id id = [&col, sourceIndex = sourceIndex]() {
           if constexpr (isColFromLeft) {
             return col[sourceIndex];
           } else {
