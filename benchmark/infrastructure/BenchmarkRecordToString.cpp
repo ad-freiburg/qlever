@@ -6,7 +6,7 @@
 
 // ___________________________________________________________________________
 void addCategoryTitelToOStringstream(std::ostringstream* stream,
-    const std::string categoryTitel){
+    std::string_view categoryTitel){
   // The bar above and below the titel.
   const size_t barLength = categoryTitel.size() + 4;
   const std::string bar(barLength, '#');

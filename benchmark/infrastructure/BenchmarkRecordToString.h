@@ -7,6 +7,7 @@
 #include <sstream>
 #include <algorithm>
 #include <vector>
+#include <string_view>
 
 #include "util/json.h"
 #include "../benchmark/infrastructure/Benchmark.h"
@@ -24,7 +25,7 @@
  *  to the stream.
  */
 void addCategoryTitelToOStringstream(std::ostringstream* stream,
-    const std::string categoryTitel);
+    std::string_view categoryTitel);
 
 // Default way of adding a vector of RecordEntrys to a `ostringstream` with
 // optional prefix.
