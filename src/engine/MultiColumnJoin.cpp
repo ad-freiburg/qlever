@@ -6,7 +6,7 @@
 
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
-#include "util/JoinAlgorithms.h"
+#include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::string;
 
@@ -215,48 +215,44 @@ void MultiColumnJoin::computeSizeEstimateAndMultiplicities() {
 
 // _______________________________________________________________________
 void MultiColumnJoin::computeMultiColumnJoin(
-    const IdTable& dynA, const IdTable& dynB,
+    const IdTable& left, const IdTable& right,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
     IdTable* result) {
   // check for trivial cases
-  if (dynA.empty() || dynB.empty()) {
+  if (left.empty() || right.empty()) {
     return;
   }
 
-  const auto& a = dynA;
-  const auto& b = dynB;
+  ad_utility::JoinColumnData joinColumnData{joinColumns, left.numColumns(),
+                                            right.numColumns()};
 
-  auto joinColumnData = ad_utility::prepareJoinColumns(
-      joinColumns, a.numColumns(), b.numColumns());
+  IdTableView<0> leftJoinColumns =
+      left.asColumnSubsetView(joinColumnData.jcsLeft());
+  IdTableView<0> rightJoinColumns =
+      right.asColumnSubsetView(joinColumnData.jcsRight());
 
-  auto dynASubset = dynA.asColumnSubsetView(joinColumnData.jcsA_);
-  auto dynBSubset = dynB.asColumnSubsetView(joinColumnData.jcsB_);
-
-  auto dynAPermuted = dynA.asColumnSubsetView(joinColumnData.colsCompleteA_);
-  auto dynBPermuted = dynB.asColumnSubsetView(joinColumnData.colsCompleteB_);
-
-  auto lessThanBoth = std::ranges::lexicographical_compare;
+  auto leftPermuted = left.asColumnSubsetView(joinColumnData.permutationLeft());
+  auto rightPermuted =
+      right.asColumnSubsetView(joinColumnData.permutationRight());
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      joinColumns.size(), dynAPermuted, dynBPermuted, result);
+      joinColumns.size(), leftPermuted, rightPermuted, result);
   auto addRow = [&rowAdder](const auto& rowA, const auto& rowB) {
     rowAdder.addRow(rowA.rowIndex(), rowB.rowIndex());
   };
 
-  auto findUndefDispatch = [](const auto& row, auto begin, auto end,
-                              bool& outOfOrder) {
+  auto findUndef = [](const auto& row, auto begin, auto end, bool& outOfOrder) {
     return ad_utility::findSmallerUndefRanges(row, begin, end, outOfOrder);
   };
   auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
-      dynASubset, dynBSubset, lessThanBoth, addRow, findUndefDispatch,
-      findUndefDispatch);
+      leftJoinColumns, rightJoinColumns, std::ranges::lexicographical_compare,
+      addRow, findUndef, findUndef);
   rowAdder.flush();
-  // TODO<joka921> We have two sorted ranges, a simple merge would suffice
-  // (possibly even in-place), or we could even lazily pass them on to the
-  // upstream operation.
-  // Note: the merging only works if we don't have the arbitrary out of order
-  // case.
-  // TODO<joka921> We only have to do this if the sorting is required.
+  // If there were undefined values in the input, the result might be out of
+  // order. Sort it, because this operation promises a sorted result in its
+  // `resultSortedOn()` member function.
+  // TODO<joka921> We only have to do this if the sorting is required (merge the
+  // other PR first).
   if (numOutOfOrder > 0) {
     std::vector<ColumnIndex> cols;
     for (size_t i = 0; i < joinColumns.size(); ++i) {
@@ -265,10 +261,8 @@ void MultiColumnJoin::computeMultiColumnJoin(
     Engine::sort(*result, cols);
   }
 
-  // The column order in the result is now
-  // [joinColumns, non-join-columns-a, non-join-columns-b] (which makes the
-  // algorithms above easier), be the order that is expected by the rest of the
-  // code is [columns-a, non-join-columns-b]. Permute the columns to fix the
-  // order.
-  result->permuteColumns(joinColumnData.permutation_);
+  // The result that `zipperJoinWithUndef` produces has a different order of
+  // columns than expected, permute them. See the documentation of
+  // `JoinColumnData` for details.
+  result->permuteColumns(joinColumnData.permutationResult());
 }

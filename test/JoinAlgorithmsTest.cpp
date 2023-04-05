@@ -9,7 +9,7 @@
 #include "global/Id.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "util/JoinAlgorithms.h"
+#include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using namespace ad_utility;
 using ad_utility::source_location;

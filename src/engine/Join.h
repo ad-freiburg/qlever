@@ -12,7 +12,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
-#include "util/JoinAlgorithms.h"
+#include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::list;
 

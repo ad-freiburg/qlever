@@ -7,7 +7,7 @@
 
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
-#include "util/JoinAlgorithms.h"
+#include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::string;
 
@@ -284,14 +284,15 @@ void OptionalJoin::optionalJoin(
   const auto& a = dynA;
   const auto& b = dynB;
 
-  auto joinColumnData = ad_utility::prepareJoinColumns(
-      joinColumns, a.numColumns(), b.numColumns());
+  ad_utility::JoinColumnData joinColumnData{joinColumns, a.numColumns(),
+                                            b.numColumns()};
 
-  auto dynASubset = dynA.asColumnSubsetView(joinColumnData.jcsA_);
-  auto dynBSubset = dynB.asColumnSubsetView(joinColumnData.jcsB_);
+  auto dynASubset = dynA.asColumnSubsetView(joinColumnData.jcsLeft());
+  auto dynBSubset = dynB.asColumnSubsetView(joinColumnData.jcsRight());
 
-  auto dynAPermuted = dynA.asColumnSubsetView(joinColumnData.colsCompleteA_);
-  auto dynBPermuted = dynB.asColumnSubsetView(joinColumnData.colsCompleteB_);
+  auto dynAPermuted = dynA.asColumnSubsetView(joinColumnData.permutationLeft());
+  auto dynBPermuted =
+      dynB.asColumnSubsetView(joinColumnData.permutationRight());
 
   auto lessThanBoth = std::ranges::lexicographical_compare;
 
@@ -301,8 +302,9 @@ void OptionalJoin::optionalJoin(
     rowAdder.addRow(rowA.rowIndex(), rowB.rowIndex());
   };
 
-  auto addOptionalRow = [&rowAdder](const auto& rowA) {
-    rowAdder.addOptionalRow(rowA.rowIndex());
+  auto addOptionalRow = [&rowAdder,
+                         begin = dynASubset.begin()](const auto& itLeft) {
+    rowAdder.addOptionalRow(itLeft - begin);
   };
 
   auto findUndefDispatch = [](const auto& row, auto begin, auto end,
@@ -333,7 +335,7 @@ void OptionalJoin::optionalJoin(
     }
     Engine::sort(*result, cols);
   }
-  result->permuteColumns(joinColumnData.permutation_);
+  result->permuteColumns(joinColumnData.permutationResult());
 }
 
 // ______________________________________________________________
@@ -349,14 +351,15 @@ void OptionalJoin::specialOptionalJoin(
   const auto& a = dynA;
   const auto& b = dynB;
 
-  auto joinColumnData = ad_utility::prepareJoinColumns(
-      joinColumns, a.numColumns(), b.numColumns());
+  ad_utility::JoinColumnData joinColumnData{joinColumns, a.numColumns(),
+                                            b.numColumns()};
 
-  auto dynASubset = dynA.asColumnSubsetView(joinColumnData.jcsA_);
-  auto dynBSubset = dynB.asColumnSubsetView(joinColumnData.jcsB_);
+  auto dynASubset = dynA.asColumnSubsetView(joinColumnData.jcsLeft());
+  auto dynBSubset = dynB.asColumnSubsetView(joinColumnData.jcsRight());
 
-  auto dynAPermuted = dynA.asColumnSubsetView(joinColumnData.colsCompleteA_);
-  auto dynBPermuted = dynB.asColumnSubsetView(joinColumnData.colsCompleteB_);
+  auto dynAPermuted = dynA.asColumnSubsetView(joinColumnData.permutationLeft());
+  auto dynBPermuted =
+      dynB.asColumnSubsetView(joinColumnData.permutationRight());
 
   auto lessThanBoth = std::ranges::lexicographical_compare;
 
@@ -366,8 +369,9 @@ void OptionalJoin::specialOptionalJoin(
     rowAdder.addRow(rowA.rowIndex(), rowB.rowIndex());
   };
 
-  auto addOptionalRow = [&rowAdder](const auto& rowA) {
-    rowAdder.addOptionalRow(rowA.rowIndex());
+  auto addOptionalRow = [&rowAdder,
+                         begin = dynASubset.begin()](const auto& it) {
+    rowAdder.addOptionalRow(it - begin);
   };
 
   ad_utility::specialOptionalJoin(dynASubset, dynBSubset, lessThanBoth, addRow,
@@ -380,5 +384,5 @@ void OptionalJoin::specialOptionalJoin(
   // order.
   rowAdder.flush();
 
-  result->permuteColumns(joinColumnData.permutation_);
+  result->permuteColumns(joinColumnData.permutationResult());
 }

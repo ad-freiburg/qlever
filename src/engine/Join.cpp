@@ -408,13 +408,14 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   }
   [[maybe_unused]] auto checkTimeoutAfterNCalls =
       checkTimeoutAfterNCallsFactory();
-  auto joinColumnData = ad_utility::prepareJoinColumns(
-      {{jc1, jc2}}, a.numColumns(), b.numColumns());
+  ad_utility::JoinColumnData joinColumnData{
+      {{jc1, jc2}}, a.numColumns(), b.numColumns()};
   auto joinColumnL = a.getColumn(jc1);
   auto joinColumnR = b.getColumn(jc2);
 
-  auto dynAPermuted = dynA.asColumnSubsetView(joinColumnData.colsCompleteA_);
-  auto dynBPermuted = dynB.asColumnSubsetView(joinColumnData.colsCompleteB_);
+  auto dynAPermuted = dynA.asColumnSubsetView(joinColumnData.permutationLeft());
+  auto dynBPermuted =
+      dynB.asColumnSubsetView(joinColumnData.permutationRight());
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(1, dynAPermuted,
                                                       dynBPermuted, result);
@@ -482,7 +483,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   // algorithms above easier), be the order that is expected by the rest of
   // the code is [columns-a, non-join-columns-b]. Permute the columns to fix
   // the order.
-  result->permuteColumns(joinColumnData.permutation_);
+  result->permuteColumns(joinColumnData.permutationResult());
 
   LOG(DEBUG) << "Join done.\n";
   LOG(DEBUG) << "Result: width = " << result->numColumns()

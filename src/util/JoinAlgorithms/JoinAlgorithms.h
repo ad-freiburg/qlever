@@ -11,231 +11,10 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/Generator.h"
+#include "util/JoinAlgorithms/FindUndefRanges.h"
+#include "util/JoinAlgorithms/JoinColumnData.h"
 
 namespace ad_utility {
-
-struct JoinColumnData {
-  std::vector<size_t> jcsA_;
-  std::vector<size_t> jcsB_;
-  std::vector<size_t> colsCompleteA_;
-  std::vector<size_t> colsCompleteB_;
-  std::vector<size_t> permutation_;
-};
-
-inline JoinColumnData prepareJoinColumns(
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns, size_t numColsA,
-    size_t numColsB) {
-  std::vector<size_t> permutation;
-  permutation.resize(numColsA + numColsB - joinColumns.size());
-  std::vector<size_t> jcsA, jcsB;
-  for (auto [colA, colB] : joinColumns) {
-    permutation.at(colA) = jcsA.size();
-    jcsA.push_back(colA);
-    jcsB.push_back(colB);
-  }
-
-  std::vector<size_t> colsAComplete = jcsA;
-  std::vector<size_t> colsBComplete = jcsB;
-
-  for (size_t i = 0; i < numColsA; ++i) {
-    if (!ad_utility::contains(jcsA, i)) {
-      permutation.at(i) = colsAComplete.size();
-      colsAComplete.push_back(i);
-    }
-  }
-
-  size_t numSkippedJoinColumns = 0;
-  for (size_t i = 0; i < numColsB; ++i) {
-    if (!ad_utility::contains(jcsB, i)) {
-      permutation.at(i - numSkippedJoinColumns + numColsA) =
-          i - numSkippedJoinColumns + numColsA;
-      colsBComplete.push_back(i);
-    } else {
-      ++numSkippedJoinColumns;
-    }
-  }
-  return {std::move(jcsA), std::move(jcsB), std::move(colsAComplete),
-          std::move(colsBComplete), std::move(permutation)};
-}
-
-// The following functions `findSmallerUndefRanges...` have the following in
-// common: For a single `row` of IDs find all the iterators in the sorted range
-// `[begin, end)` that are lexicographically smaller than `row`, are compatible
-// with `row` (meaning that on each position they have either the same value, or
-// one of them is UNDEF), and contain at least one UNDEF entry. They all have to
-// following preconditions (checked via `assert()` macros):
-//   - The `row` must have the same number of entries than the elements in the
-//     range `[begin, end)`
-//   - The range `[begin, end)` must be lexicographically sorted.
-// The resulting rows are returned via a generator of iterators. The boolean
-// argument `outOfOrderElementFound` is set to true if the `row` contains at
-// least one undefined entry, and one of the compatible rows form `[begin, end)`
-// contains at least one undefined entry in a column in which `row` is defined.
-// It is in general not possible for a zipper-style join algorithm to determine
-// the correct position in the sorted output for such an element, so we have to
-// keep track of this information.
-
-// This function has the additional precondition that none of the entries of
-// `row` may be undefined. This function runs in `O(2^C * log(N) + R)` where C
-// is the number of columns, N is the size of the range `[begin, end)` and `R`
-// is the number of matching elements.
-// TODO<joka921> This can be optimized when we also know which columns of
-// `[begin, end)` can possibly contain undefined values.
-template <std::random_access_iterator It>
-auto findSmallerUndefRangesForRowsWithoutUndef(
-    const auto& row, It begin, It end,
-    [[maybe_unused]] bool& outOfOrderElementFound) -> cppcoro::generator<It> {
-  using Row = typename std::iterator_traits<It>::value_type;
-  assert(row.size() == (*begin).size());
-  assert(
-      std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
-  assert((std::ranges::all_of(
-      row, [](Id id) { return id != Id::makeUndefined(); })));
-  size_t numJoinColumns = row.size();
-  // TODO<joka921> This can be done without copying.
-  Row rowLower = row;
-
-  size_t upperBound = 1UL << row.size();
-  for (size_t i = 0; i < upperBound - 1; ++i) {
-    for (size_t j = 0; j < numJoinColumns; ++j) {
-      rowLower[j] = (i >> (numJoinColumns - j - 1)) & 1
-                        ? row[j]
-                        : ValueId::makeUndefined();
-    }
-
-    auto [begOfUndef, endOfUndef] = std::equal_range(
-        begin, end, rowLower, std::ranges::lexicographical_compare);
-    for (auto it = begOfUndef; it != endOfUndef; ++it) {
-      co_yield it;
-    }
-  }
-}
-
-// This function has the additional precondition, that the `row` contains
-// UNDEF values in all the last `numLastUndefined` columns and no UNDEF values
-// in the remaining columns. This function runs in `O(2^C * log(N) + R)` where C
-// is the number of  defined columns (`numColumns - numLastUndefined`), N is the
-// size of the range `[begin, end)` and `R` is the number of matching elements.
-
-// TODO<joka921> We could also implement a version that is optimized on the
-// [begin, end] range not having UNDEF values in some of the columns
-template <std::random_access_iterator It>
-auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
-    const auto& row, const size_t numLastUndefined, It begin, It end,
-    bool& outOfOrderElementFound) -> cppcoro::generator<It> {
-  using Row = typename std::iterator_traits<It>::value_type;
-  const size_t numJoinColumns = row.size();
-  assert(row.size() == (*begin).size());
-  assert(numJoinColumns >= numLastUndefined);
-  assert(
-      std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
-  const size_t numDefinedColumns = numJoinColumns - numLastUndefined;
-  for (size_t i = 0; i < numDefinedColumns; ++i) {
-    assert(row[i] != Id::makeUndefined());
-  }
-  for (size_t i = numDefinedColumns; i < numJoinColumns; ++i) {
-    assert(row[i] == Id::makeUndefined());
-  }
-
-  // If every entry in the row is undefined, then it is the smallest possible
-  // row, and there can be no smaller row.
-  if (numLastUndefined == 0) {
-    co_return;
-  }
-  Row rowLower = row;
-
-  size_t upperBound = 1u << numDefinedColumns;
-  for (size_t permutationCounter = 0; permutationCounter < upperBound - 1;
-       ++permutationCounter) {
-    for (size_t colIdx = 0; colIdx < numDefinedColumns; ++colIdx) {
-      rowLower[colIdx] =
-          (permutationCounter >> (numDefinedColumns - colIdx - 1)) & 1
-              ? row[colIdx]
-              : ValueId::makeUndefined();
-    }
-
-    auto begOfUndef = std::lower_bound(begin, end, rowLower,
-                                       std::ranges::lexicographical_compare);
-    rowLower[numDefinedColumns - 1] =
-        Id::fromBits(rowLower[numDefinedColumns - 1].getBits() + 1);
-    auto endOfUndef = std::lower_bound(begin, end, rowLower,
-                                       std::ranges::lexicographical_compare);
-    for (; begOfUndef != endOfUndef; ++begOfUndef) {
-      outOfOrderElementFound = true;
-      co_yield begOfUndef;
-    }
-  }
-}
-
-// This function has no additional preconditions, but runs in `O((end - begin) *
-// numColumns)`.
-template <std::random_access_iterator It>
-auto findSmallerUndefRangesArbitrary(const auto& row, It begin, It end,
-                                     bool& outOfOrderElementFound)
-    -> cppcoro::generator<It> {
-  assert(row.size() == (*begin).size());
-  assert(
-      std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
-
-  // To only get smaller entries, we first find a suitable upper bound in the
-  // input range. We use `std::lower_bound` because the input row itself is not
-  // a valid match.
-  end = std::lower_bound(begin, end, row, std::ranges::lexicographical_compare);
-
-  const size_t numJoinColumns = row.size();
-  auto isCompatible = [&](const auto& otherRow) {
-    for (size_t k = 0u; k < numJoinColumns; ++k) {
-      Id a = row[k];
-      Id b = otherRow[k];
-      bool aUndef = a == Id::makeUndefined();
-      bool bUndef = b == Id::makeUndefined();
-      bool eq = a == b;
-      auto match = aUndef || bUndef || eq;
-      if (!match) {
-        return false;
-      }
-    }
-    return true;
-  };
-
-  for (auto it = begin; it != end; ++it) {
-    if (isCompatible(*it)) {
-      outOfOrderElementFound = true;
-      co_yield it;
-    }
-  }
-  co_return;
-}
-
-// This function first checks in which positions the `row` has UNDEF values, and
-// then calls the cheapest possible of the functions defined above.
-template <std::random_access_iterator It>
-auto findSmallerUndefRanges(const auto& row, It begin, It end,
-                            bool& outOfOrderFound) -> cppcoro::generator<It> {
-  size_t numLastUndefined = 0;
-  assert(row.size() > 0);
-  auto it = std::ranges::rbegin(row);
-  auto rend = std::ranges::rend(row);
-  for (; it < rend; ++it) {
-    if (*it != Id::makeUndefined()) {
-      break;
-    }
-    ++numLastUndefined;
-  }
-
-  for (; it < rend; ++it) {
-    if (*it == Id::makeUndefined()) {
-      return findSmallerUndefRangesArbitrary(row, begin, end, outOfOrderFound);
-    }
-  }
-  if (numLastUndefined == 0) {
-    return findSmallerUndefRangesForRowsWithoutUndef(row, begin, end,
-                                                     outOfOrderFound);
-  } else {
-    return findSmallerUndefRangesForRowsWithUndefInLastColumns(
-        row, numLastUndefined, begin, end, outOfOrderFound);
-  }
-}
 
 // A function that takes an arbitrary number of arguments by reference and does
 // nothing.
@@ -244,11 +23,27 @@ auto findSmallerUndefRanges(const auto& row, It begin, It end,
   // here).
 };
 
+template <typename Pred, typename Range>
+concept BinaryRangePredicate =
+    std::indirect_binary_predicate<Pred, std::ranges::iterator_t<Range>,
+                                   std::ranges::iterator_t<Range>>;
+
+template <typename F, typename Range>
+concept UnaryIteratorFunction =
+    std::invocable<F, std::ranges::iterator_t<Range>>;
+
+template <typename F, typename Range>
+concept BinaryIteratorFunction =
+    std::invocable<F, std::ranges::iterator_t<Range>,
+                   std::ranges::iterator_t<Range>>;
+
 // TODO<joka921> Comment, cleanup, move into header.
-template <std::ranges::random_access_range Range,
-          typename ElFromFirstNotFoundAction = decltype(noop)>
+template <
+    std::ranges::random_access_range Range,
+    BinaryRangePredicate<Range> LessThan,
+    UnaryIteratorFunction<Range> ElFromFirstNotFoundAction = decltype(noop)>
 [[nodiscard]] size_t zipperJoinWithUndef(
-    const Range& range1, const Range& range2, const auto& lessThan,
+    const Range& range1, const Range& range2, const LessThan& lessThan,
     const auto& compatibleRowAction, const auto& findSmallerUndefRangesLeft,
     const auto& findSmallerUndefRangesRight,
     ElFromFirstNotFoundAction elFromFirstNotFoundAction = {}) {
@@ -322,7 +117,7 @@ template <std::ranges::random_access_range Range,
           if (!mergeWithUndefRight(*it1, std::begin(range2), it2)) {
             if (containsNoUndefined(*it1)) {
               cover(it1);
-              elFromFirstNotFoundAction(*it1);
+              elFromFirstNotFoundAction(it1);
             }
           } else {
             cover(it1);
@@ -377,7 +172,7 @@ template <std::ranges::random_access_range Range,
     for (; it1 < end1; ++it1) {
       cover(it1);
       if (!mergeWithUndefRight(*it1, std::begin(range2), std::end(range2))) {
-        elFromFirstNotFoundAction(*it1);
+        elFromFirstNotFoundAction(it1);
       }
     }
   }
@@ -387,7 +182,7 @@ template <std::ranges::random_access_range Range,
   if constexpr (hasNotFoundAction) {
     for (size_t i = 0; i < coveredFromLeft.size(); ++i) {
       if (!coveredFromLeft[i]) {
-        elFromFirstNotFoundAction(*(std::begin(range1) + i));
+        elFromFirstNotFoundAction(std::begin(range1) + i);
         ++numOutOfOrderAtEnd;
       }
     }
@@ -466,9 +261,10 @@ void gallopingJoin(const Range& smaller, const Range& larger,
 
 // TODO<joka921> Comment this abstraction
 template <std::ranges::random_access_range Range>
-void specialOptionalJoin(const Range& range1, const Range& range2,
-                         const auto& lessThan, const auto& compatibleRowAction,
-                         const auto& elFromFirstNotFoundAction) {
+void specialOptionalJoin(
+    const Range& range1, const Range& range2, const auto& lessThan,
+    const auto& compatibleRowAction,
+    const UnaryIteratorFunction<Range> auto& elFromFirstNotFoundAction) {
   auto it1 = std::begin(range1);
   auto end1 = std::end(range1);
   auto it2 = std::begin(range2);
@@ -513,8 +309,9 @@ void specialOptionalJoin(const Range& range1, const Range& range2,
       return compareAllButLast(row, *it2);
     });
 
-    std::for_each(it1, next1,
-                  [&](const auto& row) { elFromFirstNotFoundAction(row); });
+    for (auto it = it1; it != next1; ++it) {
+      elFromFirstNotFoundAction(it);
+    }
     it1 = next1;
     auto endSame1 = std::find_if_not(it1, end1, [&](const auto& row) {
       return compareEqButLast(row, *it2);
@@ -549,8 +346,9 @@ void specialOptionalJoin(const Range& range1, const Range& range2,
       compatibleRowAction(*(it1 + (&id1 - leftSub.data())),
                           *(it2 + (&id2 - rightSub.data())));
     };
-    auto notFoundAction = [&](const Id& id1) {
-      elFromFirstNotFoundAction(*(it1 + (&id1 - leftSub.data())));
+    auto notFoundAction = [&elFromFirstNotFoundAction, &it1,
+                           begin = leftSub.begin()](const auto& it) {
+      elFromFirstNotFoundAction(it1 + (it - begin));
     };
 
     size_t numOutOfOrder = ad_utility::zipperJoinWithUndef(
@@ -560,7 +358,8 @@ void specialOptionalJoin(const Range& range1, const Range& range2,
     it1 = endSame1;
     it2 = endSame2;
   }
-  std::for_each(it1, end1,
-                [&](const auto& row) { elFromFirstNotFoundAction(row); });
+  for (auto it = it1; it != end1; ++it) {
+    elFromFirstNotFoundAction(it);
+  }
 }
 }  // namespace ad_utility

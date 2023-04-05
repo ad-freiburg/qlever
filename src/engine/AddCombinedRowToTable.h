@@ -175,9 +175,8 @@ class AddCombinedRowToIdTable {
     // Note: There is quite some code duplication between this lambda and the
     // previous one. I have tried to unify them but this lead to template-heavy
     // code that was very hard to read for humans.
-    auto writeNonJoinColumn = [&result, &mergeWithUndefined, oldSize,
-                               this]<bool isColFromLeft>(size_t colIdx,
-                                                         size_t resultColIdx) {
+    auto writeNonJoinColumn = [&result, oldSize, this]<bool isColFromLeft>(
+                                  size_t colIdx, size_t resultColIdx) {
       decltype(auto) col = isColFromLeft ? inputLeft_.getColumn(colIdx)
                                          : inputRight_.getColumn(colIdx);
       // TODO<joka921> Implement prefetching.
