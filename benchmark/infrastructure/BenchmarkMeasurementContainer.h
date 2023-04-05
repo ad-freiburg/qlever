@@ -85,7 +85,8 @@ class RecordGroup {
 
   @param descriptor A string to identify this instance in json format later.
   */
-  RecordGroup(const std::string& descriptor): descriptor_{descriptor} {}
+  explicit RecordGroup(const std::string& descriptor): descriptor_{descriptor}
+  {}
 
   // A custom copy constructor is needed because of `entries_`. The default
   // copy constructor tires to copy them, which is an illegal operation.
