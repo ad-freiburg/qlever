@@ -36,7 +36,7 @@ class KeyIsntRegisteredException : public std::exception {
       message_ += ".";
     }
 
-    const char * what () const throw () {
+    const char * what () const throw () final{
       return message_.c_str();
     }
 };
@@ -97,7 +97,7 @@ class HashMapWithInsertionOrder{
    * @brief Returns all values in the order, that they were inserted into the
    *  hash map.
    */
-  const std::vector<Value> getAllValues() const{
+  std::vector<Value> getAllValues() const{
     return values_;
   }
 
