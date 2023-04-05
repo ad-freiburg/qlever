@@ -91,6 +91,13 @@ class RecordGroup {
   // copy constructor tires to copy them, which is an illegal operation.
   RecordGroup(const RecordGroup& group);
 
+  // Default destructor.
+  ~RecordGroup() = default;
+
+  // Deleting the default copy constructor. We don't use it and implementing
+  // it would be a waste of time.
+  RecordGroup& operator=(const RecordGroup&) = delete;
+
   /*
   @brief Adds a new instance of `RecordEntry` to the group.
 

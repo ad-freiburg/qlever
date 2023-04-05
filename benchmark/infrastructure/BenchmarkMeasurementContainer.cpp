@@ -8,6 +8,7 @@
 #include <memory>
 #include <sstream>
 #include <algorithm>
+#include <string_view>
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkRecordToString.h"
