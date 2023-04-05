@@ -150,8 +150,8 @@ with the json object literal keys `index` and `value`.
 */
 namespace nlohmann {
 template <typename T>
-requires std::is_copy_constructible<T>::value struct adl_serializer<
-    std::unique_ptr<T>> {
+requires std::is_copy_constructible_v<T>
+struct adl_serializer<std::unique_ptr<T>> {
   static void to_json(nlohmann::json& j, const std::unique_ptr<T>& ptr) {
     // Does the `unique_ptr` hold anything? If yes, save the dereferenced
     // object, if no, save a `nullptr`.
