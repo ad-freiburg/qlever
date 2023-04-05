@@ -32,9 +32,6 @@ Server::Server(unsigned short port, int numThreads, size_t maxMemGB,
             cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
                                             numBytesToAllocate / sizeof(Id));
           }},
-      sortPerformanceEstimator_(),
-      index_(),
-      engine_(),
       enablePatternTrick_(usePatternTrick),
       // The number of server threads currently also is the number of queries
       // that can be processed simultaneously.

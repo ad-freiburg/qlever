@@ -57,7 +57,9 @@ class Server {
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
-  Engine engine_;
+  // TODO is this member even required?
+  // The engine class only has static functions
+  [[no_unique_address]] Engine engine_;
 
   bool enablePatternTrick_;
 
