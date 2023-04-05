@@ -80,18 +80,18 @@ class ValueId {
   /// `maxIndex`.
   struct IndexTooLargeException : public std::exception {
    private:
-    std::string _errorMessage;
+    std::string errorMessage_;
 
    public:
     IndexTooLargeException(T tooBigValue,
                            ad_utility::source_location s =
                                ad_utility::source_location::current()) {
-      _errorMessage = absl::StrCat(
+      errorMessage_ = absl::StrCat(
           s.file_name(), ", line ", s.line(), ": The given value ", tooBigValue,
           " is bigger than what the maxIndex of ValueId allows.");
     }
 
-    const char* what() const noexcept override { return _errorMessage.c_str(); }
+    const char* what() const noexcept override { return errorMessage_.c_str(); }
   };
 
   /// A struct that represents the single undefined value. This is required for
