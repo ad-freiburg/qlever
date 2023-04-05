@@ -114,34 +114,38 @@ template <
       [&cover, &compatibleRowAction,
        &outOfOrderFound]<bool reversed, typename FindUndef>(
           const auto& lt, const FindUndef& findUndef) {
-        return
-            [&cover, &lt, &findUndef, &compatibleRowAction, &outOfOrderFound](
-                Iterator el, Iterator startOfRange, Iterator endOfRange) {
-              (void)findUndef;
-              (void)compatibleRowAction;
-              (void)cover;
-              (void)lt;
-              (void)outOfOrderFound;
-              if constexpr (ad_utility::isSimilar<FindUndef, decltype(noop)>) {
-                return false;
-              } else {
-                bool compatibleWasFound = false;
-                auto smallerUndefRanges =
-                    findUndef(*el, startOfRange, endOfRange, outOfOrderFound);
-                for (const auto& it : smallerUndefRanges) {
-                  if (lt(*it, *el)) {
-                    compatibleWasFound = true;
-                    if constexpr (reversed) {
-                      compatibleRowAction(el, it);
-                    } else {
-                      compatibleRowAction(it, el);
-                      cover(it);
-                    }
-                  }
+        return [&cover, &lt, &findUndef, &compatibleRowAction,
+                &outOfOrderFound](Iterator rowIt, Iterator startOfRange,
+                                  Iterator endOfRange) {
+          (void)findUndef;
+          (void)compatibleRowAction;
+          (void)cover;
+          (void)lt;
+          (void)outOfOrderFound;
+          if constexpr (ad_utility::isSimilar<FindUndef, decltype(noop)>) {
+            return false;
+          } else {
+            bool compatibleWasFound = false;
+            // We need to bind the const& to a variable, else it will be
+            // dangling inside the `findUndef` coroutine.
+            const auto& row = *rowIt;
+            auto smallerUndefRanges =
+                findUndef(row, startOfRange, endOfRange, outOfOrderFound);
+            for (const auto& it :
+                 findUndef(row, startOfRange, endOfRange, outOfOrderFound)) {
+              if (lt(*it, *rowIt)) {
+                compatibleWasFound = true;
+                if constexpr (reversed) {
+                  compatibleRowAction(rowIt, it);
+                } else {
+                  compatibleRowAction(it, rowIt);
+                  cover(it);
                 }
-                return compatibleWasFound;
               }
-            };
+            }
+            return compatibleWasFound;
+          }
+        };
       };
   auto mergeWithUndefLeft = makeMergeWithUndefLeft.template operator()<false>(
       lessThan, findSmallerUndefRangesLeft);
@@ -238,10 +242,27 @@ template <
                          : numOutOfOrderAtEnd;
 }
 
-// _____________________________________________________________________________
+/**
+ *
+ * @brief Perform the galloping join algorithm on a `smaller` and a `larger`
+ * input. For each pair of matching iterators, the given `action` is called.
+ * @param smaller The left input to the join. Must not contain UNDEF values,
+ * otherwise the result is wrong. Should be much smaller than `larger`,
+ * otherwise the zipper/merge join algorithm should be used for efficiency
+ * reasons.
+ * @param larger The right input to the join. Must not contain UNDEF values,
+ * otherwise the result is wrong.
+ * @param lessThan The predicate that is used to identify equal entry pairs in
+ * `smaller` and `larger`. Both inputs must be sorted by this predicate.
+ * @param action For each pair of equal entries (entryFromSmaller,
+ * entryFromLarger), this function is called with the iterators to the matching
+ * entries as arguments. These calls will be in ascending order wrt `lessThan`,
+ * meaning that the result will be sorted.
+ */
 template <std::ranges::random_access_range Range>
 void gallopingJoin(const Range& smaller, const Range& larger,
-                   const auto& lessThan, auto&& action) {
+                   BinaryRangePredicate<Range> auto const& lessThan,
+                   BinaryIteratorFunction<Range> auto const& action) {
   auto itSmall = std::begin(smaller);
   auto endSmall = std::end(smaller);
   auto itLarge = std::begin(larger);
