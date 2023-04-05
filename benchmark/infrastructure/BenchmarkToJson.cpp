@@ -21,6 +21,16 @@ void to_json(nlohmann::json& j, const BenchmarkRecords& records){
 }
 
 /*
+Requires `TranslationFunction` to be a invocable function, that takes one
+parameter of a specific type and returns a `nlohmann::json` object.
+*/
+template<typename SourceType, typename TranslationFunction>
+concept TransformsSourceTypeToJson =
+requires(TranslationFunction t, SourceType v){
+  {t(v)} -> std::same_as<nlohmann::json>;
+};
+
+/*
 @brief Transforms the content of a vector into a json array, using a
 provided translation function for the vector entries.
 
@@ -28,9 +38,7 @@ provided translation function for the vector entries.
 and returns a `nlohmann:json` object.
 */
 template<typename VectorType, typename TranslationFunction>
-requires requires(TranslationFunction t, VectorType v){
-  {t(v)} -> std::same_as<nlohmann::json>;
-}
+requires TransformsSourceTypeToJson<VectorType, TranslationFunction>
 static nlohmann::json transformIntoJsonArray(const std::vector<VectorType>& vec,
   TranslationFunction translationFunction){
   // Without explicit instantiation, `nlohmann::json` is not guaranteed, to
