@@ -102,11 +102,15 @@ RecordTable::operator std::string() const{
     return std::visit(entryToStringVisitor, entry);
   };
 
-  // Add a string to a stringstream with enough padding, empty spaces to the
-  // right of the string, to reach the wanted length.
+  /*
+  Add a string to a stringstream with enough padding, empty spaces to the
+  right of the string, to reach the wanted length. Doesn't shorten the
+  given string.
+  */
   auto addStringWithPadding = [](std::ostringstream& stream,
-      const auto& text, const size_t wantedLength){
-    stream << std::setw(wantedLength) << std::left << text;
+      const std::string& text, const size_t wantedLength){
+    const std::string padding(wantedLength - text.length(), ' ');
+    stream << text << padding;
   };
 
   // For printing the table.
