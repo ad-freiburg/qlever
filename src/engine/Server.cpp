@@ -22,23 +22,23 @@ using Awaitable = Server::Awaitable<T>;
 // __________________________________________________________________________
 Server::Server(unsigned short port, int numThreads, size_t maxMemGB,
                std::string accessToken, bool usePatternTrick)
-    : _numThreads(numThreads),
-      _port(port),
+    : numThreads_(numThreads),
+      port_(port),
       accessToken_(std::move(accessToken)),
-      _allocator{
+      allocator_{
           ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMemGB *
                                                                (1ULL << 30U)),
           [this](size_t numBytesToAllocate) {
-            _cache.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
+            cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
                                             numBytesToAllocate / sizeof(Id));
           }},
-      _sortPerformanceEstimator(),
-      _index(),
-      _engine(),
-      _enablePatternTrick(usePatternTrick),
+      sortPerformanceEstimator_(),
+      index_(),
+      engine_(),
+      enablePatternTrick_(usePatternTrick),
       // The number of server threads currently also is the number of queries
       // that can be processed simultaneously.
-      _queryProcessingSemaphore(numThreads) {
+      queryProcessingSemaphore_(numThreads) {
   // TODO<joka921> Write a strong type for KB, MB, GB etc and use it
   // in the cache and the memory limit
   // Convert a number of gigabytes to the number of Ids that find in that
@@ -49,14 +49,14 @@ Server::Server(unsigned short port, int numThreads, size_t maxMemGB,
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
   RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
-      [this](size_t newValue) { _cache.setMaxNumEntries(newValue); });
+      [this](size_t newValue) { cache_.setMaxNumEntries(newValue); });
   RuntimeParameters().setOnUpdateAction<"cache-max-size-gb">(
       [this, toNumIds](size_t newValue) {
-        _cache.setMaxSize(toNumIds(newValue));
+        cache_.setMaxSize(toNumIds(newValue));
       });
   RuntimeParameters().setOnUpdateAction<"cache-max-size-gb-single-entry">(
       [this, toNumIds](size_t newValue) {
-        _cache.setMaxSizeSingleEntry(toNumIds(newValue));
+        cache_.setMaxSizeSingleEntry(toNumIds(newValue));
       });
 }
 
@@ -65,23 +65,23 @@ void Server::initialize(const string& indexBaseName, bool useText,
                         bool usePatterns, bool loadAllPermutations) {
   LOG(INFO) << "Initializing server ..." << std::endl;
 
-  _index.setUsePatterns(usePatterns);
-  _index.setLoadAllPermutations(loadAllPermutations);
+  index_.setUsePatterns(usePatterns);
+  index_.setLoadAllPermutations(loadAllPermutations);
 
   // Init the index.
-  _index.createFromOnDiskIndex(indexBaseName);
+  index_.createFromOnDiskIndex(indexBaseName);
   if (useText) {
-    _index.addTextFromOnDiskIndex();
+    index_.addTextFromOnDiskIndex();
   }
 
-  _sortPerformanceEstimator.computeEstimatesExpensively(
-      _allocator, _index.numTriples().normalAndInternal_() *
+  sortPerformanceEstimator_.computeEstimatesExpensively(
+      allocator_, index_.numTriples().normalAndInternal_() *
                       PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
 
   LOG(INFO) << "Access token for restricted API calls is \"" << accessToken_
             << "\"" << std::endl;
   LOG(INFO) << "The server is ready, listening for requests on port "
-            << std::to_string(_port) << " ..." << std::endl;
+            << std::to_string(port_) << " ..." << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -139,7 +139,7 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
   // First set up the HTTP server, so that it binds to the socket, and
   // the "socket already in use" error appears quickly.
   auto httpServer =
-      HttpServer{_port, "0.0.0.0", _numThreads, std::move(httpSessionHandler)};
+      HttpServer{port_, "0.0.0.0", numThreads_, std::move(httpSessionHandler)};
 
   // Initialize the index
   initialize(indexBaseName, useText, usePatterns, loadAllPermutations);
@@ -304,12 +304,12 @@ Awaitable<void> Server::process(
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-cache")) {
     logCommand(cmd, "clear the cache (unpinned elements only)");
-    _cache.clearUnpinnedOnly();
+    cache_.clearUnpinnedOnly();
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd =
                  checkParameter("cmd", "clear-cache-complete", accessTokenOk)) {
     logCommand(cmd, "clear cache completely (including unpinned elements)");
-    _cache.clearAll();
+    cache_.clearAll();
     response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
@@ -333,7 +333,7 @@ Awaitable<void> Server::process(
           checkParameter("index-description", std::nullopt, accessTokenOk)) {
     LOG(INFO) << "Setting index description to: \"" << description.value()
               << "\"" << std::endl;
-    _index.setKbName(description.value());
+    index_.setKbName(description.value());
     response = createJsonResponse(composeStatsJson(), request);
   }
 
@@ -342,7 +342,7 @@ Awaitable<void> Server::process(
           checkParameter("text-description", std::nullopt, accessTokenOk)) {
     LOG(INFO) << "Setting text description to: \"" << description.value()
               << "\"" << std::endl;
-    _index.setTextName(description.value());
+    index_.setTextName(description.value());
     response = createJsonResponse(composeStatsJson(), request);
   }
 
@@ -438,35 +438,35 @@ json Server::composeErrorResponseJson(
 // _____________________________________________________________________________
 json Server::composeStatsJson() const {
   json result;
-  result["name-index"] = _index.getKbName();
-  result["num-permutations"] = (_index.hasAllPermutations() ? 6 : 2);
-  result["num-predicates-normal"] = _index.numDistinctPredicates().normal_;
-  result["num-predicates-internal"] = _index.numDistinctPredicates().internal_;
-  if (_index.hasAllPermutations()) {
-    result["num-subjects-normal"] = _index.numDistinctSubjects().normal_;
-    result["num-subjects-internal"] = _index.numDistinctSubjects().internal_;
-    result["num-objects-normal"] = _index.numDistinctObjects().normal_;
-    result["num-objects-internal"] = _index.numDistinctObjects().internal_;
+  result["name-index"] = index_.getKbName();
+  result["num-permutations"] = (index_.hasAllPermutations() ? 6 : 2);
+  result["num-predicates-normal"] = index_.numDistinctPredicates().normal_;
+  result["num-predicates-internal"] = index_.numDistinctPredicates().internal_;
+  if (index_.hasAllPermutations()) {
+    result["num-subjects-normal"] = index_.numDistinctSubjects().normal_;
+    result["num-subjects-internal"] = index_.numDistinctSubjects().internal_;
+    result["num-objects-normal"] = index_.numDistinctObjects().normal_;
+    result["num-objects-internal"] = index_.numDistinctObjects().internal_;
   }
 
-  auto numTriples = _index.numTriples();
+  auto numTriples = index_.numTriples();
   result["num-triples-normal"] = numTriples.normal_;
   result["num-triples-internal"] = numTriples.internal_;
-  result["name-text-index"] = _index.getTextName();
-  result["num-text-records"] = _index.getNofTextRecords();
-  result["num-word-occurrences"] = _index.getNofWordPostings();
-  result["num-entity-occurrences"] = _index.getNofEntityPostings();
+  result["name-text-index"] = index_.getTextName();
+  result["num-text-records"] = index_.getNofTextRecords();
+  result["num-word-occurrences"] = index_.getNofWordPostings();
+  result["num-entity-occurrences"] = index_.getNofEntityPostings();
   return result;
 }
 
 // _______________________________________
 nlohmann::json Server::composeCacheStatsJson() const {
   nlohmann::json result;
-  result["num-non-pinned-entries"] = _cache.numNonPinnedEntries();
-  result["num-pinned-entries"] = _cache.numPinnedEntries();
-  result["non-pinned-size"] = _cache.nonPinnedSize();
-  result["pinned-size"] = _cache.pinnedSize();
-  result["num-pinned-index-scan-sizes"] = _cache.pinnedSizes().rlock()->size();
+  result["num-non-pinned-entries"] = cache_.numNonPinnedEntries();
+  result["num-pinned-entries"] = cache_.numPinnedEntries();
+  result["non-pinned-size"] = cache_.nonPinnedSize();
+  result["pinned-size"] = cache_.pinnedSize();
+  result["num-pinned-index-scan-sizes"] = cache_.pinnedSizes().rlock()->size();
   return result;
 }
 
@@ -586,11 +586,11 @@ boost::asio::awaitable<void> Server::processQuery(
     // might happen that the query planner runs for a while (recall that it many
     // do index scans) and then we get an error message afterwards that a
     // certain media type is not supported.
-    QueryExecutionContext qec(_index, _engine, &_cache, _allocator,
-                              _sortPerformanceEstimator, pinSubtrees,
+    QueryExecutionContext qec(index_, engine_, &cache_, allocator_,
+                              sortPerformanceEstimator_, pinSubtrees,
                               pinResult);
     QueryPlanner qp(&qec);
-    qp.setEnablePatternTrick(_enablePatternTrick);
+    qp.setEnablePatternTrick(enablePatternTrick_);
     queryExecutionTree = qp.createExecutionTree(pq);
     auto& qet = queryExecutionTree.value();
     qet.isRoot() = true;  // allow pinning of the final result
@@ -720,10 +720,10 @@ template <typename Function, typename T>
 Awaitable<T> Server::computeInNewThread(Function function) const {
   auto acquireComputeRelease = [this, function = std::move(function)] {
     LOG(DEBUG) << "Acquiring new thread for query processing\n";
-    _queryProcessingSemaphore.acquire();
+    queryProcessingSemaphore_.acquire();
     absl::Cleanup f{[this]() noexcept {
       try {
-        _queryProcessingSemaphore.release();
+        queryProcessingSemaphore_.release();
       } catch (...) {
       }
     }};
