@@ -37,12 +37,12 @@ void testSmallerUndefRangesForArbitraryRows(
   auto t = generateLocationTrace(l);
   // TODO<joka921> also actually test the bool;
   [[maybe_unused]] bool outOfOrder;
-  EXPECT_THAT(toPositions(findSmallerUndefRangesArbitrary<std::array<Id, I>>(
+  EXPECT_THAT(toPositions(findSmallerUndefRangesArbitrary(
                               row, range.begin(), range.end(), outOfOrder),
                           range),
               ::testing::ElementsAreArray(positions));
-  EXPECT_THAT(toPositions(findSmallerUndefRanges<std::array<Id, I>>(
-                              row, range.begin(), range.end(), outOfOrder),
+  EXPECT_THAT(toPositions(findSmallerUndefRanges(row, range.begin(),
+                                                 range.end(), outOfOrder),
                           range),
               ::testing::ElementsAreArray(positions));
 }
@@ -57,7 +57,7 @@ void testSmallerUndefRangesForRowsWithoutUndef(
   std::vector<int64_t> foundPositions;
   // TODO<joka921> also actually test the bool;
   [[maybe_unused]] bool outOfOrder;
-  for (auto it : findSmallerUndefRangesForRowsWithoutUndef<std::array<Id, I>>(
+  for (auto it : findSmallerUndefRangesForRowsWithoutUndef(
            row, range.begin(), range.end(), outOfOrder)) {
     foundPositions.push_back(it - range.begin());
   }

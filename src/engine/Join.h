@@ -95,7 +95,7 @@ class Join : public Operation {
    * a proper switch.
    **/
   void join(const IdTable& dynA, size_t jc1, const IdTable& dynB, size_t jc2,
-            IdTable* dynRes);
+            IdTable* result) const;
 
   /**
    * @brief Joins IdTables dynA and dynB on join column jc2, returning

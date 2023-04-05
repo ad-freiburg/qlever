@@ -85,23 +85,12 @@ ResultTable Join::computeResult() {
   size_t leftWidth = _left->getResultWidth();
   size_t rightWidth = _right->getResultWidth();
   IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(leftWidth + rightWidth - 1);
 
-  // TODO<joka921> Currently the _resultTypes are set incorrectly in case
-  // of early stopping. For now, early stopping is thus disabled.
-  // TODO: Implement getting the result types without calculating the result;
-  /*
-  // Checking this before calling getResult on the subtrees can
-  // avoid the computation of an non-empty subtree.
   if (_left->knownEmptyResult() || _right->knownEmptyResult()) {
-    LOG(TRACE) << "Either side is empty thus join result is empty" << endl;
-    runtimeInfo.addDetail("Either side was empty", "");
-    size_t resWidth = leftWidth + rightWidth - 1;
-    result->_data.setNumColumns(resWidth);
-    result->_resultTypes.resize(result->_data.numColumns());
-    result->_sortedBy = {_leftJoinCol};
-    return;
+    // TODO<joka921> We should set the childrens' runtimeInfo to "optimizedOut"
+    return {std::move(idTable), resultSortedOn(), LocalVocab()};
   }
-   */
 
   // Check for joins with dummy
   AD_CORRECTNESS_CHECK(!isFullScanDummy(_left));
@@ -109,40 +98,19 @@ ResultTable Join::computeResult() {
     return computeResultForJoinWithFullScanDummy();
   }
 
-  LOG(TRACE) << "Computing left side..." << endl;
   shared_ptr<const ResultTable> leftRes = _left->getResult();
-
-  // TODO<joka921> Currently the _resultTypes are set incorrectly in case
-  // of early stopping. For now, early stopping is thus disabled.
-  // TODO: Implement getting the result types without calculating the result;
-  // Check if we can stop early.
-  /*
   if (leftRes->size() == 0) {
-    LOG(TRACE) << "Left side empty thus join result is empty" << endl;
-    runtimeInfo.addDetail("The left side was empty", "");
-    size_t resWidth = leftWidth + rightWidth - 1;
-    result->_data.setNumColumns(resWidth);
-    result->_resultTypes.resize(result->_data.numColumns());
-    result->_sortedBy = {_leftJoinCol};
-    return;
+    return {std::move(idTable), resultSortedOn(), LocalVocab()};
+    // TODO<joka921> We should set the right child's runtimeInfo to
+    // "optimizedOut"
   }
-   */
 
-  LOG(TRACE) << "Computing right side..." << endl;
   shared_ptr<const ResultTable> rightRes = _right->getResult();
 
   LOG(DEBUG) << "Computing Join result..." << endl;
 
-  idTable.setNumColumns(leftWidth + rightWidth - 1);
-
   join(leftRes->idTable(), _leftJoinCol, rightRes->idTable(), _rightJoinCol,
        &idTable);
-
-  /*
-  CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::join, this,
-                  leftRes->idTable(), _leftJoinCol, rightRes->idTable(),
-                  _rightJoinCol, &idTable);
-  */
 
   LOG(DEBUG) << "Join result computation done" << endl;
 
@@ -424,7 +392,7 @@ void Join::appendCrossProduct(const IdTable::const_iterator& leftBegin,
 // ______________________________________________________________________________
 
 void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
-                size_t jc2, IdTable* result) {
+                size_t jc2, IdTable* result) const {
   const auto& a = dynA;
   const auto& b = dynB;
 
@@ -458,16 +426,17 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     rowAdder.addRow(&rowA - dynASubset.data(), &rowB - dynBSubset.data());
   };
 
+  // TODO<joka921> `joinColumnL` and `dynASubset` are exactly the same thing for
+  // the case of one column.
   auto joinColumnL = a.getColumn(jc1);
   auto joinColumnR = b.getColumn(jc2);
-  auto aUndef = std::equal_range(joinColumnL.begin(), joinColumnL.end(),
-                                 ValueId::makeUndefined());
-  auto bUndef = std::equal_range(joinColumnR.begin(), joinColumnR.end(),
-                                 ValueId::makeUndefined());
-  // The undef values are right at the start, so this simplified calculation
-  // should work.
-  auto numUndefA = aUndef.second - aUndef.first;
-  auto numUndefB = bUndef.second - bUndef.first;
+  // The undef values are right at the start, so this calculation works.
+  size_t numUndefA =
+      std::ranges::upper_bound(joinColumnL, ValueId::makeUndefined()) -
+      joinColumnL.begin();
+  size_t numUndefB =
+      std::ranges::upper_bound(joinColumnR, ValueId::makeUndefined()) -
+      joinColumnR.begin();
   std::pair aUnd{dynASubset.begin(), dynASubset.begin() + numUndefA};
   std::pair bUnd{dynBSubset.begin(), dynBSubset.begin() + numUndefB};
   // Cannot just switch l1 and l2 around because the order of

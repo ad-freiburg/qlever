@@ -47,7 +47,9 @@ class AddCombinedRowToIdTable {
 
   // The first row index in the output for which a result has neither been
   // written nor stored in one of the buffers.
-  size_t nextIndex_ = 0ul;
+  // TODO<joka921> This comment is out of date, write what this actually
+  // represents.
+  size_t nextIndex_ = 0;
 
   // The number of rows for which the indices are buffered until they are
   // materialized and written to the result in one go.
@@ -101,14 +103,19 @@ class AddCombinedRowToIdTable {
   // because that is very likely a bug, because the complete result is not
   // written until `flush()` is called.
   ~AddCombinedRowToIdTable() {
-    // TODO<joka921> Change this to an
-    // `OnDestructionDontThrowDuringStackUnwinding` to make it safe.
     if (!indexBuffer_.empty() && std::uncaught_exceptions() == 0) {
       AD_THROW(
           "Before destroying an object of type AddCombinedRowToIdTable, the "
           "`flush` method must be called. Please report this");
     }
   }
+
+  // Disable copying and moving, it is currently not needed and makes it harder
+  // to reason about
+  AddCombinedRowToIdTable(const AddCombinedRowToIdTable&) = delete;
+  AddCombinedRowToIdTable& operator=(const AddCombinedRowToIdTable&) = delete;
+  AddCombinedRowToIdTable(AddCombinedRowToIdTable&&) = delete;
+  AddCombinedRowToIdTable& operator=(AddCombinedRowToIdTable&&) = delete;
 
   // Write the result rows the indices of which have been stored in the buffers
   // since the last call to `flush()`. This function is automatically called by
@@ -154,7 +161,7 @@ class AddCombinedRowToIdTable {
 
       // Write the matching rows. For join columns (numInputs == 2) the inputs
       // are combined, for non-join-columns, the (single) input is just copied.
-      for (auto [targetIndex, sourceIndices] : indexBuffer_) {
+      for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
         // The explicit capturing of the structured binding is required for
         // Clang <= 15.
         auto resultId = [&, sourceIndices = sourceIndices]() -> Id {
@@ -166,7 +173,7 @@ class AddCombinedRowToIdTable {
                                       std::get<1>(cols)[sourceIndices[1]]);
           }
         }();
-        numUndef += resultId == Id::makeUndefined();
+        numUndef += static_cast<size_t>(resultId == Id::makeUndefined());
         resultCol[oldSize + targetIndex] = resultId;
       }
 
@@ -199,7 +206,7 @@ class AddCombinedRowToIdTable {
 
     indexBuffer_.clear();
     optionalIndexBuffer_.clear();
-    nextIndex_ = 0ul;
+    nextIndex_ = 0;
   }
 };
 }  // namespace ad_utility

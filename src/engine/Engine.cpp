@@ -9,7 +9,7 @@
 // The actual implementation of sorting an `IdTable` according to the
 // `sortCols`.
 void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
-  int width = idTable.numColumns();
+  size_t width = idTable.numColumns();
 
   // Instantiate specialized comparison lambdas for one and two sort columns
   // and use a generic comparison for a higher number of sort columns.

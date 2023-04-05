@@ -34,7 +34,8 @@ inline JoinColumnData prepareJoinColumns(
     jcsB.push_back(colB);
   }
 
-  std::vector<size_t> colsAComplete = jcsA, colsBComplete = jcsB;
+  std::vector<size_t> colsAComplete = jcsA;
+  std::vector<size_t> colsBComplete = jcsB;
 
   for (size_t i = 0; i < numColsA; ++i) {
     if (!ad_utility::contains(jcsA, i)) {
@@ -80,11 +81,11 @@ inline JoinColumnData prepareJoinColumns(
 // is the number of matching elements.
 // TODO<joka921> This can be optimized when we also know which columns of
 // `[begin, end)` can possibly contain undefined values.
+template <std::random_access_iterator It>
 auto findSmallerUndefRangesForRowsWithoutUndef(
-    const auto& row, auto begin, auto end,
-    [[maybe_unused]] bool& outOfOrderElementFound)
-    -> cppcoro::generator<decltype(begin)> {
-  using Row = typename std::iterator_traits<decltype(begin)>::value_type;
+    const auto& row, It begin, It end,
+    [[maybe_unused]] bool& outOfOrderElementFound) -> cppcoro::generator<It> {
+  using Row = typename std::iterator_traits<It>::value_type;
   assert(row.size() == (*begin).size());
   assert(
       std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
@@ -94,7 +95,7 @@ auto findSmallerUndefRangesForRowsWithoutUndef(
   // TODO<joka921> This can be done without copying.
   Row rowLower = row;
 
-  size_t upperBound = 1ul << row.size();
+  size_t upperBound = 1UL << row.size();
   for (size_t i = 0; i < upperBound - 1; ++i) {
     for (size_t j = 0; j < numJoinColumns; ++j) {
       rowLower[j] = (i >> (numJoinColumns - j - 1)) & 1
@@ -104,8 +105,8 @@ auto findSmallerUndefRangesForRowsWithoutUndef(
 
     auto [begOfUndef, endOfUndef] = std::equal_range(
         begin, end, rowLower, std::ranges::lexicographical_compare);
-    for (; begOfUndef != endOfUndef; ++begOfUndef) {
-      co_yield begOfUndef;
+    for (auto it = begOfUndef; it != endOfUndef; ++it) {
+      co_yield it;
     }
   }
 }
@@ -118,10 +119,11 @@ auto findSmallerUndefRangesForRowsWithoutUndef(
 
 // TODO<joka921> We could also implement a version that is optimized on the
 // [begin, end] range not having UNDEF values in some of the columns
+template <std::random_access_iterator It>
 auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
-    const auto& row, const size_t numLastUndefined, auto begin, auto end,
-    bool& outOfOrderElementFound) -> cppcoro::generator<decltype(begin)> {
-  using Row = typename std::iterator_traits<decltype(begin)>::value_type;
+    const auto& row, const size_t numLastUndefined, It begin, It end,
+    bool& outOfOrderElementFound) -> cppcoro::generator<It> {
+  using Row = typename std::iterator_traits<It>::value_type;
   const size_t numJoinColumns = row.size();
   assert(row.size() == (*begin).size());
   assert(numJoinColumns >= numLastUndefined);
@@ -167,9 +169,10 @@ auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
 
 // This function has no additional preconditions, but runs in `O((end - begin) *
 // numColumns)`.
-auto findSmallerUndefRangesArbitrary(const auto& row, auto begin, auto end,
+template <std::random_access_iterator It>
+auto findSmallerUndefRangesArbitrary(const auto& row, It begin, It end,
                                      bool& outOfOrderElementFound)
-    -> cppcoro::generator<decltype(begin)> {
+    -> cppcoro::generator<It> {
   assert(row.size() == (*begin).size());
   assert(
       std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
@@ -206,9 +209,9 @@ auto findSmallerUndefRangesArbitrary(const auto& row, auto begin, auto end,
 
 // This function first checks in which positions the `row` has UNDEF values, and
 // then calls the cheapest possible of the functions defined above.
-auto findSmallerUndefRanges(const auto& row, auto begin, auto end,
-                            bool& outOfOrderFound)
-    -> cppcoro::generator<decltype(begin)> {
+template <std::random_access_iterator It>
+auto findSmallerUndefRanges(const auto& row, It begin, It end,
+                            bool& outOfOrderFound) -> cppcoro::generator<It> {
   size_t numLastUndefined = 0;
   assert(row.size() > 0);
   auto it = std::ranges::rbegin(row);
@@ -234,24 +237,32 @@ auto findSmallerUndefRanges(const auto& row, auto begin, auto end,
   }
 }
 
-[[maybe_unused]] static inline auto noop = [](auto&&...) {};
+// A function that takes an arbitrary number of arguments by reference and does
+// nothing.
+[[maybe_unused]] static inline auto noop = [](const auto&...) {
+  // This function deliberately does nothing (static analysis expectes a comment
+  // here).
+};
+
 // TODO<joka921> Comment, cleanup, move into header.
-template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
+template <std::ranges::random_access_range Range,
+          typename ElFromFirstNotFoundAction = decltype(noop)>
 [[nodiscard]] size_t zipperJoinWithUndef(
-    Range&& range1, Range&& range2, auto&& lessThan, auto&& compatibleRowAction,
-    auto&& findSmallerUndefRangesLeft, auto&& findSmallerUndefRangesRight,
+    const Range& range1, const Range& range2, const auto& lessThan,
+    const auto& compatibleRowAction, const auto& findSmallerUndefRangesLeft,
+    const auto& findSmallerUndefRangesRight,
     ElFromFirstNotFoundAction elFromFirstNotFoundAction = {}) {
   static constexpr bool hasNotFoundAction =
       !ad_utility::isSimilar<ElFromFirstNotFoundAction, decltype(noop)>;
-  auto it1 = range1.begin();
-  auto end1 = range1.end();
-  auto it2 = range2.begin();
-  auto end2 = range2.end();
+  auto it1 = std::begin(range1);
+  auto end1 = std::end(range1);
+  auto it2 = std::begin(range2);
+  auto end2 = std::end(range2);
 
   std::vector<bool> coveredFromLeft(end1 - it1);
   auto cover = [&](auto it) {
     if constexpr (hasNotFoundAction) {
-      coveredFromLeft[it - range1.begin()] = true;
+      coveredFromLeft[it - std::begin(range1)] = true;
     }
   };
 
@@ -308,7 +319,7 @@ template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
     while (it1 < end1 && it2 < end2) {
       while (lessThan(*it1, *it2)) {
         if constexpr (hasNotFoundAction) {
-          if (!mergeWithUndefRight(*it1, range2.begin(), it2)) {
+          if (!mergeWithUndefRight(*it1, std::begin(range2), it2)) {
             if (containsNoUndefined(*it1)) {
               cover(it1);
               elFromFirstNotFoundAction(*it1);
@@ -323,7 +334,7 @@ template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
         }
       }
       while (lessThan(*it2, *it1)) {
-        mergeWithUndefLeft(*it2, range1.begin(), it1);
+        mergeWithUndefLeft(*it2, std::begin(range1), it1);
         ++it2;
         if (it2 >= end2) {
           return;
@@ -341,10 +352,10 @@ template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
           it2, end2, [&](const auto& row) { return eq(*it1, row); });
 
       std::for_each(it1, endSame1, [&](const auto& row) {
-        mergeWithUndefRight(row, range2.begin(), it2);
+        mergeWithUndefRight(row, std::begin(range2), it2);
       });
       std::for_each(it2, endSame2, [&](const auto& row) {
-        mergeWithUndefLeft(row, range1.begin(), it1);
+        mergeWithUndefLeft(row, std::begin(range1), it1);
       });
 
       for (; it1 != endSame1; ++it1) {
@@ -359,13 +370,13 @@ template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
   }();
 
   std::for_each(it2, end2, [&](const auto& row) {
-    mergeWithUndefLeft(row, range1.begin(), range1.end());
+    mergeWithUndefLeft(row, std::begin(range1), std::end(range1));
   });
 
   if constexpr (hasNotFoundAction) {
     for (; it1 < end1; ++it1) {
       cover(it1);
-      if (!mergeWithUndefRight(*it1, range2.begin(), range2.end())) {
+      if (!mergeWithUndefRight(*it1, std::begin(range2), std::end(range2))) {
         elFromFirstNotFoundAction(*it1);
       }
     }
@@ -376,7 +387,7 @@ template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
   if constexpr (hasNotFoundAction) {
     for (size_t i = 0; i < coveredFromLeft.size(); ++i) {
       if (!coveredFromLeft[i]) {
-        elFromFirstNotFoundAction(*(range1.begin() + i));
+        elFromFirstNotFoundAction(*(std::begin(range1) + i));
         ++numOutOfOrderAtEnd;
       }
     }
@@ -386,12 +397,13 @@ template <typename Range, typename ElFromFirstNotFoundAction = decltype(noop)>
 }
 
 // _____________________________________________________________________________
-void gallopingJoin(auto&& smaller, auto&& larger, auto&& lessThan,
-                   auto&& action) {
-  auto itSmall = smaller.begin();
-  auto endSmall = smaller.end();
-  auto itLarge = larger.begin();
-  auto endLarge = larger.end();
+template <std::ranges::random_access_range Range>
+void gallopingJoin(const Range& smaller, const Range& larger,
+                   const auto& lessThan, auto&& action) {
+  auto itSmall = std::begin(smaller);
+  auto endSmall = std::end(smaller);
+  auto itLarge = std::begin(larger);
+  auto endLarge = std::end(larger);
   auto eq = [&lessThan](const auto& el1, const auto& el2) {
     return !lessThan(el1, el2) && !lessThan(el2, el1);
   };
@@ -419,22 +431,23 @@ void gallopingJoin(auto&& smaller, auto&& larger, auto&& lessThan,
     if (eq(*itSmall, *itLarge)) {
       // We stepped into a block where l1 and l2 are equal. We need to
       // find the beginning of this block
-      while (itLarge > larger.begin() && eq(*itSmall, *(itLarge - 1))) {
+      while (itLarge > std::begin(larger) && eq(*itSmall, *(itLarge - 1))) {
         --itLarge;
       }
     } else if (lessThan(*itSmall, *itLarge)) {
       // We stepped over the location where l1 and l2 may be equal.
       // Use binary search to locate that spot
       const auto& needle = *itSmall;
-      itLarge = std::lower_bound(
-          last, itLarge, needle,
-          [&lessThan](const auto& row, const auto& needle) -> bool {
-            return lessThan(row, needle);
-          });
+      itLarge =
+          std::lower_bound(last, itLarge, needle,
+                           [&lessThan](const auto& a, const auto& b) -> bool {
+                             return lessThan(a, b);
+                           });
     }
-    // TODO<joka921> We can also use the (cheaper) `lessThan` here.
     // TODO<joka921> The following block is the same for `zipper` and
     // `galloping`, so it can be factored out into a function.
+    // Note: We could also use the (cheaper) `lessThan` here, but this would
+    // require a lot of caution.
     auto endSameSmall = std::find_if_not(
         itSmall, endSmall, [&](const auto& row) { return eq(row, *itLarge); });
     auto endSameLarge = std::find_if_not(
@@ -452,16 +465,16 @@ void gallopingJoin(auto&& smaller, auto&& larger, auto&& lessThan,
 }
 
 // TODO<joka921> Comment this abstraction
-template <typename Range>
-void specialOptionalJoin(Range&& range1, Range&& range2, auto&& lessThan,
-                         auto&& compatibleRowAction,
-                         auto&& elFromFirstNotFoundAction) {
-  auto it1 = range1.begin();
-  auto end1 = range1.end();
-  auto it2 = range2.begin();
-  auto end2 = range2.end();
+template <std::ranges::random_access_range Range>
+void specialOptionalJoin(const Range& range1, const Range& range2,
+                         const auto& lessThan, const auto& compatibleRowAction,
+                         const auto& elFromFirstNotFoundAction) {
+  auto it1 = std::begin(range1);
+  auto end1 = std::end(range1);
+  auto it2 = std::begin(range2);
+  auto end2 = std::end(range2);
 
-  if (range1.begin() == range1.end()) {
+  if (std::empty(range1)) {
     return;
   }
 
