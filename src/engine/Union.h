@@ -29,11 +29,6 @@ class Union : public Operation {
         const std::shared_ptr<QueryExecutionTree>& t1,
         const std::shared_ptr<QueryExecutionTree>& t2);
 
-  // Create a very explicit way to create an invalid, uninitialized union. This
-  // can only be used for certain unit tests of almost static member functions
-  struct InvalidUnionOnlyUseForTestinTag {};
-  explicit Union(InvalidUnionOnlyUseForTestinTag) {}
-
  protected:
   virtual string asStringImpl(size_t indent = 0) const override;
 
@@ -59,7 +54,6 @@ class Union : public Operation {
   const static size_t NO_COLUMN;
 
   // The method is declared here to make it unit testable
-  template <int LEFT_WIDTH, int RIGHT_WIDTH, int OUT_WIDTH>
   void computeUnion(IdTable* inputTable, const IdTable& left,
                     const IdTable& right,
                     const std::vector<std::array<size_t, 2>>& columnOrigins);

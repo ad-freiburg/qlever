@@ -135,7 +135,7 @@ ResultTable CountAvailablePredicates::computeResult() {
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
 
-    int width = subresult->idTable().numColumns();
+    size_t width = subresult->idTable().numColumns();
     CALL_FIXED_SIZE(width, &computePatternTrick, subresult->idTable(), &idTable,
                     hasPattern, hasPredicate, patterns, _subjectColumnIndex,
                     &runtimeInfo);
@@ -204,7 +204,7 @@ class MergeableHashMap : public ad_utility::HashMap<T, size_t> {
   }
 };
 
-template <int WIDTH>
+template <size_t WIDTH>
 void CountAvailablePredicates::computePatternTrick(
     const IdTable& dynInput, IdTable* dynResult,
     const vector<PatternID>& hasPattern,

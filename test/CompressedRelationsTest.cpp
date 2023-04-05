@@ -108,12 +108,12 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
   CompressedRelationReader reader;
   for (size_t i = 0; i < metaData.size(); ++i) {
     const auto& m = metaData[i];
-    ASSERT_EQ(V(inputs[i].col0_), m._col0Id);
-    ASSERT_EQ(inputs[i].col1And2_.size(), m._numRows);
+    ASSERT_EQ(V(inputs[i].col0_), m.col0Id_);
+    ASSERT_EQ(inputs[i].col1And2_.size(), m.numRows_);
     // The number of distinct elements in `col1` was passed in as `i + 1` for
     // testing purposes, so this is the expected multiplicity.
-    ASSERT_FLOAT_EQ(m._numRows / static_cast<float>(i + 1),
-                    m._multiplicityCol1);
+    ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
+                    m.multiplicityCol1_);
     // Scan for all distinct `col0` and check that we get the expected result.
     IdTable table{2, ad_utility::testing::makeAllocator()};
     reader.scan(metaData[i], blocks, file, &table, timer);
@@ -259,13 +259,13 @@ TEST(CompressedRelationMetadata, GettersAndSetters) {
   CompressedRelationMetadata m;
   m.setCol1Multiplicity(2.0f);
   ASSERT_FLOAT_EQ(2.0f, m.getCol1Multiplicity());
-  ASSERT_FLOAT_EQ(2.0f, m._multiplicityCol1);
+  ASSERT_FLOAT_EQ(2.0f, m.multiplicityCol1_);
   m.setCol2Multiplicity(1.0f);
-  ASSERT_FLOAT_EQ(1.0f, m._multiplicityCol2);
+  ASSERT_FLOAT_EQ(1.0f, m.multiplicityCol2_);
   ASSERT_FLOAT_EQ(1.0f, m.getCol2Multiplicity());
   ASSERT_FALSE(m.isFunctional());
   m.setCol1Multiplicity(1.0f);
   ASSERT_TRUE(m.isFunctional());
-  m._numRows = 43;
-  ASSERT_EQ(43, m._numRows);
+  m.numRows_ = 43;
+  ASSERT_EQ(43, m.numRows_);
 }

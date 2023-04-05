@@ -216,13 +216,13 @@ LocatedTriple LocatedTriple::locateTripleInPermutation(
   auto matchingBlock = std::lower_bound(
       blocks.begin(), blocks.end(), std::array<Id, 3>{id1, id2, id3},
       [&](const CompressedBlockMetadata& block, const auto& triple) -> bool {
-        if (block._col0LastId < triple[0]) {
+        if (block.col0LastId_ < triple[0]) {
           return true;
-        } else if (block._col0LastId == triple[0]) {
-          if (block._col1LastId < triple[1]) {
+        } else if (block.col0LastId_ == triple[0]) {
+          if (block.col1LastId_ < triple[1]) {
             return true;
-          } else if (block._col1LastId == triple[1]) {
-            return block._col2LastId < triple[2];
+          } else if (block.col1LastId_ == triple[1]) {
+            return block.col2LastId_ < triple[2];
           }
         }
         return false;
@@ -268,13 +268,13 @@ LocatedTriple LocatedTriple::locateTripleInPermutation(
   // NOTE: Since we have already handled the case, where all IDs in the
   // permutation are smaller, above, such a relation should exist.
   Id searchId =
-      matchingBlock->_col0FirstId > id1 ? matchingBlock->_col0FirstId : id1;
+      matchingBlock->col0FirstId_ > id1 ? matchingBlock->col0FirstId_ : id1;
   const auto& it = meta._data.lower_bound(searchId);
   AD_CORRECTNESS_CHECK(it != meta._data.end());
   Id id = it.getId();
   const auto& relationMetadata = meta.getMetaData(id);
-  size_t offsetBegin = relationMetadata._offsetInBlock;
-  size_t offsetEnd = offsetBegin + relationMetadata._numRows;
+  size_t offsetBegin = relationMetadata.offsetInBlock_;
+  size_t offsetEnd = offsetBegin + relationMetadata.numRows_;
   // Note: If the relation spans multiple blocks, we know that the block we
   // found above contains only triples from that relation.
   if (offsetBegin == std::numeric_limits<uint64_t>::max()) {

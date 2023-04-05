@@ -130,7 +130,7 @@ class DeltaTriplesTest : public ::testing::Test {
     // block, and each of these is as large as the respective block.
     std::vector<std::vector<Id>> result(metadataPerBlock.size());
     for (size_t i = 0; i < result.size(); ++i) {
-      result[i].resize(metadataPerBlock[i]._numRows, Id::makeUndefined());
+      result[i].resize(metadataPerBlock[i].numRows_, Id::makeUndefined());
     }
 
     // Iterate over all relations.
@@ -146,41 +146,41 @@ class DeltaTriplesTest : public ::testing::Test {
       // Get the `Id` of this relation, and where it starts in its (at this
       // unknown) block, and how many triples it has overall.
       const CompressedRelationMetadata& relationMetadata = it.getMetaData();
-      Id relationId = relationMetadata._col0Id;
-      size_t offsetInBlock = relationMetadata._offsetInBlock;
-      size_t numTriples = relationMetadata._numRows;
+      Id relationId = relationMetadata.col0Id_;
+      size_t offsetInBlock = relationMetadata.offsetInBlock_;
+      size_t numTriples = relationMetadata.numRows_;
 
       // Find the index of the first block that contains triples from this
       // relation.
       const auto block = std::lower_bound(
           metadataPerBlock.begin(), metadataPerBlock.end(), relationId,
           [&](const CompressedBlockMetadata& block, const Id& id) -> bool {
-            return block._col0LastId < id;
+            return block.col0LastId_ < id;
           });
       size_t blockIndex = block - metadataPerBlock.begin();
       AD_CORRECTNESS_CHECK(blockIndex < metadataPerBlock.size());
-      AD_CORRECTNESS_CHECK(block->_col0FirstId <= relationId);
-      AD_CORRECTNESS_CHECK(block->_col0LastId >= relationId);
+      AD_CORRECTNESS_CHECK(block->col0FirstId_ <= relationId);
+      AD_CORRECTNESS_CHECK(block->col0LastId_ >= relationId);
 
       // If the relation fits into a single block, we need to write the relation
       // `Id` only in one block of our result. Otherwise, we have a sequence of
       // blocks for only that relation `Id`.
       if (offsetInBlock != std::numeric_limits<size_t>::max()) {
-        AD_CORRECTNESS_CHECK(offsetInBlock + numTriples <= block->_numRows);
+        AD_CORRECTNESS_CHECK(offsetInBlock + numTriples <= block->numRows_);
         for (size_t i = offsetInBlock; i < offsetInBlock + numTriples; ++i) {
           result[blockIndex][i] = relationId;
         }
       } else {
         size_t count = 0;
         while (blockIndex < metadataPerBlock.size() &&
-               metadataPerBlock[blockIndex]._col0FirstId == relationId) {
+               metadataPerBlock[blockIndex].col0FirstId_ == relationId) {
           const auto& block = metadataPerBlock[blockIndex];
-          AD_CORRECTNESS_CHECK(block._col0LastId == relationId);
-          for (size_t i = 0; i < block._numRows; ++i) {
+          AD_CORRECTNESS_CHECK(block.col0LastId_ == relationId);
+          for (size_t i = 0; i < block.numRows_; ++i) {
             result[blockIndex][i] = relationId;
           }
           ++blockIndex;
-          count += block._numRows;
+          count += block.numRows_;
         }
         AD_CORRECTNESS_CHECK(count == numTriples);
       }
@@ -308,9 +308,9 @@ TEST_F(DeltaTriplesTest, insertAndDeleteTriples) {
         const vector<CompressedBlockMetadata>& metadataPerBlock =
             meta.blockData();
         AD_CONTRACT_CHECK(metadataPerBlock.size() > 0);
-        IdTriple lastTriple{metadataPerBlock.back()._col0LastId,
-                            metadataPerBlock.back()._col1LastId,
-                            metadataPerBlock.back()._col2LastId};
+        IdTriple lastTriple{metadataPerBlock.back().col0LastId_,
+                            metadataPerBlock.back().col1LastId_,
+                            metadataPerBlock.back().col2LastId_};
         if (blockIndex >= metadataPerBlock.size()) {
           ASSERT_EQ(blockIndex, metadataPerBlock.size()) << msg;
           ASSERT_FALSE(existsInIndex);
@@ -342,8 +342,8 @@ TEST_F(DeltaTriplesTest, insertAndDeleteTriples) {
                 blockTuples(rowIndexInBlock - 1, 0),
                 blockTuples(rowIndexInBlock - 1, 1)};
           } else if (blockIndex > 0) {
-            return IdTriple{metadataPerBlock[blockIndex - 1]._col0LastId,
-                            metadataPerBlock[blockIndex - 1]._col1LastId,
+            return IdTriple{metadataPerBlock[blockIndex - 1].col0LastId_,
+                            metadataPerBlock[blockIndex - 1].col1LastId_,
                             metadataPerBlock[blockIndex - 1]._col2LastId};
           } else {
             return IdTriple{Id::makeUndefined(), Id::makeUndefined(),

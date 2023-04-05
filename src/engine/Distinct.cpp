@@ -46,7 +46,7 @@ ResultTable Distinct::computeResult() {
 
   LOG(DEBUG) << "Distinct result computation..." << endl;
   idTable.setNumColumns(subRes->idTable().numColumns());
-  int width = subRes->idTable().numColumns();
+  size_t width = subRes->idTable().numColumns();
   CALL_FIXED_SIZE(width, &Engine::distinct, subRes->idTable(), _keepIndices,
                   &idTable);
   LOG(DEBUG) << "Distinct result computation done." << endl;

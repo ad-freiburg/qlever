@@ -158,7 +158,8 @@ VariableToColumnMap Join::computeVariableToColumnMap() const {
   }
   return makeVarToColMapForJoinOperation(
       _left->getVariableColumns(), _right->getVariableColumns(),
-      {{_leftJoinCol, _rightJoinCol}}, BinOpType::Join);
+      {{_leftJoinCol, _rightJoinCol}}, BinOpType::Join,
+      _left->getResultWidth());
 }
 
 // _____________________________________________________________________________

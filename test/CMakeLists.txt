@@ -317,3 +317,5 @@ addLinkAndDiscoverTest(LimitOffsetClauseTest)
 addLinkAndDiscoverTest(OperationTest engine)
 
 addLinkAndDiscoverTest(RuntimeInformationTest engine)
+
+addLinkAndDiscoverTest(VariableToColumnMapTest engine)

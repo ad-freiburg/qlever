@@ -167,6 +167,13 @@ class Operation {
     return std::nullopt;
   }
 
+  // Direct access to the `computeResult()` method. This should be only used for
+  // testing, otherwise the `getResult()` function should be used which also
+  // sets the runtime info and uses the cache.
+  virtual ResultTable computeResultOnlyForTesting() final {
+    return computeResult();
+  }
+
  protected:
   // The QueryExecutionContext for this particular element.
   // No ownership.
