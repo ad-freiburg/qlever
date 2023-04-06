@@ -583,7 +583,7 @@ boost::asio::awaitable<void> Server::processQuery(
     // might happen that the query planner runs for a while (recall that it many
     // do index scans) and then we get an error message afterwards that a
     // certain media type is not supported.
-    QueryExecutionContext qec(index_, engine_, &cache_, allocator_,
+    QueryExecutionContext qec(index_, &cache_, allocator_,
                               sortPerformanceEstimator_, pinSubtrees,
                               pinResult);
     QueryPlanner qp(&qec);
