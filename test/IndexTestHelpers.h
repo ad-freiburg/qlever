@@ -110,12 +110,10 @@ inline QueryExecutionContext* getQec(std::string turtleInput = "") {
   struct Context {
     TypeErasedCleanup cleanup_;
     std::unique_ptr<Index> index_;
-    std::unique_ptr<Engine> engine_;
     std::unique_ptr<QueryResultCache> cache_;
     std::unique_ptr<QueryExecutionContext> qec_ =
-        std::make_unique<QueryExecutionContext>(*index_, *engine_, cache_.get(),
-                                                makeAllocator(),
-                                                SortPerformanceEstimator{});
+        std::make_unique<QueryExecutionContext>(
+            *index_, cache_.get(), makeAllocator(), SortPerformanceEstimator{});
   };
 
   static ad_utility::HashMap<std::string, Context> contextMap;
@@ -135,7 +133,6 @@ inline QueryExecutionContext* getQec(std::string turtleInput = "") {
                              }},
                              std::make_unique<Index>(
                                  makeTestIndex(testIndexBasename, turtleInput)),
-                             std::make_unique<Engine>(),
                              std::make_unique<QueryResultCache>()});
   }
   return contextMap.at(turtleInput).qec_.get();
