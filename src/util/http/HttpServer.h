@@ -21,7 +21,7 @@ namespace net = boost::asio;       // from <boost/asio.hpp>
 using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
 
 /*
- * \brief A Simple HttpServer, based on Boost::Beast. Its can be configured via
+ * \brief A Simple HttpServer, based on Boost::Beast. It can be configured via
  * the mandatory HttpHandler parameter.
  *
  * \tparam HttpHandler A callable type that takes two parameters, a
@@ -30,13 +30,13 @@ using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
  * an awaitable<void>.
  *
  * The behavior is then as follows: as soon as the server receives a HTTP
- * request, co_await _httpHandler(move(request), sendAction) is called.
- * (_httpHandler is a member of type HttpHandler). The expected behavior of this
- * call is that _httpHandler takes the request, computes the corresponding
+ * request, co_await httpHandler_(move(request), sendAction) is called.
+ * (httpHandler_ is a member of type HttpHandler). The expected behavior of this
+ * call is that httpHandler_ takes the request, computes the corresponding
  * `response`, and calls co_await sendAction(response). The `sendAction` is
  * needed because the `response` can have different types (in beast, a
  * http::message is templated on the body type). For this reason, this approach
- * is more flexible, than having _httpHandler simply return the response.
+ * is more flexible, than having httpHandler_ simply return the response.
  *
  * A very basic HttpHandler, which simply serves files from a directory, can be
  * obtained via `ad_utility::httpUtils::makeFileServer()`.
@@ -44,44 +44,44 @@ using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
 template <typename HttpHandler>
 class HttpServer {
  private:
-  const net::ip::address _ipAdress;
-  const short unsigned int _port;
-  HttpHandler _httpHandler;
-  int _numServerThreads;
-  net::io_context _ioContext;
-  tcp::acceptor _acceptor;
-  // All code that uses the `_acceptor` must run within this strand.
-  // Note that the `_acceptor` might be concurrently accessed by the `listener`
+  const net::ip::address ipAddress_;
+  const unsigned short port_;
+  HttpHandler httpHandler_;
+  int numServerThreads_;
+  net::io_context ioContext_;
+  tcp::acceptor acceptor_;
+  // All code that uses the `acceptor_` must run within this strand.
+  // Note that the `acceptor_` might be concurrently accessed by the `listener`
   // and the `shutdown` function, the latter of which is currently only used in
   // unit tests.
-  net::strand<net::io_context::executor_type> _acceptorStrand =
-      net::make_strand(_ioContext);
-  std::atomic<bool> _serverIsReady = false;
+  net::strand<net::io_context::executor_type> acceptorStrand_ =
+      net::make_strand(ioContext_);
+  std::atomic<bool> serverIsReady_ = false;
 
  public:
   /// Construct from the port and ip address, on which this server will listen,
   /// as well as the HttpHandler. This constructor only initializes several
   /// member functions
-  explicit HttpServer(short unsigned int port,
-                      const std::string& ipAdress = "0.0.0.0",
+  explicit HttpServer(unsigned short port,
+                      const std::string& ipAddress = "0.0.0.0",
                       int numServerThreads = 1,
                       HttpHandler handler = HttpHandler{})
-      : _ipAdress{net::ip::make_address(ipAdress)},
-        _port{port},
-        _httpHandler{std::move(handler)},
+      : ipAddress_{net::ip::make_address(ipAddress)},
+        port_{port},
+        httpHandler_{std::move(handler)},
         // We need at least two threads to avoid blocking.
         // TODO<joka921> why is that?
-        _numServerThreads{std::max(2, numServerThreads)},
-        _ioContext{_numServerThreads},
-        _acceptor{_ioContext} {
+        numServerThreads_{std::max(2, numServerThreads)},
+        ioContext_{numServerThreads_},
+        acceptor_{ioContext_} {
     try {
-      tcp::endpoint endpoint{_ipAdress, _port};
+      tcp::endpoint endpoint{ipAddress_, port_};
       // Open the acceptor.
-      _acceptor.open(endpoint.protocol());
+      acceptor_.open(endpoint.protocol());
       boost::asio::socket_base::reuse_address option{true};
-      _acceptor.set_option(option);
+      acceptor_.set_option(option);
       // Bind to the server address.
-      _acceptor.bind(endpoint);
+      acceptor_.bind(endpoint);
     } catch (const boost::system::system_error& b) {
       logBeastError(b.code(), "Opening or binding the socket failed");
       throw;
@@ -97,15 +97,15 @@ class HttpServer {
     // Create the listener coroutine.
     auto listenerCoro = listener();
 
-    // Schedule the listener onto the `_acceptorStrand`.
-    net::co_spawn(_acceptorStrand, std::move(listenerCoro), net::detached);
+    // Schedule the listener onto the `acceptorStrand_`.
+    net::co_spawn(acceptorStrand_, std::move(listenerCoro), net::detached);
 
     // Add some threads to the io context, s.t. the work can actually be
     // scheduled.
     std::vector<ad_utility::JThread> threads;
-    threads.reserve(_numServerThreads);
-    for (auto i = 0; i < _numServerThreads; ++i) {
-      threads.emplace_back([&ioContext = _ioContext] { ioContext.run(); });
+    threads.reserve(numServerThreads_);
+    for (auto i = 0; i < numServerThreads_; ++i) {
+      threads.emplace_back([&ioContext = ioContext_] { ioContext.run(); });
     }
 
     // This will run forever, because the destructor of the JThreads blocks
@@ -114,43 +114,43 @@ class HttpServer {
   }
 
   // Get the server port.
-  short unsigned int getPort() const { return _port; }
+  [[nodiscard]] unsigned short getPort() const { return port_; }
 
   // Is the server ready yet? We need this in `test/HttpTest.cpp` so that our
   // test can wait for the server to be ready and continue with its test
   // queries.
-  bool serverIsReady() const { return _serverIsReady; }
+  [[nodiscard]] bool serverIsReady() const { return serverIsReady_; }
 
   // Shut down the server. Http sessions that are still active are still allowed
   // to finish, even after this call, but all outstanding new connections will
   // fail. This interface is currently only used for testing. In the typical use
   // case, the server runs forever.
   void shutDown() {
-    std::atomic_flag shutdownWasSuccesful;
-    shutdownWasSuccesful.clear();
+    std::atomic_flag shutdownWasSuccessful;
+    shutdownWasSuccessful.clear();
     // The actual code for the shutdown is being executed on the same `strand`
     // as the `listener`. By the way strands work, there will then be no
-    // concurrent access to `_acceptor`.
-    net::post(_acceptorStrand, [&shutdownWasSuccesful, this]() {
-      _acceptor.close();
-      shutdownWasSuccesful.test_and_set();
-      shutdownWasSuccesful.notify_all();
+    // concurrent access to `acceptor_`.
+    net::post(acceptorStrand_, [&shutdownWasSuccessful, this]() {
+      acceptor_.close();
+      shutdownWasSuccessful.test_and_set();
+      shutdownWasSuccessful.notify_all();
     });
 
-    // Wait until the posted task has succesfully executed and notified us via
+    // Wait until the posted task has successfully executed and notified us via
     // the flag.
     //
     // NOTE: The while loop is needed because notifications can also occur
     // spuriously (without being triggered explicitly by our code). The argument
     // of the `wait` is `false` because the semantics is to wait for a change in
     // the specified value.
-    while (!shutdownWasSuccesful.test()) {
-      shutdownWasSuccesful.wait(false);
+    while (!shutdownWasSuccessful.test()) {
+      shutdownWasSuccessful.wait(false);
     }
   }
 
   // _____________________________________________________________________
-  net::io_context& getIoContext() { return _ioContext; };
+  net::io_context& getIoContext() { return ioContext_; };
 
  private:
   // Format a boost/beast error and log it to console
@@ -162,29 +162,29 @@ class HttpServer {
   // to the session() coroutine below.
   boost::asio::awaitable<void> listener() {
     try {
-      _acceptor.listen(boost::asio::socket_base::max_listen_connections);
+      acceptor_.listen(boost::asio::socket_base::max_listen_connections);
     } catch (const boost::system::system_error& b) {
       logBeastError(b.code(), "Listening on the socket failed");
       co_return;
     }
-    _serverIsReady = true;
+    serverIsReady_ = true;
 
-    // While the `_acceptor` is open, accept connections and handle each
+    // While the `acceptor_` is open, accept connections and handle each
     // connection asynchronously (so that we are ready to accept the next
-    // connection right away). The `_acceptor` will be closed via the
+    // connection right away). The `acceptor_` will be closed via the
     // `shutdown` method.
-    while (_acceptor.is_open()) {
+    while (acceptor_.is_open()) {
       try {
         // Wait for a request (the code only continues after we have received
         // and accepted a request).
         auto socket =
-            co_await _acceptor.async_accept(boost::asio::use_awaitable);
+            co_await acceptor_.async_accept(boost::asio::use_awaitable);
         // Schedule the session such that it may run in parallel to this loop.
         // the `strand` makes each session conceptually single-threaded.
         // TODO<joka921> is this even needed, to my understanding,
         // nothing may happen in parallel within an HTTP session, but
         // then again this does no harm.
-        net::co_spawn(net::make_strand(_ioContext), session(std::move(socket)),
+        net::co_spawn(net::make_strand(ioContext_), session(std::move(socket)),
                       net::detached);
       } catch (const boost::system::system_error& b) {
         logBeastError(b.code(), "Error in the accept loop");
@@ -240,9 +240,9 @@ class HttpServer {
         // by QLever's timeout mechanism.
         stream.expires_never();
 
-        // Handle the http request. Note that `_httpHandler` is also
+        // Handle the http request. Note that `httpHandler_` is also
         // responsible for sending the message via the `sendMessage` lambda.
-        co_await _httpHandler(std::move(req), sendMessage);
+        co_await httpHandler_(std::move(req), sendMessage);
 
         // The closing of the stream is done in the exception handler.
         if (streamNeedsClosing) {

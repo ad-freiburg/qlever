@@ -155,7 +155,7 @@ static constexpr size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;
 
 // When asked to make room for X ids in the cache, actually make room for X
 // times this factor.
-static constexpr double MAKE_ROOM_SLACK_FACTOR = 2;
+static constexpr size_t MAKE_ROOM_SLACK_FACTOR = 2;
 
 // The version of the binary format of the pattern files. Has to be increased,
 // when this format is changed.

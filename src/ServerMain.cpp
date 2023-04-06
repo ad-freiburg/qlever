@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
   std::string indexBasename;
   std::string accessToken;
   bool text = false;
-  int port;
+  unsigned short port;
   NonNegative numSimultaneousQueries = 1;
   bool noPatterns;
   bool noPatternTrick;
@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
   // TODO<joka921> Can we output the "required" automatically?
   add("index-basename,i", po::value<std::string>(&indexBasename)->required(),
       "The basename of the index files (required).");
-  add("port,p", po::value<int>(&port)->required(),
+  add("port,p", po::value<unsigned short>(&port)->required(),
       "The port on which HTTP requests are served (required).");
   add("access-token,a", po::value<std::string>(&accessToken)->default_value(""),
       "Access token for restricted API calls (default: no access).");
@@ -127,9 +127,8 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, static_cast<int>(numSimultaneousQueries),
-                  memoryMaxSizeGb, std::move(accessToken));
-    server.run(indexBasename, text, !noPatterns, !noPatternTrick,
-               !onlyPsoAndPosPermutations);
+                  memoryMaxSizeGb, std::move(accessToken), !noPatternTrick);
+    server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
     // within server.run()
