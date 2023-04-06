@@ -93,18 +93,3 @@ std::vector<BenchmarkMeasurementContainer::RecordTable> {
       return (*pointer);
   });
 }
-
-// ____________________________________________________________________________
-BenchmarkRecords::BenchmarkRecords(const BenchmarkRecords& records){
-  // Copy the vectors of unique pointer.
-  auto copyPointerVector =
-    []<typename T>(const PointerVector<T>& sourceVector, auto& targetVector){
-    targetVector = ad_utility::transform(sourceVector, [](const auto& pointer){
-      return std::make_unique<T>(*pointer);
-    });
-  };
-
-  copyPointerVector(records.singleMeasurements_, singleMeasurements_);
-  copyPointerVector(records.recordGroups_, recordGroups_);
-  copyPointerVector(records.recordTables_, recordTables_);
-}

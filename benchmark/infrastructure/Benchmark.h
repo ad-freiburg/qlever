@@ -20,6 +20,7 @@
 #include "../benchmark/util/HashMapWithInsertionOrder.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
+#include "../benchmark/infrastructure/CopybaleUniquePtr.h"
 
 /*
  * Used for measuring the time needed for the execution of a function and
@@ -27,7 +28,7 @@
  */
 class BenchmarkRecords {
     template<typename T>
-    using PointerVector = std::vector<std::unique_ptr<T>>;
+    using PointerVector = std::vector<CopybaleUniquePtr<T>>;
 
     // A vector of all the created single measurements.
     PointerVector<BenchmarkMeasurementContainer::RecordEntry>
@@ -44,24 +45,25 @@ class BenchmarkRecords {
 
     /*
     @brief Adds an entry to the given vector, by creating an instance of
-    `std::unique_ptr` for the given type and appending it. Strictly an
+    `CopybaleUniquePtr` for the given type and appending it. Strictly an
     internal helper function.
 
-    @tparam EntryType The type, that the `std::unique_ptr` in the vector points
+    @tparam EntryType The type, that the `CopybaleUniquePtr` in the vector points
     to.
     @tparam ConstructorArgs Types for the constructor arguments for creating
     a new instance of `EntryType`.
 
-    @param targetVector A vector of `std::unique_ptr`, that own values.
+    @param targetVector A vector of `CopybaleUniquePtr`, that own values.
     @param constructorArgs Arguments to pass to the constructor of the object,
-    that the new `std::unique_ptr` will own.
+    that the new `CopybaleUniquePtr` will own.
     */
     template<typename EntryType, typename... ConstructorArgs>
     static EntryType& addEntryToContainerVector(
       PointerVector<EntryType>& targetVector,
       ConstructorArgs&&... constructorArgs){
-      targetVector.push_back(std::make_unique<EntryType>(
-        std::forward<ConstructorArgs>(constructorArgs)...));
+      targetVector.push_back(CopybaleUniquePtr<EntryType>(
+        std::make_unique<EntryType>(std::forward<ConstructorArgs>(
+        constructorArgs)...)));
       return (*targetVector.back());
     }
 
@@ -123,22 +125,6 @@ class BenchmarkRecords {
      */
     std::vector<BenchmarkMeasurementContainer::RecordTable>
     getTables() const;
-
-    // Default constructor.
-    BenchmarkRecords() = default;
-
-    // Default destructor.
-    ~BenchmarkRecords() = default;
-
-    /*
-    This class holds unique pointers, so the default copy assignment operator
-    will not work. We also newer use it, so there was no real reason, to write a
-    custom one.
-    */
-    BenchmarkRecords& operator=(const BenchmarkRecords&) = delete;
-
-    // Custom copy constructor because of the vectors of unique pointers.
-    BenchmarkRecords(const BenchmarkRecords& records);
 
     // Json serialization. The implementation can be found in
     // `BenchmarkToJson`.

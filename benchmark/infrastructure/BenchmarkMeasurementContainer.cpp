@@ -30,16 +30,6 @@ void to_json(nlohmann::json& j, const RecordEntry& recordEntry){
 }
 
 // ____________________________________________________________________________
-RecordGroup::RecordGroup(const RecordGroup& group):
-  descriptor_{group.descriptor_}, metadata_{group.metadata_}{
-  // To copy the vector of unique pointer, we use the copy constructor of it's
-  // entries.
-  entries_ = ad_utility::transform(group.entries_, [](const auto& pointer){
-    return std::make_unique<RecordEntry>(*pointer);
-  });
-}
-
-// ____________________________________________________________________________
 RecordGroup::operator std::string() const{
   // We need to add all the string representations of the group members,
   // so doing everything using a stream is the best idea.

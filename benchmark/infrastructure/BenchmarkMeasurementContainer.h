@@ -12,6 +12,7 @@
 #include "util/Timer.h"
 #include "util/json.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
+#include "../benchmark/infrastructure/CopybaleUniquePtr.h"
 
 // All the classes, that hold the measurements of measured benchmarks.
 namespace BenchmarkMeasurementContainer{
@@ -75,7 +76,7 @@ class RecordGroup {
   // Needed for identifying groups.
   std::string descriptor_;
   // Members of the group.
-  std::vector<std::unique_ptr<RecordEntry>> entries_;
+  std::vector<CopybaleUniquePtr<RecordEntry>> entries_;
 
   public:
   BenchmarkMetadata metadata_;
@@ -87,17 +88,6 @@ class RecordGroup {
   */
   explicit RecordGroup(const std::string& descriptor): descriptor_{descriptor}
   {}
-
-  // A custom copy constructor is needed because of `entries_`. The default
-  // copy constructor tires to copy them, which is an illegal operation.
-  RecordGroup(const RecordGroup& group);
-
-  // Default destructor.
-  ~RecordGroup() = default;
-
-  // Deleting the default copy constructor. We don't use it and implementing
-  // it would be a waste of time.
-  RecordGroup& operator=(const RecordGroup&) = delete;
 
   /*
   @brief Adds a new instance of `RecordEntry` to the group.
