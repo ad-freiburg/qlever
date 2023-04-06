@@ -9,6 +9,7 @@
 #include <memory>
 #include <utility>
 
+#include "util/Exception.h"
 #include "util/Timer.h"
 #include "util/json.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
@@ -158,13 +159,14 @@ class RecordTable {
   @tparam Function Lambda function with no function arguments and returns void.
 
   @param row, column Where in the tables to write the measured time.
-   Starts with `(0,0)``.
+   Starts with `(0,0)`.
   @param functionToMeasure The function, which execution time will be measured.
   */
   template<typename Function>
     requires std::invocable<Function>
   void addMeasurement(const size_t& row, const size_t& column,
     const Function& functionToMeasure){
+    AD_CONTRACT_CHECK(row < rowNames_.size() && column < columnNames_.size());
     entries_.at(row).at(column) = measureTimeOfFunction(functionToMeasure);
   }
 
