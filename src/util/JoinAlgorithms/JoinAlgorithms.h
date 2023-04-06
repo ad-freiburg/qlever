@@ -94,13 +94,24 @@ template <
     const auto& findSmallerUndefRangesRight,
     ElFromFirstNotFoundAction elFromFirstNotFoundAction = {}) {
   using Iterator = std::ranges::iterator_t<Range>;
+
+  // If this is not an OPTIONAL join or a MINUS we can apply several
+  // optimizations, so we store this information.
   static constexpr bool hasNotFoundAction =
       !ad_utility::isSimilar<ElFromFirstNotFoundAction, decltype(noop)>;
+
+  // Iterators for both ranges that will be used to advance during the zipper
+  // algorithm.
   auto it1 = std::begin(left);
   auto end1 = std::end(left);
   auto it2 = std::begin(right);
   auto end2 = std::end(right);
 
+  // If this is an OPTIONAL join or a MINUS then we have to keep track of the
+  // information for which elements from the left input we have already found a
+  // match in the right input. We call these elements "covered". For all
+  // uncovered elements the `elFromFirstNotFoundAction` has to be called at the
+  // end.
   std::vector<bool> coveredFromLeft;
   if constexpr (hasNotFoundAction) {
     coveredFromLeft.resize(end1 - it1);
@@ -111,8 +122,18 @@ template <
     }
   };
 
+  // Store the information whether the output contains rows that are completely
+  // out of order because matching rows with UNDEF values in different columns
+  // were encountered.
   bool outOfOrderFound = false;
 
+  // The following function has to be called for every element in `right`. It
+  // finds all elements in `left` that are smaller than the element, but are
+  // compatible with it (because of UNDEF values this might happen) and adds
+  // these matches to the result. The range `[leftBegin, leftEnd)` must cover
+  // all elements in `left` that are smaller than `*itFromRight` to work
+  // correctly. It would thus be always correct to pass in `left.begin()` and
+  // `left.end()`, but passing in smaller ranges is more efficient.
   auto mergeWithUndefLeft = [&](Iterator itFromRight, Iterator leftBegin,
                                 Iterator leftEnd) {
     if constexpr (!isSimilar<decltype(findSmallerUndefRangesLeft),
@@ -129,6 +150,10 @@ template <
       }
     }
   };
+
+  // This function checks whether a single element of `left` or `right` contains
+  // no UNDEF values. It is used inside the following `mergeWithUndefRight`
+  // function.
   auto containsNoUndefined = []<typename T>(const T& row) {
     if constexpr (std::is_same_v<T, Id>) {
       return row != Id::makeUndefined();
@@ -138,6 +163,15 @@ template <
     }
   };
 
+  // This function is the inverse of `mergeWithUndefLeft` above. The bool
+  // argument `hasNoMatch` has to be set to `true` iff no exact match for
+  // `*itFromLeft` was found in `right`. If `hasNoMatch` is `true` and no
+  // matching smaller rows are found in `right` and `*itFromLeft` contains no
+  // undefined values, then the `elFromFirstNotFoundAction` is directly called
+  // from inside this lambda. That way, the "optional" row will be in the
+  // correct place in the result. The condition about containing no UNDEF values
+  // is important, because otherwise `*itFromLeft` may be compatible to a larger
+  // element in `right` that is only discovered later.
   auto mergeWithUndefRight = [&](Iterator itFromLeft, Iterator beginRight,
                                  Iterator endRight, bool hasNoMatch) {
     if constexpr (!isSimilar<decltype(findSmallerUndefRangesRight),
@@ -167,9 +201,15 @@ template <
     }
   };
 
+  // The main loop of the zipper algorithm. It is wrapped in a lambda, so we can
+  // easily `break` from an inner loop via a `return` statement.
   [&]() {
+    // Advance over all elements in `left` and `right` that have no exact
+    // matches in the counterpart. We have to still call the correct
+    // `mergeWithUndef...` function for each element.
     while (it1 < end1 && it2 < end2) {
       while (lessThan(*it1, *it2)) {
+        // The last argument means "exact match was found for this element".
         mergeWithUndefRight(it1, std::begin(right), it2, true);
         ++it1;
         if (it1 >= end1) {
@@ -184,8 +224,11 @@ template <
         }
       }
 
+      // Find the following ranges in `left` and `right` where the elements are
+      // equal.
       // TODO <joka921> Maybe we can pass in the equality operator for increased
-      // performance.
+      // performance. We can also use `lessThan` directly, but then the order of
+      // the two loops above is important.
       auto eq = [&lessThan](const auto& el1, const auto& el2) {
         return !lessThan(el1, el2) && !lessThan(el2, el1);
       };
@@ -194,9 +237,8 @@ template <
       auto endSame2 = std::find_if_not(
           it2, end2, [&](const auto& row) { return eq(*it1, row); });
 
-      bool hasNoMatch = it2 == endSame2;
       for (auto it = it1; it != endSame1; ++it) {
-        mergeWithUndefRight(it, std::begin(right), it2, hasNoMatch);
+        mergeWithUndefRight(it, std::begin(right), it2, false);
       }
       for (auto it = it2; it != endSame2; ++it) {
         mergeWithUndefLeft(it, std::begin(left), it1);
