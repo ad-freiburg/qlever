@@ -28,7 +28,8 @@ class CopybaleUniquePtr: public std::unique_ptr<T, Deleter>{
   @brief Creates a `CopybaleUniquePtr`, that holds a copy of the object owned
   by the given unique pointer.
   */
-  explicit CopybaleUniquePtr(Base& ptr): Base(std::make_unique<T>(*ptr)) {}
+  explicit CopybaleUniquePtr(const Base& ptr): Base(std::make_unique<T>(*ptr))
+  {}
 
   /*
   @brief Creates a `CopybaleUniquePtr`, that holds the object formerly
@@ -38,19 +39,20 @@ class CopybaleUniquePtr: public std::unique_ptr<T, Deleter>{
 
   // Copy constructor.
   // Special behaviour only needed, if `ptr` doesn't own an object.
-  CopybaleUniquePtr(CopybaleUniquePtr& ptr):
+  CopybaleUniquePtr(const CopybaleUniquePtr& ptr):
   Base(ptr ? std::make_unique<T>(*ptr) : nullptr) {}
 
   // Move constructor.
   CopybaleUniquePtr(CopybaleUniquePtr&& ptr): Base(ptr.release()) {}
 
   // Copy assignment operator.
-  CopybaleUniquePtr<T, Deleter>& operator=(CopybaleUniquePtr<T, Deleter>& ptr){
+  CopybaleUniquePtr<T, Deleter>& operator=(
+    const CopybaleUniquePtr<T, Deleter>& ptr){
     // Special behaviour in case, that `ptr` doesn't own an object.
     if (ptr){
-      return this->operator=(std::make_unique<T>(*ptr));
+      return Base::operator=(std::make_unique<T>(*ptr));
     } else {
-      return {nullptr};
+      return Base::operator=(nullptr);
     }
   }
 
