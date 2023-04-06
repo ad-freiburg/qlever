@@ -101,57 +101,34 @@ template <
   auto it2 = std::begin(right);
   auto end2 = std::end(right);
 
-  std::vector<bool> coveredFromLeft(end1 - it1);
-  auto cover = [&](auto it) {
+  std::vector<bool> coveredFromLeft;
+  if constexpr (hasNotFoundAction) {
+    coveredFromLeft.resize(end1 - it1);
+  }
+  auto cover = [&coveredFromLeft, begLeft = std::begin(left)](auto it) {
     if constexpr (hasNotFoundAction) {
-      coveredFromLeft[it - std::begin(left)] = true;
+      coveredFromLeft[it - begLeft] = true;
     }
   };
 
   bool outOfOrderFound = false;
 
-  auto makeMergeWithUndefLeft =
-      [&cover, &compatibleRowAction,
-       &outOfOrderFound]<bool reversed, typename FindUndef>(
-          const auto& lt, const FindUndef& findUndef) {
-        return [&cover, &lt, &findUndef, &compatibleRowAction,
-                &outOfOrderFound](Iterator rowIt, Iterator startOfRange,
-                                  Iterator endOfRange) {
-          (void)findUndef;
-          (void)compatibleRowAction;
-          (void)cover;
-          (void)lt;
-          (void)outOfOrderFound;
-          if constexpr (ad_utility::isSimilar<FindUndef, decltype(noop)>) {
-            return false;
-          } else {
-            bool compatibleWasFound = false;
-            // We need to bind the const& to a variable, else it will be
-            // dangling inside the `findUndef` coroutine.
-            const auto& row = *rowIt;
-            auto smallerUndefRanges =
-                findUndef(row, startOfRange, endOfRange, outOfOrderFound);
-            for (const auto& it :
-                 findUndef(row, startOfRange, endOfRange, outOfOrderFound)) {
-              if (lt(*it, *rowIt)) {
-                compatibleWasFound = true;
-                if constexpr (reversed) {
-                  compatibleRowAction(rowIt, it);
-                } else {
-                  compatibleRowAction(it, rowIt);
-                  cover(it);
-                }
-              }
-            }
-            return compatibleWasFound;
-          }
-        };
-      };
-  auto mergeWithUndefLeft = makeMergeWithUndefLeft.template operator()<false>(
-      lessThan, findSmallerUndefRangesLeft);
-  auto mergeWithUndefRight = makeMergeWithUndefLeft.template operator()<true>(
-      lessThan, findSmallerUndefRangesRight);
-
+  auto mergeWithUndefLeft = [&](Iterator itFromRight, Iterator leftBegin,
+                                Iterator leftEnd) {
+    if constexpr (!isSimilar<decltype(findSmallerUndefRangesLeft),
+                             decltype(noop)>) {
+      // We need to bind the const& to a variable, else it will be
+      // dangling inside the `findUndef` coroutine.
+      const auto& row = *itFromRight;
+      for (const auto& it : findSmallerUndefRangesLeft(row, leftBegin, leftEnd,
+                                                       outOfOrderFound)) {
+        if (lessThan(*it, *itFromRight)) {
+          compatibleRowAction(it, itFromRight);
+          cover(it);
+        }
+      }
+    }
+  };
   auto containsNoUndefined = []<typename T>(const T& row) {
     if constexpr (std::is_same_v<T, Id>) {
       return row != Id::makeUndefined();
@@ -161,19 +138,39 @@ template <
     }
   };
 
+  auto mergeWithUndefRight = [&](Iterator itFromLeft, Iterator beginRight,
+                                 Iterator endRight, bool hasNoMatch) {
+    if constexpr (!isSimilar<decltype(findSmallerUndefRangesRight),
+                             decltype(noop)>) {
+      bool compatibleWasFound = false;
+      // We need to bind the const& to a variable, else it will be
+      // dangling inside the `findUndef` coroutine.
+      const auto& row = *itFromLeft;
+      for (const auto& it : findSmallerUndefRangesRight(
+               row, beginRight, endRight, outOfOrderFound)) {
+        if (lessThan(*it, *itFromLeft)) {
+          compatibleWasFound = true;
+          compatibleRowAction(itFromLeft, it);
+        }
+      }
+      if (compatibleWasFound) {
+        cover(itFromLeft);
+      } else if (hasNoMatch && containsNoUndefined(row)) {
+        elFromFirstNotFoundAction(itFromLeft);
+        cover(itFromLeft);
+      }
+    } else {
+      if (hasNoMatch && containsNoUndefined(*itFromLeft)) {
+        elFromFirstNotFoundAction(itFromLeft);
+        cover(itFromLeft);
+      }
+    }
+  };
+
   [&]() {
     while (it1 < end1 && it2 < end2) {
       while (lessThan(*it1, *it2)) {
-        if constexpr (hasNotFoundAction) {
-          if (!mergeWithUndefRight(it1, std::begin(right), it2)) {
-            if (containsNoUndefined(*it1)) {
-              cover(it1);
-              elFromFirstNotFoundAction(it1);
-            }
-          } else {
-            cover(it1);
-          }
-        }
+        mergeWithUndefRight(it1, std::begin(right), it2, true);
         ++it1;
         if (it1 >= end1) {
           return;
@@ -197,8 +194,9 @@ template <
       auto endSame2 = std::find_if_not(
           it2, end2, [&](const auto& row) { return eq(*it1, row); });
 
+      bool hasNoMatch = it2 == endSame2;
       for (auto it = it1; it != endSame1; ++it) {
-        mergeWithUndefRight(it, std::begin(right), it2);
+        mergeWithUndefRight(it, std::begin(right), it2, hasNoMatch);
       }
       for (auto it = it2; it != endSame2; ++it) {
         mergeWithUndefLeft(it, std::begin(left), it1);
@@ -219,17 +217,12 @@ template <
     mergeWithUndefLeft(it, std::begin(left), std::end(left));
   }
 
-  if constexpr (hasNotFoundAction) {
-    for (; it1 < end1; ++it1) {
-      cover(it1);
-      if (!mergeWithUndefRight(it1, std::begin(right), std::end(right))) {
-        elFromFirstNotFoundAction(it1);
-      }
-    }
+  for (; it1 != end1; ++it1) {
+    mergeWithUndefRight(it1, std::begin(right), std::end(right), true);
   }
 
   size_t numOutOfOrderAtEnd = 0;
-  // TODO<joka921> These will be out of order;
+
   if constexpr (hasNotFoundAction) {
     for (size_t i = 0; i < coveredFromLeft.size(); ++i) {
       if (!coveredFromLeft[i]) {
@@ -327,18 +320,35 @@ void gallopingJoin(const Range& smaller, const Range& larger,
   }
 }
 
-// TODO<joka921> Comment this abstraction
-template <std::ranges::random_access_range Range>
+/**
+ * @brief Perform an OPTIONAL join for the following special case: The `left`
+ * input contains no UNDEF values in any of its join columns, the `right`
+ * range contains UNDEF values only in its least significant join column. The
+ * meaning of the other parameters and the preconditions on the input are the
+ * same as for the more general `zipperJoinWithUndef` algorithm above. Note:
+ * This algorithms can also be used to implement a MINUS operation for inputs
+ * with the same preconditions by specifying an appropriate
+ * `elFromFirstNotFoundAction`.
+ * @param left The left input of the optional join. Must not contain UNDEF
+ * values in the join columns.
+ * @param right The right input of the optional join. Must only contain UNDEF
+ * values in the least significant join column
+ * @param lessThan Same as in `zipperJoinWithUndef`
+ * @param compatibleRowAction Same as in `zipperJoinWithUndef`
+ * @param elFromFirstNotFoundAction Same as in `zipperJoinWithUndef`
+ */
 void specialOptionalJoin(
-    const Range& range1, const Range& range2, const auto& lessThan,
-    const BinaryIteratorFunction<Range> auto& compatibleRowAction,
-    const UnaryIteratorFunction<Range> auto& elFromFirstNotFoundAction) {
-  auto it1 = std::begin(range1);
-  auto end1 = std::end(range1);
-  auto it2 = std::begin(range2);
-  auto end2 = std::end(range2);
+    const IdTableView<0>& left, const IdTableView<0>& right,
+    const auto& lessThan,
+    const BinaryIteratorFunction<IdTableView<0>> auto& compatibleRowAction,
+    const UnaryIteratorFunction<IdTableView<0>> auto&
+        elFromFirstNotFoundAction) {
+  auto it1 = std::begin(left);
+  auto end1 = std::end(left);
+  auto it2 = std::begin(right);
+  auto end2 = std::end(right);
 
-  if (std::empty(range1)) {
+  if (std::empty(left)) {
     return;
   }
 
@@ -362,15 +372,14 @@ void specialOptionalJoin(
     return true;
   };
 
-  std::span<const Id> lastColumn1 = range1.getColumn(range1.numColumns() - 1);
-  std::span<const Id> lastColumn2 = range2.getColumn(range1.numColumns() - 1);
+  std::span<const Id> lastColumn1 = left.getColumn(left.numColumns() - 1);
+  std::span<const Id> lastColumn2 = right.getColumn(left.numColumns() - 1);
 
   while (it1 < end1 && it2 < end2) {
     it2 = std::find_if_not(
         it2, end2, [&](const auto& row) { return lessThan(row, *it1); });
     if (it2 == end2) {
       break;
-      // TODO<joka921> add the remaining elements from (it1 to end1).
     }
 
     auto next1 = std::find_if_not(it1, end1, [&](const auto& row) {
@@ -391,12 +400,12 @@ void specialOptionalJoin(
       continue;
     }
 
-    auto beg = it1 - range1.begin();
-    auto end = endSame1 - range1.begin();
+    auto beg = it1 - left.begin();
+    auto end = endSame1 - left.begin();
     std::span<const Id> leftSub{lastColumn1.begin() + beg,
                                 lastColumn1.begin() + end};
-    beg = it2 - range2.begin();
-    end = endSame2 - range2.begin();
+    beg = it2 - right.begin();
+    end = endSame2 - right.begin();
     std::span<const Id> rightSub{lastColumn2.begin() + beg,
                                  lastColumn2.begin() + end};
 
