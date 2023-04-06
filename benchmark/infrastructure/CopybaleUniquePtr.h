@@ -59,7 +59,15 @@ class CopybaleUniquePtr: public std::unique_ptr<T, Deleter>{
   // Json serialization.
   friend void to_json(nlohmann::json& j,
     const CopybaleUniquePtr<T, Deleter>& p){
-    j = static_cast<std::unique_ptr<T, Deleter>>(p);
+    /*
+    The serialization of `CopybaleUniquePtr` would have identical code to the
+    serialization of a normal unique pointer, so we just re-cast it, to save on
+    code duplication.
+    However, unique pointers can only be created with rvalues, so we also have
+    to create a temporary copy.
+    */
+    j = static_cast<std::unique_ptr<T, Deleter>>(
+      CopybaleUniquePtr<T, Deleter>{p});
   }
 };
 

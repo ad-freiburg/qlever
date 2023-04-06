@@ -61,9 +61,9 @@ class BenchmarkRecords {
     static EntryType& addEntryToContainerVector(
       PointerVector<EntryType>& targetVector,
       ConstructorArgs&&... constructorArgs){
-      targetVector.push_back(CopybaleUniquePtr<EntryType>(
+      targetVector.push_back(CopybaleUniquePtr<EntryType>{
         std::make_unique<EntryType>(std::forward<ConstructorArgs>(
-        constructorArgs)...)));
+        constructorArgs)...)});
       return (*targetVector.back());
     }
 

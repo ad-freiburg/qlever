@@ -102,8 +102,13 @@ class RecordGroup {
     requires std::invocable<Function>
   RecordEntry& addMeasurement(const std::string& descriptor,
       const Function& functionToMeasure){
-      entries_.push_back(std::make_unique<RecordEntry>(descriptor,
-        functionToMeasure));
+      // TODO replace with the out commented code later, this is only for debugging purposes.
+      std::unique_ptr<RecordEntry> uptr{std::make_unique<RecordEntry>(descriptor, functionToMeasure)};
+      CopybaleUniquePtr<RecordEntry> cptr{std::move(uptr)};
+      entries_.push_back(std::move(cptr));
+      /*
+      entries_.push_back(CopybaleUniquePtr<RecordEntry>{
+        std::make_unique<RecordEntry>(descriptor, functionToMeasure)});*/
       return (*entries_.back());
     }
 
