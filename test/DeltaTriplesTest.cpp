@@ -344,7 +344,7 @@ TEST_F(DeltaTriplesTest, insertAndDeleteTriples) {
           } else if (blockIndex > 0) {
             return IdTriple{metadataPerBlock[blockIndex - 1].col0LastId_,
                             metadataPerBlock[blockIndex - 1].col1LastId_,
-                            metadataPerBlock[blockIndex - 1]._col2LastId};
+                            metadataPerBlock[blockIndex - 1].col2LastId_};
           } else {
             return IdTriple{Id::makeUndefined(), Id::makeUndefined(),
                             Id::makeUndefined()};

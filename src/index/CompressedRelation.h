@@ -72,10 +72,6 @@ struct CompressedBlockMetadata {
   Id col1FirstId_;
   Id col1LastId_;
 
-  // For our `DeltaTriples` (https://github.com/ad-freiburg/qlever/pull/916), we
-  // need to know the least significant `Id` of the last triple as well.
-  Id col2LastId_;
-
   // For `DeltaTriples::findTripleInPermutation`, it helps to know the least
   // significant ID of the last triple as well.
   //
@@ -84,7 +80,7 @@ struct CompressedBlockMetadata {
   // above either. It doesn't really harm though because the total size of the
   // blocks is small (even for Wikidata, we have only 50K block, and as you can
   // see from the members, a block consumes < 100 bytes).
-  Id _col2LastId;
+  Id col2LastId_;
 
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadata&) const = default;
