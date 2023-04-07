@@ -119,7 +119,7 @@ RecordTable::operator std::string() const{
   
   // The max width of the column containing the row names.
   const size_t rowNameMaxStringWidth = std::ranges::max(rowNames_,
-      {}, [](const std::string& name){return name.length();}).length();
+      {}, [](std::string_view name){return name.length();}).length();
 
   // The max width for columns with actual entries.
   std::vector<size_t> columnMaxStringWidth(numberColumns, 0);
