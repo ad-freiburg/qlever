@@ -43,7 +43,7 @@ class CopybaleUniquePtr: public std::unique_ptr<T, Deleter>{
   Base(ptr ? std::make_unique<T>(*ptr) : nullptr) {}
 
   // Move constructor.
-  CopybaleUniquePtr(CopybaleUniquePtr&& ptr): Base(ptr.release()) {}
+  CopybaleUniquePtr(CopybaleUniquePtr&&) noexcept = default;
 
   // Copy assignment operator.
   CopybaleUniquePtr<T, Deleter>& operator=(
