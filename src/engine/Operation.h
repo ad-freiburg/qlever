@@ -61,8 +61,6 @@ class Operation {
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
-  const Engine& getEngine() const { return _executionContext->getEngine(); }
-
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
   // Calls  `asStringImpl` and adds the information about the `LIMIT` clause.
@@ -165,6 +163,13 @@ class Operation {
   virtual std::optional<std::shared_ptr<const ResultTable>>
   getPrecomputedResultFromQueryPlanning() {
     return std::nullopt;
+  }
+
+  // Direct access to the `computeResult()` method. This should be only used for
+  // testing, otherwise the `getResult()` function should be used which also
+  // sets the runtime info and uses the cache.
+  virtual ResultTable computeResultOnlyForTesting() final {
+    return computeResult();
   }
 
  protected:

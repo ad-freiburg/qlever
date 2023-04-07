@@ -175,7 +175,7 @@ size_t GroupBy::getCostEstimate() {
   return _subtree->getCostEstimate();
 }
 
-template <int OUT_WIDTH>
+template <size_t OUT_WIDTH>
 void GroupBy::processGroup(
     const GroupBy::Aggregate& aggregate,
     sparqlExpression::EvaluationContext& evaluationContext, size_t blockStart,
@@ -229,14 +229,14 @@ void GroupBy::processGroup(
  *                        its already allocated storage.
  */
 
-template <int IN_WIDTH, int OUT_WIDTH>
+template <size_t IN_WIDTH, size_t OUT_WIDTH>
 void GroupBy::doGroupBy(const IdTable& dynInput,
                         const vector<size_t>& groupByCols,
                         const vector<GroupBy::Aggregate>& aggregates,
                         IdTable* dynResult, const IdTable* inTable,
                         LocalVocab* outLocalVocab) const {
   LOG(DEBUG) << "Group by input size " << dynInput.size() << std::endl;
-  if (dynInput.size() == 0) {
+  if (dynInput.empty()) {
     return;
   }
   const IdTableView<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
@@ -263,8 +263,8 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
       result(rowIdx, i) = input(blockStart, groupByCols[i]);
     }
     for (const GroupBy::Aggregate& a : aggregates) {
-      processGroup(a, evaluationContext, blockStart, blockEnd, &result, rowIdx,
-                   a._outCol, outLocalVocab);
+      processGroup<OUT_WIDTH>(a, evaluationContext, blockStart, blockEnd,
+                              &result, rowIdx, a._outCol, outLocalVocab);
     }
   };
 
@@ -360,8 +360,8 @@ ResultTable GroupBy::computeResult() {
     groupByCols.push_back(subtreeVarCols.at(var).columnIndex_);
   }
 
-  int inWidth = subresult->idTable().numColumns();
-  int outWidth = idTable.numColumns();
+  size_t inWidth = subresult->idTable().numColumns();
+  size_t outWidth = idTable.numColumns();
 
   CALL_FIXED_SIZE((std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
                   subresult->idTable(), groupByCols, aggregates, &idTable,

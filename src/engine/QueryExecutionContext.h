@@ -88,8 +88,7 @@ class QueryResultCache : public ConcurrentLruCache {
 // Holds references to index and engine, implements caching.
 class QueryExecutionContext {
  public:
-  QueryExecutionContext(const Index& index, const Engine& engine,
-                        QueryResultCache* const cache,
+  QueryExecutionContext(const Index& index, QueryResultCache* const cache,
                         ad_utility::AllocatorWithLimit<Id> allocator,
                         SortPerformanceEstimator sortPerformanceEstimator,
                         const bool pinSubtrees = false,
@@ -97,15 +96,12 @@ class QueryExecutionContext {
       : _pinSubtrees(pinSubtrees),
         _pinResult(pinResult),
         _index(index),
-        _engine(engine),
         _subtreeCache(cache),
         _allocator(std::move(allocator)),
         _costFactors(),
         _sortPerformanceEstimator(sortPerformanceEstimator) {}
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
-
-  [[nodiscard]] const Engine& getEngine() const { return _engine; }
 
   [[nodiscard]] const Index& getIndex() const { return _index; }
 
@@ -131,7 +127,6 @@ class QueryExecutionContext {
 
  private:
   const Index& _index;
-  const Engine& _engine;
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;

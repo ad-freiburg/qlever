@@ -105,8 +105,8 @@ ResultTable Bind::computeResult() {
   // added. Same for GROUP BY.
   auto localVocab = subRes->getCopyOfLocalVocab();
 
-  int inwidth = subRes->idTable().numColumns();
-  int outwidth = getResultWidth();
+  size_t inwidth = subRes->idTable().numColumns();
+  size_t outwidth = getResultWidth();
 
   CALL_FIXED_SIZE((std::array{inwidth, outwidth}), &Bind::computeExpressionBind,
                   this, &idTable, &localVocab, *subRes,
@@ -117,7 +117,7 @@ ResultTable Bind::computeResult() {
 }
 
 // _____________________________________________________________________________
-template <int IN_WIDTH, int OUT_WIDTH>
+template <size_t IN_WIDTH, size_t OUT_WIDTH>
 void Bind::computeExpressionBind(
     IdTable* outputIdTable, LocalVocab* outputLocalVocab,
     const ResultTable& inputResultTable,

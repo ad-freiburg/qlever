@@ -246,9 +246,8 @@ TEST(HasPredicateScan, subtreeS) {
   CompactVectorOfStrings<Id> patterns(patternsSrc);
 
   Index index;
-  Engine engine;
   QueryResultCache cache{};
-  QueryExecutionContext ctx(index, engine, &cache, makeAllocator(),
+  QueryExecutionContext ctx(index, &cache, makeAllocator(),
                             SortPerformanceEstimator{});
 
   // create the subtree operation
