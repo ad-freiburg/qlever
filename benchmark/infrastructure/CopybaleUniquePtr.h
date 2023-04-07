@@ -52,11 +52,8 @@ class CopybaleUniquePtr: public std::unique_ptr<T, Deleter>{
   CopybaleUniquePtr<T, Deleter>& operator=(
     const CopybaleUniquePtr<T, Deleter>& ptr){
     // Special behaviour in case, that `ptr` doesn't own an object.
-    if (ptr){
-      return Base::operator=(std::make_unique<T>(*ptr));
-    } else {
-      return Base::operator=(nullptr);
-    }
+    Base::operator=(ptr ? std::make_unique<T>(*ptr) : nullptr);
+    return *this;
   }
 
   // Json serialization.
