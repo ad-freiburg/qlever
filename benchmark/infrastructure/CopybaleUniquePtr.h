@@ -24,6 +24,9 @@ class CopybaleUniquePtr: public std::unique_ptr<T, Deleter>{
   // Default constructor.
   CopybaleUniquePtr(): Base() {}
 
+  // Default destructor.
+  ~CopybaleUniquePtr() = default;
+
   /*
   @brief Creates a `CopybaleUniquePtr`, that holds a copy of the object owned
   by the given unique pointer.
