@@ -367,13 +367,13 @@ void CompressedRelationReader::scan(
     ad_utility::AllocatorWithLimit<Id> allocator{
         ad_utility::makeAllocationMemoryLeftThreadsafeObject(
             std::numeric_limits<size_t>::max())};
-    IdTable result(1, allocator);
-    result.resize(block.size());
+    std::unique_ptr<IdTable> result = std::make_unique<IdTable>(1, allocator);
+    result->resize(block.size());
     for (size_t i = 0; i < block.size(); ++i) {
-      result(i, 0) = block(i, 1);
+      (*result)(i, 0) = block(i, 1);
     }
-    return {std::make_unique<IdTable>(std::move(result)), rowIndexBegin,
-            rowIndexEnd, blockIndex, numInsAndDel};
+    return {std::move(result), rowIndexBegin, rowIndexEnd, blockIndex,
+            numInsAndDel};
   };
 
   // The first and the last block might be incomplete. We process them
