@@ -99,6 +99,8 @@ jobs:
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
       run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} .
 
+      name: BenchmarkExample
+
     - name: E2E
       run: ${{github.workspace}}/e2e/e2e.sh
 
