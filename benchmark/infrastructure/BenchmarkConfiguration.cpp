@@ -102,3 +102,8 @@ void BenchmarkConfiguration::parseShortHand(const std::string& shortHandString){
       nlohmann::json::parse(assigmentVariableContentUninterpreted);
   }
 }
+
+// JSON serialization.
+void to_json(nlohmann::json& j, const BenchmarkConfiguration& configuration){
+ j = configuration.data_;
+}

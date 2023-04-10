@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "nlohmann/json.hpp"
 #include "util/json.h"
 
 /*
@@ -36,9 +37,8 @@ class BenchmarkMetadata{
       return data_.dump();
     }
 
-    // JSON (d)serialization.
-    // TODO This works, but `"data_":null` looks a bit ugly. Is there a way,
-    // to skip the `data_` and just have the content of `data_` as the
-    // serialied form of this class?
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkMetadata, data_)
+    // JSON serialization.
+    friend void to_json(nlohmann::json& j, const BenchmarkMetadata& metadata){
+      j = metadata.data_;
+    }
 };

@@ -100,9 +100,7 @@ public:
   */
  void parseShortHand(const std::string& shortHandString);
 
- // JSON (d)serialization.
- // TODO This works, but `"data_":null` looks a bit ugly. Is there a way,
- // to skip the `data_` and just have the content of `data_` as the
- // serialied form of this class?
- NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkConfiguration, data_)
+ // JSON serialization.
+ friend void to_json(nlohmann::json& j,
+  const BenchmarkConfiguration& configuration);
 };
