@@ -28,7 +28,7 @@ Using the functions described there would require including
 */
 
 // Single Measurements
-class BMSingleMeasurements: public BenchmarkClassInterface{
+class BMSingleMeasurements: public BenchmarkInterface{
   public:
 
   void parseConfiguration(const BenchmarkConfiguration&) final{
@@ -73,7 +73,7 @@ class BMSingleMeasurements: public BenchmarkClassInterface{
 };
 
 // Groups
-class BMGroups: public BenchmarkClassInterface{
+class BMGroups: public BenchmarkInterface{
   public:
 
   void parseConfiguration(const BenchmarkConfiguration&) final{
@@ -141,7 +141,7 @@ class BMGroups: public BenchmarkClassInterface{
 };
 
 // Tables
-class BMTables: public BenchmarkClassInterface{
+class BMTables: public BenchmarkInterface{
   public:
 
   void parseConfiguration(const BenchmarkConfiguration&) final{
@@ -217,7 +217,7 @@ class BMTables: public BenchmarkClassInterface{
 
 // A simple example of the usage of the `BenchmarkConfiguration` and the
 // general `BenchmarkMetadata`.
-class BMConfigurationAndMetadataExample: public BenchmarkClassInterface{
+class BMConfigurationAndMetadataExample: public BenchmarkInterface{
   // This class will simply transcribe specific configuration options
   // to this `BenchmarkMetadta` object and return it later with the
   // `getMetadata()` function.

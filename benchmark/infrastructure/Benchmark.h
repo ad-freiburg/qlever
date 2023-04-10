@@ -136,7 +136,7 @@ The interface for benchmark classes. More specifically, it's the interface
 between a collection of benchmarks of any type (single, group, table) and
 the processing/management of those benchmarks.
 */
-class BenchmarkClassInterface{
+class BenchmarkInterface{
   public:
 
   // Used to transport values, that you want to set at runtime.
@@ -153,7 +153,7 @@ class BenchmarkClassInterface{
   For example: Let's say, you are measuring the same benchmarks for different
   versions of an algorithm. You could add the metadata information, which
   version it is, to every `resultGroup`, `resultTable`, etc., but that is a bit
-  clunky. Instead, you make one `BenchmarkClassInterface` instance for every
+  clunky. Instead, you make one `BenchmarkInterface` instance for every
   version and simply return which version you are using as metadata through
   `getMetadata`.
   */
@@ -170,7 +170,7 @@ class BenchmarkClassInterface{
   virtual BenchmarkResults runAllBenchmarks() = 0; 
   
   // Without this, we get memory problems.
-  virtual ~BenchmarkClassInterface() = default;
+  virtual ~BenchmarkInterface() = default;
 };
 
 /*
@@ -180,7 +180,7 @@ access and use them.
 class BenchmarkRegister {
 
   // Alias for a type, so that we don't repeat things so often.
-  using BenchmarkPointer = std::unique_ptr<BenchmarkClassInterface>;
+  using BenchmarkPointer = std::unique_ptr<BenchmarkInterface>;
 
   /*
   Static vector of all registered benchmark classe instances.
@@ -192,7 +192,7 @@ class BenchmarkRegister {
   /*
    * @brief Register one benchmark class, by creating a global
    *  instance of this class and passing the instances of your class, that
-   *  implemented the `BenchmarkClassInterface`. Shouldn't take up much space
+   *  implemented the `BenchmarkInterface`. Shouldn't take up much space
    *  and I couldn't find a better way of doing it.
    *
    * @param benchmarkClasseInstance The memory managment of the passed
