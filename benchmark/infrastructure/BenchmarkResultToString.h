@@ -14,6 +14,7 @@
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
 
+namespace ad_benchmark{
 /*
  * @brief Add a string of the form
  * "
@@ -30,25 +31,22 @@ void addCategoryTitelToOStringstream(std::ostringstream* stream,
 // Default way of adding a vector of ResultEntrys to a `ostringstream` with
 // optional prefix.
 void addVectorOfResultEntryToOStringstream(std::ostringstream* stream,
-    const std::vector<BenchmarkMeasurementContainer::ResultEntry>& entries,
-    const std::string& prefix = "");
+    const std::vector<ResultEntry>& entries, const std::string& prefix = "");
 
 // Visualization for single measurments.
 void addSingleMeasurementsToOStringstream(std::ostringstream* stream,
-    const std::vector<BenchmarkMeasurementContainer::ResultEntry>&
-    resultEntries);
+    const std::vector<ResultEntry>& resultEntries);
 
 // Visualization for groups.
 void addGroupsToOStringstream(std::ostringstream* stream,
-    const std::vector<BenchmarkMeasurementContainer::ResultGroup>&
-    resultGroups);
+    const std::vector<ResultGroup>& resultGroups);
 
 // Visualization for tables.
 void addTablesToOStringstream(std::ostringstream* stream,
-    const std::vector<BenchmarkMeasurementContainer::ResultTable>&
-    resultTables);
+    const std::vector<ResultTable>& resultTables);
 
 /*
  * @brief Returns a formated string containing all benchmark information.
  */
 std::string benchmarkResultsToString(const BenchmarkResults& results);
+} // End of namespace `ad_benchmark`

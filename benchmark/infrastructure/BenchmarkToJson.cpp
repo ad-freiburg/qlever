@@ -10,6 +10,7 @@
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "nlohmann/json.hpp"
 
+namespace ad_benchmark{
 // ___________________________________________________________________________
 void to_json(nlohmann::json& j, const BenchmarkResults& results){
   // Creating the json object. We actually don't want `BenchmarkResults` to
@@ -92,3 +93,4 @@ nlohmann::json zipGeneralMetadataAndBenchmarkResultsToJson(
 
   return zipGeneralMetadataAndBenchmarkResultsToJson(vectorsPairedUp);
 }
+} // End of namespace `ad_benchmark`

@@ -9,6 +9,7 @@
 #include "util/json.h"
 #include <type_traits>
 
+namespace ad_benchmark{
 /*
  * A rather basic wrapper for nlohmann::json, which only allows reading of
  * information and setting the configuration by parsing strings.
@@ -104,3 +105,4 @@ public:
  friend void to_json(nlohmann::json& j,
   const BenchmarkConfiguration& configuration);
 };
+} // End of namespace `ad_benchmark`

@@ -4,6 +4,7 @@
 
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
 
+namespace ad_benchmark{
 // ___________________________________________________________________________
 void addCategoryTitelToOStringstream(std::ostringstream* stream,
     std::string_view categoryTitel){
@@ -16,8 +17,7 @@ void addCategoryTitelToOStringstream(std::ostringstream* stream,
 
 // ___________________________________________________________________________
 void addVectorOfResultEntryToOStringstream(std::ostringstream* stream,
-    const std::vector<BenchmarkMeasurementContainer::ResultEntry>& entries,
-    const std::string& prefix) {
+    const std::vector<ResultEntry>& entries, const std::string& prefix) {
   for (const auto& entry: entries) {
     (*stream) << "\n" << prefix << (std::string)entry;
   }
@@ -25,8 +25,7 @@ void addVectorOfResultEntryToOStringstream(std::ostringstream* stream,
 
 // ___________________________________________________________________________
 void addSingleMeasurementsToOStringstream(std::ostringstream* stream,
-  const std::vector<BenchmarkMeasurementContainer::ResultEntry>&
-  resultEntries){
+  const std::vector<ResultEntry>& resultEntries){
   addCategoryTitelToOStringstream(stream, "Single measurment benchmarks");
   addVectorOfResultEntryToOStringstream(stream, resultEntries,
       "Single measurment benchmark ");
@@ -34,8 +33,8 @@ void addSingleMeasurementsToOStringstream(std::ostringstream* stream,
 
 // ___________________________________________________________________________
 void addGroupsToOStringstream(std::ostringstream* stream,
-  const std::vector<BenchmarkMeasurementContainer::ResultGroup>& resultGroups){
-  addCategoryTitelToOStringstream(stream, "Group benchmarks");
+  const std::vector<ResultGroup>& resultGroups){
+    addCategoryTitelToOStringstream(stream, "Group benchmarks");
   for (const auto& group: resultGroups) {
     (*stream) << "\n\n" << (std::string)group;
   }
@@ -43,8 +42,8 @@ void addGroupsToOStringstream(std::ostringstream* stream,
 
 // ___________________________________________________________________________
 void addTablesToOStringstream(std::ostringstream* stream,
-  const std::vector<BenchmarkMeasurementContainer::ResultTable>& resultTables){
-  addCategoryTitelToOStringstream(stream, "Table benchmarks");
+  const std::vector<ResultTable>& resultTables){
+    addCategoryTitelToOStringstream(stream, "Table benchmarks");
   // Printing the tables themselves.
   for (const auto& table: resultTables) {
     (*stream) << "\n\n" << (std::string)table;
@@ -54,12 +53,10 @@ void addTablesToOStringstream(std::ostringstream* stream,
 // ___________________________________________________________________________
 std::string benchmarkResultsToString(const BenchmarkResults& results) {
   // The values for all the categories of benchmarks.
-  const std::vector<BenchmarkMeasurementContainer::ResultEntry>&
-    singleMeasurements = results.getSingleMeasurements();
-  const std::vector<BenchmarkMeasurementContainer::ResultGroup>&
-    resultGroups = results.getGroups();
-  const std::vector<BenchmarkMeasurementContainer::ResultTable>&
-    resultTables = results.getTables();
+  const std::vector<ResultEntry>& singleMeasurements =
+    results.getSingleMeasurements();
+  const std::vector<ResultGroup>& resultGroups = results.getGroups();
+  const std::vector<ResultTable>& resultTables = results.getTables();
 
   // Visualizes the measured times.
   std::ostringstream visualization;
@@ -99,3 +96,4 @@ std::string benchmarkResultsToString(const BenchmarkResults& results) {
 
   return visualization.str();
 }
+} // End of namespace `ad_benchmark`

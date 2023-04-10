@@ -6,6 +6,7 @@
 
 #include "util/json.h"
 
+namespace ad_benchmark{
 /*
  * A rather basic wrapper for nlohmann::json, which only allows basic adding
  * of key value pairs and returning of the json string.
@@ -41,3 +42,4 @@ class BenchmarkMetadata{
       j = metadata.data_;
     }
 };
+} // End of namespace `ad_benchmark`

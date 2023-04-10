@@ -22,6 +22,7 @@
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/CopybaleUniquePtr.h"
 
+namespace ad_benchmark{
 /*
  * Used for measuring the time needed for the execution of a function and
  * organizing those measured times.
@@ -31,17 +32,14 @@ class BenchmarkResults {
     using PointerVector = std::vector<CopybaleUniquePtr<T>>;
 
     // A vector of all the created single measurements.
-    PointerVector<BenchmarkMeasurementContainer::ResultEntry>
-    singleMeasurements_;
+    PointerVector<ResultEntry> singleMeasurements_;
 
     // A vector of all the created resultGroups.
-    PointerVector<BenchmarkMeasurementContainer::ResultGroup>
-    resultGroups_;
+    PointerVector<ResultGroup> resultGroups_;
   
     // A hash map of all the created resultTables. For faster access.
     // The key for a resultTable is it's descriptor.
-    PointerVector<BenchmarkMeasurementContainer::ResultTable>
-    resultTables_;
+    PointerVector<ResultTable> resultTables_;
 
     /*
     @brief Adds an entry to the given vector, by creating an instance of
@@ -84,8 +82,8 @@ class BenchmarkResults {
      */
     template<typename Function>
       requires std::invocable<Function>
-    BenchmarkMeasurementContainer::ResultEntry& addMeasurement(
-      const std::string& descriptor, const Function& functionToMeasure){
+    ResultEntry& addMeasurement(const std::string& descriptor,
+      const Function& functionToMeasure){
       return addEntryToContainerVector(singleMeasurements_, descriptor,
       functionToMeasure);
     }
@@ -93,20 +91,17 @@ class BenchmarkResults {
     /*
      * @brief Returns a vector of all the singe measurements.
      */
-    std::vector<BenchmarkMeasurementContainer::ResultEntry>
-    getSingleMeasurements() const;
+    std::vector<ResultEntry> getSingleMeasurements() const;
 
     /*
      * @brief Creates an empty group with the given descriptor.
      */
-    BenchmarkMeasurementContainer::ResultGroup& addGroup(
-      const std::string& descriptor);
+    ResultGroup& addGroup( const std::string& descriptor);
 
     /*
      * @brief Returns a vector of all the groups.
      */
-    std::vector<BenchmarkMeasurementContainer::ResultGroup> getGroups()
-    const;
+    std::vector<ResultGroup> getGroups() const;
 
     /*
      * @brief Creates an empty table, which can be accesed/identified using the
@@ -115,16 +110,14 @@ class BenchmarkResults {
      * @param descriptor The name/identifier of the table.
      * @param rowNames,columnNames The names for the rows/columns.
      */
-    BenchmarkMeasurementContainer::ResultTable& addTable(
-        const std::string& descriptor,
-        const std::vector<std::string>& rowNames,
-        const std::vector<std::string>& columnNames);
+    ResultTable& addTable( const std::string& descriptor,
+      const std::vector<std::string>& rowNames,
+      const std::vector<std::string>& columnNames);
     
     /*
      * @brief Returns a vector of all the tables.
      */
-    std::vector<BenchmarkMeasurementContainer::ResultTable>
-    getTables() const;
+    std::vector<ResultTable> getTables() const;
 
     // Json serialization. The implementation can be found in
     // `BenchmarkToJson`.
@@ -248,3 +241,4 @@ pass some arguments to a special constructor, you can pass any extra
 constructor arguments here. Just treat it like a variadic template function.
 */
 #define AD_REGISTER_BENCHMARK(benchmarkClass, ...) AD_DECLARE_REGISTER_VARIABLE(__LINE__, benchmarkClass __VA_OPT__(,) __VA_ARGS__)
+} // End of namespace `ad_benchmark`

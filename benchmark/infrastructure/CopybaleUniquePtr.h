@@ -9,6 +9,7 @@
 
 #include "util/json.h"
 
+namespace ad_benchmark{
 /*
 A version of `std::unique_ptr` with a copy assigment operator and a copy
 constructor, which both copy the dereferenced pointer to create a new instace
@@ -70,4 +71,4 @@ class CopybaleUniquePtr: public std::unique_ptr<T, Deleter>{
       CopybaleUniquePtr<T, Deleter>{p});
   }
 };
-
+} // End of namespace `ad_benchmark`

@@ -9,6 +9,7 @@
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "util/Exception.h"
 
+namespace ad_benchmark{
 // ____________________________________________________________________________
 void BenchmarkConfiguration::parseJsonString(const std::string& jsonString){
   data_ = nlohmann::json::parse(jsonString);
@@ -107,3 +108,4 @@ void BenchmarkConfiguration::parseShortHand(const std::string& shortHandString){
 void to_json(nlohmann::json& j, const BenchmarkConfiguration& configuration){
  j = configuration.data_;
 }
+} // End of namespace `ad_benchmark`

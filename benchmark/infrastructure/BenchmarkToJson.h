@@ -11,6 +11,7 @@
 #include "util/json.h"
 #include "../benchmark/infrastructure/Benchmark.h"
 
+namespace ad_benchmark{
 /*
  * @brief Create a nlohmann::json array with all relevant informations
  *  about the measurments taken by all the `BenchmarkResults`.
@@ -35,3 +36,4 @@ with the entry at the same place in the other vector.
 nlohmann::json zipGeneralMetadataAndBenchmarkResultsToJson(
  const std::vector<BenchmarkMetadata>& generalMetadata,
  const std::vector<BenchmarkResults>& benchmarkResults);
+} // End of namespace `ad_benchmark`

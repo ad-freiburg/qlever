@@ -107,7 +107,7 @@ int main(int argc, char** argv) {
   }
 
   // Did we get any configuration?
-  BenchmarkConfiguration config{};
+  ad_benchmark::BenchmarkConfiguration config{};
 
   // The order of first parsing the json and then parsing the short hand is
   // important, because `parseJsonString` resets and then sets the
@@ -120,23 +120,25 @@ int main(int argc, char** argv) {
   }
 
   // Pass the configuration, even if it is empty.
-  BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(config);
+  ad_benchmark::BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(
+    config);
 
   // Measuring the time for all registered benchmarks.
   // For measuring and saving the times.
-  const std::vector<BenchmarkResults>&
-    results{BenchmarkRegister::runAllRegisteredBenchmarks()};
+  const std::vector<ad_benchmark::BenchmarkResults>&
+    results{ad_benchmark::BenchmarkRegister::runAllRegisteredBenchmarks()};
 
   // Actually processing the arguments.
   if (vm.count("print")) {
-    std::ranges::for_each(results, [](const BenchmarkResults& result){
+    std::ranges::for_each(results, [](
+      const ad_benchmark::BenchmarkResults& result){
       std::cout << benchmarkResultsToString(result) << "\n";
     }, {});
   }
 
   if (vm.count("write")) {
     writeJsonToFile(zipGeneralMetadataAndBenchmarkResultsToJson(
-      BenchmarkRegister::getAllGeneralMetadata(), results), writeFileName,
-        vm.count("append"));
+      ad_benchmark::BenchmarkRegister::getAllGeneralMetadata(), results),
+      writeFileName, vm.count("append"));
   }
 }

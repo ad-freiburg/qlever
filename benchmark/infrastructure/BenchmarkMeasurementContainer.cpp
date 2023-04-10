@@ -15,8 +15,7 @@
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
 
-// ____________________________________________________________________________
-namespace BenchmarkMeasurementContainer{
+namespace ad_benchmark{
 // ____________________________________________________________________________
 ResultEntry::operator std::string() const{
   return absl::StrCat("'", descriptor_, "' took ", measuredTime_, " seconds.");
@@ -177,4 +176,4 @@ void to_json(nlohmann::json& j, const ResultTable& resultTable){
     {"metadata", resultTable.metadata_}};
 }
 
-} // End of namespace `BenchmarkMeasurementContainer`
+} // End of namespace `ad_benchmark`

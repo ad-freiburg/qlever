@@ -15,8 +15,7 @@
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "../benchmark/infrastructure/CopybaleUniquePtr.h"
 
-// All the classes, that hold the measurements of measured benchmarks.
-namespace BenchmarkMeasurementContainer{
+namespace ad_benchmark{
 
 // Helper function for adding time entries to the classes.
 /*
@@ -205,4 +204,4 @@ class ResultTable {
   friend void to_json(nlohmann::json& j, const ResultTable& resultTable);
 };
   
-}
+} // End of namespace `ad_benchmark`

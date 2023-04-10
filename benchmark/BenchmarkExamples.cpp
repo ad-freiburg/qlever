@@ -12,6 +12,7 @@
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "util/Random.h"
 
+namespace ad_benchmark{
 /*
 A typical problem in benchmarking is that the result of a computation is
 not used and thus the whole computation gets optimized out by the compiler.
@@ -268,3 +269,4 @@ AD_REGISTER_BENCHMARK(BMSingleMeasurements);
 AD_REGISTER_BENCHMARK(BMGroups);
 AD_REGISTER_BENCHMARK(BMTables);
 AD_REGISTER_BENCHMARK(BMConfigurationAndMetadataExample);
+} // End of namespace `ad_benchmark`
