@@ -315,3 +315,5 @@ addLinkAndDiscoverTest(OperationTest engine)
 addLinkAndDiscoverTest(RuntimeInformationTest engine)
 
 addLinkAndDiscoverTest(VariableToColumnMapTest engine)
+
+addLinkAndDiscoverTest(CopybaleUniquePtr)
