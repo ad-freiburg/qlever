@@ -13,7 +13,7 @@
 #include "util/Random.h"
 
 /*
-TODO: A typical problem in benchmarking is that the result of a computation is
+A typical problem in benchmarking is that the result of a computation is
 not used and thus the whole computation gets optimized out by the compiler.
 To avoid this, the `BMSingleMeasurements` example prints the result of a
 computation to the screen.
