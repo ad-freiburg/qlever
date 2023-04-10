@@ -107,34 +107,34 @@ class BMGroups: public BenchmarkInterface{
     };
 
     // Measuring functions.
-    auto& loopAddGroup{results.addGroup("loopAdd")};
+    auto& loopAddGroup = results.addGroup("loopAdd");
     loopAddGroup.metadata_.addKeyValuePair("Operator", '+');
 
-    auto& loopMultiplyGroup{results.addGroup("loopMultiply")};
+    auto& loopMultiplyGroup = results.addGroup("loopMultiply");
     loopMultiplyGroup.metadata_.addKeyValuePair("Operator", '*');
 
-    auto& addMember1{loopAddGroup.addMeasurement(
-      "1+1", [&loopAdd](){loopAdd(1,1);})};
+    auto& addMember1 = loopAddGroup.addMeasurement(
+      "1+1", [&loopAdd](){loopAdd(1,1);});
     addMember1.metadata_.addKeyValuePair("Result", 2);
 
-    auto& addMember2{loopAddGroup.addMeasurement(
-      "42+69", [&loopAdd](){loopAdd(42,69);})};
+    auto& addMember2 = loopAddGroup.addMeasurement(
+      "42+69", [&loopAdd](){loopAdd(42,69);});
     addMember2.metadata_.addKeyValuePair("Result", 42+69);
 
-    auto& addMember3{loopAddGroup.addMeasurement(
-      "10775+24502", [&loopAdd](){loopAdd(10775, 24502);})};
+    auto& addMember3 = loopAddGroup.addMeasurement(
+      "10775+24502", [&loopAdd](){loopAdd(10775, 24502);});
     addMember3.metadata_.addKeyValuePair("Result", 10775+24502);
 
-    auto& multiplicationMember1{loopMultiplyGroup.addMeasurement(
-      "1*1", [&loopMultiply](){loopMultiply(1,1);})};
+    auto& multiplicationMember1 = loopMultiplyGroup.addMeasurement(
+      "1*1", [&loopMultiply](){loopMultiply(1,1);});
     multiplicationMember1.metadata_.addKeyValuePair("Result", 1);
 
-    auto& multiplicationMember2{loopMultiplyGroup.addMeasurement(
-      "42*69", [&loopMultiply](){loopMultiply(42,69);})};
+    auto& multiplicationMember2 = loopMultiplyGroup.addMeasurement(
+      "42*69", [&loopMultiply](){loopMultiply(42,69);});
     multiplicationMember2.metadata_.addKeyValuePair("Result", 42*69);
 
-    auto& multiplicationMember3{loopMultiplyGroup.addMeasurement(
-      "10775*24502", [&loopMultiply](){loopMultiply(10775, 24502);})};
+    auto& multiplicationMember3 = loopMultiplyGroup.addMeasurement(
+      "10775*24502", [&loopMultiply](){loopMultiply(10775, 24502);});
     multiplicationMember3.metadata_.addKeyValuePair("Result", 10775*24502);
     
     return results;
@@ -167,12 +167,12 @@ class BMTables: public BenchmarkInterface{
     };
 
     // Measuring functions.
-    auto& tableExponentsWithBasis{results.addTable(
+    auto& tableExponentsWithBasis = results.addTable(
       "Exponents with the given basis", {"2", "3", "Time difference"},
-      {"0", "1", "2", "3", "4"})};
+      {"0", "1", "2", "3", "4"});
 
-    auto& tableAddingExponents{results.addTable("Adding exponents",
-      {"2^10", "2^11", "Values written out"}, {"2^10", "2^11"})};
+    auto& tableAddingExponents = results.addTable("Adding exponents",
+      {"2^10", "2^11", "Values written out"}, {"2^10", "2^11"});
     // Adding some metadata.
     tableAddingExponents.metadata_.addKeyValuePair("Manually set fields",
       "Row 2");
