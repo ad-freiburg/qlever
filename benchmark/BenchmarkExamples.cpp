@@ -41,7 +41,7 @@ class BMSingleMeasurements: public BenchmarkClassInterface{
   }
 
   BenchmarkResults runAllBenchmarks() final{
-    BenchmarkResults records{};
+    BenchmarkResults results{};
     
     // Setup.
     const size_t number = SlowRandomIntGenerator<size_t>(10,1'000)();
@@ -50,10 +50,10 @@ class BMSingleMeasurements: public BenchmarkClassInterface{
     };
 
     // Measuring functions.
-    records.addMeasurement("Exponentiate once",
+    results.addMeasurement("Exponentiate once",
       [&exponentiate, &number](){exponentiate(number);});
     auto& multipleTimes =
-      records.addMeasurement("Recursivly exponentiate multiple times",
+      results.addMeasurement("Recursivly exponentiate multiple times",
       [&number, &exponentiate](){
           size_t toExponentiate = number;
           for (size_t i = 0; i < 10'000'000'000; i++) {
@@ -68,7 +68,7 @@ class BMSingleMeasurements: public BenchmarkClassInterface{
     multipleTimes.metadata_.addKeyValuePair("Amount of exponentiations",
       10'000'000'000);
 
-    return records;
+    return results;
   } 
 };
 
@@ -86,7 +86,7 @@ class BMGroups: public BenchmarkClassInterface{
   }
 
   BenchmarkResults runAllBenchmarks() final{
-    BenchmarkResults records{};
+    BenchmarkResults results{};
 
     // Setup.
     auto loopAdd = [](const size_t a, const size_t b) {
@@ -106,10 +106,10 @@ class BMGroups: public BenchmarkClassInterface{
     };
 
     // Measuring functions.
-    auto& loopAddGroup{records.addGroup("loopAdd")};
+    auto& loopAddGroup{results.addGroup("loopAdd")};
     loopAddGroup.metadata_.addKeyValuePair("Operator", '+');
 
-    auto& loopMultiplyGroup{records.addGroup("loopMultiply")};
+    auto& loopMultiplyGroup{results.addGroup("loopMultiply")};
     loopMultiplyGroup.metadata_.addKeyValuePair("Operator", '*');
 
     auto& addMember1{loopAddGroup.addMeasurement(
@@ -136,7 +136,7 @@ class BMGroups: public BenchmarkClassInterface{
       "10775*24502", [&loopMultiply](){loopMultiply(10775, 24502);})};
     multiplicationMember3.metadata_.addKeyValuePair("Result", 10775*24502);
     
-    return records;
+    return results;
   } 
 };
 
@@ -154,7 +154,7 @@ class BMTables: public BenchmarkClassInterface{
   }
 
   BenchmarkResults runAllBenchmarks() final{
-    BenchmarkResults records{};
+    BenchmarkResults results{};
 
     // Setup.
     auto exponentiateNTimes = [](const size_t number, const size_t n){
@@ -166,11 +166,11 @@ class BMTables: public BenchmarkClassInterface{
     };
 
     // Measuring functions.
-    auto& tableExponentsWithBasis{records.addTable(
+    auto& tableExponentsWithBasis{results.addTable(
       "Exponents with the given basis", {"2", "3", "Time difference"},
       {"0", "1", "2", "3", "4"})};
 
-    auto& tableAddingExponents{records.addTable("Adding exponents",
+    auto& tableAddingExponents{results.addTable("Adding exponents",
       {"2^10", "2^11", "Values written out"}, {"2^10", "2^11"})};
     // Adding some metadata.
     tableAddingExponents.metadata_.addKeyValuePair("Manually set fields",
@@ -211,7 +211,7 @@ class BMTables: public BenchmarkClassInterface{
     tableAddingExponents.setEntry(2, 0, "1024+1024 and 1024+2048");
     tableAddingExponents.setEntry(2, 1, "1024+2048 and 2048+2048");
 
-    return records;
+    return results;
   } 
 };
 

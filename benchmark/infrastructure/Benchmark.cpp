@@ -54,42 +54,42 @@ BenchmarkRegister::BenchmarkRegister(
 
 // ____________________________________________________________________________
 auto BenchmarkResults::getSingleMeasurements() const
--> std::vector<BenchmarkMeasurementContainer::RecordEntry> {
+-> std::vector<BenchmarkMeasurementContainer::ResultEntry> {
   return ad_utility::transform(singleMeasurements_,
-  [](const auto& pointer)->BenchmarkMeasurementContainer::RecordEntry{
+  [](const auto& pointer)->BenchmarkMeasurementContainer::ResultEntry{
       return (*pointer);
   });
 }
 
 // ____________________________________________________________________________
-BenchmarkMeasurementContainer::RecordGroup& BenchmarkResults::addGroup(
+BenchmarkMeasurementContainer::ResultGroup& BenchmarkResults::addGroup(
     const std::string& descriptor) {
-    return addEntryToContainerVector(recordGroups_, descriptor);
+    return addEntryToContainerVector(resultGroups_, descriptor);
 }
 
 // ____________________________________________________________________________
 auto BenchmarkResults::getGroups() const
-    -> std::vector<BenchmarkMeasurementContainer::RecordGroup> {
-  return ad_utility::transform(recordGroups_,
-  [](const auto& pointer)->BenchmarkMeasurementContainer::RecordGroup{
+    -> std::vector<BenchmarkMeasurementContainer::ResultGroup> {
+  return ad_utility::transform(resultGroups_,
+  [](const auto& pointer)->BenchmarkMeasurementContainer::ResultGroup{
       return (*pointer);
   });
 }
 
 // ____________________________________________________________________________
-BenchmarkMeasurementContainer::RecordTable& BenchmarkResults::addTable(
+BenchmarkMeasurementContainer::ResultTable& BenchmarkResults::addTable(
     const std::string& descriptor,
     const std::vector<std::string>& rowNames,
     const std::vector<std::string>& columnNames) {
-    return addEntryToContainerVector(recordTables_, descriptor, rowNames,
+    return addEntryToContainerVector(resultTables_, descriptor, rowNames,
     columnNames);
 }
 
 // ____________________________________________________________________________
 auto BenchmarkResults::getTables() const ->
-std::vector<BenchmarkMeasurementContainer::RecordTable> {
-  return ad_utility::transform(recordTables_,
-  [](const auto& pointer)->BenchmarkMeasurementContainer::RecordTable{
+std::vector<BenchmarkMeasurementContainer::ResultTable> {
+  return ad_utility::transform(resultTables_,
+  [](const auto& pointer)->BenchmarkMeasurementContainer::ResultTable{
       return (*pointer);
   });
 }

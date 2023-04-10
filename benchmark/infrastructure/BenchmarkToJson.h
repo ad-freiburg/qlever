@@ -15,7 +15,7 @@
  * @brief Create a nlohmann::json array with all relevant informations
  *  about the measurments taken by all the `BenchmarkResults`.
  */
-nlohmann::json benchmarkRecordsToJson(const std::vector<BenchmarkResults>& records);
+nlohmann::json benchmarkResultsToJson(const std::vector<BenchmarkResults>& results);
 
 /*
 @brief Create a nlohmann::json array with all relevant informations
@@ -34,4 +34,4 @@ with the entry at the same place in the other vector.
 */
 nlohmann::json zipGeneralMetadataAndBenchmarkResultsToJson(
  const std::vector<BenchmarkMetadata>& generalMetadata,
- const std::vector<BenchmarkResults>& benchmarkRecords);
+ const std::vector<BenchmarkResults>& benchmarkResults);

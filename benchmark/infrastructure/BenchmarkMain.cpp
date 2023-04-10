@@ -17,7 +17,7 @@
 #include "util/File.h"
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkToJson.h"
-#include "../benchmark/infrastructure/BenchmarkRecordToString.h"
+#include "../benchmark/infrastructure/BenchmarkResultToString.h"
 
 
 /*
@@ -125,18 +125,18 @@ int main(int argc, char** argv) {
   // Measuring the time for all registered benchmarks.
   // For measuring and saving the times.
   const std::vector<BenchmarkResults>&
-    records{BenchmarkRegister::runAllRegisteredBenchmarks()};
+    results{BenchmarkRegister::runAllRegisteredBenchmarks()};
 
   // Actually processing the arguments.
   if (vm.count("print")) {
-    std::ranges::for_each(records, [](const BenchmarkResults& record){
-      std::cout << benchmarkRecordsToString(record) << "\n";
+    std::ranges::for_each(results, [](const BenchmarkResults& result){
+      std::cout << benchmarkResultsToString(result) << "\n";
     }, {});
   }
 
   if (vm.count("write")) {
     writeJsonToFile(zipGeneralMetadataAndBenchmarkResultsToJson(
-      BenchmarkRegister::getAllGeneralMetadata(), records), writeFileName,
+      BenchmarkRegister::getAllGeneralMetadata(), results), writeFileName,
         vm.count("append"));
   }
 }

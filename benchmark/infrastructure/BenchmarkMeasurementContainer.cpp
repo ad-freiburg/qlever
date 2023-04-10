@@ -11,26 +11,26 @@
 #include <string_view>
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-#include "../benchmark/infrastructure/BenchmarkRecordToString.h"
+#include "../benchmark/infrastructure/BenchmarkResultToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
 
 // ____________________________________________________________________________
 namespace BenchmarkMeasurementContainer{
 // ____________________________________________________________________________
-RecordEntry::operator std::string() const{
+ResultEntry::operator std::string() const{
   return absl::StrCat("'", descriptor_, "' took ", measuredTime_, " seconds.");
 }
 
 // ____________________________________________________________________________
-void to_json(nlohmann::json& j, const RecordEntry& recordEntry){
-  j = nlohmann::json{{"descriptor", recordEntry.descriptor_},
-    {"measuredTime", recordEntry.measuredTime_},
-    {"metadata", recordEntry.metadata_}};
+void to_json(nlohmann::json& j, const ResultEntry& resultEntry){
+  j = nlohmann::json{{"descriptor", resultEntry.descriptor_},
+    {"measuredTime", resultEntry.measuredTime_},
+    {"metadata", resultEntry.metadata_}};
 }
 
 // ____________________________________________________________________________
-RecordGroup::operator std::string() const{
+ResultGroup::operator std::string() const{
   // We need to add all the string representations of the group members,
   // so doing everything using a stream is the best idea.
   std::ostringstream stream;
@@ -39,27 +39,27 @@ RecordGroup::operator std::string() const{
   stream << "Group '" << descriptor_ << "':";
 
   // Listing all the entries.
-  addVectorOfRecordEntryToOStringstream(&stream, ad_utility::transform(entries_,
+  addVectorOfResultEntryToOStringstream(&stream, ad_utility::transform(entries_,
     [](const auto& pointer){return (*pointer);}), "\t");
 
   return stream.str();
 }
 
 // ____________________________________________________________________________
-void to_json(nlohmann::json& j, const RecordGroup& recordGroup){
-  j = nlohmann::json{{"descriptor", recordGroup.descriptor_},
-    {"entries", recordGroup.entries_},
-    {"metadata", recordGroup.metadata_}};
+void to_json(nlohmann::json& j, const ResultGroup& resultGroup){
+  j = nlohmann::json{{"descriptor", resultGroup.descriptor_},
+    {"entries", resultGroup.entries_},
+    {"metadata", resultGroup.metadata_}};
 }
 
 // ____________________________________________________________________________
-void RecordTable::setEntry(const size_t& row, const size_t& column,
+void ResultTable::setEntry(const size_t& row, const size_t& column,
   const EntryType& newEntryContent){
   entries_.at(row).at(column) = newEntryContent;
 }
 
 // ____________________________________________________________________________
-RecordTable::operator std::string() const{
+ResultTable::operator std::string() const{
   // Used for the formating of numbers in the table. They will always be
   // formated as having 4 values after the decimal point.
   constexpr absl::string_view floatFormatSpecifier = "%.4f";
@@ -67,7 +67,7 @@ RecordTable::operator std::string() const{
   // What should be printed between columns. Used for nicer formating.
   const std::string columnSeperator = " | ";
 
-  // Convert an `EntryType` of `RecordTable` to a screen friendly
+  // Convert an `EntryType` of `ResultTable` to a screen friendly
   // format.
   auto entryToStringVisitor = [&floatFormatSpecifier]<typename T>(
       const T& entry){
@@ -169,12 +169,12 @@ RecordTable::operator std::string() const{
 }
 
 // ____________________________________________________________________________
-void to_json(nlohmann::json& j, const RecordTable& recordTable){
-  j = nlohmann::json{{"descriptor", recordTable.descriptor_},
-    {"rowNames", recordTable.rowNames_},
-    {"columnNames", recordTable.columnNames_},
-    {"entries", recordTable.entries_},
-    {"metadata", recordTable.metadata_}};
+void to_json(nlohmann::json& j, const ResultTable& resultTable){
+  j = nlohmann::json{{"descriptor", resultTable.descriptor_},
+    {"rowNames", resultTable.rowNames_},
+    {"columnNames", resultTable.columnNames_},
+    {"entries", resultTable.entries_},
+    {"metadata", resultTable.metadata_}};
 }
 
 } // End of namespace `BenchmarkMeasurementContainer`

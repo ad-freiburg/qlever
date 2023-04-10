@@ -11,13 +11,13 @@
 #include "nlohmann/json.hpp"
 
 // ___________________________________________________________________________
-void to_json(nlohmann::json& j, const BenchmarkResults& records){
+void to_json(nlohmann::json& j, const BenchmarkResults& results){
   // Creating the json object. We actually don't want `BenchmarkResults` to
   // be serialized, because that is the management class for measured
   // benchmarks. We just want the measured benchmarks.
-  j = nlohmann::json{{"singleMeasurements", records.getSingleMeasurements()},
-    {"recordGroups", records.getGroups()},
-    {"recordTables", records.getTables()}};
+  j = nlohmann::json{{"singleMeasurements", results.getSingleMeasurements()},
+    {"resultGroups", results.getGroups()},
+    {"resultTables", results.getTables()}};
 }
 
 /*
@@ -56,9 +56,9 @@ static nlohmann::json transformIntoJsonArray(const std::vector<VectorType>& vec,
 }
 
 // ___________________________________________________________________________
-nlohmann::json benchmarkRecordsToJson(const std::vector<BenchmarkResults>& records){
-  return transformIntoJsonArray(records, [](const BenchmarkResults& record){
-    return nlohmann::json{record};
+nlohmann::json benchmarkResultsToJson(const std::vector<BenchmarkResults>& results){
+  return transformIntoJsonArray(results, [](const BenchmarkResults& result){
+    return nlohmann::json{result};
   });
 }
 
@@ -77,13 +77,13 @@ nlohmann::json zipGeneralMetadataAndBenchmarkResultsToJson(
 // ___________________________________________________________________________
 nlohmann::json zipGeneralMetadataAndBenchmarkResultsToJson(
  const std::vector<BenchmarkMetadata>& generalMetadata,
- const std::vector<BenchmarkResults>& benchmarkRecords){
+ const std::vector<BenchmarkResults>& benchmarkResults){
   // We can just pass this, after transforming it.
   std::vector<std::pair<BenchmarkMetadata, BenchmarkResults>>
   vectorsPairedUp{};
   vectorsPairedUp.reserve(generalMetadata.size());
 
-  std::ranges::transform(generalMetadata, benchmarkRecords,
+  std::ranges::transform(generalMetadata, benchmarkResults,
     std::back_inserter(vectorsPairedUp),
     [](auto& a, auto& b){
       return std::make_pair(a, b);

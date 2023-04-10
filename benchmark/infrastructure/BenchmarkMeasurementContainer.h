@@ -41,7 +41,7 @@ static float measureTimeOfFunction(const Function& functionToMeasure){
 }
 
 // Describes the measured execution time of a function.
-class RecordEntry{
+class ResultEntry{
   /*
   Needed, because without it, nobody could tell, which time belongs to which
   benchmark.
@@ -54,7 +54,7 @@ class RecordEntry{
   BenchmarkMetadata metadata_;
 
   /*
-  @brief Creates an instance of `RecordEntry`.
+  @brief Creates an instance of `ResultEntry`.
 
   @tparam Function Lambda function with no function arguments and returns void.
 
@@ -64,7 +64,7 @@ class RecordEntry{
   */
   template<typename Function>
     requires std::invocable<Function>
-  RecordEntry(const std::string& descriptor, const Function& functionToMeasure):
+  ResultEntry(const std::string& descriptor, const Function& functionToMeasure):
   descriptor_{descriptor},
   measuredTime_{measureTimeOfFunction(functionToMeasure)} {}
 
@@ -72,29 +72,29 @@ class RecordEntry{
   explicit operator std::string() const;
   
   // JSON serialization.
-  friend void to_json(nlohmann::json& j, const RecordEntry& recordEntry);
+  friend void to_json(nlohmann::json& j, const ResultEntry& resultEntry);
 };
 
-// Describes a group of `RecordEntry`.
-class RecordGroup {
+// Describes a group of `ResultEntry`.
+class ResultGroup {
   // Needed for identifying groups.
   std::string descriptor_;
   // Members of the group.
-  std::vector<CopybaleUniquePtr<RecordEntry>> entries_;
+  std::vector<CopybaleUniquePtr<ResultEntry>> entries_;
 
   public:
   BenchmarkMetadata metadata_;
 
   /*
-  @brief Creates an empty group of `RecordEntry`s.
+  @brief Creates an empty group of `ResultEntry`s.
 
   @param descriptor A string to identify this instance in json format later.
   */
-  explicit RecordGroup(const std::string& descriptor): descriptor_{descriptor}
+  explicit ResultGroup(const std::string& descriptor): descriptor_{descriptor}
   {}
 
   /*
-  @brief Adds a new instance of `RecordEntry` to the group.
+  @brief Adds a new instance of `ResultEntry` to the group.
 
   @tparam Function Lambda function with no function arguments and returns void.
 
@@ -104,10 +104,10 @@ class RecordGroup {
   */
   template<typename Function>
     requires std::invocable<Function>
-  RecordEntry& addMeasurement(const std::string& descriptor,
+  ResultEntry& addMeasurement(const std::string& descriptor,
       const Function& functionToMeasure){
-      entries_.push_back(CopybaleUniquePtr<RecordEntry>{
-        std::make_unique<RecordEntry>(descriptor, functionToMeasure)});
+      entries_.push_back(CopybaleUniquePtr<ResultEntry>{
+        std::make_unique<ResultEntry>(descriptor, functionToMeasure)});
       return (*entries_.back());
     }
 
@@ -115,11 +115,11 @@ class RecordGroup {
   explicit operator std::string() const;
   
   // JSON serialization.
-  friend void to_json(nlohmann::json& j, const RecordGroup& recordGroup);
+  friend void to_json(nlohmann::json& j, const ResultGroup& resultGroup);
 };
 
 // Describes a table of measured execution times of functions.
-class RecordTable {
+class ResultTable {
   // For identification.
   std::string descriptor_;
   // The names of the columns and rows.
@@ -134,7 +134,7 @@ class RecordTable {
   BenchmarkMetadata metadata_;
 
   /*
-  @brief Create an empty `RecordTable`.
+  @brief Create an empty `ResultTable`.
 
   @param descriptor A string to identify this instance in json format later.
   @param rowNames The names for the rows. The amount of rows in this table is
@@ -142,7 +142,7 @@ class RecordTable {
   @param columnNames The names for the columns. The amount of columns in this
   table is equal to the amount of column names.
   */
-  RecordTable(const std::string& descriptor, 
+  ResultTable(const std::string& descriptor, 
       const std::vector<std::string>& rowNames,
       const std::vector<std::string>& columnNames):
       descriptor_{descriptor}, rowNames_{rowNames},
@@ -202,7 +202,7 @@ class RecordTable {
   explicit operator std::string() const;
 
   // JSON serialization.
-  friend void to_json(nlohmann::json& j, const RecordTable& recordTable);
+  friend void to_json(nlohmann::json& j, const ResultTable& resultTable);
 };
   
 }

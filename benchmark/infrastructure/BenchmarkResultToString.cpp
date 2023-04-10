@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel February of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkRecordToString.h"
+#include "../benchmark/infrastructure/BenchmarkResultToString.h"
 
 // ___________________________________________________________________________
 void addCategoryTitelToOStringstream(std::ostringstream* stream,
@@ -15,8 +15,8 @@ void addCategoryTitelToOStringstream(std::ostringstream* stream,
 }
 
 // ___________________________________________________________________________
-void addVectorOfRecordEntryToOStringstream(std::ostringstream* stream,
-    const std::vector<BenchmarkMeasurementContainer::RecordEntry>& entries,
+void addVectorOfResultEntryToOStringstream(std::ostringstream* stream,
+    const std::vector<BenchmarkMeasurementContainer::ResultEntry>& entries,
     const std::string& prefix) {
   for (const auto& entry: entries) {
     (*stream) << "\n" << prefix << (std::string)entry;
@@ -25,41 +25,41 @@ void addVectorOfRecordEntryToOStringstream(std::ostringstream* stream,
 
 // ___________________________________________________________________________
 void addSingleMeasurementsToOStringstream(std::ostringstream* stream,
-  const std::vector<BenchmarkMeasurementContainer::RecordEntry>&
-  recordEntries){
+  const std::vector<BenchmarkMeasurementContainer::ResultEntry>&
+  resultEntries){
   addCategoryTitelToOStringstream(stream, "Single measurment benchmarks");
-  addVectorOfRecordEntryToOStringstream(stream, recordEntries,
+  addVectorOfResultEntryToOStringstream(stream, resultEntries,
       "Single measurment benchmark ");
 }
 
 // ___________________________________________________________________________
 void addGroupsToOStringstream(std::ostringstream* stream,
-  const std::vector<BenchmarkMeasurementContainer::RecordGroup>& recordGroups){
+  const std::vector<BenchmarkMeasurementContainer::ResultGroup>& resultGroups){
   addCategoryTitelToOStringstream(stream, "Group benchmarks");
-  for (const auto& group: recordGroups) {
+  for (const auto& group: resultGroups) {
     (*stream) << "\n\n" << (std::string)group;
   }
 }
 
 // ___________________________________________________________________________
 void addTablesToOStringstream(std::ostringstream* stream,
-  const std::vector<BenchmarkMeasurementContainer::RecordTable>& recordTables){
+  const std::vector<BenchmarkMeasurementContainer::ResultTable>& resultTables){
   addCategoryTitelToOStringstream(stream, "Table benchmarks");
   // Printing the tables themselves.
-  for (const auto& table: recordTables) {
+  for (const auto& table: resultTables) {
     (*stream) << "\n\n" << (std::string)table;
   }
 }
 
 // ___________________________________________________________________________
-std::string benchmarkRecordsToString(const BenchmarkResults& records) {
+std::string benchmarkResultsToString(const BenchmarkResults& results) {
   // The values for all the categories of benchmarks.
-  const std::vector<BenchmarkMeasurementContainer::RecordEntry>&
-    singleMeasurements = records.getSingleMeasurements();
-  const std::vector<BenchmarkMeasurementContainer::RecordGroup>&
-    recordGroups = records.getGroups();
-  const std::vector<BenchmarkMeasurementContainer::RecordTable>&
-    recordTables = records.getTables();
+  const std::vector<BenchmarkMeasurementContainer::ResultEntry>&
+    singleMeasurements = results.getSingleMeasurements();
+  const std::vector<BenchmarkMeasurementContainer::ResultGroup>&
+    resultGroups = results.getGroups();
+  const std::vector<BenchmarkMeasurementContainer::ResultTable>&
+    resultTables = results.getTables();
 
   // Visualizes the measured times.
   std::ostringstream visualization;
@@ -68,8 +68,8 @@ std::string benchmarkRecordsToString(const BenchmarkResults& records) {
   //  exists for reducing code duplication.
   //
   // @param stringStream The stringstream where the text will get added.
-  // @param categoryRecord The information needed, for printing the benchmark
-  //  category. Should be a vector of RecordEntry, RecordGroup, or RecordTable.
+  // @param categoryResult The information needed, for printing the benchmark
+  //  category. Should be a vector of ResultEntry, ResultGroup, or ResultTable.
   // @param categoryAddPrintStreamFunction The function, which given the
   //  benchmark category information, converts them to text, and adds that text
   //  to the stringstream.
@@ -77,10 +77,10 @@ std::string benchmarkRecordsToString(const BenchmarkResults& records) {
   //  categoryAddPrintStreamFunction. Mostly for linebreaks between those
   //  categories.
   auto addNonEmptyCategorieToStringSteam = [](std::ostringstream* stringStream,
-      const auto& categoryRecord, const auto& categoryAddPrintStreamFunction,
+      const auto& categoryResult, const auto& categoryAddPrintStreamFunction,
       const std::string& suffix = ""){
-    if (categoryRecord.size() > 0){
-      categoryAddPrintStreamFunction(stringStream, categoryRecord);
+    if (categoryResult.size() > 0){
+      categoryAddPrintStreamFunction(stringStream, categoryResult);
       (*stringStream) << suffix;
     }
   };
@@ -90,11 +90,11 @@ std::string benchmarkRecordsToString(const BenchmarkResults& records) {
       addSingleMeasurementsToOStringstream, "\n\n");
 
   // Visualization for groups, if there are any.
-  addNonEmptyCategorieToStringSteam(&visualization, recordGroups,
+  addNonEmptyCategorieToStringSteam(&visualization, resultGroups,
       addGroupsToOStringstream, "\n\n");
 
   // Visualization for tables, if there are any.
-  addNonEmptyCategorieToStringSteam(&visualization, recordTables,
+  addNonEmptyCategorieToStringSteam(&visualization, resultTables,
       addTablesToOStringstream);
 
   return visualization.str();

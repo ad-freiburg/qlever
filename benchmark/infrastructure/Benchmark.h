@@ -31,17 +31,17 @@ class BenchmarkResults {
     using PointerVector = std::vector<CopybaleUniquePtr<T>>;
 
     // A vector of all the created single measurements.
-    PointerVector<BenchmarkMeasurementContainer::RecordEntry>
+    PointerVector<BenchmarkMeasurementContainer::ResultEntry>
     singleMeasurements_;
 
-    // A vector of all the created RecordGroups.
-    PointerVector<BenchmarkMeasurementContainer::RecordGroup>
-    recordGroups_;
+    // A vector of all the created resultGroups.
+    PointerVector<BenchmarkMeasurementContainer::ResultGroup>
+    resultGroups_;
   
-    // A hash map of all the created RecordTables. For faster access.
-    // The key for a RecordTable is it's descriptor.
-    PointerVector<BenchmarkMeasurementContainer::RecordTable>
-    recordTables_;
+    // A hash map of all the created resultTables. For faster access.
+    // The key for a resultTable is it's descriptor.
+    PointerVector<BenchmarkMeasurementContainer::ResultTable>
+    resultTables_;
 
     /*
     @brief Adds an entry to the given vector, by creating an instance of
@@ -84,7 +84,7 @@ class BenchmarkResults {
      */
     template<typename Function>
       requires std::invocable<Function>
-    BenchmarkMeasurementContainer::RecordEntry& addMeasurement(
+    BenchmarkMeasurementContainer::ResultEntry& addMeasurement(
       const std::string& descriptor, const Function& functionToMeasure){
       return addEntryToContainerVector(singleMeasurements_, descriptor,
       functionToMeasure);
@@ -93,19 +93,19 @@ class BenchmarkResults {
     /*
      * @brief Returns a vector of all the singe measurements.
      */
-    std::vector<BenchmarkMeasurementContainer::RecordEntry>
+    std::vector<BenchmarkMeasurementContainer::ResultEntry>
     getSingleMeasurements() const;
 
     /*
      * @brief Creates an empty group with the given descriptor.
      */
-    BenchmarkMeasurementContainer::RecordGroup& addGroup(
+    BenchmarkMeasurementContainer::ResultGroup& addGroup(
       const std::string& descriptor);
 
     /*
      * @brief Returns a vector of all the groups.
      */
-    std::vector<BenchmarkMeasurementContainer::RecordGroup> getGroups()
+    std::vector<BenchmarkMeasurementContainer::ResultGroup> getGroups()
     const;
 
     /*
@@ -115,7 +115,7 @@ class BenchmarkResults {
      * @param descriptor The name/identifier of the table.
      * @param rowNames,columnNames The names for the rows/columns.
      */
-    BenchmarkMeasurementContainer::RecordTable& addTable(
+    BenchmarkMeasurementContainer::ResultTable& addTable(
         const std::string& descriptor,
         const std::vector<std::string>& rowNames,
         const std::vector<std::string>& columnNames);
@@ -123,12 +123,12 @@ class BenchmarkResults {
     /*
      * @brief Returns a vector of all the tables.
      */
-    std::vector<BenchmarkMeasurementContainer::RecordTable>
+    std::vector<BenchmarkMeasurementContainer::ResultTable>
     getTables() const;
 
     // Json serialization. The implementation can be found in
     // `BenchmarkToJson`.
-    friend void to_json(nlohmann::json& j, const BenchmarkResults& records);
+    friend void to_json(nlohmann::json& j, const BenchmarkResults& results);
 };
 
 /*
@@ -152,7 +152,7 @@ class BenchmarkClassInterface{
   repeat the same thing over and over again.
   For example: Let's say, you are measuring the same benchmarks for different
   versions of an algorithm. You could add the metadata information, which
-  version it is, to every `RecordGroup`, `RecordTable`, etc., but that is a bit
+  version it is, to every `resultGroup`, `resultTable`, etc., but that is a bit
   clunky. Instead, you make one `BenchmarkClassInterface` instance for every
   version and simply return which version you are using as metadata through
   `getMetadata`.

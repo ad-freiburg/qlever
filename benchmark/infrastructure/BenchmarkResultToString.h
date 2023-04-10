@@ -12,7 +12,7 @@
 #include "util/json.h"
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-#include "../benchmark/infrastructure/BenchmarkRecordToString.h"
+#include "../benchmark/infrastructure/BenchmarkResultToString.h"
 
 /*
  * @brief Add a string of the form
@@ -27,28 +27,28 @@
 void addCategoryTitelToOStringstream(std::ostringstream* stream,
     std::string_view categoryTitel);
 
-// Default way of adding a vector of RecordEntrys to a `ostringstream` with
+// Default way of adding a vector of ResultEntrys to a `ostringstream` with
 // optional prefix.
-void addVectorOfRecordEntryToOStringstream(std::ostringstream* stream,
-    const std::vector<BenchmarkMeasurementContainer::RecordEntry>& entries,
+void addVectorOfResultEntryToOStringstream(std::ostringstream* stream,
+    const std::vector<BenchmarkMeasurementContainer::ResultEntry>& entries,
     const std::string& prefix = "");
 
 // Visualization for single measurments.
 void addSingleMeasurementsToOStringstream(std::ostringstream* stream,
-    const std::vector<BenchmarkMeasurementContainer::RecordEntry>&
-    recordEntries);
+    const std::vector<BenchmarkMeasurementContainer::ResultEntry>&
+    resultEntries);
 
 // Visualization for groups.
 void addGroupsToOStringstream(std::ostringstream* stream,
-    const std::vector<BenchmarkMeasurementContainer::RecordGroup>&
-    recordGroups);
+    const std::vector<BenchmarkMeasurementContainer::ResultGroup>&
+    resultGroups);
 
 // Visualization for tables.
 void addTablesToOStringstream(std::ostringstream* stream,
-    const std::vector<BenchmarkMeasurementContainer::RecordTable>&
-    recordTables);
+    const std::vector<BenchmarkMeasurementContainer::ResultTable>&
+    resultTables);
 
 /*
  * @brief Returns a formated string containing all benchmark information.
  */
-std::string benchmarkRecordsToString(const BenchmarkResults& records);
+std::string benchmarkResultsToString(const BenchmarkResults& results);
