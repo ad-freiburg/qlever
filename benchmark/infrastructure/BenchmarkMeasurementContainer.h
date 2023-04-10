@@ -34,7 +34,10 @@ static float measureTimeOfFunction(const Function& functionToMeasure){
   functionToMeasure();
   benchmarkTimer.stop();
 
-  return ad_utility::timer::Timer::toSeconds(benchmarkTimer.value());
+  // This is used for a macro benchmark, so we don't need that high of a
+  // precision.
+  return static_cast<float>(
+  ad_utility::timer::Timer::toSeconds(benchmarkTimer.value()));
 }
 
 // Describes the measured execution time of a function.
