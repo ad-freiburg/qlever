@@ -40,8 +40,8 @@ class BMSingleMeasurements: public BenchmarkClassInterface{
     return BenchmarkMetadata{};
   }
 
-  BenchmarkRecords runAllBenchmarks() final{
-    BenchmarkRecords records{};
+  BenchmarkResults runAllBenchmarks() final{
+    BenchmarkResults records{};
     
     // Setup.
     const size_t number = SlowRandomIntGenerator<size_t>(10,1'000)();
@@ -85,8 +85,8 @@ class BMGroups: public BenchmarkClassInterface{
     return BenchmarkMetadata{};
   }
 
-  BenchmarkRecords runAllBenchmarks() final{
-    BenchmarkRecords records{};
+  BenchmarkResults runAllBenchmarks() final{
+    BenchmarkResults records{};
 
     // Setup.
     auto loopAdd = [](const size_t a, const size_t b) {
@@ -153,8 +153,8 @@ class BMTables: public BenchmarkClassInterface{
     return BenchmarkMetadata{};
   }
 
-  BenchmarkRecords runAllBenchmarks() final{
-    BenchmarkRecords records{};
+  BenchmarkResults runAllBenchmarks() final{
+    BenchmarkResults records{};
 
     // Setup.
     auto exponentiateNTimes = [](const size_t number, const size_t n){
@@ -257,8 +257,8 @@ class BMConfigurationAndMetadataExample: public BenchmarkClassInterface{
 
   // This is just a dummy, because this class is only an example for other
   // features of the benchmark infrastructure.
-  BenchmarkRecords runAllBenchmarks() final{
-    return BenchmarkRecords{};
+  BenchmarkResults runAllBenchmarks() final{
+    return BenchmarkResults{};
   }
 };
 

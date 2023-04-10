@@ -26,7 +26,7 @@
  * Used for measuring the time needed for the execution of a function and
  * organizing those measured times.
  */
-class BenchmarkRecords {
+class BenchmarkResults {
     template<typename T>
     using PointerVector = std::vector<CopybaleUniquePtr<T>>;
 
@@ -128,7 +128,7 @@ class BenchmarkRecords {
 
     // Json serialization. The implementation can be found in
     // `BenchmarkToJson`.
-    friend void to_json(nlohmann::json& j, const BenchmarkRecords& records);
+    friend void to_json(nlohmann::json& j, const BenchmarkResults& records);
 };
 
 /*
@@ -148,7 +148,7 @@ class BenchmarkClassInterface{
 
   /*
   For the general metadata of a class. Mostly information, that is the same
-  for every benchmark, so that every entry of the `BenchmarkRecords` doesn't
+  for every benchmark, so that every entry of the `BenchmarkResults` doesn't
   repeat the same thing over and over again.
   For example: Let's say, you are measuring the same benchmarks for different
   versions of an algorithm. You could add the metadata information, which
@@ -163,11 +163,11 @@ class BenchmarkClassInterface{
   }
 
   /*
-  Run all your benchmarks. The `BenchmarkRecords` class is a management
+  Run all your benchmarks. The `BenchmarkResults` class is a management
   class for measuering the execution time of functions and organizing the
   results.
   */
-  virtual BenchmarkRecords runAllBenchmarks() = 0; 
+  virtual BenchmarkResults runAllBenchmarks() = 0; 
   
   // Without this, we get memory problems.
   virtual ~BenchmarkClassInterface() = default;
@@ -209,13 +209,13 @@ class BenchmarkRegister {
 
   /*
    * @brief Measures all the registered benchmarks and returns the resulting
-   *  BenchmarkRecords objects.
+   *  `BenchmarkResuls` objects.
    *
    * @return Every benchmark class get's measured with their own
-   *  `BenchmarkRecords`. They should be in the same order as the
+   *  `BenchmarkResults`. They should be in the same order as the
    *  registrations.
    */
-  static std::vector<BenchmarkRecords> runAllRegisteredBenchmarks();
+  static std::vector<BenchmarkResults> runAllRegisteredBenchmarks();
 
   /*
    * @brief Returns the general metadata of all the registered benchmarks. As

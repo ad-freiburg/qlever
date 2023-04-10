@@ -13,18 +13,18 @@
 
 /*
  * @brief Create a nlohmann::json array with all relevant informations
- *  about the measurments taken by all the BenchmarkRecords.
+ *  about the measurments taken by all the `BenchmarkResults`.
  */
-nlohmann::json benchmarkRecordsToJson(const std::vector<BenchmarkRecords>& records);
+nlohmann::json benchmarkRecordsToJson(const std::vector<BenchmarkResults>& records);
 
 /*
 @brief Create a nlohmann::json array with all relevant informations
 given by the pairs. That is, all the `BenchmarkMetadata` and all information
 defined by benchmarks, with every pair grouped up.
 */
-nlohmann::json zipGeneralMetadataAndBenchmarkRecordsToJson(
- const std::vector<std::pair<BenchmarkMetadata, BenchmarkRecords>>&
- generalMetadataAndBenchmarkRecords);
+nlohmann::json zipGeneralMetadataAndBenchmarkResultsToJson(
+ const std::vector<std::pair<BenchmarkMetadata, BenchmarkResults>>&
+ generalMetadataAndBenchmarkResults);
 
 /*
 @brief Create a nlohmann::json array with all relevant informations
@@ -32,6 +32,6 @@ given by the two vectors. That is, all the `BenchmarkMetadata` and all
 information defined by benchmarks, with every entry in a vector paired up
 with the entry at the same place in the other vector.
 */
-nlohmann::json zipGeneralMetadataAndBenchmarkRecordsToJson(
+nlohmann::json zipGeneralMetadataAndBenchmarkResultsToJson(
  const std::vector<BenchmarkMetadata>& generalMetadata,
- const std::vector<BenchmarkRecords>& benchmarkRecords);
+ const std::vector<BenchmarkResults>& benchmarkRecords);

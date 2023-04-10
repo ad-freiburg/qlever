@@ -51,4 +51,4 @@ void addTablesToOStringstream(std::ostringstream* stream,
 /*
  * @brief Returns a formated string containing all benchmark information.
  */
-std::string benchmarkRecordsToString(const BenchmarkRecords& records);
+std::string benchmarkRecordsToString(const BenchmarkResults& records);

@@ -11,8 +11,8 @@
 #include "nlohmann/json.hpp"
 
 // ___________________________________________________________________________
-void to_json(nlohmann::json& j, const BenchmarkRecords& records){
-  // Creating the json object. We actually don't want BenchmarkRecords to
+void to_json(nlohmann::json& j, const BenchmarkResults& records){
+  // Creating the json object. We actually don't want `BenchmarkResults` to
   // be serialized, because that is the management class for measured
   // benchmarks. We just want the measured benchmarks.
   j = nlohmann::json{{"singleMeasurements", records.getSingleMeasurements()},
@@ -56,18 +56,18 @@ static nlohmann::json transformIntoJsonArray(const std::vector<VectorType>& vec,
 }
 
 // ___________________________________________________________________________
-nlohmann::json benchmarkRecordsToJson(const std::vector<BenchmarkRecords>& records){
-  return transformIntoJsonArray(records, [](const BenchmarkRecords& record){
+nlohmann::json benchmarkRecordsToJson(const std::vector<BenchmarkResults>& records){
+  return transformIntoJsonArray(records, [](const BenchmarkResults& record){
     return nlohmann::json{record};
   });
 }
 
 
 // ___________________________________________________________________________
-nlohmann::json zipGeneralMetadataAndBenchmarkRecordsToJson(
- const std::vector<std::pair<BenchmarkMetadata, BenchmarkRecords>>&
- generalMetadataAndBenchmarkRecords){
-  return transformIntoJsonArray(generalMetadataAndBenchmarkRecords,
+nlohmann::json zipGeneralMetadataAndBenchmarkResultsToJson(
+ const std::vector<std::pair<BenchmarkMetadata, BenchmarkResults>>&
+ generalMetadataAndBenchmarkResults){
+  return transformIntoJsonArray(generalMetadataAndBenchmarkResults,
   [](const auto& pair){
     return nlohmann::json{{"general metadata", pair.first},
     {"measurements", pair.second}};
@@ -75,11 +75,11 @@ nlohmann::json zipGeneralMetadataAndBenchmarkRecordsToJson(
 }
 
 // ___________________________________________________________________________
-nlohmann::json zipGeneralMetadataAndBenchmarkRecordsToJson(
+nlohmann::json zipGeneralMetadataAndBenchmarkResultsToJson(
  const std::vector<BenchmarkMetadata>& generalMetadata,
- const std::vector<BenchmarkRecords>& benchmarkRecords){
+ const std::vector<BenchmarkResults>& benchmarkRecords){
   // We can just pass this, after transforming it.
-  std::vector<std::pair<BenchmarkMetadata, BenchmarkRecords>>
+  std::vector<std::pair<BenchmarkMetadata, BenchmarkResults>>
   vectorsPairedUp{};
   vectorsPairedUp.reserve(generalMetadata.size());
 
@@ -90,5 +90,5 @@ nlohmann::json zipGeneralMetadataAndBenchmarkRecordsToJson(
     }
     );
 
-  return zipGeneralMetadataAndBenchmarkRecordsToJson(vectorsPairedUp);
+  return zipGeneralMetadataAndBenchmarkResultsToJson(vectorsPairedUp);
 }

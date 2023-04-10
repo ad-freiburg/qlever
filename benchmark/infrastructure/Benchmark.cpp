@@ -36,10 +36,10 @@ std::vector<BenchmarkMetadata> BenchmarkRegister::getAllGeneralMetadata(){
 }
 
 // ____________________________________________________________________________
-std::vector<BenchmarkRecords>
+std::vector<BenchmarkResults>
 BenchmarkRegister::runAllRegisteredBenchmarks(){
   // Go through every registered instance of a benchmark class, measure their
-  // benchmarks and return the resulting `BenchmarkRecords` in a new vector.
+  // benchmarks and return the resulting `BenchmarkResults` in a new vector.
   return ad_utility::transform(registeredBenchmarks, [](BenchmarkPointer& instance){
       return instance->runAllBenchmarks();
   });
@@ -53,7 +53,7 @@ BenchmarkRegister::BenchmarkRegister(
 }
 
 // ____________________________________________________________________________
-auto BenchmarkRecords::getSingleMeasurements() const
+auto BenchmarkResults::getSingleMeasurements() const
 -> std::vector<BenchmarkMeasurementContainer::RecordEntry> {
   return ad_utility::transform(singleMeasurements_,
   [](const auto& pointer)->BenchmarkMeasurementContainer::RecordEntry{
@@ -62,13 +62,13 @@ auto BenchmarkRecords::getSingleMeasurements() const
 }
 
 // ____________________________________________________________________________
-BenchmarkMeasurementContainer::RecordGroup& BenchmarkRecords::addGroup(
+BenchmarkMeasurementContainer::RecordGroup& BenchmarkResults::addGroup(
     const std::string& descriptor) {
     return addEntryToContainerVector(recordGroups_, descriptor);
 }
 
 // ____________________________________________________________________________
-auto BenchmarkRecords::getGroups() const
+auto BenchmarkResults::getGroups() const
     -> std::vector<BenchmarkMeasurementContainer::RecordGroup> {
   return ad_utility::transform(recordGroups_,
   [](const auto& pointer)->BenchmarkMeasurementContainer::RecordGroup{
@@ -77,7 +77,7 @@ auto BenchmarkRecords::getGroups() const
 }
 
 // ____________________________________________________________________________
-BenchmarkMeasurementContainer::RecordTable& BenchmarkRecords::addTable(
+BenchmarkMeasurementContainer::RecordTable& BenchmarkResults::addTable(
     const std::string& descriptor,
     const std::vector<std::string>& rowNames,
     const std::vector<std::string>& columnNames) {
@@ -86,7 +86,7 @@ BenchmarkMeasurementContainer::RecordTable& BenchmarkRecords::addTable(
 }
 
 // ____________________________________________________________________________
-auto BenchmarkRecords::getTables() const ->
+auto BenchmarkResults::getTables() const ->
 std::vector<BenchmarkMeasurementContainer::RecordTable> {
   return ad_utility::transform(recordTables_,
   [](const auto& pointer)->BenchmarkMeasurementContainer::RecordTable{

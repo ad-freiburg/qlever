@@ -52,7 +52,7 @@ void addTablesToOStringstream(std::ostringstream* stream,
 }
 
 // ___________________________________________________________________________
-std::string benchmarkRecordsToString(const BenchmarkRecords& records) {
+std::string benchmarkRecordsToString(const BenchmarkResults& records) {
   // The values for all the categories of benchmarks.
   const std::vector<BenchmarkMeasurementContainer::RecordEntry>&
     singleMeasurements = records.getSingleMeasurements();
