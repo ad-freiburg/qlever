@@ -73,7 +73,7 @@ struct adl_serializer<std::monostate> {
     j = nullptr;
   }
 
-  static void from_json(const nlohmann::json& j, std::monostate&) {
+  static void from_json(const nlohmann::json& j, const std::monostate&) {
     /*
     Monostate holds no values, so the given monostate is already identical to
     the serialized one.
