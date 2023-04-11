@@ -120,6 +120,7 @@ template <
     if constexpr (hasNotFoundAction) {
       coveredFromLeft[it - begLeft] = true;
     }
+    (void) coveredFromLeft, (void) begLeft;
   };
 
   // Store the information whether the output contains rows that are completely
@@ -204,7 +205,7 @@ template <
   // The main loop of the zipper algorithm. It is wrapped in a lambda, so we can
   // easily `break` from an inner loop via a `return` statement.
   [&]() {
-    // Advance over all elements in `left` and `right` that have no exact
+    // Iterate over all elements in `left` and `right` that have no exact
     // matches in the counterpart. We have to still call the correct
     // `mergeWithUndef...` function for each element.
     while (it1 < end1 && it2 < end2) {
@@ -255,16 +256,18 @@ template <
     }
   }();
 
+  // Deal with the remaining elements that have no exact match in the other input.
   for (auto it = it2; it != end2; ++it) {
     mergeWithUndefLeft(it, std::begin(left), std::end(left));
   }
-
   for (; it1 != end1; ++it1) {
     mergeWithUndefRight(it1, std::begin(right), std::end(right), true);
   }
 
+  // If this is an OPTIONAL or MINUS join it might be that we have elements from `left` that have no match in `right`
+  // and for which the `elFromFirstNotFoundAction` hast not yet been called. Those are now added to the result. These
+  // elements form a sorted range at the end of the output.
   size_t numOutOfOrderAtEnd = 0;
-
   if constexpr (hasNotFoundAction) {
     for (size_t i = 0; i < coveredFromLeft.size(); ++i) {
       if (!coveredFromLeft[i]) {
@@ -273,6 +276,9 @@ template <
       }
     }
   }
+
+  // If The return value is 0, then the result is sorted. If the return value is `max()` then we can provide no guarantees about the sorting of the result. Otherwise, the result consists of two consecutive sorted ranges,
+  // the second of which has length `returnValue`.
   return outOfOrderFound ? std::numeric_limits<size_t>::max()
                          : numOutOfOrderAtEnd;
 }
@@ -306,15 +312,16 @@ void gallopingJoin(const Range& smaller, const Range& larger,
     return !lessThan(el1, el2) && !lessThan(el2, el1);
   };
   while (itSmall < endSmall && itLarge < endLarge) {
+    // Linear search in the smaller input.
     while (lessThan(*itSmall, *itLarge)) {
       ++itSmall;
       if (itSmall >= endSmall) {
         return;
       }
     }
+    // Exponential search in the larger input.
     size_t step = 1;
     auto last = itLarge;
-    // Perform the exponential search.
     while (lessThan(*itLarge, *itSmall)) {
       last = itLarge;
       itLarge += step;
@@ -342,10 +349,6 @@ void gallopingJoin(const Range& smaller, const Range& larger,
                              return lessThan(a, b);
                            });
     }
-    // TODO<joka921> The following block is the same for `zipper` and
-    // `galloping`, so it can be factored out into a function.
-    // Note: We could also use the (cheaper) `lessThan` here, but this would
-    // require a lot of caution.
     auto endSameSmall = std::find_if_not(
         itSmall, endSmall, [&](const auto& row) { return eq(row, *itLarge); });
     auto endSameLarge = std::find_if_not(
@@ -375,13 +378,11 @@ void gallopingJoin(const Range& smaller, const Range& larger,
  * values in the join columns.
  * @param right The right input of the optional join. Must only contain UNDEF
  * values in the least significant join column
- * @param lessThan Same as in `zipperJoinWithUndef`
  * @param compatibleRowAction Same as in `zipperJoinWithUndef`
  * @param elFromFirstNotFoundAction Same as in `zipperJoinWithUndef`
  */
 void specialOptionalJoin(
     const IdTableView<0>& left, const IdTableView<0>& right,
-    const auto& lessThan,
     const BinaryIteratorFunction<IdTableView<0>> auto& compatibleRowAction,
     const UnaryIteratorFunction<IdTableView<0>> auto&
         elFromFirstNotFoundAction) {
@@ -394,10 +395,10 @@ void specialOptionalJoin(
     return;
   }
 
-  size_t numCols = (*it1).size();
-
-  auto compareAllButLast = [numCols](const auto& a, const auto& b) {
-    for (size_t i = 0; i < numCols - 1; ++i) {
+  size_t numColumns = (*it1).size();
+  // A predicate that compares two rows lexicographically but ignores the last column.
+  auto compareAllButLast = [numColumns](const auto& a, const auto& b) {
+    for (size_t i = 0; i < numColumns - 1; ++i) {
       if (a[i] != b[i]) {
         return a[i] < b[i];
       }
@@ -405,8 +406,9 @@ void specialOptionalJoin(
     return false;
   };
 
-  auto compareEqButLast = [numCols](const auto& a, const auto& b) {
-    for (size_t i = 0; i < numCols - 1; ++i) {
+    // Similar to the previous lambda, but checks for equality.
+  auto compareEqButLast = [numColumns](const auto& a, const auto& b) {
+    for (size_t i = 0; i < numColumns - 1; ++i) {
       if (a[i] != b[i]) {
         return false;
       }
@@ -414,16 +416,19 @@ void specialOptionalJoin(
     return true;
   };
 
-  std::span<const Id> lastColumn1 = left.getColumn(left.numColumns() - 1);
-  std::span<const Id> lastColumn2 = right.getColumn(left.numColumns() - 1);
+  // The last columns from the left and right input. Those will be dealt with separately.
+  std::span<const Id> lastColumnLeft = left.getColumn(left.numColumns() - 1);
+  std::span<const Id> lastColumnRight = right.getColumn(right.numColumns() - 1);
 
   while (it1 < end1 && it2 < end2) {
+    // Skip over rows in `right` where the first columns don't match.
     it2 = std::find_if_not(
-        it2, end2, [&](const auto& row) { return lessThan(row, *it1); });
+        it2, end2, [&](const auto& row) { return compareAllButLast(row, *it1); });
     if (it2 == end2) {
       break;
     }
 
+      // Skip over rows in `left` where the first columns don't match, but call the `notFoundAction` on them.
     auto next1 = std::find_if_not(it1, end1, [&](const auto& row) {
       return compareAllButLast(row, *it2);
     });
@@ -432,6 +437,8 @@ void specialOptionalJoin(
       elFromFirstNotFoundAction(it);
     }
     it1 = next1;
+
+    // Find the rows where the left and the right input match on the first columns.
     auto endSame1 = std::find_if_not(it1, end1, [&](const auto& row) {
       return compareEqButLast(row, *it2);
     });
@@ -442,15 +449,22 @@ void specialOptionalJoin(
       continue;
     }
 
+    // For the rows where the first columns match we will perform a one-column join on the last column. This
+    // can be done efficiently, because the UNDEF  values are at the beginning of these sub-ranges.
+
+    // Set up the corresponding sub-ranges of the last columns.
     auto beg = it1 - left.begin();
     auto end = endSame1 - left.begin();
-    std::span<const Id> leftSub{lastColumn1.begin() + beg,
-                                lastColumn1.begin() + end};
+    std::span<const Id> leftSub{lastColumnLeft.begin() + beg,
+                                lastColumnLeft.begin() + end};
     beg = it2 - right.begin();
     end = endSame2 - right.begin();
-    std::span<const Id> rightSub{lastColumn2.begin() + beg,
-                                 lastColumn2.begin() + end};
+    std::span<const Id> rightSub{lastColumnRight.begin() + beg,
+                                 lastColumnRight.begin() + end};
 
+    // Set up the generator for the UNDEF values.
+    // TODO<joka921> We could probably also apply this optimization if both inputs contain undefined values only in
+    // the last column, and possibly also not only for `OPTIONAL` joins.
     auto endOfUndef = std::find_if(leftSub.begin(), leftSub.end(), [](Id id) {
       return id != Id::makeUndefined();
     });
@@ -461,6 +475,7 @@ void specialOptionalJoin(
       }
     };
 
+    // Also set up the actions for compatible rows that now work on single columns.
     auto compAction = [&](const auto& itL, const auto& itR) {
       compatibleRowAction((it1 + (itL - leftSub.begin())),
                           (it2 + (itR - rightSub.begin())));
@@ -470,6 +485,7 @@ void specialOptionalJoin(
       elFromFirstNotFoundAction(it1 + (it - begin));
     };
 
+    // Perform the join on the last column.
     size_t numOutOfOrder = ad_utility::zipperJoinWithUndef(
         leftSub, rightSub, std::less<>{}, compAction, findSmallerUndefRangeLeft,
         noop, notFoundAction);

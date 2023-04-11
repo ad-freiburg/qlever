@@ -363,8 +363,6 @@ void OptionalJoin::specialOptionalJoin(
   auto dynBPermuted =
       dynB.asColumnSubsetView(joinColumnData.permutationRight());
 
-  auto lessThanBoth = std::ranges::lexicographical_compare;
-
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
       joinColumns.size(), dynAPermuted, dynBPermuted, result);
   auto addRow = [&rowAdder, beginLeft = dynASubset.begin(),
@@ -378,7 +376,7 @@ void OptionalJoin::specialOptionalJoin(
     rowAdder.addOptionalRow(it - begin);
   };
 
-  ad_utility::specialOptionalJoin(dynASubset, dynBSubset, lessThanBoth, addRow,
+  ad_utility::specialOptionalJoin(dynASubset, dynBSubset, addRow,
                                   addOptionalRow);
 
   // The column order in the result is now
