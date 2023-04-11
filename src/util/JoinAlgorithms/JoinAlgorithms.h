@@ -120,7 +120,7 @@ template <
     if constexpr (hasNotFoundAction) {
       coveredFromLeft[it - begLeft] = true;
     }
-    (void) coveredFromLeft, (void) begLeft;
+    (void)coveredFromLeft, (void)begLeft;
   };
 
   // Store the information whether the output contains rows that are completely
@@ -256,7 +256,8 @@ template <
     }
   }();
 
-  // Deal with the remaining elements that have no exact match in the other input.
+  // Deal with the remaining elements that have no exact match in the other
+  // input.
   for (auto it = it2; it != end2; ++it) {
     mergeWithUndefLeft(it, std::begin(left), std::end(left));
   }
@@ -264,9 +265,10 @@ template <
     mergeWithUndefRight(it1, std::begin(right), std::end(right), true);
   }
 
-  // If this is an OPTIONAL or MINUS join it might be that we have elements from `left` that have no match in `right`
-  // and for which the `elFromFirstNotFoundAction` hast not yet been called. Those are now added to the result. These
-  // elements form a sorted range at the end of the output.
+  // If this is an OPTIONAL or MINUS join it might be that we have elements from
+  // `left` that have no match in `right` and for which the
+  // `elFromFirstNotFoundAction` hast not yet been called. Those are now added
+  // to the result. These elements form a sorted range at the end of the output.
   size_t numOutOfOrderAtEnd = 0;
   if constexpr (hasNotFoundAction) {
     for (size_t i = 0; i < coveredFromLeft.size(); ++i) {
@@ -277,8 +279,10 @@ template <
     }
   }
 
-  // If The return value is 0, then the result is sorted. If the return value is `max()` then we can provide no guarantees about the sorting of the result. Otherwise, the result consists of two consecutive sorted ranges,
-  // the second of which has length `returnValue`.
+  // If The return value is 0, then the result is sorted. If the return value is
+  // `max()` then we can provide no guarantees about the sorting of the result.
+  // Otherwise, the result consists of two consecutive sorted ranges, the second
+  // of which has length `returnValue`.
   return outOfOrderFound ? std::numeric_limits<size_t>::max()
                          : numOutOfOrderAtEnd;
 }
@@ -396,7 +400,8 @@ void specialOptionalJoin(
   }
 
   size_t numColumns = (*it1).size();
-  // A predicate that compares two rows lexicographically but ignores the last column.
+  // A predicate that compares two rows lexicographically but ignores the last
+  // column.
   auto compareAllButLast = [numColumns](const auto& a, const auto& b) {
     for (size_t i = 0; i < numColumns - 1; ++i) {
       if (a[i] != b[i]) {
@@ -406,7 +411,7 @@ void specialOptionalJoin(
     return false;
   };
 
-    // Similar to the previous lambda, but checks for equality.
+  // Similar to the previous lambda, but checks for equality.
   auto compareEqButLast = [numColumns](const auto& a, const auto& b) {
     for (size_t i = 0; i < numColumns - 1; ++i) {
       if (a[i] != b[i]) {
@@ -416,19 +421,22 @@ void specialOptionalJoin(
     return true;
   };
 
-  // The last columns from the left and right input. Those will be dealt with separately.
+  // The last columns from the left and right input. Those will be dealt with
+  // separately.
   std::span<const Id> lastColumnLeft = left.getColumn(left.numColumns() - 1);
   std::span<const Id> lastColumnRight = right.getColumn(right.numColumns() - 1);
 
   while (it1 < end1 && it2 < end2) {
     // Skip over rows in `right` where the first columns don't match.
-    it2 = std::find_if_not(
-        it2, end2, [&](const auto& row) { return compareAllButLast(row, *it1); });
+    it2 = std::find_if_not(it2, end2, [&](const auto& row) {
+      return compareAllButLast(row, *it1);
+    });
     if (it2 == end2) {
       break;
     }
 
-      // Skip over rows in `left` where the first columns don't match, but call the `notFoundAction` on them.
+    // Skip over rows in `left` where the first columns don't match, but call
+    // the `notFoundAction` on them.
     auto next1 = std::find_if_not(it1, end1, [&](const auto& row) {
       return compareAllButLast(row, *it2);
     });
@@ -438,7 +446,8 @@ void specialOptionalJoin(
     }
     it1 = next1;
 
-    // Find the rows where the left and the right input match on the first columns.
+    // Find the rows where the left and the right input match on the first
+    // columns.
     auto endSame1 = std::find_if_not(it1, end1, [&](const auto& row) {
       return compareEqButLast(row, *it2);
     });
@@ -449,8 +458,9 @@ void specialOptionalJoin(
       continue;
     }
 
-    // For the rows where the first columns match we will perform a one-column join on the last column. This
-    // can be done efficiently, because the UNDEF  values are at the beginning of these sub-ranges.
+    // For the rows where the first columns match we will perform a one-column
+    // join on the last column. This can be done efficiently, because the UNDEF
+    // values are at the beginning of these sub-ranges.
 
     // Set up the corresponding sub-ranges of the last columns.
     auto beg = it1 - left.begin();
@@ -463,8 +473,9 @@ void specialOptionalJoin(
                                  lastColumnRight.begin() + end};
 
     // Set up the generator for the UNDEF values.
-    // TODO<joka921> We could probably also apply this optimization if both inputs contain undefined values only in
-    // the last column, and possibly also not only for `OPTIONAL` joins.
+    // TODO<joka921> We could probably also apply this optimization if both
+    // inputs contain undefined values only in the last column, and possibly
+    // also not only for `OPTIONAL` joins.
     auto endOfUndef = std::find_if(leftSub.begin(), leftSub.end(), [](Id id) {
       return id != Id::makeUndefined();
     });
@@ -475,7 +486,8 @@ void specialOptionalJoin(
       }
     };
 
-    // Also set up the actions for compatible rows that now work on single columns.
+    // Also set up the actions for compatible rows that now work on single
+    // columns.
     auto compAction = [&](const auto& itL, const auto& itR) {
       compatibleRowAction((it1 + (itL - leftSub.begin())),
                           (it2 + (itR - rightSub.begin())));

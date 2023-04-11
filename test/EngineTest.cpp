@@ -60,17 +60,6 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
   ASSERT_EQ(expectedResult, result);
 }
 
-void testSpecialOptionalJoin(const IdTable& inputA, const IdTable& inputB,
-                             JoinColumns jcls, const IdTable& expectedResult) {
-  // TODO<joka921> Let this use the proper constructor of OptionalJoin.
-  IdTable result{inputA.numColumns() + inputB.numColumns() - jcls.size(),
-                 makeAllocator()};
-  // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
-  // a have to equal those of column 2 of b and vice versa).
-  OptionalJoin::specialOptionalJoin(inputA, inputB, jcls, &result);
-  ASSERT_EQ(expectedResult, result);
-}
-
 // TODO<joka921> This function already exists in another PR in a better version,
 // merge them.
 IdTable makeTable(const std::vector<std::vector<Id>>& input) {
@@ -316,6 +305,6 @@ TEST(OptionalJoin, specialOptionalJoinTwoColumns) {
     IdTable expectedResult = makeTableV(
         {{4, 1, 2, U}, {2, 1, 3, 3}, {1, 1, 4, U}, {2, 2, 2, 4}, {1, 3, 1, 1}});
 
-    testSpecialOptionalJoin(a, b, jcls, expectedResult);
+    testOptionalJoin(a, b, jcls, expectedResult);
   }
 }

@@ -239,73 +239,56 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
   _multiplicitiesComputed = true;
 }
 
-template <int OUT_WIDTH>
-void OptionalJoin::createOptionalResult(const auto& row,
-                                        IdTableStatic<OUT_WIDTH>* res) {
-  res->emplace_back();
-  size_t rIdx = res->size() - 1;
-  // Fill the columns of b with ID_NO_VALUE and the rest with a
-  for (size_t col = 0; col < row.numColumns(); col++) {
-    (*res)(rIdx, col) = row[col];
-  }
-  for (size_t col = row.numColumns(); col < res->numColumns(); col++) {
-    (*res)(rIdx, col) = ID_NO_VALUE;
-  }
-}
-
 // ______________________________________________________________
 void OptionalJoin::optionalJoin(
-    const IdTable& dynA, const IdTable& dynB,
+    const IdTable& left, const IdTable& right,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
     IdTable* result) {
   // check for trivial cases
-  if (dynA.empty()) {
+  if (left.empty()) {
     return;
   }
 
+  // Determine if we can apply the `specialOptionalJoin`. This is the case when
+  // only the last column of the left input contains UNDEF values.
   bool isCheap = true;
   for (size_t i = 0; i < joinColumns.size(); ++i) {
-    auto [leftCol, rightCol] = joinColumns.at(0);
-    if (std::ranges::any_of(dynB.getColumn(rightCol),
+    auto [leftCol, rightCol] = joinColumns.at(i);
+    if (std::ranges::any_of(right.getColumn(rightCol),
                             [](Id id) { return id.isUndefined(); })) {
       isCheap = false;
     }
     if ((i != joinColumns.size() - 1) &&
-        std::ranges::any_of(dynA.getColumn(leftCol),
+        std::ranges::any_of(left.getColumn(leftCol),
                             [](Id id) { return id.isUndefined(); })) {
       isCheap = false;
     }
   }
 
-  if (isCheap) {
-    return specialOptionalJoin(dynA, dynB, joinColumns, result);
-  }
+  ad_utility::JoinColumnData joinColumnData{joinColumns, left.numColumns(),
+                                            right.numColumns()};
 
-  const auto& a = dynA;
-  const auto& b = dynB;
+  IdTableView<0> joinColumnsLeft =
+      left.asColumnSubsetView(joinColumnData.jcsLeft());
+  IdTableView<0> joinColumnsRight =
+      right.asColumnSubsetView(joinColumnData.jcsRight());
 
-  ad_utility::JoinColumnData joinColumnData{joinColumns, a.numColumns(),
-                                            b.numColumns()};
-
-  auto dynASubset = dynA.asColumnSubsetView(joinColumnData.jcsLeft());
-  auto dynBSubset = dynB.asColumnSubsetView(joinColumnData.jcsRight());
-
-  auto dynAPermuted = dynA.asColumnSubsetView(joinColumnData.permutationLeft());
-  auto dynBPermuted =
-      dynB.asColumnSubsetView(joinColumnData.permutationRight());
+  auto leftPermuted = left.asColumnSubsetView(joinColumnData.permutationLeft());
+  auto rightPermuted =
+      right.asColumnSubsetView(joinColumnData.permutationRight());
 
   auto lessThanBoth = std::ranges::lexicographical_compare;
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      joinColumns.size(), dynAPermuted, dynBPermuted, result);
-  auto addRow = [&rowAdder, beginLeft = dynASubset.begin(),
-                 beginRight = dynBSubset.begin()](const auto& itLeft,
-                                                  const auto& itRight) {
+      joinColumns.size(), leftPermuted, rightPermuted, result);
+  auto addRow = [&rowAdder, beginLeft = joinColumnsLeft.begin(),
+                 beginRight = joinColumnsRight.begin()](const auto& itLeft,
+                                                        const auto& itRight) {
     rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
   };
 
   auto addOptionalRow = [&rowAdder,
-                         begin = dynASubset.begin()](const auto& itLeft) {
+                         begin = joinColumnsLeft.begin()](const auto& itLeft) {
     rowAdder.addOptionalRow(itLeft - begin);
   };
 
@@ -313,10 +296,18 @@ void OptionalJoin::optionalJoin(
                               bool& outOfOrder) {
     return ad_utility::findSmallerUndefRanges(row, begin, end, outOfOrder);
   };
-  auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
-      dynASubset, dynBSubset, lessThanBoth, addRow, findUndefDispatch,
-      findUndefDispatch, addOptionalRow);
 
+  const size_t numOutOfOrder = [&]() {
+    if (isCheap) {
+      ad_utility::specialOptionalJoin(joinColumnsLeft, joinColumnsRight, addRow,
+                                      addOptionalRow);
+      return 0ul;
+    } else {
+      return ad_utility::zipperJoinWithUndef(
+          joinColumnsLeft, joinColumnsRight, lessThanBoth, addRow,
+          findUndefDispatch, findUndefDispatch, addOptionalRow);
+    }
+  }();
   // The column order in the result is now
   // [joinColumns, non-join-columns-a, non-join-columns-b] (which makes the
   // algorithms above easier), be the order that is expected by the rest of the
@@ -337,54 +328,5 @@ void OptionalJoin::optionalJoin(
     }
     Engine::sort(*result, cols);
   }
-  result->permuteColumns(joinColumnData.permutationResult());
-}
-
-// ______________________________________________________________
-void OptionalJoin::specialOptionalJoin(
-    const IdTable& dynA, const IdTable& dynB,
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
-    IdTable* result) {
-  // check for trivial cases
-  if (dynA.empty()) {
-    return;
-  }
-
-  const auto& a = dynA;
-  const auto& b = dynB;
-
-  ad_utility::JoinColumnData joinColumnData{joinColumns, a.numColumns(),
-                                            b.numColumns()};
-
-  auto dynASubset = dynA.asColumnSubsetView(joinColumnData.jcsLeft());
-  auto dynBSubset = dynB.asColumnSubsetView(joinColumnData.jcsRight());
-
-  auto dynAPermuted = dynA.asColumnSubsetView(joinColumnData.permutationLeft());
-  auto dynBPermuted =
-      dynB.asColumnSubsetView(joinColumnData.permutationRight());
-
-  auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      joinColumns.size(), dynAPermuted, dynBPermuted, result);
-  auto addRow = [&rowAdder, beginLeft = dynASubset.begin(),
-                 beginRight = dynBSubset.begin()](const auto& itLeft,
-                                                  const auto& itRight) {
-    rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
-  };
-
-  auto addOptionalRow = [&rowAdder,
-                         begin = dynASubset.begin()](const auto& it) {
-    rowAdder.addOptionalRow(it - begin);
-  };
-
-  ad_utility::specialOptionalJoin(dynASubset, dynBSubset, addRow,
-                                  addOptionalRow);
-
-  // The column order in the result is now
-  // [joinColumns, non-join-columns-a, non-join-columns-b] (which makes the
-  // algorithms above easier), be the order that is expected by the rest of the
-  // code is [columns-a, non-join-columns-b]. Permute the columns to fix the
-  // order.
-  rowAdder.flush();
-
   result->permuteColumns(joinColumnData.permutationResult());
 }

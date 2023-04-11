@@ -67,32 +67,12 @@ class OptionalJoin : public Operation {
    * @param result
    */
   static void optionalJoin(
-      const IdTable& dynA, const IdTable& dynB,
-      const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
-      IdTable* dynResult);
-  static void specialOptionalJoin(
-      const IdTable& dynA, const IdTable& dynB,
+      const IdTable& left, const IdTable& right,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
       IdTable* dynResult);
 
  private:
   void computeSizeEstimateAndMultiplicities();
-
-  /**
-   * @brief Takes a row from each of the input tables and creates a result row
-   * @param a A row from table a.
-   * @param b A row from table b.
-   * @param sizeA The size of a row in table a.
-   * @param joinColumnBitmap_a A bitmap in which a bit is 1 if the corresponding
-   *                           column is a join column
-   * @param joinColumnBitmap_b A bitmap in which a bit is 1 if the corresponding
-   *                           column is a join column
-   * @param joinColumnAToB Maps join columns in a to their counterparts in b
-   * @param res the result row
-   */
-  template <int OUT_WIDTH>
-  static void createOptionalResult(const auto& row,
-                                   IdTableStatic<OUT_WIDTH>* res);
 
   ResultTable computeResult() override;
 
