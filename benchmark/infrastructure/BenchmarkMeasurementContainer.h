@@ -105,8 +105,8 @@ class ResultGroup {
     requires std::invocable<Function>
   ResultEntry& addMeasurement(const std::string& descriptor,
       const Function& functionToMeasure){
-      entries_.push_back(CopybaleUniquePtr<ResultEntry>{
-        std::make_unique<ResultEntry>(descriptor, functionToMeasure)});
+      entries_.push_back(
+        make_copyable_unique<ResultEntry>(descriptor, functionToMeasure));
       return (*entries_.back());
     }
 
