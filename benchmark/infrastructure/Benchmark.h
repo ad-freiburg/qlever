@@ -20,7 +20,7 @@
 #include "../benchmark/util/HashMapWithInsertionOrder.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-#include "../benchmark/infrastructure/CopyableUniquePtr.h"
+#include "util/CopyableUniquePtr.h"
 
 namespace ad_benchmark{
 /*
@@ -29,7 +29,7 @@ namespace ad_benchmark{
  */
 class BenchmarkResults {
     template<typename T>
-    using PointerVector = std::vector<CopyableUniquePtr<T>>;
+    using PointerVector = std::vector<ad_utility::CopyableUniquePtr<T>>;
 
     // A vector of all the created single measurements.
     PointerVector<ResultEntry> singleMeasurements_;
@@ -60,8 +60,8 @@ class BenchmarkResults {
       PointerVector<EntryType>& targetVector,
       ConstructorArgs&&... constructorArgs){
       targetVector.push_back(
-        make_copyable_unique<EntryType>(std::forward<ConstructorArgs>(
-        constructorArgs)...));
+        ad_utility::make_copyable_unique<EntryType>(
+        std::forward<ConstructorArgs>(constructorArgs)...));
       return (*targetVector.back());
     }
 

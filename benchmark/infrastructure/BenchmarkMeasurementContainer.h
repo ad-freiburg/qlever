@@ -13,7 +13,7 @@
 #include "util/Timer.h"
 #include "util/json.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
-#include "../benchmark/infrastructure/CopyableUniquePtr.h"
+#include "util/CopyableUniquePtr.h"
 
 namespace ad_benchmark{
 
@@ -79,7 +79,7 @@ class ResultGroup {
   // Needed for identifying groups.
   std::string descriptor_;
   // Members of the group.
-  std::vector<CopyableUniquePtr<ResultEntry>> entries_;
+  std::vector<ad_utility::CopyableUniquePtr<ResultEntry>> entries_;
 
   public:
   BenchmarkMetadata metadata_;
@@ -106,7 +106,8 @@ class ResultGroup {
   ResultEntry& addMeasurement(const std::string& descriptor,
       const Function& functionToMeasure){
       entries_.push_back(
-        make_copyable_unique<ResultEntry>(descriptor, functionToMeasure));
+        ad_utility::make_copyable_unique<ResultEntry>(descriptor,
+        functionToMeasure));
       return (*entries_.back());
     }
 

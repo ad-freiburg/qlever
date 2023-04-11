@@ -10,6 +10,8 @@
 
 #include "util/json.h"
 
+namespace ad_utility {
+
 /*
 A version of `std::unique_ptr` with a copy assigment operator and a copy
 constructor, which both copy the dereferenced pointer to create a new instace
@@ -86,3 +88,5 @@ template<typename T, typename... Args>
 constexpr CopyableUniquePtr<T> make_copyable_unique(Args&&... args){
   return CopyableUniquePtr<T>(std::make_unique<T>(std::forward<Args>(args)...));
 }
+
+}  // namespace ad_utility
