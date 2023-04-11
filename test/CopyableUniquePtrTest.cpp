@@ -7,7 +7,7 @@
 #include <memory>
 
 #include "util/CopyableUniquePtr.h"
-#include "nlohmann/json.hpp"
+#include "util/json.h"
 
 /*
 @brief Check, if `CopyableUniquePtr` owns an object, that is equal to the
@@ -38,7 +38,7 @@ TEST(CopyableUniquePtr, make_copyable_unique){
 }
 
 // Copy and move constructor.
-TEST(CopyableUniquePtr, copyAndMoveConstructor){
+TEST(CopyableUniquePtr, CopyAndMoveConstructor){
   // Copy constructor for empty object.
   {
     ad_utility::CopyableUniquePtr<int> emptyPointer;
@@ -91,7 +91,7 @@ TEST(CopyableUniquePtr, copyAndMoveConstructor){
 }
 
 // Copy assignment operator.
-TEST(CopyableUniquePtr, copyAssignmentOperator){
+TEST(CopyableUniquePtr, CopyAssignmentOperator){
   ad_utility::CopyableUniquePtr<int> intPointer;
   const ad_utility::CopyableUniquePtr<int> fortyTwoPointer{
     ad_utility::make_copyable_unique<int>(42)};
