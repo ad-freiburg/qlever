@@ -19,13 +19,13 @@ in mind, so that may not work.
 */
 template<typename T, typename Deleter = std::default_delete<T>>
 requires std::is_copy_constructible_v<T>
-class CopybaleUniquePtr: public std::unique_ptr<T, Deleter>{
+class CopyableUniquePtr: public std::unique_ptr<T, Deleter>{
   // This makes calling functions, etc. from the base class so much easier.
   using Base = std::unique_ptr<T, Deleter>;
 
   // This function uses a private constructor, so it needs private access.
   template<typename T2, typename... Args>
-  friend constexpr CopybaleUniquePtr<T2> make_copyable_unique(Args&&... args);
+  friend constexpr CopyableUniquePtr<T2> make_copyable_unique(Args&&... args);
 
   /*
   @brief Returns an unique pointer, that holds a copy of the dereferenced
@@ -37,28 +37,28 @@ class CopybaleUniquePtr: public std::unique_ptr<T, Deleter>{
   }
 
   /*
-  @brief Creates a `CopybaleUniquePtr`, that holds the object formerly
+  @brief Creates a `CopyableUniquePtr`, that holds the object formerly
   owned by the unique pointer. Needed for `make_copyable_unique`.
   */
-  explicit CopybaleUniquePtr(Base&& ptr): Base(std::move(ptr)) {}
+  explicit CopyableUniquePtr(Base&& ptr): Base(std::move(ptr)) {}
 
   public:
   // Default constructor.
-  CopybaleUniquePtr(): Base() {}
+  CopyableUniquePtr(): Base() {}
 
   // Default destructor.
-  ~CopybaleUniquePtr() = default;
+  ~CopyableUniquePtr() = default;
 
   // Copy constructor.
-  CopybaleUniquePtr(const CopybaleUniquePtr& ptr):
+  CopyableUniquePtr(const CopyableUniquePtr& ptr):
   Base(CopyDereferencedPointer(ptr)) {}
 
   // Move constructor.
-  CopybaleUniquePtr(CopybaleUniquePtr&&) noexcept = default;
+  CopyableUniquePtr(CopyableUniquePtr&&) noexcept = default;
 
   // Copy assignment operator.
-  CopybaleUniquePtr<T, Deleter>& operator=(
-    const CopybaleUniquePtr<T, Deleter>& ptr){
+  CopyableUniquePtr<T, Deleter>& operator=(
+    const CopyableUniquePtr<T, Deleter>& ptr){
     // Special behaviour in case, that `ptr` doesn't own an object.
     Base::operator=(CopyDereferencedPointer(ptr));
     return *this;
@@ -66,23 +66,23 @@ class CopybaleUniquePtr: public std::unique_ptr<T, Deleter>{
 
   // Json serialization.
   friend void to_json(nlohmann::json& j,
-    const CopybaleUniquePtr<T, Deleter>& p){
+    const CopyableUniquePtr<T, Deleter>& p){
     /*
-    The serialization of `CopybaleUniquePtr` would have identical code to the
+    The serialization of `CopyableUniquePtr` would have identical code to the
     serialization of a normal unique pointer, so we just re-cast it, to save on
     code duplication.
     However, unique pointers can only be created with rvalues, so we also have
     to create a temporary copy.
     */
     j = static_cast<std::unique_ptr<T, Deleter>>(
-      CopybaleUniquePtr<T, Deleter>{p});
+      CopyableUniquePtr<T, Deleter>{p});
   }
 };
 
 /*
-@brief Same as `std::make_unique`, but for `CopybaleUniquePtr`.
+@brief Same as `std::make_unique`, but for `CopyableUniquePtr`.
 */
 template<typename T, typename... Args>
-constexpr CopybaleUniquePtr<T> make_copyable_unique(Args&&... args){
-  return CopybaleUniquePtr<T>(std::make_unique<T>(std::forward<Args>(args)...));
+constexpr CopyableUniquePtr<T> make_copyable_unique(Args&&... args){
+  return CopyableUniquePtr<T>(std::make_unique<T>(std::forward<Args>(args)...));
 }

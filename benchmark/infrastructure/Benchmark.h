@@ -20,7 +20,7 @@
 #include "../benchmark/util/HashMapWithInsertionOrder.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-#include "../benchmark/infrastructure/CopybaleUniquePtr.h"
+#include "../benchmark/infrastructure/CopyableUniquePtr.h"
 
 namespace ad_benchmark{
 /*
@@ -29,7 +29,7 @@ namespace ad_benchmark{
  */
 class BenchmarkResults {
     template<typename T>
-    using PointerVector = std::vector<CopybaleUniquePtr<T>>;
+    using PointerVector = std::vector<CopyableUniquePtr<T>>;
 
     // A vector of all the created single measurements.
     PointerVector<ResultEntry> singleMeasurements_;
@@ -43,17 +43,17 @@ class BenchmarkResults {
 
     /*
     @brief Adds an entry to the given vector, by creating an instance of
-    `CopybaleUniquePtr` for the given type and appending it. Strictly an
+    `CopyableUniquePtr` for the given type and appending it. Strictly an
     internal helper function.
 
-    @tparam EntryType The type, that the `CopybaleUniquePtr` in the vector points
+    @tparam EntryType The type, that the `CopyableUniquePtr` in the vector points
     to.
     @tparam ConstructorArgs Types for the constructor arguments for creating
     a new instance of `EntryType`.
 
-    @param targetVector A vector of `CopybaleUniquePtr`, that own values.
+    @param targetVector A vector of `CopyableUniquePtr`, that own values.
     @param constructorArgs Arguments to pass to the constructor of the object,
-    that the new `CopybaleUniquePtr` will own.
+    that the new `CopyableUniquePtr` will own.
     */
     template<typename EntryType, typename... ConstructorArgs>
     static EntryType& addEntryToContainerVector(

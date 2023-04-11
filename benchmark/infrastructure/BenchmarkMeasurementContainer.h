@@ -13,7 +13,7 @@
 #include "util/Timer.h"
 #include "util/json.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
-#include "../benchmark/infrastructure/CopybaleUniquePtr.h"
+#include "../benchmark/infrastructure/CopyableUniquePtr.h"
 
 namespace ad_benchmark{
 
@@ -79,7 +79,7 @@ class ResultGroup {
   // Needed for identifying groups.
   std::string descriptor_;
   // Members of the group.
-  std::vector<CopybaleUniquePtr<ResultEntry>> entries_;
+  std::vector<CopyableUniquePtr<ResultEntry>> entries_;
 
   public:
   BenchmarkMetadata metadata_;
