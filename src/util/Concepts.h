@@ -12,7 +12,5 @@ namespace ad_utility {
  * @tparam T The Type to be formatted
  */
 template <typename T>
-concept Streamable = requires(T x, std::ostream& os) {
-  os << x;
-};
+concept Streamable = requires(T x, std::ostream& os) { os << x; };
 }  // namespace ad_utility

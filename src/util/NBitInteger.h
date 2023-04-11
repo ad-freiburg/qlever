@@ -11,7 +11,8 @@ namespace ad_utility {
 
 // A type for signed integers that only need `N` bits to represent.
 template <uint8_t N>
-requires(N <= 64 && N >= 1) class NBitInteger {
+  requires(N <= 64 && N >= 1)
+class NBitInteger {
   using T = uint64_t;
   static constexpr uint8_t UNUSED_BITS = 64 - N;
 

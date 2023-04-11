@@ -89,9 +89,8 @@ class TripleComponent {
   /// Construct from anything that is able to construct the underlying
   /// `Variant`.
   template <typename... Args>
-  requires std::is_constructible_v<Variant, Args&&...> TripleComponent(
-      Args&&... args)
-      : _variant(AD_FWD(args)...) {
+    requires std::is_constructible_v<Variant, Args&&...>
+  TripleComponent(Args&&... args) : _variant(AD_FWD(args)...) {
     if (isString()) {
       // Previously we stored variables as strings, so this check is a way
       // to easily track places where this old behavior is accidentally still
@@ -119,7 +118,7 @@ class TripleComponent {
   /// Assignment for types that can be directly assigned to the underlying
   /// variant.
   template <typename T>
-  requires requires(Variant v, T&& t) { _variant = t; }
+    requires requires(Variant v, T&& t) { _variant = t; }
   TripleComponent& operator=(T&& value) {
     _variant = AD_FWD(value);
     checkThatStringIsValid();
@@ -139,8 +138,10 @@ class TripleComponent {
 
   /// Make a `TripleComponent` directly comparable to the underlying types.
   template <typename T>
-  requires requires(T&& t) { _variant == t; }
-  bool operator==(const T& other) const { return _variant == other; }
+    requires requires(T&& t) { _variant == t; }
+  bool operator==(const T& other) const {
+    return _variant == other;
+  }
 
   /// Equality comparison between two `TripleComponent`s.
   bool operator==(const TripleComponent&) const = default;

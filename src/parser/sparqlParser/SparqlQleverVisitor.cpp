@@ -1799,8 +1799,9 @@ BlankNode Visitor::visit(Parser::BlankNodeContext* ctx) {
 
 // ____________________________________________________________________________________
 template <typename Ctx>
-void Visitor::visitVector(const std::vector<Ctx*>& childContexts) requires
-    voidWhenVisited<Visitor, Ctx> {
+void Visitor::visitVector(const std::vector<Ctx*>& childContexts)
+  requires voidWhenVisited<Visitor, Ctx>
+{
   for (const auto& child : childContexts) {
     visit(child);
   }
@@ -1810,7 +1811,8 @@ void Visitor::visitVector(const std::vector<Ctx*>& childContexts) requires
 template <typename Ctx>
 [[nodiscard]] auto Visitor::visitVector(const std::vector<Ctx*>& childContexts)
     -> std::vector<decltype(visit(childContexts[0]))>
-requires(!voidWhenVisited<Visitor, Ctx>) {
+  requires(!voidWhenVisited<Visitor, Ctx>)
+{
   std::vector<decltype(visit(childContexts[0]))> children;
   for (const auto& child : childContexts) {
     children.emplace_back(visit(child));
@@ -1853,7 +1855,9 @@ void Visitor::visitIf(Target* target, Ctx* ctx) {
 
 // _____________________________________________________________________________
 template <typename Ctx>
-void Visitor::visitIf(Ctx* ctx) requires voidWhenVisited<Visitor, Ctx> {
+void Visitor::visitIf(Ctx* ctx)
+  requires voidWhenVisited<Visitor, Ctx>
+{
   if (ctx) {
     visit(ctx);
   }

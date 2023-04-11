@@ -192,8 +192,7 @@ void testAllN(auto function, auto... args) {
   // argument on a separate line for some reason.
   [&]<size_t... Ns>(std::index_sequence<Ns...>) {
     (..., function.template operator()<Ns + 1>(args...));
-  }
-  (std::make_index_sequence<64>());
+  }(std::make_index_sequence<64>());
 }
 
 // A generator that yields 100 values near int64_t::min(), 100 values near 0,

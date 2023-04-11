@@ -119,7 +119,9 @@ class TaskQueue {
     return executeAndUpdateTimer(action, _popTime);
   }
 
-  void resetTimers() requires TrackTimes {
+  void resetTimers()
+    requires TrackTimes
+  {
     _pushTime = 0;
     _popTime = 0;
   }
@@ -145,7 +147,9 @@ class TaskQueue {
   }
 
   // __________________________________________________________________________
-  std::string getTimeStatistics() const requires TrackTimes {
+  std::string getTimeStatistics() const
+    requires TrackTimes
+  {
     return "Time spent waiting in queue " + _name + ": " +
            std::to_string(_pushTime) + "ms (push), " +
            std::to_string(_popTime) + "ms (pop)";

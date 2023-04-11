@@ -25,7 +25,7 @@ namespace detail {
 // has to perform actions that might throw, but when handling these exceptions
 // is not important.
 template <typename F>
-requires std::invocable<std::remove_cvref_t<F>>
+  requires std::invocable<std::remove_cvref_t<F>>
 void ignoreExceptionIfThrows(F&& f,
                              std::string_view additionalNote = "") noexcept {
   if constexpr (std::is_nothrow_invocable_v<std::remove_cvref_t<F>>) {
@@ -53,15 +53,12 @@ void ignoreExceptionIfThrows(F&& f,
 // this function must never throw an exception.
 template <typename F,
           typename TerminateAction = decltype(detail::callStdTerminate)>
-requires(
-    std::invocable<std::remove_cvref_t<F>>&& std::is_nothrow_invocable_v<
-        TerminateAction>) void terminateIfThrows(F&& f,
-                                                 std::string_view message,
-                                                 TerminateAction
-                                                     terminateAction = {},
-                                                 ad_utility::source_location l =
-                                                     ad_utility::source_location::
-                                                         current()) noexcept {
+  requires(std::invocable<std::remove_cvref_t<F>> &&
+           std::is_nothrow_invocable_v<TerminateAction>)
+void terminateIfThrows(F&& f, std::string_view message,
+                       TerminateAction terminateAction = {},
+                       ad_utility::source_location l =
+                           ad_utility::source_location::current()) noexcept {
   try {
     std::invoke(AD_FWD(f));
   } catch (const std::exception& e) {

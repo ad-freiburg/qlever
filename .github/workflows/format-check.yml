@@ -18,7 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Install dependencies
-        run: sudo apt-get install -y clang-format-14
+        run:  |
+            wget https://apt.llvm.org/llvm.sh
+            sudo chmod +x llvm.sh
+            sed   's/apt-key del/echo/' llvm.sh -iy
+            sudo ./llvm.sh 16
+            sudo apt install -y clang-format-16
 
       - name: Run the format checker
         run: ${{github.workspace}}/misc/format-check.sh

@@ -53,14 +53,19 @@ class Row {
  public:
   // Construct a row for the dynamic case (then the number of columns has to be
   // specified).
-  explicit Row(size_t numCols) requires(isDynamic()) : data_(numCols) {}
+  explicit Row(size_t numCols)
+    requires(isDynamic())
+      : data_(numCols) {}
 
   // Construct a row when the number of columns is statically known. Besides the
   // default constructor, we also keep the constructor that has a `numCols`
   // argument (which is ignored), in order to facilitate generic code that works
   // for both cases.
-  Row() requires(!isDynamic()) = default;
-  explicit Row([[maybe_unused]] size_t numCols) requires(!isDynamic())
+  Row()
+    requires(!isDynamic())
+  = default;
+  explicit Row([[maybe_unused]] size_t numCols)
+    requires(!isDynamic())
       : Row() {}
 
   // Access the i-th element.
@@ -161,7 +166,9 @@ class RowReferenceImpl {
    public:
     // Access to the `i`-th columns of this row. Only allowed for const values
     // and for rvalues.
-    T& operator[](size_t i) && requires(!isConst) {
+    T& operator[](size_t i) &&
+          requires(!isConst)
+    {
       return operatorBracketImpl(*this, i);
     }
     const T& operator[](size_t i) const& {
@@ -205,7 +212,9 @@ class RowReferenceImpl {
    protected:
     // The implementation of swapping two `RowReference`s (passed either by
     // value or by reference).
-    static void swapImpl(auto&& a, auto&& b) requires(!isConst) {
+    static void swapImpl(auto&& a, auto&& b)
+      requires(!isConst)
+    {
       for (size_t i = 0; i < a.numColumns(); ++i) {
         std::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
       }
@@ -219,7 +228,9 @@ class RowReferenceImpl {
    public:
     // Swap two `RowReference`s, but only if they are temporaries (rvalues).
     // This modifies the underlying table.
-    friend void swap(This&& a, This&& b) requires(!isConst) {
+    friend void swap(This&& a, This&& b)
+      requires(!isConst)
+    {
       return swapImpl(a, b);
     }
 
@@ -227,7 +238,8 @@ class RowReferenceImpl {
     // a `RowReference` and a `Row` if the number of columns match.
     template <typename U>
     bool operator==(const U& other) const
-        requires(numStaticColumns == U::numStaticColumns) {
+      requires(numStaticColumns == U::numStaticColumns)
+    {
       if constexpr (numStaticColumns == 0) {
         if (numColumns() != other.numColumns()) {
           return false;
@@ -278,7 +290,8 @@ class RowReferenceImpl {
     // Assignment from a `const` RowReference to a `mutable` RowReference
     This& operator=(const RowReferenceWithRestrictedAccess<
                     Table, ad_utility::IsConst::True>& other) &&
-        requires(!isConst) {
+          requires(!isConst)
+    {
       return assignmentImpl(*this, other);
     }
 
@@ -326,7 +339,9 @@ class RowReference
   RowReference(Base b) : Base{std::move(b)} {}
 
   // Access to the `i`-th column of this row.
-  T& operator[](size_t i) requires(!isConst) {
+  T& operator[](size_t i)
+    requires(!isConst)
+  {
     return Base::operatorBracketImpl(base(), i);
   }
   const T& operator[](size_t i) const {
@@ -343,7 +358,9 @@ class RowReference
 
   // __________________________________________________________________________
   template <ad_utility::SimilarTo<RowReference> R>
-  friend void swap(R&& a, R&& b) requires(!isConst) {
+  friend void swap(R&& a, R&& b)
+    requires(!isConst)
+  {
     return Base::swapImpl(AD_FWD(a), AD_FWD(b));
   }
 
@@ -351,7 +368,8 @@ class RowReference
   // a `RowReference` and a `Row` if the number of columns match.
   template <typename T>
   bool operator==(const T& other) const
-      requires(numStaticColumns == T::numStaticColumns) {
+    requires(numStaticColumns == T::numStaticColumns)
+  {
     return base() == other;
   }
 
@@ -371,8 +389,10 @@ class RowReference
   }
 
   // Assignment from a `const` RowReference to a `mutable` RowReference
-  RowReference& operator=(const RowReference<Table, ad_utility::IsConst::True>&
-                              other) requires(!isConst) {
+  RowReference& operator=(
+      const RowReference<Table, ad_utility::IsConst::True>& other)
+    requires(!isConst)
+  {
     return assignmentImpl(base(), other);
   }
 

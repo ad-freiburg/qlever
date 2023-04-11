@@ -71,7 +71,8 @@ class IteratorForAccessOperator {
   Accessor _accessor{};
 
  public:
-  IteratorForAccessOperator() requires std::is_default_constructible_v<Accessor>
+  IteratorForAccessOperator()
+    requires std::is_default_constructible_v<Accessor>
   = default;
   IteratorForAccessOperator(RandomAccessContainerPtr vec, index_type index,
                             Accessor accessor = Accessor{})
@@ -143,17 +144,29 @@ class IteratorForAccessOperator {
   }
 
   decltype(auto) operator*() const { return _accessor(*_vector, _index); }
-  decltype(auto) operator*() requires(!isConst) {
+  decltype(auto) operator*()
+    requires(!isConst)
+  {
     return _accessor(*_vector, _index);
   }
 
   // Only allowed, if `RandomAccessContainer` yields references and not values
   template <typename A = Accessor, typename P = RandomAccessContainerPtr>
-  requires requires(A a, P p, uint64_t i) { {&a(*p, i)}; }
-  auto operator->() requires(!isConst) { return &(*(*this)); }
+    requires requires(A a, P p, uint64_t i) {
+      { &a(*p, i) };
+    }
+             auto operator->()
+               requires(!isConst)
+  {
+    return &(*(*this));
+  }
   template <typename A = Accessor, typename P = RandomAccessContainerPtr>
-  requires requires(A a, P p, uint64_t i) { {&a(*p, i)}; }
-  auto operator->() const { return &(*(*this)); }
+    requires requires(A a, P p, uint64_t i) {
+      { &a(*p, i) };
+    }
+  auto operator->() const {
+    return &(*(*this));
+  }
 
   decltype(auto) operator[](difference_type n) const {
     return _accessor(*_vector, _index + n);
