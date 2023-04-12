@@ -130,4 +130,16 @@ TEST(ConstexprUtils, ConstExprForLoop) {
 }
 
 TEST(ConstexprUtils, RuntimeValueToCompileTimeValue) {
+  // Create one function, that sets `i` to x, for every possible
+  // version of x in [0,100].
+  size_t i = 1;
+  auto setI = [&i]<size_t Number>(){i = Number;};
+  for (size_t d = 0; d <= 100; d++){
+    RuntimeValueToCompileTimeValue<100>(d, setI);
+    ASSERT_EQ(i, d);
+  }
+
+  // Should cause an exception, if the given value is bigger than the
+  // `MaxValue`.
+  ASSERT_ANY_THROW(RuntimeValueToCompileTimeValue<5>(10, setI));
 }
