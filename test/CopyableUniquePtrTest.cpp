@@ -4,6 +4,7 @@
 // schlegea@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
+
 #include <memory>
 
 #include "util/CopyableUniquePtr.h"
@@ -13,9 +14,9 @@
 @brief Check, if `CopyableUniquePtr` owns an object, that is equal to the
 given object.
 */
-template<typename T>
+template <typename T>
 static void compareOwnedObject(const ad_utility::CopyableUniquePtr<T>& ptr,
-  const T& objectToCompareTo){
+                               const T& objectToCompareTo) {
   // Does `ptr` actually hold an object?
   ASSERT_TRUE(ptr);
 
@@ -24,21 +25,21 @@ static void compareOwnedObject(const ad_utility::CopyableUniquePtr<T>& ptr,
 }
 
 // Testing `make_copyable_unique`.
-TEST(CopyableUniquePtr, make_copyable_unique){
+TEST(CopyableUniquePtr, make_copyable_unique) {
   {
     ad_utility::CopyableUniquePtr<int> emptyPointer{
-      ad_utility::make_copyable_unique<int>()};
+        ad_utility::make_copyable_unique<int>()};
     ASSERT_TRUE(emptyPointer);
   }
   {
     ad_utility::CopyableUniquePtr<int> pointer{
-      ad_utility::make_copyable_unique<int>(42)};
+        ad_utility::make_copyable_unique<int>(42)};
     compareOwnedObject(pointer, 42);
   }
 }
 
 // Copy and move constructor.
-TEST(CopyableUniquePtr, CopyAndMoveConstructor){
+TEST(CopyableUniquePtr, CopyAndMoveConstructor) {
   // Copy constructor for empty object.
   {
     ad_utility::CopyableUniquePtr<int> emptyPointer;
@@ -51,7 +52,7 @@ TEST(CopyableUniquePtr, CopyAndMoveConstructor){
   // Copy constructor for non-empty object.
   {
     ad_utility::CopyableUniquePtr<int> nonEmptyPointer(
-      ad_utility::make_copyable_unique<int>(42));
+        ad_utility::make_copyable_unique<int>(42));
     ad_utility::CopyableUniquePtr<int> pointerToCopyTo(nonEmptyPointer);
 
     compareOwnedObject(pointerToCopyTo, 42);
@@ -73,13 +74,13 @@ TEST(CopyableUniquePtr, CopyAndMoveConstructor){
   // Move constructor for non-empty object.
   {
     ad_utility::CopyableUniquePtr<int> nonEmptyPointer(
-      ad_utility::make_copyable_unique<int>(42));
+        ad_utility::make_copyable_unique<int>(42));
     // Saving the adress of the int object, so that we can later check, that
     // it was actually moved.
     int* const intAdress = nonEmptyPointer.get();
-    
+
     ad_utility::CopyableUniquePtr<int> pointerToMoveTo(
-      std::move(nonEmptyPointer));
+        std::move(nonEmptyPointer));
 
     // Does `pointerToMoveTo` own the correct object?
     compareOwnedObject(pointerToMoveTo, 42);
@@ -91,16 +92,16 @@ TEST(CopyableUniquePtr, CopyAndMoveConstructor){
 }
 
 // Copy assignment operator.
-TEST(CopyableUniquePtr, CopyAssignmentOperator){
+TEST(CopyableUniquePtr, CopyAssignmentOperator) {
   ad_utility::CopyableUniquePtr<int> intPointer;
   const ad_utility::CopyableUniquePtr<int> fortyTwoPointer{
-    ad_utility::make_copyable_unique<int>(42)};
+      ad_utility::make_copyable_unique<int>(42)};
   const ad_utility::CopyableUniquePtr<int> sixPointer{
-    ad_utility::make_copyable_unique<int>(6)};
+      ad_utility::make_copyable_unique<int>(6)};
 
   // Quick check, if both pointer have equal dereferenced objects, that are
   // however not the same object.
-  auto check = [](const auto& pointer1, const auto& pointer2){
+  auto check = [](const auto& pointer1, const auto& pointer2) {
     // Both own an object.
     ASSERT_TRUE(pointer1 && pointer2);
     // The owned objects count as equal.
@@ -119,7 +120,7 @@ TEST(CopyableUniquePtr, CopyAssignmentOperator){
 }
 
 // Json serialization.
-TEST(CopyableUniquePtr, jsonSerialization){
+TEST(CopyableUniquePtr, jsonSerialization) {
   // Does an empty `CopyableUniquePtr` serialize as `null`?
   nlohmann::json j = ad_utility::CopyableUniquePtr<int>{};
   ASSERT_TRUE(j.is_null());

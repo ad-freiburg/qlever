@@ -4,6 +4,7 @@
 // schlegea@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
+
 #include <memory>
 #include <optional>
 #include <variant>
@@ -16,7 +17,7 @@ These are tests for all the custom converter for third party classes in
 */
 
 // `std::optional`
-TEST(JsonCustomConverterForThirdParty, StdOptional){
+TEST(JsonCustomConverterForThirdParty, StdOptional) {
   nlohmann::json j;
 
   // `std::optional` without a value.
@@ -34,7 +35,7 @@ TEST(JsonCustomConverterForThirdParty, StdOptional){
 }
 
 // `std::monostate` from `std::variant`.
-TEST(JsonCustomConverterForThirdParty, StdMonostate){
+TEST(JsonCustomConverterForThirdParty, StdMonostate) {
   nlohmann::json j;
 
   // Does it serialize?
@@ -53,7 +54,7 @@ TEST(JsonCustomConverterForThirdParty, StdMonostate){
 }
 
 // `std::variant`.
-TEST(JsonCustomConverterForThirdParty, StdVariant){
+TEST(JsonCustomConverterForThirdParty, StdVariant) {
   nlohmann::json j;
 
   using VariantType = std::variant<std::monostate, int, float>;
@@ -62,13 +63,13 @@ TEST(JsonCustomConverterForThirdParty, StdVariant){
   // Helper function, that translates the given type `T` to its index number in
   // the given variant.
   // Most of this code is from: `https://stackoverflow.com/a/52305530`
-  constexpr auto typeToVariantIndex = []<typename T, typename... Ts>(
-    std::variant<Ts...>){
-    size_t i = 0;
-    ((!std::is_same_v<T, Ts> && ++i) && ...);
-    return i;
-  };
-  
+  constexpr auto typeToVariantIndex =
+      []<typename T, typename... Ts>(std::variant<Ts...>) {
+        size_t i = 0;
+        ((!std::is_same_v<T, Ts> && ++i) && ...);
+        return i;
+      };
+
   /*
   @brief Quick check, if the the given json object has the values for `index`
   and `value`, that are wanted.
@@ -76,11 +77,11 @@ TEST(JsonCustomConverterForThirdParty, StdVariant){
   is just a plain json check.
   */
   auto checkJson = [&j, &variant, &typeToVariantIndex]<typename ValueType>(
-    const ValueType& wantedValue){
-      ASSERT_EQ(typeToVariantIndex.template operator()<ValueType>(variant),
-        j["index"].get<size_t>());
-      ASSERT_EQ(wantedValue, j["value"].get<ValueType>());
-    };
+                       const ValueType& wantedValue) {
+    ASSERT_EQ(typeToVariantIndex.template operator()<ValueType>(variant),
+              j["index"].get<size_t>());
+    ASSERT_EQ(wantedValue, j["value"].get<ValueType>());
+  };
 
   /*
   @brief Sets `variant` to value, serializes `variant`, sets `variant` to an
@@ -92,34 +93,33 @@ TEST(JsonCustomConverterForThirdParty, StdVariant){
   deserialization. Needs to be different from newValue, so that we can make
   sure, that the variant is actually changed by the deserialization.
   */
-  auto doSimpleTest = [&j, &variant, &checkJson, &typeToVariantIndex]<
-    typename NewValueType>(
-    const NewValueType& newValue, const auto& intermediateValue){
-    // Serialize `variant` after setting it to the new value.
-    variant = newValue;
-    j = variant;
+  auto doSimpleTest =
+      [&j, &variant, &checkJson, &typeToVariantIndex]<typename NewValueType>(
+          const NewValueType& newValue, const auto& intermediateValue) {
+        // Serialize `variant` after setting it to the new value.
+        variant = newValue;
+        j = variant;
 
-    // Was it serialized, as it should?
-    checkJson(newValue);
+        // Was it serialized, as it should?
+        checkJson(newValue);
 
-    /*
-    Set `variant` to a intermediate value, before checking, if it deserializes
-    correctly.
-    */
-    variant = intermediateValue;
-    variant = j.get<VariantType>();
+        /*
+        Set `variant` to a intermediate value, before checking, if it
+        deserializes correctly.
+        */
+        variant = intermediateValue;
+        variant = j.get<VariantType>();
 
-    ASSERT_EQ(
-      typeToVariantIndex.template operator()<NewValueType>(variant),
-      variant.index());
-    ASSERT_EQ(newValue, std::get<NewValueType>(variant));
-  };
+        ASSERT_EQ(typeToVariantIndex.template operator()<NewValueType>(variant),
+                  variant.index());
+        ASSERT_EQ(newValue, std::get<NewValueType>(variant));
+      };
 
   // Do simple tests for monostate, float and int.
-  doSimpleTest((int) 42, (float) 6.5);
-  doSimpleTest((float) 13.702, (int) 10);
-  doSimpleTest(std::monostate{}, (int) 42);
-  doSimpleTest((float) 4.2777422, std::monostate{});
+  doSimpleTest((int)42, (float)6.5);
+  doSimpleTest((float)13.702, (int)10);
+  doSimpleTest(std::monostate{}, (int)42);
+  doSimpleTest((float)4.2777422, std::monostate{});
 
   // There is a custom exception, should the index for a value tpye be not
   // valid. That is, to big, or to small.
@@ -131,7 +131,7 @@ TEST(JsonCustomConverterForThirdParty, StdVariant){
 
 // `std::unique_ptr<T>` for copy constructible `T`.
 TEST(JsonCustomConverterForThirdParty,
-  StdUnique_PtrForCopyConstructibleObjects){
+     StdUnique_PtrForCopyConstructibleObjects) {
   nlohmann::json j;
   using PointerObjectType = int;
   using PointerType = std::unique_ptr<PointerObjectType>;
@@ -147,18 +147,18 @@ TEST(JsonCustomConverterForThirdParty,
   away with doing nothing.
   */
   auto doCheckPreparation = [&j, &pointer](auto&& newValue,
-    auto&& intermediateValue){
-      // Set and serialize.
-      pointer = std::move(newValue);
-      j = pointer;
+                                           auto&& intermediateValue) {
+    // Set and serialize.
+    pointer = std::move(newValue);
+    j = pointer;
 
-      // Give the pointer a different object to manage, so that the converter
-      // can't get away with doing nothing.
-      pointer = std::move(intermediateValue);
+    // Give the pointer a different object to manage, so that the converter
+    // can't get away with doing nothing.
+    pointer = std::move(intermediateValue);
 
-      // Deserialize.
-      pointer = j.get<PointerType>();
-    };
+    // Deserialize.
+    pointer = j.get<PointerType>();
+  };
 
   // Uniqe pointer doesn't own an object.
   doCheckPreparation(nullptr, std::make_unique<PointerObjectType>(42));

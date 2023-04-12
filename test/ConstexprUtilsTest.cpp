@@ -3,6 +3,7 @@
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include <utility>
+
 #include "gtest/gtest.h"
 #include "util/ConstexprUtils.h"
 
@@ -113,19 +114,19 @@ TEST(ConstexprUtils, ConstExprForLoop) {
   size_t i{0};
 
   // Add `i` up to one hundred.
-  ConstExprForLoop(std::make_index_sequence<100>{}, [&i]<size_t>(){i++;});
+  ConstExprForLoop(std::make_index_sequence<100>{}, [&i]<size_t>() { i++; });
   ASSERT_EQ(i, 100);
 
   // Add up 2, 5, and 9 at run time.
   i = 0;
-  ConstExprForLoop(std::index_sequence<2,5,9>{},
-    [&i]<size_t NumberToAdd>(){i += NumberToAdd;});
+  ConstExprForLoop(std::index_sequence<2, 5, 9>{},
+                   [&i]<size_t NumberToAdd>() { i += NumberToAdd; });
   ASSERT_EQ(i, 16);
-  
+
   // Shouldn't do anything, because the index sequence is empty.
   i = 0;
   ConstExprForLoop(std::index_sequence<>{},
-    [&i]<size_t NumberToAdd>(){i += NumberToAdd;});
+                   [&i]<size_t NumberToAdd>() { i += NumberToAdd; });
   ASSERT_EQ(i, 0);
 }
 
@@ -133,8 +134,8 @@ TEST(ConstexprUtils, RuntimeValueToCompileTimeValue) {
   // Create one function, that sets `i` to x, for every possible
   // version of x in [0,100].
   size_t i = 1;
-  auto setI = [&i]<size_t Number>(){i = Number;};
-  for (size_t d = 0; d <= 100; d++){
+  auto setI = [&i]<size_t Number>() { i = Number; };
+  for (size_t d = 0; d <= 100; d++) {
     RuntimeValueToCompileTimeValue<100>(d, setI);
     ASSERT_EQ(i, d);
   }
