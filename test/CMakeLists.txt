@@ -317,3 +317,5 @@ addLinkAndDiscoverTest(RuntimeInformationTest engine)
 addLinkAndDiscoverTest(VariableToColumnMapTest engine)
 
 addLinkAndDiscoverTest(CopyableUniquePtrTest)
+
+addLinkAndDiscoverTest(JsonCustomConverterForThirdPartyTest)
