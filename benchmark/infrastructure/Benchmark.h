@@ -94,7 +94,7 @@ class BenchmarkResults {
     std::vector<ResultEntry> getSingleMeasurements() const;
 
     /*
-     * @brief Creates an empty group with the given descriptor.
+     * @brief Creates and returns an empty group with the given descriptor.
      */
     ResultGroup& addGroup( const std::string& descriptor);
 
@@ -104,8 +104,7 @@ class BenchmarkResults {
     std::vector<ResultGroup> getGroups() const;
 
     /*
-     * @brief Creates an empty table, which can be accesed/identified using the
-     *  descriptor.
+     * @brief Creates and returns an empty table.
      *
      * @param descriptor The name/identifier of the table.
      * @param rowNames,columnNames The names for the rows/columns.
