@@ -22,19 +22,15 @@ TEST(JsonCustomConverterForThirdParty, StdOptional){
   // `std::optional` without a value.
   j = std::optional<int>{};
   ASSERT_TRUE(j.is_null());
-  {
-    std::optional<int> testOptional = j.get<std::optional<int>>();
-    ASSERT_FALSE(testOptional.has_value());
-  }
+  std::optional<int> testOptional = j.get<std::optional<int>>();
+  ASSERT_FALSE(testOptional.has_value());
 
   // `std::optional` with a value.
   j = std::optional<int>{42};
   ASSERT_TRUE(j.is_number_integer());
-  {
-    std::optional<int> testOptional = j.get<std::optional<int>>();
-    ASSERT_TRUE(testOptional.has_value());
-    ASSERT_EQ(testOptional.value(), 42);
-  }
+  testOptional = j.get<std::optional<int>>();
+  ASSERT_TRUE(testOptional.has_value());
+  ASSERT_EQ(testOptional.value(), 42);
 }
 
 // `std::monostate` from `std::variant`.
