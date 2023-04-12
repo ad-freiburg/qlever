@@ -64,7 +64,7 @@ template <size_t MaxValue, typename Function>
 void RuntimeValueToCompileTimeValue(const size_t& value,
                                     const Function& function) {
   AD_CONTRACT_CHECK(value <= MaxValue);  // Is the value valid?
-  ConstExprForLoop(std::make_index_sequence<MaxValue>{},
+  ConstExprForLoop(std::make_index_sequence<MaxValue+1>{},
                    [&function, &value]<size_t Index>() {
                      if (Index == value) {
                        function.template operator()<Index>();
