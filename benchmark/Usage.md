@@ -70,12 +70,25 @@ Registering your finished benchmark class is rather easy.
 Simply add the line `addAndLinkBenchmark(MyBenchmarkClassFile)`, without the ending `.cpp`, to the file `benchmark/CMakeLists.txt`.  
 It will now be compiled. The compiled version can be found inside the `benchmark` folder inside your build directory.
 
-# Using compiled benchmarks
-TODO
-
 # Using advanced benchmark features
 ## Metadata
-TODO
+Setting metadata is handled by the `BenchmarkMetadata` class. The set metadata information will not be included in the printed output of a compiled benchmark file, but it will be included in the JSON file export.
+
+You can find instances of `BenchmarkMetadata` for your usage at 4 code locations:
+- At `metadata_` of `ResultEntry`, in order to give metadata information about the benchmark measurement.
+- At `metadata_` of `ResultGroup`, in order to give metadata information about the group.
+- At `metadata_` of `ResultTable`, in order to give metadata information about the table.
+- Writing a `getMetadata` function, like in the `BenchmarkInterface`, in order to give more general metadata information about your benchmark class. This is mostly, so that you don't have to constantly repeat metadata information in other places, that are true for all the things you are measuring. For example, this would be a good place to give the name of an algorithm, if your whole benchmark class is about measuring the runtimes of one. Or you could give the time, at which those benchmark measurements were taken.
+
+Currently, `BenchmarkMetadata` is a rather simple wrapper for a `nlohmann::json` object. If `nlohmann::json` can convert a type to JSON, or if you wrote a custom converter for the type, you can add a key-value-pair, with key being of the type, to a `BenchmarkMetadata` object using `BenchmarkMetadata::addKeyValuePair`.
 
 ## Runtime configuration
-TODO
+Passing values at runtime to your benchmark classes can be done two ways:
+1. Writing a JSON file and passing the file location via CLI.
+2. Using the shorthand described in `BenchmarkConfiguration::parseShortHand`, by writing it directly as an argument via CLI. Note: The shorthand will overwrite any values of the same name from the JSON file, if both ways are used.
+
+Using those two, a `BenchmarkConfiguration` object will be created and configured to hold all passed information, in a not interpreted form.
+
+Your class can read this `BenchmarkConfiguration` by having a `parseConfiguration` function, as described in `BenchmarkInterface`. In this function, you can read out and interpret values using `BenchmarkConfiguration::getValueByNestedKeys`.
+
+Currently, `BenchmarkConfiguration` is a rather simple wrapper for a `nlohmann::json` object. If `nlohmann::json` can convert pure JSON to a wanted type, or if you wrote a custom converter for this type, `BenchmarkConfiguration::getValueByNestedKeys` can interpret and return values of this type for you.
