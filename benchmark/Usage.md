@@ -26,7 +26,8 @@ Secondly, you should write your class inside the `ad_benchmark` namespace, where
 Now, the interface for benchmark classes has 3 functions:
 - `parseConfiguration`
 - `getMetadata`
-- `runAllBenchmarks`
+- `runAllBenchmarks`  
+
 `parseConfiguration` and `getMetadata` are for advanced features, and come with default implementations, that don't actually do anything. So they can be safely ignored for the time being.  
 
 `runAllBenchmarks` is where you actually measure your functions using the classes of `BenchmarkMeasurementContainer.h`, which should be created using `BenchmarkResults`, who will save them and later pass them on for processing by the infrastructure.
