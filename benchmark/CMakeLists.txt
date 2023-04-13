@@ -1,12 +1,18 @@
 # Re-compiling all the infrastructure all the time is a waste of time, so we
 # pre-compile that part as a library.
-add_library(benchmark infrastructure/Benchmark.cpp infrastructure/BenchmarkMeasurementContainer.cpp infrastructure/BenchmarkToJson.cpp infrastructure/BenchmarkResultToString.cpp infrastructure/BenchmarkConfiguration.cpp infrastructure/BenchmarkMain.cpp)
+
+# This part compiles 'just' the benchmark infrastructure and doesn't provide a main function.
+add_library(benchmark infrastructure/Benchmark.cpp infrastructure/BenchmarkMeasurementContainer.cpp infrastructure/BenchmarkToJson.cpp infrastructure/BenchmarkResultToString.cpp infrastructure/BenchmarkConfiguration.cpp)
 qlever_target_link_libraries(benchmark boost_program_options absl::str_format)
+
+# This provides the library of the benchmark infrastructure together with its default main function.
+add_library(benchmarkWithMain infrastructure/BenchmarkMain.cpp)
+qlever_target_link_libraries(benchmarkWithMain benchmark)
 
 # Link binary ${basename} against the benchmark library,
 # and all libraries that are specified as additional arguments.
 function (linkBenchmark basename)
-    qlever_target_link_libraries(${basename} benchmark ${ARGN})
+    qlever_target_link_libraries(${basename} benchmarkWithMain ${ARGN})
 endfunction()
 
 # Compile the benchmark and link it.
