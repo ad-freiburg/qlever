@@ -11,9 +11,9 @@
 #include "util/Algorithm.h"
 
 namespace ad_utility {
-// The implementation of the join algorithms (merge/zipper join, galloping join)
-// in `JoinAlgorithms.h` assume that in each of their inputs the first columns
-// are the (ordered) join columns. They also write a result where the join
+// The implementations of the join algorithms (merge/zipper join, galloping join)
+// in `JoinAlgorithms.h` assume that their inputs only consist of the
+// join columns. They also write a result where the join
 // columns come first, then the non-join columns of the left input and then the
 // non-join columns of the right input. This format is different from the
 // formats that the join operations (`Join`, `OptionalJoin`, `MultiColumnJoin`
@@ -24,7 +24,7 @@ namespace ad_utility {
 // but without the join columns (also in the same order). The following struct
 // stores the information, which permutations have to be applied to the input
 // and the result to convert from one of those formats to the other.
-class JoinColumnData {
+class JoinColumnMapping {
  private:
   // For a documentation of those members, see the getter function with the same
   // name below.
@@ -43,7 +43,7 @@ class JoinColumnData {
   const std::vector<size_t>& jcsRight() const { return jcsRight_; }
 
   // This permutation has to be applied to the left input to obtain the column
-  // order expected by the join algorihtms (see above for details on the
+  // order expected by the join algorithms (see above for details on the
   // different orderings).
   const std::vector<size_t>& permutationLeft() const {
     return permutationLeft_;
@@ -58,7 +58,7 @@ class JoinColumnData {
     return permutationResult_;
   }
 
-  JoinColumnData(const std::vector<std::array<size_t, 2>>& joinColumns,
+  JoinColumnMapping(const std::vector<std::array<size_t, 2>>& joinColumns,
                  size_t numColsA, size_t numColsB) {
     permutationResult_.resize(numColsA + numColsB - joinColumns.size());
     for (auto [colA, colB] : joinColumns) {

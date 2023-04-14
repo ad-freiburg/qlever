@@ -223,7 +223,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
     return;
   }
 
-  ad_utility::JoinColumnData joinColumnData{joinColumns, left.numColumns(),
+  ad_utility::JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
                                             right.numColumns()};
 
   IdTableView<0> leftJoinColumns =
@@ -265,6 +265,6 @@ void MultiColumnJoin::computeMultiColumnJoin(
 
   // The result that `zipperJoinWithUndef` produces has a different order of
   // columns than expected, permute them. See the documentation of
-  // `JoinColumnData` for details.
+  // `JoinColumnMapping` for details.
   result->permuteColumns(joinColumnData.permutationResult());
 }

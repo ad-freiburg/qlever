@@ -12,12 +12,13 @@
 #include "global/Id.h"
 #include "util/Generator.h"
 #include "util/JoinAlgorithms/FindUndefRanges.h"
-#include "util/JoinAlgorithms/JoinColumnData.h"
+#include "util/JoinAlgorithms/JoinColumnMapping.h"
 
 namespace ad_utility {
 
 // A function that takes an arbitrary number of arguments by reference and does
-// nothing.
+// nothing. This is used below when certain customization points of the join algorithms
+// don't have to do anything.
 [[maybe_unused]] static inline auto noop = [](const auto&...) {
   // This function deliberately does nothing (static analysis expectes a comment
   // here).
@@ -46,11 +47,15 @@ concept BinaryIteratorFunction =
     std::invocable<F, std::ranges::iterator_t<Range>,
                    std::ranges::iterator_t<Range>>;
 
+// Note: In the following functions, two rows of IDs are called `compatible` if for each position they are equal,
+// or at least one of them is UNDEF. This is exactly the semantics of the SPARQL standard for rows that match in
+// a JOIN operation.
+
 /**
  * @brief This function performs a merge/zipper join that also handles UNDEF
  * values correctly. It is highly configurable to also support OPTIONAL joins
  * and MINUS and to allow for optimizations when some of the columns don't
- * contain undefined values.
+ * contain UNDEF values.
  * @param left The left input to the join algorithm. Typically a range of rows
  * of IDs (e.g.`IdTable` or `IdTableView`).
  * @param right The right input to the join algorithm.
@@ -63,9 +68,9 @@ concept BinaryIteratorFunction =
  * or because they are found by the `findSmallerUndef...` functions (see below),
  * this function is called with the two *iterators* to the  elements, i.e .
  * `compatibleRowAction(itToLeft, itToRight)`
- * @param findSmallerUndefRangesLeft A function that gets an element `el` from
+ * @param findSmallerUndefRangesLeft A function that takes an element `el` from
  * `right` and returns all the iterators to elements from `left` that are
- * smaller than `el` but are still compatible to `el` because of undefined
+ * smaller than `el` but are still compatible to `el` because of UNDEF
  * values. This should be one of the functions in `FindUndefRanges.h` or
  * `ad_utility::noop` if it is known in advance that the left input contains no
  * UNDEF values.
@@ -77,9 +82,9 @@ concept BinaryIteratorFunction =
  * for "normal` joins, but can be set to implement `OPTIONAL` or `MINUS`.
  * @return 0 if the result is sorted, > 0 if the result is not sorted. `Sorted`
  * means that all the calls to `compatibleRowAction` were ordered wrt
- * `lessThan`. A result being out of order can happen if two rows with undefined
+ * `lessThan`. A result being out of order can happen if two rows with UNDEF
  * values in different places are merged, or when performing OPTIONAL or MINUS
- * with undefined values in the left input. TODO<joka921> The second of the
+ * with UNDEF values in the left input. TODO<joka921> The second of the
  * described cases leads to two sorted ranges in the output, this can possibly
  * be exploited to fix the result in a cheaper way than a full sort.
  */
@@ -114,7 +119,7 @@ template <
   // end.
   std::vector<bool> coveredFromLeft;
   if constexpr (hasNotFoundAction) {
-    coveredFromLeft.resize(end1 - it1);
+    coveredFromLeft.resize(left.size());
   }
   auto cover = [&coveredFromLeft, begLeft = std::begin(left)](auto it) {
     if constexpr (hasNotFoundAction) {
@@ -140,7 +145,7 @@ template <
     if constexpr (!isSimilar<decltype(findSmallerUndefRangesLeft),
                              decltype(noop)>) {
       // We need to bind the const& to a variable, else it will be
-      // dangling inside the `findUndef` coroutine.
+      // dangling inside the `findSmallerUndefRangesLeft` generator.
       const auto& row = *itFromRight;
       for (const auto& it : findSmallerUndefRangesLeft(row, leftBegin, leftEnd,
                                                        outOfOrderFound)) {
@@ -152,9 +157,8 @@ template <
     }
   };
 
-  // This function checks whether a single element of `left` or `right` contains
-  // no UNDEF values. It is used inside the following `mergeWithUndefRight`
-  // function.
+  // This function returns true if and only if the given `row` (which is an element of `left` or `right`) constains no
+  // UNDEF values. It is used inside the following `mergeWithUndefRight` function.
   auto containsNoUndefined = []<typename T>(const T& row) {
     if constexpr (std::is_same_v<T, Id>) {
       return row != Id::makeUndefined();
@@ -168,7 +172,7 @@ template <
   // argument `hasNoMatch` has to be set to `true` iff no exact match for
   // `*itFromLeft` was found in `right`. If `hasNoMatch` is `true` and no
   // matching smaller rows are found in `right` and `*itFromLeft` contains no
-  // undefined values, then the `elFromFirstNotFoundAction` is directly called
+  // UNDEF values, then the `elFromFirstNotFoundAction` is directly called
   // from inside this lambda. That way, the "optional" row will be in the
   // correct place in the result. The condition about containing no UNDEF values
   // is important, because otherwise `*itFromLeft` may be compatible to a larger
@@ -179,7 +183,7 @@ template <
                              decltype(noop)>) {
       bool compatibleWasFound = false;
       // We need to bind the const& to a variable, else it will be
-      // dangling inside the `findUndef` coroutine.
+      // dangling inside the `findSmallerUndefRangesRight` generator.
       const auto& row = *itFromLeft;
       for (const auto& it : findSmallerUndefRangesRight(
                row, beginRight, endRight, outOfOrderFound)) {
@@ -200,6 +204,7 @@ template <
         cover(itFromLeft);
       }
     }
+
   };
 
   // The main loop of the zipper algorithm. It is wrapped in a lambda, so we can
@@ -210,7 +215,7 @@ template <
     // `mergeWithUndef...` function for each element.
     while (it1 < end1 && it2 < end2) {
       while (lessThan(*it1, *it2)) {
-        // The last argument means "exact match was found for this element".
+        // The last argument means "no exact match was found for this element".
         mergeWithUndefRight(it1, std::begin(right), it2, true);
         ++it1;
         if (it1 >= end1) {
@@ -370,8 +375,8 @@ void gallopingJoin(const Range& smaller, const Range& larger,
 }
 
 /**
- * @brief Perform an OPTIONAL join for the following special case: The `left`
- * input contains no UNDEF values in any of its join columns, the `right`
+ * @brief Perform an OPTIONAL join for the following special case: The `right`
+ * input contains no UNDEF values in any of its join columns, the `left`
  * range contains UNDEF values only in its least significant join column. The
  * meaning of the other parameters and the preconditions on the input are the
  * same as for the more general `zipperJoinWithUndef` algorithm above. Note:
@@ -474,7 +479,7 @@ void specialOptionalJoin(
 
     // Set up the generator for the UNDEF values.
     // TODO<joka921> We could probably also apply this optimization if both
-    // inputs contain undefined values only in the last column, and possibly
+    // inputs contain UNDEF values only in the last column, and possibly
     // also not only for `OPTIONAL` joins.
     auto endOfUndef = std::find_if(leftSub.begin(), leftSub.end(), [](Id id) {
       return id != Id::makeUndefined();

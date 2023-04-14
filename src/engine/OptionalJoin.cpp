@@ -265,7 +265,7 @@ void OptionalJoin::optionalJoin(
     }
   }
 
-  ad_utility::JoinColumnData joinColumnData{joinColumns, left.numColumns(),
+  ad_utility::JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
                                             right.numColumns()};
 
   IdTableView<0> joinColumnsLeft =

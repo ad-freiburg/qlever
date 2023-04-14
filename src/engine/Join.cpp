@@ -408,7 +408,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   }
   [[maybe_unused]] auto checkTimeoutAfterNCalls =
       checkTimeoutAfterNCallsFactory();
-  ad_utility::JoinColumnData joinColumnData{
+  ad_utility::JoinColumnMapping joinColumnData{
       {{jc1, jc2}}, a.numColumns(), b.numColumns()};
   auto joinColumnL = a.getColumn(jc1);
   auto joinColumnR = b.getColumn(jc2);
