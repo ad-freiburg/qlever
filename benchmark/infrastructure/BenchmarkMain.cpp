@@ -19,6 +19,8 @@
 #include "../benchmark/infrastructure/BenchmarkToJson.h"
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
 
+// We are not in a global header file, so its fine.
+using namespace ad_benchmark;
 
 /*
  * @brief Write the json object to the specified file.
@@ -107,7 +109,7 @@ int main(int argc, char** argv) {
   }
 
   // Did we get any configuration?
-  ad_benchmark::BenchmarkConfiguration config{};
+  BenchmarkConfiguration config{};
 
   if (vm.count("configuration-json")){
     config.setJsonString(readFileToString(jsonConfigurationFileName));
@@ -117,25 +119,24 @@ int main(int argc, char** argv) {
   }
 
   // Pass the configuration, even if it is empty.
-  ad_benchmark::BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(
-    config);
+  BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(config);
 
   // Measuring the time for all registered benchmarks.
   // For measuring and saving the times.
-  const std::vector<ad_benchmark::BenchmarkResults>&
-    results{ad_benchmark::BenchmarkRegister::runAllRegisteredBenchmarks()};
+  const std::vector<BenchmarkResults>&
+    results{BenchmarkRegister::runAllRegisteredBenchmarks()};
 
   // Actually processing the arguments.
   if (vm.count("print")) {
     std::ranges::for_each(results, [](
-      const ad_benchmark::BenchmarkResults& result){
+      const BenchmarkResults& result){
       std::cout << benchmarkResultsToString(result) << "\n";
     }, {});
   }
 
   if (vm.count("write")) {
     writeJsonToFile(zipGeneralMetadataAndBenchmarkResultsToJson(
-      ad_benchmark::BenchmarkRegister::getAllGeneralMetadata(), results),
+      BenchmarkRegister::getAllGeneralMetadata(), results),
       writeFileName, vm.count("append"));
   }
 }
