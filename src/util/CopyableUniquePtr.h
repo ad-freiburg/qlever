@@ -9,13 +9,14 @@
 #include <utility>
 
 #include "util/json.h"
+#include "util/Forward.h"
 
 namespace ad_utility {
 
 /*
 A version of `std::unique_ptr` with a copy assigment operator and a copy
 constructor, which both copy the dereferenced pointer to create a new instace
-of the object for the `unique_prt`.
+of the object for the `unique_ptr`.
 Currently not written with support for dynamically-allocated array of objects
 in mind, so that may not work.
 */
@@ -25,30 +26,11 @@ class CopyableUniquePtr : public std::unique_ptr<T, Deleter> {
   // This makes calling functions, etc. from the base class so much easier.
   using Base = std::unique_ptr<T, Deleter>;
 
-  // This function uses a private constructor, so it needs private access.
-  template <typename T2, typename... Args>
-  friend constexpr CopyableUniquePtr<T2> make_copyable_unique(Args&&... args);
-
-  /*
-  @brief Returns an unique pointer, that holds a copy of the dereferenced
-  (copyable) unique pointer, that was given.
-  */
-  Base CopyDereferencedPointer(const auto& ptr) {
-    // Different behaviour based on whenever the ptr actually owns an object.
-    return ptr ? std::make_unique<T>(*ptr) : nullptr;
-  }
-
-  /*
-  @brief Creates a `CopyableUniquePtr`, that holds the object formerly
-  owned by the unique pointer. Needed for `make_copyable_unique`.
-  */
-  explicit CopyableUniquePtr(Base&& ptr) : Base(std::move(ptr)) {}
-
  public:
-  // Default constructor.
-  CopyableUniquePtr() : Base() {}
+  // Constructor.
+  CopyableUniquePtr() = default;
 
-  // Default destructor.
+  // Destructor.
   ~CopyableUniquePtr() = default;
 
   // Copy constructor.
@@ -56,12 +38,11 @@ class CopyableUniquePtr : public std::unique_ptr<T, Deleter> {
       : Base(CopyDereferencedPointer(ptr)) {}
 
   // Move constructor.
-  CopyableUniquePtr(CopyableUniquePtr&&) noexcept = default;
+  CopyableUniquePtr(CopyableUniquePtr&&) = default;
 
   // Copy assignment operator.
   CopyableUniquePtr<T, Deleter>& operator=(
       const CopyableUniquePtr<T, Deleter>& ptr) {
-    // Special behaviour in case, that `ptr` doesn't own an object.
     Base::operator=(CopyDereferencedPointer(ptr));
     return *this;
   }
@@ -79,14 +60,35 @@ class CopyableUniquePtr : public std::unique_ptr<T, Deleter> {
     j = static_cast<std::unique_ptr<T, Deleter>>(
         CopyableUniquePtr<T, Deleter>{p});
   }
+
+ private:
+  // This function uses a private constructor, so it needs private access.
+  template <typename T2>
+  friend constexpr CopyableUniquePtr<T2> make_copyable_unique(auto&&... args);
+
+  /*
+  @brief Returns an unique pointer, that holds a copy of the dereferenced
+  (copyable) unique pointer, that was given.
+  */
+  Base CopyDereferencedPointer(const auto& ptr) {
+    // Different behaviour based on whenever the ptr actually owns an object.
+    return ptr ? std::make_unique<T>(*ptr) : nullptr;
+  }
+
+  /*
+  @brief Creates a `CopyableUniquePtr`, that holds the object formerly
+  owned by the unique pointer. Needed for `make_copyable_unique`.
+  */
+  explicit CopyableUniquePtr(Base&& ptr) : Base(std::move(ptr)) {}
+  
 };
 
 /*
 @brief Same as `std::make_unique`, but for `CopyableUniquePtr`.
 */
-template <typename T, typename... Args>
-constexpr CopyableUniquePtr<T> make_copyable_unique(Args&&... args) {
-  return CopyableUniquePtr<T>(std::make_unique<T>(std::forward<Args>(args)...));
+template <typename T>
+constexpr CopyableUniquePtr<T> make_copyable_unique(auto&&... args) {
+  return CopyableUniquePtr<T>(std::make_unique<T>(AD_FWD(args)...));
 }
 
 }  // namespace ad_utility
