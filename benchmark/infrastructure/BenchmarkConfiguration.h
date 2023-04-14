@@ -19,11 +19,26 @@ class BenchmarkConfiguration{
  // nlohmann::json object already containes everything, that we could need.
  nlohmann::json data_;
 
+ /*
+  * @brief Parses the given short hand and returns it as a json object,
+  *  that contains all the described configuration data..
+  *
+  * @param shortHandString The language of the short hand is a number of
+  *  assigments `variableName = variableContent;` with no seperator.
+  *  `variableName` is the name of the configuration option. As long as it's
+  *  a valid variable name in `C++` everything should be good.
+  *  `variableContent` can a boolean literal, an integer literal, or a list
+  *  of those literals in the form of `{value1, value2, ...}`.
+  *  An example for a short hand string:
+  *  `"isSorted=false;numberOfLoops=2;numberOfItems={4,5,6,7};"`
+  */
+ static nlohmann::json parseShortHand(const std::string& shortHandString);
+
 public:
 
  /*
  @brief If the underlying JSON can be accessed with
- `data_[firstKey][secondKey][....]` the return the resulting value of this
+ `data_[firstKey][secondKey][....]` then return the resulting value of this
  recursive access, interpreted as a given type. Else return an empty
  `std::optional`.
 
@@ -84,22 +99,33 @@ public:
   * @brief Sets the configuration based on the given json string. This
   *  overwrites all previous held configuration data.
   */
- void parseJsonString(const std::string& jsonString);
+ void setJsonString(const std::string& jsonString);
+
+ /*
+  * @brief Add the configuration based on the given json string. This
+  *  overwrites previous held configuration data, if the names collide.
+  */
+ void addJsonString(const std::string& jsonString);
 
  /*
   * @brief Parses the given short hand and adds all configuration data, that
-  *  was described with a valid syntax.
+  *  was described with a valid syntax. This overwrites all previous held
+  *  configuration data.
   *
-  * @param shortHandString The language of the short hand is a number of
-  *  assigments `variableName = variableContent;` with no seperator.
-  *  `variableName` is the name of the configuration option. As long as it's
-  *  a valid variable name in `C++` everything should be good.
-  *  `variableContent` can a boolean literal, an integer literal, or a list
-  *  of those literals in the form of `{value1, value2, ...}`.
-  *  An example for a short hand string:
-  *  `"isSorted=false;numberOfLoops=2;numberOfItems={4,5,6,7};"`
+  * @param shortHandString For a description of the short hand syntax, see
+  *  `BenchmarkConfiguration::parseShortHand`
   */
- void parseShortHand(const std::string& shortHandString);
+ void setShortHand(const std::string& shortHandString);
+
+ /*
+  * @brief Parses the given short hand and adds all configuration data, that
+  *  was described with a valid syntax. This overwrites previous held
+  *  configuration data, if the names collide.
+  *
+  * @param shortHandString For a description of the short hand syntax, see
+  *  `BenchmarkConfiguration::parseShortHand`
+  */
+ void addShortHand(const std::string& shortHandString);
 
  // JSON serialization.
  friend void to_json(nlohmann::json& j,

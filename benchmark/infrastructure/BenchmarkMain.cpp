@@ -109,14 +109,11 @@ int main(int argc, char** argv) {
   // Did we get any configuration?
   ad_benchmark::BenchmarkConfiguration config{};
 
-  // The order of first parsing the json and then parsing the short hand is
-  // important, because `parseJsonString` resets and then sets the
-  // configuration. `parseShortHand` however just sets, or overwrites, things.
   if (vm.count("configuration-json")){
-    config.parseJsonString(readFileToString(jsonConfigurationFileName));
+    config.setJsonString(readFileToString(jsonConfigurationFileName));
   }
   if (vm.count("configuration-shorthand")){
-    config.parseShortHand(shortHandConfigurationString);
+    config.addShortHand(shortHandConfigurationString);
   }
 
   // Pass the configuration, even if it is empty.

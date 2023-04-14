@@ -10,10 +10,6 @@
 #include "util/Exception.h"
 
 namespace ad_benchmark{
-// ____________________________________________________________________________
-void BenchmarkConfiguration::parseJsonString(const std::string& jsonString){
-  data_ = nlohmann::json::parse(jsonString);
-}
 
 /*
 @brief A custom exception for `parseShortHand`, for when the short hand
@@ -40,7 +36,8 @@ class ShortHandSyntaxException : public std::exception {
 };
 
 // ____________________________________________________________________________
-void BenchmarkConfiguration::parseShortHand(const std::string& shortHandString){
+nlohmann::json BenchmarkConfiguration::parseShortHand(
+  const std::string& shortHandString){
   // I use regular expressions to parse the short hand. In order to easier
   // reuse parts of my patterns, I defined some contants here.
 
@@ -68,6 +65,9 @@ void BenchmarkConfiguration::parseShortHand(const std::string& shortHandString){
   if (!std::regex_match(shortHandString, std::regex{R"--(()--" + assigment + R"--()*)--"})){
     throw ShortHandSyntaxException{shortHandString};
   }
+
+  // The json object for returning. Will always be an 'object' in json terms.
+  nlohmann::json jsonObject(nlohmann::json::value_t::object);
 
   // Create the regular expression of an assigment.
   std::regex assigmentRegex(assigment);
@@ -99,9 +99,50 @@ void BenchmarkConfiguration::parseShortHand(const std::string& shortHandString){
       assigmentVariableContentUninterpreted.replace(
         assigmentVariableContentUninterpreted.length() - 1, 1, R"(])");
     }
-    data_[assigmentVariableName] =
+    jsonObject[assigmentVariableName] =
       nlohmann::json::parse(assigmentVariableContentUninterpreted);
   }
+
+  return jsonObject;
+}
+
+// ____________________________________________________________________________
+void BenchmarkConfiguration::setShortHand(const std::string& shortHandString){
+  data_ = parseShortHand(shortHandString);
+}
+
+// ____________________________________________________________________________
+void BenchmarkConfiguration::addShortHand(const std::string& shortHandString){
+  // This will cause an exception, if `data_` contains a json literal, or array.
+  // But that is intended, because, trying to add dictionary like entries to
+  // an array, sounds more like a problem on the user side of things.
+  data_.update(parseShortHand(shortHandString));
+}
+
+// ____________________________________________________________________________
+void BenchmarkConfiguration::setJsonString(const std::string& jsonString){
+  data_ = nlohmann::json::parse(jsonString);
+}
+
+// ____________________________________________________________________________
+void BenchmarkConfiguration::addJsonString(const std::string& jsonString){
+    nlohmann::json::const_reference parsedJsonString = nlohmann::json::parse(
+      jsonString);
+
+    /*
+    We need different functions, based on whatever `data_` contains a json
+    object, or a json array.
+    However, if the parsed `jsonString` results in a different type, it will
+    cause an exception. But that is intended, because it's not possible to
+    combine a json object and json array in a way, that makes sense.
+    */
+    if (data_.is_array()){
+      data_.insert(data_.end(), parsedJsonString.begin(),
+        parsedJsonString.end());
+    } else{
+      // `data_` must be an object. If not, we want an exception anyway.
+      data_.update(parsedJsonString);
+    }
 }
 
 // JSON serialization.
