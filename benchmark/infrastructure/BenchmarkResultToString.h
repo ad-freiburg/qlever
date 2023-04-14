@@ -19,14 +19,14 @@ namespace ad_benchmark{
  * @brief Add a string of the form
  * "
  *  #################
- *  # categoryTitel #
+ *  # categoryTitle #
  *  #################
  *
  *  "
  *  to the stream.
  */
-void addCategoryTitelToOStringstream(std::ostringstream* stream,
-    std::string_view categoryTitel);
+void addCategoryTitleToOStringstream(std::ostringstream* stream,
+    std::string_view categoryTitle);
 
 // Default way of adding a vector of ResultEntrys to a `ostringstream` with
 // optional prefix.

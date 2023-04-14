@@ -6,13 +6,13 @@
 
 namespace ad_benchmark{
 // ___________________________________________________________________________
-void addCategoryTitelToOStringstream(std::ostringstream* stream,
-    std::string_view categoryTitel){
-  // The bar above and below the titel.
-  const size_t barLength = categoryTitel.size() + 4;
+void addCategoryTitleToOStringstream(std::ostringstream* stream,
+    std::string_view categoryTitle){
+  // The bar above and below the title.
+  const size_t barLength = categoryTitle.size() + 4;
   const std::string bar(barLength, '#');
 
-  (*stream) << "\n" << bar << "\n# " << categoryTitel << " #\n" << bar << "\n";
+  (*stream) << "\n" << bar << "\n# " << categoryTitle << " #\n" << bar << "\n";
 }
 
 // ___________________________________________________________________________
@@ -26,7 +26,7 @@ void addVectorOfResultEntryToOStringstream(std::ostringstream* stream,
 // ___________________________________________________________________________
 void addSingleMeasurementsToOStringstream(std::ostringstream* stream,
   const std::vector<ResultEntry>& resultEntries){
-  addCategoryTitelToOStringstream(stream, "Single measurment benchmarks");
+  addCategoryTitleToOStringstream(stream, "Single measurment benchmarks");
   addVectorOfResultEntryToOStringstream(stream, resultEntries,
       "Single measurment benchmark ");
 }
@@ -34,7 +34,7 @@ void addSingleMeasurementsToOStringstream(std::ostringstream* stream,
 // ___________________________________________________________________________
 void addGroupsToOStringstream(std::ostringstream* stream,
   const std::vector<ResultGroup>& resultGroups){
-    addCategoryTitelToOStringstream(stream, "Group benchmarks");
+    addCategoryTitleToOStringstream(stream, "Group benchmarks");
   for (const auto& group: resultGroups) {
     (*stream) << "\n\n" << (std::string)group;
   }
@@ -43,7 +43,7 @@ void addGroupsToOStringstream(std::ostringstream* stream,
 // ___________________________________________________________________________
 void addTablesToOStringstream(std::ostringstream* stream,
   const std::vector<ResultTable>& resultTables){
-    addCategoryTitelToOStringstream(stream, "Table benchmarks");
+    addCategoryTitleToOStringstream(stream, "Table benchmarks");
   // Printing the tables themselves.
   for (const auto& table: resultTables) {
     (*stream) << "\n\n" << (std::string)table;
