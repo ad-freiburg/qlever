@@ -39,7 +39,7 @@ constexpr auto pow(auto base, int exponent) {
  * @param loopBody The body of the for loop.
  */
 template <typename Function, size_t... ForLoopIndexes>
-void ConstExprForLoop(const std::index_sequence<ForLoopIndexes...>&,
+void ConstexprForLoop(const std::index_sequence<ForLoopIndexes...>&,
                       const Function& loopBody) {
   ((loopBody.template operator()<ForLoopIndexes>()), ...);
 }
@@ -64,7 +64,7 @@ template <size_t MaxValue, typename Function>
 void RuntimeValueToCompileTimeValue(const size_t& value,
                                     const Function& function) {
   AD_CONTRACT_CHECK(value <= MaxValue);  // Is the value valid?
-  ConstExprForLoop(std::make_index_sequence<MaxValue + 1>{},
+  ConstexprForLoop(std::make_index_sequence<MaxValue + 1>{},
                    [&function, &value]<size_t Index>() {
                      if (Index == value) {
                        function.template operator()<Index>();

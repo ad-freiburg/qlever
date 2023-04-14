@@ -110,22 +110,22 @@ TEST(ConstexprUtils, cartesianPowerAsIntegerArray) {
   ASSERT_TRUE(compare(c, (cartesianPowerAsIntegerArray<2, 3>())));
 }
 
-TEST(ConstexprUtils, ConstExprForLoop) {
+TEST(ConstexprUtils, ConstexprForLoop) {
   size_t i{0};
 
   // Add `i` up to one hundred.
-  ConstExprForLoop(std::make_index_sequence<100>{}, [&i]<size_t>() { i++; });
+  ConstexprForLoop(std::make_index_sequence<100>{}, [&i]<size_t>() { i++; });
   ASSERT_EQ(i, 100);
 
   // Add up 2, 5, and 9 at run time.
   i = 0;
-  ConstExprForLoop(std::index_sequence<2, 5, 9>{},
+  ConstexprForLoop(std::index_sequence<2, 5, 9>{},
                    [&i]<size_t NumberToAdd>() { i += NumberToAdd; });
   ASSERT_EQ(i, 16);
 
   // Shouldn't do anything, because the index sequence is empty.
   i = 0;
-  ConstExprForLoop(std::index_sequence<>{},
+  ConstexprForLoop(std::index_sequence<>{},
                    [&i]<size_t NumberToAdd>() { i += NumberToAdd; });
   ASSERT_EQ(i, 0);
 }
