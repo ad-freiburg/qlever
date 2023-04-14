@@ -1,7 +1,7 @@
 # Introduction
 A quick introduction and tutorial for the macro benchmark infrastructure.
 
-As of the `12.4.2023` the benchmark infrastructure has the following features:
+As of April 2023 the benchmark infrastructure has the following features:
 - Measuring the execution time of a function in seconds.
 - Organizing a benchmark as a single measurement, as a group of single measurements, or as a table of measurements.
 - Printing the measured benchmarks and/or exporting them as a JSON formatted file.
@@ -31,34 +31,47 @@ Now, the interface for benchmark classes has 3 functions:
 `parseConfiguration` and `getMetadata` are for advanced features, and come with default implementations, that don't actually do anything. So they can be safely ignored for the time being.  
 
 `runAllBenchmarks` is where you actually measure your functions using the classes of `BenchmarkMeasurementContainer.h`, which should be created using `BenchmarkResults`, who will save them and later pass them on for processing by the infrastructure.
-
 Which could look like this:
+
 ```c++
 BenchmarkResults runAllBenchmarks(){
   BenchmarkResults results{};
 
+  /*
+  The functions for measuring the execution time of functions, only take
+  lambdas, which will be called without any arguments. Simply wrap the actual
+  function call, you want to measure.
+  */
+  auto& dummyFunctionToMeasure = [](){
+    // Do whatever you might want to measure.
+  };
+
+  // In order to recognise later, which time belongs to which benchmark,
+  // most of the functions concerning the measurement of functions, or their
+  // organization, require an identifier. A.k.a. a name.
+  const std::string identifier = "Some identifier";
+
   // Just saves the meausred execution time.
-  results.addMeasurement(...);
+  results.addMeasurement(identifier, dummyFunctionToMeasure);
 
   // Creates an enpty group. Doesn't measure anything.
-  auto& group = results.addGroup(...);
+  auto& group = results.addGroup(identifier);
   // You add the measurements as group members.
-  group.addMeasurement(...);
+  group.addMeasurement(identifier, dummyFunctionToMeasure);
 
-  // Creates an enpty table with a set number of rows and columns. Doesn't
+  // Create an empty table with a set number of rows and columns. Doesn't
   // measure anything.
-  auto& table = results.addTable(...);
+  auto& table = results.addTable(identifier, {"rowName1", "rowName2", "etc."},
+    {"columnName1", "columnName2", "etc."});
   // You can add measurements to the table as entries, but you can also
   // read and set entries.
-  table.addMeasurement(...);
-  table.setEntry(...);
-  table.getEntry(...);
+  table.addMeasurement(0, 1, dummyFunctionToMeasure); // Row 0, column 1.
+  table.setEntry(0, 0, "A custom entry can be a float, or a string.");
+  table.getEntry(0, 1); // The measured time of the dummy function.
 
   return results;
 }
 ```
-
-Every `addMeasurement` function takes a function as an argument, which will be called without any arguments and the execution time measured. Most of the time, those functions will probably be lambda wrappers.
 
 After writing your class, you will have to register it. For that, simply call the macro `AD_REGISTER_BENCHMARK` with your class name and all needed arguments for construction inside the `ad_benchmark` namespace.  
 For example:
