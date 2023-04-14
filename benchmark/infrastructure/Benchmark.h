@@ -21,6 +21,7 @@
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "util/CopyableUniquePtr.h"
+#include "util/Forward.h"
 
 namespace ad_benchmark{
 /*
@@ -37,8 +38,7 @@ class BenchmarkResults {
     // A vector of all the created resultGroups.
     PointerVector<ResultGroup> resultGroups_;
   
-    // A hash map of all the created resultTables. For faster access.
-    // The key for a resultTable is it's descriptor.
+    // A vector of all the created resultTables.
     PointerVector<ResultTable> resultTables_;
 
     /*
@@ -55,13 +55,13 @@ class BenchmarkResults {
     @param constructorArgs Arguments to pass to the constructor of the object,
     that the new `CopyableUniquePtr` will own.
     */
-    template<typename EntryType, typename... ConstructorArgs>
+    template<typename EntryType>
     static EntryType& addEntryToContainerVector(
       PointerVector<EntryType>& targetVector,
-      ConstructorArgs&&... constructorArgs){
+      auto&&... constructorArgs){
       targetVector.push_back(
         ad_utility::make_copyable_unique<EntryType>(
-        std::forward<ConstructorArgs>(constructorArgs)...));
+        AD_FWD(constructorArgs)...));
       return (*targetVector.back());
     }
 
