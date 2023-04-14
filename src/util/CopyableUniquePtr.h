@@ -41,15 +41,18 @@ class CopyableUniquePtr : public std::unique_ptr<T, Deleter> {
   CopyableUniquePtr(CopyableUniquePtr&&) = default;
 
   // Copy assignment operator.
-  CopyableUniquePtr<T, Deleter>& operator=(
-      const CopyableUniquePtr<T, Deleter>& ptr) {
+  CopyableUniquePtr& operator=(
+      const CopyableUniquePtr& ptr) {
     Base::operator=(CopyDereferencedPointer(ptr));
     return *this;
   }
 
+  // Move assignment operator.
+  CopyableUniquePtr& operator=(CopyableUniquePtr&& ptr) = default;
+
   // Json serialization.
   friend void to_json(nlohmann::json& j,
-                      const CopyableUniquePtr<T, Deleter>& p) {
+                      const CopyableUniquePtr& p) {
     /*
     The serialization of `CopyableUniquePtr` would have identical code to the
     serialization of a normal unique pointer, so we just re-cast it, to save on
@@ -57,8 +60,7 @@ class CopyableUniquePtr : public std::unique_ptr<T, Deleter> {
     However, unique pointers can only be created with rvalues, so we also have
     to create a temporary copy.
     */
-    j = static_cast<std::unique_ptr<T, Deleter>>(
-        CopyableUniquePtr<T, Deleter>{p});
+    j = static_cast<const Base&>(p);
   }
 
  private:
@@ -82,6 +84,7 @@ class CopyableUniquePtr : public std::unique_ptr<T, Deleter> {
   explicit CopyableUniquePtr(Base&& ptr) : Base(std::move(ptr)) {}
   
 };
+
 
 /*
 @brief Same as `std::make_unique`, but for `CopyableUniquePtr`.
