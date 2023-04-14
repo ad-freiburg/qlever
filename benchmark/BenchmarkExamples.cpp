@@ -19,7 +19,7 @@ not used and thus the whole computation gets optimized out by the compiler.
 To avoid this, the `BMSingleMeasurements` example prints the result of a
 computation to the screen.
 
-A more elegant solution, to prevent such unwanted compiler optimizations, can be
+A more elegant solution to prevent such unwanted compiler optimizations, can be
 found in google benchmark:
 `https://github.com/google/benchmark/blob/main/docs/user_guide.md#preventing-
 optimization`.
@@ -46,8 +46,8 @@ class BMSingleMeasurements: public BenchmarkInterface{
     
     // Setup.
     const size_t number = SlowRandomIntGenerator<size_t>(10,1'000)();
-    auto exponentiate = [](const size_t numbertoExponentiate){
-      return numbertoExponentiate*numbertoExponentiate;
+    auto exponentiate = [](const size_t numberToExponentiate){
+      return numberToExponentiate*numberToExponentiate;
     };
 
     // Measuring functions.
