@@ -8,8 +8,8 @@
 #include <type_traits>
 #include <utility>
 
-#include "util/json.h"
 #include "util/Forward.h"
+#include "util/json.h"
 
 namespace ad_utility {
 
@@ -41,8 +41,7 @@ class CopyableUniquePtr : public std::unique_ptr<T, Deleter> {
   CopyableUniquePtr(CopyableUniquePtr&&) = default;
 
   // Copy assignment operator.
-  CopyableUniquePtr& operator=(
-      const CopyableUniquePtr& ptr) {
+  CopyableUniquePtr& operator=(const CopyableUniquePtr& ptr) {
     Base::operator=(CopyDereferencedPointer(ptr));
     return *this;
   }
@@ -51,8 +50,7 @@ class CopyableUniquePtr : public std::unique_ptr<T, Deleter> {
   CopyableUniquePtr& operator=(CopyableUniquePtr&& ptr) = default;
 
   // Json serialization.
-  friend void to_json(nlohmann::json& j,
-                      const CopyableUniquePtr& p) {
+  friend void to_json(nlohmann::json& j, const CopyableUniquePtr& p) {
     /*
     The serialization of `CopyableUniquePtr` would have identical code to the
     serialization of a normal unique pointer, so we just re-cast it, to save on
@@ -82,9 +80,7 @@ class CopyableUniquePtr : public std::unique_ptr<T, Deleter> {
   owned by the unique pointer. Needed for `make_copyable_unique`.
   */
   explicit CopyableUniquePtr(Base&& ptr) : Base(std::move(ptr)) {}
-  
 };
-
 
 /*
 @brief Same as `std::make_unique`, but for `CopyableUniquePtr`.
