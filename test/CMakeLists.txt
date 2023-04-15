@@ -321,3 +321,5 @@ addLinkAndDiscoverTest(CopyableUniquePtrTest)
 addLinkAndDiscoverTest(JsonCustomConverterForThirdPartyTest)
 
 addLinkAndDiscoverTest(BenchmarkConfigurationTest benchmark)
+
+addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)

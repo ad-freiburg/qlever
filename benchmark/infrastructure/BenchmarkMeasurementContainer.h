@@ -8,6 +8,7 @@
 #include <vector>
 #include <memory>
 #include <utility>
+#include <gtest/gtest.h>
 
 #include "util/Exception.h"
 #include "util/Timer.h"
@@ -49,6 +50,10 @@ class ResultEntry{
   // The measured time in seconds.
   float measuredTime_;
 
+  // Needed for testing purposes.
+  FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultEntry);
+  FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultGroup);
+
   public:
   BenchmarkMetadata metadata_;
 
@@ -80,6 +85,9 @@ class ResultGroup {
   std::string descriptor_;
   // Members of the group.
   std::vector<ad_utility::CopyableUniquePtr<ResultEntry>> entries_;
+
+  // Needed for testing purposes.
+  FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultGroup);
 
   public:
   BenchmarkMetadata metadata_;
@@ -129,6 +137,9 @@ class ResultTable {
   // seconds, a string, or empty.
   using EntryType = std::variant<std::monostate, float, std::string>;
   std::vector<std::vector<EntryType>> entries_;
+
+  // Needed for testing purposes.
+  FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultTable);
 
   public:
   BenchmarkMetadata metadata_;
