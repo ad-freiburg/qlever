@@ -7,26 +7,22 @@
 #include <absl/cleanup/cleanup.h>
 
 #include <iostream>
+#include <optional>
+
+#include "../MultiMap.h"
+#include "./Common.h"
+#include "./QueryState.h"
 
 namespace ad_utility::websocket {
 using namespace boost::asio::experimental::awaitable_operators;
 using websocket = beast::websocket::stream<tcp::socket>;
+using common::RuntimeInformationSnapshot;
 
-typedef uint32_t QueryId;
 typedef uint32_t WebSocketId;
-typedef std::function<void(bool)> QueryUpdateCallback;
+// We need a copy here due to the async nature of the lifetime of those objects
+// TODO evaluate if using a shared const ptr is more efficient here
+typedef std::function<void(std::optional<RuntimeInformationSnapshot>)> QueryUpdateCallback;
 
-template<typename Container>
-void removeKeyValuePair(Container& container, typename Container::key_type key, typename Container::mapped_type value) {
-  auto iterPair = container.equal_range(key);
-
-  for (auto it = iterPair.first; it != iterPair.second; ++it) {
-    if (it->second == value) {
-      container.erase(it);
-      break;
-    }
-  }
-}
 
 static absl::btree_multimap<QueryId, WebSocketId> activeWebSockets{};
 // Note there may be active websockets that are not currently listening
@@ -43,11 +39,21 @@ void registerCallback(WebSocketId webSocketId, QueryUpdateCallback callback) {
   listeningWebSockets[webSocketId] = std::move(callback);
 }
 
-void fireCallbackAndRemoveIfPresent(WebSocketId webSocketId, bool abort) {
+void fireCallbackAndRemoveIfPresent(WebSocketId webSocketId, std::optional<RuntimeInformationSnapshot> runtimeInformation) {
   // TODO lock here for listeningWebSockets
   if (listeningWebSockets.count(webSocketId) != 0) {
-    listeningWebSockets.at(webSocketId)(abort);
+    listeningWebSockets.at(webSocketId)(std::move(runtimeInformation));
     listeningWebSockets.erase(webSocketId);
+  }
+}
+
+void fireAllCallbacksForQuery(QueryId queryId, RuntimeInformationSnapshot runtimeInformationSnapshot) {
+  // TODO lock here for activeWebSockets
+  // TODO lock here for listeningWebSockets
+  auto range = activeWebSockets.equal_range(queryId);
+  for (auto it = range.first; it != range.second; it++) {
+    // TODO optimize out redundant lock in this case
+    fireCallbackAndRemoveIfPresent(it->second, runtimeInformationSnapshot);
   }
 }
 
@@ -59,22 +65,28 @@ void enableWebSocket(WebSocketId webSocketId, QueryId queryId) {
 void disableWebSocket(WebSocketId webSocketId, QueryId queryId) {
   // TODO lock here for activeWebSockets
   removeKeyValuePair(activeWebSockets, queryId, webSocketId);
-  fireCallbackAndRemoveIfPresent(webSocketId, true);
+  fireCallbackAndRemoveIfPresent(webSocketId, std::nullopt);
 }
 
 // Based on https://stackoverflow.com/a/69285751
 template<typename CompletionToken>
-auto waitForEvent(QueryId queryId, CompletionToken&& token) {
-  auto initiate = []<typename Handler>(Handler&& self, QueryId queryId) mutable {
-    // TODO check if update ready, otherwise register callback
-    registerCallback(queryId, [self = std::make_shared<Handler>(std::forward<Handler>(self))](bool abort) {
-      (*self)(abort);
-    });
+auto waitForEvent(QueryId queryId, common::TimeStamp lastUpdate, CompletionToken&& token) {
+  auto initiate = [lastUpdate]<typename Handler>(Handler&& self, QueryId queryId) mutable {
+    auto callback = [self = std::make_shared<Handler>(std::forward<Handler>(self))](std::optional<RuntimeInformationSnapshot> snapshot) {
+      (*self)(snapshot);
+      // TODO clear data if snapshot indicates this is the last update for a given query and this is the last active websocket waiting on said query
+    };
+    auto potentialUpdate = query_state::getIfUpdatedSince(queryId, lastUpdate);
+    if (potentialUpdate.has_value()) {
+      callback(*potentialUpdate);
+    } else {
+      registerCallback(queryId, std::move(callback));
+    }
   };
   // TODO match this to QueryUpdateCallback
   // TODO don't pass token directly and instead wrap it inside "bind_cancellation_slot"
   //  to remove the callback in case it gets cancelled
-  return net::async_initiate<CompletionToken, void(bool)>(
+  return net::async_initiate<CompletionToken, void(std::optional<RuntimeInformationSnapshot>)>(
       initiate, token, queryId
   );
 }
@@ -88,6 +100,7 @@ net::awaitable<void> handleClientCommands(websocket& ws, WebSocketId webSocketId
 
   while (ws.is_open()) {
     co_await ws.async_read(buffer, net::use_awaitable);
+    // TODO replace with cancellation process
     ws.text(ws.got_text());
     co_await ws.async_write(buffer.data(), net::use_awaitable);
     buffer.clear();
@@ -95,16 +108,18 @@ net::awaitable<void> handleClientCommands(websocket& ws, WebSocketId webSocketId
 }
 
 net::awaitable<void> waitForServerEvents(websocket& ws, WebSocketId webSocketId, QueryId queryId) {
-  std::string testData = "Abc";
-
+  common::TimeStamp lastUpdate = std::chrono::steady_clock::now();
   while (ws.is_open()) {
-    bool abort = co_await waitForEvent(queryId, net::use_awaitable);
-    if (abort) {
+    auto update = co_await waitForEvent(queryId, lastUpdate, net::use_awaitable);
+    if (!update.has_value()) {
       break;
     }
     ws.text(true);
-    co_await ws.async_write(net::buffer(testData.data(), testData.length()), net::use_awaitable);
+    std::string json = update->runtimeInformation.toString();
+    lastUpdate = update->updateMoment;
+    co_await ws.async_write(net::buffer(json.data(), json.length()), net::use_awaitable);
   }
+  // TODO remove
   std::cout << "End of server events" << std::endl;
 }
 
@@ -145,5 +160,4 @@ net::awaitable<void> manageConnection(tcp::socket socket, http::request<http::st
   auto executor = socket.get_executor();
   return net::co_spawn(executor, connectionLifecycle(std::move(socket), std::move(request)), net::use_awaitable);
 }
-};
-
+}

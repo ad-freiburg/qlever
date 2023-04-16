@@ -63,7 +63,7 @@ class RuntimeInformation {
   /// A short human-readable string that identifies the operation.
   std::string descriptor_;
 
-  /// The names of the variables that are stored in the columsn of the result.
+  /// The names of the variables that are stored in the columns of the result.
   std::vector<std::string> columnNames_;
 
   /// The child operations of this operation.
