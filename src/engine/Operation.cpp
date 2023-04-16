@@ -246,6 +246,7 @@ void Operation::updateRuntimeInformationOnSuccess(
           child->getRootOperation()->getRuntimeInfo());
     }
   }
+  // TODO call websocket update with query id
 }
 
 // ____________________________________________________________________________________________________________________
@@ -275,6 +276,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
           _runtimeInfo.totalTime_ += child.totalTime_;
         }
       });
+  // TODO call websocket update with query id
 }
 
 // _____________________________________________________________________________
@@ -302,6 +304,7 @@ void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
 
   _runtimeInfo.totalTime_ = timeInMilliseconds;
   _runtimeInfo.status_ = RuntimeInformation::Status::failed;
+  // TODO call websocket update with query id
 }
 
 // __________________________________________________________________
@@ -356,6 +359,7 @@ void Operation::createRuntimeInfoFromEstimates() {
         RuntimeInformation::Status::completedDuringQueryPlanning;
     _runtimeInfo.cacheStatus_ = ad_utility::CacheStatus::computed;
   }
+  // TODO call websocket update with query id
 }
 
 // ___________________________________________________________________________
