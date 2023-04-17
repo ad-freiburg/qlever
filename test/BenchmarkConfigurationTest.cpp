@@ -7,9 +7,6 @@
 
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 
-// TODO Add a exception catch test for trying to json string set to anything else than an object.
-// TODO Add a exception catch test for trying to json string add, without seting the configuration to anything.
-
 TEST(BenchmarkConfigurationTest, ParseJsonTest) {
   ad_benchmark::BenchmarkConfiguration config{};
 
@@ -120,3 +117,25 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
   ASSERT_TRUE(config.getValueByNestedKeys<int>("myWishAverage").has_value());
   ASSERT_EQ(1, config.getValueByNestedKeys<int>("myWishAverage").value());
 }
+
+// Testing the exceptions of set and add json string.
+TEST(BenchmarkConfigurationTest, ExceptionsOfParseJsonString){
+  ad_benchmark::BenchmarkConfiguration config{};
+
+  // Both exceptions for `setJsonstring` and `addJsonString` are caused
+  // by the given json string not representing a json object. So we can simply
+  // re-use the strings, we use to cause them.
+  auto doSetAndAdd = [&config](const std::string& str){
+    ASSERT_ANY_THROW(config.setJsonString(str));
+    ASSERT_ANY_THROW(config.addJsonString(str));
+  };
+
+  doSetAndAdd(R"--([4, 2])--");
+  doSetAndAdd(R"--(4)--");
+  doSetAndAdd(R"--(-64)--");
+  doSetAndAdd(R"--(true)--");
+  doSetAndAdd(R"--(null)--");
+  doSetAndAdd(R"--(4.2)--");
+  doSetAndAdd(R"--("Hallo World")--");
+}
+

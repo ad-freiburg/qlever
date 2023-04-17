@@ -123,8 +123,10 @@ void BenchmarkConfiguration::addShortHand(const std::string& shortHandString){
 void BenchmarkConfiguration::setJsonString(const std::string& jsonString){
   data_ = nlohmann::json::parse(jsonString);
   // It should only possible for `data_` to be an json object.
-  if (!data_.is_object()){throw ad_utility::Exception("A BenchmarkConfiguration"
-      "should only be set to a json object.");}
+  if (!data_.is_object()){
+    throw ad_utility::Exception("A BenchmarkConfiguration"
+    "should only be set to a json object.");
+  }
 }
 
 // ____________________________________________________________________________
