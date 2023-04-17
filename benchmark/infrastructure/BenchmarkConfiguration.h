@@ -17,7 +17,8 @@ namespace ad_benchmark{
 class BenchmarkConfiguration{
  // No real reason, to really build everything ourselves, when the
  // nlohmann::json object already containes everything, that we could need.
- nlohmann::json data_;
+ // P.S.: It initializes to an empty json object.
+ nlohmann::json data_ = nlohmann::json(nlohmann::json::value_t::object);
 
  /*
   * @brief Parses the given short hand and returns it as a json object,
@@ -96,14 +97,20 @@ public:
  }
 
  /*
-  * @brief Sets the configuration based on the given json string. This
+  * @brief Sets the configuration based on the given json object string. This
   *  overwrites all previous held configuration data.
+  *
+  * @param jsonString A string of a json object. MUST be an object, otherwise
+  *  will cause an exception.
   */
  void setJsonString(const std::string& jsonString);
 
  /*
-  * @brief Add the configuration based on the given json string. This
+  * @brief Add the configuration based on the given json object string. This
   *  overwrites previous held configuration data, if the names collide.
+  *
+  * @param jsonString A string of a json object. MUST be an object, otherwise
+  *  will cause an exception.
   */
  void addJsonString(const std::string& jsonString);
 

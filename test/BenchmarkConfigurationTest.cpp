@@ -7,6 +7,9 @@
 
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 
+// TODO Add a exception catch test for trying to json string set to anything else than an object.
+// TODO Add a exception catch test for trying to json string add, without seting the configuration to anything.
+
 TEST(BenchmarkConfigurationTest, ParseJsonTest) {
   ad_benchmark::BenchmarkConfiguration config{};
 

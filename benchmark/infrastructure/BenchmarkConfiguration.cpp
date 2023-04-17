@@ -22,7 +22,7 @@ class ShortHandSyntaxException : public std::exception {
 
   public:
   /*
-  @param shortHandString The string, that was parsed string.
+  @param shortHandString The string, that was parsed.
   */
   explicit ShortHandSyntaxException(const std::string& shortHandString){
     message_ =
@@ -122,27 +122,23 @@ void BenchmarkConfiguration::addShortHand(const std::string& shortHandString){
 // ____________________________________________________________________________
 void BenchmarkConfiguration::setJsonString(const std::string& jsonString){
   data_ = nlohmann::json::parse(jsonString);
+  // It should only possible for `data_` to be an json object.
+  if (!data_.is_object()){throw ad_utility::Exception("A BenchmarkConfiguration"
+      "should only be set to a json object.");}
 }
 
 // ____________________________________________________________________________
 void BenchmarkConfiguration::addJsonString(const std::string& jsonString){
-    nlohmann::json::const_reference parsedJsonString = nlohmann::json::parse(
-      jsonString);
+  nlohmann::json::const_reference parsedJsonString = nlohmann::json::parse(
+  jsonString);
 
-    /*
-    We need different functions, based on whatever `data_` contains a json
-    object, or a json array.
-    However, if the parsed `jsonString` results in a different type, it will
-    cause an exception. But that is intended, because it's not possible to
-    combine a json object and json array in a way, that makes sense.
-    */
-    if (data_.is_array()){
-      data_.insert(data_.end(), parsedJsonString.begin(),
-        parsedJsonString.end());
-    } else{
-      // `data_` must be an object. If not, we want an exception anyway.
-      data_.update(parsedJsonString);
-    }
+  // Only a `jsonString` representing a json object is allowed.
+  if (!parsedJsonString.is_object()){
+    throw ad_utility::Exception("The given json string must"
+    " represent a valid json object.");
+  }
+
+  data_.update(parsedJsonString);
 }
 
 // JSON serialization.
