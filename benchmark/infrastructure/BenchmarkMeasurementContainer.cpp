@@ -16,6 +16,17 @@
 #include "util/Algorithm.h"
 
 namespace ad_benchmark{
+
+// ____________________________________________________________________________
+BenchmarkMetadata& BenchmarkMetadataGetter::getMetadata(){
+  return metadata_;
+}
+
+// ____________________________________________________________________________
+const BenchmarkMetadata& BenchmarkMetadataGetter::getMetadata() const{
+  return metadata_;
+}
+
 // ____________________________________________________________________________
 ResultEntry::operator std::string() const{
   return absl::StrCat("'", descriptor_, "' took ", measuredTime_, " seconds.");
@@ -25,7 +36,7 @@ ResultEntry::operator std::string() const{
 void to_json(nlohmann::json& j, const ResultEntry& resultEntry){
   j = nlohmann::json{{"descriptor", resultEntry.descriptor_},
     {"measuredTime", resultEntry.measuredTime_},
-    {"metadata", resultEntry.metadata_}};
+    {"metadata", resultEntry.getMetadata()}};
 }
 
 // ____________________________________________________________________________
@@ -48,7 +59,7 @@ ResultGroup::operator std::string() const{
 void to_json(nlohmann::json& j, const ResultGroup& resultGroup){
   j = nlohmann::json{{"descriptor", resultGroup.descriptor_},
     {"entries", resultGroup.entries_},
-    {"metadata", resultGroup.metadata_}};
+    {"metadata", resultGroup.getMetadata()}};
 }
 
 // ____________________________________________________________________________
@@ -173,7 +184,7 @@ void to_json(nlohmann::json& j, const ResultTable& resultTable){
     {"rowNames", resultTable.rowNames_},
     {"columnNames", resultTable.columnNames_},
     {"entries", resultTable.entries_},
-    {"metadata", resultTable.metadata_}};
+    {"metadata", resultTable.getMetadata()}};
 }
 
 } // End of namespace `ad_benchmark`

@@ -66,7 +66,7 @@ class BMSingleMeasurements: public BenchmarkInterface{
         });
 
     // Adding some basic metadata.
-    multipleTimes.metadata_.addKeyValuePair("Amount of exponentiations",
+    multipleTimes.getMetadata().addKeyValuePair("Amount of exponentiations",
       10'000'000'000);
 
     return results;
@@ -108,34 +108,34 @@ class BMGroups: public BenchmarkInterface{
 
     // Measuring functions.
     auto& loopAddGroup = results.addGroup("loopAdd");
-    loopAddGroup.metadata_.addKeyValuePair("Operator", '+');
+    loopAddGroup.getMetadata().addKeyValuePair("Operator", '+');
 
     auto& loopMultiplyGroup = results.addGroup("loopMultiply");
-    loopMultiplyGroup.metadata_.addKeyValuePair("Operator", '*');
+    loopMultiplyGroup.getMetadata().addKeyValuePair("Operator", '*');
 
     auto& addMember1 = loopAddGroup.addMeasurement(
       "1+1", [&loopAdd](){loopAdd(1,1);});
-    addMember1.metadata_.addKeyValuePair("Result", 2);
+    addMember1.getMetadata().addKeyValuePair("Result", 2);
 
     auto& addMember2 = loopAddGroup.addMeasurement(
       "42+69", [&loopAdd](){loopAdd(42,69);});
-    addMember2.metadata_.addKeyValuePair("Result", 42+69);
+    addMember2.getMetadata().addKeyValuePair("Result", 42+69);
 
     auto& addMember3 = loopAddGroup.addMeasurement(
       "10775+24502", [&loopAdd](){loopAdd(10775, 24502);});
-    addMember3.metadata_.addKeyValuePair("Result", 10775+24502);
+    addMember3.getMetadata().addKeyValuePair("Result", 10775+24502);
 
     auto& multiplicationMember1 = loopMultiplyGroup.addMeasurement(
       "1*1", [&loopMultiply](){loopMultiply(1,1);});
-    multiplicationMember1.metadata_.addKeyValuePair("Result", 1);
+    multiplicationMember1.getMetadata().addKeyValuePair("Result", 1);
 
     auto& multiplicationMember2 = loopMultiplyGroup.addMeasurement(
       "42*69", [&loopMultiply](){loopMultiply(42,69);});
-    multiplicationMember2.metadata_.addKeyValuePair("Result", 42*69);
+    multiplicationMember2.getMetadata().addKeyValuePair("Result", 42*69);
 
     auto& multiplicationMember3 = loopMultiplyGroup.addMeasurement(
       "10775*24502", [&loopMultiply](){loopMultiply(10775, 24502);});
-    multiplicationMember3.metadata_.addKeyValuePair("Result", 10775*24502);
+    multiplicationMember3.getMetadata().addKeyValuePair("Result", 10775*24502);
     
     return results;
   } 
@@ -174,7 +174,7 @@ class BMTables: public BenchmarkInterface{
     auto& tableAddingExponents = results.addTable("Adding exponents",
       {"2^10", "2^11", "Values written out"}, {"2^10", "2^11"});
     // Adding some metadata.
-    tableAddingExponents.metadata_.addKeyValuePair("Manually set fields",
+    tableAddingExponents.getMetadata().addKeyValuePair("Manually set fields",
       "Row 2");
 
     // Measure the calculating of the exponents.

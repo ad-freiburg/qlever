@@ -125,7 +125,7 @@ void BenchmarkConfiguration::setJsonString(const std::string& jsonString){
   // It should only possible for `data_` to be an json object.
   if (!data_.is_object()){
     throw ad_utility::Exception("A BenchmarkConfiguration"
-    "should only be set to a json object.");
+    " should only be set to a json object.");
   }
 }
 

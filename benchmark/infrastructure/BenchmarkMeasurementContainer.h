@@ -40,8 +40,25 @@ static float measureTimeOfFunction(const Function& functionToMeasure){
   ad_utility::timer::Timer::toSeconds(benchmarkTimer.value()));
 }
 
+// A very simple wrapper for a `BenchmarkMetadata` getter.
+class BenchmarkMetadataGetter{
+  BenchmarkMetadata metadata_;
+
+  public:
+
+  /*
+  @brief Get a reference to the held metadata object.
+  */
+  BenchmarkMetadata& getMetadata();
+
+  /*
+  @brief Get a reference to the held metadata object.
+  */
+  const BenchmarkMetadata& getMetadata() const;
+};
+
 // Describes the measured execution time of a function.
-class ResultEntry{
+class ResultEntry: public BenchmarkMetadataGetter{
   /*
   Needed, because without it, nobody could tell, which time belongs to which
   benchmark.
@@ -55,7 +72,6 @@ class ResultEntry{
   FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultGroup);
 
   public:
-  BenchmarkMetadata metadata_;
 
   /*
   @brief Creates an instance of `ResultEntry`.
@@ -80,7 +96,7 @@ class ResultEntry{
 };
 
 // Describes a group of `ResultEntry`.
-class ResultGroup {
+class ResultGroup: public BenchmarkMetadataGetter {
   // Needed for identifying groups.
   std::string descriptor_;
   // Members of the group.
@@ -90,7 +106,6 @@ class ResultGroup {
   FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultGroup);
 
   public:
-  BenchmarkMetadata metadata_;
 
   /*
   @brief Creates an empty group of `ResultEntry`s.
@@ -127,7 +142,7 @@ class ResultGroup {
 };
 
 // Describes a table of measured execution times of functions.
-class ResultTable {
+class ResultTable: public BenchmarkMetadataGetter {
   // For identification.
   std::string descriptor_;
   // The names of the columns and rows.
@@ -142,7 +157,6 @@ class ResultTable {
   FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultTable);
 
   public:
-  BenchmarkMetadata metadata_;
 
   /*
   @brief Create an empty `ResultTable`.
