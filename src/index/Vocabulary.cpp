@@ -265,6 +265,20 @@ const std::optional<std::string_view> Vocabulary<S, C>::operator[](
 template const std::optional<std::string_view>
 TextVocabulary::operator[]<std::string, void>(VocabIndex idx) const;
 
+template <typename S, typename C>
+template <typename, typename>
+const std::optional<string> Vocabulary<S, C>::indexToOptionalString(
+    VocabIndex idx) const {
+  if (idx.get() < _internalVocabulary.size()) {
+    return _internalVocabulary[idx.get()];
+  } else {
+    // this word must be externalized
+    idx.get() -= _internalVocabulary.size();
+    AD_CHECK(idx.get() < _externalVocabulary.size());
+    return _externalVocabulary[idx.get()];
+  }
+}
+
 // ___________________________________________________________________________
 template <typename S, typename C>
 ad_utility::HashMap<typename Vocabulary<S, C>::Datatypes,
@@ -306,7 +320,7 @@ void Vocabulary<S, C>::printRangesForDatatypes() {
 }
 
 template const std::optional<string> RdfsVocabulary::indexToOptionalString<
-    CompressedString>(VocabIndex idx) const;
+    CompressedString, void>(VocabIndex idx) const;
 
 // Explicit template instantiations
 template class Vocabulary<CompressedString, TripleComponentComparator>;
