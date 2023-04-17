@@ -67,7 +67,7 @@ jobs:
         wget https://apt.llvm.org/llvm.sh
         sudo chmod +x llvm.sh
         sed   's/apt-key del/echo/' llvm.sh -iy
-        sudo ./llvm.sh 15 all
+        sudo ./llvm.sh 15
         sudo apt install clang-15
       if :  matrix.compiler == 'clang' && matrix.compiler-version == 15
     - name: Install clang 16
@@ -78,7 +78,8 @@ jobs:
         wget https://apt.llvm.org/llvm.sh
         sudo chmod +x llvm.sh
         sed   's/apt-key del/echo/' llvm.sh -iy
-        sudo ./llvm.sh 16 all
+        sudo ./llvm.sh 16
+        sudo apt install -y clang-16
       if :  matrix.compiler == 'clang' && matrix.compiler-version == 16
 
     - name: Python dependencies
