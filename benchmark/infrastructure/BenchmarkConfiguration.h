@@ -72,7 +72,7 @@ public:
     */
     if constexpr (std::is_integral<Key>::value){
      return jsonObject->is_array() && (0 <= keyToCheck) &&
-     ((size_t) keyToCheck < jsonObject->size());
+     (static_cast<size_t>(keyToCheck) < jsonObject->size());
     }else{
      return jsonObject->contains(keyToCheck);
     }
