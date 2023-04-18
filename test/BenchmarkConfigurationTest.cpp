@@ -7,14 +7,14 @@
 
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 
-TEST(BenchmarkConfigurationTest, getValueByNestedKeysException){
+TEST(BenchmarkConfigurationTest, getValueByNestedKeysException) {
   // Create a non empty benchmark configuration, then cause the exception
   // , by trying to interpret a value as something, it isn't.
   ad_benchmark::BenchmarkConfiguration config{};
   config.setJsonString(R"--({"Level 1":{"Level 2":{"Level 3": 42}}})--");
 
   ASSERT_ANY_THROW(
-    config.getValueByNestedKeys<bool>("Level 1","Level 2", "Level 3"));
+      config.getValueByNestedKeys<bool>("Level 1", "Level 2", "Level 3"));
 }
 
 TEST(BenchmarkConfigurationTest, ParseJsonTest) {
@@ -102,8 +102,8 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
     // Parse strings.
     function(R"(myName = "Bernd";)");
     ASSERT_EQ("Bernd",
-      config.getValueByNestedKeys<std::string>("myName").value());
-    
+              config.getValueByNestedKeys<std::string>("myName").value());
+
     // Parse a list of mixed literals.
     function(R"(list = [42, -42, true, false, "Johannes"];)");
     ASSERT_EQ(42, config.getValueByNestedKeys<int>("list", 0).value());
@@ -111,7 +111,7 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
     ASSERT_TRUE(config.getValueByNestedKeys<bool>("list", 2).value());
     ASSERT_FALSE(config.getValueByNestedKeys<bool>("list", 3).value());
     ASSERT_EQ("Johannes",
-      config.getValueByNestedKeys<std::string>("list", 4).value());
+              config.getValueByNestedKeys<std::string>("list", 4).value());
   };
 
   // Do the test for set.
@@ -136,13 +136,13 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
 }
 
 // Testing the exceptions of set and add json string.
-TEST(BenchmarkConfigurationTest, ExceptionsOfParseJsonString){
+TEST(BenchmarkConfigurationTest, ExceptionsOfParseJsonString) {
   ad_benchmark::BenchmarkConfiguration config{};
 
   // Both exceptions for `setJsonstring` and `addJsonString` are caused
   // by the given json string not representing a json object. So we can simply
   // re-use the strings, we use to cause them.
-  auto doSetAndAdd = [&config](const std::string& str){
+  auto doSetAndAdd = [&config](const std::string& str) {
     ASSERT_ANY_THROW(config.setJsonString(str));
     ASSERT_ANY_THROW(config.addJsonString(str));
   };
@@ -155,4 +155,3 @@ TEST(BenchmarkConfigurationTest, ExceptionsOfParseJsonString){
   doSetAndAdd(R"--(4.2)--");
   doSetAndAdd(R"--("Hallo World")--");
 }
-
