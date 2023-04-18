@@ -258,6 +258,13 @@ class Operation {
   virtual void updateRuntimeInformationWhenOptimizedOut(
       std::vector<RuntimeInformation> children);
 
+  // In this overload, we use the already stored runtime info for the children,
+  // but set all of them to `optimizedOut`. This can be used, when a complete
+  // tree was optimized out (for example when one child of a JOIN operation is
+  // empty, the result will be empty and it is not necessary to evaluate the
+  // other child.
+  virtual void updateRuntimeInformationWhenOptimizedOut();
+
   // Some operations (currently `IndexScans` with only one variable) are
   // computed during query planning. Get the total time spent in such
   // computations for this operation and all its descendants. This can be used

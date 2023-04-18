@@ -19,10 +19,13 @@ namespace ad_utility {
 // A function that takes an arbitrary number of arguments by reference and does
 // nothing. This is used below when certain customization points of the join
 // algorithms don't have to do anything.
-[[maybe_unused]] static inline auto noop = [](const auto&...) {
-  // This function deliberately does nothing (static analysis expects a comment
-  // here).
+struct Noop {
+  void operator()(const auto&...) const {
+    // This function deliberately does nothing (static analysis expects a
+    // comment here).
+  }
 };
+[[maybe_unused]] static inline auto noop = Noop{};
 
 // Some helper concepts.
 
@@ -91,13 +94,14 @@ concept BinaryIteratorFunction =
  */
 template <
     std::ranges::random_access_range Range,
-    BinaryRangePredicate<Range> LessThan,
+    BinaryRangePredicate<Range> LessThan, typename FindSmallerUndefRangesLeft,
+    typename FindSmallerUndefRangesRight,
     UnaryIteratorFunction<Range> ElFromFirstNotFoundAction = decltype(noop)>
 [[nodiscard]] size_t zipperJoinWithUndef(
     const Range& left, const Range& right, const LessThan& lessThan,
     const BinaryIteratorFunction<Range> auto& compatibleRowAction,
-    const auto& findSmallerUndefRangesLeft,
-    const auto& findSmallerUndefRangesRight,
+    const FindSmallerUndefRangesLeft& findSmallerUndefRangesLeft,
+    const FindSmallerUndefRangesRight& findSmallerUndefRangesRight,
     ElFromFirstNotFoundAction elFromFirstNotFoundAction = {}) {
   using Iterator = std::ranges::iterator_t<Range>;
 
@@ -143,8 +147,7 @@ template <
   // `left.end()`, but passing in smaller ranges is more efficient.
   auto mergeWithUndefLeft = [&](Iterator itFromRight, Iterator leftBegin,
                                 Iterator leftEnd) {
-    if constexpr (!isSimilar<decltype(findSmallerUndefRangesLeft),
-                             decltype(noop)>) {
+    if constexpr (!isSimilar<FindSmallerUndefRangesLeft, Noop>) {
       // We need to bind the const& to a variable, else it will be
       // dangling inside the `findSmallerUndefRangesLeft` generator.
       const auto& row = *itFromRight;
@@ -181,8 +184,7 @@ template <
   // element in `right` that is only discovered later.
   auto mergeWithUndefRight = [&](Iterator itFromLeft, Iterator beginRight,
                                  Iterator endRight, bool hasNoMatch) {
-    if constexpr (!isSimilar<decltype(findSmallerUndefRangesRight),
-                             decltype(noop)>) {
+    if constexpr (!isSimilar<FindSmallerUndefRangesRight, Noop>) {
       bool compatibleWasFound = false;
       // We need to bind the const& to a variable, else it will be
       // dangling inside the `findSmallerUndefRangesRight` generator.
@@ -321,44 +323,52 @@ void gallopingJoin(const Range& smaller, const Range& larger,
   auto eq = [&lessThan](const auto& el1, const auto& el2) {
     return !lessThan(el1, el2) && !lessThan(el2, el1);
   };
+
+  // Perform an exponential search for the element `*itS` in the range `[itL,
+  // endLarge]`. Return a pair `(lower, upper)` of iterators, where the first
+  // element that is `>=*itS` is in `[lower, upper)`. The only exception to this
+  // is when the whole range (itL, endLarge) is smaller than `*itS`. In this
+  // case the second iterator will be `endLarge`. This is defined in a way, s.t.
+  // a subsequent `std::lower_bound(lower, upper)` will either find the element
+  // or will return `upper` and `upper == endLarge`.
+  auto exponentialSearch = [&lessThan, &endLarge](auto itL, auto itS) {
+    size_t step = 1;
+    auto lower = itL;
+    while (lessThan(*itL, *itS)) {
+      lower = itL;
+      itL += step;
+      step *= 2;
+      if (itL >= endLarge) {
+        return std::pair{lower, endLarge};
+      }
+    }
+    // It might be, that `itL` points to the first element that is >= *itS. We
+    // thus have to add one to the second element, s.t. the second element is a
+    // guaranteed upper bound.
+    return std::pair{lower, itL + 1};
+  };
   while (itSmall < endSmall && itLarge < endLarge) {
     // Linear search in the smaller input.
-    while (lessThan(*itSmall, *itLarge)) {
-      ++itSmall;
-      if (itSmall >= endSmall) {
-        return;
-      }
+    itSmall = std::find_if_not(
+        itSmall, endSmall,
+        [&lessThan, &itLarge](auto el) { return lessThan(el, *itLarge); });
+    if (itSmall >= endSmall) {
+      return;
     }
-    // Exponential search in the larger input.
-    size_t step = 1;
-    auto last = itLarge;
-    while (lessThan(*itLarge, *itSmall)) {
-      last = itLarge;
-      itLarge += step;
-      step *= 2;
-      if (itLarge >= endLarge) {
-        itLarge = endLarge - 1;
-        if (lessThan(*itLarge, *itSmall)) {
-          return;
-        }
-      }
+
+    // Exponential search followed by binary search on the larger input.
+    auto [lower, upper] = exponentialSearch(itLarge, itSmall);
+    const auto& needle = *itSmall;
+    itLarge =
+        std::lower_bound(lower, upper, needle,
+                         [&lessThan](const auto& a, const auto& b) -> bool {
+                           return lessThan(a, b);
+                         });
+    if (itLarge == endLarge) {
+      return;
     }
-    if (eq(*itSmall, *itLarge)) {
-      // We stepped into a block where l1 and l2 are equal. We need to
-      // find the beginning of this block
-      while (itLarge > std::begin(larger) && eq(*itSmall, *(itLarge - 1))) {
-        --itLarge;
-      }
-    } else if (lessThan(*itSmall, *itLarge)) {
-      // We stepped over the location where l1 and l2 may be equal.
-      // Use binary search to locate that spot
-      const auto& needle = *itSmall;
-      itLarge =
-          std::lower_bound(last, itLarge, needle,
-                           [&lessThan](const auto& a, const auto& b) -> bool {
-                             return lessThan(a, b);
-                           });
-    }
+
+    // Find the ranges where both inputs are equal and add them to the result.
     auto endSameSmall = std::find_if_not(
         itSmall, endSmall, [&](const auto& row) { return eq(row, *itLarge); });
     auto endSameLarge = std::find_if_not(
@@ -482,7 +492,7 @@ void specialOptionalJoin(
     // TODO<joka921> We could probably also apply this optimization if both
     // inputs contain UNDEF values only in the last column, and possibly
     // also not only for `OPTIONAL` joins.
-    auto endOfUndef = std::ranges::find_if(leftSub, &Id::isUndefined);
+    auto endOfUndef = std::ranges::find_if_not(leftSub, &Id::isUndefined);
     auto findSmallerUndefRangeLeft =
         [leftSub,
          endOfUndef](auto&&...) -> cppcoro::generator<decltype(endOfUndef)> {
@@ -493,8 +503,8 @@ void specialOptionalJoin(
 
     // Also set up the actions for compatible rows that now work on single
     // columns.
-    auto compAction = [&compatibleRowAction, it1, it2](const auto& itL,
-                                                       const auto& itR) {
+    auto compAction = [&compatibleRowAction, it1, it2, &leftSub, &rightSub](
+                          const auto& itL, const auto& itR) {
       compatibleRowAction((it1 + (itL - leftSub.begin())),
                           (it2 + (itR - rightSub.begin())));
     };
