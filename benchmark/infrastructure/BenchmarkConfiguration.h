@@ -28,14 +28,14 @@ class BenchmarkConfiguration{
   *  that contains all the described configuration data..
   *
   * @param shortHandString The language of the short hand is a number of
-  *  assigments `variableName = variableContent;` with no seperator.
+  *  assigments `variableName = variableContent;`.
   *  `variableName` is the name of the configuration option. As long as it's
-  *  a valid variable name in `C++` everything should be good.
+  *  a valid variable name in JSON everything should be good.
   *  `variableContent` can a boolean literal, an integer literal,  a string
   *  literal, or a list of those literals in the form of
   *  `[value1, value2, ...]`.
   *  An example for a short hand string:
-  *  `"isSorted=false;numberOfLoops=2;numberOfItems={4,5,6,7];myName = "Bernd"`
+  *  `"isSorted=false;numberOfLoops=2;numberOfItems={4,5,6,7];myName = "Bernd";`
   */
  static nlohmann::json parseShortHand(const std::string& shortHandString);
 
@@ -49,13 +49,13 @@ public:
 
  @tparam ReturnType The type the resulting value should be interpreted as.
  
- @param key, keys The keys for looking up the configuration option.
+ @param keys The keys for looking up the configuration option.
   Look at the documentation of `nlohmann::basic_json::at`, if you want
   to see, what's possible.
  */
  template<typename ReturnType>
- std::optional<ReturnType> getValueByNestedKeys(const auto& key,
-  const auto&... keys)const{
+ std::optional<ReturnType> getValueByNestedKeys(const auto&... keys) const
+ requires (sizeof...(keys) > 0){
   // Easier usage. 
   using ConstJsonPointer = const nlohmann::json::value_type*;
 
@@ -93,14 +93,14 @@ public:
    }
   };
 
-  if ((checkAndAssign(key) && ... && checkAndAssign(keys))){
+  if ((checkAndAssign(keys) && ...)){
    try {
     return {currentJsonObject->get<ReturnType>()};
    } catch(...){
     // Trying to interpret the value must have failed.
     std::ostringstream errorMessage;
-    errorMessage << absl::StrCat("Interpretation error: While there was a",
-      " value found at [", key , "]");
+    errorMessage << "Interpretation error: While there was a"
+      " value found at ";
     ((errorMessage << "[" << keys << "]") , ...);
     errorMessage << ", it couldn't be interpreted as the wanted type";
     throw ad_utility::Exception(errorMessage.str());
