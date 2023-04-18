@@ -135,6 +135,10 @@ class AddCombinedRowToIdTable {
     // Sometimes columns are combined where one value is UNDEF and the other one
     // is not. This function very efficiently returns the not-UNDEF value in
     // this case.
+    // TODO<joka921> If we keep track of the information that one of the
+    // involved columns contains no UNDEF values at all, we can omit this step
+    // and simply copy the values from this column without looking at the other
+    // input.
     auto mergeWithUndefined = [](const ValueId a, const ValueId b) {
       static_assert(ValueId::makeUndefined().getBits() == 0u);
       return ValueId::fromBits(a.getBits() | b.getBits());

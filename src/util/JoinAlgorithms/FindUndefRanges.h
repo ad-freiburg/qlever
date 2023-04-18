@@ -16,22 +16,25 @@ namespace ad_utility {
 //   - The range `[begin, end)` must be lexicographically sorted.
 // The resulting rows are returned via a generator of iterators. The boolean
 // argument `outOfOrderElementFound` is set to true if the `row` contains at
-// least one undefined entry, and one of the compatible rows form `[begin, end)`
-// contains at least one undefined entry in a column in which `row` is defined.
+// least one UNDEF entry, and one of the compatible rows from `[begin, end)`
+// contains at least one UNDEF entry in a column in which `row` is defined.
 // It is in general not possible for a zipper-style join algorithm to determine
 // the correct position in the sorted output for such an element, so we have to
-// keep track of this information.
+// keep track of this information. For example (5, UNDEF) and (UNDEF, 3) are
+// compatible, but the result is (5, 3) which is not adjacent to any of the two
+// inputs.
+// -- End of comment for all functions --
 
 // This function has the additional precondition that none of the entries of
-// `row` may be undefined. This function runs in `O(2^C * log(N) + R)` where C
+// `row` may be UNDEF. This function runs in `O(2^C * log(N) + R)` where C
 // is the number of columns, N is the size of the range `[begin, end)` and `R`
 // is the number of matching elements.
 // TODO<joka921> This can be optimized when we also know which columns of
-// `[begin, end)` can possibly contain undefined values.
+// `[begin, end)` can possibly contain UNDEF values.
 template <std::random_access_iterator It>
 auto findSmallerUndefRangesForRowsWithoutUndef(
     const auto& row, It begin, It end,
-    [[maybe_unused]] bool& outOfOrderElementFound) -> cppcoro::generator<It> {
+    [[maybe_unused]] bool& resultMightBeUnsorted) -> cppcoro::generator<It> {
   using Row = typename std::iterator_traits<It>::value_type;
   assert(row.size() == (*begin).size());
   assert(
@@ -69,7 +72,7 @@ auto findSmallerUndefRangesForRowsWithoutUndef(
 template <std::random_access_iterator It>
 auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
     const auto& row, const size_t numLastUndefined, It begin, It end,
-    bool& outOfOrderElementFound) -> cppcoro::generator<It> {
+    bool& resultMightBeUnsorted) -> cppcoro::generator<It> {
   using Row = typename std::iterator_traits<It>::value_type;
   const size_t numJoinColumns = row.size();
   assert(row.size() == (*begin).size());
@@ -84,7 +87,7 @@ auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
     assert(row[i] == Id::makeUndefined());
   }
 
-  // If every entry in the row is undefined, then it is the smallest possible
+  // If every entry in the row is UNDEF, then it is the smallest possible
   // row, and there can be no smaller row.
   if (numLastUndefined == 0) {
     co_return;
@@ -108,7 +111,7 @@ auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
     auto endOfUndef = std::lower_bound(begin, end, rowLower,
                                        std::ranges::lexicographical_compare);
     for (; begOfUndef != endOfUndef; ++begOfUndef) {
-      outOfOrderElementFound = true;
+      resultMightBeUnsorted = true;
       co_yield begOfUndef;
     }
   }
@@ -118,7 +121,7 @@ auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
 // numColumns)`.
 template <std::random_access_iterator It>
 auto findSmallerUndefRangesArbitrary(const auto& row, It begin, It end,
-                                     bool& outOfOrderElementFound)
+                                     bool& resultMightBeUnsorted)
     -> cppcoro::generator<It> {
   assert(row.size() == (*begin).size());
   assert(
@@ -147,7 +150,7 @@ auto findSmallerUndefRangesArbitrary(const auto& row, It begin, It end,
 
   for (auto it = begin; it != end; ++it) {
     if (isCompatible(*it)) {
-      outOfOrderElementFound = true;
+      resultMightBeUnsorted = true;
       co_yield it;
     }
   }
@@ -156,9 +159,14 @@ auto findSmallerUndefRangesArbitrary(const auto& row, It begin, It end,
 
 // This function first checks in which positions the `row` has UNDEF values, and
 // then calls the cheapest possible of the functions defined above.
+// Note: Using this function is always correct, but rather costly. We typically
+// have additional information about the input (most notably which of the join
+// columns contain no UNDEF at all) and therefore a more specialized routine
+// should be chosen.
 template <std::random_access_iterator It>
 auto findSmallerUndefRanges(const auto& row, It begin, It end,
-                            bool& outOfOrderFound) -> cppcoro::generator<It> {
+                            bool& resultMightBeUnsorted)
+    -> cppcoro::generator<It> {
   size_t numLastUndefined = 0;
   assert(row.size() > 0);
   auto it = std::ranges::rbegin(row);
@@ -172,15 +180,16 @@ auto findSmallerUndefRanges(const auto& row, It begin, It end,
 
   for (; it < rend; ++it) {
     if (*it == Id::makeUndefined()) {
-      return findSmallerUndefRangesArbitrary(row, begin, end, outOfOrderFound);
+      return findSmallerUndefRangesArbitrary(row, begin, end,
+                                             resultMightBeUnsorted);
     }
   }
   if (numLastUndefined == 0) {
     return findSmallerUndefRangesForRowsWithoutUndef(row, begin, end,
-                                                     outOfOrderFound);
+                                                     resultMightBeUnsorted);
   } else {
     return findSmallerUndefRangesForRowsWithUndefInLastColumns(
-        row, numLastUndefined, begin, end, outOfOrderFound);
+        row, numLastUndefined, begin, end, resultMightBeUnsorted);
   }
 }
 }  // namespace ad_utility

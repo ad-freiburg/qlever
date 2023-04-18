@@ -391,11 +391,8 @@ void Join::appendCrossProduct(const IdTable::const_iterator& leftBegin,
 
 // ______________________________________________________________________________
 
-void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
-                size_t jc2, IdTable* result) const {
-  const auto& a = dynA;
-  const auto& b = dynB;
-
+void Join::join(const IdTable& a, size_t jc1, const IdTable& b, size_t jc2,
+                IdTable* result) const {
   LOG(DEBUG) << "Performing join between two tables.\n";
   LOG(DEBUG) << "A: width = " << a.numColumns() << ", size = " << a.size()
              << "\n";
@@ -403,7 +400,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
              << "\n";
 
   // Check trivial case.
-  if (dynA.empty() || dynB.empty()) {
+  if (a.empty() || b.empty()) {
     return;
   }
   [[maybe_unused]] auto checkTimeoutAfterNCalls =
@@ -413,19 +410,18 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   auto joinColumnL = a.getColumn(jc1);
   auto joinColumnR = b.getColumn(jc2);
 
-  auto dynAPermuted = dynA.asColumnSubsetView(joinColumnData.permutationLeft());
-  auto dynBPermuted =
-      dynB.asColumnSubsetView(joinColumnData.permutationRight());
+  auto aPermuted = a.asColumnSubsetView(joinColumnData.permutationLeft());
+  auto bPermuted = b.asColumnSubsetView(joinColumnData.permutationRight());
 
-  auto rowAdder = ad_utility::AddCombinedRowToIdTable(1, dynAPermuted,
-                                                      dynBPermuted, result);
+  auto rowAdder =
+      ad_utility::AddCombinedRowToIdTable(1, aPermuted, bPermuted, result);
   auto addRow = [beginLeft = joinColumnL.begin(),
                  beginRight = joinColumnR.begin(),
                  &rowAdder](const auto& itLeft, const auto& itRight) {
     rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
   };
 
-  // The undef values are right at the start, so this calculation works.
+  // The UNDEF values are right at the start, so this calculation works.
   size_t numUndefA =
       std::ranges::upper_bound(joinColumnL, ValueId::makeUndefined()) -
       joinColumnL.begin();
@@ -505,7 +501,7 @@ void Join::hashJoinImpl(const IdTable& dynA, size_t jc1, const IdTable& dynB,
              << "\n";
 
   // Check trivial case.
-  if (a.size() == 0 || b.size() == 0) {
+  if (a.empty() || b.empty()) {
     return;
   }
 

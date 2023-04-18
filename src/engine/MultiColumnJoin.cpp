@@ -224,7 +224,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
   }
 
   ad_utility::JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
-                                            right.numColumns()};
+                                               right.numColumns()};
 
   IdTableView<0> leftJoinColumns =
       left.asColumnSubsetView(joinColumnData.jcsLeft());
@@ -246,9 +246,30 @@ void MultiColumnJoin::computeMultiColumnJoin(
   auto findUndef = [](const auto& row, auto begin, auto end, bool& outOfOrder) {
     return ad_utility::findSmallerUndefRanges(row, begin, end, outOfOrder);
   };
-  auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
-      leftJoinColumns, rightJoinColumns, std::ranges::lexicographical_compare,
-      addRow, findUndef, findUndef);
+
+  // Determine if there are no UNDEF values in the join columns. In this case we
+  // can use a much cheaper algorithm.
+  // TODO<joka921> There are many other cases where a cheaper implementation can
+  // be chosen, but we leave those for another PR, this is the most common case.
+  namespace stdr = std::ranges;
+  bool isCheap = stdr::none_of(joinColumns, [&](const auto& jcs) {
+    auto [leftCol, rightCol] = jcs;
+    return (stdr::any_of(right.getColumn(rightCol), &Id::isUndefined)) ||
+           (stdr::any_of(left.getColumn(leftCol), &Id::isUndefined));
+  });
+
+  const size_t numOutOfOrder = [&]() {
+    if (isCheap) {
+      return ad_utility::zipperJoinWithUndef(
+          leftJoinColumns, rightJoinColumns,
+          std::ranges::lexicographical_compare, addRow, ad_utility::noop,
+          ad_utility::noop);
+    } else {
+      return ad_utility::zipperJoinWithUndef(
+          leftJoinColumns, rightJoinColumns,
+          std::ranges::lexicographical_compare, addRow, findUndef, findUndef);
+    }
+  }();
   rowAdder.flush();
   // If there were undefined values in the input, the result might be out of
   // order. Sort it, because this operation promises a sorted result in its

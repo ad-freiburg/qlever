@@ -266,7 +266,7 @@ void OptionalJoin::optionalJoin(
   }
 
   ad_utility::JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
-                                            right.numColumns()};
+                                               right.numColumns()};
 
   IdTableView<0> joinColumnsLeft =
       left.asColumnSubsetView(joinColumnData.jcsLeft());

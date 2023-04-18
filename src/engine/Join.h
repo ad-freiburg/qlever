@@ -80,7 +80,7 @@ class Join : public Operation {
   }
 
   /**
-   * @brief Joins IdTables dynA and dynB on join column jc2, returning
+   * @brief Joins IdTables a and b on join column jc2, returning
    * the result in dynRes. Creates a cross product for matching rows.
    *
    * This should be a switch, which shoud decide which algorithm to use for
@@ -94,7 +94,7 @@ class Join : public Operation {
    * TODO Move the merge join into it's own function and make this function
    * a proper switch.
    **/
-  void join(const IdTable& dynA, size_t jc1, const IdTable& dynB, size_t jc2,
+  void join(const IdTable& a, size_t jc1, const IdTable& b, size_t jc2,
             IdTable* result) const;
 
   /**

@@ -17,10 +17,10 @@
 namespace ad_utility {
 
 // A function that takes an arbitrary number of arguments by reference and does
-// nothing. This is used below when certain customization points of the join algorithms
-// don't have to do anything.
+// nothing. This is used below when certain customization points of the join
+// algorithms don't have to do anything.
 [[maybe_unused]] static inline auto noop = [](const auto&...) {
-  // This function deliberately does nothing (static analysis expectes a comment
+  // This function deliberately does nothing (static analysis expects a comment
   // here).
 };
 
@@ -47,9 +47,10 @@ concept BinaryIteratorFunction =
     std::invocable<F, std::ranges::iterator_t<Range>,
                    std::ranges::iterator_t<Range>>;
 
-// Note: In the following functions, two rows of IDs are called `compatible` if for each position they are equal,
-// or at least one of them is UNDEF. This is exactly the semantics of the SPARQL standard for rows that match in
-// a JOIN operation.
+// Note: In the following functions, two rows of IDs are called `compatible` if
+// for each position they are equal, or at least one of them is UNDEF. This is
+// exactly the semantics of the SPARQL standard for rows that match in a JOIN
+// operation.
 
 /**
  * @brief This function performs a merge/zipper join that also handles UNDEF
@@ -157,8 +158,9 @@ template <
     }
   };
 
-  // This function returns true if and only if the given `row` (which is an element of `left` or `right`) constains no
-  // UNDEF values. It is used inside the following `mergeWithUndefRight` function.
+  // This function returns true if and only if the given `row` (which is an
+  // element of `left` or `right`) constains no UNDEF values. It is used inside
+  // the following `mergeWithUndefRight` function.
   auto containsNoUndefined = []<typename T>(const T& row) {
     if constexpr (std::is_same_v<T, Id>) {
       return row != Id::makeUndefined();
@@ -204,7 +206,6 @@ template <
         cover(itFromLeft);
       }
     }
-
   };
 
   // The main loop of the zipper algorithm. It is wrapped in a lambda, so we can
