@@ -18,8 +18,7 @@ MultiColumnJoin::MultiColumnJoin(
     : Operation(qec),
       _left(std::move(t1)),
       _right(std::move(t2)),
-      _joinColumns(jcs),
-      _multiplicitiesComputed(false) {
+      _joinColumns(jcs) {
   // Make sure subtrees are ordered so that identical queries can be identified.
   AD_CONTRACT_CHECK(!jcs.empty());
   if (_left->asString() > _right->asString()) {
@@ -236,7 +235,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
       right.asColumnSubsetView(joinColumnData.permutationRight());
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      joinColumns.size(), leftPermuted, rightPermuted, result);
+      joinColumns.size(), leftPermuted, rightPermuted, std::move(*result));
   auto addRow = [&rowAdder, beginLeft = leftJoinColumns.begin(),
                  beginRight = rightJoinColumns.begin()](const auto& itLeft,
                                                         const auto& itRight) {
@@ -270,7 +269,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
           std::ranges::lexicographical_compare, addRow, findUndef, findUndef);
     }
   }();
-  rowAdder.flush();
+  *result = std::move(rowAdder).resultTable();
   // If there were undefined values in the input, the result might be out of
   // order. Sort it, because this operation promises a sorted result in its
   // `resultSortedOn()` member function.

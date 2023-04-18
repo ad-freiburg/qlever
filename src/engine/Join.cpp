@@ -88,7 +88,8 @@ ResultTable Join::computeResult() {
   idTable.setNumColumns(leftWidth + rightWidth - 1);
 
   if (_left->knownEmptyResult() || _right->knownEmptyResult()) {
-    // TODO<joka921> We should set the childrens' runtimeInfo to "optimizedOut"
+    _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
+    _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     return {std::move(idTable), resultSortedOn(), LocalVocab()};
   }
 
@@ -100,9 +101,8 @@ ResultTable Join::computeResult() {
 
   shared_ptr<const ResultTable> leftRes = _left->getResult();
   if (leftRes->size() == 0) {
+    _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     return {std::move(idTable), resultSortedOn(), LocalVocab()};
-    // TODO<joka921> We should set the right child's runtimeInfo to
-    // "optimizedOut"
   }
 
   shared_ptr<const ResultTable> rightRes = _right->getResult();
@@ -413,8 +413,8 @@ void Join::join(const IdTable& a, size_t jc1, const IdTable& b, size_t jc2,
   auto aPermuted = a.asColumnSubsetView(joinColumnData.permutationLeft());
   auto bPermuted = b.asColumnSubsetView(joinColumnData.permutationRight());
 
-  auto rowAdder =
-      ad_utility::AddCombinedRowToIdTable(1, aPermuted, bPermuted, result);
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable(1, aPermuted, bPermuted,
+                                                      std::move(*result));
   auto addRow = [beginLeft = joinColumnL.begin(),
                  beginRight = joinColumnR.begin(),
                  &rowAdder](const auto& itLeft, const auto& itRight) {
@@ -448,13 +448,13 @@ void Join::join(const IdTable& a, size_t jc1, const IdTable& b, size_t jc2,
   } else {
     // TODO<joka921> Reinstate the timeout checks.
     auto findSmallerUndefRangeLeft =
-        [=](auto&&...) -> cppcoro::generator<decltype(aUnd.first)> {
+        [aUnd](auto&&...) -> cppcoro::generator<decltype(aUnd.first)> {
       for (auto it = aUnd.first; it != aUnd.second; ++it) {
         co_yield it;
       }
     };
     auto findSmallerUndefRangeRight =
-        [=](auto&&...) -> cppcoro::generator<decltype(bUnd.first)> {
+        [bUnd](auto&&...) -> cppcoro::generator<decltype(bUnd.first)> {
       for (auto it = bUnd.first; it != bUnd.second; ++it) {
         co_yield it;
       }
@@ -474,7 +474,7 @@ void Join::join(const IdTable& a, size_t jc1, const IdTable& b, size_t jc2,
     }();
     AD_CORRECTNESS_CHECK(numOutOfOrder == 0);
   }
-  rowAdder.flush();
+  *result = std::move(rowAdder).resultTable();
   // The column order in the result is now
   // [joinColumns, non-join-columns-a, non-join-columns-b] (which makes the
   // algorithms above easier), be the order that is expected by the rest of

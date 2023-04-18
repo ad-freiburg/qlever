@@ -21,7 +21,7 @@ class AddCombinedRowToIdTable {
   size_t numJoinColumns_;
   IdTableView<0> inputLeft_;
   IdTableView<0> inputRight_;
-  IdTable* resultTable_;
+  IdTable resultTable_;
 
   // This struct stores the information, which row indices from the input are
   // combined into a given row index in the output, i.e. "To obtain the
@@ -59,18 +59,18 @@ class AddCombinedRowToIdTable {
   // Construct from the number of join columns, the two inputs, and the output.
   explicit AddCombinedRowToIdTable(size_t numJoinColumns,
                                    const IdTableView<0>& input1,
-                                   const IdTableView<0>& input2,
-                                   IdTable* output)
-      : numUndefinedPerColumn_(output->numColumns()),
+                                   const IdTableView<0>& input2, IdTable output)
+      : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
         inputLeft_{input1},
         inputRight_{input2},
-        resultTable_{output} {
-    AD_CORRECTNESS_CHECK(output->numColumns() == input1.numColumns() +
-                                                     input2.numColumns() -
-                                                     numJoinColumns);
+        resultTable_{std::move(output)} {
+    AD_CORRECTNESS_CHECK(resultTable_.numColumns() == input1.numColumns() +
+                                                          input2.numColumns() -
+                                                          numJoinColumns);
     AD_CORRECTNESS_CHECK(input1.numColumns() >= numJoinColumns &&
                          input2.numColumns() >= numJoinColumns);
+    AD_CORRECTNESS_CHECK(resultTable_.empty());
   }
 
   // Return the number of UNDEF values per column. The result is only valid
@@ -102,15 +102,11 @@ class AddCombinedRowToIdTable {
     }
   }
 
-  // The destructor throws if `flush()` hasn't been called immediately before,
-  // because that is very likely a bug, because the complete result is not
-  // written until `flush()` is called.
-  ~AddCombinedRowToIdTable() {
-    if (!indexBuffer_.empty() && std::uncaught_exceptions() == 0) {
-      AD_THROW(
-          "Before destroying an object of type AddCombinedRowToIdTable, the "
-          "`flush` method must be called. Please report this");
-    }
+  // Move the result out after the last write. The function ensures, that the
+  // `flush()` is called before doing so.
+  IdTable&& resultTable() && {
+    flush();
+    return std::move(resultTable_);
   }
 
   // Disable copying and moving, it is currently not needed and makes it harder
@@ -126,7 +122,7 @@ class AddCombinedRowToIdTable {
   // have to call it manually after adding the last row, else the destructor
   // will throw an exception.
   void flush() {
-    auto& result = *resultTable_;
+    auto& result = resultTable_;
     size_t oldSize = result.size();
     AD_CORRECTNESS_CHECK(nextIndex_ ==
                          indexBuffer_.size() + optionalIndexBuffer_.size());
@@ -144,10 +140,8 @@ class AddCombinedRowToIdTable {
       return ValueId::fromBits(a.getBits() | b.getBits());
     };
 
-    size_t resultColIdx = 0;
-
     // A lambda that writes the join column with the given `colIdx` to the
-    // `resultColIdx`-th column of the result.
+    // `nextResultColIdx`-th column of the result.
     auto writeJoinColumn = [&result, &mergeWithUndefined, oldSize, this](
                                size_t colIdx, size_t resultColIdx) {
       const auto& colLeft = inputLeft_.getColumn(colIdx);
@@ -174,7 +168,7 @@ class AddCombinedRowToIdTable {
     };
 
     // A lambda that writes the non-join-column `colIdx` to the
-    // `resultColIdx`-th column of the result. the bool `isColFromLeft`
+    // `nextResultColIdx`-th column of the result. the bool `isColFromLeft`
     // determines whether the input is taken from the left or the right input.
     // Note: There is quite some code duplication between this lambda and the
     // previous one. I have tried to unify them but this lead to template-heavy
@@ -212,22 +206,23 @@ class AddCombinedRowToIdTable {
       }
     };
 
+    size_t nextResultColIdx = 0;
     // First write all the join columns.
     for (size_t col = 0; col < numJoinColumns_; col++) {
-      writeJoinColumn(col, resultColIdx);
-      ++resultColIdx;
+      writeJoinColumn(col, nextResultColIdx);
+      ++nextResultColIdx;
     }
 
     // Then the remaining columns from the first input.
     for (size_t col = numJoinColumns_; col < inputLeft_.numColumns(); ++col) {
-      writeNonJoinColumn.operator()<true>(col, resultColIdx);
-      ++resultColIdx;
+      writeNonJoinColumn.operator()<true>(col, nextResultColIdx);
+      ++nextResultColIdx;
     }
 
     // Then the remaining columns from the second input.
     for (size_t col = numJoinColumns_; col < inputRight_.numColumns(); col++) {
-      writeNonJoinColumn.operator()<false>(col, resultColIdx);
-      ++resultColIdx;
+      writeNonJoinColumn.operator()<false>(col, nextResultColIdx);
+      ++nextResultColIdx;
     }
 
     indexBuffer_.clear();

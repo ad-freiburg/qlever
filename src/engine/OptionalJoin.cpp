@@ -19,8 +19,7 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
     : Operation(qec),
       _left{std::move(t1)},
       _right{std::move(t2)},
-      _joinColumns(jcs),
-      _multiplicitiesComputed(false) {
+      _joinColumns(jcs) {
   AD_CONTRACT_CHECK(jcs.size() > 0);
 }
 
@@ -280,7 +279,7 @@ void OptionalJoin::optionalJoin(
   auto lessThanBoth = std::ranges::lexicographical_compare;
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      joinColumns.size(), leftPermuted, rightPermuted, result);
+      joinColumns.size(), leftPermuted, rightPermuted, std::move(*result));
   auto addRow = [&rowAdder, beginLeft = joinColumnsLeft.begin(),
                  beginRight = joinColumnsRight.begin()](const auto& itLeft,
                                                         const auto& itRight) {
@@ -301,7 +300,7 @@ void OptionalJoin::optionalJoin(
     if (isCheap) {
       ad_utility::specialOptionalJoin(joinColumnsLeft, joinColumnsRight, addRow,
                                       addOptionalRow);
-      return 0ul;
+      return 0UL;
     } else {
       return ad_utility::zipperJoinWithUndef(
           joinColumnsLeft, joinColumnsRight, lessThanBoth, addRow,
@@ -313,7 +312,7 @@ void OptionalJoin::optionalJoin(
   // algorithms above easier), be the order that is expected by the rest of the
   // code is [columns-a, non-join-columns-b]. Permute the columns to fix the
   // order.
-  rowAdder.flush();
+  *result = std::move(rowAdder).resultTable();
 
   // TODO<joka921> We have two sorted ranges, a simple merge would suffice
   // (possibly even in-place), or we could even lazily pass them on to the

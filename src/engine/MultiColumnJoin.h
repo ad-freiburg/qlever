@@ -18,7 +18,7 @@ class MultiColumnJoin : public Operation {
 
   vector<float> _multiplicities;
   size_t _sizeEstimate;
-  bool _multiplicitiesComputed;
+  bool _multiplicitiesComputed = false;
 
  public:
   MultiColumnJoin(QueryExecutionContext* qec,

@@ -129,7 +129,7 @@ cppcoro::generator<const Variable> Bind::containedVariables() const {
   for (const auto* ptr : _expression.containedVariables()) {
     co_yield *ptr;
   }
-  co_yield (_target);
+  co_yield _target;
 }
 
 // ____________________________________________________________________________

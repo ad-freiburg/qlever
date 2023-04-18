@@ -482,11 +482,10 @@ void specialOptionalJoin(
     // TODO<joka921> We could probably also apply this optimization if both
     // inputs contain UNDEF values only in the last column, and possibly
     // also not only for `OPTIONAL` joins.
-    auto endOfUndef = std::find_if(leftSub.begin(), leftSub.end(), [](Id id) {
-      return id != Id::makeUndefined();
-    });
+    auto endOfUndef = std::ranges::find_if(leftSub, &Id::isUndefined);
     auto findSmallerUndefRangeLeft =
-        [=](auto&&...) -> cppcoro::generator<decltype(endOfUndef)> {
+        [leftSub,
+         endOfUndef](auto&&...) -> cppcoro::generator<decltype(endOfUndef)> {
       for (auto it = leftSub.begin(); it != endOfUndef; ++it) {
         co_yield it;
       }
@@ -494,7 +493,8 @@ void specialOptionalJoin(
 
     // Also set up the actions for compatible rows that now work on single
     // columns.
-    auto compAction = [&](const auto& itL, const auto& itR) {
+    auto compAction = [&compatibleRowAction, it1, it2](const auto& itL,
+                                                       const auto& itR) {
       compatibleRowAction((it1 + (itL - leftSub.begin())),
                           (it2 + (itR - rightSub.begin())));
     };
