@@ -146,6 +146,12 @@ size_t OptionalJoin::getCostEstimate() {
     const auto& leftVars = _left->getVariableColumns();
     const auto& rightVars = _right->getVariableColumns();
 
+    // `isCheap` is true iff all join columns contain no UNDEF values, except
+    // for the last join column in the right input. In this case we can use an
+    // optimized implementation that is much cheaper. This fact has to be
+    // reflected in the cost estimate s.t. the query planner can prefer an order
+    // of the join columns, where the only undefined values are in the last join
+    // column.
     bool isCheap = true;
     for (size_t i = 0; i < _joinColumns.size(); ++i) {
       auto [leftCol, rightCol] = _joinColumns.at(i);
@@ -196,7 +202,7 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
     numDistinctRight = std::min(numDistinctRight, dr);
   }
   size_t numDistinctResult = std::min(numDistinctLeft, numDistinctRight);
-  // The number of distinct is at leat the number of distinct in a non optional
+  // The number of distinct is at least the number of distinct in a non optional
   // column, if the other one is optional.
   numDistinctRight = std::max(numDistinctRight, numDistinctResult);
 
