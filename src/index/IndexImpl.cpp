@@ -527,6 +527,8 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
     if (triple[c0] != currentRel) {
       auto md1 = writer1.addRelation(currentRel.value(), buffer, distinctCol1);
       auto md2 = writeSwitchedRel(&writer2, currentRel.value(), &buffer);
+      md1.setCol2Multiplicity(md2.getCol1Multiplicity());
+      md2.setCol2Multiplicity(md1.getCol1Multiplicity());
       metaData1.add(md1);
       metaData2.add(md2);
       buffer.clear();
@@ -625,33 +627,12 @@ void IndexImpl::createPermutationPair(
   metaData.value().first.setName(getKbName());
   metaData.value().second.setName(getKbName());
   if (metaData) {
-    LOG(INFO) << "Exchanging multiplicities for " << p1._readableName << " and "
-              << p2._readableName << " ..." << std::endl;
-    exchangeMultiplicities(&(metaData.value().first),
-                           &(metaData.value().second));
     LOG(INFO) << "Writing meta data for " << p1._readableName << " and "
               << p2._readableName << " ..." << std::endl;
     ad_utility::File f1(_onDiskBase + ".index" + p1._fileSuffix, "r+");
     metaData.value().first.appendToFile(&f1);
     ad_utility::File f2(_onDiskBase + ".index" + p2._fileSuffix, "r+");
     metaData.value().second.appendToFile(&f2);
-  }
-}
-
-// _________________________________________________________________________
-template <class MetaData>
-void IndexImpl::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
-  for (auto it = m1->data().begin(); it != m1->data().end(); ++it) {
-    // our MetaData classes have a read-only interface because normally the
-    // FuullRelationMetaData are created separately and then added and never
-    // changed. This function forms an exception to this pattern
-    // because calculation the 2nd column multiplicity separately for each
-    // permutation is inefficient. So it is fine to use const_cast here as an
-    // exception: we delibarately write to a read-only data structure and are
-    // knowing what we are doing
-    Id id = it.getId();
-    m2->data()[id].setCol2Multiplicity(m1->data()[id].getCol1Multiplicity());
-    m1->data()[id].setCol2Multiplicity(m2->data()[id].getCol1Multiplicity());
   }
 }
 
