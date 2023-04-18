@@ -29,9 +29,9 @@ class BenchmarkConfiguration{
   *  `variableName` is the name of the configuration option. As long as it's
   *  a valid variable name in `C++` everything should be good.
   *  `variableContent` can a boolean literal, an integer literal, or a list
-  *  of those literals in the form of `{value1, value2, ...}`.
+  *  of those literals in the form of `[value1, value2, ...]`.
   *  An example for a short hand string:
-  *  `"isSorted=false;numberOfLoops=2;numberOfItems={4,5,6,7};"`
+  *  `"isSorted=false;numberOfLoops=2;numberOfItems={4,5,6,7];"`
   */
  static nlohmann::json parseShortHand(const std::string& shortHandString);
 

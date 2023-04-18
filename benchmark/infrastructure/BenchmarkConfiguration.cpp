@@ -44,8 +44,8 @@ nlohmann::json BenchmarkConfiguration::parseShortHand(
   // Boolean literal, or integer literal.
   const std::string valueLiterals{R"--(true|false|-?\d+)--"};
   // How a list of `valueLiterals` looks like.
-  const std::string listOfValueLiterals{R"--(\{(\s*()--" + valueLiterals +
-    R"--()\s*,)*\s*()--" + valueLiterals + R"--()\s*\})--"};
+  const std::string listOfValueLiterals{R"--(\[(\s*()--" + valueLiterals +
+    R"--()\s*,)*\s*()--" + valueLiterals + R"--()\s*\])--"};
   // What kind of names can the left side of the assigment
   // `variableName = variableContent;` have?
   const std::string variableName{R"--([\w]+)--"};
@@ -85,20 +85,6 @@ nlohmann::json BenchmarkConfiguration::parseShortHand(
     // Get the not yet interpreted variable content. It should be in the second sub-match.
     std::string assigmentVariableContentUninterpreted{match.str(2)};
 
-    /*
-     * Because `data_` is a `nlohmann::json` object, we can parse the assigment
-     * variables using `nlohmann::json::parse`, geeting a `nlohmann::json`
-     * object, and then add them to `data_`, instead of parsing and holding the
-     * interim result ourselves. 
-     * For this, only the list of values needs any manipulation, because it
-     * doesn't follow the json syntax. We use the wrong braces.
-     */
-    if (assigmentVariableContentUninterpreted.at(0) == '{'){
-      // We got a list. Change it to the json syntax.
-      assigmentVariableContentUninterpreted.replace(0, 1, R"([)");
-      assigmentVariableContentUninterpreted.replace(
-        assigmentVariableContentUninterpreted.length() - 1, 1, R"(])");
-    }
     jsonObject[assigmentVariableName] =
       nlohmann::json::parse(assigmentVariableContentUninterpreted);
   }

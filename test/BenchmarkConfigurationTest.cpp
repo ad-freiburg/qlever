@@ -90,7 +90,7 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
     ASSERT_FALSE(config.getValueByNestedKeys<bool>("boolFalse").value());
 
     // Parse a list of mixed literals.
-    function(R"(list = {42, -42, true, false};)");
+    function(R"(list = [42, -42, true, false];)");
     ASSERT_EQ(42, config.getValueByNestedKeys<int>("list", 0).value());
     ASSERT_EQ(-42, config.getValueByNestedKeys<int>("list", 1).value());
     ASSERT_TRUE(config.getValueByNestedKeys<bool>("list", 2).value());
