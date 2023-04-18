@@ -98,20 +98,23 @@ public:
  }
 
  /*
-  * @brief Sets the configuration based on the given json object string. This
-  *  overwrites all previous held configuration data.
+  * @brief Sets the configuration based on the given json object literal,
+  * represented by the string. This overwrites all previous held configuration
+  * data.
   *
-  * @param jsonString A string of a json object. MUST be an object, otherwise
-  *  will cause an exception.
+  * @param jsonString A string representing a json object literal. MUST be an
+  * object, otherwise will cause an exception.
   */
  void setJsonString(const std::string& jsonString);
 
  /*
-  * @brief Add the configuration based on the given json object string. This
-  *  overwrites previous held configuration data, if the names collide.
+  * @brief Add key value pairs to the held json object literal, by adding the
+  * the key value pairs of the json object literal represented by the given
+  * string. This overwrites previous key value pairs in the json object
+  * literal, if the keys collide.
   *
-  * @param jsonString A string of a json object. MUST be an object, otherwise
-  *  will cause an exception.
+  * @param jsonString A string describing a json object literal. MUST be an
+  * object, otherwise will cause an exception.
   */
  void addJsonString(const std::string& jsonString);
 
@@ -126,9 +129,9 @@ public:
  void setShortHand(const std::string& shortHandString);
 
  /*
-  * @brief Parses the given short hand and adds all configuration data, that
-  *  was described with a valid syntax. This overwrites previous held
-  *  configuration data, if the names collide.
+  * @brief Parses the given short hand and adds all the key value pairs, that
+  *  was described with a valid syntax, as key value pairs to the held
+  *  json object literal. This overrides key value pairs, if the keys collide.
   *
   * @param shortHandString For a description of the short hand syntax, see
   *  `BenchmarkConfiguration::parseShortHand`
