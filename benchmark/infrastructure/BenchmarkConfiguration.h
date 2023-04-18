@@ -93,7 +93,7 @@ public:
   if ((checkAndAssign(key) && ... && checkAndAssign(keys))){
    return {currentJsonObject->get<ReturnType>()};
   }else{
-   return {std::nullopt};
+   return std::nullopt;
   }
  }
 
