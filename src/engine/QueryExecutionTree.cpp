@@ -95,7 +95,9 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     bool includeQuestionMark) const {
   ColumnIndicesAndTypes exportColumns;
 
-  for (const auto& var : selectClause.getSelectedVariables()) {
+  auto variables = selectClause.getSelectedVariables();
+  variables.push_back(Variable("?completedWord")); //TODO: more elgant solution
+  for (const auto& var : variables) {
     std::string varString = var.name();
     if (getVariableColumns().contains(var)) {
       auto columnIndex = getVariableColumns().at(var);
@@ -339,6 +341,12 @@ QueryExecutionTree::idToStringAndType(Id id,
     case Datatype::TextRecordIndex:
       return std::pair{_qec->getIndex().getTextExcerpt(id.getTextRecordIndex()),
                        nullptr};
+    case Datatype::WordVocabIndex: //QUESTION: ist das richtig so?
+      std::optional<string> entity = _qec->getIndex().idToOptionalString(id);
+      if (!entity.has_value()) {
+        return std::nullopt;
+      }
+      return std::pair{std::move(entity.value()), nullptr};
   }
   AD_FAIL();
 }
@@ -419,7 +427,9 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
   static constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
   constexpr std::string_view sepView{&sep, 1};
   // Print header line
-  const auto& variables = selectClause.getSelectedVariablesAsStrings();
+  std::vector<std::string> variables = selectClause.getSelectedVariablesAsStrings();
+  std::string str("?completedWord"); //TODO: more elgant solution
+  variables.push_back(str);
   co_yield absl::StrJoin(variables, sepView);
   co_yield '\n';
 
@@ -455,6 +465,11 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
           case Datatype::TextRecordIndex:
             co_yield escapeFunction(
                 _qec->getIndex().getTextExcerpt(id.getTextRecordIndex()));
+            break;
+          case Datatype::WordVocabIndex: //QUESTION: ist das richtig so?
+            co_yield escapeFunction(
+              _qec->getIndex().getTextVocab()
+              .indexToOptionalString(id.getVocabIndex()).value());
             break;
           default:
             AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,

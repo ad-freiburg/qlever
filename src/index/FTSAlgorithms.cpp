@@ -15,14 +15,14 @@
 using std::pair;
 
 // _____________________________________________________________________________
-IndexImpl::WordEntityPostings FTSAlgorithms::filterByRange(const IdRange& idRange,
-                                  const IndexImpl::WordEntityPostings& wepPreFilter) {
+Index::WordEntityPostings FTSAlgorithms::filterByRange(const IdRange& idRange,
+                                  const Index::WordEntityPostings& wepPreFilter) {
   AD_CHECK(wepPreFilter.cids.size() == wepPreFilter.wids.size());
   AD_CHECK(wepPreFilter.cids.size() == wepPreFilter.scores.size());
   LOG(DEBUG) << "Filtering " << wepPreFilter.cids.size()
              << " elements by ID range...\n";
 
-  IndexImpl::WordEntityPostings wepResult;
+  Index::WordEntityPostings wepResult;
   wepResult.cids.resize(wepPreFilter.cids.size() + 2);
   wepResult.scores.resize(wepPreFilter.cids.size() + 2);
   wepResult.wids.resize(wepPreFilter.cids.size() + 2);
@@ -57,70 +57,66 @@ IndexImpl::WordEntityPostings FTSAlgorithms::filterByRange(const IdRange& idRang
 }
 
 // _____________________________________________________________________________
-// QUESTION: warum heißt es eBlockWids nicht eBlockEids, obwohl es keine WordIds sind
-// --> verwirrender Name. (Ist auch falscher Typ für Wids)
-// NOTE: Runtime von crossIntersect O(n*m) nicht mehr O(n+m)
-// -> ist aber optimal, da Speicheranforderung n*m ist
-void FTSAlgorithms::intersect(const vector<TextRecordIndex>& matchingContexts,
-                              const vector<TextRecordIndex>& eBlockCids,
-                              const vector<Id>& eBlockWids,
-                              const vector<Score>& eBlockScores,
-                              vector<TextRecordIndex>& resultCids,
-                              vector<Id>& resultEids,
-                              vector<Score>& resultScores) {
+Index::WordEntityPostings FTSAlgorithms::intersect(
+                          const Index::WordEntityPostings& matchingContextsWep,
+                          const Index::WordEntityPostings& eBlockWep) {
   LOG(DEBUG) << "Intersection to filter the entity postings from a block "
              << "so that only matching ones remain\n";
-  LOG(DEBUG) << "matchingContexts size: " << matchingContexts.size() << '\n';
-  LOG(DEBUG) << "eBlockCids size: " << eBlockCids.size() << '\n';
+  LOG(DEBUG) << "matchingContextsWep.cids size: "
+             << matchingContextsWep.cids.size() << '\n';
+  LOG(DEBUG) << "eBlockWep.cids size: " << eBlockWep.cids.size() << '\n';
+  Index::WordEntityPostings resultWep;
   // Handle trivial empty case
-  if (matchingContexts.empty() || eBlockCids.empty()) {
-    return;
+  if (matchingContextsWep.cids.empty() || eBlockWep.cids.empty()) {
+    return resultWep;
   }
-  resultCids.reserve(eBlockCids.size());
-  resultCids.clear();
-  resultEids.reserve(eBlockCids.size());
-  resultEids.clear();
-  resultScores.reserve(eBlockCids.size());
-  resultScores.clear();
+
+  resultWep.cids.reserve(eBlockWep.cids.size());
+  resultWep.cids.clear();
+  resultWep.eids.reserve(eBlockWep.cids.size());
+  resultWep.eids.clear();
+  resultWep.scores.reserve(eBlockWep.cids.size());
+  resultWep.scores.clear();
 
   size_t i = 0;
   size_t j = 0;
 
-  while (i < matchingContexts.size() && j < eBlockCids.size()) {
-    while (matchingContexts[i] < eBlockCids[j]) {
-      ++i; // QUESTION: Warum ++i und nicht i++, sollte hier doch egal sein
-      if (i >= matchingContexts.size()) {
-        return;
+  while (i < matchingContextsWep.cids.size() && j < eBlockWep.cids.size()) {
+    while (matchingContextsWep.cids[i] < eBlockWep.cids[j]) {
+      ++i;
+      if (i >= matchingContextsWep.cids.size()) {
+        return resultWep;
       }
     }
-    while (eBlockCids[j] < matchingContexts[i]) {
+    while (eBlockWep.cids[j] < matchingContextsWep.cids[i]) {
       ++j;
-      if (j >= eBlockCids.size()) {
-        return;
+      if (j >= eBlockWep.cids.size()) {
+        return resultWep;
       }
     }
-    while (matchingContexts[i] == eBlockCids[j]) {
+    while (matchingContextsWep.cids[i] == eBlockWep.cids[j]) {
       // Make sure we get all matching elements from the entity list (l2)
       // that match the current context.
       // If there are multiple elements for that context in l1,
       // we can safely skip them unless we want to incorporate the scores
       // later on.
-      resultCids.push_back(eBlockCids[j]);
-      resultEids.push_back(eBlockWids[j]);
-      resultScores.push_back(eBlockScores[j]);
+      resultWep.cids.push_back(eBlockWep.cids[j]);
+      resultWep.eids.push_back(eBlockWep.eids[j]);
+      resultWep.scores.push_back(eBlockWep.scores[j]);
       j++;
-      if (j >= eBlockCids.size()) {
+      if (j >= eBlockWep.cids.size()) {
         break;
       }
     }
     ++i;
   }
+  return resultWep;
 }
 
 // _____________________________________________________________________________
-IndexImpl::WordEntityPostings FTSAlgorithms::crossIntersect(
-                          const IndexImpl::WordEntityPostings& matchingContextsWep,
-                          const IndexImpl::WordEntityPostings& eBlockWep) {
+Index::WordEntityPostings FTSAlgorithms::crossIntersect(
+                          const Index::WordEntityPostings& matchingContextsWep,
+                          const Index::WordEntityPostings& eBlockWep) {
   // Example:
   // matchingContextsWep.wids: 3 4 3 4 3
   // matchingContextsWep.cids: 1 4 5 5 7
@@ -137,7 +133,7 @@ IndexImpl::WordEntityPostings FTSAlgorithms::crossIntersect(
   LOG(DEBUG) << "matchingContextsWep.cids size: "
              << matchingContextsWep.cids.size() << '\n';
   LOG(DEBUG) << "eBlockWep.cids size: " << eBlockWep.cids.size() << '\n';
-  IndexImpl::WordEntityPostings resultWep;
+  Index::WordEntityPostings resultWep;
   // Handle trivial empty case
   if (matchingContextsWep.cids.empty() || eBlockWep.cids.empty()) {
     return resultWep;
@@ -241,139 +237,10 @@ void FTSAlgorithms::intersectTwoPostingLists(
 }
 
 // _____________________________________________________________________________
-void FTSAlgorithms::intersectKWay(
-    const vector<vector<TextRecordIndex>>& cidVecs,
-    const vector<vector<Score>>& scoreVecs, vector<Id>* lastListEids,
-    vector<TextRecordIndex>& resCids, vector<Id>& resEids,
-    vector<Score>& resScores) {
-  size_t k = cidVecs.size();
-  {
-    if (cidVecs[k - 1].size() == 0) {
-      LOG(DEBUG) << "Empty list involved, no intersect necessary.\n";
-      return;
-    }
-    LOG(DEBUG) << "K-way intersection of " << k << " lists of sizes: ";
-    for (const auto& l : cidVecs) {
-      LOG(DEBUG) << l.size() << ' ';
-    }
-    LOG(DEBUG) << '\n';
-  }
-
-  const bool entityMode = lastListEids != nullptr;
-
-  size_t minSize = std::numeric_limits<size_t>::max();
-  if (entityMode) {
-    minSize = lastListEids->size();
-  } else {
-    for (size_t i = 0; i < cidVecs.size(); ++i) {
-      if (cidVecs[i].size() == 0) {
-        return;
-      }
-      if (cidVecs[i].size() < minSize) {
-        minSize = cidVecs[i].size();
-      }
-    }
-  }
-
-  resCids.reserve(minSize + 2);
-  resCids.resize(minSize);
-  resScores.reserve(minSize + 2);
-  resScores.resize(minSize);
-  if (lastListEids) {
-    resEids.reserve(minSize + 2);
-    resEids.resize(minSize);
-  }
-
-  // For intersection, we don't need a PQ.
-  // The algorithm:
-  // Remember the current context and the length of the streak
-  // (i.e. in how many lists was that context found).
-  // If the streak reaches k, write the context to the result.
-  // Until then, go through lists in a round-robin way and advance until
-  // a) the context is found or
-  // b) a higher context is found without a match before (reset cur and streak).
-  // Stop as soon as one list cannot advance.
-
-  // I think no PQ is needed, because unlike for merge, elements that
-  // do not occur in all lists, don't have to be visited in the right order.
-
-  vector<size_t> nextIndices;
-  nextIndices.resize(cidVecs.size(), 0);
-  TextRecordIndex currentContext = cidVecs[k - 1][0];
-  size_t currentList = k - 1;  // Has the fewest different contexts. Start here.
-  size_t streak = 0;
-  size_t n = 0;
-  while (true) {  // break when one list cannot advance
-    size_t thisListSize = cidVecs[currentList].size();
-    if (nextIndices[currentList] == thisListSize) {
-      break;
-    }
-    while (cidVecs[currentList][nextIndices[currentList]] < currentContext) {
-      nextIndices[currentList] += 1;
-      if (nextIndices[currentList] == thisListSize) {
-        break;
-      }
-    }
-    if (nextIndices[currentList] == thisListSize) {
-      break;
-    }
-    TextRecordIndex atId = cidVecs[currentList][nextIndices[currentList]];
-    if (atId == currentContext) {
-      if (++streak == k) {
-        Score s = 0;
-        for (size_t i = 0; i < k - 1; ++i) {
-          s += scoreVecs[i][(i == currentList ? nextIndices[i]
-                                              : nextIndices[i] - 1)];
-        }
-        if (entityMode) {
-          // If entities are involved, there may be multiple postings
-          // for one context. Handle all matching the current context.
-          size_t matchInEL = (k - 1 == currentList ? nextIndices[k - 1]
-                                                   : nextIndices[k - 1] - 1);
-          while (matchInEL < cidVecs[k - 1].size() &&
-                 cidVecs[k - 1][matchInEL] == currentContext) {
-            resCids[n] = currentContext;
-            resEids[n] = (*lastListEids)[matchInEL];
-            resScores[n++] = s + scoreVecs[k - 1][matchInEL];
-            ++matchInEL;
-          }
-          nextIndices[k - 1] = matchInEL;
-        } else {
-          resCids[n] = currentContext;
-          resScores[n++] =
-              s +
-              scoreVecs[k - 1][(k - 1 == currentList ? nextIndices[k - 1]
-                                                     : nextIndices[k - 1] - 1)];
-        }
-        // Optimization: The last list will feature the fewest different
-        // contexts. After a match, always advance in that list
-        currentList = k - 1;
-        continue;
-      }
-    } else {
-      streak = 1;
-      currentContext = atId;
-    }
-    nextIndices[currentList++] += 1;
-    if (currentList == k) {
-      currentList = 0;
-    }  // wrap around
-  }
-
-  resCids.resize(n);
-  resScores.resize(n);
-  if (entityMode) {
-    resEids.resize(n);
-  }
-  LOG(DEBUG) << "Intersection done. Size: " << resCids.size() << "\n";
-}
-
-// _____________________________________________________________________________
-//TODO: algorithm is probably faulty rightnow. WordId needs to be considered
-IndexImpl::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
-    const vector<IndexImpl::WordEntityPostings>& wepVecs, vector<Id>* lastListEids) {
+Index::WordEntityPostings FTSAlgorithms::intersectKWay(
+    const vector<Index::WordEntityPostings>& wepVecs, vector<Id>* lastListEids) {
   size_t k = wepVecs.size();
-  IndexImpl::WordEntityPostings resultWep;
+  Index::WordEntityPostings resultWep;
   {
     if (wepVecs[k - 1].cids.size() == 0) {
       LOG(DEBUG) << "Empty list involved, no intersect necessary.\n";
@@ -588,7 +455,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
 
 // _____________________________________________________________________________
 void FTSAlgorithms::aggScoresAndTakeTopKContexts(
-    const IndexImpl::WordEntityPostings wep, size_t k, IdTable* dynResult) {
+    const Index::WordEntityPostings wep, size_t k, IdTable* dynResult) {
   AD_CHECK_EQ(wep.cids.size(), wep.eids.size());
   AD_CHECK_EQ(wep.cids.size(), wep.scores.size());
   LOG(DEBUG) << "Going from a WordEntityPostings-Element consisting of an entity,"
@@ -606,7 +473,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
   // This achieves O(n log k)
   LOG(DEBUG) << "Heap-using case with " << k << " contexts per entity...\n";
 
-  using ScoreToContextAndWord = std::set<tuple<Score, TextRecordIndex, WordIndex>>;
+  using ScoreToContextAndWord = std::set<std::tuple<Score, TextRecordIndex, WordIndex>>;
   using ScoreAndStCaW = pair<Score, ScoreToContextAndWord>;
   using AggMap = ad_utility::HashMap<Id, ScoreAndStCaW>;
   AggMap map;
@@ -637,7 +504,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
     for (auto itt = stcaw.rbegin(); itt != stcaw.rend(); ++itt) {
       result.push_back(
           {Id::makeFromTextRecordIndex(std::get<1>(*itt)), entityScore, eid, 
-          Id::makeFromVocabIndex(VocabIndex::make(std::get<2>(*itt)))}); // QUESTION: gibt es ne elegantere Lösung???
+          Id::makeFromWordVocabIndex(WordVocabIndex::make(std::get<2>(*itt)))}); // QUESTION: gibt es ne elegantere Lösung???
     }
   }
   *dynResult = std::move(result).toDynamic();
@@ -797,9 +664,9 @@ template void FTSAlgorithms::aggScoresAndTakeTopContext<10>(
 // _____________________________________________________________________________
 template <int WIDTH>
 void FTSAlgorithms::aggScoresAndTakeTopContext(
-                  const IndexImpl::WordEntityPostings& wep, IdTable* dynResult) {
+                  const Index::WordEntityPostings& wep, IdTable* dynResult) {
   LOG(DEBUG) << "Special case with 1 contexts per entity...\n";
-  typedef ad_utility::HashMap<Id, pair<Score, tuple<TextRecordIndex, Score,
+  typedef ad_utility::HashMap<Id, pair<Score, std::tuple<TextRecordIndex, Score,
                                                              WordIndex>>> AggMap;
   AggMap map;
   for (size_t i = 0; i < wep.eids.size(); ++i) {
@@ -825,7 +692,7 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
     result(n, 0) = Id::makeFromTextRecordIndex(std::get<0>(it->second.second));
     result(n, 1) = Id::makeFromInt(it->second.first);
     result(n, 2) = it->first;
-    result(n, 3) = Id::makeFromVocabIndex(VocabIndex::make(std::get<2>(it->second.second)));
+    result(n, 3) = Id::makeFromWordVocabIndex(WordVocabIndex::make(std::get<2>(it->second.second)));
     n++;
   }
   AD_CHECK_EQ(n, result.size());
@@ -837,27 +704,27 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
 
 // QUESTION: was macht das?
 template void FTSAlgorithms::aggScoresAndTakeTopContext<0>(
-  const IndexImpl::WordEntityPostings& wep, IdTable* dynResult);
+  const Index::WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<1>(
-  const IndexImpl::WordEntityPostings& wep, IdTable* dynResult);
+  const Index::WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<2>(
-  const IndexImpl::WordEntityPostings& wep, IdTable* dynResult);
+  const Index::WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<3>(
-  const IndexImpl::WordEntityPostings& wep, IdTable* dynResult);
+  const Index::WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<4>(
-  const IndexImpl::WordEntityPostings& wep, IdTable* dynResult);
+  const Index::WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<5>(
-  const IndexImpl::WordEntityPostings& wep, IdTable* dynResult);
+  const Index::WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<6>(
-  const IndexImpl::WordEntityPostings& wep, IdTable* dynResult);
+  const Index::WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<7>(
-  const IndexImpl::WordEntityPostings& wep, IdTable* dynResult);
+  const Index::WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<8>(
-  const IndexImpl::WordEntityPostings& wep, IdTable* dynResult);
+  const Index::WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<9>(
-  const IndexImpl::WordEntityPostings& wep, IdTable* dynResult);
+  const Index::WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<10>(
-  const IndexImpl::WordEntityPostings& wep, IdTable* dynResult);
+  const Index::WordEntityPostings& wep, IdTable* dynResult);
 
 // _____________________________________________________________________________
 template <int WIDTH>

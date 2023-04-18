@@ -42,6 +42,7 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
         stream << id.getInt();
         return std::move(stream).str();
       }
+      case Datatype::WordVocabIndex:
       case Datatype::VocabIndex:
         return qecIndex.idToOptionalString(id).value_or("");
       case Datatype::LocalVocabIndex:

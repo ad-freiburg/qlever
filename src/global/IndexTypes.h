@@ -11,5 +11,6 @@
 using VocabIndex = ad_utility::TypedIndex<uint64_t, "VocabIndex">;
 using LocalVocabIndex = ad_utility::TypedIndex<uint64_t, "LocalVocabIndex">;
 using TextRecordIndex = ad_utility::TypedIndex<uint64_t, "TextRecordIndex">;
+using WordVocabIndex = ad_utility::TypedIndex<uint64_t, "WordVocabIndex">;
 
 #endif  // QLEVER_INDEXTYPES_H

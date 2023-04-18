@@ -12,7 +12,7 @@
 #include "../util/HashMap.h"
 #include "../util/HashSet.h"
 #include "./Vocabulary.h"
-#include "./IndexImpl.h"
+#include "./Index.h"
 
 using std::array;
 using std::vector;
@@ -28,19 +28,16 @@ class FTSAlgorithms {
   typedef vector<array<Id, 5>> WidthFiveList;
   typedef vector<vector<Id>> VarWidthList;
 
-  static IndexImpl::WordEntityPostings filterByRange(const IdRange& idRange,
-                                  const IndexImpl::WordEntityPostings& wepPreFilter);
+  static Index::WordEntityPostings filterByRange(const IdRange& idRange,
+                                  const Index::WordEntityPostings& wepPreFilter);
 
-  static void intersect(const vector<TextRecordIndex>& matchingContexts,
-                        const vector<TextRecordIndex>& eBlockCids,
-                        const vector<Id>& eBlockWids,
-                        const vector<Score>& eBlockScores,
-                        vector<TextRecordIndex>& resultCids,
-                        vector<Id>& resultEids, vector<Score>& resultScores);
+  static Index::WordEntityPostings intersect(
+                          const Index::WordEntityPostings& matchingContextsWep,
+                          const Index::WordEntityPostings& eBlockWep);
 
-  static IndexImpl::WordEntityPostings crossIntersect(
-                          const IndexImpl::WordEntityPostings& matchingContextsWep,
-                          const IndexImpl::WordEntityPostings& eBlockWep);
+  static Index::WordEntityPostings crossIntersect(
+                          const Index::WordEntityPostings& matchingContextsWep,
+                          const Index::WordEntityPostings& eBlockWep);
 
   static void intersectTwoPostingLists(const vector<TextRecordIndex>& cids1,
                                        const vector<Score>& scores1,
@@ -58,7 +55,7 @@ class FTSAlgorithms {
                                            const vector<Score>& scores,
                                            size_t k, IdTable* dynResult);
 
-  static void aggScoresAndTakeTopKContexts(const IndexImpl::WordEntityPostings wep,
+  static void aggScoresAndTakeTopKContexts(const Index::WordEntityPostings wep,
                                                      size_t k, IdTable* dynResult);
 
   template <int WIDTH>
@@ -86,7 +83,7 @@ class FTSAlgorithms {
 
   // Special case where k == 1.
   template <int WIDTH>
-  static void aggScoresAndTakeTopContext(const IndexImpl::WordEntityPostings& wep,
+  static void aggScoresAndTakeTopContext(const Index::WordEntityPostings& wep,
                                          IdTable* dynResult);
 
   // K-way intersect whereas there may be word ids / entity ids
@@ -94,14 +91,9 @@ class FTSAlgorithms {
   // That list (param: eids) can be given or null.
   // If it is null, resEids is left untouched, otherwise resEids
   // will contain word/entity for the matching contexts.
-  static void intersectKWay(const vector<vector<TextRecordIndex>>& cidVecs,
-                            const vector<vector<Score>>& scoreVecs,
-                            vector<Id>* lastListEids,
-                            vector<TextRecordIndex>& resCids,
-                            vector<Id>& resEids, vector<Score>& resScores);
-
-  static IndexImpl::WordEntityPostings crossIntersectKWay(
-    const vector<IndexImpl::WordEntityPostings>& wepVecs, vector<Id>* lastListEids);
+  static Index::WordEntityPostings intersectKWay(
+                    const vector<Index::WordEntityPostings>& wepVecs,
+                    vector<Id>* lastListEids);
 
   // Constructs the cross-product between entity postings of this
   // context and matching subtree result tuples.

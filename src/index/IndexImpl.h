@@ -105,13 +105,6 @@ class IndexImpl {
     using ReadType = IndexMetaDataHmap;
   };
 
-  struct WordEntityPostings {
-    vector<TextRecordIndex> cids;
-    vector<WordIndex> wids;
-    vector<Id> eids;
-    vector<Score> scores;
-  };
-
   template <class A, class B>
   using PermutationImpl = Permutation::PermutationImpl<A, B>;
 
@@ -348,6 +341,13 @@ class IndexImpl {
         return std::nullopt;
       case Datatype::TextRecordIndex:
         return getTextExcerpt(id.getTextRecordIndex());
+      case Datatype::WordVocabIndex: //QUESTION: ist das so richtig?
+        auto result = _vocab.indexToOptionalString(id.getVocabIndex());
+        if (result.has_value() && result.value().starts_with(VALUE_PREFIX)) {
+          result.value() =
+              ad_utility::convertIndexWordToValueLiteral(result.value());
+        }
+        return result;
     }
     // should be unreachable because the enum is exhaustive.
     AD_FAIL();
@@ -417,7 +417,7 @@ class IndexImpl {
                                          const IdTable& filter, size_t nofVars,
                                          size_t limit, IdTable* result) const;
 
-  IndexImpl::WordEntityPostings getContextEntityScoreListsForWords(const string& words) const;
+  Index::WordEntityPostings getContextEntityScoreListsForWords(const string& words) const;
 
   template <size_t I>
   void getECListForWordsAndSingleSub(const string& words,
@@ -436,13 +436,13 @@ class IndexImpl {
       const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
       size_t limit, vector<vector<Id>>& res) const;
 
-  IndexImpl::WordEntityPostings getWordPostingsForTerm(const string& term) const;
+  Index::WordEntityPostings getWordPostingsForTerm(const string& term) const;
 
-  IndexImpl::WordEntityPostings getEntityPostingsForTerm(const string& term) const;
+  Index::WordEntityPostings getEntityPostingsForTerm(const string& term) const;
 
-  WordEntityPostings readWordCl(TextBlockMetaData tbmd) const;
+  Index::WordEntityPostings readWordCl(TextBlockMetaData tbmd) const;
 
-  WordEntityPostings readWordEntityCl(TextBlockMetaData tbmd) const;
+  Index::WordEntityPostings readWordEntityCl(TextBlockMetaData tbmd) const;
 
   string getTextExcerpt(TextRecordIndex cid) const {
     if (cid.get() >= _docsDB._size) {

@@ -47,6 +47,14 @@ class Index {
     size_t normalAndInternal_() const { return normal_ + internal_; }
   };
 
+  // Store all information about possible search results in one place.
+  struct WordEntityPostings {
+    vector<TextRecordIndex> cids;
+    vector<WordIndex> wids;
+    vector<Id> eids;
+    vector<Score> scores;
+  };
+
   /// Forbid copy and assignment.
   Index& operator=(const Index&) = delete;
   Index(const Index&) = delete;
@@ -169,10 +177,7 @@ class Index {
                                          const IdTable& filter, size_t nofVars,
                                          size_t limit, IdTable* result) const;
 
-  void getContextEntityScoreListsForWords(const std::string& words,
-                                          vector<TextRecordIndex>& cids,
-                                          vector<Id>& eids,
-                                          vector<Score>& scores) const;
+  WordEntityPostings getContextEntityScoreListsForWords(const std::string& words) const;
 
   template <size_t I>
   void getECListForWordsAndSingleSub(const std::string& words,
@@ -191,13 +196,9 @@ class Index {
       const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
       size_t limit, vector<vector<Id>>& res) const;
 
-  void getWordPostingsForTerm(const std::string& term,
-                              vector<TextRecordIndex>& cids,
-                              vector<Score>& scores) const;
+  WordEntityPostings getWordPostingsForTerm(const std::string& term) const;
 
-  void getEntityPostingsForTerm(const std::string& term,
-                                vector<TextRecordIndex>& cids, vector<Id>& eids,
-                                vector<Score>& scores) const;
+  WordEntityPostings getEntityPostingsForTerm(const std::string& term) const;
 
   [[nodiscard]] std::string getTextExcerpt(TextRecordIndex cid) const;
 
