@@ -1,23 +1,24 @@
 // Copyright 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Andre Schlegel (November of 2022, schlegea@informatik.uni-freiburg.de)
+// Author: Andre Schlegel (November of 2022,
+// schlegea@informatik.uni-freiburg.de)
+#include <algorithm>
+#include <boost/program_options.hpp>
 #include <boost/program_options/value_semantic.hpp>
+#include <fstream>
+#include <iomanip>
+#include <ios>
 #include <iostream>
 #include <ostream>
-#include <fstream>
-#include <ios>
-#include <iomanip>
 #include <sstream>
-#include <algorithm>
 #include <vector>
 
-#include <boost/program_options.hpp>
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
-#include "util/json.h"
-#include "util/File.h"
 #include "../benchmark/infrastructure/Benchmark.h"
-#include "../benchmark/infrastructure/BenchmarkToJson.h"
+#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
+#include "../benchmark/infrastructure/BenchmarkToJson.h"
+#include "util/File.h"
+#include "util/json.h"
 
 // We are not in a global header file, so its fine.
 using namespace ad_benchmark;
@@ -31,12 +32,13 @@ using namespace ad_benchmark;
  *  of the file, or should the previous content be overwritten?
  */
 static void writeJsonToFile(nlohmann::json j, const std::string& fileName,
-    bool appendToFile = false) {
-  ad_utility::makeOfstream(fileName, appendToFile ?
-      (std::ios::out | std::ios::app) : std::ios::out) << j;
+                            bool appendToFile = false) {
+  ad_utility::makeOfstream(
+      fileName, appendToFile ? (std::ios::out | std::ios::app) : std::ios::out)
+      << j;
 }
 
-static std::string readFileToString(const std::string& fileName){
+static std::string readFileToString(const std::string& fileName) {
   // The string gets build using a string stream.
   std::ostringstream transchribedString{};
 
@@ -63,28 +65,27 @@ int main(int argc, char** argv) {
 
   // For easier usage.
   namespace po = boost::program_options;
-  
+
   // Declaring the supported options.
   po::options_description options("Options for the benchmark");
-  options.add_options()
-      ("help,h", "Print the help message.")
-      ("print,p", "Roughly prints all benchmarks.")
-      ("write,w", po::value<std::string>(&writeFileName),
-       "Writes the benchmarks as json to a file, overriding the previous"
-       " content of the file.")
-      ("append,a", "Causes the json option to append to the end of the"
-      " file, instead of overriding the previous content of the file.")
-      ("configuration-json,j",
+  options.add_options()("help,h", "Print the help message.")(
+      "print,p", "Roughly prints all benchmarks.")(
+      "write,w", po::value<std::string>(&writeFileName),
+      "Writes the benchmarks as json to a file, overriding the previous"
+      " content of the file.")(
+      "append,a",
+      "Causes the json option to append to the end of the"
+      " file, instead of overriding the previous content of the file.")(
+      "configuration-json,j",
       po::value<std::string>(&jsonConfigurationFileName),
-      "Set the configuration of benchmarks as described in a json file.")
-      ("configuration-shorthand,s",
+      "Set the configuration of benchmarks as described in a json file.")(
+      "configuration-shorthand,s",
       po::value<std::string>(&shortHandConfigurationString),
       "Allows you to add options to configuration of the benchmarks using the"
-      " short hand described in `BenchmarkConfiguration.h:parseShortHand`.")
-  ;
+      " short hand described in `BenchmarkConfiguration.h:parseShortHand`.");
 
   // Prints how to use the file correctly and exits.
-  auto printUsageAndExit = [&options](){
+  auto printUsageAndExit = [&options]() {
     std::cerr << options << "\n";
     exit(1);
   };
@@ -92,7 +93,7 @@ int main(int argc, char** argv) {
   // Calling without using ANY arguments makes no sense.
   if (argc == 1) {
     std::cerr << "You have to specify at least one of the options of `--print`,"
-      " or `--write`.\n";
+                 " or `--write`.\n";
     printUsageAndExit();
   }
 
@@ -104,17 +105,17 @@ int main(int argc, char** argv) {
   // Did they set any option, that would require anything to actually happen?
   // If not, don't do anything. This should also happen, if they explicitly
   // wanted to see the `help` option.
-  if (vm.count("help") || !(vm.count("print") || vm.count("write"))){
+  if (vm.count("help") || !(vm.count("print") || vm.count("write"))) {
     printUsageAndExit();
   }
 
   // Did we get any configuration?
   BenchmarkConfiguration config{};
 
-  if (vm.count("configuration-json")){
+  if (vm.count("configuration-json")) {
     config.setJsonString(readFileToString(jsonConfigurationFileName));
   }
-  if (vm.count("configuration-shorthand")){
+  if (vm.count("configuration-shorthand")) {
     config.addShortHand(shortHandConfigurationString);
   }
 
@@ -123,20 +124,22 @@ int main(int argc, char** argv) {
 
   // Measuring the time for all registered benchmarks.
   // For measuring and saving the times.
-  const std::vector<BenchmarkResults>&
-    results{BenchmarkRegister::runAllRegisteredBenchmarks()};
+  const std::vector<BenchmarkResults>& results{
+      BenchmarkRegister::runAllRegisteredBenchmarks()};
 
   // Actually processing the arguments.
   if (vm.count("print")) {
-    std::ranges::for_each(results, [](
-      const BenchmarkResults& result){
-      std::cout << benchmarkResultsToString(result) << "\n";
-    }, {});
+    std::ranges::for_each(results,
+                          [](const BenchmarkResults& result) {
+                            std::cout << benchmarkResultsToString(result)
+                                      << "\n";
+                          },
+                          {});
   }
 
   if (vm.count("write")) {
     writeJsonToFile(zipGeneralMetadataAndBenchmarkResultsToJson(
-      BenchmarkRegister::getAllGeneralMetadata(), results),
-      writeFileName, vm.count("append"));
+                        BenchmarkRegister::getAllGeneralMetadata(), results),
+                    writeFileName, vm.count("append"));
   }
 }

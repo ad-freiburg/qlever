@@ -4,19 +4,20 @@
 
 #pragma once
 
-#include <vector>
 #include <utility>
+#include <vector>
 
+#include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "util/json.h"
-#include "../benchmark/infrastructure/Benchmark.h"
 
-namespace ad_benchmark{
+namespace ad_benchmark {
 /*
  * @brief Create a nlohmann::json array with all relevant informations
  *  about the measurments taken by all the `BenchmarkResults`.
  */
-nlohmann::json benchmarkResultsToJson(const std::vector<BenchmarkResults>& results);
+nlohmann::json benchmarkResultsToJson(
+    const std::vector<BenchmarkResults>& results);
 
 /*
 @brief Create a nlohmann::json array with all relevant informations
@@ -24,8 +25,8 @@ given by the pairs. That is, all the `BenchmarkMetadata` and all information
 defined by benchmarks, with every pair grouped up.
 */
 nlohmann::json zipGeneralMetadataAndBenchmarkResultsToJson(
- const std::vector<std::pair<BenchmarkMetadata, BenchmarkResults>>&
- generalMetadataAndBenchmarkResults);
+    const std::vector<std::pair<BenchmarkMetadata, BenchmarkResults>>&
+        generalMetadataAndBenchmarkResults);
 
 /*
 @brief Create a nlohmann::json array with all relevant informations
@@ -34,6 +35,6 @@ information defined by benchmarks, with every entry in a vector paired up
 with the entry at the same place in the other vector.
 */
 nlohmann::json zipGeneralMetadataAndBenchmarkResultsToJson(
- const std::vector<BenchmarkMetadata>& generalMetadata,
- const std::vector<BenchmarkResults>& benchmarkResults);
-} // End of namespace `ad_benchmark`
+    const std::vector<BenchmarkMetadata>& generalMetadata,
+    const std::vector<BenchmarkResults>& benchmarkResults);
+}  // namespace ad_benchmark

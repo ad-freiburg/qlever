@@ -4,10 +4,10 @@
 
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
 
-namespace ad_benchmark{
+namespace ad_benchmark {
 // ___________________________________________________________________________
 void addCategoryTitleToOStringstream(std::ostringstream* stream,
-    std::string_view categoryTitle){
+                                     std::string_view categoryTitle) {
   // The bar above and below the title.
   const size_t barLength = categoryTitle.size() + 4;
   const std::string bar(barLength, '#');
@@ -16,36 +16,37 @@ void addCategoryTitleToOStringstream(std::ostringstream* stream,
 }
 
 // ___________________________________________________________________________
-void addVectorOfResultEntryToOStringstream(std::ostringstream* stream,
-    const std::vector<ResultEntry>& entries, const std::string& prefix) {
-  for (const auto& entry: entries) {
+void addVectorOfResultEntryToOStringstream(
+    std::ostringstream* stream, const std::vector<ResultEntry>& entries,
+    const std::string& prefix) {
+  for (const auto& entry : entries) {
     (*stream) << "\n" << prefix << (std::string)entry;
   }
 };
 
 // ___________________________________________________________________________
-void addSingleMeasurementsToOStringstream(std::ostringstream* stream,
-  const std::vector<ResultEntry>& resultEntries){
+void addSingleMeasurementsToOStringstream(
+    std::ostringstream* stream, const std::vector<ResultEntry>& resultEntries) {
   addCategoryTitleToOStringstream(stream, "Single measurment benchmarks");
   addVectorOfResultEntryToOStringstream(stream, resultEntries,
-      "Single measurment benchmark ");
+                                        "Single measurment benchmark ");
 }
 
 // ___________________________________________________________________________
 void addGroupsToOStringstream(std::ostringstream* stream,
-  const std::vector<ResultGroup>& resultGroups){
-    addCategoryTitleToOStringstream(stream, "Group benchmarks");
-  for (const auto& group: resultGroups) {
+                              const std::vector<ResultGroup>& resultGroups) {
+  addCategoryTitleToOStringstream(stream, "Group benchmarks");
+  for (const auto& group : resultGroups) {
     (*stream) << "\n\n" << (std::string)group;
   }
 }
 
 // ___________________________________________________________________________
 void addTablesToOStringstream(std::ostringstream* stream,
-  const std::vector<ResultTable>& resultTables){
-    addCategoryTitleToOStringstream(stream, "Table benchmarks");
+                              const std::vector<ResultTable>& resultTables) {
+  addCategoryTitleToOStringstream(stream, "Table benchmarks");
   // Printing the tables themselves.
-  for (const auto& table: resultTables) {
+  for (const auto& table : resultTables) {
     (*stream) << "\n\n" << (std::string)table;
   }
 }
@@ -54,7 +55,7 @@ void addTablesToOStringstream(std::ostringstream* stream,
 std::string benchmarkResultsToString(const BenchmarkResults& results) {
   // The values for all the categories of benchmarks.
   const std::vector<ResultEntry>& singleMeasurements =
-    results.getSingleMeasurements();
+      results.getSingleMeasurements();
   const std::vector<ResultGroup>& resultGroups = results.getGroups();
   const std::vector<ResultTable>& resultTables = results.getTables();
 
@@ -73,27 +74,29 @@ std::string benchmarkResultsToString(const BenchmarkResults& results) {
   // @param suffix Added to the stringstream after
   //  categoryAddPrintStreamFunction. Mostly for linebreaks between those
   //  categories.
-  auto addNonEmptyCategorieToStringSteam = [](std::ostringstream* stringStream,
-      const auto& categoryResult, const auto& categoryAddPrintStreamFunction,
-      const std::string& suffix = ""){
-    if (categoryResult.size() > 0){
-      categoryAddPrintStreamFunction(stringStream, categoryResult);
-      (*stringStream) << suffix;
-    }
-  };
+  auto addNonEmptyCategorieToStringSteam =
+      [](std::ostringstream* stringStream, const auto& categoryResult,
+         const auto& categoryAddPrintStreamFunction,
+         const std::string& suffix = "") {
+        if (categoryResult.size() > 0) {
+          categoryAddPrintStreamFunction(stringStream, categoryResult);
+          (*stringStream) << suffix;
+        }
+      };
 
   // Visualization for single measurments, if there are any.
   addNonEmptyCategorieToStringSteam(&visualization, singleMeasurements,
-      addSingleMeasurementsToOStringstream, "\n\n");
+                                    addSingleMeasurementsToOStringstream,
+                                    "\n\n");
 
   // Visualization for groups, if there are any.
   addNonEmptyCategorieToStringSteam(&visualization, resultGroups,
-      addGroupsToOStringstream, "\n\n");
+                                    addGroupsToOStringstream, "\n\n");
 
   // Visualization for tables, if there are any.
   addNonEmptyCategorieToStringSteam(&visualization, resultTables,
-      addTablesToOStringstream);
+                                    addTablesToOStringstream);
 
   return visualization.str();
 }
-} // End of namespace `ad_benchmark`
+}  // namespace ad_benchmark

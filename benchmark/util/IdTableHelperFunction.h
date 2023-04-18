@@ -1,22 +1,23 @@
 // Copyright 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Andre Schlegel (November of 2022, schlegea@informatik.uni-freiburg.de)
+// Author: Andre Schlegel (November of 2022,
+// schlegea@informatik.uni-freiburg.de)
 
 #pragma once
 
-#include <cstdio>
 #include <algorithm>
+#include <cstdio>
 
-#include "engine/Engine.h"
-#include "util/Exception.h"
-#include "util/Random.h"
-#include "util/Forward.h"
-#include "engine/idTable/IdTable.h"
-#include "../test/util/IdTableHelpers.h"
-#include "engine/CallFixedSize.h"
-#include "global/ValueId.h"
 #include "../test/util/AllocatorTestHelpers.h"
+#include "../test/util/IdTableHelpers.h"
 #include "../test/util/IdTestHelpers.h"
+#include "engine/CallFixedSize.h"
+#include "engine/Engine.h"
+#include "engine/idTable/IdTable.h"
+#include "global/ValueId.h"
+#include "util/Exception.h"
+#include "util/Forward.h"
+#include "util/Random.h"
 
 /*
  * @brief Return a IdTable, that is randomly filled. The range of numbers
@@ -28,10 +29,12 @@
  * @param joinColumnLowerBound, joinColumnUpperBound The range of the entries
  *  in the join column, definied as
  *  [joinColumnLowerBound, joinColumnUpperBound].
-*/
+ */
 IdTable createRandomlyFilledIdTable(const size_t numberRows,
-    const size_t numberColumns, const size_t joinColumn,
-    const size_t joinColumnLowerBound, const size_t joinColumnUpperBound) {
+                                    const size_t numberColumns,
+                                    const size_t joinColumn,
+                                    const size_t joinColumnLowerBound,
+                                    const size_t joinColumnUpperBound) {
   // Entries in IdTables have a max size.
   constexpr size_t maxIdSize = ValueId::maxIndex;
 
@@ -43,9 +46,11 @@ IdTable createRandomlyFilledIdTable(const size_t numberRows,
 
   // The random number generators for normal entries and join column entries.
   // Both can be found in util/Random.h
-  SlowRandomIntGenerator<size_t> normalEntryGenerator(0, maxIdSize); // Entries in IdTables have a max size.
-  SlowRandomIntGenerator<size_t> joinColumnEntryGenerator(joinColumnLowerBound, joinColumnUpperBound);
-  
+  SlowRandomIntGenerator<size_t> normalEntryGenerator(
+      0, maxIdSize);  // Entries in IdTables have a max size.
+  SlowRandomIntGenerator<size_t> joinColumnEntryGenerator(joinColumnLowerBound,
+                                                          joinColumnUpperBound);
+
   // Creating the table and setting it to the wanted size.
   IdTable table{numberColumns, ad_utility::testing::makeAllocator()};
   table.resize(numberRows);
@@ -63,15 +68,15 @@ IdTable createRandomlyFilledIdTable(const size_t numberRows,
       table[row][i] = transform(normalEntryGenerator());
     }
   }
-  
-  return table; 
+
+  return table;
 }
 
 /*
- * @brief Sorts an IdTable in place, in the same way, that we sort them during normal programm
- * usage.
+ * @brief Sorts an IdTable in place, in the same way, that we sort them during
+ * normal programm usage.
  */
 void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table) {
-  CALL_FIXED_SIZE( (std::array{table.idTable.numColumns()}),
-      &Engine::sort, &table.idTable, table.joinColumn);
+  CALL_FIXED_SIZE((std::array{table.idTable.numColumns()}), &Engine::sort,
+                  &table.idTable, table.joinColumn);
 }
