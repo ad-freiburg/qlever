@@ -79,7 +79,7 @@ jobs:
         sudo chmod +x llvm.sh
         sed   's/apt-key del/echo/' llvm.sh -iy
         sudo ./llvm.sh 16
-        sudo apt install clang-16
+        sudo apt install -y clang-16
       if :  matrix.compiler == 'clang' && matrix.compiler-version == 16
 
     - name: Python dependencies

@@ -19,7 +19,7 @@ void IndexMetaData<MapType>::add(AddType addedValue) {
   // only add rmd to _data if it's not already present there
   if constexpr (!isPersistentMetaData) {
     _totalElements += addedValue.getNofElements();
-    _data.set(addedValue._col0Id, addedValue);
+    _data.set(addedValue.col0Id_, addedValue);
   }
 }
 

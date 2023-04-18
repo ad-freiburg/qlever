@@ -61,8 +61,6 @@ class Operation {
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
-  const Engine& getEngine() const { return _executionContext->getEngine(); }
-
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
   // Calls  `asStringImpl` and adds the information about the `LIMIT` clause.
