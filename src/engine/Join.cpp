@@ -428,8 +428,8 @@ void Join::join(const IdTable& a, size_t jc1, const IdTable& b, size_t jc2,
   size_t numUndefB =
       std::ranges::upper_bound(joinColumnR, ValueId::makeUndefined()) -
       joinColumnR.begin();
-  std::pair aUnd{joinColumnL.begin(), joinColumnL.begin() + numUndefA};
-  std::pair bUnd{joinColumnR.begin(), joinColumnR.begin() + numUndefB};
+  std::pair undefRangeA{joinColumnL.begin(), joinColumnL.begin() + numUndefA};
+  std::pair undefRangeB{joinColumnR.begin(), joinColumnR.begin() + numUndefB};
 
   // Determine whether we should use the galloping join optimization.
   if (a.size() / b.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
@@ -448,14 +448,16 @@ void Join::join(const IdTable& a, size_t jc1, const IdTable& b, size_t jc2,
   } else {
     // TODO<joka921> Reinstate the timeout checks.
     auto findSmallerUndefRangeLeft =
-        [aUnd](auto&&...) -> cppcoro::generator<decltype(aUnd.first)> {
-      for (auto it = aUnd.first; it != aUnd.second; ++it) {
+        [undefRangeA](
+            auto&&...) -> cppcoro::generator<decltype(undefRangeA.first)> {
+      for (auto it = undefRangeA.first; it != undefRangeA.second; ++it) {
         co_yield it;
       }
     };
     auto findSmallerUndefRangeRight =
-        [bUnd](auto&&...) -> cppcoro::generator<decltype(bUnd.first)> {
-      for (auto it = bUnd.first; it != bUnd.second; ++it) {
+        [undefRangeB](
+            auto&&...) -> cppcoro::generator<decltype(undefRangeB.first)> {
+      for (auto it = undefRangeB.first; it != undefRangeB.second; ++it) {
         co_yield it;
       }
     };

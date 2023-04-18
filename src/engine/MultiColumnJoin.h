@@ -59,14 +59,14 @@ class MultiColumnJoin : public Operation {
 
   /**
    * @brief Joins left and right using the column defined int joinColumns,
-   *storing the result in result. R should have width resultWidth (or be left
-   *vector that should have resultWidth entries). This method is made public
-   *here for unit testing purposes.
+   *storing the resultMightBeUnsorted in resultMightBeUnsorted. R should have
+   *width resultWidth (or be left vector that should have resultWidth entries).
+   *This method is made public here for unit testing purposes.
    **/
   static void computeMultiColumnJoin(
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
-      IdTable* result);
+      IdTable* resultMightBeUnsorted);
 
  private:
   virtual ResultTable computeResult() override;

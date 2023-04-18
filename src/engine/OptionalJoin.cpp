@@ -163,8 +163,12 @@ size_t OptionalJoin::getCostEstimate() {
                        ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
       bool rightUndef = rightIt->second.mightContainUndef_ ==
                         ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
-      isCheap = isCheap && (!rightUndef);
-      isCheap = isCheap && (!leftUndef || i == _joinColumns.size() - 1);
+      if (rightUndef) {
+        isCheap = false;
+      }
+      if (leftUndef && i != _joinColumns.size() - 1) {
+        isCheap = false;
+      }
     }
     size_t factor = isCheap ? 1 : 100;
     _costEstimate = _left->getCostEstimate() + _right->getCostEstimate() +
@@ -248,8 +252,8 @@ void OptionalJoin::optionalJoin(
     return;
   }
 
-  // Determine if we can apply the `specialOptionalJoin`. This is the case when
-  // only the last column of the left input contains UNDEF values.
+  // `isCheap` is true iff we can apply the `specialOptionalJoin`. This is the
+  // case when only the last column of the left input contains UNDEF values.
   bool isCheap = true;
   for (size_t i = 0; i < joinColumns.size(); ++i) {
     auto [leftCol, rightCol] = joinColumns.at(i);

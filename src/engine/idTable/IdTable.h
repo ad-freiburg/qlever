@@ -115,8 +115,8 @@ class IdTable {
   // The actual storage is a plain 1D vector with the logical columns
   // concatenated.
   using Storage = std::vector<ColumnStorage>;
-  using ViewStorage = std::vector<std::span<const T>>;
-  using Data = std::conditional_t<isView, ViewStorage, Storage>;
+  using ViewSpans = std::vector<std::span<const T>>;
+  using Data = std::conditional_t<isView, ViewSpans, Storage>;
   using Allocator = decltype(std::declval<ColumnStorage&>().get_allocator());
 
   static constexpr bool columnsAreAllocatable =
@@ -505,10 +505,10 @@ class IdTable {
   asStaticView()
   const {
     AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
-    ViewStorage viewStorage(data().begin(), data().end());
+    ViewSpans viewSpans(data().begin(), data().end());
 
     return IdTable<T, NewNumColumns, ColumnStorage, IsView::True>{
-        std::move(viewStorage), numColumns_, numRows_, allocator_};
+        std::move(viewSpans), numColumns_, numRows_, allocator_};
   }
 
   // Obtain a dynamic and const view to this IdTable that contains a subset of
@@ -518,19 +518,19 @@ class IdTable {
       std::span<const size_t> columnIndices) const requires isDynamic {
     AD_CONTRACT_CHECK(std::ranges::all_of(
         columnIndices, [this](size_t idx) { return idx < numColumns(); }));
-    ViewStorage viewStorage;
-    viewStorage.reserve(columnIndices.size());
+    ViewSpans viewSpans;
+    viewSpans.reserve(columnIndices.size());
     for (size_t idx : columnIndices) {
-      viewStorage.push_back(getColumn(idx));
+      viewSpans.push_back(getColumn(idx));
     }
     return IdTable<T, 0, ColumnStorage, IsView::True>{
-        std::move(viewStorage), columnIndices.size(), numRows_, allocator_};
+        std::move(viewSpans), columnIndices.size(), numRows_, allocator_};
   }
 
   // Apply the `permutation` to the columns of the table. The permutation must
   // be a permutation of the values `[0, 1, ..., numColumns - 1 ]`. The column
   // with the old index `permutation[i]` will become the `i`-th column after the
-  // permutation. For example, `permuteColumns({1, 2, 0})` rotates the columsn
+  // permutation. For example, `permuteColumns({1, 2, 0})` rotates the columns
   // of a table with three columns left by one element.
   void permuteColumns(std::span<const size_t> permutation) {
     // First check that the `permutation` is indeed a permutation of the column

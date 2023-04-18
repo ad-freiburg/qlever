@@ -242,12 +242,14 @@ void MultiColumnJoin::computeMultiColumnJoin(
     rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
   };
 
-  auto findUndef = [](const auto& row, auto begin, auto end, bool& outOfOrder) {
-    return ad_utility::findSmallerUndefRanges(row, begin, end, outOfOrder);
+  auto findUndef = [](const auto& row, auto begin, auto end,
+                      bool& resultMightBeUnsorted) {
+    return ad_utility::findSmallerUndefRanges(row, begin, end,
+                                              resultMightBeUnsorted);
   };
 
-  // Determine if there are no UNDEF values in the join columns. In this case we
-  // can use a much cheaper algorithm.
+  // `isCheap` is true iff there are no UNDEF values in the join columns. In
+  // this case we can use a much cheaper algorithm.
   // TODO<joka921> There are many other cases where a cheaper implementation can
   // be chosen, but we leave those for another PR, this is the most common case.
   namespace stdr = std::ranges;
@@ -270,7 +272,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
     }
   }();
   *result = std::move(rowAdder).resultTable();
-  // If there were undefined values in the input, the result might be out of
+  // If there were UNDEF values in the input, the result might be out of
   // order. Sort it, because this operation promises a sorted result in its
   // `resultSortedOn()` member function.
   // TODO<joka921> We only have to do this if the sorting is required (merge the

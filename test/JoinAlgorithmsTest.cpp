@@ -78,10 +78,10 @@ TEST(JoinAlgorithms, findSmallerUndefRangesForRowsWithoutUndef) {
   testSmallerUndefRangesForRowsWithoutUndef<2>({V(3), V(19)}, twoCols,
                                                {0, 5, 7});
 
-  // (3, 19, 2) is compatible to (U, U, U)[0], (U, 19, U)[4], (U, 19, 2)[5], and
-  // (3, 19, U)[9] Note: it is NOT compatible to (3, 19, 2)[10] because we only
-  // look for elements that are smaller than (3, 19, 2) AND contain at least one
-  // undefined value.
+  // (3, 19, 2) is compatible to (U, U, U) [row 0], (U, 19, U) [row 4], (U, 19,
+  // 2)[row 5], and (3, 19, U) [row 9]. Note: it is NOT compatible to (3, 19, 2)
+  // [row 10] because we only look for elements that are smaller than (3, 19, 2)
+  // AND contain at least one UNDEF value.
   std::vector<Arr<3>> threeCols{
       {U, U, U},        {U, U, V(0)},     {U, U, V(1)},        {U, V(1), U},
       {U, V(19), U},    {U, V(19), V(2)}, {U, V(19), V(18)},   {V(0), U, U},
@@ -113,7 +113,7 @@ void testSmallerUndefRangesForRowsWithUndefInLastColumns(
 
 TEST(JoinAlgorithms, findSmallerUndefRangesForRowsWithUndefInLastColumns) {
   std::vector<Arr<1>> oneCol{{U}, {U}, {V(3)}, {V(7)}, {V(8)}};
-  // There can be no smaller row than one that is completely undefined, so the
+  // There can be no smaller row than one that is completely UNDEF, so the
   // result is empty.
   testSmallerUndefRangesForRowsWithUndefInLastColumns<1>({U}, oneCol, 1, {});
 
@@ -131,10 +131,10 @@ TEST(JoinAlgorithms, findSmallerUndefRangesForRowsWithUndefInLastColumns) {
   testSmallerUndefRangesForRowsWithUndefInLastColumns<2>({U, U}, twoCols, 2,
                                                          {});
 
-  // (3, 19, U) is compatible to (U, U, X)[0-2],  (U, 19, X)[4-6],  and, (3, U,
-  // X)[8-9] Note: it is NOT compatible to (3, 19, U) because we only look for
-  // elements that are smaller than (3, 19, U) AND contain at least one
-  // undefined value.
+  // (3, 19, U) is compatible to (U, U, X) [rows 0-2],  (U, 19, X) [rows 4-6],
+  // and, (3, U, X) [rows 8-9]. Note: it is NOT compatible to (3, 19, U) because
+  // we only look for elements that are smaller than (3, 19, U) AND contain at
+  // least one UNDEF value.
   std::vector<Arr<3>> threeCols{
       {U, U, U},           {U, U, V(0)},     {U, U, V(1)},
       {U, V(1), U},        {U, V(19), U},    {U, V(19), V(2)},
@@ -170,9 +170,9 @@ TEST(JoinAlgorithms, findSmallerUndefRangesArbitrary) {
   testSmallerUndefRangesForArbitraryRows<2>({U, U}, twoCols, {});
 
   // (3, 19, U) is compatible to (U, U, X)[0-2],  (U, 19, X)[4-6],  and, (3, U,
-  // X)[8-9] Note: it is NOT compatible to (3, 19, U) because we only look for
+  // X)[8-9]. Note: it is NOT compatible to (3, 19, U) because we only look for
   // elements that are smaller than (3, 19, U) AND contain at least one
-  // undefined value.
+  // UNDEF value.
   std::vector<Arr<3>> threeCols{
       {U, U, U},           {U, U, V(0)},     {U, U, V(1)},
       {U, V(1), U},        {U, V(19), U},    {U, V(19), V(2)},
@@ -191,7 +191,7 @@ TEST(JoinAlgorithms, findSmallerUndefRangesArbitrary) {
                                             {0, 2, 3});
 
   // TODO<joka921> Can we implement an optimized algorithm when the last
-  // column(s) are undefined and there still are other undefined values? (U, 19,
+  // column(s) are UNDEF and there still are other UNDEF values? (U, 19,
   // U) is compatible to and greater than (U, U, X)
   testSmallerUndefRangesForArbitraryRows<3>({U, V(19), U}, threeCols,
                                             {
@@ -200,23 +200,3 @@ TEST(JoinAlgorithms, findSmallerUndefRangesArbitrary) {
                                                 2,
                                             });
 }
-
-/*
-TEST(JoinAlgorithms, AddCombinedRowToIdTable) {
-  AddCombinedRowToIdTable adder{5};
-  IdTable table(ad_utility::testing::makeAllocator());
-  table.setNumColumns(5);
-  adder(std::array{V(1), U, U}, std::array{V(1), V(3), V(28), U}, 2, &table);
-  adder(std::array{U, V(3), V(8)}, std::array{V(7), U, V(28), V(3)}, 2, &table);
-  adder(std::array{U, V(3), V(8)}, std::array{U, V(3), V(28), U}, 2, &table);
-  adder(std::array{V(12), V(3), V(8)}, std::array{V(12), V(3), U, U}, 2,
-        &table);
-
-  EXPECT_EQ(table, makeIdTableFromIdVector({{V(1), V(3), U, V(28), U},
-                                            {V(7), V(3), V(8), V(28), V(3)},
-                                            {U, V(3), V(8), V(28), U},
-                                            {V(12), V(3), V(8), U, U}}));
-  EXPECT_THAT(adder.numUndefinedPerColumn(),
-              ::testing::ElementsAre(1, 0, 1, 1, 3));
-}
- */
