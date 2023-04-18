@@ -89,12 +89,19 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
     ASSERT_TRUE(config.getValueByNestedKeys<bool>("boolTrue").value());
     ASSERT_FALSE(config.getValueByNestedKeys<bool>("boolFalse").value());
 
+    // Parse strings.
+    function(R"(myName = "Bernd";)");
+    ASSERT_EQ("Bernd",
+      config.getValueByNestedKeys<std::string>("myName").value());
+    
     // Parse a list of mixed literals.
-    function(R"(list = [42, -42, true, false];)");
+    function(R"(list = [42, -42, true, false, "Johannes"];)");
     ASSERT_EQ(42, config.getValueByNestedKeys<int>("list", 0).value());
     ASSERT_EQ(-42, config.getValueByNestedKeys<int>("list", 1).value());
     ASSERT_TRUE(config.getValueByNestedKeys<bool>("list", 2).value());
     ASSERT_FALSE(config.getValueByNestedKeys<bool>("list", 3).value());
+    ASSERT_EQ("Johannes",
+      config.getValueByNestedKeys<std::string>("list", 4).value());
   };
 
   // Do the test for set.

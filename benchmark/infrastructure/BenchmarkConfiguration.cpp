@@ -41,8 +41,8 @@ nlohmann::json BenchmarkConfiguration::parseShortHand(
   // I use regular expressions to parse the short hand. In order to easier
   // reuse parts of my patterns, I defined some contants here.
 
-  // Boolean literal, or integer literal.
-  const std::string valueLiterals{R"--(true|false|-?\d+)--"};
+  // Boolean literal, integer literal, or string literal.
+  const std::string valueLiterals{R"--(true|false|-?\d+|".*")--"};
   // How a list of `valueLiterals` looks like.
   const std::string listOfValueLiterals{R"--(\[(\s*()--" + valueLiterals +
     R"--()\s*,)*\s*()--" + valueLiterals + R"--()\s*\])--"};

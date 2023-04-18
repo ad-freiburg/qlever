@@ -17,7 +17,6 @@
 #include "util/HashMap.h"
 #include "util/Exception.h"
 #include "util/SourceLocation.h"
-#include "../benchmark/util/HashMapWithInsertionOrder.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "util/CopyableUniquePtr.h"
