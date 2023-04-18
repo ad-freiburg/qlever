@@ -49,12 +49,12 @@ class BenchmarkMetadataGetter{
   /*
   @brief Get a reference to the held metadata object.
   */
-  BenchmarkMetadata& getMetadata();
+  BenchmarkMetadata& metadata();
 
   /*
   @brief Get a reference to the held metadata object.
   */
-  const BenchmarkMetadata& getMetadata() const;
+  const BenchmarkMetadata& metadata() const;
 };
 
 // Describes the measured execution time of a function.
