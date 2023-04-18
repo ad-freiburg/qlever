@@ -60,7 +60,7 @@ class BMSingleMeasurements: public BenchmarkInterface{
           for (size_t i = 0; i < 10'000'000'000; i++) {
             toExponentiate = exponentiate(toExponentiate);
           }
-          // TODO Too much optimization without the line. Alternative can be found
+          // Too much optimization without the line. Alternative can be found
           // under the `DoNotOptimize(...)` of google benchmark.
           std::cout << toExponentiate;
         });
