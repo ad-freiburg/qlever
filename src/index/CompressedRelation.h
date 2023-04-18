@@ -146,7 +146,6 @@ AD_SERIALIZE_FUNCTION(CompressedRelationMetadata) {
 class CompressedRelationWriter {
  private:
   ad_utility::File outfile_;
-  std::vector<CompressedRelationMetadata> metaDataBuffer_;
   std::vector<CompressedBlockMetadata> blockBuffer_;
   CompressedBlockMetadata currentBlockData_;
   SmallRelationsBuffer buffer_;
@@ -172,25 +171,18 @@ class CompressedRelationWriter {
    * can also calculate the average multiplicity and whether the relation is
    * functional, so we don't need to store that
    * explicitly).
+   *
+   * \return The Metadata of the relation that was added.
    */
-  void addRelation(Id col0Id, const BufferedIdTable& col1And2Ids,
-                   size_t numDistinctCol1);
+  CompressedRelationMetadata addRelation(Id col0Id,
+                                         const BufferedIdTable& col1And2Ids,
+                                         size_t numDistinctCol1);
 
   /// Finish writing all relations which have previously been added, but might
   /// still be in some internal buffer.
   void finish() {
     writeBufferedRelationsToSingleBlock();
     outfile_.close();
-  }
-
-  /// Get the complete CompressedRelationMetaData created by the calls to
-  /// addRelation. This meta data is then deleted from the
-  /// CompressedRelationWriter. The typical workflow is: add all relations,
-  /// then call `finish()` and then call this method.
-  auto getFinishedMetaData() {
-    auto result = std::move(metaDataBuffer_);
-    metaDataBuffer_.clear();
-    return result;
   }
 
   /// Get all the CompressedBlockMetaData that were created by the calls to

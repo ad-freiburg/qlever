@@ -525,14 +525,10 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
     (..., perTripleCallbacks(triple));
     ++totalNumTriples;
     if (triple[c0] != currentRel) {
-      writer1.addRelation(currentRel.value(), buffer, distinctCol1);
-      writeSwitchedRel(&writer2, currentRel.value(), &buffer);
-      for (auto& md : writer1.getFinishedMetaData()) {
-        metaData1.add(md);
-      }
-      for (auto& md : writer2.getFinishedMetaData()) {
-        metaData2.add(md);
-      }
+      auto md1 = writer1.addRelation(currentRel.value(), buffer, distinctCol1);
+      auto md2 = writeSwitchedRel(&writer2, currentRel.value(), &buffer);
+      metaData1.add(md1);
+      metaData2.add(md2);
       buffer.clear();
       distinctCol1 = 1;
       currentRel = triple[c0];
@@ -543,18 +539,14 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
     lastLhs = triple[c1];
   }
   if (from < totalNumTriples) {
-    writer1.addRelation(currentRel.value(), buffer, distinctCol1);
-    writeSwitchedRel(&writer2, currentRel.value(), &buffer);
+    auto md1 = writer1.addRelation(currentRel.value(), buffer, distinctCol1);
+    auto md2 = writeSwitchedRel(&writer2, currentRel.value(), &buffer);
+    metaData1.add(md1);
+    metaData2.add(md2);
   }
 
   writer1.finish();
   writer2.finish();
-  for (auto& md : writer1.getFinishedMetaData()) {
-    metaData1.add(md);
-  }
-  for (auto& md : writer2.getFinishedMetaData()) {
-    metaData2.add(md);
-  }
   metaData1.blockData() = writer1.getFinishedBlocks();
   metaData2.blockData() = writer2.getFinishedBlocks();
 
@@ -562,8 +554,8 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
 }
 
 // __________________________________________________________________________
-void IndexImpl::writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
-                                 BufferedIdTable* bufPtr) {
+CompressedRelationMetadata IndexImpl::writeSwitchedRel(
+    CompressedRelationWriter* out, Id currentRel, BufferedIdTable* bufPtr) {
   // Sort according to the "switched" relation.
   // TODO<joka921> The swapping is rather inefficient, as we have to iterate
   // over the whole file. Maybe the `CompressedRelationWriter` should take
@@ -584,7 +576,7 @@ void IndexImpl::writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
     distinctC1 += el != lastLhs;
     lastLhs = el;
   }
-  out->addRelation(currentRel, buffer, distinctC1);
+  return out->addRelation(currentRel, buffer, distinctC1);
 }
 
 // ________________________________________________________________________

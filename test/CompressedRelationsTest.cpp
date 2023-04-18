@@ -62,6 +62,7 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
 
   // First create the on-disk permutation.
   CompressedRelationWriter writer{ad_utility::File{filename, "w"}, blocksize};
+  vector<CompressedRelationMetadata> metaData;
   {
     size_t i = 0;
     for (const auto& input : inputs) {
@@ -78,7 +79,8 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
       }
       // The last argument is the number of distinct elements in `col1`. We
       // store a dummy value here that we can check later.
-      writer.addRelation(V(input.col0_), buffer, i + 1);
+      auto md = writer.addRelation(V(input.col0_), buffer, i + 1);
+      metaData.push_back(md);
       buffer.clear();
       ASSERT_THROW(writer.addRelation(V(input.col0_), buffer, i + 1),
                    ad_utility::Exception);
@@ -86,7 +88,6 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
     }
   }
   writer.finish();
-  auto metaData = writer.getFinishedMetaData();
   auto blocks = writer.getFinishedBlocks();
   // Test the serialization of the blocks and the metaData.
   ad_utility::serialization::ByteBufferWriteSerializer w;
