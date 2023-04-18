@@ -24,6 +24,9 @@ class BenchmarkMetadata{
      * @tparam T Can be anything, as long as the type is supported by
      *  `nlohmann::json`. If it isn't, you can look up, how to add
      *  types.
+     *
+     * @param key The name of the metadata entry.
+     * @param value The content of the metadata entry.
      */
     template<typename T>
     void addKeyValuePair(const std::string& key, const T& value){

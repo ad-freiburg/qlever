@@ -94,8 +94,6 @@ You can find instances of `BenchmarkMetadata` for your usage at 4 locations:
 - At `metadata_` of created `ResultTable` objects, in order to give metadata information about the table.
 - Writing a `getMetadata` function, like in the `BenchmarkInterface`, in order to give more general metadata information about your benchmark class. This is mostly, so that you don't have to constantly repeat metadata information, that are true for all the things you are measuring, in other places. For example, this would be a good place to give the name of an algorithm, if your whole benchmark class is about measuring the runtimes of one. Or you could give the time, at which those benchmark measurements were taken.
 
-Currently, `BenchmarkMetadata` is a rather simple wrapper for a `nlohmann::json` object. If `nlohmann::json` can convert a type to JSON, or if you wrote a custom converter for the type, you can add a key-value-pair, with key being of the type, to a `BenchmarkMetadata` object using `BenchmarkMetadata::addKeyValuePair`.
-
 ## Runtime configuration
 Passing values at runtime to your benchmark classes can be done in two ways:
 1. Writing a JSON file and passing the file location via CLI.
