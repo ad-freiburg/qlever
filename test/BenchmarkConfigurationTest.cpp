@@ -7,6 +7,16 @@
 
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 
+TEST(BenchmarkConfigurationTest, getValueByNestedKeysException){
+  // Create a non empty benchmark configuration, then cause the exception
+  // , by trying to interpret a value as something, it isn't.
+  ad_benchmark::BenchmarkConfiguration config{};
+  config.setJsonString(R"--({"Level 1":{"Level 2":{"Level 3": 42}}})--");
+
+  ASSERT_ANY_THROW(
+    config.getValueByNestedKeys<bool>("Level 1","Level 2", "Level 3"));
+}
+
 TEST(BenchmarkConfigurationTest, ParseJsonTest) {
   ad_benchmark::BenchmarkConfiguration config{};
 

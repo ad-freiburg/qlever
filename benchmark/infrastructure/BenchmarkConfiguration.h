@@ -4,9 +4,12 @@
 
 #pragma once
 
+#include <absl/strings/str_cat.h>
 #include <optional>
 
+#include "util/Exception.h"
 #include "util/json.h"
+#include <sstream>
 #include <type_traits>
 
 namespace ad_benchmark{
@@ -91,7 +94,17 @@ public:
   };
 
   if ((checkAndAssign(key) && ... && checkAndAssign(keys))){
-   return {currentJsonObject->get<ReturnType>()};
+   try {
+    return {currentJsonObject->get<ReturnType>()};
+   } catch(...){
+    // Trying to interpret the value must have failed.
+    std::ostringstream errorMessage;
+    errorMessage << absl::StrCat("Interpretation error: While there was a",
+      " value found at [", key , "]");
+    ((errorMessage << "[" << keys << "]") , ...);
+    errorMessage << ", it couldn't be interpreted as the wanted type";
+    throw ad_utility::Exception(errorMessage.str());
+   }
   }else{
    return std::nullopt;
   }
