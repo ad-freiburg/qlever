@@ -73,7 +73,7 @@ jobs:
       working-directory: ${{github.workspace}}/build/test
       run:  >
         llvm-profdata-15 merge -sparse *.profraw -o default.profdata;
-        xargs -a tests.txt llvm-cov-15 export --dump --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/third_party/" --ignore-filename-regex="/generated/"  --ignore-filename-regex="/nlohmann/" --ignore-filename-regex="/ctre/"  --ignore-filename-regex="/test/" > ./coverage.lcov
+        xargs -a tests.txt llvm-cov-15 export --dump --format=lcov --instr-profile ./default.profdata --ignore-filename-regex="/third_party/" --ignore-filename-regex="/generated/"  --ignore-filename-regex="/nlohmann/" --ignore-filename-regex="/ctre/"  --ignore-filename-regex="/test/" --ignore-filename-regex="/benchmark/" > ./coverage.lcov
 
 # Only upload the coverage directly if this is not a pull request. In this
 # case we are on the master branch and have access to the Codecov token.
