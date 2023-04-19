@@ -1237,11 +1237,8 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
   // symmetric.
   AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL &&
                     b.type == SubtreePlan::OPTIONAL);
-
-  auto jcs = getJoinColumns(a, b);
-  auto [qetA, qetB] =
-      QueryExecutionTree::createSortedTrees(a._qet, b._qet, jcs);
-  return makeSubtreePlan<OptionalJoin>(_qec, qetA, qetB, jcs);
+  return makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet,
+                                       getJoinColumns(a, b));
 }
 
 // _____________________________________________________________________________

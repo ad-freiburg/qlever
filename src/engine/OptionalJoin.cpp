@@ -20,7 +20,40 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
       _left{std::move(t1)},
       _right{std::move(t2)},
       _joinColumns(jcs) {
-  AD_CONTRACT_CHECK(jcs.size() > 0);
+  AD_CONTRACT_CHECK(!jcs.empty());
+
+  // If `_right` contains no UNDEF in the join columns and at most one column in
+  // `_left` contains UNDEF values, and that column is the last join column,
+  // then a cheaper implementation can be used. The following code determines
+  // whether only one join column in `_left` can contain UNDEF values and makes
+  // this join column the last one.
+  bool rightHasUndefColumn = false;
+  size_t numUndefColumnsLeft = 0;
+  ColumnIndex undefColumnLeftIndex = 0;
+  std::vector<bool> leftUndefJoinCols;
+  for (size_t i = 0; i < _joinColumns.size(); ++i) {
+    auto [leftCol, rightCol] = _joinColumns.at(i);
+    auto leftIt = _left->getVariableAndInfoByColumnIndex(leftCol);
+    auto rightIt = _right->getVariableAndInfoByColumnIndex(rightCol);
+    if (leftIt.second.mightContainUndef_ ==
+        ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined) {
+      ++numUndefColumnsLeft;
+      undefColumnLeftIndex = i;
+    }
+    if (rightIt.second.mightContainUndef_ ==
+        ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined) {
+      rightHasUndefColumn = true;
+    }
+  }
+  if (!rightHasUndefColumn && numUndefColumnsLeft == 1) {
+    std::swap(_joinColumns.at(undefColumnLeftIndex), _joinColumns.back());
+  }
+
+  // The inputs must be sorted by the join columns.
+  auto [sortedLeft, sortedRight] = QueryExecutionTree::createSortedTrees(
+      std::move(_left), std::move(_right), _joinColumns);
+  _left = std::move(sortedLeft);
+  _right = std::move(sortedRight);
 }
 
 // _____________________________________________________________________________
@@ -49,15 +82,12 @@ string OptionalJoin::asStringImpl(size_t indent) const {
 
 // _____________________________________________________________________________
 string OptionalJoin::getDescriptor() const {
-  std::string joinVars = "";
-  for (auto p : _left->getVariableColumns()) {
-    for (auto jc : _joinColumns) {
-      // If the left join column matches the index of a variable in the left
-      // subresult.
-      if (jc[0] == p.second.columnIndex_) {
-        joinVars += p.first.name() + " ";
-      }
-    }
+  std::string joinVars;
+  for (auto [leftCol, rightCol] : _joinColumns) {
+    (void)rightCol;
+    const std::string& varName =
+        _left->getVariableAndInfoByColumnIndex(leftCol).first.name();
+    joinVars += varName + " ";
   }
   return "OptionalJoin on " + joinVars;
 }
@@ -143,42 +173,8 @@ size_t OptionalJoin::getCostEstimate() {
     // Make the join 7% more expensive per join column
     costEstimate *= (1 + (_joinColumns.size() - 1) * 0.07);
 
-    const auto& leftVars = _left->getVariableColumns();
-    const auto& rightVars = _right->getVariableColumns();
-
-    // `isCheap` is true iff all join columns contain no UNDEF values, except
-    // for the last join column in the right input. In this case we can use an
-    // optimized implementation that is much cheaper. This fact has to be
-    // reflected in the cost estimate s.t. the query planner can prefer an order
-    // of the join columns, where the only undefined values are in the last join
-    // column.
-    bool isCheap = true;
-    for (size_t i = 0; i < _joinColumns.size(); ++i) {
-      auto [leftCol, rightCol] = _joinColumns.at(i);
-      auto leftIt =
-          std::ranges::find_if(leftVars, [leftCol = leftCol](const auto& el) {
-            return el.second.columnIndex_ == leftCol;
-          });
-      auto rightIt = std::ranges::find_if(
-          rightVars, [rightCol = rightCol](const auto& el) {
-            return el.second.columnIndex_ == rightCol;
-          });
-      AD_CORRECTNESS_CHECK(leftIt != leftVars.end() &&
-                           rightIt != rightVars.end());
-      bool leftUndef = leftIt->second.mightContainUndef_ ==
-                       ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
-      bool rightUndef = rightIt->second.mightContainUndef_ ==
-                        ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
-      if (rightUndef) {
-        isCheap = false;
-      }
-      if (leftUndef && i != _joinColumns.size() - 1) {
-        isCheap = false;
-      }
-    }
-    size_t factor = isCheap ? 1 : 100;
-    _costEstimate = _left->getCostEstimate() + _right->getCostEstimate() +
-                    factor * costEstimate;
+    _costEstimate =
+        _left->getCostEstimate() + _right->getCostEstimate() + costEstimate;
   }
   return _costEstimate.value();
 }
