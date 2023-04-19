@@ -66,23 +66,36 @@ static void createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 // Benchmarks for unsorted and sorted tables, with and without overlapping values in
 // IdTables. Done with normal join and hash join.
 class BM_UnsortedAndSortedIdTable: public BenchmarkInterface {
+
+  // The amount of rows and columns of the tables.
+  size_t numberRows;
+  size_t numberColumns;
   public:
+
+  /*
+  Sets the amount of rows and columns based on the configuration options
+  `numberRows` and `numberColumns`.
+  */
+  void parseConfiguration(const BenchmarkConfiguration& config) {
+    numberRows =
+      config.getValueByNestedKeys<size_t>("numberRows").value_or(100);
+
+    // The maximum number of columns, we should ever have, is 20.
+    numberColumns = std::min(static_cast<size_t>(20),
+      config.getValueByNestedKeys<size_t>("numberColumns").value_or(10));
+  }
 
   BenchmarkResults runAllBenchmarks(){
     BenchmarkResults results{};
-    
-    // For easier changing of the IdTables size.
-    const size_t NUMBER_ROWS = 10000;
-    const size_t NUMBER_COLUMNS = 20; 
 
     auto hashJoinLambda = makeHashJoinLambda();
     auto joinLambda = makeJoinLambda();
 
     // Tables, that have no overlapping values in their join columns.
     IdTableAndJoinColumn a{
-      createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 0, 10), 0};
+      createRandomlyFilledIdTable(numberRows, numberColumns, 0, 0, 10), 0};
     IdTableAndJoinColumn b{
-      createRandomlyFilledIdTable(NUMBER_ROWS, NUMBER_COLUMNS, 0, 20, 30), 0};
+      createRandomlyFilledIdTable(numberRows, numberColumns, 0, 20, 30), 0};
 
     // Lambda wrapper for the functions, that I measure.
   
@@ -458,16 +471,39 @@ static std::vector<size_t> createExponentVectorUntilSize(const size_t base,
   return exponentVector;
 }
 
+/*
+Provides the member variables, that most of the benchmark classes here
+set using the `BenchmarkConfiguration` and delivers a default configuration
+parser, that sets them.
+*/
+class GeneralConfigurationOption{
+  protected:
+  // The maximum amount of rows, that the smaller table should have.
+  size_t maxSmallerTableRows;
+  // The maximal row ratio between the smaller and the bigger table.
+  size_t maxRatioRows;
+
+  public:
+  void parseConfiguration(const BenchmarkConfiguration& config) {
+    maxSmallerTableRows =
+      config.getValueByNestedKeys<size_t>("maxSmallerTableRows").value_or(256);
+    maxRatioRows =
+      config.getValueByNestedKeys<size_t>("maxRatioRows").value_or(256);
+  }
+};
+
 // Create benchmark tables, where the smaller table stays at 2000 rows and
 // the bigger tables keeps getting bigger. Amount of columns stays the same.
-class BM_OnlyBiggerTableSizeChanges: public BenchmarkInterface{
+class BM_OnlyBiggerTableSizeChanges: public BenchmarkInterface,
+  public GeneralConfigurationOption{
   public:
+
   BenchmarkResults runAllBenchmarks(){
     BenchmarkResults results{};
 
     // Easier reading.
     const std::vector<size_t> ratioRows{
-      createExponentVectorUntilSize(2, 100'000)};
+      createExponentVectorUntilSize(2, maxRatioRows)};
     constexpr size_t smallerTableAmountRows{2000};
     constexpr size_t smallerTableAmountColumns{20};
     constexpr size_t biggerTableAmountColumns{20};
@@ -487,14 +523,16 @@ class BM_OnlyBiggerTableSizeChanges: public BenchmarkInterface{
 
 // Create benchmark tables, where the smaller table grows and the ratio
 // between tables stays the same. As does the amount of columns.
-class BM_OnlySmallerTableSizeChanges: public BenchmarkInterface{
+class BM_OnlySmallerTableSizeChanges: public BenchmarkInterface,
+  public GeneralConfigurationOption{
   public:
+
   BenchmarkResults runAllBenchmarks(){
     BenchmarkResults results{};
 
     // Easier reading.
     const std::vector<size_t> smallerTableAmountRows{
-      createExponentVectorUntilSize(2, 200'000)};
+      createExponentVectorUntilSize(2, maxSmallerTableRows)};
     constexpr size_t smallerTableAmountColumns{3};
     constexpr size_t biggerTableAmountColumns{3};
     constexpr float overlapChance{42.0};
@@ -502,7 +540,7 @@ class BM_OnlySmallerTableSizeChanges: public BenchmarkInterface{
     for (const bool smallerTableSorted : {false, true}){
       for (const bool biggerTableSorted : {false, true}) {
         // We also make multiple tables for different row ratios.
-        for (const size_t ratioRows: createExponentVectorUntilSize(2, 1'000)){
+        for (const size_t ratioRows: createExponentVectorUntilSize(2, maxRatioRows)){
           makeBenchmarkTable(&results, overlapChance, smallerTableSorted,
               biggerTableSorted, ratioRows, smallerTableAmountRows,
               smallerTableAmountColumns, biggerTableAmountColumns);
@@ -516,28 +554,30 @@ class BM_OnlySmallerTableSizeChanges: public BenchmarkInterface{
 
 // Create benchmark tables, where the tables are the same size and
 // both just get more rows.
-class BM_SameSizeRowGrowth: public BenchmarkInterface{
+class BM_SameSizeRowGrowth: public BenchmarkInterface,
+  public GeneralConfigurationOption{
   public:
+
   BenchmarkResults runAllBenchmarks(){
     BenchmarkResults results{};
 
   // Easier reading.
   const std::vector<size_t> smallerTableAmountRows{
-    createExponentVectorUntilSize(2, 200'000'000)};
-  constexpr size_t smallerTableAmountColumns{3};
-  constexpr size_t biggerTableAmountColumns{3};
-  constexpr size_t ratioRows{1};
-  constexpr float overlapChance{42.0};
-  // Making a benchmark table for all combination of IdTables being sorted.
-  for (const bool smallerTableSorted : {false, true}){
-    for (const bool biggerTableSorted : {false, true}) {
-      makeBenchmarkTable(&results, overlapChance, smallerTableSorted,
-          biggerTableSorted, ratioRows, smallerTableAmountRows,
-          smallerTableAmountColumns, biggerTableAmountColumns);
+    createExponentVectorUntilSize(2, maxSmallerTableRows)};
+    constexpr size_t smallerTableAmountColumns{3};
+    constexpr size_t biggerTableAmountColumns{3};
+    constexpr size_t ratioRows{1};
+    constexpr float overlapChance{42.0};
+    // Making a benchmark table for all combination of IdTables being sorted.
+    for (const bool smallerTableSorted : {false, true}){
+      for (const bool biggerTableSorted : {false, true}) {
+        makeBenchmarkTable(&results, overlapChance, smallerTableSorted,
+            biggerTableSorted, ratioRows, smallerTableAmountRows,
+            smallerTableAmountColumns, biggerTableAmountColumns);
+      }
     }
-  }
 
-  return results;
+    return results;
   }
 };
 
