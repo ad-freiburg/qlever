@@ -177,7 +177,7 @@ class IndexImpl {
  public:
   IndexImpl();
 
-  /// Forbid copying
+  // Forbid copying.
   IndexImpl& operator=(const IndexImpl&) = delete;
   IndexImpl(const IndexImpl&) = delete;
   // Moving is currently not supported, because several of the members use
