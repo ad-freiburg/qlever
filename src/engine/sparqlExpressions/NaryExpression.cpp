@@ -59,9 +59,9 @@ INSTANTIATE_NARY(2, FV<decltype(orLambda), EffectiveBooleanValueGetter>,
 INSTANTIATE_NARY(2, FV<decltype(andLambda), EffectiveBooleanValueGetter>,
                  SET<SetOfIntervals::Intersection>);
 
-INSTANTIATE_NARY(1, FV<decltype(unaryNegate), NumericValueGetter>, SET<SetOfIntervals::Complement>);
+INSTANTIATE_NARY(1, FV<decltype(unaryNegate), EffectiveBooleanValueGetter>);
 
-INSTANTIATE_NARY(1, FV<decltype(unaryMinus), NumericValueGetter>);
+INSTANTIATE_NARY(1, FV<decltype(unaryMinus), NumericValueGetter>, SET<SetOfIntervals::Complement>);
 
 INSTANTIATE_NARY(2, FV<decltype(multiply), NumericValueGetter>);
 
