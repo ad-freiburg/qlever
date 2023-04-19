@@ -6,12 +6,13 @@
 
 #pragma once
 
-#include <engine/Operation.h>
-#include <engine/QueryExecutionTree.h>
-#include <util/HashMap.h>
-#include <util/HashSet.h>
-
 #include <list>
+
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
+#include "util/HashMap.h"
+#include "util/HashSet.h"
+#include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::list;
 
@@ -84,7 +85,7 @@ class Join : public Operation {
   }
 
   /**
-   * @brief Joins IdTables dynA and dynB on join column jc2, returning
+   * @brief Joins IdTables a and b on join column jc2, returning
    * the result in dynRes. Creates a cross product for matching rows.
    *
    * This should be a switch, which shoud decide which algorithm to use for
@@ -98,16 +99,8 @@ class Join : public Operation {
    * TODO Move the merge join into it's own function and make this function
    * a proper switch.
    **/
-  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-  void join(const IdTable& dynA, size_t jc1, const IdTable& dynB, size_t jc2,
-            IdTable* dynRes);
-
-  class RightLargerTag {};
-  class LeftLargerTag {};
-  template <typename TagType, int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-  static void doGallopInnerJoin(TagType, const IdTableView<L_WIDTH>& l1,
-                                size_t jc1, const IdTableView<R_WIDTH>& l2,
-                                size_t jc2, IdTableStatic<OUT_WIDTH>* result);
+  void join(const IdTable& a, size_t jc1, const IdTable& b, size_t jc2,
+            IdTable* result) const;
 
   /**
    * @brief Joins IdTables dynA and dynB on join column jc2, returning
@@ -161,7 +154,7 @@ class Join : public Operation {
    * @param[in] The left row of the join.
    * @param[in] The right row of the join.
    * @param[in] The numerical position of the join column of row b.
-   * @param[in] The table, in which the new combined row should be insterted.
+   * @param[in] The table, in which the new combined row should be inserted.
    * Must be static.
    */
   template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>

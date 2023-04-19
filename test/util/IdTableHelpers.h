@@ -33,57 +33,31 @@ struct IdTableAndJoinColumn {
 
 // For easier reading. We repeat that type combination so often, that this
 // will make things a lot easier in terms of reading and writing.
-using VectorTable = std::vector<std::vector<int64_t>>;
+using IntOrId = std::variant<int64_t, Id>;
+using VectorTable = std::vector<std::vector<IntOrId>>;
 
 /*
- * Return an 'IdTable' with the given 'tableContent' by applying the
- * `transformation` to each of them. All rows of `tableContent` must have the
+ * Return an 'IdTable' with the given `content` by applying the
+ * `transformation` to each of them. All rows of `content` must have the
  * same length.
  */
 template <typename Transformation = decltype(ad_utility::testing::VocabId)>
-IdTable makeIdTableFromVector(const VectorTable& tableContent,
-                              Transformation transformation = {}) {
-  if (tableContent.empty()) {
-    return IdTable{ad_utility::testing::makeAllocator()};
-  }
-  IdTable result{tableContent[0].size(), ad_utility::testing::makeAllocator()};
-
-  // Copying the content into the table.
-  for (const auto& row : tableContent) {
-    AD_CONTRACT_CHECK(row.size() ==
-                      result.numColumns());  // All rows of an IdTable must
-                                             // have the same length.
-    const size_t backIndex{result.size()};
-
-    // TODO<clang 16> This should be
-    // std::ranges::copy(std::views::transform(row, I), result.back().begin());
-    // as soon as our compilers supports it.
+inline IdTable makeIdTableFromVector(const VectorTable& content,
+                                     Transformation transformation = {}) {
+  size_t numCols = content.empty() ? 0UL : content.at(0).size();
+  IdTable result{numCols, ad_utility::testing::makeAllocator()};
+  result.reserve(content.size());
+  for (const auto& row : content) {
+    AD_CONTRACT_CHECK(row.size() == result.numColumns());
     result.emplace_back();
-
-    for (size_t c = 0; c < row.size(); c++) {
-      result(backIndex, c) = transformation(row[c]);
+    for (size_t i = 0; i < result.numColumns(); ++i) {
+      if (std::holds_alternative<Id>(row.at(i))) {
+        result.back()[i] = std::get<Id>(row.at(i));
+      } else {
+        result.back()[i] = transformation(std::get<int64_t>(row.at(i)));
+      }
     }
   }
-
-  return result;
-}
-
-inline IdTable makeIdTableFromIdVector(
-    const std::vector<std::vector<Id>>& tableContent) {
-  if (tableContent.empty()) {
-    return IdTable{ad_utility::testing::makeAllocator()};
-  }
-  IdTable result{tableContent[0].size(), ad_utility::testing::makeAllocator()};
-
-  // Copy the content into the table.
-  for (const auto& row : tableContent) {
-    // All rows of an IdTable must have the same length.
-    AD_CONTRACT_CHECK(row.size() == result.numColumns());
-    // TODO<joka921> Can this be a single call to `push_back`
-    result.emplace_back();
-    std::ranges::copy(row, result.back().begin());
-  }
-
   return result;
 }
 

@@ -3,36 +3,57 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //         Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 
-#include "OptionalJoin.h"
+#include "engine/OptionalJoin.h"
 
-#include "CallFixedSize.h"
+#include "engine/AddCombinedRowToTable.h"
+#include "engine/CallFixedSize.h"
+#include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::string;
 
 // _____________________________________________________________________________
 OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
                            std::shared_ptr<QueryExecutionTree> t1,
-                           bool t1Optional,
                            std::shared_ptr<QueryExecutionTree> t2,
-                           bool t2Optional,
                            const std::vector<std::array<ColumnIndex, 2>>& jcs)
-    : Operation(qec), _joinColumns(jcs), _multiplicitiesComputed(false) {
-  // Make sure subtrees are ordered so that identical queries can be identified.
-  AD_CONTRACT_CHECK(jcs.size() > 0);
-  if (t1->asString() < t2->asString()) {
-    _left = t1;
-    _leftOptional = t1Optional;
-    _right = t2;
-    _rightOptional = t2Optional;
-  } else {
-    _left = t2;
-    _leftOptional = t2Optional;
-    _right = t1;
-    _rightOptional = t1Optional;
-    for (unsigned int i = 0; i < _joinColumns.size(); i++) {
-      std::swap(_joinColumns[i][0], _joinColumns[i][1]);
+    : Operation(qec),
+      _left{std::move(t1)},
+      _right{std::move(t2)},
+      _joinColumns(jcs) {
+  AD_CONTRACT_CHECK(!jcs.empty());
+
+  // If `_right` contains no UNDEF in the join columns and at most one column in
+  // `_left` contains UNDEF values, and that column is the last join column,
+  // then a cheaper implementation can be used. The following code determines
+  // whether only one join column in `_left` can contain UNDEF values and makes
+  // this join column the last one.
+  bool rightHasUndefColumn = false;
+  size_t numUndefColumnsLeft = 0;
+  ColumnIndex undefColumnLeftIndex = 0;
+  std::vector<bool> leftUndefJoinCols;
+  for (size_t i = 0; i < _joinColumns.size(); ++i) {
+    auto [leftCol, rightCol] = _joinColumns.at(i);
+    auto leftIt = _left->getVariableAndInfoByColumnIndex(leftCol);
+    auto rightIt = _right->getVariableAndInfoByColumnIndex(rightCol);
+    if (leftIt.second.mightContainUndef_ ==
+        ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined) {
+      ++numUndefColumnsLeft;
+      undefColumnLeftIndex = i;
+    }
+    if (rightIt.second.mightContainUndef_ ==
+        ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined) {
+      rightHasUndefColumn = true;
     }
   }
+  if (!rightHasUndefColumn && numUndefColumnsLeft == 1) {
+    std::swap(_joinColumns.at(undefColumnLeftIndex), _joinColumns.back());
+  }
+
+  // The inputs must be sorted by the join columns.
+  auto [sortedLeft, sortedRight] = QueryExecutionTree::createSortedTrees(
+      std::move(_left), std::move(_right), _joinColumns);
+  _left = std::move(sortedLeft);
+  _right = std::move(sortedRight);
 }
 
 // _____________________________________________________________________________
@@ -61,15 +82,12 @@ string OptionalJoin::asStringImpl(size_t indent) const {
 
 // _____________________________________________________________________________
 string OptionalJoin::getDescriptor() const {
-  std::string joinVars = "";
-  for (auto p : _left->getVariableColumns()) {
-    for (auto jc : _joinColumns) {
-      // If the left join column matches the index of a variable in the left
-      // subresult.
-      if (jc[0] == p.second.columnIndex_) {
-        joinVars += p.first.name() + " ";
-      }
-    }
+  std::string joinVars;
+  for (auto [leftCol, rightCol] : _joinColumns) {
+    (void)rightCol;
+    const std::string& varName =
+        _left->getVariableAndInfoByColumnIndex(leftCol).first.name();
+    joinVars += varName + " ";
   }
   return "OptionalJoin on " + joinVars;
 }
@@ -90,16 +108,9 @@ ResultTable OptionalJoin::computeResult() {
 
   LOG(DEBUG) << "Computing optional join between results of size "
              << leftResult->size() << " and " << rightResult->size() << endl;
-  LOG(DEBUG) << "Left side optional: " << _leftOptional
-             << " right side optional: " << _rightOptional << endl;
 
-  int leftWidth = leftResult->idTable().numColumns();
-  int rightWidth = rightResult->idTable().numColumns();
-  int resWidth = idTable.numColumns();
-  CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, resWidth}),
-                  &OptionalJoin::optionalJoin, leftResult->idTable(),
-                  rightResult->idTable(), _leftOptional, _rightOptional,
-                  _joinColumns, &idTable);
+  optionalJoin(leftResult->idTable(), rightResult->idTable(), _joinColumns,
+               &idTable);
 
   LOG(DEBUG) << "OptionalJoin result computation done." << endl;
   // If only one of the two operands has a non-empty local vocabulary, share
@@ -153,14 +164,19 @@ size_t OptionalJoin::getSizeEstimateBeforeLimit() {
 
 // _____________________________________________________________________________
 size_t OptionalJoin::getCostEstimate() {
-  size_t costEstimate = getSizeEstimateBeforeLimit() +
-                        _left->getSizeEstimate() + _right->getSizeEstimate();
-  // The optional join is about 3-7 times slower than a normal join, due to
-  // its increased complexity
-  costEstimate *= 4;
-  // Make the join 7% more expensive per join column
-  costEstimate *= (1 + (_joinColumns.size() - 1) * 0.07);
-  return _left->getCostEstimate() + _right->getCostEstimate() + costEstimate;
+  if (!_costEstimate.has_value()) {
+    size_t costEstimate = getSizeEstimateBeforeLimit() +
+                          _left->getSizeEstimate() + _right->getSizeEstimate();
+    // The optional join is about 3-7 times slower than a normal join, due to
+    // its increased complexity
+    costEstimate *= 4;
+    // Make the join 7% more expensive per join column
+    costEstimate *= (1 + (_joinColumns.size() - 1) * 0.07);
+
+    _costEstimate =
+        _left->getCostEstimate() + _right->getCostEstimate() + costEstimate;
+  }
+  return _costEstimate.value();
 }
 
 // _____________________________________________________________________________
@@ -182,14 +198,9 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
     numDistinctRight = std::min(numDistinctRight, dr);
   }
   size_t numDistinctResult = std::min(numDistinctLeft, numDistinctRight);
-  // The number of distinct is at leat the number of distinct in a non optional
+  // The number of distinct is at least the number of distinct in a non optional
   // column, if the other one is optional.
-  if (_leftOptional) {
-    numDistinctResult = std::max(numDistinctLeft, numDistinctResult);
-  }
-  if (_rightOptional) {
-    numDistinctRight = std::max(numDistinctRight, numDistinctResult);
-  }
+  numDistinctRight = std::max(numDistinctRight, numDistinctResult);
 
   // compute an estimate for the results multiplicity
   float multLeft = std::numeric_limits<float>::max();
@@ -201,16 +212,8 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
   }
   float multResult = multLeft * multRight;
 
-  if (_leftOptional && _rightOptional) {
-    _sizeEstimate =
-        (_left->getSizeEstimate() + _right->getSizeEstimate()) * multResult;
-  } else if (_leftOptional) {
-    _sizeEstimate = _right->getSizeEstimate() * multResult;
-  } else if (_rightOptional) {
-    _sizeEstimate = _left->getSizeEstimate() * multResult;
-  } else {
-    _sizeEstimate = multResult * numDistinctResult;
-  }
+  _sizeEstimate = _left->getSizeEstimate() * multResult;
+
   // Don't estimate 0 since then some parent operations
   // (in particular joins) using isKnownEmpty() will
   // will assume the size to be exactly zero
@@ -241,228 +244,94 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
   _multiplicitiesComputed = true;
 }
 
-template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
-void OptionalJoin::createOptionalResult(
-    const IdTableView<A_WIDTH>& a, size_t aIdx, bool aEmpty,
-    const IdTableView<B_WIDTH>& b, size_t bIdx, bool bEmpty,
-    int joinColumnBitmap_a, int joinColumnBitmap_b,
-    const std::vector<ColumnIndex>& joinColumnAToB,
-    IdTableStatic<OUT_WIDTH>* res) {
-  assert(!(aEmpty && bEmpty));
-  res->emplace_back();
-  size_t rIdx = res->size() - 1;
-  if (aEmpty) {
-    // Fill the columns of a with ID_NO_VALUE and the rest with b.
-    size_t i = 0;
-    for (size_t col = 0; col < a.numColumns(); col++) {
-      if ((joinColumnBitmap_a & (1 << col)) == 0) {
-        (*res)(rIdx, col) = ID_NO_VALUE;
-      } else {
-        // if this is one of the join columns use the value in b
-        (*res)(rIdx, col) = b(bIdx, joinColumnAToB[col]);
-      }
-      i++;
-    }
-    for (size_t col = 0; col < b.numColumns(); col++) {
-      if ((joinColumnBitmap_b & (1 << col)) == 0) {
-        // only write the value if it is not one of the join columns in b
-        (*res)(rIdx, i) = b(bIdx, col);
-        i++;
-      }
-    }
-  } else if (bEmpty) {
-    // Fill the columns of b with ID_NO_VALUE and the rest with a
-    for (size_t col = 0; col < a.numColumns(); col++) {
-      (*res)(rIdx, col) = a(aIdx, col);
-    }
-    for (size_t col = a.numColumns(); col < res->numColumns(); col++) {
-      (*res)(rIdx, col) = ID_NO_VALUE;
-    }
-  } else {
-    // Use the values from both a and b
-    size_t i = 0;
-    for (size_t col = 0; col < a.numColumns(); col++) {
-      (*res)(rIdx, col) = a(aIdx, col);
-      i++;
-    }
-    for (size_t col = 0; col < b.numColumns(); col++) {
-      if ((joinColumnBitmap_b & (1 << col)) == 0) {
-        (*res)(rIdx, i) = b(bIdx, col);
-        i++;
-      }
-    }
-  }
-}
-
-template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
+// ______________________________________________________________
 void OptionalJoin::optionalJoin(
-    const IdTable& dynA, const IdTable& dynB, bool aOptional, bool bOptional,
+    const IdTable& left, const IdTable& right,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
-    IdTable* dynResult) {
+    IdTable* result) {
   // check for trivial cases
-  if ((dynA.size() == 0 && dynB.size() == 0) ||
-      (dynA.size() == 0 && !aOptional) || (dynB.size() == 0 && !bOptional)) {
+  if (left.empty()) {
     return;
   }
 
-  const IdTableView<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
-  const IdTableView<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
-  IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
-
-  int joinColumnBitmapLeft = 0;
-  int joinColumnBitmapRight = 0;
-  for (const auto& [joinColumnLeft, joinColumnRight] : joinColumns) {
-    joinColumnBitmapLeft |= (1 << joinColumnLeft);
-    joinColumnBitmapRight |= (1 << joinColumnRight);
-  }
-
-  // When a is optional this is used to quickly determine
-  // in which column of b the value of a joined column can be found.
-  std::vector<ColumnIndex> joinColumnLeftToRight;
-  if (aOptional) {
-    uint32_t maxJoinColLeft = 0;
-    for (const auto& [joinColumnLeft, joinColumnRight] : joinColumns) {
-      if (joinColumnLeft > maxJoinColLeft) {
-        maxJoinColLeft = joinColumnLeft;
-      }
+  // `isCheap` is true iff we can apply the `specialOptionalJoin`. This is the
+  // case when only the last column of the left input contains UNDEF values.
+  bool isCheap = true;
+  for (size_t i = 0; i < joinColumns.size(); ++i) {
+    auto [leftCol, rightCol] = joinColumns.at(i);
+    if (std::ranges::any_of(right.getColumn(rightCol),
+                            [](Id id) { return id.isUndefined(); })) {
+      isCheap = false;
     }
-    joinColumnLeftToRight.resize(maxJoinColLeft + 1);
-    for (const auto& [joinColumnLeft, joinColumnRight] : joinColumns) {
-      joinColumnLeftToRight[joinColumnLeft] = joinColumnRight;
+    if ((i != joinColumns.size() - 1) &&
+        std::ranges::any_of(left.getColumn(leftCol),
+                            [](Id id) { return id.isUndefined(); })) {
+      isCheap = false;
     }
   }
 
-  // Deal with one of the two tables beeing both empty and optional
-  if (a.size() == 0 && aOptional) {
-    for (size_t ib = 0; ib < b.size(); ib++) {
-      createOptionalResult(a, 0, true, b, ib, false, joinColumnBitmapLeft,
-                           joinColumnBitmapRight, joinColumnLeftToRight,
-                           &result);
+  ad_utility::JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
+                                               right.numColumns()};
+
+  IdTableView<0> joinColumnsLeft =
+      left.asColumnSubsetView(joinColumnData.jcsLeft());
+  IdTableView<0> joinColumnsRight =
+      right.asColumnSubsetView(joinColumnData.jcsRight());
+
+  auto leftPermuted = left.asColumnSubsetView(joinColumnData.permutationLeft());
+  auto rightPermuted =
+      right.asColumnSubsetView(joinColumnData.permutationRight());
+
+  auto lessThanBoth = std::ranges::lexicographical_compare;
+
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable(
+      joinColumns.size(), leftPermuted, rightPermuted, std::move(*result));
+  auto addRow = [&rowAdder, beginLeft = joinColumnsLeft.begin(),
+                 beginRight = joinColumnsRight.begin()](const auto& itLeft,
+                                                        const auto& itRight) {
+    rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
+  };
+
+  auto addOptionalRow = [&rowAdder,
+                         begin = joinColumnsLeft.begin()](const auto& itLeft) {
+    rowAdder.addOptionalRow(itLeft - begin);
+  };
+
+  auto findUndefDispatch = [](const auto& row, auto begin, auto end,
+                              bool& outOfOrder) {
+    return ad_utility::findSmallerUndefRanges(row, begin, end, outOfOrder);
+  };
+
+  const size_t numOutOfOrder = [&]() {
+    if (isCheap) {
+      ad_utility::specialOptionalJoin(joinColumnsLeft, joinColumnsRight, addRow,
+                                      addOptionalRow);
+      return 0UL;
+    } else {
+      return ad_utility::zipperJoinWithUndef(
+          joinColumnsLeft, joinColumnsRight, lessThanBoth, addRow,
+          findUndefDispatch, findUndefDispatch, addOptionalRow);
     }
-    *dynResult = std::move(result).toDynamic();
-    return;
-  } else if (b.size() == 0 && bOptional) {
-    for (size_t ia = 0; ia < a.size(); ia++) {
-      createOptionalResult(a, ia, false, b, 0, true, joinColumnBitmapLeft,
-                           joinColumnBitmapRight, joinColumnLeftToRight,
-                           &result);
+  }();
+  // The column order in the result is now
+  // [joinColumns, non-join-columns-a, non-join-columns-b] (which makes the
+  // algorithms above easier), be the order that is expected by the rest of the
+  // code is [columns-a, non-join-columns-b]. Permute the columns to fix the
+  // order.
+  *result = std::move(rowAdder).resultTable();
+
+  // TODO<joka921> We have two sorted ranges, a simple merge would suffice
+  // (possibly even in-place), or we could even lazily pass them on to the
+  // upstream operation.
+  // Note: the merging only works if we don't have the arbitrary out of order
+  // case.
+  // TODO<joka921> We only have to do this if the sorting is required.
+  if (numOutOfOrder > 0) {
+    std::vector<ColumnIndex> cols;
+    for (size_t i = 0; i < joinColumns.size(); ++i) {
+      cols.push_back(i);
     }
-    *dynResult = std::move(result).toDynamic();
-    return;
+    Engine::sort(*result, cols);
   }
-
-  bool matched = false;
-  size_t ia = 0, ib = 0;
-  while (ia < a.size() && ib < b.size()) {
-    // Join columns 0 are the primary sort columns
-    while (a(ia, joinColumns[0][0]) < b(ib, joinColumns[0][1])) {
-      if (bOptional) {
-        createOptionalResult(a, ia, false, b, ib, true, joinColumnBitmapLeft,
-                             joinColumnBitmapRight, joinColumnLeftToRight,
-                             &result);
-      }
-      ia++;
-      if (ia >= a.size()) {
-        goto finish;
-      }
-    }
-    while (b[ib][joinColumns[0][1]] < a[ia][joinColumns[0][0]]) {
-      if (aOptional) {
-        createOptionalResult(a, ia, true, b, ib, false, joinColumnBitmapLeft,
-                             joinColumnBitmapRight, joinColumnLeftToRight,
-                             &result);
-      }
-      ib++;
-      if (ib >= b.size()) {
-        goto finish;
-      }
-    }
-
-    // check if the rest of the join columns also match
-    matched = true;
-    for (size_t joinColIndex = 0; joinColIndex < joinColumns.size();
-         joinColIndex++) {
-      const auto& joinColumn = joinColumns[joinColIndex];
-      if (a[ia][joinColumn[0]] < b[ib][joinColumn[1]]) {
-        if (bOptional) {
-          createOptionalResult(a, ia, false, b, ib, true, joinColumnBitmapLeft,
-                               joinColumnBitmapRight, joinColumnLeftToRight,
-                               &result);
-        }
-        ia++;
-        matched = false;
-        break;
-      }
-      if (b[ib][joinColumn[1]] < a[ia][joinColumn[0]]) {
-        if (aOptional) {
-          createOptionalResult(a, ia, true, b, ib, false, joinColumnBitmapLeft,
-                               joinColumnBitmapRight, joinColumnLeftToRight,
-                               &result);
-        }
-        ib++;
-        matched = false;
-        break;
-      }
-    }
-
-    // Compute the cross product of the row in a and all matching
-    // rows in b.
-    while (matched && ia < a.size() && ib < b.size()) {
-      // used to reset ib if another cross product needs to be computed
-      size_t initIb = ib;
-
-      while (matched) {
-        createOptionalResult(a, ia, false, b, ib, false, joinColumnBitmapLeft,
-                             joinColumnBitmapRight, joinColumnLeftToRight,
-                             &result);
-
-        ib++;
-
-        // do the rows still match?
-        for (const auto& [joinColumnLeft, joinColumnRight] : joinColumns) {
-          if (ib >= b.size() ||
-              a[ia][joinColumnLeft] != b[ib][joinColumnRight]) {
-            matched = false;
-            break;
-          }
-        }
-      }
-      ia++;
-      // Check if the next row in a also matches the initial row in b
-      matched = true;
-      for (const auto& [joinColumnLeft, joinColumnRight] : joinColumns) {
-        if (ia >= a.size() ||
-            a[ia][joinColumnLeft] != b[initIb][joinColumnRight]) {
-          matched = false;
-          break;
-        }
-      }
-      // If they match reset ib and compute another cross product
-      if (matched) {
-        ib = initIb;
-      }
-    }
-  }
-finish:
-
-  // If the table of which we reached the end is optional, add all entries
-  // of the other table.
-  if (aOptional && ib < b.size()) {
-    while (ib < b.size()) {
-      createOptionalResult(a, ia, true, b, ib, false, joinColumnBitmapLeft,
-                           joinColumnBitmapRight, joinColumnLeftToRight,
-                           &result);
-
-      ++ib;
-    }
-  }
-  if (bOptional && ia < a.size()) {
-    while (ia < a.size()) {
-      createOptionalResult(a, ia, false, b, ib, true, joinColumnBitmapLeft,
-                           joinColumnBitmapRight, joinColumnLeftToRight,
-                           &result);
-      ++ia;
-    }
-  }
-  *dynResult = std::move(result).toDynamic();
+  result->permuteColumns(joinColumnData.permutationResult());
 }

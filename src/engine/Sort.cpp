@@ -54,58 +54,6 @@ string Sort::getDescriptor() const {
   return "Sort (internal order) on" + orderByVars;
 }
 
-namespace {
-
-// The call to `callFixedSize` is put into a separate function to get rid
-// of an internal compiler error in Clang 13.
-// TODO<joka921, future compilers> Check if this problem goes away in future
-// compiler versions as soon as we don't support Clang 13 anymore.
-void callFixedSizeForSort(auto& idTable, auto comparison) {
-  ad_utility::callFixedSize(idTable.numColumns(),
-                            [&idTable, comparison]<size_t I>() {
-                              Engine::sort<I>(&idTable, comparison);
-                            });
-}
-
-// The actual implementation of sorting an `IdTable` according to the
-// `sortCols`.
-void sortImpl(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
-  size_t width = idTable.numColumns();
-
-  // Instantiate specialized comparison lambdas for one and two sort columns
-  // and use a generic comparison for a higher number of sort columns.
-  // TODO<joka921> As soon as we have merged the benchmark, measure whether
-  // this is in fact beneficial and whether it should also be applied for a
-  // higher number of columns, maybe even using `CALL_FIXED_SIZE` for the
-  // number of sort columns.
-  // TODO<joka921> Also experiment with sorting algorithms that take the
-  // column-based structure of the `IdTable` into account.
-  if (sortCols.size() == 1) {
-    CALL_FIXED_SIZE(width, &Engine::sort, &idTable, sortCols.at(0));
-  } else if (sortCols.size() == 2) {
-    auto comparison = [c0 = sortCols[0], c1 = sortCols[1]](const auto& row1,
-                                                           const auto& row2) {
-      if (row1[c0] != row2[c0]) {
-        return row1[c0] < row2[c0];
-      } else {
-        return row1[c1] < row2[c1];
-      }
-    };
-    callFixedSizeForSort(idTable, comparison);
-  } else {
-    auto comparison = [&sortCols](const auto& row1, const auto& row2) {
-      for (auto& col : sortCols) {
-        if (row1[col] != row2[col]) {
-          return row1[col] < row2[col];
-        }
-      }
-      return false;
-    };
-    callFixedSizeForSort(idTable, comparison);
-  }
-}
-}  // namespace
-
 // _____________________________________________________________________________
 ResultTable Sort::computeResult() {
   LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
@@ -128,7 +76,7 @@ ResultTable Sort::computeResult() {
 
   LOG(DEBUG) << "Sort result computation..." << endl;
   IdTable idTable = subRes->idTable().clone();
-  sortImpl(idTable, sortColumnIndices_);
+  Engine::sort(idTable, sortColumnIndices_);
 
   LOG(DEBUG) << "Sort result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};

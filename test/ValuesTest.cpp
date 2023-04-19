@@ -72,7 +72,7 @@ TEST(Values, computeResult) {
   auto I = ad_utility::testing::IntId;
   auto L = ad_utility::testing::LocalVocabId;
   auto U = Id::makeUndefined();
-  ASSERT_EQ(table, makeIdTableFromIdVector({{I(12), x}, {U, L(0)}}));
+  ASSERT_EQ(table, makeIdTableFromVector({{I(12), x}, {U, L(0)}}));
 }
 
 // Check that if the number of variables and the number of values in each row

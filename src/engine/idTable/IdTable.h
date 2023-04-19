@@ -14,6 +14,7 @@
 
 #include "engine/idTable/IdTableRow.h"
 #include "global/Id.h"
+#include "util/Algorithm.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/Iterators.h"
 #include "util/LambdaHelpers.h"
@@ -114,7 +115,8 @@ class IdTable {
   // The actual storage is a plain 1D vector with the logical columns
   // concatenated.
   using Storage = std::vector<ColumnStorage>;
-  using Data = std::conditional_t<isView, const Storage*, Storage>;
+  using ViewSpans = std::vector<std::span<const T>>;
+  using Data = std::conditional_t<isView, ViewSpans, Storage>;
   using Allocator = decltype(std::declval<ColumnStorage&>().get_allocator());
 
   static constexpr bool columnsAreAllocatable =
@@ -430,8 +432,12 @@ class IdTable {
   IdTable<T, NumColumns, ColumnStorage, IsView::False> clone()
       const requires std::is_copy_constructible_v<Storage> &&
       std::is_copy_constructible_v<ColumnStorage> {
+    Storage storage;
+    for (const auto& column : getColumns()) {
+      storage.emplace_back(column.begin(), column.end(), getAllocator());
+    }
     return IdTable<T, NumColumns, ColumnStorage, IsView::False>{
-        data(), numColumns_, numRows_, allocator_};
+        std::move(storage), numColumns_, numRows_, allocator_};
   }
 
   // Overload of `clone` for `Storage` types that are not copy constructible.
@@ -495,12 +501,52 @@ class IdTable {
   // creates a dynamic view from a dynamic table. This makes generic code that
   // is templated on the number of columns easier to write.
   template <size_t NewNumColumns>
-  requires(isDynamic && !isView)
-      IdTable<T, NewNumColumns, ColumnStorage, IsView::True> asStaticView()
+  requires isDynamic IdTable<T, NewNumColumns, ColumnStorage, IsView::True>
+  asStaticView()
   const {
     AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
+    ViewSpans viewSpans(data().begin(), data().end());
+
     return IdTable<T, NewNumColumns, ColumnStorage, IsView::True>{
-        &data(), numColumns_, numRows_, allocator_};
+        std::move(viewSpans), numColumns_, numRows_, allocator_};
+  }
+
+  // Obtain a dynamic and const view to this IdTable that contains a subset of
+  // the columns that may be permuted. The subset of the columns is specified by
+  // the argument `columnIndices`.
+  IdTable<T, 0, ColumnStorage, IsView::True> asColumnSubsetView(
+      std::span<const size_t> columnIndices) const requires isDynamic {
+    AD_CONTRACT_CHECK(std::ranges::all_of(
+        columnIndices, [this](size_t idx) { return idx < numColumns(); }));
+    ViewSpans viewSpans;
+    viewSpans.reserve(columnIndices.size());
+    for (size_t idx : columnIndices) {
+      viewSpans.push_back(getColumn(idx));
+    }
+    return IdTable<T, 0, ColumnStorage, IsView::True>{
+        std::move(viewSpans), columnIndices.size(), numRows_, allocator_};
+  }
+
+  // Apply the `permutation` to the columns of the table. The permutation must
+  // be a permutation of the values `[0, 1, ..., numColumns - 1 ]`. The column
+  // with the old index `permutation[i]` will become the `i`-th column after the
+  // permutation. For example, `permuteColumns({1, 2, 0})` rotates the columns
+  // of a table with three columns left by one element.
+  void permuteColumns(std::span<const size_t> permutation) {
+    // First check that the `permutation` is indeed a permutation of the column
+    // indices.
+    std::vector<size_t> check{permutation.begin(), permutation.end()};
+    std::ranges::sort(check);
+    std::vector<size_t> expected(numColumns());
+    std::iota(expected.begin(), expected.end(), size_t{0});
+    AD_CONTRACT_CHECK(check == expected);
+
+    Data newData;
+    newData.reserve(numColumns());
+    for (size_t colIdx : permutation) {
+      newData.push_back(std::move(data().at(colIdx)));
+    }
+    data() = std::move(newData);
   }
 
   // Helper `struct` that stores a pointer to this table and has an `operator()`
@@ -614,7 +660,7 @@ class IdTable {
   }
 
   // Get the `i`-th column. It is stored contiguously in memory.
-  std::span<T> getColumn(size_t i) { return {data().at(i)}; }
+  std::span<T> getColumn(size_t i) requires(!isView) { return {data().at(i)}; }
   std::span<const T> getColumn(size_t i) const { return {data().at(i)}; }
 
   // Return all the columns as a `std::vector` (if `isDynamic`) or as a
@@ -625,14 +671,8 @@ class IdTable {
 
  private:
   // Get direct access to the underlying data() as a reference.
-  Storage& data() requires(!isView) { return data_; }
-  const Storage& data() const {
-    if constexpr (isView) {
-      return *data_;
-    } else {
-      return data_;
-    }
-  }
+  Data& data() requires(!isView) { return data_; }
+  const Data& data() const { return data_; }
 
   // Common implementation for const and mutable overloads of `getColumns`
   // (see below).

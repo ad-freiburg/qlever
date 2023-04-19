@@ -277,6 +277,22 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
       });
 }
 
+// _____________________________________________________________________________
+void Operation::updateRuntimeInformationWhenOptimizedOut() {
+  auto setStatus = [](RuntimeInformation& rti, const auto& self) -> void {
+    if (rti.status_ ==
+        RuntimeInformation::Status::completedDuringQueryPlanning) {
+      return;
+    }
+    rti.status_ = RuntimeInformation::Status::optimizedOut;
+    rti.totalTime_ = 0;
+    for (auto& child : rti.children_) {
+      self(child, self);
+    }
+  };
+  setStatus(_runtimeInfo, setStatus);
+}
+
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
   _runtimeInfo.children_.clear();
