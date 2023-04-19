@@ -154,11 +154,11 @@ class MmapVector {
   MmapVector(MmapVector<T>&& other) noexcept;
   MmapVector& operator=(MmapVector<T>&& other) noexcept;
 
-  template <class First, typename... Args>
-  requires(!std::derived_from<std::remove_cvref_t<First>, MmapVector<T>>)
-      MmapVector(First&& first, Args&&... args)
+  template <class Arg, typename... Args>
+  requires(!std::derived_from<std::remove_cvref_t<Arg>, MmapVector<T>>)
+      MmapVector(Arg&& arg, Args&&... args)
       : MmapVector<T>() {
-    this->open(AD_FWD(first), AD_FWD(args)...);
+    this->open(AD_FWD(arg), AD_FWD(args)...);
   }
 
   // create Array of given size  fill with default value
@@ -376,13 +376,13 @@ class MmapVectorTmp : public MmapVector<T> {
       : MmapVector<T>(std::move(rhs)) {}
   MmapVectorTmp(const MmapVectorTmp<T>& rhs) = delete;
 
-  template <class First, typename... Args>
+  template <class Arg, typename... Args>
   requires(
-      !std::derived_from<std::remove_cvref_t<First>,
-                         MmapVectorTmp>) explicit MmapVectorTmp(First&& first,
+      !std::derived_from<std::remove_cvref_t<Arg>,
+                         MmapVectorTmp>) explicit MmapVectorTmp(Arg&& arg,
                                                                 Args&&... args)
       : MmapVector<T>() {
-    this->open(AD_FWD(first), AD_FWD(args)...);
+    this->open(AD_FWD(arg), AD_FWD(args)...);
   }
 
   // If we still own a file, delete it after cleaning up
