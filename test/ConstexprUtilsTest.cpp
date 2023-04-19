@@ -2,6 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <utility>
+
 #include "gtest/gtest.h"
 #include "util/ConstexprUtils.h"
 
@@ -106,4 +108,39 @@ TEST(ConstexprUtils, cartesianPowerAsIntegerArray) {
       std::array{1, 0, 1}, std::array{1, 1, 0}, std::array{1, 1, 1}>
       c;
   ASSERT_TRUE(compare(c, (cartesianPowerAsIntegerArray<2, 3>())));
+}
+
+TEST(ConstexprUtils, ConstexprForLoop) {
+  size_t i{0};
+
+  // Add `i` up to one hundred.
+  ConstexprForLoop(std::make_index_sequence<100>{}, [&i]<size_t>() { i++; });
+  ASSERT_EQ(i, 100);
+
+  // Add up 2, 5, and 9 at run time.
+  i = 0;
+  ConstexprForLoop(std::index_sequence<2, 5, 9>{},
+                   [&i]<size_t NumberToAdd>() { i += NumberToAdd; });
+  ASSERT_EQ(i, 16);
+
+  // Shouldn't do anything, because the index sequence is empty.
+  i = 0;
+  ConstexprForLoop(std::index_sequence<>{},
+                   [&i]<size_t NumberToAdd>() { i += NumberToAdd; });
+  ASSERT_EQ(i, 0);
+}
+
+TEST(ConstexprUtils, RuntimeValueToCompileTimeValue) {
+  // Create one function, that sets `i` to x, for every possible
+  // version of x in [0,100].
+  size_t i = 1;
+  auto setI = [&i]<size_t Number>() { i = Number; };
+  for (size_t d = 0; d <= 100; d++) {
+    RuntimeValueToCompileTimeValue<100>(d, setI);
+    ASSERT_EQ(i, d);
+  }
+
+  // Should cause an exception, if the given value is bigger than the
+  // `MaxValue`.
+  ASSERT_ANY_THROW(RuntimeValueToCompileTimeValue<5>(10, setI));
 }

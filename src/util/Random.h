@@ -59,8 +59,8 @@ requires(std::is_integral_v<Int> &&
   std::array<uint64_t, 4> _shuffleTable;
 };
 
-/**
- * @brief Create random integers from a given range.
+/*
+ * @brief Create random integers from a given range [min, max].
  * @tparam Int an integral type like int, unsigned int, size_t, etc...
  *
  * This generator is much slower than the FastRandomIntGenerator, but has
@@ -80,6 +80,9 @@ class SlowRandomIntGenerator {
   std::uniform_int_distribution<Int> _distribution;
 };
 
+/*
+ * @brief Create random doubles from a given range [min, max].
+ */
 class RandomDoubleGenerator {
  public:
   explicit RandomDoubleGenerator(

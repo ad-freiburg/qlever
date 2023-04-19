@@ -6,7 +6,7 @@
 
 #include "util/Exception.h"
 
-// Various helper functions for compile-time programming
+// Various helper functions for compile-time programming.
 
 namespace ad_utility {
 
@@ -25,6 +25,52 @@ constexpr auto pow(auto base, int exponent) {
   }
   return result;
 };
+
+/*
+ * @brief A compile time for loop, which passes the loop index to the
+ *  given loop body.
+ *
+ * @tparam Function The loop body should be a templated function, with one
+ *  size_t template argument and no more. It also shouldn't take any function
+ *  arguments. Should be passed per deduction.
+ * @tparam ForLoopIndexes The indexes, that the for loop goes over. Should be
+ *  passed per deduction.
+ *
+ * @param loopBody The body of the for loop.
+ */
+template <typename Function, size_t... ForLoopIndexes>
+void ConstexprForLoop(const std::index_sequence<ForLoopIndexes...>&,
+                      const Function& loopBody) {
+  ((loopBody.template operator()<ForLoopIndexes>()), ...);
+}
+
+/*
+ * @brief 'Converts' a run time value of `size_t` to a compile time value and
+ * then calls `function.template operator()<value>()`. `value < MaxValue` must
+ * be true, else an exception is thrown. *
+ *
+ * @tparam MaxValue The maximal value, that the function parameter value could
+ *  take.
+ * @tparam Function The given function should be a templated function, with one
+ *  size_t template argument and no more. It also shouldn't take any function
+ *  arguments. This parameter should be passed per deduction.
+ *
+ * @param value Value that you need as a compile time value.
+ * @param function The templated function, which you wish to execute. Must be
+ *  a function object (for example a lambda expression) that has an
+ *  `operator()` which is templated on a single `size_t`.
+ */
+template <size_t MaxValue, typename Function>
+void RuntimeValueToCompileTimeValue(const size_t& value,
+                                    const Function& function) {
+  AD_CONTRACT_CHECK(value <= MaxValue);  // Is the value valid?
+  ConstexprForLoop(std::make_index_sequence<MaxValue + 1>{},
+                   [&function, &value]<size_t Index>() {
+                     if (Index == value) {
+                       function.template operator()<Index>();
+                     }
+                   });
+}
 
 namespace detail {
 
