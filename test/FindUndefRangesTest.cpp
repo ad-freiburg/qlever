@@ -21,6 +21,10 @@ template <size_t I>
 using Arr = std::array<Id, I>;
 }  // namespace
 
+// A small helper function used in the `testSmallerUndef...` functions below. It
+// converts a list of iterators that are yielded by the `generator` to indices
+// in the `range` by subtracting `range.begin()`. Requires that the `generator`
+// yields iterators that point into the `range`.
 std::vector<int64_t> toPositions(auto generator, const auto& range) {
   std::vector<int64_t> foundPositions;
   for (auto it : generator) {
@@ -29,10 +33,16 @@ std::vector<int64_t> toPositions(auto generator, const auto& range) {
   return foundPositions;
 }
 
+// Test that `findSmallerUndefRangesArbitrary` when being called with `row,
+// range.begin(), range.end()` as arguments, yields the elements from `range` at
+// the `expectedPositions`. For example, if `expectedPositions` is `[3, 7]`,
+// then it is expected that `findSmallerUndefRangesArbitrary(row, range.begin(),
+// range.end())` returns a generator that generates exactly two iterators that
+// point to the elements from `range` at indices 3 and 7.
 template <size_t I>
 void testSmallerUndefRangesForArbitraryRows(
     std::array<Id, I> row, const std::vector<std::array<Id, I>>& range,
-    const std::vector<size_t>& positions,
+    const std::vector<size_t>& expectedPositions,
     source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
   // TODO<joka921> also actually test the bool;
@@ -40,13 +50,15 @@ void testSmallerUndefRangesForArbitraryRows(
   EXPECT_THAT(toPositions(findSmallerUndefRangesArbitrary(
                               row, range.begin(), range.end(), outOfOrder),
                           range),
-              ::testing::ElementsAreArray(positions));
+              ::testing::ElementsAreArray(expectedPositions));
   EXPECT_THAT(toPositions(findSmallerUndefRanges(row, range.begin(),
                                                  range.end(), outOfOrder),
                           range),
-              ::testing::ElementsAreArray(positions));
+              ::testing::ElementsAreArray(expectedPositions));
 }
 
+// A similar helper function, but for
+// `findSmallerUndefRangesForRowsWithoutUndef`.
 template <size_t I>
 void testSmallerUndefRangesForRowsWithoutUndef(
     std::array<Id, I> row, const std::vector<std::array<Id, I>>& range,
@@ -67,6 +79,7 @@ void testSmallerUndefRangesForRowsWithoutUndef(
   testSmallerUndefRangesForArbitraryRows(row, range, positions);
 }
 
+// ____________________________________________________________________________________
 TEST(JoinAlgorithms, findSmallerUndefRangesForRowsWithoutUndef) {
   std::vector<Arr<1>> oneCol{{U}, {U}, {V(3)}, {V(7)}, {V(8)}};
   testSmallerUndefRangesForRowsWithoutUndef<1>({V(3)}, oneCol, {0, 1});
@@ -91,6 +104,8 @@ TEST(JoinAlgorithms, findSmallerUndefRangesForRowsWithoutUndef) {
                                                {0, 4, 5, 9});
 }
 
+// A similar helper function to the ones defined above, but for
+// `findSmallerUndefRangesForRowsWithUndefInLastColumns`
 template <size_t I>
 void testSmallerUndefRangesForRowsWithUndefInLastColumns(
     Arr<I> row, const std::vector<Arr<I>>& range, size_t numLastUndef,
@@ -111,6 +126,7 @@ void testSmallerUndefRangesForRowsWithUndefInLastColumns(
   testSmallerUndefRangesForArbitraryRows(row, range, positions);
 }
 
+// ____________________________________________________________________________________
 TEST(JoinAlgorithms, findSmallerUndefRangesForRowsWithUndefInLastColumns) {
   std::vector<Arr<1>> oneCol{{U}, {U}, {V(3)}, {V(7)}, {V(8)}};
   // There can be no smaller row than one that is completely UNDEF, so the

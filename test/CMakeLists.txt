@@ -316,4 +316,6 @@ addLinkAndDiscoverTest(RuntimeInformationTest engine)
 
 addLinkAndDiscoverTest(VariableToColumnMapTest engine)
 
-addLinkAndDiscoverTest(JoinAlgorithmsTest)
+addLinkAndDiscoverTest(FindUndefRangesTest)
+
+addLinkAndDiscoverTest(AddCombinedRowToTableTest)

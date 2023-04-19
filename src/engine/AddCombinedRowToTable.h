@@ -57,14 +57,17 @@ class AddCombinedRowToIdTable {
 
  public:
   // Construct from the number of join columns, the two inputs, and the output.
+  // The `bufferSize` can be configured for testing.
   explicit AddCombinedRowToIdTable(size_t numJoinColumns,
                                    const IdTableView<0>& input1,
-                                   const IdTableView<0>& input2, IdTable output)
+                                   const IdTableView<0>& input2, IdTable output,
+                                   size_t bufferSize = 100'000)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
         inputLeft_{input1},
         inputRight_{input2},
-        resultTable_{std::move(output)} {
+        resultTable_{std::move(output)},
+        bufferSize_{bufferSize} {
     AD_CORRECTNESS_CHECK(resultTable_.numColumns() == input1.numColumns() +
                                                           input2.numColumns() -
                                                           numJoinColumns);

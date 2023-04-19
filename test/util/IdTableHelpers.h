@@ -25,13 +25,14 @@
 
 // For easier reading. We repeat that type combination so often, that this
 // will make things a lot easier in terms of reading and writing.
-using VectorTable = std::vector<std::vector<int64_t>>;
+using VectorTable = std::vector<std::vector<std::variant<int64_t, Id>>>;
 
 /*
  * Return an 'IdTable' with the given 'tableContent' by applying the
  * `transformation` to each of them. All rows of `tableContent` must have the
  * same length.
  */
+/*
 template <typename Transformation = decltype(ad_utility::testing::VocabId)>
 IdTable makeIdTableFromVector(const VectorTable& tableContent,
                               Transformation transformation = {}) {
@@ -58,6 +59,28 @@ IdTable makeIdTableFromVector(const VectorTable& tableContent,
   }
 
   return result;
+}
+*/
+
+// TODO<joka921> This function already exists in another PR in a better version,
+// merge them.
+template <typename Transformation = decltype(ad_utility::testing::VocabId)>
+inline IdTable makeIdTableFromVector(const VectorTable& input,
+                                     Transformation transformation = {}) {
+  size_t numCols = input[0].size();
+  IdTable table{numCols, ad_utility::testing::makeAllocator()};
+  table.reserve(input.size());
+  for (const auto& row : input) {
+    table.emplace_back();
+    for (size_t i = 0; i < table.numColumns(); ++i) {
+      if (std::holds_alternative<Id>(row.at(i))) {
+        table.back()[i] = std::get<Id>(row.at(i));
+      } else {
+        table.back()[i] = transformation(std::get<int64_t>(row.at(i)));
+      }
+    }
+  }
+  return table;
 }
 
 inline IdTable makeIdTableFromIdVector(
