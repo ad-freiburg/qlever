@@ -12,6 +12,7 @@
 #include <sstream>
 #include <tuple>
 
+#include "./IndexTestHelpers.h"
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
@@ -21,6 +22,7 @@
 #include "engine/Join.h"
 #include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
 #include "util/Forward.h"
 #include "util/Random.h"
@@ -51,13 +53,41 @@ TEST(EngineTest, distinctTest) {
 
 void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
                       JoinColumns jcls, const IdTable& expectedResult) {
-  // TODO<joka921> Let this use the proper constructor of OptionalJoin.
-  IdTable result{inputA.numColumns() + inputB.numColumns() - jcls.size(),
-                 makeAllocator()};
-  // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
-  // a have to equal those of column 2 of b and vice versa).
-  OptionalJoin::optionalJoin(inputA, inputB, jcls, &result);
-  ASSERT_EQ(expectedResult, result);
+  {
+    // TODO<joka921> Let this use the proper constructor of OptionalJoin.
+    IdTable result{inputA.numColumns() + inputB.numColumns() - jcls.size(),
+                   makeAllocator()};
+    // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
+    // a have to equal those of column 2 of b and vice versa).
+    OptionalJoin::optionalJoin(inputA, inputB, jcls, &result);
+    ASSERT_EQ(expectedResult, result);
+  }
+
+  {
+    std::vector<Variable> varsLeft;
+    for (size_t i = 0; i < inputA.numColumns(); ++i) {
+      varsLeft.emplace_back(absl::StrCat("?left_", i));
+    }
+    std::vector<Variable> varsRight;
+    for (size_t i = 0; i < inputB.numColumns(); ++i) {
+      varsRight.emplace_back(absl::StrCat("?right_", i));
+    }
+    size_t idx = 0;
+    for (auto [left, right] : jcls) {
+      varsLeft.at(left) = Variable(absl::StrCat("?joinColumn_", idx));
+      varsRight.at(right) = Variable(absl::StrCat("?joinColumn_", idx));
+      ++idx;
+    }
+    auto qec = ad_utility::testing::getQec();
+    auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, inputA.clone(), varsLeft);
+    auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, inputB.clone(), varsRight);
+    OptionalJoin opt{qec, left, right, jcls};
+
+    auto result = opt.computeResultOnlyForTesting();
+    ASSERT_EQ(result.idTable(), expectedResult);
+  }
 }
 
 // TODO<joka921> This function already exists in another PR in a better version,
@@ -75,146 +105,125 @@ IdTable makeTable(const std::vector<std::vector<Id>>& input) {
   return table;
 }
 
-// TODO<joka921> This function already exists in another PR in a better version,
-// merge them.
-IdTable makeTableV(
-    const std::vector<std::vector<std::variant<Id, int>>>& input) {
-  size_t numCols = input[0].size();
-  IdTable table{numCols, makeAllocator()};
-  table.reserve(input.size());
-  for (const auto& row : input) {
-    table.emplace_back();
-    for (size_t i = 0; i < table.numColumns(); ++i) {
-      if (std::holds_alternative<Id>(row.at(i))) {
-        table.back()[i] = std::get<Id>(row.at(i));
-      } else {
-        table.back()[i] = V(std::get<int>(row.at(i)));
-      }
-    }
-  }
-  return table;
-}
-
 TEST(OptionalJoin, singleColumnRightIsEmpty) {
-  auto a = makeTableV({{U}, {2}, {3}});
+  auto a = makeIdTableFromVector({{U}, {2}, {3}});
   IdTable b(1, makeAllocator());
-  auto expected = makeTableV({{U}, {2}, {3}});
+  auto expected = makeIdTableFromVector({{U}, {2}, {3}});
   testOptionalJoin(a, b, {{0, 0}}, expected);
 }
 
 TEST(OptionalJoin, singleColumnLeftIsEmpty) {
   IdTable a(1, makeAllocator());
-  auto b = makeTableV({{U}, {2}, {3}});
+  auto b = makeIdTableFromVector({{U}, {2}, {3}});
   testOptionalJoin(a, b, {{0, 0}}, a);
 }
 
 TEST(OptionalJoin, singleColumnPreexistingNulloptsLeft) {
-  auto a = makeTableV({{U}, {U}, {2}, {3}, {4}});
-  auto b = makeTableV({{3}, {5}});
-  auto expected = makeTableV({{2}, {3}, {3}, {3}, {4}, {5}, {5}});
+  auto a = makeIdTableFromVector({{U}, {U}, {2}, {3}, {4}});
+  auto b = makeIdTableFromVector({{3}, {5}});
+  auto expected = makeIdTableFromVector({{2}, {3}, {3}, {3}, {4}, {5}, {5}});
   testOptionalJoin(a, b, {{0, 0}}, expected);
 }
 
 TEST(OptionalJoin, singleColumnPreexistingNulloptsRight) {
-  auto a = makeTableV({{0}, {3}, {5}});
-  auto b = makeTableV({{U}, {U}, {2}, {3}, {4}});
-  auto expected = makeTableV({{0}, {0}, {3}, {3}, {3}, {5}, {5}});
+  auto a = makeIdTableFromVector({{0}, {3}, {5}});
+  auto b = makeIdTableFromVector({{U}, {U}, {2}, {3}, {4}});
+  auto expected = makeIdTableFromVector({{0}, {0}, {3}, {3}, {3}, {5}, {5}});
   testOptionalJoin(a, b, {{0, 0}}, expected);
 }
 
 TEST(OptionalJoin, singleColumnPreexistingNulloptsBoth) {
-  auto a = makeTableV({{U}, {U}, {0}, {3}, {3}, {5}, {6}});
-  auto b = makeTableV({{U}, {2}, {3}, {5}});
-  auto expected = makeTableV({{U},
-                              {U},
-                              {0},
-                              {2},
-                              {2},
-                              {3},
-                              {3},
-                              {3},
-                              {3},
-                              {3},
-                              {3},
-                              {5},
-                              {5},
-                              {5},
-                              {5},
-                              {6}});
+  auto a = makeIdTableFromVector({{U}, {U}, {0}, {3}, {3}, {5}, {6}});
+  auto b = makeIdTableFromVector({{U}, {2}, {3}, {5}});
+  auto expected = makeIdTableFromVector({{U},
+                                         {U},
+                                         {0},
+                                         {2},
+                                         {2},
+                                         {3},
+                                         {3},
+                                         {3},
+                                         {3},
+                                         {3},
+                                         {3},
+                                         {5},
+                                         {5},
+                                         {5},
+                                         {5},
+                                         {6}});
   testOptionalJoin(a, b, {{0, 0}}, expected);
 }
 
 TEST(OptionalJoin, twoColumnsPreexistingUndefLeft) {
   {
-    auto a = makeTableV({{U, U}, {U, 3}, {3, U}, {3, U}});
-    auto b = makeTableV({{3, 3}});
-    auto expected = makeTableV({{3, 3}, {3, 3}, {3, 3}, {3, 3}});
+    auto a = makeIdTableFromVector({{U, U}, {U, 3}, {3, U}, {3, U}});
+    auto b = makeIdTableFromVector({{3, 3}});
+    auto expected = makeIdTableFromVector({{3, 3}, {3, 3}, {3, 3}, {3, 3}});
     testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
   }
 
   {
-    auto a = makeTableV({{U, U},
-                         {U, 2},
-                         {U, 3},
-                         {U, 123},
-                         {0, 1},
-                         {3, U},
-                         {3, U},
-                         {3, 7},
-                         {4, U},
-                         {5, 2},
-                         {6, U},
-                         {18, U}});
-    auto b =
-        makeTableV({{0, 0}, {0, 1}, {0, 1}, {3, 3}, {5, 2}, {6, 12}, {20, 3}});
+    auto a = makeIdTableFromVector({{U, U},
+                                    {U, 2},
+                                    {U, 3},
+                                    {U, 123},
+                                    {0, 1},
+                                    {3, U},
+                                    {3, U},
+                                    {3, 7},
+                                    {4, U},
+                                    {5, 2},
+                                    {6, U},
+                                    {18, U}});
+    auto b = makeIdTableFromVector(
+        {{0, 0}, {0, 1}, {0, 1}, {3, 3}, {5, 2}, {6, 12}, {20, 3}});
     // TODO<joka921> This is the result for the case that the sorting is not
     // corrected.
     /*
-    auto expected = makeTableV({{0, 0},  {0, 1},  {0, 1},   {0, 1},  {0, 1},
-                                {3, 3},  {3, 3},  {3, 3},   {3, 3},  {3, 7},
-                                {5, 2},  {5, 2},  {5, 2},   {6, 12}, {6, 12},
-                                {20, 3}, {20, 3}, {U, 123}, {4, U},  {18, U}});
+    auto expected = makeIdTableFromVector({{0, 0},  {0, 1},  {0, 1},   {0, 1},
+    {0, 1}, {3, 3},  {3, 3},  {3, 3},   {3, 3},  {3, 7}, {5, 2},  {5, 2},  {5,
+    2},   {6, 12}, {6, 12}, {20, 3}, {20, 3}, {U, 123}, {4, U},  {18, U}});
                                 */
-    auto expected = makeTableV({{U, 123}, {0, 0},  {0, 1},  {0, 1},  {0, 1},
-                                {0, 1},   {3, 3},  {3, 3},  {3, 3},  {3, 3},
-                                {3, 7},   {4, U},  {5, 2},  {5, 2},  {5, 2},
-                                {6, 12},  {6, 12}, {18, U}, {20, 3}, {20, 3}});
+    auto expected = makeIdTableFromVector(
+        {{U, 123}, {0, 0},  {0, 1},  {0, 1},  {0, 1},  {0, 1}, {3, 3},
+         {3, 3},   {3, 3},  {3, 3},  {3, 7},  {4, U},  {5, 2}, {5, 2},
+         {5, 2},   {6, 12}, {6, 12}, {18, U}, {20, 3}, {20, 3}});
     testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
   }
 }
 
 TEST(OptionalJoin, twoColumnsPreexistingUndefRight) {
   {
-    auto a =
-        makeTableV({{0, 0}, {0, 1}, {0, 1}, {3, 3}, {5, 2}, {6, 12}, {20, 3}});
-    auto b = makeTableV({{U, U},
-                         {U, 2},
-                         {U, 3},
-                         {U, 123},
-                         {0, 1},
-                         {3, U},
-                         {3, U},
-                         {3, 7},
-                         {4, U},
-                         {5, 2},
-                         {6, U},
-                         {18, U}});
-    auto expected = makeTableV({{0, 0},
-                                {0, 1},
-                                {0, 1},
-                                {0, 1},
-                                {0, 1},
-                                {3, 3},
-                                {3, 3},
-                                {3, 3},
-                                {3, 3},
-                                {5, 2},
-                                {5, 2},
-                                {5, 2},
-                                {6, 12},
-                                {6, 12},
-                                {20, 3},
-                                {20, 3}});
+    auto a = makeIdTableFromVector(
+        {{0, 0}, {0, 1}, {0, 1}, {3, 3}, {5, 2}, {6, 12}, {20, 3}});
+    auto b = makeIdTableFromVector({{U, U},
+                                    {U, 2},
+                                    {U, 3},
+                                    {U, 123},
+                                    {0, 1},
+                                    {3, U},
+                                    {3, U},
+                                    {3, 7},
+                                    {4, U},
+                                    {5, 2},
+                                    {6, U},
+                                    {18, U}});
+    auto expected = makeIdTableFromVector({{0, 0},
+                                           {0, 1},
+                                           {0, 1},
+                                           {0, 1},
+                                           {0, 1},
+                                           {3, 3},
+                                           {3, 3},
+                                           {3, 3},
+                                           {3, 3},
+                                           {5, 2},
+                                           {5, 2},
+                                           {5, 2},
+                                           {6, 12},
+                                           {6, 12},
+                                           {20, 3},
+                                           {20, 3}});
 
     testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
   }
@@ -222,32 +231,32 @@ TEST(OptionalJoin, twoColumnsPreexistingUndefRight) {
 
 TEST(OptionalJoin, twoColumnsPreexistingUndefBoth) {
   {
-    auto a = makeTableV({{12, U}});
-    auto b = makeTableV({{U, U}, {U, 3}, {U, 123}});
-    auto expected = makeTableV({{12, U}, {12, 3}, {12, 123}});
+    auto a = makeIdTableFromVector({{12, U}});
+    auto b = makeIdTableFromVector({{U, U}, {U, 3}, {U, 123}});
+    auto expected = makeIdTableFromVector({{12, U}, {12, 3}, {12, 123}});
 
     testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
   }
   {
-    auto a = makeTableV(
+    auto a = makeIdTableFromVector(
         {{0, 0}, {0, 1}, {0, 1}, {3, 3}, {5, U}, {6, 12}, {12, U}, {20, 3}});
-    auto b = makeTableV({{U, U},
-                         {U, 2},
-                         {U, 3},
-                         {U, 123},
-                         {0, 1},
-                         {3, U},
-                         {3, U},
-                         {3, 7},
-                         {4, U},
-                         {5, 2},
-                         {6, U},
-                         {18, U}});
-    auto expected =
-        makeTableV({{0, 0},  {0, 1},    {0, 1},  {0, 1},  {0, 1},  {3, 3},
-                    {3, 3},  {3, 3},    {3, 3},  {5, U},  {5, 2},  {5, 2},
-                    {5, 3},  {5, 123},  {6, 12}, {6, 12}, {12, U}, {12, 2},
-                    {12, 3}, {12, 123}, {20, 3}, {20, 3}});
+    auto b = makeIdTableFromVector({{U, U},
+                                    {U, 2},
+                                    {U, 3},
+                                    {U, 123},
+                                    {0, 1},
+                                    {3, U},
+                                    {3, U},
+                                    {3, 7},
+                                    {4, U},
+                                    {5, 2},
+                                    {6, U},
+                                    {18, U}});
+    auto expected = makeIdTableFromVector(
+        {{0, 0},  {0, 1},    {0, 1},  {0, 1},  {0, 1},  {3, 3},
+         {3, 3},  {3, 3},    {3, 3},  {5, U},  {5, 2},  {5, 2},
+         {5, 3},  {5, 123},  {6, 12}, {6, 12}, {12, U}, {12, 2},
+         {12, 3}, {12, 123}, {20, 3}, {20, 3}});
 
     testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
   }
@@ -263,7 +272,7 @@ TEST(OptionalJoin, multipleColumnsNoUndef) {
     // a have to equal those of column 2 of b and vice versa).
     JoinColumns jcls{{1, 2}, {2, 1}};
 
-    IdTable expectedResult = makeTableV(
+    IdTable expectedResult = makeIdTableFromVector(
         {{4, 1, 2, U}, {2, 1, 3, 3}, {1, 1, 4, U}, {2, 2, 1, U}, {1, 3, 1, 1}});
 
     testOptionalJoin(a, b, jcls, expectedResult);
@@ -279,11 +288,11 @@ TEST(OptionalJoin, multipleColumnsNoUndef) {
     JoinColumns jcls{{1, 0}, {2, 1}};
 
     // For easier checking.
-    auto expectedResult = makeTableV({{1, 2, 3, 4, 5, 6, 4},
-                                      {1, 2, 3, 4, 5, 6, 5},
-                                      {1, 2, 3, 7, 5, 6, 4},
-                                      {1, 2, 3, 7, 5, 6, 5},
-                                      {7, 6, 5, 4, 3, 2, U}});
+    auto expectedResult = makeIdTableFromVector({{1, 2, 3, 4, 5, 6, 4},
+                                                 {1, 2, 3, 4, 5, 6, 5},
+                                                 {1, 2, 3, 7, 5, 6, 4},
+                                                 {1, 2, 3, 7, 5, 6, 5},
+                                                 {7, 6, 5, 4, 3, 2, U}});
 
     testOptionalJoin(va, vb, jcls, expectedResult);
   }
@@ -291,18 +300,18 @@ TEST(OptionalJoin, multipleColumnsNoUndef) {
 
 TEST(OptionalJoin, specialOptionalJoinTwoColumns) {
   {
-    IdTable a{makeIdTableFromIdVector({{V(4), V(1), V(2)},
-                                       {V(2), V(1), V(3)},
-                                       {V(1), V(1), V(4)},
-                                       {V(2), V(2), U},
-                                       {V(1), V(3), V(1)}})};
+    IdTable a{makeIdTableFromVector({{V(4), V(1), V(2)},
+                                     {V(2), V(1), V(3)},
+                                     {V(1), V(1), V(4)},
+                                     {V(2), V(2), U},
+                                     {V(1), V(3), V(1)}})};
     IdTable b{
         makeIdTableFromVector({{3, 3, 1}, {1, 8, 1}, {4, 2, 2}, {1, 1, 3}})};
     // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
     // a have to equal those of column 2 of b and vice versa).
     JoinColumns jcls{{1, 2}, {2, 1}};
 
-    IdTable expectedResult = makeTableV(
+    IdTable expectedResult = makeIdTableFromVector(
         {{4, 1, 2, U}, {2, 1, 3, 3}, {1, 1, 4, U}, {2, 2, 2, 4}, {1, 3, 1, 1}});
 
     testOptionalJoin(a, b, jcls, expectedResult);

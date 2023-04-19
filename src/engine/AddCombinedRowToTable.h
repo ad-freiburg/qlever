@@ -76,9 +76,9 @@ class AddCombinedRowToIdTable {
     AD_CORRECTNESS_CHECK(resultTable_.empty());
   }
 
-  // Return the number of UNDEF values per column. The result is only valid
-  // after all rows have been added and `flush()` has been called.
-  const std::vector<size_t>& numUndefinedPerColumn() const {
+  // Return the number of UNDEF values per column.
+  const std::vector<size_t>& numUndefinedPerColumn() {
+    flush();
     return numUndefinedPerColumn_;
   }
 
