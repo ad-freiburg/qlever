@@ -138,13 +138,13 @@ using AndExpression =
 // Unary Negation
 inline auto unaryNegate = [](bool a) -> Bool { return !a; };
 using UnaryNegateExpression =
-    NARY<1, FV<decltype(unaryNegate), EffectiveBooleanValueGetter>,
-         SET<SetOfIntervals::Complement>>;
+    NARY<1, FV<decltype(unaryNegate), EffectiveBooleanValueGetter>>;
 
 // Unary Minus, currently all results are converted to double
 inline auto unaryMinus = [](auto a) -> double { return -a; };
 using UnaryMinusExpression =
-    NARY<1, FV<decltype(unaryMinus), NumericValueGetter>>;
+    NARY<1, FV<decltype(unaryMinus), NumericValueGetter>,
+         SET<SetOfIntervals::Complement>>;
 
 // Multiplication.
 inline auto multiply = [](const auto& a, const auto& b) -> double {
