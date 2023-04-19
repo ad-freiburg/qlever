@@ -40,9 +40,7 @@ inline IdTable makeIdTableFromVector(const VectorTable& content,
   IdTable result{numCols, ad_utility::testing::makeAllocator()};
   result.reserve(content.size());
   for (const auto& row : content) {
-    AD_CONTRACT_CHECK(row.size() ==
-                      result.numColumns());  // All rows of an IdTable must
-    // have the same length.
+    AD_CONTRACT_CHECK(row.size() == result.numColumns());
     result.emplace_back();
     for (size_t i = 0; i < result.numColumns(); ++i) {
       if (std::holds_alternative<Id>(row.at(i))) {
