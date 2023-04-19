@@ -33,7 +33,7 @@ namespace ad_benchmark {
  *  join column entry of smallerTable to be overwritten by a random join column
  *  entry of biggerTable.
  */
-void createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
+static void createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
     const IdTableAndJoinColumn& biggerTable,
     const double probabilityToCreateOverlap) {
   // For easier reading.
@@ -66,6 +66,7 @@ void createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 // Benchmarks for unsorted and sorted tables, with and without overlapping values in
 // IdTables. Done with normal join and hash join.
 class BM_UnsortedAndSortedIdTable: public BenchmarkInterface {
+  public:
 
   BenchmarkResults runAllBenchmarks(){
     BenchmarkResults results{};
@@ -460,6 +461,7 @@ static std::vector<size_t> createExponentVectorUntilSize(const size_t base,
 // Create benchmark tables, where the smaller table stays at 2000 rows and
 // the bigger tables keeps getting bigger. Amount of columns stays the same.
 class BM_OnlyBiggerTableSizeChanges: public BenchmarkInterface{
+  public:
   BenchmarkResults runAllBenchmarks(){
     BenchmarkResults results{};
 
@@ -486,6 +488,7 @@ class BM_OnlyBiggerTableSizeChanges: public BenchmarkInterface{
 // Create benchmark tables, where the smaller table grows and the ratio
 // between tables stays the same. As does the amount of columns.
 class BM_OnlySmallerTableSizeChanges: public BenchmarkInterface{
+  public:
   BenchmarkResults runAllBenchmarks(){
     BenchmarkResults results{};
 
@@ -514,6 +517,7 @@ class BM_OnlySmallerTableSizeChanges: public BenchmarkInterface{
 // Create benchmark tables, where the tables are the same size and
 // both just get more rows.
 class BM_SameSizeRowGrowth: public BenchmarkInterface{
+  public:
   BenchmarkResults runAllBenchmarks(){
     BenchmarkResults results{};
 
