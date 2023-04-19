@@ -12,6 +12,7 @@
 
 #include "absl/strings/str_join.h"
 #include "engine/VariableToColumnMap.h"
+#include "parser/data/LimitOffsetClause.h"
 #include "parser/data/Variable.h"
 #include "util/ConcurrentCache.h"
 #include "util/HashMap.h"
@@ -107,6 +108,14 @@ class RuntimeInformation {
   void addDetail(const std::string& key, const T& value) {
     details_[key] = value;
   }
+
+  // Set the runtime information for a LIMIT or OFFSET operation as the new root
+  // of the tree and make the old root the only child of the LIMIT operation.
+  // The details of the LIMIT/OFFSET, the time (in ms) that was spent computing
+  // it, and the information whether the `actual` operation (the old root of the
+  // runtime information) is written to the cache, are passed in as arguments.
+  void addLimitOffsetRow(const LimitOffsetClause& l, size_t timeForLimit,
+                         bool fullResultIsNotCached);
 
  private:
   static std::string_view toString(Status status);

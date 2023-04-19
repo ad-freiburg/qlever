@@ -110,7 +110,7 @@ size_t IndexScan::getResultWidth() const {
     case FULL_INDEX_SCAN_OPS:
       return 3;
     default:
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED, "Should be unreachable.");
+      AD_FAIL();
   }
 }
 
@@ -136,31 +136,36 @@ vector<size_t> IndexScan::resultSortedOn() const {
     case FULL_INDEX_SCAN_OPS:
       return {0, 1, 2};
     default:
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED, "Should be unreachable.");
+      AD_FAIL();
   }
 }
 
 // _____________________________________________________________________________
 VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   VariableToColumnMap res;
+  // All the columns of an index scan only contain defined values.
+  auto makeCol = makeAlwaysDefinedColumn;
   size_t col = 0;
 
   // Helper lambdas that add the respective triple component as the next column.
   auto addSubject = [&]() {
     if (_subject.isVariable()) {
-      res[_subject.getVariable()] = col++;
+      res[_subject.getVariable()] = makeCol(col);
+      ++col;
     }
   };
   // TODO<joka921> Refactor the `PropertyPath` class s.t. it also has
   //`isVariable` and `getVariable`, then those three lambdas can become one.
   auto addPredicate = [&]() {
     if (_predicate[0] == '?') {
-      res[Variable{_predicate}] = col++;
+      res[Variable{_predicate}] = makeCol(col);
+      ++col;
     }
   };
   auto addObject = [&]() {
     if (_object.isVariable()) {
-      res[_object.getVariable()] = col++;
+      res[_object.getVariable()] = makeCol(col);
+      ++col;
     }
   };
 
@@ -205,104 +210,94 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
       addPredicate();
       return res;
     default:
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED, "Should be unreachable.");
+      AD_FAIL();
   }
 }
 // _____________________________________________________________________________
-void IndexScan::computeResult(ResultTable* result) {
+ResultTable IndexScan::computeResult() {
   LOG(DEBUG) << "IndexScan result computation...\n";
+  IdTable idTable{getExecutionContext()->getAllocator()};
 
   using enum Index::Permutation;
   switch (_type) {
     case PSO_BOUND_S:
-      computePSOboundS(result);
+      computePSOboundS(&idTable);
       break;
     case POS_BOUND_O:
-      computePOSboundO(result);
+      computePOSboundO(&idTable);
       break;
     case PSO_FREE_S:
-      computePSOfreeS(result);
+      computePSOfreeS(&idTable);
       break;
     case POS_FREE_O:
-      computePOSfreeO(result);
+      computePOSfreeO(&idTable);
       break;
     case SOP_BOUND_O:
-      computeSOPboundO(result);
+      computeSOPboundO(&idTable);
       break;
     case SPO_FREE_P:
-      computeSPOfreeP(result);
+      computeSPOfreeP(&idTable);
       break;
     case SOP_FREE_O:
-      computeSOPfreeO(result);
+      computeSOPfreeO(&idTable);
       break;
     case OSP_FREE_S:
-      computeOSPfreeS(result);
+      computeOSPfreeS(&idTable);
       break;
     case OPS_FREE_P:
-      computeOPSfreeP(result);
+      computeOPSfreeP(&idTable);
       break;
     case FULL_INDEX_SCAN_SPO:
-      computeFullScan(result, SPO);
+      computeFullScan(&idTable, SPO);
       break;
     case FULL_INDEX_SCAN_SOP:
-      computeFullScan(result, SOP);
+      computeFullScan(&idTable, SOP);
       break;
     case FULL_INDEX_SCAN_PSO:
-      computeFullScan(result, PSO);
+      computeFullScan(&idTable, PSO);
       break;
     case FULL_INDEX_SCAN_POS:
-      computeFullScan(result, POS);
+      computeFullScan(&idTable, POS);
       break;
     case FULL_INDEX_SCAN_OSP:
-      computeFullScan(result, OSP);
+      computeFullScan(&idTable, OSP);
       break;
     case FULL_INDEX_SCAN_OPS:
-      computeFullScan(result, OPS);
+      computeFullScan(&idTable, OPS);
       break;
   }
   LOG(DEBUG) << "IndexScan result computation done.\n";
+
+  return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }
 
 // _____________________________________________________________________________
-void IndexScan::computePSOboundS(ResultTable* result) const {
-  result->_idTable.setNumColumns(1);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_sortedBy = {0};
+void IndexScan::computePSOboundS(IdTable* result) const {
+  result->setNumColumns(1);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, _subject, &result->_idTable, Index::Permutation::PSO,
+  idx.scan(_predicate, _subject, result, Index::Permutation::PSO,
            _timeoutTimer);
 }
 
 // _____________________________________________________________________________
-void IndexScan::computePSOfreeS(ResultTable* result) const {
-  result->_idTable.setNumColumns(2);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_sortedBy = {0, 1};
+void IndexScan::computePSOfreeS(IdTable* result) const {
+  result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, &result->_idTable, Index::Permutation::PSO,
-           _timeoutTimer);
+  idx.scan(_predicate, result, Index::Permutation::PSO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
-void IndexScan::computePOSboundO(ResultTable* result) const {
-  result->_idTable.setNumColumns(1);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_sortedBy = {0};
+void IndexScan::computePOSboundO(IdTable* result) const {
+  result->setNumColumns(1);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, _object, &result->_idTable, Index::Permutation::POS,
-           _timeoutTimer);
+  idx.scan(_predicate, _object, result, Index::Permutation::POS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
-void IndexScan::computePOSfreeO(ResultTable* result) const {
-  result->_idTable.setNumColumns(2);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_sortedBy = {0, 1};
+void IndexScan::computePOSfreeO(IdTable* result) const {
+  result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, &result->_idTable, Index::Permutation::POS,
-           _timeoutTimer);
+  idx.scan(_predicate, result, Index::Permutation::POS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -368,7 +363,7 @@ size_t IndexScan::computeSizeEstimate() {
 // _____________________________________________________________________________
 size_t IndexScan::getCostEstimate() {
   if (getResultWidth() != 3) {
-    return getSizeEstimate();
+    return getSizeEstimateBeforeLimit();
   } else {
     // The computation of the `full scan` estimate must be consistent with the
     // full scan dummy joins in `Join.cpp` for correct query planning.
@@ -388,58 +383,43 @@ size_t IndexScan::getCostEstimate() {
     // estimate a tuple `(numFullIndexScans, costEstimateForRemainder)`.
     // Implement this functionality.
 
-    return getSizeEstimate() * 10'000;
+    return getSizeEstimateBeforeLimit() * 10'000;
   }
 }
 
 // _____________________________________________________________________________
-void IndexScan::computeSPOfreeP(ResultTable* result) const {
-  result->_idTable.setNumColumns(2);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_sortedBy = {0, 1};
+void IndexScan::computeSPOfreeP(IdTable* result) const {
+  result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, &result->_idTable, Index::Permutation::SPO, _timeoutTimer);
+  idx.scan(_subject, result, Index::Permutation::SPO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
-void IndexScan::computeSOPboundO(ResultTable* result) const {
-  result->_idTable.setNumColumns(1);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_sortedBy = {0};
+void IndexScan::computeSOPboundO(IdTable* result) const {
+  result->setNumColumns(1);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, _object, &result->_idTable, Index::Permutation::SOP,
-           _timeoutTimer);
+  idx.scan(_subject, _object, result, Index::Permutation::SOP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
-void IndexScan::computeSOPfreeO(ResultTable* result) const {
-  result->_idTable.setNumColumns(2);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_sortedBy = {0, 1};
+void IndexScan::computeSOPfreeO(IdTable* result) const {
+  result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, &result->_idTable, Index::Permutation::SOP, _timeoutTimer);
+  idx.scan(_subject, result, Index::Permutation::SOP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
-void IndexScan::computeOPSfreeP(ResultTable* result) const {
-  result->_idTable.setNumColumns(2);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_sortedBy = {0, 1};
+void IndexScan::computeOPSfreeP(IdTable* result) const {
+  result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_object, &result->_idTable, Index::Permutation::OPS, _timeoutTimer);
+  idx.scan(_object, result, Index::Permutation::OPS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
-void IndexScan::computeOSPfreeS(ResultTable* result) const {
-  result->_idTable.setNumColumns(2);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_sortedBy = {0, 1};
+void IndexScan::computeOSPfreeS(IdTable* result) const {
+  result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_object, &result->_idTable, Index::Permutation::OSP, _timeoutTimer);
+  idx.scan(_object, result, Index::Permutation::OSP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -494,8 +474,7 @@ void IndexScan::determineMultiplicities() {
           _multiplicity = idx.getMultiplicities(Index::Permutation::OPS);
           break;
         default:
-          AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,
-                   "Switch reached default block unexpectedly!");
+          AD_FAIL();
       }
     }
   } else {
@@ -508,25 +487,29 @@ void IndexScan::determineMultiplicities() {
   assert(_multiplicity.size() >= 1 || _multiplicity.size() <= 3);
 }
 
-void IndexScan::computeFullScan(ResultTable* result,
+// ________________________________________________________________________
+void IndexScan::computeFullScan(IdTable* result,
                                 const Index::Permutation permutation) const {
   auto [ignoredRanges, isTripleIgnored] =
       getIndex().getImpl().getIgnoredIdRanges(permutation);
 
-  result->_idTable.setNumColumns(3);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_sortedBy = {0, 1, 2};
+  result->setNumColumns(3);
 
   // This implementation computes the complete knowledge graph, except the
   // internal triples.
   uint64_t resultSize = getIndex().numTriples().normal_;
-  if (getLimit().has_value() && getLimit() < resultSize) {
-    resultSize = getLimit().value();
+  if (getLimit()._limit.has_value() && getLimit()._limit < resultSize) {
+    resultSize = getLimit()._limit.value();
   }
-  result->_idTable.reserve(resultSize);
-  auto table = std::move(result->_idTable).toStatic<3>();
+
+  // TODO<joka921> Implement OFFSET
+  if (getLimit()._offset != 0) {
+    throw NotSupportedException{
+        "Scanning the complete index with an OFFSET clause is currently not "
+        "supported by QLever"};
+  }
+  result->reserve(resultSize);
+  auto table = std::move(*result).toStatic<3>();
   size_t i = 0;
   auto triplesView =
       getExecutionContext()->getIndex().getImpl().applyToPermutation(
@@ -542,5 +525,5 @@ void IndexScan::computeFullScan(ResultTable* result,
     table.push_back(triple);
     ++i;
   }
-  result->_idTable = std::move(table).toDynamic();
+  *result = std::move(table).toDynamic();
 }

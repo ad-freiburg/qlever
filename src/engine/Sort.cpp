@@ -1,6 +1,7 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author: 2015 - 2017 Björn Buchhold (buchhold@cs.uni-freiburg.de)
+// Author: 2023 -      Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
 #include "./Sort.h"
 
@@ -12,12 +13,15 @@
 using std::string;
 
 // _____________________________________________________________________________
-size_t Sort::getResultWidth() const { return _subtree->getResultWidth(); }
+size_t Sort::getResultWidth() const { return subtree_->getResultWidth(); }
 
 // _____________________________________________________________________________
 Sort::Sort(QueryExecutionContext* qec,
-           std::shared_ptr<QueryExecutionTree> subtree, size_t sortCol)
-    : Operation(qec), _subtree(std::move(subtree)), _sortCol(sortCol) {}
+           std::shared_ptr<QueryExecutionTree> subtree,
+           std::vector<ColumnIndex> sortColumnIndices)
+    : Operation{qec},
+      subtree_{std::move(subtree)},
+      sortColumnIndices_{std::move(sortColumnIndices)} {}
 
 // _____________________________________________________________________________
 string Sort::asStringImpl(size_t indent) const {
@@ -26,44 +30,42 @@ string Sort::asStringImpl(size_t indent) const {
     os << " ";
   }
 
-  os << "SORT / ORDER BY on columns:";
+  os << "SORT(internal) on columns:";
 
-  // TODO<joka921> This produces exactly the same format as ORDER BY operations
-  // which is crucial for caching. Please refactor those classes to one class
-  // (this is only an optimization for sorts on a single column);
-  os << "asc(" << _sortCol << ") ";
-  os << "\n" << _subtree->asString(indent);
+  for (const auto& sortCol : sortColumnIndices_) {
+    os << "asc(" << sortCol << ") ";
+  }
+  os << "\n" << subtree_->asString(indent);
   return std::move(os).str();
 }
 
 // _____________________________________________________________________________
 string Sort::getDescriptor() const {
   std::string orderByVars;
-  for (const auto& p : _subtree->getVariableColumns()) {
-    if (p.second == _sortCol) {
-      orderByVars = "ASC(" + p.first.name() + ") ";
-      break;
+  const auto& varCols = subtree_->getVariableColumns();
+  for (auto sortColumn : sortColumnIndices_) {
+    for (const auto& [var, varIndex] : varCols) {
+      if (sortColumn == varIndex.columnIndex_) {
+        orderByVars += " " + var.name();
+      }
     }
   }
 
-  return "Sort on (OrderBy) on " + orderByVars;
+  return "Sort (internal order) on" + orderByVars;
 }
 
 // _____________________________________________________________________________
-void Sort::computeResult(ResultTable* result) {
+ResultTable Sort::computeResult() {
   LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
-  shared_ptr<const ResultTable> subRes = _subtree->getResult();
+  shared_ptr<const ResultTable> subRes = subtree_->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
-  double remainingSecs =
-      static_cast<double>(_timeoutTimer->wlock()->remainingMicroseconds()) /
-      1'000'000;
+  auto remainingTime = _timeoutTimer->wlock()->remainingTime();
   auto sortEstimateCancellationFactor =
       RuntimeParameters().get<"sort-estimate-cancellation-factor">();
-  if (getExecutionContext()
-          ->getSortPerformanceEstimator()
-          .estimatedSortTimeInSeconds(subRes->size(), subRes->width()) >
-      remainingSecs * sortEstimateCancellationFactor) {
+  if (getExecutionContext()->getSortPerformanceEstimator().estimatedSortTime(
+          subRes->size(), subRes->width()) >
+      remainingTime * sortEstimateCancellationFactor) {
     // The estimated time for this sort is much larger than the actually
     // remaining time, cancel this operation
     throw ad_utility::TimeoutException(
@@ -73,19 +75,9 @@ void Sort::computeResult(ResultTable* result) {
   }
 
   LOG(DEBUG) << "Sort result computation..." << endl;
-  result->_resultTypes.insert(result->_resultTypes.end(),
-                              subRes->_resultTypes.begin(),
-                              subRes->_resultTypes.end());
-  result->_localVocab = subRes->_localVocab;
-  result->_idTable = subRes->_idTable.clone();
-  /*
-  result->_idTable.setNumColumns(subRes->_idTable.numColumns());
-  result->_idTable.insert(result->_idTable.end(), subRes->_idTable.begin(),
-                          subRes->_idTable.end());
-                          */
-  int width = result->_idTable.numColumns();
-  CALL_FIXED_SIZE(width, &Engine::sort, &result->_idTable, _sortCol);
-  result->_sortedBy = resultSortedOn();
+  IdTable idTable = subRes->idTable().clone();
+  Engine::sort(idTable, sortColumnIndices_);
 
   LOG(DEBUG) << "Sort result computation done." << endl;
+  return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }

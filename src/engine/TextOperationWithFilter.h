@@ -58,7 +58,10 @@ class TextOperationWithFilter : public Operation {
     _multiplicities.clear();
   }
 
-  virtual size_t getSizeEstimate() override;
+ private:
+  size_t getSizeEstimateBeforeLimit() override;
+
+ public:
   virtual size_t getCostEstimate() override;
 
   const string& getWordPart() const { return _words; }
@@ -87,7 +90,7 @@ class TextOperationWithFilter : public Operation {
  private:
   void computeMultiplicities();
 
-  virtual void computeResult(ResultTable* result) override;
+  virtual ResultTable computeResult() override;
 
   virtual VariableToColumnMap computeVariableToColumnMap() const override;
 };

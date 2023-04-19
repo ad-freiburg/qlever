@@ -20,20 +20,23 @@ static constexpr char urlRegexString[] =
 static constexpr auto urlRegex = ctll::fixed_string(urlRegexString);
 
 // ____________________________________________________________________________
-UrlComponents::UrlComponents(const std::string_view url) {
+Url::Url(std::string_view url) {
   auto match = ctre::search<urlRegex>(url);
   if (!match) {
-    throw std::runtime_error(
-        absl::StrCat("URL malformed, must match regex ", urlRegexString));
+    throw std::runtime_error(absl::StrCat(
+        "URL \"", url, "\" malformed, must match regex ", urlRegexString));
   }
-  protocol =
+  protocol_ =
       match.get<1>().to_string() == "http" ? Protocol::HTTP : Protocol::HTTPS;
-  host = match.get<2>().to_string();
-  port = match.get<4>().to_string();
-  if (port.empty()) {
-    port = protocol == Protocol::HTTP ? "80" : "443";
+  host_ = match.get<2>().to_string();
+  port_ = match.get<4>().to_string();
+  if (port_.empty()) {
+    port_ = protocol_ == Protocol::HTTP ? "80" : "443";
   }
-  target = match.get<5>().to_string();
+  target_ = match.get<5>().to_string();
+  if (target_.empty()) {
+    target_ = "/";
+  }
 }
 
 }  // namespace ad_utility::httpUtils

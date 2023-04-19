@@ -34,3 +34,9 @@ class VariableOrderKey {
 
 // Represents an ordering by a variable or an expression.
 using OrderKey = std::variant<VariableOrderKey, ExpressionOrderKey>;
+
+enum struct IsInternalSort { True, False };
+struct OrderClause {
+  IsInternalSort isInternalSort = IsInternalSort::False;
+  std::vector<OrderKey> orderKeys;
+};

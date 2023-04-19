@@ -7,41 +7,53 @@
 
 #include <utility>
 
-#include "../engine/ResultTable.h"
-#include "../index/Vocabulary.h"
-#include "../util/OverloadCallOperator.h"
-#include "./ValueId.h"
+#include "global/ValueId.h"
+#include "util/OverloadCallOperator.h"
 
 namespace valueIdComparators {
-/// This enum encodes the different numeric comparators LessThan, LessEqual,
-/// EQual, NotEqual, GreaterEqual, GreaterThan.
+// This enum encodes the different numeric comparators LessThan, LessEqual,
+// Equal, NotEqual, GreaterEqual, GreaterThan.
 enum struct Comparison { LT, LE, EQ, NE, GE, GT };
 
-/// Compares two `ValueId`s directly on the underlying representation. Note
-/// that because the type bits are the most significant bits, all values of
-/// the same `Datatype` will be adjacent to each other. Unsigned index types
-/// are also ordered correctly. Signed integers are ordered as follows: first
-/// the positive integers (>= 0) in order and then the negative integers (< 0)
-/// in order. For doubles it is first the positive doubles in order, then the
-/// negative doubles in reversed order. In detail it is [0.0 ... infinity, NaN,
-/// -0.0, ... -infinity]. This is a direct consequence of comparing the bit
-/// representation of these values as unsigned integers.
+// This enum can be used to configure the behavior of the `compareIds` method
+// below in the case when two `Id`s have incompatible datatypes (e.g.
+// `VocabIndex` and a numeric type, or `Undefined` and any other type).
+// For `AlwaysFalse`, the comparison will always be false, so for example `"x"`
+// is neither smaller than nor greater than nor equal to `42`. This behavior is
+// similar to the behavior of floating point `NaN` values. It is used for
+// example for filter expressions like `FILTER (?x < 42)` which will filter out
+// all string values. For `CompareByType` such pairs of `Id`s will be compared
+// by the numeric order of their datatypes, so for example all `Undefined` IDs
+// will be smaller than all IDs with a type different from `Undefined`. This
+// behavior is used e.g. in `ORDER BY` expressions where we need a consistent
+// partial ordering on all possible IDs.
+enum struct ComparisonForIncompatibleTypes { AlwaysFalse, CompareByType };
+
+// Compares two `ValueId`s directly on the underlying representation. Note
+// that because the type bits are the most significant bits, all values of
+// the same `Datatype` will be adjacent to each other. Unsigned index types
+// are also ordered correctly. Signed integers are ordered as follows: first
+// the positive integers (>= 0) in order and then the negative integers (< 0)
+// in order. For doubles it is first the positive doubles in order, then the
+// negative doubles in reversed order. In detail it is [0.0 ... infinity, NaN,
+// -0.0, ... -infinity]. This is a direct consequence of comparing the bit
+// representation of these values as unsigned integers.
 inline bool compareByBits(ValueId a, ValueId b) {
   return a.getBits() < b.getBits();
 }
 
 namespace detail {
 
-/// Returns a comparator predicate `pred` that can be called with two arguments:
-/// a `ValueId` and a templated `Value`. The predicate first calls the
-/// `valueIdProjection` on the `ValueId` and then calls the `comparator` with
-/// the `value` and the result of the projection. The predicate is symmetric, so
-/// both `pred(ValueId, Value)` and `pred(Value, ValueId)` work as expected.
-/// This function is useful for `std::equal_range` which expects both orders to
-/// work. Example: `makeSymmetricComparator(&ValueId::getDatatype,
-/// std::equal_to<>{})` returns a predicate that can be called with
-/// `pred(Datatype, ValueId)` and pred(ValueId, Datatype)` and returns true iff
-/// `Datatype` and the datatype of the Id are the same.
+// Returns a comparator predicate `pred` that can be called with two arguments:
+// a `ValueId` and a templated `Value`. The predicate first calls the
+// `valueIdProjection` on the `ValueId` and then calls the `comparator` with
+// the `value` and the result of the projection. The predicate is symmetric, so
+// both `pred(ValueId, Value)` and `pred(Value, ValueId)` work as expected.
+// This function is useful for `std::equal_range` which expects both orders to
+// work. Example: `makeSymmetricComparator(&ValueId::getDatatype,
+// std::equal_to<>{})` returns a predicate that can be called with
+// `pred(Datatype, ValueId)` and pred(ValueId, Datatype)` and returns true iff
+// `Datatype` and the datatype of the Id are the same.
 template <typename Projection, typename Comparator = std::less<>>
 auto makeSymmetricComparator(Projection valueIdProjection,
                              Comparator comparator = Comparator{}) {
@@ -55,9 +67,9 @@ auto makeSymmetricComparator(Projection valueIdProjection,
 }
 }  // namespace detail
 
-/// For a range of `ValueId`s that is represented by `[begin, end)` and has to
-/// be sorted according to `compareByBits`, return the contiguous range of
-/// `ValueIds` (as a pair of iterators) where the Ids have the `datatype`.
+// For a range of `ValueId`s that is represented by `[begin, end)` and has to
+// be sorted according to `compareByBits`, return the contiguous range of
+// `ValueIds` (as a pair of iterators) where the Ids have the `datatype`.
 template <typename RandomIt>
 inline std::pair<RandomIt, RandomIt> getRangeForDatatype(RandomIt begin,
                                                          RandomIt end,
@@ -148,7 +160,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForDouble(
         return !doubleIdIsNegative(id);
       });
 
-  AD_CHECK(beginOfNegatives >= beginOfNans);
+  AD_CONTRACT_CHECK(beginOfNegatives >= beginOfNans);
 
   auto comparatorLess = makeSymmetricComparator(&ValueId::getDouble);
   auto comparatorGreater =
@@ -248,18 +260,6 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIntsAndDoubles(
   auto result = getRangesForDouble(begin, end, value, comparison);
   auto resultInt = getRangesForInt(begin, end, value, comparison);
   result.insert(result.end(), resultInt.begin(), resultInt.end());
-
-  // If the comparison is "not equal" we also have to add the ranges for
-  // non-matching datatypes.
-  if (comparison == Comparison::NE) {
-    auto rangeOfDoubles = getRangeForDatatype(begin, end, Datatype::Double);
-    auto rangeOfInts = getRangeForDatatype(begin, end, Datatype::Int);
-    AD_CHECK(rangeOfInts.first <= rangeOfDoubles.first);
-    result.push_back({begin, rangeOfInts.first});
-    result.push_back({rangeOfInts.second, rangeOfDoubles.first});
-    result.push_back({rangeOfDoubles.second, end});
-  }
-
   return result;
 }
 
@@ -274,11 +274,9 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
   RangeFilter<RandomIt> rangeFilter{comparison};
   auto [eqBegin, eqEnd] =
       std::equal_range(beginType, endType, valueId, &compareByBits);
-  rangeFilter.addNotEqual(begin, beginType);
   rangeFilter.addSmaller(beginType, eqBegin);
   rangeFilter.addEqual(eqBegin, eqEnd);
   rangeFilter.addGreater(eqEnd, endType);
-  rangeFilter.addNotEqual(endType, end);
   return std::move(rangeFilter).getResult();
 }
 
@@ -296,11 +294,9 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
       std::lower_bound(beginOfType, endOfType, valueIdBegin, &compareByBits);
   auto eqEnd =
       std::lower_bound(beginOfType, endOfType, valueIdEnd, &compareByBits);
-  rangeFilter.addNotEqual(begin, beginOfType);
   rangeFilter.addSmaller(beginOfType, eqBegin);
   rangeFilter.addEqual(eqBegin, eqEnd);
   rangeFilter.addGreater(eqEnd, endOfType);
-  rangeFilter.addNotEqual(endOfType, end);
   return std::move(rangeFilter).getResult();
 }
 
@@ -339,6 +335,11 @@ inline auto simplifyRanges =
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison) {
+  // For the evaluation of FILTERs, comparisons that involve undefined values
+  // are always false.
+  if (valueId.getDatatype() == Datatype::Undefined) {
+    return {};
+  }
   // This lambda enforces the invariants `non-empty` and `sorted`.
   switch (valueId.getDatatype()) {
     case Datatype::Double:
@@ -358,21 +359,21 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
   AD_FAIL();
 }
 
-/// Similar to `getRangesForId` above but takes a range [valueIdBegin,
-/// valueIdEnd) of Ids that are considered to be equal. `valueIdBegin` and
-/// `valueIdEnd` must have the same datatype which must be one of the index
-/// types `VocabIndex, LocalVocabIndex, ...`, otherwise an `AD_CHECK` will fail
-/// at runtime.
+// Similar to `getRangesForId` above but takes a range [valueIdBegin,
+// valueIdEnd) of Ids that are considered to be equal. `valueIdBegin` and
+// `valueIdEnd` must have the same datatype which must be one of the index
+// types `VocabIndex, LocalVocabIndex, ...`, otherwise an `AD_CONTRACT_CHECK`
+// will fail at runtime.
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
     RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
     Comparison comparison) {
   // For an explanation of the case `valueIdBegin == valueIdEnd`, see the
   // documentation of a similar check in `compareIds` below.
-  AD_CHECK(valueIdBegin <= valueIdEnd);
+  AD_CONTRACT_CHECK(valueIdBegin <= valueIdEnd);
   // This lambda enforces the invariants `non-empty` and `sorted` and also
   // merges directly adjacent ranges.
-  AD_CHECK(valueIdBegin.getDatatype() == valueIdEnd.getDatatype());
+  AD_CONTRACT_CHECK(valueIdBegin.getDatatype() == valueIdEnd.getDatatype());
   switch (valueIdBegin.getDatatype()) {
     case Datatype::Double:
     case Datatype::Int:
@@ -389,16 +390,33 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
 
 namespace detail {
 
-// This function is part of the implementation of `compareIds` (see below).
-bool compareIdsImpl(ValueId a, ValueId b, auto comparator) {
-  auto isNumeric = [](Id id) {
-    return id.getDatatype() == Datatype::Double ||
-           id.getDatatype() == Datatype::Int;
+// Determine whether the two datatypes can be compared. If they cannot be
+// compared, a comparison is always an `expression error` (term from the SPARQL
+// standard) which we currently handle by all the comparisons returning `false`.
+inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
+  auto isNumeric = [](Datatype type) {
+    return type == Datatype::Double || type == Datatype::Int;
   };
-  bool compatible =
-      (a.getDatatype() == b.getDatatype()) || (isNumeric(a) && isNumeric(b));
-  if (!compatible) {
-    return false;
+  auto isUndefined = [](Datatype type) { return type == Datatype::Undefined; };
+  // Note: Undefined values cannot be compared to other undefined values.
+  return (!isUndefined(typeA)) &&
+         ((typeA == typeB) || (isNumeric(typeA) && isNumeric(typeB)));
+}
+
+// This function is part of the implementation of `compareIds` (see below).
+template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
+              ComparisonForIncompatibleTypes::AlwaysFalse>
+bool compareIdsImpl(ValueId a, ValueId b, auto comparator) {
+  Datatype typeA = a.getDatatype();
+  Datatype typeB = b.getDatatype();
+  if (!areTypesCompatible(typeA, typeB)) {
+    using enum ComparisonForIncompatibleTypes;
+    if constexpr (comparisonForIncompatibleTypes == AlwaysFalse) {
+      return false;
+    } else {
+      static_assert(comparisonForIncompatibleTypes == CompareByType);
+      return comparator(a.getDatatype(), b.getDatatype());
+    }
   }
 
   auto visitor = [comparator](const auto& aValue, const auto& bValue) -> bool {
@@ -419,28 +437,37 @@ bool compareIdsImpl(ValueId a, ValueId b, auto comparator) {
 // bValue are the values contained in `a` and `b`.
 // 2. The datatype of `a` and `b` are compatible, s.t. the comparison in
 // condition one is well-defined.
+// For the definition of the template parameter `comparisonForIncompatibleTypes`
+// see the documentation of the enum `ComparisonForIncompatibleTypes` above.
+template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
+              ComparisonForIncompatibleTypes::AlwaysFalse>
 inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
+  // A helper lambda to factor out common code
+  auto compare = [&](auto comparator) {
+    return detail::compareIdsImpl<comparisonForIncompatibleTypes>(a, b,
+                                                                  comparator);
+  };
+  using enum Comparison;
   switch (comparison) {
-    case Comparison::LT:
-      return detail::compareIdsImpl(a, b, std::less<>());
-    case Comparison::LE:
-      return detail::compareIdsImpl(a, b, std::less_equal<>());
-    case Comparison::EQ:
-      return detail::compareIdsImpl(a, b, std::equal_to<>());
-    case Comparison::NE:
-      // IDs with incompatible datatypes are also considered "not equal".
-      return !compareIds(a, b, Comparison::EQ);
-    case Comparison::GE:
-      return detail::compareIdsImpl(a, b, std::greater_equal<>());
-    case Comparison::GT:
-      return detail::compareIdsImpl(a, b, std::greater<>());
+    case LT:
+      return compare(std::less{});
+    case LE:
+      return compare(std::less_equal{});
+    case EQ:
+      return compare(std::equal_to{});
+    case NE:
+      return compare(std::not_equal_to{});
+    case GE:
+      return compare(std::greater_equal{});
+    case GT:
+      return compare(std::greater{});
     default:
       AD_FAIL();
   }
 }
 
-/// Similar to `compareIds` above but takes a range [bBegin, bEnd) of Ids that
-/// are considered to be equal.
+// Similar to `compareIds` above but takes a range [bBegin, bEnd) of Ids that
+// are considered to be equal.
 inline bool compareWithEqualIds(ValueId a, ValueId bBegin, ValueId bEnd,
                                 Comparison comparison) {
   // The case `bBegin == bEnd` happens when IDs from QLever's vocabulary are
@@ -448,21 +475,31 @@ inline bool compareWithEqualIds(ValueId a, ValueId bBegin, ValueId bEnd,
   // vocabulary. In this case the ID `bBegin` is the ID of the smallest
   // vocabulary entry that is larger than the non-existing word that it
   // represents.
-  AD_CHECK(bBegin <= bEnd);
+  AD_CONTRACT_CHECK(bBegin <= bEnd);
+
+  // The comparison for `equal` is also used for the `not equal` case, so we
+  // factor it out.
+  auto compareEqual = [&]() {
+    return detail::compareIdsImpl(a, bBegin, std::greater_equal<>()) &&
+           detail::compareIdsImpl(a, bEnd, std::less<>());
+  };
+  using enum Comparison;
   switch (comparison) {
-    case Comparison::LT:
+    case LT:
       return detail::compareIdsImpl(a, bBegin, std::less<>());
-    case Comparison::LE:
+    case LE:
       return detail::compareIdsImpl(a, bEnd, std::less<>());
-    case Comparison::EQ:
-      return detail::compareIdsImpl(a, bBegin, std::greater_equal<>()) &&
-             detail::compareIdsImpl(a, bEnd, std::less<>());
-    case Comparison::NE:
-      // IDs with incompatible datatypes are also considered "not equal".
-      return !compareWithEqualIds(a, bBegin, bEnd, Comparison::EQ);
-    case Comparison::GE:
+    case EQ:
+      return compareEqual();
+    case NE:
+      // If the datatypes are not compatible then we always yield `false`. This
+      // is the correct behavior for SPARQL filters where this is called an
+      // `expression error`.
+      return !compareEqual() &&
+             detail::areTypesCompatible(a.getDatatype(), bBegin.getDatatype());
+    case GE:
       return detail::compareIdsImpl(a, bBegin, std::greater_equal<>());
-    case Comparison::GT:
+    case GT:
       return detail::compareIdsImpl(a, bEnd, std::greater_equal<>());
     default:
       AD_FAIL();

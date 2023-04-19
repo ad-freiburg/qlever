@@ -18,12 +18,12 @@ size_t TextOperationWithoutFilter::getResultWidth() const {
 
 // _____________________________________________________________________________
 TextOperationWithoutFilter::TextOperationWithoutFilter(
-    QueryExecutionContext* qec, const string& words,
-    const SetOfVariables& variables, const Variable& cvar, size_t textLimit)
+    QueryExecutionContext* qec, const std::vector<std::string>& words,
+    SetOfVariables variables, Variable cvar, size_t textLimit)
     : Operation(qec),
-      _words(words),
-      _variables(variables),
-      _cvar(cvar),
+      _words(absl::StrJoin(words, " ")),
+      _variables(std::move(variables)),
+      _cvar(std::move(cvar)),
       _textLimit(textLimit),
       _sizeEstimate(std::numeric_limits<size_t>::max()) {}
 
@@ -31,14 +31,20 @@ TextOperationWithoutFilter::TextOperationWithoutFilter(
 VariableToColumnMap TextOperationWithoutFilter::computeVariableToColumnMap()
     const {
   VariableToColumnMap vcmap;
-  size_t index = 0;
-  vcmap[_cvar] = index++;
-  vcmap[_cvar.getTextScoreVariable()] = index++;
+  auto addDefinedVar = [&vcmap, index = 0](const Variable& var) mutable {
+    vcmap[var] = makeAlwaysDefinedColumn(index);
+    ++index;
+  };
+  addDefinedVar(_cvar);
+  addDefinedVar(_cvar.getTextScoreVariable());
   // TODO<joka921> The order of the variables is not deterministic, check
   // whether this is correct.
+  // TODO<joka921> These variables seem to be newly created an never contain
+  // undefined values. However I currently don't understand their semantics
+  // which should be documented.
   for (const auto& var : _variables) {
     if (var != _cvar) {
-      vcmap[var] = index++;
+      addDefinedVar(var);
     }
   }
   vcmap[Variable("?completedWord")] = index++;
@@ -64,36 +70,29 @@ string TextOperationWithoutFilter::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-void TextOperationWithoutFilter::computeResult(ResultTable* result) {
+ResultTable TextOperationWithoutFilter::computeResult() {
   LOG(DEBUG) << "TextOperationWithoutFilter result computation..." << endl;
+  IdTable table{getExecutionContext()->getAllocator()};
   if (getNofVars() == 0) {
-    computeResultNoVar(result);
+    computeResultNoVar(&table);
   } else if (getNofVars() == 1) {
-    computeResultOneVar(result);
+    computeResultOneVar(&table);
   } else {
-    computeResultMultVars(result);
+    computeResultMultVars(&table);
   }
-
   LOG(DEBUG) << "TextOperationWithoutFilter result computation done." << endl;
+  return {std::move(table), resultSortedOn(), LocalVocab{}};
 }
 
 // _____________________________________________________________________________
-void TextOperationWithoutFilter::computeResultNoVar(ResultTable* result) const {
-  result->_idTable.setNumColumns(2);
-  result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
-  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-  getExecutionContext()->getIndex().getContextListForWords(_words,
-                                                           &result->_idTable);
+void TextOperationWithoutFilter::computeResultNoVar(IdTable* idTable) const {
+  idTable->setNumColumns(2);
+  getExecutionContext()->getIndex().getContextListForWords(_words, idTable);
 }
 
 // _____________________________________________________________________________
-void TextOperationWithoutFilter::computeResultOneVar(
-    ResultTable* result) const {
-  result->_idTable.setNumColumns(4);
-  result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
-  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::LOCAL_VOCAB); // QUESTION: ist das überhaupt richtig??? müsste es nicht nur vocab sein???
+void TextOperationWithoutFilter::computeResultOneVar(IdTable* idTable) const {
+  idTable->setNumColumns(4);
   getExecutionContext()->getIndex().getECListForWordsOneVar(_words, _textLimit,
                                                             &result->_idTable);
   LOG(INFO) << "Result Table: " << result->asDebugString();
@@ -107,21 +106,14 @@ void TextOperationWithoutFilter::computeResultOneVar(
 }
 
 // _____________________________________________________________________________
-void TextOperationWithoutFilter::computeResultMultVars(
-    ResultTable* result) const {
-  result->_idTable.setNumColumns(getNofVars() + 2);
-  result->_resultTypes.reserve(result->_idTable.numColumns());
-  result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
-  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-  for (size_t i = 2; i < result->_idTable.numColumns(); i++) {
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  }
-  getExecutionContext()->getIndex().getECListForWords(
-      _words, getNofVars(), _textLimit, &result->_idTable);
+void TextOperationWithoutFilter::computeResultMultVars(IdTable* idTable) const {
+  idTable->setNumColumns(getNofVars() + 2);
+  getExecutionContext()->getIndex().getECListForWords(_words, getNofVars(),
+                                                      _textLimit, idTable);
 }
 
 // _____________________________________________________________________________
-size_t TextOperationWithoutFilter::getSizeEstimate() {
+size_t TextOperationWithoutFilter::getSizeEstimateBeforeLimit() {
   if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
     double nofEntitiesSingleVar;
     if (_executionContext) {
@@ -143,9 +135,9 @@ size_t TextOperationWithoutFilter::getCostEstimate() {
   if (_executionContext) {
     return static_cast<size_t>(
         _executionContext->getCostFactor("NO_FILTER_PUNISH") *
-        (getSizeEstimate() * getNofVars()));
+        (getSizeEstimateBeforeLimit() * getNofVars()));
   } else {
-    return getSizeEstimate() * getNofVars();
+    return getSizeEstimateBeforeLimit() * getNofVars();
   }
 }
 
@@ -154,7 +146,7 @@ float TextOperationWithoutFilter::getMultiplicity(size_t col) {
   if (_multiplicities.size() == 0) {
     computeMultiplicities();
   }
-  AD_CHECK_LT(col, _multiplicities.size());
+  AD_CONTRACT_CHECK(col < _multiplicities.size());
   return _multiplicities[col];
 }
 

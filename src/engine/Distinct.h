@@ -39,12 +39,14 @@ class Distinct : public Operation {
     _subtree->setTextLimit(limit);
   }
 
-  virtual size_t getSizeEstimate() override {
+ private:
+  size_t getSizeEstimateBeforeLimit() override {
     return _subtree->getSizeEstimate();
   }
 
+ public:
   virtual size_t getCostEstimate() override {
-    return getSizeEstimate() + _subtree->getCostEstimate();
+    return getSizeEstimateBeforeLimit() + _subtree->getCostEstimate();
   }
 
   virtual float getMultiplicity(size_t col) override {
@@ -61,7 +63,7 @@ class Distinct : public Operation {
   [[nodiscard]] string asStringImpl(size_t indent = 0) const override;
 
  private:
-  virtual void computeResult(ResultTable* result) override;
+  virtual ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };

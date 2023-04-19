@@ -15,6 +15,7 @@
 #include "engine/ResultTable.h"
 #include "engine/RuntimeInformation.h"
 #include "engine/VariableToColumnMap.h"
+#include "parser/data/LimitOffsetClause.h"
 #include "parser/data/Variable.h"
 #include "util/Exception.h"
 #include "util/Log.h"
@@ -60,16 +61,16 @@ class Operation {
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
-  const Engine& getEngine() const { return _executionContext->getEngine(); }
-
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
   // Calls  `asStringImpl` and adds the information about the `LIMIT` clause.
   virtual string asString(size_t indent = 0) const final {
     auto result = asStringImpl(indent);
-    if (supportsLimit() && _limit.has_value()) {
-      result +=
-          " LIMIT (as part of operation) " + std::to_string(_limit.value());
+    if (_limit._limit.has_value()) {
+      absl::StrAppend(&result, " LIMIT ", _limit._limit.value());
+    }
+    if (_limit._offset != 0) {
+      absl::StrAppend(&result, " OFFSET ", _limit._offset);
     }
     return result;
   }
@@ -86,7 +87,19 @@ class Operation {
   virtual size_t getResultWidth() const = 0;
   virtual void setTextLimit(size_t limit) = 0;
   virtual size_t getCostEstimate() = 0;
-  virtual size_t getSizeEstimate() = 0;
+
+  virtual size_t getSizeEstimate() final {
+    if (_limit._limit.has_value()) {
+      return std::min(_limit._limit.value(), getSizeEstimateBeforeLimit());
+    } else {
+      return getSizeEstimateBeforeLimit();
+    }
+  }
+
+ private:
+  virtual size_t getSizeEstimateBeforeLimit() = 0;
+
+ public:
   virtual float getMultiplicity(size_t col) = 0;
   virtual bool knownEmptyResult() = 0;
 
@@ -118,10 +131,9 @@ class Operation {
   [[nodiscard]] virtual bool supportsLimit() const { return false; }
 
   // Set the value of the `LIMIT` clause that will be applied to the result of
-  // this operation. May only be called if `supportsLimit` returns true.
-  void setLimit(uint64_t limit) {
-    AD_CHECK(supportsLimit());
-    _limit = limit;
+  // this operation.
+  void setLimit(const LimitOffsetClause& limitOffsetClause) {
+    _limit = limitOffsetClause;
   }
 
   // Create and return the runtime information wrt the size and cost estimates
@@ -153,19 +165,17 @@ class Operation {
     return std::nullopt;
   }
 
+  // Direct access to the `computeResult()` method. This should be only used for
+  // testing, otherwise the `getResult()` function should be used which also
+  // sets the runtime info and uses the cache.
+  virtual ResultTable computeResultOnlyForTesting() final {
+    return computeResult();
+  }
+
  protected:
   // The QueryExecutionContext for this particular element.
   // No ownership.
   QueryExecutionContext* _executionContext;
-
-  /**
-   * @brief Allows for updating of the sorted columns of an operation. This
-   *        has to be used by an operation if it's sort columns change during
-   *        the operations lifetime.
-   */
-  void setResultSortedOn(const vector<size_t>& sortedColumns) {
-    _resultSortedColumns = sortedColumns;
-  }
 
   /**
    * @brief Compute and return the columns on which the result will be sorted
@@ -203,8 +213,8 @@ class Operation {
             this](size_t countIncrease = 1) mutable {
       i += countIncrease;
       if (i >= numOperationsBetweenTimeoutChecks) {
-        _timeoutTimer->wlock()->checkTimeoutAndThrow("Timeout in " +
-                                                     getDescriptor());
+        _timeoutTimer->wlock()->checkTimeoutAndThrow(
+            [this]() { return "Timeout in " + getDescriptor(); });
         i = 0;
       }
     };
@@ -218,8 +228,7 @@ class Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  //! Computes both, an EntityList and a HitList.
-  virtual void computeResult(ResultTable* result) = 0;
+  virtual ResultTable computeResult() = 0;
 
   // Create and store the complete runtime information for this operation after
   // it has either been succesfully computed or read from the cache.
@@ -248,6 +257,13 @@ class Operation {
   // see `GroupBy.cpp`
   virtual void updateRuntimeInformationWhenOptimizedOut(
       std::vector<RuntimeInformation> children);
+
+  // Use the already stored runtime info for the children,
+  // but set all of them to `optimizedOut`. This can be used, when a complete
+  // tree was optimized out. For example when one child of a JOIN operation is
+  // empty, the result will be empty, and it is not necessary to evaluate the
+  // other child.
+  virtual void updateRuntimeInformationWhenOptimizedOut();
 
   // Some operations (currently `IndexScans` with only one variable) are
   // computed during query planning. Get the total time spent in such
@@ -280,7 +296,16 @@ class Operation {
   std::vector<std::string> _warnings;
 
   // The limit from a SPARQL `LIMIT` clause.
-  std::optional<uint64_t> _limit;
+
+  // Note: This limit will only be set in the following cases:
+  // 1. This operation is the last operation of a subquery
+  // 2. This operation is the last operation of a query AND it supports an
+  //    efficient calculation of the limit (see also the `supportsLimit()`
+  //    function).
+  // We have chosen this design (in contrast to a dedicated subclass
+  // of `Operation`) to favor such efficient implementations of a limit in the
+  // future.
+  LimitOffsetClause _limit;
 
   // A mutex that can be "copied". The semantics are, that copying will create
   // a new mutex. This is sufficient for applications like in

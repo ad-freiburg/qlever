@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8.4)
+cmake_minimum_required(VERSION 3.16)
 project(QLever C CXX)
 
 # C/C++ Versions
@@ -9,12 +9,22 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
-include(CheckCXXCompilerFlag)
-check_cxx_compiler_flag(-fcoroutines HAS_COROUTINES)
-if (HAS_COROUTINES)
-    add_compile_options(-fcoroutines)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0")
+      MESSAGE(FATAL_ERROR, "G++ versions older than 11.0 are not supported by QLever")
+  else()
+      add_compile_options(-fcoroutines)
+  endif()
+
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "14.0.0")
+        MESSAGE(FATAL_ERROR, "Clang++ versions older than 14.0 are not supported by QLever")
+    elseif(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
+        add_compile_options(-fcoroutines-ts)
+        # starting from Clang 16, coroutines are enabled by default for C++ 20
+    endif()
 else()
-    add_compile_options(-fcoroutines-ts)
+    MESSAGE(FATAL_ERROR, "QLever currently only supports the G++ or LLVM-Clang++ compilers")
 endif()
 
 ## Build targets for address sanitizer
@@ -110,14 +120,31 @@ include_directories(${Boost_INCLUDE_DIR})
 ######################################
 find_package(OpenSSL REQUIRED)
 
+##############################################
+# Define a set of common third-party libraries that are used almost as
+# frequently as the standard library or as a  drop-in replacement for
+# some of its functionality.To enable the usage in all parts of QLever,
+# call the following function `qlever_target_link_libraries` for all
+# libraries and executables. It is a drop-in replacement for
+# `target_link_libraries` that additionally links against the common
+# libraries.
+function (qlever_target_link_libraries target)
+    target_link_libraries(${target} ${ARGN} absl::flat_hash_map absl::flat_hash_set absl::strings)
+endfunction()
+
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
-# Enable the specification of additional warnings manually from the commandline
+# Enable the specification of additional compiler flags manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
+
+# Enable the specification of additional linker flags manually from the commandline
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
+
 
 
 if (${PERFTOOLS_PROFILER})
@@ -174,6 +201,11 @@ endif()
 if (RUN_EXPENSIVE_TESTS)
     message(STATUS "Running expensive unit tests. This is only recommended in release builds")
     add_definitions("-DQLEVER_RUN_EXPENSIVE_TESTS")
+endif()
+
+if (ENABLE_EXPENSIVE_CHECKS)
+    message(STATUS "Enabling checks that potentially have a significant runtime overhead")
+    add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")
 endif()
 
 ################################
@@ -264,7 +296,10 @@ add_subdirectory(src/engine)
 target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
 add_subdirectory(src/index)
 add_subdirectory(src/util)
+add_subdirectory(benchmark)
+
 enable_testing()
+option(SINGLE_TEST_BINARY "Link all unit tests into a single binary. This is useful e.g. for code coverage tools" OFF)
 add_subdirectory(test)
 
 configure_file(src/web/index.html index.html)
@@ -276,23 +311,23 @@ configure_file(src/web/script.js script.js)
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
-target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
+qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
 
 add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp src/util/ConstexprSmallString.h)
-target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
+qlever_target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(ServerMain src/ServerMain.cpp)
-target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
+qlever_target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
 target_precompile_headers(ServerMain REUSE_FROM engine)
 
 add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
-target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
+qlever_target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(TurtleParserMain src/TurtleParserMain.cpp)
-target_link_libraries(TurtleParserMain parser ${CMAKE_THREAD_LIBS_INIT} absl::flat_hash_map)
+qlever_target_link_libraries(TurtleParserMain parser ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
-target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
+qlever_target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PermutationExporterMain src/index/PermutationExporterMain.cpp)
-target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_INIT})
+qlever_target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_INIT})

@@ -6,12 +6,13 @@
 
 #pragma once
 
-#include <engine/Operation.h>
-#include <engine/QueryExecutionTree.h>
-#include <util/HashMap.h>
-#include <util/HashSet.h>
-
 #include <list>
+
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
+#include "util/HashMap.h"
+#include "util/HashSet.h"
+#include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::list;
 
@@ -39,8 +40,13 @@ class Join : public Operation {
   // has no subtrees, which violates class invariants). These invalid Join
   // objects can be used for unit tests that only test member functions which
   // don't access the subtrees.
+  //
+  // @param qec Needed for creating some dummies, so that the time out checker
+  //  in Join::join doesn't create a seg fault, when it detects a time out and
+  //  tries to create an error message. (test/IndexTestHelpers.h has a function
+  //  `getQec` for easily creating one for tests.)
   struct InvalidOnlyForTestingJoinTag {};
-  explicit Join(InvalidOnlyForTestingJoinTag) {}
+  explicit Join(InvalidOnlyForTestingJoinTag, QueryExecutionContext* qec);
 
   virtual string getDescriptor() const override;
 
@@ -54,7 +60,8 @@ class Join : public Operation {
     _sizeEstimateComputed = false;
   }
 
-  virtual size_t getSizeEstimate() override {
+ private:
+  size_t getSizeEstimateBeforeLimit() override {
     if (!_sizeEstimateComputed) {
       computeSizeEstimateAndMultiplicities();
       _sizeEstimateComputed = true;
@@ -62,6 +69,7 @@ class Join : public Operation {
     return _sizeEstimate;
   }
 
+ public:
   size_t getCostEstimate() override;
 
   bool knownEmptyResult() override {
@@ -77,19 +85,38 @@ class Join : public Operation {
   }
 
   /**
-   * @brief Joins IdTables dynA and dynB on join column jc2, returning
-   * the result in dynRes. Creates a cross product for matching rows
+   * @brief Joins IdTables a and b on join column jc2, returning
+   * the result in dynRes. Creates a cross product for matching rows.
+   *
+   * This should be a switch, which shoud decide which algorithm to use for
+   * joining two IdTables.
+   * The possible algorithms should be:
+   * - The normal merge join.
+   * - The doGallopInnerJoin.
+   * - The hashJoinImpl.
+   * Currently it only decides between doGallopInnerJoin and the standard merge
+   * join, with the merge join code directly written in the function.
+   * TODO Move the merge join into it's own function and make this function
+   * a proper switch.
    **/
-  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-  void join(const IdTable& dynA, size_t jc1, const IdTable& dynB, size_t jc2,
-            IdTable* dynRes);
+  void join(const IdTable& a, size_t jc1, const IdTable& b, size_t jc2,
+            IdTable* result) const;
 
-  class RightLargerTag {};
-  class LeftLargerTag {};
-  template <typename TagType, int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-  static void doGallopInnerJoin(TagType, const IdTableView<L_WIDTH>& l1,
-                                size_t jc1, const IdTableView<R_WIDTH>& l2,
-                                size_t jc2, IdTableStatic<OUT_WIDTH>* result);
+  /**
+   * @brief Joins IdTables dynA and dynB on join column jc2, returning
+   * the result in dynRes. Creates a cross product for matching rows by putting
+   * the smaller IdTable in a hash map and using that, to faster find the
+   * matching rows.
+   * Needed to be a seperate function from the actual implementation, because
+   * compiler optimization keept inlining it, which make testing impossible,
+   * because you couldn't call the function after linking and just got
+   * 'undefined reference' errors.
+   *
+   * @return The result is only sorted, if the bigger table is sorted.
+   * Otherwise it is not sorted.
+   **/
+  void hashJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
+                size_t jc2, IdTable* dynRes);
 
   static bool isFullScanDummy(std::shared_ptr<QueryExecutionTree> tree) {
     return tree->getType() == QueryExecutionTree::SCAN &&
@@ -100,18 +127,16 @@ class Join : public Operation {
   virtual string asStringImpl(size_t indent = 0) const override;
 
  private:
-  void computeResult(ResultTable* result) override;
+  ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  void computeResultForJoinWithFullScanDummy(ResultTable* result);
+  ResultTable computeResultForJoinWithFullScanDummy();
 
   using ScanMethodType = std::function<void(Id, IdTable*)>;
 
   ScanMethodType getScanMethod(
       std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const;
-
-  void doComputeJoinWithFullScanDummyLeft(const IdTable& v, IdTable* r) const;
 
   void doComputeJoinWithFullScanDummyRight(const IdTable& v, IdTable* r) const;
 
@@ -120,4 +145,27 @@ class Join : public Operation {
                           const IdTable::const_iterator& rightBegin,
                           const IdTable::const_iterator& rightEnd,
                           IdTable* res) const;
+  /*
+   * @brief Combines 2 rows like in a join and inserts the result in the
+   * given table.
+   *
+   *@tparam The amount of columns in the rows and the table.
+   *
+   * @param[in] The left row of the join.
+   * @param[in] The right row of the join.
+   * @param[in] The numerical position of the join column of row b.
+   * @param[in] The table, in which the new combined row should be inserted.
+   * Must be static.
+   */
+  template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>
+  static void addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
+                                      const size_t jcRowB,
+                                      IdTableStatic<TABLE_WIDTH>* table);
+
+  /*
+   * @brief The implementation of hashJoin.
+   */
+  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+  void hashJoinImpl(const IdTable& dynA, size_t jc1, const IdTable& dynB,
+                    size_t jc2, IdTable* dynRes);
 };

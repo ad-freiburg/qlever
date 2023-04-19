@@ -64,25 +64,22 @@ vector<size_t> CountAvailablePredicates::resultSortedOn() const {
 VariableToColumnMap CountAvailablePredicates::computeVariableToColumnMap()
     const {
   VariableToColumnMap varCols;
-  varCols[_predicateVariable] = 0;
-  varCols[_countVariable] = 1;
+  auto col = makeAlwaysDefinedColumn;
+  varCols[_predicateVariable] = col(0);
+  varCols[_countVariable] = col(1);
   return varCols;
 }
 
 // _____________________________________________________________________________
-float CountAvailablePredicates::getMultiplicity(size_t col) {
-  if (col == 0) {
-    return 1;
-  } else {
-    // Determining the multiplicity of the second column (the counts)
-    // is non trivial (and potentially not possible) without computing
-    // at least a part of the result first.
-    return 1;
-  }
+float CountAvailablePredicates::getMultiplicity([[maybe_unused]] size_t col) {
+  // Determining the multiplicity of the second column (the counts)
+  // is not trivial (and potentially not possible) without computing
+  // at least a part of the result first, so we always return 1.
+  return 1.0f;
 }
 
 // _____________________________________________________________________________
-size_t CountAvailablePredicates::getSizeEstimate() {
+size_t CountAvailablePredicates::getSizeEstimateBeforeLimit() {
   if (_subtree.get() != nullptr) {
     // Predicates are only computed for entities in the subtrees result.
 
@@ -109,17 +106,15 @@ size_t CountAvailablePredicates::getCostEstimate() {
     return _subtree->getCostEstimate() + _subtree->getSizeEstimate();
   } else {
     // the cost is proportional to the number of elements we need to write.
-    return getSizeEstimate();
+    return getSizeEstimateBeforeLimit();
   }
 }
 
 // _____________________________________________________________________________
-void CountAvailablePredicates::computeResult(ResultTable* result) {
+ResultTable CountAvailablePredicates::computeResult() {
   LOG(DEBUG) << "CountAvailablePredicates result computation..." << std::endl;
-  result->_idTable.setNumColumns(2);
-  result->_sortedBy = resultSortedOn();
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(2);
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
 
@@ -133,19 +128,20 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
   if (_subtree == nullptr) {
     // Compute the predicates for all entities
     CountAvailablePredicates::computePatternTrickAllEntities(
-        &result->_idTable, hasPattern, hasPredicate, patterns);
+        &idTable, hasPattern, hasPredicate, patterns);
+    return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   } else {
     std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
 
-    int width = subresult->_idTable.numColumns();
-    CALL_FIXED_SIZE(width, &computePatternTrick, subresult->_idTable,
-                    &result->_idTable, hasPattern, hasPredicate, patterns,
-                    _subjectColumnIndex, &runtimeInfo);
+    size_t width = subresult->idTable().numColumns();
+    CALL_FIXED_SIZE(width, &computePatternTrick, subresult->idTable(), &idTable,
+                    hasPattern, hasPredicate, patterns, _subjectColumnIndex,
+                    &runtimeInfo);
+    return {std::move(idTable), resultSortedOn(),
+            subresult->getSharedLocalVocab()};
   }
-  LOG(DEBUG) << "CountAvailablePredicates result computation done."
-             << std::endl;
 }
 
 void CountAvailablePredicates::computePatternTrickAllEntities(
@@ -208,7 +204,7 @@ class MergeableHashMap : public ad_utility::HashMap<T, size_t> {
   }
 };
 
-template <int WIDTH>
+template <size_t WIDTH>
 void CountAvailablePredicates::computePatternTrick(
     const IdTable& dynInput, IdTable* dynResult,
     const vector<PatternID>& hasPattern,
@@ -299,12 +295,17 @@ void CountAvailablePredicates::computePatternTrick(
 #pragma omp single
 #pragma omp taskloop grainsize(100000) default(none) reduction(MergeHashmapsId:predicateCounts) reduction(+ : numPredicatesSubsumedInPatterns) \
                                        reduction(+ : numEntitiesWithPatterns) reduction(+: numPatternPredicates) reduction(+: numListPredicates) shared( patternVec, patterns)
-    for (auto it = patternVec.begin(); it != patternVec.end(); ++it) {
-      const auto& pattern = patterns[it->first];
+    // TODO<joka921> When we use iterators (`patternVec.begin()`) for the loop,
+    // there is a strange warning on clang15 when OpenMP is activated. Find out
+    // whether this is a known issue and whether this will be fixed in later
+    // versions of clang.
+    for (size_t i = 0; i != patternVec.size(); ++i) {
+      auto [patternIndex, patternCount] = patternVec[i];
+      const auto& pattern = patterns[patternIndex];
       numPatternPredicates += pattern.size();
       for (const auto& predicate : pattern) {
-        predicateCounts[predicate] += it->second;
-        numPredicatesSubsumedInPatterns += it->second;
+        predicateCounts[predicate] += patternCount;
+        numPredicatesSubsumedInPatterns += patternCount;
       }
     }
   }

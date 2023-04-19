@@ -3,6 +3,7 @@
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #include "./IndexTestHelpers.h"
+#include "./util/IdTestHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 #include "gtest/gtest.h"
@@ -11,8 +12,8 @@
 #pragma once
 
 namespace sparqlExpression {
-/// Dummy expression for testing, that for `evaluate` returns the `result`
-/// that is specified in the constructor.
+// Dummy expression for testing, that for `evaluate` returns the `result` that
+// is specified in the constructor.
 struct DummyExpression : public SparqlExpression {
   explicit DummyExpression(ExpressionResult result)
       : _result{std::move(result)} {}
@@ -20,7 +21,7 @@ struct DummyExpression : public SparqlExpression {
   ExpressionResult evaluate(EvaluationContext*) const override {
     return std::move(_result);
   }
-  vector<std::string> getUnaggregatedVariables() override { return {}; }
+  vector<Variable> getUnaggregatedVariables() override { return {}; }
   string getCacheKey(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
     return "DummyDummyDummDumm";
@@ -29,11 +30,10 @@ struct DummyExpression : public SparqlExpression {
   std::span<SparqlExpression::Ptr> children() override { return {}; }
 };
 
-// Make a `ValueId` from an int. Shorter name, as it will be used often.
-ValueId IntId(int64_t i) { return ValueId::makeFromInt(i); }
-
-// Make a `ValueId` from a double. Shorter name, as it will be used often.
-ValueId DoubleId(double d) { return ValueId::makeFromDouble(d); }
+// Make a `ValueId` from an int/ a double. Shorter name, as it will be used
+// often.
+using ad_utility::testing::DoubleId;
+using ad_utility::testing::IntId;
 
 // Struct that stores a `sparqlExpression::EvaluationContext` and all the data
 // structures that this context refers to. Most importantly it uses the
@@ -42,7 +42,7 @@ ValueId DoubleId(double d) { return ValueId::makeFromDouble(d); }
 // various types. For details see the constructor.
 struct TestContext {
   QueryExecutionContext* qec = ad_utility::testing::getQec();
-  sparqlExpression::VariableToColumnAndResultTypeMap varToColMap;
+  VariableToColumnMap varToColMap;
   LocalVocab localVocab;
   IdTable table{qec->getAllocator()};
   sparqlExpression::EvaluationContext context{*qec, varToColMap, table,
@@ -55,13 +55,13 @@ struct TestContext {
     Id Beta;
 
     bool b = qec->getIndex().getId("\"alpha\"", &alpha);
-    AD_CHECK(b);
+    AD_CONTRACT_CHECK(b);
     b = qec->getIndex().getId("\"älpha\"", &aelpha);
-    AD_CHECK(b);
+    AD_CONTRACT_CHECK(b);
     b = qec->getIndex().getId("\"A\"", &A);
-    AD_CHECK(b);
+    AD_CONTRACT_CHECK(b);
     b = qec->getIndex().getId("\"Beta\"", &Beta);
-    AD_CHECK(b);
+    AD_CONTRACT_CHECK(b);
 
     // Set up the `table` that represents the previous partial query results. It
     // has five columns/variables: ?ints (only integers), ?doubles (only
@@ -79,18 +79,18 @@ struct TestContext {
     context._endIndex = table.size();
     // Define the mapping from variable names to column indices.
     using V = Variable;
-    varToColMap[V{"?ints"}] = {0, qlever::ResultType::KB};
-    varToColMap[V{"?doubles"}] = {1, qlever::ResultType::KB};
-    varToColMap[V{"?numeric"}] = {2, qlever::ResultType::KB};
-    varToColMap[V{"?vocab"}] = {3, qlever::ResultType::KB};
-    varToColMap[V{"?mixed"}] = {4, qlever::ResultType::KB};
+    varToColMap[V{"?ints"}] = makeAlwaysDefinedColumn(0);
+    varToColMap[V{"?doubles"}] = makeAlwaysDefinedColumn(1);
+    varToColMap[V{"?numeric"}] = makeAlwaysDefinedColumn(2);
+    varToColMap[V{"?vocab"}] = makeAlwaysDefinedColumn(3);
+    varToColMap[V{"?mixed"}] = makeAlwaysDefinedColumn(4);
   }
 
   // Get a test context where the rows are the same as by default, but sorted by
   // `variable`
   static TestContext sortedBy(const Variable& variable) {
     TestContext result;
-    auto columnIndex = result.varToColMap.at(variable).first;
+    ColumnIndex columnIndex = result.varToColMap.at(variable).columnIndex_;
     std::sort(result.table.begin(), result.table.end(),
               [columnIndex](const auto& a, const auto& b) {
                 return valueIdComparators::compareByBits(a[columnIndex],
@@ -104,7 +104,7 @@ struct TestContext {
 
 // Add output for `SetOfIntervals for Gtest.
 namespace ad_utility {
-void PrintTo(const SetOfIntervals& set, std::ostream* os) {
+inline void PrintTo(const SetOfIntervals& set, std::ostream* os) {
   for (auto [first, second] : set._intervals) {
     *os << '{' << first << ", " << second << '}';
   }

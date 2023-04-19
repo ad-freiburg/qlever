@@ -10,7 +10,7 @@
 #include <unordered_set>
 
 #include "../parser/ParsedQuery.h"
-#include "../parser/data/Context.h"
+#include "../parser/data/ConstructQueryExportContext.h"
 #include "../parser/data/Types.h"
 #include "../parser/data/VarOrTerm.h"
 #include "../util/Conversions.h"
@@ -53,12 +53,12 @@ class QueryExecutionTree {
     MULTICOLUMN_JOIN,
     TRANSITIVE_PATH,
     VALUES,
+    SERVICE,
     BIND,
     MINUS,
-    NEUTRAL_ELEMENT
+    NEUTRAL_ELEMENT,
+    DUMMY
   };
-
-  enum class ExportSubFormat { CSV, TSV, BINARY };
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
 
@@ -70,9 +70,17 @@ class QueryExecutionTree {
   const QueryExecutionContext* getQec() const { return _qec; }
 
   const VariableToColumnMap& getVariableColumns() const {
-    AD_CHECK(_rootOperation);
+    AD_CONTRACT_CHECK(_rootOperation);
     return _rootOperation->getExternallyVisibleVariableColumns();
   }
+
+  // For a given `ColumnIndex` return the corresponding `pair<Variable,
+  // ColumnIndexAndTypeInfo>` by searching the `VariableToColumnMap`. If the
+  // given column index does not exist, an `AD_CONTRACT_CHECK` fails. This runs
+  // in O(numVariables) because it does a linear search over the
+  // `VariableToColumnMap`.
+  const VariableToColumnMap::value_type& getVariableAndInfoByColumnIndex(
+      ColumnIndex colIdx) const;
 
   std::shared_ptr<Operation> getRootOperation() const { return _rootOperation; }
 
@@ -99,7 +107,6 @@ class QueryExecutionTree {
   struct VariableAndColumnIndex {
     std::string _variable;
     size_t _columnIndex;
-    ResultTable::ResultType _resultType;
   };
 
   using ColumnIndicesAndTypes = vector<std::optional<VariableAndColumnIndex>>;
@@ -108,37 +115,7 @@ class QueryExecutionTree {
   // `ResultType` of the i-th `selectVariable` in the `resultTable`
   ColumnIndicesAndTypes selectedVariablesToColumnIndices(
       const parsedQuery::SelectClause& selectClause,
-      const ResultTable& resultTable, bool includeQuestionMark = true) const;
-
-  template <ExportSubFormat format>
-  ad_utility::streams::stream_generator generateResults(
-      const parsedQuery::SelectClause& selectClause, size_t limit,
-      size_t offset) const;
-
-  // Generate an RDF graph in turtle format for a CONSTRUCT query.
-  ad_utility::streams::stream_generator writeRdfGraphTurtle(
-      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-      size_t offset, std::shared_ptr<const ResultTable> res) const;
-
-  // Generate an RDF graph in csv/tsv format for a CONSTRUCT query.
-  template <ExportSubFormat format>
-  ad_utility::streams::stream_generator writeRdfGraphSeparatedValues(
-      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-      size_t offset, std::shared_ptr<const ResultTable> res) const;
-
-  // Generate an RDF graph in json format for a CONSTRUCT query.
-  nlohmann::json writeRdfGraphJson(
-      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-      size_t offset, std::shared_ptr<const ResultTable> res) const;
-
-  nlohmann::json writeResultAsQLeverJson(
-      const parsedQuery::SelectClause& selectClause, size_t limit,
-      size_t offset, shared_ptr<const ResultTable> resultTable = nullptr) const;
-
-  nlohmann::json writeResultAsSparqlJson(
-      const parsedQuery::SelectClause& selectClause, size_t limit,
-      size_t offset,
-      shared_ptr<const ResultTable> preComputedResult = nullptr) const;
+      bool includeQuestionMark = true) const;
 
   const std::vector<size_t>& resultSortedOn() const {
     return _rootOperation->getResultSortedOn();
@@ -219,6 +196,15 @@ class QueryExecutionTree {
       std::shared_ptr<QueryExecutionTree> qet,
       const vector<size_t>& sortColumns);
 
+  // Similar to `createSortedTree` (see directly above), but create the sorted
+  // trees for two different trees, the sort columns of which are specified as
+  // a vector of two-dimensional arrays. This format often appears in
+  // `QueryPlanner.cpp`.
+  static std::array<std::shared_ptr<QueryExecutionTree>, 2> createSortedTrees(
+      std::shared_ptr<QueryExecutionTree> qetA,
+      std::shared_ptr<QueryExecutionTree> qetB,
+      const vector<std::array<size_t, 2>>& sortColumns);
+
   // If the result of this `Operation` is sorted (either because this
   // `Operation` enforces this sorting, or because it preserves the sorting of
   // its children), return the variable that is the primary sort key. Else
@@ -240,6 +226,7 @@ class QueryExecutionTree {
 
   std::shared_ptr<const ResultTable> _cachedResult = nullptr;
 
+ public:
   // Helper class to avoid bug in g++ that leads to memory corruption when
   // used inside of coroutines when using srd::array<std::string, 3> instead
   // see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more
@@ -253,25 +240,16 @@ class QueryExecutionTree {
           _predicate{std::move(predicate)},
           _object{std::move(object)} {}
   };
-
-  /**
-   * @brief Convert an IdTable (typically from a query result) to a json array
-   * @param data the IdTable from which we read
-   * @param from the first <from> entries of the idTable are skipped
-   * @param limit at most <limit> entries are written, starting at <from>
-   * @param columns each pair of <columnInIdTable, correspondingType> tells
-   * us which columns are to be serialized in which order
-   * @return a 2D-Json array corresponding to the IdTable given the arguments
-   */
-  nlohmann::json writeQLeverJsonTable(
-      size_t from, size_t limit, const ColumnIndicesAndTypes& columns,
-      std::shared_ptr<const ResultTable> resultTable = nullptr) const;
-
-  [[nodiscard]] std::optional<std::pair<std::string, const char*>>
-  idToStringAndType(Id id, const ResultTable& resultTable) const;
-
-  // Generate an RDF graph for a CONSTRUCT query.
-  cppcoro::generator<StringTriple> generateRdfGraph(
-      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-      size_t offset, std::shared_ptr<const ResultTable> res) const;
 };
+
+namespace ad_utility {
+// Create a `QueryExecutionTree` with `Operation` at the root.
+// The `Operation` is created using `qec` and `args...` as constructor
+// arguments.
+template <typename Operation>
+std::shared_ptr<QueryExecutionTree> makeExecutionTree(
+    QueryExecutionContext* qec, auto&&... args) {
+  return std::make_shared<QueryExecutionTree>(
+      qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
+}
+}  // namespace ad_utility

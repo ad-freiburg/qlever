@@ -8,6 +8,8 @@
 #include <set>
 #include <vector>
 
+#include "absl/strings/str_join.h"
+#include "absl/strings/str_split.h"
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/Filter.h"
 #include "engine/QueryExecutionTree.h"
@@ -34,34 +36,30 @@ class QueryPlanner {
     TripleGraph(const TripleGraph& other, vector<size_t> keepNodes);
 
     struct Node {
-      Node(size_t id, const SparqlTriple& t)
-          // TODO<joka921> should the `_cvar` be an `optional` or a `variant`.
-          : _id(id),
-            _triple(t),
-            _variables(),
-            _cvar(std::nullopt),
-            _wordPart() {
-        if (isVariable(t._s)) {
-          _variables.insert(t._s.getVariable());
+      Node(size_t id, SparqlTriple t) : _id(id), _triple(std::move(t)) {
+        if (isVariable(_triple._s)) {
+          _variables.insert(_triple._s.getVariable());
         }
-        if (isVariable(t._p)) {
-          _variables.insert(Variable{t._p._iri});
+        if (isVariable(_triple._p)) {
+          _variables.insert(Variable{_triple._p._iri});
         }
-        if (isVariable(t._o)) {
-          _variables.insert(t._o.getVariable());
+        if (isVariable(_triple._o)) {
+          _variables.insert(_triple._o.getVariable());
         }
       }
 
-      Node(size_t id, const Variable& cvar, const string& wordPart,
+      Node(size_t id, const Variable& cvar, std::vector<std::string> words,
            const vector<SparqlTriple>& trips)
           : _id(id),
+            // TODO<joka921> What is this triple used for? If it is just a
+            // dummy, then we can replace it by a `variant<Triple,
+            // TextNodeData>`.
             _triple(cvar,
                     PropertyPath(PropertyPath::Operation::IRI, 0,
                                  INTERNAL_TEXT_MATCH_PREDICATE, {}),
-                    wordPart),
-            _variables(),
+                    TripleComponent::UNDEF{}),
             _cvar(cvar),
-            _wordPart(wordPart) {
+            _wordPart(std::move(words)) {
         _variables.insert(cvar);
         for (const auto& t : trips) {
           if (isVariable(t._s)) {
@@ -97,7 +95,7 @@ class QueryPlanner {
         // together?
         if (n._cvar.has_value()) {
           out << " cvar " << n._cvar.value().name() << " wordPart "
-              << n._wordPart;
+              << absl::StrJoin(n._wordPart.value(), " ");
         }
         return out;
       }
@@ -106,11 +104,12 @@ class QueryPlanner {
       SparqlTriple _triple;
       ad_utility::HashSet<Variable> _variables;
       std::optional<Variable> _cvar = std::nullopt;
-      string _wordPart;
+      std::optional<std::vector<std::string>> _wordPart = std::nullopt;
     };
 
     // Allows for manually building triple graphs for testing
-    TripleGraph(const std::vector<std::pair<Node, std::vector<size_t>>>& init);
+    explicit TripleGraph(
+        const std::vector<std::pair<Node, std::vector<size_t>>>& init);
 
     // Checks for id and order independent equality
     bool isSimilar(const TripleGraph& other) const;
@@ -273,7 +272,8 @@ class QueryPlanner {
   // (see `TransitivePath.cpp` for details), then returns that bound transitive
   // path. Else returns `std::nullopt`
   [[nodiscard]] static std::optional<SubtreePlan> createJoinWithTransitivePath(
-      SubtreePlan a, SubtreePlan b, const vector<array<ColumnIndex, 2>>& jcs);
+      SubtreePlan a, SubtreePlan b,
+      const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
   // Used internally by `createJoinCandidates`. If  `a` or `b` is a
   // `HasPredicateScan` with a variable as a subject (`?x ql:has-predicate
@@ -281,21 +281,25 @@ class QueryPlanner {
   // then returns a `HasPredicateScan` that takes the other input as a subtree.
   // Else returns `std::nullopt`.
   [[nodiscard]] static std::optional<SubtreePlan>
-  createJoinWithHasPredicateScan(SubtreePlan a, SubtreePlan b,
-                                 const vector<array<ColumnIndex, 2>>& jcs);
+  createJoinWithHasPredicateScan(
+      SubtreePlan a, SubtreePlan b,
+      const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
   // Used internally by `createJoinCandidates`. If  `a` or `b` is a
   // `TextOperationWithoutFilter` create a `TextOperationWithFilter` that takes
   // the result of the other input as the filter input. Else return
   // `std::nullopt`.
   [[nodiscard]] static std::optional<SubtreePlan> createJoinAsTextFilter(
-      SubtreePlan a, SubtreePlan b, const vector<array<ColumnIndex, 2>>& jcs);
+      SubtreePlan a, SubtreePlan b,
+      const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
   [[nodiscard]] vector<SubtreePlan> getOrderByRow(
-      const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
+      const ParsedQuery& pq,
+      const std::vector<std::vector<SubtreePlan>>& dpTab) const;
 
   [[nodiscard]] vector<SubtreePlan> getGroupByRow(
-      const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
+      const ParsedQuery& pq,
+      const std::vector<std::vector<SubtreePlan>>& dpTab) const;
 
   [[nodiscard]] vector<SubtreePlan> getDistinctRow(
       const parsedQuery::SelectClause& selectClause,
@@ -312,14 +316,14 @@ class QueryPlanner {
   [[nodiscard]] bool connected(const SubtreePlan& a, const SubtreePlan& b,
                                const TripleGraph& graph) const;
 
-  [[nodiscard]] vector<array<ColumnIndex, 2>> getJoinColumns(
+  [[nodiscard]] std::vector<std::array<ColumnIndex, 2>> getJoinColumns(
       const SubtreePlan& a, const SubtreePlan& b) const;
 
   [[nodiscard]] string getPruningKey(
       const SubtreePlan& plan, const vector<size_t>& orderedOnColumns) const;
 
   [[nodiscard]] void applyFiltersIfPossible(
-      vector<SubtreePlan>& row, const vector<SparqlFilter>& filters,
+      std::vector<SubtreePlan>& row, const std::vector<SparqlFilter>& filters,
       bool replaceInsteadOfAddPlans) const;
 
   /**

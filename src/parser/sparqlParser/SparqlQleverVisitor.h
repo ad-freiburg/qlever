@@ -1,8 +1,8 @@
-// Copyright 2021, University of Freiburg,
+// Copyright 2021 - 2022, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Authors:
-//   2021 - Johannes Kalmbach <kalmbacj@informatik.uni-freiburg.de>
-//   2022   Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+// Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -73,19 +73,32 @@ class SparqlQleverVisitor {
   using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
   using IntOrDouble = std::variant<int64_t, double>;
 
+  enum struct DisableSomeChecksOnlyForTesting { False, True };
+
  private:
   size_t _blankNodeCounter = 0;
   int64_t numInternalVariables_ = 0;
   int64_t numGraphPatterns_ = 0;
-  // A Stack of vector<Variable> that store the variables that are visible in a
-  // query body. Each element corresponds to nested Queries that the parse is
-  // currently parsing.
-  std::vector<std::vector<Variable>> visibleVariables_{{}};
+  // The visible variables in the order in which they are encountered in the
+  // query. This may contain duplicates. A variable is added via
+  // `addVisibleVariable`.
+  std::vector<Variable> visibleVariables_{};
   PrefixMap prefixMap_{};
+  // We need to remember the prologue (prefix declarations) when we encounter it
+  // because we need it when we encounter a SERVICE query. When there is no
+  // prologue, this string simply remains empty.
+  std::string prologueString_;
+
+  DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting_;
 
  public:
   SparqlQleverVisitor() = default;
-  SparqlQleverVisitor(PrefixMap prefixMap) : prefixMap_{std::move(prefixMap)} {}
+  SparqlQleverVisitor(
+      PrefixMap prefixMap,
+      DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
+          DisableSomeChecksOnlyForTesting::False)
+      : prefixMap_{std::move(prefixMap)},
+        disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {}
 
   const PrefixMap& prefixMap() const { return prefixMap_; }
   void setPrefixMapManually(PrefixMap map) { prefixMap_ = std::move(map); }
@@ -97,7 +110,7 @@ class SparqlQleverVisitor {
   void visit(Parser::PrologueContext* ctx);
 
   // ___________________________________________________________________________
-  [[noreturn]] void visit(Parser::BaseDeclContext* ctx);
+  [[noreturn]] static void visit(Parser::BaseDeclContext* ctx);
 
   // ___________________________________________________________________________
   void visit(Parser::PrefixDeclContext* ctx);
@@ -122,17 +135,17 @@ class SparqlQleverVisitor {
   // will always throw an exception because the corresponding feature is not
   // (yet) supported by QLever. If they have return types other than void this
   // is to make the usage of abstractions like `visitAlternative` easier.
-  [[noreturn]] ParsedQuery visit(Parser::DescribeQueryContext* ctx);
+  [[noreturn]] static ParsedQuery visit(Parser::DescribeQueryContext* ctx);
 
-  [[noreturn]] ParsedQuery visit(Parser::AskQueryContext* ctx);
+  [[noreturn]] static ParsedQuery visit(Parser::AskQueryContext* ctx);
 
-  [[noreturn]] void visit(Parser::DatasetClauseContext* ctx);
+  [[noreturn]] static void visit(Parser::DatasetClauseContext* ctx);
 
-  [[noreturn]] void visit(Parser::DefaultGraphClauseContext* ctx);
+  [[noreturn]] static void visit(Parser::DefaultGraphClauseContext* ctx);
 
-  [[noreturn]] void visit(Parser::NamedGraphClauseContext* ctx);
+  [[noreturn]] static void visit(Parser::NamedGraphClauseContext* ctx);
 
-  [[noreturn]] void visit(Parser::SourceSelectorContext* ctx);
+  [[noreturn]] static void visit(Parser::SourceSelectorContext* ctx);
 
   [[nodiscard]] PatternAndVisibleVariables visit(
       Parser::WhereClauseContext* ctx);
@@ -147,17 +160,17 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] SparqlFilter visit(Parser::HavingConditionContext* ctx);
 
-  [[nodiscard]] vector<OrderKey> visit(Parser::OrderClauseContext* ctx);
+  [[nodiscard]] OrderClause visit(Parser::OrderClauseContext* ctx);
 
   [[nodiscard]] OrderKey visit(Parser::OrderConditionContext* ctx);
 
   [[nodiscard]] LimitOffsetClause visit(Parser::LimitOffsetClausesContext* ctx);
 
-  [[nodiscard]] uint64_t visit(Parser::LimitClauseContext* ctx);
+  [[nodiscard]] static uint64_t visit(Parser::LimitClauseContext* ctx);
 
-  [[nodiscard]] uint64_t visit(Parser::OffsetClauseContext* ctx);
+  [[nodiscard]] static uint64_t visit(Parser::OffsetClauseContext* ctx);
 
-  [[nodiscard]] uint64_t visit(Parser::TextLimitClauseContext* ctx);
+  [[nodiscard]] static uint64_t visit(Parser::TextLimitClauseContext* ctx);
 
   [[nodiscard]] std::optional<parsedQuery::Values> visit(
       Parser::ValuesClauseContext* ctx);
@@ -174,7 +187,7 @@ class SparqlQleverVisitor {
       Parser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx);
 
   [[nodiscard]] parsedQuery::BasicGraphPattern visit(
-      Parser::TriplesBlockContext* ctx);
+      Parser::TriplesBlockContext* graphTerm);
 
   // Filter clauses are no independent graph patterns themselves, but their
   // scope is always the complete graph pattern enclosing them.
@@ -184,10 +197,10 @@ class SparqlQleverVisitor {
   [[nodiscard]] parsedQuery::GraphPatternOperation visit(
       Parser::OptionalGraphPatternContext* ctx);
 
-  [[noreturn]] parsedQuery::GraphPatternOperation visit(
+  [[noreturn]] static parsedQuery::GraphPatternOperation visit(
       Parser::GraphGraphPatternContext* ctx);
 
-  [[noreturn]] parsedQuery::GraphPatternOperation visit(
+  [[nodiscard]] parsedQuery::Service visit(
       Parser::ServiceGraphPatternContext* ctx);
 
   [[nodiscard]] parsedQuery::GraphPatternOperation visit(
@@ -223,7 +236,7 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] vector<ExpressionPtr> visit(Parser::ArgListContext* ctx);
 
-  [[noreturn]] void visit(Parser::ExpressionListContext* ctx);
+  [[noreturn]] static void visit(Parser::ExpressionListContext* ctx);
 
   [[nodiscard]] std::optional<parsedQuery::ConstructClause> visit(
       Parser::ConstructTemplateContext* ctx);
@@ -252,7 +265,7 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] PropertyPath visit(Parser::VerbPathContext* ctx);
 
-  [[nodiscard]] Variable visit(Parser::VerbSimpleContext* ctx);
+  [[nodiscard]] static Variable visit(Parser::VerbSimpleContext* ctx);
 
   [[nodiscard]] PathTuples visit(Parser::TupleWithoutPathContext* ctx);
 
@@ -275,17 +288,19 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] PropertyPath visit(Parser::PathEltOrInverseContext* ctx);
 
-  [[noreturn]] void visit(Parser::PathModContext* ctx);
+  [[noreturn]] static void visit(Parser::PathModContext* ctx);
 
   [[nodiscard]] PropertyPath visit(Parser::PathPrimaryContext* ctx);
 
-  [[noreturn]] PropertyPath visit(Parser::PathNegatedPropertySetContext*);
+  [[noreturn]] static PropertyPath visit(
+      Parser::PathNegatedPropertySetContext*);
 
-  [[noreturn]] PropertyPath visit(Parser::PathOneInPropertySetContext* ctx);
+  [[noreturn]] static PropertyPath visit(
+      Parser::PathOneInPropertySetContext* ctx);
 
   /// Note that in the SPARQL grammar the INTEGER rule refers to positive
   /// integers without an explicit sign.
-  [[nodiscard]] uint64_t visit(Parser::IntegerContext* ctx);
+  [[nodiscard]] static uint64_t visit(Parser::IntegerContext* ctx);
 
   [[nodiscard]] Node visit(Parser::TriplesNodeContext* ctx);
 
@@ -307,7 +322,7 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] VarOrTerm visit(Parser::VarOrIriContext* ctx);
 
-  [[nodiscard]] Variable visit(Parser::VarContext* ctx);
+  [[nodiscard]] static Variable visit(Parser::VarContext* ctx);
 
   [[nodiscard]] GraphTerm visit(Parser::GraphTermContext* ctx);
 
@@ -371,13 +386,13 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] ExpressionPtr visit(Parser::LangExpressionContext* ctx);
 
-  [[noreturn]] void visit(Parser::SubstringExpressionContext* ctx);
+  [[noreturn]] static void visit(Parser::SubstringExpressionContext* ctx);
 
-  [[noreturn]] void visit(Parser::StrReplaceExpressionContext* ctx);
+  [[noreturn]] static void visit(Parser::StrReplaceExpressionContext* ctx);
 
-  [[noreturn]] void visit(Parser::ExistsFuncContext* ctx);
+  [[noreturn]] static void visit(Parser::ExistsFuncContext* ctx);
 
-  [[noreturn]] void visit(Parser::NotExistsFuncContext* ctx);
+  [[noreturn]] static void visit(Parser::NotExistsFuncContext* ctx);
 
   [[nodiscard]] ExpressionPtr visit(Parser::AggregateContext* ctx);
 
@@ -387,19 +402,23 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] IntOrDouble visit(Parser::NumericLiteralContext* ctx);
 
-  [[nodiscard]] IntOrDouble visit(Parser::NumericLiteralUnsignedContext* ctx);
+  [[nodiscard]] static IntOrDouble visit(
+      Parser::NumericLiteralUnsignedContext* ctx);
 
-  [[nodiscard]] IntOrDouble visit(Parser::NumericLiteralPositiveContext* ctx);
+  [[nodiscard]] static IntOrDouble visit(
+      Parser::NumericLiteralPositiveContext* ctx);
 
-  [[nodiscard]] IntOrDouble visit(Parser::NumericLiteralNegativeContext* ctx);
+  [[nodiscard]] static IntOrDouble visit(
+      Parser::NumericLiteralNegativeContext* ctx);
 
-  [[nodiscard]] bool visit(Parser::BooleanLiteralContext* ctx);
+  [[nodiscard]] static bool visit(Parser::BooleanLiteralContext* ctx);
 
-  [[nodiscard]] string visit(Parser::StringContext* ctx);
+  [[nodiscard]] static RdfEscaping::NormalizedRDFString visit(
+      Parser::StringContext* ctx);
 
   [[nodiscard]] string visit(Parser::IriContext* ctx);
 
-  [[nodiscard]] string visit(Parser::IrirefContext* ctx);
+  [[nodiscard]] static string visit(Parser::IrirefContext* ctx);
 
   [[nodiscard]] string visit(Parser::PrefixedNameContext* ctx);
 
@@ -422,14 +441,21 @@ class SparqlQleverVisitor {
     return {true, std::move(label)};
   }
 
+  // Get the part of the original input string that pertains to the given
+  // context. This is necessary because ANTLR's `getText()` only provides that
+  // part with *all* whitespace removed. Preserving the whitespace is important
+  // for readability (for example, in an error message), and even more so when
+  // using such parts for further processing (like the body of a SERVICE query,
+  // which is not valid SPARQL anymore when you remove all whitespace).
+  static std::string getOriginalInputForContext(
+      const antlr4::ParserRuleContext* context);
+
   // Process an IRI function call. This is used in both `visitFunctionCall` and
   // `visitIriOrFunction`.
   [[nodiscard]] ExpressionPtr processIriFunctionCall(
-      const std::string& iri, std::vector<ExpressionPtr> argList);
+      const std::string& iri, std::vector<ExpressionPtr> argList,
+      antlr4::ParserRuleContext*);
 
-  // TODO: Remove addVisibleVariable(const string&) when all Types use the
-  //  strong type `Variable`.
-  void addVisibleVariable(string var);
   void addVisibleVariable(Variable var);
 
   [[noreturn]] void throwCollectionsAndBlankNodePathsNotSupported(auto* ctx) {
@@ -485,22 +511,25 @@ class SparqlQleverVisitor {
   template <typename Ctx>
   void visitIf(Ctx* ctx) requires voidWhenVisited<SparqlQleverVisitor, Ctx>;
 
-  [[noreturn]] void reportError(antlr4::ParserRuleContext* ctx,
-                                const std::string& msg);
+ public:
+  [[noreturn]] static void reportError(antlr4::ParserRuleContext* ctx,
+                                       const std::string& msg);
 
-  [[noreturn]] void reportNotSupported(antlr4::ParserRuleContext* ctx,
-                                       const std::string& feature);
+  [[noreturn]] static void reportNotSupported(antlr4::ParserRuleContext* ctx,
+                                              const std::string& feature);
 
+ private:
   // Throw an exception if the `expression` contains the `LANG()` function. The
   // `context` will be used to create the exception metadata.
-  void checkUnsupportedLangOperation(antlr4::ParserRuleContext* context,
-                                     SparqlExpressionPimpl expression);
+  static void checkUnsupportedLangOperation(
+      antlr4::ParserRuleContext* context,
+      const SparqlExpressionPimpl& expression);
 
   // Similar to `checkUnsupportedLangOperation` but doesn't throw for the
   // expression `LANG(?someVariable) = "someLangtag"` which is supported by
   // QLever inside a FILTER clause.
-  void checkUnsupportedLangOperationAllowFilters(
-      antlr4::ParserRuleContext* ctx, SparqlExpressionPimpl expression);
+  static void checkUnsupportedLangOperationAllowFilters(
+      antlr4::ParserRuleContext* ctx, const SparqlExpressionPimpl& expression);
 
   // Parse both `ConstructTriplesContext` and `TriplesTemplateContext` because
   // they have the same structure.

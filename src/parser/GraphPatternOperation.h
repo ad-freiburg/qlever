@@ -11,6 +11,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/GraphPattern.h"
 #include "parser/TripleComponent.h"
+#include "parser/data/VarOrTerm.h"
 #include "parser/data/Variable.h"
 #include "util/Algorithm.h"
 #include "util/VisitMixin.h"
@@ -29,17 +30,30 @@ class GraphPattern;
 /// TODO<joka921> the two classes `SparqlValues` and `Values` (below) can be
 /// merged, but we first have to figure out and refactor the `id`-business in
 /// the query planner.
-class SparqlValues {
+struct SparqlValues {
  public:
   // The variables to which the values will be bound
   std::vector<Variable> _variables;
   // A table storing the values in their string form
   std::vector<std::vector<TripleComponent>> _values;
-  // The `_variable` as a string, in the format like so: "?x ?y ?z".
+  // The `_variables` as a string, in the format like so: "?x ?y ?z".
   std::string variablesToString() const;
   // The `_values` as a string, in the format like so: "(<v12> <v12> <v13>)
   // (<v21> <v22> <v23>)".
   std::string valuesToString() const;
+};
+
+/// A `SERVICE` clause.
+struct Service {
+ public:
+  // The visible variables of the service clause.
+  std::vector<Variable> visibleVariables_;
+  // The URL of the service clause.
+  Iri serviceIri_;
+  // The prologue (prefix definitions).
+  std::string prologue_;
+  // The body of the SPARQL query for the remote endpoint.
+  std::string graphPatternAsString_;
 };
 
 /// A `BasicGraphPattern` represents a consecutive block of triples.
@@ -130,24 +144,16 @@ struct Bind {
 
   // Return all the variables that are used in the BIND expression (the target
   // variable as well as all variables from the expression).
-  cppcoro::generator<const Variable> containedVariables() const {
-    for (const auto* ptr : _expression.containedVariables()) {
-      co_yield *ptr;
-    }
-    co_yield (_target);
-  }
+  cppcoro::generator<const Variable> containedVariables() const;
 
-  [[nodiscard]] string getDescriptor() const {
-    auto inner = _expression.getDescriptor();
-    return "BIND (" + inner + " AS " + _target.name() + ")";
-  }
+  [[nodiscard]] string getDescriptor() const;
 };
 
 // TODO<joka921> Further refactor this, s.t. the whole `GraphPatternOperation`
 // class actually becomes `using GraphPatternOperation = std::variant<...>`
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-                 Values, Minus, GroupGraphPattern>;
+                 Values, Service, Minus, GroupGraphPattern>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {

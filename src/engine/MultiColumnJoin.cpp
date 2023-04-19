@@ -4,29 +4,29 @@
 
 #include "MultiColumnJoin.h"
 
-#include "CallFixedSize.h"
+#include "engine/AddCombinedRowToTable.h"
+#include "engine/CallFixedSize.h"
+#include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::string;
 
 // _____________________________________________________________________________
-MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
-                                 std::shared_ptr<QueryExecutionTree> t1,
-                                 std::shared_ptr<QueryExecutionTree> t2,
-                                 const vector<array<ColumnIndex, 2>>& jcs)
-    : Operation(qec), _joinColumns(jcs), _multiplicitiesComputed(false) {
+MultiColumnJoin::MultiColumnJoin(
+    QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
+    std::shared_ptr<QueryExecutionTree> t2,
+    const std::vector<std::array<ColumnIndex, 2>>& jcs)
+    : Operation(qec),
+      _left(std::move(t1)),
+      _right(std::move(t2)),
+      _joinColumns(jcs) {
   // Make sure subtrees are ordered so that identical queries can be identified.
-  AD_CHECK_GT(jcs.size(), 0);
-  if (t1->asString() < t2->asString()) {
-    _left = t1;
-    _right = t2;
-  } else {
-    // Swap the two subtrees
-    _left = t2;
-    _right = t1;
+  AD_CONTRACT_CHECK(!jcs.empty());
+  if (_left->asString() > _right->asString()) {
+    std::swap(_left, _right);
     // As the subtrees have been swapped the join columns need to be swapped
     // as well.
-    for (unsigned int i = 0; i < _joinColumns.size(); i++) {
-      std::swap(_joinColumns[i][0], _joinColumns[i][1]);
+    for (auto& [leftCol, rightCol] : _joinColumns) {
+      std::swap(leftCol, rightCol);
     }
   }
 }
@@ -62,7 +62,7 @@ string MultiColumnJoin::getDescriptor() const {
     for (auto jc : _joinColumns) {
       // If the left join column matches the index of a variable in the left
       // subresult.
-      if (jc[0] == p.second) {
+      if (jc[0] == p.second.columnIndex_) {
         joinVars += p.first.name() + " ";
       }
     }
@@ -71,78 +71,45 @@ string MultiColumnJoin::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-void MultiColumnJoin::computeResult(ResultTable* result) {
-  AD_CHECK(result);
+ResultTable MultiColumnJoin::computeResult() {
   LOG(DEBUG) << "MultiColumnJoin result computation..." << endl;
 
-  result->_sortedBy = resultSortedOn();
-  result->_idTable.setNumColumns(getResultWidth());
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(getResultWidth());
 
-  AD_CHECK_GE(result->_idTable.numColumns(), _joinColumns.size());
+  AD_CONTRACT_CHECK(idTable.numColumns() >= _joinColumns.size());
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
 
   LOG(DEBUG) << "MultiColumnJoin subresult computation done." << std::endl;
 
-  // compute the result types
-  result->_resultTypes.reserve(result->_idTable.numColumns());
-  result->_resultTypes.insert(result->_resultTypes.end(),
-                              leftResult->_resultTypes.begin(),
-                              leftResult->_resultTypes.end());
-  for (size_t col = 0; col < rightResult->_idTable.numColumns(); col++) {
-    bool isJoinColumn = false;
-    for (const std::array<ColumnIndex, 2>& a : _joinColumns) {
-      if (a[1] == col) {
-        isJoinColumn = true;
-        break;
-      }
-    }
-    if (!isJoinColumn) {
-      result->_resultTypes.push_back(rightResult->_resultTypes[col]);
-    }
-  }
-
   LOG(DEBUG) << "Computing a multi column join between results of size "
              << leftResult->size() << " and " << rightResult->size() << endl;
 
-  int leftWidth = leftResult->_idTable.numColumns();
-  int rightWidth = rightResult->_idTable.numColumns();
-  int resWidth = result->_idTable.numColumns();
-  CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, resWidth}),
-                  &MultiColumnJoin::computeMultiColumnJoin,
-                  leftResult->_idTable, rightResult->_idTable, _joinColumns,
-                  &result->_idTable);
-  LOG(DEBUG) << "MultiColumnJoin result computation done." << endl;
+  computeMultiColumnJoin(leftResult->idTable(), rightResult->idTable(),
+                         _joinColumns, &idTable);
+
+  LOG(DEBUG) << "MultiColumnJoin result computation done" << endl;
+  // If only one of the two operands has a non-empty local vocabulary, share
+  // with that one (otherwise, throws an exception).
+  return {std::move(idTable), resultSortedOn(),
+          ResultTable::getSharedLocalVocabFromNonEmptyOf(*leftResult,
+                                                         *rightResult)};
 }
 
 // _____________________________________________________________________________
 VariableToColumnMap MultiColumnJoin::computeVariableToColumnMap() const {
-  VariableToColumnMap retVal(_left->getVariableColumns());
-  size_t columnIndex = retVal.size();
-  const auto variableColumnsRightSorted =
-      copySortedByColumnIndex(_right->getVariableColumns());
-  for (const auto& it : variableColumnsRightSorted) {
-    bool isJoinColumn = false;
-    for (const std::array<ColumnIndex, 2>& a : _joinColumns) {
-      if (a[1] == it.second) {
-        isJoinColumn = true;
-        break;
-      }
-    }
-    if (!isJoinColumn) {
-      retVal[it.first] = columnIndex;
-      columnIndex++;
-    }
-  }
-  return retVal;
+  return makeVarToColMapForJoinOperation(
+      _left->getVariableColumns(), _right->getVariableColumns(), _joinColumns,
+      BinOpType::Join, _left->getResultWidth());
 }
 
 // _____________________________________________________________________________
 size_t MultiColumnJoin::getResultWidth() const {
   size_t res =
       _left->getResultWidth() + _right->getResultWidth() - _joinColumns.size();
-  AD_CHECK(res > 0);
+  AD_CONTRACT_CHECK(res > 0);
   return res;
 }
 
@@ -165,7 +132,7 @@ float MultiColumnJoin::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t MultiColumnJoin::getSizeEstimate() {
+size_t MultiColumnJoin::getSizeEstimateBeforeLimit() {
   if (!_multiplicitiesComputed) {
     computeSizeEstimateAndMultiplicities();
   }
@@ -174,8 +141,8 @@ size_t MultiColumnJoin::getSizeEstimate() {
 
 // _____________________________________________________________________________
 size_t MultiColumnJoin::getCostEstimate() {
-  size_t costEstimate =
-      getSizeEstimate() + _left->getSizeEstimate() + _right->getSizeEstimate();
+  size_t costEstimate = getSizeEstimateBeforeLimit() +
+                        _left->getSizeEstimate() + _right->getSizeEstimate();
   // This join is slower than a normal join, due to
   // its increased complexity
   costEstimate *= 2;
@@ -243,4 +210,83 @@ void MultiColumnJoin::computeSizeEstimateAndMultiplicities() {
     _multiplicities.push_back(mult);
   }
   _multiplicitiesComputed = true;
+}
+
+// _______________________________________________________________________
+void MultiColumnJoin::computeMultiColumnJoin(
+    const IdTable& left, const IdTable& right,
+    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+    IdTable* result) {
+  // check for trivial cases
+  if (left.empty() || right.empty()) {
+    return;
+  }
+
+  ad_utility::JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
+                                               right.numColumns()};
+
+  IdTableView<0> leftJoinColumns =
+      left.asColumnSubsetView(joinColumnData.jcsLeft());
+  IdTableView<0> rightJoinColumns =
+      right.asColumnSubsetView(joinColumnData.jcsRight());
+
+  auto leftPermuted = left.asColumnSubsetView(joinColumnData.permutationLeft());
+  auto rightPermuted =
+      right.asColumnSubsetView(joinColumnData.permutationRight());
+
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable(
+      joinColumns.size(), leftPermuted, rightPermuted, std::move(*result));
+  auto addRow = [&rowAdder, beginLeft = leftJoinColumns.begin(),
+                 beginRight = rightJoinColumns.begin()](const auto& itLeft,
+                                                        const auto& itRight) {
+    rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
+  };
+
+  auto findUndef = [](const auto& row, auto begin, auto end,
+                      bool& resultMightBeUnsorted) {
+    return ad_utility::findSmallerUndefRanges(row, begin, end,
+                                              resultMightBeUnsorted);
+  };
+
+  // `isCheap` is true iff there are no UNDEF values in the join columns. In
+  // this case we can use a much cheaper algorithm.
+  // TODO<joka921> There are many other cases where a cheaper implementation can
+  // be chosen, but we leave those for another PR, this is the most common case.
+  namespace stdr = std::ranges;
+  bool isCheap = stdr::none_of(joinColumns, [&](const auto& jcs) {
+    auto [leftCol, rightCol] = jcs;
+    return (stdr::any_of(right.getColumn(rightCol), &Id::isUndefined)) ||
+           (stdr::any_of(left.getColumn(leftCol), &Id::isUndefined));
+  });
+
+  const size_t numOutOfOrder = [&]() {
+    if (isCheap) {
+      return ad_utility::zipperJoinWithUndef(
+          leftJoinColumns, rightJoinColumns,
+          std::ranges::lexicographical_compare, addRow, ad_utility::noop,
+          ad_utility::noop);
+    } else {
+      return ad_utility::zipperJoinWithUndef(
+          leftJoinColumns, rightJoinColumns,
+          std::ranges::lexicographical_compare, addRow, findUndef, findUndef);
+    }
+  }();
+  *result = std::move(rowAdder).resultTable();
+  // If there were UNDEF values in the input, the result might be out of
+  // order. Sort it, because this operation promises a sorted result in its
+  // `resultSortedOn()` member function.
+  // TODO<joka921> We only have to do this if the sorting is required (merge the
+  // other PR first).
+  if (numOutOfOrder > 0) {
+    std::vector<ColumnIndex> cols;
+    for (size_t i = 0; i < joinColumns.size(); ++i) {
+      cols.push_back(i);
+    }
+    Engine::sort(*result, cols);
+  }
+
+  // The result that `zipperJoinWithUndef` produces has a different order of
+  // columns than expected, permute them. See the documentation of
+  // `JoinColumnMapping` for details.
+  result->permuteColumns(joinColumnData.permutationResult());
 }

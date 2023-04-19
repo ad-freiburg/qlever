@@ -1,238 +1,319 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Co-Author: Andre Schlegel (November of 2022,
+// schlegea@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <fstream>
+#include <sstream>
+#include <tuple>
 
-#include "../src/engine/CallFixedSize.h"
-#include "../src/engine/Engine.h"
-#include "../src/engine/Join.h"
-#include "../src/engine/OptionalJoin.h"
+#include "./IndexTestHelpers.h"
+#include "./util/AllocatorTestHelpers.h"
+#include "./util/GTestHelpers.h"
+#include "./util/IdTableHelpers.h"
+#include "./util/IdTestHelpers.h"
+#include "engine/CallFixedSize.h"
+#include "engine/Engine.h"
+#include "engine/Join.h"
+#include "engine/OptionalJoin.h"
+#include "engine/QueryExecutionTree.h"
+#include "engine/ValuesForTesting.h"
+#include "engine/idTable/IdTable.h"
+#include "util/Forward.h"
+#include "util/Random.h"
+#include "util/SourceLocation.h"
 
-ad_utility::AllocatorWithLimit<Id>& allocator() {
-  static ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<size_t>::max())};
-  return a;
-}
-
-auto I = [](const auto& id) {
-  return Id::makeFromVocabIndex(VocabIndex::make(id));
-};
-
-TEST(EngineTest, joinTest) {
-  IdTable a(2, allocator());
-  a.push_back({I(1), I(1)});
-  a.push_back({I(1), I(3)});
-  a.push_back({I(2), I(1)});
-  a.push_back({I(2), I(2)});
-  a.push_back({I(4), I(1)});
-  IdTable b(2, allocator());
-  b.push_back({I(1), I(3)});
-  b.push_back({I(1), I(8)});
-  b.push_back({I(3), I(1)});
-  b.push_back({I(4), I(2)});
-  IdTable res(3, allocator());
-  int lwidth = a.numColumns();
-  int rwidth = b.numColumns();
-  int reswidth = a.numColumns() + b.numColumns() - 1;
-  Join J{Join::InvalidOnlyForTestingJoinTag{}};
-  CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::join, J, a, 0,
-                  b, 0, &res);
-
-  ASSERT_EQ(I(1), res(0, 0));
-  ASSERT_EQ(I(1), res(0, 1));
-  ASSERT_EQ(I(3), res(0, 2));
-  ASSERT_EQ(I(1), res(1, 0));
-  ASSERT_EQ(I(1), res(1, 1));
-  ASSERT_EQ(I(8), res(1, 2));
-  ASSERT_EQ(I(1), res(2, 0));
-  ASSERT_EQ(I(3), res(2, 1));
-  ASSERT_EQ(I(3), res(2, 2));
-  ASSERT_EQ(I(1), res(3, 0));
-  ASSERT_EQ(I(3), res(3, 1));
-  ASSERT_EQ(I(8), res(3, 2));
-  ASSERT_EQ(5u, res.size());
-  ASSERT_EQ(I(4), res(4, 0));
-  ASSERT_EQ(I(1), res(4, 1));
-  ASSERT_EQ(I(2), res(4, 2));
-
-  res.clear();
-  for (size_t i = 1; i <= 10000; ++i) {
-    b.push_back({I(4 + i), I(2 + i)});
-  }
-  a.push_back({I(400000), I(200000)});
-  b.push_back({I(400000), I(200000)});
-
-  CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::join, J, a, 0,
-                  b, 0, &res);
-  ASSERT_EQ(6u, res.size());
-
-  a.clear();
-  b.clear();
-  res.clear();
-
-  for (size_t i = 1; i <= 10000; ++i) {
-    a.push_back({I(4 + i), I(2 + i)});
-  }
-  a.push_back({I(40000), I(200000)});
-  b.push_back({I(40000), I(200000)});
-
-  for (size_t i = 1; i <= 10000; ++i) {
-    a.push_back({I(40000 + i), I(2 + i)});
-  }
-  a.push_back({I(4000001), I(200000)});
-  b.push_back({I(4000001), I(200000)});
-  CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::join, &J, a, 0,
-                  b, 0, &res);
-  ASSERT_EQ(2u, res.size());
-
-  a.clear();
-  b.clear();
-  res.clear();
-
-  IdTable c(1, allocator());
-  c.push_back({I(0)});
-
-  b.push_back({I(0), I(1)});
-  b.push_back({I(0), I(2)});
-  b.push_back({I(1), I(3)});
-  b.push_back({I(1), I(4)});
-
-  lwidth = b.numColumns();
-  rwidth = c.numColumns();
-  reswidth = b.numColumns() + c.numColumns() - 1;
-  // reset the IdTable.
-  res = IdTable(reswidth, allocator());
-  CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::join, J, b, 0,
-                  c, 0, &res);
-
-  ASSERT_EQ(2u, res.size());
-
-  ASSERT_EQ(I(0), res(0, 0));
-  ASSERT_EQ(I(1), res(0, 1));
-
-  ASSERT_EQ(I(0), res(1, 0));
-  ASSERT_EQ(I(2), res(1, 1));
-};
-
-TEST(EngineTest, optionalJoinTest) {
-  IdTable a(3, allocator());
-  a.push_back({I(4), I(1), I(2)});
-  a.push_back({I(2), I(1), I(3)});
-  a.push_back({I(1), I(1), I(4)});
-  a.push_back({I(2), I(2), I(1)});
-  a.push_back({I(1), I(3), I(1)});
-  IdTable b(3, allocator());
-  b.push_back({I(3), I(3), I(1)});
-  b.push_back({I(1), I(8), I(1)});
-  b.push_back({I(4), I(2), I(2)});
-  b.push_back({I(1), I(1), I(3)});
-  IdTable res(4, allocator());
-  vector<array<ColumnIndex, 2>> jcls;
-  jcls.push_back(array<ColumnIndex, 2>{{1, 2}});
-  jcls.push_back(array<ColumnIndex, 2>{{2, 1}});
-
-  // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
-  // a have to equal those of column 2 of b and vice versa).
-  int aWidth = a.numColumns();
-  int bWidth = b.numColumns();
-  int resWidth = res.numColumns();
-  CALL_FIXED_SIZE((std::array{aWidth, bWidth, resWidth}),
-                  OptionalJoin::optionalJoin, a, b, false, true, jcls, &res);
-
-  ASSERT_EQ(5u, res.size());
-
-  ASSERT_EQ(I(4), res(0, 0));
-  ASSERT_EQ(I(1), res(0, 1));
-  ASSERT_EQ(I(2), res(0, 2));
-  ASSERT_EQ(ID_NO_VALUE, res(0, 3));
-
-  ASSERT_EQ(I(2), res(1, 0));
-  ASSERT_EQ(I(1), res(1, 1));
-  ASSERT_EQ(I(3), res(1, 2));
-  ASSERT_EQ(I(3), res(1, 3));
-
-  ASSERT_EQ(I(1), res(2, 0));
-  ASSERT_EQ(I(1), res(2, 1));
-  ASSERT_EQ(I(4), res(2, 2));
-  ASSERT_EQ(ID_NO_VALUE, res(2, 3));
-
-  ASSERT_EQ(I(2), res(3, 0));
-  ASSERT_EQ(I(2), res(3, 1));
-  ASSERT_EQ(I(1), res(3, 2));
-  ASSERT_EQ(ID_NO_VALUE, res(3, 3));
-
-  ASSERT_EQ(I(1), res(4, 0));
-  ASSERT_EQ(I(3), res(4, 1));
-  ASSERT_EQ(I(1), res(4, 2));
-  ASSERT_EQ(I(1), res(4, 3));
-
-  // Test the optional join with variable sized data.
-  IdTable va(6, allocator());
-  va.push_back({I(1), I(2), I(3), I(4), I(5), I(6)});
-  va.push_back({I(1), I(2), I(3), I(7), I(5), I(6)});
-  va.push_back({I(7), I(6), I(5), I(4), I(3), I(2)});
-
-  IdTable vb(3, allocator());
-  vb.push_back({I(2), I(3), I(4)});
-  vb.push_back({I(2), I(3), I(5)});
-  vb.push_back({I(6), I(7), I(4)});
-
-  IdTable vres(7, allocator());
-  jcls.clear();
-  jcls.push_back(array<ColumnIndex, 2>{{1, 0}});
-  jcls.push_back(array<ColumnIndex, 2>{{2, 1}});
-
-  aWidth = va.numColumns();
-  bWidth = vb.numColumns();
-  resWidth = vres.numColumns();
-  CALL_FIXED_SIZE((std::array{aWidth, bWidth, resWidth}),
-                  OptionalJoin::optionalJoin, va, vb, true, false, jcls, &vres);
-
-  ASSERT_EQ(5u, vres.size());
-  ASSERT_EQ(7u, vres.numColumns());
-
-  vector<Id> r{I(1), I(2), I(3), I(4), I(5), I(6), I(4)};
-  for (size_t i = 0; i < 7; i++) {
-    ASSERT_EQ(r[i], vres[0][i]);
-  }
-  r = {I(1), I(2), I(3), I(4), I(5), I(6), I(5)};
-  for (size_t i = 0; i < 7; i++) {
-    ASSERT_EQ(r[i], vres[1][i]);
-  }
-  r = {I(1), I(2), I(3), I(7), I(5), I(6), I(4)};
-  for (size_t i = 0; i < 7; i++) {
-    ASSERT_EQ(r[i], vres(2, i));
-  }
-  r = {I(1), I(2), I(3), I(7), I(5), I(6), I(5)};
-  for (size_t i = 0; i < 7; i++) {
-    ASSERT_EQ(r[i], vres(3, i));
-  }
-  r = {ID_NO_VALUE, I(6), I(7), ID_NO_VALUE, ID_NO_VALUE, ID_NO_VALUE, I(4)};
-  for (size_t i = 0; i < 7; i++) {
-    ASSERT_EQ(r[i], vres(4, i));
-  }
-}
+using ad_utility::testing::makeAllocator;
+using namespace ad_utility::testing;
+namespace {
+auto V = VocabId;
+constexpr auto U = Id::makeUndefined();
+using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
+}  // namespace
 
 TEST(EngineTest, distinctTest) {
-  IdTable inp(4, allocator());
-  IdTable res(4, allocator());
+  IdTable inp{makeIdTableFromVector(
+      {{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
 
-  inp.push_back({I(1), I(1), I(3), I(7)});
-  inp.push_back({I(6), I(1), I(3), I(6)});
-  inp.push_back({I(2), I(2), I(3), I(5)});
-  inp.push_back({I(3), I(6), I(5), I(4)});
-  inp.push_back({I(1), I(6), I(5), I(1)});
+  IdTable result{4, makeAllocator()};
 
-  std::vector<size_t> keepIndices = {1, 2};
-  CALL_FIXED_SIZE(4, Engine::distinct, inp, keepIndices, &res);
+  std::vector<size_t> keepIndices{{1, 2}};
+  CALL_FIXED_SIZE(4, Engine::distinct, inp, keepIndices, &result);
 
-  ASSERT_EQ(3u, res.size());
-  ASSERT_EQ(inp[0], res[0]);
-  ASSERT_EQ(inp[2], res[1]);
-  ASSERT_EQ(inp[3], res[2]);
+  // For easier checking.
+  IdTable expectedResult{
+      makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}})};
+  ASSERT_EQ(expectedResult, result);
+}
+
+void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
+                      JoinColumns jcls, const IdTable& expectedResult) {
+  {
+    // TODO<joka921> Let this use the proper constructor of OptionalJoin.
+    IdTable result{inputA.numColumns() + inputB.numColumns() - jcls.size(),
+                   makeAllocator()};
+    // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
+    // a have to equal those of column 2 of b and vice versa).
+    OptionalJoin::optionalJoin(inputA, inputB, jcls, &result);
+    ASSERT_EQ(expectedResult, result);
+  }
+
+  {
+    std::vector<Variable> varsLeft;
+    for (size_t i = 0; i < inputA.numColumns(); ++i) {
+      varsLeft.emplace_back(absl::StrCat("?left_", i));
+    }
+    std::vector<Variable> varsRight;
+    for (size_t i = 0; i < inputB.numColumns(); ++i) {
+      varsRight.emplace_back(absl::StrCat("?right_", i));
+    }
+    size_t idx = 0;
+    for (auto [left, right] : jcls) {
+      varsLeft.at(left) = Variable(absl::StrCat("?joinColumn_", idx));
+      varsRight.at(right) = Variable(absl::StrCat("?joinColumn_", idx));
+      ++idx;
+    }
+    auto qec = ad_utility::testing::getQec();
+    auto left = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, inputA.clone(), varsLeft);
+    auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, inputB.clone(), varsRight);
+    OptionalJoin opt{qec, left, right, jcls};
+
+    auto result = opt.computeResultOnlyForTesting();
+    ASSERT_EQ(result.idTable(), expectedResult);
+  }
+}
+
+// TODO<joka921> This function already exists in another PR in a better version,
+// merge them.
+IdTable makeTable(const std::vector<std::vector<Id>>& input) {
+  size_t numCols = input[0].size();
+  IdTable table{numCols, makeAllocator()};
+  table.reserve(input.size());
+  for (const auto& row : input) {
+    table.emplace_back();
+    for (size_t i = 0; i < table.numColumns(); ++i) {
+      table.back()[i] = row.at(i);
+    }
+  }
+  return table;
+}
+
+TEST(OptionalJoin, singleColumnRightIsEmpty) {
+  auto a = makeIdTableFromVector({{U}, {2}, {3}});
+  IdTable b(1, makeAllocator());
+  auto expected = makeIdTableFromVector({{U}, {2}, {3}});
+  testOptionalJoin(a, b, {{0, 0}}, expected);
+}
+
+TEST(OptionalJoin, singleColumnLeftIsEmpty) {
+  IdTable a(1, makeAllocator());
+  auto b = makeIdTableFromVector({{U}, {2}, {3}});
+  testOptionalJoin(a, b, {{0, 0}}, a);
+}
+
+TEST(OptionalJoin, singleColumnPreexistingNulloptsLeft) {
+  auto a = makeIdTableFromVector({{U}, {U}, {2}, {3}, {4}});
+  auto b = makeIdTableFromVector({{3}, {5}});
+  auto expected = makeIdTableFromVector({{2}, {3}, {3}, {3}, {4}, {5}, {5}});
+  testOptionalJoin(a, b, {{0, 0}}, expected);
+}
+
+TEST(OptionalJoin, singleColumnPreexistingNulloptsRight) {
+  auto a = makeIdTableFromVector({{0}, {3}, {5}});
+  auto b = makeIdTableFromVector({{U}, {U}, {2}, {3}, {4}});
+  auto expected = makeIdTableFromVector({{0}, {0}, {3}, {3}, {3}, {5}, {5}});
+  testOptionalJoin(a, b, {{0, 0}}, expected);
+}
+
+TEST(OptionalJoin, singleColumnPreexistingNulloptsBoth) {
+  auto a = makeIdTableFromVector({{U}, {U}, {0}, {3}, {3}, {5}, {6}});
+  auto b = makeIdTableFromVector({{U}, {2}, {3}, {5}});
+  auto expected = makeIdTableFromVector({{U},
+                                         {U},
+                                         {0},
+                                         {2},
+                                         {2},
+                                         {3},
+                                         {3},
+                                         {3},
+                                         {3},
+                                         {3},
+                                         {3},
+                                         {5},
+                                         {5},
+                                         {5},
+                                         {5},
+                                         {6}});
+  testOptionalJoin(a, b, {{0, 0}}, expected);
+}
+
+TEST(OptionalJoin, twoColumnsPreexistingUndefLeft) {
+  {
+    auto a = makeIdTableFromVector({{U, U}, {U, 3}, {3, U}, {3, U}});
+    auto b = makeIdTableFromVector({{3, 3}});
+    auto expected = makeIdTableFromVector({{3, 3}, {3, 3}, {3, 3}, {3, 3}});
+    testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
+  }
+
+  {
+    auto a = makeIdTableFromVector({{U, U},
+                                    {U, 2},
+                                    {U, 3},
+                                    {U, 123},
+                                    {0, 1},
+                                    {3, U},
+                                    {3, U},
+                                    {3, 7},
+                                    {4, U},
+                                    {5, 2},
+                                    {6, U},
+                                    {18, U}});
+    auto b = makeIdTableFromVector(
+        {{0, 0}, {0, 1}, {0, 1}, {3, 3}, {5, 2}, {6, 12}, {20, 3}});
+    // TODO<joka921> This is the result for the case that the sorting is not
+    // corrected.
+    /*
+    auto expected = makeIdTableFromVector({{0, 0},  {0, 1},  {0, 1},   {0, 1},
+    {0, 1}, {3, 3},  {3, 3},  {3, 3},   {3, 3},  {3, 7}, {5, 2},  {5, 2},  {5,
+    2},   {6, 12}, {6, 12}, {20, 3}, {20, 3}, {U, 123}, {4, U},  {18, U}});
+                                */
+    auto expected = makeIdTableFromVector(
+        {{U, 123}, {0, 0},  {0, 1},  {0, 1},  {0, 1},  {0, 1}, {3, 3},
+         {3, 3},   {3, 3},  {3, 3},  {3, 7},  {4, U},  {5, 2}, {5, 2},
+         {5, 2},   {6, 12}, {6, 12}, {18, U}, {20, 3}, {20, 3}});
+    testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
+  }
+}
+
+TEST(OptionalJoin, twoColumnsPreexistingUndefRight) {
+  {
+    auto a = makeIdTableFromVector(
+        {{0, 0}, {0, 1}, {0, 1}, {3, 3}, {5, 2}, {6, 12}, {20, 3}});
+    auto b = makeIdTableFromVector({{U, U},
+                                    {U, 2},
+                                    {U, 3},
+                                    {U, 123},
+                                    {0, 1},
+                                    {3, U},
+                                    {3, U},
+                                    {3, 7},
+                                    {4, U},
+                                    {5, 2},
+                                    {6, U},
+                                    {18, U}});
+    auto expected = makeIdTableFromVector({{0, 0},
+                                           {0, 1},
+                                           {0, 1},
+                                           {0, 1},
+                                           {0, 1},
+                                           {3, 3},
+                                           {3, 3},
+                                           {3, 3},
+                                           {3, 3},
+                                           {5, 2},
+                                           {5, 2},
+                                           {5, 2},
+                                           {6, 12},
+                                           {6, 12},
+                                           {20, 3},
+                                           {20, 3}});
+
+    testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
+  }
+}
+
+TEST(OptionalJoin, twoColumnsPreexistingUndefBoth) {
+  {
+    auto a = makeIdTableFromVector({{12, U}});
+    auto b = makeIdTableFromVector({{U, U}, {U, 3}, {U, 123}});
+    auto expected = makeIdTableFromVector({{12, U}, {12, 3}, {12, 123}});
+
+    testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
+  }
+  {
+    auto a = makeIdTableFromVector(
+        {{0, 0}, {0, 1}, {0, 1}, {3, 3}, {5, U}, {6, 12}, {12, U}, {20, 3}});
+    auto b = makeIdTableFromVector({{U, U},
+                                    {U, 2},
+                                    {U, 3},
+                                    {U, 123},
+                                    {0, 1},
+                                    {3, U},
+                                    {3, U},
+                                    {3, 7},
+                                    {4, U},
+                                    {5, 2},
+                                    {6, U},
+                                    {18, U}});
+    auto expected = makeIdTableFromVector(
+        {{0, 0},  {0, 1},    {0, 1},  {0, 1},  {0, 1},  {3, 3},
+         {3, 3},  {3, 3},    {3, 3},  {5, U},  {5, 2},  {5, 2},
+         {5, 3},  {5, 123},  {6, 12}, {6, 12}, {12, U}, {12, 2},
+         {12, 3}, {12, 123}, {20, 3}, {20, 3}});
+
+    testOptionalJoin(a, b, {{0, 0}, {1, 1}}, expected);
+  }
+}
+
+TEST(OptionalJoin, multipleColumnsNoUndef) {
+  {
+    IdTable a{makeIdTableFromVector(
+        {{4, 1, 2}, {2, 1, 3}, {1, 1, 4}, {2, 2, 1}, {1, 3, 1}})};
+    IdTable b{
+        makeIdTableFromVector({{3, 3, 1}, {1, 8, 1}, {4, 2, 2}, {1, 1, 3}})};
+    // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
+    // a have to equal those of column 2 of b and vice versa).
+    JoinColumns jcls{{1, 2}, {2, 1}};
+
+    IdTable expectedResult = makeIdTableFromVector(
+        {{4, 1, 2, U}, {2, 1, 3, 3}, {1, 1, 4, U}, {2, 2, 1, U}, {1, 3, 1, 1}});
+
+    testOptionalJoin(a, b, jcls, expectedResult);
+  }
+
+  {
+    // Test the optional join with variable sized data.
+    IdTable va{makeIdTableFromVector(
+        {{1, 2, 3, 4, 5, 6}, {1, 2, 3, 7, 5, 6}, {7, 6, 5, 4, 3, 2}})};
+
+    IdTable vb{makeIdTableFromVector({{2, 3, 4}, {2, 3, 5}, {6, 7, 4}})};
+
+    JoinColumns jcls{{1, 0}, {2, 1}};
+
+    // For easier checking.
+    auto expectedResult = makeIdTableFromVector({{1, 2, 3, 4, 5, 6, 4},
+                                                 {1, 2, 3, 4, 5, 6, 5},
+                                                 {1, 2, 3, 7, 5, 6, 4},
+                                                 {1, 2, 3, 7, 5, 6, 5},
+                                                 {7, 6, 5, 4, 3, 2, U}});
+
+    testOptionalJoin(va, vb, jcls, expectedResult);
+  }
+}
+
+TEST(OptionalJoin, specialOptionalJoinTwoColumns) {
+  {
+    IdTable a{makeIdTableFromVector({{V(4), V(1), V(2)},
+                                     {V(2), V(1), V(3)},
+                                     {V(1), V(1), V(4)},
+                                     {V(2), V(2), U},
+                                     {V(1), V(3), V(1)}})};
+    IdTable b{
+        makeIdTableFromVector({{3, 3, 1}, {1, 8, 1}, {4, 2, 2}, {1, 1, 3}})};
+    // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
+    // a have to equal those of column 2 of b and vice versa).
+    JoinColumns jcls{{1, 2}, {2, 1}};
+
+    IdTable expectedResult = makeIdTableFromVector(
+        {{4, 1, 2, U}, {2, 1, 3, 3}, {1, 1, 4, U}, {2, 2, 2, 4}, {1, 3, 1, 1}});
+
+    testOptionalJoin(a, b, jcls, expectedResult);
+  }
 }

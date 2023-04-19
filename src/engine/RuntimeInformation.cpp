@@ -8,8 +8,6 @@
 #include <util/Log.h>
 #include <util/TransparentFunctors.h>
 
-#include <ranges>
-
 // ________________________________________________________________________________________________________________
 std::string RuntimeInformation::toString() const {
   std::ostringstream buffer;
@@ -89,12 +87,18 @@ void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
   }
   // Resize the `columnNames_` vector such that we can use the keys from
   // columnMap (which are not necessarily consecutive) as indexes.
-  auto maxColumnIndex =
-      std::ranges::max_element(columnMap, {}, ad_utility::second)->second;
+
+  // TODO<joka921, Clang16> This is `stdr::max(columnMap | stdv::values |
+  // stdv::transform(&ColumnIndexAndTypeInfo::columnIndex_))`
+  ColumnIndex maxColumnIndex =
+      std::ranges::max_element(columnMap, std::less{}, [](const auto& pair) {
+        return pair.second.columnIndex_;
+      })->second.columnIndex_;
   columnNames_.resize(maxColumnIndex + 1);
   // Now copy the (variable, index) pairs to the vector.
-  for (const auto& [variable, columnIndex] : columnMap) {
-    AD_CHECK(columnIndex < columnNames_.size());
+  for (const auto& [variable, columnIndexAndType] : columnMap) {
+    ColumnIndex columnIndex = columnIndexAndType.columnIndex_;
+    AD_CONTRACT_CHECK(columnIndex < columnNames_.size());
     columnNames_[columnIndex] = variable.name();
   }
 }
@@ -199,4 +203,34 @@ void to_json(nlohmann::ordered_json& j,
   j = nlohmann::ordered_json{
       {"time_query_planning", rti.timeQueryPlanning},
       {"time_index_scans_query_planning", rti.timeIndexScansQueryPlanning}};
+}
+
+// ___________________________________________________________________________________
+void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
+                                           size_t timeForLimit,
+                                           bool fullResultIsNotCached) {
+  bool hasLimit = l._limit.has_value();
+  bool hasOffset = l._offset != 0;
+  if (!(hasLimit || hasOffset)) {
+    return;
+  }
+  children_ = std::vector{*this};
+  auto& actualOperation = children_.at(0);
+  numRows_ = l.actualSize(actualOperation.numRows_);
+  details_.clear();
+  cacheStatus_ = ad_utility::CacheStatus::computed;
+  totalTime_ += static_cast<double>(timeForLimit);
+  actualOperation.addDetail("not-written-to-cache-because-child-of-limit",
+                            fullResultIsNotCached);
+  sizeEstimate_ = l.actualSize(sizeEstimate_);
+
+  // Update the descriptor.
+  descriptor_.clear();
+  if (hasLimit) {
+    descriptor_ = absl::StrCat("LIMIT ", l._limit.value());
+  }
+
+  if (hasOffset) {
+    absl::StrAppend(&descriptor_, hasLimit ? " " : "", "OFFSET ", l._offset);
+  }
 }

@@ -235,7 +235,7 @@ inline ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(
       nextWordId++;
       lastWord = el.first;
     }
-    AD_CHECK(!res.count(el.second.m_id));
+    AD_CONTRACT_CHECK(!res.count(el.second.m_id));
     res[el.second.m_id] = nextWordId;
     el.second.m_id = nextWordId;
     first = false;

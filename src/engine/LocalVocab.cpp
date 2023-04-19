@@ -9,6 +9,36 @@
 #include "global/ValueId.h"
 
 // _____________________________________________________________________________
+LocalVocab LocalVocab::clone() const {
+  LocalVocab localVocabClone;
+  // First, make a deep copy of the `absl::node_hash_map` holding the actual
+  // map of strings to indexes.
+  localVocabClone.wordsToIndexesMap_ = this->wordsToIndexesMap_;
+  // The next free index should be the same.
+  localVocabClone.nextFreeIndex_ = this->nextFreeIndex_;
+  // The map from local ids to strings stores pointers to strings. So we cannot
+  // just copy these from `this->indexesToWordsMap_` to `localVocabClone`, but
+  // we need to make sure to store the pointers to the strings of the new map
+  // `localVocabClone.wordsToIndexesMap_`.
+  //
+  // NOTE: An alternative algorithm would be to sort the word-index pairs in
+  // `wordsToIndexesMap_` by index and then fill `indexesToWordsMap_` in order.
+  // This would have better locality, but the sorting takes non-linear time plus
+  // the sorting has to handle pairs of `LocalVocabIndex` and `std::string`. So
+  // for very large local vocabularies (and only then is this operation
+  // performance-criticial at all), the simpler approach below is probably
+  // better.
+  const size_t localVocabSize = this->size();
+  localVocabClone.indexesToWordsMap_.resize(localVocabSize);
+  for (const auto& [wordInMap, index] : localVocabClone.wordsToIndexesMap_) {
+    AD_CONTRACT_CHECK(index.get() < localVocabSize);
+    localVocabClone.indexesToWordsMap_[index.get()] = std::addressof(wordInMap);
+  }
+  // Return the clone.
+  return localVocabClone;
+}
+
+// _____________________________________________________________________________
 template <typename WordT>
 LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
   // The following code contains two subtle, but important optimizations:
@@ -24,11 +54,11 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
   // contained in the map).
   //
   auto [wordInMapAndIndex, isNewWord] =
-      wordsToIdsMap_.insert({std::forward<WordT>(word), nextFreeIndex_});
+      wordsToIndexesMap_.insert({std::forward<WordT>(word), nextFreeIndex_});
   const auto& [wordInMap, index] = *wordInMapAndIndex;
   if (isNewWord) {
-    idsToWordsMap_.push_back(&wordInMap);
-    nextFreeIndex_ = LocalVocabIndex::make(idsToWordsMap_.size());
+    indexesToWordsMap_.push_back(&wordInMap);
+    nextFreeIndex_ = LocalVocabIndex::make(indexesToWordsMap_.size());
   }
   return index;
 }
@@ -45,28 +75,23 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(std::string&& word) {
 }
 
 // _____________________________________________________________________________
-const std::string& LocalVocab::getWord(LocalVocabIndex localVocabIndex) const {
-  if (localVocabIndex.get() > idsToWordsMap_.size()) {
-    throw std::runtime_error(absl::StrCat(
-        "LocalVocab error: request for word with local vocab index ",
-        localVocabIndex.get(), ", but size of local vocab is only ",
-        idsToWordsMap_.size(), ", please contact the developers"));
+std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
+    const std::string& word) const {
+  auto localVocabIndex = wordsToIndexesMap_.find(word);
+  if (localVocabIndex != wordsToIndexesMap_.end()) {
+    return localVocabIndex->second;
+  } else {
+    return std::nullopt;
   }
-  return *(idsToWordsMap_[localVocabIndex.get()]);
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<LocalVocab> LocalVocab::mergeLocalVocabsIfOneIsEmpty(
-    const std::shared_ptr<LocalVocab>& localVocab1,
-    const std::shared_ptr<LocalVocab>& localVocab2) {
-  AD_CHECK(localVocab1 != nullptr);
-  AD_CHECK(localVocab2 != nullptr);
-  bool isLocalVocab1Empty = localVocab1->empty();
-  bool isLocalVocab2Empty = localVocab2->empty();
-  if (!isLocalVocab1Empty && !isLocalVocab2Empty) {
-    throw std::runtime_error(
-        "Merging of two non-empty local vocabularies is currently not "
-        "supported, please contact the developers");
+const std::string& LocalVocab::getWord(LocalVocabIndex localVocabIndex) const {
+  if (localVocabIndex.get() >= indexesToWordsMap_.size()) {
+    throw std::runtime_error(absl::StrCat(
+        "LocalVocab error: request for word with local vocab index ",
+        localVocabIndex.get(), ", but size of local vocab is only ",
+        indexesToWordsMap_.size(), ", please contact the developers"));
   }
-  return !isLocalVocab1Empty ? localVocab1 : localVocab2;
+  return *(indexesToWordsMap_.at(localVocabIndex.get()));
 }

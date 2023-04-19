@@ -18,7 +18,7 @@ class TextOperationWithoutFilter : public Operation {
   using SetOfVariables = ad_utility::HashSet<Variable>;
 
  private:
-  const string _words;
+  string _words;
   const SetOfVariables _variables;
   const Variable _cvar;
 
@@ -28,9 +28,10 @@ class TextOperationWithoutFilter : public Operation {
   vector<float> _multiplicities;
 
  public:
-  TextOperationWithoutFilter(QueryExecutionContext* qec, const string& words,
-                             const SetOfVariables& variables,
-                             const Variable& cvar, size_t textLimit = 1);
+  TextOperationWithoutFilter(QueryExecutionContext* qec,
+                             const std::vector<std::string>& words,
+                             SetOfVariables variables, Variable cvar,
+                             size_t textLimit = 1);
 
  protected:
   virtual string asStringImpl(size_t indent = 0) const override;
@@ -51,8 +52,10 @@ class TextOperationWithoutFilter : public Operation {
     _sizeEstimate = std::numeric_limits<size_t>::max();
   }
 
-  virtual size_t getSizeEstimate() override;
+ private:
+  size_t getSizeEstimateBeforeLimit() override;
 
+ public:
   virtual size_t getCostEstimate() override;
 
   virtual float getMultiplicity(size_t col) override;
@@ -78,13 +81,13 @@ class TextOperationWithoutFilter : public Operation {
  private:
   void computeMultiplicities();
 
-  virtual void computeResult(ResultTable* result) override;
+  ResultTable computeResult() override;
 
-  void computeResultNoVar(ResultTable* result) const;
+  void computeResultNoVar(IdTable* idTable) const;
 
-  void computeResultOneVar(ResultTable* result) const;
+  void computeResultOneVar(IdTable* idTable) const;
 
-  void computeResultMultVars(ResultTable* result) const;
+  void computeResultMultVars(IdTable* idTable) const;
 
-  virtual VariableToColumnMap computeVariableToColumnMap() const override;
+  VariableToColumnMap computeVariableToColumnMap() const override;
 };

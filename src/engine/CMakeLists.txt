@@ -1,7 +1,8 @@
 add_subdirectory(sparqlExpressions)
 add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp SortPerformanceEstimator.h)
+qlever_target_link_libraries(SortPerformanceEstimator)
 add_library(engine
-        Engine.h
+        Engine.cpp
         IndexSequence.h
         QueryExecutionTree.h QueryExecutionTree.cpp
         Operation.h Operation.cpp
@@ -30,6 +31,7 @@ add_library(engine
         Union.cpp Union.h
         MultiColumnJoin.cpp MultiColumnJoin.h
         TransitivePath.cpp TransitivePath.h
+        Service.cpp Service.h
         Values.cpp Values.h
         Bind.cpp Bind.h
         idTable/IdTable.h
@@ -37,7 +39,6 @@ add_library(engine
         Minus.h Minus.cpp
         ResultType.h
         ../util/Parameters.h RuntimeInformation.cpp CheckUsePatternTrick.cpp CheckUsePatternTrick.h
-        VariableToColumnMap.cpp)
+        VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp )
 
-
-target_link_libraries(engine index parser sparqlExpressions http SortPerformanceEstimator absl::flat_hash_set ${ICU_LIBRARIES} boost_iostreams)
+qlever_target_link_libraries(engine index parser sparqlExpressions http SortPerformanceEstimator ${ICU_LIBRARIES} boost_iostreams)

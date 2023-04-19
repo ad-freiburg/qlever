@@ -45,52 +45,45 @@ string Filter::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-void Filter::computeResult(ResultTable* result) {
+ResultTable Filter::computeResult() {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Filter result computation..." << endl;
-  result->_idTable.setNumColumns(subRes->_idTable.numColumns());
-  result->_resultTypes.insert(result->_resultTypes.end(),
-                              subRes->_resultTypes.begin(),
-                              subRes->_resultTypes.end());
-  result->_localVocab = subRes->_localVocab;
 
-  int width = result->_idTable.numColumns();
-  CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this, result, *subRes);
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(subRes->idTable().numColumns());
+
+  size_t width = idTable.numColumns();
+  CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this, &idTable, *subRes);
   LOG(DEBUG) << "Filter result computation done." << endl;
+
+  return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
 
 // _____________________________________________________________________________
-template <int WIDTH>
-void Filter::computeFilterImpl(ResultTable* outputResultTable,
+template <size_t WIDTH>
+void Filter::computeFilterImpl(IdTable* outputIdTable,
                                const ResultTable& inputResultTable) {
-  sparqlExpression::VariableToColumnAndResultTypeMap columnMap;
-  for (const auto& [variable, columnIndex] : _subtree->getVariableColumns()) {
-    // TODO<joka921> The "ResultType" is currently unused, but we can use it in
-    // the future for optimizations (in the style of "we know that this complete
-    // column consists of floats").
-    columnMap[variable] = std::pair(columnIndex, qlever::ResultType::KB);
-  }
-
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), columnMap, inputResultTable._idTable,
-      getExecutionContext()->getAllocator(), *inputResultTable._localVocab);
+      *getExecutionContext(), _subtree->getVariableColumns(),
+      inputResultTable.idTable(), getExecutionContext()->getAllocator(),
+      inputResultTable.localVocab());
 
   // TODO<joka921> This should be a mandatory argument to the EvaluationContext
   // constructor.
-  evaluationContext._columnsByWhichResultIsSorted = inputResultTable._sortedBy;
+  evaluationContext._columnsByWhichResultIsSorted = inputResultTable.sortedBy();
 
   sparqlExpression::ExpressionResult expressionResult =
       _expression.getPimpl()->evaluate(&evaluationContext);
 
-  const auto input = inputResultTable._idTable.asStaticView<WIDTH>();
-  auto output = std::move(outputResultTable->_idTable).toStatic<WIDTH>();
+  const auto input = inputResultTable.idTable().asStaticView<WIDTH>();
+  auto output = std::move(*outputIdTable).toStatic<WIDTH>();
 
   auto visitor =
       [&]<sparqlExpression::SingleExpressionResult T>(T&& singleResult) {
         if constexpr (std::is_same_v<T, sparqlExpression::VectorWithMemoryLimit<
                                             sparqlExpression::Bool>>) {
-          AD_CHECK(singleResult.size() == input.size());
+          AD_CONTRACT_CHECK(singleResult.size() == input.size());
           auto totalSize =
               std::accumulate(singleResult.begin(), singleResult.end(), 0ul);
           output.reserve(totalSize);
@@ -99,7 +92,7 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
               output.push_back(input[i]);
             }
           }
-          AD_CHECK_EQ(output.size(), totalSize);
+          AD_CONTRACT_CHECK(output.size() == totalSize);
         } else if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
           auto totalSize = std::accumulate(
               singleResult._intervals.begin(), singleResult._intervals.end(),
@@ -108,10 +101,10 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
               });
           output.reserve(totalSize);
           for (auto [beg, end] : singleResult._intervals) {
-            AD_CHECK(end <= input.size());
+            AD_CONTRACT_CHECK(end <= input.size());
             output.insertAtEnd(input.cbegin() + beg, input.cbegin() + end);
           }
-          AD_CHECK_EQ(output.size(), totalSize);
+          AD_CONTRACT_CHECK(output.size() == totalSize);
         } else {
           // Default case for all other types. We currently implicitly convert
           // all kinds of results (strings, doubles, ints) to bools inside a
@@ -137,11 +130,11 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
 
   std::visit(visitor, std::move(expressionResult));
 
-  outputResultTable->_idTable = std::move(output).toDynamic();
+  *outputIdTable = std::move(output).toDynamic();
 }
 
 // _____________________________________________________________________________
-size_t Filter::getSizeEstimate() {
+size_t Filter::getSizeEstimateBeforeLimit() {
   return _expression
       .getEstimatesForFilterExpression(
           _subtree->getSizeEstimate(),

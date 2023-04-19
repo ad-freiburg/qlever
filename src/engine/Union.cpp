@@ -14,12 +14,13 @@ Union::Union(QueryExecutionContext* qec,
              const std::shared_ptr<QueryExecutionTree>& t1,
              const std::shared_ptr<QueryExecutionTree>& t2)
     : Operation(qec) {
-  AD_CHECK(t1 && t2);
+  AD_CONTRACT_CHECK(t1 && t2);
   _subtrees[0] = t1;
   _subtrees[1] = t2;
 
   // compute the column origins
-  VariableToColumnMap variableColumns = getInternallyVisibleVariableColumns();
+  const VariableToColumnMap& variableColumns =
+      getInternallyVisibleVariableColumns();
   _columnOrigins.resize(variableColumns.size(), {NO_COLUMN, NO_COLUMN});
   const auto& t1VarCols = t1->getVariableColumns();
   const auto& t2VarCols = t2->getVariableColumns();
@@ -27,19 +28,22 @@ Union::Union(QueryExecutionContext* qec,
     // look for the corresponding column in t1
     auto it1 = t1VarCols.find(it.first);
     if (it1 != t1VarCols.end()) {
-      _columnOrigins[it.second][0] = it1->second;
+      _columnOrigins[it.second.columnIndex_][0] = it1->second.columnIndex_;
     } else {
-      _columnOrigins[it.second][0] = NO_COLUMN;
+      _columnOrigins[it.second.columnIndex_][0] = NO_COLUMN;
     }
 
     // look for the corresponding column in t2
     const auto it2 = t2VarCols.find(it.first);
     if (it2 != t2VarCols.end()) {
-      _columnOrigins[it.second][1] = it2->second;
+      _columnOrigins[it.second.columnIndex_][1] = it2->second.columnIndex_;
     } else {
-      _columnOrigins[it.second][1] = NO_COLUMN;
+      _columnOrigins[it.second.columnIndex_][1] = NO_COLUMN;
     }
   }
+  AD_CORRECTNESS_CHECK(std::ranges::all_of(_columnOrigins, [](const auto& el) {
+    return el[0] != NO_COLUMN || el[1] != NO_COLUMN;
+  }));
 }
 
 string Union::asStringImpl(size_t indent) const {
@@ -66,16 +70,37 @@ vector<size_t> Union::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
 VariableToColumnMap Union::computeVariableToColumnMap() const {
-  using VarAndIndex = std::pair<Variable, size_t>;
+  using VarAndTypeInfo = std::pair<Variable, ColumnIndexAndTypeInfo>;
 
   VariableToColumnMap variableColumns;
-  size_t column = 0;
 
+  // A variable is only guaranteed to always be bound if it exists in all the
+  // subtrees and if it is guaranteed to be bound in all the subtrees.
+  auto mightContainUndef = [this](const Variable& var) {
+    return std::ranges::any_of(
+        _subtrees, [&](const shared_ptr<QueryExecutionTree>& subtree) {
+          const auto& varCols = subtree->getVariableColumns();
+          return !varCols.contains(var) ||
+                 (varCols.at(var).mightContainUndef_ ==
+                  ColumnIndexAndTypeInfo::PossiblyUndefined);
+        });
+  };
+
+  // Note: it is tempting to declare `nextColumnIndex` inside the lambda
+  // `addVariableColumnIfNotExists`, but that doesn't work because
+  // `std::ranges::for_each` takes the lambda by value and creates a new
+  // variable at every invocation.
+  size_t nextColumnIndex = 0;
   auto addVariableColumnIfNotExists =
-      [&variableColumns, &column](const VarAndIndex& varAndIndex) {
-        if (!variableColumns.contains(varAndIndex.first)) {
-          variableColumns[varAndIndex.first] = column;
-          column++;
+      [&mightContainUndef, &variableColumns,
+       &nextColumnIndex](const VarAndTypeInfo& varAndIndex) {
+        const auto& variable = varAndIndex.first;
+        if (!variableColumns.contains(variable)) {
+          using enum ColumnIndexAndTypeInfo::UndefStatus;
+          variableColumns[variable] = ColumnIndexAndTypeInfo{
+              nextColumnIndex,
+              mightContainUndef(variable) ? PossiblyUndefined : AlwaysDefined};
+          nextColumnIndex++;
         }
       };
 
@@ -117,7 +142,7 @@ float Union::getMultiplicity(size_t col) {
                          static_cast<double>(_subtrees[0]->getMultiplicity(
                              _columnOrigins[col][0]));
     numDistinct += 1;
-    return getSizeEstimate() / numDistinct;
+    return getSizeEstimateBeforeLimit() / numDistinct;
   } else if (_columnOrigins[col][1] != NO_COLUMN) {
     // Compute the number of distinct elements in the input, add one new element
     // for the unbound variables, then divide it by the number of elements in
@@ -127,126 +152,94 @@ float Union::getMultiplicity(size_t col) {
                          static_cast<double>(_subtrees[1]->getMultiplicity(
                              _columnOrigins[col][1]));
     numDistinct += 1;
-    return getSizeEstimate() / numDistinct;
+    return getSizeEstimateBeforeLimit() / numDistinct;
   }
   return 1;
 }
 
-size_t Union::getSizeEstimate() {
+size_t Union::getSizeEstimateBeforeLimit() {
   return _subtrees[0]->getSizeEstimate() + _subtrees[1]->getSizeEstimate();
 }
 
 size_t Union::getCostEstimate() {
   return _subtrees[0]->getCostEstimate() + _subtrees[1]->getCostEstimate() +
-         getSizeEstimate();
+         getSizeEstimateBeforeLimit();
 }
 
-void Union::computeResult(ResultTable* result) {
+ResultTable Union::computeResult() {
   LOG(DEBUG) << "Union result computation..." << std::endl;
   shared_ptr<const ResultTable> subRes1 = _subtrees[0]->getResult();
   shared_ptr<const ResultTable> subRes2 = _subtrees[1]->getResult();
   LOG(DEBUG) << "Union subresult computation done." << std::endl;
 
-  result->_sortedBy = resultSortedOn();
-  for (const std::array<size_t, 2>& o : _columnOrigins) {
-    if (o[0] != NO_COLUMN) {
-      result->_resultTypes.push_back(subRes1->getResultType(o[0]));
-    } else if (o[1] != NO_COLUMN) {
-      result->_resultTypes.push_back(subRes2->getResultType(o[1]));
-    } else {
-      result->_resultTypes.push_back(ResultTable::ResultType::KB);
-    }
-  }
-  result->_idTable.setNumColumns(getResultWidth());
-  int leftWidth = subRes1->_idTable.numColumns();
-  int rightWidth = subRes2->_idTable.numColumns();
-  int outWidth = result->_idTable.numColumns();
+  IdTable idTable{getExecutionContext()->getAllocator()};
 
-  CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, outWidth}),
-                  &Union::computeUnion, this, &result->_idTable,
-                  subRes1->_idTable, subRes2->_idTable, _columnOrigins);
-  LOG(DEBUG) << "Union result computation done." << std::endl;
+  idTable.setNumColumns(getResultWidth());
+  Union::computeUnion(&idTable, subRes1->idTable(), subRes2->idTable(),
+                      _columnOrigins);
+
+  LOG(DEBUG) << "Union result computation done" << std::endl;
+  // If only one of the two operands has a non-empty local vocabulary, share
+  // with that one (otherwise, throws an exception).
+  return ResultTable{
+      std::move(idTable), resultSortedOn(),
+      ResultTable::getSharedLocalVocabFromNonEmptyOf(*subRes1, *subRes2)};
 }
 
-template <int LEFT_WIDTH, int RIGHT_WIDTH, int OUT_WIDTH>
 void Union::computeUnion(
-    IdTable* dynRes, const IdTable& dynLeft, const IdTable& dynRight,
+    IdTable* resPtr, const IdTable& left, const IdTable& right,
     const std::vector<std::array<size_t, 2>>& columnOrigins) {
-  const IdTableView<LEFT_WIDTH> left = dynLeft.asStaticView<LEFT_WIDTH>();
-  const IdTableView<RIGHT_WIDTH> right = dynRight.asStaticView<RIGHT_WIDTH>();
-  IdTableStatic<OUT_WIDTH> res = std::move(*dynRes).toStatic<OUT_WIDTH>();
+  IdTable& res = *resPtr;
+  res.resize(left.size() + right.size());
 
-  res.reserve(left.size() + right.size());
+  static constexpr size_t chunkSize = 1'000'000;
 
-  // TODO<joka921> insert global constant here
-  const size_t chunkSize =
-      100000 /
-      res.numColumns();  // after this many elements, check for timeouts
-  auto checkAfterChunkSize = checkTimeoutAfterNCallsFactory(chunkSize);
-
-  // Append the contents of inputTable to the result. This requires previous
-  // checks that the columns are compatible. After copying chunkSize elements,
-  // we check for a timeout. It is only called when the number of columns
-  // matches at compile time, hence the [[maybe_unused]]
-  [[maybe_unused]] auto appendToResultChunked = [&res, chunkSize,
-                                                 this](const auto& inputTable) {
-    // always copy chunkSize results at once and then check for a timeout
-    size_t numChunks = inputTable.size() / chunkSize;
-    for (size_t i = 0; i < numChunks; ++i) {
-      res.insertAtEnd(inputTable.begin() + i * chunkSize,
-                      inputTable.begin() + (i + 1) * chunkSize);
+  // A drop-in replacement for `std::copy` that performs the copying in chunks
+  // of `chunkSize` and checks the timeout after each chunk.
+  auto copyChunked = [this](auto beg, auto end, auto target) {
+    size_t total = end - beg;
+    for (size_t i = 0; i < total; i += chunkSize) {
       checkTimeout();
+      size_t actualEnd = std::min(i + chunkSize, total);
+      std::copy(beg + i, beg + actualEnd, target + i);
     }
-    res.insertAtEnd(inputTable.begin() + numChunks * chunkSize,
-                    inputTable.end());
   };
 
-  auto columnsMatch = [&columnOrigins](const auto& inputTable,
-                                       const auto& getter) {
-    bool allColumnsAreUsed = inputTable.numColumns() == columnOrigins.size();
-    bool columnsAreSorted = std::ranges::is_sorted(columnOrigins, {}, getter);
-    bool noGapsInColumns =
-        getter(columnOrigins.back()) == inputTable.numColumns() - 1;
-    return allColumnsAreUsed && columnsAreSorted && noGapsInColumns;
+  // A similar timeout-checking replacement for `std::fill`.
+  auto fillChunked = [this](auto beg, auto end, const auto& value) {
+    size_t total = end - beg;
+    for (size_t i = 0; i < total; i += chunkSize) {
+      checkTimeout();
+      size_t actualEnd = std::min(i + chunkSize, total);
+      std::fill(beg + i, beg + actualEnd, value);
+    }
   };
 
-  // Append the result of one the children (`left` or `right`), passed via the
-  // `inputTable` argument to the final result of this `UNION` operation. The
-  // `WIDTH` must be the width of the input table (`LEFT_WIDTH` or
-  // `RIGHT_WIDTH`) and  `getter` must be a function that extracts the correct
-  // column index for the `inputTable` from an element of the `columnOrigins`.
-  auto appendResult = [&columnOrigins, &res, &appendToResultChunked,
-                       &checkAfterChunkSize, &columnsMatch]<size_t WIDTH>(
-                          const auto& inputTable, const auto& getter) {
-    (void)appendToResultChunked;
-    if (columnsMatch(inputTable, getter)) {
-      // Left and right have the same columns, we can simply copy the entries.
-      // This if clause is only here to avoid creating the call to insert when
-      // it would not be possible to call the function due to not matching
-      // columns.
-      AD_CHECK(WIDTH == OUT_WIDTH);
-      if constexpr (WIDTH == OUT_WIDTH) {
-        appendToResultChunked(inputTable);
-      }
+  // Write the column with the `inputColumnIndex` from the `inputTable` into the
+  // `targetColumn`. Always copy the complete input column and start at position
+  // `offset` in the target column. If the `inputColumnIndex` is `NO_COLUMN`,
+  // then the corresponding range in the `targetColumn` will be filled with
+  // UNDEF.
+  auto writeColumn = [&copyChunked, &fillChunked](
+                         const auto& inputTable, auto& targetColumn,
+                         size_t inputColumnIndex, size_t offset) {
+    if (inputColumnIndex != NO_COLUMN) {
+      decltype(auto) input = inputTable.getColumn(inputColumnIndex);
+      copyChunked(input.begin(), input.end(), targetColumn.begin() + offset);
     } else {
-      for (const auto& row : inputTable) {
-        checkAfterChunkSize();
-        res.emplace_back();
-        size_t backIdx = res.size() - 1;
-        for (size_t i = 0; i < columnOrigins.size(); i++) {
-          const auto column = getter(columnOrigins[i]);
-          res(backIdx, i) = column != NO_COLUMN ? row[column] : ID_NO_VALUE;
-        }
-      }
+      fillChunked(targetColumn.begin() + offset,
+                  targetColumn.begin() + offset + inputTable.size(),
+                  Id::makeUndefined());
     }
   };
 
-  if (left.size() > 0) {
-    appendResult.template operator()<LEFT_WIDTH>(left, ad_utility::first);
+  // Write all the columns.
+  AD_CORRECTNESS_CHECK(columnOrigins.size() == res.numColumns());
+  for (size_t targetColIdx = 0; targetColIdx < columnOrigins.size();
+       ++targetColIdx) {
+    auto [leftCol, rightCol] = columnOrigins.at(targetColIdx);
+    decltype(auto) targetColumn = res.getColumn(targetColIdx);
+    writeColumn(left, targetColumn, leftCol, 0u);
+    writeColumn(right, targetColumn, rightCol, left.size());
   }
-
-  if (right.size() > 0) {
-    appendResult.template operator()<RIGHT_WIDTH>(right, ad_utility::second);
-  }
-  *dynRes = std::move(res).toDynamic();
 }

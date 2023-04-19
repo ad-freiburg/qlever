@@ -14,10 +14,7 @@ namespace parsedQuery {
 
 // _____________________________________________________________________________
 std::string SparqlValues::variablesToString() const {
-  return absl::StrJoin(_variables, " ",
-                       [](std::string* out, const Variable& variable) {
-                         out->append(variable.name());
-                       });
+  return absl::StrJoin(_variables, "\t", Variable::AbslFormatter);
 }
 
 // _____________________________________________________________________________
@@ -93,6 +90,9 @@ void GraphPatternOperation::toString(std::ostringstream& os,
     } else if constexpr (std::is_same_v<T, Values>) {
       os << "VALUES (" << arg._inlineValues.variablesToString() << ") "
          << arg._inlineValues.valuesToString();
+    } else if constexpr (std::is_same_v<T, Service>) {
+      os << "SERVICE " << arg.serviceIri_.toSparql() << " { "
+         << arg.graphPatternAsString_ << " }";
     } else if constexpr (std::is_same_v<T, BasicGraphPattern>) {
       for (size_t i = 0; i + 1 < arg._triples.size(); ++i) {
         os << "\n";
@@ -106,7 +106,8 @@ void GraphPatternOperation::toString(std::ostringstream& os,
       }
 
     } else if constexpr (std::is_same_v<T, Bind>) {
-      os << "Some kind of BIND\n";
+      os << "BIND " << arg._expression.getDescriptor() << " as "
+         << arg._target.name() << "\n";
       // TODO<joka921> proper ToString (are they used for something?)
     } else if constexpr (std::is_same_v<T, Minus>) {
       os << "MINUS ";
@@ -121,5 +122,19 @@ void GraphPatternOperation::toString(std::ostringstream& os,
        */
     }
   });
+}
+
+// ____________________________________________________________________________
+cppcoro::generator<const Variable> Bind::containedVariables() const {
+  for (const auto* ptr : _expression.containedVariables()) {
+    co_yield *ptr;
+  }
+  co_yield _target;
+}
+
+// ____________________________________________________________________________
+[[nodiscard]] string Bind::getDescriptor() const {
+  auto inner = _expression.getDescriptor();
+  return "BIND (" + inner + " AS " + _target.name() + ")";
 }
 }  // namespace parsedQuery

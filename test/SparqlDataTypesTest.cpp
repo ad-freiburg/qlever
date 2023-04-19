@@ -4,38 +4,41 @@
 
 #include <gmock/gmock.h>
 
-#include "../src/parser/data/VarOrTerm.h"
+#include "./util/AllocatorTestHelpers.h"
+#include "parser/data/VarOrTerm.h"
 
 using namespace std::string_literals;
 using ::testing::Optional;
+using enum PositionInTriple;
 
-ad_utility::AllocatorWithLimit<Id>& allocator() {
-  static ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<size_t>::max())};
-  return a;
-}
-
+namespace {
 struct ContextWrapper {
   Index _index{};
-  ResultTable _resultTable{allocator()};
+  ResultTable _resultTable{
+      IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}};
   // TODO<joka921> `VariableToColumnMap`
-  ad_utility::HashMap<Variable, size_t> _hashMap{};
+  VariableToColumnMap _hashMap{};
 
-  Context createContextForRow(size_t row) const {
+  ConstructQueryExportContext createContextForRow(size_t row) const {
     return {row, _resultTable, _hashMap, _index};
+  }
+
+  void setIdTable(IdTable&& table) {
+    _resultTable =
+        ResultTable{std::move(table), {}, _resultTable.getSharedLocalVocab()};
   }
 };
 
 ContextWrapper prepareContext() { return {}; }
+}  // namespace
 
 TEST(SparqlDataTypesTest, BlankNodeInvalidLabelsThrowException) {
-  EXPECT_THROW(BlankNode(false, ""), ad_semsearch::Exception);
-  EXPECT_THROW(BlankNode(false, "label with spaces"), ad_semsearch::Exception);
-  EXPECT_THROW(BlankNode(false, "trailing-dash-"), ad_semsearch::Exception);
-  EXPECT_THROW(BlankNode(false, "-leading-dash"), ad_semsearch::Exception);
-  EXPECT_THROW(BlankNode(false, "trailing.dots."), ad_semsearch::Exception);
-  EXPECT_THROW(BlankNode(false, ".leading.dots"), ad_semsearch::Exception);
+  EXPECT_THROW(BlankNode(false, ""), ad_utility::Exception);
+  EXPECT_THROW(BlankNode(false, "label with spaces"), ad_utility::Exception);
+  EXPECT_THROW(BlankNode(false, "trailing-dash-"), ad_utility::Exception);
+  EXPECT_THROW(BlankNode(false, "-leading-dash"), ad_utility::Exception);
+  EXPECT_THROW(BlankNode(false, "trailing.dots."), ad_utility::Exception);
+  EXPECT_THROW(BlankNode(false, ".leading.dots"), ad_utility::Exception);
 }
 
 TEST(SparqlDataTypesTest, BlankNodeEvaluatesCorrectlyBasedOnContext) {
@@ -43,7 +46,8 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluatesCorrectlyBasedOnContext) {
 
   BlankNode blankNodeA{false, "a"};
   BlankNode blankNodeB{true, "b"};
-  Context context0 = wrapper.createContextForRow(0);
+  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
+  using enum PositionInTriple;
 
   EXPECT_THAT(blankNodeA.evaluate(context0, SUBJECT), Optional("_:u0_a"s));
   EXPECT_THAT(blankNodeA.evaluate(context0, PREDICATE), Optional("_:u0_a"s));
@@ -52,7 +56,7 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluatesCorrectlyBasedOnContext) {
   EXPECT_THAT(blankNodeB.evaluate(context0, PREDICATE), Optional("_:g0_b"s));
   EXPECT_THAT(blankNodeB.evaluate(context0, SUBJECT), Optional("_:g0_b"s));
 
-  Context context10 = wrapper.createContextForRow(10);
+  ConstructQueryExportContext context10 = wrapper.createContextForRow(10);
 
   EXPECT_THAT(blankNodeA.evaluate(context10, SUBJECT), Optional("_:u10_a"s));
   EXPECT_THAT(blankNodeA.evaluate(context10, PREDICATE), Optional("_:u10_a"s));
@@ -66,7 +70,7 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
   BlankNode blankNode{false, "label"};
-  Context context = wrapper.createContextForRow(42);
+  ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
   auto expectedLabel = Optional("_:u42_label"s);
 
@@ -77,24 +81,23 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
 }
 
 TEST(SparqlDataTypesTest, IriInvalidSyntaxThrowsException) {
-  EXPECT_THROW(Iri{"http://linkwithoutangularbrackets"},
-               ad_semsearch::Exception);
-  EXPECT_THROW(Iri{"<<nestedangularbrackets>>"}, ad_semsearch::Exception);
-  EXPECT_THROW(Iri{"<duplicatedangularbracker>>"}, ad_semsearch::Exception);
-  EXPECT_THROW(Iri{"<<duplicatedangularbracker>"}, ad_semsearch::Exception);
-  EXPECT_THROW(Iri{"<noend"}, ad_semsearch::Exception);
-  EXPECT_THROW(Iri{"nostart>"}, ad_semsearch::Exception);
-  EXPECT_THROW(Iri{"<\"withdoublequote>"}, ad_semsearch::Exception);
-  EXPECT_THROW(Iri{"<{withcurlybrace>"}, ad_semsearch::Exception);
-  EXPECT_THROW(Iri{"<}withcurlybrace>"}, ad_semsearch::Exception);
-  EXPECT_THROW(Iri{"<|withpipesymbol>"}, ad_semsearch::Exception);
-  EXPECT_THROW(Iri{"<^withcaret>"}, ad_semsearch::Exception);
-  EXPECT_THROW(Iri{"<\\withbackslash>"}, ad_semsearch::Exception);
-  EXPECT_THROW(Iri{"<`withbacktick>"}, ad_semsearch::Exception);
+  EXPECT_THROW(Iri{"http://linkwithoutangularbrackets"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<<nestedangularbrackets>>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<duplicatedangularbracker>>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<<duplicatedangularbracker>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<noend"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"nostart>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<\"withdoublequote>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<{withcurlybrace>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<}withcurlybrace>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<|withpipesymbol>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<^withcaret>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<\\withbackslash>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<`withbacktick>"}, ad_utility::Exception);
   // U+0000 (NULL) to U+0020 (Space) are all forbidden characters
   // but the following two are probably the most common cases
-  EXPECT_THROW(Iri{"<with whitespace>"}, ad_semsearch::Exception);
-  EXPECT_THROW(Iri{"<with\r\nnewline>"}, ad_semsearch::Exception);
+  EXPECT_THROW(Iri{"<with whitespace>"}, ad_utility::Exception);
+  EXPECT_THROW(Iri{"<with\r\nnewline>"}, ad_utility::Exception);
 }
 
 TEST(SparqlDataTypesTest, IriValidIriIsPreserved) {
@@ -106,13 +109,13 @@ TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
 
   std::string iriString{"<http://some-iri>"};
   Iri iri{iriString};
-  Context context0 = wrapper.createContextForRow(0);
+  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
   EXPECT_THAT(iri.evaluate(context0, SUBJECT), Optional(iriString));
   EXPECT_THAT(iri.evaluate(context0, PREDICATE), Optional(iriString));
   EXPECT_THAT(iri.evaluate(context0, OBJECT), Optional(iriString));
 
-  Context context1337 = wrapper.createContextForRow(1337);
+  ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
 
   EXPECT_THAT(iri.evaluate(context1337, SUBJECT), Optional(iriString));
   EXPECT_THAT(iri.evaluate(context1337, PREDICATE), Optional(iriString));
@@ -123,7 +126,7 @@ TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
   Iri iri{"<http://some-iri>"};
-  Context context = wrapper.createContextForRow(42);
+  ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
   auto expectedString = Optional("<http://some-iri>"s);
 
@@ -155,13 +158,13 @@ TEST(SparqlDataTypesTest, LiteralEvaluatesCorrectlyBasedOnContext) {
 
   std::string literalString{"true"};
   Literal literal{literalString};
-  Context context0 = wrapper.createContextForRow(0);
+  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
   EXPECT_EQ(literal.evaluate(context0, SUBJECT), std::nullopt);
   EXPECT_EQ(literal.evaluate(context0, PREDICATE), std::nullopt);
   EXPECT_THAT(literal.evaluate(context0, OBJECT), Optional(literalString));
 
-  Context context1337 = wrapper.createContextForRow(1337);
+  ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
 
   EXPECT_EQ(literal.evaluate(context1337, SUBJECT), std::nullopt);
   EXPECT_EQ(literal.evaluate(context1337, PREDICATE), std::nullopt);
@@ -172,7 +175,7 @@ TEST(SparqlDataTypesTest, LiteralEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
   Literal literal{"some literal"};
-  Context context = wrapper.createContextForRow(42);
+  ConstructQueryExportContext context = wrapper.createContextForRow(42);
 
   EXPECT_EQ(literal.evaluate(context, SUBJECT), std::nullopt);
   EXPECT_EQ(GraphTerm{literal}.evaluate(context, SUBJECT), std::nullopt);
@@ -196,32 +199,34 @@ TEST(SparqlDataTypesTest, VariableNormalizesDollarSign) {
 }
 
 TEST(SparqlDataTypesTest, VariableInvalidNamesThrowException) {
-  EXPECT_THROW(Variable{"no_leading_var_or_dollar"}, ad_semsearch::Exception);
-  EXPECT_THROW(Variable{""}, ad_semsearch::Exception);
-  EXPECT_THROW(Variable{"? var with space"}, ad_semsearch::Exception);
-  EXPECT_THROW(Variable{"?"}, ad_semsearch::Exception);
-  EXPECT_THROW(Variable{"$"}, ad_semsearch::Exception);
+  EXPECT_THROW(Variable{"no_leading_var_or_dollar"}, ad_utility::Exception);
+  EXPECT_THROW(Variable{""}, ad_utility::Exception);
+  EXPECT_THROW(Variable{"? var with space"}, ad_utility::Exception);
+  EXPECT_THROW(Variable{"?"}, ad_utility::Exception);
+  EXPECT_THROW(Variable{"$"}, ad_utility::Exception);
 }
 
 TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
   auto wrapper = prepareContext();
 
-  wrapper._hashMap[Variable{"?var"}] = 0;
-  wrapper._resultTable._resultTypes.push_back(qlever::ResultType::VERBATIM);
-  wrapper._resultTable._idTable.setNumColumns(1);
+  wrapper._hashMap[Variable{"?var"}] = makeAlwaysDefinedColumn(0);
+  IdTable table{ad_utility::testing::makeAllocator()};
+  table.setNumColumns(1);
   Id value1 = Id::makeFromInt(69);
   Id value2 = Id::makeFromInt(420);
-  wrapper._resultTable._idTable.push_back({value1});
-  wrapper._resultTable._idTable.push_back({value2});
+  table.push_back({value1});
+  table.push_back({value2});
+
+  wrapper.setIdTable(std::move(table));
 
   Variable variable{"?var"};
-  Context context0 = wrapper.createContextForRow(0);
+  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
   EXPECT_THAT(variable.evaluate(context0, SUBJECT), Optional("69"s));
   EXPECT_THAT(variable.evaluate(context0, PREDICATE), Optional("69"s));
   EXPECT_THAT(variable.evaluate(context0, OBJECT), Optional("69"s));
 
-  Context context1 = wrapper.createContextForRow(1);
+  ConstructQueryExportContext context1 = wrapper.createContextForRow(1);
 
   EXPECT_THAT(variable.evaluate(context1, SUBJECT), Optional("420"s));
   EXPECT_THAT(variable.evaluate(context1, PREDICATE), Optional("420"s));
@@ -232,13 +237,13 @@ TEST(SparqlDataTypesTest, VariableEvaluatesNothingForUnusedName) {
   auto wrapper = prepareContext();
 
   Variable variable{"?var"};
-  Context context0 = wrapper.createContextForRow(0);
+  ConstructQueryExportContext context0 = wrapper.createContextForRow(0);
 
   EXPECT_EQ(variable.evaluate(context0, SUBJECT), std::nullopt);
   EXPECT_EQ(variable.evaluate(context0, PREDICATE), std::nullopt);
   EXPECT_EQ(variable.evaluate(context0, OBJECT), std::nullopt);
 
-  Context context1337 = wrapper.createContextForRow(1337);
+  ConstructQueryExportContext context1337 = wrapper.createContextForRow(1337);
 
   EXPECT_EQ(variable.evaluate(context1337, SUBJECT), std::nullopt);
   EXPECT_EQ(variable.evaluate(context1337, PREDICATE), std::nullopt);
@@ -248,14 +253,15 @@ TEST(SparqlDataTypesTest, VariableEvaluatesNothingForUnusedName) {
 TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
   auto wrapper = prepareContext();
 
-  wrapper._hashMap[Variable{"?var"}] = 0;
-  wrapper._resultTable._resultTypes.push_back(qlever::ResultType::VERBATIM);
-  wrapper._resultTable._idTable.setNumColumns(1);
+  wrapper._hashMap[Variable{"?var"}] = makeAlwaysDefinedColumn(0);
+  IdTable table{ad_utility::testing::makeAllocator()};
+  table.setNumColumns(1);
   Id value = Id::makeFromInt(69);
-  wrapper._resultTable._idTable.push_back({value});
+  table.push_back({value});
+  wrapper.setIdTable(std::move(table));
 
   Variable variableKnown{"?var"};
-  Context context = wrapper.createContextForRow(0);
+  ConstructQueryExportContext context = wrapper.createContextForRow(0);
 
   EXPECT_THAT(variableKnown.evaluate(context, SUBJECT), Optional("69"s));
   EXPECT_THAT(VarOrTerm{variableKnown}.evaluate(context, SUBJECT),

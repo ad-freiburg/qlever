@@ -17,8 +17,8 @@ using std::pair;
 // _____________________________________________________________________________
 Index::WordEntityPostings FTSAlgorithms::filterByRange(const IdRange& idRange,
                                   const Index::WordEntityPostings& wepPreFilter) {
-  AD_CHECK(wepPreFilter.cids.size() == wepPreFilter.wids.size());
-  AD_CHECK(wepPreFilter.cids.size() == wepPreFilter.scores.size());
+  AD_CONTRACT_CHECK(wepPreFilter.cids.size() == wepPreFilter.wids.size());
+  AD_CONTRACT_CHECK(wepPreFilter.cids.size() == wepPreFilter.scores.size());
   LOG(DEBUG) << "Filtering " << wepPreFilter.cids.size()
              << " elements by ID range...\n";
 
@@ -49,8 +49,8 @@ Index::WordEntityPostings FTSAlgorithms::filterByRange(const IdRange& idRange,
   wepResult.scores.resize(nofResultElements);
   wepResult.wids.resize(nofResultElements);
 
-  AD_CHECK(wepResult.cids.size() == wepResult.scores.size());
-  AD_CHECK(wepResult.cids.size() == wepResult.wids.size());
+  AD_CONTRACT_CHECK(wepResult.cids.size() == wepResult.scores.size());
+  AD_CONTRACT_CHECK(wepResult.cids.size() == wepResult.wids.size());
   LOG(DEBUG) << "Filtering by ID range done. Result has " << wepResult.cids.size()
              << " elements.\n";
   return wepResult;
@@ -368,7 +368,7 @@ Index::WordEntityPostings FTSAlgorithms::intersectKWay(
 void FTSAlgorithms::getTopKByScores(const vector<Id>& cids,
                                     const vector<Score>& scores, size_t k,
                                     WidthOneList* result) {
-  AD_CHECK_EQ(cids.size(), scores.size());
+  AD_CONTRACT_CHECK(cids.size() == scores.size());
   k = std::min(k, cids.size());
   LOG(DEBUG) << "Call getTopKByScores (partial sort of " << cids.size()
              << " contexts by score)...\n";
@@ -394,8 +394,8 @@ void FTSAlgorithms::getTopKByScores(const vector<Id>& cids,
 void FTSAlgorithms::aggScoresAndTakeTopKContexts(
     const vector<TextRecordIndex>& cids, const vector<Id>& eids,
     const vector<Score>& scores, size_t k, IdTable* dynResult) {
-  AD_CHECK_EQ(cids.size(), eids.size());
-  AD_CHECK_EQ(cids.size(), scores.size());
+  AD_CONTRACT_CHECK(cids.size() == eids.size());
+  AD_CONTRACT_CHECK(cids.size() == scores.size());
   LOG(DEBUG) << "Going from an entity, context and score list of size: "
              << cids.size() << " elements to a table with distinct entities "
              << "and at most " << k << " contexts per entity.\n";
@@ -521,7 +521,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
 template <typename Row>
 void FTSAlgorithms::aggScoresAndTakeTopKContexts(vector<Row>& nonAggRes,
                                                  size_t k, vector<Row>& res) {
-  AD_CHECK(res.size() == 0);
+  AD_CONTRACT_CHECK(res.size() == 0);
   LOG(DEBUG) << "Aggregating scores from a list of size " << nonAggRes.size()
              << " while keeping the top " << k << " contexts each.\n";
 
@@ -621,7 +621,7 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
     result(n, 2) = it->first;
     n++;
   }
-  AD_CHECK_EQ(n, result.size());
+  AD_CONTRACT_CHECK(n == result.size());
   *dynResult = std::move(result).toDynamic();
   LOG(DEBUG) << "Done. There are " << dynResult->size()
              << " context-score-entity tuples now.\n";
@@ -978,7 +978,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
     }
     n++;
   }
-  AD_CHECK_EQ(n, result.size());
+  AD_CONTRACT_CHECK(n == result.size());
   *dynResult = std::move(result).toDynamic();
   LOG(DEBUG) << "Done. There are " << dynResult->size() << " tuples now.\n";
 }
@@ -1113,8 +1113,8 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<TextRecordIndex>& cids, const vector<Id>& eids,
     const vector<Score>& scores, const ad_utility::HashMap<Id, IdTable>& fMap,
     size_t k, IdTable* dynResult) {
-  AD_CHECK_EQ(cids.size(), eids.size());
-  AD_CHECK_EQ(cids.size(), scores.size());
+  AD_CONTRACT_CHECK(cids.size() == eids.size());
+  AD_CONTRACT_CHECK(cids.size() == scores.size());
   LOG(DEBUG) << "Going from an entity, context and score list of size: "
              << cids.size()
              << " elements to a table with filtered distinct entities "
@@ -1229,8 +1229,8 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<TextRecordIndex>& cids, const vector<Id>& eids,
     const vector<Score>& scores, const HashSet<Id>& fSet, size_t k,
     IdTable* dynResult) {
-  AD_CHECK_EQ(cids.size(), eids.size());
-  AD_CHECK_EQ(cids.size(), scores.size());
+  AD_CONTRACT_CHECK(cids.size() == eids.size());
+  AD_CONTRACT_CHECK(cids.size() == scores.size());
   LOG(DEBUG) << "Going from an entity, context and score list of size: "
              << cids.size()
              << " elements to a table with filtered distinct entities "

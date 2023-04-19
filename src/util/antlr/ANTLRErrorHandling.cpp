@@ -36,7 +36,7 @@ ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
   // the subclasses. As of ANTLRv4 `antlr4::Parser` and `antlr4::Lexer` are the
   // only subclasses of `antlr4::Recognizer`.
   if (auto* parser = dynamic_cast<antlr4::Parser*>(recognizer)) {
-    AD_CHECK(offendingToken != nullptr);
+    AD_CONTRACT_CHECK(offendingToken != nullptr);
     return generateMetadata(parser, offendingToken, line, charPositionInLine);
   } else if (auto* lexer = dynamic_cast<antlr4::Lexer*>(recognizer)) {
     // If the recognizer is a Lexer this means that the error was a Lexer error.
@@ -75,7 +75,7 @@ void ThrowingErrorListener::syntaxError(antlr4::Recognizer* recognizer,
                                         size_t line, size_t charPositionInLine,
                                         const std::string& msg,
                                         [[maybe_unused]] std::exception_ptr e) {
-  throw ParseException{
+  throw InvalidQueryException{
       generateExceptionMessage(offendingSymbol, msg),
       generateMetadata(recognizer, offendingSymbol, line, charPositionInLine)};
 }

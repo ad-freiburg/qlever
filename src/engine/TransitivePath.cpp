@@ -6,9 +6,9 @@
 
 #include <limits>
 
-#include "../util/Exception.h"
-#include "CallFixedSize.h"
-#include "IndexScan.h"
+#include "engine/CallFixedSize.h"
+#include "engine/IndexScan.h"
+#include "util/Exception.h"
 
 // _____________________________________________________________________________
 TransitivePath::TransitivePath(
@@ -22,7 +22,7 @@ TransitivePath::TransitivePath(
       _rightSideTree(nullptr),
       _rightSideCol(-1),
       _resultWidth(2),
-      _subtree(child),
+      _subtree(std::move(child)),
       _leftIsVar(leftIsVar),
       _rightIsVar(rightIsVar),
       _leftSubCol(leftSubCol),
@@ -34,8 +34,8 @@ TransitivePath::TransitivePath(
       _rightColName(rightColName.name()),
       _minDist(minDist),
       _maxDist(maxDist) {
-  _variableColumns[leftColName] = 0;
-  _variableColumns[rightColName] = 1;
+  _variableColumns[leftColName] = makeAlwaysDefinedColumn(0);
+  _variableColumns[rightColName] = makeAlwaysDefinedColumn(1);
 }
 
 // _____________________________________________________________________________
@@ -159,7 +159,7 @@ float TransitivePath::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t TransitivePath::getSizeEstimate() {
+size_t TransitivePath::getSizeEstimateBeforeLimit() {
   if (!_leftIsVar || !_rightIsVar) {
     // If the subject or object is fixed, assume that the number of matching
     // triples is 1000. This will usually be an overestimate, but it will do the
@@ -180,8 +180,8 @@ size_t TransitivePath::getSizeEstimate() {
   // other way, so that the only possible query plan is to compute the complete
   // transitive hull).
   //
-  // NOTE: _subtree->getSizeEstimate() is the number of triples of the
-  // predicate, for which the transitive hull operator (+) is specified. On
+  // NOTE: _subtree->getSizeEstimateBeforeLimit() is the number of triples of
+  // the predicate, for which the transitive hull operator (+) is specified. On
   // Wikidata, the predicate with the largest blowup when taking the
   // transitive hull is wdt:P2789 (connects with). The blowup is then from 90K
   // (without +) to 110M (with +), so about 1000 times larger.
@@ -199,7 +199,7 @@ size_t TransitivePath::getSizeEstimate() {
 size_t TransitivePath::getCostEstimate() {
   // We assume that the cost of computing the transitive path is proportional to
   // the result size.
-  auto costEstimate = getSizeEstimate();
+  auto costEstimate = getSizeEstimateBeforeLimit();
   // Add the cost for the index scan of the predicate involved.
   for (auto* ptr : getChildren()) {
     if (ptr) {
@@ -210,7 +210,7 @@ size_t TransitivePath::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-template <int SUB_WIDTH>
+template <size_t SUB_WIDTH>
 void TransitivePath::computeTransitivePath(IdTable* res, const IdTable& sub,
                                            bool leftIsVar, bool rightIsVar,
                                            size_t leftSubCol,
@@ -247,7 +247,7 @@ template void TransitivePath::computeTransitivePath<2>(
     size_t minDist, size_t maxDist);
 
 // _____________________________________________________________________________
-template <int SUB_WIDTH, bool leftIsVar, bool rightIsVar>
+template <size_t SUB_WIDTH, bool leftIsVar, bool rightIsVar>
 void TransitivePath::computeTransitivePath(IdTable* dynRes,
                                            const IdTable& dynSub,
                                            size_t leftSubCol,
@@ -339,9 +339,9 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
       edgeCache.push_back(rootEdges->second);
     }
     if (minDist == 0) {
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-               "The TransitivePath operation does not support a minimum "
-               "distance of 0 (use at least one instead).");
+      AD_THROW(
+          "The TransitivePath operation does not support a minimum "
+          "distance of 0 (use at least one instead).");
     }
 
     // While we have not found the entire transitive hull and have not reached
@@ -390,7 +390,7 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
   *dynRes = std::move(res).toDynamic();
 }
 
-template <int SUB_WIDTH, int LEFT_WIDTH, int RES_WIDTH>
+template <size_t SUB_WIDTH, size_t LEFT_WIDTH, size_t RES_WIDTH>
 void TransitivePath::computeTransitivePathLeftBound(
     IdTable* dynRes, const IdTable& dynSub, const IdTable& dynLeft,
     size_t leftSideCol, bool rightIsVar, size_t leftSubCol, size_t rightSubCol,
@@ -464,9 +464,9 @@ void TransitivePath::computeTransitivePathLeftBound(
       edgeCache.push_back(rootEdges->second);
     }
     if (minDist == 0) {
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-               "The TransitivePath operation does not support a minimum "
-               "distance of 0 (use at least one instead).");
+      AD_THROW(
+          "The TransitivePath operation does not support a minimum "
+          "distance of 0 (use at least one instead).");
     }
 
     // While we have not found the entire transitive hull and have not reached
@@ -602,9 +602,9 @@ void TransitivePath::computeTransitivePathRightBound(
       edgeCache.push_back(rootEdges->second);
     }
     if (minDist == 0) {
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-               "The TransitivePath operation does not support a minimum "
-               "distance of 0 (use at least one instead).");
+      AD_THROW(
+          "The TransitivePath operation does not support a minimum "
+          "distance of 0 (use at least one instead).");
     }
 
     // While we have not found the entire transitive hull and have not reached
@@ -664,106 +664,98 @@ void TransitivePath::computeTransitivePathRightBound(
 }
 
 // _____________________________________________________________________________
-void TransitivePath::computeResult(ResultTable* result) {
+ResultTable TransitivePath::computeResult() {
   LOG(DEBUG) << "TransitivePath result computation..." << std::endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "TransitivePath subresult computation done." << std::endl;
 
-  result->_sortedBy = resultSortedOn();
-  if (_leftIsVar || _leftSideTree != nullptr) {
-    result->_resultTypes.push_back(subRes->getResultType(_leftSubCol));
-  } else {
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  }
-  if (_rightIsVar || _rightSideTree != nullptr) {
-    result->_resultTypes.push_back(subRes->getResultType(_rightSubCol));
-  } else {
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  }
-  result->_idTable.setNumColumns(getResultWidth());
+  IdTable idTable{getExecutionContext()->getAllocator()};
 
-  int subWidth = subRes->_idTable.numColumns();
+  idTable.setNumColumns(getResultWidth());
+
+  size_t subWidth = subRes->idTable().numColumns();
   if (_leftSideTree != nullptr) {
     shared_ptr<const ResultTable> leftRes = _leftSideTree->getResult();
-    for (size_t c = 0; c < leftRes->_idTable.numColumns(); c++) {
-      if (c != _leftSideCol) {
-        result->_resultTypes.push_back(leftRes->getResultType(c));
-      }
-    }
-    int leftWidth = leftRes->_idTable.numColumns();
-    CALL_FIXED_SIZE(
-        (std::array{subWidth, leftWidth, static_cast<int>(_resultWidth)}),
-        &TransitivePath::computeTransitivePathLeftBound, this,
-        &result->_idTable, subRes->_idTable, leftRes->_idTable, _leftSideCol,
-        _rightIsVar, _leftSubCol, _rightSubCol, _rightValue, _minDist, _maxDist,
-        _resultWidth);
+    size_t leftWidth = leftRes->idTable().numColumns();
+    CALL_FIXED_SIZE((std::array{subWidth, leftWidth, _resultWidth}),
+                    &TransitivePath::computeTransitivePathLeftBound, this,
+                    &idTable, subRes->idTable(), leftRes->idTable(),
+                    _leftSideCol, _rightIsVar, _leftSubCol, _rightSubCol,
+                    _rightValue, _minDist, _maxDist, _resultWidth);
   } else if (_rightSideTree != nullptr) {
     shared_ptr<const ResultTable> rightRes = _rightSideTree->getResult();
-    for (size_t c = 0; c < rightRes->_idTable.numColumns(); c++) {
-      if (c != _rightSideCol) {
-        result->_resultTypes.push_back(rightRes->getResultType(c));
-      }
-    }
-    int rightWidth = rightRes->_idTable.numColumns();
-    CALL_FIXED_SIZE(
-        (std::array{subWidth, rightWidth, static_cast<int>(_resultWidth)}),
-        &TransitivePath::computeTransitivePathRightBound, this,
-        &result->_idTable, subRes->_idTable, rightRes->_idTable, _rightSideCol,
-        _leftIsVar, _leftSubCol, _rightSubCol, _leftValue, _minDist, _maxDist,
-        _resultWidth);
+    size_t rightWidth = rightRes->idTable().numColumns();
+    CALL_FIXED_SIZE((std::array{subWidth, rightWidth, _resultWidth}),
+                    &TransitivePath::computeTransitivePathRightBound, this,
+                    &idTable, subRes->idTable(), rightRes->idTable(),
+                    _rightSideCol, _leftIsVar, _leftSubCol, _rightSubCol,
+                    _leftValue, _minDist, _maxDist, _resultWidth);
   } else {
     CALL_FIXED_SIZE(subWidth, &TransitivePath::computeTransitivePath, this,
-                    &result->_idTable, subRes->_idTable, _leftIsVar,
-                    _rightIsVar, _leftSubCol, _rightSubCol, _leftValue,
-                    _rightValue, _minDist, _maxDist);
+                    &idTable, subRes->idTable(), _leftIsVar, _rightIsVar,
+                    _leftSubCol, _rightSubCol, _leftValue, _rightValue,
+                    _minDist, _maxDist);
   }
 
   LOG(DEBUG) << "TransitivePath result computation done." << std::endl;
+  // NOTE: The only place, where the input to a transitive path operation is not
+  // an index scan (which has an empty local vocabulary by default) is the
+  // `LocalVocabTest`. But it doesn't harm to propagate the local vocab here
+  // either.
+  return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
 
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
     std::shared_ptr<QueryExecutionTree> leftop, size_t inputCol) const {
-  // Enforce required sorting of `leftop`.
-  leftop = QueryExecutionTree::createSortedTree(std::move(leftop), {inputCol});
-  // Create a copy of this
-  std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(*this);
-  p->_leftSideTree = leftop;
-  p->_leftSideCol = inputCol;
-  const auto& var = leftop->getVariableColumns();
-  for (const auto& [variable, columnIndex] : var) {
-    if (columnIndex != inputCol) {
-      if (columnIndex > inputCol) {
-        p->_variableColumns[variable] = columnIndex + 1;
-      } else {
-        p->_variableColumns[variable] = columnIndex + 2;
-      }
-      p->_resultWidth++;
-    }
-  }
-  return p;
+  return bindLeftOrRightSide(std::move(leftop), inputCol, true);
 }
 
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePath> TransitivePath::bindRightSide(
     std::shared_ptr<QueryExecutionTree> rightop, size_t inputCol) const {
-  // TODO<joka921> `bindRightSide` and `bindLeftSide` are almost the same,
-  // could and should this be made generic? It probably requires refactoring
-  // quite a lot of this class though.
-  // Enforce required sorting of `rightop`.
-  rightop =
-      QueryExecutionTree::createSortedTree(std::move(rightop), {inputCol});
-  // Create a copy of this
-  std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(*this);
-  p->_rightSideTree = rightop;
-  p->_rightSideCol = inputCol;
-  const auto& var = rightop->getVariableColumns();
-  for (const auto& [variable, columnIndex] : var) {
+  return bindLeftOrRightSide(std::move(rightop), inputCol, false);
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
+    std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
+    bool isLeft) const {
+  // Enforce required sorting of `leftOrRightOp`.
+  leftOrRightOp = QueryExecutionTree::createSortedTree(std::move(leftOrRightOp),
+                                                       {inputCol});
+  // Create a copy of this.
+  //
+  // NOTE: The RHS used to be `std::make_shared<TransitivePath>()`, which is
+  // wrong because it first calls the copy constructor of the base class
+  // `Operation`, which  would then ignore the changes in `variableColumnMap_`
+  // made below (see `Operation::getInternallyVisibleVariableColumns` and
+  // `Operation::getExternallyVariableColumns`).
+  std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(
+      getExecutionContext(), _subtree, _leftIsVar, _rightIsVar, _leftSubCol,
+      _rightSubCol, _leftValue, _rightValue, Variable{_leftColName},
+      Variable{_rightColName}, _minDist, _maxDist);
+  if (isLeft) {
+    p->_leftSideTree = leftOrRightOp;
+    p->_leftSideCol = inputCol;
+  } else {
+    p->_rightSideTree = leftOrRightOp;
+    p->_rightSideCol = inputCol;
+  }
+
+  // Note: The `variable` in the following structured binding is `const`, even
+  // if we bind by value. We deliberately make one unnecessary copy of the
+  // `variable` to keep the code simpler.
+  for (auto [variable, columnIndexWithType] :
+       leftOrRightOp->getVariableColumns()) {
+    ColumnIndex columnIndex = columnIndexWithType.columnIndex_;
     if (columnIndex != inputCol) {
       if (columnIndex > inputCol) {
-        p->_variableColumns[variable] = columnIndex + 1;
+        columnIndexWithType.columnIndex_++;
+        p->_variableColumns[variable] = columnIndexWithType;
       } else {
-        p->_variableColumns[variable] = columnIndex + 2;
+        columnIndexWithType.columnIndex_ += 2;
+        p->_variableColumns[variable] = columnIndexWithType;
       }
       p->_resultWidth++;
     }

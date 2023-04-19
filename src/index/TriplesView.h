@@ -3,11 +3,12 @@
 #include <utility>
 #include <vector>
 
-#include "../global/Id.h"
-#include "../util/AllocatorWithLimit.h"
-#include "../util/File.h"
-#include "../util/Generator.h"
 #include "CompressedRelation.h"
+#include "engine/idTable/IdTable.h"
+#include "global/Id.h"
+#include "util/AllocatorWithLimit.h"
+#include "util/File.h"
+#include "util/Generator.h"
 
 namespace detail {
 using IgnoredRelations = std::vector<std::pair<Id, Id>>;
@@ -72,16 +73,15 @@ cppcoro::generator<std::array<Id, 3>> TriplesView(
   // blocks, making the limit here unnecessary.
   using Tuple = std::array<Id, 2>;
   auto tupleAllocator = allocator.as<Tuple>();
-  std::vector<Tuple, ad_utility::AllocatorWithLimit<Tuple>> col2And3{
-      tupleAllocator};
+  IdTable col1And2{2, allocator};
   for (auto& [begin, end] : allowedRanges) {
     for (auto it = begin; it != end; ++it) {
-      col2And3.clear();
+      col1And2.clear();
       Id id = it.getId();
       // TODO<joka921> We could also pass a timeout pointer here.
-      permutation.scan(id, &col2And3);
-      for (const auto& [col2, col3] : col2And3) {
-        std::array<Id, 3> triple{id, col2, col3};
+      permutation.scan(id, &col1And2);
+      for (const auto& row : col1And2) {
+        std::array<Id, 3> triple{id, row[0], row[1]};
         if (isTripleIgnored(triple)) [[unlikely]] {
           continue;
         }

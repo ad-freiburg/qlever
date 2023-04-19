@@ -38,7 +38,6 @@ class VectorWithMemoryLimit
 
  public:
   VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = delete;
-
   // Moving is fine.
   VectorWithMemoryLimit(VectorWithMemoryLimit&&) noexcept = default;
   VectorWithMemoryLimit& operator=(VectorWithMemoryLimit&&) noexcept = default;
@@ -92,92 +91,6 @@ namespace sparqlExpression {
 /// A list of StrongIds that all have the same datatype.
 using StrongIdsWithResultType = VectorWithMemoryLimit<ValueId>;
 
-/// Typedef for a map from variables names to (input column, type of input
-/// column.
-using VariableToColumnAndResultTypeMap =
-    ad_utility::HashMap<Variable, std::pair<size_t, ResultTable::ResultType>>;
-
-/// All the additional information which is needed to evaluate a Sparql
-/// expression.
-struct EvaluationContext {
-  const QueryExecutionContext& _qec;
-  // The VariableToColumnMap of the input
-  const VariableToColumnAndResultTypeMap& _variableToColumnAndResultTypeMap;
-
-  /// The input of the expression.
-  const IdTable& _inputTable;
-
-  /// The indices of the actual range of rows in the _inputTable on which the
-  /// expression is evaluated. For BIND expressions this is always [0,
-  /// _inputTable.size()) but for GROUP BY evaluation we also need only parts
-  /// of the input.
-  size_t _beginIndex = 0;
-  size_t _endIndex = _inputTable.size();
-
-  /// The input is sorted on these columns. This information can be used to
-  /// perform efficient relational operations like `equal` or `less than`
-  std::vector<size_t> _columnsByWhichResultIsSorted;
-
-  /// Let the expression evaluation also respect the memory limit.
-  ad_utility::AllocatorWithLimit<Id> _allocator;
-
-  /// The local vocabulary of the input.
-  const LocalVocab& _localVocab;
-
-  /// Constructor for evaluating an expression on the complete input.
-  EvaluationContext(
-      const QueryExecutionContext& qec,
-      const VariableToColumnAndResultTypeMap& variableToColumnAndResultTypeMap,
-      const IdTable& inputTable,
-      const ad_utility::AllocatorWithLimit<Id>& allocator,
-      const LocalVocab& localVocab)
-      : _qec{qec},
-        _variableToColumnAndResultTypeMap{variableToColumnAndResultTypeMap},
-        _inputTable{inputTable},
-        _allocator{allocator},
-        _localVocab{localVocab} {}
-
-  /// Constructor for evaluating an expression on a part of the input
-  /// (only considers the rows [beginIndex, endIndex) from the input.
-  EvaluationContext(const QueryExecutionContext& qec,
-                    const VariableToColumnAndResultTypeMap& map,
-                    const IdTable& inputTable, size_t beginIndex,
-                    size_t endIndex,
-                    const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    const LocalVocab& localVocab)
-      : _qec{qec},
-        _variableToColumnAndResultTypeMap{map},
-        _inputTable{inputTable},
-        _beginIndex{beginIndex},
-        _endIndex{endIndex},
-        _allocator{allocator},
-        _localVocab{localVocab} {}
-
-  bool isResultSortedBy(const Variable& variable) {
-    if (_columnsByWhichResultIsSorted.empty()) {
-      return false;
-    }
-    if (!_variableToColumnAndResultTypeMap.contains(variable)) {
-      return false;
-    }
-
-    return getColumnIndexForVariable(variable) ==
-           _columnsByWhichResultIsSorted[0];
-  }
-  // The size (in number of elements) that this evaluation context refers to.
-  [[nodiscard]] size_t size() const { return _endIndex - _beginIndex; }
-
-  // ____________________________________________________________________________
-  [[nodiscard]] size_t getColumnIndexForVariable(const Variable& var) const {
-    const auto& map = _variableToColumnAndResultTypeMap;
-    if (!map.contains(var)) {
-      throw std::runtime_error(absl::StrCat(
-          "Variable ", var.name(), " was not found in input to expression."));
-    }
-    return map.at(var).first;
-  }
-};
-
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
 /// the row indices in which a boolean expression evaluates to "true". Constant
@@ -206,6 +119,27 @@ template <typename T>
 concept SingleExpressionResult =
     ad_utility::isTypeContainedIn<T, ExpressionResult>;
 
+// If the `ExpressionResult` holds a value that is cheap to copy (a constant or
+// a variable), return a copy. Else throw an exception the message of which
+// implies that this is not a valid usage of this function.
+inline ExpressionResult copyExpressionResultIfNotVector(
+    const ExpressionResult& result) {
+  auto copyIfCopyable =
+      []<SingleExpressionResult R>(const R& x) -> ExpressionResult {
+    if constexpr (std::is_copy_assignable_v<R> &&
+                  std::is_copy_constructible_v<R>) {
+      return x;
+    } else {
+      AD_THROW(
+          "Tried to copy an expression result that is a vector. This should "
+          "never happen, as this code should only be called for the results of "
+          "expressions in a GROUP BY clause which all should be aggregates. "
+          "Please report this.");
+    }
+  };
+  return std::visit(copyIfCopyable, result);
+}
+
 /// True iff T represents a constant.
 template <typename T>
 constexpr static bool isConstantResult =
@@ -214,28 +148,119 @@ constexpr static bool isConstantResult =
 /// True iff T is one of the ConstantTypesAsVector
 template <typename T>
 constexpr static bool isVectorResult =
-    ad_utility::isTypeContainedIn<T, detail::ConstantTypesAsVector>;
+    ad_utility::isTypeContainedIn<T, detail::ConstantTypesAsVector> ||
+    ad_utility::isSimilar<T, std::span<const ValueId>>;
+
+/// All the additional information which is needed to evaluate a SPARQL
+/// expression.
+struct EvaluationContext {
+  const QueryExecutionContext& _qec;
+  // The VariableToColumnMap of the input
+  const VariableToColumnMap& _variableToColumnMap;
+
+  /// The input of the expression.
+  const IdTable& _inputTable;
+
+  /// The indices of the actual range of rows in the _inputTable on which the
+  /// expression is evaluated. For BIND expressions this is always [0,
+  /// _inputTable.size()) but for GROUP BY evaluation we also need only parts
+  /// of the input.
+  size_t _beginIndex = 0;
+  size_t _endIndex = _inputTable.size();
+
+  /// The input is sorted on these columns. This information can be used to
+  /// perform efficient relational operations like `equal` or `less than`
+  std::vector<size_t> _columnsByWhichResultIsSorted;
+
+  /// Let the expression evaluation also respect the memory limit.
+  ad_utility::AllocatorWithLimit<Id> _allocator;
+
+  /// The local vocabulary of the input.
+  const LocalVocab& _localVocab;
+
+  // If the expression is part of a GROUP BY then this member has to be set to
+  // the variables by which the input is grouped. These variables will then be
+  // treated as constants.
+  ad_utility::HashSet<Variable> _groupedVariables;
+
+  // Only needed during GROUP BY evaluation.
+  // Stores information about the results from previous expressions of the same
+  // SELECT clause line that might be accessed in the same SELECT clause.
+
+  // This map maps variables that are bound in the select clause to indices.
+  VariableToColumnMap _variableToColumnMapPreviousResults;
+  // This vector contains the last result of the expressions in the SELECT
+  // clause. The correct index for a given variable is obtained from the
+  // `_variableToColumnMapPreviousResults`.
+  std::vector<ExpressionResult> _previousResultsFromSameGroup;
+
+  /// Constructor for evaluating an expression on the complete input.
+  EvaluationContext(const QueryExecutionContext& qec,
+                    const VariableToColumnMap& variableToColumnMap,
+                    const IdTable& inputTable,
+                    const ad_utility::AllocatorWithLimit<Id>& allocator,
+                    const LocalVocab& localVocab)
+      : _qec{qec},
+        _variableToColumnMap{variableToColumnMap},
+        _inputTable{inputTable},
+        _allocator{allocator},
+        _localVocab{localVocab} {}
+
+  /// Constructor for evaluating an expression on a part of the input
+  /// (only considers the rows [beginIndex, endIndex) from the input.
+  EvaluationContext(const QueryExecutionContext& qec,
+                    const VariableToColumnMap& map, const IdTable& inputTable,
+                    size_t beginIndex, size_t endIndex,
+                    const ad_utility::AllocatorWithLimit<Id>& allocator,
+                    const LocalVocab& localVocab)
+      : _qec{qec},
+        _variableToColumnMap{map},
+        _inputTable{inputTable},
+        _beginIndex{beginIndex},
+        _endIndex{endIndex},
+        _allocator{allocator},
+        _localVocab{localVocab} {}
+
+  bool isResultSortedBy(const Variable& variable) {
+    if (_columnsByWhichResultIsSorted.empty()) {
+      return false;
+    }
+    if (!_variableToColumnMap.contains(variable)) {
+      return false;
+    }
+
+    return getColumnIndexForVariable(variable) ==
+           _columnsByWhichResultIsSorted[0];
+  }
+  // The size (in number of elements) that this evaluation context refers to.
+  [[nodiscard]] size_t size() const { return _endIndex - _beginIndex; }
+
+  // ____________________________________________________________________________
+  [[nodiscard]] size_t getColumnIndexForVariable(const Variable& var) const {
+    const auto& map = _variableToColumnMap;
+    if (!map.contains(var)) {
+      throw std::runtime_error(absl::StrCat(
+          "Variable ", var.name(), " was not found in input to expression."));
+    }
+    return map.at(var).columnIndex_;
+  }
+
+  // _____________________________________________________________________________
+  std::optional<ExpressionResult> getResultFromPreviousAggregate(
+      const Variable& var) const {
+    const auto& map = _variableToColumnMapPreviousResults;
+    if (!map.contains(var)) {
+      return std::nullopt;
+    }
+    ColumnIndex idx = map.at(var).columnIndex_;
+    AD_CONTRACT_CHECK(idx < _previousResultsFromSameGroup.size());
+
+    return copyExpressionResultIfNotVector(
+        _previousResultsFromSameGroup.at(idx));
+  }
+};
 
 namespace detail {
-
-/// Convert expression result type T to corresponding qlever ResultType.
-/// TODO<joka921>: currently all constants are floats.
-template <SingleExpressionResult T>
-constexpr static qlever::ResultType expressionResultTypeToQleverResultType() {
-  if constexpr (ad_utility::isSimilar<T, string> ||
-                ad_utility::isSimilar<T, VectorWithMemoryLimit<string>>) {
-    return qlever::ResultType::LOCAL_VOCAB;
-  } else if constexpr (isConstantResult<T> || isVectorResult<T>) {
-    return qlever::ResultType::FLOAT;
-  } else if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
-    return qlever::ResultType::VERBATIM;
-  } else {
-    // for Variables and StrongIdWithDatatypes we cannot get the result type at
-    // compile time.
-    static_assert(ad_utility::alwaysFalse<T>);
-  }
-}
-
 /// Get Id of constant result of type T.
 template <SingleExpressionResult T, typename LocalVocabT>
 Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
@@ -299,7 +324,7 @@ struct SpecializedFunction {
                     }) {
         return Function{}(std::forward<Operands>(operands)...);
       } else {
-        AD_CHECK(false);
+        AD_FAIL();
       }
     }
   }
@@ -345,12 +370,13 @@ std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
 /// multiple `ValueGetters` (a parameter pack, that has to appear at the end of
 /// the template declaration) and the default parameter for the
 /// `FunctionForSetOfIntervals` (which also has to appear at the end).
-template <size_t NumOperands, typename FunctionAndValueGettersT,
-          typename... SpecializedFunctions>
-requires ad_utility::isInstantiation<FunctionAndValueGetters,
-                                     FunctionAndValueGettersT> &&
-    (...&& ad_utility::isInstantiation<SpecializedFunction,
-                                       SpecializedFunctions>)struct Operation {
+template <
+    size_t NumOperands,
+    ad_utility::isInstantiation<FunctionAndValueGetters>
+        FunctionAndValueGettersT,
+    ad_utility::isInstantiation<SpecializedFunction>... SpecializedFunctions>
+
+struct Operation {
  private:
   using OriginalValueGetters = typename FunctionAndValueGettersT::ValueGetters;
   static constexpr size_t NV = std::tuple_size_v<OriginalValueGetters>;

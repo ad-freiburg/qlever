@@ -7,84 +7,66 @@
 #include <array>
 #include <vector>
 
-#include "../src/engine/CallFixedSize.h"
-#include "../src/engine/Union.h"
-#include "../src/global/Id.h"
+#include "./IndexTestHelpers.h"
+#include "./engine/ValuesForTesting.h"
+#include "./util/IdTableHelpers.h"
+#include "./util/IdTestHelpers.h"
+#include "engine/Union.h"
+#include "global/Id.h"
 
-ad_utility::AllocatorWithLimit<Id>& allocator() {
-  static ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<size_t>::max())};
-  return a;
+namespace {
+auto V = ad_utility::testing::VocabId;
 }
 
-auto I = [](const auto& id) {
-  return Id::makeFromVocabIndex(VocabIndex::make(id));
-};
-
+// A simple test for computing a union.
 TEST(UnionTest, computeUnion) {
-  IdTable left(1, allocator());
-  left.push_back({I(1)});
-  left.push_back({I(2)});
-  left.push_back({I(3)});
+  auto* qec = ad_utility::testing::getQec();
+  IdTable left = makeIdTableFromVector({{V(1)}, {V(2)}, {V(3)}});
+  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, left.clone(), std::vector{Variable{"?x"}});
 
-  IdTable right(2, allocator());
-  right.push_back({I(4), I(5)});
-  right.push_back({I(6), I(7)});
+  IdTable right = makeIdTableFromVector({{V(4), V(5)}, {V(6), V(7)}});
+  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, right.clone(), std::vector{Variable{"?u"}, Variable{"?x"}});
 
-  IdTable result(2, allocator());
+  Union u{ad_utility::testing::getQec(), leftT, rightT};
+  auto resultTable = u.computeResultOnlyForTesting();
+  const auto& result = resultTable.idTable();
 
-  const std::vector<std::array<size_t, 2>> columnOrigins = {
-      {0, 1}, {Union::NO_COLUMN, 0}};
-
-  int leftWidth = left.numColumns();
-  int rightWidth = right.numColumns();
-  int outWidth = result.numColumns();
-  Union U{Union::InvalidUnionOnlyUseForTestinTag{}};
-  CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, outWidth}),
-                  &Union::computeUnion, &U, &result, left, right,
-                  columnOrigins);
-
-  ASSERT_EQ(5u, result.size());
-  for (size_t i = 0; i < left.size(); i++) {
-    ASSERT_EQ(left(i, 0), result(i, 0));
-    ASSERT_EQ(ID_NO_VALUE, result(i, 1));
-  }
-  for (size_t i = 0; i < right.size(); i++) {
-    ASSERT_EQ(right(i, 0), result(i + left.size(), 1));
-    ASSERT_EQ(right(i, 1), result(i + left.size(), 0));
-  }
+  auto U = Id::makeUndefined();
+  auto expected = makeIdTableFromVector(
+      {{V(1), U}, {V(2), U}, {V(3), U}, {V(5), V(4)}, {V(7), V(6)}});
+  ASSERT_EQ(result, expected);
 }
 
-TEST(UnionTest, computeUnionOptimized) {
-  // the left and right data vectors will be deleted by the result tables
-  IdTable left(2, allocator());
-  left.push_back({I(1), I(2)});
-  left.push_back({I(2), I(3)});
-  left.push_back({I(3), I(4)});
-
-  IdTable right(2, allocator());
-  right.push_back({I(4), I(5)});
-  right.push_back({I(6), I(7)});
-
-  IdTable result(2, allocator());
-
-  const std::vector<std::array<size_t, 2>> columnOrigins = {{0, 0}, {1, 1}};
-  int leftWidth = left.numColumns();
-  int rightWidth = right.numColumns();
-  int outWidth = result.numColumns();
-  Union U{Union::InvalidUnionOnlyUseForTestinTag{}};
-  CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, outWidth}),
-                  &Union::computeUnion, &U, &result, left, right,
-                  columnOrigins);
-
-  ASSERT_EQ(5u, result.size());
-  for (size_t i = 0; i < left.size(); i++) {
-    ASSERT_EQ(left(i, 0), result(i, 0));
-    ASSERT_EQ(left(i, 1), result(i, 1));
+// A test with large inputs to test the chunked writing that is caused by the
+// timeout checks.
+TEST(UnionTest, computeUnionLarge) {
+  auto* qec = ad_utility::testing::getQec();
+  VectorTable leftInput, rightInput, expected;
+  size_t numInputsL = 1'500'000u;
+  size_t numInputsR = 5;
+  size_t numInputs = numInputsL + numInputsR;
+  auto U = Id::makeUndefined();
+  leftInput.reserve(numInputsL);
+  expected.reserve(numInputs);
+  for (size_t i = 0; i < numInputsL; ++i) {
+    leftInput.push_back(std::vector<IntOrId>{V(i)});
+    expected.push_back(std::vector<IntOrId>{V(i), U});
   }
-  for (size_t i = 0; i < right.size(); i++) {
-    ASSERT_EQ(right(i, 0), result(i + left.size(), 0));
-    ASSERT_EQ(right(i, 1), result(i + left.size(), 1));
+  for (size_t i = 0; i < numInputsR; ++i) {
+    rightInput.push_back(std::vector<IntOrId>{V(i + 425)});
+    expected.push_back(std::vector<IntOrId>{U, V(i + 425)});
   }
+  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector(leftInput), std::vector{Variable{"?x"}});
+
+  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector(rightInput), std::vector{Variable{"?u"}});
+
+  Union u{ad_utility::testing::getQec(), leftT, rightT};
+  auto resultTable = u.computeResultOnlyForTesting();
+  const auto& result = resultTable.idTable();
+
+  ASSERT_EQ(result, makeIdTableFromVector(expected));
 }

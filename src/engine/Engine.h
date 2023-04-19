@@ -20,8 +20,8 @@ class Engine {
   template <typename Comp, int WIDTH>
   static void filter(const IdTableView<WIDTH>& v, const Comp& comp,
                      IdTableStatic<WIDTH>* result) {
-    AD_CHECK(result);
-    AD_CHECK(result->size() == 0);
+    AD_CONTRACT_CHECK(result);
+    AD_CONTRACT_CHECK(result->size() == 0);
     LOG(DEBUG) << "Filtering " << v.size() << " elements.\n";
     for (const auto& e : v) {
       if (comp(e)) {
@@ -34,8 +34,8 @@ class Engine {
   template <int IN_WIDTH, int FILTER_WIDTH>
   static void filter(const IdTable& dynV, size_t fc1, size_t fc2,
                      const IdTable& dynFilter, IdTable* dynResult) {
-    AD_CHECK(dynResult);
-    AD_CHECK(dynResult->size() == 0);
+    AD_CONTRACT_CHECK(dynResult);
+    AD_CONTRACT_CHECK(dynResult->size() == 0);
     LOG(DEBUG) << "Filtering " << dynV.size()
                << " elements with a filter relation with " << dynFilter.size()
                << "elements\n";
@@ -96,7 +96,7 @@ class Engine {
                << " elements.\n";
   }
 
-  template <int WIDTH>
+  template <size_t WIDTH>
   static void sort(IdTable* tab, const size_t keyColumn) {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements ..." << std::endl;
     IdTableStatic<WIDTH> stab = std::move(*tab).toStatic<WIDTH>();
@@ -138,22 +138,22 @@ class Engine {
     LOG(DEBUG) << "Sort done.\n";
   }
 
+  static void sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols);
+
   /**
    * @brief Removes all duplicates from input with regards to the columns
    *        in keepIndices. The input needs to be sorted on the keep indices,
    *        otherwise the result of this function is undefined.
    **/
-  template <int WIDTH>
+  template <size_t WIDTH>
   static void distinct(const IdTable& dynInput,
                        const std::vector<size_t>& keepIndices,
                        IdTable* dynResult) {
     LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
     const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
     IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
-    if (input.size() > 0) {
-      AD_CHECK_LE(keepIndices.size(), input.numColumns());
-      // TODO<joka921> Should we delete copy operations of the new IDtable as
-      // well.
+    if (!input.empty()) {
+      AD_CONTRACT_CHECK(keepIndices.size() <= input.numColumns());
       result = input.clone();
 
       auto last = std::unique(result.begin(), result.end(),

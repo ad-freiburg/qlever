@@ -80,8 +80,10 @@ class CountAvailablePredicates : public Operation {
 
   float getMultiplicity(size_t col) override;
 
-  size_t getSizeEstimate() override;
+ private:
+  size_t getSizeEstimateBeforeLimit() override;
 
+ public:
   size_t getCostEstimate() override;
 
   // This method is declared here solely for unit testing purposes
@@ -97,7 +99,7 @@ class CountAvailablePredicates : public Operation {
    * @param subjectColumn The column containing the entities for which the
    *                      relations should be counted.
    */
-  template <int I>
+  template <size_t I>
   static void computePatternTrick(
       const IdTable& input, IdTable* result,
       const vector<PatternID>& hasPattern,
@@ -111,6 +113,6 @@ class CountAvailablePredicates : public Operation {
       const CompactVectorOfStrings<Id>& patterns);
 
  private:
-  void computeResult(ResultTable* result) override;
+  ResultTable computeResult() override;
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };

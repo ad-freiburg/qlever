@@ -18,22 +18,38 @@
 #error "AD_PROPERTY must not already be defined. Consider renaming it."
 #else
 #define AD_PROPERTY(Class, Member, Matcher) \
-  testing::Property(#Member "()", &Class::Member, Matcher)
+  ::testing::Property(#Member "()", &Class::Member, Matcher)
 #endif
 
 #ifdef AD_FIELD
 #error "AD_FIELD must not already be defined. Consider renaming it."
 #else
 #define AD_FIELD(Class, Member, Matcher) \
-  testing::Field(#Member, &Class::Member, Matcher)
+  ::testing::Field(#Member, &Class::Member, Matcher)
 #endif
+
+// Similar to Gtest's `EXPECT_THROW`. Expect that executing `statement` throws
+// an exception that inherits from `std::exception`, and that the error message
+// of that exception, obtained by the `what()` member function, matches the
+// given `errorMessageMatcher`.
+#define AD_EXPECT_THROW_WITH_MESSAGE(statement, errorMessageMatcher)      \
+  try {                                                                   \
+    statement;                                                            \
+    FAIL() << "No exception was thrown";                                  \
+  } catch (const std::exception& e) {                                     \
+    EXPECT_THAT(e.what(), errorMessageMatcher)                            \
+        << "The exception message does not match";                        \
+  } catch (...) {                                                         \
+    FAIL() << "The thrown exception did not inherit from std::exception"; \
+  }                                                                       \
+  void()
 
 // _____________________________________________________________________________
 // Add the given `source_location`  to all gtest failure messages that occur,
 // while the return value is still in scope. It is important to bind the return
 // value to a variable, otherwise it will immediately go of scope and have no
 // effect.
-[[nodiscard]] testing::ScopedTrace generateLocationTrace(
+[[nodiscard]] inline testing::ScopedTrace generateLocationTrace(
     ad_utility::source_location l,
     std::string_view errorMessage = "Actual location of the test failure") {
   return {l.file_name(), static_cast<int>(l.line()), errorMessage};

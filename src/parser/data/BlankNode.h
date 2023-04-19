@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "parser/data/Context.h"
+#include "parser/data/ConstructQueryExportContext.h"
 
 class BlankNode {
   bool _generated;
@@ -25,7 +25,8 @@ class BlankNode {
 
   // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> evaluate(
-      const Context& context, [[maybe_unused]] ContextRole role) const;
+      const ConstructQueryExportContext& context,
+      [[maybe_unused]] PositionInTriple positionInTriple) const;
 
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const;

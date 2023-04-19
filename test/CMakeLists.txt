@@ -3,7 +3,7 @@ include(GoogleTest)
 # Link binary ${basename} against `gmock_main`, the threading library,
 # and all libraries that are specified as additional arguments.
 function (linkTest basename)
-    target_link_libraries(${basename} ${ARGN} gmock_main ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(${basename} ${ARGN} gmock_main ${CMAKE_THREAD_LIBS_INIT})
 endfunction()
 
 # Add the exectutable ${basename} that is compiled from the source file
@@ -33,14 +33,30 @@ function(linkAndDiscoverTestSerial basename)
             TRUE)
 endfunction()
 
+if (SINGLE_TEST_BINARY)
+    message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
+    add_executable(QLeverAllUnitTestsMain)
+    qlever_target_link_libraries(QLeverAllUnitTestsMain gmock_main ${CMAKE_THREAD_LIBS_INIT})
+    gtest_discover_tests(QLeverAllUnitTestsMain QLeverAllUnitTestsMain PROPERTIES RUN_SERIAL
+            TRUE)
+else()
+    message(STATUS "The tests are split over multiple binaries")
+
+endif()
 # Usage: `addAndLinkTest(basename, [additionalLibraries...]`
 # Add a GTest/GMock test case that is called `basename` and compiled from a file called
 # `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
 # additional libraries against which the test case has to be linked can be specified as
 # additional arguments after the `basename`
 function(addLinkAndDiscoverTest basename)
+  if (SINGLE_TEST_BINARY)
+      target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
+      qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
+  else()
     addTest(${basename})
     linkAndDiscoverTest(${basename} ${ARGN})
+  endif()
+
 endfunction()
 
 # Usage: `addAndLinkTestSerial(basename, [additionalLibraries...]`
@@ -48,8 +64,13 @@ endfunction()
 # (without any of the other test cases running in parallel). This can be
 # required e.g. if several tests cases write to the same file.
 function(addLinkAndDiscoverTestSerial basename)
+  if (SINGLE_TEST_BINARY)
+    target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
+    qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
+  else()
     addTest(${basename})
     linkAndDiscoverTestSerial(${basename} ${ARGN})
+  endif()
 endfunction()
 
 # Only compile and link the test, but do not run it.
@@ -65,12 +86,12 @@ addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions ${ICU_LI
 
 addLinkAndDiscoverTest(StringUtilsTest ${ICU_LIBRARIES})
 
-addLinkAndDiscoverTest(CacheTest absl::flat_hash_map)
+addLinkAndDiscoverTest(CacheTest)
 
-addLinkAndDiscoverTest(ConcurrentCacheTest absl::flat_hash_map)
+addLinkAndDiscoverTest(ConcurrentCacheTest)
 
 # This test also seems to use the same filenames and should be fixed.
-addLinkAndDiscoverTestSerial(FileTest absl::strings)
+addLinkAndDiscoverTestSerial(FileTest)
 
 addLinkAndDiscoverTest(Simple8bTest)
 
@@ -87,13 +108,15 @@ addLinkAndDiscoverTest(FTSAlgorithmsTest index)
 
 addLinkAndDiscoverTest(EngineTest engine)
 
+addLinkAndDiscoverTest(JoinTest engine)
+
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
-addLinkAndDiscoverTest(ConversionsTest util absl::strings)
+addLinkAndDiscoverTest(ConversionsTest util)
 
-addLinkAndDiscoverTest(HashMapTest absl::flat_hash_map)
+addLinkAndDiscoverTest(HashMapTest)
 
-addLinkAndDiscoverTest(HashSetTest absl::flat_hash_set)
+addLinkAndDiscoverTest(HashSetTest)
 
 addLinkAndDiscoverTestSerial(GroupByTest engine)
 
@@ -101,17 +124,22 @@ addLinkAndDiscoverTest(VocabularyGeneratorTest index)
 
 addLinkAndDiscoverTest(HasPredicateScanTest engine)
 
-addLinkAndDiscoverTest(MmapVectorTest absl::strings)
+addLinkAndDiscoverTest(MmapVectorTest)
 
 # BufferedVectorTest also uses conflicting filenames.
-addLinkAndDiscoverTestSerial(BufferedVectorTest absl::strings)
+addLinkAndDiscoverTestSerial(BufferedVectorTest)
 
 addLinkAndDiscoverTest(UnionTest engine)
 
-add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
-linkAndDiscoverTest(TokenTest parser re2 util ${ICU_LIBRARIES})
+if (SINGLE_TEST_BINARY)
+    target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
+    qlever_target_link_libraries(QLeverAllUnitTestsMain parser re2 util ${ICU_LIBRARIES})
+else()
+    add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
+    linkAndDiscoverTest(TokenTest parser re2 util ${ICU_LIBRARIES})
+endif()
 
-addLinkAndDiscoverTest(TurtleParserTest parser absl::flat_hash_map re2)
+addLinkAndDiscoverTest(TurtleParserTest parser re2)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
@@ -125,11 +153,11 @@ addLinkAndDiscoverTest(TupleHelpersTest)
 
 addLinkAndDiscoverTest(StringSortComparatorTest ${ICU_LIBRARIES})
 
-addLinkAndDiscoverTest(PriorityQueueTest absl::flat_hash_map ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(PriorityQueueTest ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(SynchronizedTest)
 
-addLinkAndDiscoverTest(LimitedAllocatorTest)
+addLinkAndDiscoverTest(AllocatorWithLimitTest)
 
 addLinkAndDiscoverTest(MinusTest engine)
 
@@ -139,17 +167,17 @@ addLinkAndDiscoverTest(MinusTest engine)
 addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 #addLinkAndDiscoverTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 
-addLinkAndDiscoverTest(SparqlAntlrParserTest parser sparqlExpressions engine)
+addLinkAndDiscoverTestSerial(SparqlAntlrParserTest parser sparqlExpressions engine)
 
 # The SerializerTest uses temporary files. The tests fail when multiple test
 # cases are run in parallel. This should be fixed by using distinct filenames
 # for each test case.
 # TODO<qup42, joka921> fix this
-addLinkAndDiscoverTestSerial(SerializerTest absl::flat_hash_map)
+addLinkAndDiscoverTestSerial(SerializerTest)
 
-addLinkAndDiscoverTest(ParametersTest absl::flat_hash_map)
+addLinkAndDiscoverTest(ParametersTest)
 
-addLinkAndDiscoverTest(ZstdCompressionTest absl::flat_hash_map zstd ${cmake_thread_libs_init})
+addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
 
 addLinkAndDiscoverTest(TaskQueueTest)
 
@@ -171,7 +199,7 @@ addLinkAndDiscoverTest(CompactStringVectorTest)
 
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
-addLinkAndDiscoverTest(ContentEncodingHelperTest absl::strings http)
+addLinkAndDiscoverTest(ContentEncodingHelperTest http)
 
 addLinkAndDiscoverTest(VocabularyInMemoryTest vocabulary)
 
@@ -183,14 +211,14 @@ addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
 
 addLinkAndDiscoverTest(PrefixCompressorTest)
 
-addLinkAndDiscoverTest(MilestoneIdTest absl::strings)
+addLinkAndDiscoverTest(MilestoneIdTest)
 
 # The VocabularyOnDisk uses mmap which fails when the tests are run in
 # parallel. This should be fixed by using distinct filenames for each test case.
 # TODO<qup42, joka921> fix this
 addLinkAndDiscoverTest(VocabularyOnDiskTest index)
 
-addLinkAndDiscoverTest(VocabularyTest index absl::strings)
+addLinkAndDiscoverTest(VocabularyTest index)
 
 addLinkAndDiscoverTest(IteratorTest)
 
@@ -222,9 +250,9 @@ addLinkAndDiscoverTest(HttpUtilsTest util http)
 
 addLinkAndDiscoverTest(DateTest)
 
-addLinkAndDiscoverTest(TripleObjectTest absl::strings parser)
+addLinkAndDiscoverTest(TripleComponentTest parser)
 
-addLinkAndDiscoverTest(ValueIdTest absl::flat_hash_set)
+addLinkAndDiscoverTest(ValueIdTest)
 
 addLinkAndDiscoverTest(LambdaHelpersTest)
 
@@ -234,16 +262,68 @@ addLinkAndDiscoverTest(TransparentFunctorsTest)
 
 addLinkAndDiscoverTest(SelectClauseTest parser engine)
 
-addLinkAndDiscoverTestSerial(RelationalExpressionTest sparqlExpressions index engine)
+addLinkAndDiscoverTestSerial(RelationalExpressionTest parser sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(CheckUsePatternTrickTest parser engine)
 
-addLinkAndDiscoverTestSerial(RegexExpressionTest sparqlExpressions index engine)
+addLinkAndDiscoverTestSerial(RegexExpressionTest parser sparqlExpressions index engine parser)
 
-addLinkAndDiscoverTest(LocalVocabTest engine)
+addLinkAndDiscoverTestSerial(LocalVocabTest engine)
+
+addLinkAndDiscoverTestSerial(ValuesTest engine)
+
+addLinkAndDiscoverTestSerial(ServiceTest engine)
 
 addLinkAndDiscoverTest(HttpTest boost_iostreams http)
 
 addLinkAndDiscoverTest(CallFixedSizeTest)
 
 addLinkAndDiscoverTest(ConstexprUtilsTest)
+
+addLinkAndDiscoverTest(ResetWhenMovedTest)
+
+addLinkAndDiscoverTest(TimerTest)
+
+addLinkAndDiscoverTest(AlgorithmTest)
+
+addLinkAndDiscoverTest(CompressedRelationsTest index)
+
+addLinkAndDiscoverTest(ExceptionTest)
+
+addLinkAndDiscoverTestSerial(RandomExpressionTest index)
+
+addLinkAndDiscoverTestSerial(SortTest engine)
+
+addLinkAndDiscoverTestSerial(OrderByTest engine)
+
+addLinkAndDiscoverTestSerial(ValuesForTestingTest index)
+
+addLinkAndDiscoverTestSerial(ExportQueryExecutionTreeTest index engine parser)
+
+addLinkAndDiscoverTestSerial(AggregateExpressionTest parser sparqlExpressions index engine)
+
+addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
+
+addLinkAndDiscoverTest(ExceptionHandlingTest)
+
+addLinkAndDiscoverTest(SparqlExpressionTypesTest)
+
+addLinkAndDiscoverTest(LimitOffsetClauseTest)
+
+addLinkAndDiscoverTest(OperationTest engine)
+
+addLinkAndDiscoverTest(RuntimeInformationTest engine)
+
+addLinkAndDiscoverTest(VariableToColumnMapTest engine)
+
+addLinkAndDiscoverTest(CopyableUniquePtrTest)
+
+addLinkAndDiscoverTest(JsonCustomConverterForThirdPartyTest)
+
+addLinkAndDiscoverTest(BenchmarkConfigurationTest benchmark)
+
+addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
+
+addLinkAndDiscoverTest(FindUndefRangesTest)
+
+addLinkAndDiscoverTest(AddCombinedRowToTableTest)

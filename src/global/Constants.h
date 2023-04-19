@@ -56,9 +56,11 @@ static const std::string INTERNAL_ENTITIES_URI_PREFIX =
 static const std::string LANGUAGE_PREDICATE =
     INTERNAL_ENTITIES_URI_PREFIX + "langtag>";
 
+// NOTE: Only `VALUE_DATE_PREFIX` is still in use (until we switch to our new
+// `Date` class).
 static const char VALUE_PREFIX[] = ":v:";
-static const char VALUE_DATE_PREFIX[] = ":v:date:";
 static const char VALUE_FLOAT_PREFIX[] = ":v:float:";
+static const char VALUE_DATE_PREFIX[] = ":v:date:";
 
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.
@@ -153,7 +155,7 @@ static constexpr size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;
 
 // When asked to make room for X ids in the cache, actually make room for X
 // times this factor.
-static constexpr double MAKE_ROOM_SLACK_FACTOR = 2;
+static constexpr size_t MAKE_ROOM_SLACK_FACTOR = 2;
 
 // The version of the binary format of the pattern files. Has to be increased,
 // when this format is changed.

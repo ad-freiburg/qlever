@@ -28,8 +28,8 @@ using std::vector;
 //! The HTTP Server used.
 class Server {
  public:
-  explicit Server(const int port, const int numThreads, size_t maxMemGB,
-                  std::string accessToken);
+  explicit Server(unsigned short port, int numThreads, size_t maxMemGB,
+                  std::string accessToken, bool usePatternTrick = true);
 
   virtual ~Server() = default;
 
@@ -38,34 +38,31 @@ class Server {
  private:
   //! Initialize the server.
   void initialize(const string& indexBaseName, bool useText,
-                  bool usePatterns = true, bool usePatternTrick = true,
-                  bool loadAllPermutations = true);
+                  bool usePatterns = true, bool loadAllPermutations = true);
 
  public:
   //! First initialize the server. Then loop, wait for requests and trigger
   //! processing. This method never returns except when throwing an exception.
   void run(const string& indexBaseName, bool useText, bool usePatterns = true,
-           bool usePatternTrick = true, bool loadAllPermutations = true);
+           bool loadAllPermutations = true);
 
-  Index& index() { return _index; }
-  const Index& index() const { return _index; }
+  Index& index() { return index_; }
+  const Index& index() const { return index_; }
 
  private:
-  const int _numThreads;
-  int _port;
+  const int numThreads_;
+  unsigned short port_;
   std::string accessToken_;
-  QueryResultCache _cache;
-  ad_utility::AllocatorWithLimit<Id> _allocator;
-  SortPerformanceEstimator _sortPerformanceEstimator;
-  Index _index;
-  Engine _engine;
+  QueryResultCache cache_;
+  ad_utility::AllocatorWithLimit<Id> allocator_;
+  SortPerformanceEstimator sortPerformanceEstimator_;
+  Index index_;
 
-  bool _initialized;
-  bool _enablePatternTrick;
+  bool enablePatternTrick_;
 
   // Semaphore for the number of queries that can be processed at once.
   mutable std::counting_semaphore<std::numeric_limits<int>::max()>
-      _queryProcessingSemaphore;
+      queryProcessingSemaphore_;
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
@@ -97,40 +94,17 @@ class Server {
       const ParamValueMap& params, ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
-  Awaitable<json> composeResponseQleverJson(
-      const ParsedQuery& query, const QueryExecutionTree& qet,
-      ad_utility::Timer& requestTimer,
-      size_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
-  Awaitable<json> composeResponseSparqlJson(
-      const ParsedQuery& query, const QueryExecutionTree& qet,
-      ad_utility::Timer& requestTimer,
-      size_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
-
-  // Wrapper method for all the different export formats (specified via `type`)
-  // that return a `stream_generator`. Can currently only be used for tsv, csv,
-  // octet-stream and turtle output.
-  Awaitable<ad_utility::streams::stream_generator> composeStreamableResponse(
-      ad_utility::MediaType type, const ParsedQuery& query,
-      const QueryExecutionTree& qet) const;
-
-  template <QueryExecutionTree::ExportSubFormat format>
-  Awaitable<ad_utility::streams::stream_generator> composeResponseSepValues(
-      const ParsedQuery& query, const QueryExecutionTree& qet) const;
-
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
       ad_utility::Timer& requestTimer,
       const std::optional<ExceptionMetadata>& metadata = std::nullopt);
-
-  static ad_utility::streams::stream_generator composeTurtleResponse(
-      const ParsedQuery& query, const QueryExecutionTree& qet);
 
   json composeStatsJson() const;
 
   json composeCacheStatsJson() const;
 
   // Perform the following steps: Acquire a token from the
-  // _queryProcessingSemaphore, run `function`, and release the token. These
+  // queryProcessingSemaphore_, run `function`, and release the token. These
   // steps are performed on a new thread (not one of the server threads).
   // Returns an awaitable of the return value of `function`
   template <typename Function, typename T = std::invoke_result_t<Function>>

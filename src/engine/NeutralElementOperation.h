@@ -27,7 +27,11 @@ class NeutralElementOperation : public Operation {
   [[nodiscard]] size_t getResultWidth() const override { return 0; };
   void setTextLimit(size_t) override{};
   size_t getCostEstimate() override { return 0; }
-  size_t getSizeEstimate() override { return 1; }
+
+ private:
+  size_t getSizeEstimateBeforeLimit() override { return 1; }
+
+ public:
   float getMultiplicity(size_t) override { return 0; };
   bool knownEmptyResult() override { return false; };
 
@@ -35,9 +39,11 @@ class NeutralElementOperation : public Operation {
   [[nodiscard]] vector<size_t> resultSortedOn() const override { return {}; };
 
  private:
-  void computeResult(ResultTable* result) override {
-    result->_idTable.setNumColumns(0);
-    result->_idTable.resize(1);
+  ResultTable computeResult() override {
+    IdTable idTable{getExecutionContext()->getAllocator()};
+    idTable.setNumColumns(0);
+    idTable.resize(1);
+    return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   }
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()

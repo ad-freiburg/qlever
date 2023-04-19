@@ -9,7 +9,6 @@
 
 #include "global/Constants.h"
 #include "util/ConstexprUtils.h"
-#include "util/DisableWarningsClang13.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 
@@ -52,7 +51,7 @@ namespace detail {
 // the `array` is `<= maxValue`.
 template <int maxValue, size_t NumValues, std::integral Int>
 auto callLambdaForIntArray(std::array<Int, NumValues> array, auto&& lambda, auto&&... args) {
-  AD_CHECK(std::ranges::all_of(array, [](auto el) { return el <= maxValue; }));
+  AD_CONTRACT_CHECK(std::ranges::all_of(array, [](auto el) { return el <= maxValue; }));
   using ArrayType = std::array<Int, NumValues>;
 
   // Call the `lambda` when the correct compile-time `Int`s are given as a
@@ -72,9 +71,7 @@ auto callLambdaForIntArray(std::array<Int, NumValues> array, auto&& lambda, auto
   // Lambda: If the compile time parameter `I` and the runtime parameter `array`
   // are equal, then call the `lambda` with `I` as a template parameter and
   // store the result in `result` (unless it is `void`).
-  DISABLE_WARNINGS_CLANG_13
   auto applyIf = [&]<ArrayType Array>() mutable {
-    ENABLE_WARNINGS_CLANG_13
     if (array == Array) {
       if constexpr (resultIsVoid) {
         applyOnIntegerSequence(ad_utility::toIntegerSequence<Array>());

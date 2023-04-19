@@ -25,11 +25,11 @@ class MetaDataWrapperDense {
     AddGetIdIterator(BaseIterator base) : BaseIterator{base} {}
     [[nodiscard]] Id getId() const { return getIdFromElement(*(*this)); }
     static Id getIdFromElement(const typename BaseIterator::value_type& v) {
-      return v._col0Id;
+      return v.col0Id_;
     }
     static auto getNumRowsFromElement(
         const typename BaseIterator::value_type& v) {
-      return v._numRows;
+      return v.numRows_;
     }
   };
 
@@ -93,28 +93,28 @@ class MetaDataWrapperDense {
   // ____________________________________________________________
   void set(Id id, const value_type& value) {
     // Assert that the ids are ascending.
-    AD_CHECK(_vec.size() == 0 || _vec.back()._col0Id < id);
+    AD_CONTRACT_CHECK(_vec.size() == 0 || _vec.back().col0Id_ < id);
     _vec.push_back(value);
   }
 
   // __________________________________________________________
   const value_type& getAsserted(Id id) const {
     auto it = lower_bound(id);
-    AD_CHECK(it != _vec.end() && it->_col0Id == id);
+    AD_CONTRACT_CHECK(it != _vec.end() && it->col0Id_ == id);
     return *it;
   }
 
   // _________________________________________________________
   value_type& operator[](Id id) {
     auto it = lower_bound(id);
-    AD_CHECK(it != _vec.end() && it->_col0Id == id);
+    AD_CONTRACT_CHECK(it != _vec.end() && it->col0Id_ == id);
     return *it;
   }
 
   // ________________________________________________________
   size_t count(Id id) const {
     auto it = lower_bound(id);
-    return it != _vec.end() && it->_col0Id == id;
+    return it != _vec.end() && it->col0Id_ == id;
   }
 
   // ___________________________________________________________
@@ -123,13 +123,13 @@ class MetaDataWrapperDense {
  private:
   ConstIterator lower_bound(Id id) const {
     auto cmp = [](const auto& metaData, Id id) {
-      return metaData._col0Id < id;
+      return metaData.col0Id_ < id;
     };
     return std::lower_bound(_vec.begin(), _vec.end(), id, cmp);
   }
   Iterator lower_bound(Id id) {
     auto cmp = [](const auto& metaData, Id id) {
-      return metaData._col0Id < id;
+      return metaData.col0Id_ < id;
     };
     return std::lower_bound(_vec.begin(), _vec.end(), id, cmp);
   }
@@ -144,13 +144,13 @@ class MetaDataWrapperHashMap {
   struct AddGetIdIterator : public BaseIterator {
     using BaseIterator::BaseIterator;
     AddGetIdIterator(BaseIterator base) : BaseIterator{base} {}
-    [[nodiscard]] Id getId() const { return (*this)->second._col0Id; }
+    [[nodiscard]] Id getId() const { return (*this)->second.col0Id_; }
     static Id getIdFromElement(const typename BaseIterator::value_type& v) {
-      return v.second._col0Id;
+      return v.second.col0Id_;
     }
     static auto getNumRowsFromElement(
         const typename BaseIterator::value_type& v) {
-      return v.second._numRows;
+      return v.second.numRows_;
     }
   };
   using Iterator = AddGetIdIterator<typename hashMap::iterator>;
@@ -202,7 +202,7 @@ class MetaDataWrapperHashMap {
 
   // _________________________________________________________________________
   ConstOrderedIterator ordered_end() const {
-    AD_CHECK(size() == _sortedKeys.size());
+    AD_CONTRACT_CHECK(size() == _sortedKeys.size());
     return ConstOrderedIterator{this, size()};
   }
 
@@ -210,7 +210,7 @@ class MetaDataWrapperHashMap {
   void set(Id id, value_type value) {
     _map[id] = std::move(value);
     if (!_sortedKeys.empty()) {
-      AD_CHECK(id > _sortedKeys.back());
+      AD_CONTRACT_CHECK(id > _sortedKeys.back());
     }
     _sortedKeys.push_back(id);
   }
@@ -220,14 +220,14 @@ class MetaDataWrapperHashMap {
   // __________________________________________________________
   const value_type& getAsserted(Id id) const {
     auto it = _map.find(id);
-    AD_CHECK(it != _map.end());
+    AD_CONTRACT_CHECK(it != _map.end());
     return std::cref(it->second);
   }
 
   // __________________________________________________________
   value_type& operator[](Id id) {
     auto it = _map.find(id);
-    AD_CHECK(it != _map.end());
+    AD_CONTRACT_CHECK(it != _map.end());
     return std::ref(it->second);
   }
 
