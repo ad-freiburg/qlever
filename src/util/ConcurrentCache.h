@@ -4,11 +4,13 @@
 
 #ifndef QLEVER_CONCURRENTCACHE_H
 #define QLEVER_CONCURRENTCACHE_H
+#include <concepts>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <utility>
 
+#include "util/Forward.h"
 #include "util/HashMap.h"
 #include "util/Log.h"
 #include "util/Synchronized.h"
@@ -144,10 +146,13 @@ class ConcurrentCache {
   using Value = typename Cache::value_type;
   using Key = typename Cache::key_type;
 
+  ConcurrentCache() requires std::default_initializable<Cache>
+  = default;
   /// Constructor: all arguments are forwarded to the underlying cache type.
-  template <typename... CacheArgs>
-  ConcurrentCache(CacheArgs&&... cacheArgs)
-      : _cacheAndInProgressMap{std::forward<CacheArgs>(cacheArgs)...} {}
+  template <typename CacheArg, typename... CacheArgs>
+  requires(!std::same_as<ConcurrentCache, std::remove_cvref_t<CacheArg>>)
+      ConcurrentCache(CacheArg&& cacheArg, CacheArgs&&... cacheArgs)
+      : _cacheAndInProgressMap{AD_FWD(cacheArg), AD_FWD(cacheArgs)...} {}
 
   struct ResultAndCacheStatus {
     shared_ptr<const Value> _resultPointer;
@@ -262,9 +267,12 @@ class ConcurrentCache {
     // Values that are currently being computed. The bool tells us whether this
     // result will be pinned in the cache.
     HashMap<Key, std::pair<bool, shared_ptr<ResultInProgress>>> _inProgress;
-    template <typename... Args>
-    CacheAndInProgressMap(Args&&... args)
-        : _cache{std::forward<Args>(args)...} {}
+
+    CacheAndInProgressMap() = default;
+    template <typename Arg, typename... Args>
+    requires(!std::same_as<std::remove_cvref_t<Arg>, CacheAndInProgressMap>)
+        CacheAndInProgressMap(Arg&& arg, Args&&... args)
+        : _cache{AD_FWD(arg), AD_FWD(args)...} {}
   };
 
   // make the whole class thread-safe by making all the data members thread-safe

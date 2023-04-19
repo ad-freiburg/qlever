@@ -8,10 +8,12 @@
 #define QLEVER_SYNCHRONIZED_H
 
 #include <atomic>
+#include <concepts>
 #include <condition_variable>
 #include <shared_mutex>
 
 #include "absl/cleanup/cleanup.h"
+#include "util/Forward.h"
 
 namespace ad_utility {
 
@@ -85,13 +87,17 @@ class Synchronized {
   /// default Movable
   Synchronized(Synchronized&&) noexcept = default;
   Synchronized& operator=(Synchronized&&) noexcept = default;
+
+  Synchronized() requires std::default_initializable<T>
+  = default;
   ~Synchronized() = default;
 
   /// Constructor that is not copy or move, tries to instantiate the underlying
   /// type via perfect forwarding (this includes the default constructor)
-  template <typename... Args>
-  explicit(sizeof...(Args) == 1) Synchronized(Args&&... args)
-      : data_{std::forward<Args>(args)...}, m_{} {}
+  template <typename Arg, typename... Args>
+  requires(!std::same_as<std::remove_cvref_t<Arg>, Synchronized>) explicit(
+      sizeof...(Args) == 0) Synchronized(Arg&& arg, Args&&... args)
+      : data_{AD_FWD(arg), AD_FWD(args)...}, m_{} {}
 
   template <typename... Args>
   Synchronized(ConstructWithMutex, Mutex mutex, Args&&... args)
@@ -216,8 +222,8 @@ class Synchronized {
   }
 
  private:
-  T data_;   // The data to which we synchronize the access.
-  Mutex m_;  // The used mutex
+  T data_{};  // The data to which we synchronize the access.
+  Mutex m_;   // The used mutex
 
   Mutex& mutex() const { return const_cast<Mutex&>(m_); }
 
