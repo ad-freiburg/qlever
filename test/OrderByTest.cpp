@@ -166,17 +166,15 @@ TEST(OrderBy, mixedDatatypes) {
   auto D = ad_utility::testing::DoubleId;
   auto U = Id::makeUndefined();
 
-  std::vector<std::vector<Id>> input{{I(13)},   {I(-7)}, {U},       {I(0)},
-                                     {D(12.3)}, {U},     {V(12)},   {V(0)},
-                                     {U},       {U},     {D(-2e-4)}};
-  std::vector<std::vector<Id>> expected{{U},     {U},        {U},    {U},
-                                        {I(-7)}, {D(-2e-4)}, {I(0)}, {D(12.3)},
-                                        {I(13)}, {V(0)},     {V(12)}};
-  testOrderBy(makeIdTableFromIdVector(input), makeIdTableFromIdVector(expected),
+  VectorTable input{{I(13)}, {I(-7)}, {U}, {I(0)}, {D(12.3)}, {U},
+                    {V(12)}, {V(0)},  {U}, {U},    {D(-2e-4)}};
+  VectorTable expected{{U},    {U},       {U},     {U},    {I(-7)}, {D(-2e-4)},
+                       {I(0)}, {D(12.3)}, {I(13)}, {V(0)}, {V(12)}};
+  testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
               {false});
 
   std::ranges::reverse(expected);
-  testOrderBy(makeIdTableFromIdVector(input), makeIdTableFromIdVector(expected),
+  testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
               {true});
 }
 

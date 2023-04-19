@@ -27,11 +27,10 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 // scan matches `expected`.
 auto makeTestScanWidthOne = [](const IndexImpl& index) {
   return [&index](const std::string& c0, const std::string& c1,
-                  const auto& permutation,
-                  const std::vector<std::vector<Id>>& expected) {
+                  const auto& permutation, const VectorTable& expected) {
     IdTable result(1, makeAllocator());
     index.scan(c0, c1, &result, permutation);
-    ASSERT_EQ(result, makeIdTableFromIdVector(expected));
+    ASSERT_EQ(result, makeIdTableFromVector(expected));
   };
 };
 
@@ -41,10 +40,13 @@ auto makeTestScanWidthOne = [](const IndexImpl& index) {
 // scan matches `expected`.
 auto makeTestScanWidthTwo = [](const IndexImpl& index) {
   return [&index](const std::string& c0, const auto& permutation,
-                  const std::vector<std::vector<Id>>& expected) {
+                  const VectorTable& expected,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) {
+    auto t = generateLocationTrace(l);
     IdTable wol(2, makeAllocator());
     index.scan(c0, &wol, permutation);
-    ASSERT_EQ(wol, makeIdTableFromIdVector(expected));
+    ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };
 }  // namespace

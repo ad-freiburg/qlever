@@ -4,6 +4,7 @@
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
+#include <engine/AddCombinedRowToTable.h>
 #include <engine/CallFixedSize.h>
 #include <engine/IndexScan.h>
 #include <engine/Join.h>
@@ -94,23 +95,13 @@ ResultTable Join::computeResult() {
   size_t leftWidth = _left->getResultWidth();
   size_t rightWidth = _right->getResultWidth();
   IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(leftWidth + rightWidth - 1);
 
-  // TODO<joka921> Currently the _resultTypes are set incorrectly in case
-  // of early stopping. For now, early stopping is thus disabled.
-  // TODO: Implement getting the result types without calculating the result;
-  /*
-  // Checking this before calling getResult on the subtrees can
-  // avoid the computation of an non-empty subtree.
   if (_left->knownEmptyResult() || _right->knownEmptyResult()) {
-    LOG(TRACE) << "Either side is empty thus join result is empty" << endl;
-    runtimeInfo.addDetail("Either side was empty", "");
-    size_t resWidth = leftWidth + rightWidth - 1;
-    result->_data.setNumColumns(resWidth);
-    result->_resultTypes.resize(result->_data.numColumns());
-    result->_sortedBy = {_leftJoinCol};
-    return;
+    _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
+    _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
+    return {std::move(idTable), resultSortedOn(), LocalVocab()};
   }
-   */
 
   // Check for joins with dummy
   AD_CORRECTNESS_CHECK(!isFullScanDummy(_left));
@@ -118,39 +109,18 @@ ResultTable Join::computeResult() {
     return computeResultForJoinWithFullScanDummy();
   }
 
-  LOG(TRACE) << "Computing left side..." << endl;
   shared_ptr<const ResultTable> leftRes = _left->getResult();
-
-  // TODO<joka921> Currently the _resultTypes are set incorrectly in case
-  // of early stopping. For now, early stopping is thus disabled.
-  // TODO: Implement getting the result types without calculating the result;
-  // Check if we can stop early.
-  /*
   if (leftRes->size() == 0) {
-    LOG(TRACE) << "Left side empty thus join result is empty" << endl;
-    runtimeInfo.addDetail("The left side was empty", "");
-    size_t resWidth = leftWidth + rightWidth - 1;
-    result->_data.setNumColumns(resWidth);
-    result->_resultTypes.resize(result->_data.numColumns());
-    result->_sortedBy = {_leftJoinCol};
-    return;
+    _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
+    return {std::move(idTable), resultSortedOn(), LocalVocab()};
   }
-   */
 
-  LOG(TRACE) << "Computing right side..." << endl;
   shared_ptr<const ResultTable> rightRes = _right->getResult();
 
   LOG(DEBUG) << "Computing Join result..." << endl;
 
-  idTable.setNumColumns(leftWidth + rightWidth - 1);
-
-  int lwidth = leftRes->idTable().numColumns();
-  int rwidth = rightRes->idTable().numColumns();
-  int reswidth = idTable.numColumns();
-
-  CALL_FIXED_SIZE((std::array{lwidth, rwidth, reswidth}), &Join::join, this,
-                  leftRes->idTable(), _leftJoinCol, rightRes->idTable(),
-                  _rightJoinCol, &idTable);
+  join(leftRes->idTable(), _leftJoinCol, rightRes->idTable(), _rightJoinCol,
+       &idTable);
 
   LOG(DEBUG) << "Join result computation done" << endl;
 
@@ -431,12 +401,8 @@ void Join::appendCrossProduct(const IdTable::const_iterator& leftBegin,
 
 // ______________________________________________________________________________
 
-template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
-                size_t jc2, IdTable* dynRes) {
-  const IdTableView<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
-  const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
-
+void Join::join(const IdTable& a, size_t jc1, const IdTable& b, size_t jc2,
+                IdTable* result) const {
   LOG(DEBUG) << "Performing join between two tables.\n";
   LOG(DEBUG) << "A: width = " << a.numColumns() << ", size = " << a.size()
              << "\n";
@@ -444,191 +410,93 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
              << "\n";
 
   // Check trivial case.
-  if (a.size() == 0 || b.size() == 0) {
+  if (a.empty() || b.empty()) {
     return;
   }
+  [[maybe_unused]] auto checkTimeoutAfterNCalls =
+      checkTimeoutAfterNCallsFactory();
+  ad_utility::JoinColumnMapping joinColumnData{
+      {{jc1, jc2}}, a.numColumns(), b.numColumns()};
+  auto joinColumnL = a.getColumn(jc1);
+  auto joinColumnR = b.getColumn(jc2);
 
-  IdTableStatic<OUT_WIDTH> result = std::move(*dynRes).toStatic<OUT_WIDTH>();
-  // Cannot just switch l1 and l2 around because the order of
-  // items in the result tuples is important.
-  if (a.size() / b.size() > GALLOP_THRESHOLD) {
-    doGallopInnerJoin(LeftLargerTag{}, a, jc1, b, jc2, &result);
-  } else if (b.size() / a.size() > GALLOP_THRESHOLD) {
-    doGallopInnerJoin(RightLargerTag{}, a, jc1, b, jc2, &result);
+  auto aPermuted = a.asColumnSubsetView(joinColumnData.permutationLeft());
+  auto bPermuted = b.asColumnSubsetView(joinColumnData.permutationRight());
+
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable(1, aPermuted, bPermuted,
+                                                      std::move(*result));
+  auto addRow = [beginLeft = joinColumnL.begin(),
+                 beginRight = joinColumnR.begin(),
+                 &rowAdder](const auto& itLeft, const auto& itRight) {
+    rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
+  };
+
+  // The UNDEF values are right at the start, so this calculation works.
+  size_t numUndefA =
+      std::ranges::upper_bound(joinColumnL, ValueId::makeUndefined()) -
+      joinColumnL.begin();
+  size_t numUndefB =
+      std::ranges::upper_bound(joinColumnR, ValueId::makeUndefined()) -
+      joinColumnR.begin();
+  std::pair undefRangeA{joinColumnL.begin(), joinColumnL.begin() + numUndefA};
+  std::pair undefRangeB{joinColumnR.begin(), joinColumnR.begin() + numUndefB};
+
+  // Determine whether we should use the galloping join optimization.
+  if (a.size() / b.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
+      numUndefB == 0) {
+    // The first argument to the galloping join will always be the smaller
+    // input, so we need to switch the rows when adding them.
+    auto inverseAddRow = [&addRow](const auto& rowA, const auto& rowB) {
+      addRow(rowB, rowA);
+    };
+    ad_utility::gallopingJoin(joinColumnR, joinColumnL, std::ranges::less{},
+                              inverseAddRow);
+  } else if (b.size() / a.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
+             numUndefB == 0) {
+    ad_utility::gallopingJoin(joinColumnL, joinColumnR, std::ranges::less{},
+                              addRow);
   } else {
-    auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory();
-    // Intersect both lists.
-    size_t i = 0;
-    size_t j = 0;
-    // while (a(i, jc1) < sent1) {
-    while (i < a.size() && j < b.size()) {
-      while (a(i, jc1) < b(j, jc2)) {
-        ++i;
-        checkTimeoutAfterNCalls();
-        if (i >= a.size()) {
-          goto finish;
-        }
+    // TODO<joka921> Reinstate the timeout checks.
+    auto findSmallerUndefRangeLeft =
+        [undefRangeA](
+            auto&&...) -> cppcoro::generator<decltype(undefRangeA.first)> {
+      for (auto it = undefRangeA.first; it != undefRangeA.second; ++it) {
+        co_yield it;
       }
+    };
+    auto findSmallerUndefRangeRight =
+        [undefRangeB](
+            auto&&...) -> cppcoro::generator<decltype(undefRangeB.first)> {
+      for (auto it = undefRangeB.first; it != undefRangeB.second; ++it) {
+        co_yield it;
+      }
+    };
 
-      while (b(j, jc2) < a(i, jc1)) {
-        ++j;
-        checkTimeoutAfterNCalls();
-        if (j >= b.size()) {
-          goto finish;
-        }
-      }
+    auto numOutOfOrder = [&]() {
+      if (numUndefB == 0 && numUndefA == 0) {
+        return ad_utility::zipperJoinWithUndef(
+            joinColumnL, joinColumnR, std::ranges::less{}, addRow,
+            ad_utility::noop, ad_utility::noop);
 
-      while (a(i, jc1) == b(j, jc2)) {
-        // In case of match, create cross-product
-        // Always fix a and go through b.
-        size_t keepJ = j;
-        while (a(i, jc1) == b(j, jc2)) {
-          addCombinedRowToIdTable(a[i], b[j], jc2, &result);
-          ++j;
-          checkTimeoutAfterNCalls();
-          if (j >= b.size()) {
-            // The next i might still match
-            break;
-          }
-        }
-        ++i;
-        checkTimeoutAfterNCalls();
-        if (i >= a.size()) {
-          goto finish;
-        }
-        // If the next i is still the same, reset j.
-        if (a(i, jc1) == b(keepJ, jc2)) {
-          j = keepJ;
-        } else if (j >= b.size()) {
-          // this check is needed because otherwise we might leak an out of
-          // bounds value for j into the next loop which does not check it. this
-          // fixes a bug that was not discovered by testing due to 0
-          // initialization of IdTables used for testing and should not occur in
-          // typical use cases but it is still wrong.
-          goto finish;
-        }
+      } else {
+        return ad_utility::zipperJoinWithUndef(
+            joinColumnL, joinColumnR, std::ranges::less{}, addRow,
+            findSmallerUndefRangeLeft, findSmallerUndefRangeRight);
       }
-    }
+    }();
+    AD_CORRECTNESS_CHECK(numOutOfOrder == 0);
   }
-finish:
-  *dynRes = std::move(result).toDynamic();
+  *result = std::move(rowAdder).resultTable();
+  // The column order in the result is now
+  // [joinColumns, non-join-columns-a, non-join-columns-b] (which makes the
+  // algorithms above easier), be the order that is expected by the rest of
+  // the code is [columns-a, non-join-columns-b]. Permute the columns to fix
+  // the order.
+  result->permuteColumns(joinColumnData.permutationResult());
 
   LOG(DEBUG) << "Join done.\n";
-  LOG(DEBUG) << "Result: width = " << dynRes->numColumns()
-             << ", size = " << dynRes->size() << "\n";
-}
-
-// _____________________________________________________________________________
-template <typename TagType, int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-void Join::doGallopInnerJoin(const TagType, const IdTableView<L_WIDTH>& l1,
-                             const size_t jc1, const IdTableView<R_WIDTH>& l2,
-                             const size_t jc2,
-                             IdTableStatic<OUT_WIDTH>* result) {
-  LOG(DEBUG) << "Galloping case.\n";
-  size_t i = 0;
-  size_t j = 0;
-  while (i < l1.size() && j < l2.size()) {
-    if constexpr (std::is_same<TagType, RightLargerTag>::value) {
-      while (l1(i, jc1) < l2(j, jc2)) {
-        ++i;
-        if (i >= l1.size()) {
-          return;
-        }
-      }
-      size_t step = 1;
-      size_t last = j;
-      while (l1(i, jc1) > l2(j, jc2)) {
-        last = j;
-        j += step;
-        step *= 2;
-        if (j >= l2.size()) {
-          j = l2.size() - 1;
-          if (l1(i, jc1) > l2(j, jc2)) {
-            return;
-          }
-        }
-      }
-      if (l1(i, jc1) == l2(j, jc2)) {
-        // We stepped into a block where l1 and l2 are equal. We need to
-        // find the beginning of this block
-        while (j > 0 && l1(i, jc1) == l2(j - 1, jc2)) {
-          j--;
-        }
-      } else if (l1(i, jc1) < l2(j, jc2)) {
-        // We stepped over the location where l1 and l2 may be equal.
-        // Use binary search to locate that spot
-        const Id needle = l1(i, jc1);
-        j = std::lower_bound(l2.cbegin() + last, l2.cbegin() + j, needle,
-                             [jc2](const auto& l, const Id needle) -> bool {
-                               return l[jc2] < needle;
-                             }) -
-            l2.begin();
-      }
-    } else {
-      size_t step = 1;
-      size_t last = j;
-      while (l2(j, jc2) > l1(i, jc1)) {
-        last = i;
-        i += step;
-        step *= 2;
-        if (i >= l1.size()) {
-          i = l1.size() - 1;
-          if (l2(j, jc2) > l1(i, jc1)) {
-            return;
-          }
-        }
-      }
-      if (l2(j, jc2) == l1(i, jc1)) {
-        // We stepped into a block where l1 and l2 are equal. We need to
-        // find the beginning of this block
-        while (i > 0 && l1(i - 1, jc1) == l2(j, jc2)) {
-          i--;
-        }
-      } else if (l2(j, jc2) < l1(i, jc1)) {
-        // We stepped over the location where l1 and l2 may be equal.
-        // Use binary search to locate that spot
-        const Id needle = l2(j, jc2);
-        i = std::lower_bound(l1.begin() + last, l1.begin() + i, needle,
-                             [jc1](const auto& l, const Id needle) -> bool {
-                               return l[jc1] < needle;
-                             }) -
-            l1.begin();
-      }
-      while (l1(i, jc1) > l2(j, jc2)) {
-        ++j;
-        if (j >= l2.size()) {
-          return;
-        }
-      }
-    }
-    while (l1(i, jc1) == l2(j, jc2)) {
-      // In case of match, create cross-product
-      // Always fix l1 and go through l2.
-      const size_t keepJ = j;
-      while (l1(i, jc1) == l2(j, jc2)) {
-        addCombinedRowToIdTable(l1[i], l2[j], jc2, result);
-        ++j;
-        if (j >= l2.size()) {
-          break;
-        }
-      }
-      ++i;
-      if (i >= l1.size()) {
-        return;
-      }
-      // If the next i is still the same, reset j.
-      if (l1(i, jc1) == l2(keepJ, jc2)) {
-        j = keepJ;
-      } else if (j >= l2.size()) {
-        // this check is needed because otherwise we might leak an out of bounds
-        // value for j into the next loop which does not check it.
-        // this fixes a bug that was not discovered by testing due to 0
-        // initialization of IdTables used for testing and should not occur in
-        // typical use cases but it is still wrong.
-        return;
-      }
-    }
-  }
+  LOG(DEBUG) << "Result: width = " << result->numColumns()
+             << ", size = " << result->size() << "\n";
 }
 
 // ______________________________________________________________________________
@@ -645,7 +513,7 @@ void Join::hashJoinImpl(const IdTable& dynA, size_t jc1, const IdTable& dynB,
              << "\n";
 
   // Check trivial case.
-  if (a.size() == 0 || b.size() == 0) {
+  if (a.empty() || b.empty()) {
     return;
   }
 

@@ -52,7 +52,7 @@ constexpr std::string_view toString(Datatype type) {
       return "TextRecordIndex";
   }
   // This line is reachable if we cast an arbitrary invalid int to this enum
-  throw std::runtime_error("should be unreachable");
+  AD_FAIL();
 }
 
 /// Encode values of different types (the types from the `Datatype` enum above)
@@ -145,6 +145,7 @@ class ValueId {
   /// single undefined value correctly, but it is very useful for generic code
   /// like the `visit` member function.
   [[nodiscard]] UndefinedType getUndefined() const noexcept { return {}; }
+  bool isUndefined() const noexcept { return *this == makeUndefined(); }
 
   /// Create a `ValueId` for a double value. The conversion will reduce the
   /// precision of the mantissa of an IEEE double precision floating point

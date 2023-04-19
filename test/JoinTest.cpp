@@ -230,7 +230,7 @@ TEST(JoinTest, joinWithFullScanPSO) {
   auto idA = getId("<a>");
   auto idO = getId("<o>");
   auto I = ad_utility::testing::IntId;
-  auto expected = makeIdTableFromIdVector({{idA, idX, I(3)}, {idO, idX, I(2)}});
+  auto expected = makeIdTableFromVector({{idA, idX, I(3)}, {idO, idX, I(2)}});
   EXPECT_EQ(res->idTable(), expected);
   VariableToColumnMap expectedVariables{
       {Variable{"?p"}, makeAlwaysDefinedColumn(0)},
