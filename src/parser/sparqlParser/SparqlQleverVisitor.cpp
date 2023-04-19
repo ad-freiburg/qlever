@@ -1507,11 +1507,13 @@ Visitor::OperatorAndExpression Visitor::visit(
 ExpressionPtr Visitor::visit(Parser::UnaryExpressionContext* ctx) {
   auto child = visit(ctx->primaryExpression());
   if (ctx->children[0]->getText() == "-") {
-    return createExpression<sparqlExpression::UnaryMinusExpression>(
-        std::move(child));
-  } else if (ctx->children[0]->getText() == "!") {
+    return createExpression<sparqlExpression::UnaryMinusExpression>
+        (
+            (SparqlExpression::Ptr&&)(child));
+  } else if (ctx->children[0]->getText() == "!")
+  {
     return createExpression<sparqlExpression::UnaryNegateExpression>(
-        std::move(child));
+        (SparqlExpression::Ptr&&)(child));
   } else {
     // no sign or an explicit '+'
     return child;
