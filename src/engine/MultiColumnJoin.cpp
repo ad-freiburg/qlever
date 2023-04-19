@@ -4,7 +4,9 @@
 
 #include "MultiColumnJoin.h"
 
-#include "CallFixedSize.h"
+#include "engine/AddCombinedRowToTable.h"
+#include "engine/CallFixedSize.h"
+#include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::string;
 
@@ -13,20 +15,18 @@ MultiColumnJoin::MultiColumnJoin(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
     std::shared_ptr<QueryExecutionTree> t2,
     const std::vector<std::array<ColumnIndex, 2>>& jcs)
-    : Operation(qec), _joinColumns(jcs), _multiplicitiesComputed(false) {
+    : Operation(qec),
+      _left(std::move(t1)),
+      _right(std::move(t2)),
+      _joinColumns(jcs) {
   // Make sure subtrees are ordered so that identical queries can be identified.
   AD_CONTRACT_CHECK(!jcs.empty());
-  if (t1->asString() < t2->asString()) {
-    _left = t1;
-    _right = t2;
-  } else {
-    // Swap the two subtrees
-    _left = t2;
-    _right = t1;
+  if (_left->asString() > _right->asString()) {
+    std::swap(_left, _right);
     // As the subtrees have been swapped the join columns need to be swapped
     // as well.
-    for (unsigned int i = 0; i < _joinColumns.size(); i++) {
-      std::swap(_joinColumns[i][0], _joinColumns[i][1]);
+    for (auto& [leftCol, rightCol] : _joinColumns) {
+      std::swap(leftCol, rightCol);
     }
   }
 }
@@ -87,13 +87,8 @@ ResultTable MultiColumnJoin::computeResult() {
   LOG(DEBUG) << "Computing a multi column join between results of size "
              << leftResult->size() << " and " << rightResult->size() << endl;
 
-  int leftWidth = leftResult->idTable().numColumns();
-  int rightWidth = rightResult->idTable().numColumns();
-  int resWidth = idTable.numColumns();
-  CALL_FIXED_SIZE((std::array{leftWidth, rightWidth, resWidth}),
-                  &MultiColumnJoin::computeMultiColumnJoin,
-                  leftResult->idTable(), rightResult->idTable(), _joinColumns,
-                  &idTable);
+  computeMultiColumnJoin(leftResult->idTable(), rightResult->idTable(),
+                         _joinColumns, &idTable);
 
   LOG(DEBUG) << "MultiColumnJoin result computation done" << endl;
   // If only one of the two operands has a non-empty local vocabulary, share
@@ -215,4 +210,83 @@ void MultiColumnJoin::computeSizeEstimateAndMultiplicities() {
     _multiplicities.push_back(mult);
   }
   _multiplicitiesComputed = true;
+}
+
+// _______________________________________________________________________
+void MultiColumnJoin::computeMultiColumnJoin(
+    const IdTable& left, const IdTable& right,
+    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
+    IdTable* result) {
+  // check for trivial cases
+  if (left.empty() || right.empty()) {
+    return;
+  }
+
+  ad_utility::JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
+                                               right.numColumns()};
+
+  IdTableView<0> leftJoinColumns =
+      left.asColumnSubsetView(joinColumnData.jcsLeft());
+  IdTableView<0> rightJoinColumns =
+      right.asColumnSubsetView(joinColumnData.jcsRight());
+
+  auto leftPermuted = left.asColumnSubsetView(joinColumnData.permutationLeft());
+  auto rightPermuted =
+      right.asColumnSubsetView(joinColumnData.permutationRight());
+
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable(
+      joinColumns.size(), leftPermuted, rightPermuted, std::move(*result));
+  auto addRow = [&rowAdder, beginLeft = leftJoinColumns.begin(),
+                 beginRight = rightJoinColumns.begin()](const auto& itLeft,
+                                                        const auto& itRight) {
+    rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
+  };
+
+  auto findUndef = [](const auto& row, auto begin, auto end,
+                      bool& resultMightBeUnsorted) {
+    return ad_utility::findSmallerUndefRanges(row, begin, end,
+                                              resultMightBeUnsorted);
+  };
+
+  // `isCheap` is true iff there are no UNDEF values in the join columns. In
+  // this case we can use a much cheaper algorithm.
+  // TODO<joka921> There are many other cases where a cheaper implementation can
+  // be chosen, but we leave those for another PR, this is the most common case.
+  namespace stdr = std::ranges;
+  bool isCheap = stdr::none_of(joinColumns, [&](const auto& jcs) {
+    auto [leftCol, rightCol] = jcs;
+    return (stdr::any_of(right.getColumn(rightCol), &Id::isUndefined)) ||
+           (stdr::any_of(left.getColumn(leftCol), &Id::isUndefined));
+  });
+
+  const size_t numOutOfOrder = [&]() {
+    if (isCheap) {
+      return ad_utility::zipperJoinWithUndef(
+          leftJoinColumns, rightJoinColumns,
+          std::ranges::lexicographical_compare, addRow, ad_utility::noop,
+          ad_utility::noop);
+    } else {
+      return ad_utility::zipperJoinWithUndef(
+          leftJoinColumns, rightJoinColumns,
+          std::ranges::lexicographical_compare, addRow, findUndef, findUndef);
+    }
+  }();
+  *result = std::move(rowAdder).resultTable();
+  // If there were UNDEF values in the input, the result might be out of
+  // order. Sort it, because this operation promises a sorted result in its
+  // `resultSortedOn()` member function.
+  // TODO<joka921> We only have to do this if the sorting is required (merge the
+  // other PR first).
+  if (numOutOfOrder > 0) {
+    std::vector<ColumnIndex> cols;
+    for (size_t i = 0; i < joinColumns.size(); ++i) {
+      cols.push_back(i);
+    }
+    Engine::sort(*result, cols);
+  }
+
+  // The result that `zipperJoinWithUndef` produces has a different order of
+  // columns than expected, permute them. See the documentation of
+  // `JoinColumnMapping` for details.
+  result->permuteColumns(joinColumnData.permutationResult());
 }
