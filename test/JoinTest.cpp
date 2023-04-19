@@ -16,6 +16,7 @@
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/JoinHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/IndexScan.h"
@@ -30,14 +31,6 @@
 
 using ad_utility::testing::makeAllocator;
 namespace {
-/*
- * Does what it says on the tin: Save an IdTable with the corresponding
- * join column.
- */
-struct IdTableAndJoinColumn {
-  IdTable idTable;
-  size_t joinColumn;
-};
 
 /*
  * A structure containing all information needed for a normal join test. A
@@ -51,41 +44,6 @@ struct JoinTestCase {
   IdTable expectedResult;
   bool resultMustBeSortedByJoinColumn;
 };
-
-/*
- * @brief Join two IdTables using the given join function and return
- * the result.
- *
- * @tparam JOIN_FUNCTION is used to allow the transfer of any type of
- *  lambda function, that could contain a join function. You never have to
- *  actually specify this parameter , just let inference do its job.
- *
- * @param tableA, tableB the tables with their join columns.
- * @param func the function, that will be used for joining the two tables
- *  together. Look into src/engine/Join.h for how it should look like.
- *
- * @returns tableA and tableB joined together in a IdTable.
- */
-template <typename JOIN_FUNCTION>
-IdTable useJoinFunctionOnIdTables(const IdTableAndJoinColumn& tableA,
-                                  const IdTableAndJoinColumn& tableB,
-                                  JOIN_FUNCTION func) {
-  int resultWidth{static_cast<int>(tableA.idTable.numColumns() +
-                                   tableB.idTable.numColumns() - 1)};
-  IdTable result{static_cast<size_t>(resultWidth), makeAllocator()};
-
-  // You need to use this special function for executing lambdas. The normal
-  // function for functions won't work.
-  // Additionaly, we need to cast the two size_t, because callFixedSize only
-  // takes arrays of int.
-  ad_utility::callFixedSize(
-      (std::array{static_cast<int>(tableA.idTable.numColumns()),
-                  static_cast<int>(tableB.idTable.numColumns()), resultWidth}),
-      func, tableA.idTable, tableA.joinColumn, tableB.idTable,
-      tableB.joinColumn, &result);
-
-  return result;
-}
 
 /*
  * @brief Goes through the sets of tests, joins them together with the given
@@ -126,13 +84,8 @@ void runTestCasesForAllJoinAlgorithms(
 
   // All normal join algorithm defined as lambda functions for easier handing
   // over to helper functions.
-  Join J{Join::InvalidOnlyForTestingJoinTag{}};
-  auto hashJoinLambda = [&J]<int A, int B, int C>(auto&&... args) {
-    return J.hashJoin(AD_FWD(args)...);
-  };
-  auto joinLambda = [&J]<int A, int B, int C>(auto&&... args) {
-    return J.join<A, B, C>(AD_FWD(args)...);
-  };
+  auto hashJoinLambda = makeHashJoinLambda();
+  auto joinLambda = makeJoinLambda();
 
   // For sorting IdTableAndJoinColumn by their join column.
   auto sortByJoinColumn = [](IdTableAndJoinColumn& idTableAndJC) {

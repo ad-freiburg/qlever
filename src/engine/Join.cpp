@@ -9,6 +9,7 @@
 #include <engine/Join.h>
 #include <global/Constants.h>
 #include <global/Id.h>
+#include <util/Exception.h>
 #include <util/HashMap.h>
 
 #include <functional>
@@ -48,6 +49,15 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   _sizeEstimate = 0;
   _sizeEstimateComputed = false;
   _multiplicities.clear();
+}
+
+// _____________________________________________________________________________
+Join::Join(InvalidOnlyForTestingJoinTag, QueryExecutionContext* qec)
+    : Operation(qec) {
+  // Needed, so that the time out checker in Join::join doesn't create a seg
+  // fault if it tries to create a message about the time out.
+  _left = std::make_shared<QueryExecutionTree>(qec);
+  _right = _left;
 }
 
 // _____________________________________________________________________________

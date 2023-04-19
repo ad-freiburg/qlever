@@ -21,7 +21,15 @@
 #include "engine/idTable/IdTable.h"
 #include "util/Forward.h"
 #include "util/Random.h"
-#include "util/SourceLocation.h"
+
+/*
+ * Does what it says on the tin: Save an IdTable with the corresponding
+ * join column.
+ */
+struct IdTableAndJoinColumn {
+  IdTable idTable;
+  size_t joinColumn;
+};
 
 // For easier reading. We repeat that type combination so often, that this
 // will make things a lot easier in terms of reading and writing.

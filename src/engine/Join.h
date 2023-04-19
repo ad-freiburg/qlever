@@ -39,8 +39,13 @@ class Join : public Operation {
   // has no subtrees, which violates class invariants). These invalid Join
   // objects can be used for unit tests that only test member functions which
   // don't access the subtrees.
+  //
+  // @param qec Needed for creating some dummies, so that the time out checker
+  //  in Join::join doesn't create a seg fault, when it detects a time out and
+  //  tries to create an error message. (test/IndexTestHelpers.h has a function
+  //  `getQec` for easily creating one for tests.)
   struct InvalidOnlyForTestingJoinTag {};
-  explicit Join(InvalidOnlyForTestingJoinTag) {}
+  explicit Join(InvalidOnlyForTestingJoinTag, QueryExecutionContext* qec);
 
   virtual string getDescriptor() const override;
 

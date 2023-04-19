@@ -5,14 +5,18 @@
 #ifndef QLEVER_VALUEID_H
 #define QLEVER_VALUEID_H
 
+#include <absl/strings/str_cat.h>
+
 #include <bit>
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <sstream>
 
 #include "../util/BitUtils.h"
 #include "../util/NBitInteger.h"
 #include "../util/Serializer/Serializer.h"
+#include "../util/SourceLocation.h"
 #include "./IndexTypes.h"
 
 /// The different Datatypes that a `ValueId` (see below) can encode.
@@ -74,7 +78,21 @@ class ValueId {
   /// This exception is thrown if we try to store a value of an index type
   /// (VocabIndex, LocalVocabIndex, TextRecordIndex) that is larger than
   /// `maxIndex`.
-  struct IndexTooLargeException : public std::exception {};
+  struct IndexTooLargeException : public std::exception {
+   private:
+    std::string errorMessage_;
+
+   public:
+    IndexTooLargeException(T tooBigValue,
+                           ad_utility::source_location s =
+                               ad_utility::source_location::current()) {
+      errorMessage_ = absl::StrCat(
+          s.file_name(), ", line ", s.line(), ": The given value ", tooBigValue,
+          " is bigger than what the maxIndex of ValueId allows.");
+    }
+
+    const char* what() const noexcept override { return errorMessage_.c_str(); }
+  };
 
   /// A struct that represents the single undefined value. This is required for
   /// generic code like in the `visit` method.
@@ -287,7 +305,7 @@ class ValueId {
   // Helper function for the implementation of the unsigned index types.
   static constexpr ValueId makeFromIndex(T id, Datatype type) {
     if (id > maxIndex) {
-      throw IndexTooLargeException();
+      throw IndexTooLargeException(id);
     }
     return addDatatypeBits(id, type);
   }

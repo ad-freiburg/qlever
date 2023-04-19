@@ -2,7 +2,7 @@
 
 printf "Checking sources for code style\n"
 SOURCE_FILES=()
-find ./src/ ./test/ -regextype egrep -regex '.*\.(h|c)(pp|xx)?$' -print0 > sourcelist
+find ./src/ ./test/ ./benchmark/ -regextype egrep -regex '.*\.(h|c)(pp|xx)?$' -print0 > sourcelist
 while IFS=  read -r -d $'\0'; do
     SOURCE_FILES+=("$REPLY")
 done <sourcelist
