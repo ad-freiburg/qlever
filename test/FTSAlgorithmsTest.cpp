@@ -93,10 +93,10 @@ TEST(FTSAlgorithmsTest, crossIntersectTest) {
   eBlockWep.cids.push_back(T(2));
   eBlockWep.cids.push_back(T(2));
   eBlockWep.cids.push_back(T(4));
-  eBlockWep.eids.push_back(I(10));
-  eBlockWep.eids.push_back(I(1));
-  eBlockWep.eids.push_back(I(1));
-  eBlockWep.eids.push_back(I(2));
+  eBlockWep.eids.push_back(V(10));
+  eBlockWep.eids.push_back(V(1));
+  eBlockWep.eids.push_back(V(1));
+  eBlockWep.eids.push_back(V(2));
   eBlockWep.scores.push_back(1);
   eBlockWep.scores.push_back(1);
   eBlockWep.scores.push_back(1);

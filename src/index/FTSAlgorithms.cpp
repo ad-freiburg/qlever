@@ -456,8 +456,8 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
 // _____________________________________________________________________________
 void FTSAlgorithms::aggScoresAndTakeTopKContexts(
     const Index::WordEntityPostings wep, size_t k, IdTable* dynResult) {
-  AD_CHECK_EQ(wep.cids.size(), wep.eids.size());
-  AD_CHECK_EQ(wep.cids.size(), wep.scores.size());
+  AD_CONTRACT_CHECK(wep.cids.size() == wep.eids.size());
+  AD_CONTRACT_CHECK(wep.cids.size() == wep.scores.size());
   LOG(DEBUG) << "Going from a WordEntityPostings-Element consisting of an entity,"
              << " context, word and score list of size: "  << wep.cids.size()
              << " elements to a table with distinct entities "
@@ -465,7 +465,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
 
   // The default case where k == 1 can use a map for a O(n) solution
   if (k == 1) {
-    aggScoresAndTakeTopContext<4>(wep, dynResult); //TODO: rewrite
+    aggScoresAndTakeTopContext<4>(wep, dynResult);
     return;
   }
 
@@ -695,7 +695,7 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
     result(n, 3) = Id::makeFromWordVocabIndex(WordVocabIndex::make(std::get<2>(it->second.second)));
     n++;
   }
-  AD_CHECK_EQ(n, result.size());
+  AD_CONTRACT_CHECK(n == result.size());
   *dynResult = std::move(result).toDynamic();
   LOG(DEBUG) << "Done. There are " << dynResult->size()
              << " context-score-entity tuples now.\n";
