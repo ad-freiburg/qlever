@@ -177,7 +177,7 @@ TEST_F(ServiceTest, computeResult) {
 
   // Check that the result table corresponds to the contents of the TSV.
   EXPECT_TRUE(result);
-  IdTable expectedIdTable = makeIdTableFromIdVector(
+  IdTable expectedIdTable = makeIdTableFromVector(
       {{idX, idY}, {idBla, idBli}, {idBlu, idBla}, {idBli, idBlu}});
   EXPECT_EQ(result->idTable(), expectedIdTable);
 }

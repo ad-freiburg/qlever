@@ -107,8 +107,11 @@ std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
 // used to keep track of which values we have already seen. One of these
 // copies could be avoided, but our current uses of this function are
 // currently not at all performance-critical (small `input` and small `T`).
-template <typename T>
-std::vector<T> removeDuplicates(const std::vector<T>& input) {
+template <std::ranges::forward_range Range>
+auto removeDuplicates(const Range& input) -> std::vector<
+    typename std::iterator_traits<std::ranges::iterator_t<Range>>::value_type> {
+  using T =
+      typename std::iterator_traits<std::ranges::iterator_t<Range>>::value_type;
   std::vector<T> result;
   ad_utility::HashSet<T> distinctElements;
   for (const T& element : input) {
