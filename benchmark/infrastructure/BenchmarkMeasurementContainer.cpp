@@ -148,6 +148,10 @@ ResultTable::operator std::string() const {
   // For formating: What is the maximum string width of a column, if you
   // compare all it's entries?
 
+  // `std::ranges::max` has undefined behaviour, when given empty vectors.
+  // So, a quick check beforehand, using the names.
+  AD_CONTRACT_CHECK(!rowNames_.empty());
+
   // The max width of the column containing the row names.
   const size_t rowNameMaxStringWidth =
       std::ranges::max(rowNames_, {}, [](std::string_view name) {
