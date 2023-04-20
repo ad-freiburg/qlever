@@ -163,11 +163,7 @@ class ResultTable : public BenchmarkMetadataGetter {
   */
   ResultTable(const std::string& descriptor,
               const std::vector<std::string>& rowNames,
-              const std::vector<std::string>& columnNames)
-      : descriptor_{descriptor},
-        rowNames_{rowNames},
-        columnNames_{columnNames},
-        entries_(rowNames.size(), std::vector<EntryType>(columnNames.size())) {}
+              const std::vector<std::string>& columnNames);
 
   /*
   @brief Measures the time needed for the execution of the given function and
