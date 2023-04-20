@@ -4,4 +4,6 @@ DerivePointerAlignment: false
 PointerAlignment: Left
 LineEnding: LF
 InsertNewlineAtEOF: true
+RequiresClausePosition: OwnLine
+IndentRequiresClause: true
 ...
