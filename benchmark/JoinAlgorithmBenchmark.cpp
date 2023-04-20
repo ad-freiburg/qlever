@@ -478,17 +478,87 @@ variables, that most of the benchmark classes here set using the
 */
 class GeneralConfigurationOption: public BenchmarkInterface{
   protected:
-  // The maximum amount of rows, that the smaller table should have.
+  /*
+  The benchmark classes after this point always make tables, where one
+  attribute of the `IdTables` gets bigger with every row, while the other
+  attributes stay the same.
+  For the attributes, that don't stay the same, they create a list of
+  exponents, with basis $2$, from $1$ up to an upper boundary for the
+  exponents. The variables, that define such boundaries, always begin with
+  `max`.
+
+  The name of a variable in the configuration is just the variable name.
+  Should that configuration option not be set, it will be set to a default
+  value.
+  */
+
+  // Amount of rows for the smaller `IdTable`, if we always use the amount.
+  size_t smallerTableAmountRows;
+
+  // The maximum amount of rows, that the smaller `IdTable` should have.
   size_t maxSmallerTableRows;
-  // The maximal row ratio between the smaller and the bigger table.
+
+  // Amount of columns for the `IdTable`s
+  size_t smallerTableAmountColumns;
+  size_t biggerTableAmountColumns;
+
+  /*
+  Chance for an entry in the join column of the smaller `IdTable` to be the
+  same value as an entry in the join column of the bigger `IdTable`.
+  Must be in the range $(0,100]$.
+  */
+  float overlapChance;
+
+  /*
+  The row ratio between the smaller and the bigger `IdTable`. That is
+  the value of the amount of rows in the bigger `IdTable` divided through the
+  amount of rows in the smaller `IdTable`.
+  */
+  size_t ratioRows;
+
+  // The maximal row ratio between the smaller and the bigger `IdTable`.
   size_t maxRatioRows;
 
   public:
   void parseConfiguration(const BenchmarkConfiguration& config) final{
-    maxSmallerTableRows =
-      config.getValueByNestedKeys<size_t>("maxSmallerTableRows").value_or(256);
-    maxRatioRows =
-      config.getValueByNestedKeys<size_t>("maxRatioRows").value_or(256);
+    /*
+    @brief Assigns the value in the configuration option to the variable. If the
+    option wasn't set, assigns a default value.
+
+    @tparam VariableType The type of the variable. This is also what the
+    configuration option will be interpreted as.
+
+    @param key The key for the configuration option.
+    @param variable The variable, that will be set.
+    @param defaultValue The default value, that the variable will be set to, if
+    the configuration option wasn't set.
+    */
+    auto setToValueInConfigurationOrDefault = [&config]<typename VariableType>(
+      VariableType& variable, const std::string& key,
+      const VariableType& defaultValue){
+      variable = config.getValueByNestedKeys<VariableType>(key).value_or(
+        defaultValue);
+    };
+
+    setToValueInConfigurationOrDefault(smallerTableAmountRows,
+        "smallerTableAmountRows", static_cast<size_t>(256));
+
+    setToValueInConfigurationOrDefault(maxSmallerTableRows,
+        "maxSmallerTableRows", static_cast<size_t>(2000));
+
+    setToValueInConfigurationOrDefault(smallerTableAmountColumns,
+        "smallerTableAmountColumns", static_cast<size_t>(20));
+    setToValueInConfigurationOrDefault(biggerTableAmountColumns,
+        "biggerTableAmountColumns", static_cast<size_t>(20));
+
+    setToValueInConfigurationOrDefault(overlapChance,
+        "overlapChance", static_cast<float>(42.0));
+
+    setToValueInConfigurationOrDefault(ratioRows,
+        "ratioRows", static_cast<size_t>(1));
+
+    setToValueInConfigurationOrDefault(maxRatioRows,
+        "maxRatioRows", static_cast<size_t>(256));
   }
 };
 
@@ -503,10 +573,6 @@ class BM_OnlyBiggerTableSizeChanges final: public GeneralConfigurationOption{
     // Easier reading.
     const std::vector<size_t> ratioRows{
       createExponentVectorUntilSize(2, maxRatioRows)};
-    constexpr size_t smallerTableAmountRows{2000};
-    constexpr size_t smallerTableAmountColumns{20};
-    constexpr size_t biggerTableAmountColumns{20};
-    constexpr float overlapChance{42.0};
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}){
       for (const bool biggerTableSorted : {false, true}) {
@@ -531,9 +597,6 @@ class BM_OnlySmallerTableSizeChanges final: public GeneralConfigurationOption{
     // Easier reading.
     const std::vector<size_t> smallerTableAmountRows{
       createExponentVectorUntilSize(2, maxSmallerTableRows)};
-    constexpr size_t smallerTableAmountColumns{3};
-    constexpr size_t biggerTableAmountColumns{3};
-    constexpr float overlapChance{42.0};
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}){
       for (const bool biggerTableSorted : {false, true}) {
@@ -558,13 +621,9 @@ class BM_SameSizeRowGrowth final: public GeneralConfigurationOption{
   BenchmarkResults runAllBenchmarks() override{
     BenchmarkResults results{};
 
-  // Easier reading.
-  const std::vector<size_t> smallerTableAmountRows{
-    createExponentVectorUntilSize(2, maxSmallerTableRows)};
-    constexpr size_t smallerTableAmountColumns{3};
-    constexpr size_t biggerTableAmountColumns{3};
-    constexpr size_t ratioRows{1};
-    constexpr float overlapChance{42.0};
+    // Easier reading.
+    const std::vector<size_t> smallerTableAmountRows{
+      createExponentVectorUntilSize(2, maxSmallerTableRows)};
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}){
       for (const bool biggerTableSorted : {false, true}) {
