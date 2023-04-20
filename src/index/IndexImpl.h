@@ -341,7 +341,7 @@ class IndexImpl {
       case Datatype::TextRecordIndex:
         return getTextExcerpt(id.getTextRecordIndex());
       case Datatype::WordVocabIndex: //QUESTION: ist das so richtig?
-        auto result = _vocab.indexToOptionalString(id.getVocabIndex());
+        auto result = _textVocab.indexToOptionalString(id.getVocabIndex());
         if (result.has_value() && result.value().starts_with(VALUE_PREFIX)) {
           result.value() =
               ad_utility::convertIndexWordToValueLiteral(result.value());

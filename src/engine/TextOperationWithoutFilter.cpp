@@ -47,7 +47,7 @@ VariableToColumnMap TextOperationWithoutFilter::computeVariableToColumnMap()
       addDefinedVar(var);
     }
   }
-  vcmap[Variable("?completedWord")] = index++;
+  addDefinedVar(Variable("?completedWord"));
   return vcmap;
 }
 // _____________________________________________________________________________
@@ -94,15 +94,7 @@ void TextOperationWithoutFilter::computeResultNoVar(IdTable* idTable) const {
 void TextOperationWithoutFilter::computeResultOneVar(IdTable* idTable) const {
   idTable->setNumColumns(4);
   getExecutionContext()->getIndex().getECListForWordsOneVar(_words, _textLimit,
-                                                            &result->_idTable);
-  LOG(INFO) << "Result Table: " << result->asDebugString();
-
-  for (int i=0; i<3; i++) {
-    LOG(INFO) << "text: " << getExecutionContext()->getIndex().getTextExcerpt(result->_idTable[i][0].getTextRecordIndex()) << '\n';
-    LOG(INFO) << "score: " << result->_idTable[i][1].getInt() << '\n';
-    LOG(INFO) << "eid: " << getExecutionContext()->getIndex().getVocab().indexToOptionalString(result->_idTable[i][2].getVocabIndex()).value() << '\n';
-    LOG(INFO) << "wid: " << getExecutionContext()->getIndex().getTextVocab().indexToOptionalString(result->_idTable[i][3].getVocabIndex()).value() << '\n';
-  }
+                                                            idTable);
 }
 
 // _____________________________________________________________________________

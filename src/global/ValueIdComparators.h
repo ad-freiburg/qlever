@@ -381,6 +381,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
       AD_FAIL();
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
+    case Datatype::WordVocabIndex:
     case Datatype::TextRecordIndex:
       return detail::simplifyRanges(detail::getRangesForIndexTypes(
           begin, end, valueIdBegin, valueIdEnd, comparison));

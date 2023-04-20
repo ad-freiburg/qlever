@@ -146,6 +146,11 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     }
     case Datatype::Int:
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
+    case Datatype::WordVocabIndex:{
+      std::optional<string> entity = index.idToOptionalString(id);
+      AD_CONTRACT_CHECK(entity.has_value());
+      return std::pair{escapeFunction(std::move(entity.value())), nullptr};
+    }
     case Datatype::VocabIndex: {
       // TODO<joka921> As soon as we get rid of the special encoding of date
       // values, we can use `index.getVocab().indexToOptionalString()` directly.
@@ -364,7 +369,8 @@ ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary(
 
   static constexpr char separator = format == MediaType::tsv ? '\t' : ',';
   // Print header line
-  const auto& variables = selectClause.getSelectedVariablesAsStrings();
+  std::vector<std::string> variables = selectClause.getSelectedVariablesAsStrings();
+  variables.push_back(string("?completedWord"));
   co_yield absl::StrJoin(variables, std::string_view{&separator, 1});
   co_yield '\n';
 

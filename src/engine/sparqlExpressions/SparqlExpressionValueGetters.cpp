@@ -40,7 +40,14 @@ bool EffectiveBooleanValueGetter::operator()(ValueId id,
       return id.getInt() != 0;
     case Datatype::Undefined:
       return false;
-    case Datatype::WordVocabIndex: //QUESTION: ist das richtig so?
+    case Datatype::WordVocabIndex: { //QUESTION: ist das richtig so?
+      auto index = id.getVocabIndex();
+      return !context->_qec.getIndex()
+                  .getTextVocab()
+                  .indexToOptionalString(index)
+                  .value_or("")
+                  .empty();
+    }
     case Datatype::VocabIndex: {
       auto index = id.getVocabIndex();
       // TODO<joka921> We could precompute whether the empty literal or empty
@@ -69,7 +76,12 @@ string StringValueGetter::operator()(Id id, EvaluationContext* context) const {
       return std::to_string(id.getDouble());
     case Datatype::Int:
       return std::to_string(id.getInt());
-    case Datatype::WordVocabIndex: //QUESTION: ist das richtig so?
+    case Datatype::WordVocabIndex:{ //QUESTION: ist das richtig so?
+      return context->_qec.getIndex()
+          .getTextVocab()
+          .indexToOptionalString(id.getVocabIndex())
+          .value_or("");
+    }
     case Datatype::VocabIndex:
       return context->_qec.getIndex()
           .getVocab()
