@@ -2,7 +2,7 @@ add_subdirectory(sparqlExpressions)
 add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp SortPerformanceEstimator.h)
 qlever_target_link_libraries(SortPerformanceEstimator)
 add_library(engine
-        Engine.h
+        Engine.cpp
         IndexSequence.h
         QueryExecutionTree.h QueryExecutionTree.cpp
         Operation.h Operation.cpp

@@ -323,3 +323,7 @@ addLinkAndDiscoverTest(JsonCustomConverterForThirdPartyTest)
 addLinkAndDiscoverTest(BenchmarkConfigurationTest benchmark)
 
 addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
+
+addLinkAndDiscoverTest(FindUndefRangesTest)
+
+addLinkAndDiscoverTest(AddCombinedRowToTableTest)

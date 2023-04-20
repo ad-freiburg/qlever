@@ -122,13 +122,11 @@ TEST(Sort, mixedDatatypes) {
   auto D = ad_utility::testing::DoubleId;
   auto U = Id::makeUndefined();
 
-  std::vector<std::vector<Id>> input{{I(13)},   {I(-7)}, {U},       {I(0)},
-                                     {D(12.3)}, {U},     {V(12)},   {V(0)},
-                                     {U},       {U},     {D(-2e-4)}};
-  std::vector<std::vector<Id>> expected{{U},        {U},     {U},     {U},
-                                        {I(0)},     {I(13)}, {I(-7)}, {D(12.3)},
-                                        {D(-2e-4)}, {V(0)},  {V(12)}};
-  testSort(makeIdTableFromIdVector(input), makeIdTableFromIdVector(expected));
+  VectorTable input{{I(13)}, {I(-7)}, {U}, {I(0)}, {D(12.3)}, {U},
+                    {V(12)}, {V(0)},  {U}, {U},    {D(-2e-4)}};
+  VectorTable expected{{U},     {U},       {U},        {U},    {I(0)}, {I(13)},
+                       {I(-7)}, {D(12.3)}, {D(-2e-4)}, {V(0)}, {V(12)}};
+  testSort(makeIdTableFromVector(input), makeIdTableFromVector(expected));
 }
 
 TEST(Sort, SimpleMemberFunctions) {

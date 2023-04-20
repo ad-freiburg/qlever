@@ -138,6 +138,8 @@ class Engine {
     LOG(DEBUG) << "Sort done.\n";
   }
 
+  static void sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols);
+
   /**
    * @brief Removes all duplicates from input with regards to the columns
    *        in keepIndices. The input needs to be sorted on the keep indices,

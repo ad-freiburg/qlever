@@ -74,6 +74,14 @@ class QueryExecutionTree {
     return _rootOperation->getExternallyVisibleVariableColumns();
   }
 
+  // For a given `ColumnIndex` return the corresponding `pair<Variable,
+  // ColumnIndexAndTypeInfo>` by searching the `VariableToColumnMap`. If the
+  // given column index does not exist, an `AD_CONTRACT_CHECK` fails. This runs
+  // in O(numVariables) because it does a linear search over the
+  // `VariableToColumnMap`.
+  const VariableToColumnMap::value_type& getVariableAndInfoByColumnIndex(
+      ColumnIndex colIdx) const;
+
   std::shared_ptr<Operation> getRootOperation() const { return _rootOperation; }
 
   const OperationType& getType() const { return _type; }
