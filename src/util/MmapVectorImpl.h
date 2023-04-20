@@ -265,7 +265,9 @@ void MmapVector<T>::close() {
 // _______________________________________________________________
 template <class T>
 MmapVector<T>::~MmapVector() {
-  close();
+  std::string message = absl::StrCat(
+      "Error while unmapping a file with name \"", _filename, "\"");
+  ad_utility::terminateIfThrows([this]() { this->close(); }, message);
 }
 
 // ________________________________________________________________
