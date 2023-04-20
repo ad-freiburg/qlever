@@ -177,12 +177,13 @@ class IndexImpl {
  public:
   IndexImpl();
 
-  /// Forbid copy and assignment.
+  // Forbid copying.
   IndexImpl& operator=(const IndexImpl&) = delete;
   IndexImpl(const IndexImpl&) = delete;
-
-  /// Allow move construction, which is mostly used in unit tests.
-  IndexImpl(IndexImpl&&) noexcept = default;
+  // Moving is currently not supported, because several of the members use
+  // mutexes internally. It is also not needed.
+  IndexImpl& operator=(IndexImpl&&) = delete;
+  IndexImpl(IndexImpl&&) = delete;
 
   const auto& POS() const { return _POS; }
   auto& POS() { return _POS; }

@@ -5,8 +5,10 @@
 
 #pragma once
 
+#include <concepts>
 #include <cstdint>
 #include <string>
+#include <type_traits>
 #include <variant>
 
 #include "engine/LocalVocab.h"
@@ -86,12 +88,16 @@ class TripleComponent {
   Variant _variant;
 
  public:
+  // There are several places during the parsing where an uninitizalized
+  // `TripleComponent` is currently used.
+  TripleComponent() = default;
   /// Construct from anything that is able to construct the underlying
   /// `Variant`.
-  template <typename... Args>
-  requires std::is_constructible_v<Variant, Args&&...> TripleComponent(
-      Args&&... args)
-      : _variant(AD_FWD(args)...) {
+  template <typename FirstArg, typename... Args>
+  requires(!std::same_as<std::remove_cvref_t<FirstArg>, TripleComponent> &&
+           std::is_constructible_v<Variant, FirstArg&&, Args&&...>)
+      TripleComponent(FirstArg&& firstArg, Args&&... args)
+      : _variant(AD_FWD(firstArg), AD_FWD(args)...) {
     if (isString()) {
       // Previously we stored variables as strings, so this check is a way
       // to easily track places where this old behavior is accidentally still
