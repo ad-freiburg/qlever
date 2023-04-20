@@ -462,9 +462,10 @@ class IdTable {
   // `true`), then the copy constructor will also create a (const and
   // non-owning) view, but `clone` will create a mutable deep copy of the data
   // that the view points to
-  IdTable<T, NumColumns, ColumnStorage, IsView::False> clone()
-      const requires std::is_copy_constructible_v<Storage> &&
-      std::is_copy_constructible_v<ColumnStorage> {
+  IdTable<T, NumColumns, ColumnStorage, IsView::False> clone() const
+    requires std::is_copy_constructible_v<Storage> &&
+             std::is_copy_constructible_v<ColumnStorage>
+  {
     Storage storage;
     for (const auto& column : getColumns()) {
       storage.emplace_back(column.begin(), column.end(), getAllocator());
@@ -537,9 +538,8 @@ class IdTable {
   // creates a dynamic view from a dynamic table. This makes generic code that
   // is templated on the number of columns easier to write.
   template <size_t NewNumColumns>
-  requires isDynamic IdTable<T, NewNumColumns, ColumnStorage, IsView::True>
-  asStaticView()
-  const {
+    requires isDynamic
+  IdTable<T, NewNumColumns, ColumnStorage, IsView::True> asStaticView() const {
     AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
     ViewSpans viewSpans(data().begin(), data().end());
 
@@ -551,7 +551,9 @@ class IdTable {
   // the columns that may be permuted. The subset of the columns is specified by
   // the argument `columnIndices`.
   IdTable<T, 0, ColumnStorage, IsView::True> asColumnSubsetView(
-      std::span<const size_t> columnIndices) const requires isDynamic {
+      std::span<const size_t> columnIndices) const
+    requires isDynamic
+  {
     AD_CONTRACT_CHECK(std::ranges::all_of(
         columnIndices, [this](size_t idx) { return idx < numColumns(); }));
     ViewSpans viewSpans;
@@ -712,7 +714,11 @@ class IdTable {
   }
 
   // Get the `i`-th column. It is stored contiguously in memory.
-  std::span<T> getColumn(size_t i) requires(!isView) { return {data().at(i)}; }
+  std::span<T> getColumn(size_t i)
+    requires(!isView)
+  {
+    return {data().at(i)};
+  }
   std::span<const T> getColumn(size_t i) const { return {data().at(i)}; }
 
   // Return all the columns as a `std::vector` (if `isDynamic`) or as a
@@ -723,7 +729,11 @@ class IdTable {
 
  private:
   // Get direct access to the underlying data() as a reference.
-  Data& data() requires(!isView) { return data_; }
+  Data& data()
+    requires(!isView)
+  {
+    return data_;
+  }
   const Data& data() const { return data_; }
 
   // Common implementation for const and mutable overloads of `getColumns`

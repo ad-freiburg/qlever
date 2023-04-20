@@ -146,12 +146,13 @@ class ConcurrentCache {
   using Value = typename Cache::value_type;
   using Key = typename Cache::key_type;
 
-  ConcurrentCache() requires std::default_initializable<Cache>
+  ConcurrentCache()
+    requires std::default_initializable<Cache>
   = default;
   /// Constructor: all arguments are forwarded to the underlying cache type.
   template <typename CacheArg, typename... CacheArgs>
-  requires(!std::same_as<ConcurrentCache, std::remove_cvref_t<CacheArg>>)
-      ConcurrentCache(CacheArg&& cacheArg, CacheArgs&&... cacheArgs)
+    requires(!std::same_as<ConcurrentCache, std::remove_cvref_t<CacheArg>>)
+  ConcurrentCache(CacheArg&& cacheArg, CacheArgs&&... cacheArgs)
       : _cacheAndInProgressMap{AD_FWD(cacheArg), AD_FWD(cacheArgs)...} {}
 
   struct ResultAndCacheStatus {
@@ -270,8 +271,8 @@ class ConcurrentCache {
 
     CacheAndInProgressMap() = default;
     template <typename Arg, typename... Args>
-    requires(!std::same_as<std::remove_cvref_t<Arg>, CacheAndInProgressMap>)
-        CacheAndInProgressMap(Arg&& arg, Args&&... args)
+      requires(!std::same_as<std::remove_cvref_t<Arg>, CacheAndInProgressMap>)
+    CacheAndInProgressMap(Arg&& arg, Args&&... args)
         : _cache{AD_FWD(arg), AD_FWD(args)...} {}
   };
 

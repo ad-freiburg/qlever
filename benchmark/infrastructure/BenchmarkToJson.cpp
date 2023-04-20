@@ -27,10 +27,10 @@ Requires `TranslationFunction` to be a invocable function, that takes one
 parameter of a specific type and returns a `nlohmann::json` object.
 */
 template <typename SourceType, typename TranslationFunction>
-concept TransformsSourceTypeToJson = requires(TranslationFunction t,
-                                              SourceType v) {
-  { t(v) } -> std::same_as<nlohmann::json>;
-};
+concept TransformsSourceTypeToJson =
+    requires(TranslationFunction t, SourceType v) {
+      { t(v) } -> std::same_as<nlohmann::json>;
+    };
 
 /*
 @brief Transforms the content of a vector into a json array, using a
@@ -40,7 +40,7 @@ provided translation function for the vector entries.
 and returns a `nlohmann:json` object.
 */
 template <typename VectorType, typename TranslationFunction>
-requires TransformsSourceTypeToJson<VectorType, TranslationFunction>
+  requires TransformsSourceTypeToJson<VectorType, TranslationFunction>
 static nlohmann::json transformIntoJsonArray(
     const std::vector<VectorType>& vec,
     TranslationFunction translationFunction) {
