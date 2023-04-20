@@ -548,10 +548,8 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
     addCurrentRelation();
   }
 
-  writer1.finish();
-  writer2.finish();
-  metaData1.blockData() = writer1.getFinishedBlocks();
-  metaData2.blockData() = writer2.getFinishedBlocks();
+  metaData1.blockData() = std::move(writer1).getFinishedBlocks();
+  metaData2.blockData() = std::move(writer2).getFinishedBlocks();
 
   return std::make_pair(std::move(metaData1), std::move(metaData2));
 }

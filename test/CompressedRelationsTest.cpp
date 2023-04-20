@@ -87,8 +87,7 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
       ++i;
     }
   }
-  writer.finish();
-  auto blocks = writer.getFinishedBlocks();
+  auto blocks = std::move(writer).getFinishedBlocks();
   // Test the serialization of the blocks and the metaData.
   ad_utility::serialization::ByteBufferWriteSerializer w;
   w << metaData;

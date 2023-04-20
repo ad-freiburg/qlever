@@ -178,21 +178,12 @@ class CompressedRelationWriter {
                                          const BufferedIdTable& col1And2Ids,
                                          size_t numDistinctCol1);
 
-  /// Finish writing all relations which have previously been added, but might
-  /// still be in some internal buffer.
-  void finish() {
-    writeBufferedRelationsToSingleBlock();
-    outfile_.close();
-  }
-
   /// Get all the CompressedBlockMetaData that were created by the calls to
-  /// addRelation. This meta data is then deleted from the
-  /// CompressedRelationWriter. The typical workflow is: add all relations,
-  /// then call `finish()` and then call this method.
-  auto getFinishedBlocks() {
-    auto result = std::move(blockBuffer_);
-    blockBuffer_.clear();
-    return result;
+  /// addRelation. This also closes the writer. The typical workflow is:
+  /// add all relations and then call this method.
+  auto getFinishedBlocks() && {
+    finish();
+    return std::move(blockBuffer_);
   }
 
   // Compute the multiplicity of given the number of elements and the number of
@@ -205,6 +196,13 @@ class CompressedRelationWriter {
                                    size_t numDistinctElements);
 
  private:
+  /// Finish writing all relations which have previously been added, but might
+  /// still be in some internal buffer.
+  void finish() {
+    writeBufferedRelationsToSingleBlock();
+    outfile_.close();
+  }
+
   // Compress the contents of `buffer_` into a single block and write it to
   // outfile_. Update `currentBlockData_` with the meta data of the written
   // block. Then clear `buffer_`.
