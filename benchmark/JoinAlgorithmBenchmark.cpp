@@ -472,11 +472,11 @@ static std::vector<size_t> createExponentVectorUntilSize(const size_t base,
 }
 
 /*
-Provides the member variables, that most of the benchmark classes here
-set using the `BenchmarkConfiguration` and delivers a default configuration
-parser, that sets them.
+Partly implements the interface `BenchmarkInterface`, by providing the member
+variables, that most of the benchmark classes here set using the
+`BenchmarkConfiguration` and delivers a default configuration parser, that sets them.
 */
-class GeneralConfigurationOption{
+class GeneralConfigurationOption: public BenchmarkInterface{
   protected:
   // The maximum amount of rows, that the smaller table should have.
   size_t maxSmallerTableRows;
@@ -484,7 +484,7 @@ class GeneralConfigurationOption{
   size_t maxRatioRows;
 
   public:
-  void parseConfiguration(const BenchmarkConfiguration& config) {
+  void parseConfiguration(const BenchmarkConfiguration& config) final{
     maxSmallerTableRows =
       config.getValueByNestedKeys<size_t>("maxSmallerTableRows").value_or(256);
     maxRatioRows =
@@ -494,11 +494,10 @@ class GeneralConfigurationOption{
 
 // Create benchmark tables, where the smaller table stays at 2000 rows and
 // the bigger tables keeps getting bigger. Amount of columns stays the same.
-class BM_OnlyBiggerTableSizeChanges: public BenchmarkInterface,
-  public GeneralConfigurationOption{
+class BM_OnlyBiggerTableSizeChanges final: public GeneralConfigurationOption{
   public:
 
-  BenchmarkResults runAllBenchmarks(){
+  BenchmarkResults runAllBenchmarks() override{
     BenchmarkResults results{};
 
     // Easier reading.
@@ -523,11 +522,10 @@ class BM_OnlyBiggerTableSizeChanges: public BenchmarkInterface,
 
 // Create benchmark tables, where the smaller table grows and the ratio
 // between tables stays the same. As does the amount of columns.
-class BM_OnlySmallerTableSizeChanges: public BenchmarkInterface,
-  public GeneralConfigurationOption{
+class BM_OnlySmallerTableSizeChanges final: public GeneralConfigurationOption{
   public:
 
-  BenchmarkResults runAllBenchmarks(){
+  BenchmarkResults runAllBenchmarks() override{
     BenchmarkResults results{};
 
     // Easier reading.
@@ -554,11 +552,10 @@ class BM_OnlySmallerTableSizeChanges: public BenchmarkInterface,
 
 // Create benchmark tables, where the tables are the same size and
 // both just get more rows.
-class BM_SameSizeRowGrowth: public BenchmarkInterface,
-  public GeneralConfigurationOption{
+class BM_SameSizeRowGrowth final: public GeneralConfigurationOption{
   public:
 
-  BenchmarkResults runAllBenchmarks(){
+  BenchmarkResults runAllBenchmarks() override{
     BenchmarkResults results{};
 
   // Easier reading.
