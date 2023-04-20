@@ -63,6 +63,7 @@ using PsoSorter = StxxlSorter<SortByPSO>;
 // index builder.
 struct IndexBuilderDataBase {
   VocabularyMerger::VocabularyMetaData vocabularyMetaData_;
+  std::vector<std::string> prefixes_;
 };
 
 // All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
