@@ -33,7 +33,7 @@ jobs:
           sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable"
           sudo apt update
           sudo apt-cache policy docker-ce
-          sudo apt install docker-ce
+          sudo apt install docker-ce containerd.io
 
       - name: Prepare folders
         run:  mkdir -p ${{github.workspace}}/e2e_data/scientist-collection/ && sudo chmod -R o+rwx ${{github.workspace}}/e2e_data
