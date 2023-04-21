@@ -164,6 +164,7 @@ class HttpServer {
         // and accepted a request).
         auto socket =
             co_await acceptor_.async_accept(boost::asio::use_awaitable);
+        // Schedule the session such that it may run in parallel to this loop.
         net::co_spawn(ioContext_, session(std::move(socket)), net::detached);
       } catch (const boost::system::system_error& b) {
         logBeastError(b.code(), "Error in the accept loop");
