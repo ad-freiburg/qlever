@@ -10,15 +10,15 @@ namespace detail {
 // _____________________________________________________________________________
 template <typename Op>
 requires(isOperation<Op>)
-    NaryExpression<Op>::NaryExpression(Children&& children)
+NaryExpression<Op>::NaryExpression(Children&& children)
     : _children{std::move(children)} {}
 
 // _____________________________________________________________________________
 
 template <typename NaryOperation>
-requires(isOperation<NaryOperation>) ExpressionResult
-    NaryExpression<NaryOperation>::evaluate(EvaluationContext* context)
-const {
+requires(isOperation<NaryOperation>)
+ExpressionResult NaryExpression<NaryOperation>::evaluate(
+    EvaluationContext* context) const {
   auto resultsOfChildren = ad_utility::applyFunctionToEachElementOfTuple(
       [context](const auto& child) { return child->evaluate(context); },
       _children);
@@ -35,7 +35,7 @@ const {
 // _____________________________________________________________________________
 template <typename Op>
 requires(isOperation<Op>)
-    std::span<SparqlExpression::Ptr> NaryExpression<Op>::children() {
+std::span<SparqlExpression::Ptr> NaryExpression<Op>::children() {
   return {_children.data(), _children.size()};
 }
 

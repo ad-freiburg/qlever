@@ -95,8 +95,8 @@ class TripleComponent {
   /// `Variant`.
   template <typename FirstArg, typename... Args>
   requires(!std::same_as<std::remove_cvref_t<FirstArg>, TripleComponent> &&
-           std::is_constructible_v<Variant, FirstArg&&, Args&&...>)
-      TripleComponent(FirstArg&& firstArg, Args&&... args)
+           std::is_constructible_v<Variant, FirstArg &&, Args && ...>)
+  TripleComponent(FirstArg&& firstArg, Args&&... args)
       : _variant(AD_FWD(firstArg), AD_FWD(args)...) {
     if (isString()) {
       // Previously we stored variables as strings, so this check is a way
@@ -146,7 +146,9 @@ class TripleComponent {
   /// Make a `TripleComponent` directly comparable to the underlying types.
   template <typename T>
   requires requires(T&& t) { _variant == t; }
-  bool operator==(const T& other) const { return _variant == other; }
+  bool operator==(const T& other) const {
+    return _variant == other;
+  }
 
   /// Equality comparison between two `TripleComponent`s.
   bool operator==(const TripleComponent&) const = default;

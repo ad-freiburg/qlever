@@ -149,11 +149,17 @@ class IteratorForAccessOperator {
 
   // Only allowed, if `RandomAccessContainer` yields references and not values
   template <typename A = Accessor, typename P = RandomAccessContainerPtr>
-  requires requires(A a, P p, uint64_t i) { {&a(*p, i)}; }
-  auto operator->() requires(!isConst) { return &(*(*this)); }
+  requires requires(A a, P p, uint64_t i) {
+    { &a(*p, i) };
+  } auto operator->() requires(!isConst) {
+    return &(*(*this));
+  }
   template <typename A = Accessor, typename P = RandomAccessContainerPtr>
-  requires requires(A a, P p, uint64_t i) { {&a(*p, i)}; }
-  auto operator->() const { return &(*(*this)); }
+  requires requires(A a, P p, uint64_t i) {
+    { &a(*p, i) };
+  } auto operator->() const {
+    return &(*(*this));
+  }
 
   decltype(auto) operator[](difference_type n) const {
     return _accessor(*_vector, _index + n);

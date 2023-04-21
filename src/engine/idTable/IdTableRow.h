@@ -375,8 +375,9 @@ class RowReference
   }
 
   // Assignment from a `const` RowReference to a `mutable` RowReference
-  RowReference& operator=(const RowReference<Table, ad_utility::IsConst::True>&
-                              other) requires(!isConst) {
+  RowReference& operator=(
+      const RowReference<Table, ad_utility::IsConst::True>& other)
+      requires(!isConst) {
     return assignmentImpl(base(), other);
   }
 
