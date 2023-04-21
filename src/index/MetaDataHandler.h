@@ -168,9 +168,6 @@ class MetaDataWrapperHashMap {
   ConstIterator cbegin() const { return _map.begin(); }
   ConstIterator begin() const { return _map.begin(); }
 
-  // __________________________________________________________________
-  Iterator begin() { return _map.begin(); }
-
   // _________________________________________________________________________
   ConstOrderedIterator ordered_begin() const {
     return ConstOrderedIterator{this, 0};
@@ -179,9 +176,6 @@ class MetaDataWrapperHashMap {
   // ____________________________________________________________
   ConstIterator cend() const { return _map.end(); }
   ConstIterator end() const { return _map.end(); }
-
-  // ____________________________________________________________
-  Iterator end() { return _map.end(); }
 
   // _________________________________________________________________________
   ConstOrderedIterator ordered_end() const {

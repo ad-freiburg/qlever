@@ -517,7 +517,7 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
   size_t distinctCol1 = 0;
   Id lastLhs = ID_NO_VALUE;
   uint64_t totalNumTriples = 0;
-  auto addCurrentRelation = [this, &metaData1, &metaData2, &writer1, &writer2,
+  auto addCurrentRelation = [&metaData1, &metaData2, &writer1, &writer2,
                              &currentRel, &buffer, &distinctCol1]() {
     auto md1 = writer1.addRelation(currentRel.value(), buffer, distinctCol1);
     auto md2 = writeSwitchedRel(&writer2, currentRel.value(), &buffer);
