@@ -17,5 +17,4 @@ void removeKeyValuePair(Container& container, typename Container::key_type key, 
     }
   }
 }
-
 }
