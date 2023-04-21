@@ -47,7 +47,6 @@ VariableToColumnMap TextOperationWithoutFilter::computeVariableToColumnMap()
       addDefinedVar(var);
     }
   }
-  addDefinedVar(Variable("?completedWord"));
   return vcmap;
 }
 // _____________________________________________________________________________
@@ -92,7 +91,7 @@ void TextOperationWithoutFilter::computeResultNoVar(IdTable* idTable) const {
 
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultOneVar(IdTable* idTable) const {
-  idTable->setNumColumns(4);
+  idTable->setNumColumns(3);
   getExecutionContext()->getIndex().getECListForWordsOneVar(_words, _textLimit,
                                                             idTable);
 }

@@ -114,84 +114,6 @@ Index::WordEntityPostings FTSAlgorithms::intersect(
 }
 
 // _____________________________________________________________________________
-Index::WordEntityPostings FTSAlgorithms::crossIntersect(
-    const Index::WordEntityPostings& matchingContextsWep,
-    const Index::WordEntityPostings& eBlockWep) {
-  // Example:
-  // matchingContextsWep.wids: 3 4 3 4 3
-  // matchingContextsWep.cids: 1 4 5 5 7
-  // -----------------------------------
-  // eBlockWep.cids          : 4 5 5 8
-  // eBlockWep.eids          : 2 1 2 1
-  // ===================================
-  // resultWep.cids          : 4 5 5 5 5
-  // resultWep.wids          : 4 3 4 3 4
-  // resultWep.eids          : 2 1 2 2 1
-  LOG(DEBUG)
-      << "Intersection to filter the word-entity postings from a block so that "
-      << "only entries remain where the entity matches. If there are multiple "
-      << "entries with the same eid, then the crossproduct of them remains.\n";
-  LOG(DEBUG) << "matchingContextsWep.cids size: "
-             << matchingContextsWep.cids.size() << '\n';
-  LOG(DEBUG) << "eBlockWep.cids size: " << eBlockWep.cids.size() << '\n';
-  Index::WordEntityPostings resultWep;
-  // Handle trivial empty case
-  if (matchingContextsWep.cids.empty() || eBlockWep.cids.empty()) {
-    return resultWep;
-  }
-  resultWep.wids.reserve(eBlockWep.cids.size());
-  resultWep.wids.clear();
-  resultWep.cids.reserve(eBlockWep.cids.size());
-  resultWep.cids.clear();
-  resultWep.eids.reserve(eBlockWep.cids.size());
-  resultWep.eids.clear();
-  resultWep.scores.reserve(eBlockWep.cids.size());
-  resultWep.scores.clear();
-
-  size_t i = 0;
-  size_t j = 0;
-
-  while (i < matchingContextsWep.cids.size() && j < eBlockWep.cids.size()) {
-    while (matchingContextsWep.cids[i] < eBlockWep.cids[j]) {
-      ++i;
-      if (i >= matchingContextsWep.cids.size()) {
-        return resultWep;
-      }
-    }
-    while (eBlockWep.cids[j] < matchingContextsWep.cids[i]) {
-      ++j;
-      if (j >= eBlockWep.cids.size()) {
-        return resultWep;
-      }
-    }
-    while (matchingContextsWep.cids[i] == eBlockWep.cids[j]) {
-      // Make sure we get all matching elements from the entity list (l2)
-      // that match the current context.
-      // If there are multiple elements for that context in l1,
-      // we can safely skip them unless we want to incorporate the scores
-      // later on.
-      size_t k = 0;
-      while (matchingContextsWep.cids[i + k] == matchingContextsWep.cids[i]) {
-        resultWep.wids.push_back(matchingContextsWep.wids[i + k]);
-        resultWep.cids.push_back(eBlockWep.cids[j]);
-        resultWep.eids.push_back(eBlockWep.eids[j]);
-        resultWep.scores.push_back(eBlockWep.scores[j]);
-        k++;
-        if (k >= matchingContextsWep.cids.size()) {
-          break;
-        }
-      }
-      j++;
-      if (j >= eBlockWep.cids.size()) {
-        break;
-      }
-    }
-    ++i;
-  }
-  return resultWep;
-}
-
-// _____________________________________________________________________________
 void FTSAlgorithms::intersectTwoPostingLists(
     const vector<TextRecordIndex>& cids1, const vector<Score>& scores1,
     const vector<TextRecordIndex>& cids2, const vector<Score>& scores2,
@@ -509,7 +431,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
     for (auto itt = stcaw.rbegin(); itt != stcaw.rend(); ++itt) {
       result.push_back(
           {Id::makeFromTextRecordIndex(std::get<1>(*itt)), entityScore, eid,
-           Id::makeFromWordVocabIndex(WordVocabIndex::make(std::get<2>(
+           Id::makeFromVocabIndex(VocabIndex::make(std::get<2>(
                *itt)))});  // QUESTION: gibt es ne elegantere Lösung???
     }
   }
@@ -699,8 +621,8 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
     result(n, 0) = Id::makeFromTextRecordIndex(std::get<0>(it->second.second));
     result(n, 1) = Id::makeFromInt(it->second.first);
     result(n, 2) = it->first;
-    result(n, 3) = Id::makeFromWordVocabIndex(
-        WordVocabIndex::make(std::get<2>(it->second.second)));
+    result(n, 3) = Id::makeFromVocabIndex(
+        VocabIndex::make(std::get<2>(it->second.second)));
     n++;
   }
   AD_CONTRACT_CHECK(n == result.size());

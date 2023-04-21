@@ -27,7 +27,6 @@ enum struct Datatype {
   VocabIndex,
   LocalVocabIndex,
   TextRecordIndex,
-  WordVocabIndex,
   MaxValue = TextRecordIndex
   // TODO<joka921> At least "date" is missing and not yet folded.
   // Note: Unfortunately we cannot easily get the size of an enum.
@@ -51,8 +50,6 @@ constexpr std::string_view toString(Datatype type) {
       return "LocalVocabIndex";
     case Datatype::TextRecordIndex:
       return "TextRecordIndex";
-    case Datatype::WordVocabIndex:
-      return "WordVocabIndex";
   }
   // This line is reachable if we cast an arbitrary invalid int to this enum
   AD_FAIL();
@@ -190,9 +187,6 @@ class ValueId {
   static ValueId makeFromLocalVocabIndex(LocalVocabIndex index) {
     return makeFromIndex(index.get(), Datatype::LocalVocabIndex);
   }
-  static ValueId makeFromWordVocabIndex(WordVocabIndex index) {
-    return makeFromIndex(index.get(), Datatype::WordVocabIndex);
-  }
 
   /// Obtain the unsigned index that this `ValueId` encodes. If `getDatatype()
   /// != [VocabIndex|TextRecordIndex|LocalVocabIndex]` then the result is
@@ -205,9 +199,6 @@ class ValueId {
   }
   [[nodiscard]] constexpr LocalVocabIndex getLocalVocabIndex() const noexcept {
     return LocalVocabIndex::make(removeDatatypeBits(_bits));
-  }
-  [[nodiscard]] constexpr WordVocabIndex getWordVocabIndex() const noexcept {
-    return WordVocabIndex::make(removeDatatypeBits(_bits));
   }
 
   // TODO<joka921> implement dates
@@ -256,8 +247,6 @@ class ValueId {
         return std::invoke(visitor, getLocalVocabIndex());
       case Datatype::TextRecordIndex:
         return std::invoke(visitor, getTextRecordIndex());
-      case Datatype::WordVocabIndex:
-        return std::invoke(visitor, getWordVocabIndex());
       default:
         AD_FAIL();
     }

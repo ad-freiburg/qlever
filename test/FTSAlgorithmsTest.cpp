@@ -66,60 +66,6 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
   ASSERT_EQ(4u, resultWep.scores.size());
 };
 
-TEST(FTSAlgorithmsTest, crossIntersectTest) {
-  Index::WordEntityPostings matchingContextsWep;
-  Index::WordEntityPostings eBlockWep;
-  Index::WordEntityPostings resultWep;
-  resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
-  ASSERT_EQ(0u, resultWep.wids.size());
-  ASSERT_EQ(0u, resultWep.cids.size());
-  ASSERT_EQ(0u, resultWep.eids.size());
-  ASSERT_EQ(0u, resultWep.scores.size());
-
-  matchingContextsWep.cids.push_back(T(0));
-  matchingContextsWep.cids.push_back(T(2));
-  matchingContextsWep.wids.push_back(1);
-  matchingContextsWep.wids.push_back(4);
-  matchingContextsWep.scores.push_back(1);
-  matchingContextsWep.scores.push_back(1);
-
-  resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
-  ASSERT_EQ(0u, resultWep.wids.size());
-  ASSERT_EQ(0u, resultWep.cids.size());
-  ASSERT_EQ(0u, resultWep.eids.size());
-  ASSERT_EQ(0u, resultWep.scores.size());
-
-  eBlockWep.cids.push_back(T(1));
-  eBlockWep.cids.push_back(T(2));
-  eBlockWep.cids.push_back(T(2));
-  eBlockWep.cids.push_back(T(4));
-  eBlockWep.eids.push_back(V(10));
-  eBlockWep.eids.push_back(V(1));
-  eBlockWep.eids.push_back(V(1));
-  eBlockWep.eids.push_back(V(2));
-  eBlockWep.scores.push_back(1);
-  eBlockWep.scores.push_back(1);
-  eBlockWep.scores.push_back(1);
-  eBlockWep.scores.push_back(1);
-
-  resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
-  ASSERT_EQ(2u, resultWep.wids.size());
-  ASSERT_EQ(2u, resultWep.cids.size());
-  ASSERT_EQ(2u, resultWep.eids.size());
-  ASSERT_EQ(2u, resultWep.scores.size());
-
-  matchingContextsWep.cids.push_back(T(2));
-  matchingContextsWep.wids.push_back(8);
-  matchingContextsWep.scores.push_back(1);
-
-  resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
-  ASSERT_EQ(4u, resultWep.wids.size());
-  ASSERT_EQ(4u, resultWep.cids.size());
-  ASSERT_EQ(4u, resultWep.eids.size());
-  ASSERT_EQ(4u, resultWep.scores.size());
-  ASSERT_EQ(8u, resultWep.wids[1]);
-};
-
 TEST(FTSAlgorithmsTest, intersectTest) {
   Index::WordEntityPostings matchingContextsWep;
   Index::WordEntityPostings eBlockWep;

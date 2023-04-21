@@ -99,9 +99,7 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     const SelectClause& selectClause, bool includeQuestionMark) const {
   ColumnIndicesAndTypes exportColumns;
 
-  auto variables = selectClause.getSelectedVariables();
-  variables.push_back(Variable("?completedWord")); //TODO: more elgant solution
-  for (const auto& var : variables) {
+  for (const auto& var : selectClause.getSelectedVariables()) {
     std::string varString = var.name();
     if (getVariableColumns().contains(var)) {
       auto columnIndex = getVariableColumns().at(var).columnIndex_;

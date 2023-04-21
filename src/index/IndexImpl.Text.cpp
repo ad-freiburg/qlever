@@ -917,7 +917,7 @@ Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
           getWordPostingsForTerm(terms[onlyWordsFrom]);
       Index::WordEntityPostings eWep =
           getEntityPostingsForTerm(terms[useElFromTerm]);
-      resultWep = FTSAlgorithms::crossIntersect(wWep, eWep);
+      resultWep = FTSAlgorithms::intersect(wWep, eWep);
     } else {
       // Generic case: Use a k-way intersect whereas the entity postings
       // play a special role.
@@ -940,8 +940,8 @@ Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
     // Special case: Just one word to deal with.
     resultWep = getEntityPostingsForTerm(terms[0]);
   }
-  LOG(INFO) << "Done with getEntityContextScoreListsForWords. "
-            << "Got " << resultWep.cids.size() << " elements. \n";
+  LOG(DEBUG) << "Done with getEntityContextScoreListsForWords. "
+             << "Got " << resultWep.cids.size() << " elements. \n";
   return resultWep;
 }
 
@@ -952,9 +952,8 @@ void IndexImpl::getECListForWordsOneVar(const string& words, size_t limit,
   Index::WordEntityPostings wep;
   wep = getContextEntityScoreListsForWords(words);
   FTSAlgorithms::aggScoresAndTakeTopKContexts(wep, limit, result);
-  LOG(INFO) << "Words variable: " << words << std::endl;
-  LOG(INFO) << "Done with getECListForWords. Result size: " << result->size()
-            << "\n";
+  LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
+             << "\n";
 }
 
 // _____________________________________________________________________________
@@ -1056,7 +1055,7 @@ void IndexImpl::getFilteredECListForWordsWidthOne(const string& words,
 // _____________________________________________________________________________
 Index::WordEntityPostings IndexImpl::getEntityPostingsForTerm(
     const string& term) const {
-  LOG(INFO) << "Getting entity postings for term: " << term << '\n';
+  LOG(DEBUG) << "Getting entity postings for term: " << term << '\n';
   IdRange idRange;
   Index::WordEntityPostings resultWep;
   bool entityTerm = (term[0] == '<' && term.back() == '>');
@@ -1101,7 +1100,7 @@ Index::WordEntityPostings IndexImpl::getEntityPostingsForTerm(
 
     // Read the full lists
     Index::WordEntityPostings eBlockWep = readWordEntityCl(tbmd);
-    resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
+    resultWep = FTSAlgorithms::intersect(matchingContextsWep, eBlockWep);
   }
   return resultWep;
 }

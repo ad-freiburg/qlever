@@ -35,10 +35,6 @@ class FTSAlgorithms {
       const Index::WordEntityPostings& matchingContextsWep,
       const Index::WordEntityPostings& eBlockWep);
 
-  static Index::WordEntityPostings crossIntersect(
-      const Index::WordEntityPostings& matchingContextsWep,
-      const Index::WordEntityPostings& eBlockWep);
-
   static void intersectTwoPostingLists(const vector<TextRecordIndex>& cids1,
                                        const vector<Score>& scores1,
                                        const vector<TextRecordIndex>& cids2,

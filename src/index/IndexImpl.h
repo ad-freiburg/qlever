@@ -343,13 +343,6 @@ class IndexImpl {
         return std::nullopt;
       case Datatype::TextRecordIndex:
         return getTextExcerpt(id.getTextRecordIndex());
-      case Datatype::WordVocabIndex:  // QUESTION: ist das so richtig?
-        auto result = _textVocab.indexToOptionalString(id.getVocabIndex());
-        if (result.has_value() && result.value().starts_with(VALUE_PREFIX)) {
-          result.value() =
-              ad_utility::convertIndexWordToValueLiteral(result.value());
-        }
-        return result;
     }
     // should be unreachable because the enum is exhaustive.
     AD_FAIL();
