@@ -1527,4 +1527,15 @@ queries:
       - contains_row: [ 2, 2 ]
       - contains_row: [ 3, 34 ]
 
+  - query: distinct-with-empty-input
+    type: no-text
+    sparql: |
+      SELECT DISTINCT ?x WHERE {
+        ?x <not_existing_310131492157> <adjfoie.axjdi>
+      }
+    checks:
+      - num_cols: 1
+      - num_rows : 0
+      - selected: [ "?x" ]
+
 
