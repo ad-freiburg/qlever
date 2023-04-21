@@ -63,6 +63,7 @@ using PsoSorter = StxxlSorter<SortByPSO>;
 // index builder.
 struct IndexBuilderDataBase {
   VocabularyMerger::VocabularyMetaData vocabularyMetaData_;
+  // The prefixes that are used for the prefix compression.
   std::vector<std::string> prefixes_;
 };
 

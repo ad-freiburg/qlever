@@ -376,6 +376,9 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     sizeInternalVocabulary = mergeResult.numWordsTotal_;
     LOG(INFO) << "Number of words in internal vocabulary: "
               << sizeInternalVocabulary << std::endl;
+    // Flush and close the created vocabulary, s.t. the prefix compression sees
+    // all of its contents.
+    compressionOutfile.close();
     // We have to use the "normally" sorted vocabulary for the prefix
     // compression.
     std::string vocabFileForPrefixCalculation =
