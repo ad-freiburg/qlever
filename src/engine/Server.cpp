@@ -181,11 +181,12 @@ ad_utility::UrlParser::UrlPathAndParameters Server::getUrlPathAndParameters(
     // these parameters.
     if (contentType.starts_with(contentTypeUrlEncoded)) {
       return ad_utility::UrlParser::parseGetRequestTarget(
-          absl::StrCat(request.target(), "?", request.body()), true);
+          absl::StrCat(toStd(request.target()), "?", request.body()), true);
     }
     if (contentType.starts_with(contentTypeSparqlQuery)) {
       return ad_utility::UrlParser::parseGetRequestTarget(
-          absl::StrCat(request.target(), "?query=", request.body()), false);
+          absl::StrCat(toStd(request.target()), "?query=", request.body()),
+          false);
     }
     throw std::runtime_error(
         absl::StrCat("POST request with content type \"", contentType,
