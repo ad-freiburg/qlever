@@ -36,4 +36,9 @@
 #include <boost/beast.hpp>
 
 // For boost versions prior to 1.81 this should be no-op
+#if defined BOOST_BEAST_VERSION && BOOST_BEAST_VERSION < 345
+constexpr std::string_view toStd(std::string_view view) { return view; }
+#else
 inline std::string_view toStd(boost::core::string_view view) { return view; }
+#endif
+
