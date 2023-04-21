@@ -174,7 +174,8 @@ void Index::getFilteredECListForWordsWidthOne(const std::string& words,
 }
 
 // _______________________________
-Index::WordEntityPostings Index::getContextEntityScoreListsForWords(const std::string& words) const {
+Index::WordEntityPostings Index::getContextEntityScoreListsForWords(
+    const std::string& words) const {
   return pimpl_->getContextEntityScoreListsForWords(words);
 }
 
@@ -206,12 +207,14 @@ void Index::getECListForWordsAndSubtrees(
 }
 
 // ___________________________
-Index::WordEntityPostings Index::getWordPostingsForTerm(const std::string& term) const {
+Index::WordEntityPostings Index::getWordPostingsForTerm(
+    const std::string& term) const {
   return pimpl_->getWordPostingsForTerm(term);
 }
 
 // __________________________
-Index::WordEntityPostings Index::getEntityPostingsForTerm(const std::string& term) const {
+Index::WordEntityPostings Index::getEntityPostingsForTerm(
+    const std::string& term) const {
   return pimpl_->getEntityPostingsForTerm(term);
 }
 

@@ -784,7 +784,8 @@ void IndexImpl::getContextListForWords(const string& words,
     }
     if (wepVecs.size() == 2) {
       FTSAlgorithms::intersectTwoPostingLists(
-          wepVecs[0].cids, wepVecs[1].scores, wepVecs[1].cids, wepVecs[1].scores, wep.cids, wep.scores);
+          wepVecs[0].cids, wepVecs[1].scores, wepVecs[1].cids,
+          wepVecs[1].scores, wep.cids, wep.scores);
     } else {
       vector<Id> dummy;
       wep = FTSAlgorithms::intersectKWay(wepVecs, nullptr);
@@ -805,44 +806,45 @@ void IndexImpl::getContextListForWords(const string& words,
 }
 
 // _____________________________________________________________________________
-Index::WordEntityPostings IndexImpl::readWordCl(TextBlockMetaData tbmd) const{
+Index::WordEntityPostings IndexImpl::readWordCl(TextBlockMetaData tbmd) const {
   Index::WordEntityPostings wep;
   wep.cids = readGapComprList<TextRecordIndex>(
-                     tbmd._cl._nofElements, tbmd._cl._startContextlist,
-                     static_cast<size_t>(tbmd._cl._startWordlist -
-                                         tbmd._cl._startContextlist),
-                     &TextRecordIndex::make);
+      tbmd._cl._nofElements, tbmd._cl._startContextlist,
+      static_cast<size_t>(tbmd._cl._startWordlist - tbmd._cl._startContextlist),
+      &TextRecordIndex::make);
   wep.wids = readFreqComprList<WordIndex>(
-        tbmd._cl._nofElements, tbmd._cl._startWordlist,
-        static_cast<size_t>(tbmd._cl._startScorelist - tbmd._cl._startWordlist));
+      tbmd._cl._nofElements, tbmd._cl._startWordlist,
+      static_cast<size_t>(tbmd._cl._startScorelist - tbmd._cl._startWordlist));
   wep.scores = readFreqComprList<Score>(
-        tbmd._cl._nofElements, tbmd._cl._startScorelist,
-        static_cast<size_t>(tbmd._cl._lastByte + 1 - tbmd._cl._startScorelist));
+      tbmd._cl._nofElements, tbmd._cl._startScorelist,
+      static_cast<size_t>(tbmd._cl._lastByte + 1 - tbmd._cl._startScorelist));
   return wep;
 }
 
 // _____________________________________________________________________________
-Index::WordEntityPostings IndexImpl::readWordEntityCl(TextBlockMetaData tbmd) const{
+Index::WordEntityPostings IndexImpl::readWordEntityCl(
+    TextBlockMetaData tbmd) const {
   Index::WordEntityPostings wep;
-  wep.cids = readGapComprList<TextRecordIndex>(tbmd._entityCl._nofElements,
-                     tbmd._entityCl._startContextlist,
-                     static_cast<size_t>(tbmd._entityCl._startWordlist -
-                                         tbmd._entityCl._startContextlist),
-                     &TextRecordIndex::make);
-  wep.eids = readFreqComprList<Id>(tbmd._entityCl._nofElements,
-                      tbmd._entityCl._startWordlist,
-                      static_cast<size_t>(tbmd._entityCl._startScorelist -
-                                          tbmd._entityCl._startWordlist),
-                      &Id::fromBits);
-  wep.scores = readFreqComprList<Score>(tbmd._entityCl._nofElements,
-                      tbmd._entityCl._startScorelist,
-                      static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
-                                          tbmd._entityCl._startScorelist));
+  wep.cids = readGapComprList<TextRecordIndex>(
+      tbmd._entityCl._nofElements, tbmd._entityCl._startContextlist,
+      static_cast<size_t>(tbmd._entityCl._startWordlist -
+                          tbmd._entityCl._startContextlist),
+      &TextRecordIndex::make);
+  wep.eids = readFreqComprList<Id>(
+      tbmd._entityCl._nofElements, tbmd._entityCl._startWordlist,
+      static_cast<size_t>(tbmd._entityCl._startScorelist -
+                          tbmd._entityCl._startWordlist),
+      &Id::fromBits);
+  wep.scores = readFreqComprList<Score>(
+      tbmd._entityCl._nofElements, tbmd._entityCl._startScorelist,
+      static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
+                          tbmd._entityCl._startScorelist));
   return wep;
 }
 
 // _____________________________________________________________________________
-Index::WordEntityPostings IndexImpl::getWordPostingsForTerm(const string& term) const {
+Index::WordEntityPostings IndexImpl::getWordPostingsForTerm(
+    const string& term) const {
   assert(term.size() > 0);
   LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
   IdRange idRange;
@@ -878,16 +880,17 @@ Index::WordEntityPostings IndexImpl::getWordPostingsForTerm(const string& term) 
   if (tbmd._cl.hasMultipleWords() &&
       !(tbmd._firstWordId == idRange._first.get() &&
         tbmd._lastWordId == idRange._last.get())) {
-    wep =  FTSAlgorithms::filterByRange(idRange, wep);
+    wep = FTSAlgorithms::filterByRange(idRange, wep);
   }
-  LOG(DEBUG) << "Word postings for term: " << term << ": cids: " << wep.cids.size()
-             << " scores " << wep.scores.size() << '\n';
+  LOG(DEBUG) << "Word postings for term: " << term
+             << ": cids: " << wep.cids.size() << " scores " << wep.scores.size()
+             << '\n';
   return wep;
 }
 
 // _____________________________________________________________________________
 Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
-                                                    const string& words) const {
+    const string& words) const {
   LOG(DEBUG) << "In getEntityContextScoreListsForWords...\n";
   // TODO vector can be of type std::string_view if called functions
   //  are updated to accept std::string_view instead of const std::string&
@@ -901,15 +904,19 @@ Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
     // the context and not on the word/block used as entry point.
     // Take all other words and get word posting lists for them.
     // Intersect all and keep the entity word ids.
-    size_t useElFromTerm = getIndexOfBestSuitedElTerm(terms); // QUESTION: funktion umändern oder raus, jetzt wo wordid auch wichtig ist
+    size_t useElFromTerm = getIndexOfBestSuitedElTerm(
+        terms);  // QUESTION: funktion umändern oder raus, jetzt wo wordid auch
+                 // wichtig ist
     LOG(TRACE) << "Best term to take entity list from: " << terms[useElFromTerm]
                << std::endl;
 
     if (terms.size() == 2) {
       // Special case of two terms: no k-way intersect needed.
       size_t onlyWordsFrom = 1 - useElFromTerm;
-      Index::WordEntityPostings wWep = getWordPostingsForTerm(terms[onlyWordsFrom]);
-      Index::WordEntityPostings eWep = getEntityPostingsForTerm(terms[useElFromTerm]);
+      Index::WordEntityPostings wWep =
+          getWordPostingsForTerm(terms[onlyWordsFrom]);
+      Index::WordEntityPostings eWep =
+          getEntityPostingsForTerm(terms[useElFromTerm]);
       resultWep = FTSAlgorithms::crossIntersect(wWep, eWep);
     } else {
       // Generic case: Use a k-way intersect whereas the entity postings
@@ -922,16 +929,19 @@ Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
         }
       }
       wepVecs.emplace_back();
-      Index::WordEntityPostings wep = getEntityPostingsForTerm(terms[useElFromTerm]);
+      Index::WordEntityPostings wep =
+          getEntityPostingsForTerm(terms[useElFromTerm]);
       wepVecs.back() = wep;
-      resultWep = FTSAlgorithms::intersectKWay(wepVecs, &wep.eids); // TODO: auf word id umschreiben mit crossintersect
+      resultWep = FTSAlgorithms::intersectKWay(
+          wepVecs,
+          &wep.eids);  // TODO: auf word id umschreiben mit crossintersect
     }
   } else {
     // Special case: Just one word to deal with.
     resultWep = getEntityPostingsForTerm(terms[0]);
   }
   LOG(INFO) << "Done with getEntityContextScoreListsForWords. "
-             << "Got " << resultWep.cids.size() << " elements. \n";
+            << "Got " << resultWep.cids.size() << " elements. \n";
   return resultWep;
 }
 
@@ -944,7 +954,7 @@ void IndexImpl::getECListForWordsOneVar(const string& words, size_t limit,
   FTSAlgorithms::aggScoresAndTakeTopKContexts(wep, limit, result);
   LOG(INFO) << "Words variable: " << words << std::endl;
   LOG(INFO) << "Done with getECListForWords. Result size: " << result->size()
-             << "\n";
+            << "\n";
 }
 
 // _____________________________________________________________________________
@@ -986,7 +996,7 @@ void IndexImpl::getFilteredECListForWords(const string& words,
     }
     Index::WordEntityPostings wep;
     wep = getContextEntityScoreListsForWords(words);
-    vector<TextRecordIndex> cids = wep.cids; // TODO: rewrite
+    vector<TextRecordIndex> cids = wep.cids;  // TODO: rewrite
     vector<Id> eids = wep.eids;
     vector<Score> scores = wep.scores;
     int width = result->numColumns();
@@ -1023,7 +1033,7 @@ void IndexImpl::getFilteredECListForWordsWidthOne(const string& words,
   }
   Index::WordEntityPostings wep;
   wep = getContextEntityScoreListsForWords(words);
-  vector<TextRecordIndex> cids = wep.cids; // TODO: rewrite
+  vector<TextRecordIndex> cids = wep.cids;  // TODO: rewrite
   vector<Id> eids = wep.eids;
   vector<Score> scores = wep.scores;
   int width = result->numColumns();
@@ -1044,7 +1054,8 @@ void IndexImpl::getFilteredECListForWordsWidthOne(const string& words,
 }
 
 // _____________________________________________________________________________
-Index::WordEntityPostings IndexImpl::getEntityPostingsForTerm(const string& term) const {
+Index::WordEntityPostings IndexImpl::getEntityPostingsForTerm(
+    const string& term) const {
   LOG(INFO) << "Getting entity postings for term: " << term << '\n';
   IdRange idRange;
   Index::WordEntityPostings resultWep;
@@ -1085,7 +1096,8 @@ Index::WordEntityPostings IndexImpl::getEntityPostingsForTerm(const string& term
     // CASE: more than one word in the block.
     // Need to obtain matching postings for regular words and intersect for
     // a list of matching contexts.
-    Index::WordEntityPostings matchingContextsWep = getWordPostingsForTerm(term);
+    Index::WordEntityPostings matchingContextsWep =
+        getWordPostingsForTerm(term);
 
     // Read the full lists
     Index::WordEntityPostings eBlockWep = readWordEntityCl(tbmd);
@@ -1096,8 +1108,9 @@ Index::WordEntityPostings IndexImpl::getEntityPostingsForTerm(const string& term
 
 // _____________________________________________________________________________
 template <typename T, typename MakeFromUint64t>
-vector<T> IndexImpl::readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
-                                 MakeFromUint64t makeFromUint64t) const {
+vector<T> IndexImpl::readGapComprList(size_t nofElements, off_t from,
+                                      size_t nofBytes,
+                                      MakeFromUint64t makeFromUint64t) const {
   LOG(DEBUG) << "Reading gap-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
              << ", nofBytes: " << nofBytes << '\n';
@@ -1134,8 +1147,9 @@ vector<T> IndexImpl::readGapComprList(size_t nofElements, off_t from, size_t nof
 
 // _____________________________________________________________________________
 template <typename T, typename MakeFromUint64t>
-vector<T> IndexImpl::readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
-                                  MakeFromUint64t makeFromUint) const {
+vector<T> IndexImpl::readFreqComprList(size_t nofElements, off_t from,
+                                       size_t nofBytes,
+                                       MakeFromUint64t makeFromUint) const {
   AD_CONTRACT_CHECK(nofBytes > 0);
   LOG(DEBUG) << "Reading frequency-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
@@ -1516,7 +1530,7 @@ void IndexImpl::getECListForWordsAndTwoW1Subs(
   // Get context entity postings matching the words
   Index::WordEntityPostings wep;
   wep = getContextEntityScoreListsForWords(words);
-  vector<TextRecordIndex> cids = wep.cids; // TODO: rewrite
+  vector<TextRecordIndex> cids = wep.cids;  // TODO: rewrite
   vector<Id> eids = wep.eids;
   vector<Score> scores = wep.scores;
 
@@ -1578,7 +1592,7 @@ void IndexImpl::getECListForWordsAndSubtrees(
   // Get context entity postings matching the words
   Index::WordEntityPostings wep;
   wep = getContextEntityScoreListsForWords(words);
-  vector<TextRecordIndex> cids = wep.cids; // TODO: rewrite
+  vector<TextRecordIndex> cids = wep.cids;  // TODO: rewrite
   vector<Id> eids = wep.eids;
   vector<Score> scores = wep.scores;
 

@@ -340,7 +340,7 @@ class IndexImpl {
         return std::nullopt;
       case Datatype::TextRecordIndex:
         return getTextExcerpt(id.getTextRecordIndex());
-      case Datatype::WordVocabIndex: //QUESTION: ist das so richtig?
+      case Datatype::WordVocabIndex:  // QUESTION: ist das so richtig?
         auto result = _textVocab.indexToOptionalString(id.getVocabIndex());
         if (result.has_value() && result.value().starts_with(VALUE_PREFIX)) {
           result.value() =
@@ -416,7 +416,8 @@ class IndexImpl {
                                          const IdTable& filter, size_t nofVars,
                                          size_t limit, IdTable* result) const;
 
-  Index::WordEntityPostings getContextEntityScoreListsForWords(const string& words) const;
+  Index::WordEntityPostings getContextEntityScoreListsForWords(
+      const string& words) const;
 
   template <size_t I>
   void getECListForWordsAndSingleSub(const string& words,
@@ -766,11 +767,12 @@ class IndexImpl {
 
   template <typename T, typename MakeFromUint64t>
   vector<T> readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
-                                 MakeFromUint64t makeFromUint64t) const;
+                             MakeFromUint64t makeFromUint64t) const;
 
   template <typename T, typename MakeFromUint64t = std::identity>
-  vector<T> readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
-                                  MakeFromUint64t makeFromUint = MakeFromUint64t{}) const;
+  vector<T> readFreqComprList(
+      size_t nofElements, off_t from, size_t nofBytes,
+      MakeFromUint64t makeFromUint = MakeFromUint64t{}) const;
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 

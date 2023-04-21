@@ -11,8 +11,8 @@
 #include "../global/Id.h"
 #include "../util/HashMap.h"
 #include "../util/HashSet.h"
-#include "./Vocabulary.h"
 #include "./Index.h"
+#include "./Vocabulary.h"
 
 using std::array;
 using std::vector;
@@ -28,16 +28,16 @@ class FTSAlgorithms {
   typedef vector<array<Id, 5>> WidthFiveList;
   typedef vector<vector<Id>> VarWidthList;
 
-  static Index::WordEntityPostings filterByRange(const IdRange& idRange,
-                                  const Index::WordEntityPostings& wepPreFilter);
+  static Index::WordEntityPostings filterByRange(
+      const IdRange& idRange, const Index::WordEntityPostings& wepPreFilter);
 
   static Index::WordEntityPostings intersect(
-                          const Index::WordEntityPostings& matchingContextsWep,
-                          const Index::WordEntityPostings& eBlockWep);
+      const Index::WordEntityPostings& matchingContextsWep,
+      const Index::WordEntityPostings& eBlockWep);
 
   static Index::WordEntityPostings crossIntersect(
-                          const Index::WordEntityPostings& matchingContextsWep,
-                          const Index::WordEntityPostings& eBlockWep);
+      const Index::WordEntityPostings& matchingContextsWep,
+      const Index::WordEntityPostings& eBlockWep);
 
   static void intersectTwoPostingLists(const vector<TextRecordIndex>& cids1,
                                        const vector<Score>& scores1,
@@ -56,7 +56,7 @@ class FTSAlgorithms {
                                            size_t k, IdTable* dynResult);
 
   static void aggScoresAndTakeTopKContexts(const Index::WordEntityPostings wep,
-                                                     size_t k, IdTable* dynResult);
+                                           size_t k, IdTable* dynResult);
 
   template <int WIDTH>
   static void multVarsAggScoresAndTakeTopKContexts(
@@ -92,8 +92,8 @@ class FTSAlgorithms {
   // If it is null, resEids is left untouched, otherwise resEids
   // will contain word/entity for the matching contexts.
   static Index::WordEntityPostings intersectKWay(
-                    const vector<Index::WordEntityPostings>& wepVecs,
-                    vector<Id>* lastListEids);
+      const vector<Index::WordEntityPostings>& wepVecs,
+      vector<Id>* lastListEids);
 
   // Constructs the cross-product between entity postings of this
   // context and matching subtree result tuples.

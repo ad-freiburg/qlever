@@ -177,7 +177,8 @@ class Index {
                                          const IdTable& filter, size_t nofVars,
                                          size_t limit, IdTable* result) const;
 
-  WordEntityPostings getContextEntityScoreListsForWords(const std::string& words) const;
+  WordEntityPostings getContextEntityScoreListsForWords(
+      const std::string& words) const;
 
   template <size_t I>
   void getECListForWordsAndSingleSub(const std::string& words,
