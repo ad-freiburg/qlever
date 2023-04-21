@@ -106,15 +106,8 @@ void IndexImpl::createFromFile(const string& filename) {
   // hurt.
   string vocabFile = _onDiskBase + INTERNAL_VOCAB_SUFFIX;
   string vocabFileTmp = _onDiskBase + ".vocabularyTmp";
-  std::vector<string> prefixes;
+  const std::vector<string>& prefixes = indexBuilderData.prefixes_;
   if (_vocabPrefixCompressed) {
-    // We have to use the "normally" sorted vocabulary for the prefix
-    // compression.
-    std::string vocabFileForPrefixCalculation =
-        _onDiskBase + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX;
-    prefixes = calculatePrefixes(vocabFileForPrefixCalculation,
-                                 NUM_COMPRESSION_PREFIXES, 1, true);
-    deleteTemporaryFile(vocabFileForPrefixCalculation);
     auto prefixFile = ad_utility::makeOfstream(_onDiskBase + PREFIX_FILE);
     for (const auto& prefix : prefixes) {
       prefixFile << prefix << std::endl;
@@ -364,6 +357,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
             << std::endl;
 
   size_t sizeInternalVocabulary = 0;
+  std::vector<std::string> prefixes;
   if (_vocabPrefixCompressed) {
     LOG(INFO) << "Merging partial vocabularies in byte order "
               << "(internal only) ..." << std::endl;
@@ -382,6 +376,15 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     sizeInternalVocabulary = mergeResult.numWordsTotal_;
     LOG(INFO) << "Number of words in internal vocabulary: "
               << sizeInternalVocabulary << std::endl;
+    // Flush and close the created vocabulary, s.t. the prefix compression sees
+    // all of its contents.
+    compressionOutfile.close();
+    // We have to use the "normally" sorted vocabulary for the prefix
+    // compression.
+    std::string vocabFileForPrefixCalculation =
+        _onDiskBase + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX;
+    prefixes = calculatePrefixes(vocabFileForPrefixCalculation,
+                                 NUM_COMPRESSION_PREFIXES, 1, true);
   }
 
   LOG(INFO) << "Merging partial vocabularies in Unicode order "
@@ -403,6 +406,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;
   res.vocabularyMetaData_ = mergeRes;
+  res.prefixes_ = std::move(prefixes);
   LOG(INFO) << "Number of words in external vocabulary: "
             << res.vocabularyMetaData_.numWordsTotal_ - sizeInternalVocabulary
             << std::endl;

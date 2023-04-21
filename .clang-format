@@ -2,4 +2,8 @@
 BasedOnStyle: Google
 DerivePointerAlignment: false
 PointerAlignment: Left
+LineEnding: LF
+InsertNewlineAtEOF: true
+RequiresClausePosition: SingleLine
+IndentRequiresClause: false
 ...

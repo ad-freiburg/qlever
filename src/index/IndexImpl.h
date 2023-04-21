@@ -63,6 +63,8 @@ using PsoSorter = StxxlSorter<SortByPSO>;
 // index builder.
 struct IndexBuilderDataBase {
   VocabularyMerger::VocabularyMetaData vocabularyMetaData_;
+  // The prefixes that are used for the prefix compression.
+  std::vector<std::string> prefixes_;
 };
 
 // All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
@@ -177,12 +179,13 @@ class IndexImpl {
  public:
   IndexImpl();
 
-  /// Forbid copy and assignment.
+  // Forbid copying.
   IndexImpl& operator=(const IndexImpl&) = delete;
   IndexImpl(const IndexImpl&) = delete;
-
-  /// Allow move construction, which is mostly used in unit tests.
-  IndexImpl(IndexImpl&&) noexcept = default;
+  // Moving is currently not supported, because several of the members use
+  // mutexes internally. It is also not needed.
+  IndexImpl& operator=(IndexImpl&&) = delete;
+  IndexImpl(IndexImpl&&) = delete;
 
   const auto& POS() const { return _POS; }
   auto& POS() { return _POS; }

@@ -80,8 +80,8 @@ struct EffectiveBooleanValueGetter {
 /// templates. It produces a string value.
 struct StringValueGetter {
   template <typename T>
-  requires(std::is_arithmetic_v<T>) string operator()(
-      T v, EvaluationContext*) const {
+  requires(std::is_arithmetic_v<T>)
+  string operator()(T v, EvaluationContext*) const {
     return std::to_string(v);
   }
 

@@ -78,8 +78,9 @@ class BenchmarkResults {
    *  with the needed parameters.
    */
   template <typename Function>
-  requires std::invocable<Function> ResultEntry& addMeasurement(
-      const std::string& descriptor, const Function& functionToMeasure) {
+  requires std::invocable<Function>
+  ResultEntry& addMeasurement(const std::string& descriptor,
+                              const Function& functionToMeasure) {
     return addEntryToContainerVector(singleMeasurements_, descriptor,
                                      functionToMeasure);
   }

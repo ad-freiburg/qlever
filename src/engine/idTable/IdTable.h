@@ -159,9 +159,8 @@ class IdTable {
   // Construct from the number of columns and an allocator. If `NumColumns != 0`
   // Then the argument `numColumns` and `NumColumns` (the static and the
   // dynamic number of columns) must be equal, else a runtime check fails.
-  explicit IdTable(size_t numColumns,
-                   Allocator allocator = {}) requires(!isView &&
-                                                      columnsAreAllocatable)
+  explicit IdTable(size_t numColumns, Allocator allocator = {})
+      requires(!isView && columnsAreAllocatable)
       : numColumns_{numColumns}, allocator_{std::move(allocator)} {
     if constexpr (!isDynamic) {
       AD_CONTRACT_CHECK(NumColumns == numColumns);
@@ -178,8 +177,8 @@ class IdTable {
   // fails. Additional columns (if `columns.size() > numColumns`) are deleted.
   // This behavior is useful for unit tests Where we can just generically pass
   // in more columns than are needed in any test.
-  IdTable(size_t numColumns,
-          std::ranges::forward_range auto columns) requires(!isView)
+  IdTable(size_t numColumns, std::ranges::forward_range auto columns)
+      requires(!isView)
       : data_{std::make_move_iterator(columns.begin()),
               std::make_move_iterator(columns.end())},
         numColumns_{numColumns} {
@@ -198,8 +197,8 @@ class IdTable {
   // already set up with the correct number of columns and can be used directly.
   // If `NumColumns == 0` then the number of columns has to be specified via
   // `setNumColumns()`.
-  explicit IdTable(Allocator allocator = {}) requires(!isView &&
-                                                      columnsAreAllocatable)
+  explicit IdTable(Allocator allocator = {})
+      requires(!isView && columnsAreAllocatable)
       : IdTable{NumColumns, std::move(allocator)} {};
 
   // `IdTables` are expensive to copy, so we disable accidental copies as they
@@ -244,8 +243,8 @@ class IdTable {
  public:
   // For an empty and dynamic (`NumColumns == 0`) `IdTable`, specify the
   // number of columns.
-  void setNumColumns(size_t numColumns) requires(
-      isDynamic&& columnsAreAllocatable) {
+  void setNumColumns(size_t numColumns)
+      requires(isDynamic && columnsAreAllocatable) {
     AD_CONTRACT_CHECK(empty());
     numColumns_ = numColumns;
     data().resize(numColumns, ColumnStorage{allocator_});
@@ -390,9 +389,8 @@ class IdTable {
   // (`NumColumns != 0`), then this is a safe interface, as the correct size of
   // `newRow` can be statically checked.
   template <size_t N>
-  void push_back(const std::array<T, N>& newRow) requires(!isView &&
-                                                          (isDynamic ||
-                                                           NumColumns == N)) {
+  void push_back(const std::array<T, N>& newRow)
+      requires(!isView && (isDynamic || NumColumns == N)) {
     if constexpr (isDynamic) {
       AD_EXPENSIVE_CHECK(newRow.size() == numColumns());
     }
@@ -429,9 +427,9 @@ class IdTable {
   // `true`), then the copy constructor will also create a (const and
   // non-owning) view, but `clone` will create a mutable deep copy of the data
   // that the view points to
-  IdTable<T, NumColumns, ColumnStorage, IsView::False> clone()
-      const requires std::is_copy_constructible_v<Storage> &&
-      std::is_copy_constructible_v<ColumnStorage> {
+  IdTable<T, NumColumns, ColumnStorage, IsView::False> clone() const
+      requires std::is_copy_constructible_v<Storage> &&
+               std::is_copy_constructible_v<ColumnStorage> {
     Storage storage;
     for (const auto& column : getColumns()) {
       storage.emplace_back(column.begin(), column.end(), getAllocator());
@@ -469,8 +467,8 @@ class IdTable {
   //       generic code that is templated on the number of columns easier to
   //       write.
   template <int NewNumColumns>
-  requires(isDynamic &&
-           !isView) IdTable<T, NewNumColumns, ColumnStorage> toStatic() && {
+  requires(isDynamic && !isView)
+  IdTable<T, NewNumColumns, ColumnStorage> toStatic() && {
     AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
     auto result = IdTable<T, NewNumColumns, ColumnStorage>{
         std::move(data()), numColumns(), std::move(numRows_),
@@ -501,9 +499,8 @@ class IdTable {
   // creates a dynamic view from a dynamic table. This makes generic code that
   // is templated on the number of columns easier to write.
   template <size_t NewNumColumns>
-  requires isDynamic IdTable<T, NewNumColumns, ColumnStorage, IsView::True>
-  asStaticView()
-  const {
+  requires isDynamic
+  IdTable<T, NewNumColumns, ColumnStorage, IsView::True> asStaticView() const {
     AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
     ViewSpans viewSpans(data().begin(), data().end());
 

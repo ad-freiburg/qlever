@@ -62,9 +62,9 @@ class ReadSerializerTag {};
 template <typename S>
 concept WriteSerializer = requires(S s, const char* ptr, size_t numBytes) {
   {
-    typename std::decay_t<S>::SerializerType {}
-    } -> std::same_as<WriteSerializerTag>;
-  {s.serializeBytes(ptr, numBytes)};
+    typename std::decay_t<S>::SerializerType{}
+  } -> std::same_as<WriteSerializerTag>;
+  { s.serializeBytes(ptr, numBytes) };
 };
 
 /// A `ReadSerializer` can read to span of bytes from some resource and has a
@@ -72,9 +72,9 @@ concept WriteSerializer = requires(S s, const char* ptr, size_t numBytes) {
 template <typename S>
 concept ReadSerializer = requires(S s, char* ptr, size_t numBytes) {
   {
-    typename std::decay_t<S>::SerializerType {}
-    } -> std::same_as<ReadSerializerTag>;
-  {s.serializeBytes(ptr, numBytes)};
+    typename std::decay_t<S>::SerializerType{}
+  } -> std::same_as<ReadSerializerTag>;
+  { s.serializeBytes(ptr, numBytes) };
 };
 
 /// A `Serializer` is either a `WriteSerializer` or a `ReadSerializer`
@@ -210,14 +210,13 @@ struct TrivialSerializationHelperTag {};
  * void allowTrivialSerialization(std::same_as<Z> auto, auto);
  */
 template <typename T>
-concept TriviallySerializable = requires(T t,
-                                         TrivialSerializationHelperTag tag) {
-  // The `TrivialSerializationHelperTag` lets the argument-dependent lookup also
-  // find the `allowTrivialSerialization` function if it is defined in the
-  // `ad::serialization` namespace.
-  allowTrivialSerialization(t, tag);
-}
-&&std::is_trivially_copyable_v<std::decay_t<T>>;
+concept TriviallySerializable =
+    requires(T t, TrivialSerializationHelperTag tag) {
+      // The `TrivialSerializationHelperTag` lets the argument-dependent lookup
+      // also find the `allowTrivialSerialization` function if it is defined in
+      // the `ad::serialization` namespace.
+      allowTrivialSerialization(t, tag);
+    } && std::is_trivially_copyable_v<std::decay_t<T>>;
 
 /// Serialize function for `TriviallySerializable` types that works by simply
 /// serializing the binary object representation.
@@ -234,8 +233,8 @@ void serialize(S& serializer, T&& t) {
 /// Arithmetic types (the builtins like int, char, double) can be trivially
 /// serialized.
 template <typename T>
-requires std::is_arithmetic_v<std::decay_t<T>> std::true_type
-allowTrivialSerialization(T, auto) {
+requires std::is_arithmetic_v<std::decay_t<T>>
+std::true_type allowTrivialSerialization(T, auto) {
   return {};
 }
 

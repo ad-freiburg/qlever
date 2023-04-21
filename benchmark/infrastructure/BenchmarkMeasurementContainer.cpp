@@ -16,6 +16,7 @@
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
+#include "util/Exception.h"
 
 namespace ad_benchmark {
 
@@ -63,6 +64,24 @@ void to_json(nlohmann::json& j, const ResultGroup& resultGroup) {
   j = nlohmann::json{{"descriptor", resultGroup.descriptor_},
                      {"entries", resultGroup.entries_},
                      {"metadata", resultGroup.metadata()}};
+}
+
+// ____________________________________________________________________________
+ResultTable::ResultTable(const std::string& descriptor,
+                         const std::vector<std::string>& rowNames,
+                         const std::vector<std::string>& columnNames)
+    : descriptor_{descriptor},
+      rowNames_{rowNames},
+      columnNames_{columnNames},
+      entries_(rowNames.size(), std::vector<EntryType>(columnNames.size())) {
+  // Having a table without any rows/columns makes no sense.
+  if (rowNames.empty() || columnNames.empty()) {
+    throw ad_utility::Exception(
+        absl::StrCat("A `ResultTable` must have at"
+                     " least one column and one row. Table '",
+                     descriptor, "' has ", rowNames.size(), " rows and ",
+                     columnNames.size(), " columns"));
+  }
 }
 
 // ____________________________________________________________________________
@@ -128,6 +147,10 @@ ResultTable::operator std::string() const {
 
   // For formating: What is the maximum string width of a column, if you
   // compare all it's entries?
+
+  // `std::ranges::max` has undefined behaviour, when given empty vectors.
+  // So, a quick check beforehand, using the names.
+  AD_CONTRACT_CHECK(!rowNames_.empty());
 
   // The max width of the column containing the row names.
   const size_t rowNameMaxStringWidth =

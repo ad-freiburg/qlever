@@ -34,8 +34,8 @@ namespace detail {
 // @tparam BinaryOperations The actual binary operations. They must be callable
 // with the result types of the `ValueGetter`.
 template <typename NaryOperation>
-requires(isOperation<NaryOperation>) class NaryExpression
-    : public SparqlExpression {
+requires(isOperation<NaryOperation>)
+class NaryExpression : public SparqlExpression {
  public:
   static constexpr size_t N = NaryOperation::N;
   using Children = std::array<SparqlExpression::Ptr, N>;
@@ -46,9 +46,8 @@ requires(isOperation<NaryOperation>) class NaryExpression
   // Construct from `N` child expressions. Each of the children must have a type
   // `std::unique_ptr<SubclassOfSparqlExpression>`.
   explicit NaryExpression(
-      std::convertible_to<
-          SparqlExpression::
-              Ptr> auto... children) requires(sizeof...(children) == N)
+      std::convertible_to<SparqlExpression::Ptr> auto... children)
+      requires(sizeof...(children) == N)
       : NaryExpression{Children{std::move(children)...}} {}
 
  public:

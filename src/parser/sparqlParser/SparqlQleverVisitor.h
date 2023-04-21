@@ -476,15 +476,15 @@ class SparqlQleverVisitor {
   }
 
   template <typename Ctx>
-  void visitVector(const std::vector<Ctx*>& childContexts) requires
-      voidWhenVisited<SparqlQleverVisitor, Ctx>;
+  void visitVector(const std::vector<Ctx*>& childContexts)
+      requires voidWhenVisited<SparqlQleverVisitor, Ctx>;
 
   // Call `visit` for each of the `childContexts` and return the results of
   // those calls as a `vector`.
   template <typename Ctx>
   [[nodiscard]] auto visitVector(const std::vector<Ctx*>& childContexts)
       -> std::vector<decltype(visit(childContexts[0]))>
-  requires(!voidWhenVisited<SparqlQleverVisitor, Ctx>);
+      requires(!voidWhenVisited<SparqlQleverVisitor, Ctx>);
 
   // Check that exactly one of the `ctxs` is not `null`, visit that context,
   // cast the result to `Out` and return it. Requires that for all of the
