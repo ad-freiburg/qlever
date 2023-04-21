@@ -17,10 +17,12 @@
 #include "engine/ResultTable.h"
 #include "engine/idTable/IdTable.h"
 #include "infrastructure/BenchmarkMeasurementContainer.h"
+#include "util/BenchmarkTableCommonCalculations.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/Random.h"
 #include "util/TypeTraits.h"
+#include "../benchmark/util/BenchmarkTableCommonCalculations.h"
 
 namespace ad_benchmark {
 /*
@@ -304,7 +306,8 @@ static void makeBenchmarkTable(
 
     return records->addTable(tableDescriptor.str(), rowNames,
                              {"Merge/Galloping join", "Hash join",
-                              "Number of rows in joined IdTable"});
+                              "Number of rows in joined IdTable",
+                              "Speedup with hash join"});
   };
 
   // Setup for easier creation of the tables, that will be joined.
@@ -407,11 +410,17 @@ static void makeBenchmarkTable(
       });
     }
 
-    // A table can only be set to `float`, or `std::string`.
+    // Adding the number of rows of the result.
     table->setEntry(i, 2, std::to_string(numberRowsOfResult));
 
     // The next call of the lambda, will be one row further.
     i++;
+  };
+
+  // For adding the speedup of the hash join algorithm in comparison
+  // to the merge/galloping join algorithm.
+  auto addSpeedup = [](ResultTable* table){
+    calculateSpeedupOfColumn(table, 1, 0, 3);
   };
 
   // We have to adjust a few things, based on which argument is the
@@ -426,6 +435,7 @@ static void makeBenchmarkTable(
           biggerTableAmountColumns, biggerTableJoinColumnSampleSizeRatio);
       addNextRowToBenchmarkTable(&table);
     }
+    addSpeedup(&table);
   } else if constexpr (std::is_same<T2, std::vector<size_t>>::value) {
     ResultTable& table = createBenchmarkTable(smallerTableAmountRows);
     for (const size_t& smallerTableAmountRow : smallerTableAmountRows) {
@@ -435,6 +445,7 @@ static void makeBenchmarkTable(
                       biggerTableJoinColumnSampleSizeRatio);
       addNextRowToBenchmarkTable(&table);
     }
+    addSpeedup(&table);
   } else if constexpr (std::is_same<T3, std::vector<size_t>>::value) {
     ResultTable& table = createBenchmarkTable(smallerTableAmountColumns);
     for (const size_t& smallerTableAmountColumn : smallerTableAmountColumns) {
@@ -444,6 +455,7 @@ static void makeBenchmarkTable(
                       biggerTableJoinColumnSampleSizeRatio);
       addNextRowToBenchmarkTable(&table);
     }
+    addSpeedup(&table);
   } else if constexpr (std::is_same<T4, std::vector<size_t>>::value) {
     ResultTable& table = createBenchmarkTable(biggerTableAmountColumns);
     for (const size_t& biggerTableAmountColumn : biggerTableAmountColumns) {
@@ -453,6 +465,7 @@ static void makeBenchmarkTable(
           biggerTableAmountColumn, biggerTableJoinColumnSampleSizeRatio);
       addNextRowToBenchmarkTable(&table);
     }
+    addSpeedup(&table);
   } else if constexpr (std::is_same<T4, std::vector<float>>::value) {
     ResultTable& table = createBenchmarkTable(overlap);
     for (const size_t& overlapChance : overlap) {
@@ -462,6 +475,7 @@ static void makeBenchmarkTable(
           biggerTableAmountColumns, biggerTableJoinColumnSampleSizeRatio);
       addNextRowToBenchmarkTable(&table);
     }
+    addSpeedup(&table);
   } else if constexpr (std::is_same<T5, std::vector<float>>::value) {
     ResultTable& table =
         createBenchmarkTable(smallerTableJoinColumnSampleSizeRatio);
@@ -473,6 +487,7 @@ static void makeBenchmarkTable(
                       biggerTableJoinColumnSampleSizeRatio);
       addNextRowToBenchmarkTable(&table);
     }
+    addSpeedup(&table);
   } else if constexpr (std::is_same<T6, std::vector<float>>::value) {
     ResultTable& table =
         createBenchmarkTable(biggerTableJoinColumnSampleSizeRatio);
@@ -483,6 +498,7 @@ static void makeBenchmarkTable(
                       biggerTableAmountColumns, sampleSizeRatio);
       addNextRowToBenchmarkTable(&table);
     }
+    addSpeedup(&table);
   }
 }
 
