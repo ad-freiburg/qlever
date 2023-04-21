@@ -202,7 +202,7 @@ template<isTypeOrVectorOfType<size_t> T1, isTypeOrVectorOfType<size_t> T2,
   isTypeOrVectorOfType<size_t> T3, isTypeOrVectorOfType<size_t> T4,
   isTypeOrVectorOfType<float> TF, isTypeOrVectorOfType<float> T5 = float,
   isTypeOrVectorOfType<float> T6 = float>
-requires exactlyOneVector<T1, T2, T3, T4, TF, T6, T6>
+requires exactlyOneVector<T1, T2, T3, T4, TF, T5, T6>
 static void makeBenchmarkTable(BenchmarkResults* records, const TF& overlap,
     const bool smallerTableSorted, const bool biggerTableSorted, const T1& ratioRows,
     const T2& smallerTableAmountRows, const T3& smallerTableAmountColumns,
