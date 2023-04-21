@@ -129,9 +129,9 @@ class HttpServer {
     // The actual code for the shutdown is being executed on the same `strand`
     // as the `listener`. By the way strands work, there will then be no
     // concurrent access to `acceptor_`.
-    auto future = net::post(acceptorStrand_, std::packaged_task<void()>([this]() {
-      acceptor_.close();
-    }));
+    auto future =
+        net::post(acceptorStrand_,
+                  std::packaged_task<void()>([this]() { acceptor_.close(); }));
 
     // Wait until the posted task has successfully executed
     future.wait();
