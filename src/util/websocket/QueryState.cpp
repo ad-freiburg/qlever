@@ -16,11 +16,11 @@ static absl::flat_hash_map<QueryId, RuntimeInformationSnapshot> queryStates{};
 
 void signalUpdateForQuery(QueryId queryId, RuntimeInformation runtimeInformation) {
   RuntimeInformationSnapshot snapshot{std::move(runtimeInformation), std::chrono::steady_clock::now()};
-  {
+  // Only insert data if there are additional waiting websockets
+  if (websocket::fireAllCallbacksForQuery(queryId, snapshot)) {
     std::lock_guard lock{queryStatesMutex};
-    queryStates[queryId] = snapshot;
+    queryStates[queryId] = std::move(snapshot);
   }
-  websocket::fireAllCallbacksForQuery(queryId, std::move(snapshot));
 }
 
 void clearQueryInfo(QueryId queryId) {

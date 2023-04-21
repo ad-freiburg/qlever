@@ -14,5 +14,6 @@ namespace ad_utility::websocket {
   using websocket::common::RuntimeInformationSnapshot;
 
   net::awaitable<void> manageConnection(tcp::socket socket, http::request<http::string_body> request);
-  void fireAllCallbacksForQuery(QueryId queryId, RuntimeInformationSnapshot runtimeInformationSnapshot);
+  // Returns true if there are other active connections that do no currently wait.
+  bool fireAllCallbacksForQuery(QueryId queryId, RuntimeInformationSnapshot runtimeInformationSnapshot);
 };
