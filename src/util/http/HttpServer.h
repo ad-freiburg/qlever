@@ -6,7 +6,7 @@
 #define QLEVER_HTTPSERVER_H
 
 #include <cstdlib>
-#include <semaphore>
+#include <future>
 
 #include "absl/cleanup/cleanup.h"
 #include "util/Exception.h"
@@ -126,31 +126,16 @@ class HttpServer {
   // fail. This interface is currently only used for testing. In the typical use
   // case, the server runs forever.
   void shutDown() {
-    std::atomic_flag shutdownWasSuccessful;
-    shutdownWasSuccessful.clear();
     // The actual code for the shutdown is being executed on the same `strand`
     // as the `listener`. By the way strands work, there will then be no
     // concurrent access to `acceptor_`.
-    net::post(acceptorStrand_, [&shutdownWasSuccessful, this]() {
-      acceptor_.close();
-      shutdownWasSuccessful.test_and_set();
-      shutdownWasSuccessful.notify_all();
-    });
+    auto future =
+        net::post(acceptorStrand_,
+                  std::packaged_task<void()>([this]() { acceptor_.close(); }));
 
-    // Wait until the posted task has successfully executed and notified us via
-    // the flag.
-    //
-    // NOTE: The while loop is needed because notifications can also occur
-    // spuriously (without being triggered explicitly by our code). The argument
-    // of the `wait` is `false` because the semantics is to wait for a change in
-    // the specified value.
-    while (!shutdownWasSuccessful.test()) {
-      shutdownWasSuccessful.wait(false);
-    }
+    // Wait until the posted task has successfully executed
+    future.wait();
   }
-
-  // _____________________________________________________________________
-  net::io_context& getIoContext() { return ioContext_; };
 
  private:
   // Format a boost/beast error and log it to console
@@ -180,12 +165,7 @@ class HttpServer {
         auto socket =
             co_await acceptor_.async_accept(boost::asio::use_awaitable);
         // Schedule the session such that it may run in parallel to this loop.
-        // the `strand` makes each session conceptually single-threaded.
-        // TODO<joka921> is this even needed, to my understanding,
-        // nothing may happen in parallel within an HTTP session, but
-        // then again this does no harm.
-        net::co_spawn(net::make_strand(ioContext_), session(std::move(socket)),
-                      net::detached);
+        net::co_spawn(ioContext_, session(std::move(socket)), net::detached);
       } catch (const boost::system::system_error& b) {
         logBeastError(b.code(), "Error in the accept loop");
       }

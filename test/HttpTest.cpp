@@ -20,24 +20,24 @@ TEST(HttpServer, HttpTest) {
   // Create and run a HTTP server, which replies to each request with three
   // lines: the request method (GET, POST, or OTHER), a copy of the request
   // target (might be empty), and a copy of the request body (might be empty).
-  TestHttpServer httpServer([](auto request,
-                               auto&& send) -> boost::asio::awaitable<void> {
-    std::string methodName;
-    switch (request.method()) {
-      case boost::beast::http::verb::get:
-        methodName = "GET";
-        break;
-      case boost::beast::http::verb::post:
-        methodName = "POST";
-        break;
-      default:
-        methodName = "OTHER";
-    }
-    std::string response =
-        absl::StrCat(methodName, "\n", request.target(), "\n", request.body());
-    co_return co_await send(
-        createOkResponse(response, request, ad_utility::MediaType::textPlain));
-  });
+  TestHttpServer httpServer(
+      [](auto request, auto&& send) -> boost::asio::awaitable<void> {
+        std::string methodName;
+        switch (request.method()) {
+          case boost::beast::http::verb::get:
+            methodName = "GET";
+            break;
+          case boost::beast::http::verb::post:
+            methodName = "POST";
+            break;
+          default:
+            methodName = "OTHER";
+        }
+        std::string response = absl::StrCat(
+            methodName, "\n", toStd(request.target()), "\n", request.body());
+        co_return co_await send(createOkResponse(
+            response, request, ad_utility::MediaType::textPlain));
+      });
   httpServer.runInOwnThread();
 
   // Create a client, and send a GET and a POST request in one session.
