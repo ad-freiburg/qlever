@@ -37,13 +37,13 @@ using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
 }  // namespace
 
 TEST(EngineTest, distinctTest) {
-  IdTable inp{makeIdTableFromVector(
+  IdTable input{makeIdTableFromVector(
       {{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
 
   IdTable result{4, makeAllocator()};
 
   std::vector<size_t> keepIndices{{1, 2}};
-  CALL_FIXED_SIZE(4, Engine::distinct, inp, keepIndices, &result);
+  CALL_FIXED_SIZE(4, Engine::distinct, input, keepIndices, &result);
 
   // For easier checking.
   IdTable expectedResult{
@@ -52,12 +52,12 @@ TEST(EngineTest, distinctTest) {
 }
 
 TEST(EngineTest, distinctWithEmptyInput) {
-  IdTable inp{1, makeAllocator()};
+  IdTable input{1, makeAllocator()};
   // Deliberately input a non-empty result to check that it is
   // overwritten by the (empty) input.
   IdTable result = makeIdTableFromVector({{3}});
-  CALL_FIXED_SIZE(1, Engine::distinct, inp, std::vector<size_t>{}, &result);
-  ASSERT_EQ(inp, result);
+  CALL_FIXED_SIZE(1, Engine::distinct, input, std::vector<size_t>{}, &result);
+  ASSERT_EQ(input, result);
 }
 
 void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,

@@ -1530,7 +1530,7 @@ queries:
   - query: distinct-with-empty-input
     type: no-text
     sparql: |
-      SELECT ?x WHERE {
+      SELECT DISTINCT ?x WHERE {
         ?x <not_existing_310131492157> <adjfoie.axjdi>
       }
     checks:
