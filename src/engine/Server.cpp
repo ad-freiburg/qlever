@@ -185,7 +185,8 @@ ad_utility::UrlParser::UrlPathAndParameters Server::getUrlPathAndParameters(
     }
     if (contentType.starts_with(contentTypeSparqlQuery)) {
       return ad_utility::UrlParser::parseGetRequestTarget(
-          absl::StrCat(toStd(request.target()), "?query=", request.body()), false);
+          absl::StrCat(toStd(request.target()), "?query=", request.body()),
+          false);
     }
     throw std::runtime_error(
         absl::StrCat("POST request with content type \"", contentType,

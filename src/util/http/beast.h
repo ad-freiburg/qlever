@@ -34,6 +34,4 @@
 #include <boost/beast.hpp>
 
 // For boost versions prior to 1.81 this should be no-op
-inline std::string_view toStd(boost::core::string_view view) {
-  return view;
-}
+inline std::string_view toStd(boost::core::string_view view) { return view; }
