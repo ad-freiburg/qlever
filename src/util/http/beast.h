@@ -27,14 +27,17 @@
 // Don't set header for boost beast 1.81 and forward, because it is noop there.
 #if defined BOOST_BEAST_VERSION && BOOST_BEAST_VERSION < 345
 #define BOOST_BEAST_USE_STD_STRING_VIEW
-using beast_string_view = std::string_view;
-#else
-using beast_string_view = boost::core::string_view;
 #endif
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/beast.hpp>
+
+#if defined BOOST_BEAST_VERSION && BOOST_BEAST_VERSION < 345
+using beast_string_view = std::string_view;
+#else
+using beast_string_view = boost::core::string_view;
+#endif
 
 // For boost versions prior to 1.81 this should be no-op
 inline std::string_view toStd(beast_string_view view) { return view; }
