@@ -4,13 +4,16 @@
 
 #pragma once
 
+#include <concepts>
 #include <exception>
 #include <fstream>
 #include <sstream>
 #include <string>
 
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/File.h"
+#include "util/Forward.h"
 #include "util/Iterators.h"
 #include "util/ResetWhenMoved.h"
 
@@ -151,12 +154,11 @@ class MmapVector {
   MmapVector(MmapVector<T>&& other) noexcept;
   MmapVector& operator=(MmapVector<T>&& other) noexcept;
 
-  template <class U>
-  using isNotMmapVector =
-      std::enable_if_t<!std::is_base_of_v<MmapVector<T>, std::decay_t<U>>>;
-  template <class First, typename... Args, typename = isNotMmapVector<First>>
-  MmapVector(First&& first, Args&&... args) : MmapVector<T>() {
-    this->open(std::forward<First>(first), std::forward<Args>(args)...);
+  template <class Arg, typename... Args>
+  requires(!std::derived_from<std::remove_cvref_t<Arg>, MmapVector<T>>)
+      MmapVector(Arg&& arg, Args&&... args)
+      : MmapVector<T>() {
+    this->open(AD_FWD(arg), AD_FWD(args)...);
   }
 
   // create Array of given size  fill with default value
@@ -310,9 +312,12 @@ class MmapVectorView : private MmapVector<T> {
 
   // construct with any combination of arguments that is supported by the open()
   // member function
-  template <typename... Args>
-  MmapVectorView(Args&&... args) {
-    open(std::forward<Args>(args)...);
+  template <typename Arg, typename... Args>
+  requires(
+      !std::same_as<std::remove_cvref_t<Arg>,
+                    MmapVectorView>) explicit MmapVectorView(Arg&& arg,
+                                                             Args&&... args) {
+    open(AD_FWD(arg), AD_FWD(args)...);
   }
 
   // Move construction and assignment are allowed, but not copying
@@ -371,12 +376,13 @@ class MmapVectorTmp : public MmapVector<T> {
       : MmapVector<T>(std::move(rhs)) {}
   MmapVectorTmp(const MmapVectorTmp<T>& rhs) = delete;
 
-  template <class U>
-  using isNotMmapVectorTmp =
-      std::enable_if_t<!std::is_base_of_v<MmapVectorTmp<T>, std::decay_t<U>>>;
-  template <class First, typename... Args, typename = isNotMmapVectorTmp<First>>
-  MmapVectorTmp(First&& first, Args&&... args) : MmapVector<T>() {
-    this->open(std::forward<First>(first), std::forward<Args>(args)...);
+  template <class Arg, typename... Args>
+  requires(
+      !std::derived_from<std::remove_cvref_t<Arg>,
+                         MmapVectorTmp>) explicit MmapVectorTmp(Arg&& arg,
+                                                                Args&&... args)
+      : MmapVector<T>() {
+    this->open(AD_FWD(arg), AD_FWD(args)...);
   }
 
   // If we still own a file, delete it after cleaning up
@@ -384,7 +390,9 @@ class MmapVectorTmp : public MmapVector<T> {
   ~MmapVectorTmp() {
     // if the filename is not empty, we still own a file
     std::string oldFilename = this->_filename;
-    this->close();
+    std::string message = absl::StrCat(
+        "Error while unmapping a file with name \"", oldFilename, "\"");
+    ad_utility::terminateIfThrows([this]() { this->close(); }, message);
     if (!oldFilename.empty()) {
       ad_utility::deleteFile(oldFilename);
     }

@@ -60,21 +60,14 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultTable) {
-  // Special case: A table with no rows, or columns. Should just throw
-  // exceptions, if you try to do anything with it.
-  {
-    ResultTable table("0 by 0 table", {}, {});
-
-    ASSERT_EQ(table.descriptor_, "0 by 0 table");
-    ASSERT_TRUE(table.rowNames_.empty());
-    ASSERT_TRUE(table.columnNames_.empty());
-    ASSERT_TRUE(table.entries_.empty());
-
-    // Those should just throw exceptions.
-    ASSERT_ANY_THROW(table.addMeasurement(0, 0, []() {}));
-    ASSERT_ANY_THROW(table.setEntry(0, 0, (float)0.1));
-    ASSERT_ANY_THROW(table.getEntry<float>(0, 0));
-  }
+  /*
+  Special case: A table with no rows, or columns. Should throw an exception
+  on creation, because it's quite the stupid idea.
+  Additionally, operations on such an empty table can create segmentation
+  faults. The string conversion of `ResultTable` uses `std::ranges::max`, which
+  really doesn't play well with empty vectors.
+  */
+  ASSERT_ANY_THROW(ResultTable("0 by 0 table", {}, {}));
 
   // Normal case.
   const std::vector<std::string> rowNames{"row1", "row2"};
