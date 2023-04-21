@@ -34,7 +34,7 @@ TEST(HttpServer, HttpTest) {
         methodName = "OTHER";
     }
     std::string response =
-        absl::StrCat(methodName, "\n", request.target(), "\n", request.body());
+        absl::StrCat(methodName, "\n", toStd(request.target()), "\n", request.body());
     co_return co_await send(
         createOkResponse(response, request, ad_utility::MediaType::textPlain));
   });
