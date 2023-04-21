@@ -206,6 +206,21 @@ ResultTable::operator std::string() const {
 }
 
 // ____________________________________________________________________________
+size_t ResultTable::numRows() const{
+  return entries_.size();
+}
+
+// ____________________________________________________________________________
+size_t ResultTable::numColumns() const{
+  /*
+  If nobody played around with the private member variables, every row
+  should have the same amount of columns and there should be AT LEAST one row,
+  and one column. So we can just return the length of the first row.
+  */
+  return entries_.at(0).size();
+}
+
+// ____________________________________________________________________________
 void to_json(nlohmann::json& j, const ResultTable& resultTable) {
   j = nlohmann::json{{"descriptor", resultTable.descriptor_},
                      {"rowNames", resultTable.rowNames_},

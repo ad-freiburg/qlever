@@ -204,8 +204,8 @@ class ResultTable : public BenchmarkMetadataGetter {
   @param row, column Which table entry to read. Starts with `(0,0)`.
   */
   template <typename T>
-  requires std::is_same_v<T, float> || std::is_same_v<T, std::string> T
-  getEntry(const size_t row, const size_t column) {
+  requires std::is_same_v<T, float> || std::is_same_v<T, std::string>
+  T getEntry(const size_t row, const size_t column) {
     // There is a chance, that the entry of the table does NOT have type T,
     // in which case this will cause an error. As this is a mistake on the
     // side of the user, we don't really care.
@@ -214,6 +214,16 @@ class ResultTable : public BenchmarkMetadataGetter {
 
   // User defined conversion to `std::string`.
   explicit operator std::string() const;
+
+  /*
+  The number of rows.
+  */
+  size_t numRows() const;
+
+  /*
+  The number of columns.
+  */
+  size_t numColumns() const;
 
   // JSON serialization.
   friend void to_json(nlohmann::json& j, const ResultTable& resultTable);
