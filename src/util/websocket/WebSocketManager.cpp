@@ -42,22 +42,29 @@ void registerCallback(WebSocketId webSocketId, QueryUpdateCallback callback) {
   listeningWebSockets[webSocketId] = std::move(callback);
 }
 
-void fireCallbackAndRemoveIfPresent(WebSocketId webSocketId, std::optional<RuntimeInformationSnapshot> runtimeInformation) {
-  std::lock_guard lock{listeningWebSocketsMutex};
+// ONLY CALL THIS IF YOU HOLD the listeningWebSocketsMutex!!!
+void fireCallbackAndRemoveIfPresentNoLock(WebSocketId webSocketId, std::optional<RuntimeInformationSnapshot> runtimeInformation) {
   if (listeningWebSockets.count(webSocketId) != 0) {
     listeningWebSockets.at(webSocketId)(std::move(runtimeInformation));
     listeningWebSockets.erase(webSocketId);
   }
 }
 
-void fireAllCallbacksForQuery(QueryId queryId, RuntimeInformationSnapshot runtimeInformationSnapshot) {
+void fireCallbackAndRemoveIfPresent(WebSocketId webSocketId, std::optional<RuntimeInformationSnapshot> runtimeInformation) {
+    std::lock_guard lock{listeningWebSocketsMutex};
+    fireCallbackAndRemoveIfPresentNoLock(webSocketId, std::move(runtimeInformation));
+}
+
+bool fireAllCallbacksForQuery(QueryId queryId, RuntimeInformationSnapshot runtimeInformationSnapshot) {
   std::lock_guard lock1{activeWebSocketsMutex};
   std::lock_guard lock2{listeningWebSocketsMutex};
   auto range = activeWebSockets.equal_range(queryId);
+  size_t counter = 0;
   for (auto it = range.first; it != range.second; it++) {
-    // TODO optimize out redundant lock in this case
-    fireCallbackAndRemoveIfPresent(it->second, runtimeInformationSnapshot);
+    fireCallbackAndRemoveIfPresentNoLock(it->second, runtimeInformationSnapshot);
+    counter++;
   }
+  return counter < activeWebSockets.count(queryId);
 }
 
 void enableWebSocket(WebSocketId webSocketId, QueryId queryId) {
@@ -66,18 +73,24 @@ void enableWebSocket(WebSocketId webSocketId, QueryId queryId) {
 }
 
 void disableWebSocket(WebSocketId webSocketId, QueryId queryId) {
-  std::lock_guard lock{activeWebSocketsMutex};
-  removeKeyValuePair(activeWebSockets, queryId, webSocketId);
-  fireCallbackAndRemoveIfPresent(webSocketId, std::nullopt);
+  bool noListenersLeft;
+  {
+    std::lock_guard lock{activeWebSocketsMutex};
+    removeKeyValuePair(activeWebSockets, queryId, webSocketId);
+    fireCallbackAndRemoveIfPresent(webSocketId, std::nullopt);
+    noListenersLeft = activeWebSockets.count(queryId) == 0;
+  }
+  if (noListenersLeft) {
+    query_state::clearQueryInfo(queryId);
+  }
 }
 
 // Based on https://stackoverflow.com/a/69285751
 template<typename CompletionToken>
 auto waitForEvent(QueryId queryId, common::TimeStamp lastUpdate, CompletionToken&& token) {
   auto initiate = [lastUpdate]<typename Handler>(Handler&& self, QueryId queryId) mutable {
-    auto callback = [self = std::make_shared<Handler>(std::forward<Handler>(self))](std::optional<RuntimeInformationSnapshot> snapshot) {
+    auto callback = [self = std::make_shared<Handler>(std::forward<Handler>(self)), queryId](std::optional<RuntimeInformationSnapshot> snapshot) {
       (*self)(snapshot);
-      // TODO clear data if snapshot indicates this is the last update for a given query and this is the last active websocket waiting on said query
     };
     auto potentialUpdate = query_state::getIfUpdatedSince(queryId, lastUpdate);
     if (potentialUpdate.has_value()) {
