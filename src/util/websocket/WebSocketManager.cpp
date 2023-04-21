@@ -8,6 +8,7 @@
 
 #include <iostream>
 #include <optional>
+#include <mutex>
 
 #include "../MultiMap.h"
 #include "./Common.h"
@@ -24,23 +25,25 @@ typedef uint32_t WebSocketId;
 typedef std::function<void(std::optional<RuntimeInformationSnapshot>)> QueryUpdateCallback;
 
 
+static std::mutex activeWebSocketsMutex{};
 static absl::btree_multimap<QueryId, WebSocketId> activeWebSockets{};
 // Note there may be active websockets that are not currently listening
 // because of concurrency.
+static std::mutex listeningWebSocketsMutex{};
 static absl::flat_hash_map<WebSocketId, QueryUpdateCallback> listeningWebSockets{};
 
 static std::atomic<WebSocketId> webSocketIdCounter{0};
 
 void registerCallback(WebSocketId webSocketId, QueryUpdateCallback callback) {
-  // TODO lock here for activeWebSockets
-  // TODO assert websocket is in activeWebSockets
-  // TODO lock here for listeningWebSockets
-  // TODO assert no callback active
+  std::lock_guard lock1{activeWebSocketsMutex};
+  AD_CORRECTNESS_CHECK(activeWebSockets.count(webSocketId) != 0);
+  std::lock_guard lock2{listeningWebSocketsMutex};
+  AD_CORRECTNESS_CHECK(listeningWebSockets.count(webSocketId) == 0);
   listeningWebSockets[webSocketId] = std::move(callback);
 }
 
 void fireCallbackAndRemoveIfPresent(WebSocketId webSocketId, std::optional<RuntimeInformationSnapshot> runtimeInformation) {
-  // TODO lock here for listeningWebSockets
+  std::lock_guard lock{listeningWebSocketsMutex};
   if (listeningWebSockets.count(webSocketId) != 0) {
     listeningWebSockets.at(webSocketId)(std::move(runtimeInformation));
     listeningWebSockets.erase(webSocketId);
@@ -48,8 +51,8 @@ void fireCallbackAndRemoveIfPresent(WebSocketId webSocketId, std::optional<Runti
 }
 
 void fireAllCallbacksForQuery(QueryId queryId, RuntimeInformationSnapshot runtimeInformationSnapshot) {
-  // TODO lock here for activeWebSockets
-  // TODO lock here for listeningWebSockets
+  std::lock_guard lock1{activeWebSocketsMutex};
+  std::lock_guard lock2{listeningWebSocketsMutex};
   auto range = activeWebSockets.equal_range(queryId);
   for (auto it = range.first; it != range.second; it++) {
     // TODO optimize out redundant lock in this case
@@ -58,12 +61,12 @@ void fireAllCallbacksForQuery(QueryId queryId, RuntimeInformationSnapshot runtim
 }
 
 void enableWebSocket(WebSocketId webSocketId, QueryId queryId) {
-  // TODO lock here for activeWebSockets
+  std::lock_guard lock{activeWebSocketsMutex};
   activeWebSockets.insert({webSocketId, queryId});
 }
 
 void disableWebSocket(WebSocketId webSocketId, QueryId queryId) {
-  // TODO lock here for activeWebSockets
+  std::lock_guard lock{activeWebSocketsMutex};
   removeKeyValuePair(activeWebSockets, queryId, webSocketId);
   fireCallbackAndRemoveIfPresent(webSocketId, std::nullopt);
 }
@@ -112,6 +115,9 @@ net::awaitable<void> waitForServerEvents(websocket& ws, WebSocketId webSocketId,
   while (ws.is_open()) {
     auto update = co_await waitForEvent(queryId, lastUpdate, net::use_awaitable);
     if (!update.has_value()) {
+      if (ws.is_open()) {
+        co_await ws.async_close(beast::websocket::close_code::normal, net::use_awaitable);
+      }
       break;
     }
     ws.text(true);
@@ -143,14 +149,15 @@ net::awaitable<void> connectionLifecycle(tcp::socket socket, http::request<http:
     co_await (net::co_spawn(strand, waitForServerEvents(ws, webSocketId, queryId), net::use_awaitable)
               && net::co_spawn(strand, handleClientCommands(ws, webSocketId, queryId), net::use_awaitable));
 
-
-    co_await ws.async_close(beast::websocket::close_code::normal, net::use_awaitable);
+    // TODO can this happen?
+    if (ws.is_open()) {
+      co_await ws.async_close(beast::websocket::close_code::normal, net::use_awaitable);
+    }
 
   } catch (boost::system::system_error& error) {
     if (error.code() != beast::websocket::error::closed) {
       // There was an unexpected error, rethrow
-      // TODO does this move make sense?
-      throw std::move(error);
+      throw;
     }
     // TODO check if there are errors where the socket needs to be closed explicitly
   }
