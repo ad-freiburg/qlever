@@ -19,6 +19,7 @@
 #include "../benchmark/util/IdTableHelperFunction.h"
 #include "../test/util/IdTableHelpers.h"
 #include "../test/util/JoinHelpers.h"
+#include "util/TypeTraits.h"
 
 namespace ad_benchmark {
 /*
@@ -101,11 +102,11 @@ class BM_UnsortedAndSortedIdTable: public BenchmarkInterface {
   
     // Sorts the table IN PLACE and the uses the normal join on them.
     auto sortThenJoinLambdaWrapper = [&]() {
-          // Sorting the tables by the join column.
-          sortIdTableByJoinColumnInPlace(a);
-          sortIdTableByJoinColumnInPlace(b);
+      // Sorting the tables by the join column.
+      sortIdTableByJoinColumnInPlace(a);
+      sortIdTableByJoinColumnInPlace(b);
 
-          useJoinFunctionOnIdTables(a, b, joinLambda);
+      useJoinFunctionOnIdTables(a, b, joinLambda);
     };
 
     auto joinLambdaWrapper = [&]() {
@@ -113,16 +114,16 @@ class BM_UnsortedAndSortedIdTable: public BenchmarkInterface {
     };
 
     auto hashJoinLambdaWrapper = [&]() {
-          useJoinFunctionOnIdTables(a, b, hashJoinLambda);
+      useJoinFunctionOnIdTables(a, b, hashJoinLambda);
     };
 
     // Because it's easier to read/interpret, the benchmarks are entries in tables.
     auto& sortedIdTablesTable = results.addTable("Sorted IdTables",
-        {"Merge/Galloping join", "Hashed join"},
-        {"Overlapping join column entries", "Non-overlapping join column entries"});
+      {"Merge/Galloping join", "Hashed join"},
+      {"Overlapping join column entries", "Non-overlapping join column entries"});
     auto& unsortedIdTablesTable = results.addTable("Unsorted IdTables",
-        {"Merge/Galloping join", "Hashed join"},
-        {"Overlapping join column entries", "Non-overlapping join column entries"});
+      {"Merge/Galloping join", "Hashed join"},
+      {"Overlapping join column entries", "Non-overlapping join column entries"});
 
     // Benchmarking with non-overlapping IdTables.
  
@@ -152,18 +153,14 @@ class BM_UnsortedAndSortedIdTable: public BenchmarkInterface {
   }
 };
 
-template<typename T>
-concept isSizeTVector = std::is_same<T, std::vector<size_t>>::value;
+// Is the given type `T` of type `Type`, or is it a vector, containing
+// objects of type `Type`?
+template<typename T, typename Type>
+concept isTypeOrVectorOfType = std::is_same_v<Type, T> || std::is_same_v<std::vector<Type>, T>;
 
-template<typename T>
-concept isFloatVector = std::is_same<T, std::vector<float>>::value;
-
-template<typename T, typename... objects>
-concept areAllTheSameType = (std::is_same<T, objects>::value && ...);
-
-template<typename vectorContent, typename T, typename... objects>
-concept onlyFirstIsVector = std::is_same<T, std::vector<vectorContent>>::value
-  && areAllTheSameType<vectorContent, objects...>;
+// Is exactly one of the given types a `std::vector`?
+template<typename... Ts>
+concept exactlyOneVector = (ad_utility::isVector<Ts> + ...) == 1;
 
 /*
  * @brief Create a benchmark table for join algorithm, with the given
@@ -201,17 +198,11 @@ concept onlyFirstIsVector = std::is_same<T, std::vector<vectorContent>>::value
  *  size to `Amount of rows * ratio`, which affects the possibility of
  *  duplicates. Important: `Amount of rows * ratio` must be a natural number.
  */
-template<typename T1, typename T2, typename T3, typename T4,
-  typename TF, typename T5 = float, typename T6 = float>
-requires ((onlyFirstIsVector<size_t, T1, T2, T3, T4> ||
-      onlyFirstIsVector<size_t, T2, T1, T3, T4> ||
-      onlyFirstIsVector<size_t, T3, T2, T1, T4> ||
-      onlyFirstIsVector<size_t, T4, T2, T3, T1>) &&
-    areAllTheSameType<float, TF, T5, T6>) ||
-  ((onlyFirstIsVector<float, TF, T5, T6> ||
-    onlyFirstIsVector<float, T5, TF, T6> ||
-    onlyFirstIsVector<float, T6, T5, TF>) &&
-    areAllTheSameType<size_t, T1, T2, T3, T4>)
+template<isTypeOrVectorOfType<size_t> T1, isTypeOrVectorOfType<size_t> T2,
+  isTypeOrVectorOfType<size_t> T3, isTypeOrVectorOfType<size_t> T4,
+  isTypeOrVectorOfType<float> TF, isTypeOrVectorOfType<float> T5 = float,
+  isTypeOrVectorOfType<float> T6 = float>
+requires exactlyOneVector<T1, T2, T3, T4, TF, T6, T6>
 static void makeBenchmarkTable(BenchmarkResults* records, const TF& overlap,
     const bool smallerTableSorted, const bool biggerTableSorted, const T1& ratioRows,
     const T2& smallerTableAmountRows, const T3& smallerTableAmountColumns,
