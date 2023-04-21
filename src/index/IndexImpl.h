@@ -696,9 +696,8 @@ class IndexImpl {
                             SortedTriples&& sortedTriples, size_t c0, size_t c1,
                             size_t c2, auto&&... perTripleCallbacks);
 
-  CompressedRelationMetadata writeSwitchedRel(CompressedRelationWriter* out,
-                                              Id currentRel,
-                                              BufferedIdTable* bufPtr);
+  static CompressedRelationMetadata writeSwitchedRel(
+      CompressedRelationWriter* out, Id currentRel, BufferedIdTable* bufPtr);
 
   // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,
