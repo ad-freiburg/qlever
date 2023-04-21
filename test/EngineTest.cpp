@@ -51,6 +51,15 @@ TEST(EngineTest, distinctTest) {
   ASSERT_EQ(expectedResult, result);
 }
 
+TEST(EngineTest, distinctWithEmptyInput) {
+  IdTable inp{1, makeAllocator()};
+  // Deliberately input a non-empty result to check that it is
+  // overwritten by the (empty) input.
+  IdTable result = makeIdTableFromVector({{3}});
+  CALL_FIXED_SIZE(1, Engine::distinct, inp, std::vector<size_t>{}, &result);
+  ASSERT_EQ(inp, result);
+}
+
 void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
                       JoinColumns jcls, const IdTable& expectedResult) {
   {
