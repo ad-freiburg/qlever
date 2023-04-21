@@ -25,13 +25,15 @@ jobs:
         with:
           submodules: 'recursive'
       - name: Install dependencies
+        # See https://docs.docker.com/engine/install/ubuntu/
         run: |
           sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
+          sudo apt remove docker docker-engine docker.io containerd runc
           curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
           sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable"
           sudo apt update
           sudo apt-cache policy docker-ce
-          sudo apt install docker-ce
+          sudo apt install docker-ce containerd.io
 
       - name: Prepare folders
         run:  mkdir -p ${{github.workspace}}/e2e_data/scientist-collection/ && sudo chmod -R o+rwx ${{github.workspace}}/e2e_data
