@@ -41,4 +41,3 @@ constexpr std::string_view toStd(std::string_view view) { return view; }
 #else
 inline std::string_view toStd(boost::core::string_view view) { return view; }
 #endif
-
