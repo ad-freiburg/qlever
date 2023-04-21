@@ -25,7 +25,7 @@ class ZstdWrapper {
   // Decompress the given byte array, assuming that the size of the decompressed
   // data is known.
   template <typename T>
-    requires(std::is_trivially_copyable_v<T>)
+  requires(std::is_trivially_copyable_v<T>)
   static std::vector<T> decompress(void* src, size_t numBytes,
                                    size_t knownOriginalSize) {
     knownOriginalSize *= sizeof(T);
@@ -39,7 +39,7 @@ class ZstdWrapper {
   // Decompress the given byte array to the given buffer of the given size,
   // returning the number of bytes of the decompressed data.
   template <typename T>
-    requires(std::is_trivially_copyable_v<T>)
+  requires(std::is_trivially_copyable_v<T>)
   static size_t decompressToBuffer(const char* src, size_t numBytes, T* buffer,
                                    size_t bufferCapacity) {
     auto decompressedSize = ZSTD_decompress(buffer, bufferCapacity,

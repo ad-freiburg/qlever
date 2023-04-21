@@ -112,20 +112,20 @@ static constexpr bool SerializerMatchesConstness =
  * - The second argument to `serialize` is a `T`, `T&`, `const T&`, `T&&` etc.
  * - If the `arg` is const then the serializer is a `WriteSerializer`.
  */
-#define AD_SERIALIZE_FUNCTION(T)                                         \
-  template <ad_utility::serialization::Serializer S,                     \
-            ad_utility::SimilarTo<T> U>                                  \
-    requires ad_utility::serialization::SerializerMatchesConstness<S, U> \
+#define AD_SERIALIZE_FUNCTION(T)                                       \
+  template <ad_utility::serialization::Serializer S,                   \
+            ad_utility::SimilarTo<T> U>                                \
+  requires ad_utility::serialization::SerializerMatchesConstness<S, U> \
   void serialize(S& serializer, U&& arg)
 
 /// Similar to `AD_SERIALIZE_FUNCTION` but defines a `friend` function to also
 /// access private members of a class. It is possible to declare the friend
 /// using `AD_SERIALIZE_FRIEND_FUNCTION(Type);` and to define it outside of the
 /// class with `AD_SERIALIZE_FUNCTION(Type){...}`
-#define AD_SERIALIZE_FRIEND_FUNCTION(T)                                  \
-  template <ad_utility::serialization::Serializer S,                     \
-            ad_utility::SimilarTo<T> U>                                  \
-    requires ad_utility::serialization::SerializerMatchesConstness<S, U> \
+#define AD_SERIALIZE_FRIEND_FUNCTION(T)                                \
+  template <ad_utility::serialization::Serializer S,                   \
+            ad_utility::SimilarTo<T> U>                                \
+  requires ad_utility::serialization::SerializerMatchesConstness<S, U> \
   friend void serialize(S& serializer, U&& arg)
 
 /**
@@ -141,22 +141,19 @@ static constexpr bool SerializerMatchesConstness =
  */
 #define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(Constraint)        \
   template <ad_utility::serialization::Serializer S, typename T> \
-    requires(Constraint)                                         \
-  void serialize(S& serializer, T&& arg)
+  requires(Constraint) void serialize(S& serializer, T&& arg)
 
 /// Similar to `AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT` but only for
 /// `WriteSerializer`s. For an exmple usage see `SerializeVector.h`
 #define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_WRITE(Constraint)       \
   template <ad_utility::serialization::WriteSerializer S, typename T> \
-    requires(Constraint)                                              \
-  void serialize(S& serializer, T&& arg)
+  requires(Constraint) void serialize(S& serializer, T&& arg)
 
 /// Similar to `AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT` but only for
 /// `ReadSerializer`s. For an example usage see `SerializeVector.h`
 #define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_READ(Constraint)       \
   template <ad_utility::serialization::ReadSerializer S, typename T> \
-    requires(Constraint)                                             \
-  void serialize(S& serializer, T&& arg)
+  requires(Constraint) void serialize(S& serializer, T&& arg)
 
 /**
  * Operator that allows the short hand notation
@@ -236,7 +233,7 @@ void serialize(S& serializer, T&& t) {
 /// Arithmetic types (the builtins like int, char, double) can be trivially
 /// serialized.
 template <typename T>
-  requires std::is_arithmetic_v<std::decay_t<T>>
+requires std::is_arithmetic_v<std::decay_t<T>>
 std::true_type allowTrivialSerialization(T, auto) {
   return {};
 }

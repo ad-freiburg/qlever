@@ -59,8 +59,7 @@ class ParserBatcher {
   // getBatch() member function. The first requires enables this function only
   // if the second "requires" evaluates to true
   std::optional<std::vector<TurtleTriple>> getBatch()
-    requires requires(Parser p) { p.getBatch(); }
-  {
+      requires requires(Parser p) { p.getBatch(); } {
     if (m_numTriplesAlreadyParsed >= m_maxNumTriples) {
       return std::nullopt;
     }

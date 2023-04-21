@@ -28,7 +28,7 @@ namespace ad_benchmark {
 @param functionToMeasure Must be a function, or callable.
 */
 template <typename Function>
-  requires std::invocable<Function>
+requires std::invocable<Function>
 static float measureTimeOfFunction(const Function& functionToMeasure) {
   ad_utility::timer::Timer benchmarkTimer(ad_utility::timer::Timer::Started);
   functionToMeasure();
@@ -81,7 +81,7 @@ class ResultEntry : public BenchmarkMetadataGetter {
   measured and saved.
   */
   template <typename Function>
-    requires std::invocable<Function>
+  requires std::invocable<Function>
   ResultEntry(const std::string& descriptor, const Function& functionToMeasure)
       : descriptor_{descriptor},
         measuredTime_{measureTimeOfFunction(functionToMeasure)} {}
@@ -122,7 +122,7 @@ class ResultGroup : public BenchmarkMetadataGetter {
   measured and saved.
   */
   template <typename Function>
-    requires std::invocable<Function>
+  requires std::invocable<Function>
   ResultEntry& addMeasurement(const std::string& descriptor,
                               const Function& functionToMeasure) {
     entries_.push_back(ad_utility::make_copyable_unique<ResultEntry>(
@@ -181,7 +181,7 @@ class ResultTable : public BenchmarkMetadataGetter {
   @param functionToMeasure The function, which execution time will be measured.
   */
   template <typename Function>
-    requires std::invocable<Function>
+  requires std::invocable<Function>
   void addMeasurement(const size_t& row, const size_t& column,
                       const Function& functionToMeasure) {
     AD_CONTRACT_CHECK(row < rowNames_.size() && column < columnNames_.size());
@@ -209,7 +209,7 @@ class ResultTable : public BenchmarkMetadataGetter {
   @param row, column Which table entry to read. Starts with `(0,0)`.
   */
   template <typename T>
-    requires std::is_same_v<T, float> || std::is_same_v<T, std::string>
+  requires std::is_same_v<T, float> || std::is_same_v<T, std::string>
   T getEntry(const size_t row, const size_t column) {
     // There is a chance, that the entry of the table does NOT have type T,
     // in which case this will cause an error. As this is a mistake on the

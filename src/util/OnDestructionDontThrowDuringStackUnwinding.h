@@ -11,7 +11,7 @@ namespace detail {
 // The implementation of `makeOnDestructionDontThrowDuringStackUnwinding` (see
 // below).
 template <typename F>
-  requires(std::is_invocable_v<F>)
+requires(std::is_invocable_v<F>)
 class OnDestructionDontThrowDuringStackUnwinding {
   static_assert(
       !std::is_nothrow_invocable_v<F>,

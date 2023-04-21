@@ -56,8 +56,7 @@ class BenchmarkConfiguration {
   */
   template <typename ReturnType>
   std::optional<ReturnType> getValueByNestedKeys(const auto&... keys) const
-    requires(sizeof...(keys) > 0)
-  {
+      requires(sizeof...(keys) > 0) {
     // Easier usage.
     using ConstJsonPointer = const nlohmann::json::value_type*;
 

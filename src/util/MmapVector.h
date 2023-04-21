@@ -155,7 +155,7 @@ class MmapVector {
   MmapVector& operator=(MmapVector<T>&& other) noexcept;
 
   template <class Arg, typename... Args>
-    requires(!std::derived_from<std::remove_cvref_t<Arg>, MmapVector<T>>)
+  requires(!std::derived_from<std::remove_cvref_t<Arg>, MmapVector<T>>)
   MmapVector(Arg&& arg, Args&&... args) : MmapVector<T>() {
     this->open(AD_FWD(arg), AD_FWD(args)...);
   }
@@ -312,7 +312,7 @@ class MmapVectorView : private MmapVector<T> {
   // construct with any combination of arguments that is supported by the open()
   // member function
   template <typename Arg, typename... Args>
-    requires(!std::same_as<std::remove_cvref_t<Arg>, MmapVectorView>)
+  requires(!std::same_as<std::remove_cvref_t<Arg>, MmapVectorView>)
   explicit MmapVectorView(Arg&& arg, Args&&... args) {
     open(AD_FWD(arg), AD_FWD(args)...);
   }
@@ -374,7 +374,7 @@ class MmapVectorTmp : public MmapVector<T> {
   MmapVectorTmp(const MmapVectorTmp<T>& rhs) = delete;
 
   template <class Arg, typename... Args>
-    requires(!std::derived_from<std::remove_cvref_t<Arg>, MmapVectorTmp>)
+  requires(!std::derived_from<std::remove_cvref_t<Arg>, MmapVectorTmp>)
   explicit MmapVectorTmp(Arg&& arg, Args&&... args) : MmapVector<T>() {
     this->open(AD_FWD(arg), AD_FWD(args)...);
   }

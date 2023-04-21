@@ -40,7 +40,7 @@ provided translation function for the vector entries.
 and returns a `nlohmann:json` object.
 */
 template <typename VectorType, typename TranslationFunction>
-  requires TransformsSourceTypeToJson<VectorType, TranslationFunction>
+requires TransformsSourceTypeToJson<VectorType, TranslationFunction>
 static nlohmann::json transformIntoJsonArray(
     const std::vector<VectorType>& vec,
     TranslationFunction translationFunction) {

@@ -23,7 +23,7 @@
  * (because of the std::enable_if) and there will be a compile-time error.
  */
 template <typename Int>
-  requires(std::is_integral_v<Int> && sizeof(Int) <= sizeof(uint64_t))
+requires(std::is_integral_v<Int> && sizeof(Int) <= sizeof(uint64_t))
 class FastRandomIntGenerator {
  public:
   FastRandomIntGenerator() {

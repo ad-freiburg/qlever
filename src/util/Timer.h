@@ -184,7 +184,7 @@ class TimeoutTimer : public Timer {
   // creates the error message lazily when the timeout occurs. This can be used
   // to make calling this function cheaper in the typical "no timeout" case.
   template <typename F>
-    requires std::is_invocable_r_v<std::string_view, F>
+  requires std::is_invocable_r_v<std::string_view, F>
   void checkTimeoutAndThrow(F&& f) {
     if (hasTimedOut()) {
       checkTimeoutAndThrow(f());

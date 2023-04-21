@@ -60,7 +60,7 @@ class CombinedVocabulary {
   // Construct from pre-initialized vocabularies and `IndexConverter`.
   CombinedVocabulary(FirstVocabulary firstVocab, SecondVocabulary secondVocab,
                      IndexConverter converter)
-    requires IndexConverterConcept<CombinedVocabulary, IndexConverter>
+      requires IndexConverterConcept<CombinedVocabulary, IndexConverter>
       : _firstVocab{std::move(firstVocab)},
         _secondVocab{std::move(secondVocab)},
         _indexConverter{converter} {}

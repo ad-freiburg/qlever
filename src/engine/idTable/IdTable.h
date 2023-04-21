@@ -160,7 +160,7 @@ class IdTable {
   // Then the argument `numColumns` and `NumColumns` (the static and the
   // dynamic number of columns) must be equal, else a runtime check fails.
   explicit IdTable(size_t numColumns, Allocator allocator = {})
-    requires(!isView && columnsAreAllocatable)
+      requires(!isView && columnsAreAllocatable)
       : numColumns_{numColumns}, allocator_{std::move(allocator)} {
     if constexpr (!isDynamic) {
       AD_CONTRACT_CHECK(NumColumns == numColumns);
@@ -178,7 +178,7 @@ class IdTable {
   // This behavior is useful for unit tests Where we can just generically pass
   // in more columns than are needed in any test.
   IdTable(size_t numColumns, std::ranges::forward_range auto columns)
-    requires(!isView)
+      requires(!isView)
       : data_{std::make_move_iterator(columns.begin()),
               std::make_move_iterator(columns.end())},
         numColumns_{numColumns} {
@@ -198,34 +198,22 @@ class IdTable {
   // If `NumColumns == 0` then the number of columns has to be specified via
   // `setNumColumns()`.
   explicit IdTable(Allocator allocator = {})
-    requires(!isView && columnsAreAllocatable)
+      requires(!isView && columnsAreAllocatable)
       : IdTable{NumColumns, std::move(allocator)} {};
 
   // `IdTables` are expensive to copy, so we disable accidental copies as they
   // are most likely bugs. To explicitly copy an `IdTable`, the `clone()` member
   // function (see below) can be used.
-  IdTable(const IdTable&)
-    requires(!isView)
-  = delete;
-  IdTable& operator=(const IdTable&)
-    requires(!isView)
-  = delete;
+  IdTable(const IdTable&) requires(!isView) = delete;
+  IdTable& operator=(const IdTable&) requires(!isView) = delete;
 
   // Views are copyable, as they are cheap to copy.
-  IdTable(const IdTable&)
-    requires isView
-  = default;
-  IdTable& operator=(const IdTable&)
-    requires isView
-  = default;
+  IdTable(const IdTable&) requires isView = default;
+  IdTable& operator=(const IdTable&) requires isView = default;
 
   // `IdTable`s are movable
-  IdTable(IdTable&& other) noexcept
-    requires(!isView)
-  = default;
-  IdTable& operator=(IdTable&& other) noexcept
-    requires(!isView)
-  = default;
+  IdTable(IdTable&& other) noexcept requires(!isView) = default;
+  IdTable& operator=(IdTable&& other) noexcept requires(!isView) = default;
 
  private:
   // Make the other instantiations of `IdTable` friends to allow for conversion
@@ -256,8 +244,7 @@ class IdTable {
   // For an empty and dynamic (`NumColumns == 0`) `IdTable`, specify the
   // number of columns.
   void setNumColumns(size_t numColumns)
-    requires(isDynamic && columnsAreAllocatable)
-  {
+      requires(isDynamic && columnsAreAllocatable) {
     AD_CONTRACT_CHECK(empty());
     numColumns_ = numColumns;
     data().resize(numColumns, ColumnStorage{allocator_});
@@ -291,9 +278,7 @@ class IdTable {
   // for performance reason whenever possible.
   // TODO<joka921, C++23> Use the multidimensional subscript operator.
   // TODO<joka921, C++23> Use explicit object parameters ("deducing this").
-  T& operator()(size_t row, size_t column)
-    requires(!isView)
-  {
+  T& operator()(size_t row, size_t column) requires(!isView) {
     AD_EXPENSIVE_CHECK(column < data().size());
     AD_EXPENSIVE_CHECK(row < data().at(column).size());
     return data()[column][row];
@@ -305,9 +290,7 @@ class IdTable {
   // Get safe access to a single element specified by the row and the column.
   // Throw if the row or the column is out of bounds. See the note for
   // `operator()` above.
-  T& at(size_t row, size_t column)
-    requires(!isView)
-  {
+  T& at(size_t row, size_t column) requires(!isView) {
     return data().at(column).at(row);
   }
   const T& at(size_t row, size_t column) const {
@@ -317,9 +300,7 @@ class IdTable {
   // Get a reference to the `i`-th row. The returned proxy objects can be
   // implicitly and trivially converted to `row_reference`. For the design
   // rationale behind those proxy types see above for their definition.
-  row_reference_restricted operator[](size_t index)
-    requires(!isView)
-  {
+  row_reference_restricted operator[](size_t index) requires(!isView) {
     return *(begin() + index);
   }
   const_row_reference_restricted operator[](size_t index) const {
@@ -343,9 +324,7 @@ class IdTable {
   //
   // Note: The semantics of this function is similar to `std::vector::resize`.
   // To set the capacity, use the `reserve` function.
-  void resize(size_t numRows)
-    requires(!isView)
-  {
+  void resize(size_t numRows) requires(!isView) {
     std::ranges::for_each(data(),
                           [numRows](auto& column) { column.resize(numRows); });
     numRows_ = numRows;
@@ -357,9 +336,7 @@ class IdTable {
   // iterators are invalidated, but you obtain the guarantee, that the insertion
   // of the next `numRows - size()` elements (via `insert` or `push_back`) can
   // be done in O(1) time without dynamic allocations.
-  void reserve(size_t numRows)
-    requires(!isView)
-  {
+  void reserve(size_t numRows) requires(!isView) {
     std::ranges::for_each(data(),
                           [numRows](auto& column) { column.reserve(numRows); });
   }
@@ -367,9 +344,7 @@ class IdTable {
   // Delete all the elements, but keep the allocated memory (`capacityRows_`
   // stays the same). Runs in O(1) time. To also free the allocated memory, call
   // `shrinkToFit()` after calling `clear()` .
-  void clear()
-    requires(!isView)
-  {
+  void clear() requires(!isView) {
     numRows_ = 0;
     std::ranges::for_each(data(), [](auto& column) { column.clear(); });
   }
@@ -377,9 +352,7 @@ class IdTable {
   // Adjust the capacity to exactly match the size. This optimizes the memory
   // consumption of this table. This operation runs in O(size()), allocates
   // memory, and invalidates all iterators.
-  void shrinkToFit()
-    requires(!isView)
-  {
+  void shrinkToFit() requires(!isView) {
     std::ranges::for_each(data(), [](auto& column) { column.shrink_to_fit(); });
   }
 
@@ -390,9 +363,7 @@ class IdTable {
   // `O(n)`. The underlying data model is a dynamic array like `std::vector`.
 
   // Insert a new uninitialized row at the end.
-  void emplace_back()
-    requires(!isView)
-  {
+  void emplace_back() requires(!isView) {
     std::ranges::for_each(data(), [](auto& column) { column.emplace_back(); });
     ++numRows_;
   }
@@ -406,9 +377,7 @@ class IdTable {
   // both the size of `newRow` and `numColumns()` are known at compile time. If
   // this check cannot be performed, a wrong size of `newRow` will lead to
   // undefined behavior which is caught by an `assert` in Debug builds.
-  void push_back(const std::initializer_list<T>& newRow)
-    requires(!isView)
-  {
+  void push_back(const std::initializer_list<T>& newRow) requires(!isView) {
     AD_EXPENSIVE_CHECK(newRow.size() == numColumns());
     ++numRows_;
     for (size_t i = 0; i < numColumns(); ++i) {
@@ -421,8 +390,7 @@ class IdTable {
   // `newRow` can be statically checked.
   template <size_t N>
   void push_back(const std::array<T, N>& newRow)
-    requires(!isView && (isDynamic || NumColumns == N))
-  {
+      requires(!isView && (isDynamic || NumColumns == N)) {
     if constexpr (isDynamic) {
       AD_EXPENSIVE_CHECK(newRow.size() == numColumns());
     }
@@ -439,14 +407,11 @@ class IdTable {
   // we would have to reformulate the `requires()` clause here a little more
   // complicated.
   template <typename RowT>
-    requires ad_utility::isTypeContainedIn<
-        RowT,
-        std::tuple<row_reference, const_row_reference, row_reference_restricted,
-                   const_row_reference_restricted,
-                   const_row_reference_view_restricted>>
-  void push_back(const RowT& newRow)
-    requires(!isView)
-  {
+  requires ad_utility::isTypeContainedIn<
+      RowT, std::tuple<row_reference, const_row_reference,
+                       row_reference_restricted, const_row_reference_restricted,
+                       const_row_reference_view_restricted>>
+  void push_back(const RowT& newRow) requires(!isView) {
     if constexpr (isDynamic) {
       AD_EXPENSIVE_CHECK(newRow.numColumns() == numColumns());
     }
@@ -463,9 +428,8 @@ class IdTable {
   // non-owning) view, but `clone` will create a mutable deep copy of the data
   // that the view points to
   IdTable<T, NumColumns, ColumnStorage, IsView::False> clone() const
-    requires std::is_copy_constructible_v<Storage> &&
-             std::is_copy_constructible_v<ColumnStorage>
-  {
+      requires std::is_copy_constructible_v<Storage> &&
+               std::is_copy_constructible_v<ColumnStorage> {
     Storage storage;
     for (const auto& column : getColumns()) {
       storage.emplace_back(column.begin(), column.end(), getAllocator());
@@ -479,8 +443,7 @@ class IdTable {
   // is then resized and filled with the appropriate contents.
   IdTable<T, NumColumns, ColumnStorage, IsView::False> clone(
       std::vector<ColumnStorage> newColumns, Allocator allocator = {}) const
-    requires(!std::is_copy_constructible_v<ColumnStorage>)
-  {
+      requires(!std::is_copy_constructible_v<ColumnStorage>) {
     AD_CONTRACT_CHECK(newColumns.size() >= numColumns());
     Storage newStorage(
         std::make_move_iterator(newColumns.begin()),
@@ -504,7 +467,7 @@ class IdTable {
   //       generic code that is templated on the number of columns easier to
   //       write.
   template <int NewNumColumns>
-    requires(isDynamic && !isView)
+  requires(isDynamic && !isView)
   IdTable<T, NewNumColumns, ColumnStorage> toStatic() && {
     AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
     auto result = IdTable<T, NewNumColumns, ColumnStorage>{
@@ -516,9 +479,7 @@ class IdTable {
   // Move this `IdTable` into a dynamic `IdTable` with `NumColumns == 0`. This
   // function may only be called on rvalues, because the table will be moved
   // from.
-  IdTable<T, 0, ColumnStorage> toDynamic() &&
-        requires(!isView)
-  {
+  IdTable<T, 0, ColumnStorage> toDynamic() && requires(!isView) {
     auto result = IdTable<T, 0, ColumnStorage>{std::move(data()), numColumns_,
                                                std::move(numRows_),
                                                std::move(allocator_)};
@@ -538,7 +499,7 @@ class IdTable {
   // creates a dynamic view from a dynamic table. This makes generic code that
   // is templated on the number of columns easier to write.
   template <size_t NewNumColumns>
-    requires isDynamic
+  requires isDynamic
   IdTable<T, NewNumColumns, ColumnStorage, IsView::True> asStaticView() const {
     AD_CONTRACT_CHECK(numColumns() == NewNumColumns || NewNumColumns == 0);
     ViewSpans viewSpans(data().begin(), data().end());
@@ -551,9 +512,7 @@ class IdTable {
   // the columns that may be permuted. The subset of the columns is specified by
   // the argument `columnIndices`.
   IdTable<T, 0, ColumnStorage, IsView::True> asColumnSubsetView(
-      std::span<const size_t> columnIndices) const
-    requires isDynamic
-  {
+      std::span<const size_t> columnIndices) const requires isDynamic {
     AD_CONTRACT_CHECK(std::ranges::all_of(
         columnIndices, [this](size_t idx) { return idx < numColumns(); }));
     ViewSpans viewSpans;
@@ -622,16 +581,8 @@ class IdTable {
 
   // The usual overloads of `begin()` and `end()` for const and mutable
   // `IdTable`s.
-  iterator begin()
-    requires(!isView)
-  {
-    return {this, 0};
-  }
-  iterator end()
-    requires(!isView)
-  {
-    return {this, size()};
-  }
+  iterator begin() requires(!isView) { return {this, 0}; }
+  iterator end() requires(!isView) { return {this, size()}; }
   const_iterator begin() const { return {this, 0}; }
   const_iterator end() const { return {this, size()}; }
 
@@ -651,9 +602,7 @@ class IdTable {
   // followed by `erase` at the end. `DISTINCT` should be implemented via an
   // out-of-place algorithm that only writes the distinct elements. The the
   // follwing two functions can be deleted.
-  void erase(const iterator& beginIt, const iterator& endIt)
-    requires(!isView)
-  {
+  void erase(const iterator& beginIt, const iterator& endIt) requires(!isView) {
     AD_EXPENSIVE_CHECK(begin() <= beginIt && beginIt <= endIt &&
                        endIt <= end());
     auto startIndex = beginIt - begin();
@@ -668,11 +617,7 @@ class IdTable {
   // Erase the single row that `it` points to by shifting all the elements
   // after `it` towards the beginning. Requires that `begin() <= it < end()`,
   // otherwise the behavior is undefined.
-  void erase(const iterator& it)
-    requires(!isView)
-  {
-    erase(it, it + 1);
-  }
+  void erase(const iterator& it) requires(!isView) { erase(it, it + 1); }
 
   // Insert all the elements in the range `(beginIt, endIt]` at the end
   // of this `IdTable`. `beginIt` and `endIt` must *not* point into this
@@ -689,9 +634,7 @@ class IdTable {
 
   // Check whether two `IdTables` have the same content. Mostly used for unit
   // testing.
-  bool operator==(const IdTable& other) const
-    requires(!isView)
-  {
+  bool operator==(const IdTable& other) const requires(!isView) {
     if (numColumns() != other.numColumns()) {
       return (empty() && other.empty());
     }
@@ -714,11 +657,7 @@ class IdTable {
   }
 
   // Get the `i`-th column. It is stored contiguously in memory.
-  std::span<T> getColumn(size_t i)
-    requires(!isView)
-  {
-    return {data().at(i)};
-  }
+  std::span<T> getColumn(size_t i) requires(!isView) { return {data().at(i)}; }
   std::span<const T> getColumn(size_t i) const { return {data().at(i)}; }
 
   // Return all the columns as a `std::vector` (if `isDynamic`) or as a
@@ -729,11 +668,7 @@ class IdTable {
 
  private:
   // Get direct access to the underlying data() as a reference.
-  Data& data()
-    requires(!isView)
-  {
-    return data_;
-  }
+  Data& data() requires(!isView) { return data_; }
   const Data& data() const { return data_; }
 
   // Common implementation for const and mutable overloads of `getColumns`

@@ -25,8 +25,8 @@ class Literal {
 
  public:
   template <typename T>
-    requires(ad_utility::Streamable<T> &&
-             !std::same_as<std::remove_cvref_t<T>, Literal>)
+  requires(ad_utility::Streamable<T> &&
+           !std::same_as<std::remove_cvref_t<T>, Literal>)
   explicit Literal(T&& t)
       : _stringRepresentation(toString(std::forward<T>(t))) {}
 

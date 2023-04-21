@@ -88,15 +88,13 @@ class Synchronized {
   Synchronized(Synchronized&&) noexcept = default;
   Synchronized& operator=(Synchronized&&) noexcept = default;
 
-  Synchronized()
-    requires std::default_initializable<T>
-  = default;
+  Synchronized() requires std::default_initializable<T> = default;
   ~Synchronized() = default;
 
   /// Constructor that is not copy or move, tries to instantiate the underlying
   /// type via perfect forwarding (this includes the default constructor)
   template <typename Arg, typename... Args>
-    requires(!std::same_as<std::remove_cvref_t<Arg>, Synchronized>)
+  requires(!std::same_as<std::remove_cvref_t<Arg>, Synchronized>)
   explicit(sizeof...(Args) == 0) Synchronized(Arg&& arg, Args&&... args)
       : data_{AD_FWD(arg), AD_FWD(args)...}, m_{} {}
 
@@ -218,8 +216,7 @@ class Synchronized {
   // Return a `Synchronized` that uses a reference to this `Synchronized`'s
   // `_data` and `mutext_`. The reference is a reference of the Base class U.
   template <typename U>
-    requires std::is_base_of_v<U, T>
-  Synchronized<U&, Mutex&> toBaseReference() {
+  requires std::is_base_of_v<U, T> Synchronized<U&, Mutex&> toBaseReference() {
     return {ConstructWithMutex{}, mutex(), data_};
   }
 

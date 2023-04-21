@@ -133,10 +133,9 @@ class CompactVectorOfStrings {
    * @param The input from which to build the vector.
    */
   template <typename T>
-    requires requires(T t) {
-      { *(t.begin()->begin()) } -> ad_utility::SimilarTo<data_type>;
-    }
-  void build(const T& input) {
+  requires requires(T t) {
+    { *(t.begin()->begin()) } -> ad_utility::SimilarTo<data_type>;
+  } void build(const T& input) {
     // Also make room for the end offset of the last element.
     _offsets.reserve(input.size() + 1);
     size_t dataSize = 0;
