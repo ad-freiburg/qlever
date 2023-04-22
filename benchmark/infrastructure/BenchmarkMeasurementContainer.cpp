@@ -206,12 +206,10 @@ ResultTable::operator std::string() const {
 }
 
 // ____________________________________________________________________________
-size_t ResultTable::numRows() const{
-  return entries_.size();
-}
+size_t ResultTable::numRows() const { return entries_.size(); }
 
 // ____________________________________________________________________________
-size_t ResultTable::numColumns() const{
+size_t ResultTable::numColumns() const {
   /*
   If nobody played around with the private member variables, every row
   should have the same amount of columns and there should be AT LEAST one row,

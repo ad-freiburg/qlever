@@ -20,8 +20,9 @@ are the entires of `columnToCalculateFor`?".
 will be placed in.
 */
 void calculateSpeedupOfColumn(ResultTable* table,
-  const size_t& columnToCalculateFor, const size_t& columnToCompareAgainst,
-  const size_t& columnToPlaceResultIn){
+                              const size_t& columnToCalculateFor,
+                              const size_t& columnToCompareAgainst,
+                              const size_t& columnToPlaceResultIn) {
   /*
   Get an entry from the table as a float. For easier usage.
   Note: This will cause an exception, if the row and column is bigger
@@ -29,15 +30,14 @@ void calculateSpeedupOfColumn(ResultTable* table,
   function was called with the wrong column numbers, in which case it
   ain't our problem and can only be fixed by the user.
   */
-  auto getEntryAsFloat = [&table](const size_t& row, const size_t& column){
+  auto getEntryAsFloat = [&table](const size_t& row, const size_t& column) {
     return table->getEntry<float>(row, column);
   };
 
   // Go through every row.
-  for (size_t row = 0; row < table->numRows(); row++){
-    const float speedUp =
-      getEntryAsFloat(row, columnToCompareAgainst)/
-      getEntryAsFloat(row, columnToCalculateFor);
+  for (size_t row = 0; row < table->numRows(); row++) {
+    const float speedUp = getEntryAsFloat(row, columnToCompareAgainst) /
+                          getEntryAsFloat(row, columnToCalculateFor);
 
     table->setEntry(row, columnToPlaceResultIn, speedUp);
   }

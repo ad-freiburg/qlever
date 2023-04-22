@@ -4,14 +4,18 @@
 // Author of the file this file is based on: Björn Buchhold
 // (buchhold@informatik.uni-freiburg.de)
 #include <absl/strings/str_cat.h>
+
 #include <algorithm>
+#include <chrono>
 #include <concepts>
 #include <cstdio>
 #include <ctime>
 #include <type_traits>
-#include <chrono>
 
 #include "../benchmark/infrastructure/Benchmark.h"
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
+#include "../benchmark/infrastructure/BenchmarkMetadata.h"
+#include "../benchmark/util/BenchmarkTableCommonCalculations.h"
 #include "../benchmark/util/IdTableHelperFunction.h"
 #include "../test/util/IdTableHelpers.h"
 #include "../test/util/JoinHelpers.h"
@@ -20,13 +24,10 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/ResultTable.h"
 #include "engine/idTable/IdTable.h"
-#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/Random.h"
 #include "util/TypeTraits.h"
-#include "../benchmark/util/BenchmarkTableCommonCalculations.h"
-#include "../benchmark/infrastructure/BenchmarkMetadata.h"
 
 namespace ad_benchmark {
 /*
@@ -245,25 +246,26 @@ static void makeBenchmarkTable(
   // Add all the function arguments to the metadata, so that you know the
   // values used for the runtimes in the benchmark table.
   auto addMetadata = [&overlap, &smallerTableSorted, &biggerTableSorted,
-    &ratioRows, &smallerTableAmountRows, &smallerTableAmountColumns,
-    &biggerTableAmountColumns, &smallerTableJoinColumnSampleSizeRatio,
-    &biggerTableJoinColumnSampleSizeRatio](ResultTable* table){
-      BenchmarkMetadata& meta = table->metadata();
+                      &ratioRows, &smallerTableAmountRows,
+                      &smallerTableAmountColumns, &biggerTableAmountColumns,
+                      &smallerTableJoinColumnSampleSizeRatio,
+                      &biggerTableJoinColumnSampleSizeRatio](
+                         ResultTable* table) {
+    BenchmarkMetadata& meta = table->metadata();
 
-      meta.addKeyValuePair("overlap", overlap);
-      meta.addKeyValuePair("smallerTableSorted", smallerTableSorted);
-      meta.addKeyValuePair("biggerTableSorted", biggerTableSorted);
-      meta.addKeyValuePair("ratioRows", ratioRows);
-      meta.addKeyValuePair("smallerTableAmountRows", smallerTableAmountRows);
-      meta.addKeyValuePair("smallerTableAmountColumns",
-        smallerTableAmountColumns);
-      meta.addKeyValuePair("biggerTableAmountColumns",
-        biggerTableAmountColumns);
-      meta.addKeyValuePair("smallerTableJoinColumnSampleSizeRatio",
-        smallerTableJoinColumnSampleSizeRatio);
-      meta.addKeyValuePair("biggerTableJoinColumnSampleSizeRatio",
-        biggerTableJoinColumnSampleSizeRatio);
-    };
+    meta.addKeyValuePair("overlap", overlap);
+    meta.addKeyValuePair("smallerTableSorted", smallerTableSorted);
+    meta.addKeyValuePair("biggerTableSorted", biggerTableSorted);
+    meta.addKeyValuePair("ratioRows", ratioRows);
+    meta.addKeyValuePair("smallerTableAmountRows", smallerTableAmountRows);
+    meta.addKeyValuePair("smallerTableAmountColumns",
+                         smallerTableAmountColumns);
+    meta.addKeyValuePair("biggerTableAmountColumns", biggerTableAmountColumns);
+    meta.addKeyValuePair("smallerTableJoinColumnSampleSizeRatio",
+                         smallerTableJoinColumnSampleSizeRatio);
+    meta.addKeyValuePair("biggerTableJoinColumnSampleSizeRatio",
+                         biggerTableJoinColumnSampleSizeRatio);
+  };
 
   // The lambdas for the join algorithms.
   auto hashJoinLambda = makeHashJoinLambda();
@@ -282,10 +284,10 @@ static void makeBenchmarkTable(
         [](const VectorContentType& entry) { return std::to_string(entry); },
         {});
 
-    return records->addTable(std::string{tableDescriptor}, rowNames,
-                             {"Merge/Galloping join", "Hash join",
-                              "Number of rows in joined IdTable",
-                              "Speedup with hash join"});
+    return records->addTable(
+        std::string{tableDescriptor}, rowNames,
+        {"Merge/Galloping join", "Hash join",
+         "Number of rows in resulting IdTable", "Speedup of hash join"});
   };
 
   // Setup for easier creation of the tables, that will be joined.
@@ -397,7 +399,7 @@ static void makeBenchmarkTable(
 
   // For adding the speedup of the hash join algorithm in comparison
   // to the merge/galloping join algorithm.
-  auto addSpeedup = [](ResultTable* table){
+  auto addSpeedup = [](ResultTable* table) {
     calculateSpeedupOfColumn(table, 1, 0, 3);
   };
 
@@ -451,8 +453,7 @@ static void makeBenchmarkTable(
       addNextRowToBenchmarkTable(table);
     }
   } else if constexpr (std::is_same<T5, std::vector<float>>::value) {
-    table =
-        &createBenchmarkTable(smallerTableJoinColumnSampleSizeRatio);
+    table = &createBenchmarkTable(smallerTableJoinColumnSampleSizeRatio);
     for (const size_t& sampleSizeRatio :
          smallerTableJoinColumnSampleSizeRatio) {
       replaceIdTables(overlap, smallerTableAmountRows,
@@ -462,8 +463,7 @@ static void makeBenchmarkTable(
       addNextRowToBenchmarkTable(table);
     }
   } else if constexpr (std::is_same<T6, std::vector<float>>::value) {
-    table =
-        &createBenchmarkTable(biggerTableJoinColumnSampleSizeRatio);
+    table = &createBenchmarkTable(biggerTableJoinColumnSampleSizeRatio);
     for (const size_t& sampleSizeRatio : biggerTableJoinColumnSampleSizeRatio) {
       replaceIdTables(overlap, smallerTableAmountRows,
                       smallerTableAmountColumns,
@@ -606,25 +606,26 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                                        static_cast<size_t>(256));
   }
 
-  BenchmarkMetadata getMetadata() const final{
+  BenchmarkMetadata getMetadata() const final {
     BenchmarkMetadata meta{};
 
     // The current point in time according to the system clock.
-    std::time_t currentTimePoint = std::chrono::system_clock::to_time_t(
-      std::chrono::system_clock::now());
+    std::time_t currentTimePoint =
+        std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     // Converting that to a row of chars and adding it to the metadata.
-    meta.addKeyValuePair("Point in time, in which taking the"
-      " measurements was finished",
-      std::ctime(&currentTimePoint));
+    meta.addKeyValuePair(
+        "Point in time, in which taking the"
+        " measurements was finished",
+        std::ctime(&currentTimePoint));
 
     return meta;
   }
-
 };
 
 // Create benchmark tables, where the smaller table stays at 2000 rows and
 // the bigger tables keeps getting bigger. Amount of columns stays the same.
-class BM_OnlyBiggerTableSizeChanges final : public GeneralInterfaceImplementation {
+class BM_OnlyBiggerTableSizeChanges final
+    : public GeneralInterfaceImplementation {
  public:
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
@@ -635,12 +636,13 @@ class BM_OnlyBiggerTableSizeChanges final : public GeneralInterfaceImplementatio
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
-        makeBenchmarkTable(&results, absl::StrCat("Smaller table stays at ",
-                           smallerTableAmountRows, " rows, ratio to rows of",
-                           " bigger table grows."),
-                           overlapChance, smallerTableSorted,
-                           biggerTableSorted, ratioRows, smallerTableAmountRows,
-                           smallerTableAmountColumns, biggerTableAmountColumns);
+        makeBenchmarkTable(
+            &results,
+            absl::StrCat("Smaller table stays at ", smallerTableAmountRows,
+                         " rows, ratio to rows of", " bigger table grows."),
+            overlapChance, smallerTableSorted, biggerTableSorted, ratioRows,
+            smallerTableAmountRows, smallerTableAmountColumns,
+            biggerTableAmountColumns);
       }
     }
 
@@ -650,7 +652,8 @@ class BM_OnlyBiggerTableSizeChanges final : public GeneralInterfaceImplementatio
 
 // Create benchmark tables, where the smaller table grows and the ratio
 // between tables stays the same. As does the amount of columns.
-class BM_OnlySmallerTableSizeChanges final : public GeneralInterfaceImplementation {
+class BM_OnlySmallerTableSizeChanges final
+    : public GeneralInterfaceImplementation {
  public:
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
@@ -664,14 +667,15 @@ class BM_OnlySmallerTableSizeChanges final : public GeneralInterfaceImplementati
         // We also make multiple tables for different row ratios.
         for (const size_t ratioRows :
              createExponentVectorUntilSize(2, maxRatioRows)) {
-          makeBenchmarkTable(&results, absl::StrCat("The amount of rows in ",
-                             "the smaller table grows and the ratio, to the ",
-                             "amount of rows in the bigger table, stays at ",
-                             ratioRows, "."),
-                             overlapChance, smallerTableSorted,
-                             biggerTableSorted, ratioRows,
-                             smallerTableAmountRows, smallerTableAmountColumns,
-                             biggerTableAmountColumns);
+          makeBenchmarkTable(
+              &results,
+              absl::StrCat("The amount of rows in ",
+                           "the smaller table grows and the ratio, to the ",
+                           "amount of rows in the bigger table, stays at ",
+                           ratioRows, "."),
+              overlapChance, smallerTableSorted, biggerTableSorted, ratioRows,
+              smallerTableAmountRows, smallerTableAmountColumns,
+              biggerTableAmountColumns);
         }
       }
     }
@@ -693,10 +697,11 @@ class BM_SameSizeRowGrowth final : public GeneralInterfaceImplementation {
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
-        makeBenchmarkTable(&results, "Both tables always have the same amount"
-                           "of rows and that amount grows." ,overlapChance,
-                           smallerTableSorted,
-                           biggerTableSorted, ratioRows, smallerTableAmountRows,
+        makeBenchmarkTable(&results,
+                           "Both tables always have the same amount"
+                           "of rows and that amount grows.",
+                           overlapChance, smallerTableSorted, biggerTableSorted,
+                           ratioRows, smallerTableAmountRows,
                            smallerTableAmountColumns, biggerTableAmountColumns);
       }
     }
