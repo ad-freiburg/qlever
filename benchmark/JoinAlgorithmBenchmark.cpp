@@ -16,13 +16,13 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/ResultTable.h"
 #include "engine/idTable/IdTable.h"
-#include "infrastructure/BenchmarkMeasurementContainer.h"
-#include "util/BenchmarkTableCommonCalculations.h"
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/Random.h"
 #include "util/TypeTraits.h"
 #include "../benchmark/util/BenchmarkTableCommonCalculations.h"
+#include "../benchmark/infrastructure/BenchmarkMetadata.h"
 
 namespace ad_benchmark {
 /*
@@ -237,6 +237,29 @@ static void makeBenchmarkTable(
   biggerThanZero(smallerTableJoinColumnSampleSizeRatio);
   biggerThanZero(biggerTableJoinColumnSampleSizeRatio);
 
+  // Add all the function arguments to the metadata, so that you know the
+  // values used for the runtimes in the benchmark table.
+  auto addMetadata = [&overlap, &smallerTableSorted, &biggerTableSorted,
+    &ratioRows, &smallerTableAmountRows, &smallerTableAmountColumns,
+    &biggerTableAmountColumns, &smallerTableJoinColumnSampleSizeRatio,
+    &biggerTableJoinColumnSampleSizeRatio](ResultTable* table){
+      BenchmarkMetadata& meta = table->metadata();
+
+      meta.addKeyValuePair("overlap", overlap);
+      meta.addKeyValuePair("smallerTableSorted", smallerTableSorted);
+      meta.addKeyValuePair("biggerTableSorted", biggerTableSorted);
+      meta.addKeyValuePair("ratioRows", ratioRows);
+      meta.addKeyValuePair("smallerTableAmountRows", smallerTableAmountRows);
+      meta.addKeyValuePair("smallerTableAmountColumns",
+        smallerTableAmountColumns);
+      meta.addKeyValuePair("biggerTableAmountColumns",
+        biggerTableAmountColumns);
+      meta.addKeyValuePair("smallerTableJoinColumnSampleSizeRatio",
+        smallerTableJoinColumnSampleSizeRatio);
+      meta.addKeyValuePair("biggerTableJoinColumnSampleSizeRatio",
+        biggerTableJoinColumnSampleSizeRatio);
+    };
+
   /*
    * For converting of the template parameter argument to string at runtime.
    * We don't know, which one of the template parameter is a vector, and
@@ -436,6 +459,7 @@ static void makeBenchmarkTable(
       addNextRowToBenchmarkTable(&table);
     }
     addSpeedup(&table);
+    addMetadata(&table);
   } else if constexpr (std::is_same<T2, std::vector<size_t>>::value) {
     ResultTable& table = createBenchmarkTable(smallerTableAmountRows);
     for (const size_t& smallerTableAmountRow : smallerTableAmountRows) {
@@ -446,6 +470,7 @@ static void makeBenchmarkTable(
       addNextRowToBenchmarkTable(&table);
     }
     addSpeedup(&table);
+    addMetadata(&table);
   } else if constexpr (std::is_same<T3, std::vector<size_t>>::value) {
     ResultTable& table = createBenchmarkTable(smallerTableAmountColumns);
     for (const size_t& smallerTableAmountColumn : smallerTableAmountColumns) {
@@ -456,6 +481,7 @@ static void makeBenchmarkTable(
       addNextRowToBenchmarkTable(&table);
     }
     addSpeedup(&table);
+    addMetadata(&table);
   } else if constexpr (std::is_same<T4, std::vector<size_t>>::value) {
     ResultTable& table = createBenchmarkTable(biggerTableAmountColumns);
     for (const size_t& biggerTableAmountColumn : biggerTableAmountColumns) {
@@ -466,6 +492,7 @@ static void makeBenchmarkTable(
       addNextRowToBenchmarkTable(&table);
     }
     addSpeedup(&table);
+    addMetadata(&table);
   } else if constexpr (std::is_same<T4, std::vector<float>>::value) {
     ResultTable& table = createBenchmarkTable(overlap);
     for (const size_t& overlapChance : overlap) {
@@ -476,6 +503,7 @@ static void makeBenchmarkTable(
       addNextRowToBenchmarkTable(&table);
     }
     addSpeedup(&table);
+    addMetadata(&table);
   } else if constexpr (std::is_same<T5, std::vector<float>>::value) {
     ResultTable& table =
         createBenchmarkTable(smallerTableJoinColumnSampleSizeRatio);
@@ -488,6 +516,7 @@ static void makeBenchmarkTable(
       addNextRowToBenchmarkTable(&table);
     }
     addSpeedup(&table);
+    addMetadata(&table);
   } else if constexpr (std::is_same<T6, std::vector<float>>::value) {
     ResultTable& table =
         createBenchmarkTable(biggerTableJoinColumnSampleSizeRatio);
@@ -499,6 +528,7 @@ static void makeBenchmarkTable(
       addNextRowToBenchmarkTable(&table);
     }
     addSpeedup(&table);
+    addMetadata(&table);
   }
 }
 
