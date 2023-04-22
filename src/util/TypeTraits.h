@@ -133,8 +133,7 @@ constexpr static bool alwaysFalse = false;
 /// From the type Tuple (std::tuple<A, B, C....>) creates the type
 /// std::tuple<TypeLifter<A>, TypeLifter<B>,...>
 template <typename Tuple, template <typename> typename TypeLifter>
-requires isTuple<Tuple>
-using LiftedTuple = typename detail::LiftInnerTypes<
+requires isTuple<Tuple> using LiftedTuple = typename detail::LiftInnerTypes<
     std::tuple, TypeLifter>::template TypeToLift<Tuple>::LiftedType;
 
 /// From the type Variant (std::variant<A, B, C....>) creates the type
@@ -153,8 +152,8 @@ using TupleToVariant = typename detail::TupleToVariantImpl<Tuple>::type;
 /// makes the type TupleCat<X, Y> = std::tuple<A, ..., B, C, ..., D, ...> (works
 /// for an arbitrary number of tuples as template parameters.
 template <typename... Tuples>
-requires(...&& isTuple<Tuples>) using TupleCat =
-    decltype(std::tuple_cat(std::declval<Tuples&>()...));
+requires(... && isTuple<Tuples>)
+using TupleCat = decltype(std::tuple_cat(std::declval<Tuples&>()...));
 
 /// A generalized version of std::visit that also supports non-variant
 /// parameters. Each `parameterOrVariant` of type T that is not a std::variant
@@ -200,7 +199,7 @@ requires(sizeof...(Ts) > 0) using Last = typename detail::LastT<Ts...>::type;
 
 // Return the first type of variadic template arguments.
 template <typename... Ts>
-requires(sizeof...(Ts) >
-         0) using First = typename detail::FirstWrapper<Ts...>::type;
+requires(sizeof...(Ts) > 0)
+using First = typename detail::FirstWrapper<Ts...>::type;
 
 }  // namespace ad_utility

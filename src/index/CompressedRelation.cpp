@@ -321,9 +321,8 @@ float CompressedRelationWriter::computeMultiplicity(
 }
 
 // ___________________________________________________________________________
-void CompressedRelationWriter::addRelation(Id col0Id,
-                                           const BufferedIdTable& col1And2Ids,
-                                           size_t numDistinctCol1) {
+CompressedRelationMetadata CompressedRelationWriter::addRelation(
+    Id col0Id, const BufferedIdTable& col1And2Ids, size_t numDistinctCol1) {
   AD_CONTRACT_CHECK(!col1And2Ids.empty());
   float multC1 = computeMultiplicity(col1And2Ids.numRows(), numDistinctCol1);
   // Dummy value that will be overwritten later
@@ -376,7 +375,7 @@ void CompressedRelationWriter::addRelation(Id col0Id,
       std::ranges::copy(column, buffer_.getColumn(i).begin() + bufferOldSize);
     }
   }
-  metaDataBuffer_.push_back(metaData);
+  return metaData;
 }
 
 // _____________________________________________________________________________

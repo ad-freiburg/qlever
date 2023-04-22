@@ -48,16 +48,15 @@ inline std::span<const ValueId> getIdsFromVariable(
 /// Generators that yield `numItems` items for the various
 /// `SingleExpressionResult`s.
 template <SingleExpressionResult T>
-requires isConstantResult<T> cppcoro::generator<T> resultGenerator(
-    T constant, size_t numItems) {
+requires isConstantResult<T>
+cppcoro::generator<T> resultGenerator(T constant, size_t numItems) {
   for (size_t i = 0; i < numItems; ++i) {
     co_yield constant;
   }
 }
 
 template <typename T>
-requires isVectorResult<T>
-auto resultGenerator(T vector, size_t numItems)
+requires isVectorResult<T> auto resultGenerator(T vector, size_t numItems)
     -> cppcoro::generator<std::remove_reference_t<decltype(vector[0])>> {
   AD_CONTRACT_CHECK(numItems == vector.size());
   for (auto& element : vector) {

@@ -263,7 +263,7 @@ boost::asio::awaitable<void> makeFileServerImpl(
       ad_utility::UrlParser::getDecodedPathAndCheck(request.target());
   if (!urlPath.has_value()) {
     throw std::runtime_error(
-        absl::StrCat("Invalid URL path \"", request.target(), "\""));
+        absl::StrCat("Invalid URL path \"", toStd(request.target()), "\""));
   }
 
   // Check if the target is in the whitelist. The `target()` starts with a
@@ -287,7 +287,7 @@ boost::asio::awaitable<void> makeFileServerImpl(
   // Handle the case where the file doesn't exist.
   if (errorCode == beast::errc::no_such_file_or_directory) {
     std::string errorMsg =
-        absl::StrCat("Resource \"", request.target(), "\" not found");
+        absl::StrCat("Resource \"", toStd(request.target()), "\" not found");
     LOG(ERROR) << errorMsg << std::endl;
     co_return co_await send(createNotFoundResponse(errorMsg, request));
   }

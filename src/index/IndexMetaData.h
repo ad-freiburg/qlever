@@ -174,7 +174,6 @@ class IndexMetaData {
 
   size_t getVersion() const { return _version; }
 
-  MapType& data() { return _data; }
   const MapType& data() const { return _data; }
 
   BlocksType& blockData() { return _blockData; }
