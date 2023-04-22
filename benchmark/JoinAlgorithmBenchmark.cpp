@@ -7,7 +7,9 @@
 #include <algorithm>
 #include <concepts>
 #include <cstdio>
+#include <ctime>
 #include <type_traits>
+#include <chrono>
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/util/IdTableHelperFunction.h"
@@ -505,12 +507,17 @@ static std::vector<size_t> createExponentVectorUntilSize(
 }
 
 /*
-Partly implements the interface `BenchmarkInterface`, by providing the member
-variables, that most of the benchmark classes here set using the
-`BenchmarkConfiguration` and delivers a default configuration parser, that sets
-them.
+Partly implements the interface `BenchmarkInterface`, by:
+
+- Providing the member variables, that most of the benchmark classes here set
+using the `BenchmarkConfiguration`.
+
+- A default configuration parser, that sets tthe provded member variables.
+
+- A default `getMetadata`, that adds the date and time, where the benchmark
+measurements were taken.
 */
-class GeneralConfigurationOption : public BenchmarkInterface {
+class GeneralInterfaceImplementation : public BenchmarkInterface {
  protected:
   /*
   The benchmark classes after this point always make tables, where one
@@ -598,13 +605,28 @@ class GeneralConfigurationOption : public BenchmarkInterface {
     setToValueInConfigurationOrDefault(maxRatioRows, "maxRatioRows",
                                        static_cast<size_t>(256));
   }
+
+  BenchmarkMetadata getMetadata() const final{
+    BenchmarkMetadata meta{};
+
+    // The current point in time according to the system clock.
+    std::time_t currentTimePoint = std::chrono::system_clock::to_time_t(
+      std::chrono::system_clock::now());
+    // Converting that to a row of chars and adding it to the metadata.
+    meta.addKeyValuePair("Point in time, in which taking the"
+      " measurements was finished",
+      std::ctime(&currentTimePoint));
+
+    return meta;
+  }
+
 };
 
 // Create benchmark tables, where the smaller table stays at 2000 rows and
 // the bigger tables keeps getting bigger. Amount of columns stays the same.
-class BM_OnlyBiggerTableSizeChanges final : public GeneralConfigurationOption {
+class BM_OnlyBiggerTableSizeChanges final : public GeneralInterfaceImplementation {
  public:
-  BenchmarkResults runAllBenchmarks() override {
+  BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
 
     // Easier reading.
@@ -628,9 +650,9 @@ class BM_OnlyBiggerTableSizeChanges final : public GeneralConfigurationOption {
 
 // Create benchmark tables, where the smaller table grows and the ratio
 // between tables stays the same. As does the amount of columns.
-class BM_OnlySmallerTableSizeChanges final : public GeneralConfigurationOption {
+class BM_OnlySmallerTableSizeChanges final : public GeneralInterfaceImplementation {
  public:
-  BenchmarkResults runAllBenchmarks() override {
+  BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
 
     // Easier reading.
@@ -660,9 +682,9 @@ class BM_OnlySmallerTableSizeChanges final : public GeneralConfigurationOption {
 
 // Create benchmark tables, where the tables are the same size and
 // both just get more rows.
-class BM_SameSizeRowGrowth final : public GeneralConfigurationOption {
+class BM_SameSizeRowGrowth final : public GeneralInterfaceImplementation {
  public:
-  BenchmarkResults runAllBenchmarks() override {
+  BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
 
     // Easier reading.
