@@ -3,9 +3,11 @@
 // Author: Andre Schlegel (January of 2023, schlegea@informatik.uni-freiburg.de)
 // Author of the file this file is based on: Björn Buchhold
 // (buchhold@informatik.uni-freiburg.de)
+#include <absl/strings/str_cat.h>
 #include <algorithm>
 #include <concepts>
 #include <cstdio>
+#include <type_traits>
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/util/IdTableHelperFunction.h"
@@ -216,7 +218,8 @@ template <isTypeOrVectorOfType<size_t> T1, isTypeOrVectorOfType<size_t> T2,
           isTypeOrVectorOfType<float> T6 = float>
 requires exactlyOneVector<T1, T2, T3, T4, TF, T5, T6>
 static void makeBenchmarkTable(
-    BenchmarkResults* records, const TF& overlap, const bool smallerTableSorted,
+    BenchmarkResults* records, const std::string_view tableDescriptor,
+    const TF& overlap, const bool smallerTableSorted,
     const bool biggerTableSorted, const T1& ratioRows,
     const T2& smallerTableAmountRows, const T3& smallerTableAmountColumns,
     const T4& biggerTableAmountColumns,
@@ -260,56 +263,6 @@ static void makeBenchmarkTable(
         biggerTableJoinColumnSampleSizeRatio);
     };
 
-  /*
-   * For converting of the template parameter argument to string at runtime.
-   * We don't know, which one of the template parameter is a vector, and
-   * which isn't, so we can reduce code duplication by having a function, that
-   * converts both to strings for the creation of the benchmark table name
-   * later.
-   */
-  auto templateParameterArgumentToString = []<typename T>(const T& object) {
-    // A number can be delegated, because there is already a 'translation'
-    // function for that.
-    if constexpr (std::is_same<T, size_t>::value ||
-                  std::is_same<T, float>::value) {
-      return std::to_string(object);
-    } else {
-      // Converting the vector is a bit more involved.
-      std::stringstream sstream;
-      sstream << "{";
-
-      // Add every number to the stream.
-      std::ranges::for_each(
-          object, [&sstream](auto number) { sstream << number << ", "; }, {});
-
-      // Only return part of the output, because we have a ", " too much.
-      return sstream.str().substr(0, sstream.str().length() - 2) + "}";
-    }
-  };
-
-  // The name of the benchmark table, this function is creating. A bit ugly,
-  // because std::vector needs special behaviour and we do not know,
-  // which argument is the vector.
-  std::stringstream tableDescriptor;
-  tableDescriptor
-      << "Benchmarks with a " << templateParameterArgumentToString(overlap)
-      << "\% chance for "
-      << "overlap betwenn " << (smallerTableSorted ? "" : "not ")
-      << "sorted smaller table, with "
-      << templateParameterArgumentToString(smallerTableAmountRows) << " rows, "
-      << templateParameterArgumentToString(smallerTableAmountColumns)
-      << " columns and "
-      << templateParameterArgumentToString(
-             smallerTableJoinColumnSampleSizeRatio)
-      << " sample size ratio, and " << (biggerTableSorted ? "" : "not ")
-      << "sorted bigger table, with "
-      << templateParameterArgumentToString(biggerTableAmountColumns)
-      << " columns , "
-      << templateParameterArgumentToString(smallerTableAmountRows) << " * "
-      << templateParameterArgumentToString(ratioRows) << " rows and "
-      << templateParameterArgumentToString(biggerTableJoinColumnSampleSizeRatio)
-      << " sample size ratio.";
-
   // The lambdas for the join algorithms.
   auto hashJoinLambda = makeHashJoinLambda();
   auto joinLambda = makeJoinLambda();
@@ -327,7 +280,7 @@ static void makeBenchmarkTable(
         [](const VectorContentType& entry) { return std::to_string(entry); },
         {});
 
-    return records->addTable(tableDescriptor.str(), rowNames,
+    return records->addTable(std::string{tableDescriptor}, rowNames,
                              {"Merge/Galloping join", "Hash join",
                               "Number of rows in joined IdTable",
                               "Speedup with hash join"});
@@ -666,7 +619,10 @@ class BM_OnlyBiggerTableSizeChanges final : public GeneralConfigurationOption {
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
-        makeBenchmarkTable(&results, overlapChance, smallerTableSorted,
+        makeBenchmarkTable(&results, absl::StrCat("Smaller table stays at ",
+                           smallerTableAmountRows, " rows, ratio to rows of",
+                           " bigger table grows."),
+                           overlapChance, smallerTableSorted,
                            biggerTableSorted, ratioRows, smallerTableAmountRows,
                            smallerTableAmountColumns, biggerTableAmountColumns);
       }
@@ -692,7 +648,11 @@ class BM_OnlySmallerTableSizeChanges final : public GeneralConfigurationOption {
         // We also make multiple tables for different row ratios.
         for (const size_t ratioRows :
              createExponentVectorUntilSize(2, maxRatioRows)) {
-          makeBenchmarkTable(&results, overlapChance, smallerTableSorted,
+          makeBenchmarkTable(&results, absl::StrCat("The amount of rows in ",
+                             "the smaller table grows and the ratio, to the ",
+                             "amount of rows in the bigger table, stays at ",
+                             ratioRows, "."),
+                             overlapChance, smallerTableSorted,
                              biggerTableSorted, ratioRows,
                              smallerTableAmountRows, smallerTableAmountColumns,
                              biggerTableAmountColumns);
@@ -717,7 +677,9 @@ class BM_SameSizeRowGrowth final : public GeneralConfigurationOption {
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
-        makeBenchmarkTable(&results, overlapChance, smallerTableSorted,
+        makeBenchmarkTable(&results, "Both tables always have the same amount"
+                           "of rows and that amount grows." ,overlapChance,
+                           smallerTableSorted,
                            biggerTableSorted, ratioRows, smallerTableAmountRows,
                            smallerTableAmountColumns, biggerTableAmountColumns);
       }
