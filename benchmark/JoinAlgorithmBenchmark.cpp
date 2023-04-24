@@ -111,7 +111,7 @@ class BmUnsortedAndSortedIdTable : public BenchmarkInterface {
     // Lambda wrapper for the functions, that I measure.
 
     // Sorts the table IN PLACE and the uses the normal join on them.
-    auto sortThenJoinLambdaWrapper = [&]() {
+    auto sortThenJoinLambdaWrapper = [&a, &b, &joinLambda]() {
       // Sorting the tables by the join column.
       sortIdTableByJoinColumnInPlace(a);
       sortIdTableByJoinColumnInPlace(b);
@@ -119,11 +119,11 @@ class BmUnsortedAndSortedIdTable : public BenchmarkInterface {
       useJoinFunctionOnIdTables(a, b, joinLambda);
     };
 
-    auto joinLambdaWrapper = [&]() {
+    auto joinLambdaWrapper = [&a, &b, &joinLambda]() {
       useJoinFunctionOnIdTables(a, b, joinLambda);
     };
 
-    auto hashJoinLambdaWrapper = [&]() {
+    auto hashJoinLambdaWrapper = [&a, &b, &hashJoinLambda]() {
       useJoinFunctionOnIdTables(a, b, hashJoinLambda);
     };
 
@@ -351,7 +351,8 @@ static void makeBenchmarkTable(
 
     // Hash join first, because merge/galloping join sorts all tables, if
     // needed, before joining them.
-    table->addMeasurement(i, 1, [&]() {
+    table->addMeasurement(i, 1, [&numberRowsOfResult, &smallerTable, &biggerTable,
+    &hashJoinLambda]() {
       numberRowsOfResult =
           useJoinFunctionOnIdTables(smallerTable, biggerTable, hashJoinLambda)
               .numRows();
@@ -361,7 +362,8 @@ static void makeBenchmarkTable(
     // before using them. That decision shouldn't happen in the wrapper for the
     // call, to minimize overhead.
     if ((!smallerTableSorted) && (!biggerTableSorted)) {
-      table->addMeasurement(i, 0, [&]() {
+      table->addMeasurement(i, 0, [&numberRowsOfResult, &smallerTable, &biggerTable,
+    &joinLambda]() {
         sortIdTableByJoinColumnInPlace(smallerTable);
         sortIdTableByJoinColumnInPlace(biggerTable);
         numberRowsOfResult =
@@ -369,21 +371,24 @@ static void makeBenchmarkTable(
                 .numRows();
       });
     } else if (!smallerTableSorted) {
-      table->addMeasurement(i, 0, [&]() {
+      table->addMeasurement(i, 0, [&numberRowsOfResult, &smallerTable, &biggerTable,
+    &joinLambda]() {
         sortIdTableByJoinColumnInPlace(smallerTable);
         numberRowsOfResult =
             useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
                 .numRows();
       });
     } else if (!biggerTableSorted) {
-      table->addMeasurement(i, 0, [&]() {
+      table->addMeasurement(i, 0, [&numberRowsOfResult, &smallerTable, &biggerTable,
+    &joinLambda]() {
         sortIdTableByJoinColumnInPlace(biggerTable);
         numberRowsOfResult =
             useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
                 .numRows();
       });
     } else {
-      table->addMeasurement(i, 0, [&]() {
+      table->addMeasurement(i, 0, [&numberRowsOfResult, &smallerTable, &biggerTable,
+    &joinLambda]() {
         numberRowsOfResult =
             useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
                 .numRows();
