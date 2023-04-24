@@ -6,13 +6,13 @@
 #include <absl/strings/str_cat.h>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <concepts>
 #include <cstdio>
 #include <ctime>
 #include <type_traits>
-#include <array>
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
@@ -307,16 +307,20 @@ static void makeBenchmarkTable(
     // Reminder: The $-1$ in the upper bounds is, because a range [a, b]
     // of natural numbers has $b - a + 1$ elements.
     const size_t smallerTableJoinColumnLowerBound = 0;
-    const size_t smallerTableJoinColumnUpperBound = static_cast<size_t>(
-      std::floor(static_cast<float>(smallerTableAmountRows) *
-      smallerTableJoinColumnSampleSizeRatio)) - 1;
+    const size_t smallerTableJoinColumnUpperBound =
+        static_cast<size_t>(
+            std::floor(static_cast<float>(smallerTableAmountRows) *
+                       smallerTableJoinColumnSampleSizeRatio)) -
+        1;
     const size_t biggerTableJoinColumnLowerBound =
         smallerTableJoinColumnUpperBound + 1;
     const size_t biggerTableJoinColumnUpperBound =
-      biggerTableJoinColumnLowerBound + static_cast<size_t>(std::floor(
-      static_cast<float>(smallerTableAmountRows) *
-      static_cast<float>(ratioRows) * biggerTableJoinColumnSampleSizeRatio))
-      - 1;
+        biggerTableJoinColumnLowerBound +
+        static_cast<size_t>(
+            std::floor(static_cast<float>(smallerTableAmountRows) *
+                       static_cast<float>(ratioRows) *
+                       biggerTableJoinColumnSampleSizeRatio)) -
+        1;
 
     // Replacing the old id tables with newly generated ones, based
     // on specification.
