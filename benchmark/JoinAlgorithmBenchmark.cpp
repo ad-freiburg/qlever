@@ -78,20 +78,20 @@ static void createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 // values in IdTables. Done with normal join and hash join.
 class BmUnsortedAndSortedIdTable : public BenchmarkInterface {
   // The amount of rows and columns of the tables.
-  size_t numberRows;
-  size_t numberColumns;
+  size_t numberRows_;
+  size_t numberColumns_;
 
  public:
   /*
   Sets the amount of rows and columns based on the configuration options
-  `numberRows` and `numberColumns`.
+  `numberRows_` and `numberColumns_`.
   */
   void parseConfiguration(const BenchmarkConfiguration& config) {
-    numberRows =
+    numberRows_ =
         config.getValueByNestedKeys<size_t>("numberRows").value_or(100);
 
     // The maximum number of columns, we should ever have, is 20.
-    numberColumns = std::min(
+    numberColumns_ = std::min(
         static_cast<size_t>(20),
         config.getValueByNestedKeys<size_t>("numberColumns").value_or(10));
   }
@@ -104,9 +104,9 @@ class BmUnsortedAndSortedIdTable : public BenchmarkInterface {
 
     // Tables, that have no overlapping values in their join columns.
     IdTableAndJoinColumn a{
-        createRandomlyFilledIdTable(numberRows, numberColumns, 0, 0, 10), 0};
+        createRandomlyFilledIdTable(numberRows_, numberColumns_, 0, 0, 10), 0};
     IdTableAndJoinColumn b{
-        createRandomlyFilledIdTable(numberRows, numberColumns, 0, 20, 30), 0};
+        createRandomlyFilledIdTable(numberRows_, numberColumns_, 0, 20, 30), 0};
 
     // Lambda wrapper for the functions, that I measure.
 
