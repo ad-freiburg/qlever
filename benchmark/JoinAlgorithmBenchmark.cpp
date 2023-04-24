@@ -86,7 +86,7 @@ class BmUnsortedAndSortedIdTable : public BenchmarkInterface {
   Sets the amount of rows and columns based on the configuration options
   `numberRows_` and `numberColumns_`.
   */
-  void parseConfiguration(const BenchmarkConfiguration& config) {
+  void parseConfiguration(const BenchmarkConfiguration& config) final{
     numberRows_ =
         config.getValueByNestedKeys<size_t>("numberRows").value_or(100);
 
@@ -96,7 +96,7 @@ class BmUnsortedAndSortedIdTable : public BenchmarkInterface {
         config.getValueByNestedKeys<size_t>("numberColumns").value_or(10));
   }
 
-  BenchmarkResults runAllBenchmarks() {
+  BenchmarkResults runAllBenchmarks() final{
     BenchmarkResults results{};
 
     auto hashJoinLambda = makeHashJoinLambda();
