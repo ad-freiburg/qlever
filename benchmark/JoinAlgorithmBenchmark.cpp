@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <ctime>
 #include <type_traits>
+#include <array>
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
@@ -624,17 +625,20 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     // The current point in time according to the system clock.
     std::time_t currentTimePoint =
         std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    // Converting the current time to a string of of format
-    // 'day.month.year hour:minute:second'.
-    char timeAsChar[20];
-    std::strftime(timeAsChar, sizeof(timeAsChar), "%d.%m.%Y %T",
+    /*
+    Converting the current time to a string of of format
+    'day.month.year hour:minute:second'. Until the year 9999, this string
+    should always be 20 characters long, iff you count the trailing null.
+    */
+    std::array<char, 20> timeAsString;
+    std::strftime(timeAsString.data(), timeAsString.size(), "%d.%m.%Y %T",
                   std::localtime(&currentTimePoint));
 
     // Adding the formatted time to the metadata.
     meta.addKeyValuePair(
         "Point in time, in which taking the"
         " measurements was finished",
-        timeAsChar);
+        timeAsString.data());
 
     return meta;
   }
