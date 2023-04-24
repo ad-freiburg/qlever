@@ -619,11 +619,17 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     // The current point in time according to the system clock.
     std::time_t currentTimePoint =
         std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    // Converting that to a row of chars and adding it to the metadata.
+    // Converting the current time to a string of of format
+    // 'day.month.year hour:minute:second'.
+    char timeAsChar[20];
+    std::strftime(timeAsChar, sizeof(timeAsChar), "%d.%m.%Y %T",
+      std::localtime(&currentTimePoint));
+
+    // Adding the formatted time to the metadata.
     meta.addKeyValuePair(
         "Point in time, in which taking the"
         " measurements was finished",
-        std::ctime(&currentTimePoint));
+        timeAsChar);
 
     return meta;
   }
