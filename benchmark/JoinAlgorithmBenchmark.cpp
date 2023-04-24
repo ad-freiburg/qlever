@@ -640,7 +640,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 class BmOnlyBiggerTableSizeChanges final
     : public GeneralInterfaceImplementation {
  public:
-  BenchmarkResults runAllBenchmarks() final {
+  BenchmarkResults runAllBenchmarks() override {
     BenchmarkResults results{};
 
     // Easier reading.
@@ -668,7 +668,7 @@ class BmOnlyBiggerTableSizeChanges final
 class BmOnlySmallerTableSizeChanges final
     : public GeneralInterfaceImplementation {
  public:
-  BenchmarkResults runAllBenchmarks() final {
+  BenchmarkResults runAllBenchmarks()  override {
     BenchmarkResults results{};
 
     // Easier reading.
@@ -701,7 +701,7 @@ class BmOnlySmallerTableSizeChanges final
 // both just get more rows.
 class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
  public:
-  BenchmarkResults runAllBenchmarks() final {
+  BenchmarkResults runAllBenchmarks() override{
     BenchmarkResults results{};
 
     // Easier reading.
