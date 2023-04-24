@@ -7,10 +7,10 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <concepts>
 #include <cstdio>
 #include <ctime>
-#include <cmath>
 #include <type_traits>
 
 #include "../benchmark/infrastructure/Benchmark.h"
@@ -87,7 +87,7 @@ class BmUnsortedAndSortedIdTable : public BenchmarkInterface {
   Sets the amount of rows and columns based on the configuration options
   `numberRows_` and `numberColumns_`.
   */
-  void parseConfiguration(const BenchmarkConfiguration& config) final{
+  void parseConfiguration(const BenchmarkConfiguration& config) final {
     numberRows_ =
         config.getValueByNestedKeys<size_t>("numberRows").value_or(100);
 
@@ -97,7 +97,7 @@ class BmUnsortedAndSortedIdTable : public BenchmarkInterface {
         config.getValueByNestedKeys<size_t>("numberColumns").value_or(10));
   }
 
-  BenchmarkResults runAllBenchmarks() final{
+  BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
 
     auto hashJoinLambda = makeHashJoinLambda();
@@ -308,13 +308,15 @@ static void makeBenchmarkTable(
     const size_t smallerTableJoinColumnLowerBound = 0;
     const size_t smallerTableJoinColumnUpperBound =
         std::floor(static_cast<float>(smallerTableAmountRows) *
-        smallerTableJoinColumnSampleSizeRatio) - 1;
+                   smallerTableJoinColumnSampleSizeRatio) -
+        1;
     const size_t biggerTableJoinColumnLowerBound =
         smallerTableJoinColumnUpperBound + 1;
     const size_t biggerTableJoinColumnUpperBound =
         biggerTableJoinColumnLowerBound +
         std::floor(static_cast<float>(smallerTableAmountRows) *
-        static_cast<float>(ratioRows) * biggerTableJoinColumnSampleSizeRatio) -
+                   static_cast<float>(ratioRows) *
+                   biggerTableJoinColumnSampleSizeRatio) -
         1;
 
     // Replacing the old id tables with newly generated ones, based
@@ -353,48 +355,53 @@ static void makeBenchmarkTable(
 
     // Hash join first, because merge/galloping join sorts all tables, if
     // needed, before joining them.
-    table->addMeasurement(i, 1, [&numberRowsOfResult, &smallerTable, &biggerTable,
-    &hashJoinLambda]() {
-      numberRowsOfResult =
-          useJoinFunctionOnIdTables(smallerTable, biggerTable, hashJoinLambda)
-              .numRows();
-    });
+    table->addMeasurement(
+        i, 1,
+        [&numberRowsOfResult, &smallerTable, &biggerTable, &hashJoinLambda]() {
+          numberRowsOfResult = useJoinFunctionOnIdTables(
+                                   smallerTable, biggerTable, hashJoinLambda)
+                                   .numRows();
+        });
 
     // The merge/galloping join may have to sort non, one, or both tables,
     // before using them. That decision shouldn't happen in the wrapper for the
     // call, to minimize overhead.
     if ((!smallerTableSorted) && (!biggerTableSorted)) {
-      table->addMeasurement(i, 0, [&numberRowsOfResult, &smallerTable, &biggerTable,
-    &joinLambda]() {
-        sortIdTableByJoinColumnInPlace(smallerTable);
-        sortIdTableByJoinColumnInPlace(biggerTable);
-        numberRowsOfResult =
-            useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
-                .numRows();
-      });
+      table->addMeasurement(
+          i, 0,
+          [&numberRowsOfResult, &smallerTable, &biggerTable, &joinLambda]() {
+            sortIdTableByJoinColumnInPlace(smallerTable);
+            sortIdTableByJoinColumnInPlace(biggerTable);
+            numberRowsOfResult =
+                useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
+                    .numRows();
+          });
     } else if (!smallerTableSorted) {
-      table->addMeasurement(i, 0, [&numberRowsOfResult, &smallerTable, &biggerTable,
-    &joinLambda]() {
-        sortIdTableByJoinColumnInPlace(smallerTable);
-        numberRowsOfResult =
-            useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
-                .numRows();
-      });
+      table->addMeasurement(
+          i, 0,
+          [&numberRowsOfResult, &smallerTable, &biggerTable, &joinLambda]() {
+            sortIdTableByJoinColumnInPlace(smallerTable);
+            numberRowsOfResult =
+                useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
+                    .numRows();
+          });
     } else if (!biggerTableSorted) {
-      table->addMeasurement(i, 0, [&numberRowsOfResult, &smallerTable, &biggerTable,
-    &joinLambda]() {
-        sortIdTableByJoinColumnInPlace(biggerTable);
-        numberRowsOfResult =
-            useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
-                .numRows();
-      });
+      table->addMeasurement(
+          i, 0,
+          [&numberRowsOfResult, &smallerTable, &biggerTable, &joinLambda]() {
+            sortIdTableByJoinColumnInPlace(biggerTable);
+            numberRowsOfResult =
+                useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
+                    .numRows();
+          });
     } else {
-      table->addMeasurement(i, 0, [&numberRowsOfResult, &smallerTable, &biggerTable,
-    &joinLambda]() {
-        numberRowsOfResult =
-            useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
-                .numRows();
-      });
+      table->addMeasurement(
+          i, 0,
+          [&numberRowsOfResult, &smallerTable, &biggerTable, &joinLambda]() {
+            numberRowsOfResult =
+                useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
+                    .numRows();
+          });
     }
 
     // Adding the number of rows of the result.
@@ -623,7 +630,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     // 'day.month.year hour:minute:second'.
     char timeAsChar[20];
     std::strftime(timeAsChar, sizeof(timeAsChar), "%d.%m.%Y %T",
-      std::localtime(&currentTimePoint));
+                  std::localtime(&currentTimePoint));
 
     // Adding the formatted time to the metadata.
     meta.addKeyValuePair(
@@ -668,7 +675,7 @@ class BmOnlyBiggerTableSizeChanges final
 class BmOnlySmallerTableSizeChanges final
     : public GeneralInterfaceImplementation {
  public:
-  BenchmarkResults runAllBenchmarks()  override {
+  BenchmarkResults runAllBenchmarks() override {
     BenchmarkResults results{};
 
     // Easier reading.
@@ -701,7 +708,7 @@ class BmOnlySmallerTableSizeChanges final
 // both just get more rows.
 class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
  public:
-  BenchmarkResults runAllBenchmarks() override{
+  BenchmarkResults runAllBenchmarks() override {
     BenchmarkResults results{};
 
     // Easier reading.
@@ -713,9 +720,10 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
         makeBenchmarkTable(&results,
                            "Both tables always have the same amount"
                            "of rows and that amount grows.",
-                           overlapChance_, smallerTableSorted, biggerTableSorted,
-                           ratioRows_, smallerTableAmountRows,
-                           smallerTableAmountColumns_, biggerTableAmountColumns_);
+                           overlapChance_, smallerTableSorted,
+                           biggerTableSorted, ratioRows_,
+                           smallerTableAmountRows, smallerTableAmountColumns_,
+                           biggerTableAmountColumns_);
       }
     }
 
