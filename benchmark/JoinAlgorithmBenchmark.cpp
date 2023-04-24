@@ -76,7 +76,7 @@ static void createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 
 // Benchmarks for unsorted and sorted tables, with and without overlapping
 // values in IdTables. Done with normal join and hash join.
-class BM_UnsortedAndSortedIdTable : public BenchmarkInterface {
+class BmUnsortedAndSortedIdTable : public BenchmarkInterface {
   // The amount of rows and columns of the tables.
   size_t numberRows;
   size_t numberColumns;
@@ -624,7 +624,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 
 // Create benchmark tables, where the smaller table stays at 2000 rows and
 // the bigger tables keeps getting bigger. Amount of columns stays the same.
-class BM_OnlyBiggerTableSizeChanges final
+class BmOnlyBiggerTableSizeChanges final
     : public GeneralInterfaceImplementation {
  public:
   BenchmarkResults runAllBenchmarks() final {
@@ -652,7 +652,7 @@ class BM_OnlyBiggerTableSizeChanges final
 
 // Create benchmark tables, where the smaller table grows and the ratio
 // between tables stays the same. As does the amount of columns.
-class BM_OnlySmallerTableSizeChanges final
+class BmOnlySmallerTableSizeChanges final
     : public GeneralInterfaceImplementation {
  public:
   BenchmarkResults runAllBenchmarks() final {
@@ -686,7 +686,7 @@ class BM_OnlySmallerTableSizeChanges final
 
 // Create benchmark tables, where the tables are the same size and
 // both just get more rows.
-class BM_SameSizeRowGrowth final : public GeneralInterfaceImplementation {
+class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
  public:
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
@@ -711,8 +711,8 @@ class BM_SameSizeRowGrowth final : public GeneralInterfaceImplementation {
 };
 
 // Registering the benchmarks
-AD_REGISTER_BENCHMARK(BM_UnsortedAndSortedIdTable);
-AD_REGISTER_BENCHMARK(BM_SameSizeRowGrowth);
-AD_REGISTER_BENCHMARK(BM_OnlySmallerTableSizeChanges);
-AD_REGISTER_BENCHMARK(BM_OnlyBiggerTableSizeChanges);
+AD_REGISTER_BENCHMARK(BmUnsortedAndSortedIdTable);
+AD_REGISTER_BENCHMARK(BmSameSizeRowGrowth);
+AD_REGISTER_BENCHMARK(BmOnlySmallerTableSizeChanges);
+AD_REGISTER_BENCHMARK(BmOnlyBiggerTableSizeChanges);
 }  // namespace ad_benchmark
