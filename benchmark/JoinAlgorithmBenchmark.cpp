@@ -541,31 +541,31 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   */
 
   // Amount of rows for the smaller `IdTable`, if we always use the amount.
-  size_t smallerTableAmountRows;
+  size_t smallerTableAmountRows_;
 
   // The maximum amount of rows, that the smaller `IdTable` should have.
-  size_t maxSmallerTableRows;
+  size_t maxSmallerTableRows_;
 
   // Amount of columns for the `IdTable`s
-  size_t smallerTableAmountColumns;
-  size_t biggerTableAmountColumns;
+  size_t smallerTableAmountColumns_;
+  size_t biggerTableAmountColumns_;
 
   /*
   Chance for an entry in the join column of the smaller `IdTable` to be the
   same value as an entry in the join column of the bigger `IdTable`.
   Must be in the range $(0,100]$.
   */
-  float overlapChance;
+  float overlapChance_;
 
   /*
   The row ratio between the smaller and the bigger `IdTable`. That is
   the value of the amount of rows in the bigger `IdTable` divided through the
   amount of rows in the smaller `IdTable`.
   */
-  size_t ratioRows;
+  size_t ratioRows_;
 
   // The maximal row ratio between the smaller and the bigger `IdTable`.
-  size_t maxRatioRows;
+  size_t maxRatioRows_;
 
  public:
   void parseConfiguration(const BenchmarkConfiguration& config) final {
@@ -589,27 +589,27 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
               defaultValue);
         };
 
-    setToValueInConfigurationOrDefault(smallerTableAmountRows,
+    setToValueInConfigurationOrDefault(smallerTableAmountRows_,
                                        "smallerTableAmountRows",
                                        static_cast<size_t>(256));
 
     setToValueInConfigurationOrDefault(
-        maxSmallerTableRows, "maxSmallerTableRows", static_cast<size_t>(2000));
+        maxSmallerTableRows_, "maxSmallerTableRows", static_cast<size_t>(2000));
 
-    setToValueInConfigurationOrDefault(smallerTableAmountColumns,
+    setToValueInConfigurationOrDefault(smallerTableAmountColumns_,
                                        "smallerTableAmountColumns",
                                        static_cast<size_t>(20));
-    setToValueInConfigurationOrDefault(biggerTableAmountColumns,
+    setToValueInConfigurationOrDefault(biggerTableAmountColumns_,
                                        "biggerTableAmountColumns",
                                        static_cast<size_t>(20));
 
-    setToValueInConfigurationOrDefault(overlapChance, "overlapChance",
+    setToValueInConfigurationOrDefault(overlapChance_, "overlapChance",
                                        static_cast<float>(42.0));
 
-    setToValueInConfigurationOrDefault(ratioRows, "ratioRows",
+    setToValueInConfigurationOrDefault(ratioRows_, "ratioRows",
                                        static_cast<size_t>(1));
 
-    setToValueInConfigurationOrDefault(maxRatioRows, "maxRatioRows",
+    setToValueInConfigurationOrDefault(maxRatioRows_, "maxRatioRows",
                                        static_cast<size_t>(256));
   }
 
@@ -639,17 +639,17 @@ class BmOnlyBiggerTableSizeChanges final
 
     // Easier reading.
     const std::vector<size_t> ratioRows{
-        createExponentVectorUntilSize(2, maxRatioRows)};
+        createExponentVectorUntilSize(2, maxRatioRows_)};
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
         makeBenchmarkTable(
             &results,
-            absl::StrCat("Smaller table stays at ", smallerTableAmountRows,
+            absl::StrCat("Smaller table stays at ", smallerTableAmountRows_,
                          " rows, ratio to rows of", " bigger table grows."),
-            overlapChance, smallerTableSorted, biggerTableSorted, ratioRows,
-            smallerTableAmountRows, smallerTableAmountColumns,
-            biggerTableAmountColumns);
+            overlapChance_, smallerTableSorted, biggerTableSorted, ratioRows,
+            smallerTableAmountRows_, smallerTableAmountColumns_,
+            biggerTableAmountColumns_);
       }
     }
 
@@ -667,22 +667,22 @@ class BmOnlySmallerTableSizeChanges final
 
     // Easier reading.
     const std::vector<size_t> smallerTableAmountRows{
-        createExponentVectorUntilSize(2, maxSmallerTableRows)};
+        createExponentVectorUntilSize(2, maxSmallerTableRows_)};
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
         // We also make multiple tables for different row ratios.
         for (const size_t ratioRows :
-             createExponentVectorUntilSize(2, maxRatioRows)) {
+             createExponentVectorUntilSize(2, maxRatioRows_)) {
           makeBenchmarkTable(
               &results,
               absl::StrCat("The amount of rows in ",
                            "the smaller table grows and the ratio, to the ",
                            "amount of rows in the bigger table, stays at ",
                            ratioRows, "."),
-              overlapChance, smallerTableSorted, biggerTableSorted, ratioRows,
-              smallerTableAmountRows, smallerTableAmountColumns,
-              biggerTableAmountColumns);
+              overlapChance_, smallerTableSorted, biggerTableSorted, ratioRows,
+              smallerTableAmountRows, smallerTableAmountColumns_,
+              biggerTableAmountColumns_);
         }
       }
     }
@@ -700,16 +700,16 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 
     // Easier reading.
     const std::vector<size_t> smallerTableAmountRows{
-        createExponentVectorUntilSize(2, maxSmallerTableRows)};
+        createExponentVectorUntilSize(2, maxSmallerTableRows_)};
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
         makeBenchmarkTable(&results,
                            "Both tables always have the same amount"
                            "of rows and that amount grows.",
-                           overlapChance, smallerTableSorted, biggerTableSorted,
-                           ratioRows, smallerTableAmountRows,
-                           smallerTableAmountColumns, biggerTableAmountColumns);
+                           overlapChance_, smallerTableSorted, biggerTableSorted,
+                           ratioRows_, smallerTableAmountRows,
+                           smallerTableAmountColumns_, biggerTableAmountColumns_);
       }
     }
 
