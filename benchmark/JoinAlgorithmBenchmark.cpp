@@ -10,6 +10,7 @@
 #include <concepts>
 #include <cstdio>
 #include <ctime>
+#include <cmath>
 #include <type_traits>
 
 #include "../benchmark/infrastructure/Benchmark.h"
@@ -232,7 +233,7 @@ static void makeBenchmarkTable(
   // biggerTableJoinColumnSampleSizeRatio are floats bigger than 0. Otherwise
   // , they don't make sense.
   auto biggerThanZero = []<typename T>(const T& object) {
-    if constexpr (std::is_same<T, std::vector<float>>::value) {
+    if constexpr (std::is_same_v<T, std::vector<float>>) {
       std::ranges::for_each(
           object, [](float number) { AD_CONTRACT_CHECK(number > 0); }, {});
     } else {
@@ -306,13 +307,14 @@ static void makeBenchmarkTable(
     // of natural numbers has $b - a + 1$ elements.
     const size_t smallerTableJoinColumnLowerBound = 0;
     const size_t smallerTableJoinColumnUpperBound =
-        (smallerTableAmountRows * smallerTableJoinColumnSampleSizeRatio) - 1;
+        std::floor(static_cast<float>(smallerTableAmountRows) *
+        smallerTableJoinColumnSampleSizeRatio) - 1;
     const size_t biggerTableJoinColumnLowerBound =
         smallerTableJoinColumnUpperBound + 1;
     const size_t biggerTableJoinColumnUpperBound =
         biggerTableJoinColumnLowerBound +
-        (smallerTableAmountRows * ratioRows *
-         biggerTableJoinColumnSampleSizeRatio) -
+        std::floor(static_cast<float>(smallerTableAmountRows) *
+        static_cast<float>(ratioRows) * biggerTableJoinColumnSampleSizeRatio) -
         1;
 
     // Replacing the old id tables with newly generated ones, based
@@ -412,7 +414,7 @@ static void makeBenchmarkTable(
   // vector. Fortunaly, we can do it so, that the uneeded parts get deleted
   // at compile time.
   ResultTable* table = nullptr;
-  if constexpr (std::is_same<T1, std::vector<size_t>>::value) {
+  if constexpr (std::is_same_v<T1, std::vector<size_t>>) {
     table = &createBenchmarkTable(ratioRows);
     for (const size_t& ratioRow : ratioRows) {
       replaceIdTables(
@@ -421,7 +423,7 @@ static void makeBenchmarkTable(
           biggerTableAmountColumns, biggerTableJoinColumnSampleSizeRatio);
       addNextRowToBenchmarkTable(table);
     }
-  } else if constexpr (std::is_same<T2, std::vector<size_t>>::value) {
+  } else if constexpr (std::is_same_v<T2, std::vector<size_t>>) {
     table = &createBenchmarkTable(smallerTableAmountRows);
     for (const size_t& smallerTableAmountRow : smallerTableAmountRows) {
       replaceIdTables(overlap, smallerTableAmountRow, smallerTableAmountColumns,
@@ -430,7 +432,7 @@ static void makeBenchmarkTable(
                       biggerTableJoinColumnSampleSizeRatio);
       addNextRowToBenchmarkTable(table);
     }
-  } else if constexpr (std::is_same<T3, std::vector<size_t>>::value) {
+  } else if constexpr (std::is_same_v<T3, std::vector<size_t>>) {
     table = &createBenchmarkTable(smallerTableAmountColumns);
     for (const size_t& smallerTableAmountColumn : smallerTableAmountColumns) {
       replaceIdTables(overlap, smallerTableAmountRows, smallerTableAmountColumn,
@@ -439,7 +441,7 @@ static void makeBenchmarkTable(
                       biggerTableJoinColumnSampleSizeRatio);
       addNextRowToBenchmarkTable(table);
     }
-  } else if constexpr (std::is_same<T4, std::vector<size_t>>::value) {
+  } else if constexpr (std::is_same_v<T4, std::vector<size_t>>) {
     table = &createBenchmarkTable(biggerTableAmountColumns);
     for (const size_t& biggerTableAmountColumn : biggerTableAmountColumns) {
       replaceIdTables(
@@ -448,7 +450,7 @@ static void makeBenchmarkTable(
           biggerTableAmountColumn, biggerTableJoinColumnSampleSizeRatio);
       addNextRowToBenchmarkTable(table);
     }
-  } else if constexpr (std::is_same<T4, std::vector<float>>::value) {
+  } else if constexpr (std::is_same_v<T4, std::vector<float>>) {
     table = &createBenchmarkTable(overlap);
     for (const size_t& overlapChance : overlap) {
       replaceIdTables(
@@ -457,7 +459,7 @@ static void makeBenchmarkTable(
           biggerTableAmountColumns, biggerTableJoinColumnSampleSizeRatio);
       addNextRowToBenchmarkTable(table);
     }
-  } else if constexpr (std::is_same<T5, std::vector<float>>::value) {
+  } else if constexpr (std::is_same_v<T5, std::vector<float>>) {
     table = &createBenchmarkTable(smallerTableJoinColumnSampleSizeRatio);
     for (const size_t& sampleSizeRatio :
          smallerTableJoinColumnSampleSizeRatio) {
@@ -467,7 +469,7 @@ static void makeBenchmarkTable(
                       biggerTableJoinColumnSampleSizeRatio);
       addNextRowToBenchmarkTable(table);
     }
-  } else if constexpr (std::is_same<T6, std::vector<float>>::value) {
+  } else if constexpr (std::is_same_v<T6, std::vector<float>>) {
     table = &createBenchmarkTable(biggerTableJoinColumnSampleSizeRatio);
     for (const size_t& sampleSizeRatio : biggerTableJoinColumnSampleSizeRatio) {
       replaceIdTables(overlap, smallerTableAmountRows,
