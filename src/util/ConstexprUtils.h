@@ -5,6 +5,7 @@
 #pragma once
 
 #include "util/Exception.h"
+#include <type_traits>
 
 // Various helper functions for compile-time programming.
 
@@ -70,6 +71,34 @@ void RuntimeValueToCompileTimeValue(const size_t& value,
                        function.template operator()<Index>();
                      }
                    });
+}
+
+/*
+@brief Returns the index of the first given type, that passes the given check.
+
+@tparam checkFunction A `constexpr` function, that takes one template
+parameter and return a bool.
+@tparam Args The list of types, that should be checked over.
+
+@return An index out of `[0, sizeof...(Args))`, if there was type, that passed
+the check. Otherwise, returns `sizeof...(Args)`.
+*/
+template<auto checkFunction, typename... Args>
+constexpr size_t getIndexOfFirstTypeToPassCheck() {
+  size_t index = 0;
+
+  auto l = [&index]<typename T>() {
+    if constexpr (checkFunction.template operator()<T>()) {
+        return true;
+    } else {
+        ++index;
+        return false;
+    }
+  };
+
+  ((l.template operator()<Args>()) || ...);
+
+  return index;
 }
 
 namespace detail {
