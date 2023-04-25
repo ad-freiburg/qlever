@@ -290,8 +290,8 @@ static void makeBenchmarkTable(
 
     return records->addTable(
         std::string{tableDescriptor}, rowNames,
-        {"Sorting IdTables before merge/galloping join",
-         "Merge/Galloping join", "Hash join",
+        {"Time for sorting", "Merge/Galloping join",
+         "Sorting + merge/galloping join", "Hash join",
          "Number of rows in resulting IdTable", "Speedup of hash join"});
   };
 
@@ -362,7 +362,7 @@ static void makeBenchmarkTable(
     // Hash join first, because merge/galloping join sorts all tables, if
     // needed, before joining them.
     table->addMeasurement(
-        i, 2,
+        i, 3,
         [&numberRowsOfResult, &smallerTable, &biggerTable, &hashJoinLambda]() {
           numberRowsOfResult = useJoinFunctionOnIdTables(
                                    smallerTable, biggerTable, hashJoinLambda)
@@ -396,7 +396,7 @@ static void makeBenchmarkTable(
         });
 
     // Adding the number of rows of the result.
-    table->setEntry(i, 3, std::to_string(numberRowsOfResult));
+    table->setEntry(i, 4, std::to_string(numberRowsOfResult));
 
     // The next call of the lambda, will be one row further.
     i++;
@@ -405,7 +405,7 @@ static void makeBenchmarkTable(
   // For adding the speedup of the hash join algorithm in comparison
   // to the merge/galloping join algorithm.
   auto addSpeedup = [](ResultTable* table) {
-    calculateSpeedupOfColumn(table, 2, 1, 4);
+    calculateSpeedupOfColumn(table, 3, 2, 5);
   };
 
   // Returns the first argument, that is a vector.
@@ -476,6 +476,10 @@ static void makeBenchmarkTable(
   // If should never to possible for table to be a null pointr, but better
   // safe than sorry.
   AD_CONTRACT_CHECK(table != nullptr);
+
+  // Adding together the time for sorting the `IdTables` and then joining
+  // them using merge/galloping join.
+  sumUpColumns(table, 2, static_cast<size_t>(0), static_cast<size_t>(1));
 
   addSpeedup(table);
   addMetadata(table);

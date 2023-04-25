@@ -6,8 +6,22 @@
 #pragma once
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
+#include <type_traits>
 
 namespace ad_benchmark {
+
+// Helper function, because this one line call happens very often in this file.
+static float getTableEntryAsFloat(ResultTable* table, const size_t& row,
+  const size_t& column){
+  /*
+  This will cause an exception, if the row and column is bigger
+  than the table. However, such a situation should only happen, if one of the
+  function using this helper got the wrong arguments to begin with. In which
+  case, it can only really be fixed by the user.
+  */
+  return table->getEntry<float>(row, column);
+}
+
 /*
 @brief Reads two columns, calculates the relativ speedup between their entries
 and writes it in a third column.
@@ -23,23 +37,37 @@ void calculateSpeedupOfColumn(ResultTable* table,
                               const size_t& columnToCalculateFor,
                               const size_t& columnToCompareAgainst,
                               const size_t& columnToPlaceResultIn) {
-  /*
-  Get an entry from the table as a float. For easier usage.
-  Note: This will cause an exception, if the row and column is bigger
-  than the table. However, such a situation should only happen, if this
-  function was called with the wrong column numbers, in which case it
-  ain't our problem and can only be fixed by the user.
-  */
-  auto getEntryAsFloat = [&table](const size_t& row, const size_t& column) {
-    return table->getEntry<float>(row, column);
-  };
-
   // Go through every row.
   for (size_t row = 0; row < table->numRows(); row++) {
-    const float speedUp = getEntryAsFloat(row, columnToCompareAgainst) /
-                          getEntryAsFloat(row, columnToCalculateFor);
+    const float speedUp =
+      getTableEntryAsFloat(table, row, columnToCompareAgainst) /
+      getTableEntryAsFloat(table, row, columnToCalculateFor);
 
     table->setEntry(row, columnToPlaceResultIn, speedUp);
+  }
+}
+
+template<typename Type, typename... Ts>
+concept AllTheSameType = (std::is_same_v<Type, Ts> && ...);
+
+/*
+@brief Adds multiple columns together and writes the result in a designated
+column.
+
+@tparam ColumnNumbers Must all be `size_t`.
+
+@param table The `ResultTable` to do this in.
+@param columnToPlaceResultIn Where to place the results.
+@param columnToSumUp All the columns, who shall be added up.
+*/
+template<typename... ColumnNumbers>
+requires AllTheSameType<size_t, ColumnNumbers...>
+void sumUpColumns(ResultTable* table, const size_t& columnToPlaceResultIn,
+  const ColumnNumbers&... columnToSumUp){
+  // Go through every row.
+  for (size_t row = 0; row < table->numRows(); row++) {
+    table->setEntry(row, columnToPlaceResultIn,
+      (getTableEntryAsFloat(table, row, columnToSumUp) + ...));
   }
 }
 }  // namespace ad_benchmark
