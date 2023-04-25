@@ -13,6 +13,7 @@
 
 using std::string;
 
+// _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, ScanType type,
                      const SparqlTriple& triple)
     : Operation(qec),
@@ -25,7 +26,16 @@ IndexScan::IndexScan(QueryExecutionContext* qec, ScanType type,
       _object(triple._o),
       _sizeEstimate(std::numeric_limits<size_t>::max()) {
   precomputeSizeEstimate();
+
+  auto permutedTriple = getPermutedTriple();
+  for (size_t i = 0; i < 3 - _numVariables; ++i) {
+    AD_CONTRACT_CHECK(!permutedTriple.at(i)->isVariable());
+  }
+  for (size_t i = 3 - _numVariables; i < permutedTriple.size(); ++i) {
+    AD_CONTRACT_CHECK(permutedTriple.at(i)->isVariable());
+  }
 }
+
 // _____________________________________________________________________________
 string IndexScan::asStringImpl(size_t indent) const {
   std::ostringstream os;

@@ -78,12 +78,12 @@ void CompressedRelationReader::scan(
   // We have at most one block that is incomplete and thus requires trimming.
   // Set up a lambda, that reads this block and decompresses it to
   // the result.
-  auto readIncompleteBlock = [&](const auto& block) {
+  auto readIncompleteBlock = [&](const auto& block) mutable {
     // A block is uniquely identified by its start position in the file.
     auto cacheKey = block.offsetsAndCompressedSize_.at(0).offsetInFile_;
     auto uncompressedBuffer = blockCache_
                                   .computeOnce(cacheKey,
-                                               [&]() {
+                                               [&]()  {
                                                  return readAndDecompressBlock(
                                                      block, file, std::nullopt);
                                                })
@@ -153,6 +153,102 @@ void CompressedRelationReader::scan(
     }  // End of omp parallel region, all the decompression was handled now.
   }
 }
+
+// _____________________________________________________________________________
+cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(const CompressedRelationMetadata& metadata, std::span<const CompressedBlockMetadata> blockMetadata, ad_utility::File& file, ad_utility::AllocatorWithLimit<Id> allocator, ad_utility::SharedConcurrentTimeoutTimer timer) {
+    // get all the blocks where col0FirstId_ <= col0Id <= col0LastId_
+    struct KeyLhs {
+      Id col0FirstId_;
+      Id col0LastId_;
+    };
+    Id col0Id = metadata.col0Id_;
+    // TODO<joka921, Clang16> Use a structured binding. Structured bindings are
+    // currently not supported by clang when using OpenMP because clang internally
+    // transforms the `#pragma`s into lambdas, and capturing structured bindings
+    // is only supported in clang >= 16.
+    decltype(blockMetadata.begin()) beginBlock, endBlock;
+    std::tie(beginBlock, endBlock) = std::equal_range(
+        // TODO<joka921> For some reason we can't use `std::ranges::equal_range`,
+        // find out why. Note: possibly it has something to do with the limited
+        // support of ranges in clang with versions < 16. Revisit this when
+        // we use clang 16.
+        blockMetadata.begin(), blockMetadata.end(), KeyLhs{col0Id, col0Id},
+        [](const auto& a, const auto& b) {
+          return a.col0FirstId_ < b.col0FirstId_ && a.col0LastId_ < b.col0LastId_;
+        });
+
+    // The first block might contain entries that are not part of our
+    // actual scan result.
+    bool firstBlockIsIncomplete =
+        beginBlock < endBlock &&
+        (beginBlock->col0FirstId_ < col0Id || beginBlock->col0LastId_ > col0Id);
+    auto lastBlock = endBlock - 1;
+
+    bool lastBlockIsIncomplete =
+        beginBlock < lastBlock &&
+        (lastBlock->col0FirstId_ < col0Id || lastBlock->col0LastId_ > col0Id);
+
+    // Invariant: A relation spans multiple blocks exclusively or several
+    // entities are stored completely in the same Block.
+    AD_CORRECTNESS_CHECK(!firstBlockIsIncomplete || (beginBlock == lastBlock));
+    AD_CORRECTNESS_CHECK(!lastBlockIsIncomplete);
+    if (firstBlockIsIncomplete) {
+      AD_CORRECTNESS_CHECK(metadata.offsetInBlock_ !=
+                           std::numeric_limits<uint64_t>::max());
+    }
+
+    // We have at most one block that is incomplete and thus requires trimming.
+    // Set up a lambda, that reads this block and decompresses it to
+    // the result.
+    auto readIncompleteBlock = [&](const auto& block) {
+      // A block is uniquely identified by its start position in the file.
+      auto cacheKey = block.offsetsAndCompressedSize_.at(0).offsetInFile_;
+      auto uncompressedBuffer = blockCache_
+          .computeOnce(cacheKey,
+                       [&]() {
+                         return readAndDecompressBlock(
+                             block, file, std::nullopt);
+                       })
+          ._resultPointer;
+
+      // Extract the part of the block that actually belongs to the relation
+      auto numElements = metadata.numRows_;
+      AD_CORRECTNESS_CHECK(uncompressedBuffer->numColumns() ==
+                           metadata.numColumns());
+      IdTable result(uncompressedBuffer->numColumns(), allocator);
+      result.resize(numElements);
+      for (size_t i = 0; i < uncompressedBuffer->numColumns(); ++i) {
+        const auto& inputCol = uncompressedBuffer->getColumn(i);
+        auto begin = inputCol.begin() + metadata.offsetInBlock_;
+        decltype(auto) resultColumn = result.getColumn(i);
+        std::copy(begin, begin + numElements, resultColumn.begin());
+      }
+      return result;
+    };
+
+    // Read the first block if it is incomplete
+    if (firstBlockIsIncomplete) {
+      co_yield readIncompleteBlock(*beginBlock);
+      ++beginBlock;
+      if (timer) {
+        timer->wlock()->checkTimeoutAndThrow("IndexScan :");
+      }
+    }
+
+    // Read all the other (complete!) blocks in parallel
+        for (; beginBlock < endBlock; ++beginBlock) {
+          const auto& block = *beginBlock;
+          // Read a block from disk (serially).
+
+          CompressedBlock compressedBuffer =
+              readCompressedBlockFromFile(block, file, std::nullopt);
+          co_yield decompressBlock(compressedBuffer, block.numRows_);
+          // The `decompressLambda` can now run in parallel
+            if (timer) {
+        timer->wlock()->checkTimeoutAndThrow();
+            };
+    }
+  }
 
 // _____________________________________________________________________________
 std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
@@ -512,8 +608,9 @@ CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
 
 // ____________________________________________________________________________
 DecompressedBlock CompressedRelationReader::decompressBlock(
-    const CompressedBlock& compressedBlock, size_t numRowsToRead) {
-  DecompressedBlock decompressedBlock{compressedBlock.size()};
+    const CompressedBlock& compressedBlock, size_t numRowsToRead) const {
+  DecompressedBlock decompressedBlock{allocator};
+  decompressedBlock.setNumColumns(compressedBlock.size());
   decompressedBlock.resize(numRowsToRead);
   for (size_t i = 0; i < compressedBlock.size(); ++i) {
     auto col = decompressedBlock.getColumn(i);
@@ -551,7 +648,7 @@ void CompressedRelationReader::decompressColumn(
 // _____________________________________________________________________________
 DecompressedBlock CompressedRelationReader::readAndDecompressBlock(
     const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
-    std::optional<std::vector<size_t>> columnIndices) {
+    std::optional<std::vector<size_t>> columnIndices) const {
   CompressedBlock compressedColumns = readCompressedBlockFromFile(
       blockMetaData, file, std::move(columnIndices));
   const auto numRowsToRead = blockMetaData.numRows_;
