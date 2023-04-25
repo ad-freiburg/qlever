@@ -27,6 +27,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/ResultTable.h"
 #include "engine/idTable/IdTable.h"
+#include "util/Algorithm.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -275,139 +276,6 @@ static void makeBenchmarkTable(
   auto hashJoinLambda = makeHashJoinLambda();
   auto joinLambda = makeJoinLambda();
 
-  // To reduce code duplication, the creation of the benchmark table is done
-  // per lambda.
-  auto createBenchmarkTable =
-      [&tableDescriptor, &records]<typename VectorContentType>(
-          const std::vector<VectorContentType>& unconvertedRowNames)
-      -> ResultTable& {
-    // Creating the names for the rows for the benchmark table creation.
-    std::vector<std::string> rowNames(unconvertedRowNames.size());
-    std::ranges::transform(
-        unconvertedRowNames, rowNames.begin(),
-        [](const VectorContentType& entry) { return std::to_string(entry); },
-        {});
-
-    return records->addTable(
-        std::string{tableDescriptor}, rowNames,
-        {"Time for sorting", "Merge/Galloping join",
-         "Sorting + merge/galloping join", "Hash join",
-         "Number of rows in resulting IdTable", "Speedup of hash join"});
-  };
-
-  // Setup for easier creation of the tables, that will be joined.
-  IdTableAndJoinColumn smallerTable{makeIdTableFromVector({{}}), 0};
-  IdTableAndJoinColumn biggerTable{makeIdTableFromVector({{}}), 0};
-  auto replaceIdTables = [&smallerTableSorted, &biggerTableSorted,
-                          &smallerTable, &biggerTable](
-                             float overlap, size_t smallerTableAmountRows,
-                             size_t smallerTableAmountColumns,
-                             float smallerTableJoinColumnSampleSizeRatio,
-                             size_t ratioRows, size_t biggerTableAmountColumns,
-                             float biggerTableJoinColumnSampleSizeRatio) {
-    // For easier use, we only calculate the boundaries for the random
-    // join column entry generators once.
-    // Reminder: The $-1$ in the upper bounds is, because a range [a, b]
-    // of natural numbers has $b - a + 1$ elements.
-    const size_t smallerTableJoinColumnLowerBound = 0;
-    const size_t smallerTableJoinColumnUpperBound =
-        static_cast<size_t>(
-            std::floor(static_cast<float>(smallerTableAmountRows) *
-                       smallerTableJoinColumnSampleSizeRatio)) -
-        1;
-    const size_t biggerTableJoinColumnLowerBound =
-        smallerTableJoinColumnUpperBound + 1;
-    const size_t biggerTableJoinColumnUpperBound =
-        biggerTableJoinColumnLowerBound +
-        static_cast<size_t>(
-            std::floor(static_cast<float>(smallerTableAmountRows) *
-                       static_cast<float>(ratioRows) *
-                       biggerTableJoinColumnSampleSizeRatio)) -
-        1;
-
-    // Replacing the old id tables with newly generated ones, based
-    // on specification.
-    smallerTable.idTable = createRandomlyFilledIdTable(
-        smallerTableAmountRows, smallerTableAmountColumns, 0,
-        smallerTableJoinColumnLowerBound, smallerTableJoinColumnUpperBound);
-    // We want the tables to have no overlap at this stage, so we have to
-    // move the bounds of the entries for the join column a bit, to make
-    // sure.
-    biggerTable.idTable = createRandomlyFilledIdTable(
-        smallerTableAmountRows * ratioRows, biggerTableAmountColumns, 0,
-        biggerTableJoinColumnLowerBound, biggerTableJoinColumnUpperBound);
-
-    // Creating overlap, if wanted.
-    if (overlap > 0) {
-      createOverlapRandomly(&smallerTable, biggerTable, overlap);
-    }
-
-    // Sort the tables, if wanted.
-    if (smallerTableSorted) {
-      sortIdTableByJoinColumnInPlace(smallerTable);
-    };
-    if (biggerTableSorted) {
-      sortIdTableByJoinColumnInPlace(biggerTable);
-    };
-  };
-
-  // Add the next row of join algorithm measurements to the benchmark table.
-  auto addNextRowToBenchmarkTable = [i = 0, &hashJoinLambda,
-                                     &smallerTableSorted, &biggerTableSorted,
-                                     &joinLambda, &smallerTable,
-                                     &biggerTable](ResultTable* table) mutable {
-    // The number of rows, that the joined `ItdTable`s end up having.
-    size_t numberRowsOfResult;
-
-    // Hash join first, because merge/galloping join sorts all tables, if
-    // needed, before joining them.
-    table->addMeasurement(
-        i, 3,
-        [&numberRowsOfResult, &smallerTable, &biggerTable, &hashJoinLambda]() {
-          numberRowsOfResult = useJoinFunctionOnIdTables(
-                                   smallerTable, biggerTable, hashJoinLambda)
-                                   .numRows();
-        });
-
-    /*
-    Then sorting of the `IdTables`. That must be done before the
-    merge/galloping, otherwise their algorithm won't result in a correct
-    result.
-    */
-    table->addMeasurement(
-        i, 0,
-        [&smallerTable, &smallerTableSorted, &biggerTable,
-        &biggerTableSorted]() {
-          if (!smallerTableSorted) {
-            sortIdTableByJoinColumnInPlace(smallerTable);
-          }
-          if (!biggerTableSorted){
-            sortIdTableByJoinColumnInPlace(biggerTable);
-          }
-        });
-
-    // The merge/galloping join.
-    table->addMeasurement(
-        i, 1,
-        [&numberRowsOfResult, &smallerTable, &biggerTable, &joinLambda]() {
-          numberRowsOfResult =
-              useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
-                  .numRows();
-        });
-
-    // Adding the number of rows of the result.
-    table->setEntry(i, 4, std::to_string(numberRowsOfResult));
-
-    // The next call of the lambda, will be one row further.
-    i++;
-  };
-
-  // For adding the speedup of the hash join algorithm in comparison
-  // to the merge/galloping join algorithm.
-  auto addSpeedup = [](ResultTable* table) {
-    calculateSpeedupOfColumn(table, 3, 2, 5);
-  };
-
   // Returns the first argument, that is a vector.
   auto returnFirstVector = []<typename... Ts>(Ts&... args)->auto&{
     // Put them into a tuple, so that we can easly look them up.
@@ -440,15 +308,22 @@ static void makeBenchmarkTable(
     }
   };
 
-  // Now on to creating the benchmark table. First, we find outt, which of our
+  // Now on to creating the benchmark table. First, we find out, which of our
   // arguments was the vector and use it to create the row names for the table.
   auto& vec = returnFirstVector(overlap, ratioRows, smallerTableAmountRows,
     smallerTableAmountColumns, biggerTableAmountColumns,
     smallerTableJoinColumnSampleSizeRatio,
     biggerTableJoinColumnSampleSizeRatio);
-  ResultTable* table = &createBenchmarkTable(vec);
 
-  // Setting rows of the table.
+  // Then, we convert the content of `vec` to strings and add the table.
+  ResultTable* table = &(records->addTable(std::string{tableDescriptor},
+    ad_utility::transform(vec,
+    [](const auto& entry) { return std::to_string(entry); }),
+    {"Time for sorting", "Merge/Galloping join",
+     "Sorting + merge/galloping join", "Hash join",
+     "Number of rows in resulting IdTable", "Speedup of hash join"}));
+
+  // Adding measurements to the table.
   for (size_t i = 0; i < vec.size(); i++){
     // All our function parameters as non vectors.
     const float sOverlap = returnEntry(overlap, i);
@@ -465,13 +340,95 @@ static void makeBenchmarkTable(
       returnEntry(biggerTableJoinColumnSampleSizeRatio, i);
 
     // Create new `IdTable`s.
-    replaceIdTables(sOverlap, sSmallerTableAmountRows,
-      sSmallerTableAmountColumns, sSmallerTableJoinColumnSampleSizeRatio,
-      sRatioRows, sBiggerTableAmountColumns,
-      sBiggerTableJoinColumnSampleSizeRatio);
 
-    addNextRowToBenchmarkTable(table);
-  }
+    /*
+    First we calculate the value boundaries for the join column entries. These
+    are needed for the creation of randomly filled tables.
+    Reminder: The $-1$ in the upper bounds is, because a range [a, b]
+    of natural numbers has $b - a + 1$ elements.
+    */
+    const size_t smallerTableJoinColumnLowerBound = 0;
+    const size_t smallerTableJoinColumnUpperBound =
+        static_cast<size_t>(
+            std::floor(static_cast<float>(sSmallerTableAmountRows) *
+                       sSmallerTableJoinColumnSampleSizeRatio)) -
+        1;
+    const size_t biggerTableJoinColumnLowerBound =
+        smallerTableJoinColumnUpperBound + 1;
+    const size_t biggerTableJoinColumnUpperBound =
+        biggerTableJoinColumnLowerBound +
+        static_cast<size_t>(
+            std::floor(static_cast<float>(sSmallerTableAmountRows) *
+                       static_cast<float>(sRatioRows) *
+                       sBiggerTableJoinColumnSampleSizeRatio)) -
+        1;
+
+    // Now we create two randomly filled `IdTable`, which have no overlap, and
+    // save them together with the information, where their join column is.
+    IdTableAndJoinColumn smallerTable{createRandomlyFilledIdTable(
+      sSmallerTableAmountRows, sSmallerTableAmountColumns, 0,
+      smallerTableJoinColumnLowerBound, smallerTableJoinColumnUpperBound), 0};
+    IdTableAndJoinColumn biggerTable{createRandomlyFilledIdTable(
+      sSmallerTableAmountRows * sRatioRows, sBiggerTableAmountColumns, 0,
+      biggerTableJoinColumnLowerBound, biggerTableJoinColumnUpperBound), 0};
+
+    // Creating overlap, if wanted.
+    if (sOverlap > 0) {
+      createOverlapRandomly(&smallerTable, biggerTable, sOverlap);
+    }
+
+    // Sort the `IdTables`, if they should be.
+    if (smallerTableSorted) {
+      sortIdTableByJoinColumnInPlace(smallerTable);
+    };
+    if (biggerTableSorted) {
+      sortIdTableByJoinColumnInPlace(biggerTable);
+    };
+
+    // Adding the benchmark measurements to the current row.
+
+    // The number of rows, that the joined `ItdTable`s end up having.
+    size_t numberRowsOfResult;
+
+    // Hash join first, because merge/galloping join sorts all tables, if
+    // needed, before joining them.
+    table->addMeasurement(
+        i, 3,
+        [&numberRowsOfResult, &smallerTable, &biggerTable, &hashJoinLambda]() {
+          numberRowsOfResult = useJoinFunctionOnIdTables(
+                                   smallerTable, biggerTable, hashJoinLambda)
+                                   .numRows();
+        });
+
+    /*
+    The sorting of the `IdTables`. That must be done before the
+    merge/galloping, otherwise their algorithm won't result in a correct
+    result.
+    */
+    table->addMeasurement(
+        i, 0,
+        [&smallerTable, &smallerTableSorted, &biggerTable,
+        &biggerTableSorted]() {
+          if (!smallerTableSorted) {
+            sortIdTableByJoinColumnInPlace(smallerTable);
+          }
+          if (!biggerTableSorted){
+            sortIdTableByJoinColumnInPlace(biggerTable);
+          }
+        });
+
+    // The merge/galloping join.
+    table->addMeasurement(
+        i, 1,
+        [&numberRowsOfResult, &smallerTable, &biggerTable, &joinLambda]() {
+          numberRowsOfResult =
+              useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
+                  .numRows();
+        });
+
+    // Adding the number of rows of the result.
+    table->setEntry(i, 4, std::to_string(numberRowsOfResult));
+}
 
   // If should never to possible for table to be a null pointr, but better
   // safe than sorry.
@@ -481,7 +438,9 @@ static void makeBenchmarkTable(
   // them using merge/galloping join.
   sumUpColumns(table, 2, static_cast<size_t>(0), static_cast<size_t>(1));
 
-  addSpeedup(table);
+  // Calculate, how much of a speedup the hash join algorithm has in comparison
+  // to the merge/galloping join algrithm.
+  calculateSpeedupOfColumn(table, 3, 2, 5);
   addMetadata(table);
 }
 
