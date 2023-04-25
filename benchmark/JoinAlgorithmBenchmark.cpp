@@ -290,7 +290,8 @@ static void makeBenchmarkTable(
 
     return records->addTable(
         std::string{tableDescriptor}, rowNames,
-        {"Merge/Galloping join", "Hash join",
+        {"Sorting IdTables before merge/galloping join",
+         "Merge/Galloping join", "Hash join",
          "Number of rows in resulting IdTable", "Speedup of hash join"});
   };
 
@@ -361,56 +362,41 @@ static void makeBenchmarkTable(
     // Hash join first, because merge/galloping join sorts all tables, if
     // needed, before joining them.
     table->addMeasurement(
-        i, 1,
+        i, 2,
         [&numberRowsOfResult, &smallerTable, &biggerTable, &hashJoinLambda]() {
           numberRowsOfResult = useJoinFunctionOnIdTables(
                                    smallerTable, biggerTable, hashJoinLambda)
                                    .numRows();
         });
 
-    // The merge/galloping join may have to sort non, one, or both tables,
-    // before using them. That decision shouldn't happen in the wrapper for the
-    // call, to minimize overhead.
-    if ((!smallerTableSorted) && (!biggerTableSorted)) {
-      table->addMeasurement(
-          i, 0,
-          [&numberRowsOfResult, &smallerTable, &biggerTable, &joinLambda]() {
+    /*
+    Then sorting of the `IdTables`. That must be done before the
+    merge/galloping, otherwise their algorithm won't result in a correct
+    result.
+    */
+    table->addMeasurement(
+        i, 0,
+        [&smallerTable, &smallerTableSorted, &biggerTable,
+        &biggerTableSorted]() {
+          if (!smallerTableSorted) {
             sortIdTableByJoinColumnInPlace(smallerTable);
+          }
+          if (!biggerTableSorted){
             sortIdTableByJoinColumnInPlace(biggerTable);
-            numberRowsOfResult =
-                useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
-                    .numRows();
-          });
-    } else if (!smallerTableSorted) {
-      table->addMeasurement(
-          i, 0,
-          [&numberRowsOfResult, &smallerTable, &biggerTable, &joinLambda]() {
-            sortIdTableByJoinColumnInPlace(smallerTable);
-            numberRowsOfResult =
-                useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
-                    .numRows();
-          });
-    } else if (!biggerTableSorted) {
-      table->addMeasurement(
-          i, 0,
-          [&numberRowsOfResult, &smallerTable, &biggerTable, &joinLambda]() {
-            sortIdTableByJoinColumnInPlace(biggerTable);
-            numberRowsOfResult =
-                useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
-                    .numRows();
-          });
-    } else {
-      table->addMeasurement(
-          i, 0,
-          [&numberRowsOfResult, &smallerTable, &biggerTable, &joinLambda]() {
-            numberRowsOfResult =
-                useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
-                    .numRows();
-          });
-    }
+          }
+        });
+
+    // The merge/galloping join.
+    table->addMeasurement(
+        i, 1,
+        [&numberRowsOfResult, &smallerTable, &biggerTable, &joinLambda]() {
+          numberRowsOfResult =
+              useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
+                  .numRows();
+        });
 
     // Adding the number of rows of the result.
-    table->setEntry(i, 2, std::to_string(numberRowsOfResult));
+    table->setEntry(i, 3, std::to_string(numberRowsOfResult));
 
     // The next call of the lambda, will be one row further.
     i++;
@@ -419,7 +405,7 @@ static void makeBenchmarkTable(
   // For adding the speedup of the hash join algorithm in comparison
   // to the merge/galloping join algorithm.
   auto addSpeedup = [](ResultTable* table) {
-    calculateSpeedupOfColumn(table, 1, 0, 3);
+    calculateSpeedupOfColumn(table, 2, 1, 4);
   };
 
   // Returns the first argument, that is a vector.
