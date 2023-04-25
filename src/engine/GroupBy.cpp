@@ -543,7 +543,7 @@ std::optional<Index::Permutation> GroupBy::getPermutationForThreeVariableTriple(
   }
   {
     auto v = variableThatMustBeContained;
-    if (v != indexScan->getSubject() && v.name() != indexScan->getPredicate() &&
+    if (v != indexScan->getSubject() && v != indexScan->getPredicate() &&
         v != indexScan->getObject()) {
       return std::nullopt;
     }
@@ -551,7 +551,7 @@ std::optional<Index::Permutation> GroupBy::getPermutationForThreeVariableTriple(
 
   if (variableByWhichToSort == indexScan->getSubject()) {
     return Index::Permutation::SPO;
-  } else if (variableByWhichToSort.name() == indexScan->getPredicate()) {
+  } else if (variableByWhichToSort == indexScan->getPredicate()) {
     return Index::Permutation::POS;
   } else if (variableByWhichToSort == indexScan->getObject()) {
     return Index::Permutation::OSP;

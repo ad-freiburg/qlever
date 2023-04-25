@@ -33,7 +33,7 @@ auto RootOperation(auto matcher) -> Matcher<const QueryExecutionTree&> {
 /// Return a matcher that checks that a given `QueryExecutionTree` consists of a
 /// single `IndexScan` with the given `subject`, `predicate`, and `object`, and
 /// that the `ScanType` of this `IndexScan` is any of the given `scanTypes`.
-auto IndexScan(TripleComponent subject, std::string predicate,
+auto IndexScan(TripleComponent subject, TripleComponent predicate,
                TripleComponent object,
                const std::vector<IndexScan::ScanType>& scanTypes = {})
     -> Matcher<const QueryExecutionTree&> {

@@ -93,17 +93,17 @@ concept BinaryIteratorFunction =
  * be exploited to fix the result in a cheaper way than a full sort.
  */
 template <
-    std::ranges::random_access_range Range,
-    BinaryRangePredicate<Range> LessThan, typename FindSmallerUndefRangesLeft,
-    typename FindSmallerUndefRangesRight,
-    UnaryIteratorFunction<Range> ElFromFirstNotFoundAction = decltype(noop)>
+    bool addDuplicatesFromLeft = true, std::ranges::random_access_range Range1,
+    std::ranges::random_access_range Range2, typename LessThan,
+    typename FindSmallerUndefRangesLeft, typename FindSmallerUndefRangesRight,
+    typename ElFromFirstNotFoundAction = decltype(noop)>
 [[nodiscard]] size_t zipperJoinWithUndef(
-    const Range& left, const Range& right, const LessThan& lessThan,
-    const BinaryIteratorFunction<Range> auto& compatibleRowAction,
+    const Range1& left, const Range2& right, const LessThan& lessThan,
+    const auto& compatibleRowAction,
     const FindSmallerUndefRangesLeft& findSmallerUndefRangesLeft,
     const FindSmallerUndefRangesRight& findSmallerUndefRangesRight,
     ElFromFirstNotFoundAction elFromFirstNotFoundAction = {}) {
-  using Iterator = std::ranges::iterator_t<Range>;
+  // using Iterator = std::ranges::iterator_t<Range>;
 
   // If this is not an OPTIONAL join or a MINUS we can apply several
   // optimizations, so we store this information.
@@ -145,8 +145,8 @@ template <
   // all elements in `left` that are smaller than `*itFromRight` to work
   // correctly. It would thus be always correct to pass in `left.begin()` and
   // `left.end()`, but passing in smaller ranges is more efficient.
-  auto mergeWithUndefLeft = [&](Iterator itFromRight, Iterator leftBegin,
-                                Iterator leftEnd) {
+  auto mergeWithUndefLeft = [&](auto itFromRight, auto leftBegin,
+                                auto leftEnd) {
     if constexpr (!isSimilar<FindSmallerUndefRangesLeft, Noop>) {
       // We need to bind the const& to a variable, else it will be
       // dangling inside the `findSmallerUndefRangesLeft` generator.
@@ -182,8 +182,8 @@ template <
   // correct place in the result. The condition about containing no UNDEF values
   // is important, because otherwise `*itFromLeft` may be compatible to a larger
   // element in `right` that is only discovered later.
-  auto mergeWithUndefRight = [&](Iterator itFromLeft, Iterator beginRight,
-                                 Iterator endRight, bool hasNoMatch) {
+  auto mergeWithUndefRight = [&](auto itFromLeft, auto beginRight,
+                                 auto endRight, bool hasNoMatch) {
     if constexpr (!isSimilar<FindSmallerUndefRangesRight, Noop>) {
       bool compatibleWasFound = false;
       // We need to bind the const& to a variable, else it will be
@@ -257,6 +257,9 @@ template <
         cover(it1);
         for (auto innerIt2 = it2; innerIt2 != endSame2; ++innerIt2) {
           compatibleRowAction(it1, innerIt2);
+        }
+        if constexpr (!addDuplicatesFromLeft) {
+          break;
         }
       }
       it1 = endSame1;

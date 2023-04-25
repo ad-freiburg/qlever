@@ -1025,7 +1025,7 @@ TEST(QueryPlannerTest, SimpleTripleOneVariable) {
   h::expect("SELECT * WHERE { ?s <p> <o> }",
             h::IndexScan(Var{"?s"}, "<p>", "<o>", {POS_BOUND_O}));
   h::expect("SELECT * WHERE { <s> ?p <o> }",
-            h::IndexScan("<s>", "?p", "<o>", {SOP_BOUND_O}));
+            h::IndexScan("<s>", Var{"?p"}, "<o>", {SOP_BOUND_O}));
   h::expect("SELECT * WHERE { <s> <p> ?o }",
             h::IndexScan("<s>", "<p>", Var{"?o"}, {PSO_BOUND_S}));
 }
@@ -1046,20 +1046,22 @@ TEST(QueryPlannerTest, SimpleTripleTwoVariables) {
             h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {PSO_FREE_S}));
 
   // Fixed subject.
-  h::expect("SELECT * WHERE { <s> ?p ?o }",
-            h::IndexScan("<s>", "?p", Var{"?o"}, {SOP_FREE_O, SPO_FREE_P}));
+  h::expect(
+      "SELECT * WHERE { <s> ?p ?o }",
+      h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP_FREE_O, SPO_FREE_P}));
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?o",
-            h::IndexScan("<s>", "?p", Var{"?o"}, {SOP_FREE_O}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP_FREE_O}));
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?p",
-            h::IndexScan("<s>", "?p", Var{"?o"}, {SPO_FREE_P}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SPO_FREE_P}));
 
   // Fixed object.
-  h::expect("SELECT * WHERE { <s> ?p ?o }",
-            h::IndexScan("<s>", "?p", Var{"?o"}, {SOP_FREE_O, SPO_FREE_P}));
+  h::expect(
+      "SELECT * WHERE { <s> ?p ?o }",
+      h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP_FREE_O, SPO_FREE_P}));
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?o",
-            h::IndexScan("<s>", "?p", Var{"?o"}, {SOP_FREE_O}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP_FREE_O}));
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?p",
-            h::IndexScan("<s>", "?p", Var{"?o"}, {SPO_FREE_P}));
+            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SPO_FREE_P}));
 }
 
 TEST(QueryPlannerTest, SimpleTripleThreeVariables) {
@@ -1068,33 +1070,39 @@ TEST(QueryPlannerTest, SimpleTripleThreeVariables) {
   // Fixed predicate.
   // Don't care about the sorting.
   h::expect("SELECT * WHERE { ?s ?p ?o }",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"},
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"},
                          {FULL_INDEX_SCAN_SPO, FULL_INDEX_SCAN_SOP,
                           FULL_INDEX_SCAN_PSO, FULL_INDEX_SCAN_POS,
                           FULL_INDEX_SCAN_OSP, FULL_INDEX_SCAN_OPS}));
 
   // Sorted by one variable, two possible permutations remain.
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?s",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"},
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"},
                          {FULL_INDEX_SCAN_SPO, FULL_INDEX_SCAN_SOP}));
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"},
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"},
                          {FULL_INDEX_SCAN_POS, FULL_INDEX_SCAN_PSO}));
   h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?o",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"},
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"},
                          {FULL_INDEX_SCAN_OSP, FULL_INDEX_SCAN_OPS}));
 
   // Sorted by two variables, this makes the permutation unique.
-  h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?s ?o",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"}, {FULL_INDEX_SCAN_SOP}));
-  h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?s ?p",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"}, {FULL_INDEX_SCAN_SPO}));
-  h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?o ?s",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"}, {FULL_INDEX_SCAN_OSP}));
-  h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?o ?p",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"}, {FULL_INDEX_SCAN_OPS}));
-  h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p ?s",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"}, {FULL_INDEX_SCAN_PSO}));
-  h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p ?o",
-            h::IndexScan(Var{"?s"}, "?p", Var{"?o"}, {FULL_INDEX_SCAN_POS}));
+  h::expect(
+      "SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?s ?o",
+      h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {FULL_INDEX_SCAN_SOP}));
+  h::expect(
+      "SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?s ?p",
+      h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {FULL_INDEX_SCAN_SPO}));
+  h::expect(
+      "SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?o ?s",
+      h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {FULL_INDEX_SCAN_OSP}));
+  h::expect(
+      "SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?o ?p",
+      h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {FULL_INDEX_SCAN_OPS}));
+  h::expect(
+      "SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p ?s",
+      h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {FULL_INDEX_SCAN_PSO}));
+  h::expect(
+      "SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p ?o",
+      h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {FULL_INDEX_SCAN_POS}));
 }

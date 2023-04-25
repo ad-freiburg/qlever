@@ -250,9 +250,15 @@ class CompressedRelationReader {
    * The same `CompressedRelationWriter` (see below).
    */
   void scan(const CompressedRelationMetadata& metadata,
-            const vector<CompressedBlockMetadata>& blockMetadata,
+            std::span<const CompressedBlockMetadata> blockMetadata,
             ad_utility::File& file, IdTable* result,
             ad_utility::SharedConcurrentTimeoutTimer timer) const;
+
+  // Get all the blocks that can contain an Id from the `joinColumn`.
+  // TODO<joka921> Include a timeout check.
+  std::vector<CompressedBlockMetadata> getBlocksForJoin(
+      std::span<const Id> joinColum, const CompressedRelationMetadata& metadata,
+      std::span<const CompressedBlockMetadata> blockMetadata);
 
   /**
    * @brief For a permutation XYZ, retrieve all Z for given X and Y.
