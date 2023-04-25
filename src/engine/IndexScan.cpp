@@ -16,7 +16,8 @@ using std::string;
 IndexScan::IndexScan(QueryExecutionContext* qec, ScanType type,
                      const SparqlTriple& triple)
     : Operation(qec),
-      _type(type),
+      _permutation(scanTypeToPermutation(type)),
+      _numVariables(scanTypeToNumVariables(type)),
       _subject(triple._s),
       _predicate(triple._p.getIri().starts_with("?")
                      ? TripleComponent(Variable{triple._p.getIri()})
@@ -31,55 +32,28 @@ string IndexScan::asStringImpl(size_t indent) const {
   for (size_t i = 0; i < indent; ++i) {
     os << ' ';
   }
-  switch (_type) {
-    case PSO_BOUND_S:
-      os << "SCAN PSO with P = \"" << _predicate << "\", S = \"" << _subject
-         << "\"";
-      break;
-    case POS_BOUND_O:
-      os << "SCAN POS with P = \"" << _predicate << "\", O = \""
-         << _object.toRdfLiteral() << "\"";
-      break;
-    case SOP_BOUND_O:
-      os << "SCAN SOP with S = \"" << _subject << "\", O = \""
-         << _object.toRdfLiteral() << "\"";
-      break;
-    case PSO_FREE_S:
-      os << "SCAN PSO with P = \"" << _predicate << "\"";
-      break;
-    case POS_FREE_O:
-      os << "SCAN POS with P = \"" << _predicate << "\"";
-      break;
-    case SPO_FREE_P:
-      os << "SCAN SPO with S = \"" << _subject << "\"";
-      break;
-    case SOP_FREE_O:
-      os << "SCAN SOP with S = \"" << _subject << "\"";
-      break;
-    case OPS_FREE_P:
-      os << "SCAN OPS with O = \"" << _object.toRdfLiteral() << "\"";
-      break;
-    case OSP_FREE_S:
-      os << "SCAN OSP with O = \"" << _object.toRdfLiteral() << "\"";
-      break;
-    case FULL_INDEX_SCAN_SPO:
-      os << "SCAN FOR FULL INDEX SPO (DUMMY OPERATION)";
-      break;
-    case FULL_INDEX_SCAN_SOP:
-      os << "SCAN FOR FULL INDEX SOP (DUMMY OPERATION)";
-      break;
-    case FULL_INDEX_SCAN_PSO:
-      os << "SCAN FOR FULL INDEX PSO (DUMMY OPERATION)";
-      break;
-    case FULL_INDEX_SCAN_POS:
-      os << "SCAN FOR FULL INDEX POS (DUMMY OPERATION)";
-      break;
-    case FULL_INDEX_SCAN_OSP:
-      os << "SCAN FOR FULL INDEX OSP (DUMMY OPERATION)";
-      break;
-    case FULL_INDEX_SCAN_OPS:
-      os << "SCAN FOR FULL INDEX OPS (DUMMY OPERATION)";
-      break;
+
+  auto permutationString = permutationToString(_permutation);
+
+  if (getResultWidth() == 3) {
+    AD_CORRECTNESS_CHECK(getResultWidth() == 3);
+    os << "SCAN FOR FULL INDEX " << permutationToString(_permutation)
+       << " (DUMMY OPERATION)";
+
+  } else {
+    auto firstKeyString = permutationString.at(0);
+    auto permutedTriple = getPermutedTriple();
+    const auto& firstKey = permutedTriple.at(0)->toRdfLiteral();
+    if (getResultWidth() == 1) {
+      auto secondKeyString = permutationString.at(1);
+      const auto& secondKey = permutedTriple.at(1)->toRdfLiteral();
+      os << "SCAN " << permutationString << " with " << firstKeyString
+         << " = \"" << firstKey << "\", " << secondKeyString << " = \""
+         << secondKey << "\"";
+    } else if (getResultWidth() == 2) {
+      os << "SCAN " << permutationString << " with " << firstKeyString
+         << " = \"" << firstKey << "\"";
+    }
   }
   return std::move(os).str();
 }
@@ -91,30 +65,7 @@ string IndexScan::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-size_t IndexScan::getResultWidth() const {
-  switch (_type) {
-    case PSO_BOUND_S:
-    case POS_BOUND_O:
-    case SOP_BOUND_O:
-      return 1;
-    case PSO_FREE_S:
-    case POS_FREE_O:
-    case SPO_FREE_P:
-    case SOP_FREE_O:
-    case OSP_FREE_S:
-    case OPS_FREE_P:
-      return 2;
-    case FULL_INDEX_SCAN_SPO:
-    case FULL_INDEX_SCAN_SOP:
-    case FULL_INDEX_SCAN_PSO:
-    case FULL_INDEX_SCAN_POS:
-    case FULL_INDEX_SCAN_OSP:
-    case FULL_INDEX_SCAN_OPS:
-      return 3;
-    default:
-      AD_FAIL();
-  }
-}
+size_t IndexScan::getResultWidth() const { return _numVariables; }
 
 // _____________________________________________________________________________
 vector<size_t> IndexScan::resultSortedOn() const {
@@ -151,19 +102,17 @@ ResultTable IndexScan::computeResult() {
   IdTable idTable{getExecutionContext()->getAllocator()};
 
   using enum Index::Permutation;
-  size_t numVariables = scanTypeToNumVariables(_type);
-  idTable.setNumColumns(numVariables);
+  idTable.setNumColumns(_numVariables);
   const auto& idx = _executionContext->getIndex();
   const auto permutedTriple = getPermutedTriple();
-  const Index::Permutation permutation = scanTypeToPermutation(_type);
-  if (numVariables == 2) {
-    idx.scan(*permutedTriple[0], &idTable, permutation, _timeoutTimer);
-  } else if (numVariables == 1) {
-    idx.scan(*permutedTriple[0], *permutedTriple[1], &idTable, permutation,
+  if (_numVariables == 2) {
+    idx.scan(*permutedTriple[0], &idTable, _permutation, _timeoutTimer);
+  } else if (_numVariables == 1) {
+    idx.scan(*permutedTriple[0], *permutedTriple[1], &idTable, _permutation,
              _timeoutTimer);
   } else {
-    AD_CORRECTNESS_CHECK(numVariables == 3);
-    computeFullScan(&idTable, permutation);
+    AD_CORRECTNESS_CHECK(_numVariables == 3);
+    computeFullScan(&idTable, _permutation);
   }
   LOG(DEBUG) << "IndexScan result computation done.\n";
 
@@ -203,7 +152,7 @@ size_t IndexScan::computeSizeEstimate() {
       }
     } else if (getResultWidth() == 2) {
       const auto& firstKey = *getPermutedTriple()[0];
-      return getIndex().getCardinality(firstKey, scanTypeToPermutation(_type));
+      return getIndex().getCardinality(firstKey, _permutation);
     } else {
       // The triple consists of three variables.
       // TODO<joka921> As soon as all implementations of a full index scan
@@ -258,17 +207,16 @@ size_t IndexScan::getCostEstimate() {
 // _____________________________________________________________________________
 void IndexScan::determineMultiplicities() {
   _multiplicity.clear();
-  auto permutation = scanTypeToPermutation(_type);
   if (_executionContext) {
     const auto& idx = getIndex();
     if (getResultWidth() == 1) {
       _multiplicity.emplace_back(1);
     } else if (getResultWidth() == 2) {
       const auto permutedTriple = getPermutedTriple();
-      _multiplicity = idx.getMultiplicities(*permutedTriple[0], permutation);
+      _multiplicity = idx.getMultiplicities(*permutedTriple[0], _permutation);
     } else {
       AD_CORRECTNESS_CHECK(getResultWidth() == 3);
-      _multiplicity = idx.getMultiplicities(permutation);
+      _multiplicity = idx.getMultiplicities(_permutation);
     }
   } else {
     _multiplicity.emplace_back(1);

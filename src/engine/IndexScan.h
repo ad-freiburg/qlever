@@ -99,8 +99,27 @@ class IndexScan : public Operation {
     }
   }
 
+  static std::string_view permutationToString(Index::Permutation permutation) {
+    using enum Index::Permutation;
+    switch (permutation) {
+      case POS:
+        return "POS";
+      case PSO:
+        return "PSO";
+      case SOP:
+        return "SOP";
+      case SPO:
+        return "SPO";
+      case OPS:
+        return "OPS";
+      case OSP:
+        return "OSP";
+    }
+  }
+
  private:
-  ScanType _type;
+  Index::Permutation _permutation;
+  size_t _numVariables;
   TripleComponent _subject;
   TripleComponent _predicate;
   TripleComponent _object;
@@ -161,7 +180,7 @@ class IndexScan : public Operation {
     return getResultWidth() == 3;
   }
 
-  ScanType getType() const { return _type; }
+  Index::Permutation permutation() const { return _permutation; }
 
  private:
   ResultTable computeResult() override;
@@ -184,7 +203,7 @@ class IndexScan : public Operation {
   std::array<const TripleComponent* const, 3> getPermutedTriple() const {
     using Arr = std::array<const TripleComponent* const, 3>;
     Arr inp{&_subject, &_predicate, &_object};
-    auto permutation = permutationToKeyOrder(scanTypeToPermutation(_type));
+    auto permutation = permutationToKeyOrder(_permutation);
     return {inp[permutation[0]], inp[permutation[1]], inp[permutation[2]]};
   }
 };
