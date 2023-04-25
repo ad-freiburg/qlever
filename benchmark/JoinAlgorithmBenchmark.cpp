@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <ctime>
 #include <type_traits>
+#include <tuple>
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
@@ -26,6 +27,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/ResultTable.h"
 #include "engine/idTable/IdTable.h"
+#include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/Random.h"
@@ -420,74 +422,69 @@ static void makeBenchmarkTable(
     calculateSpeedupOfColumn(table, 1, 0, 3);
   };
 
-  // We have to adjust a few things, based on which argument is the
-  // vector. Fortunaly, we can do it so, that the uneeded parts get deleted
-  // at compile time.
-  ResultTable* table = nullptr;
-  if constexpr (std::is_same_v<T1, std::vector<size_t>>) {
-    table = &createBenchmarkTable(ratioRows);
-    for (const size_t& ratioRow : ratioRows) {
-      replaceIdTables(
-          overlap, smallerTableAmountRows, smallerTableAmountColumns,
-          smallerTableJoinColumnSampleSizeRatio, ratioRow,
-          biggerTableAmountColumns, biggerTableJoinColumnSampleSizeRatio);
-      addNextRowToBenchmarkTable(table);
+  // Returns the first argument, that is a vector.
+  auto returnFirstVector = []<typename... Ts>(Ts&... args)->auto&{
+    // Put them into a tuple, so that we can easly look them up.
+    auto tup = std::tuple<Ts&...>{AD_FWD(args)...};
+
+    // Is something a vector?
+    constexpr auto isVector = []<typename T>(){
+      return ad_utility::isVector<std::decay_t<T>>;};
+
+    // Get the index of the first vector.
+    constexpr static size_t idx =
+      ad_utility::getIndexOfFirstTypeToPassCheck<isVector, Ts...>();
+
+    // Do we have a valid index?
+    static_assert(idx < sizeof...(Ts),
+    "There was no vector in this parameter pack.");
+
+    return std::get<idx>(tup);
+  };
+
+  /*
+  @brief Returns the entry at position `pos` of the vector, if given a vector.
+  Otherwise just returns the given `possibleVector`.
+  */
+  auto returnEntry = []<typename T>(const T& possibleVector, const size_t pos){
+    if constexpr(ad_utility::isVector<T>){
+      return possibleVector.at(pos);
+    } else {
+      return possibleVector;
     }
-  } else if constexpr (std::is_same_v<T2, std::vector<size_t>>) {
-    table = &createBenchmarkTable(smallerTableAmountRows);
-    for (const size_t& smallerTableAmountRow : smallerTableAmountRows) {
-      replaceIdTables(overlap, smallerTableAmountRow, smallerTableAmountColumns,
-                      smallerTableJoinColumnSampleSizeRatio, ratioRows,
-                      biggerTableAmountColumns,
-                      biggerTableJoinColumnSampleSizeRatio);
-      addNextRowToBenchmarkTable(table);
-    }
-  } else if constexpr (std::is_same_v<T3, std::vector<size_t>>) {
-    table = &createBenchmarkTable(smallerTableAmountColumns);
-    for (const size_t& smallerTableAmountColumn : smallerTableAmountColumns) {
-      replaceIdTables(overlap, smallerTableAmountRows, smallerTableAmountColumn,
-                      smallerTableJoinColumnSampleSizeRatio, ratioRows,
-                      biggerTableAmountColumns,
-                      biggerTableJoinColumnSampleSizeRatio);
-      addNextRowToBenchmarkTable(table);
-    }
-  } else if constexpr (std::is_same_v<T4, std::vector<size_t>>) {
-    table = &createBenchmarkTable(biggerTableAmountColumns);
-    for (const size_t& biggerTableAmountColumn : biggerTableAmountColumns) {
-      replaceIdTables(
-          overlap, smallerTableAmountRows, smallerTableAmountColumns,
-          smallerTableJoinColumnSampleSizeRatio, ratioRows,
-          biggerTableAmountColumn, biggerTableJoinColumnSampleSizeRatio);
-      addNextRowToBenchmarkTable(table);
-    }
-  } else if constexpr (std::is_same_v<T4, std::vector<float>>) {
-    table = &createBenchmarkTable(overlap);
-    for (const size_t& overlapChance : overlap) {
-      replaceIdTables(
-          overlapChance, smallerTableAmountRows, smallerTableAmountColumns,
-          smallerTableJoinColumnSampleSizeRatio, ratioRows,
-          biggerTableAmountColumns, biggerTableJoinColumnSampleSizeRatio);
-      addNextRowToBenchmarkTable(table);
-    }
-  } else if constexpr (std::is_same_v<T5, std::vector<float>>) {
-    table = &createBenchmarkTable(smallerTableJoinColumnSampleSizeRatio);
-    for (const size_t& sampleSizeRatio :
-         smallerTableJoinColumnSampleSizeRatio) {
-      replaceIdTables(overlap, smallerTableAmountRows,
-                      smallerTableAmountColumns, sampleSizeRatio, ratioRows,
-                      biggerTableAmountColumns,
-                      biggerTableJoinColumnSampleSizeRatio);
-      addNextRowToBenchmarkTable(table);
-    }
-  } else if constexpr (std::is_same_v<T6, std::vector<float>>) {
-    table = &createBenchmarkTable(biggerTableJoinColumnSampleSizeRatio);
-    for (const size_t& sampleSizeRatio : biggerTableJoinColumnSampleSizeRatio) {
-      replaceIdTables(overlap, smallerTableAmountRows,
-                      smallerTableAmountColumns,
-                      smallerTableJoinColumnSampleSizeRatio, ratioRows,
-                      biggerTableAmountColumns, sampleSizeRatio);
-      addNextRowToBenchmarkTable(table);
-    }
+  };
+
+  // Now on to creating the benchmark table. First, we find outt, which of our
+  // arguments was the vector and use it to create the row names for the table.
+  auto& vec = returnFirstVector(overlap, ratioRows, smallerTableAmountRows,
+    smallerTableAmountColumns, biggerTableAmountColumns,
+    smallerTableJoinColumnSampleSizeRatio,
+    biggerTableJoinColumnSampleSizeRatio);
+  ResultTable* table = &createBenchmarkTable(vec);
+
+  // Setting rows of the table.
+  for (size_t i = 0; i < vec.size(); i++){
+    // All our function parameters as non vectors.
+    const float sOverlap = returnEntry(overlap, i);
+    const size_t sRatioRows = returnEntry(ratioRows, i);
+    const size_t sSmallerTableAmountRows =
+      returnEntry(smallerTableAmountRows, i);
+    const size_t sSmallerTableAmountColumns =
+      returnEntry(smallerTableAmountColumns, i);
+    const size_t sBiggerTableAmountColumns =
+      returnEntry(biggerTableAmountColumns, i);
+    const float sSmallerTableJoinColumnSampleSizeRatio =
+      returnEntry(smallerTableJoinColumnSampleSizeRatio, i);
+    const float sBiggerTableJoinColumnSampleSizeRatio =
+      returnEntry(biggerTableJoinColumnSampleSizeRatio, i);
+
+    // Create new `IdTable`s.
+    replaceIdTables(sOverlap, sSmallerTableAmountRows,
+      sSmallerTableAmountColumns, sSmallerTableJoinColumnSampleSizeRatio,
+      sRatioRows, sBiggerTableAmountColumns,
+      sBiggerTableJoinColumnSampleSizeRatio);
+
+    addNextRowToBenchmarkTable(table);
   }
 
   // If should never to possible for table to be a null pointr, but better
