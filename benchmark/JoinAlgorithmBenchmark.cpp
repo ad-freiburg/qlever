@@ -423,22 +423,36 @@ static ResultTable& makeBenchmarkTable(
 }
 
 /*
- * @brief Returns a vector of exponents $base^x$, with $x$ staring at 0, and
- *  ending with the last $base^x$ that is smaller, or equal, to the stopping
- *  point.
+ * @brief Returns a vector of exponents $base^x$, with $x$ being a natural
+ * number and $base^x$ being all possible numbers of this type in a given
+ * range.
  *
  * @param base The base of the exponents.
+ * @param startingPoint What the smalles exponent must at minimum be.
  * @param stoppingPoint What the biggest exponent is allowed to be.
  *
- * @return `{base^0, base^1, ...., base^N}` with `base^N <= stoppingPoint` and
- *  `base^(N+1) > stoppingPoint`.
+ * @return `{base^i, base^(i+1), ...., base^(i+n)}` with
+ * `base^(i-1) < startingPoint`, `startingPoint <= base^i`,
+ * `base^(i+n) <= stoppingPoint`and
+ * `stoppingPoint < base^(i+n+1)`.
  */
 static std::vector<size_t> createExponentVectorUntilSize(
-    const size_t base, const size_t stoppingPoint) {
+    const size_t base, const size_t startingPoint,const size_t stoppingPoint) {
+  // Quick check, if the given arguments make sense.
+  AD_CONTRACT_CHECK(startingPoint <= stoppingPoint);
+    
   std::vector<size_t> exponentVector{};
 
-  // Calculating and adding the exponents.
-  size_t currentExponent = 1;  // base^0 = 1
+  /*
+  We can calculate our first exponent by using the logarithm.
+  A short explanation: We calculate $log_(base)(startingPoint)$ and
+  round up. This should give us the $x$ of the first $base^x$ bigger
+  than `startingPoint`.
+  */
+  size_t currentExponent = static_cast<size_t>(std::pow(base,
+    std::ceil(std::log(startingPoint)/std::log(base))));
+
+  // The rest of the exponents.
   while (currentExponent <= stoppingPoint) {
     exponentVector.push_back(currentExponent);
     currentExponent *= base;
@@ -474,9 +488,11 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   value.
   */
 
-  // Amount of rows for the smaller `IdTable`, if we always use the amount.
+  // Amount of rows for the smaller `IdTable`, if we always use the same amount.
   size_t smallerTableAmountRows_;
 
+  // The minimum amount of rows, that the smaller `IdTable` should have.
+  size_t minSmallerTableRows_;
   // The maximum amount of rows, that the smaller `IdTable` should have.
   size_t maxSmallerTableRows_;
 
@@ -498,6 +514,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   */
   size_t ratioRows_;
 
+  // The minimum row ratio between the smaller and the bigger `IdTable`.
+  size_t minRatioRows_;
   // The maximal row ratio between the smaller and the bigger `IdTable`.
   size_t maxRatioRows_;
 
@@ -528,7 +546,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                                        static_cast<size_t>(256));
 
     setToValueInConfigurationOrDefault(
-        maxSmallerTableRows_, "maxSmallerTableRows", static_cast<size_t>(2000));
+        minSmallerTableRows_, "minSmallerTableRows", static_cast<size_t>(100));
+    setToValueInConfigurationOrDefault(
+        maxSmallerTableRows_, "maxSmallerTableRows", static_cast<size_t>(10000));
 
     setToValueInConfigurationOrDefault(smallerTableAmountColumns_,
                                        "smallerTableAmountColumns",
@@ -543,8 +563,10 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     setToValueInConfigurationOrDefault(ratioRows_, "ratioRows",
                                        static_cast<size_t>(1));
 
+    setToValueInConfigurationOrDefault(minRatioRows_, "minRatioRows",
+                                       static_cast<size_t>(1));
     setToValueInConfigurationOrDefault(maxRatioRows_, "maxRatioRows",
-                                       static_cast<size_t>(256));
+                                       static_cast<size_t>(1000));
   }
 
 };
@@ -559,7 +581,7 @@ class BmOnlyBiggerTableSizeChanges final
 
     // Easier reading.
     const std::vector<size_t> ratioRows{
-        createExponentVectorUntilSize(2, maxRatioRows_)};
+        createExponentVectorUntilSize(10, minRatioRows_, maxRatioRows_)};
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
@@ -606,13 +628,14 @@ class BmOnlySmallerTableSizeChanges final
 
     // Easier reading.
     const std::vector<size_t> smallerTableAmountRows{
-        createExponentVectorUntilSize(2, maxSmallerTableRows_)};
+        createExponentVectorUntilSize(10, minSmallerTableRows_,
+        maxSmallerTableRows_)};
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
         // We also make multiple tables for different row ratios.
         for (const size_t ratioRows :
-             createExponentVectorUntilSize(2, maxRatioRows_)) {
+             createExponentVectorUntilSize(10, minRatioRows_, maxRatioRows_)) {
           ResultTable& table = makeBenchmarkTable(
               &results,
               absl::StrCat("The amount of rows in ",
@@ -659,7 +682,8 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 
     // Easier reading.
     const std::vector<size_t> smallerTableAmountRows{
-        createExponentVectorUntilSize(2, maxSmallerTableRows_)};
+        createExponentVectorUntilSize(10, minSmallerTableRows_,
+        maxSmallerTableRows_)};
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
