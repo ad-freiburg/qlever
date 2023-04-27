@@ -206,6 +206,14 @@ ResultTable::operator std::string() const {
 }
 
 // ____________________________________________________________________________
+void ResultTable::addRow(std::string_view rowName){
+    // Add the row name.
+    rowNames_.emplace_back(rowName);
+    // Create an emptry row of the same size as every other row.
+    entries_.emplace_back(numColumns());
+  }
+
+// ____________________________________________________________________________
 size_t ResultTable::numRows() const { return entries_.size(); }
 
 // ____________________________________________________________________________
