@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <type_traits>
+#include <variant>
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "util/Timer.h"
@@ -60,6 +61,53 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultTable) {
+  // Looks, if the general form is correct.
+  auto checkForm = [](const ResultTable& table, const std::string& name,
+                      const std::vector<std::string>& rowNames,
+                      const std::vector<std::string>& columnNames) {
+    ASSERT_EQ(name, table.descriptor_);
+    ASSERT_EQ(rowNames, table.rowNames_);
+    ASSERT_EQ(columnNames, table.columnNames_);
+    ASSERT_EQ(rowNames.size(), table.numRows());
+    ASSERT_EQ(columnNames.size(), table.numColumns());
+  };
+
+  // Calls the correct assert function based on type.
+  auto assertEqual = []<typename T>(const T& a, const T& b) {
+    if constexpr (std::is_floating_point_v<T>) {
+      ASSERT_NEAR(a, b, 0.01);
+    } else {
+      ASSERT_EQ(a, b);
+    }
+  };
+
+  // Checks, if a table entry was never set.
+  auto checkNeverSet = [](const ResultTable& table, const size_t& row,
+                          const size_t& column) {
+    // Is it empty?
+    ASSERT_TRUE(std::holds_alternative<std::monostate>(
+        table.entries_.at(row).at(column)));
+
+    // Does trying to access it anyway cause an error?
+    ASSERT_ANY_THROW(table.getEntry<std::string>(row, column));
+    ASSERT_ANY_THROW(table.getEntry<float>(row, column));
+  };
+
+  /*
+  Check the content of a tables row.
+  */
+  auto checkRow = [&assertEqual](const ResultTable& table,
+                                 const size_t& rowNumber,
+                                 const auto&... wantedContent) {
+    size_t column = 0;
+    auto check = [&table, &rowNumber, &column,
+                  &assertEqual](const auto& wantedContent) mutable {
+      assertEqual(wantedContent,
+                  table.getEntry<std::decay_t<decltype(wantedContent)>>(
+                      rowNumber, column++));
+    };
+    ((check(wantedContent)), ...);
+  };
   /*
   Special case: A table with no rows, or columns. Should throw an exception
   on creation, because it's quite the stupid idea.
@@ -75,31 +123,37 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   ResultTable table("My table", rowNames, columnNames);
 
   // Was it created correctly?
-  ASSERT_EQ("My table", table.descriptor_);
-  ASSERT_EQ(rowNames, table.rowNames_);
-  ASSERT_EQ(columnNames, table.columnNames_);
-  ASSERT_EQ(2, table.entries_.size());
-  ASSERT_EQ(2, table.entries_.at(0).size());
-  ASSERT_EQ(2, table.entries_.at(1).size());
+  checkForm(table, "My table", rowNames, columnNames);
 
   // Add measured function to it.
   table.addMeasurement(0, 0, createWaitLambda(100));
-  ASSERT_NEAR(0.1, table.getEntry<float>(0, 0), 0.01);
 
   // Set custom entries.
   table.setEntry(0, 1, (float)4.9);
-  table.setEntry(1, 1, "Custom entry");
+  table.setEntry(1, 0, "Custom entry");
 
-  ASSERT_FLOAT_EQ(table.getEntry<float>(0, 1), 4.9);
-  ASSERT_EQ(table.getEntry<std::string>(1, 1), "Custom entry");
+  // Check the entries.
+  checkRow(table, 0, static_cast<float>(0.1), static_cast<float>(4.9));
+  checkRow(table, 1, std::string{"Custom entry"});
+  checkNeverSet(table, 1, 1);
 
   // Trying to get entries with the wrong type, should cause an error.
   ASSERT_ANY_THROW(table.getEntry<std::string>(0, 1));
-  ASSERT_ANY_THROW(table.getEntry<float>(1, 1));
-
-  // Same for trying to get the value of an entry, who has never been set,
-  // or added.
-  ASSERT_ANY_THROW(table.getEntry<std::string>(1, 0));
   ASSERT_ANY_THROW(table.getEntry<float>(1, 0));
+
+  // Can we add a new row, without changing things?
+  table.addRow("row3");
+  checkForm(table, "My table", {"row1", "row2", "row3"}, columnNames);
+  checkRow(table, 0, static_cast<float>(0.1), static_cast<float>(4.9));
+  checkRow(table, 1, std::string{"Custom entry"});
+
+  // Are the entries of the new row empty?
+  checkNeverSet(table, 2, 0);
+  checkNeverSet(table, 2, 1);
+
+  // To those new fields work like the old ones?
+  table.addMeasurement(2, 0, createWaitLambda(290));
+  table.setEntry(2, 1, "Custom entry #2");
+  checkRow(table, 2, static_cast<float>(0.29), std::string{"Custom entry #2"});
 }
 }  // namespace ad_benchmark
