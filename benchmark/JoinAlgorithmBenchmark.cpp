@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cmath>
 #include <concepts>
+#include <cstddef>
 #include <cstdio>
 #include <ctime>
 #include <type_traits>
@@ -491,10 +492,10 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   // Amount of rows for the smaller `IdTable`, if we always use the same amount.
   size_t smallerTableAmountRows_;
 
-  // The minimum amount of rows, that the smaller `IdTable` should have.
-  size_t minSmallerTableRows_;
-  // The maximum amount of rows, that the smaller `IdTable` should have.
-  size_t maxSmallerTableRows_;
+  // The minimum amount of rows, that the bigger `IdTable` should have.
+  size_t minBiggerTableRows_;
+  // The maximum amount of rows, that the bigger `IdTable` should have.
+  size_t maxBiggerTableRows_;
 
   // Amount of columns for the `IdTable`s
   size_t smallerTableAmountColumns_;
@@ -543,12 +544,12 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 
     setToValueInConfigurationOrDefault(smallerTableAmountRows_,
                                        "smallerTableAmountRows",
-                                       static_cast<size_t>(256));
+                                       static_cast<size_t>(1000));
 
     setToValueInConfigurationOrDefault(
-        minSmallerTableRows_, "minSmallerTableRows", static_cast<size_t>(100));
+        minBiggerTableRows_, "minBiggerTableRows", static_cast<size_t>(1000));
     setToValueInConfigurationOrDefault(
-        maxSmallerTableRows_, "maxSmallerTableRows", static_cast<size_t>(10000));
+        maxBiggerTableRows_, "maxBiggerTableRows", static_cast<size_t>(100000));
 
     setToValueInConfigurationOrDefault(smallerTableAmountColumns_,
                                        "smallerTableAmountColumns",
@@ -571,17 +572,29 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 
 };
 
-// Create benchmark tables, where the smaller table stays at 2000 rows and
-// the bigger tables keeps getting bigger. Amount of columns stays the same.
+/*
+Create benchmark tables, where the smaller table stays at the same ount of
+rows and the bigger tables keeps getting bigger. Amount of columns stays the
+same.
+*/
 class BmOnlyBiggerTableSizeChanges final
     : public GeneralInterfaceImplementation {
  public:
   BenchmarkResults runAllBenchmarks() override {
     BenchmarkResults results{};
 
-    // Easier reading.
-    const std::vector<size_t> ratioRows{
-        createExponentVectorUntilSize(10, minRatioRows_, maxRatioRows_)};
+    /*
+    We got the fixed amount of rows for the smaller table and the variable
+    amount of rows for the bigger table. Those can be used to calculate the
+    ratios needed for a benchmark table, that has those values.
+    */
+    const std::vector<size_t> ratioRows{ad_utility::transform(
+      createExponentVectorUntilSize(10, minBiggerTableRows_,
+      maxBiggerTableRows_),
+      [this](const size_t& number){
+        return number/smallerTableAmountRows_;
+      })};
+
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
@@ -626,16 +639,24 @@ class BmOnlySmallerTableSizeChanges final
   BenchmarkResults runAllBenchmarks() override {
     BenchmarkResults results{};
 
-    // Easier reading.
-    const std::vector<size_t> smallerTableAmountRows{
-        createExponentVectorUntilSize(10, minSmallerTableRows_,
-        maxSmallerTableRows_)};
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
         // We also make multiple tables for different row ratios.
         for (const size_t ratioRows :
              createExponentVectorUntilSize(10, minRatioRows_, maxRatioRows_)) {
+        /*
+        We got the fixed ratio and the variable amount of rows for the bigger
+        table. Those can be used to calculate the number of rows in the smaller
+        table needed for a benchmark table, that has those values.
+        */
+        const std::vector<size_t> smallerTableAmountRows{ad_utility::transform(
+          createExponentVectorUntilSize(10, minBiggerTableRows_,
+          maxBiggerTableRows_),
+          [&ratioRows](const size_t& number){
+            return number/ratioRows;
+          })};
+
           ResultTable& table = makeBenchmarkTable(
               &results,
               absl::StrCat("The amount of rows in ",
@@ -682,8 +703,9 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 
     // Easier reading.
     const std::vector<size_t> smallerTableAmountRows{
-        createExponentVectorUntilSize(10, minSmallerTableRows_,
-        maxSmallerTableRows_)};
+        createExponentVectorUntilSize(10, minBiggerTableRows_,
+        maxBiggerTableRows_)};
+
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
@@ -691,7 +713,7 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
                            "Both tables always have the same amount"
                            "of rows and that amount grows.",
                            overlapChance_, smallerTableSorted,
-                           biggerTableSorted, ratioRows_,
+                           biggerTableSorted, static_cast<size_t>(1),
                            smallerTableAmountRows, smallerTableAmountColumns_,
                            biggerTableAmountColumns_);
 
@@ -712,7 +734,7 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
     meta.addKeyValuePair("Value changing with every row",
       "smallerTableAmountRows");
     meta.addKeyValuePair("overlap", overlapChance_);
-    meta.addKeyValuePair("ratioRows", ratioRows_);
+    meta.addKeyValuePair("ratioRows", 1);
     meta.addKeyValuePair("smallerTableAmountColumns",
                          smallerTableAmountColumns_);
     meta.addKeyValuePair("biggerTableAmountColumns", biggerTableAmountColumns_);
