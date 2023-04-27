@@ -63,8 +63,8 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
 TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   // Looks, if the general form is correct.
   auto checkForm = [](const ResultTable& table, const std::string& name,
-    const std::vector<std::string>& rowNames,
-    const std::vector<std::string>& columnNames){
+                      const std::vector<std::string>& rowNames,
+                      const std::vector<std::string>& columnNames) {
     ASSERT_EQ(name, table.descriptor_);
     ASSERT_EQ(rowNames, table.rowNames_);
     ASSERT_EQ(columnNames, table.columnNames_);
@@ -73,8 +73,8 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   };
 
   // Calls the correct assert function based on type.
-  auto assertEqual = []<typename T>(const T& a, const T& b){
-    if constexpr(std::is_floating_point_v<T>){
+  auto assertEqual = []<typename T>(const T& a, const T& b) {
+    if constexpr (std::is_floating_point_v<T>) {
       ASSERT_NEAR(a, b, 0.01);
     } else {
       ASSERT_EQ(a, b);
@@ -83,28 +83,28 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
 
   // Checks, if a table entry was never set.
   auto checkNeverSet = [](const ResultTable& table, const size_t& row,
-    const size_t& column){
-      // Is it empty?
-      ASSERT_TRUE(
-        std::holds_alternative<std::monostate>(
+                          const size_t& column) {
+    // Is it empty?
+    ASSERT_TRUE(std::holds_alternative<std::monostate>(
         table.entries_.at(row).at(column)));
 
-      // Does trying to access it anyway cause an error?
-      ASSERT_ANY_THROW(table.getEntry<std::string>(row, column));
-      ASSERT_ANY_THROW(table.getEntry<float>(row, column));
-    };
+    // Does trying to access it anyway cause an error?
+    ASSERT_ANY_THROW(table.getEntry<std::string>(row, column));
+    ASSERT_ANY_THROW(table.getEntry<float>(row, column));
+  };
 
   /*
   Check the content of a tables row.
   */
-  auto checkRow = [&assertEqual](const ResultTable& table, const size_t& rowNumber,
-    const auto&... wantedContent){
+  auto checkRow = [&assertEqual](const ResultTable& table,
+                                 const size_t& rowNumber,
+                                 const auto&... wantedContent) {
     size_t column = 0;
-    auto check = [&table, &rowNumber, &column, &assertEqual](
-      const auto& wantedContent)mutable{
+    auto check = [&table, &rowNumber, &column,
+                  &assertEqual](const auto& wantedContent) mutable {
       assertEqual(wantedContent,
-          table.getEntry<std::decay_t<decltype(wantedContent)>>(rowNumber,
-          column++));
+                  table.getEntry<std::decay_t<decltype(wantedContent)>>(
+                      rowNumber, column++));
     };
     ((check(wantedContent)), ...);
   };
@@ -133,7 +133,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   table.setEntry(1, 0, "Custom entry");
 
   // Check the entries.
-  checkRow(table, 0,  static_cast<float>(0.1), static_cast<float>(4.9));
+  checkRow(table, 0, static_cast<float>(0.1), static_cast<float>(4.9));
   checkRow(table, 1, std::string{"Custom entry"});
   checkNeverSet(table, 1, 1);
 
@@ -144,7 +144,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   // Can we add a new row, without changing things?
   table.addRow("row3");
   checkForm(table, "My table", {"row1", "row2", "row3"}, columnNames);
-  checkRow(table, 0,  static_cast<float>(0.1), static_cast<float>(4.9));
+  checkRow(table, 0, static_cast<float>(0.1), static_cast<float>(4.9));
   checkRow(table, 1, std::string{"Custom entry"});
 
   // Are the entries of the new row empty?

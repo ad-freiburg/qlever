@@ -206,7 +206,7 @@ class ResultTable : public BenchmarkMetadataGetter {
   */
   template <typename T>
   requires std::is_same_v<T, float> || std::is_same_v<T, std::string>
-  T getEntry(const size_t row, const size_t column) const{
+  T getEntry(const size_t row, const size_t column) const {
     // There is a chance, that the entry of the table does NOT have type T,
     // in which case this will cause an error. As this is a mistake on the
     // side of the user, we don't really care.
