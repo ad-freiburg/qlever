@@ -216,6 +216,16 @@ class ResultTable : public BenchmarkMetadataGetter {
   // User defined conversion to `std::string`.
   explicit operator std::string() const;
 
+  /*
+  The number of rows.
+  */
+  size_t numRows() const;
+
+  /*
+  The number of columns.
+  */
+  size_t numColumns() const;
+
   // JSON serialization.
   friend void to_json(nlohmann::json& j, const ResultTable& resultTable);
 };
