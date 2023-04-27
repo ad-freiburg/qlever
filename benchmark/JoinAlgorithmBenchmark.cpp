@@ -568,6 +568,36 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                                        static_cast<size_t>(1));
     setToValueInConfigurationOrDefault(maxRatioRows_, "maxRatioRows",
                                        static_cast<size_t>(1000));
+
+    /*
+    `maxMemoryInMB` is the max amount, that the bigger `IdTable` is allowed to
+    take up in memory. If the option was set, we adjust `maxBiggerTableRows`, so
+    that it now conforms to it.
+    */
+    const std::optional<size_t>& maxMemoryInMB =
+      config.getValueByNestedKeys<size_t>("maxMemoryInMB");
+
+    if (maxMemoryInMB.has_value()){
+      /*
+      The overhead can be, more or less, ignored. We are just concerned over
+      the space needed for the entries.
+      */
+      constexpr size_t memoryPerIdTableEntryInByte =
+        sizeof(IdTable::value_type);
+      const size_t memoryPerRowInByte = memoryPerIdTableEntryInByte *
+        biggerTableAmountColumns_;
+
+      // Does a single row take more memory, than is allowed?
+      if (maxMemoryInMB.value() * 1000000 < memoryPerRowInByte) {
+        throw ad_utility::Exception(absl::StrCat("A single row of an",
+        " IdTable, with ", biggerTableAmountColumns_, " columns, takes more",
+        " memory, than what was allowed."));
+      }
+
+      // Approximate, how many rows that would be at maximum memory usage.
+      maxBiggerTableRows_ = (maxMemoryInMB.value() * 1000000) /
+        memoryPerRowInByte;
+    }
   }
 
 };
