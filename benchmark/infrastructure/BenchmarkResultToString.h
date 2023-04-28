@@ -59,5 +59,5 @@ void addTablesToOStringstream(std::ostringstream* stream,
  * by all the benchmark information.
  */
 std::string benchmarkResultsToString(const BenchmarkMetadata& meta,
-  const BenchmarkResults& results);
+                                     const BenchmarkResults& results);
 }  // namespace ad_benchmark

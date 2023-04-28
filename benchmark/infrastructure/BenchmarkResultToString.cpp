@@ -3,6 +3,7 @@
 // Author: Andre Schlegel February of 2023, schlegea@informatik.uni-freiburg.de)
 
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
+
 #include <bits/ranges_algo.h>
 
 namespace ad_benchmark {
@@ -29,13 +30,14 @@ void addVectorOfResultEntryToOStringstream(
     feed the content of the string into the stream char for char.
     */
     std::ranges::for_each(static_cast<std::string>(entry),
-      [&stream, &newLinePrefix](const char& currentSymbol){
-        if (currentSymbol == '\n'){
-          (*stream) << "\n" << newLinePrefix;
-        } else {
-          (*stream) << currentSymbol;
-        }
-      }, {});
+                          [&stream, &newLinePrefix](const char& currentSymbol) {
+                            if (currentSymbol == '\n') {
+                              (*stream) << "\n" << newLinePrefix;
+                            } else {
+                              (*stream) << currentSymbol;
+                            }
+                          },
+                          {});
   }
 };
 
@@ -68,7 +70,7 @@ void addTablesToOStringstream(std::ostringstream* stream,
 
 // ___________________________________________________________________________
 std::string benchmarkResultsToString(const BenchmarkMetadata& meta,
-  const BenchmarkResults& results) {
+                                     const BenchmarkResults& results) {
   // The values for all the categories of benchmarks.
   const std::vector<ResultEntry>& singleMeasurements =
       results.getSingleMeasurements();
@@ -101,8 +103,9 @@ std::string benchmarkResultsToString(const BenchmarkMetadata& meta,
       };
 
   // Visualize the general metadata.
-  addCategoryTitleToOStringstream(&visualization, "General metadata for the"
-    " following benchmarks");
+  addCategoryTitleToOStringstream(&visualization,
+                                  "General metadata for the"
+                                  " following benchmarks");
   visualization << "\n\n" << meta.asJsonString(true) << "\n\n";
 
   // Visualization for single measurments, if there are any.

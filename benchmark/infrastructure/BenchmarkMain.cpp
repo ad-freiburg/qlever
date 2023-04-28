@@ -138,23 +138,22 @@ int main(int argc, char** argv) {
   same index position, and are grouped togehter correctly.
   */
   const auto& generalMetadataAndResults{ad_utility::pairTwoVectorTogether(
-    BenchmarkRegister::getAllGeneralMetadata(), results)};
+      BenchmarkRegister::getAllGeneralMetadata(), results)};
 
   // Actually processing the arguments.
   if (vm.count("print")) {
-    std::ranges::for_each(generalMetadataAndResults,
-                          [](const std::pair<BenchmarkMetadata,
-                             BenchmarkResults>& result) {
-                            std::cout << benchmarkResultsToString(result.first,
-                                         result.second)
-                                      << "\n";
-                          },
-                          {});
+    std::ranges::for_each(
+        generalMetadataAndResults,
+        [](const std::pair<BenchmarkMetadata, BenchmarkResults>& result) {
+          std::cout << benchmarkResultsToString(result.first, result.second)
+                    << "\n";
+        },
+        {});
   }
 
   if (vm.count("write")) {
-    writeJsonToFile(zipGeneralMetadataAndBenchmarkResultsToJson(
-                        generalMetadataAndResults),
-                    writeFileName, vm.count("append"));
+    writeJsonToFile(
+        zipGeneralMetadataAndBenchmarkResultsToJson(generalMetadataAndResults),
+        writeFileName, vm.count("append"));
   }
 }

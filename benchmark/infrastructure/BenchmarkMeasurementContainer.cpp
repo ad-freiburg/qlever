@@ -30,8 +30,8 @@ const BenchmarkMetadata& BenchmarkMetadataGetter::metadata() const {
 
 // ____________________________________________________________________________
 ResultEntry::operator std::string() const {
-  return absl::StrCat("metadata: ", metadata().asJsonString(true),"\n'",
-    descriptor_, "' took ", measuredTime_, " seconds.");
+  return absl::StrCat("metadata: ", metadata().asJsonString(true), "\n'",
+                      descriptor_, "' took ", measuredTime_, " seconds.");
 }
 
 // ____________________________________________________________________________
@@ -49,7 +49,7 @@ ResultGroup::operator std::string() const {
 
   // The normal foreword.
   stream << "metadata: " << metadata().asJsonString(true) << "\nGroup '"
-    << descriptor_ << "':";
+         << descriptor_ << "':";
 
   // Listing all the entries.
   addVectorOfResultEntryToOStringstream(
