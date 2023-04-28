@@ -112,10 +112,6 @@ class QueryExecutionContext {
     return _sortPerformanceEstimator;
   }
 
-  void readCostFactorsFromTSVFile(const string& fileName) {
-    _costFactors.readFromFile(fileName);
-  }
-
   [[nodiscard]] double getCostFactor(const string& key) const {
     return _costFactors.getCostFactor(key);
   };
