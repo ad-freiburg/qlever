@@ -248,7 +248,8 @@ TEST(HasPredicateScan, subtreeS) {
   Index index;
   QueryResultCache cache{};
   QueryExecutionContext ctx(index, &cache, makeAllocator(),
-                            SortPerformanceEstimator{}, 0);
+                            SortPerformanceEstimator{},
+                            ad_utility::websocket::common::QueryId::uniqueId());
 
   // create the subtree operation
   std::shared_ptr<QueryExecutionTree> subtree =

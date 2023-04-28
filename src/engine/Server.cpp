@@ -475,12 +475,9 @@ ad_utility::websocket::common::QueryId getQueryId(const ad_utility::httpUtils::H
   // TODO make sure id is actually unique
   std::string_view queryIdHeader = request.base()["Query-Id"];
   if (queryIdHeader.empty()) {
-    static std::mt19937 generator(std::random_device{}());
-    static std::uniform_int_distribution<ad_utility::websocket::common::QueryId> distrib{};
-    return distrib(generator);
+    return ad_utility::websocket::common::QueryId::uniqueId();
   }
-  // TODO change to arbitrary string
-  return static_cast<ad_utility::websocket::common::QueryId>(std::stol(std::string(queryIdHeader)));
+  return ad_utility::websocket::common::QueryId{std::string(queryIdHeader)};
 }
 
 // ____________________________________________________________________________
