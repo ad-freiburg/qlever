@@ -219,19 +219,25 @@ class HttpServer {
 
 
         if (beast::websocket::is_upgrade(req)) {
-          // prevent cleanup after socket has been moved from
-          std::move(releaseConnection).Cancel();
-          // TODO make sure error handling is correct
-          co_await ad_utility::websocket::manageConnection(std::move(stream.socket()), std::move(req));
-          co_return;
-        }
-        // Currently there is no timeout on the server side, this is handled
-        // by QLever's timeout mechanism.
-        stream.expires_never();
+          auto errorResponse = ad_utility::websocket::checkPathIsValid(req);
+          if (errorResponse) {
+            co_await sendMessage(*errorResponse);
+          } else {
+            // prevent cleanup after socket has been moved from
+            std::move(releaseConnection).Cancel();
+            // TODO make sure error handling is correct
+            co_await ad_utility::websocket::manageConnection(std::move(stream.socket()), std::move(req));
+            co_return;
+          }
+        } else {
+          // Currently there is no timeout on the server side, this is handled
+          // by QLever's timeout mechanism.
+          stream.expires_never();
 
-        // Handle the http request. Note that `httpHandler_` is also
-        // responsible for sending the message via the `sendMessage` lambda.
-        co_await httpHandler_(std::move(req), sendMessage);
+          // Handle the http request. Note that `httpHandler_` is also
+          // responsible for sending the message via the `sendMessage` lambda.
+          co_await httpHandler_(std::move(req), sendMessage);
+        }
 
         // The closing of the stream is done in the exception handler.
         if (streamNeedsClosing) {

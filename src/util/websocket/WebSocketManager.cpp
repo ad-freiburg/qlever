@@ -6,6 +6,8 @@
 #include <absl/container/btree_map.h>
 #include <absl/cleanup/cleanup.h>
 
+#include <ctre/ctre.h>
+
 #include <iostream>
 #include <optional>
 #include <mutex>
@@ -13,6 +15,7 @@
 #include "../MultiMap.h"
 #include "./Common.h"
 #include "./QueryState.h"
+#include "../http/HttpUtils.h"
 
 namespace ad_utility::websocket {
 using namespace boost::asio::experimental::awaitable_operators;
@@ -34,12 +37,15 @@ static absl::flat_hash_map<WebSocketId, QueryUpdateCallback> listeningWebSockets
 
 static std::atomic<WebSocketId> webSocketIdCounter{0};
 
-void registerCallback(WebSocketId webSocketId, QueryUpdateCallback callback) {
+void registerCallback(QueryId queryId, WebSocketId webSocketId, QueryUpdateCallback callback) {
   std::lock_guard lock1{activeWebSocketsMutex};
-  AD_CORRECTNESS_CHECK(activeWebSockets.count(webSocketId) != 0);
-  std::lock_guard lock2{listeningWebSocketsMutex};
-  AD_CORRECTNESS_CHECK(listeningWebSockets.count(webSocketId) == 0);
-  listeningWebSockets[webSocketId] = std::move(callback);
+  // make sure websocket has not been shut down right before acquiring the lock
+  if (containsKeyValuePair(activeWebSockets, queryId, webSocketId)) {
+    std::lock_guard lock2{listeningWebSocketsMutex};
+    // Ensure last callback has been fired, otherwise co_await will wait indefinitely
+    AD_CORRECTNESS_CHECK(listeningWebSockets.count(webSocketId) == 0);
+    listeningWebSockets[webSocketId] = std::move(callback);
+  }
 }
 
 // ONLY CALL THIS IF YOU HOLD the listeningWebSocketsMutex!!!
@@ -69,7 +75,7 @@ bool fireAllCallbacksForQuery(QueryId queryId, RuntimeInformationSnapshot runtim
 
 void enableWebSocket(WebSocketId webSocketId, QueryId queryId) {
   std::lock_guard lock{activeWebSocketsMutex};
-  activeWebSockets.insert({webSocketId, queryId});
+  activeWebSockets.insert({queryId, webSocketId});
 }
 
 void disableWebSocket(WebSocketId webSocketId, QueryId queryId) {
@@ -87,29 +93,30 @@ void disableWebSocket(WebSocketId webSocketId, QueryId queryId) {
 
 // Based on https://stackoverflow.com/a/69285751
 template<typename CompletionToken>
-auto waitForEvent(QueryId queryId, common::TimeStamp lastUpdate, CompletionToken&& token) {
-  auto initiate = [lastUpdate]<typename Handler>(Handler&& self, QueryId queryId) mutable {
-    auto callback = [self = std::make_shared<Handler>(std::forward<Handler>(self)), queryId](std::optional<RuntimeInformationSnapshot> snapshot) {
+auto waitForEvent(QueryId queryId, WebSocketId webSocketId, common::TimeStamp lastUpdate, CompletionToken&& token) {
+  auto initiate = [lastUpdate]<typename Handler>(Handler&& self, QueryId queryId, WebSocketId webSocketId) mutable {
+    auto callback = [self = std::make_shared<Handler>(std::forward<Handler>(self))](std::optional<RuntimeInformationSnapshot> snapshot) {
       (*self)(snapshot);
     };
     auto potentialUpdate = query_state::getIfUpdatedSince(queryId, lastUpdate);
     if (potentialUpdate.has_value()) {
       callback(*potentialUpdate);
     } else {
-      registerCallback(queryId, std::move(callback));
+      registerCallback(queryId, webSocketId, std::move(callback));
     }
   };
   // TODO match this to QueryUpdateCallback
   // TODO don't pass token directly and instead wrap it inside "bind_cancellation_slot"
   //  to remove the callback in case it gets cancelled
   return net::async_initiate<CompletionToken, void(std::optional<RuntimeInformationSnapshot>)>(
-      initiate, token, queryId
+      initiate, token, queryId, webSocketId
   );
 }
 
 net::awaitable<void> handleClientCommands(websocket& ws, WebSocketId webSocketId, QueryId queryId) {
   absl::Cleanup cleanup{[webSocketId, queryId]() {
     // TODO is this properly cleaned up when this coroutine is cancelled?
+    std::cout << "Disabling WebSocket..." << std::endl;
     disableWebSocket(webSocketId, queryId);
   }};
   beast::flat_buffer buffer;
@@ -126,7 +133,7 @@ net::awaitable<void> handleClientCommands(websocket& ws, WebSocketId webSocketId
 net::awaitable<void> waitForServerEvents(websocket& ws, WebSocketId webSocketId, QueryId queryId) {
   common::TimeStamp lastUpdate = std::chrono::steady_clock::now();
   while (ws.is_open()) {
-    auto update = co_await waitForEvent(queryId, lastUpdate, net::use_awaitable);
+    auto update = co_await waitForEvent(queryId, webSocketId, lastUpdate, net::use_awaitable);
     if (!update.has_value()) {
       if (ws.is_open()) {
         co_await ws.async_close(beast::websocket::close_code::normal, net::use_awaitable);
@@ -134,7 +141,7 @@ net::awaitable<void> waitForServerEvents(websocket& ws, WebSocketId webSocketId,
       break;
     }
     ws.text(true);
-    std::string json = update->runtimeInformation.toString();
+    std::string json = nlohmann::ordered_json(update->runtimeInformation).dump();
     lastUpdate = update->updateMoment;
     co_await ws.async_write(net::buffer(json.data(), json.length()), net::use_awaitable);
   }
@@ -143,8 +150,10 @@ net::awaitable<void> waitForServerEvents(websocket& ws, WebSocketId webSocketId,
 }
 
 net::awaitable<void> connectionLifecycle(tcp::socket socket, http::request<http::string_body> request) {
-  // TODO extract queryId from request and don't accept connection if invalid
-  QueryId queryId = 0;
+  // TODO allow arbitrary strings as IDs
+  auto match = ctre::match<"/watch/(\\d+)">(request.target());
+  AD_CORRECTNESS_CHECK(match);
+  QueryId queryId = std::stol(match.get<1>().to_string());
   websocket ws{std::move(socket)};
 
   try {
@@ -155,6 +164,7 @@ net::awaitable<void> connectionLifecycle(tcp::socket socket, http::request<http:
     // Generate unique webSocketIds until it overflows and hopefully the old
     // ids are gone by then.
     WebSocketId webSocketId = webSocketIdCounter++;
+    std::cout << "Assigned WebSocketId: " << webSocketId << std::endl;
     enableWebSocket(webSocketId, queryId);
     auto strand = net::make_strand(ws.get_executor());
 
@@ -179,5 +189,15 @@ net::awaitable<void> connectionLifecycle(tcp::socket socket, http::request<http:
 net::awaitable<void> manageConnection(tcp::socket socket, http::request<http::string_body> request) {
   auto executor = socket.get_executor();
   return net::co_spawn(executor, connectionLifecycle(std::move(socket), std::move(request)), net::use_awaitable);
+}
+
+std::optional<http::response<http::string_body>> checkPathIsValid(const http::request<http::string_body>& request) {
+  auto path = request.target();
+
+  // TODO allow arbitrary strings
+  if (ctre::match<"/watch/\\d+">(path)) {
+    return std::nullopt;
+  }
+  return ad_utility::httpUtils::createNotFoundResponse("No WebSocket on this path", request);
 }
 }
