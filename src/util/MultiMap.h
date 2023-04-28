@@ -6,8 +6,10 @@
 
 namespace ad_utility {
 
-template<typename Container>
-void removeKeyValuePair(Container& container, const typename Container::key_type& key, const typename Container::mapped_type& value) {
+template <typename Container>
+void removeKeyValuePair(Container& container,
+                        const typename Container::key_type& key,
+                        const typename Container::mapped_type& value) {
   auto iterPair = container.equal_range(key);
 
   for (auto it = iterPair.first; it != iterPair.second; ++it) {
@@ -18,8 +20,10 @@ void removeKeyValuePair(Container& container, const typename Container::key_type
   }
 }
 
-template<typename Container>
-bool containsKeyValuePair(const Container& container, const typename Container::key_type& key, const typename Container::mapped_type& value) {
+template <typename Container>
+bool containsKeyValuePair(const Container& container,
+                          const typename Container::key_type& key,
+                          const typename Container::mapped_type& value) {
   auto iterPair = container.equal_range(key);
 
   for (auto it = iterPair.first; it != iterPair.second; ++it) {
@@ -29,4 +33,4 @@ bool containsKeyValuePair(const Container& container, const typename Container::
   }
   return false;
 }
-}
+}  // namespace ad_utility

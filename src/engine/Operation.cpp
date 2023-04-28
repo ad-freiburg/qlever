@@ -4,10 +4,10 @@
 
 #include "./Operation.h"
 
+#include "../util/websocket/QueryState.h"
 #include "engine/QueryExecutionTree.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
-#include "../util/websocket/QueryState.h"
 
 template <typename F>
 void Operation::forAllDescendants(F f) {
@@ -248,7 +248,8 @@ void Operation::updateRuntimeInformationOnSuccess(
     }
   }
   if (_executionContext) {
-    ad_utility::query_state::signalUpdateForQuery(_executionContext->getQueryId(), _runtimeInfo);
+    ad_utility::query_state::signalUpdateForQuery(
+        _executionContext->getQueryId(), _runtimeInfo);
   }
 }
 
@@ -281,7 +282,8 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
       });
 
   if (_executionContext) {
-    ad_utility::query_state::signalUpdateForQuery(_executionContext->getQueryId(), _runtimeInfo);
+    ad_utility::query_state::signalUpdateForQuery(
+        _executionContext->getQueryId(), _runtimeInfo);
   }
 }
 
@@ -312,7 +314,8 @@ void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
   _runtimeInfo.status_ = RuntimeInformation::Status::failed;
 
   if (_executionContext) {
-    ad_utility::query_state::signalUpdateForQuery(_executionContext->getQueryId(), _runtimeInfo);
+    ad_utility::query_state::signalUpdateForQuery(
+        _executionContext->getQueryId(), _runtimeInfo);
   }
 }
 
@@ -370,7 +373,8 @@ void Operation::createRuntimeInfoFromEstimates() {
   }
 
   if (_executionContext) {
-    ad_utility::query_state::signalUpdateForQuery(_executionContext->getQueryId(), _runtimeInfo);
+    ad_utility::query_state::signalUpdateForQuery(
+        _executionContext->getQueryId(), _runtimeInfo);
   }
 }
 

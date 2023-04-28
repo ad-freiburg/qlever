@@ -471,7 +471,8 @@ nlohmann::json Server::composeCacheStatsJson() const {
 
 // _____________________________________________
 
-ad_utility::websocket::common::QueryId getQueryId(const ad_utility::httpUtils::HttpRequest auto& request) {
+ad_utility::websocket::common::QueryId getQueryId(
+    const ad_utility::httpUtils::HttpRequest auto& request) {
   // TODO make sure id is actually unique
   std::string_view queryIdHeader = request.base()["Query-Id"];
   if (queryIdHeader.empty()) {
