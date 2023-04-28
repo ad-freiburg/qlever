@@ -301,6 +301,61 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   return result;
 }
 
+
+std::array<std::vector<CompressedBlockMetadata>, 2> CompressedRelationReader::getBlocksForJoin(const CompressedRelationMetadata& md1, const CompressedRelationMetadata& md2, std::span<const CompressedBlockMetadata> blockMetadata) {
+  // get all the blocks where col0FirstId_ <= col0Id <= col0LastId_
+  struct KeyLhs {
+    Id col0FirstId_;
+    Id col0LastId_;
+  };
+  Id col0Id = md1.col0Id_;
+  // TODO<joka921, Clang16> Use a structured binding. Structured bindings are
+  // currently not supported by clang when using OpenMP because clang internally
+  // transforms the `#pragma`s into lambdas, and capturing structured bindings
+  // is only supported in clang >= 16.
+  decltype(blockMetadata.begin()) beginBlock1, endBlock1, beginBlock2, endBlock2;
+  std::tie(beginBlock1, endBlock1) = std::equal_range(
+      // TODO<joka921> For some reason we can't use `std::ranges::equal_range`,
+      // find out why. Note: possibly it has something to do with the limited
+      // support of ranges in clang with versions < 16. Revisit this when
+      // we use clang 16.
+      blockMetadata.begin(), blockMetadata.end(), KeyLhs{col0Id, col0Id},
+      [](const auto& a, const auto& b) {
+        return a.col0FirstId_ < b.col0FirstId_ && a.col0LastId_ < b.col0LastId_;
+      });
+  col0Id = md2.col0Id_;
+  std::tie(beginBlock2, endBlock2) = std::equal_range(
+      // TODO<joka921> For some reason we can't use `std::ranges::equal_range`,
+      // find out why. Note: possibly it has something to do with the limited
+      // support of ranges in clang with versions < 16. Revisit this when
+      // we use clang 16.
+      blockMetadata.begin(), blockMetadata.end(), KeyLhs{col0Id, col0Id},
+      [](const auto& a, const auto& b) {
+        return a.col0FirstId_ < b.col0FirstId_ && a.col0LastId_ < b.col0LastId_;
+      });
+
+  auto blockLessThanId = [](const CompressedBlockMetadata& block1, const CompressedBlockMetadata& block2) {
+    if (block1.col0LastId_ < block2.col0FirstId_ || block1.col0FirstId_ > block2.col0LastId_) {
+      return block1.col0LastId_ < block2.col0LastId_;
+    }
+  };
+
+  auto lessThan =
+      ad_utility::OverloadCallOperator{idLessThanBlock, blockLessThanId};
+
+  std::vector<CompressedBlockMetadata> result;
+  auto addRow = [&result]([[maybe_unused]] auto it1, auto it2) {
+    result.push_back(*it2);
+  };
+
+  auto noop = ad_utility::noop;
+  [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef<false>(
+      joinColum, std::span<const CompressedBlockMetadata>(beginBlock, endBlock),
+      lessThan, addRow, noop, noop);
+  return result;
+
+}
+
 // _____________________________________________________________________________
 void CompressedRelationReader::scan(
     const CompressedRelationMetadata& metaData, Id col1Id,

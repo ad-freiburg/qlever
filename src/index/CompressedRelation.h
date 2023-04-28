@@ -263,6 +263,9 @@ class CompressedRelationReader {
   std::vector<CompressedBlockMetadata> getBlocksForJoin(
       std::span<const Id> joinColum, const CompressedRelationMetadata& metadata,
       std::span<const CompressedBlockMetadata> blockMetadata);
+  std::array<std::vector<CompressedBlockMetadata>, 2> getBlocksForJoin(
+      const CompressedRelationMetadata& md1, const CompressedRelationMetadata& md2, std::span<const CompressedBlockMetadata> blockMetadata
+      );
 
   cppcoro::generator<IdTable> lazyScan(const CompressedRelationMetadata& metadata,
 std::span<const CompressedBlockMetadata> blockMetadata,
