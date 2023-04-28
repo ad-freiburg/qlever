@@ -106,10 +106,10 @@ class BMGroups : public BenchmarkInterface {
 
     // Measuring functions.
     auto& loopAddGroup = results.addGroup("loopAdd");
-    loopAddGroup.metadata().addKeyValuePair("Operator", '+');
+    loopAddGroup.metadata().addKeyValuePair("Operator", "+");
 
     auto& loopMultiplyGroup = results.addGroup("loopMultiply");
-    loopMultiplyGroup.metadata().addKeyValuePair("Operator", '*');
+    loopMultiplyGroup.metadata().addKeyValuePair("Operator", "*");
 
     auto& addMember1 =
         loopAddGroup.addMeasurement("1+1", [&loopAdd]() { loopAdd(1, 1); });
