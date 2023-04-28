@@ -23,6 +23,8 @@
 #include <string>
 #include <vector>
 
+#include "../util/websocket/Common.h"
+
 using std::shared_ptr;
 using std::string;
 using std::vector;
@@ -91,6 +93,7 @@ class QueryExecutionContext {
   QueryExecutionContext(const Index& index, QueryResultCache* const cache,
                         ad_utility::AllocatorWithLimit<Id> allocator,
                         SortPerformanceEstimator sortPerformanceEstimator,
+                        ad_utility::websocket::common::QueryId queryId,
                         const bool pinSubtrees = false,
                         const bool pinResult = false)
       : _pinSubtrees(pinSubtrees),
@@ -99,7 +102,8 @@ class QueryExecutionContext {
         _subtreeCache(cache),
         _allocator(std::move(allocator)),
         _costFactors(),
-        _sortPerformanceEstimator(sortPerformanceEstimator) {}
+        _sortPerformanceEstimator(sortPerformanceEstimator),
+        queryId_(std::move(queryId)) {}
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
@@ -118,6 +122,8 @@ class QueryExecutionContext {
 
   ad_utility::AllocatorWithLimit<Id> getAllocator() { return _allocator; }
 
+  [[nodiscard]] const ad_utility::websocket::common::QueryId& getQueryId() const { return queryId_; }
+
   const bool _pinSubtrees;
   const bool _pinResult;
 
@@ -128,4 +134,5 @@ class QueryExecutionContext {
   ad_utility::AllocatorWithLimit<Id> _allocator;
   QueryPlanningCostFactors _costFactors;
   SortPerformanceEstimator _sortPerformanceEstimator;
+  ad_utility::websocket::common::QueryId queryId_;
 };

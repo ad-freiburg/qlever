@@ -16,4 +16,6 @@ namespace ad_utility::websocket {
   net::awaitable<void> manageConnection(tcp::socket socket, http::request<http::string_body> request);
   // Returns true if there are other active connections that do no currently wait.
   bool fireAllCallbacksForQuery(QueryId queryId, RuntimeInformationSnapshot runtimeInformationSnapshot);
+
+  std::optional<http::response<http::string_body>> checkPathIsValid(const http::request<http::string_body>& request);
 };

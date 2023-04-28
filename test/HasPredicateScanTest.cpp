@@ -248,7 +248,7 @@ TEST(HasPredicateScan, subtreeS) {
   Index index;
   QueryResultCache cache{};
   QueryExecutionContext ctx(index, &cache, makeAllocator(),
-                            SortPerformanceEstimator{});
+                            SortPerformanceEstimator{}, 0);
 
   // create the subtree operation
   std::shared_ptr<QueryExecutionTree> subtree =

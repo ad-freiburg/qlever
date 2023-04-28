@@ -469,6 +469,20 @@ nlohmann::json Server::composeCacheStatsJson() const {
   return result;
 }
 
+// _____________________________________________
+
+ad_utility::websocket::common::QueryId getQueryId(const ad_utility::httpUtils::HttpRequest auto& request) {
+  // TODO make sure id is actually unique
+  std::string_view queryIdHeader = request.base()["Query-Id"];
+  if (queryIdHeader.empty()) {
+    static std::mt19937 generator(std::random_device{}());
+    static std::uniform_int_distribution<ad_utility::websocket::common::QueryId> distrib{};
+    return distrib(generator);
+  }
+  // TODO change to arbitrary string
+  return static_cast<ad_utility::websocket::common::QueryId>(std::stol(std::string(queryIdHeader)));
+}
+
 // ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
@@ -586,8 +600,8 @@ boost::asio::awaitable<void> Server::processQuery(
     // do index scans) and then we get an error message afterwards that a
     // certain media type is not supported.
     QueryExecutionContext qec(index_, &cache_, allocator_,
-                              sortPerformanceEstimator_, pinSubtrees,
-                              pinResult);
+                              sortPerformanceEstimator_, getQueryId(request),
+                              pinSubtrees, pinResult);
     QueryPlanner qp(&qec);
     qp.setEnablePatternTrick(enablePatternTrick_);
     queryExecutionTree = qp.createExecutionTree(pq);
@@ -620,7 +634,7 @@ boost::asio::awaitable<void> Server::processQuery(
       });
 
       // The `streamable_body` that is used internally turns all exceptions that
-      // occur while generating the rults into "broken pipe". We store the
+      // occur while generating the results into "broken pipe". We store the
       // actual exceptions and manually rethrow them to propagate the correct
       // error messages to the user.
       // TODO<joka921> What happens, when part of the TSV export has already
@@ -631,6 +645,7 @@ boost::asio::awaitable<void> Server::processQuery(
         auto response =
             createOkResponse(std::move(responseGenerator), request, mediaType);
         co_await send(std::move(response));
+        // TODO signal end of updates causing all websockets to disconnect
       } catch (...) {
         if (exceptionPtr) {
           std::rethrow_exception(exceptionPtr);

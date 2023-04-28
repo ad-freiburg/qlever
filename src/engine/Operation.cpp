@@ -7,6 +7,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
+#include "../util/websocket/QueryState.h"
 
 template <typename F>
 void Operation::forAllDescendants(F f) {
@@ -246,7 +247,9 @@ void Operation::updateRuntimeInformationOnSuccess(
           child->getRootOperation()->getRuntimeInfo());
     }
   }
-  // TODO call websocket update with query id
+  if (_executionContext) {
+    ad_utility::query_state::signalUpdateForQuery(_executionContext->getQueryId(), _runtimeInfo);
+  }
 }
 
 // ____________________________________________________________________________________________________________________
@@ -276,7 +279,10 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
           _runtimeInfo.totalTime_ += child.totalTime_;
         }
       });
-  // TODO call websocket update with query id
+
+  if (_executionContext) {
+    ad_utility::query_state::signalUpdateForQuery(_executionContext->getQueryId(), _runtimeInfo);
+  }
 }
 
 // _____________________________________________________________________________
@@ -304,7 +310,10 @@ void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
 
   _runtimeInfo.totalTime_ = timeInMilliseconds;
   _runtimeInfo.status_ = RuntimeInformation::Status::failed;
-  // TODO call websocket update with query id
+
+  if (_executionContext) {
+    ad_utility::query_state::signalUpdateForQuery(_executionContext->getQueryId(), _runtimeInfo);
+  }
 }
 
 // __________________________________________________________________
@@ -359,7 +368,10 @@ void Operation::createRuntimeInfoFromEstimates() {
         RuntimeInformation::Status::completedDuringQueryPlanning;
     _runtimeInfo.cacheStatus_ = ad_utility::CacheStatus::computed;
   }
-  // TODO call websocket update with query id
+
+  if (_executionContext) {
+    ad_utility::query_state::signalUpdateForQuery(_executionContext->getQueryId(), _runtimeInfo);
+  }
 }
 
 // ___________________________________________________________________________

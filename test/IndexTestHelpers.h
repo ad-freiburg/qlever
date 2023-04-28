@@ -121,7 +121,7 @@ inline QueryExecutionContext* getQec(std::string turtleInput = "",
     std::unique_ptr<QueryResultCache> cache_;
     std::unique_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
-            *index_, cache_.get(), makeAllocator(), SortPerformanceEstimator{});
+            *index_, cache_.get(), makeAllocator(), SortPerformanceEstimator{}, 0);
   };
 
   using Key = std::tuple<std::string, bool, bool, bool>;
