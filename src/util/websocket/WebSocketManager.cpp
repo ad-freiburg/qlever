@@ -17,15 +17,46 @@
 #include "./QueryState.h"
 #include "../http/HttpUtils.h"
 
+
+namespace ad_utility::websocket {
+
+class WebSocketId {
+  uint32_t id_;
+  explicit WebSocketId(uint32_t id): id_{id} {}
+
+
+ public:
+
+  // Generate unique webSocketIds until it overflows and hopefully the old
+  // ids are gone by then.
+  static WebSocketId uniqueId() {
+    static std::atomic<uint32_t> webSocketIdCounter{0};
+    return WebSocketId(webSocketIdCounter++);
+  }
+
+  constexpr bool operator==(const WebSocketId&) const noexcept = default;
+  constexpr bool operator!=(const WebSocketId&) const noexcept = default;
+
+  friend std::hash<WebSocketId>;
+};
+
+}
+
+template<>
+struct std::hash<ad_utility::websocket::WebSocketId> {
+  auto operator()(const ad_utility::websocket::WebSocketId& webSocketId) const noexcept {
+    return std::hash<uint32_t>{}(webSocketId.id_);
+  }
+};
+
 namespace ad_utility::websocket {
 using namespace boost::asio::experimental::awaitable_operators;
 using websocket = beast::websocket::stream<tcp::socket>;
 using common::RuntimeInformationSnapshot;
 
-typedef uint32_t WebSocketId;
 // We need a copy here due to the async nature of the lifetime of those objects
 // TODO evaluate if using a shared const ptr is more efficient here
-typedef std::function<void(std::optional<RuntimeInformationSnapshot>)> QueryUpdateCallback;
+using QueryUpdateCallback = std::function<void(std::optional<RuntimeInformationSnapshot>)>;
 
 
 static std::mutex activeWebSocketsMutex{};
@@ -35,9 +66,7 @@ static absl::btree_multimap<QueryId, WebSocketId> activeWebSockets{};
 static std::mutex listeningWebSocketsMutex{};
 static absl::flat_hash_map<WebSocketId, QueryUpdateCallback> listeningWebSockets{};
 
-static std::atomic<WebSocketId> webSocketIdCounter{0};
-
-void registerCallback(QueryId queryId, WebSocketId webSocketId, QueryUpdateCallback callback) {
+void registerCallback(const QueryId& queryId, WebSocketId webSocketId, QueryUpdateCallback callback) {
   std::lock_guard lock1{activeWebSocketsMutex};
   // make sure websocket has not been shut down right before acquiring the lock
   if (containsKeyValuePair(activeWebSockets, queryId, webSocketId)) {
@@ -61,7 +90,7 @@ void fireCallbackAndRemoveIfPresent(WebSocketId webSocketId, std::optional<Runti
     fireCallbackAndRemoveIfPresentNoLock(webSocketId, std::move(runtimeInformation));
 }
 
-bool fireAllCallbacksForQuery(QueryId queryId, RuntimeInformationSnapshot runtimeInformationSnapshot) {
+bool fireAllCallbacksForQuery(const QueryId& queryId, RuntimeInformationSnapshot runtimeInformationSnapshot) {
   std::lock_guard lock1{activeWebSocketsMutex};
   std::lock_guard lock2{listeningWebSocketsMutex};
   auto range = activeWebSockets.equal_range(queryId);
@@ -73,12 +102,12 @@ bool fireAllCallbacksForQuery(QueryId queryId, RuntimeInformationSnapshot runtim
   return counter < activeWebSockets.count(queryId);
 }
 
-void enableWebSocket(WebSocketId webSocketId, QueryId queryId) {
+void enableWebSocket(WebSocketId webSocketId, const QueryId& queryId) {
   std::lock_guard lock{activeWebSocketsMutex};
   activeWebSockets.insert({queryId, webSocketId});
 }
 
-void disableWebSocket(WebSocketId webSocketId, QueryId queryId) {
+void disableWebSocket(WebSocketId webSocketId, const QueryId& queryId) {
   bool noListenersLeft;
   {
     std::lock_guard lock{activeWebSocketsMutex};
@@ -93,8 +122,8 @@ void disableWebSocket(WebSocketId webSocketId, QueryId queryId) {
 
 // Based on https://stackoverflow.com/a/69285751
 template<typename CompletionToken>
-auto waitForEvent(QueryId queryId, WebSocketId webSocketId, common::TimeStamp lastUpdate, CompletionToken&& token) {
-  auto initiate = [lastUpdate]<typename Handler>(Handler&& self, QueryId queryId, WebSocketId webSocketId) mutable {
+auto waitForEvent(const QueryId& queryId, WebSocketId webSocketId, common::TimeStamp lastUpdate, CompletionToken&& token) {
+  auto initiate = [lastUpdate]<typename Handler>(Handler&& self, const QueryId& queryId, WebSocketId webSocketId) mutable {
     auto callback = [self = std::make_shared<Handler>(std::forward<Handler>(self))](std::optional<RuntimeInformationSnapshot> snapshot) {
       (*self)(snapshot);
     };
@@ -113,7 +142,7 @@ auto waitForEvent(QueryId queryId, WebSocketId webSocketId, common::TimeStamp la
   );
 }
 
-net::awaitable<void> handleClientCommands(websocket& ws, WebSocketId webSocketId, QueryId queryId) {
+net::awaitable<void> handleClientCommands(websocket& ws, WebSocketId webSocketId, const QueryId& queryId) {
   absl::Cleanup cleanup{[webSocketId, queryId]() {
     // TODO is this properly cleaned up when this coroutine is cancelled?
     std::cout << "Disabling WebSocket..." << std::endl;
@@ -130,7 +159,7 @@ net::awaitable<void> handleClientCommands(websocket& ws, WebSocketId webSocketId
   }
 }
 
-net::awaitable<void> waitForServerEvents(websocket& ws, WebSocketId webSocketId, QueryId queryId) {
+net::awaitable<void> waitForServerEvents(websocket& ws, WebSocketId webSocketId, const QueryId& queryId) {
   common::TimeStamp lastUpdate = std::chrono::steady_clock::now();
   while (ws.is_open()) {
     auto update = co_await waitForEvent(queryId, webSocketId, lastUpdate, net::use_awaitable);
@@ -150,10 +179,9 @@ net::awaitable<void> waitForServerEvents(websocket& ws, WebSocketId webSocketId,
 }
 
 net::awaitable<void> connectionLifecycle(tcp::socket socket, http::request<http::string_body> request) {
-  // TODO allow arbitrary strings as IDs
-  auto match = ctre::match<"/watch/(\\d+)">(request.target());
+  auto match = ctre::match<"/watch/([^/?]+)">(request.target());
   AD_CORRECTNESS_CHECK(match);
-  QueryId queryId = std::stol(match.get<1>().to_string());
+  QueryId queryId{match.get<1>().to_string()};
   websocket ws{std::move(socket)};
 
   try {
@@ -161,10 +189,7 @@ net::awaitable<void> connectionLifecycle(tcp::socket socket, http::request<http:
     // https://www.boost.org/doc/libs/master/libs/beast/example/websocket/server/awaitable/websocket_server_awaitable.cpp
     co_await ws.async_accept(request, boost::asio::use_awaitable);
 
-    // Generate unique webSocketIds until it overflows and hopefully the old
-    // ids are gone by then.
-    WebSocketId webSocketId = webSocketIdCounter++;
-    std::cout << "Assigned WebSocketId: " << webSocketId << std::endl;
+    WebSocketId webSocketId = WebSocketId::uniqueId();
     enableWebSocket(webSocketId, queryId);
     auto strand = net::make_strand(ws.get_executor());
 
@@ -195,7 +220,7 @@ std::optional<http::response<http::string_body>> checkPathIsValid(const http::re
   auto path = request.target();
 
   // TODO allow arbitrary strings
-  if (ctre::match<"/watch/\\d+">(path)) {
+  if (ctre::match<"/watch/[^/?]+">(path)) {
     return std::nullopt;
   }
   return ad_utility::httpUtils::createNotFoundResponse("No WebSocket on this path", request);

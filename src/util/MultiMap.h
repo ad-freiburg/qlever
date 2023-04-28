@@ -7,7 +7,7 @@
 namespace ad_utility {
 
 template<typename Container>
-void removeKeyValuePair(Container& container, typename Container::key_type key, typename Container::mapped_type value) {
+void removeKeyValuePair(Container& container, const typename Container::key_type& key, const typename Container::mapped_type& value) {
   auto iterPair = container.equal_range(key);
 
   for (auto it = iterPair.first; it != iterPair.second; ++it) {
@@ -19,7 +19,7 @@ void removeKeyValuePair(Container& container, typename Container::key_type key, 
 }
 
 template<typename Container>
-bool containsKeyValuePair(const Container& container, typename Container::key_type key, typename Container::mapped_type value) {
+bool containsKeyValuePair(const Container& container, const typename Container::key_type& key, const typename Container::mapped_type& value) {
   auto iterPair = container.equal_range(key);
 
   for (auto it = iterPair.first; it != iterPair.second; ++it) {
