@@ -122,7 +122,10 @@ class QueryExecutionContext {
 
   ad_utility::AllocatorWithLimit<Id> getAllocator() { return _allocator; }
 
-  [[nodiscard]] const ad_utility::websocket::common::QueryId& getQueryId() const { return queryId_; }
+  [[nodiscard]] const ad_utility::websocket::common::QueryId& getQueryId()
+      const {
+    return queryId_;
+  }
 
   const bool _pinSubtrees;
   const bool _pinResult;

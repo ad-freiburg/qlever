@@ -8,13 +8,13 @@
 #include <cstdlib>
 #include <future>
 
+#include "../websocket/WebSocketManager.h"
 #include "absl/cleanup/cleanup.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/beast.h"
 #include "util/jthread.h"
-#include "../websocket/WebSocketManager.h"
 
 namespace beast = boost::beast;    // from <boost/beast.hpp>
 namespace http = beast::http;      // from <boost/beast/http.hpp>
@@ -217,7 +217,6 @@ class HttpServer {
         co_await http::async_read(stream, buffer, req,
                                   boost::asio::use_awaitable);
 
-
         if (beast::websocket::is_upgrade(req)) {
           auto errorResponse = ad_utility::websocket::checkPathIsValid(req);
           if (errorResponse) {
@@ -226,7 +225,8 @@ class HttpServer {
             // prevent cleanup after socket has been moved from
             std::move(releaseConnection).Cancel();
             // TODO make sure error handling is correct
-            co_await ad_utility::websocket::manageConnection(std::move(stream.socket()), std::move(req));
+            co_await ad_utility::websocket::manageConnection(
+                std::move(stream.socket()), std::move(req));
             co_return;
           }
         } else {

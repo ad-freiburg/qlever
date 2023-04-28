@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstdint>
 #include <random>
+
 #include "../../engine/RuntimeInformation.h"
 
 namespace ad_utility::websocket::common {
@@ -19,11 +20,10 @@ class QueryId {
   explicit QueryId(std::string id) : id_{std::move(id)} {}
 
   static QueryId uniqueId() {
-      static std::mt19937 generator(std::random_device{}());
-      static std::uniform_int_distribution<uint64_t> distrib{};
-      return QueryId{std::to_string(distrib(generator))};
+    static std::mt19937 generator(std::random_device{}());
+    static std::uniform_int_distribution<uint64_t> distrib{};
+    return QueryId{std::to_string(distrib(generator))};
   }
-
 
   // TODO analyze why these can't be constexpr
   bool operator==(const QueryId&) const noexcept = default;
@@ -40,11 +40,12 @@ struct RuntimeInformationSnapshot {
   RuntimeInformation runtimeInformation;
   TimeStamp updateMoment;
 };
-}
+}  // namespace ad_utility::websocket::common
 
-template<>
+template <>
 struct std::hash<ad_utility::websocket::common::QueryId> {
-  auto operator()(const ad_utility::websocket::common::QueryId& queryId) const noexcept {
+  auto operator()(
+      const ad_utility::websocket::common::QueryId& queryId) const noexcept {
     return std::hash<std::string>{}(queryId.id_);
   }
 };

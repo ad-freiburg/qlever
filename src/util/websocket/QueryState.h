@@ -4,17 +4,19 @@
 
 #pragma once
 
-
 #include <optional>
+
 #include "./Common.h"
 
 namespace ad_utility::query_state {
 
-using websocket::common::RuntimeInformationSnapshot;
 using websocket::common::QueryId;
+using websocket::common::RuntimeInformationSnapshot;
 
-void signalUpdateForQuery(const QueryId& queryId, RuntimeInformation runtimeInformation);
+void signalUpdateForQuery(const QueryId& queryId,
+                          RuntimeInformation runtimeInformation);
 void clearQueryInfo(const QueryId& queryId);
-std::optional<RuntimeInformationSnapshot> getIfUpdatedSince(const QueryId& queryId, websocket::common::TimeStamp timeStamp);
+std::optional<RuntimeInformationSnapshot> getIfUpdatedSince(
+    const QueryId& queryId, websocket::common::TimeStamp timeStamp);
 
 }  // namespace ad_utility::query_state
