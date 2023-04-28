@@ -30,7 +30,8 @@ const BenchmarkMetadata& BenchmarkMetadataGetter::metadata() const {
 
 // ____________________________________________________________________________
 ResultEntry::operator std::string() const {
-  return absl::StrCat("'", descriptor_, "' took ", measuredTime_, " seconds.");
+  return absl::StrCat("metadata: ", metadata().asJsonString(true),"\n'",
+    descriptor_, "' took ", measuredTime_, " seconds.");
 }
 
 // ____________________________________________________________________________
@@ -47,14 +48,15 @@ ResultGroup::operator std::string() const {
   std::ostringstream stream;
 
   // The normal foreword.
-  stream << "Group '" << descriptor_ << "':";
+  stream << "metadata: " << metadata().asJsonString(true) << "\nGroup '"
+    << descriptor_ << "':";
 
   // Listing all the entries.
   addVectorOfResultEntryToOStringstream(
       &stream,
       ad_utility::transform(entries_,
                             [](const auto& pointer) { return (*pointer); }),
-      "\t");
+      "\tSingle measurment benchmark ", "\t");
 
   return stream.str();
 }
@@ -137,6 +139,9 @@ ResultTable::operator std::string() const {
 
   // For printing the table.
   std::ostringstream stream;
+
+  // Adding the metadata.
+  stream << "metadata: " << metadata().asJsonString(true) << "\n";
 
   // Adding the table to the stream.
   stream << "Table '" << descriptor_ << "':\n\n";

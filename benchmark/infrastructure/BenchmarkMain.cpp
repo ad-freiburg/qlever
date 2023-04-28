@@ -17,6 +17,8 @@
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
 #include "../benchmark/infrastructure/BenchmarkToJson.h"
+#include "BenchmarkMetadata.h"
+#include "util/Algorithm.h"
 #include "util/File.h"
 #include "util/json.h"
 
@@ -126,12 +128,25 @@ int main(int argc, char** argv) {
   // For measuring and saving the times.
   const std::vector<BenchmarkResults>& results{
       BenchmarkRegister::runAllRegisteredBenchmarks()};
+  /*
+  Pairing the measured times up togehter with the general metadata of the
+  classes. We do it this way around, so that it's assured, that the classes
+  ran their benchmarks and that in the case, of them creating metadata based
+  on those benchmark results, those values are able to exist.
+  Note: All the classes registered in `BenchmarkRegister` are always ran in
+  the same order. So the metadata and benchmark results are always at the
+  same index position, and are grouped togehter correctly.
+  */
+  const auto& generalMetadataAndResults{ad_utility::pairTwoVectorTogether(
+    BenchmarkRegister::getAllGeneralMetadata(), results)};
 
   // Actually processing the arguments.
   if (vm.count("print")) {
-    std::ranges::for_each(results,
-                          [](const BenchmarkResults& result) {
-                            std::cout << benchmarkResultsToString(result)
+    std::ranges::for_each(generalMetadataAndResults,
+                          [](const std::pair<BenchmarkMetadata,
+                             BenchmarkResults>& result) {
+                            std::cout << benchmarkResultsToString(result.first,
+                                         result.second)
                                       << "\n";
                           },
                           {});
@@ -139,7 +154,7 @@ int main(int argc, char** argv) {
 
   if (vm.count("write")) {
     writeJsonToFile(zipGeneralMetadataAndBenchmarkResultsToJson(
-                        BenchmarkRegister::getAllGeneralMetadata(), results),
+                        generalMetadataAndResults),
                     writeFileName, vm.count("append"));
   }
 }

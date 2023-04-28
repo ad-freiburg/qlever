@@ -12,6 +12,7 @@
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
+#include "BenchmarkMetadata.h"
 #include "util/json.h"
 
 namespace ad_benchmark {
@@ -28,11 +29,18 @@ namespace ad_benchmark {
 void addCategoryTitleToOStringstream(std::ostringstream* stream,
                                      std::string_view categoryTitle);
 
+/*
+@brief Add a vector of `ResultEntry` in their string form to the string stream
+in form of a list.
+
+@param vectorEntryPrefix A prefix added before every entry in the vector.
+@param newLinePrefix A prefix added before at the start of a new line.
+*/
 // Default way of adding a vector of ResultEntrys to a `ostringstream` with
-// optional prefix.
+// optional prefix, which will be inserted at the start of every new line.
 void addVectorOfResultEntryToOStringstream(
     std::ostringstream* stream, const std::vector<ResultEntry>& entries,
-    const std::string& prefix = "");
+    const std::string& vectorEntryPrefix, const std::string& newLinePrefix);
 
 // Visualization for single measurments.
 void addSingleMeasurementsToOStringstream(
@@ -47,7 +55,9 @@ void addTablesToOStringstream(std::ostringstream* stream,
                               const std::vector<ResultTable>& resultTables);
 
 /*
- * @brief Returns a formated string containing all benchmark information.
+ * @brief Returns a formated string containing the given metadata, followed
+ * by all the benchmark information.
  */
-std::string benchmarkResultsToString(const BenchmarkResults& results);
+std::string benchmarkResultsToString(const BenchmarkMetadata& meta,
+  const BenchmarkResults& results);
 }  // namespace ad_benchmark

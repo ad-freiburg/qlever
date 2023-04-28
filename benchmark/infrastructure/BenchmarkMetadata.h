@@ -34,8 +34,14 @@ class BenchmarkMetadata {
 
   /*
    * @brief Returns the metadata in form of a json string.
+   *
+   * @param prettyPrint If false, the json string will contain no new lines
+   * and will be in the most compact form available. If true, the json string
+   * will have new lines and indention.
    */
-  std::string asJsonString() const { return data_.dump(); }
+  std::string asJsonString(bool prettyPrint) const {
+    return data_.dump(prettyPrint ? 0 : -1);
+  }
 
   // JSON serialization.
   friend void to_json(nlohmann::json& j, const BenchmarkMetadata& metadata) {
