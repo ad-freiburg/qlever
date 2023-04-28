@@ -30,8 +30,9 @@ const BenchmarkMetadata& BenchmarkMetadataGetter::metadata() const {
 
 // ____________________________________________________________________________
 ResultEntry::operator std::string() const {
-  return absl::StrCat("metadata: ", metadata().asJsonString(true), "\n'",
-                      descriptor_, "' took ", measuredTime_, " seconds.");
+  return absl::StrCat("Single measurement '", descriptor_, "'\n",
+  getMetadataPrettyString(metadata(), "metadata: "), "time: ", measuredTime_,
+  "s");
 }
 
 // ____________________________________________________________________________
@@ -47,16 +48,16 @@ ResultGroup::operator std::string() const {
   // so doing everything using a stream is the best idea.
   std::ostringstream stream;
 
-  // The normal foreword.
-  stream << "metadata: " << metadata().asJsonString(true) << "\nGroup '"
-         << descriptor_ << "':";
+  // Foreword.
+  stream << absl::StrCat("Group '", descriptor_, "'\n",
+    getMetadataPrettyString(metadata(), "metadata: "), "Measurements:\n");
 
   // Listing all the entries.
   addVectorOfResultEntryToOStringstream(
       &stream,
       ad_utility::transform(entries_,
                             [](const auto& pointer) { return (*pointer); }),
-      "\tSingle measurment benchmark ", "\t");
+      "\t", "\t");
 
   return stream.str();
 }
@@ -140,11 +141,11 @@ ResultTable::operator std::string() const {
   // For printing the table.
   std::ostringstream stream;
 
-  // Adding the metadata.
-  stream << "metadata: " << metadata().asJsonString(true) << "\n";
-
   // Adding the table to the stream.
-  stream << "Table '" << descriptor_ << "':\n\n";
+  stream << "Table '" << descriptor_ << "'\n";
+
+  // Adding the metadata.
+  stream << absl::StrCat(getMetadataPrettyString(metadata(), "metadata"), "\n");
 
   // For easier usage.
   const size_t numberColumns = columnNames_.size();

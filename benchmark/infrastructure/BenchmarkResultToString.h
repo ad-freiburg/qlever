@@ -30,11 +30,20 @@ void addCategoryTitleToOStringstream(std::ostringstream* stream,
                                      std::string_view categoryTitle);
 
 /*
+@brief If `meta` is a non empty metadata object, return it's non compact
+json string representation. Otherwise, return an empty string.
+
+@param prefix Will be printed before the json string.
+*/
+std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
+  std::string_view prefix);
+
+/*
 @brief Add a vector of `ResultEntry` in their string form to the string stream
 in form of a list.
 
 @param vectorEntryPrefix A prefix added before every entry in the vector.
-@param newLinePrefix A prefix added before at the start of a new line.
+@param newLinePrefix A prefix added before the start of a new line.
 */
 // Default way of adding a vector of ResultEntrys to a `ostringstream` with
 // optional prefix, which will be inserted at the start of every new line.

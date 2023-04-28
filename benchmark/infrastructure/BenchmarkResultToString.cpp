@@ -3,7 +3,9 @@
 // Author: Andre Schlegel February of 2023, schlegea@informatik.uni-freiburg.de)
 
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
+#include "BenchmarkMetadata.h"
 
+#include <absl/strings/str_cat.h>
 #include <bits/ranges_algo.h>
 
 namespace ad_benchmark {
@@ -14,7 +16,18 @@ void addCategoryTitleToOStringstream(std::ostringstream* stream,
   const size_t barLength = categoryTitle.size() + 4;
   const std::string bar(barLength, '#');
 
-  (*stream) << "\n" << bar << "\n# " << categoryTitle << " #\n" << bar << "\n";
+  (*stream) << bar << "\n# " << categoryTitle << " #\n" << bar << "\n";
+}
+
+// ___________________________________________________________________________
+std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
+  std::string_view prefix){
+  const std::string& metadataString = meta.asJsonString(true);
+  if (metadataString != "null"){
+    return absl::StrCat(prefix, metadataString, "\n");
+  } else {
+    return "";
+  }
 }
 
 // ___________________________________________________________________________
@@ -23,7 +36,7 @@ void addVectorOfResultEntryToOStringstream(
     const std::string& vectorEntryPrefix, const std::string& newLinePrefix) {
   for (const auto& entry : entries) {
     // The beginning of the first row.
-    (*stream) << "\n\n" << vectorEntryPrefix;
+    (*stream) << vectorEntryPrefix;
 
     /*
     In order to effectivly add the prefix at the start of every new line, we
@@ -38,15 +51,17 @@ void addVectorOfResultEntryToOStringstream(
                             }
                           },
                           {});
+
+    // Line break before the start of the next row.
+    (*stream) << "\n\n";
   }
 };
 
 // ___________________________________________________________________________
 void addSingleMeasurementsToOStringstream(
     std::ostringstream* stream, const std::vector<ResultEntry>& resultEntries) {
-  addCategoryTitleToOStringstream(stream, "Single measurment benchmarks");
-  addVectorOfResultEntryToOStringstream(stream, resultEntries,
-                                        "Single measurment benchmark ", "");
+  addCategoryTitleToOStringstream(stream, "Single measurement benchmarks");
+  addVectorOfResultEntryToOStringstream(stream, resultEntries, "", "");
 }
 
 // ___________________________________________________________________________
@@ -54,7 +69,7 @@ void addGroupsToOStringstream(std::ostringstream* stream,
                               const std::vector<ResultGroup>& resultGroups) {
   addCategoryTitleToOStringstream(stream, "Group benchmarks");
   for (const auto& group : resultGroups) {
-    (*stream) << "\n\n" << (std::string)group;
+    (*stream) << (std::string)group << "\n";
   }
 }
 
@@ -64,7 +79,23 @@ void addTablesToOStringstream(std::ostringstream* stream,
   addCategoryTitleToOStringstream(stream, "Table benchmarks");
   // Printing the tables themselves.
   for (const auto& table : resultTables) {
-    (*stream) << "\n\n" << (std::string)table;
+    (*stream) << (std::string)table << "\n" ;
+  }
+}
+
+// ___________________________________________________________________________
+static void addMetadataToOStringstream(std::ostringstream* stream,
+  const BenchmarkMetadata& meta){
+  addCategoryTitleToOStringstream(stream,
+                                  "General metadata for the"
+                                  " following benchmarks");
+
+  const std::string& metaString = getMetadataPrettyString(meta, "");
+  // Just add none, if there isn't any.
+  if (metaString == ""){
+    (*stream) << "None\n\n";
+  } else {
+    (*stream) << absl::StrCat(metaString, "\n");
   }
 }
 
@@ -89,37 +120,34 @@ std::string benchmarkResultsToString(const BenchmarkMetadata& meta,
   // @param categoryAddPrintStreamFunction The function, which given the
   //  benchmark category information, converts them to text, and adds that text
   //  to the stringstream.
-  // @param suffix Added to the stringstream after
+  // @param prefix Added to the stringstream before
   //  categoryAddPrintStreamFunction. Mostly for linebreaks between those
   //  categories.
   auto addNonEmptyCategorieToStringSteam =
       [](std::ostringstream* stringStream, const auto& categoryResult,
          const auto& categoryAddPrintStreamFunction,
-         const std::string& suffix = "") {
+         const std::string& prefix = "") {
         if (categoryResult.size() > 0) {
+          (*stringStream) << prefix;
           categoryAddPrintStreamFunction(stringStream, categoryResult);
-          (*stringStream) << suffix;
         }
       };
 
   // Visualize the general metadata.
-  addCategoryTitleToOStringstream(&visualization,
-                                  "General metadata for the"
-                                  " following benchmarks");
-  visualization << "\n\n" << meta.asJsonString(true) << "\n\n";
+  addMetadataToOStringstream(&visualization, meta);
 
   // Visualization for single measurments, if there are any.
   addNonEmptyCategorieToStringSteam(&visualization, singleMeasurements,
                                     addSingleMeasurementsToOStringstream,
-                                    "\n\n");
+                                    "");
 
   // Visualization for groups, if there are any.
   addNonEmptyCategorieToStringSteam(&visualization, resultGroups,
-                                    addGroupsToOStringstream, "\n\n");
+                                    addGroupsToOStringstream, "");
 
   // Visualization for tables, if there are any.
   addNonEmptyCategorieToStringSteam(&visualization, resultTables,
-                                    addTablesToOStringstream);
+                                    addTablesToOStringstream, "");
 
   return visualization.str();
 }
