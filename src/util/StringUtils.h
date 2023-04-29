@@ -207,6 +207,27 @@ inline size_t findLiteralEnd(const std::string_view input,
   return endPos;
 }
 
+// Implementation based on https://stackoverflow.com/a/25374036
+bool constantTimeEqualsImpl(std::basic_string_view<volatile char> str1,
+                            std::basic_string_view<volatile char> str2) {
+  if (str1.length() != str2.length()) {
+    return false;
+  }
+  volatile char c = 0;
+  for (size_t i = 0; i < str1.length(); ++i) {
+    c |= str1[i] ^ str2[i];
+  }
+  return c == 0;
+}
+
+std::basic_string_view<volatile char> toVolatile(std::string_view view) {
+  return {view.data(), view.size()};
+}
+
+bool constantTimeEquals(std::string_view str1, std::string_view str2) {
+  return constantTimeEqualsImpl(toVolatile(str1), toVolatile(str2));
+}
+
 }  // namespace ad_utility
 
 // these overloads are missing in the STL
