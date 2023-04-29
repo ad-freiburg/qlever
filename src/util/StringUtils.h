@@ -215,7 +215,7 @@ bool constantTimeEqualsImpl(std::basic_string_view<volatile char> str1,
   }
   volatile char c = 0;
   for (size_t i = 0; i < str1.length(); ++i) {
-    c |= str1[i] ^ str2[i];
+    c = c | (str1[i] ^ str2[i]);
   }
   return c == 0;
 }
