@@ -40,7 +40,7 @@ class BenchmarkMetadata {
    * will have new lines and indention.
    */
   std::string asJsonString(bool prettyPrint) const {
-    return data_.dump(prettyPrint ? 0 : -1);
+    return data_.dump(prettyPrint ? 2 : -1);
   }
 
   // JSON serialization.
