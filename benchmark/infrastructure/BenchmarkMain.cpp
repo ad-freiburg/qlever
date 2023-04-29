@@ -137,7 +137,7 @@ int main(int argc, char** argv) {
   the same order. So the metadata and benchmark results are always at the
   same index position, and are grouped togehter correctly.
   */
-  const auto& generalMetadataAndResults{ad_utility::pairTwoVectorTogether(
+  const auto& generalMetadataAndResults{ad_utility::zipVectors(
       BenchmarkRegister::getAllGeneralMetadata(), results)};
 
   // Actually processing the arguments.

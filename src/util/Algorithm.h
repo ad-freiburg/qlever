@@ -86,14 +86,13 @@ auto transform(Range&& input, F unaryOp) {
 and copies them into `std::pair`s, who are returned inside a vector.
 Example: `{1,2}` and `{3,4}` are returned as `{(1,3), (2,4)}`.
 */
-template <typename VectorAContentType, typename VectorBContentType>
-std::vector<std::pair<VectorAContentType, VectorBContentType>>
-pairTwoVectorTogether(const std::vector<VectorAContentType>& vectorA,
-                      const std::vector<VectorBContentType>& vectorB) {
+template <typename T1, typename T2>
+std::vector<std::pair<T1, T2>> zipVectors(const std::vector<T1>& vectorA,
+  const std::vector<T2>& vectorB) {
   // Both vectors must have the same length.
   AD_CONTRACT_CHECK(vectorA.size() == vectorB.size());
 
-  std::vector<std::pair<VectorAContentType, VectorBContentType>>
+  std::vector<std::pair<T1, T2>>
       vectorsPairedUp{};
   vectorsPairedUp.reserve(vectorA.size());
 
