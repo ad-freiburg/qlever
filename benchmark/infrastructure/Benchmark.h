@@ -127,6 +127,10 @@ the processing/management of those benchmarks.
 */
 class BenchmarkInterface {
  public:
+
+  // Used for identification of the class later.
+  virtual std::string name() const = 0;
+
   // Used to transport values, that you want to set at runtime.
   virtual void parseConfiguration(
       [[maybe_unused]] const BenchmarkConfiguration& config) {

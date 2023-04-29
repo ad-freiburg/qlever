@@ -137,12 +137,10 @@ void addTablesToOStringstream(std::ostringstream* stream,
 // ___________________________________________________________________________
 static void addMetadataToOStringstream(std::ostringstream* stream,
   const BenchmarkMetadata& meta){
-  addCategoryTitleToOStringstream(stream,
-                                  "General metadata for the"
-                                  " following benchmarks");
-  (*stream) << "\n";
+  (*stream) << "General metadata: ";
 
   const std::string& metaString = getMetadataPrettyString(meta, "", "");
+
   // Just add none, if there isn't any.
   if (metaString == ""){
     (*stream) << "None";
@@ -184,6 +182,11 @@ std::string benchmarkResultsToString(
           categoryAddPrintStreamFunction(stringStream, categoryResult);
         }
       };
+
+  addCategoryTitleToOStringstream(&visualization,
+    absl::StrCat("Benchmark class '", benchmarkClass->name(), "'"));
+  visualization << "\n";
+
 
   // Visualize the general metadata.
   addMetadataToOStringstream(&visualization, benchmarkClass->getMetadata());

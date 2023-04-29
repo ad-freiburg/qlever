@@ -72,7 +72,8 @@ nlohmann::json zipBenchmarkClassAndBenchmarkResultsToJson(
         benchmarkClassAndBenchmarkResults) {
   return transformIntoJsonArray(
       benchmarkClassAndBenchmarkResults, [](const auto& pair) {
-        return nlohmann::json{{"general metadata", pair.first->getMetadata()},
+        return nlohmann::json{{"name", pair.first->getMetadata()},
+                              {"general metadata", pair.first->getMetadata()},
                               {"measurements", pair.second}};
       });
 }
