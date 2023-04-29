@@ -67,12 +67,12 @@ nlohmann::json benchmarkResultsToJson(
 }
 
 // ___________________________________________________________________________
-nlohmann::json zipGeneralMetadataAndBenchmarkResultsToJson(
-    const std::vector<std::pair<BenchmarkMetadata, BenchmarkResults>>&
-        generalMetadataAndBenchmarkResults) {
+nlohmann::json zipBenchmarkClassAndBenchmarkResultsToJson(
+    const std::vector<std::pair<const BenchmarkInterface*, BenchmarkResults>>&
+        benchmarkClassAndBenchmarkResults) {
   return transformIntoJsonArray(
-      generalMetadataAndBenchmarkResults, [](const auto& pair) {
-        return nlohmann::json{{"general metadata", pair.first},
+      benchmarkClassAndBenchmarkResults, [](const auto& pair) {
+        return nlohmann::json{{"general metadata", pair.first->getMetadata()},
                               {"measurements", pair.second}};
       });
 }

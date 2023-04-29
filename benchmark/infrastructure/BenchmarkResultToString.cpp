@@ -152,8 +152,9 @@ static void addMetadataToOStringstream(std::ostringstream* stream,
 }
 
 // ___________________________________________________________________________
-std::string benchmarkResultsToString(const BenchmarkMetadata& meta,
-                                     const BenchmarkResults& results) {
+std::string benchmarkResultsToString(
+  const BenchmarkInterface* const benchmarkClass,
+  const BenchmarkResults& results) {
   // The values for all the categories of benchmarks.
   const std::vector<ResultEntry>& singleMeasurements =
       results.getSingleMeasurements();
@@ -185,7 +186,7 @@ std::string benchmarkResultsToString(const BenchmarkMetadata& meta,
       };
 
   // Visualize the general metadata.
-  addMetadataToOStringstream(&visualization, meta);
+  addMetadataToOStringstream(&visualization, benchmarkClass->getMetadata());
 
   // Visualization for single measurments, if there are any.
   addNonEmptyCategorieToStringSteam(&visualization, singleMeasurements,

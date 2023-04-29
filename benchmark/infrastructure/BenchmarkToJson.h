@@ -21,10 +21,9 @@ nlohmann::json benchmarkResultsToJson(
 
 /*
 @brief Create a nlohmann::json array with all relevant informations
-given by the pairs. That is, all the `BenchmarkMetadata` and all information
-defined by benchmarks, with every pair grouped up.
+given by the pairs.
 */
-nlohmann::json zipGeneralMetadataAndBenchmarkResultsToJson(
-    const std::vector<std::pair<BenchmarkMetadata, BenchmarkResults>>&
-        generalMetadataAndBenchmarkResults);
+nlohmann::json zipBenchmarkClassAndBenchmarkResultsToJson(
+    const std::vector<std::pair<const BenchmarkInterface*, BenchmarkResults>>&
+        benchmarkClassAndBenchmarkResults);
 }  // namespace ad_benchmark

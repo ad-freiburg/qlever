@@ -129,23 +129,21 @@ int main(int argc, char** argv) {
   const std::vector<BenchmarkResults>& results{
       BenchmarkRegister::runAllRegisteredBenchmarks()};
   /*
-  Pairing the measured times up togehter with the general metadata of the
-  classes. We do it this way around, so that it's assured, that the classes
-  ran their benchmarks and that in the case, of them creating metadata based
-  on those benchmark results, those values are able to exist.
-  Note: All the classes registered in `BenchmarkRegister` are always ran in
-  the same order. So the metadata and benchmark results are always at the
-  same index position, and are grouped togehter correctly.
+  Pairing the measured times up together with the the benchmark classes,
+  that created them. Note: All the classes registered in `BenchmarkRegister`
+  are always ran in the same order. So the benchmark class and benchmark
+  results are always at the same index position, and are grouped togehter
+  correctly.
   */
-  const auto& generalMetadataAndResults{ad_utility::zipVectors(
-      BenchmarkRegister::getAllGeneralMetadata(), results)};
+  const auto& benchmarkClassAndResults{ad_utility::zipVectors(
+      BenchmarkRegister::getAllRegisteredBenchmarks(), results)};
 
   // Actually processing the arguments.
   if (vm.count("print")) {
     std::ranges::for_each(
-        generalMetadataAndResults,
-        [](const std::pair<BenchmarkMetadata, BenchmarkResults>& result) {
-          std::cout << benchmarkResultsToString(result.first, result.second)
+        benchmarkClassAndResults,
+        [](const auto& pair) {
+          std::cout << benchmarkResultsToString(pair.first, pair.second)
                     << "\n\n";
         },
         {});
@@ -153,7 +151,7 @@ int main(int argc, char** argv) {
 
   if (vm.count("write")) {
     writeJsonToFile(
-        zipGeneralMetadataAndBenchmarkResultsToJson(generalMetadataAndResults),
+        zipBenchmarkClassAndBenchmarkResultsToJson(benchmarkClassAndResults),
         writeFileName, vm.count("append"));
   }
 }

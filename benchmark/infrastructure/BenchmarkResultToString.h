@@ -62,9 +62,9 @@ void addTablesToOStringstream(std::ostringstream* stream,
                               const std::vector<ResultTable>& resultTables);
 
 /*
- * @brief Returns a formated string containing the given metadata, followed
- * by all the benchmark information.
+ * @brief Returns a formated string containing all the benchmark information.
  */
-std::string benchmarkResultsToString(const BenchmarkMetadata& meta,
-                                     const BenchmarkResults& results);
+std::string benchmarkResultsToString(
+  const BenchmarkInterface* const benchmarkClass,
+  const BenchmarkResults& results);
 }  // namespace ad_benchmark

@@ -204,13 +204,10 @@ class BenchmarkRegister {
   static std::vector<BenchmarkResults> runAllRegisteredBenchmarks();
 
   /*
-   * @brief Returns the general metadata of all the registered benchmarks. As
-   *  in, it collects and return the outputs of all those `getMetadata`
-   *  functions from the interface.
-   *
-   * @return They should be in the same order as the registrations.
-   */
-  static std::vector<BenchmarkMetadata> getAllGeneralMetadata();
+  @brief Returns pointer to all the registered benchmark class objects.
+  */
+  static std::vector<const BenchmarkInterface*>
+  getAllRegisteredBenchmarks();
 };
 
 /*
