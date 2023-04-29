@@ -127,7 +127,6 @@ the processing/management of those benchmarks.
 */
 class BenchmarkInterface {
  public:
-
   // Used for identification of the class later.
   virtual std::string name() const = 0;
 
@@ -210,8 +209,7 @@ class BenchmarkRegister {
   /*
   @brief Returns pointer to all the registered benchmark class objects.
   */
-  static std::vector<const BenchmarkInterface*>
-  getAllRegisteredBenchmarks();
+  static std::vector<const BenchmarkInterface*> getAllRegisteredBenchmarks();
 };
 
 /*

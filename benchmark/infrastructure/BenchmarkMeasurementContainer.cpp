@@ -30,9 +30,12 @@ const BenchmarkMetadata& BenchmarkMetadataGetter::metadata() const {
 
 // ____________________________________________________________________________
 ResultEntry::operator std::string() const {
-  return absl::StrCat("Single measurement '", descriptor_, "'\n",
-  addIndtention(absl::StrCat(getMetadataPrettyString(metadata(), "metadata: ",
-  "\n"), "time: ", measuredTime_, "s"), 1));
+  return absl::StrCat(
+      "Single measurement '", descriptor_, "'\n",
+      addIndtention(
+          absl::StrCat(getMetadataPrettyString(metadata(), "metadata: ", "\n"),
+                       "time: ", measuredTime_, "s"),
+          1));
 }
 
 // ____________________________________________________________________________
@@ -52,8 +55,9 @@ ResultGroup::operator std::string() const {
   // so  using a stream is the best idea.
   std::ostringstream stream;
 
-  stream << absl::StrCat(getMetadataPrettyString(metadata(), "metadata: ",
-    "\n"), "Measurements:\n\n");
+  stream << absl::StrCat(
+      getMetadataPrettyString(metadata(), "metadata: ", "\n"),
+      "Measurements:\n\n");
 
   // Listing all the entries.
   addVectorOfResultEntryToOStringstream(

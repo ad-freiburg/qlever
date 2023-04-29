@@ -31,10 +31,7 @@ Using the functions described there would require including
 // Single Measurements
 class BMSingleMeasurements : public BenchmarkInterface {
  public:
-
-  std::string name() const final{
-    return "Example for single measurements";
-  }
+  std::string name() const final { return "Example for single measurements"; }
 
   void parseConfiguration(const BenchmarkConfiguration&) final {
     // Nothing to actually do here.
@@ -80,10 +77,7 @@ class BMSingleMeasurements : public BenchmarkInterface {
 // Groups
 class BMGroups : public BenchmarkInterface {
  public:
-
-  std::string name() const final{
-    return "Example for group benchmarks";
-  }
+  std::string name() const final { return "Example for group benchmarks"; }
 
   void parseConfiguration(const BenchmarkConfiguration&) final {
     // Nothing to actually do here.
@@ -152,10 +146,7 @@ class BMGroups : public BenchmarkInterface {
 // Tables
 class BMTables : public BenchmarkInterface {
  public:
-
-  std::string name() const final{
-    return "Example for table benchmarks";
-  }
+  std::string name() const final { return "Example for table benchmarks"; }
 
   void parseConfiguration(const BenchmarkConfiguration&) final {
     // Nothing to actually do here.
@@ -239,8 +230,7 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
   BenchmarkMetadata generalMetadata_;
 
  public:
-
-  std::string name() const final{
+  std::string name() const final {
     return "Example for the usage of configuration and metadata";
   }
 

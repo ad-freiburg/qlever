@@ -32,12 +32,12 @@ void addCategoryTitleToOStringstream(std::ostringstream* stream,
 
 /*
 @brief Adds indention before the given string and directly after new line
-characters. 
+characters.
 
 @param indentionLevel How deep is the indention? `0` is no indention.
 */
 std::string addIndtention(const std::string_view str,
-  const size_t& indentionLevel);
+                          const size_t& indentionLevel);
 
 /*
 @brief If `meta` is a non empty metadata object, return it's non compact
@@ -47,7 +47,8 @@ json string representation. Otherwise, return an empty string.
 @param suffix Will be printed after the json string.
 */
 std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
-  std::string_view prefix, std::string_view suffix);
+                                    std::string_view prefix,
+                                    std::string_view suffix);
 
 /*
 @brief Add a vector of `ResultEntry` in their string form to the string stream
@@ -78,6 +79,6 @@ void addTablesToOStringstream(std::ostringstream* stream,
  * @brief Returns a formated string containing all the benchmark information.
  */
 std::string benchmarkResultsToString(
-  const BenchmarkInterface* const benchmarkClass,
-  const BenchmarkResults& results);
+    const BenchmarkInterface* const benchmarkClass,
+    const BenchmarkResults& results);
 }  // namespace ad_benchmark

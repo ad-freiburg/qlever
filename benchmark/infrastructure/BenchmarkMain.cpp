@@ -140,13 +140,13 @@ int main(int argc, char** argv) {
 
   // Actually processing the arguments.
   if (vm.count("print")) {
-    std::ranges::for_each(
-        benchmarkClassAndResults,
-        [](const auto& pair) {
-          std::cout << benchmarkResultsToString(pair.first, pair.second)
-                    << "\n\n";
-        },
-        {});
+    std::ranges::for_each(benchmarkClassAndResults,
+                          [](const auto& pair) {
+                            std::cout << benchmarkResultsToString(pair.first,
+                                                                  pair.second)
+                                      << "\n\n";
+                          },
+                          {});
   }
 
   if (vm.count("write")) {

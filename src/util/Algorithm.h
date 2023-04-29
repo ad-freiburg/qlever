@@ -88,12 +88,11 @@ Example: `{1,2}` and `{3,4}` are returned as `{(1,3), (2,4)}`.
 */
 template <typename T1, typename T2>
 std::vector<std::pair<T1, T2>> zipVectors(const std::vector<T1>& vectorA,
-  const std::vector<T2>& vectorB) {
+                                          const std::vector<T2>& vectorB) {
   // Both vectors must have the same length.
   AD_CONTRACT_CHECK(vectorA.size() == vectorB.size());
 
-  std::vector<std::pair<T1, T2>>
-      vectorsPairedUp{};
+  std::vector<std::pair<T1, T2>> vectorsPairedUp{};
   vectorsPairedUp.reserve(vectorA.size());
 
   std::ranges::transform(

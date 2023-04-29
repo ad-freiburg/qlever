@@ -49,7 +49,7 @@ std::vector<const BenchmarkInterface*>
 BenchmarkRegister::getAllRegisteredBenchmarks() {
   return ad_utility::transform(
       registeredBenchmarks,
-      [](BenchmarkPointer& instance)->const BenchmarkInterface*{
+      [](BenchmarkPointer& instance) -> const BenchmarkInterface* {
         return instance.get();
       });
 }

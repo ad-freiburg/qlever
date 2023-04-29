@@ -3,13 +3,14 @@
 // Author: Andre Schlegel February of 2023, schlegea@informatik.uni-freiburg.de)
 
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
+
+#include <absl/strings/str_cat.h>
+#include <bits/ranges_algo.h>
+
 #include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
-
-#include <absl/strings/str_cat.h>
-#include <bits/ranges_algo.h>
 
 namespace ad_benchmark {
 
@@ -27,16 +28,16 @@ void addCategoryTitleToOStringstream(std::ostringstream* stream,
 
 // ___________________________________________________________________________
 std::string addIndtention(const std::string_view str,
-  const size_t& indentionLevel){
+                          const size_t& indentionLevel) {
   // An indention level of 0 makes no sense. Must be an error.
   AD_CONTRACT_CHECK(indentionLevel > 0);
 
   // The indention symbols for this level of indention.
   std::string indentionSymbols{""};
   indentionSymbols.reserve(outputIndention.size() * indentionLevel);
-  for (size_t i = 0; i < indentionLevel; i++){
-      indentionSymbols.append(outputIndention);
-    }
+  for (size_t i = 0; i < indentionLevel; i++) {
+    indentionSymbols.append(outputIndention);
+  }
 
   std::ostringstream stream;
   stream << indentionSymbols;
@@ -44,21 +45,23 @@ std::string addIndtention(const std::string_view str,
   // Adding the content of the string char per char, so that we can easily
   // identify the new line symbols.
   std::ranges::for_each(str,
-    [&indentionSymbols, &stream](const char& symbol){
-      stream << symbol;
-      if (symbol == '\n'){
-        stream << indentionSymbols;
-      }
-    }, {});
+                        [&indentionSymbols, &stream](const char& symbol) {
+                          stream << symbol;
+                          if (symbol == '\n') {
+                            stream << indentionSymbols;
+                          }
+                        },
+                        {});
 
   return stream.str();
 }
 
 // ___________________________________________________________________________
 std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
-  std::string_view prefix, std::string_view suffix){
+                                    std::string_view prefix,
+                                    std::string_view suffix) {
   const std::string& metadataString = meta.asJsonString(true);
-  if (metadataString != "null"){
+  if (metadataString != "null") {
     return absl::StrCat(prefix, metadataString, suffix);
   } else {
     return "";
@@ -69,9 +72,10 @@ std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
 @brief Applies the given function `regularFunction` to all elements in `r`,
 except for the last one. Instead, `lastOneFunction` is applied to that one.
 */
-template<typename Range, typename RegularFunction, typename LastOneFunction>
+template <typename Range, typename RegularFunction, typename LastOneFunction>
 static void forEachExcludingTheLastOne(Range&& r,
-  RegularFunction regularFunction, LastOneFunction lastOneFunction){
+                                       RegularFunction regularFunction,
+                                       LastOneFunction lastOneFunction) {
   std::ranges::for_each_n(r.begin(), r.size() - 1, regularFunction, {});
   lastOneFunction(r.back());
 }
@@ -86,17 +90,19 @@ string.
 @param listItemSeperator Will be put between each of the string representations
 of the range elements.
 */
-template<typename Range, typename TranslationFunction>
+template <typename Range, typename TranslationFunction>
 static void addListToOStringStream(std::ostringstream* stream, Range&& r,
-  TranslationFunction translationFunction,
-  std::string_view listItemSeperator = "\n"){
-  forEachExcludingTheLastOne(AD_FWD(r),
-    [&stream, &translationFunction, &listItemSeperator](const auto& listItem){
-      (*stream) << translationFunction(listItem) << listItemSeperator;
-    },
-    [&stream, &translationFunction](const auto& listItem){
-      (*stream) << translationFunction(listItem);
-    });
+                                   TranslationFunction translationFunction,
+                                   std::string_view listItemSeperator = "\n") {
+  forEachExcludingTheLastOne(
+      AD_FWD(r),
+      [&stream, &translationFunction,
+       &listItemSeperator](const auto& listItem) {
+        (*stream) << translationFunction(listItem) << listItemSeperator;
+      },
+      [&stream, &translationFunction](const auto& listItem) {
+        (*stream) << translationFunction(listItem);
+      });
 }
 
 // ___________________________________________________________________________
@@ -108,35 +114,35 @@ void addVectorOfResultEntryToOStringstream(
 
   // Adds a single `ResultEntry` to the stream.
   auto addResultEntry = [&stream, &vectorEntryPrefix,
-                         &newLinePrefix](const ResultEntry& entry){
-      (*stream) << vectorEntryPrefix;
+                         &newLinePrefix](const ResultEntry& entry) {
+    (*stream) << vectorEntryPrefix;
 
-      /*
-      In order to effectivly add the prefix at the start of every new line, we
-      feed the content of the string into the stream char for char.
-      */
-      std::ranges::for_each(static_cast<std::string>(entry),
-                            [&stream,
-                             &newLinePrefix](const char& currentSymbol) {
-                              if (currentSymbol == '\n') {
-                                (*stream) << "\n" << newLinePrefix;
-                              } else {
-                                (*stream) << currentSymbol;
-                              }
-                            },
-                            {});
-    };
+    /*
+    In order to effectivly add the prefix at the start of every new line, we
+    feed the content of the string into the stream char for char.
+    */
+    std::ranges::for_each(static_cast<std::string>(entry),
+                          [&stream, &newLinePrefix](const char& currentSymbol) {
+                            if (currentSymbol == '\n') {
+                              (*stream) << "\n" << newLinePrefix;
+                            } else {
+                              (*stream) << currentSymbol;
+                            }
+                          },
+                          {});
+  };
 
   /*
   Adding the entries to the stream in such a way, that we don't have a line
   seperator at the end of that list.
   */
-  forEachExcludingTheLastOne(entries,
-    [&addResultEntry, &stream, &lineSeperator](const ResultEntry& entry){
-      addResultEntry(entry);
-      (*stream) << lineSeperator;
-    },
-    addResultEntry);
+  forEachExcludingTheLastOne(
+      entries,
+      [&addResultEntry, &stream, &lineSeperator](const ResultEntry& entry) {
+        addResultEntry(entry);
+        (*stream) << lineSeperator;
+      },
+      addResultEntry);
 };
 
 // ___________________________________________________________________________
@@ -152,9 +158,10 @@ void addGroupsToOStringstream(std::ostringstream* stream,
                               const std::vector<ResultGroup>& resultGroups) {
   addCategoryTitleToOStringstream(stream, "Group benchmarks");
   (*stream) << "\n";
-  addListToOStringStream(stream, resultGroups,
-    [](const ResultGroup& group){return static_cast<std::string>(group);},
-    "\n\n");
+  addListToOStringStream(
+      stream, resultGroups,
+      [](const ResultGroup& group) { return static_cast<std::string>(group); },
+      "\n\n");
 }
 
 // ___________________________________________________________________________
@@ -162,20 +169,21 @@ void addTablesToOStringstream(std::ostringstream* stream,
                               const std::vector<ResultTable>& resultTables) {
   addCategoryTitleToOStringstream(stream, "Table benchmarks");
   (*stream) << "\n";
-  addListToOStringStream(stream, resultTables,
-    [](const ResultTable& table){return static_cast<std::string>(table);},
-    "\n\n");
+  addListToOStringStream(
+      stream, resultTables,
+      [](const ResultTable& table) { return static_cast<std::string>(table); },
+      "\n\n");
 }
 
 // ___________________________________________________________________________
 static void addMetadataToOStringstream(std::ostringstream* stream,
-  const BenchmarkMetadata& meta){
+                                       const BenchmarkMetadata& meta) {
   (*stream) << "General metadata: ";
 
   const std::string& metaString = getMetadataPrettyString(meta, "", "");
 
   // Just add none, if there isn't any.
-  if (metaString == ""){
+  if (metaString == "") {
     (*stream) << "None";
   } else {
     (*stream) << metaString;
@@ -184,8 +192,8 @@ static void addMetadataToOStringstream(std::ostringstream* stream,
 
 // ___________________________________________________________________________
 std::string benchmarkResultsToString(
-  const BenchmarkInterface* const benchmarkClass,
-  const BenchmarkResults& results) {
+    const BenchmarkInterface* const benchmarkClass,
+    const BenchmarkResults& results) {
   // The values for all the categories of benchmarks.
   const std::vector<ResultEntry>& singleMeasurements =
       results.getSingleMeasurements();
@@ -209,17 +217,17 @@ std::string benchmarkResultsToString(
   //  to the stringstream.
   auto addNonEmptyCategorieToStringSteam =
       [&seperator](std::ostringstream* stringStream, const auto& categoryResult,
-         const auto& categoryAddPrintStreamFunction) {
+                   const auto& categoryAddPrintStreamFunction) {
         if (categoryResult.size() > 0) {
           (*stringStream) << seperator;
           categoryAddPrintStreamFunction(stringStream, categoryResult);
         }
       };
 
-  addCategoryTitleToOStringstream(&visualization,
-    absl::StrCat("Benchmark class '", benchmarkClass->name(), "'"));
+  addCategoryTitleToOStringstream(
+      &visualization,
+      absl::StrCat("Benchmark class '", benchmarkClass->name(), "'"));
   visualization << "\n";
-
 
   // Visualize the general metadata.
   addMetadataToOStringstream(&visualization, benchmarkClass->getMetadata());
