@@ -208,6 +208,9 @@ inline size_t findLiteralEnd(const std::string_view input,
 }
 
 // Implementation based on https://stackoverflow.com/a/25374036
+// Note because of ambiguous overload resolution the function name
+// here has the 'Impl' suffix, even though the explicit conversion is required
+// for it to compile (so only one overload actually works in practice)
 inline bool constantTimeEqualsImpl(std::basic_string_view<volatile char> str1,
                                    std::basic_string_view<volatile char> str2) {
   if (str1.length() != str2.length()) {
@@ -215,6 +218,8 @@ inline bool constantTimeEqualsImpl(std::basic_string_view<volatile char> str1,
   }
   volatile char c = 0;
   for (size_t i = 0; i < str1.length(); ++i) {
+    // In C++20 compound assignment of volatile variables causes a warning,
+    // so we can't use 'c |=' until compiling with C++23 where it is fine again.
     c = c | (str1[i] ^ str2[i]);
   }
   return c == 0;
