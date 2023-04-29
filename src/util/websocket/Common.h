@@ -13,11 +13,17 @@
 namespace ad_utility::websocket::common {
 class QueryId {
   std::string id_;
+  explicit QueryId(std::string id) : id_{std::move(id)} {}
 
  public:
-  // TODO make private and implement system ensuring unique ids
-  //  where something keeps track of active queries
-  explicit QueryId(std::string id) : id_{std::move(id)} {}
+  static std::optional<QueryId> uniqueIdFromString(std::string id) {
+    // TODO implement system ensuring unique ids
+    //  where something keeps track of active queries
+    return QueryId{std::move(id)};
+  }
+  static QueryId idFromString(std::string id) {
+    return QueryId{std::move(id)};
+  }
 
   static QueryId uniqueId() {
     static std::mt19937 generator(std::random_device{}());

@@ -202,12 +202,13 @@ net::awaitable<void> connectionLifecycle(
     tcp::socket socket, http::request<http::string_body> request) {
   auto match = ctre::match<"/watch/([^/?]+)">(request.target());
   AD_CORRECTNESS_CHECK(match);
-  QueryId queryId{match.get<1>().to_string()};
+  QueryId queryId = QueryId::idFromString(match.get<1>().to_string());
   websocket ws{std::move(socket)};
 
   try {
-    // TODO set suggested settings as described here?
-    // https://www.boost.org/doc/libs/master/libs/beast/example/websocket/server/awaitable/websocket_server_awaitable.cpp
+    ws.set_option(beast::websocket::stream_base::timeout::suggested(
+        beast::role_type::server));
+
     co_await ws.async_accept(request, boost::asio::use_awaitable);
 
     WebSocketId webSocketId = WebSocketId::uniqueId();
@@ -249,7 +250,6 @@ std::optional<http::response<http::string_body>> checkPathIsValid(
     const http::request<http::string_body>& request) {
   auto path = request.target();
 
-  // TODO allow arbitrary strings
   if (ctre::match<"/watch/[^/?]+">(path)) {
     return std::nullopt;
   }
