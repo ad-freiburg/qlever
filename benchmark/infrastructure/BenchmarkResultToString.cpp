@@ -5,12 +5,16 @@
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
 #include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
+#include "util/Exception.h"
 #include "util/Forward.h"
 
 #include <absl/strings/str_cat.h>
 #include <bits/ranges_algo.h>
 
 namespace ad_benchmark {
+
+extern const std::string outputIndention = "\t";
+
 // ___________________________________________________________________________
 void addCategoryTitleToOStringstream(std::ostringstream* stream,
                                      std::string_view categoryTitle) {
@@ -19,6 +23,35 @@ void addCategoryTitleToOStringstream(std::ostringstream* stream,
   const std::string bar(barLength, '#');
 
   (*stream) << bar << "\n# " << categoryTitle << " #\n" << bar;
+}
+
+// ___________________________________________________________________________
+std::string addIndtention(const std::string_view str,
+  const size_t& indentionLevel){
+  // An indention level of 0 makes no sense. Must be an error.
+  AD_CONTRACT_CHECK(indentionLevel > 0);
+
+  // The indention symbols for this level of indention.
+  std::string indentionSymbols{""};
+  indentionSymbols.reserve(outputIndention.size() * indentionLevel);
+  for (size_t i = 0; i < indentionLevel; i++){
+      indentionSymbols.append(outputIndention);
+    }
+
+  std::ostringstream stream;
+  stream << indentionSymbols;
+
+  // Adding the content of the string char per char, so that we can easily
+  // identify the new line symbols.
+  std::ranges::for_each(str,
+    [&indentionSymbols, &stream](const char& symbol){
+      stream << symbol;
+      if (symbol == '\n'){
+        stream << indentionSymbols;
+      }
+    }, {});
+
+  return stream.str();
 }
 
 // ___________________________________________________________________________

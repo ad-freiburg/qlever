@@ -16,6 +16,10 @@
 #include "util/json.h"
 
 namespace ad_benchmark {
+
+// How the indention should look like.
+extern const std::string outputIndention;
+
 /*
  * @brief Add a string of the form
  * "#################
@@ -25,6 +29,15 @@ namespace ad_benchmark {
  */
 void addCategoryTitleToOStringstream(std::ostringstream* stream,
                                      std::string_view categoryTitle);
+
+/*
+@brief Adds indention before the given string and directly after new line
+characters. 
+
+@param indentionLevel How deep is the indention? `0` is no indention.
+*/
+std::string addIndtention(const std::string_view str,
+  const size_t& indentionLevel);
 
 /*
 @brief If `meta` is a non empty metadata object, return it's non compact

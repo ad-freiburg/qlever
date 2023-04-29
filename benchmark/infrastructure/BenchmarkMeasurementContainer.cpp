@@ -31,8 +31,8 @@ const BenchmarkMetadata& BenchmarkMetadataGetter::metadata() const {
 // ____________________________________________________________________________
 ResultEntry::operator std::string() const {
   return absl::StrCat("Single measurement '", descriptor_, "'\n",
-  getMetadataPrettyString(metadata(), "metadata: ", "\n"), "time: ", measuredTime_,
-  "s");
+  addIndtention(absl::StrCat(getMetadataPrettyString(metadata(), "metadata: ",
+  "\n"), "time: ", measuredTime_, "s"), 1));
 }
 
 // ____________________________________________________________________________
@@ -44,23 +44,25 @@ void to_json(nlohmann::json& j, const ResultEntry& resultEntry) {
 
 // ____________________________________________________________________________
 ResultGroup::operator std::string() const {
+  // The foreword. Everything after this will be indented, so it's better
+  // to only combine them at the end.
+  std::string foreword = absl::StrCat("Group '", descriptor_, "'\n");
+
   // We need to add all the string representations of the group members,
-  // so doing everything using a stream is the best idea.
+  // so  using a stream is the best idea.
   std::ostringstream stream;
 
-  // Foreword.
-  stream << absl::StrCat("Group '", descriptor_, "'\n",
-    getMetadataPrettyString(metadata(), "metadata: ", "\n"),
-    "Measurements:\n\n");
+  stream << absl::StrCat(getMetadataPrettyString(metadata(), "metadata: ",
+    "\n"), "Measurements:\n\n");
 
   // Listing all the entries.
   addVectorOfResultEntryToOStringstream(
       &stream,
       ad_utility::transform(entries_,
                             [](const auto& pointer) { return (*pointer); }),
-      "\t", "\t");
+      outputIndention, outputIndention);
 
-  return stream.str();
+  return absl::StrCat(foreword, addIndtention(stream.str(), 1));
 }
 
 // ____________________________________________________________________________
@@ -139,11 +141,12 @@ ResultTable::operator std::string() const {
     stream << text << padding;
   };
 
+  // The foreword. Everything after this will be indented, so it's better
+  // to only combine them at the end.
+  std::string foreword = absl::StrCat("Table '", descriptor_, "'\n");
+
   // For printing the table.
   std::ostringstream stream;
-
-  // Adding the table to the stream.
-  stream << "Table '" << descriptor_ << "'\n";
 
   // Adding the metadata.
   stream << getMetadataPrettyString(metadata(), "metadata: ", "\n");
@@ -209,7 +212,7 @@ ResultTable::operator std::string() const {
     }
   }
 
-  return stream.str();
+  return absl::StrCat(foreword, addIndtention(stream.str(), 1));
 }
 
 // ____________________________________________________________________________
