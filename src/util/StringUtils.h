@@ -209,7 +209,7 @@ inline size_t findLiteralEnd(const std::string_view input,
 
 // Implementation based on https://stackoverflow.com/a/25374036
 inline bool constantTimeEqualsImpl(std::basic_string_view<volatile char> str1,
-                            std::basic_string_view<volatile char> str2) {
+                                   std::basic_string_view<volatile char> str2) {
   if (str1.length() != str2.length()) {
     return false;
   }
@@ -220,7 +220,8 @@ inline bool constantTimeEqualsImpl(std::basic_string_view<volatile char> str1,
   return c == 0;
 }
 
-constexpr std::basic_string_view<volatile char> toVolatile(std::string_view view) {
+constexpr std::basic_string_view<volatile char> toVolatile(
+    std::string_view view) {
   return {view.data(), view.size()};
 }
 
