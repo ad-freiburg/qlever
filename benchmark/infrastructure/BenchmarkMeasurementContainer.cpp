@@ -31,7 +31,7 @@ const BenchmarkMetadata& BenchmarkMetadataGetter::metadata() const {
 // ____________________________________________________________________________
 ResultEntry::operator std::string() const {
   return absl::StrCat("Single measurement '", descriptor_, "'\n",
-  getMetadataPrettyString(metadata(), "metadata: "), "time: ", measuredTime_,
+  getMetadataPrettyString(metadata(), "metadata: ", "\n"), "time: ", measuredTime_,
   "s");
 }
 
@@ -50,7 +50,8 @@ ResultGroup::operator std::string() const {
 
   // Foreword.
   stream << absl::StrCat("Group '", descriptor_, "'\n",
-    getMetadataPrettyString(metadata(), "metadata: "), "Measurements:\n");
+    getMetadataPrettyString(metadata(), "metadata: ", "\n"),
+    "Measurements:\n\n");
 
   // Listing all the entries.
   addVectorOfResultEntryToOStringstream(
@@ -145,7 +146,7 @@ ResultTable::operator std::string() const {
   stream << "Table '" << descriptor_ << "'\n";
 
   // Adding the metadata.
-  stream << absl::StrCat(getMetadataPrettyString(metadata(), "metadata"), "\n");
+  stream << getMetadataPrettyString(metadata(), "metadata: ", "\n");
 
   // For easier usage.
   const size_t numberColumns = columnNames_.size();

@@ -18,12 +18,9 @@
 namespace ad_benchmark {
 /*
  * @brief Add a string of the form
- * "
- *  #################
- *  # categoryTitle #
- *  #################
- *
- *  "
+ * "#################
+ * # categoryTitle #
+ * #################"
  *  to the stream.
  */
 void addCategoryTitleToOStringstream(std::ostringstream* stream,
@@ -34,9 +31,10 @@ void addCategoryTitleToOStringstream(std::ostringstream* stream,
 json string representation. Otherwise, return an empty string.
 
 @param prefix Will be printed before the json string.
+@param suffix Will be printed after the json string.
 */
 std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
-  std::string_view prefix);
+  std::string_view prefix, std::string_view suffix);
 
 /*
 @brief Add a vector of `ResultEntry` in their string form to the string stream

@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
         generalMetadataAndResults,
         [](const std::pair<BenchmarkMetadata, BenchmarkResults>& result) {
           std::cout << benchmarkResultsToString(result.first, result.second)
-                    << "\n";
+                    << "\n\n";
         },
         {});
   }
