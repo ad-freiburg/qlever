@@ -473,12 +473,16 @@ nlohmann::json Server::composeCacheStatsJson() const {
 
 ad_utility::websocket::common::QueryId getQueryId(
     const ad_utility::httpUtils::HttpRequest auto& request) {
-  // TODO make sure id is actually unique
+  using ad_utility::websocket::common::QueryId;
   std::string_view queryIdHeader = request.base()["Query-Id"];
   if (queryIdHeader.empty()) {
-    return ad_utility::websocket::common::QueryId::uniqueId();
+    return QueryId::uniqueId();
   }
-  return ad_utility::websocket::common::QueryId{std::string(queryIdHeader)};
+  auto queryId = QueryId::uniqueIdFromString(std::string(queryIdHeader));
+  if (!queryId) {
+    throw std::runtime_error{"QueryId '" + queryIdHeader + "' is already in use!"};
+  }
+  return *queryId;
 }
 
 // ____________________________________________________________________________
