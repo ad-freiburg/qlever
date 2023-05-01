@@ -436,9 +436,10 @@ class IndexImpl {
 
   Index::WordEntityPostings getEntityPostingsForTerm(const string& term) const;
 
-  Index::WordEntityPostings readWordCl(TextBlockMetaData tbmd) const;
+  Index::WordEntityPostings readWordCl(const TextBlockMetaData& tbmd) const;
 
-  Index::WordEntityPostings readWordEntityCl(TextBlockMetaData tbmd) const;
+  Index::WordEntityPostings readWordEntityCl(
+      const TextBlockMetaData& tbmd) const;
 
   string getTextExcerpt(TextRecordIndex cid) const {
     if (cid.get() >= _docsDB._size) {
