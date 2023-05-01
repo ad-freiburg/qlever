@@ -46,12 +46,7 @@ class FTSAlgorithms {
                               const vector<Score>& scores, size_t k,
                               WidthOneList* result);
 
-  static void aggScoresAndTakeTopKContexts(const vector<TextRecordIndex>& cids,
-                                           const vector<Id>& eids,
-                                           const vector<Score>& scores,
-                                           size_t k, IdTable* dynResult);
-
-  static void aggScoresAndTakeTopKContexts(const Index::WordEntityPostings wep,
+  static void aggScoresAndTakeTopKContexts(const Index::WordEntityPostings& wep,
                                            size_t k, IdTable* dynResult);
 
   template <int WIDTH>
@@ -72,13 +67,6 @@ class FTSAlgorithms {
 
   // Special case where k == 1.
   template <int WIDTH>
-  static void aggScoresAndTakeTopContext(const vector<TextRecordIndex>& cids,
-                                         const vector<Id>& eids,
-                                         const vector<Score>& scores,
-                                         IdTable* dynResult);
-
-  // Special case where k == 1.
-  template <int WIDTH>
   static void aggScoresAndTakeTopContext(const Index::WordEntityPostings& wep,
                                          IdTable* dynResult);
 
@@ -95,15 +83,14 @@ class FTSAlgorithms {
   // context and matching subtree result tuples.
   template <size_t I>
   static inline void appendCrossProduct(
-      const vector<TextRecordIndex>& cids, const vector<Id>& eids,
-      const vector<Score>& scores, size_t from, size_t toExclusive,
+      const Index::WordEntityPostings& wep, size_t from, size_t toExclusive,
       const ad_utility::HashMap<Id, vector<array<Id, I>>>& subRes,
       vector<array<Id, 3 + I>>& res) {
     LOG(TRACE) << "Append cross-product called for a context with "
                << toExclusive - from << " postings.\n";
     vector<array<Id, I>> contextSubRes;
     for (size_t i = from; i < toExclusive; ++i) {
-      auto it = subRes.find(eids[i]);
+      auto it = subRes.find(wep.eids[i]);
       if (it != subRes.end()) {
         for (auto& tup : it->second) {
           contextSubRes.push_back(tup);
@@ -112,9 +99,9 @@ class FTSAlgorithms {
     }
     for (size_t i = from; i < toExclusive; ++i) {
       for (auto& tup : contextSubRes) {
-        res.emplace_back(concatTupleOld(eids[i], Id::makeFromInt(scores[i]),
-                                        Id::makeFromTextRecordIndex(cids[i]),
-                                        tup, GenSeq<I>()));
+        res.emplace_back(concatTupleOld(
+            wep.eids[i], Id::makeFromInt(wep.scores[i]),
+            Id::makeFromTextRecordIndex(wep.cids[i]), tup, GenSeq<I>()));
       }
     }
   }
@@ -220,40 +207,35 @@ class FTSAlgorithms {
     out.insert(out.end(), fBegin, fEnd);
   }
 
-  static void appendCrossProduct(const vector<TextRecordIndex>& cids,
-                                 const vector<Id>& eids,
-                                 const vector<Score>& scores, size_t from,
-                                 size_t toExclusive,
+  static void appendCrossProduct(const Index::WordEntityPostings& wep,
+                                 size_t from, size_t toExclusive,
                                  const ad_utility::HashSet<Id>& subRes1,
                                  const ad_utility::HashSet<Id>& subRes2,
                                  vector<array<Id, 5>>& res);
 
   static void appendCrossProduct(
-      const vector<TextRecordIndex>& cids, const vector<Id>& eids,
-      const vector<Score>& scores, size_t from, size_t toExclusive,
+      const Index::WordEntityPostings& wep, size_t from, size_t toExclusive,
       const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>&,
       vector<vector<Id>>& res);
 
-  template <int WIDTH>
+  template <int WIDTH>  // TODO: rewrite so word id is considered
   static void oneVarFilterAggScoresAndTakeTopKContexts(
-      const vector<TextRecordIndex>& cids, const vector<Id>& eids,
-      const vector<Score>& scores, const ad_utility::HashMap<Id, IdTable>& fMap,
-      size_t k, IdTable* dynResult);
-
-  static void oneVarFilterAggScoresAndTakeTopKContexts(
-      const vector<TextRecordIndex>& cids, const vector<Id>& eids,
-      const vector<Score>& scores, const HashSet<Id>& fSet, size_t k,
+      const Index::WordEntityPostings& wep,
+      const ad_utility::HashMap<Id, IdTable>& fMap, size_t k,
       IdTable* dynResult);
 
-  template <int WIDTH>
+  static void oneVarFilterAggScoresAndTakeTopKContexts(
+      const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
+      IdTable* dynResult);
+
+  template <int WIDTH>  // TODO: rewrite so word id is considered
   static void multVarsFilterAggScoresAndTakeTopKContexts(
-      const vector<TextRecordIndex>& cids, const vector<Id>& eids,
-      const vector<Score>& scores, const ad_utility::HashMap<Id, IdTable>& fMap,
-      size_t nofVars, size_t kLimit, IdTable* dynResult);
+      const Index::WordEntityPostings& wep,
+      const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars,
+      size_t kLimit, IdTable* dynResult);
 
   template <int WIDTH>
   static void multVarsFilterAggScoresAndTakeTopKContexts(
-      const vector<TextRecordIndex>& cids, const vector<Id>& eids,
-      const vector<Score>& scores, const HashSet<Id>& fSet, size_t nofVars,
-      size_t kLimit, IdTable* dynResult);
+      const Index::WordEntityPostings& wep, const HashSet<Id>& fSet,
+      size_t nofVars, size_t kLimit, IdTable* dynResult);
 };

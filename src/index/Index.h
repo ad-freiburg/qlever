@@ -47,12 +47,18 @@ class Index {
     size_t normalAndInternal_() const { return normal_ + internal_; }
   };
 
-  // Store all information about possible search results in one place.
+  // Store all information about possible search results from the text index in
+  // one place.
+  // Every vector is either empty or has the same size as the others.
   struct WordEntityPostings {
-    vector<TextRecordIndex> cids;
-    vector<WordIndex> wids;
-    vector<Id> eids;
-    vector<Score> scores;
+    vector<TextRecordIndex>
+        cids;  // Stores the index of the TextRecord of each result.
+    vector<WordIndex>
+        wids;  // For prefix-queries stores for each result the index of the
+               // Word the prefixed-word was completed to.
+    vector<Id> eids;       // Stores the index of the entity of each result.
+    vector<Score> scores;  // Stores for each result how often an entity
+                           // appears in its associated TextRecord.
   };
 
   /// Forbid copy and assignment.
