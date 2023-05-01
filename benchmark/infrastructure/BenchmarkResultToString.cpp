@@ -214,7 +214,7 @@ std::string benchmarkResultsToString(
   //  to the stringstream.
   auto addNonEmptyCategorieToStringSteam =
       [](std::ostringstream* stringStream, const auto& categoryResult,
-                   const auto& categoryAddPrintStreamFunction) {
+         const auto& categoryAddPrintStreamFunction) {
         if (categoryResult.size() > 0) {
           // The seperator between the printed categories.
           (*stringStream) << "\n\n";
