@@ -45,11 +45,12 @@ BenchmarkRegister::BenchmarkRegister(
   registeredBenchmarks.push_back(std::move(benchmarkClassInstance));
 }
 
+// ____________________________________________________________________________
 std::vector<const BenchmarkInterface*>
 BenchmarkRegister::getAllRegisteredBenchmarks() {
   return ad_utility::transform(
       registeredBenchmarks,
-      [](BenchmarkPointer& instance) -> const BenchmarkInterface* {
+      [](const BenchmarkPointer& instance) -> const BenchmarkInterface* {
         return instance.get();
       });
 }

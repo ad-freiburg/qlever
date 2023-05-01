@@ -200,9 +200,6 @@ std::string benchmarkResultsToString(
   const std::vector<ResultGroup>& resultGroups = results.getGroups();
   const std::vector<ResultTable>& resultTables = results.getTables();
 
-  // The seperator between the printed categories.
-  constexpr std::string_view seperator = "\n\n";
-
   // Visualizes the measured times.
   std::ostringstream visualization;
 
@@ -216,10 +213,12 @@ std::string benchmarkResultsToString(
   //  benchmark category information, converts them to text, and adds that text
   //  to the stringstream.
   auto addNonEmptyCategorieToStringSteam =
-      [&seperator](std::ostringstream* stringStream, const auto& categoryResult,
+      [](std::ostringstream* stringStream, const auto& categoryResult,
                    const auto& categoryAddPrintStreamFunction) {
         if (categoryResult.size() > 0) {
-          (*stringStream) << seperator;
+          // The seperator between the printed categories.
+          (*stringStream) << "\n\n";
+
           categoryAddPrintStreamFunction(stringStream, categoryResult);
         }
       };
