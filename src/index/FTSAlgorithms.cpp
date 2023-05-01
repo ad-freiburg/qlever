@@ -244,7 +244,7 @@ Index::WordEntityPostings FTSAlgorithms::intersectKWay(
   size_t k = wepVecs.size();
   Index::WordEntityPostings resultWep;
   {
-    if (wepVecs[k - 1].cids.size() == 0) {
+    if (wepVecs[k - 1].cids.empty()) {
       LOG(DEBUG) << "Empty list involved, no intersect necessary.\n";
       return resultWep;
     }
@@ -262,7 +262,7 @@ Index::WordEntityPostings FTSAlgorithms::intersectKWay(
     minSize = lastListEids->size();
   } else {
     for (size_t i = 0; i < wepVecs.size(); ++i) {
-      if (wepVecs[i].cids.size() == 0) {
+      if (wepVecs[i].cids.empty()) {
         return resultWep;
       }
       if (wepVecs[i].cids.size() < minSize) {
@@ -422,19 +422,18 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
   for (size_t i = 0; i < wep.eids.size(); ++i) {
     if (!map.contains(wep.eids[i])) {
       ScoreToContextAndWord inner;
-      inner.insert(std::make_tuple(wep.scores[i], wep.cids[i], wep.wids[i]));
+      inner.emplace(std::make_tuple(wep.scores[i], wep.cids[i], wep.wids[i]));
       map[wep.eids[i]] = std::make_pair(1, inner);
     } else {
       auto& val = map[wep.eids[i]];
-      // val.first += wep.scores[i];
       ++val.first;
       ScoreToContextAndWord& stcaw = val.second;
       if (stcaw.size() < k || std::get<0>(*(stcaw.begin())) < wep.scores[i]) {
         if (stcaw.size() == k) {
           stcaw.erase(*stcaw.begin());
         }
-        stcaw.insert(std::make_tuple(wep.scores[i], wep.cids[i], wep.wids[i]));
-      };
+        stcaw.emplace(std::make_tuple(wep.scores[i], wep.cids[i], wep.wids[i]));
+      }
     }
   }
   IdTableStatic<4> result = std::move(*dynResult).toStatic<4>();
@@ -464,11 +463,11 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
 template <typename Row>
 void FTSAlgorithms::aggScoresAndTakeTopKContexts(vector<Row>& nonAggRes,
                                                  size_t k, vector<Row>& res) {
-  AD_CONTRACT_CHECK(res.size() == 0);
+  AD_CONTRACT_CHECK(res.empty());
   LOG(DEBUG) << "Aggregating scores from a list of size " << nonAggRes.size()
              << " while keeping the top " << k << " contexts each.\n";
 
-  if (nonAggRes.size() == 0) return;
+  if (nonAggRes.empty()) return;
 
   size_t width = nonAggRes[0].size();
   std::sort(nonAggRes.begin(), nonAggRes.end(),
@@ -544,11 +543,8 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
     if (!map.contains(wep.eids[i])) {
       map[wep.eids[i]] = std::make_pair(
           1, std::make_tuple(wep.cids[i], wep.scores[i], wep.wids[i]));
-      // map[wep.eids[i]] = std::make_pair(wep.scores[i],
-      // std::make_pair(wep.cids[i], wep.scores[i]));
     } else {
       auto& val = map[wep.eids[i]];
-      // val.first += wep.scores[i];
       ++val.first;
       if (std::get<1>(val.second) < wep.scores[i]) {
         val.second = std::make_tuple(wep.cids[i], wep.scores[i], wep.wids[i]);
@@ -603,7 +599,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     const vector<TextRecordIndex>& cids, const vector<Id>& eids,
     const vector<Score>& scores, size_t nofVars, size_t kLimit,
     IdTable* dynResult) {
-  if (cids.size() == 0) {
+  if (cids.empty()) {
     return;
   }
   if (kLimit == 1) {
@@ -988,7 +984,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
              << wep.cids.size()
              << " elements to a table with filtered distinct entities "
              << "and at most " << k << " contexts per entity.\n";
-  if (wep.cids.size() == 0 || fMap.size() == 0) {
+  if (wep.cids.empty() || fMap.empty()) {
     return;
   }
   // TODO: add code to speed up for k==1
@@ -1093,7 +1089,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
              << " elements to a table with filtered distinct entities "
              << "and at most " << k << " contexts per entity.\n";
 
-  if (wep.cids.size() == 0 || fSet.size() == 0) {
+  if (wep.cids.empty() || fSet.empty()) {
     return;
   }
 
@@ -1147,7 +1143,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const Index::WordEntityPostings& wep,
     const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
     IdTable* dynResult) {
-  if (wep.cids.size() == 0 || fMap.size() == 0) {
+  if (wep.cids.empty() || fMap.empty()) {
     return;
   }
   // Go over contexts.
@@ -1338,7 +1334,7 @@ template <int WIDTH>
 void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const Index::WordEntityPostings& wep, const HashSet<Id>& fSet,
     size_t nofVars, size_t kLimit, IdTable* dynResult) {
-  if (wep.cids.size() == 0 || fSet.size() == 0) {
+  if (wep.cids.empty() || fSet.empty()) {
     return;
   }
   // Go over contexts.
