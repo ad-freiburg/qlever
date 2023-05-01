@@ -12,7 +12,7 @@ using std::string;
 
 // _____________________________________________________________________________
 size_t TextOperationWithoutFilter::getResultWidth() const {
-  size_t width = 3 + getNofVars();
+  size_t width = 2 + getNofVars();
   return width;
 }
 

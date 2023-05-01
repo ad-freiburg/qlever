@@ -308,6 +308,7 @@ using RdfsVocabulary = Vocabulary<CompressedString, TripleComponentComparator>;
 using TextVocabulary = Vocabulary<std::string, SimpleStringComparator>;
 using TextVocabulary = Vocabulary<std::string, SimpleStringComparator>;
 
+// _______________________________________________________________
 template <typename S, typename C>
 template <typename>
 const std::optional<string> Vocabulary<S, C>::indexToOptionalString(
