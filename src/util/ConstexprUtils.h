@@ -4,8 +4,9 @@
 
 #pragma once
 
-#include "util/Exception.h"
 #include <type_traits>
+
+#include "util/Exception.h"
 
 // Various helper functions for compile-time programming.
 
@@ -83,16 +84,16 @@ parameter and return a bool.
 @return An index out of `[0, sizeof...(Args))`, if there was type, that passed
 the check. Otherwise, returns `sizeof...(Args)`.
 */
-template<auto checkFunction, typename... Args>
+template <auto checkFunction, typename... Args>
 constexpr size_t getIndexOfFirstTypeToPassCheck() {
   size_t index = 0;
 
   auto l = [&index]<typename T>() {
     if constexpr (checkFunction.template operator()<T>()) {
-        return true;
+      return true;
     } else {
-        ++index;
-        return false;
+      ++index;
+      return false;
     }
   };
 

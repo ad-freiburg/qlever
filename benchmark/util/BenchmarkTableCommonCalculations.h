@@ -5,14 +5,15 @@
 
 #pragma once
 
-#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include <type_traits>
+
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 
 namespace ad_benchmark {
 
 // Helper function, because this one line call happens very often in this file.
 static float getTableEntryAsFloat(ResultTable* table, const size_t& row,
-  const size_t& column){
+                                  const size_t& column) {
   /*
   This will cause an exception, if the row and column is bigger
   than the table. However, such a situation should only happen, if one of the
@@ -40,14 +41,14 @@ void calculateSpeedupOfColumn(ResultTable* table,
   // Go through every row.
   for (size_t row = 0; row < table->numRows(); row++) {
     const float speedUp =
-      getTableEntryAsFloat(table, row, columnToCompareAgainst) /
-      getTableEntryAsFloat(table, row, columnToCalculateFor);
+        getTableEntryAsFloat(table, row, columnToCompareAgainst) /
+        getTableEntryAsFloat(table, row, columnToCalculateFor);
 
     table->setEntry(row, columnToPlaceResultIn, speedUp);
   }
 }
 
-template<typename Type, typename... Ts>
+template <typename Type, typename... Ts>
 concept AllTheSameType = (std::is_same_v<Type, Ts> && ...);
 
 /*
@@ -60,14 +61,14 @@ column.
 @param columnToPlaceResultIn Where to place the results.
 @param columnToSumUp All the columns, who shall be added up.
 */
-template<typename... ColumnNumbers>
+template <typename... ColumnNumbers>
 requires AllTheSameType<size_t, ColumnNumbers...>
 void sumUpColumns(ResultTable* table, const size_t& columnToPlaceResultIn,
-  const ColumnNumbers&... columnToSumUp){
+                  const ColumnNumbers&... columnToSumUp) {
   // Go through every row.
   for (size_t row = 0; row < table->numRows(); row++) {
     table->setEntry(row, columnToPlaceResultIn,
-      (getTableEntryAsFloat(table, row, columnToSumUp) + ...));
+                    (getTableEntryAsFloat(table, row, columnToSumUp) + ...));
   }
 }
 }  // namespace ad_benchmark

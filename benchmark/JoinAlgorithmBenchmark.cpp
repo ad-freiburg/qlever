@@ -13,8 +13,8 @@
 #include <cstddef>
 #include <cstdio>
 #include <ctime>
-#include <type_traits>
 #include <tuple>
+#include <type_traits>
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
@@ -179,14 +179,14 @@ class BmUnsortedAndSortedIdTable : public BenchmarkInterface {
 in `makeBenchmarkTable`.
 For an explanation of the parameters, see `makeBenchmarkTable`.
 */
-static void addMeasurementsToRowOfBenchmarkTable(ResultTable* table,
-  const size_t& row,
-  const float overlap, const bool smallerTableSorted,
-  const bool biggerTableSorted, const size_t& ratioRows,
-  const size_t& smallerTableAmountRows, const size_t& smallerTableAmountColumns,
-  const size_t& biggerTableAmountColumns,
-  const float smallerTableJoinColumnSampleSizeRatio = 1.0,
-  const float biggerTableJoinColumnSampleSizeRatio = 1.0){
+static void addMeasurementsToRowOfBenchmarkTable(
+    ResultTable* table, const size_t& row, const float overlap,
+    const bool smallerTableSorted, const bool biggerTableSorted,
+    const size_t& ratioRows, const size_t& smallerTableAmountRows,
+    const size_t& smallerTableAmountColumns,
+    const size_t& biggerTableAmountColumns,
+    const float smallerTableJoinColumnSampleSizeRatio = 1.0,
+    const float biggerTableJoinColumnSampleSizeRatio = 1.0) {
   // Checking, if smallerTableJoinColumnSampleSizeRatio and
   // biggerTableJoinColumnSampleSizeRatio are floats bigger than 0. Otherwise
   // , they don't make sense.
@@ -223,12 +223,16 @@ static void addMeasurementsToRowOfBenchmarkTable(ResultTable* table,
 
   // Now we create two randomly filled `IdTable`, which have no overlap, and
   // save them together with the information, where their join column is.
-  IdTableAndJoinColumn smallerTable{createRandomlyFilledIdTable(
-    smallerTableAmountRows, smallerTableAmountColumns, 0,
-    smallerTableJoinColumnLowerBound, smallerTableJoinColumnUpperBound), 0};
-  IdTableAndJoinColumn biggerTable{createRandomlyFilledIdTable(
-    smallerTableAmountRows * ratioRows, biggerTableAmountColumns, 0,
-    biggerTableJoinColumnLowerBound, biggerTableJoinColumnUpperBound), 0};
+  IdTableAndJoinColumn smallerTable{
+      createRandomlyFilledIdTable(
+          smallerTableAmountRows, smallerTableAmountColumns, 0,
+          smallerTableJoinColumnLowerBound, smallerTableJoinColumnUpperBound),
+      0};
+  IdTableAndJoinColumn biggerTable{
+      createRandomlyFilledIdTable(
+          smallerTableAmountRows * ratioRows, biggerTableAmountColumns, 0,
+          biggerTableJoinColumnLowerBound, biggerTableJoinColumnUpperBound),
+      0};
 
   // Creating overlap, if wanted.
   if (overlap > 0) {
@@ -253,9 +257,9 @@ static void addMeasurementsToRowOfBenchmarkTable(ResultTable* table,
   table->addMeasurement(
       row, 3,
       [&numberRowsOfResult, &smallerTable, &biggerTable, &hashJoinLambda]() {
-        numberRowsOfResult = useJoinFunctionOnIdTables(
-                                 smallerTable, biggerTable, hashJoinLambda)
-                                 .numRows();
+        numberRowsOfResult =
+            useJoinFunctionOnIdTables(smallerTable, biggerTable, hashJoinLambda)
+                .numRows();
       });
 
   /*
@@ -265,12 +269,11 @@ static void addMeasurementsToRowOfBenchmarkTable(ResultTable* table,
   */
   table->addMeasurement(
       row, 0,
-      [&smallerTable, &smallerTableSorted, &biggerTable,
-      &biggerTableSorted]() {
+      [&smallerTable, &smallerTableSorted, &biggerTable, &biggerTableSorted]() {
         if (!smallerTableSorted) {
           sortIdTableByJoinColumnInPlace(smallerTable);
         }
-        if (!biggerTableSorted){
+        if (!biggerTableSorted) {
           sortIdTableByJoinColumnInPlace(biggerTable);
         }
       });
@@ -355,21 +358,22 @@ static ResultTable& makeBenchmarkTable(
     const T5& smallerTableJoinColumnSampleSizeRatio = 1.0,
     const T6& biggerTableJoinColumnSampleSizeRatio = 1.0) {
   // Returns the first argument, that is a vector.
-  auto returnFirstVector = []<typename... Ts>(Ts&... args)->auto&{
+  auto returnFirstVector = []<typename... Ts>(Ts&... args) -> auto& {
     // Put them into a tuple, so that we can easly look them up.
     auto tup = std::tuple<Ts&...>{AD_FWD(args)...};
 
     // Is something a vector?
-    constexpr auto isVector = []<typename T>(){
-      return ad_utility::isVector<std::decay_t<T>>;};
+    constexpr auto isVector = []<typename T>() {
+      return ad_utility::isVector<std::decay_t<T>>;
+    };
 
     // Get the index of the first vector.
     constexpr static size_t idx =
-      ad_utility::getIndexOfFirstTypeToPassCheck<isVector, Ts...>();
+        ad_utility::getIndexOfFirstTypeToPassCheck<isVector, Ts...>();
 
     // Do we have a valid index?
     static_assert(idx < sizeof...(Ts),
-    "There was no vector in this parameter pack.");
+                  "There was no vector in this parameter pack.");
 
     return std::get<idx>(tup);
   };
@@ -378,8 +382,8 @@ static ResultTable& makeBenchmarkTable(
   @brief Returns the entry at position `pos` of the vector, if given a vector.
   Otherwise just returns the given `possibleVector`.
   */
-  auto returnEntry = []<typename T>(const T& possibleVector, const size_t pos){
-    if constexpr(ad_utility::isVector<T>){
+  auto returnEntry = []<typename T>(const T& possibleVector, const size_t pos) {
+    if constexpr (ad_utility::isVector<T>) {
       return possibleVector.at(pos);
     } else {
       return possibleVector;
@@ -388,29 +392,211 @@ static ResultTable& makeBenchmarkTable(
 
   // Now on to creating the benchmark table. First, we find out, which of our
   // arguments was the vector and use it to create the row names for the table.
-  auto& vec = returnFirstVector(overlap, ratioRows, smallerTableAmountRows,
-    smallerTableAmountColumns, biggerTableAmountColumns,
-    smallerTableJoinColumnSampleSizeRatio,
-    biggerTableJoinColumnSampleSizeRatio);
+  auto& vec = returnFirstVector(
+      overlap, ratioRows, smallerTableAmountRows, smallerTableAmountColumns,
+      biggerTableAmountColumns, smallerTableJoinColumnSampleSizeRatio,
+      biggerTableJoinColumnSampleSizeRatio);
 
   // Then, we convert the content of `vec` to strings and add the table.
-  ResultTable* table = &(records->addTable(std::string{tableDescriptor},
-    ad_utility::transform(vec,
-    [](const auto& entry) { return std::to_string(entry); }),
-    {"Time for sorting", "Merge/Galloping join",
-     "Sorting + merge/galloping join", "Hash join",
-     "Number of rows in resulting IdTable", "Speedup of hash join"}));
+  ResultTable* table = &(records->addTable(
+      std::string{tableDescriptor},
+      ad_utility::transform(
+          vec, [](const auto& entry) { return std::to_string(entry); }),
+      {"Time for sorting", "Merge/Galloping join",
+       "Sorting + merge/galloping join", "Hash join",
+       "Number of rows in resulting IdTable", "Speedup of hash join"}));
 
   // Adding measurements to the table.
-  for (size_t i = 0; i < vec.size(); i++){
+  for (size_t i = 0; i < vec.size(); i++) {
     // Converting all our function parameters to non vectors.
-    addMeasurementsToRowOfBenchmarkTable(table, i, returnEntry(overlap, i),
-      smallerTableSorted, biggerTableSorted, returnEntry(ratioRows, i),
-      returnEntry(smallerTableAmountRows, i),
-      returnEntry(smallerTableAmountColumns, i),
-      returnEntry(biggerTableAmountColumns, i),
-      returnEntry(smallerTableJoinColumnSampleSizeRatio, i),
-      returnEntry(biggerTableJoinColumnSampleSizeRatio, i));
+    addMeasurementsToRowOfBenchmarkTable(
+        table, i, returnEntry(overlap, i), smallerTableSorted,
+        biggerTableSorted, returnEntry(ratioRows, i),
+        returnEntry(smallerTableAmountRows, i),
+        returnEntry(smallerTableAmountColumns, i),
+        returnEntry(biggerTableAmountColumns, i),
+        returnEntry(smallerTableJoinColumnSampleSizeRatio, i),
+        returnEntry(biggerTableJoinColumnSampleSizeRatio, i));
+  }
+
+  // If should never to possible for table to be a null pointr, but better
+  // safe than sorry.
+  AD_CONTRACT_CHECK(table != nullptr);
+
+  // Adding together the time for sorting the `IdTables` and then joining
+  // them using merge/galloping join.
+  sumUpColumns(table, 2, static_cast<size_t>(0), static_cast<size_t>(1));
+
+  // Calculate, how much of a speedup the hash join algorithm has in comparison
+  // to the merge/galloping join algrithm.
+  calculateSpeedupOfColumn(table, 3, 2, 5);
+
+  // For more specific adjustments.
+  return (*table);
+}
+
+// `T` must be a function, that returns something of type `ReturnType`, when
+// called with arguments of types `Args`.
+template <typename T, typename ReturnType, typename... Args>
+concept invocableWithReturnType = requires(T t, Args... args) {
+  { t(args...) } -> std::same_as<ReturnType>;
+};
+
+// Is `T` of the given type, or a function, that takes `size_t` and return
+// the given type?
+template <typename T, typename Type>
+concept isTypeOrGrowthFunction =
+    std::same_as<T, Type> || invocableWithReturnType<T, Type, const size_t&>;
+
+// There must be exactly one functioon, that takes a `size_t`.
+template <typename... Ts>
+concept exactlyOneGrowthFunction =
+    (std::invocable<Ts, const size_t&> + ...) == 1;
+
+/*
+
+@brief Create a benchmark table for join algorithm, with the given
+parameters for the IdTables, which will keep getting more rows, until the stop
+function decides, that there are enough rows. The rows will be the return values
+of the parameter, you gave a function for, and the columns will be:
+- Time needed for sorting `IdTable`s.
+- Time needed for merge/galloping join.
+- Time needed for sorting and merge/galloping added togehter.
+- Time needed for the hash join.
+- How many rows the result of joining the tables has.
+- How much faster the hash join is. For example: Two times faster.
+
+@tparam StopFunction A function, that takes the current form of the
+`ResultTable` as `const ResultTable&` and returns a bool.
+@tparam T1, T6, T7 Must be a float, or a function, that takes the row number of
+the next to be generated row as `const size_t&`, and returns a float. Can only
+be a function, if all other template `T` parameter are not vectors.
+@tparam T2, T3, T4, T5 Must be a size_t, or a function, that takes the row
+number of the next to be generated row as `const size_t&`, and returns a size_t.
+Can only be a function, if all other template `T` parameter are not vectors.
+
+@param results The BenchmarkResults, in which you want to create a new
+benchmark table.
+@param tableDescriptor A identifier to the to be created benchmark table, so
+that it can be easier identified later.
+@param stopFunction Returns true, if the table benchmark should get a new row.
+False, if there are enough rows and the created table should be returned.
+Decides the final size of the benchmark table.
+@param overlap The height of the probability for any join column entry of
+smallerTable to be overwritten by a random join column entry of biggerTable.
+@param smallerTableSorted, biggerTableSorted Should the bigger/smaller table
+be sorted by his join column before being joined? More specificly, some
+join algorithm require one, or both, of the IdTables to be sorted. If this
+argument is false, the time needed for sorting the required table will
+added to the time of the join algorithm.
+@param ratioRows How many more rows than the smaller table should the
+bigger table have? In more mathematical words: Number of rows of the
+bigger table divided by the number of rows of the smaller table is equal
+to ratioRows.
+@param smallerTableAmountRows How many rows should the smaller table have?
+@param smallerTableAmountColumns, biggerTableAmountColumns How many columns
+should the bigger/smaller tables have?
+@param smallerTableJoinColumnSampleSizeRatio,
+biggerTableJoinColumnSampleSizeRatio The join column of the tables normally
+get random entries out of a sample size with the same amount of possible
+numbers as there are rows in the table. (With every number having the same
+chance to be picked.) This adjusts the number of elements in the sample
+size to `Amount of rows * ratio`, which affects the possibility of
+duplicates. Important: `Amount of rows * ratio` must be a natural number.
+ */
+template <invocableWithReturnType<bool, const ResultTable&> StopFunction,
+          isTypeOrGrowthFunction<float> T1, isTypeOrGrowthFunction<size_t> T2,
+          isTypeOrGrowthFunction<size_t> T3, isTypeOrGrowthFunction<size_t> T4,
+          isTypeOrGrowthFunction<size_t> T5,
+          isTypeOrGrowthFunction<float> T6 = float,
+          isTypeOrGrowthFunction<float> T7 = float>
+requires exactlyOneGrowthFunction<T1, T2, T3, T4, T5, T6, T7>
+static ResultTable& makeGrowingBenchmarkTable(
+    BenchmarkResults* results, const std::string_view tableDescriptor,
+    StopFunction stopFunction, const T1& overlap, const bool smallerTableSorted,
+    const bool biggerTableSorted, const T2& ratioRows,
+    const T3& smallerTableAmountRows, const T4& smallerTableAmountColumns,
+    const T5& biggerTableAmountColumns,
+    const T6& smallerTableJoinColumnSampleSizeRatio = 1.0,
+    const T7& biggerTableJoinColumnSampleSizeRatio = 1.0) {
+  // Is something a function?
+  constexpr auto isFunction = []<typename T>() {
+    /*
+    We have to cheat a bit, because being a function is not something, that
+    can easily be checked for to my knowledge. Instead, we simply check, if
+    the given type ISN'T a function, of which there are only two possible
+    types for, while inside this function: `float` and `size_t`.
+    */
+    if constexpr (std::is_integral_v<T>) {
+      return false;
+    } else {
+      return true;
+    }
+  };
+
+  // Returns the first argument, that is a function.
+  auto returnFirstFunction =
+      [&isFunction]<typename... Ts>(Ts&... args) -> auto& {
+    // Put them into a tuple, so that we can easly look them up.
+    auto tup = std::tuple<Ts&...>{AD_FWD(args)...};
+
+    // Get the index of the first vector.
+    constexpr static size_t idx =
+        ad_utility::getIndexOfFirstTypeToPassCheck<isFunction, Ts...>();
+
+    // Do we have a valid index?
+    static_assert(idx < sizeof...(Ts),
+                  "There was no function in this parameter pack.");
+
+    return std::get<idx>(tup);
+  };
+
+  /*
+  @brief Calls the function with the number of the next row to be created, if
+  it's a function, and returns the result. Otherwise just returns the given
+  `possibleFunction`.
+  */
+  auto returnOrCall = [&isFunction]<typename T>(const T& possibleFunction,
+                                                const size_t nextRowNumber) {
+    if constexpr (isFunction.template operator()<T>()) {
+      return possibleFunction(nextRowNumber);
+    } else {
+      return possibleFunction;
+    }
+  };
+
+  /*
+  Now on to creating the benchmark table. Because we don't know, how many row
+  names we will have, we just create a table without row names.
+  */
+  ResultTable* table = &(results->addTable(
+      std::string{tableDescriptor}, {},
+      {"Time for sorting", "Merge/Galloping join",
+       "Sorting + merge/galloping join", "Hash join",
+       "Number of rows in resulting IdTable", "Speedup of hash join"}));
+  /*
+  Adding measurements to the table, as long as the stop function doesn't say
+  anything else.
+  */
+  while (stopFunction(*table)) {
+    // What's the row number of the next to be added row?
+    const size_t rowNumber = table->numRows();
+
+    // Add a new row without content.
+    table->addRow(std::to_string(returnFirstFunction(
+        overlap, ratioRows, smallerTableAmountRows, smallerTableAmountColumns,
+        biggerTableAmountColumns, smallerTableJoinColumnSampleSizeRatio,
+        biggerTableJoinColumnSampleSizeRatio)(rowNumber)));
+
+    // Converting all our function parameters to non functions.
+    addMeasurementsToRowOfBenchmarkTable(
+        table, rowNumber, returnOrCall(overlap, rowNumber), smallerTableSorted,
+        biggerTableSorted, returnOrCall(ratioRows, rowNumber),
+        returnOrCall(smallerTableAmountRows, rowNumber),
+        returnOrCall(smallerTableAmountColumns, rowNumber),
+        returnOrCall(biggerTableAmountColumns, rowNumber),
+        returnOrCall(smallerTableJoinColumnSampleSizeRatio, rowNumber),
+        returnOrCall(biggerTableJoinColumnSampleSizeRatio, rowNumber));
   }
 
   // If should never to possible for table to be a null pointr, but better
@@ -444,10 +630,10 @@ static ResultTable& makeBenchmarkTable(
  * `stoppingPoint < base^(i+n+1)`.
  */
 static std::vector<size_t> createExponentVectorUntilSize(
-    const size_t base, const size_t startingPoint,const size_t stoppingPoint) {
+    const size_t base, const size_t startingPoint, const size_t stoppingPoint) {
   // Quick check, if the given arguments make sense.
   AD_CONTRACT_CHECK(startingPoint <= stoppingPoint);
-    
+
   std::vector<size_t> exponentVector{};
 
   /*
@@ -456,8 +642,8 @@ static std::vector<size_t> createExponentVectorUntilSize(
   round up. This should give us the $x$ of the first $base^x$ bigger
   than `startingPoint`.
   */
-  size_t currentExponent = static_cast<size_t>(std::pow(base,
-    std::ceil(std::log(startingPoint)/std::log(base))));
+  size_t currentExponent = static_cast<size_t>(
+      std::pow(base, std::ceil(std::log(startingPoint) / std::log(base))));
 
   // The rest of the exponents.
   while (currentExponent <= stoppingPoint) {
@@ -581,31 +767,30 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     that it now conforms to it.
     */
     const std::optional<size_t>& maxMemoryInMB =
-      config.getValueByNestedKeys<size_t>("maxMemoryInMB");
+        config.getValueByNestedKeys<size_t>("maxMemoryInMB");
 
-    if (maxMemoryInMB.has_value()){
+    if (maxMemoryInMB.has_value()) {
       /*
       The overhead can be, more or less, ignored. We are just concerned over
       the space needed for the entries.
       */
       constexpr size_t memoryPerIdTableEntryInByte =
-        sizeof(IdTable::value_type);
-      const size_t memoryPerRowInByte = memoryPerIdTableEntryInByte *
-        biggerTableAmountColumns_;
+          sizeof(IdTable::value_type);
+      const size_t memoryPerRowInByte =
+          memoryPerIdTableEntryInByte * biggerTableAmountColumns_;
 
       // Does a single row take more memory, than is allowed?
       if (maxMemoryInMB.value() * 1000000 < memoryPerRowInByte) {
-        throw ad_utility::Exception(absl::StrCat("A single row of an",
-        " IdTable, with ", biggerTableAmountColumns_, " columns, takes more",
-        " memory, than what was allowed."));
+        throw ad_utility::Exception(absl::StrCat(
+            "A single row of an", " IdTable, with ", biggerTableAmountColumns_,
+            " columns, takes more", " memory, than what was allowed."));
       }
 
       // Approximate, how many rows that would be at maximum memory usage.
-      maxBiggerTableRows_ = (maxMemoryInMB.value() * 1000000) /
-        memoryPerRowInByte;
+      maxBiggerTableRows_ =
+          (maxMemoryInMB.value() * 1000000) / memoryPerRowInByte;
     }
   }
-
 };
 
 /*
@@ -624,12 +809,12 @@ class BmOnlyBiggerTableSizeChanges final
     amount of rows for the bigger table. Those can be used to calculate the
     ratios needed for a benchmark table, that has those values.
     */
-    const std::vector<size_t> ratioRows{ad_utility::transform(
-      createExponentVectorUntilSize(10, minBiggerTableRows_,
-      maxBiggerTableRows_),
-      [this](const size_t& number){
-        return number/smallerTableAmountRows_;
-      })};
+    const std::vector<size_t> ratioRows{
+        ad_utility::transform(createExponentVectorUntilSize(
+                                  10, minBiggerTableRows_, maxBiggerTableRows_),
+                              [this](const size_t& number) {
+                                return number / smallerTableAmountRows_;
+                              })};
 
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
@@ -653,7 +838,7 @@ class BmOnlyBiggerTableSizeChanges final
     return results;
   }
 
-  BenchmarkMetadata getMetadata() const override{
+  BenchmarkMetadata getMetadata() const override {
     BenchmarkMetadata meta{};
 
     meta.addKeyValuePair("Value changing with every row", "ratioRows");
@@ -681,17 +866,18 @@ class BmOnlySmallerTableSizeChanges final
         // We also make multiple tables for different row ratios.
         for (const size_t ratioRows :
              createExponentVectorUntilSize(10, minRatioRows_, maxRatioRows_)) {
-        /*
-        We got the fixed ratio and the variable amount of rows for the bigger
-        table. Those can be used to calculate the number of rows in the smaller
-        table needed for a benchmark table, that has those values.
-        */
-        const std::vector<size_t> smallerTableAmountRows{ad_utility::transform(
-          createExponentVectorUntilSize(10, minBiggerTableRows_,
-          maxBiggerTableRows_),
-          [&ratioRows](const size_t& number){
-            return number/ratioRows;
-          })};
+          /*
+          We got the fixed ratio and the variable amount of rows for the bigger
+          table. Those can be used to calculate the number of rows in the
+          smaller table needed for a benchmark table, that has those values.
+          */
+          const std::vector<size_t> smallerTableAmountRows{
+              ad_utility::transform(
+                  createExponentVectorUntilSize(10, minBiggerTableRows_,
+                                                maxBiggerTableRows_),
+                  [&ratioRows](const size_t& number) {
+                    return number / ratioRows;
+                  })};
 
           ResultTable& table = makeBenchmarkTable(
               &results,
@@ -716,11 +902,11 @@ class BmOnlySmallerTableSizeChanges final
     return results;
   }
 
-  BenchmarkMetadata getMetadata() const override{
+  BenchmarkMetadata getMetadata() const override {
     BenchmarkMetadata meta{};
 
     meta.addKeyValuePair("Value changing with every row",
-      "smallerTableAmountRows");
+                         "smallerTableAmountRows");
     meta.addKeyValuePair("overlap", overlapChance_);
     meta.addKeyValuePair("smallerTableAmountColumns",
                          smallerTableAmountColumns_);
@@ -740,18 +926,18 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
     // Easier reading.
     const std::vector<size_t> smallerTableAmountRows{
         createExponentVectorUntilSize(10, minBiggerTableRows_,
-        maxBiggerTableRows_)};
+                                      maxBiggerTableRows_)};
 
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
-        ResultTable& table = makeBenchmarkTable(&results,
-                           "Both tables always have the same amount"
-                           "of rows and that amount grows.",
-                           overlapChance_, smallerTableSorted,
-                           biggerTableSorted, static_cast<size_t>(1),
-                           smallerTableAmountRows, smallerTableAmountColumns_,
-                           biggerTableAmountColumns_);
+        ResultTable& table = makeBenchmarkTable(
+            &results,
+            "Both tables always have the same amount"
+            "of rows and that amount grows.",
+            overlapChance_, smallerTableSorted, biggerTableSorted,
+            static_cast<size_t>(1), smallerTableAmountRows,
+            smallerTableAmountColumns_, biggerTableAmountColumns_);
 
         // Add the metadata, that changes with every call and can't be
         // generalized.
@@ -764,11 +950,11 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
     return results;
   }
 
-  BenchmarkMetadata getMetadata() const override{
+  BenchmarkMetadata getMetadata() const override {
     BenchmarkMetadata meta{};
 
     meta.addKeyValuePair("Value changing with every row",
-      "smallerTableAmountRows");
+                         "smallerTableAmountRows");
     meta.addKeyValuePair("overlap", overlapChance_);
     meta.addKeyValuePair("ratioRows", 1);
     meta.addKeyValuePair("smallerTableAmountColumns",
