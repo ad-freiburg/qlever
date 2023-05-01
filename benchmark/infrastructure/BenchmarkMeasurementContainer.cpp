@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/string_view.h>
@@ -13,6 +11,7 @@
 #include <sstream>
 #include <string_view>
 
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
@@ -203,6 +202,14 @@ ResultTable::operator std::string() const {
   }
 
   return stream.str();
+}
+
+// ____________________________________________________________________________
+void ResultTable::addRow(std::string_view rowName) {
+  // Add the row name.
+  rowNames_.emplace_back(rowName);
+  // Create an emptry row of the same size as every other row.
+  entries_.emplace_back(numColumns());
 }
 
 // ____________________________________________________________________________
