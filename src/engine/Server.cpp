@@ -271,7 +271,8 @@ Awaitable<void> Server::process(
       throw std::runtime_error(absl::StrCat(
           accessTokenProvidedMsg,
           " but server was started without --access-token", requestIgnoredMsg));
-    } else if (!ad_utility::constantTimeEquals(*accessToken, accessToken_)) {
+    } else if (!ad_utility::constantTimeEquals(accessToken.value(),
+                                               accessToken_)) {
       throw std::runtime_error(absl::StrCat(
           accessTokenProvidedMsg, " but not correct", requestIgnoredMsg));
     } else {

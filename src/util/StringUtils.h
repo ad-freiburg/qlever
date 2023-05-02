@@ -207,31 +207,41 @@ inline size_t findLiteralEnd(const std::string_view input,
   return endPos;
 }
 
+// A "constant-time" comparison for strings.
 // Implementation based on https://stackoverflow.com/a/25374036
-// Note because of ambiguous overload resolution the function name
-// here has the 'Impl' suffix, even though the explicit conversion is required
-// for it to compile (so only one overload actually works in practice)
-inline bool constantTimeEqualsImpl(std::basic_string_view<volatile char> str1,
-                                   std::basic_string_view<volatile char> str2) {
-  if (str1.length() != str2.length()) {
-    return false;
-  }
-  volatile char c = 0;
-  for (size_t i = 0; i < str1.length(); ++i) {
-    // In C++20 compound assignment of volatile variables causes a warning,
-    // so we can't use 'c |=' until compiling with C++23 where it is fine again.
-    c = c | (str1[i] ^ str2[i]);
-  }
-  return c == 0;
-}
-
-constexpr std::basic_string_view<volatile char> toVolatile(
-    std::string_view view) {
-  return {view.data(), view.size()};
-}
-
-inline bool constantTimeEquals(std::string_view str1, std::string_view str2) {
-  return constantTimeEqualsImpl(toVolatile(str1), toVolatile(str2));
+// Basically for 2 strings of equal length this function will always
+// take the same time to compute regardless of how many characters are
+// matching. This is to prevent analysing the secret comparison string
+// by analysing response times to incrementally figure out individual
+// characters. An equally safe, but slower method to achieve the same thing
+// would be to compute cryptographically secure hashes (like SHA-3 for example)
+// and compare the hashes instead of the actual strings.
+constexpr bool constantTimeEquals(std::string_view str1,
+                                  std::string_view str2) {
+  using byte_view = std::basic_string_view<volatile std::byte>;
+  auto impl = [](byte_view str1, byte_view str2) -> bool {
+    if (str1.length() != str2.length()) {
+      return false;
+    }
+    volatile std::byte mismatchFound{0};
+    for (size_t i = 0; i < str1.length(); ++i) {
+      // In C++20 compound assignment of volatile variables causes a warning,
+      // so we can't use 'mismatchFound |=' until compiling with C++23 where it
+      // is fine again. mismatchFound can be interpreted as bool and "is false"
+      // until the first mismatch in the strings is found.
+      mismatchFound = mismatchFound | (str1[i] ^ str2[i]);
+    }
+    return !static_cast<bool>(mismatchFound);
+  };
+  auto toVolatile = [](std::string_view view) constexpr -> byte_view {
+    // Casting is safe because both types have the same size
+    static_assert(sizeof(std::string_view::value_type) ==
+                  sizeof(byte_view::value_type));
+    return {
+        static_cast<const std::byte*>(static_cast<const void*>(view.data())),
+        view.size()};
+  };
+  return impl(toVolatile(str1), toVolatile(str2));
 }
 
 }  // namespace ad_utility
