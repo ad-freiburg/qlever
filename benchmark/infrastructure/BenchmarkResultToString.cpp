@@ -83,18 +83,18 @@ static void forEachExcludingTheLastOne(Range&& r,
 string.
 
 @param translationFunction Converts range elements into string.
-@param listItemSeperator Will be put between each of the string representations
+@param listItemSeparator Will be put between each of the string representations
 of the range elements.
 */
 template <typename Range, typename TranslationFunction>
 static void addListToOStringStream(std::ostringstream* stream, Range&& r,
                                    TranslationFunction translationFunction,
-                                   std::string_view listItemSeperator = "\n") {
+                                   std::string_view listItemSeparator = "\n") {
   forEachExcludingTheLastOne(
       AD_FWD(r),
       [&stream, &translationFunction,
-       &listItemSeperator](const auto& listItem) {
-        (*stream) << translationFunction(listItem) << listItemSeperator;
+       &listItemSeparator](const auto& listItem) {
+        (*stream) << translationFunction(listItem) << listItemSeparator;
       },
       [&stream, &translationFunction](const auto& listItem) {
         (*stream) << translationFunction(listItem);
@@ -106,7 +106,7 @@ void addVectorOfResultEntryToOStringstream(
     std::ostringstream* stream, const std::vector<ResultEntry>& entries,
     const std::string& vectorEntryPrefix, const std::string& newLinePrefix) {
   // What we use to seperat single vector entries.
-  std::string_view lineSeperator{"\n\n"};
+  std::string_view lineSeparator{"\n\n"};
 
   // Adds a single `ResultEntry` to the stream.
   auto addResultEntry = [&stream, &vectorEntryPrefix,
@@ -119,13 +119,13 @@ void addVectorOfResultEntryToOStringstream(
 
   /*
   Adding the entries to the stream in such a way, that we don't have a line
-  seperator at the end of that list.
+  separator at the end of that list.
   */
   forEachExcludingTheLastOne(
       entries,
-      [&addResultEntry, &stream, &lineSeperator](const ResultEntry& entry) {
+      [&addResultEntry, &stream, &lineSeparator](const ResultEntry& entry) {
         addResultEntry(entry);
-        (*stream) << lineSeperator;
+        (*stream) << lineSeparator;
       },
       addResultEntry);
 };
@@ -201,7 +201,7 @@ std::string benchmarkResultsToString(
       [](std::ostringstream* stringStream, const auto& categoryResult,
          const auto& categoryAddPrintStreamFunction) {
         if (categoryResult.size() > 0) {
-          // The seperator between the printed categories.
+          // The separator between the printed categories.
           (*stringStream) << "\n\n";
 
           categoryAddPrintStreamFunction(stringStream, categoryResult);
