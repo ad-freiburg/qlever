@@ -42,14 +42,14 @@ static void writeJsonToFile(nlohmann::json j, const std::string& fileName,
 
 static std::string readFileToString(const std::string& fileName) {
   // The string gets build using a string stream.
-  std::ostringstream transchribedString{};
+  std::ostringstream transcribedString{};
 
   // Adding a buffer using `<<` causes the content of the buffer to be
   // individually added to the string stream. In other words: The entire
   // content of the opened file will be added.
-  transchribedString << ad_utility::makeOfstream(fileName).rdbuf();
+  transcribedString << ad_utility::makeIfstream(fileName).rdbuf();
 
-  return transchribedString.str();
+  return transcribedString.str();
 }
 
 /*
