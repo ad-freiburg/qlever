@@ -3,6 +3,7 @@
 // Author: Andre Schlegel February of 2023, schlegea@informatik.uni-freiburg.de)
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
 #include <bits/ranges_algo.h>
 
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
@@ -36,21 +37,12 @@ std::string addIndentation(const std::string_view str,
     indentationSymbols.append(outputIndentation);
   }
 
-  std::ostringstream stream;
-  stream << indentationSymbols;
-
-  // Adding the content of the string char per char, so that we can easily
-  // identify the new line symbols.
-  std::ranges::for_each(str,
-                        [&indentationSymbols, &stream](const char& symbol) {
-                          stream << symbol;
-                          if (symbol == '\n') {
-                            stream << indentationSymbols;
-                          }
-                        },
-                        {});
-
-  return stream.str();
+  // Add an indentation to the beginning and replace a new line with a new line,
+  // directly followed by the indentation.
+  return absl::StrCat(
+      indentationSymbols,
+      absl::StrReplaceAll(str,
+                          {{"\n", absl::StrCat("\n", indentationSymbols)}}));
 }
 
 // ___________________________________________________________________________
@@ -112,21 +104,10 @@ void addVectorOfResultEntryToOStringstream(
   // Adds a single `ResultEntry` to the stream.
   auto addResultEntry = [&stream, &vectorEntryPrefix,
                          &newLinePrefix](const ResultEntry& entry) {
-    (*stream) << vectorEntryPrefix;
-
-    /*
-    In order to effectivly add the prefix at the start of every new line, we
-    feed the content of the string into the stream char for char.
-    */
-    std::ranges::for_each(static_cast<std::string>(entry),
-                          [&stream, &newLinePrefix](const char& currentSymbol) {
-                            if (currentSymbol == '\n') {
-                              (*stream) << "\n" << newLinePrefix;
-                            } else {
-                              (*stream) << currentSymbol;
-                            }
-                          },
-                          {});
+    (*stream) << absl::StrCat(
+        vectorEntryPrefix,
+        absl::StrReplaceAll(static_cast<std::string>(entry),
+                            {{"\n", absl::StrCat("\n", newLinePrefix)}}));
   };
 
   /*
