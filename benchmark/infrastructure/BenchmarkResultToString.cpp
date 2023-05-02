@@ -24,28 +24,28 @@ void addCategoryTitleToOStringstream(std::ostringstream* stream,
 }
 
 // ___________________________________________________________________________
-std::string addIndtention(const std::string_view str,
-                          const size_t& indentionLevel) {
+std::string addIndentation(const std::string_view str,
+                           const size_t& indentationLevel) {
   // An indention level of 0 makes no sense. Must be an error.
-  AD_CONTRACT_CHECK(indentionLevel > 0);
+  AD_CONTRACT_CHECK(indentationLevel > 0);
 
   // The indention symbols for this level of indention.
-  std::string indentionSymbols{""};
-  indentionSymbols.reserve(outputIndentation.size() * indentionLevel);
-  for (size_t i = 0; i < indentionLevel; i++) {
-    indentionSymbols.append(outputIndentation);
+  std::string indentationSymbols{""};
+  indentationSymbols.reserve(outputIndentation.size() * indentationLevel);
+  for (size_t i = 0; i < indentationLevel; i++) {
+    indentationSymbols.append(outputIndentation);
   }
 
   std::ostringstream stream;
-  stream << indentionSymbols;
+  stream << indentationSymbols;
 
   // Adding the content of the string char per char, so that we can easily
   // identify the new line symbols.
   std::ranges::for_each(str,
-                        [&indentionSymbols, &stream](const char& symbol) {
+                        [&indentationSymbols, &stream](const char& symbol) {
                           stream << symbol;
                           if (symbol == '\n') {
-                            stream << indentionSymbols;
+                            stream << indentationSymbols;
                           }
                         },
                         {});

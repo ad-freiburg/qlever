@@ -31,7 +31,7 @@ const BenchmarkMetadata& BenchmarkMetadataGetter::metadata() const {
 ResultEntry::operator std::string() const {
   return absl::StrCat(
       "Single measurement '", descriptor_, "'\n",
-      addIndtention(
+      addIndentation(
           absl::StrCat(getMetadataPrettyString(metadata(), "metadata: ", "\n"),
                        "time: ", measuredTime_, "s"),
           1));
@@ -65,7 +65,7 @@ ResultGroup::operator std::string() const {
                             [](const auto& pointer) { return (*pointer); }),
       std::string{outputIndentation}, std::string{outputIndentation});
 
-  return absl::StrCat(prefix, addIndtention(stream.str(), 1));
+  return absl::StrCat(prefix, addIndentation(stream.str(), 1));
 }
 
 // ____________________________________________________________________________
@@ -215,7 +215,7 @@ ResultTable::operator std::string() const {
     }
   }
 
-  return absl::StrCat(prefix, addIndtention(stream.str(), 1));
+  return absl::StrCat(prefix, addIndentation(stream.str(), 1));
 }
 
 // ____________________________________________________________________________

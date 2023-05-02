@@ -36,8 +36,8 @@ characters.
 
 @param indentionLevel How deep is the indention? `0` is no indention.
 */
-std::string addIndtention(const std::string_view str,
-                          const size_t& indentionLevel);
+std::string addIndentation(const std::string_view str,
+                           const size_t& indentationLevel);
 
 /*
 @brief If `meta` is a non empty metadata object, return it's non compact
