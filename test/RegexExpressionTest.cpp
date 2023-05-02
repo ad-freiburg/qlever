@@ -51,10 +51,7 @@ void testWithExplicitResult(const SparqlExpression& expression,
   auto trace = generateLocationTrace(l, "testWithExplicitResult");
   auto resultAsVariant = expression.evaluate(&ctx.context);
   const auto& result = std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
-  ASSERT_EQ(expected.size(), result.size());
-  for (size_t i = 0; i < result.size(); ++i) {
-    EXPECT_EQ(expected[i], result[i]) << "i = " << i;
-  }
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
 }
 
 auto testNonPrefixRegex = [](std::string variable, std::string regex,
@@ -79,7 +76,7 @@ TEST(RegexExpression, nonPrefixRegex) {
   test("?vocab", "b", {false, false, false});
 
   // Not a prefix expression because of the "special" regex characters
-  test("?vocab", "^\"a.*", {false, true, false});
+  test("?vocab", "^a.*", {false, true, false});
 }
 
 auto testNonPrefixRegexWithFlags =
@@ -118,7 +115,7 @@ TEST(RegexExpression, nonPrefixRegexWithFlags) {
   // TODO<joka921> check whether the SPARQL STARTSWITH function is consistent
   // with the behavior of our prefix filter.
 
-  test("?vocab", "^\"alp", "i", {false, true, false});
+  test("?vocab", "^alp", "i", {false, true, false});
 
   // TODO<joka921>  Add tests for other flags (maybe the non-greedy one?)
 }

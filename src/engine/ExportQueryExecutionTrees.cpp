@@ -171,6 +171,11 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
   }
   AD_FAIL();
 }
+// ___________________________________________________________________________
+template std::optional<std::pair<std::string, const char*>>
+ExportQueryExecutionTrees::idToStringAndType<true, std::identity>(
+    const Index& index, Id id, const LocalVocab& localVocab,
+    std::identity&& escapeFunction);
 
 // This explicit instantiation is necessary because the `Variable` class
 // currently still uses it.

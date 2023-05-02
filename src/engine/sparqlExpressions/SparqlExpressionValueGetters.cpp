@@ -2,12 +2,11 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-
 #include "SparqlExpressionValueGetters.h"
 
+#include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "util/Conversions.h"
-#include "engine/ExportQueryExecutionTrees.h"
 
 using namespace sparqlExpression::detail;
 // _____________________________________________________________________________
@@ -59,7 +58,9 @@ bool EffectiveBooleanValueGetter::operator()(ValueId id,
 
 // ____________________________________________________________________________
 string StringValueGetter::operator()(Id id, EvaluationContext* context) const {
-  auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType<true>(context->_qec.getIndex(), id, context->_localVocab);
+  auto optionalStringAndType =
+      ExportQueryExecutionTrees::idToStringAndType<true>(
+          context->_qec.getIndex(), id, context->_localVocab);
   if (optionalStringAndType.has_value()) {
     return std::move(optionalStringAndType.value().first);
   } else {
