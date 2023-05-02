@@ -216,10 +216,10 @@ inline size_t findLiteralEnd(const std::string_view input,
 // characters. An equally safe, but slower method to achieve the same thing
 // would be to compute cryptographically secure hashes (like SHA-3 for example)
 // and compare the hashes instead of the actual strings.
-constexpr bool constantTimeEquals(std::string_view str1,
-                                  std::string_view str2) {
+constexpr bool constantTimeEquals(std::string_view view1,
+                                  std::string_view view2) {
   using byte_view = std::basic_string_view<volatile std::byte>;
-  auto impl = [](byte_view str1, byte_view str2) -> bool {
+  auto impl = [](byte_view str1, byte_view str2) {
     if (str1.length() != str2.length()) {
       return false;
     }
@@ -241,7 +241,7 @@ constexpr bool constantTimeEquals(std::string_view str1,
         static_cast<const std::byte*>(static_cast<const void*>(view.data())),
         view.size()};
   };
-  return impl(toVolatile(str1), toVolatile(str2));
+  return impl(toVolatile(view1), toVolatile(view2));
 }
 
 }  // namespace ad_utility
