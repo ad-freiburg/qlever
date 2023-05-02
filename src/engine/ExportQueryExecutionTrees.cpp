@@ -124,7 +124,7 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
 }
 
 // ___________________________________________________________________________
-template <typename EscapeFunction>
+template <bool removeQuotesAndAngleBrackets, typename EscapeFunction>
 std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
                                              const LocalVocab& localVocab,
@@ -151,11 +151,18 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       // values, we can use `index.getVocab().indexToOptionalString()` directly.
       std::optional<string> entity = index.idToOptionalString(id);
       AD_CONTRACT_CHECK(entity.has_value());
+      if constexpr (removeQuotesAndAngleBrackets) {
+        entity.value() = RdfEscaping::normalizedContentFromLiteralOrIri(
+            std::move(entity.value()));
+      }
       return std::pair{escapeFunction(std::move(entity.value())), nullptr};
     }
     case Datatype::LocalVocabIndex: {
-      return std::pair{
-          escapeFunction(localVocab.getWord(id.getLocalVocabIndex())), nullptr};
+      std::string word = localVocab.getWord(id.getLocalVocabIndex());
+      if constexpr (removeQuotesAndAngleBrackets) {
+        word = RdfEscaping::normalizedContentFromLiteralOrIri(std::move(word));
+      }
+      return std::pair{escapeFunction(std::move(word)), nullptr};
     }
     case Datatype::TextRecordIndex:
       return std::pair{
@@ -364,7 +371,13 @@ ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary(
 
   static constexpr char separator = format == MediaType::tsv ? '\t' : ',';
   // Print header line
-  const auto& variables = selectClause.getSelectedVariablesAsStrings();
+  auto variables = selectClause.getSelectedVariablesAsStrings();
+
+  // In the CSV format, the variables don't include the question mark.
+  if (format == MediaType::csv) {
+    std::ranges::for_each(variables,
+                          [](std::string& var) { var = var.substr(1); });
+  }
   co_yield absl::StrJoin(variables, std::string_view{&separator, 1});
   co_yield '\n';
 
@@ -377,8 +390,9 @@ ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary(
         const auto& val = selectedColumnIndices[j].value();
         Id id = idTable(i, val._columnIndex);
         auto optionalStringAndType =
-            idToStringAndType(qet.getQec()->getIndex(), id,
-                              resultTable->localVocab(), escapeFunction);
+            idToStringAndType<format == MediaType::csv>(
+                qet.getQec()->getIndex(), id, resultTable->localVocab(),
+                escapeFunction);
         if (optionalStringAndType.has_value()) [[likely]] {
           co_yield optionalStringAndType.value().first;
         }

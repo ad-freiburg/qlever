@@ -96,6 +96,8 @@ NormalizedRDFString normalizeRDFLiteral(std::string_view origLiteral);
  */
 std::string validRDFLiteralFromNormalized(std::string_view normLiteral);
 
+std::string normalizedContentFromLiteralOrIri(std::string&&);
+
 /**
  * In an Iriref, the only allowed escapes are \uXXXX and '\UXXXXXXXX' ,where X
  * is hexadecimal ([0-9a-fA-F]). This function replaces these escapes by the
