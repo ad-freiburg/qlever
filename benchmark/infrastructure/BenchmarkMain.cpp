@@ -17,6 +17,8 @@
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
 #include "../benchmark/infrastructure/BenchmarkToJson.h"
+#include "BenchmarkMetadata.h"
+#include "util/Algorithm.h"
 #include "util/File.h"
 #include "util/json.h"
 
@@ -126,20 +128,30 @@ int main(int argc, char** argv) {
   // For measuring and saving the times.
   const std::vector<BenchmarkResults>& results{
       BenchmarkRegister::runAllRegisteredBenchmarks()};
+  /*
+  Pairing the measured times up together with the the benchmark classes,
+  that created them. Note: All the classes registered in `BenchmarkRegister`
+  are always ran in the same order. So the benchmark class and benchmark
+  results are always at the same index position, and are grouped togehter
+  correctly.
+  */
+  const auto& benchmarkClassAndResults{ad_utility::zipVectors(
+      BenchmarkRegister::getAllRegisteredBenchmarks(), results)};
 
   // Actually processing the arguments.
   if (vm.count("print")) {
-    std::ranges::for_each(results,
-                          [](const BenchmarkResults& result) {
-                            std::cout << benchmarkResultsToString(result)
-                                      << "\n";
+    std::ranges::for_each(benchmarkClassAndResults,
+                          [](const auto& pair) {
+                            std::cout << benchmarkResultsToString(pair.first,
+                                                                  pair.second)
+                                      << "\n\n";
                           },
                           {});
   }
 
   if (vm.count("write")) {
-    writeJsonToFile(zipGeneralMetadataAndBenchmarkResultsToJson(
-                        BenchmarkRegister::getAllGeneralMetadata(), results),
-                    writeFileName, vm.count("append"));
+    writeJsonToFile(
+        zipBenchmarkClassAndBenchmarkResultsToJson(benchmarkClassAndResults),
+        writeFileName, vm.count("append"));
   }
 }

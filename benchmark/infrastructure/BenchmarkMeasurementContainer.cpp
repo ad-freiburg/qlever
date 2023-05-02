@@ -30,7 +30,12 @@ const BenchmarkMetadata& BenchmarkMetadataGetter::metadata() const {
 
 // ____________________________________________________________________________
 ResultEntry::operator std::string() const {
-  return absl::StrCat("'", descriptor_, "' took ", measuredTime_, " seconds.");
+  return absl::StrCat(
+      "Single measurement '", descriptor_, "'\n",
+      addIndentation(
+          absl::StrCat(getMetadataPrettyString(metadata(), "metadata: ", "\n"),
+                       "time: ", measuredTime_, "s"),
+          1));
 }
 
 // ____________________________________________________________________________
@@ -42,21 +47,26 @@ void to_json(nlohmann::json& j, const ResultEntry& resultEntry) {
 
 // ____________________________________________________________________________
 ResultGroup::operator std::string() const {
+  // The prefix. Everything after this will be indented, so it's better
+  // to only combine them at the end.
+  std::string prefix = absl::StrCat("Group '", descriptor_, "'\n");
+
   // We need to add all the string representations of the group members,
-  // so doing everything using a stream is the best idea.
+  // so  using a stream is the best idea.
   std::ostringstream stream;
 
-  // The normal foreword.
-  stream << "Group '" << descriptor_ << "':";
+  stream << absl::StrCat(
+      getMetadataPrettyString(metadata(), "metadata: ", "\n"),
+      "Measurements:\n\n");
 
   // Listing all the entries.
   addVectorOfResultEntryToOStringstream(
       &stream,
       ad_utility::transform(entries_,
                             [](const auto& pointer) { return (*pointer); }),
-      "\t");
+      std::string{outputIndentation}, std::string{outputIndentation});
 
-  return stream.str();
+  return absl::StrCat(prefix, addIndentation(stream.str(), 1));
 }
 
 // ____________________________________________________________________________
@@ -135,11 +145,15 @@ ResultTable::operator std::string() const {
     stream << text << padding;
   };
 
+  // The prefix. Everything after this will be indented, so it's better
+  // to only combine them at the end.
+  std::string prefix = absl::StrCat("Table '", descriptor_, "'\n");
+
   // For printing the table.
   std::ostringstream stream;
 
-  // Adding the table to the stream.
-  stream << "Table '" << descriptor_ << "':\n\n";
+  // Adding the metadata.
+  stream << getMetadataPrettyString(metadata(), "metadata: ", "\n");
 
   // For easier usage.
   const size_t numberColumns = columnNames_.size();
@@ -202,7 +216,7 @@ ResultTable::operator std::string() const {
     }
   }
 
-  return stream.str();
+  return absl::StrCat(prefix, addIndentation(stream.str(), 1));
 }
 
 // ____________________________________________________________________________
