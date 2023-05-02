@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/string_view.h>
@@ -13,6 +11,7 @@
 #include <sstream>
 #include <string_view>
 
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
@@ -47,9 +46,9 @@ void to_json(nlohmann::json& j, const ResultEntry& resultEntry) {
 
 // ____________________________________________________________________________
 ResultGroup::operator std::string() const {
-  // The foreword. Everything after this will be indented, so it's better
+  // The prefix. Everything after this will be indented, so it's better
   // to only combine them at the end.
-  std::string foreword = absl::StrCat("Group '", descriptor_, "'\n");
+  std::string prefix = absl::StrCat("Group '", descriptor_, "'\n");
 
   // We need to add all the string representations of the group members,
   // so  using a stream is the best idea.
@@ -66,7 +65,7 @@ ResultGroup::operator std::string() const {
                             [](const auto& pointer) { return (*pointer); }),
       outputIndention, outputIndention);
 
-  return absl::StrCat(foreword, addIndtention(stream.str(), 1));
+  return absl::StrCat(prefix, addIndtention(stream.str(), 1));
 }
 
 // ____________________________________________________________________________
@@ -145,9 +144,9 @@ ResultTable::operator std::string() const {
     stream << text << padding;
   };
 
-  // The foreword. Everything after this will be indented, so it's better
+  // The prefix. Everything after this will be indented, so it's better
   // to only combine them at the end.
-  std::string foreword = absl::StrCat("Table '", descriptor_, "'\n");
+  std::string prefix = absl::StrCat("Table '", descriptor_, "'\n");
 
   // For printing the table.
   std::ostringstream stream;
@@ -216,7 +215,7 @@ ResultTable::operator std::string() const {
     }
   }
 
-  return absl::StrCat(foreword, addIndtention(stream.str(), 1));
+  return absl::StrCat(prefix, addIndtention(stream.str(), 1));
 }
 
 // ____________________________________________________________________________
