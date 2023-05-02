@@ -50,28 +50,6 @@ struct Pattern {
 
   bool operator==(const Pattern& other) const = default;
 
-  /*
-  bool operator<(const Pattern& other) const {
-    if (size() == 0) {
-      return true;
-    }
-    if (other.size() == 0) {
-      return false;
-    }
-    return _data[0] < other._data[0];
-  }
-
-  bool operator>(const Pattern& other) const {
-    if (other.size() == 0) {
-      return true;
-    }
-    if (size() == 0) {
-      return false;
-    }
-    return _data[0] > other._data[0];
-  }
-   */
-
   size_t size() const { return _data.size(); }
 
   void push_back(value_type i) { _data.push_back(i); }
@@ -80,7 +58,7 @@ struct Pattern {
 
   const_ref back() const { return _data.back(); }
   ref back() { return _data.back(); }
-  bool empty() { return _data.empty(); }
+  bool empty() const { return _data.empty(); }
 
   const value_type* data() const { return _data.data(); }
 
