@@ -63,7 +63,7 @@ ResultGroup::operator std::string() const {
       &stream,
       ad_utility::transform(entries_,
                             [](const auto& pointer) { return (*pointer); }),
-      outputIndention, outputIndention);
+      std::string{outputIndentation}, std::string{outputIndentation});
 
   return absl::StrCat(prefix, addIndtention(stream.str(), 1));
 }

@@ -18,7 +18,7 @@
 namespace ad_benchmark {
 
 // How the indention should look like.
-extern const std::string outputIndention;
+static constexpr std::string_view outputIndentation = "    ";
 
 /*
  * @brief Add a string of the form

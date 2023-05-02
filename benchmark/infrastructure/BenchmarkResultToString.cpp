@@ -2,19 +2,16 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel February of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkResultToString.h"
-
 #include <absl/strings/str_cat.h>
 #include <bits/ranges_algo.h>
 
+#include "../benchmark/infrastructure/BenchmarkResultToString.h"
 #include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 
 namespace ad_benchmark {
-
-extern const std::string outputIndention = "    ";
 
 // ___________________________________________________________________________
 void addCategoryTitleToOStringstream(std::ostringstream* stream,
@@ -34,9 +31,9 @@ std::string addIndtention(const std::string_view str,
 
   // The indention symbols for this level of indention.
   std::string indentionSymbols{""};
-  indentionSymbols.reserve(outputIndention.size() * indentionLevel);
+  indentionSymbols.reserve(outputIndentation.size() * indentionLevel);
   for (size_t i = 0; i < indentionLevel; i++) {
-    indentionSymbols.append(outputIndention);
+    indentionSymbols.append(outputIndentation);
   }
 
   std::ostringstream stream;
