@@ -325,10 +325,10 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
       << " context, word and score list of size: " << wep.cids.size()
       << " elements to a table with distinct entities "
       << "and at most " << k << " contexts per entity.\n";
-
+    
   // The default case where k == 1 can use a map for a O(n) solution
   if (k == 1) {
-    aggScoresAndTakeTopContext<4>(wep, dynResult);
+    aggScoresAndTakeTopContext<3>(wep, dynResult);
     return;
   }
 
@@ -342,9 +342,10 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
   using AggMap = ad_utility::HashMap<Id, ScoreAndStCaW>;
   AggMap map;
   for (size_t i = 0; i < wep.eids.size(); ++i) {
+    WordIndex wid = wep.wids.empty() ? 0 : wep.wids[i];
     if (!map.contains(wep.eids[i])) {
       ScoreToContextAndWord inner;
-      inner.emplace(std::make_tuple(wep.scores[i], wep.cids[i], wep.wids[i]));
+      inner.emplace(std::make_tuple(wep.scores[i], wep.cids[i], wid));
       map[wep.eids[i]] = std::make_pair(1, inner);
     } else {
       auto& val = map[wep.eids[i]];
@@ -354,11 +355,11 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
         if (stcaw.size() == k) {
           stcaw.erase(*stcaw.begin());
         }
-        stcaw.emplace(std::make_tuple(wep.scores[i], wep.cids[i], wep.wids[i]));
+        stcaw.emplace(std::make_tuple(wep.scores[i], wep.cids[i], wid));
       }
     }
   }
-  IdTableStatic<4> result = std::move(*dynResult).toStatic<4>();
+  IdTableStatic<3> result = std::move(*dynResult).toStatic<3>();
   result.reserve(map.size() * k + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     Id eid = it->first;
@@ -366,9 +367,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
     ScoreToContextAndWord& stcaw = it->second.second;
     for (auto itt = stcaw.rbegin(); itt != stcaw.rend(); ++itt) {
       result.push_back(
-          {Id::makeFromTextRecordIndex(std::get<1>(*itt)), entityScore, eid,
-           Id::makeFromVocabIndex(VocabIndex::make(std::get<2>(
-               *itt)))});  // QUESTION: gibt es ne elegantere Lösung???
+          {Id::makeFromTextRecordIndex(std::get<1>(*itt)), entityScore, eid});
     }
   }
   *dynResult = std::move(result).toDynamic();
@@ -462,14 +461,15 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
       AggMap;
   AggMap map;
   for (size_t i = 0; i < wep.eids.size(); ++i) {
+    WordIndex wid = wep.wids.empty() ? 0 : wep.wids[i];
     if (!map.contains(wep.eids[i])) {
       map[wep.eids[i]] = std::make_pair(
-          1, std::make_tuple(wep.cids[i], wep.scores[i], wep.wids[i]));
+          1, std::make_tuple(wep.cids[i], wep.scores[i], wid));
     } else {
       auto& val = map[wep.eids[i]];
       ++val.first;
       if (std::get<1>(val.second) < wep.scores[i]) {
-        val.second = std::make_tuple(wep.cids[i], wep.scores[i], wep.wids[i]);
+        val.second = std::make_tuple(wep.cids[i], wep.scores[i], wid);
       };
     }
   }
@@ -481,8 +481,6 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
     result(n, 0) = Id::makeFromTextRecordIndex(std::get<0>(it->second.second));
     result(n, 1) = Id::makeFromInt(it->second.first);
     result(n, 2) = it->first;
-    result(n, 3) = Id::makeFromVocabIndex(
-        VocabIndex::make(std::get<2>(it->second.second)));
     n++;
   }
   AD_CONTRACT_CHECK(n == result.size());
