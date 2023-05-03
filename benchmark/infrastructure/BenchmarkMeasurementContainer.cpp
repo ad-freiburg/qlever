@@ -83,13 +83,12 @@ ResultTable::ResultTable(const std::string& descriptor,
       rowNames_{rowNames},
       columnNames_{columnNames},
       entries_(rowNames.size(), std::vector<EntryType>(columnNames.size())) {
-  // Having a table without any rows/columns makes no sense.
-  if (rowNames.empty() || columnNames.empty()) {
+  // Having a table without any columns makes no sense.
+  if (columnNames.empty()) {
     throw ad_utility::Exception(
         absl::StrCat("A `ResultTable` must have at"
-                     " least one column and one row. Table '",
-                     descriptor, "' has ", rowNames.size(), " rows and ",
-                     columnNames.size(), " columns"));
+                     " least one column. Table '",
+                     descriptor, "' has ", columnNames.size(), " columns"));
   }
 }
 
