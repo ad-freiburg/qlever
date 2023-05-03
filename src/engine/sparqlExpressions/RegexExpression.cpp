@@ -194,11 +194,13 @@ ExpressionResult RegexExpression::evaluate(
       auto column = context->getColumnIndexForVariable(*variablePtr);
       for (auto [lowerId, upperId] : lowerAndUpperIds) {
         auto lower = std::lower_bound(
-            beg, end, nullptr, [column, lowerId](const auto& l, const auto&) {
+            beg, end, nullptr,
+            [column, lowerId = lowerId](const auto& l, const auto&) {
               return l[column] < lowerId;
             });
         auto upper = std::lower_bound(
-            beg, end, nullptr, [column, upperId](const auto& l, const auto&) {
+            beg, end, nullptr,
+            [column, upperId = upperId](const auto& l, const auto&) {
               return l[column] < upperId;
             });
 
