@@ -17,19 +17,19 @@ using std::pair;
 // _____________________________________________________________________________
 Index::WordEntityPostings FTSAlgorithms::filterByRange(
     const IdRange& idRange, const Index::WordEntityPostings& wepPreFilter) {
-  AD_CONTRACT_CHECK(wepPreFilter.cids.size() == wepPreFilter.wids.size());
-  AD_CONTRACT_CHECK(wepPreFilter.cids.size() == wepPreFilter.scores.size());
-  LOG(DEBUG) << "Filtering " << wepPreFilter.cids.size()
+  AD_CONTRACT_CHECK(wepPreFilter.cids_.size() == wepPreFilter.wids_.size());
+  AD_CONTRACT_CHECK(wepPreFilter.cids_.size() == wepPreFilter.scores_.size());
+  LOG(DEBUG) << "Filtering " << wepPreFilter.cids_.size()
              << " elements by ID range...\n";
 
   Index::WordEntityPostings wepResult;
-  wepResult.cids.resize(wepPreFilter.cids.size() + 2);
-  wepResult.scores.resize(wepPreFilter.cids.size() + 2);
-  wepResult.wids.resize(wepPreFilter.cids.size() + 2);
+  wepResult.cids_.resize(wepPreFilter.cids_.size() + 2);
+  wepResult.scores_.resize(wepPreFilter.cids_.size() + 2);
+  wepResult.wids_.resize(wepPreFilter.cids_.size() + 2);
 
   size_t nofResultElements = 0;
 
-  for (size_t i = 0; i < wepPreFilter.wids.size(); ++i) {
+  for (size_t i = 0; i < wepPreFilter.wids_.size(); ++i) {
     // TODO<joka921> proper Ids for the text stuff.
     // The mapping from words that appear in text records to `WordIndex`es is
     // stored in a `Vocabulary` that stores `VocabIndex`es, so we have to
@@ -37,22 +37,22 @@ Index::WordEntityPostings FTSAlgorithms::filterByRange(
     // TODO<joka921> Can we make the returned `IndexType` a template parameter
     // of the vocabulary, s.t. we have a vocabulary that stores `WordIndex`es
     // directly?
-    if (wepPreFilter.wids[i] >= idRange._first.get() &&
-        wepPreFilter.wids[i] <= idRange._last.get()) {
-      wepResult.cids[nofResultElements] = wepPreFilter.cids[i];
-      wepResult.scores[nofResultElements] = wepPreFilter.scores[i];
-      wepResult.wids[nofResultElements++] = wepPreFilter.wids[i];
+    if (wepPreFilter.wids_[i] >= idRange._first.get() &&
+        wepPreFilter.wids_[i] <= idRange._last.get()) {
+      wepResult.cids_[nofResultElements] = wepPreFilter.cids_[i];
+      wepResult.scores_[nofResultElements] = wepPreFilter.scores_[i];
+      wepResult.wids_[nofResultElements++] = wepPreFilter.wids_[i];
     }
   }
 
-  wepResult.cids.resize(nofResultElements);
-  wepResult.scores.resize(nofResultElements);
-  wepResult.wids.resize(nofResultElements);
+  wepResult.cids_.resize(nofResultElements);
+  wepResult.scores_.resize(nofResultElements);
+  wepResult.wids_.resize(nofResultElements);
 
-  AD_CONTRACT_CHECK(wepResult.cids.size() == wepResult.scores.size());
-  AD_CONTRACT_CHECK(wepResult.cids.size() == wepResult.wids.size());
+  AD_CONTRACT_CHECK(wepResult.cids_.size() == wepResult.scores_.size());
+  AD_CONTRACT_CHECK(wepResult.cids_.size() == wepResult.wids_.size());
   LOG(DEBUG) << "Filtering by ID range done. Result has "
-             << wepResult.cids.size() << " elements.\n";
+             << wepResult.cids_.size() << " elements.\n";
   return wepResult;
 }
 
@@ -62,49 +62,49 @@ Index::WordEntityPostings FTSAlgorithms::intersect(
     const Index::WordEntityPostings& eBlockWep) {
   LOG(DEBUG) << "Intersection to filter the entity postings from a block "
              << "so that only matching ones remain\n";
-  LOG(DEBUG) << "matchingContextsWep.cids size: "
-             << matchingContextsWep.cids.size() << '\n';
-  LOG(DEBUG) << "eBlockWep.cids size: " << eBlockWep.cids.size() << '\n';
+  LOG(DEBUG) << "matchingContextsWep.cids_ size: "
+             << matchingContextsWep.cids_.size() << '\n';
+  LOG(DEBUG) << "eBlockWep.cids_ size: " << eBlockWep.cids_.size() << '\n';
   Index::WordEntityPostings resultWep;
   // Handle trivial empty case
-  if (matchingContextsWep.cids.empty() || eBlockWep.cids.empty()) {
+  if (matchingContextsWep.cids_.empty() || eBlockWep.cids_.empty()) {
     return resultWep;
   }
 
-  resultWep.cids.reserve(eBlockWep.cids.size());
-  resultWep.cids.clear();
-  resultWep.eids.reserve(eBlockWep.cids.size());
-  resultWep.eids.clear();
-  resultWep.scores.reserve(eBlockWep.cids.size());
-  resultWep.scores.clear();
+  resultWep.cids_.reserve(eBlockWep.cids_.size());
+  resultWep.cids_.clear();
+  resultWep.eids_.reserve(eBlockWep.cids_.size());
+  resultWep.eids_.clear();
+  resultWep.scores_.reserve(eBlockWep.cids_.size());
+  resultWep.scores_.clear();
 
   size_t i = 0;
   size_t j = 0;
 
-  while (i < matchingContextsWep.cids.size() && j < eBlockWep.cids.size()) {
-    while (matchingContextsWep.cids[i] < eBlockWep.cids[j]) {
+  while (i < matchingContextsWep.cids_.size() && j < eBlockWep.cids_.size()) {
+    while (matchingContextsWep.cids_[i] < eBlockWep.cids_[j]) {
       ++i;
-      if (i >= matchingContextsWep.cids.size()) {
+      if (i >= matchingContextsWep.cids_.size()) {
         return resultWep;
       }
     }
-    while (eBlockWep.cids[j] < matchingContextsWep.cids[i]) {
+    while (eBlockWep.cids_[j] < matchingContextsWep.cids_[i]) {
       ++j;
-      if (j >= eBlockWep.cids.size()) {
+      if (j >= eBlockWep.cids_.size()) {
         return resultWep;
       }
     }
-    while (matchingContextsWep.cids[i] == eBlockWep.cids[j]) {
+    while (matchingContextsWep.cids_[i] == eBlockWep.cids_[j]) {
       // Make sure we get all matching elements from the entity list (l2)
       // that match the current context.
       // If there are multiple elements for that context in l1,
       // we can safely skip them unless we want to incorporate the scores
       // later on.
-      resultWep.cids.push_back(eBlockWep.cids[j]);
-      resultWep.eids.push_back(eBlockWep.eids[j]);
-      resultWep.scores.push_back(eBlockWep.scores[j]);
+      resultWep.cids_.push_back(eBlockWep.cids_[j]);
+      resultWep.eids_.push_back(eBlockWep.eids_[j]);
+      resultWep.scores_.push_back(eBlockWep.scores_[j]);
       j++;
-      if (j >= eBlockWep.cids.size()) {
+      if (j >= eBlockWep.cids_.size()) {
         break;
       }
     }
@@ -166,13 +166,13 @@ Index::WordEntityPostings FTSAlgorithms::intersectKWay(
   size_t k = wepVecs.size();
   Index::WordEntityPostings resultWep;
   {
-    if (wepVecs[k - 1].cids.empty()) {
+    if (wepVecs[k - 1].cids_.empty()) {
       LOG(DEBUG) << "Empty list involved, no intersect necessary.\n";
       return resultWep;
     }
     LOG(DEBUG) << "K-way intersection of " << k << " lists of sizes: ";
     for (const auto& l : wepVecs) {
-      LOG(DEBUG) << l.cids.size() << ' ';
+      LOG(DEBUG) << l.cids_.size() << ' ';
     }
     LOG(DEBUG) << '\n';
   }
@@ -184,22 +184,22 @@ Index::WordEntityPostings FTSAlgorithms::intersectKWay(
     minSize = lastListEids->size();
   } else {
     for (size_t i = 0; i < wepVecs.size(); ++i) {
-      if (wepVecs[i].cids.empty()) {
+      if (wepVecs[i].cids_.empty()) {
         return resultWep;
       }
-      if (wepVecs[i].cids.size() < minSize) {
-        minSize = wepVecs[i].cids.size();
+      if (wepVecs[i].cids_.size() < minSize) {
+        minSize = wepVecs[i].cids_.size();
       }
     }
   }
 
-  resultWep.cids.reserve(minSize + 2);
-  resultWep.cids.resize(minSize);
-  resultWep.scores.reserve(minSize + 2);
-  resultWep.scores.resize(minSize);
+  resultWep.cids_.reserve(minSize + 2);
+  resultWep.cids_.resize(minSize);
+  resultWep.scores_.reserve(minSize + 2);
+  resultWep.scores_.resize(minSize);
   if (lastListEids) {
-    resultWep.eids.reserve(minSize + 2);
-    resultWep.eids.resize(minSize);
+    resultWep.eids_.reserve(minSize + 2);
+    resultWep.eids_.resize(minSize);
   }
 
   // For intersection, we don't need a PQ.
@@ -217,16 +217,16 @@ Index::WordEntityPostings FTSAlgorithms::intersectKWay(
 
   vector<size_t> nextIndices;
   nextIndices.resize(wepVecs.size(), 0);
-  TextRecordIndex currentContext = wepVecs[k - 1].cids[0];
+  TextRecordIndex currentContext = wepVecs[k - 1].cids_[0];
   size_t currentList = k - 1;  // Has the fewest different contexts. Start here.
   size_t streak = 0;
   size_t n = 0;
   while (true) {  // break when one list cannot advance
-    size_t thisListSize = wepVecs[currentList].cids.size();
+    size_t thisListSize = wepVecs[currentList].cids_.size();
     if (nextIndices[currentList] == thisListSize) {
       break;
     }
-    while (wepVecs[currentList].cids[nextIndices[currentList]] <
+    while (wepVecs[currentList].cids_[nextIndices[currentList]] <
            currentContext) {
       nextIndices[currentList] += 1;
       if (nextIndices[currentList] == thisListSize) {
@@ -236,12 +236,12 @@ Index::WordEntityPostings FTSAlgorithms::intersectKWay(
     if (nextIndices[currentList] == thisListSize) {
       break;
     }
-    TextRecordIndex atId = wepVecs[currentList].cids[nextIndices[currentList]];
+    TextRecordIndex atId = wepVecs[currentList].cids_[nextIndices[currentList]];
     if (atId == currentContext) {
       if (++streak == k) {
         Score s = 0;
         for (size_t i = 0; i < k - 1; ++i) {
-          s += wepVecs[i].scores[(i == currentList ? nextIndices[i]
+          s += wepVecs[i].scores_[(i == currentList ? nextIndices[i]
                                                    : nextIndices[i] - 1)];
         }
         if (entityMode) {
@@ -249,19 +249,19 @@ Index::WordEntityPostings FTSAlgorithms::intersectKWay(
           // for one context. Handle all matching the current context.
           size_t matchInEL = (k - 1 == currentList ? nextIndices[k - 1]
                                                    : nextIndices[k - 1] - 1);
-          while (matchInEL < wepVecs[k - 1].cids.size() &&
-                 wepVecs[k - 1].cids[matchInEL] == currentContext) {
-            resultWep.cids[n] = currentContext;
-            resultWep.eids[n] = (*lastListEids)[matchInEL];
-            resultWep.scores[n++] = s + wepVecs[k - 1].scores[matchInEL];
+          while (matchInEL < wepVecs[k - 1].cids_.size() &&
+                 wepVecs[k - 1].cids_[matchInEL] == currentContext) {
+            resultWep.cids_[n] = currentContext;
+            resultWep.eids_[n] = (*lastListEids)[matchInEL];
+            resultWep.scores_[n++] = s + wepVecs[k - 1].scores_[matchInEL];
             ++matchInEL;
           }
           nextIndices[k - 1] = matchInEL;
         } else {
-          resultWep.cids[n] = currentContext;
-          resultWep.scores[n++] =
+          resultWep.cids_[n] = currentContext;
+          resultWep.scores_[n++] =
               s + wepVecs[k - 1]
-                      .scores[(k - 1 == currentList ? nextIndices[k - 1]
+                      .scores_[(k - 1 == currentList ? nextIndices[k - 1]
                                                     : nextIndices[k - 1] - 1)];
         }
         // Optimization: The last list will feature the fewest different
@@ -279,12 +279,12 @@ Index::WordEntityPostings FTSAlgorithms::intersectKWay(
     }  // wrap around
   }
 
-  resultWep.cids.resize(n);
-  resultWep.scores.resize(n);
+  resultWep.cids_.resize(n);
+  resultWep.scores_.resize(n);
   if (entityMode) {
-    resultWep.eids.resize(n);
+    resultWep.eids_.resize(n);
   }
-  LOG(DEBUG) << "Intersection done. Size: " << resultWep.cids.size() << "\n";
+  LOG(DEBUG) << "Intersection done. Size: " << resultWep.cids_.size() << "\n";
 
   return resultWep;
 }
@@ -318,11 +318,11 @@ void FTSAlgorithms::getTopKByScores(const vector<Id>& cids,
 // _____________________________________________________________________________
 void FTSAlgorithms::aggScoresAndTakeTopKContexts(
     const Index::WordEntityPostings& wep, size_t k, IdTable* dynResult) {
-  AD_CONTRACT_CHECK(wep.cids.size() == wep.eids.size());
-  AD_CONTRACT_CHECK(wep.cids.size() == wep.scores.size());
+  AD_CONTRACT_CHECK(wep.cids_.size() == wep.eids_.size());
+  AD_CONTRACT_CHECK(wep.cids_.size() == wep.scores_.size());
   LOG(DEBUG)
       << "Going from a WordEntityPostings-Element consisting of an entity,"
-      << " context, word and score list of size: " << wep.cids.size()
+      << " context, word and score list of size: " << wep.cids_.size()
       << " elements to a table with distinct entities "
       << "and at most " << k << " contexts per entity.\n";
     
@@ -341,21 +341,21 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
   using ScoreAndStCaW = pair<Score, ScoreToContextAndWord>;
   using AggMap = ad_utility::HashMap<Id, ScoreAndStCaW>;
   AggMap map;
-  for (size_t i = 0; i < wep.eids.size(); ++i) {
-    WordIndex wid = wep.wids.empty() ? 0 : wep.wids[i];
-    if (!map.contains(wep.eids[i])) {
+  for (size_t i = 0; i < wep.eids_.size(); ++i) {
+    WordIndex wid = wep.wids_.empty() ? 0 : wep.wids_[i];
+    if (!map.contains(wep.eids_[i])) {
       ScoreToContextAndWord inner;
-      inner.emplace(std::make_tuple(wep.scores[i], wep.cids[i], wid));
-      map[wep.eids[i]] = std::make_pair(1, inner);
+      inner.emplace(std::make_tuple(wep.scores_[i], wep.cids_[i], wid));
+      map[wep.eids_[i]] = std::make_pair(1, inner);
     } else {
-      auto& val = map[wep.eids[i]];
+      auto& val = map[wep.eids_[i]];
       ++val.first;
       ScoreToContextAndWord& stcaw = val.second;
-      if (stcaw.size() < k || std::get<0>(*(stcaw.begin())) < wep.scores[i]) {
+      if (stcaw.size() < k || std::get<0>(*(stcaw.begin())) < wep.scores_[i]) {
         if (stcaw.size() == k) {
           stcaw.erase(*stcaw.begin());
         }
-        stcaw.emplace(std::make_tuple(wep.scores[i], wep.cids[i], wid));
+        stcaw.emplace(std::make_tuple(wep.scores_[i], wep.cids_[i], wid));
       }
     }
   }
@@ -460,16 +460,16 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
       Id, pair<Score, std::tuple<TextRecordIndex, Score, WordIndex>>>
       AggMap;
   AggMap map;
-  for (size_t i = 0; i < wep.eids.size(); ++i) {
-    WordIndex wid = wep.wids.empty() ? 0 : wep.wids[i];
-    if (!map.contains(wep.eids[i])) {
-      map[wep.eids[i]] = std::make_pair(
-          1, std::make_tuple(wep.cids[i], wep.scores[i], wid));
+  for (size_t i = 0; i < wep.eids_.size(); ++i) {
+    WordIndex wid = wep.wids_.empty() ? 0 : wep.wids_[i];
+    if (!map.contains(wep.eids_[i])) {
+      map[wep.eids_[i]] = std::make_pair(
+          1, std::make_tuple(wep.cids_[i], wep.scores_[i], wid));
     } else {
-      auto& val = map[wep.eids[i]];
+      auto& val = map[wep.eids_[i]];
       ++val.first;
-      if (std::get<1>(val.second) < wep.scores[i]) {
-        val.second = std::make_tuple(wep.cids[i], wep.scores[i], wid);
+      if (std::get<1>(val.second) < wep.scores_[i]) {
+        val.second = std::make_tuple(wep.cids_[i], wep.scores_[i], wid);
       };
     }
   }
@@ -816,23 +816,23 @@ void FTSAlgorithms::appendCrossProduct(const Index::WordEntityPostings& wep,
   vector<Id> contextSubRes2;
   ad_utility::HashSet<Id> done;
   for (size_t i = from; i < toExclusive; ++i) {
-    if (done.count(wep.eids[i])) {
+    if (done.count(wep.eids_[i])) {
       continue;
     }
-    done.insert(wep.eids[i]);
-    if (subRes1.count(wep.eids[i]) > 0) {
-      contextSubRes1.push_back(wep.eids[i]);
+    done.insert(wep.eids_[i]);
+    if (subRes1.count(wep.eids_[i]) > 0) {
+      contextSubRes1.push_back(wep.eids_[i]);
     }
-    if (subRes2.count(wep.eids[i]) > 0) {
-      contextSubRes2.push_back(wep.eids[i]);
+    if (subRes2.count(wep.eids_[i]) > 0) {
+      contextSubRes2.push_back(wep.eids_[i]);
     }
   }
   for (size_t i = from; i < toExclusive; ++i) {
     for (size_t j = 0; j < contextSubRes1.size(); ++j) {
       for (size_t k = 0; k < contextSubRes2.size(); ++k) {
         res.emplace_back(
-            array<Id, 5>{{wep.eids[i], Id::makeFromInt(wep.scores[i]),
-                          Id::makeFromTextRecordIndex(wep.cids[i]),
+            array<Id, 5>{{wep.eids_[i], Id::makeFromInt(wep.scores_[i]),
+                          Id::makeFromTextRecordIndex(wep.cids_[i]),
                           contextSubRes1[j], contextSubRes2[k]}});
       }
     }
@@ -848,13 +848,13 @@ void FTSAlgorithms::appendCrossProduct(
   subResMatches.resize(subResMaps.size());
   ad_utility::HashSet<Id> distinctEids;
   for (size_t i = from; i < toExclusive; ++i) {
-    if (distinctEids.count(wep.eids[i])) {
+    if (distinctEids.count(wep.eids_[i])) {
       continue;
     }
-    distinctEids.insert(wep.eids[i]);
+    distinctEids.insert(wep.eids_[i]);
     for (size_t j = 0; j < subResMaps.size(); ++j) {
-      if (subResMaps[j].count(wep.eids[i]) > 0) {
-        for (const vector<Id>& row : subResMaps[j].find(wep.eids[i])->second) {
+      if (subResMaps[j].count(wep.eids_[i]) > 0) {
+        for (const vector<Id>& row : subResMaps[j].find(wep.eids_[i])->second) {
           subResMatches[j].push_back(row);
         }
       }
@@ -876,8 +876,8 @@ void FTSAlgorithms::appendCrossProduct(
     }
 
     for (size_t n = 0; n < nofResultRows; ++n) {
-      vector<Id> resRow = {wep.eids[i], Id::makeFromInt(wep.scores[i]),
-                           Id::makeFromTextRecordIndex(wep.cids[i])};
+      vector<Id> resRow = {wep.eids_[i], Id::makeFromInt(wep.scores_[i]),
+                           Id::makeFromTextRecordIndex(wep.cids_[i])};
       for (size_t j = 0; j < subResMatches.size(); ++j) {
         size_t index = n;
         for (size_t k = 0; k < j; ++k) {
@@ -898,13 +898,13 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const Index::WordEntityPostings& wep,
     const ad_utility::HashMap<Id, IdTable>& fMap, size_t k,
     IdTable* dynResult) {
-  AD_CONTRACT_CHECK(wep.cids.size() == wep.eids.size());
-  AD_CONTRACT_CHECK(wep.cids.size() == wep.scores.size());
+  AD_CONTRACT_CHECK(wep.cids_.size() == wep.eids_.size());
+  AD_CONTRACT_CHECK(wep.cids_.size() == wep.scores_.size());
   LOG(DEBUG) << "Going from an entity, context and score list of size: "
-             << wep.cids.size()
+             << wep.cids_.size()
              << " elements to a table with filtered distinct entities "
              << "and at most " << k << " contexts per entity.\n";
-  if (wep.cids.empty() || fMap.empty()) {
+  if (wep.cids_.empty() || fMap.empty()) {
     return;
   }
   // TODO: add code to speed up for k==1
@@ -917,22 +917,22 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   using ScoreAndStC = pair<Score, ScoreToContext>;
   using AggMap = ad_utility::HashMap<Id, ScoreAndStC>;
   AggMap map;
-  for (size_t i = 0; i < wep.eids.size(); ++i) {
-    if (fMap.count(wep.eids[i]) > 0) {
-      if (map.count(wep.eids[i]) == 0) {
+  for (size_t i = 0; i < wep.eids_.size(); ++i) {
+    if (fMap.count(wep.eids_[i]) > 0) {
+      if (map.count(wep.eids_[i]) == 0) {
         ScoreToContext inner;
-        inner.insert(std::make_pair(wep.scores[i], wep.cids[i]));
-        map[wep.eids[i]] = std::make_pair(1, inner);
+        inner.insert(std::make_pair(wep.scores_[i], wep.cids_[i]));
+        map[wep.eids_[i]] = std::make_pair(1, inner);
       } else {
-        auto& val = map[wep.eids[i]];
+        auto& val = map[wep.eids_[i]];
         // val.first += scores[i];
         ++val.first;
         ScoreToContext& stc = val.second;
-        if (stc.size() < k || stc.begin()->first < wep.scores[i]) {
+        if (stc.size() < k || stc.begin()->first < wep.scores_[i]) {
           if (stc.size() == k) {
             stc.erase(*stc.begin());
           }
-          stc.insert(std::make_pair(wep.scores[i], wep.cids[i]));
+          stc.insert(std::make_pair(wep.scores_[i], wep.cids_[i]));
         };
       }
     }
@@ -1002,14 +1002,14 @@ template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<10>(
 void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
     IdTable* dynResult) {
-  AD_CONTRACT_CHECK(wep.cids.size() == wep.eids.size());
-  AD_CONTRACT_CHECK(wep.cids.size() == wep.scores.size());
+  AD_CONTRACT_CHECK(wep.cids_.size() == wep.eids_.size());
+  AD_CONTRACT_CHECK(wep.cids_.size() == wep.scores_.size());
   LOG(DEBUG) << "Going from an entity, context and score list of size: "
-             << wep.cids.size()
+             << wep.cids_.size()
              << " elements to a table with filtered distinct entities "
              << "and at most " << k << " contexts per entity.\n";
 
-  if (wep.cids.empty() || fSet.empty()) {
+  if (wep.cids_.empty() || fSet.empty()) {
     return;
   }
 
@@ -1023,22 +1023,22 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   using ScoreAndStC = pair<Score, ScoreToContext>;
   using AggMap = ad_utility::HashMap<Id, ScoreAndStC>;
   AggMap map;
-  for (size_t i = 0; i < wep.eids.size(); ++i) {
-    if (fSet.count(wep.eids[i]) > 0) {
-      if (map.count(wep.eids[i]) == 0) {
+  for (size_t i = 0; i < wep.eids_.size(); ++i) {
+    if (fSet.count(wep.eids_[i]) > 0) {
+      if (map.count(wep.eids_[i]) == 0) {
         ScoreToContext inner;
-        inner.insert(std::make_pair(wep.scores[i], wep.cids[i]));
-        map[wep.eids[i]] = std::make_pair(1, inner);
+        inner.insert(std::make_pair(wep.scores_[i], wep.cids_[i]));
+        map[wep.eids_[i]] = std::make_pair(1, inner);
       } else {
-        auto& val = map[wep.eids[i]];
+        auto& val = map[wep.eids_[i]];
         // val.first += scores[i];
         ++val.first;
         ScoreToContext& stc = val.second;
-        if (stc.size() < k || stc.begin()->first < wep.scores[i]) {
+        if (stc.size() < k || stc.begin()->first < wep.scores_[i]) {
           if (stc.size() == k) {
             stc.erase(*stc.begin());
           }
-          stc.insert(std::make_pair(wep.scores[i], wep.cids[i]));
+          stc.insert(std::make_pair(wep.scores_[i], wep.cids_[i]));
         };
       }
     }
@@ -1063,7 +1063,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const Index::WordEntityPostings& wep,
     const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
     IdTable* dynResult) {
-  if (wep.cids.empty() || fMap.empty()) {
+  if (wep.cids_.empty() || fMap.empty()) {
     return;
   }
   // Go over contexts.
@@ -1079,15 +1079,15 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   AggMap map;
   vector<Id> entitiesInContext;
   vector<Id> filteredEntitiesInContext;
-  TextRecordIndex currentCid = wep.cids[0];
-  Score cscore = wep.scores[0];
+  TextRecordIndex currentCid = wep.cids_[0];
+  Score cscore = wep.scores_[0];
 
-  for (size_t i = 0; i < wep.cids.size(); ++i) {
-    if (wep.cids[i] == currentCid) {
-      if (fMap.count(wep.eids[i]) > 0) {
-        filteredEntitiesInContext.push_back(wep.eids[i]);
+  for (size_t i = 0; i < wep.cids_.size(); ++i) {
+    if (wep.cids_[i] == currentCid) {
+      if (fMap.count(wep.eids_[i]) > 0) {
+        filteredEntitiesInContext.push_back(wep.eids_[i]);
       }
-      entitiesInContext.push_back(wep.eids[i]);
+      entitiesInContext.push_back(wep.eids_[i]);
       // cscore += scores[i];
     } else {
       if (filteredEntitiesInContext.size() > 0) {
@@ -1126,11 +1126,11 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
       }
       entitiesInContext.clear();
       filteredEntitiesInContext.clear();
-      currentCid = wep.cids[i];
-      cscore = wep.scores[i];
-      entitiesInContext.push_back(wep.eids[i]);
-      if (fMap.count(wep.eids[i]) > 0) {
-        filteredEntitiesInContext.push_back(wep.eids[i]);
+      currentCid = wep.cids_[i];
+      cscore = wep.scores_[i];
+      entitiesInContext.push_back(wep.eids_[i]);
+      if (fMap.count(wep.eids_[i]) > 0) {
+        filteredEntitiesInContext.push_back(wep.eids_[i]);
       }
     }
   }
@@ -1254,7 +1254,7 @@ template <int WIDTH>
 void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const Index::WordEntityPostings& wep, const HashSet<Id>& fSet,
     size_t nofVars, size_t kLimit, IdTable* dynResult) {
-  if (wep.cids.empty() || fSet.empty()) {
+  if (wep.cids_.empty() || fSet.empty()) {
     return;
   }
   // Go over contexts.
@@ -1270,15 +1270,15 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   AggMap map;
   vector<Id> entitiesInContext;
   vector<Id> filteredEntitiesInContext;
-  TextRecordIndex currentCid = wep.cids[0];
-  Score cscore = wep.scores[0];
+  TextRecordIndex currentCid = wep.cids_[0];
+  Score cscore = wep.scores_[0];
 
-  for (size_t i = 0; i < wep.cids.size(); ++i) {
-    if (wep.cids[i] == currentCid) {
-      if (fSet.count(wep.eids[i]) > 0) {
-        filteredEntitiesInContext.push_back(wep.eids[i]);
+  for (size_t i = 0; i < wep.cids_.size(); ++i) {
+    if (wep.cids_[i] == currentCid) {
+      if (fSet.count(wep.eids_[i]) > 0) {
+        filteredEntitiesInContext.push_back(wep.eids_[i]);
       }
-      entitiesInContext.push_back(wep.eids[i]);
+      entitiesInContext.push_back(wep.eids_[i]);
       // cscore += scores[i];
     } else {
       if (filteredEntitiesInContext.size() > 0) {
@@ -1317,11 +1317,11 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
       }
       entitiesInContext.clear();
       filteredEntitiesInContext.clear();
-      currentCid = wep.cids[i];
-      cscore = wep.scores[i];
-      entitiesInContext.push_back(wep.eids[i]);
-      if (fSet.count(wep.eids[i]) > 0) {
-        filteredEntitiesInContext.push_back(wep.eids[i]);
+      currentCid = wep.cids_[i];
+      cscore = wep.scores_[i];
+      entitiesInContext.push_back(wep.eids_[i]);
+      if (fSet.count(wep.eids_[i]) > 0) {
+        filteredEntitiesInContext.push_back(wep.eids_[i]);
       }
     }
   }
