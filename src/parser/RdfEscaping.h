@@ -96,7 +96,11 @@ NormalizedRDFString normalizeRDFLiteral(std::string_view origLiteral);
  */
 std::string validRDFLiteralFromNormalized(std::string_view normLiteral);
 
-std::string normalizedContentFromLiteralOrIri(std::string&&);
+// If `input` is an IRI in `<angleBrackets>` remove those. If it is a
+// "literal"^^<withDatatype> (or with a language tag or nothing),
+// only return the part between the quotation marks (`literal`) in the
+// example. All other strings are returned unchanged.
+std::string normalizedContentFromLiteralOrIri(std::string&& input);
 
 /**
  * In an Iriref, the only allowed escapes are \uXXXX and '\UXXXXXXXX' ,where X
