@@ -154,6 +154,12 @@ ResultTable::operator std::string() const {
   // Adding the metadata.
   stream << getMetadataPrettyString(metadata(), "metadata: ", "\n");
 
+  // It's allowed to have tables without rows. In that case, we are already
+  // done, because there is no table content to print.
+  if (numRows() == 0) {
+    return absl::StrCat(prefix, addIndentation(stream.str(), 1));
+  }
+
   // For easier usage.
   const size_t numberColumns = columnNames_.size();
   const size_t numberRows = rowNames_.size();
