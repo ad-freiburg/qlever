@@ -20,6 +20,10 @@ class RegexExpression : public SparqlExpression {
   // The regex as a string, used for the cache key.
   std::string regexAsString_;
 
+  // True if the STR() function is to be applied on the child before evaluating
+  // the regex.
+  bool childIsStrExpression = false;
+
  public:
   // `child` must be a `VariableExpression` and `regex` must be a
   // `LiteralExpression` that stores a string, else an exception will be thrown.

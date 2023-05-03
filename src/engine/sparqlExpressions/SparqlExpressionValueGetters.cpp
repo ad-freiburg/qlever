@@ -69,6 +69,19 @@ string StringValueGetter::operator()(Id id, EvaluationContext* context) const {
 }
 
 // ____________________________________________________________________________
+std::optional<string> LiteralFromIdGetter::operator()(
+    ValueId id, sparqlExpression::EvaluationContext* context) const {
+  auto optionalStringAndType =
+      ExportQueryExecutionTrees::idToStringAndType<true, true>(
+          context->_qec.getIndex(), id, context->_localVocab);
+  if (optionalStringAndType.has_value()) {
+    return std::move(optionalStringAndType.value().first);
+  } else {
+    return std::nullopt;
+  }
+}
+
+// ____________________________________________________________________________
 bool IsValidValueGetter::operator()(
     ValueId id, [[maybe_unused]] EvaluationContext* context) const {
   // Every knowledge base value that is bound converts to "True"

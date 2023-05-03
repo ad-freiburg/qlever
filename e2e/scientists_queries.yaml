@@ -386,7 +386,7 @@ queries:
       SELECT ?s WHERE {
           ?s <Profession> <Scientist> .
           ?s <is-a> <Person> .
-          FILTER regex(?s, "^A[a-z]*_E[a-z]*$")
+          FILTER regex(STR(?s), "^A[a-z]*_E[a-z]*$")
       }
     checks:
       - num_rows: 22
@@ -403,7 +403,7 @@ queries:
       SELECT ?s WHERE {
           ?s <Profession> <Scientist> .
           ?s <is-a> <Person> .
-          FILTER regex(?s, "^[a-z]*_[a-z]*stein[a-z]*$", "i")
+          FILTER regex(STR(?s), "^[a-z]*_[a-z]*stein[a-z]*$", "i")
       }
     checks:
       - num_rows: 68
@@ -422,7 +422,7 @@ queries:
           ?s <is-a> <Scientist> .
           FILTER regex(?s, "^<Albert") .
           ?s <Award_Won> ?a .
-          FILTER regex(?a, "physic", "i")
+          FILTER regex(STR(?a), "physic", "i")
       }
     checks:
       - num_rows: 6

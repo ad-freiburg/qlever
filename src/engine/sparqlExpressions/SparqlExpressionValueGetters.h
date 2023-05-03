@@ -93,6 +93,11 @@ struct StringValueGetter {
 
   string operator()(string s, EvaluationContext*) const { return s; }
 };
+
+struct LiteralFromIdGetter {
+  std::optional<string> operator()(ValueId, EvaluationContext*) const;
+};
+
 }  // namespace sparqlExpression::detail
 
 #endif  // QLEVER_SPARQLEXPRESSIONVALUEGETTERS_H

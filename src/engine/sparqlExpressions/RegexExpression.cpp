@@ -5,6 +5,7 @@
 #include "./RegexExpression.h"
 
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "global/ValueIdComparators.h"
 #include "re2/re2.h"
@@ -81,6 +82,10 @@ RegexExpression::RegexExpression(
     SparqlExpression::Ptr child, SparqlExpression::Ptr regex,
     std::optional<SparqlExpression::Ptr> optionalFlags)
     : child_{std::move(child)} {
+  if (dynamic_cast<const StrExpression*>(child_.get())) {
+    child_ = std::move(std::move(*child_).moveChildrenOut().at(0));
+    childIsStrExpression = true;
+  }
   if (!dynamic_cast<const VariableExpression*>(child_.get())) {
     throw std::runtime_error(
         "REGEX expressions are currently supported only on variables.");
@@ -207,9 +212,21 @@ ExpressionResult RegexExpression::evaluate(
     auto resultSize = context->size();
     VectorWithMemoryLimit<Bool> result{context->_allocator};
     result.reserve(resultSize);
-    for (auto id : detail::makeGenerator(*variablePtr, resultSize, context)) {
-      result.push_back(RE2::PartialMatch(
-          detail::StringValueGetter{}(id, context), std::get<RE2>(regex_)));
+    if (childIsStrExpression) {
+      for (auto id : detail::makeGenerator(*variablePtr, resultSize, context)) {
+        result.push_back(RE2::PartialMatch(
+            detail::StringValueGetter{}(id, context), std::get<RE2>(regex_)));
+      }
+    } else {
+      for (auto id : detail::makeGenerator(*variablePtr, resultSize, context)) {
+        auto optionalString = detail::LiteralFromIdGetter{}(id, context);
+        if (optionalString.has_value()) {
+          result.push_back(
+              RE2::PartialMatch(optionalString.value(), std::get<RE2>(regex_)));
+        } else {
+          result.push_back(false);
+        }
+      }
     }
     return result;
   }

@@ -124,11 +124,19 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
 }
 
 // ___________________________________________________________________________
-template <bool removeQuotesAndAngleBrackets, typename EscapeFunction>
+template <bool removeQuotesAndAngleBrackets, bool onlyReturnLiterals,
+          typename EscapeFunction>
 std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
                                              const LocalVocab& localVocab,
                                              EscapeFunction&& escapeFunction) {
+  auto datatype = id.getDatatype();
+  if constexpr (onlyReturnLiterals) {
+    if (!(datatype == Datatype::VocabIndex ||
+          datatype == Datatype::LocalVocabIndex)) {
+      return std::nullopt;
+    }
+  }
   switch (id.getDatatype()) {
     case Datatype::Undefined:
       return std::nullopt;
@@ -151,6 +159,11 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       // values, we can use `index.getVocab().indexToOptionalString()` directly.
       std::optional<string> entity = index.idToOptionalString(id);
       AD_CONTRACT_CHECK(entity.has_value());
+      if constexpr (onlyReturnLiterals) {
+        if (!entity.value().starts_with('"')) {
+          return std::nullopt;
+        }
+      }
       if constexpr (removeQuotesAndAngleBrackets) {
         entity.value() = RdfEscaping::normalizedContentFromLiteralOrIri(
             std::move(entity.value()));
@@ -159,6 +172,11 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     }
     case Datatype::LocalVocabIndex: {
       std::string word = localVocab.getWord(id.getLocalVocabIndex());
+      if constexpr (onlyReturnLiterals) {
+        if (!word.starts_with('"')) {
+          return std::nullopt;
+        }
+      }
       if constexpr (removeQuotesAndAngleBrackets) {
         word = RdfEscaping::normalizedContentFromLiteralOrIri(std::move(word));
       }
@@ -173,7 +191,13 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
 }
 // ___________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>
-ExportQueryExecutionTrees::idToStringAndType<true, std::identity>(
+ExportQueryExecutionTrees::idToStringAndType<true, false, std::identity>(
+    const Index& index, Id id, const LocalVocab& localVocab,
+    std::identity&& escapeFunction);
+
+// ___________________________________________________________________________
+template std::optional<std::pair<std::string, const char*>>
+ExportQueryExecutionTrees::idToStringAndType<true, true, std::identity>(
     const Index& index, Id id, const LocalVocab& localVocab,
     std::identity&& escapeFunction);
 
