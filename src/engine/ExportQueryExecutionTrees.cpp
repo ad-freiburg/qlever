@@ -165,7 +165,7 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
         }
       }
       if constexpr (removeQuotesAndAngleBrackets) {
-        entity.value() = RdfEscaping::normalizedContentFromLiteralOrIri(
+        entity = RdfEscaping::normalizedContentFromLiteralOrIri(
             std::move(entity.value()));
       }
       return std::pair{escapeFunction(std::move(entity.value())), nullptr};

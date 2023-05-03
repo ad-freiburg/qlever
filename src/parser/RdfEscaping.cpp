@@ -159,7 +159,7 @@ std::string unescapeNewlinesAndBackslashes(std::string_view literal) {
 
 // ____________________________________________________________________________
 std::string escapeNewlinesAndBackslashes(std::string_view literal) {
-  return absl::StrReplaceAll(literal, {{"\n", "\\n"}, {"\\", "\\\\"}});
+  return absl::StrReplaceAll(literal, {{"\n", "\\n"}, {R"(\)", R"(\\)"}});
 }
 
 // ________________________________________________________________________
@@ -207,7 +207,7 @@ std::string validRDFLiteralFromNormalized(std::string_view normLiteral) {
   std::string_view normalizedContent = normLiteral.substr(1, posLastQuote - 1);
   std::string content = absl::StrReplaceAll(
       normalizedContent,
-      {{"\\", "\\\\"}, {"\n", "\\n"}, {"\r", "\\r"}, {"\"", "\\\""}});
+      {{R"(\)", R"(\\)"}, {"\n", "\\n"}, {"\r", "\\r"}, {R"(")", R"(\")"}});
   return absl::StrCat("\"", content, normLiteral.substr(posLastQuote));
 }
 
