@@ -1142,7 +1142,7 @@ queries:
       SELECT * WHERE {
           ?s <Profession> <Scientist> .
           ?s <is-a> <Person> .
-          FILTER regex(?s, "^[a-z]*_[a-z]*stein[a-z]*$", "i")
+          FILTER regex(STR(?s), "^[a-z]*_[a-z]*stein[a-z]*$", "i")
       }
     checks:
       - num_rows: 68
