@@ -132,3 +132,22 @@ TEST(AlgorithmTest, removeDuplicates) {
   ASSERT_EQ(ad_utility::removeDuplicates(std::vector<int>{}),
             (std::vector<int>{}));
 };
+
+// _____________________________________________________________________________
+TEST(AlgorithmTest, ZipVectors) {
+  // Vectors of different size are not allowed.
+  ASSERT_ANY_THROW(
+      zipVectors(std::vector<size_t>{1}, std::vector<size_t>{1, 2}));
+
+  // Do a simple test.
+  std::vector<char> charVector{'a', 'b', 'c'};
+  std::vector<float> floatVector{4.0, 4.1, 4.2};
+  const auto& combinedVector = zipVectors(charVector, floatVector);
+
+  for (size_t i = 0; i < charVector.size(); i++) {
+    ASSERT_EQ(charVector.at(i), combinedVector.at(i).first);
+  }
+  for (size_t i = 0; i < charVector.size(); i++) {
+    ASSERT_FLOAT_EQ(floatVector.at(i), combinedVector.at(i).second);
+  }
+};

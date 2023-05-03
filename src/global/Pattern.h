@@ -48,37 +48,7 @@ struct Pattern {
 
   const_iterator end() const { return {this, size()}; }
 
-  bool operator==(const Pattern& other) const {
-    if (size() != other.size()) {
-      return false;
-    }
-    for (size_t i = 0; i < size(); i++) {
-      if (other._data[i] != _data[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  bool operator<(const Pattern& other) const {
-    if (size() == 0) {
-      return true;
-    }
-    if (other.size() == 0) {
-      return false;
-    }
-    return _data[0] < other._data[0];
-  }
-
-  bool operator>(const Pattern& other) const {
-    if (other.size() == 0) {
-      return true;
-    }
-    if (size() == 0) {
-      return false;
-    }
-    return _data[0] > other._data[0];
-  }
+  bool operator==(const Pattern& other) const = default;
 
   size_t size() const { return _data.size(); }
 
@@ -88,7 +58,7 @@ struct Pattern {
 
   const_ref back() const { return _data.back(); }
   ref back() { return _data.back(); }
-  bool empty() { return _data.empty(); }
+  bool empty() const { return _data.empty(); }
 
   const value_type* data() const { return _data.data(); }
 
@@ -276,8 +246,8 @@ cppcoro::generator<typename CompactVectorOfStrings<DataT>::vector_type>
 CompactVectorOfStrings<DataT>::diskIterator(string filename) {
   ad_utility::File dataFile{filename, "r"};
   ad_utility::File indexFile{filename, "r"};
-  AD_CONTRACT_CHECK(dataFile.isOpen());
-  AD_CONTRACT_CHECK(indexFile.isOpen());
+  AD_CORRECTNESS_CHECK(dataFile.isOpen());
+  AD_CORRECTNESS_CHECK(indexFile.isOpen());
 
   const size_t dataSizeInBytes = [&]() {
     size_t dataSize;
@@ -316,13 +286,3 @@ struct hash<Pattern> {
   }
 };
 }  // namespace std
-
-inline std::ostream& operator<<(std::ostream& o, const Pattern& p) {
-  for (size_t i = 0; i + 1 < p.size(); i++) {
-    o << p[i] << ", ";
-  }
-  if (p.size() > 0) {
-    o << p[p.size() - 1];
-  }
-  return o;
-}

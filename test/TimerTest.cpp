@@ -2,6 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "util/Timer.h"
@@ -123,14 +124,14 @@ TEST(TimeoutTimer, Limited) {
   }
 }
 
-TEST(TimeBlockAndLock, TimeBlockAndLock) {
+TEST(TimeBlockAndLog, TimeBlockAndLog) {
   std::string s;
   {
     auto callback = [&s](size_t msecs, std::string_view message) {
       s = absl::StrCat(message, ": ", msecs);
     };
     ad_utility::TimeBlockAndLog t{"message", callback};
-    std::this_thread::sleep_for(10ms);
+    std::this_thread::sleep_for(25ms);
   }
-  ASSERT_EQ("message: 10", s);
+  ASSERT_THAT(s, ::testing::MatchesRegex("message: 2[5-9]"));
 }

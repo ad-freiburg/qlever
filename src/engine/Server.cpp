@@ -260,7 +260,7 @@ Awaitable<void> Server::process(
 
   // Check the access token. If an access token is provided and the check fails,
   // throw an exception and do not process any part of the query (even if the
-  // processing would have been allowed without access token).
+  // processing had been allowed without access token).
   auto accessToken = checkParameter("access-token", std::nullopt);
   bool accessTokenOk = false;
   if (accessToken) {
@@ -271,7 +271,8 @@ Awaitable<void> Server::process(
       throw std::runtime_error(absl::StrCat(
           accessTokenProvidedMsg,
           " but server was started without --access-token", requestIgnoredMsg));
-    } else if (accessToken != accessToken_) {
+    } else if (!ad_utility::constantTimeEquals(accessToken.value(),
+                                               accessToken_)) {
       throw std::runtime_error(absl::StrCat(
           accessTokenProvidedMsg, " but not correct", requestIgnoredMsg));
     } else {
