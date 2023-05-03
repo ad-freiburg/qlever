@@ -158,7 +158,7 @@ RegexExpression::RegexExpression(
 string RegexExpression::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   return "REGEX expression " + child_->getCacheKey(varColMap) + " with " +
-         regexAsString_;
+         regexAsString_ + "str:" + std::to_string(childIsStrExpression_);
 }
 
 // ___________________________________________________________________________
