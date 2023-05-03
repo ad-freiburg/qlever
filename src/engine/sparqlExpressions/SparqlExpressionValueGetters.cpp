@@ -70,7 +70,7 @@ string StringValueGetter::operator()(Id id, EvaluationContext* context) const {
 
 // ____________________________________________________________________________
 std::optional<string> LiteralFromIdGetter::operator()(
-    ValueId id, sparqlExpression::EvaluationContext* context) const {
+    ValueId id, const sparqlExpression::EvaluationContext* context) const {
   auto optionalStringAndType =
       ExportQueryExecutionTrees::idToStringAndType<true, true>(
           context->_qec.getIndex(), id, context->_localVocab);

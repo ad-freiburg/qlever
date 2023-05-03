@@ -95,7 +95,7 @@ struct StringValueGetter {
 };
 
 struct LiteralFromIdGetter {
-  std::optional<string> operator()(ValueId, EvaluationContext*) const;
+  std::optional<string> operator()(ValueId, const EvaluationContext*) const;
 };
 
 }  // namespace sparqlExpression::detail
