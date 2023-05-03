@@ -89,6 +89,10 @@ class BmUnsortedAndSortedIdTable : public BenchmarkInterface {
   size_t numberColumns_;
 
  public:
+  std::string name() const override {
+    return "Basic benchmarks, for which I had no time to delete yet.";
+  }
+
   /*
   Sets the amount of rows and columns based on the configuration options
   `numberRows_` and `numberColumns_`.
@@ -832,13 +836,18 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 };
 
 /*
-Create benchmark tables, where the smaller table stays at the same ount of
+Create benchmark tables, where the smaller table stays at the same amount of
 rows and the bigger tables keeps getting bigger. Amount of columns stays the
 same.
 */
 class BmOnlyBiggerTableSizeChanges final
     : public GeneralInterfaceImplementation {
  public:
+  std::string name() const override {
+    return "Benchmarktables, where the smaller table stays at the same amount "
+           "of rows and the bigger tables keeps getting bigger.";
+  }
+
   BenchmarkResults runAllBenchmarks() override {
     BenchmarkResults results{};
 
@@ -923,6 +932,11 @@ class BmOnlyBiggerTableSizeChanges final
 class BmOnlySmallerTableSizeChanges final
     : public GeneralInterfaceImplementation {
  public:
+  std::string name() const override {
+    return "Benchmarktables, where the smaller table grows and the ratio "
+           "between tables stays the same.";
+  }
+
   BenchmarkResults runAllBenchmarks() override {
     BenchmarkResults results{};
 
@@ -1014,6 +1028,11 @@ class BmOnlySmallerTableSizeChanges final
 // both just get more rows.
 class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
  public:
+  std::string name() const override {
+    return "Benchmarktables, where the tables are the same size and both just "
+           "get more rows.";
+  }
+
   BenchmarkResults runAllBenchmarks() override {
     BenchmarkResults results{};
 
