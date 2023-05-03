@@ -147,17 +147,22 @@ ResultTable::operator std::string() const {
   // to only combine them at the end.
   std::string prefix = absl::StrCat("Table '", descriptor_, "'\n");
 
+  // It's allowed to have tables without rows. In that case, we are already
+  // done, because there is no table content to print.
+  if (numRows() == 0) {
+    // In the case of no metadata, we don't need the line break at the end of
+    // the prefix.
+    return absl::StrCat(
+        prefix.substr(0, prefix.size() - 1),
+        addIndentation(getMetadataPrettyString(metadata(), "\nmetadata: ", ""),
+                       1));
+  }
+
   // For printing the table.
   std::ostringstream stream;
 
   // Adding the metadata.
   stream << getMetadataPrettyString(metadata(), "metadata: ", "\n");
-
-  // It's allowed to have tables without rows. In that case, we are already
-  // done, because there is no table content to print.
-  if (numRows() == 0) {
-    return absl::StrCat(prefix, addIndentation(stream.str(), 1));
-  }
 
   // For easier usage.
   const size_t numberColumns = columnNames_.size();
