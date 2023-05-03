@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <ctime>
+#include <string_view>
 #include <tuple>
 #include <type_traits>
 
@@ -527,7 +528,7 @@ static ResultTable& makeGrowingBenchmarkTable(
     the given type ISN'T a function, of which there are only two possible
     types for, while inside this function: `float` and `size_t`.
     */
-    if constexpr (std::is_integral_v<T>) {
+    if constexpr (std::is_arithmetic_v<T>) {
       return false;
     } else {
       return true;
@@ -616,6 +617,33 @@ static ResultTable& makeGrowingBenchmarkTable(
 }
 
 /*
+@brief Verifies, that all the function measurements in a benchmark table row are
+lower than a maximal time value.
+*/
+static bool checkIfFunctionMeasurementOfRowUnderMaxtime(
+    const ResultTable& table, const size_t& row, const float& maxTime) {
+  // Check if the time limit was followed, for a single column.
+  auto checkTime = [&maxTime, &row, &table](const size_t& column) {
+    return table.getEntry<float>(row, column) <= maxTime;
+  };
+
+  // We measure the functions in column 0, 1 and 3.
+  return checkTime(0) && checkTime(1) && checkTime(3);
+}
+
+/*
+@brief Calculates the smalles whole exponent, so that $base^n$ is equal, or
+bigger, than the `startingPoint`.
+*/
+static size_t calculateNextWholeExponent(const size_t& base,
+                                         const auto& startingPoint) {
+  // This is a rather simple calculation: We calculate
+  // $log_(base)(startingPoint)$ and round up.
+  return static_cast<size_t>(
+      std::ceil(std::log(startingPoint) / std::log(base)));
+}
+
+/*
  * @brief Returns a vector of exponents $base^x$, with $x$ being a natural
  * number and $base^x$ being all possible numbers of this type in a given
  * range.
@@ -630,7 +658,8 @@ static ResultTable& makeGrowingBenchmarkTable(
  * `stoppingPoint < base^(i+n+1)`.
  */
 static std::vector<size_t> createExponentVectorUntilSize(
-    const size_t base, const size_t startingPoint, const size_t stoppingPoint) {
+    const size_t& base, const size_t& startingPoint,
+    const size_t& stoppingPoint) {
   // Quick check, if the given arguments make sense.
   AD_CONTRACT_CHECK(startingPoint <= stoppingPoint);
 
@@ -643,7 +672,7 @@ static std::vector<size_t> createExponentVectorUntilSize(
   than `startingPoint`.
   */
   size_t currentExponent = static_cast<size_t>(
-      std::pow(base, std::ceil(std::log(startingPoint) / std::log(base))));
+      std::pow(base, calculateNextWholeExponent(base, startingPoint)));
 
   // The rest of the exponents.
   while (currentExponent <= stoppingPoint) {
@@ -711,6 +740,12 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   size_t minRatioRows_;
   // The maximal row ratio between the smaller and the bigger `IdTable`.
   size_t maxRatioRows_;
+
+  /*
+  The maximal amount of time, any function measurement is allowed to take. Will
+  only have a value, if the configuration option was set.
+  */
+  std::optional<float> maxTimeSingleMeasurement_;
 
  public:
   void parseConfiguration(const BenchmarkConfiguration& config) final {
@@ -790,6 +825,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       maxBiggerTableRows_ =
           (maxMemoryInMB.value() * 1000000) / memoryPerRowInByte;
     }
+
+    maxTimeSingleMeasurement_ =
+        config.getValueByNestedKeys<float>("maxTimeSingleMeasurement");
   }
 };
 
@@ -819,17 +857,45 @@ class BmOnlyBiggerTableSizeChanges final
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
-        ResultTable& table = makeBenchmarkTable(
-            &results,
+        const std::string& tableName =
             absl::StrCat("Smaller table stays at ", smallerTableAmountRows_,
-                         " rows, ratio to rows of", " bigger table grows."),
-            overlapChance_, smallerTableSorted, biggerTableSorted, ratioRows,
-            smallerTableAmountRows_, smallerTableAmountColumns_,
-            biggerTableAmountColumns_);
+                         " rows, ratio to rows of bigger table grows.");
+
+        // We have to call different functions depending on if there was a max
+        // time limit to a single measurement.
+        ResultTable* table;
+        if (!maxTimeSingleMeasurement_.has_value()) {
+          table = &makeBenchmarkTable(
+              &results, tableName, overlapChance_, smallerTableSorted,
+              biggerTableSorted, ratioRows, smallerTableAmountRows_,
+              smallerTableAmountColumns_, biggerTableAmountColumns_);
+        } else {
+          table = &makeGrowingBenchmarkTable(
+              &results, tableName,
+              [maxTime{maxTimeSingleMeasurement_.value()}](
+                  const ResultTable& table) {
+                // If the tables has no rows, that's an automatic pass.
+                if (table.numRows() == 0) {
+                  return true;
+                }
+
+                // Did any measurement take to long in the newest row?
+                return checkIfFunctionMeasurementOfRowUnderMaxtime(
+                    table, table.numRows() - 1, static_cast<float>(maxTime));
+              },
+              overlapChance_, smallerTableSorted, biggerTableSorted,
+              [this](const size_t& row) -> size_t {
+                static size_t startingExponent = calculateNextWholeExponent(
+                    2, minBiggerTableRows_ / smallerTableAmountRows_);
+                return std::pow(2, startingExponent + row);
+              },
+              smallerTableAmountRows_, smallerTableAmountColumns_,
+              biggerTableAmountColumns_);
+        }
 
         // Add the metadata, that changes with every call and can't be
         // generalized.
-        BenchmarkMetadata& meta = table.metadata();
+        BenchmarkMetadata& meta = table->metadata();
         meta.addKeyValuePair("smallerTableSorted", smallerTableSorted);
         meta.addKeyValuePair("biggerTableSorted", biggerTableSorted);
       }
@@ -866,32 +932,60 @@ class BmOnlySmallerTableSizeChanges final
         // We also make multiple tables for different row ratios.
         for (const size_t ratioRows :
              createExponentVectorUntilSize(10, minRatioRows_, maxRatioRows_)) {
-          /*
-          We got the fixed ratio and the variable amount of rows for the bigger
-          table. Those can be used to calculate the number of rows in the
-          smaller table needed for a benchmark table, that has those values.
-          */
-          const std::vector<size_t> smallerTableAmountRows{
-              ad_utility::transform(
-                  createExponentVectorUntilSize(10, minBiggerTableRows_,
-                                                maxBiggerTableRows_),
-                  [&ratioRows](const size_t& number) {
-                    return number / ratioRows;
-                  })};
+          const std::string& tableName = absl::StrCat(
+              "The amount of rows in the smaller table grows and the ratio, to "
+              "the amount of rows in the bigger table, stays at ",
+              ratioRows, ".");
 
-          ResultTable& table = makeBenchmarkTable(
-              &results,
-              absl::StrCat("The amount of rows in ",
-                           "the smaller table grows and the ratio, to the ",
-                           "amount of rows in the bigger table, stays at ",
-                           ratioRows, "."),
-              overlapChance_, smallerTableSorted, biggerTableSorted, ratioRows,
-              smallerTableAmountRows, smallerTableAmountColumns_,
-              biggerTableAmountColumns_);
+          // We have to call different functions depending on if there was a max
+          // time limit to a single measurement.
+          ResultTable* table;
+          if (!maxTimeSingleMeasurement_.has_value()) {
+            /*
+            We got the fixed ratio and the variable amount of rows for the
+            bigger table. Those can be used to calculate the number of rows in
+            the smaller table needed for a benchmark table, that has those
+            values.
+            */
+            const std::vector<size_t> smallerTableAmountRows{
+                ad_utility::transform(
+                    createExponentVectorUntilSize(10, minBiggerTableRows_,
+                                                  maxBiggerTableRows_),
+                    [&ratioRows](const size_t& number) {
+                      return number / ratioRows;
+                    })};
+
+            table = &makeBenchmarkTable(
+                &results, tableName, overlapChance_, smallerTableSorted,
+                biggerTableSorted, ratioRows, smallerTableAmountRows,
+                smallerTableAmountColumns_, biggerTableAmountColumns_);
+          } else {
+            table = &makeGrowingBenchmarkTable(
+                &results, tableName,
+                [maxTime{maxTimeSingleMeasurement_.value()}](
+                    const ResultTable& table) {
+                  // If the tables has no rows, that's an automatic pass.
+                  if (table.numRows() == 0) {
+                    return true;
+                  }
+
+                  // Did any measurement take to long in the newest row?
+                  return checkIfFunctionMeasurementOfRowUnderMaxtime(
+                      table, table.numRows() - 1, static_cast<float>(maxTime));
+                },
+                overlapChance_, smallerTableSorted, biggerTableSorted,
+                ratioRows,
+                [this, &ratioRows](const size_t& row) -> size_t {
+                  static size_t startingExponent = calculateNextWholeExponent(
+                      2, minBiggerTableRows_ / ratioRows);
+                  return std::pow(2, startingExponent + row);
+                },
+                smallerTableAmountColumns_, biggerTableAmountColumns_);
+          }
 
           // Add the metadata, that changes with every call and can't be
           // generalized.
-          BenchmarkMetadata& meta = table.metadata();
+          BenchmarkMetadata& meta = table->metadata();
           meta.addKeyValuePair("ratioRows", ratioRows);
           meta.addKeyValuePair("smallerTableSorted", smallerTableSorted);
           meta.addKeyValuePair("biggerTableSorted", biggerTableSorted);
@@ -931,17 +1025,44 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
-        ResultTable& table = makeBenchmarkTable(
-            &results,
-            "Both tables always have the same amount"
-            "of rows and that amount grows.",
-            overlapChance_, smallerTableSorted, biggerTableSorted,
-            static_cast<size_t>(1), smallerTableAmountRows,
-            smallerTableAmountColumns_, biggerTableAmountColumns_);
+        constexpr std::string_view tableName =
+            "Both tables always have the same amount of rows and that amount "
+            "grows.";
 
+        // We have to call different functions depending on if there was a max
+        // time limit to a single measurement.
+        ResultTable* table;
+        if (!maxTimeSingleMeasurement_.has_value()) {
+          table = &makeBenchmarkTable(
+              &results, tableName, overlapChance_, smallerTableSorted,
+              biggerTableSorted, static_cast<size_t>(1), smallerTableAmountRows,
+              smallerTableAmountColumns_, biggerTableAmountColumns_);
+        } else {
+          table = &makeGrowingBenchmarkTable(
+              &results, tableName,
+              [maxTime{maxTimeSingleMeasurement_.value()}](
+                  const ResultTable& table) {
+                // If the tables has no rows, that's an automatic pass.
+                if (table.numRows() == 0) {
+                  return true;
+                }
+
+                // Did any measurement take to long in the newest row?
+                return checkIfFunctionMeasurementOfRowUnderMaxtime(
+                    table, table.numRows() - 1, static_cast<float>(maxTime));
+              },
+              overlapChance_, smallerTableSorted, biggerTableSorted,
+              static_cast<size_t>(1),
+              [this](const size_t& row) -> size_t {
+                static size_t startingExponent =
+                    calculateNextWholeExponent(2, minBiggerTableRows_);
+                return std::pow(2, startingExponent + row);
+              },
+              smallerTableAmountColumns_, biggerTableAmountColumns_);
+        }
         // Add the metadata, that changes with every call and can't be
         // generalized.
-        BenchmarkMetadata& meta = table.metadata();
+        BenchmarkMetadata& meta = table->metadata();
         meta.addKeyValuePair("smallerTableSorted", smallerTableSorted);
         meta.addKeyValuePair("biggerTableSorted", biggerTableSorted);
       }
