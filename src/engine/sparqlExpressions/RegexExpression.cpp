@@ -173,37 +173,55 @@ ExpressionResult RegexExpression::evaluate(
   AD_CONTRACT_CHECK(variablePtr);
 
   if (auto prefixRegex = std::get_if<std::string>(&regex_)) {
-    auto prefixRange =
-        context->_qec.getIndex().getVocab().prefix_range(*prefixRegex);
-    Id lowerId = Id::makeFromVocabIndex(prefixRange.first);
-    Id upperId = Id::makeFromVocabIndex(prefixRange.second);
+    std::vector<std::string> actualPrefixes;
+    actualPrefixes.push_back("\"" + *prefixRegex);
+    if (childIsStrExpression) {
+      actualPrefixes.push_back("<" + *prefixRegex);
+    }
+    std::vector<ad_utility::SetOfIntervals> resultSetOfIntervals;
+    std::vector<std::pair<Id, Id>> lowerAndUpperIds;
+    for (const auto& prefix : actualPrefixes) {
+      auto prefixRange =
+          context->_qec.getIndex().getVocab().prefix_range(prefix);
+      Id lowerId = Id::makeFromVocabIndex(prefixRange.first);
+      Id upperId = Id::makeFromVocabIndex(prefixRange.second);
+      lowerAndUpperIds.emplace_back(lowerId, upperId);
+    }
     auto beg = context->_inputTable.begin() + context->_beginIndex;
     auto end = context->_inputTable.begin() + context->_endIndex;
     AD_CONTRACT_CHECK(end <= context->_inputTable.end());
     if (context->isResultSortedBy(*variablePtr)) {
       auto column = context->getColumnIndexForVariable(*variablePtr);
-      auto lower = std::lower_bound(
-          beg, end, nullptr, [column, lowerId](const auto& l, const auto&) {
-            return l[column] < lowerId;
-          });
-      auto upper = std::lower_bound(
-          beg, end, nullptr, [column, upperId](const auto& l, const auto&) {
-            return l[column] < upperId;
-          });
+      for (auto [lowerId, upperId] : lowerAndUpperIds) {
+        auto lower = std::lower_bound(
+            beg, end, nullptr, [column, lowerId](const auto& l, const auto&) {
+              return l[column] < lowerId;
+            });
+        auto upper = std::lower_bound(
+            beg, end, nullptr, [column, upperId](const auto& l, const auto&) {
+              return l[column] < upperId;
+            });
 
-      // Return the empty result as an empty `SetOfIntervals` instead of as an
-      // empty range.
-      if (lower == upper) {
-        return ad_utility::SetOfIntervals{};
+        // Return the empty result as an empty `SetOfIntervals` instead of as an
+        // empty range.
+        if (lower != upper) {
+          resultSetOfIntervals.push_back(
+              ad_utility::SetOfIntervals{{{lower - beg, upper - beg}}});
+        }
       }
-      return ad_utility::SetOfIntervals{{{lower - beg, upper - beg}}};
+      return std::reduce(
+          resultSetOfIntervals.begin(), resultSetOfIntervals.end(),
+          ad_utility::SetOfIntervals{}, ad_utility::SetOfIntervals::Union{});
     } else {
       auto resultSize = context->size();
       VectorWithMemoryLimit<Bool> result{context->_allocator};
       result.reserve(resultSize);
       for (auto id : detail::makeGenerator(*variablePtr, resultSize, context)) {
-        result.push_back(!valueIdComparators::compareByBits(id, lowerId) &&
-                         valueIdComparators::compareByBits(id, upperId));
+        result.push_back(
+            std::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
+              return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
+                     valueIdComparators::compareByBits(id, lowerUpper.second);
+            }));
       }
       return result;
     }

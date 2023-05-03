@@ -147,15 +147,15 @@ TEST(RegexExpression, unorderedPrefixRegexUnorderedColumn) {
   auto test = testPrefixRegexUnorderedColumn;
   // ?vocab column is `"Beta", "alpha", "älpha"
   // ?mixed column is `1, -0.1, A`
-  test("?vocab", "^\"Be", {true, false, false});
+  test("?vocab", "^Be", {true, false, false});
   // Prefix filters are currently always case-insensitive.
-  test("?vocab", "^\"be", {true, false, false});
+  test("?vocab", "^be", {true, false, false});
   // Prefix filters currently always work on the primary level, where `a` and
   // `ä` are considered equal.
-  test("?vocab", "^\"al", {false, true, true});
-  test("?vocab", "^\"äl", {false, true, true});
+  test("?vocab", "^al", {false, true, true});
+  test("?vocab", "^äl", {false, true, true});
 
-  test("?vocab", "^\"c", {false, false, false});
+  test("?vocab", "^c", {false, false, false});
 }
 
 auto testPrefixRegexOrderedColumn = [](std::string variableAsString,
@@ -178,14 +178,14 @@ TEST(RegexExpression, prefixRegexOrderedColumn) {
   // Sorted order (by bits of the valueIds):
   // ?vocab column is  "alpha", "älpha", "Beta"
   // ?mixed column is `1, -0.1, A`
-  test("?vocab", "^\"Be", {{{2, 3}}});
+  test("?vocab", "^Be", {{{2, 3}}});
   // Prefix filters are currently always case-insensitive.
-  test("?vocab", "^\"be", {{{2, 3}}});
+  test("?vocab", "^be", {{{2, 3}}});
   // Prefix filters currently always work on the primary level, where `a` and
   // `ä` are considered equal.
-  test("?vocab", "^\"al", {{{0, 2}}});
-  test("?vocab", "^\"äl", {{{0, 2}}});
-  test("?vocab", "^\"c", {});
+  test("?vocab", "^al", {{{0, 2}}});
+  test("?vocab", "^äl", {{{0, 2}}});
+  test("?vocab", "^c", {});
 }
 
 TEST(RegexExpression, getCacheKey) {
