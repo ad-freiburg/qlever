@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/string_view.h>
@@ -13,6 +11,7 @@
 #include <sstream>
 #include <string_view>
 
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
@@ -213,16 +212,15 @@ void ResultTable::addRow(std::string_view rowName) {
 }
 
 // ____________________________________________________________________________
-size_t ResultTable::numRows() const { return entries_.size(); }
+size_t ResultTable::numRows() const { return rowNames_.size(); }
 
 // ____________________________________________________________________________
 size_t ResultTable::numColumns() const {
   /*
-  If nobody played around with the private member variables, every row
-  should have the same amount of columns and there should be AT LEAST one row,
-  and one column. So we can just return the length of the first row.
+  If nobody played around with the private member variables, the amount of
+  column names always implies the amount of columns.
   */
-  return entries_.at(0).size();
+  return columnNames_.size();
 }
 
 // ____________________________________________________________________________
