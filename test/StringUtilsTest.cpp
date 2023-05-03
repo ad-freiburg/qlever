@@ -6,6 +6,7 @@
 
 #include "util/StringUtils.h"
 
+using ad_utility::constantTimeEquals;
 using ad_utility::getLowercaseUtf8;
 using ad_utility::getUTF8Substring;
 
@@ -46,4 +47,15 @@ TEST(StringUtilsTest, getUTF8Substring) {
   // start+size > number of codepoints
   ASSERT_EQ("Apfelsaft", getUTF8Substring("Apfelsaft", 0, 100));
   ASSERT_EQ("\u00A9", getUTF8Substring("\u2702\u231A\u00A9", 2, 2));
+}
+
+// It should just work like the == operator for strings, just without
+// the typical short circuit optimization
+TEST(StringUtilsTest, constantTimeEquals) {
+  EXPECT_TRUE(constantTimeEquals("", ""));
+  EXPECT_TRUE(constantTimeEquals("Abcdefg", "Abcdefg"));
+  EXPECT_FALSE(constantTimeEquals("Abcdefg", "abcdefg"));
+  EXPECT_FALSE(constantTimeEquals("", "Abcdefg"));
+  EXPECT_FALSE(constantTimeEquals("Abcdefg", ""));
+  EXPECT_FALSE(constantTimeEquals("Abc", "defg"));
 }
