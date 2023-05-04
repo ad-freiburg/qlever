@@ -67,28 +67,15 @@ nlohmann::json benchmarkResultsToJson(
 }
 
 // ___________________________________________________________________________
-nlohmann::json zipGeneralMetadataAndBenchmarkResultsToJson(
-    const std::vector<std::pair<BenchmarkMetadata, BenchmarkResults>>&
-        generalMetadataAndBenchmarkResults) {
+nlohmann::json zipBenchmarkClassAndBenchmarkResultsToJson(
+    const std::vector<std::pair<const BenchmarkInterface*, BenchmarkResults>>&
+        benchmarkClassAndBenchmarkResults) {
   return transformIntoJsonArray(
-      generalMetadataAndBenchmarkResults, [](const auto& pair) {
-        return nlohmann::json{{"general metadata", pair.first},
+      benchmarkClassAndBenchmarkResults, [](const auto& pair) {
+        return nlohmann::json{{"name", pair.first->name()},
+                              {"general metadata", pair.first->getMetadata()},
                               {"measurements", pair.second}};
       });
 }
 
-// ___________________________________________________________________________
-nlohmann::json zipGeneralMetadataAndBenchmarkResultsToJson(
-    const std::vector<BenchmarkMetadata>& generalMetadata,
-    const std::vector<BenchmarkResults>& benchmarkResults) {
-  // We can just pass this, after transforming it.
-  std::vector<std::pair<BenchmarkMetadata, BenchmarkResults>> vectorsPairedUp{};
-  vectorsPairedUp.reserve(generalMetadata.size());
-
-  std::ranges::transform(generalMetadata, benchmarkResults,
-                         std::back_inserter(vectorsPairedUp),
-                         [](auto& a, auto& b) { return std::make_pair(a, b); });
-
-  return zipGeneralMetadataAndBenchmarkResultsToJson(vectorsPairedUp);
-}
 }  // namespace ad_benchmark

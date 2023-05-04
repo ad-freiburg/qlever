@@ -19,14 +19,11 @@ using std::string;
 // Helper class to store static properties of the different permutations to
 // avoid code duplication. The first template parameter is a search functor for
 // STXXL.
-template <class Comparator, class MetaDataT>
 class PermutationImpl {
  public:
-  using MetaData = MetaDataT;
-  PermutationImpl(const Comparator& comp, string name, string suffix,
-                  array<unsigned short, 3> order)
-      : _comp(comp),
-        _readableName(std::move(name)),
+  using MetaData = IndexMetaDataMmapView;
+  PermutationImpl(string name, string suffix, array<unsigned short, 3> order)
+      : _readableName(std::move(name)),
         _fileSuffix(std::move(suffix)),
         _keyOrder(order) {}
 
@@ -104,8 +101,6 @@ class PermutationImpl {
   // _______________________________________________________
   void setKbName(const string& name) { _meta.setName(name); }
 
-  // stxxl comparison functor
-  const Comparator _comp;
   // for Log output, e.g. "POS"
   const std::string _readableName;
   // e.g. ".pos"
@@ -124,13 +119,5 @@ class PermutationImpl {
 
   bool _isLoaded = false;
 };
-
-// Type aliases for the 6 permutations used by QLever
-using POS_T = PermutationImpl<SortByPOS, IndexMetaDataHmap>;
-using PSO_T = PermutationImpl<SortByPSO, IndexMetaDataHmap>;
-using SOP_T = Permutation::PermutationImpl<SortBySOP, IndexMetaDataMmapView>;
-using SPO_T = PermutationImpl<SortBySPO, IndexMetaDataMmapView>;
-using OPS_T = PermutationImpl<SortByOPS, IndexMetaDataMmapView>;
-using OSP_T = PermutationImpl<SortByOSP, IndexMetaDataMmapView>;
 
 }  // namespace Permutation

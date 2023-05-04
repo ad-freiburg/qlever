@@ -45,6 +45,7 @@ class Index {
     size_t normal_;
     size_t internal_;
     size_t normalAndInternal_() const { return normal_ + internal_; }
+    bool operator==(const NumNormalAndInternal&) const = default;
   };
 
   /// Forbid copy and assignment.

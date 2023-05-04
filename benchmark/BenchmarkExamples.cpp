@@ -31,6 +31,8 @@ Using the functions described there would require including
 // Single Measurements
 class BMSingleMeasurements : public BenchmarkInterface {
  public:
+  std::string name() const final { return "Example for single measurements"; }
+
   void parseConfiguration(const BenchmarkConfiguration&) final {
     // Nothing to actually do here.
   }
@@ -75,6 +77,8 @@ class BMSingleMeasurements : public BenchmarkInterface {
 // Groups
 class BMGroups : public BenchmarkInterface {
  public:
+  std::string name() const final { return "Example for group benchmarks"; }
+
   void parseConfiguration(const BenchmarkConfiguration&) final {
     // Nothing to actually do here.
   }
@@ -106,10 +110,10 @@ class BMGroups : public BenchmarkInterface {
 
     // Measuring functions.
     auto& loopAddGroup = results.addGroup("loopAdd");
-    loopAddGroup.metadata().addKeyValuePair("Operator", '+');
+    loopAddGroup.metadata().addKeyValuePair("Operator", "+");
 
     auto& loopMultiplyGroup = results.addGroup("loopMultiply");
-    loopMultiplyGroup.metadata().addKeyValuePair("Operator", '*');
+    loopMultiplyGroup.metadata().addKeyValuePair("Operator", "*");
 
     auto& addMember1 =
         loopAddGroup.addMeasurement("1+1", [&loopAdd]() { loopAdd(1, 1); });
@@ -142,6 +146,8 @@ class BMGroups : public BenchmarkInterface {
 // Tables
 class BMTables : public BenchmarkInterface {
  public:
+  std::string name() const final { return "Example for table benchmarks"; }
+
   void parseConfiguration(const BenchmarkConfiguration&) final {
     // Nothing to actually do here.
   }
@@ -224,6 +230,10 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
   BenchmarkMetadata generalMetadata_;
 
  public:
+  std::string name() const final {
+    return "Example for the usage of configuration and metadata";
+  }
+
   void parseConfiguration(const BenchmarkConfiguration& config) final {
     // Collect some arbitrary values.
     std::string dateString{

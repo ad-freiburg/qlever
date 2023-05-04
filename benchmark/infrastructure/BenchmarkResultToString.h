@@ -12,27 +12,56 @@
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
+#include "BenchmarkMetadata.h"
 #include "util/json.h"
 
 namespace ad_benchmark {
+
+// How the indention should look like.
+static constexpr std::string_view outputIndentation = "    ";
+
 /*
  * @brief Add a string of the form
- * "
- *  #################
- *  # categoryTitle #
- *  #################
- *
- *  "
+ * "#################
+ * # categoryTitle #
+ * #################"
  *  to the stream.
  */
 void addCategoryTitleToOStringstream(std::ostringstream* stream,
                                      std::string_view categoryTitle);
 
+/*
+@brief Adds indention before the given string and directly after new line
+characters.
+
+@param indentionLevel How deep is the indention? `0` is no indention.
+*/
+std::string addIndentation(const std::string_view str,
+                           const size_t& indentationLevel);
+
+/*
+@brief If `meta` is a non empty metadata object, return it's non compact
+json string representation. Otherwise, return an empty string.
+
+@param prefix Will be printed before the json string.
+@param suffix Will be printed after the json string.
+*/
+std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
+                                    std::string_view prefix,
+                                    std::string_view suffix);
+
+/*
+@brief Add a vector of `ResultEntry` in their string form to the string stream
+in form of a list.
+
+@param vectorEntryPrefix A prefix added before every entry in the vector.
+@param newLinePrefix A prefix added before the start of a new line.
+*/
 // Default way of adding a vector of ResultEntrys to a `ostringstream` with
-// optional prefix.
+// optional prefix, which will be inserted at the start of every new line.
 void addVectorOfResultEntryToOStringstream(
     std::ostringstream* stream, const std::vector<ResultEntry>& entries,
-    const std::string& prefix = "");
+    const std::string& vectorEntryPrefix, const std::string& newLinePrefix);
 
 // Visualization for single measurments.
 void addSingleMeasurementsToOStringstream(
@@ -47,7 +76,9 @@ void addTablesToOStringstream(std::ostringstream* stream,
                               const std::vector<ResultTable>& resultTables);
 
 /*
- * @brief Returns a formated string containing all benchmark information.
+ * @brief Returns a formated string containing all the benchmark information.
  */
-std::string benchmarkResultsToString(const BenchmarkResults& results);
+std::string benchmarkResultsToString(
+    const BenchmarkInterface* const benchmarkClass,
+    const BenchmarkResults& results);
 }  // namespace ad_benchmark

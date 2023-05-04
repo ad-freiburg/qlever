@@ -262,13 +262,11 @@ void IndexScan::computeFullScan(IdTable* result,
   result->reserve(resultSize);
   auto table = std::move(*result).toStatic<3>();
   size_t i = 0;
+  const auto& permutationImpl =
+      getExecutionContext()->getIndex().getImpl().getPermutation(permutation);
   auto triplesView =
-      getExecutionContext()->getIndex().getImpl().applyToPermutation(
-          permutation, [&, ignoredRanges = ignoredRanges,
-                        isTripleIgnored = isTripleIgnored](const auto& p) {
-            return TriplesView(p, getExecutionContext()->getAllocator(),
-                               ignoredRanges, isTripleIgnored);
-          });
+      TriplesView(permutationImpl, getExecutionContext()->getAllocator(),
+                  ignoredRanges, isTripleIgnored);
   for (const auto& triple : triplesView) {
     if (i >= resultSize) {
       break;
