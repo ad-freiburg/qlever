@@ -157,8 +157,8 @@ RegexExpression::RegexExpression(
 // ___________________________________________________________________________
 string RegexExpression::getCacheKey(
     const VariableToColumnMap& varColMap) const {
-  return "REGEX expression " + child_->getCacheKey(varColMap) + " with " +
-         regexAsString_ + "str:" + std::to_string(childIsStrExpression_);
+  return absl::StrCat("REGEX expression ", child_->getCacheKey(varColMap),
+                      " with ", regexAsString_, "str:", childIsStrExpression_);
 }
 
 // ___________________________________________________________________________
@@ -183,9 +183,10 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
   std::vector<ad_utility::SetOfIntervals> resultSetOfIntervals;
   std::vector<std::pair<Id, Id>> lowerAndUpperIds;
   for (const auto& prefix : actualPrefixes) {
-    auto prefixRange = context->_qec.getIndex().getVocab().prefix_range(prefix);
-    Id lowerId = Id::makeFromVocabIndex(prefixRange.first);
-    Id upperId = Id::makeFromVocabIndex(prefixRange.second);
+    auto [lowerIndex, upperIndex] =
+        context->_qec.getIndex().getVocab().prefix_range(prefix);
+    Id lowerId = Id::makeFromVocabIndex(lowerIndex);
+    Id upperId = Id::makeFromVocabIndex(upperIndex);
     lowerAndUpperIds.emplace_back(lowerId, upperId);
   }
   auto beg = context->_inputTable.begin() + context->_beginIndex;
