@@ -60,7 +60,7 @@ inline std::vector<std::string> getAllIndexFilenames(
 // for the subclasses of `SparqlExpression`.
 // The concrete triple contents are currently used in `GroupByTest.cpp`.
 inline Index makeTestIndex(const std::string& indexBasename,
-                           std::string turtleInput = "") {
+                           std::string turtleInput = "", bool loadAllPermutations = true) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
@@ -86,6 +86,7 @@ inline Index makeTestIndex(const std::string& indexBasename,
   }
   Index index;
   index.setUsePatterns(true);
+  index.setLoadAllPermutations(loadAllPermutations);
   index.createFromOnDiskIndex(indexBasename);
   return index;
 }
@@ -94,7 +95,7 @@ inline Index makeTestIndex(const std::string& indexBasename,
 // build using `makeTestIndex` (see above). The index (most notably its
 // vocabulary) is the only part of the `QueryExecutionContext` that is actually
 // relevant for these tests, so the other members are defaulted.
-inline QueryExecutionContext* getQec(std::string turtleInput = "") {
+inline QueryExecutionContext* getQec(std::string turtleInput = "", bool loadAllPermutations = true) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -116,13 +117,15 @@ inline QueryExecutionContext* getQec(std::string turtleInput = "") {
             *index_, cache_.get(), makeAllocator(), SortPerformanceEstimator{});
   };
 
-  static ad_utility::HashMap<std::string, Context> contextMap;
+  static ad_utility::HashMap<std::pair<std::string, bool>, Context> contextMap;
 
-  if (!contextMap.contains(turtleInput)) {
+  auto key = std::pair{turtleInput, loadAllPermutations};
+
+  if (!contextMap.contains(key)) {
     std::string testIndexBasename =
         "_staticGlobalTestIndex" + std::to_string(contextMap.size());
     contextMap.emplace(
-        turtleInput, Context{TypeErasedCleanup{[testIndexBasename]() {
+        key, Context{TypeErasedCleanup{[testIndexBasename]() {
                                for (const std::string& indexFilename :
                                     getAllIndexFilenames(testIndexBasename)) {
                                  // Don't log when a file can't be deleted,
@@ -132,10 +135,10 @@ inline QueryExecutionContext* getQec(std::string turtleInput = "") {
                                }
                              }},
                              std::make_unique<Index>(
-                                 makeTestIndex(testIndexBasename, turtleInput)),
+                                 makeTestIndex(testIndexBasename, turtleInput, loadAllPermutations)),
                              std::make_unique<QueryResultCache>()});
   }
-  return contextMap.at(turtleInput).qec_.get();
+  return contextMap.at(key).qec_.get();
 }
 
 // Return a lambda that takes a string and converts it into an ID by looking

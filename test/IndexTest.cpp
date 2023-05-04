@@ -471,6 +471,8 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_EQ(subjects.normal_, 3);
   // All literals with language tags are added subjects.
   EXPECT_EQ(subjects.internal_, 1);
+  EXPECT_EQ(subjects, index.numDistinctCol0(Index::Permutation::SPO));
+  EXPECT_EQ(subjects, index.numDistinctCol0(Index::Permutation::SOP));
 
   auto predicates = index.numDistinctPredicates();
   EXPECT_EQ(predicates.normal_, 2);
@@ -478,14 +480,26 @@ TEST(IndexTest, NumDistinctEntities) {
   // each combination of predicate+language that is actually used (e.g.
   // `@en@label`).
   EXPECT_EQ(predicates.internal_, 2);
+  EXPECT_EQ(predicates, index.numDistinctCol0(Index::Permutation::PSO));
+  EXPECT_EQ(predicates, index.numDistinctCol0(Index::Permutation::POS));
 
   auto objects = index.numDistinctObjects();
   EXPECT_EQ(objects.normal_, 7);
   // One added object for each language that is used
   EXPECT_EQ(objects.internal_, 1);
+  EXPECT_EQ(objects, index.numDistinctCol0(Index::Permutation::OSP));
+  EXPECT_EQ(objects, index.numDistinctCol0(Index::Permutation::OPS));
 
   auto numTriples = index.numTriples();
   EXPECT_EQ(numTriples.normal_, 7);
   // Two added triples for each triple that has an object with a language tag.
   EXPECT_EQ(numTriples.internal_, 2);
+
+}
+
+TEST(IndexTest, NumDistinctEntitiesCornerCases) {
+  const IndexImpl& index = getQec("", false)->getIndex().getImpl();
+  AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctSubjects(), ::testing::ContainsRegex("if all 6"));
+  AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctObjects(), ::testing::ContainsRegex("if all 6"));
+  AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctCol0(static_cast<Index::Permutation>(42)), ::testing::ContainsRegex("should be unreachable"));
 }
