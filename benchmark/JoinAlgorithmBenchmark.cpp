@@ -840,6 +840,24 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     maxTimeSingleMeasurement_ =
         config.getValueByNestedKeys<float>("maxTimeSingleMeasurement");
   }
+
+  /*
+  @brief Add metadata information, that is always interessting, if it has been
+  set from outside:
+  - "maxTimeSingleMeasurement"
+  - Max. number of Rows in the bigger table, if it was set by giving an amount
+    of space in memory.
+  */
+  void addExternallySetConfiguration(BenchmarkMetadata* meta) const {
+    if (maxTimeSingleMeasurement_.has_value()) {
+      meta->addKeyValuePair("maxTimeSingleMeasurement",
+                            maxTimeSingleMeasurement_.value());
+    }
+
+    if (maxMemoryInMBWasGiven_) {
+      meta->addKeyValuePair("maxBiggerTableRows", maxBiggerTableRows_);
+    }
+  }
 };
 
 /*
@@ -981,6 +999,8 @@ class BmOnlyBiggerTableSizeChanges final
                          smallerTableAmountColumns_);
     meta.addKeyValuePair("biggerTableAmountColumns", biggerTableAmountColumns_);
 
+    GeneralInterfaceImplementation::addExternallySetConfiguration(&meta);
+
     return meta;
   }
 };
@@ -1073,6 +1093,8 @@ class BmOnlySmallerTableSizeChanges final
                          smallerTableAmountColumns_);
     meta.addKeyValuePair("biggerTableAmountColumns", biggerTableAmountColumns_);
 
+    GeneralInterfaceImplementation::addExternallySetConfiguration(&meta);
+
     return meta;
   }
 };
@@ -1145,6 +1167,8 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
     meta.addKeyValuePair("smallerTableAmountColumns",
                          smallerTableAmountColumns_);
     meta.addKeyValuePair("biggerTableAmountColumns", biggerTableAmountColumns_);
+
+    GeneralInterfaceImplementation::addExternallySetConfiguration(&meta);
 
     return meta;
   }
