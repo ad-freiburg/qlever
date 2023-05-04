@@ -131,7 +131,7 @@ class Vocabulary {
   //! word is not in the vocabulary. Returns an lvalue because compressed or
   //! externalized words don't allow references
   template <typename U = StringType>
-  [[nodiscard]] const std::optional<string> indexToOptionalString(
+  [[nodiscard]] std::optional<string> indexToOptionalString(
       VocabIndex idx) const;
 
   //! Get the word with the given idx.
@@ -311,7 +311,7 @@ using TextVocabulary = Vocabulary<std::string, SimpleStringComparator>;
 // _______________________________________________________________
 template <typename S, typename C>
 template <typename>
-const std::optional<string> Vocabulary<S, C>::indexToOptionalString(
+std::optional<string> Vocabulary<S, C>::indexToOptionalString(
     VocabIndex idx) const {
   if (idx.get() < _internalVocabulary.size()) {
     return std::optional<string>(_internalVocabulary[idx.get()]);

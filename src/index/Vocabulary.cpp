@@ -305,7 +305,7 @@ void Vocabulary<S, C>::printRangesForDatatypes() {
   }
 }
 
-template const std::optional<string>
+template std::optional<string>
 RdfsVocabulary::indexToOptionalString<CompressedString>(VocabIndex idx) const;
 
 // Explicit template instantiations
