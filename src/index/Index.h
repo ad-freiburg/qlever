@@ -55,10 +55,10 @@ class Index {
         cids_;  // Stores the index of the TextRecord of each result.
     vector<WordIndex>
         wids_;  // For prefix-queries stores for each result the index of the
-               // Word the prefixed-word was completed to.
+                // Word the prefixed-word was completed to.
     vector<Id> eids_;       // Stores the index of the entity of each result.
     vector<Score> scores_;  // Stores for each result how often an entity
-                           // appears in its associated TextRecord.
+                            // appears in its associated TextRecord.
   };
 
   /// Forbid copy and assignment.
