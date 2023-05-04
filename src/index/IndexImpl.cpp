@@ -526,7 +526,7 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
     metaData1.add(md1);
     metaData2.add(md2);
   };
-  for (auto triple : sortedTriples) {
+  for (auto triple : AD_FWD(sortedTriples)) {
     if (!currentRel.has_value()) {
       currentRel = triple[c0];
     }
@@ -1213,8 +1213,8 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
 
 // ___________________________________________________________________________
 size_t IndexImpl::getCardinality(Id id, Index::Permutation permutation) const {
-  const auto& p = getPermutation(permutation);
-  if (p.metaData().col0IdExists(id)) {
+  if (const auto& p = getPermutation(permutation);
+      p.metaData().col0IdExists(id)) {
     return p.metaData().getMetaData(id).getNofElements();
   }
   return 0;
@@ -1231,8 +1231,7 @@ size_t IndexImpl::getCardinality(const TripleComponent& comp,
   if (comp == INTERNAL_TEXT_MATCH_PREDICATE) {
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
-  std::optional<Id> relId = comp.toValueId(getVocab());
-  if (relId.has_value()) {
+  if (std::optional<Id> relId = comp.toValueId(getVocab()); relId.has_value()) {
     return getCardinality(relId.value(), permutation);
   }
   return 0;
@@ -1241,24 +1240,25 @@ size_t IndexImpl::getCardinality(const TripleComponent& comp,
 // TODO<joka921> Once we have an overview over the folding this logic should
 // probably not be in the index class.
 std::optional<string> IndexImpl::idToOptionalString(Id id) const {
+  using enum Datatype;
   switch (id.getDatatype()) {
-    case Datatype::Undefined:
+    case Undefined:
       return std::nullopt;
-    case Datatype::Double:
+    case Double:
       return std::to_string(id.getDouble());
-    case Datatype::Int:
+    case Int:
       return std::to_string(id.getInt());
-    case Datatype::VocabIndex: {
+    case VocabIndex: {
       auto result = vocab_.indexToOptionalString(id.getVocabIndex());
       if (result.has_value() && result.value().starts_with(VALUE_PREFIX)) {
         result = ad_utility::convertIndexWordToValueLiteral(result.value());
       }
       return result;
     }
-    case Datatype::LocalVocabIndex:
+    case LocalVocabIndex:
       // TODO:: this is why this shouldn't be here
       return std::nullopt;
-    case Datatype::TextRecordIndex:
+    case TextRecordIndex:
       return getTextExcerpt(id.getTextRecordIndex());
   }
   // should be unreachable because the enum is exhaustive.
@@ -1324,10 +1324,10 @@ void IndexImpl::scan(const TripleComponent& key, IdTable* result,
   const auto& p = getPermutation(permutation);
   LOG(DEBUG) << "Performing " << p._readableName
              << " scan for full list for: " << key << "\n";
-  std::optional<Id> optionalId = key.toValueId(getVocab());
-  if (optionalId.has_value()) {
+
+  if (std::optional<Id> id = key.toValueId(getVocab()); id.has_value()) {
     LOG(TRACE) << "Successfully got key ID.\n";
-    scan(optionalId.value(), result, permutation, std::move(timer));
+    scan(id.value(), result, permutation, std::move(timer));
   }
   LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
 }
