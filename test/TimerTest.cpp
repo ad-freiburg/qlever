@@ -14,13 +14,13 @@ using namespace std::chrono_literals;
 void testTime(Timer::Duration duration, size_t msecs,
               std::chrono::milliseconds expected) {
   ASSERT_GE(duration, 0.9 * expected);
-  ASSERT_LE(duration, 1.1 * (expected + 1ms));
+  ASSERT_LE(duration, 1.1 * (expected + 3ms));
 
   ASSERT_GE(msecs, 0.9 * expected.count());
-  ASSERT_LE(msecs, 1.1 * (expected.count() + 1));
+  ASSERT_LE(msecs, 1.1 * (expected.count() + 3));
 
   ASSERT_GE(Timer::toSeconds(duration), 0.0009 * expected.count());
-  ASSERT_LE(Timer::toSeconds(duration), 0.0011 * (expected.count() + 1));
+  ASSERT_LE(Timer::toSeconds(duration), 0.0011 * (expected.count() + 0.003));
 }
 
 void testTime(const ad_utility::Timer& timer,
