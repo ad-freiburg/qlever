@@ -237,8 +237,8 @@ ResultTable::operator std::string() const {
   auto insertEntryInFrontOfRValueVector =
       [](std::vector<std::pair<std::string, size_t>>&& vec,
          std::pair<std::string, size_t>&& entry) {
-        vec.insert(vec.begin(), AD_FWD(entry));
-        return AD_FWD(vec);
+        vec.insert(vec.begin(), std::move(entry));
+        return std::move(vec);
       };
 
   // Print the top row of names.
