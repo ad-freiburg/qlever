@@ -18,6 +18,8 @@
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
+#include "util/Forward.h"
+#include "util/Iterators.h"
 
 namespace ad_benchmark {
 
@@ -229,49 +231,34 @@ ResultTable::operator std::string() const {
             : columnNames_[column].length();
   }
 
+  /*
+  @brief Adds an entry to an rvalue vector and returns the resulting vector.
+  */
+  auto insertEntryInFrontOfRValueVector =
+      [](std::vector<std::pair<std::string, size_t>>&& vec,
+         std::pair<std::string, size_t>&& entry) {
+        vec.insert(vec.begin(), AD_FWD(entry));
+        return AD_FWD(vec);
+      };
+
   // Print the top row of names.
-  {
-    // Because the column of row names also has a width, we create an empty
-    // string of that size, before actually printing the row of column names.
-    std::vector<std::pair<std::string, size_t>> columnNames{std::make_pair(
-        std::string(rowNameMaxStringWidth, ' '), rowNameMaxStringWidth)};
-
-    // We know exactly, how many entries there will be. The `+1` is for the row
-    // name.
-    columnNames.reserve(1 + numColumns());
-
-    // The actual column names.
-    ad_utility::appendVector(
-        columnNames,
-        ad_utility::zipVectors(columnNames_, columnMaxStringWidth));
-
-    // Actually printing them.
-    addRow(stream, columnNames);
-  }
+  addRow(stream, insertEntryInFrontOfRValueVector(
+                     ad_utility::zipVectors(columnNames_, columnMaxStringWidth),
+                     std::make_pair(std::string(rowNameMaxStringWidth, ' '),
+                                    rowNameMaxStringWidth)));
 
   // Print the rows.
   for (size_t row = 0; row < numberRows; row++) {
     // Line break between rows.
     stream << "\n";
 
-    // Vector representing a row.
-    std::vector<std::pair<std::string, size_t>> rowVector{};
-
-    // We know exactly, how many entries there will be. The `+1` is for the row
-    // name.
-    rowVector.reserve(1 + numColumns());
-
-    // Row name
-    rowVector.push_back(std::make_pair(rowNames_[row], rowNameMaxStringWidth));
-
-    // Row content.
-    ad_utility::appendVector(
-        rowVector, ad_utility::zipVectors(
-                       ad_utility::transform(entries_.at(row), entryToString),
-                       columnMaxStringWidth));
-
     // Actually printing the row.
-    addRow(stream, rowVector);
+    addRow(stream,
+           insertEntryInFrontOfRValueVector(
+               ad_utility::zipVectors(
+                   ad_utility::transform(entries_.at(row), entryToString),
+                   columnMaxStringWidth),
+               std::make_pair(rowNames_[row], rowNameMaxStringWidth)));
   }
 
   return absl::StrCat(prefix, addIndentation(stream.str(), 1));
