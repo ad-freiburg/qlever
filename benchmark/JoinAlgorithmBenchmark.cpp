@@ -963,7 +963,7 @@ class BmOnlyBiggerTableSizeChanges final
         } else {
           // Returns the ratio used for the measurements in a given row.
           auto growthFunction = createDefaultGrowthLambda(
-              2, minBiggerTableRows_ / smallerTableAmountRows_);
+              10, minBiggerTableRows_ / smallerTableAmountRows_);
 
           table = &makeGrowingBenchmarkTable(
               &results, tableName,
@@ -1055,7 +1055,7 @@ class BmOnlySmallerTableSizeChanges final
             // Returns the amount of rows in the smaller `IdTable`, used for the
             // measurements in a given row.
             auto growthFunction =
-                createDefaultGrowthLambda(2, minBiggerTableRows_ / ratioRows);
+                createDefaultGrowthLambda(10, minBiggerTableRows_ / ratioRows);
 
             table = &makeGrowingBenchmarkTable(
                 &results, tableName,
@@ -1135,7 +1135,7 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
           // Returns the amount of rows in the smaller `IdTable`, used for the
           // measurements in a given row.
           auto growthFunction =
-              createDefaultGrowthLambda(2, minBiggerTableRows_);
+              createDefaultGrowthLambda(10, minBiggerTableRows_);
 
           table = &makeGrowingBenchmarkTable(
               &results, tableName,
