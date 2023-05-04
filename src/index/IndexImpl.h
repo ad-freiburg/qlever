@@ -102,11 +102,6 @@ class IndexImpl {
     using ReadType = IndexMetaDataMmapView;
   };
 
-  struct IndexMetaDataHmapDispatcher {
-    using WriteType = IndexMetaDataHmap;
-    using ReadType = IndexMetaDataHmap;
-  };
-
   using PermutationImpl = Permutation::PermutationImpl;
 
   using NumNormalAndInternal = Index::NumNormalAndInternal;
