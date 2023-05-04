@@ -80,22 +80,42 @@ class PermutationImpl {
   }
 
   struct MetaDataAndBlocks {
-    const CompressedRelationMetadata& relationMetadata_;
-    const std::vector<CompressedBlockMetadata>& blockMetadata_;
+    const CompressedRelationMetadata relationMetadata_;
+    std::span<const CompressedBlockMetadata> blockMetadata_;
   };
 
-  std::optional<MetaDataAndBlocks> getMetadataAndBlocks(Id col0Id) {
+  std::optional<MetaDataAndBlocks> getMetadataAndBlocks(
+      Id col0Id, std::optional<Id> col1Id) const {
     if (!_meta.col0IdExists(col0Id)) {
       return std::nullopt;
     }
-    return MetaDataAndBlocks{_meta.getMetaData(col0Id), _meta.blockData()};
+
+    auto metadata = _meta.getMetaData(col0Id);
+    return MetaDataAndBlocks{
+        _meta.getMetaData(col0Id),
+        _reader.getBlocksFromMetadata(metadata, col1Id, _meta.blockData())};
   }
 
-  cppcoro::generator<IdTable> lazyScan(Id col0Id, const std::vector<CompressedBlockMetadata>& blocks, ad_utility::AllocatorWithLimit<Id> allocator, ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) {
+  cppcoro::generator<IdTable> lazyScan(
+      Id col0Id, const std::vector<CompressedBlockMetadata>& blocks,
+      ad_utility::AllocatorWithLimit<Id> allocator,
+      ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
     if (!_meta.col0IdExists(col0Id)) {
       return {};
     }
-    return _reader.lazyScan(_meta.getMetaData(col0Id), blocks, _file, std::move(allocator), timer);
+    return _reader.lazyScan(_meta.getMetaData(col0Id), blocks, _file,
+                            std::move(allocator), timer);
+  }
+
+  cppcoro::generator<IdTable> lazyScan(
+      Id col0Id, Id col1Id, const std::vector<CompressedBlockMetadata>& blocks,
+      ad_utility::AllocatorWithLimit<Id> allocator,
+      ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
+    if (!_meta.col0IdExists(col0Id)) {
+      return {};
+    }
+    return _reader.lazyScan(_meta.getMetaData(col0Id), col1Id, blocks, _file,
+                            std::move(allocator), timer);
   }
 
   // _______________________________________________________

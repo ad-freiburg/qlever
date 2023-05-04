@@ -23,27 +23,11 @@ void CompressedRelationReader::scan(
     ad_utility::SharedConcurrentTimeoutTimer timer) const {
   AD_CONTRACT_CHECK(result->numColumns() == NumColumns);
 
-  // get all the blocks where col0FirstId_ <= col0Id <= col0LastId_
-  struct KeyLhs {
-    Id col0FirstId_;
-    Id col0LastId_;
-  };
+  auto relevantBlocks =
+      getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
+  auto beginBlock = relevantBlocks.begin();
+  auto endBlock = relevantBlocks.end();
   Id col0Id = metadata.col0Id_;
-  // TODO<joka921, Clang16> Use a structured binding. Structured bindings are
-  // currently not supported by clang when using OpenMP because clang internally
-  // transforms the `#pragma`s into lambdas, and capturing structured bindings
-  // is only supported in clang >= 16.
-  decltype(blockMetadata.begin()) beginBlock, endBlock;
-  std::tie(beginBlock, endBlock) = std::equal_range(
-      // TODO<joka921> For some reason we can't use `std::ranges::equal_range`,
-      // find out why. Note: possibly it has something to do with the limited
-      // support of ranges in clang with versions < 16. Revisit this when
-      // we use clang 16.
-      blockMetadata.begin(), blockMetadata.end(), KeyLhs{col0Id, col0Id},
-      [](const auto& a, const auto& b) {
-        return a.col0FirstId_ < b.col0FirstId_ && a.col0LastId_ < b.col0LastId_;
-      });
-
   // The total size of the result is now known.
   result->resize(metadata.getNofElements());
 
@@ -83,7 +67,7 @@ void CompressedRelationReader::scan(
     auto cacheKey = block.offsetsAndCompressedSize_.at(0).offsetInFile_;
     auto uncompressedBuffer = blockCache_
                                   .computeOnce(cacheKey,
-                                               [&]()  {
+                                               [&]() {
                                                  return readAndDecompressBlock(
                                                      block, file, std::nullopt);
                                                })
@@ -155,128 +139,192 @@ void CompressedRelationReader::scan(
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(const CompressedRelationMetadata& metadata, std::span<const CompressedBlockMetadata> blockMetadata, ad_utility::File& file, ad_utility::AllocatorWithLimit<Id> allocator, ad_utility::SharedConcurrentTimeoutTimer timer) {
-    // get all the blocks where col0FirstId_ <= col0Id <= col0LastId_
-    struct KeyLhs {
-      Id col0FirstId_;
-      Id col0LastId_;
-    };
-    Id col0Id = metadata.col0Id_;
-    // TODO<joka921, Clang16> Use a structured binding. Structured bindings are
-    // currently not supported by clang when using OpenMP because clang internally
-    // transforms the `#pragma`s into lambdas, and capturing structured bindings
-    // is only supported in clang >= 16.
-    decltype(blockMetadata.begin()) beginBlock, endBlock;
-    std::tie(beginBlock, endBlock) = std::equal_range(
-        // TODO<joka921> For some reason we can't use `std::ranges::equal_range`,
-        // find out why. Note: possibly it has something to do with the limited
-        // support of ranges in clang with versions < 16. Revisit this when
-        // we use clang 16.
-        blockMetadata.begin(), blockMetadata.end(), KeyLhs{col0Id, col0Id},
-        [](const auto& a, const auto& b) {
-          return a.col0FirstId_ < b.col0FirstId_ && a.col0LastId_ < b.col0LastId_;
-        });
+cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
+    const CompressedRelationMetadata& metadata,
+    std::span<const CompressedBlockMetadata> blockMetadata,
+    ad_utility::File& file, ad_utility::AllocatorWithLimit<Id> allocator,
+    ad_utility::SharedConcurrentTimeoutTimer timer) const {
+  auto relevantBlocks =
+      getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
+  auto beginBlock = relevantBlocks.begin();
+  auto endBlock = relevantBlocks.end();
+  Id col0Id = metadata.col0Id_;
+  // The first block might contain entries that are not part of our
+  // actual scan result.
+  bool firstBlockIsIncomplete =
+      beginBlock < endBlock &&
+      (beginBlock->col0FirstId_ < col0Id || beginBlock->col0LastId_ > col0Id);
+  auto lastBlock = endBlock - 1;
 
-    // The first block might contain entries that are not part of our
-    // actual scan result.
-    bool firstBlockIsIncomplete =
-        beginBlock < endBlock &&
-        (beginBlock->col0FirstId_ < col0Id || beginBlock->col0LastId_ > col0Id);
-    auto lastBlock = endBlock - 1;
+  bool lastBlockIsIncomplete =
+      beginBlock < lastBlock &&
+      (lastBlock->col0FirstId_ < col0Id || lastBlock->col0LastId_ > col0Id);
 
-    bool lastBlockIsIncomplete =
-        beginBlock < lastBlock &&
-        (lastBlock->col0FirstId_ < col0Id || lastBlock->col0LastId_ > col0Id);
+  // Invariant: A relation spans multiple blocks exclusively or several
+  // entities are stored completely in the same Block.
+  AD_CORRECTNESS_CHECK(!firstBlockIsIncomplete || (beginBlock == lastBlock));
+  AD_CORRECTNESS_CHECK(!lastBlockIsIncomplete);
+  if (firstBlockIsIncomplete) {
+    AD_CORRECTNESS_CHECK(metadata.offsetInBlock_ !=
+                         std::numeric_limits<uint64_t>::max());
+  }
 
-    // Invariant: A relation spans multiple blocks exclusively or several
-    // entities are stored completely in the same Block.
-    AD_CORRECTNESS_CHECK(!firstBlockIsIncomplete || (beginBlock == lastBlock));
-    AD_CORRECTNESS_CHECK(!lastBlockIsIncomplete);
-    if (firstBlockIsIncomplete) {
-      AD_CORRECTNESS_CHECK(metadata.offsetInBlock_ !=
-                           std::numeric_limits<uint64_t>::max());
+  // We have at most one block that is incomplete and thus requires trimming.
+  // Set up a lambda, that reads this block and decompresses it to
+  // the result.
+  auto readIncompleteBlock = [&](const auto& block) {
+    // A block is uniquely identified by its start position in the file.
+    auto cacheKey = block.offsetsAndCompressedSize_.at(0).offsetInFile_;
+    auto uncompressedBuffer = blockCache_
+                                  .computeOnce(cacheKey,
+                                               [&]() {
+                                                 return readAndDecompressBlock(
+                                                     block, file, std::nullopt);
+                                               })
+                                  ._resultPointer;
+
+    // Extract the part of the block that actually belongs to the relation
+    auto numElements = metadata.numRows_;
+    AD_CORRECTNESS_CHECK(uncompressedBuffer->numColumns() ==
+                         metadata.numColumns());
+    IdTable result(uncompressedBuffer->numColumns(), allocator);
+    result.resize(numElements);
+    for (size_t i = 0; i < uncompressedBuffer->numColumns(); ++i) {
+      const auto& inputCol = uncompressedBuffer->getColumn(i);
+      auto begin = inputCol.begin() + metadata.offsetInBlock_;
+      decltype(auto) resultColumn = result.getColumn(i);
+      std::copy(begin, begin + numElements, resultColumn.begin());
     }
+    return result;
+  };
 
-    // We have at most one block that is incomplete and thus requires trimming.
-    // Set up a lambda, that reads this block and decompresses it to
-    // the result.
-    auto readIncompleteBlock = [&](const auto& block) {
-      // A block is uniquely identified by its start position in the file.
-      auto cacheKey = block.offsetsAndCompressedSize_.at(0).offsetInFile_;
-      auto uncompressedBuffer = blockCache_
-          .computeOnce(cacheKey,
-                       [&]() {
-                         return readAndDecompressBlock(
-                             block, file, std::nullopt);
-                       })
-          ._resultPointer;
-
-      // Extract the part of the block that actually belongs to the relation
-      auto numElements = metadata.numRows_;
-      AD_CORRECTNESS_CHECK(uncompressedBuffer->numColumns() ==
-                           metadata.numColumns());
-      IdTable result(uncompressedBuffer->numColumns(), allocator);
-      result.resize(numElements);
-      for (size_t i = 0; i < uncompressedBuffer->numColumns(); ++i) {
-        const auto& inputCol = uncompressedBuffer->getColumn(i);
-        auto begin = inputCol.begin() + metadata.offsetInBlock_;
-        decltype(auto) resultColumn = result.getColumn(i);
-        std::copy(begin, begin + numElements, resultColumn.begin());
-      }
-      return result;
-    };
-
-    // Read the first block if it is incomplete
-    if (firstBlockIsIncomplete) {
-      co_yield readIncompleteBlock(*beginBlock);
-      ++beginBlock;
-      if (timer) {
-        timer->wlock()->checkTimeoutAndThrow("IndexScan :");
-      }
-    }
-
-    // Read all the other (complete!) blocks in parallel
-        for (; beginBlock < endBlock; ++beginBlock) {
-          const auto& block = *beginBlock;
-          // Read a block from disk (serially).
-
-          CompressedBlock compressedBuffer =
-              readCompressedBlockFromFile(block, file, std::nullopt);
-          co_yield decompressBlock(compressedBuffer, block.numRows_);
-          // The `decompressLambda` can now run in parallel
-            if (timer) {
-        timer->wlock()->checkTimeoutAndThrow();
-            };
+  // Read the first block if it is incomplete
+  if (firstBlockIsIncomplete) {
+    co_yield readIncompleteBlock(*beginBlock);
+    ++beginBlock;
+    if (timer) {
+      timer->wlock()->checkTimeoutAndThrow("IndexScan :");
     }
   }
+
+  // Read all the other (complete!) blocks in parallel
+  for (; beginBlock < endBlock; ++beginBlock) {
+    const auto& block = *beginBlock;
+    // Read a block from disk (serially).
+
+    CompressedBlock compressedBuffer =
+        readCompressedBlockFromFile(block, file, std::nullopt);
+    co_yield decompressBlock(compressedBuffer, block.numRows_);
+    // The `decompressLambda` can now run in parallel
+    if (timer) {
+      timer->wlock()->checkTimeoutAndThrow();
+    };
+  }
+}
+
+cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
+    const CompressedRelationMetadata& metadata, Id col1Id,
+    std::span<const CompressedBlockMetadata> blockMetadata,
+    ad_utility::File& file, ad_utility::AllocatorWithLimit<Id> allocator,
+    ad_utility::SharedConcurrentTimeoutTimer timer) const {
+  auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blockMetadata);
+  auto beginBlock = relevantBlocks.begin();
+  auto endBlock = relevantBlocks.end();
+
+  // Invariant: The col0Id is completely stored in a single block, or it is
+  // contained in multiple blocks that only contain this col0Id,
+  bool col0IdHasExclusiveBlocks =
+      metadata.offsetInBlock_ == std::numeric_limits<uint64_t>::max();
+  if (!col0IdHasExclusiveBlocks) {
+    // This might also be zero if no block was found at all.
+    AD_CORRECTNESS_CHECK(endBlock - beginBlock <= 1);
+  }
+
+  // The first and the last block might be incomplete (that is, only
+  // a part of these blocks is actually part of the result,
+  // set up a lambda which allows us to read these blocks, and returns
+  // the result as a vector.
+  auto readPossiblyIncompleteBlock = [&](const auto& block) {
+    DecompressedBlock uncompressedBuffer =
+        readAndDecompressBlock(block, file, std::nullopt);
+    AD_CORRECTNESS_CHECK(uncompressedBuffer.numColumns() == 2);
+    const auto& col1Column = uncompressedBuffer.getColumn(0);
+    const auto& col2Column = uncompressedBuffer.getColumn(1);
+    AD_CORRECTNESS_CHECK(col1Column.size() == col2Column.size());
+
+    // Find the range in the block, that belongs to the same relation `col0Id`
+    bool containedInOnlyOneBlock =
+        metadata.offsetInBlock_ != std::numeric_limits<uint64_t>::max();
+    auto begin = col1Column.begin();
+    if (containedInOnlyOneBlock) {
+      begin += metadata.offsetInBlock_;
+    }
+    auto end =
+        containedInOnlyOneBlock ? begin + metadata.numRows_ : col1Column.end();
+
+    // Find the range in the block, where also the col1Id matches (the second
+    // ID in the `std::array` does not matter).
+    std::tie(begin, end) = std::equal_range(begin, end, col1Id);
+
+    size_t beginIndex = begin - col1Column.begin();
+    size_t endIndex = end - col1Column.begin();
+
+    // Only extract the relevant portion of the second column.
+    IdTable result{1, allocator};
+    result.resize(endIndex - beginIndex);
+    std::copy(col2Column.begin() + beginIndex, col2Column.begin() + endIndex,
+              result.getColumn(0).begin());
+    return result;
+  };
+
+  // The first and the last block might be incomplete, compute
+  // and store the partial results from them.
+  std::optional<IdTable> firstBlockResult, lastBlockResult;
+  if (beginBlock < endBlock) {
+    firstBlockResult = readPossiblyIncompleteBlock(*beginBlock);
+    ++beginBlock;
+    if (timer) {
+      timer->wlock()->checkTimeoutAndThrow("IndexScan: ");
+    }
+  }
+  if (beginBlock < endBlock) {
+    lastBlockResult = readPossiblyIncompleteBlock(*(endBlock - 1));
+    endBlock--;
+    if (timer) {
+      timer->wlock()->checkTimeoutAndThrow("IndexScan: ");
+    }
+  }
+
+  if (firstBlockResult.has_value()) {
+    co_yield std::move(firstBlockResult.value());
+  }
+
+  for (; beginBlock < endBlock; ++beginBlock) {
+    const auto& block = *beginBlock;
+
+    // Read the block serially, only read the second column.
+    AD_CORRECTNESS_CHECK(block.offsetsAndCompressedSize_.size() == 2);
+    CompressedBlock compressedBuffer =
+        readCompressedBlockFromFile(block, file, std::vector{1ul});
+    co_yield decompressBlock(compressedBuffer, block.numRows_);
+  }
+  timer->wlock()->checkTimeoutAndThrow();
+  if (lastBlockResult.has_value()) {
+    co_yield lastBlockResult.value();
+  }
+}
 
 // _____________________________________________________________________________
 std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
     std::span<const Id> joinColum, const CompressedRelationMetadata& metadata,
     std::span<const CompressedBlockMetadata> blockMetadata) {
   // get all the blocks where col0FirstId_ <= col0Id <= col0LastId_
-  struct KeyLhs {
-    Id col0FirstId_;
-    Id col0LastId_;
-  };
-  Id col0Id = metadata.col0Id_;
-  // TODO<joka921, Clang16> Use a structured binding. Structured bindings are
-  // currently not supported by clang when using OpenMP because clang internally
-  // transforms the `#pragma`s into lambdas, and capturing structured bindings
-  // is only supported in clang >= 16.
-  decltype(blockMetadata.begin()) beginBlock, endBlock;
-  std::tie(beginBlock, endBlock) = std::equal_range(
-      // TODO<joka921> For some reason we can't use `std::ranges::equal_range`,
-      // find out why. Note: possibly it has something to do with the limited
-      // support of ranges in clang with versions < 16. Revisit this when
-      // we use clang 16.
-      blockMetadata.begin(), blockMetadata.end(), KeyLhs{col0Id, col0Id},
-      [](const auto& a, const auto& b) {
-        return a.col0FirstId_ < b.col0FirstId_ && a.col0LastId_ < b.col0LastId_;
-      });
-
+  auto relevantBlocks =
+      getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
+  auto beginBlock = relevantBlocks.begin();
+  auto endBlock = relevantBlocks.end();
   if (endBlock - beginBlock < 2) {
-    return std::vector<CompressedBlockMetadata>(beginBlock, endBlock);
+    return {beginBlock, endBlock};
   }
 
   auto idLessThanBlock = [](Id id, const CompressedBlockMetadata& block) {
@@ -301,46 +349,37 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   return result;
 }
 
-std::array<std::vector<CompressedBlockMetadata>, 2> CompressedRelationReader::getBlocksForJoin(const CompressedRelationMetadata& md1, const CompressedRelationMetadata& md2, std::span<const CompressedBlockMetadata> blockMetadata) {
+std::array<std::vector<CompressedBlockMetadata>, 2>
+CompressedRelationReader::getBlocksForJoin(
+    const CompressedRelationMetadata& md1,
+    const CompressedRelationMetadata& md2,
+    std::span<const CompressedBlockMetadata> blockMetadata1,
+    std::span<const CompressedBlockMetadata> blockMetadata2) {
   // get all the blocks where col0FirstId_ <= col0Id <= col0LastId_
   struct KeyLhs {
     Id col0FirstId_;
     Id col0LastId_;
   };
-  Id col0Id = md1.col0Id_;
-  // TODO<joka921, Clang16> Use a structured binding. Structured bindings are
-  // currently not supported by clang when using OpenMP because clang internally
-  // transforms the `#pragma`s into lambdas, and capturing structured bindings
-  // is only supported in clang >= 16.
-  decltype(blockMetadata.begin()) beginBlock1, endBlock1, beginBlock2, endBlock2;
-  std::tie(beginBlock1, endBlock1) = std::equal_range(
-      // TODO<joka921> For some reason we can't use `std::ranges::equal_range`,
-      // find out why. Note: possibly it has something to do with the limited
-      // support of ranges in clang with versions < 16. Revisit this when
-      // we use clang 16.
-      blockMetadata.begin(), blockMetadata.end(), KeyLhs{col0Id, col0Id},
-      [](const auto& a, const auto& b) {
-        return a.col0FirstId_ < b.col0FirstId_ && a.col0LastId_ < b.col0LastId_;
-      });
-  col0Id = md2.col0Id_;
-  std::tie(beginBlock2, endBlock2) = std::equal_range(
-      // TODO<joka921> For some reason we can't use `std::ranges::equal_range`,
-      // find out why. Note: possibly it has something to do with the limited
-      // support of ranges in clang with versions < 16. Revisit this when
-      // we use clang 16.
-      blockMetadata.begin(), blockMetadata.end(), KeyLhs{col0Id, col0Id},
-      [](const auto& a, const auto& b) {
-        return a.col0FirstId_ < b.col0FirstId_ && a.col0LastId_ < b.col0LastId_;
-      });
 
-  auto blockLessThanBlock = [](const CompressedBlockMetadata& block1, const CompressedBlockMetadata& block2) {
-    if (block1.col0LastId_ < block2.col0FirstId_ || block1.col0FirstId_ > block2.col0LastId_) {
+  auto relevantBlocks1 =
+      getBlocksFromMetadata(md1, std::nullopt, blockMetadata1);
+  auto beginBlock1 = relevantBlocks1.begin();
+  auto endBlock1 = relevantBlocks1.end();
+
+  auto relevantBlocks2 =
+      getBlocksFromMetadata(md2, std::nullopt, blockMetadata2);
+  auto beginBlock2 = relevantBlocks2.begin();
+  auto endBlock2 = relevantBlocks2.end();
+
+  auto blockLessThanBlock = [](const CompressedBlockMetadata& block1,
+                               const CompressedBlockMetadata& block2) {
+    if (block1.col0LastId_ < block2.col0FirstId_ ||
+        block1.col0FirstId_ > block2.col0LastId_) {
       return block1.col0LastId_ < block2.col0LastId_;
     } else {
       return false;
     }
   };
-
 
   std::array<std::vector<CompressedBlockMetadata>, 2> result;
   auto addRow = [&result]([[maybe_unused]] auto it1, auto it2) {
@@ -350,13 +389,13 @@ std::array<std::vector<CompressedBlockMetadata>, 2> CompressedRelationReader::ge
 
   auto noop = ad_utility::noop;
   [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef<false>(
-      std::span<const CompressedBlockMetadata>{beginBlock1, endBlock1}, std::span<const CompressedBlockMetadata>(beginBlock2, endBlock2),
+      std::span<const CompressedBlockMetadata>{beginBlock1, endBlock1},
+      std::span<const CompressedBlockMetadata>(beginBlock2, endBlock2),
       blockLessThanBlock, addRow, noop, noop);
   for (auto& vec : result) {
     vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
   }
   return result;
-
 }
 
 // _____________________________________________________________________________
@@ -366,30 +405,9 @@ void CompressedRelationReader::scan(
     IdTable* result, ad_utility::SharedConcurrentTimeoutTimer timer) const {
   AD_CONTRACT_CHECK(result->numColumns() == 1);
 
-  // Get all the blocks  that possibly might contain our pair of col0Id and
-  // col1Id
-  struct KeyLhs {
-    Id col0FirstId_;
-    Id col0LastId_;
-    Id col1FirstId_;
-    Id col1LastId_;
-  };
-
-  auto comp = [](const auto& a, const auto& b) {
-    bool endBeforeBegin = a.col0LastId_ < b.col0FirstId_;
-    endBeforeBegin |=
-        (a.col0LastId_ == b.col0FirstId_ && a.col1LastId_ < b.col1FirstId_);
-    return endBeforeBegin;
-  };
-
-  Id col0Id = metaData.col0Id_;
-
-  // Note: See the comment in the other overload for `scan` above for the
-  // reason why we (currently) can't use a structured binding here.
-  decltype(blocks.begin()) beginBlock, endBlock;
-  std::tie(beginBlock, endBlock) =
-      std::equal_range(blocks.begin(), blocks.end(),
-                       KeyLhs{col0Id, col0Id, col1Id, col1Id}, comp);
+  auto relevantBlocks = getBlocksFromMetadata(metaData, col1Id, blocks);
+  auto beginBlock = relevantBlocks.begin();
+  auto endBlock = relevantBlocks.end();
 
   // Invariant: The col0Id is completely stored in a single block, or it is
   // contained in multiple blocks that only contain this col0Id,
@@ -724,4 +742,57 @@ CompressedRelationWriter::compressAndWriteColumn(std::span<const Id> column) {
   return {offsetInFile, compressedSize};
 };
 
-//CompressedRelationWriter::getBlocksFromMetadata
+// _____________________________________________________________________________
+std::span<const CompressedBlockMetadata>
+CompressedRelationReader::getBlocksFromMetadata(
+    const CompressedRelationMetadata& metadata, std::optional<Id> col1Id,
+    std::span<const CompressedBlockMetadata> blockMetadata) {
+  if (!col1Id.has_value()) {
+    // get all the blocks where col0FirstId_ <= col0Id <= col0LastId_
+    struct KeyLhs {
+      Id col0FirstId_;
+      Id col0LastId_;
+    };
+    Id col0Id = metadata.col0Id_;
+    // TODO<joka921, Clang16> Use a structured binding. Structured bindings are
+    // currently not supported by clang when using OpenMP because clang
+    // internally transforms the `#pragma`s into lambdas, and capturing
+    // structured bindings is only supported in clang >= 16.
+    auto [beginBlock, endBlock] = std::equal_range(
+        // TODO<joka921> For some reason we can't use
+        // `std::ranges::equal_range`, find out why. Note: possibly it has
+        // something to do with the limited support of ranges in clang with
+        // versions < 16. Revisit this when we use clang 16.
+        blockMetadata.begin(), blockMetadata.end(), KeyLhs{col0Id, col0Id},
+        [](const auto& a, const auto& b) {
+          return a.col0FirstId_ < b.col0FirstId_ &&
+                 a.col0LastId_ < b.col0LastId_;
+        });
+    return {beginBlock, endBlock};
+  } else {
+    // Get all the blocks  that possibly might contain our pair of col0Id and
+    // col1Id
+    struct KeyLhs {
+      Id col0FirstId_;
+      Id col0LastId_;
+      Id col1FirstId_;
+      Id col1LastId_;
+    };
+
+    auto comp = [](const auto& a, const auto& b) {
+      bool endBeforeBegin = a.col0LastId_ < b.col0FirstId_;
+      endBeforeBegin |=
+          (a.col0LastId_ == b.col0FirstId_ && a.col1LastId_ < b.col1FirstId_);
+      return endBeforeBegin;
+    };
+
+    Id col0Id = metadata.col0Id_;
+
+    // Note: See the comment in the other overload for `scan` above for the
+    // reason why we (currently) can't use a structured binding here.
+    auto [beginBlock, endBlock] = std::equal_range(
+        blockMetadata.begin(), blockMetadata.end(),
+        KeyLhs{col0Id, col0Id, col1Id.value(), col1Id.value()}, comp);
+    return {beginBlock, endBlock};
+  }
+}

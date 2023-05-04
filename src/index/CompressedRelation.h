@@ -15,12 +15,12 @@
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
 #include "util/File.h"
+#include "util/Generator.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
-#include "util/Generator.h"
 
 // Forward declaration of the `IdTable` class.
 class IdTable;
@@ -235,7 +235,9 @@ class CompressedRelationReader {
       blockCache_{20ul};
 
   // TODO<joka921> This should probably be the allocator of the global qec.
-  mutable ad_utility::AllocatorWithLimit<Id> allocator{ad_utility::makeAllocationMemoryLeftThreadsafeObject(std::numeric_limits<size_t>::max())};
+  mutable ad_utility::AllocatorWithLimit<Id> allocator{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<size_t>::max())};
 
  public:
   /**
@@ -258,43 +260,53 @@ class CompressedRelationReader {
             ad_utility::File& file, IdTable* result,
             ad_utility::SharedConcurrentTimeoutTimer timer) const;
 
-  std::span<const CompressedBlockMetadata> getBlocksFromMetadata(const CompressedRelationMetadata& metadata, std::optional<Id> col1Id, std::span<const CompressedBlockMetadata> blockMetadata);
+  static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
+      const CompressedRelationMetadata& metadata, std::optional<Id> col1Id,
+      std::span<const CompressedBlockMetadata> blockMetadata);
 
   // Get all the blocks that can contain an Id from the `joinColumn`.
   // TODO<joka921> Include a timeout check.
-  std::vector<CompressedBlockMetadata> getBlocksForJoin(
+  static std::vector<CompressedBlockMetadata> getBlocksForJoin(
       std::span<const Id> joinColum, const CompressedRelationMetadata& metadata,
       std::span<const CompressedBlockMetadata> blockMetadata);
-  std::array<std::vector<CompressedBlockMetadata>, 2> getBlocksForJoin(
-      const CompressedRelationMetadata& md1, const CompressedRelationMetadata& md2, std::span<const CompressedBlockMetadata> blockMetadata
-      );
+  static std::array<std::vector<CompressedBlockMetadata>, 2> getBlocksForJoin(
+      const CompressedRelationMetadata& md1,
+      const CompressedRelationMetadata& md2,
+      std::span<const CompressedBlockMetadata> blockMetadata1,
+      std::span<const CompressedBlockMetadata> blockMetadata2);
 
-  cppcoro::generator<IdTable> lazyScan(const CompressedRelationMetadata& metadata,
-std::span<const CompressedBlockMetadata> blockMetadata,
-ad_utility::File& file, ad_utility::AllocatorWithLimit<Id> allocator,
-ad_utility::SharedConcurrentTimeoutTimer timer);
+  cppcoro::generator<IdTable> lazyScan(
+      const CompressedRelationMetadata& metadata,
+      std::span<const CompressedBlockMetadata> blockMetadata,
+      ad_utility::File& file, ad_utility::AllocatorWithLimit<Id> allocator,
+      ad_utility::SharedConcurrentTimeoutTimer timer) const;
 
-      /**
-       * @brief For a permutation XYZ, retrieve all Z for given X and Y.
-       *
-       * @param metaData The metadata of the given X.
-       * @param col1Id The ID for Y.
-       * @param blocks The metadata of the on-disk blocks for the given
-       * permutation.
-       * @param file The file in which the permutation is stored.
-       * @param result The ID table to which we write the result. It must have
-       * exactly one column.
-       * @param timer If specified (!= nullptr) a `TimeoutException` will be
-       * thrown if the timer runs out during the exeuction of this function.
-       *
-       * The arguments `metaData`, `blocks`, and `file` must all be obtained
-       * from The same `CompressedRelationWriter` (see below).
-       */
-      void
-      scan(const CompressedRelationMetadata& metaData, Id col1Id,
-           const vector<CompressedBlockMetadata>& blocks,
-           ad_utility::File& file, IdTable* result,
-           ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+  cppcoro::generator<IdTable> lazyScan(
+      const CompressedRelationMetadata& metadata, Id col1Id,
+      std::span<const CompressedBlockMetadata> blockMetadata,
+      ad_utility::File& file, ad_utility::AllocatorWithLimit<Id> allocator,
+      ad_utility::SharedConcurrentTimeoutTimer timer) const;
+
+  /**
+   * @brief For a permutation XYZ, retrieve all Z for given X and Y.
+   *
+   * @param metaData The metadata of the given X.
+   * @param col1Id The ID for Y.
+   * @param blocks The metadata of the on-disk blocks for the given
+   * permutation.
+   * @param file The file in which the permutation is stored.
+   * @param result The ID table to which we write the result. It must have
+   * exactly one column.
+   * @param timer If specified (!= nullptr) a `TimeoutException` will be
+   * thrown if the timer runs out during the exeuction of this function.
+   *
+   * The arguments `metaData`, `blocks`, and `file` must all be obtained
+   * from The same `CompressedRelationWriter` (see below).
+   */
+  void scan(const CompressedRelationMetadata& metaData, Id col1Id,
+            const vector<CompressedBlockMetadata>& blocks,
+            ad_utility::File& file, IdTable* result,
+            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
@@ -308,8 +320,8 @@ ad_utility::SharedConcurrentTimeoutTimer timer);
   // have after decompression must be passed in via the `numRowsToRead`
   // argument. It is typically obtained from the corresponding
   // `CompressedBlockMetaData`.
-  DecompressedBlock decompressBlock(
-      const CompressedBlock& compressedBlock, size_t numRowsToRead) const;
+  DecompressedBlock decompressBlock(const CompressedBlock& compressedBlock,
+                                    size_t numRowsToRead) const;
 
   // Similar to `decompressBlock`, but the block is directly decompressed into
   // the `table`, starting at the `offsetInTable`-th row. The `table` and the

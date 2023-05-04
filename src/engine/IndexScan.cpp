@@ -277,7 +277,56 @@ void IndexScan::computeFullScan(IdTable* result,
   *result = std::move(table).toDynamic();
 }
 
-std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
+std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
+    const IndexScan& s1, const IndexScan& s2) {
   const auto& index = s1.getExecutionContext()->getIndex().getImpl();
+  AD_CONTRACT_CHECK(s1._numVariables < 3 && s2._numVariables < 3);
 
+  const auto& s = s1;
+  auto f = [&](const IndexScan& s)
+      -> std::optional<Permutation::PermutationImpl::MetaDataAndBlocks> {
+    auto permutedTriple = s.getPermutedTriple();
+    std::optional<Id> optId =
+        s.getPermutedTriple()[0]->toValueId(index.getVocab());
+    std::optional<Id> optId2 =
+        s._numVariables == 2
+            ? std::nullopt
+            : s.getPermutedTriple()[1]->toValueId(index.getVocab());
+    if (!optId.has_value() || (!optId2.has_value() && s._numVariables == 1)) {
+      return std::nullopt;
+    }
+    return index.getPermutation(s.permutation())
+        .getMetadataAndBlocks(optId.value(), optId2);
+  };
+
+  auto metaBlocks1 = f(s1);
+  auto metaBlocks2 = f(s2);
+
+  if (!metaBlocks1.has_value() || !metaBlocks2.has_value()) {
+    return {{}};
+  }
+  auto [blocks1, blocks2] = CompressedRelationReader::getBlocksForJoin(
+      metaBlocks1.value().relationMetadata_,
+      metaBlocks2.value().relationMetadata_, metaBlocks1.value().blockMetadata_,
+      metaBlocks2.value().blockMetadata_);
+
+  // TODO<joka921> include a timeout timer.
+  auto getScan = [&index](const IndexScan& s, const auto& blocks) {
+    // TODO<joka921> pass the IDs here.
+    Id col0Id = s.getPermutedTriple()[0]->toValueId(index.getVocab()).value();
+    std::optional<Id> col1Id;
+    if (s._numVariables == 1) {
+      col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
+    }
+    if (!col1Id.has_value()) {
+      return index.getPermutation(s.permutation())
+          .lazyScan(col0Id, blocks, s.getExecutionContext()->getAllocator());
+    } else {
+      return index.getPermutation(s.permutation())
+          .lazyScan(col0Id, col1Id.value(), blocks,
+                    s.getExecutionContext()->getAllocator());
+    }
+  };
+
+  return {getScan(s1, blocks1), getScan(s2, blocks2)};
 }

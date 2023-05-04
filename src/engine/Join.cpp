@@ -37,7 +37,7 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
     std::swap(t1, t2);
     std::swap(t1JoinCol, t2JoinCol);
   }
-  if (isFullScanDummy(t1) || t1->getType() == QueryExecutionTree::SCAN) {
+  if (isFullScanDummy(t1)) {
     AD_CONTRACT_CHECK(!isFullScanDummy(t2));
     std::swap(t1, t2);
     std::swap(t1JoinCol, t2JoinCol);
@@ -610,5 +610,6 @@ void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
 
 // ______________________________________________________________________________________________________
 ResultTable Join::computeResultForTwoIndexScans() {
-  AD_CORRECTNESS_CHECK(_left->getType() == QueryExecutionTree::SCAN && _right->getType() == QueryExecutionTree::SCAN);
+  AD_CORRECTNESS_CHECK(_left->getType() == QueryExecutionTree::SCAN &&
+                       _right->getType() == QueryExecutionTree::SCAN);
 }

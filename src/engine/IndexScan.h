@@ -153,7 +153,8 @@ class IndexScan : public Operation {
   // can be read from the Metadata.
   size_t getExactSize() const { return _sizeEstimate; }
 
-  static std::array<cppcoro::generator<IdTable>, 2> lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2);
+  static std::array<cppcoro::generator<IdTable>, 2> lazyScanForJoinOfTwoScans(
+      const IndexScan& s1, const IndexScan& s2);
 
  private:
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for
