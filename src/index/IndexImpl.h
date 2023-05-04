@@ -107,8 +107,7 @@ class IndexImpl {
     using ReadType = IndexMetaDataHmap;
   };
 
-  template <class A, class B>
-  using PermutationImpl = Permutation::PermutationImpl<A, B>;
+  using PermutationImpl = Permutation::PermutationImpl;
 
   using NumNormalAndInternal = Index::NumNormalAndInternal;
 
@@ -169,12 +168,12 @@ class IndexImpl {
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
-  Permutation::POS_T _POS{SortByPOS(), "POS", ".pos", {1, 2, 0}};
-  Permutation::PSO_T _PSO{SortByPSO(), "PSO", ".pso", {1, 0, 2}};
-  Permutation::SOP_T _SOP{SortBySOP(), "SOP", ".sop", {0, 2, 1}};
-  Permutation::SPO_T _SPO{SortBySPO(), "SPO", ".spo", {0, 1, 2}};
-  Permutation::OPS_T _OPS{SortByOPS(), "OPS", ".ops", {2, 1, 0}};
-  Permutation::OSP_T _OSP{SortByOSP(), "OSP", ".osp", {2, 0, 1}};
+  PermutationImpl _POS{"POS", ".pos", {1, 2, 0}};
+  PermutationImpl _PSO{"PSO", ".pso", {1, 0, 2}};
+  PermutationImpl _SOP{"SOP", ".sop", {0, 2, 1}};
+  PermutationImpl _SPO{"SPO", ".spo", {0, 1, 2}};
+  PermutationImpl _OPS{"OPS", ".ops", {2, 1, 0}};
+  PermutationImpl _OSP{"OSP", ".osp", {2, 0, 1}};
 
  public:
   IndexImpl();
@@ -691,11 +690,10 @@ class IndexImpl {
   void processWordsForInvertedLists(const string& contextFile,
                                     bool addWordsFromLiterals, TextVec& vec);
 
-  template <class MetaDataDispatcher, typename SortedTriples>
-  std::optional<std::pair<typename MetaDataDispatcher::WriteType,
-                          typename MetaDataDispatcher::WriteType>>
+  std::optional<std::pair<IndexMetaDataMmapDispatcher::WriteType,
+                          IndexMetaDataMmapDispatcher::WriteType>>
   createPermutationPairImpl(const string& fileName1, const string& fileName2,
-                            SortedTriples&& sortedTriples, size_t c0, size_t c1,
+                            auto&& sortedTriples, size_t c0, size_t c1,
                             size_t c2, auto&&... perTripleCallbacks);
 
   static CompressedRelationMetadata writeSwitchedRel(
@@ -712,14 +710,10 @@ class IndexImpl {
   // the SPO permutation is also needed for patterns (see usage in
   // IndexImpl::createFromFile function)
 
-  template <class MetaDataDispatcher, class Comparator1, class Comparator2>
-  void createPermutationPair(
-      auto&& sortedTriples,
-      const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
-          p1,
-      const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
-          p2,
-      auto&&... perTripleCallbacks);
+  template <>
+  void createPermutationPair(auto&& sortedTriples, const PermutationImpl& p1,
+                             const PermutationImpl& p2,
+                             auto&&... perTripleCallbacks);
 
   // wrapper for createPermutation that saves a lot of code duplications
   // Writes the permutation that is specified by argument permutation
@@ -730,16 +724,10 @@ class IndexImpl {
   // Careful: only multiplicities for first column is valid after call, need to
   // call exchangeMultiplicities as done by createPermutationPair
   // the optional is std::nullopt if vec and thus the index is empty
-  template <class MetaDataDispatcher, class Comparator1, class Comparator2>
-  std::optional<std::pair<typename MetaDataDispatcher::WriteType,
-                          typename MetaDataDispatcher::WriteType>>
-  createPermutations(
-      auto&& sortedTriples,
-      const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
-          p1,
-      const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
-          p2,
-      auto&&... perTripleCallbacks);
+  std::optional<std::pair<IndexMetaDataMmapDispatcher::WriteType,
+                          IndexMetaDataMmapDispatcher::WriteType>>
+  createPermutations(auto&& sortedTriples, const PermutationImpl& p1,
+                     const PermutationImpl& p2, auto&&... perTripleCallbacks);
 
   void createTextIndex(const string& filename, const TextVec& vec);
 

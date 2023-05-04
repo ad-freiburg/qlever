@@ -171,7 +171,7 @@ void IndexImpl::createFromFile(const string& filename) {
   auto uniqueSorter = ad_utility::uniqueView(psoSorter.sortedView());
 
   size_t numPredicatesNormal = 0;
-  createPermutationPair<IndexMetaDataHmapDispatcher>(
+  createPermutationPair(
       std::move(uniqueSorter), _PSO, _POS, spoSorter.makePushCallback(),
       makeNumEntitiesCounter(numPredicatesNormal, 1), countActualTriples);
   _configurationJson["num-predicates-normal"] = numPredicatesNormal;
@@ -192,14 +192,13 @@ void IndexImpl::createFromFile(const string& filename) {
           patternCreator.processTriple(triple);
         }
       };
-      createPermutationPair<IndexMetaDataMmapDispatcher>(
-          spoSorter.sortedView(), _SPO, _SOP, ospSorter.makePushCallback(),
-          pushTripleToPatterns, numSubjectCounter);
+      createPermutationPair(spoSorter.sortedView(), _SPO, _SOP,
+                            ospSorter.makePushCallback(), pushTripleToPatterns,
+                            numSubjectCounter);
       patternCreator.finish();
     } else {
-      createPermutationPair<IndexMetaDataMmapDispatcher>(
-          spoSorter.sortedView(), _SPO, _SOP, ospSorter.makePushCallback(),
-          numSubjectCounter);
+      createPermutationPair(spoSorter.sortedView(), _SPO, _SOP,
+                            ospSorter.makePushCallback(), numSubjectCounter);
     }
     spoSorter.clear();
     _configurationJson["num-subjects-normal"] = numSubjectsNormal;
@@ -208,9 +207,8 @@ void IndexImpl::createFromFile(const string& filename) {
     // For the last pair of permutations we don't need a next sorter, so we have
     // no fourth argument.
     size_t numObjectsNormal = 0;
-    createPermutationPair<IndexMetaDataMmapDispatcher>(
-        ospSorter.sortedView(), _OSP, _OPS,
-        makeNumEntitiesCounter(numObjectsNormal, 2));
+    createPermutationPair(ospSorter.sortedView(), _OSP, _OPS,
+                          makeNumEntitiesCounter(numObjectsNormal, 2));
     _configurationJson["num-objects-normal"] = numObjectsNormal;
     _configurationJson["has-all-permutations"] = true;
   } else {
@@ -487,15 +485,13 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
 }
 
 // _____________________________________________________________________________
-template <class MetaDataDispatcher, typename SortedTriples>
-std::optional<std::pair<typename MetaDataDispatcher::WriteType,
-                        typename MetaDataDispatcher::WriteType>>
+std::optional<std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
+                        IndexImpl::IndexMetaDataMmapDispatcher::WriteType>>
 IndexImpl::createPermutationPairImpl(const string& fileName1,
                                      const string& fileName2,
-                                     SortedTriples&& sortedTriples, size_t c0,
-                                     size_t c1, size_t c2,
-                                     auto&&... perTripleCallbacks) {
-  using MetaData = typename MetaDataDispatcher::WriteType;
+                                     auto&& sortedTriples, size_t c0, size_t c1,
+                                     size_t c2, auto&&... perTripleCallbacks) {
+  using MetaData = IndexMetaDataMmapDispatcher::WriteType;
   MetaData metaData1, metaData2;
   if constexpr (metaData1._isMmapBased) {
     metaData1.setup(fileName1 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
@@ -585,17 +581,12 @@ CompressedRelationMetadata IndexImpl::writeSwitchedRel(
 }
 
 // ________________________________________________________________________
-template <class MetaDataDispatcher, class Comparator1, class Comparator2>
-std::optional<std::pair<typename MetaDataDispatcher::WriteType,
-                        typename MetaDataDispatcher::WriteType>>
-IndexImpl::createPermutations(
-    auto&& sortedTriples,
-    const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
-        p1,
-    const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
-        p2,
-    auto&&... perTripleCallbacks) {
-  auto metaData = createPermutationPairImpl<MetaDataDispatcher>(
+std::optional<std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
+                        IndexImpl::IndexMetaDataMmapDispatcher::WriteType>>
+IndexImpl::createPermutations(auto&& sortedTriples, const PermutationImpl& p1,
+                              const PermutationImpl& p2,
+                              auto&&... perTripleCallbacks) {
+  auto metaData = createPermutationPairImpl(
       _onDiskBase + ".index" + p1._fileSuffix,
       _onDiskBase + ".index" + p2._fileSuffix, AD_FWD(sortedTriples),
       p1._keyOrder[0], p1._keyOrder[1], p1._keyOrder[2],
@@ -613,16 +604,12 @@ IndexImpl::createPermutations(
 }
 
 // ________________________________________________________________________
-template <class MetaDataDispatcher, class Comparator1, class Comparator2>
-void IndexImpl::createPermutationPair(
-    auto&& sortedTriples,
-    const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
-        p1,
-    const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
-        p2,
-    auto&&... perTripleCallbacks) {
-  auto metaData = createPermutations<MetaDataDispatcher>(
-      AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
+void IndexImpl::createPermutationPair(auto&& sortedTriples,
+                                      const PermutationImpl& p1,
+                                      const PermutationImpl& p2,
+                                      auto&&... perTripleCallbacks) {
+  auto metaData = createPermutations(AD_FWD(sortedTriples), p1, p2,
+                                     AD_FWD(perTripleCallbacks)...);
   // Set the name of this newly created pair of `IndexMetaData` objects.
   // NOTE: When `setKbName` was called, it set the name of _PSO._meta,
   // _PSO._meta, ... which however are not used during index building.
