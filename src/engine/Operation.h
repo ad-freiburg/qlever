@@ -27,15 +27,15 @@ class QueryExecutionTree;
 class Operation {
  public:
   // Default Constructor.
-  Operation() : _executionContext(nullptr) {}
+  Operation() : executionContext_(nullptr) {}
 
   // Typical Constructor.
   explicit Operation(QueryExecutionContext* executionContext)
-      : _executionContext(executionContext) {}
+      : executionContext_(executionContext) {}
 
   // Destructor.
   virtual ~Operation() {
-    // Do NOT delete _executionContext, since
+    // Do NOT delete executionContext_, since
     // there is no ownership.
   }
 
@@ -59,21 +59,21 @@ class Operation {
    */
   const vector<size_t>& getResultSortedOn() const;
 
-  const Index& getIndex() const { return _executionContext->getIndex(); }
+  const Index& getIndex() const { return executionContext_->getIndex(); }
 
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
   // Calls  `asStringImpl` and adds the information about the `LIMIT` clause.
   virtual string asString(size_t indent = 0) const final {
     auto result = asStringImpl(indent);
-    if (_limit._limit.has_value()) {
-      absl::StrAppend(&result, " LIMIT ", _limit._limit.value());
+    if (limit_._limit.has_value()) {
+      absl::StrAppend(&result, " LIMIT ", limit_._limit.value());
     }
-    if (_limit._offset != 0) {
-      absl::StrAppend(&result, " OFFSET ", _limit._offset);
+    if (limit_._offset != 0) {
+      absl::StrAppend(&result, " OFFSET ", limit_._offset);
     }
 
-    if (!getResultSortedOn().empty() && _sortingIsRequired) {
+    if (!getResultSortedOn().empty() && sortingIsRequired_) {
       result += " IMPLICIT SORTING REQUIRED";
     }
     return result;
@@ -93,8 +93,8 @@ class Operation {
   virtual size_t getCostEstimate() = 0;
 
   virtual size_t getSizeEstimate() final {
-    if (_limit._limit.has_value()) {
-      return std::min(_limit._limit.value(), getSizeEstimateBeforeLimit());
+    if (limit_._limit.has_value()) {
+      return std::min(limit_._limit.value(), getSizeEstimateBeforeLimit());
     } else {
       return getSizeEstimateBeforeLimit();
     }
@@ -115,9 +115,9 @@ class Operation {
   virtual void setSelectedVariablesForSubquery(
       const std::vector<Variable>& selectedVariables) final;
 
-  RuntimeInformation& getRuntimeInfo() { return _runtimeInfo; }
+  RuntimeInformation& getRuntimeInfo() { return runtimeInfo_; }
   RuntimeInformationWholeQuery& getRuntimeInfoWholeQuery() {
-    return _runtimeInfoWholeQuery;
+    return runtimeInfoWholeQuery_;
   }
 
   // Get the result for the subtree rooted at this element.
@@ -137,7 +137,7 @@ class Operation {
   // Set the value of the `LIMIT` clause that will be applied to the result of
   // this operation.
   void setLimit(const LimitOffsetClause& limitOffsetClause) {
-    _limit = limitOffsetClause;
+    limit_ = limitOffsetClause;
   }
 
   // Create and return the runtime information wrt the size and cost estimates
@@ -145,7 +145,7 @@ class Operation {
   virtual void createRuntimeInfoFromEstimates() final;
 
   QueryExecutionContext* getExecutionContext() const {
-    return _executionContext;
+    return executionContext_;
   }
 
   // If the result of this `Operation` is sorted (either because this
@@ -179,7 +179,7 @@ class Operation {
  protected:
   // The QueryExecutionContext for this particular element.
   // No ownership.
-  QueryExecutionContext* _executionContext;
+  QueryExecutionContext* executionContext_;
 
   /**
    * @brief Compute and return the columns on which the result will be sorted
@@ -187,12 +187,12 @@ class Operation {
    */
   [[nodiscard]] virtual vector<size_t> resultSortedOn() const = 0;
 
-  const auto& getLimit() const { return _limit; }
+  const auto& getLimit() const { return limit_; }
 
   /// interface to the generated warnings of this operation
-  std::vector<std::string>& getWarnings() { return _warnings; }
+  std::vector<std::string>& getWarnings() { return warnings_; }
   [[nodiscard]] const std::vector<std::string>& getWarnings() const {
-    return _warnings;
+    return warnings_;
   }
 
   // Check if there is still time left and throw a TimeoutException otherwise.
@@ -241,7 +241,7 @@ class Operation {
       size_t timeInMilliseconds) final;
 
   // Similar to the function above, but the components are specified manually.
-  // If nullopt is specified for the last argument, then the `_runtimeInfo` is
+  // If nullopt is specified for the last argument, then the `runtimeInfo_` is
   // expected to already have the correct children information. This is only
   // allowed when `cacheStatus` is `cachedPinned` or `cachedNotPinned`,
   // otherwise a runtime check will fail.
@@ -275,9 +275,9 @@ class Operation {
   // to correct the time statistics for the query planning and execution.
   size_t getTotalExecutionTimeDuringQueryPlanning() const;
 
-  // Access to the `_sortingIsRequired` member, see the documentation of that
+  // Access to the `sortingIsRequired_` member, see the documentation of that
   // member for details
-  bool& sortingIsRequired() { return _sortingIsRequired; }
+  bool& sortingIsRequired() { return sortingIsRequired_; }
 
  private:
   // Create the runtime information in case the evaluation of this operation has
@@ -296,12 +296,12 @@ class Operation {
   template <typename F>
   void forAllDescendants(F f) const;
 
-  RuntimeInformation _runtimeInfo;
-  RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
+  RuntimeInformation runtimeInfo_;
+  RuntimeInformationWholeQuery runtimeInfoWholeQuery_;
 
   // Collect all the warnings that were created during the creation or
   // execution of this operation.
-  std::vector<std::string> _warnings;
+  std::vector<std::string> warnings_;
 
   // The limit from a SPARQL `LIMIT` clause.
 
@@ -313,7 +313,7 @@ class Operation {
   // We have chosen this design (in contrast to a dedicated subclass
   // of `Operation`) to favor such efficient implementations of a limit in the
   // future.
-  LimitOffsetClause _limit;
+  LimitOffsetClause limit_;
 
   // If this member is set to `true` then it is required that the result of
   // `computeResult` is sorted by the columns that `resultSortedOn()` returns.
@@ -323,7 +323,7 @@ class Operation {
   // (for example a hash join instead of a merge join). This happens if the
   // parent operation needs a different sorting or no sorting at all to work
   // properly. This member is set to true by `ad_utility::createSortedTree`.
-  bool _sortingIsRequired = false;
+  bool sortingIsRequired_ = false;
 
   // A mutex that can be "copied". The semantics are, that copying will create
   // a new mutex. This is sufficient for applications like in
@@ -349,8 +349,8 @@ class Operation {
       externallyVisibleVariableToColumnMap_;
 
   // Mutex that protects the `_resultSortedColumns` below.
-  mutable CopyableMutex _resultSortedColumnsMutex;
+  mutable CopyableMutex resultSortedColumnsMutex_;
 
   // Store the list of columns by which the result is sorted.
-  mutable std::optional<vector<size_t>> _resultSortedColumns = std::nullopt;
+  mutable std::optional<vector<size_t>> resultSortedColumns_ = std::nullopt;
 };

@@ -107,11 +107,11 @@ void TextOperationWithoutFilter::computeResultMultVars(IdTable* idTable) const {
 size_t TextOperationWithoutFilter::getSizeEstimateBeforeLimit() {
   if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
     double nofEntitiesSingleVar;
-    if (_executionContext) {
+    if (executionContext_) {
       nofEntitiesSingleVar =
-          _executionContext->getIndex().getSizeEstimate(_words) *
+          executionContext_->getIndex().getSizeEstimate(_words) *
           std::min(float(_textLimit),
-                   _executionContext->getIndex().getAverageNofEntityContexts());
+                   executionContext_->getIndex().getAverageNofEntityContexts());
     } else {
       nofEntitiesSingleVar = 10000 * 0.8;
     }
@@ -123,9 +123,9 @@ size_t TextOperationWithoutFilter::getSizeEstimateBeforeLimit() {
 
 // _____________________________________________________________________________
 size_t TextOperationWithoutFilter::getCostEstimate() {
-  if (_executionContext) {
+  if (executionContext_) {
     return static_cast<size_t>(
-        _executionContext->getCostFactor("NO_FILTER_PUNISH") *
+        executionContext_->getCostFactor("NO_FILTER_PUNISH") *
         (getSizeEstimateBeforeLimit() * getNofVars()));
   } else {
     return getSizeEstimateBeforeLimit() * getNofVars();
@@ -145,11 +145,11 @@ float TextOperationWithoutFilter::getMultiplicity(size_t col) {
 void TextOperationWithoutFilter::computeMultiplicities() {
   for (size_t i = 0; i < getResultWidth(); ++i) {
     double nofEntitiesSingleVar;
-    if (_executionContext) {
+    if (executionContext_) {
       nofEntitiesSingleVar =
-          _executionContext->getIndex().getSizeEstimate(_words) *
+          executionContext_->getIndex().getSizeEstimate(_words) *
           std::min(float(_textLimit),
-                   _executionContext->getIndex().getAverageNofEntityContexts());
+                   executionContext_->getIndex().getAverageNofEntityContexts());
     } else {
       nofEntitiesSingleVar = 10000 * 0.8;
     }

@@ -118,18 +118,18 @@ float TextOperationWithFilter::getMultiplicity(size_t col) {
 
 // _____________________________________________________________________________
 void TextOperationWithFilter::computeMultiplicities() {
-  if (_executionContext) {
+  if (executionContext_) {
     // Like without filter
     vector<float> multiplicitiesNoFilter;
     for (size_t i = 0;
          i < getResultWidth() + 1 - _filterResult->getResultWidth(); ++i) {
       double nofEntitiesSingleVar;
-      if (_executionContext) {
+      if (executionContext_) {
         nofEntitiesSingleVar =
-            _executionContext->getIndex().getSizeEstimate(_words) *
+            executionContext_->getIndex().getSizeEstimate(_words) *
             std::min(
                 float(_textLimit),
-                _executionContext->getIndex().getAverageNofEntityContexts());
+                executionContext_->getIndex().getAverageNofEntityContexts());
       } else {
         nofEntitiesSingleVar = 10000 * 0.8;
       }
@@ -166,14 +166,14 @@ void TextOperationWithFilter::computeMultiplicities() {
 // _____________________________________________________________________________
 size_t TextOperationWithFilter::getSizeEstimateBeforeLimit() {
   if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
-    if (_executionContext) {
+    if (executionContext_) {
       // NEW at 05 Dec 2016:
       // Estimate the size of the result like the equivalent text without filter
       // plus join.
       double nofEntitiesSingleVar =
-          _executionContext->getIndex().getSizeEstimate(_words) *
+          executionContext_->getIndex().getSizeEstimate(_words) *
           std::min(float(_textLimit),
-                   _executionContext->getIndex().getAverageNofEntityContexts());
+                   executionContext_->getIndex().getAverageNofEntityContexts());
 
       auto estNoFil =
           static_cast<size_t>(pow(nofEntitiesSingleVar, getNofVars()));
@@ -187,7 +187,7 @@ size_t TextOperationWithFilter::getSizeEstimateBeforeLimit() {
 
       _sizeEstimate = std::max(
           size_t(1),
-          static_cast<size_t>(_executionContext->getCostFactor(
+          static_cast<size_t>(executionContext_->getCostFactor(
                                   "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR") *
                               joinColMultiplicity *
                               std::min(nofDistinctFilter, estNoFil)));
@@ -203,12 +203,12 @@ size_t TextOperationWithFilter::getCostEstimate() {
   if (_filterResult->knownEmptyResult()) {
     return 0;
   }
-  if (_executionContext) {
+  if (executionContext_) {
     return static_cast<size_t>(
-        _executionContext->getCostFactor("FILTER_PUNISH") *
+        executionContext_->getCostFactor("FILTER_PUNISH") *
         (getSizeEstimateBeforeLimit() * getNofVars() +
          _filterResult->getSizeEstimate() *
-             _executionContext->getCostFactor("HASH_MAP_OPERATION_COST") +
+             executionContext_->getCostFactor("HASH_MAP_OPERATION_COST") +
          _filterResult->getCostEstimate()));
   } else {
     return _filterResult->getSizeEstimate() * 2 +
