@@ -194,27 +194,10 @@ class IndexImpl {
   const auto& OSP() const { return _OSP; }
   auto& OSP() { return _OSP; }
 
-  PermutationImpl& getPermutation(Index::Permutation p) {
-    using enum Index::Permutation;
-    switch (p) {
-      case PSO:
-        return _PSO;
-      case POS:
-        return _POS;
-      case SPO:
-        return _SPO;
-      case SOP:
-        return _SOP;
-      case OSP:
-        return _OSP;
-      case OPS:
-        return _OPS;
-    }
-  }
-
-  const PermutationImpl& getPermutation(Index::Permutation p) const {
-    return const_cast<IndexImpl&>(*this).getPermutation(p);
-  }
+  // For a given `Permutation` (e.g. `PSO`) return the corresponding
+  // `PermutationImpl` object by reference (`_PSO`).
+  PermutationImpl& getPermutation(Index::Permutation p);
+  const PermutationImpl& getPermutation(Index::Permutation p) const;
 
   // Creates an index from a file. Parameter Parser must be able to split the
   // file's format into triples.
@@ -250,134 +233,39 @@ class IndexImpl {
   // --------------------------------------------------------------------------
   //  -- RETRIEVAL ---
   // --------------------------------------------------------------------------
-  typedef vector<array<Id, 1>> WidthOneList;
-  typedef vector<array<Id, 2>> WidthTwoList;
-  typedef vector<array<Id, 3>> WidthThreeList;
-  typedef vector<array<Id, 4>> WidthFourList;
-  typedef vector<array<Id, 5>> WidthFiveList;
-  typedef vector<vector<Id>> VarWidthList;
 
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------
 
   // __________________________________________________________________________
-  NumNormalAndInternal numDistinctSubjects() const {
-    if (hasAllPermutations()) {
-      auto numActually = _numSubjectsNormal;
-      return {numActually, _SPO.metaData().getNofDistinctC1() - numActually};
-    } else {
-      AD_THROW(
-          "Can only get # distinct subjects if all 6 permutations "
-          "have been registered on sever start (and index build time) "
-          "with the -a option.");
-    }
-  }
+  NumNormalAndInternal numDistinctSubjects() const;
 
   // __________________________________________________________________________
-  NumNormalAndInternal numDistinctObjects() const {
-    if (hasAllPermutations()) {
-      auto numActually = _numObjectsNormal;
-      return {numActually, _OSP.metaData().getNofDistinctC1() - numActually};
-    } else {
-      AD_THROW(
-          "Can only get # distinct objects if all 6 permutations "
-          "have been registered on sever start (and index build time) "
-          "with the -a option.");
-    }
-  }
+  NumNormalAndInternal numDistinctObjects() const;
 
   // __________________________________________________________________________
-  NumNormalAndInternal numDistinctPredicates() const {
-    auto numActually = _numPredicatesNormal;
-    return {numActually, _PSO.metaData().getNofDistinctC1() - numActually};
-  }
+  NumNormalAndInternal numDistinctPredicates() const;
 
   // __________________________________________________________________________
-  NumNormalAndInternal numDistinctCol0(Index::Permutation permutation) const {
-    switch (permutation) {
-      case Index::Permutation::SOP:
-      case Index::Permutation::SPO:
-        return numDistinctSubjects();
-      case Index::Permutation::OPS:
-      case Index::Permutation::OSP:
-        return numDistinctObjects();
-      case Index::Permutation::POS:
-      case Index::Permutation::PSO:
-        return numDistinctPredicates();
-      default:
-        AD_FAIL();
-    }
-  }
+  NumNormalAndInternal numDistinctCol0(Index::Permutation permutation) const;
 
   // ___________________________________________________________________________
-  size_t getCardinality(Id id, Index::Permutation permutation) const {
-    const auto& p = getPermutation(permutation);
-    if (p.metaData().col0IdExists(id)) {
-      return p.metaData().getMetaData(id).getNofElements();
-    }
-    return 0;
-  }
+  size_t getCardinality(Id id, Index::Permutation permutation) const;
 
   // ___________________________________________________________________________
   size_t getCardinality(const TripleComponent& comp,
-                        Index::Permutation permutation) const {
-    // TODO<joka921> This special case is only relevant for the `PSO` and `POS`
-    // permutations, but this internal predicate should never appear in subjects
-    // or objects anyway.
-    // TODO<joka921> Find out what the effect of this special case is for the
-    // query planning.
-    if (comp == INTERNAL_TEXT_MATCH_PREDICATE) {
-      return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
-    }
-    std::optional<Id> relId = comp.toValueId(getVocab());
-    if (relId.has_value()) {
-      return getCardinality(relId.value(), permutation);
-    }
-    return 0;
-  }
+                        Index::Permutation permutation) const;
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
-  std::optional<string> idToOptionalString(Id id) const {
-    switch (id.getDatatype()) {
-      case Datatype::Undefined:
-        return std::nullopt;
-      case Datatype::Double:
-        return std::to_string(id.getDouble());
-      case Datatype::Int:
-        return std::to_string(id.getInt());
-      case Datatype::VocabIndex: {
-        auto result = _vocab.indexToOptionalString(id.getVocabIndex());
-        if (result.has_value() && result.value().starts_with(VALUE_PREFIX)) {
-          result = ad_utility::convertIndexWordToValueLiteral(result.value());
-        }
-        return result;
-      }
-      case Datatype::LocalVocabIndex:
-        // TODO:: this is why this shouldn't be here
-        return std::nullopt;
-      case Datatype::TextRecordIndex:
-        return getTextExcerpt(id.getTextRecordIndex());
-    }
-    // should be unreachable because the enum is exhaustive.
-    AD_FAIL();
-  }
+  std::optional<string> idToOptionalString(Id id) const;
 
-  bool getId(const string& element, Id* id) const {
-    // TODO<joka921> we should parse doubles correctly in the SparqlParser and
-    // then return the correct ids here or somewhere else.
-    VocabIndex vocabId;
-    auto success = getVocab().getId(element, &vocabId);
-    *id = Id::makeFromVocabIndex(vocabId);
-    return success;
-  }
+  // ___________________________________________________________________________
+  bool getId(const string& element, Id* id) const;
 
-  std::pair<Id, Id> prefix_range(const std::string& prefix) const {
-    // TODO<joka921> Do we need prefix ranges for numbers?
-    auto [begin, end] = _vocab.prefix_range(prefix);
-    return {Id::makeFromVocabIndex(begin), Id::makeFromVocabIndex(end)};
-  }
+  // ___________________________________________________________________________
+  std::pair<Id, Id> prefix_range(const std::string& prefix) const;
 
   const vector<PatternID>& getHasPattern() const;
   const CompactVectorOfStrings<Id>& getHasPredicate() const;
@@ -511,32 +399,10 @@ class IndexImpl {
 
   // _____________________________________________________________________________
   vector<float> getMultiplicities(const TripleComponent& key,
-                                  Index::Permutation permutation) const {
-    const auto& p = getPermutation(permutation);
-    std::optional<Id> keyId = key.toValueId(getVocab());
-    vector<float> res;
-    if (keyId.has_value() && p._meta.col0IdExists(keyId.value())) {
-      auto metaData = p._meta.getMetaData(keyId.value());
-      res.push_back(metaData.getCol1Multiplicity());
-      res.push_back(metaData.getCol2Multiplicity());
-    } else {
-      res.push_back(1);
-      res.push_back(1);
-    }
-    return res;
-  }
+                                  Index::Permutation permutation) const;
 
   // ___________________________________________________________________
-  vector<float> getMultiplicities(Index::Permutation permutation) const {
-    const auto& p = getPermutation(permutation);
-    auto numTriples =
-        static_cast<float>(this->numTriples().normalAndInternal_());
-    std::array<float, 3> m{
-        numTriples / numDistinctSubjects().normalAndInternal_(),
-        numTriples / numDistinctPredicates().normalAndInternal_(),
-        numTriples / numDistinctObjects().normalAndInternal_()};
-    return {m[p._keyOrder[0]], m[p._keyOrder[1]], m[p._keyOrder[2]]};
-  }
+  vector<float> getMultiplicities(Index::Permutation permutation) const;
 
   /**
    * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
@@ -550,9 +416,7 @@ class IndexImpl {
    * IndexImpl class).
    */
   void scan(Id key, IdTable* result, const Index::Permutation& p,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
-    getPermutation(p).scan(key, result, std::move(timer));
-  }
+            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   /**
    * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
@@ -567,17 +431,7 @@ class IndexImpl {
    */
   void scan(const TripleComponent& key, IdTable* result,
             Index::Permutation permutation,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
-    const auto& p = getPermutation(permutation);
-    LOG(DEBUG) << "Performing " << p._readableName
-               << " scan for full list for: " << key << "\n";
-    std::optional<Id> optionalId = key.toValueId(getVocab());
-    if (optionalId.has_value()) {
-      LOG(TRACE) << "Successfully got key ID.\n";
-      scan(optionalId.value(), result, permutation, std::move(timer));
-    }
-    LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
-  }
+            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   /**
    * @brief Perform a scan for two keys i.e. retrieve all Z from the XYZ
@@ -596,22 +450,7 @@ class IndexImpl {
   void scan(const TripleComponent& col0String,
             const TripleComponent& col1String, IdTable* result,
             const Index::Permutation& permutation,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
-    std::optional<Id> col0Id = col0String.toValueId(getVocab());
-    std::optional<Id> col1Id = col1String.toValueId(getVocab());
-    const auto& p = getPermutation(permutation);
-    if (!col0Id.has_value() || !col1Id.has_value()) {
-      LOG(DEBUG) << "Key " << col0String << " or key " << col1String
-                 << " were not found in the vocabulary \n";
-      return;
-    }
-
-    LOG(DEBUG) << "Performing " << p._readableName << "  scan of relation "
-               << col0String << " with fixed subject: " << col1String
-               << "...\n";
-
-    p.scan(col0Id.value(), col1Id.value(), result, timer);
-  }
+            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
  private:
   // Private member functions
@@ -814,27 +653,11 @@ class IndexImpl {
   template <class Parser>
   void readIndexBuilderSettingsFromFile();
 
-  // Helper function for Debugging during the index build.
-  // ExtVecs are not persistent, so we dump them to a mmapVector in a file with
-  // given filename
-  static void dumpExtVecToMmap(const TripleVec& vec, std::string filename) {
-    LOG(INFO) << "Dumping ext vec to mmap" << std::endl;
-    MmapVector<TripleVec::value_type> mmapVec(vec.size(), filename);
-    for (size_t i = 0; i < vec.size(); ++i) {
-      mmapVec[i] = vec[i];
-    }
-    LOG(INFO) << "Done" << std::endl;
-  }
-
   /**
    * Delete a temporary file unless the _keepTempFiles flag is set
    * @param path
    */
-  void deleteTemporaryFile(const string& path) {
-    if (!_keepTempFiles) {
-      ad_utility::deleteFile(path);
-    }
-  }
+  void deleteTemporaryFile(const string& path);
 
  public:
   // Count the number of "QLever-internal" triples (predicate ql:langtag or
