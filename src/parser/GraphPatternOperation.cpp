@@ -123,4 +123,18 @@ void GraphPatternOperation::toString(std::ostringstream& os,
     }
   });
 }
+
+// ____________________________________________________________________________
+cppcoro::generator<const Variable> Bind::containedVariables() const {
+  for (const auto* ptr : _expression.containedVariables()) {
+    co_yield *ptr;
+  }
+  co_yield _target;
+}
+
+// ____________________________________________________________________________
+[[nodiscard]] string Bind::getDescriptor() const {
+  auto inner = _expression.getDescriptor();
+  return "BIND (" + inner + " AS " + _target.name() + ")";
+}
 }  // namespace parsedQuery

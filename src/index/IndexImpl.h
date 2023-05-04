@@ -63,6 +63,8 @@ using PsoSorter = StxxlSorter<SortByPSO>;
 // index builder.
 struct IndexBuilderDataBase {
   VocabularyMerger::VocabularyMetaData vocabularyMetaData_;
+  // The prefixes that are used for the prefix compression.
+  std::vector<std::string> prefixes_;
 };
 
 // All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
@@ -177,12 +179,13 @@ class IndexImpl {
  public:
   IndexImpl();
 
-  /// Forbid copy and assignment.
+  // Forbid copying.
   IndexImpl& operator=(const IndexImpl&) = delete;
   IndexImpl(const IndexImpl&) = delete;
-
-  /// Allow move construction, which is mostly used in unit tests.
-  IndexImpl(IndexImpl&&) noexcept = default;
+  // Moving is currently not supported, because several of the members use
+  // mutexes internally. It is also not needed.
+  IndexImpl& operator=(IndexImpl&&) = delete;
+  IndexImpl(IndexImpl&&) = delete;
 
   const auto& POS() const { return _POS; }
   auto& POS() { return _POS; }
@@ -695,8 +698,8 @@ class IndexImpl {
                             SortedTriples&& sortedTriples, size_t c0, size_t c1,
                             size_t c2, auto&&... perTripleCallbacks);
 
-  void writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
-                        BufferedIdTable* bufPtr);
+  static CompressedRelationMetadata writeSwitchedRel(
+      CompressedRelationWriter* out, Id currentRel, BufferedIdTable* bufPtr);
 
   // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,
@@ -717,14 +720,6 @@ class IndexImpl {
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
       auto&&... perTripleCallbacks);
-
-  // The pairs of permutations are PSO-POS, OSP-OPS and SPO-SOP
-  // the multiplicity of column 1 in partner 1 of the pair is equal to the
-  // multiplity of column 2 in partner 2
-  // This functions writes the multiplicities of the first column of one
-  // arguments to the 2nd column multiplicities of the other
-  template <class MetaData>
-  void exchangeMultiplicities(MetaData* m1, MetaData* m2);
 
   // wrapper for createPermutation that saves a lot of code duplications
   // Writes the permutation that is specified by argument permutation

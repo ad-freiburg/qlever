@@ -55,7 +55,8 @@ concept StoresBoolean =
 
 // Concept that requires that `T` logically stores `ValueId`s.
 template <typename T>
-concept StoresValueId = ad_utility::SimilarTo<T, Variable> ||
+concept StoresValueId =
+    ad_utility::SimilarTo<T, Variable> ||
     ad_utility::SimilarTo<T, VectorWithMemoryLimit<ValueId>> ||
     ad_utility::SimilarTo<T, ValueId>;
 
@@ -258,8 +259,9 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
 // `AreComparable` (see above), which means that the comparison between them is
 // supported and not always false.
 template <Comparison Comp, SingleExpressionResult S1, SingleExpressionResult S2>
-requires AreComparable<S1, S2> ExpressionResult
-evaluateRelationalExpression(S1 value1, S2 value2, EvaluationContext* context) {
+requires AreComparable<S1, S2>
+ExpressionResult evaluateRelationalExpression(S1 value1, S2 value2,
+                                              EvaluationContext* context) {
   auto resultSize =
       sparqlExpression::detail::getResultSize(*context, value1, value2);
   constexpr static bool resultIsConstant =
@@ -321,17 +323,16 @@ evaluateRelationalExpression(S1 value1, S2 value2, EvaluationContext* context) {
 // The relational comparisons like `less than` are not useful for booleans and
 // thus currently throw an exception.
 template <Comparison, typename A, typename B>
-Bool evaluateRelationalExpression(const A&, const B&,
-                                  EvaluationContext*) requires
-    StoresBoolean<A> || StoresBoolean<B> {
+Bool evaluateRelationalExpression(const A&, const B&, EvaluationContext*)
+    requires StoresBoolean<A> || StoresBoolean<B> {
   throw std::runtime_error(
       "Relational expressions like <, >, == are currently not supported for "
       "boolean arguments");
 }
 
 template <Comparison Comp, typename A, typename B>
-requires AreIncomparable<A, B> Bool
-evaluateRelationalExpression(const A&, const B&, EvaluationContext*) {
+requires AreIncomparable<A, B>
+Bool evaluateRelationalExpression(const A&, const B&, EvaluationContext*) {
   if constexpr (Comp == Comparison::NE) {
     return true;
   } else {
@@ -342,8 +343,9 @@ evaluateRelationalExpression(const A&, const B&, EvaluationContext*) {
 // For comparisons where exactly one of the operands is a variable, the variable
 // must come first.
 template <Comparison Comp, SingleExpressionResult A, SingleExpressionResult B>
-requires(!AreComparable<A, B> && AreComparable<B, A>) ExpressionResult
-    evaluateRelationalExpression(A a, B b, EvaluationContext* context) {
+requires(!AreComparable<A, B> && AreComparable<B, A>)
+ExpressionResult evaluateRelationalExpression(A a, B b,
+                                              EvaluationContext* context) {
   return evaluateRelationalExpression<getComparisonForSwappedArguments(Comp)>(
       std::move(b), std::move(a), context);
 }

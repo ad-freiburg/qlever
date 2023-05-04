@@ -61,8 +61,6 @@ class Operation {
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
-  const Engine& getEngine() const { return _executionContext->getEngine(); }
-
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
   // Calls  `asStringImpl` and adds the information about the `LIMIT` clause.
@@ -263,6 +261,13 @@ class Operation {
   // see `GroupBy.cpp`
   virtual void updateRuntimeInformationWhenOptimizedOut(
       std::vector<RuntimeInformation> children);
+
+  // Use the already stored runtime info for the children,
+  // but set all of them to `optimizedOut`. This can be used, when a complete
+  // tree was optimized out. For example when one child of a JOIN operation is
+  // empty, the result will be empty, and it is not necessary to evaluate the
+  // other child.
+  virtual void updateRuntimeInformationWhenOptimizedOut();
 
   // Some operations (currently `IndexScans` with only one variable) are
   // computed during query planning. Get the total time spent in such

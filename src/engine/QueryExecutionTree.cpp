@@ -283,7 +283,7 @@ std::shared_ptr<QueryExecutionTree> createSortedTree(
   return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
 }
 
-// ________________________________________________________________________________________________________________
+// _____________________________________________________________________________
 std::array<std::shared_ptr<QueryExecutionTree>, 2> createSortedTrees(
     std::shared_ptr<QueryExecutionTree> qetA,
     std::shared_ptr<QueryExecutionTree> qetB,
@@ -298,3 +298,14 @@ std::array<std::shared_ptr<QueryExecutionTree>, 2> createSortedTrees(
           createSortedTree(std::move(qetB), sortColumnsB)};
 }
 }  // namespace ad_utility
+
+// _____________________________________________________________________________
+const VariableToColumnMap::value_type&
+QueryExecutionTree::getVariableAndInfoByColumnIndex(ColumnIndex colIdx) const {
+  const auto& varColMap = getVariableColumns();
+  auto it = std::ranges::find_if(varColMap, [leftCol = colIdx](const auto& el) {
+    return el.second.columnIndex_ == leftCol;
+  });
+  AD_CONTRACT_CHECK(it != varColMap.end());
+  return *it;
+}

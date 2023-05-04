@@ -202,6 +202,10 @@ class RowReferenceImpl {
     // The number of columns that this row contains.
     size_t numColumns() const { return table_->numColumns(); }
 
+    size_t rowIndex() const { return row_; }
+
+    size_t size() const { return numColumns(); }
+
    protected:
     // The implementation of swapping two `RowReference`s (passed either by
     // value or by reference).
@@ -371,8 +375,9 @@ class RowReference
   }
 
   // Assignment from a `const` RowReference to a `mutable` RowReference
-  RowReference& operator=(const RowReference<Table, ad_utility::IsConst::True>&
-                              other) requires(!isConst) {
+  RowReference& operator=(
+      const RowReference<Table, ad_utility::IsConst::True>& other)
+      requires(!isConst) {
     return assignmentImpl(base(), other);
   }
 

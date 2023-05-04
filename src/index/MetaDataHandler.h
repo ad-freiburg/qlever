@@ -25,11 +25,11 @@ class MetaDataWrapperDense {
     AddGetIdIterator(BaseIterator base) : BaseIterator{base} {}
     [[nodiscard]] Id getId() const { return getIdFromElement(*(*this)); }
     static Id getIdFromElement(const typename BaseIterator::value_type& v) {
-      return v._col0Id;
+      return v.col0Id_;
     }
     static auto getNumRowsFromElement(
         const typename BaseIterator::value_type& v) {
-      return v._numRows;
+      return v.numRows_;
     }
   };
 
@@ -72,9 +72,6 @@ class MetaDataWrapperDense {
   ConstIterator cbegin() const { return _vec.begin(); }
 
   // __________________________________________________________________
-  Iterator begin() { return _vec.begin(); }
-
-  // __________________________________________________________________
   ConstIterator begin() const { return _vec.begin(); }
 
   // __________________________________________________________________________
@@ -85,7 +82,6 @@ class MetaDataWrapperDense {
 
   // __________________________________________________________________________
   ConstIterator end() const { return _vec.end(); }
-  Iterator end() { return _vec.end(); }
 
   // __________________________________________________________________________
   ConstOrderedIterator ordered_end() const { return end(); }
@@ -93,28 +89,21 @@ class MetaDataWrapperDense {
   // ____________________________________________________________
   void set(Id id, const value_type& value) {
     // Assert that the ids are ascending.
-    AD_CONTRACT_CHECK(_vec.size() == 0 || _vec.back()._col0Id < id);
+    AD_CONTRACT_CHECK(_vec.size() == 0 || _vec.back().col0Id_ < id);
     _vec.push_back(value);
   }
 
   // __________________________________________________________
   const value_type& getAsserted(Id id) const {
     auto it = lower_bound(id);
-    AD_CONTRACT_CHECK(it != _vec.end() && it->_col0Id == id);
-    return *it;
-  }
-
-  // _________________________________________________________
-  value_type& operator[](Id id) {
-    auto it = lower_bound(id);
-    AD_CONTRACT_CHECK(it != _vec.end() && it->_col0Id == id);
+    AD_CONTRACT_CHECK(it != _vec.end() && it->col0Id_ == id);
     return *it;
   }
 
   // ________________________________________________________
   size_t count(Id id) const {
     auto it = lower_bound(id);
-    return it != _vec.end() && it->_col0Id == id;
+    return it != _vec.end() && it->col0Id_ == id;
   }
 
   // ___________________________________________________________
@@ -123,13 +112,7 @@ class MetaDataWrapperDense {
  private:
   ConstIterator lower_bound(Id id) const {
     auto cmp = [](const auto& metaData, Id id) {
-      return metaData._col0Id < id;
-    };
-    return std::lower_bound(_vec.begin(), _vec.end(), id, cmp);
-  }
-  Iterator lower_bound(Id id) {
-    auto cmp = [](const auto& metaData, Id id) {
-      return metaData._col0Id < id;
+      return metaData.col0Id_ < id;
     };
     return std::lower_bound(_vec.begin(), _vec.end(), id, cmp);
   }
@@ -144,13 +127,13 @@ class MetaDataWrapperHashMap {
   struct AddGetIdIterator : public BaseIterator {
     using BaseIterator::BaseIterator;
     AddGetIdIterator(BaseIterator base) : BaseIterator{base} {}
-    [[nodiscard]] Id getId() const { return (*this)->second._col0Id; }
+    [[nodiscard]] Id getId() const { return (*this)->second.col0Id_; }
     static Id getIdFromElement(const typename BaseIterator::value_type& v) {
-      return v.second._col0Id;
+      return v.second.col0Id_;
     }
     static auto getNumRowsFromElement(
         const typename BaseIterator::value_type& v) {
-      return v.second._numRows;
+      return v.second.numRows_;
     }
   };
   using Iterator = AddGetIdIterator<typename hashMap::iterator>;
@@ -185,9 +168,6 @@ class MetaDataWrapperHashMap {
   ConstIterator cbegin() const { return _map.begin(); }
   ConstIterator begin() const { return _map.begin(); }
 
-  // __________________________________________________________________
-  Iterator begin() { return _map.begin(); }
-
   // _________________________________________________________________________
   ConstOrderedIterator ordered_begin() const {
     return ConstOrderedIterator{this, 0};
@@ -196,9 +176,6 @@ class MetaDataWrapperHashMap {
   // ____________________________________________________________
   ConstIterator cend() const { return _map.end(); }
   ConstIterator end() const { return _map.end(); }
-
-  // ____________________________________________________________
-  Iterator end() { return _map.end(); }
 
   // _________________________________________________________________________
   ConstOrderedIterator ordered_end() const {
@@ -222,13 +199,6 @@ class MetaDataWrapperHashMap {
     auto it = _map.find(id);
     AD_CONTRACT_CHECK(it != _map.end());
     return std::cref(it->second);
-  }
-
-  // __________________________________________________________
-  value_type& operator[](Id id) {
-    auto it = _map.find(id);
-    AD_CONTRACT_CHECK(it != _map.end());
-    return std::ref(it->second);
   }
 
   // ________________________________________________________

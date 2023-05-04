@@ -144,17 +144,9 @@ struct Bind {
 
   // Return all the variables that are used in the BIND expression (the target
   // variable as well as all variables from the expression).
-  cppcoro::generator<const Variable> containedVariables() const {
-    for (const auto* ptr : _expression.containedVariables()) {
-      co_yield *ptr;
-    }
-    co_yield (_target);
-  }
+  cppcoro::generator<const Variable> containedVariables() const;
 
-  [[nodiscard]] string getDescriptor() const {
-    auto inner = _expression.getDescriptor();
-    return "BIND (" + inner + " AS " + _target.name() + ")";
-  }
+  [[nodiscard]] string getDescriptor() const;
 };
 
 // TODO<joka921> Further refactor this, s.t. the whole `GraphPatternOperation`

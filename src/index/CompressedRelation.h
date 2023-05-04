@@ -51,19 +51,29 @@ struct CompressedBlockMetadata {
   // Since we have column-based indices, the two columns of each block are
   // stored separately (but adjacently).
   struct OffsetAndCompressedSize {
-    off_t _offsetInFile;
-    size_t _compressedSize;
+    off_t offsetInFile_;
+    size_t compressedSize_;
     bool operator==(const OffsetAndCompressedSize&) const = default;
   };
-  std::vector<OffsetAndCompressedSize> _offsetsAndCompressedSize;
-  size_t _numRows;
+  std::vector<OffsetAndCompressedSize> offsetsAndCompressedSize_;
+  size_t numRows_;
   // For example, in the PSO permutation, col0 is the P and col1 is the S. The
   // col0 ID is not stored in the block. First and last are meant inclusively,
   // that is, they are both part of the block.
-  Id _col0FirstId;
-  Id _col0LastId;
-  Id _col1FirstId;
-  Id _col1LastId;
+  //
+  // NOTE: Strictly speaking, we don't need `col0FirstId_` and `col1FirstId_`.
+  // However, they are convenient to have and don't really harm with respect to
+  // space efficiency. For example, for Wikidata, we have only around 50K blocks
+  // with block size 8M and around 5M blocks with block size 80K; even the
+  // latter takes only half a GB in total.
+  Id col0FirstId_;
+  Id col0LastId_;
+  Id col1FirstId_;
+  Id col1LastId_;
+
+  // For our `DeltaTriples` (https://github.com/ad-freiburg/qlever/pull/916), we
+  // need to know the least significant `Id` of the last triple as well.
+  Id col2LastId_;
 
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadata&) const = default;
@@ -71,37 +81,38 @@ struct CompressedBlockMetadata {
 
 // Serialization of the `OffsetAndcompressedSize` subclass.
 AD_SERIALIZE_FUNCTION(CompressedBlockMetadata::OffsetAndCompressedSize) {
-  serializer | arg._offsetInFile;
-  serializer | arg._compressedSize;
+  serializer | arg.offsetInFile_;
+  serializer | arg.compressedSize_;
 }
 
 // Serialization of the block metadata.
 AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
-  serializer | arg._offsetsAndCompressedSize;
-  serializer | arg._numRows;
-  serializer | arg._col0FirstId;
-  serializer | arg._col0LastId;
-  serializer | arg._col1FirstId;
-  serializer | arg._col1LastId;
+  serializer | arg.offsetsAndCompressedSize_;
+  serializer | arg.numRows_;
+  serializer | arg.col0FirstId_;
+  serializer | arg.col0LastId_;
+  serializer | arg.col1FirstId_;
+  serializer | arg.col1LastId_;
+  serializer | arg.col2LastId_;
 }
 
 // The metadata of a whole compressed "relation", where relation refers to a
 // maximal sequence of triples with equal first component (e.g., P for the PSO
 // permutation).
 struct CompressedRelationMetadata {
-  Id _col0Id;
-  size_t _numRows;
-  float _multiplicityCol1;  // E.g., in PSO this is the multiplicity of "S".
-  float _multiplicityCol2;  // E.g., in PSO this is the multiplicity of "O".
+  Id col0Id_;
+  size_t numRows_;
+  float multiplicityCol1_;  // E.g., in PSO this is the multiplicity of "S".
+  float multiplicityCol2_;  // E.g., in PSO this is the multiplicity of "O".
   // If this "relation" is contained in a block together with other "relations",
   // then all of these relations are contained only in this block and
-  // `_offsetInBlock` stores the offset in this block (referring to the index in
+  // `offsetInBlock_` stores the offset in this block (referring to the index in
   // the uncompressed sequence of triples).  Otherwise, this "relation" is
-  // stored in one or several blocks of its own, and we set `_offsetInBlock` to
+  // stored in one or several blocks of its own, and we set `offsetInBlock_` to
   // `Id(-1)`.
-  uint64_t _offsetInBlock = std::numeric_limits<uint64_t>::max();
+  uint64_t offsetInBlock_ = std::numeric_limits<uint64_t>::max();
 
-  size_t getNofElements() const { return _numRows; }
+  size_t getNofElements() const { return numRows_; }
 
   // We currently always store two columns (the second and third column of a
   // triple). This might change in the future when we might also store
@@ -110,12 +121,12 @@ struct CompressedRelationMetadata {
   static constexpr size_t numColumns() { return NumColumns; }
 
   // Setters and getters for the multiplicities.
-  float getCol1Multiplicity() const { return _multiplicityCol1; }
-  float getCol2Multiplicity() const { return _multiplicityCol2; }
-  void setCol1Multiplicity(float mult) { _multiplicityCol1 = mult; }
-  void setCol2Multiplicity(float mult) { _multiplicityCol2 = mult; }
+  float getCol1Multiplicity() const { return multiplicityCol1_; }
+  float getCol2Multiplicity() const { return multiplicityCol2_; }
+  void setCol1Multiplicity(float mult) { multiplicityCol1_ = mult; }
+  void setCol2Multiplicity(float mult) { multiplicityCol2_ = mult; }
 
-  bool isFunctional() const { return _multiplicityCol1 == 1.0f; }
+  bool isFunctional() const { return multiplicityCol1_ == 1.0f; }
 
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedRelationMetadata&) const = default;
@@ -123,30 +134,29 @@ struct CompressedRelationMetadata {
 
 // Serialization of the compressed "relation" meta data.
 AD_SERIALIZE_FUNCTION(CompressedRelationMetadata) {
-  serializer | arg._col0Id;
-  serializer | arg._numRows;
-  serializer | arg._multiplicityCol1;
-  serializer | arg._multiplicityCol2;
-  serializer | arg._offsetInBlock;
+  serializer | arg.col0Id_;
+  serializer | arg.numRows_;
+  serializer | arg.multiplicityCol1_;
+  serializer | arg.multiplicityCol2_;
+  serializer | arg.offsetInBlock_;
 }
 
 /// Manage the compression and serialization of relations during the index
 /// build.
 class CompressedRelationWriter {
  private:
-  ad_utility::File _outfile;
-  std::vector<CompressedRelationMetadata> _metaDataBuffer;
-  std::vector<CompressedBlockMetadata> _blockBuffer;
-  CompressedBlockMetadata _currentBlockData;
-  SmallRelationsBuffer _buffer;
-  size_t _numBytesPerBlock;
+  ad_utility::File outfile_;
+  std::vector<CompressedBlockMetadata> blockBuffer_;
+  CompressedBlockMetadata currentBlockData_;
+  SmallRelationsBuffer buffer_;
+  size_t numBytesPerBlock_;
 
  public:
   /// Create using a filename, to which the relation data will be written.
-  CompressedRelationWriter(
+  explicit CompressedRelationWriter(
       ad_utility::File f,
       size_t numBytesPerBlock = BLOCKSIZE_COMPRESSED_METADATA)
-      : _outfile{std::move(f)}, _numBytesPerBlock{numBytesPerBlock} {}
+      : outfile_{std::move(f)}, numBytesPerBlock_{numBytesPerBlock} {}
 
   /**
    * Add a complete (single) relation.
@@ -161,35 +171,19 @@ class CompressedRelationWriter {
    * can also calculate the average multiplicity and whether the relation is
    * functional, so we don't need to store that
    * explicitly).
+   *
+   * \return The Metadata of the relation that was added.
    */
-  void addRelation(Id col0Id, const BufferedIdTable& col1And2Ids,
-                   size_t numDistinctCol1);
-
-  /// Finish writing all relations which have previously been added, but might
-  /// still be in some internal buffer.
-  void finish() {
-    writeBufferedRelationsToSingleBlock();
-    _outfile.close();
-  }
-
-  /// Get the complete CompressedRelationMetaData created by the calls to
-  /// addRelation. This meta data is then deleted from the
-  /// CompressedRelationWriter. The typical workflow is: add all relations,
-  /// then call `finish()` and then call this method.
-  auto getFinishedMetaData() {
-    auto result = std::move(_metaDataBuffer);
-    _metaDataBuffer.clear();
-    return result;
-  }
+  CompressedRelationMetadata addRelation(Id col0Id,
+                                         const BufferedIdTable& col1And2Ids,
+                                         size_t numDistinctCol1);
 
   /// Get all the CompressedBlockMetaData that were created by the calls to
-  /// addRelation. This meta data is then deleted from the
-  /// CompressedRelationWriter. The typical workflow is: add all relations,
-  /// then call `finish()` and then call this method.
-  auto getFinishedBlocks() {
-    auto result = std::move(_blockBuffer);
-    _blockBuffer.clear();
-    return result;
+  /// addRelation. This also closes the writer. The typical workflow is:
+  /// add all relations and then call this method.
+  auto getFinishedBlocks() && {
+    finish();
+    return std::move(blockBuffer_);
   }
 
   // Compute the multiplicity of given the number of elements and the number of
@@ -202,18 +196,25 @@ class CompressedRelationWriter {
                                    size_t numDistinctElements);
 
  private:
-  // Compress the contents of `_buffer` into a single block and write it to
-  // _outfile. Update `_currentBlockData` with the meta data of the written
-  // block. Then clear `_buffer`.
+  /// Finish writing all relations which have previously been added, but might
+  /// still be in some internal buffer.
+  void finish() {
+    writeBufferedRelationsToSingleBlock();
+    outfile_.close();
+  }
+
+  // Compress the contents of `buffer_` into a single block and write it to
+  // outfile_. Update `currentBlockData_` with the meta data of the written
+  // block. Then clear `buffer_`.
   void writeBufferedRelationsToSingleBlock();
 
   // Compress the relation from `data` into one or more blocks, depending on
-  // its size. Write the blocks to `_outfile` and append all the created
-  // block metadata to `_blockBuffer`.
+  // its size. Write the blocks to `outfile_` and append all the created
+  // block metadata to `blockBuffer_`.
   void writeRelationToExclusiveBlocks(Id col0Id, const BufferedIdTable& data);
 
-  // Compress the `column` and write it to the `_outfile`. Return the offset and
-  // size of the compressed column in the `_outfile`.
+  // Compress the `column` and write it to the `outfile_`. Return the offset and
+  // size of the compressed column in the `outfile_`.
   CompressedBlockMetadata::OffsetAndCompressedSize compressAndWriteColumn(
       std::span<const Id> column);
 };

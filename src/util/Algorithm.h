@@ -12,6 +12,7 @@
 #include <string_view>
 #include <utility>
 
+#include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/HashSet.h"
 #include "util/Iterators.h"
@@ -80,6 +81,27 @@ auto transform(Range&& input, F unaryOp) {
   return out;
 }
 
+/*
+@brief Takes two vectors, pairs up their content at the same index positions
+and copies them into `std::pair`s, who are returned inside a vector.
+Example: `{1,2}` and `{3,4}` are returned as `{(1,3), (2,4)}`.
+*/
+template <typename T1, typename T2>
+std::vector<std::pair<T1, T2>> zipVectors(const std::vector<T1>& vectorA,
+                                          const std::vector<T2>& vectorB) {
+  // Both vectors must have the same length.
+  AD_CONTRACT_CHECK(vectorA.size() == vectorB.size());
+
+  std::vector<std::pair<T1, T2>> vectorsPairedUp{};
+  vectorsPairedUp.reserve(vectorA.size());
+
+  std::ranges::transform(
+      vectorA, vectorB, std::back_inserter(vectorsPairedUp),
+      [](const auto& a, const auto& b) { return std::make_pair(a, b); });
+
+  return vectorsPairedUp;
+}
+
 /**
  * Flatten a vector<vector<T>> into a vector<T>. Currently requires an rvalue
  * (temporary or `std::move`d value) as an input.
@@ -107,8 +129,11 @@ std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
 // used to keep track of which values we have already seen. One of these
 // copies could be avoided, but our current uses of this function are
 // currently not at all performance-critical (small `input` and small `T`).
-template <typename T>
-std::vector<T> removeDuplicates(const std::vector<T>& input) {
+template <std::ranges::forward_range Range>
+auto removeDuplicates(const Range& input) -> std::vector<
+    typename std::iterator_traits<std::ranges::iterator_t<Range>>::value_type> {
+  using T =
+      typename std::iterator_traits<std::ranges::iterator_t<Range>>::value_type;
   std::vector<T> result;
   ad_utility::HashSet<T> distinctElements;
   for (const T& element : input) {

@@ -315,3 +315,15 @@ addLinkAndDiscoverTest(OperationTest engine)
 addLinkAndDiscoverTest(RuntimeInformationTest engine)
 
 addLinkAndDiscoverTest(VariableToColumnMapTest engine)
+
+addLinkAndDiscoverTest(CopyableUniquePtrTest)
+
+addLinkAndDiscoverTest(JsonCustomConverterForThirdPartyTest)
+
+addLinkAndDiscoverTest(BenchmarkConfigurationTest benchmark)
+
+addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
+
+addLinkAndDiscoverTest(FindUndefRangesTest)
+
+addLinkAndDiscoverTest(AddCombinedRowToTableTest)

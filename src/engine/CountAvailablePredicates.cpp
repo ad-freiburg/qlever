@@ -221,10 +221,10 @@ void CountAvailablePredicates::computePatternTrick(
 
   // declare openmp reductions which aggregate Hashmaps by adding the values for
   // corresponding keys
-#pragma omp declare reduction(MergeHashmapsId:MergeableHashMap<Id> \
-                              : omp_out %= omp_in)
-#pragma omp declare reduction(MergeHashmapsSizeT:MergeableHashMap<size_t> \
-                              : omp_out %= omp_in)
+#pragma omp declare reduction( \
+        MergeHashmapsId : MergeableHashMap<Id> : omp_out %= omp_in)
+#pragma omp declare reduction( \
+        MergeHashmapsSizeT : MergeableHashMap<size_t> : omp_out %= omp_in)
 
   // These variables are used to gather additional statistics
   size_t numEntitiesWithPatterns = 0;
@@ -236,8 +236,12 @@ void CountAvailablePredicates::computePatternTrick(
   if (input.size() > 0) {  // avoid strange OpenMP segfaults on GCC
 #pragma omp parallel
 #pragma omp single
-#pragma omp taskloop grainsize(500000) default(none) reduction(MergeHashmapsId:predicateCounts) reduction(MergeHashmapsSizeT : patternCounts) \
-                                       reduction(+ : numEntitiesWithPatterns) reduction(+: numPatternPredicates) reduction(+: numListPredicates) shared(input, subjectColumn, hasPattern, hasPredicate)
+#pragma omp taskloop grainsize(500000) default(none)                           \
+    reduction(MergeHashmapsId : predicateCounts)                               \
+    reduction(MergeHashmapsSizeT : patternCounts)                              \
+    reduction(+ : numEntitiesWithPatterns) reduction(+ : numPatternPredicates) \
+    reduction(+ : numListPredicates)                                           \
+    shared(input, subjectColumn, hasPattern, hasPredicate)
     for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
       // Skip over elements with the same subject (don't count them twice)
       Id subjectId = input(inputIdx, subjectColumn);
@@ -293,8 +297,11 @@ void CountAvailablePredicates::computePatternTrick(
       patternVec.end()) {  // avoid segfaults with OpenMP on GCC
 #pragma omp parallel
 #pragma omp single
-#pragma omp taskloop grainsize(100000) default(none) reduction(MergeHashmapsId:predicateCounts) reduction(+ : numPredicatesSubsumedInPatterns) \
-                                       reduction(+ : numEntitiesWithPatterns) reduction(+: numPatternPredicates) reduction(+: numListPredicates) shared( patternVec, patterns)
+#pragma omp taskloop grainsize(100000) default(none)                           \
+    reduction(MergeHashmapsId : predicateCounts)                               \
+    reduction(+ : numPredicatesSubsumedInPatterns)                             \
+    reduction(+ : numEntitiesWithPatterns) reduction(+ : numPatternPredicates) \
+    reduction(+ : numListPredicates) shared(patternVec, patterns)
     // TODO<joka921> When we use iterators (`patternVec.begin()`) for the loop,
     // there is a strange warning on clang15 when OpenMP is activated. Find out
     // whether this is a known issue and whether this will be fixed in later

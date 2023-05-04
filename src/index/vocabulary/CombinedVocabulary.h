@@ -24,21 +24,21 @@
 /// first or the second vocabulary, and to convert from global indices to
 /// local indices.
 template <typename CombinedVocabulary, typename T>
-concept IndexConverterConcept = requires(const T& t, uint64_t i,
-                                         const CombinedVocabulary& v) {
-  // Return true, iff a word with ID `i` belongs to the first vocabulary.
-  { t.isInFirst(i, v) } -> std::same_as<bool>;
-  // Transform a local ID from the first vocabulary to a global ID.
-  { t.localFirstToGlobal(i, v) } -> std::convertible_to<uint64_t>;
-  // Transform a local ID from the second vocabulary to a global ID.
-  { t.localSecondToGlobal(i, v) } -> std::convertible_to<uint64_t>;
-  // Transform a global ID to a local ID for the first vocabulary.
-  // May only be called if `t.isInFirst(i, v)` is true.
-  { t.globalToLocalFirst(i, v) } -> std::convertible_to<uint64_t>;
-  // Transform a global ID to a local ID for the second vocabulary.
-  // May only be called if `t.isInFirst(i, v)` is false.
-  { t.globalToLocalSecond(i, v) } -> std::convertible_to<uint64_t>;
-};
+concept IndexConverterConcept =
+    requires(const T& t, uint64_t i, const CombinedVocabulary& v) {
+      // Return true, iff a word with ID `i` belongs to the first vocabulary.
+      { t.isInFirst(i, v) } -> std::same_as<bool>;
+      // Transform a local ID from the first vocabulary to a global ID.
+      { t.localFirstToGlobal(i, v) } -> std::convertible_to<uint64_t>;
+      // Transform a local ID from the second vocabulary to a global ID.
+      { t.localSecondToGlobal(i, v) } -> std::convertible_to<uint64_t>;
+      // Transform a global ID to a local ID for the first vocabulary.
+      // May only be called if `t.isInFirst(i, v)` is true.
+      { t.globalToLocalFirst(i, v) } -> std::convertible_to<uint64_t>;
+      // Transform a global ID to a local ID for the second vocabulary.
+      // May only be called if `t.isInFirst(i, v)` is false.
+      { t.globalToLocalSecond(i, v) } -> std::convertible_to<uint64_t>;
+    };
 
 ///
 /// \tparam FirstVocabulary The first underlying vocabulary
@@ -59,8 +59,8 @@ class CombinedVocabulary {
  public:
   // Construct from pre-initialized vocabularies and `IndexConverter`.
   CombinedVocabulary(FirstVocabulary firstVocab, SecondVocabulary secondVocab,
-                     IndexConverter converter) requires
-      IndexConverterConcept<CombinedVocabulary, IndexConverter>
+                     IndexConverter converter)
+      requires IndexConverterConcept<CombinedVocabulary, IndexConverter>
       : _firstVocab{std::move(firstVocab)},
         _secondVocab{std::move(secondVocab)},
         _indexConverter{converter} {}

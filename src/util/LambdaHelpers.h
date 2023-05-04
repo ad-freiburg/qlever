@@ -19,9 +19,9 @@ struct AssignableLambdaImpl {
  public:
   explicit constexpr AssignableLambdaImpl(Lambda lambda)
       : _lambda{std::move(lambda)} {}
-  constexpr AssignableLambdaImpl() requires
-      std::is_default_constructible_v<Lambda>
-  = default;
+  constexpr AssignableLambdaImpl()
+      requires std::is_default_constructible_v<Lambda>
+      = default;
 
   decltype(auto) operator()(auto&&... args) noexcept(
       noexcept(_lambda(AD_FWD(args)...))) {
@@ -33,8 +33,8 @@ struct AssignableLambdaImpl {
     return _lambda(AD_FWD(args)...);
   }
 
-  AssignableLambdaImpl& operator=(const AssignableLambdaImpl& other) requires
-      std::is_copy_constructible_v<Lambda> {
+  AssignableLambdaImpl& operator=(const AssignableLambdaImpl& other)
+      requires std::is_copy_constructible_v<Lambda> {
     std::destroy_at(&_lambda);
     std::construct_at(&_lambda, other._lambda);
     return *this;
