@@ -39,7 +39,7 @@ except for the last one. Instead, `lastOneFunction` is applied to that one.
 @param r Must hold at least one element.
 */
 template <typename Range, typename RegularFunction, typename LastOneFunction>
-static void forEachExcludingTheLastOne(Range&& r,
+static void forEachExcludingTheLastOne(const Range& r,
                                        RegularFunction regularFunction,
                                        LastOneFunction lastOneFunction) {
   // Throw an error, if there are no elements in `r`.
