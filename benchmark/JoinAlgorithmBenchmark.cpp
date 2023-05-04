@@ -784,9 +784,10 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                                        static_cast<size_t>(1000));
 
     setToValueInConfigurationOrDefault(
-        minBiggerTableRows_, "minBiggerTableRows", static_cast<size_t>(1000));
-    setToValueInConfigurationOrDefault(
-        maxBiggerTableRows_, "maxBiggerTableRows", static_cast<size_t>(100000));
+        minBiggerTableRows_, "minBiggerTableRows", static_cast<size_t>(100000));
+    setToValueInConfigurationOrDefault(maxBiggerTableRows_,
+                                       "maxBiggerTableRows",
+                                       static_cast<size_t>(10000000));
 
     setToValueInConfigurationOrDefault(smallerTableAmountColumns_,
                                        "smallerTableAmountColumns",
