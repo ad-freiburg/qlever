@@ -30,30 +30,30 @@
 using std::array;
 
 // _____________________________________________________________________________
-IndexImpl::IndexImpl() : _usePatterns(false) {}
+IndexImpl::IndexImpl() : usePatterns_(false) {}
 
 // _____________________________________________________________________________
 template <class Parser>
 IndexBuilderDataAsPsoSorter IndexImpl::createIdTriplesAndVocab(
     const string& ntFile) {
   auto indexBuilderData =
-      passFileForVocabulary<Parser>(ntFile, _numTriplesPerBatch);
+      passFileForVocabulary<Parser>(ntFile, numTriplesPerBatch_);
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
-  _totalVocabularySize = indexBuilderData.vocabularyMetaData_.numWordsTotal_;
+  totalVocabularySize_ = indexBuilderData.vocabularyMetaData_.numWordsTotal_;
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
-             << _totalVocabularySize << std::endl;
+             << totalVocabularySize_ << std::endl;
 
   LOG(INFO) << "Converting external vocabulary to binary format ..."
             << std::endl;
-  _vocab.externalizeLiteralsFromTextFile(
-      _onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME,
-      _onDiskBase + EXTERNAL_VOCAB_SUFFIX);
-  deleteTemporaryFile(_onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME);
+  vocab_.externalizeLiteralsFromTextFile(
+      onDiskBase_ + EXTERNAL_LITS_TEXT_FILE_NAME,
+      onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
+  deleteTemporaryFile(onDiskBase_ + EXTERNAL_LITS_TEXT_FILE_NAME);
   // clear vocabulary to save ram (only information from partial binary files
   // used from now on). This will preserve information about externalized
   // Prefixes etc.
-  _vocab.clear();
+  vocab_.clear();
   auto psoSorter = convertPartialToGlobalIds(
       *indexBuilderData.idTriples, indexBuilderData.actualPartialSizes,
       NUM_TRIPLES_PER_PARTIAL_VOCAB);
@@ -79,13 +79,13 @@ void createPatternsFromSpoTriplesView(auto&& spoTriplesView,
 // _____________________________________________________________________________
 template <class Parser>
 void IndexImpl::createFromFile(const string& filename) {
-  string indexFilename = _onDiskBase + ".index";
+  string indexFilename = onDiskBase_ + ".index";
 
   readIndexBuilderSettingsFromFile<Parser>();
 
   IndexBuilderDataAsPsoSorter indexBuilderData;
   if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
-    if (_onlyAsciiTurtlePrefixes) {
+    if (onlyAsciiTurtlePrefixes_) {
       LOG(DEBUG) << "Using the CTRE library for tokenization" << std::endl;
       indexBuilderData =
           createIdTriplesAndVocab<TurtleParallelParser<TokenizerCtre>>(
@@ -104,21 +104,21 @@ void IndexImpl::createFromFile(const string& filename) {
   // If we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
   // hurt.
-  string vocabFile = _onDiskBase + INTERNAL_VOCAB_SUFFIX;
-  string vocabFileTmp = _onDiskBase + ".vocabularyTmp";
+  string vocabFile = onDiskBase_ + INTERNAL_VOCAB_SUFFIX;
+  string vocabFileTmp = onDiskBase_ + ".vocabularyTmp";
   const std::vector<string>& prefixes = indexBuilderData.prefixes_;
-  if (_vocabPrefixCompressed) {
-    auto prefixFile = ad_utility::makeOfstream(_onDiskBase + PREFIX_FILE);
+  if (vocabPrefixCompressed_) {
+    auto prefixFile = ad_utility::makeOfstream(onDiskBase_ + PREFIX_FILE);
     for (const auto& prefix : prefixes) {
       prefixFile << prefix << std::endl;
     }
   }
-  _configurationJson["prefixes"] = _vocabPrefixCompressed;
+  configurationJson_["prefixes"] = vocabPrefixCompressed_;
   LOG(INFO) << "Writing compressed vocabulary to disk ..." << std::endl;
 
-  _vocab.buildCodebookForPrefixCompression(prefixes);
-  auto wordReader = _vocab.makeUncompressedDiskIterator(vocabFile);
-  auto wordWriter = _vocab.makeCompressedWordWriter(vocabFileTmp);
+  vocab_.buildCodebookForPrefixCompression(prefixes);
+  auto wordReader = vocab_.makeUncompressedDiskIterator(vocabFile);
+  auto wordWriter = vocab_.makeCompressedWordWriter(vocabFileTmp);
   for (const auto& word : wordReader) {
     wordWriter.push(word);
   }
@@ -172,52 +172,52 @@ void IndexImpl::createFromFile(const string& filename) {
 
   size_t numPredicatesNormal = 0;
   createPermutationPair(
-      std::move(uniqueSorter), _PSO, _POS, spoSorter.makePushCallback(),
+      std::move(uniqueSorter), PSO_, POS_, spoSorter.makePushCallback(),
       makeNumEntitiesCounter(numPredicatesNormal, 1), countActualTriples);
-  _configurationJson["num-predicates-normal"] = numPredicatesNormal;
-  _configurationJson["num-triples-normal"] = numTriplesNormal;
+  configurationJson_["num-predicates-normal"] = numPredicatesNormal;
+  configurationJson_["num-triples-normal"] = numTriplesNormal;
   writeConfiguration();
   psoSorter.clear();
 
-  if (_loadAllPermutations) {
+  if (loadAllPermutations_) {
     // After the SPO permutation, create patterns if so desired.
     StxxlSorter<SortByOSP> ospSorter{stxxlMemoryInBytes() / 5};
     size_t numSubjectsNormal = 0;
     auto numSubjectCounter = makeNumEntitiesCounter(numSubjectsNormal, 0);
-    if (_usePatterns) {
-      PatternCreator patternCreator{_onDiskBase + ".index.patterns"};
+    if (usePatterns_) {
+      PatternCreator patternCreator{onDiskBase_ + ".index.patterns"};
       auto pushTripleToPatterns = [&patternCreator,
                                    &isInternalId](const auto& triple) {
         if (!std::ranges::any_of(triple, isInternalId)) {
           patternCreator.processTriple(triple);
         }
       };
-      createPermutationPair(spoSorter.sortedView(), _SPO, _SOP,
+      createPermutationPair(spoSorter.sortedView(), SPO_, SOP_,
                             ospSorter.makePushCallback(), pushTripleToPatterns,
                             numSubjectCounter);
       patternCreator.finish();
     } else {
-      createPermutationPair(spoSorter.sortedView(), _SPO, _SOP,
+      createPermutationPair(spoSorter.sortedView(), SPO_, SOP_,
                             ospSorter.makePushCallback(), numSubjectCounter);
     }
     spoSorter.clear();
-    _configurationJson["num-subjects-normal"] = numSubjectsNormal;
+    configurationJson_["num-subjects-normal"] = numSubjectsNormal;
     writeConfiguration();
 
     // For the last pair of permutations we don't need a next sorter, so we have
     // no fourth argument.
     size_t numObjectsNormal = 0;
-    createPermutationPair(ospSorter.sortedView(), _OSP, _OPS,
+    createPermutationPair(ospSorter.sortedView(), OSP_, OPS_,
                           makeNumEntitiesCounter(numObjectsNormal, 2));
-    _configurationJson["num-objects-normal"] = numObjectsNormal;
-    _configurationJson["has-all-permutations"] = true;
+    configurationJson_["num-objects-normal"] = numObjectsNormal;
+    configurationJson_["has-all-permutations"] = true;
   } else {
-    if (_usePatterns) {
+    if (usePatterns_) {
       createPatternsFromSpoTriplesView(spoSorter.sortedView(),
-                                       _onDiskBase + ".index.patterns",
+                                       onDiskBase_ + ".index.patterns",
                                        isInternalId);
     }
-    _configurationJson["has-all-permutations"] = false;
+    configurationJson_["has-all-permutations"] = false;
   }
   LOG(DEBUG) << "Finished writing permutations" << std::endl;
 
@@ -242,8 +242,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   LOG(INFO) << "Processing input triples from " << filename << " ..."
             << std::endl;
   auto parser = std::make_shared<Parser>(filename);
-  parser->integerOverflowBehavior() = _turtleParserIntegerOverflowBehavior;
-  parser->invalidLiteralsAreSkipped() = _turtleParserSkipIllegalLiterals;
+  parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
+  parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   std::unique_ptr<TripleVec> idTriples(new TripleVec());
   ad_utility::Synchronized<TripleVec::bufwriter_type> writer(*idTriples);
   bool parserExhausted = false;
@@ -268,7 +268,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 
     {
       auto p = ad_pipeline::setupParallelPipeline<3, NUM_PARALLEL_ITEM_MAPS>(
-          _parserBatchSize,
+          parserBatchSize_,
           // when called, returns an optional to the next triple. If
           // `linesPerPartial` triples were parsed, return std::nullopt. when
           // the parser is unable to deliver triples, set parserExhausted to
@@ -286,7 +286,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
           // Tag triples using the provided HashMaps via itemArray. See
           // documentation of the function for more details
           getIdMapLambdas<NUM_PARALLEL_ITEM_MAPS>(
-              &itemArray, linesPerPartial, &(_vocab.getCaseComparator())));
+              &itemArray, linesPerPartial, &(vocab_.getCaseComparator())));
 
       while (auto opt = p.getNextValue()) {
         i++;
@@ -356,12 +356,12 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 
   size_t sizeInternalVocabulary = 0;
   std::vector<std::string> prefixes;
-  if (_vocabPrefixCompressed) {
+  if (vocabPrefixCompressed_) {
     LOG(INFO) << "Merging partial vocabularies in byte order "
               << "(internal only) ..." << std::endl;
     VocabularyMerger m;
     auto compressionOutfile = ad_utility::makeOfstream(
-        _onDiskBase + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX);
+        onDiskBase_ + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX);
     auto internalVocabularyActionCompression =
         [&compressionOutfile](const auto& word) {
           compressionOutfile << RdfEscaping::escapeNewlinesAndBackslashes(word)
@@ -369,7 +369,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
         };
     m._noIdMapsAndIgnoreExternalVocab = true;
     auto mergeResult =
-        m.mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles,
+        m.mergeVocabulary(onDiskBase_ + TMP_BASENAME_COMPRESSION, numFiles,
                           std::less<>(), internalVocabularyActionCompression);
     sizeInternalVocabulary = mergeResult.numWordsTotal_;
     LOG(INFO) << "Number of words in internal vocabulary: "
@@ -380,7 +380,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     // We have to use the "normally" sorted vocabulary for the prefix
     // compression.
     std::string vocabFileForPrefixCalculation =
-        _onDiskBase + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX;
+        onDiskBase_ + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX;
     prefixes = calculatePrefixes(vocabFileForPrefixCalculation,
                                  NUM_COMPRESSION_PREFIXES, 1, true);
   }
@@ -389,16 +389,16 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
             << "(internal and external) ..." << std::endl;
   const VocabularyMerger::VocabularyMetaData mergeRes = [&]() {
     VocabularyMerger v;
-    auto sortPred = [cmp = &(_vocab.getCaseComparator())](std::string_view a,
+    auto sortPred = [cmp = &(vocab_.getCaseComparator())](std::string_view a,
                                                           std::string_view b) {
-      return (*cmp)(a, b, decltype(_vocab)::SortLevel::TOTAL);
+      return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
     };
     auto wordWriter =
-        _vocab.makeUncompressingWordWriter(_onDiskBase + INTERNAL_VOCAB_SUFFIX);
+        vocab_.makeUncompressingWordWriter(onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
     auto internalVocabularyAction = [&wordWriter](const auto& word) {
       wordWriter.push(word.data(), word.size());
     };
-    return v.mergeVocabulary(_onDiskBase, numFiles, sortPred,
+    return v.mergeVocabulary(onDiskBase_, numFiles, sortPred,
                              internalVocabularyAction);
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
@@ -415,10 +415,10 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   LOG(INFO) << "Removing temporary files ..." << std::endl;
   for (size_t n = 0; n < numFiles; ++n) {
     string partialFilename =
-        _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(n);
+        onDiskBase_ + PARTIAL_VOCAB_FILE_NAME + std::to_string(n);
     deleteTemporaryFile(partialFilename);
-    if (_vocabPrefixCompressed) {
-      partialFilename = _onDiskBase + TMP_BASENAME_COMPRESSION +
+    if (vocabPrefixCompressed_) {
+      partialFilename = onDiskBase_ + TMP_BASENAME_COMPRESSION +
                         PARTIAL_VOCAB_FILE_NAME + std::to_string(n);
       deleteTemporaryFile(partialFilename);
     }
@@ -443,7 +443,7 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
   size_t i = 0;
   for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();
        partialNum++) {
-    std::string mmapFilename(_onDiskBase + PARTIAL_MMAP_IDS +
+    std::string mmapFilename(onDiskBase_ + PARTIAL_MMAP_IDS +
                              std::to_string(partialNum));
     LOG(DEBUG) << "Reading ID map from: " << mmapFilename << std::endl;
     ad_utility::HashMap<Id, Id> idMap = IdMapFromPartialIdMapFile(mmapFilename);
@@ -587,8 +587,8 @@ IndexImpl::createPermutations(auto&& sortedTriples, const PermutationImpl& p1,
                               const PermutationImpl& p2,
                               auto&&... perTripleCallbacks) {
   auto metaData = createPermutationPairImpl(
-      _onDiskBase + ".index" + p1._fileSuffix,
-      _onDiskBase + ".index" + p2._fileSuffix, AD_FWD(sortedTriples),
+      onDiskBase_ + ".index" + p1._fileSuffix,
+      onDiskBase_ + ".index" + p2._fileSuffix, AD_FWD(sortedTriples),
       p1._keyOrder[0], p1._keyOrder[1], p1._keyOrder[2],
       AD_FWD(perTripleCallbacks)...);
 
@@ -611,24 +611,24 @@ void IndexImpl::createPermutationPair(auto&& sortedTriples,
   auto metaData = createPermutations(AD_FWD(sortedTriples), p1, p2,
                                      AD_FWD(perTripleCallbacks)...);
   // Set the name of this newly created pair of `IndexMetaData` objects.
-  // NOTE: When `setKbName` was called, it set the name of _PSO._meta,
-  // _PSO._meta, ... which however are not used during index building.
+  // NOTE: When `setKbName` was called, it set the name of PSO_._meta,
+  // PSO_._meta, ... which however are not used during index building.
   // `getKbName` simple reads one of these names.
   metaData.value().first.setName(getKbName());
   metaData.value().second.setName(getKbName());
   if (metaData) {
     LOG(INFO) << "Writing meta data for " << p1._readableName << " and "
               << p2._readableName << " ..." << std::endl;
-    ad_utility::File f1(_onDiskBase + ".index" + p1._fileSuffix, "r+");
+    ad_utility::File f1(onDiskBase_ + ".index" + p1._fileSuffix, "r+");
     metaData.value().first.appendToFile(&f1);
-    ad_utility::File f2(_onDiskBase + ".index" + p2._fileSuffix, "r+");
+    ad_utility::File f2(onDiskBase_ + ".index" + p2._fileSuffix, "r+");
     metaData.value().second.appendToFile(&f2);
   }
 }
 
 // _____________________________________________________________________________
 void IndexImpl::addPatternsToExistingIndex() {
-  // auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
+  // auto [langPredLowerBound, langPredUpperBound] = vocab_.prefix_range("@");
   //  We only iterate over the SPO permutation which typically only has few
   //  triples per subject, so it should be safe to not apply a memory limit
   //  here.
@@ -637,8 +637,8 @@ void IndexImpl::addPatternsToExistingIndex() {
   ad_utility::AllocatorWithLimit<Id> allocator{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
           std::numeric_limits<uint64_t>::max())};
-  auto iterator = TriplesView(_SPO, allocator);
-  createPatternsFromSpoTriplesView(iterator, _onDiskBase + ".index.patterns",
+  auto iterator = TriplesView(SPO_, allocator);
+  createPatternsFromSpoTriplesView(iterator, onDiskBase_ + ".index.patterns",
                                    Id::makeFromVocabIndex(langPredLowerBound),
                                    Id::makeFromVocabIndex(langPredUpperBound));
                                    */
@@ -649,37 +649,37 @@ void IndexImpl::addPatternsToExistingIndex() {
 void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
-  _vocab.readFromFile(_onDiskBase + INTERNAL_VOCAB_SUFFIX,
-                      _onDiskBase + EXTERNAL_VOCAB_SUFFIX);
+  vocab_.readFromFile(onDiskBase_ + INTERNAL_VOCAB_SUFFIX,
+                      onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
 
-  _totalVocabularySize = _vocab.size() + _vocab.getExternalVocab().size();
+  totalVocabularySize_ = vocab_.size() + vocab_.getExternalVocab().size();
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
-             << _totalVocabularySize << std::endl;
-  _PSO.loadFromDisk(_onDiskBase);
-  _POS.loadFromDisk(_onDiskBase);
+             << totalVocabularySize_ << std::endl;
+  PSO_.loadFromDisk(onDiskBase_);
+  POS_.loadFromDisk(onDiskBase_);
 
-  if (_loadAllPermutations) {
-    _OPS.loadFromDisk(_onDiskBase);
-    _OSP.loadFromDisk(_onDiskBase);
-    _SPO.loadFromDisk(_onDiskBase);
-    _SOP.loadFromDisk(_onDiskBase);
+  if (loadAllPermutations_) {
+    OPS_.loadFromDisk(onDiskBase_);
+    OSP_.loadFromDisk(onDiskBase_);
+    SPO_.loadFromDisk(onDiskBase_);
+    SOP_.loadFromDisk(onDiskBase_);
   } else {
     LOG(INFO) << "Only the PSO and POS permutation were loaded, SPARQL queries "
                  "with predicate variables will therefore not work"
               << std::endl;
   }
 
-  if (_usePatterns) {
+  if (usePatterns_) {
     PatternCreator::readPatternsFromFile(
-        _onDiskBase + ".index.patterns", _avgNumDistinctSubjectsPerPredicate,
-        _avgNumDistinctPredicatesPerSubject, _numDistinctSubjectPredicatePairs,
-        _patterns, _hasPattern);
+        onDiskBase_ + ".index.patterns", avgNumDistinctSubjectsPerPredicate_,
+        avgNumDistinctPredicatesPerSubject_, numDistinctSubjectPredicatePairs_,
+        patterns_, hasPattern_);
   }
 }
 
 // _____________________________________________________________________________
 void IndexImpl::throwExceptionIfNoPatterns() const {
-  if (!_usePatterns) {
+  if (!usePatterns_) {
     AD_THROW(
         "The requested feature requires a loaded patterns file ("
         "do not specify the --no-patterns option for this to work)");
@@ -689,37 +689,37 @@ void IndexImpl::throwExceptionIfNoPatterns() const {
 // _____________________________________________________________________________
 const vector<PatternID>& IndexImpl::getHasPattern() const {
   throwExceptionIfNoPatterns();
-  return _hasPattern;
+  return hasPattern_;
 }
 
 // _____________________________________________________________________________
 const CompactVectorOfStrings<Id>& IndexImpl::getHasPredicate() const {
   throwExceptionIfNoPatterns();
-  return _hasPredicate;
+  return hasPredicate_;
 }
 
 // _____________________________________________________________________________
 const CompactVectorOfStrings<Id>& IndexImpl::getPatterns() const {
   throwExceptionIfNoPatterns();
-  return _patterns;
+  return patterns_;
 }
 
 // _____________________________________________________________________________
 double IndexImpl::getAvgNumDistinctPredicatesPerSubject() const {
   throwExceptionIfNoPatterns();
-  return _avgNumDistinctPredicatesPerSubject;
+  return avgNumDistinctPredicatesPerSubject_;
 }
 
 // _____________________________________________________________________________
 double IndexImpl::getAvgNumDistinctSubjectsPerPredicate() const {
   throwExceptionIfNoPatterns();
-  return _avgNumDistinctSubjectsPerPredicate;
+  return avgNumDistinctSubjectsPerPredicate_;
 }
 
 // _____________________________________________________________________________
 size_t IndexImpl::getNumDistinctSubjectPredicatePairs() const {
   throwExceptionIfNoPatterns();
-  return _numDistinctSubjectPredicatePairs;
+  return numDistinctSubjectPredicatePairs_;
 }
 
 // _____________________________________________________________________________
@@ -741,68 +741,68 @@ template void IndexImpl::writeAsciiListFile<vector<Score>>(
 
 // _____________________________________________________________________________
 bool IndexImpl::isLiteral(const string& object) const {
-  return decltype(_vocab)::isLiteral(object);
+  return decltype(vocab_)::isLiteral(object);
 }
 
 // _____________________________________________________________________________
 bool IndexImpl::shouldBeExternalized(const string& object) {
-  return _vocab.shouldBeExternalized(object);
+  return vocab_.shouldBeExternalized(object);
 }
 
 // _____________________________________________________________________________
 void IndexImpl::setKbName(const string& name) {
-  _POS.setKbName(name);
-  _PSO.setKbName(name);
-  _SOP.setKbName(name);
-  _SPO.setKbName(name);
-  _OPS.setKbName(name);
-  _OSP.setKbName(name);
+  POS_.setKbName(name);
+  PSO_.setKbName(name);
+  SOP_.setKbName(name);
+  SPO_.setKbName(name);
+  OPS_.setKbName(name);
+  OSP_.setKbName(name);
 }
 
 // ____________________________________________________________________________
 void IndexImpl::setOnDiskBase(const std::string& onDiskBase) {
-  _onDiskBase = onDiskBase;
+  onDiskBase_ = onDiskBase;
 }
 
 // ____________________________________________________________________________
 void IndexImpl::setKeepTempFiles(bool keepTempFiles) {
-  _keepTempFiles = keepTempFiles;
+  keepTempFiles_ = keepTempFiles;
 }
 
 // _____________________________________________________________________________
-void IndexImpl::setUsePatterns(bool usePatterns) { _usePatterns = usePatterns; }
+void IndexImpl::setUsePatterns(bool usePatterns) { usePatterns_ = usePatterns; }
 
 // _____________________________________________________________________________
 void IndexImpl::setLoadAllPermutations(bool loadAllPermutations) {
-  _loadAllPermutations = loadAllPermutations;
+  loadAllPermutations_ = loadAllPermutations;
 }
 
 // ____________________________________________________________________________
 void IndexImpl::setSettingsFile(const std::string& filename) {
-  _settingsFileName = filename;
+  settingsFileName_ = filename;
 }
 
 // ____________________________________________________________________________
 void IndexImpl::setPrefixCompression(bool compressed) {
-  _vocabPrefixCompressed = compressed;
+  vocabPrefixCompressed_ = compressed;
 }
 
 // ____________________________________________________________________________
 void IndexImpl::writeConfiguration() const {
   // Copy the configuration and add the current commit hash.
-  auto configuration = _configurationJson;
+  auto configuration = configurationJson_;
   configuration["git_hash"] = std::string(qlever::version::GitHash);
-  auto f = ad_utility::makeOfstream(_onDiskBase + CONFIGURATION_FILE);
+  auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
 }
 
 // ___________________________________________________________________________
 void IndexImpl::readConfiguration() {
-  auto f = ad_utility::makeIfstream(_onDiskBase + CONFIGURATION_FILE);
-  f >> _configurationJson;
-  if (_configurationJson.find("git_hash") != _configurationJson.end()) {
+  auto f = ad_utility::makeIfstream(onDiskBase_ + CONFIGURATION_FILE);
+  f >> configurationJson_;
+  if (configurationJson_.find("git_hash") != configurationJson_.end()) {
     LOG(INFO) << "The git hash used to build this index was "
-              << std::string(_configurationJson["git_hash"]).substr(0, 6)
+              << std::string(configurationJson_["git_hash"]).substr(0, 6)
               << std::endl;
   } else {
     LOG(INFO) << "The index was built before git commit hashes were stored in "
@@ -810,36 +810,36 @@ void IndexImpl::readConfiguration() {
               << std::endl;
   }
 
-  if (_configurationJson.find("prefixes") != _configurationJson.end()) {
-    if (_configurationJson["prefixes"]) {
+  if (configurationJson_.find("prefixes") != configurationJson_.end()) {
+    if (configurationJson_["prefixes"]) {
       vector<string> prefixes;
-      auto prefixFile = ad_utility::makeIfstream(_onDiskBase + PREFIX_FILE);
+      auto prefixFile = ad_utility::makeIfstream(onDiskBase_ + PREFIX_FILE);
       for (string prefix; std::getline(prefixFile, prefix);) {
         prefixes.emplace_back(std::move(prefix));
       }
-      _vocab.buildCodebookForPrefixCompression(prefixes);
+      vocab_.buildCodebookForPrefixCompression(prefixes);
     } else {
-      _vocab.buildCodebookForPrefixCompression(std::vector<std::string>());
+      vocab_.buildCodebookForPrefixCompression(std::vector<std::string>());
     }
   }
 
-  if (_configurationJson.find("prefixes-external") !=
-      _configurationJson.end()) {
-    _vocab.initializeExternalizePrefixes(
-        _configurationJson["prefixes-external"]);
+  if (configurationJson_.find("prefixes-external") !=
+      configurationJson_.end()) {
+    vocab_.initializeExternalizePrefixes(
+        configurationJson_["prefixes-external"]);
   }
 
-  if (_configurationJson.count("ignore-case")) {
+  if (configurationJson_.count("ignore-case")) {
     LOG(ERROR) << ERROR_IGNORE_CASE_UNSUPPORTED << '\n';
     throw std::runtime_error("Deprecated key \"ignore-case\" in index build");
   }
 
-  if (_configurationJson.count("locale")) {
-    std::string lang{_configurationJson["locale"]["language"]};
-    std::string country{_configurationJson["locale"]["country"]};
-    bool ignorePunctuation{_configurationJson["locale"]["ignore-punctuation"]};
-    _vocab.setLocale(lang, country, ignorePunctuation);
-    _textVocab.setLocale(lang, country, ignorePunctuation);
+  if (configurationJson_.count("locale")) {
+    std::string lang{configurationJson_["locale"]["language"]};
+    std::string country{configurationJson_["locale"]["country"]};
+    bool ignorePunctuation{configurationJson_["locale"]["ignore-punctuation"]};
+    vocab_.setLocale(lang, country, ignorePunctuation);
+    textVocab_.setLocale(lang, country, ignorePunctuation);
   } else {
     LOG(ERROR) << "Key \"locale\" is missing in the metadata. This is probably "
                   "and old index build that is no longer supported by QLever. "
@@ -848,22 +848,22 @@ void IndexImpl::readConfiguration() {
         "Missing required key \"locale\" in index build's metadata");
   }
 
-  if (_configurationJson.find("languages-internal") !=
-      _configurationJson.end()) {
-    _vocab.initializeInternalizedLangs(
-        _configurationJson["languages-internal"]);
+  if (configurationJson_.find("languages-internal") !=
+      configurationJson_.end()) {
+    vocab_.initializeInternalizedLangs(
+        configurationJson_["languages-internal"]);
   }
 
-  if (_configurationJson.find("has-all-permutations") !=
-          _configurationJson.end() &&
-      _configurationJson["has-all-permutations"] == false) {
+  if (configurationJson_.find("has-all-permutations") !=
+          configurationJson_.end() &&
+      configurationJson_["has-all-permutations"] == false) {
     // If the permutations simply don't exist, then we can never load them.
-    _loadAllPermutations = false;
+    loadAllPermutations_ = false;
   }
 
   auto loadRequestedDataMember = [this](std::string_view key, auto& target) {
-    auto it = _configurationJson.find(key);
-    if (it == _configurationJson.end()) {
+    auto it = configurationJson_.find(key);
+    if (it == configurationJson_.end()) {
       throw std::runtime_error{absl::StrCat(
           "The required key \"", key,
           "\" was not found in the `meta-data.json`. Most likely this index "
@@ -872,10 +872,10 @@ void IndexImpl::readConfiguration() {
     target = std::decay_t<decltype(target)>{*it};
   };
 
-  loadRequestedDataMember("num-predicates-normal", _numPredicatesNormal);
-  loadRequestedDataMember("num-subjects-normal", _numSubjectsNormal);
-  loadRequestedDataMember("num-objects-normal", _numObjectsNormal);
-  loadRequestedDataMember("num-triples-normal", _numTriplesNormal);
+  loadRequestedDataMember("num-predicates-normal", numPredicatesNormal_);
+  loadRequestedDataMember("num-subjects-normal", numSubjectsNormal_);
+  loadRequestedDataMember("num-objects-normal", numObjectsNormal_);
+  loadRequestedDataMember("num-triples-normal", numTriplesNormal_);
 }
 
 // ___________________________________________________________________________
@@ -907,13 +907,13 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     }
     auto& component = std::get<PossiblyExternalizedIriOrLiteral>(el);
     auto& iriOrLiteral = component._iriOrLiteral;
-    iriOrLiteral = _vocab.getLocaleManager().normalizeUtf8(iriOrLiteral);
-    if (_vocab.shouldBeExternalized(iriOrLiteral)) {
+    iriOrLiteral = vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
+    if (vocab_.shouldBeExternalized(iriOrLiteral)) {
       component._isExternal = true;
     }
     // Only the third element (the object) might contain a language tag.
     if (i == 2 && isLiteral(iriOrLiteral)) {
-      result._langtag = decltype(_vocab)::getLanguage(iriOrLiteral);
+      result._langtag = decltype(vocab_)::getLanguage(iriOrLiteral);
     }
   }
   return result;
@@ -924,14 +924,14 @@ template <class Parser>
 void IndexImpl::readIndexBuilderSettingsFromFile() {
   json j;  // if we have no settings, we still have to initialize some default
            // values
-  if (!_settingsFileName.empty()) {
-    auto f = ad_utility::makeIfstream(_settingsFileName);
+  if (!settingsFileName_.empty()) {
+    auto f = ad_utility::makeIfstream(settingsFileName_);
     f >> j;
   }
 
   if (j.find("prefixes-external") != j.end()) {
-    _vocab.initializeExternalizePrefixes(j["prefixes-external"]);
-    _configurationJson["prefixes-external"] = j["prefixes-external"];
+    vocab_.initializeExternalizePrefixes(j["prefixes-external"]);
+    configurationJson_["prefixes-external"] = j["prefixes-external"];
   }
 
   if (j.count("ignore-case")) {
@@ -972,25 +972,25 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                    "filing a bug report. Also note that changing the\n\t"
                 << "locale requires to completely rebuild the index\n";
     }
-    _vocab.setLocale(lang, country, ignorePunctuation);
-    _textVocab.setLocale(lang, country, ignorePunctuation);
-    _configurationJson["locale"]["language"] = lang;
-    _configurationJson["locale"]["country"] = country;
-    _configurationJson["locale"]["ignore-punctuation"] = ignorePunctuation;
+    vocab_.setLocale(lang, country, ignorePunctuation);
+    textVocab_.setLocale(lang, country, ignorePunctuation);
+    configurationJson_["locale"]["language"] = lang;
+    configurationJson_["locale"]["country"] = country;
+    configurationJson_["locale"]["ignore-punctuation"] = ignorePunctuation;
   }
 
   if (j.find("languages-internal") != j.end()) {
-    _vocab.initializeInternalizedLangs(j["languages-internal"]);
-    _configurationJson["languages-internal"] = j["languages-internal"];
+    vocab_.initializeInternalizedLangs(j["languages-internal"]);
+    configurationJson_["languages-internal"] = j["languages-internal"];
   }
   if (j.count("ascii-prefixes-only")) {
     if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
       bool v{j["ascii-prefixes-only"]};
       if (v) {
         LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
-        _onlyAsciiTurtlePrefixes = true;
+        onlyAsciiTurtlePrefixes_ = true;
       } else {
-        _onlyAsciiTurtlePrefixes = false;
+        onlyAsciiTurtlePrefixes_ = false;
       }
     } else {
       LOG(WARN) << "You specified the ascii-prefixes-only but a parser that is "
@@ -1001,16 +1001,16 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   }
 
   if (j.count("num-triples-per-batch")) {
-    _numTriplesPerBatch = size_t{j["num-triples-per-batch"]};
+    numTriplesPerBatch_ = size_t{j["num-triples-per-batch"]};
     LOG(INFO)
-        << "You specified \"num-triples-per-batch = " << _numTriplesPerBatch
+        << "You specified \"num-triples-per-batch = " << numTriplesPerBatch_
         << "\", choose a lower value if the index builder runs out of memory"
         << std::endl;
   }
 
   if (j.count("parser-batch-size")) {
-    _parserBatchSize = size_t{j["parser-batch-size"]};
-    LOG(INFO) << "Overriding setting parser-batch-size to " << _parserBatchSize
+    parserBatchSize_ = size_t{j["parser-batch-size"]};
+    LOG(INFO) << "Overriding setting parser-batch-size to " << parserBatchSize_
               << " This might influence performance during index build."
               << std::endl;
   }
@@ -1029,17 +1029,17 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
       LOG(INFO) << "Integers that cannot be represented by QLever will throw "
                    "an exception"
                 << std::endl;
-      _turtleParserIntegerOverflowBehavior =
+      turtleParserIntegerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::Error;
     } else if (value == overflowingIntegersBecomeDoubles) {
       LOG(INFO) << "Integers that cannot be represented by QLever will be "
                    "converted to doubles"
                 << std::endl;
-      _turtleParserIntegerOverflowBehavior =
+      turtleParserIntegerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
     } else if (value == allIntegersBecomeDoubles) {
       LOG(INFO) << "All integers will be converted to doubles" << std::endl;
-      _turtleParserIntegerOverflowBehavior =
+      turtleParserIntegerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
     } else {
       AD_CONTRACT_CHECK(std::find(allModes.begin(), allModes.end(), value) ==
@@ -1049,7 +1049,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
                 << absl::StrJoin(allModes, ",") << std::endl;
     }
   } else {
-    _turtleParserIntegerOverflowBehavior =
+    turtleParserIntegerOverflowBehavior_ =
         TurtleParserIntegerOverflowBehavior::Error;
     LOG(INFO) << "Integers that cannot be represented by QLever will throw an "
                  "exception (this is the default behavior)"
@@ -1068,20 +1068,20 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       << actualCurrentPartialSize << std::endl;
   std::future<void> resultFuture;
   string partialFilename =
-      _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
-  string partialCompressionFilename = _onDiskBase + TMP_BASENAME_COMPRESSION +
+      onDiskBase_ + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
+  string partialCompressionFilename = onDiskBase_ + TMP_BASENAME_COMPRESSION +
                                       PARTIAL_VOCAB_FILE_NAME +
                                       std::to_string(numFiles);
 
   auto lambda = [localIds = std::move(localIds), globalWritePtr,
-                 items = std::move(items), vocab = &_vocab, partialFilename,
+                 items = std::move(items), vocab = &vocab_, partialFilename,
                  partialCompressionFilename, numFiles,
-                 vocabPrefixCompressed = _vocabPrefixCompressed]() mutable {
+                 vocabPrefixCompressed = vocabPrefixCompressed_]() mutable {
     auto vec = vocabMapsToVector(std::move(items));
     const auto identicalPred = [&c = vocab->getCaseComparator()](
                                    const auto& a, const auto& b) {
       return c(a.second.m_splitVal, b.second.m_splitVal,
-               decltype(_vocab)::SortLevel::TOTAL);
+               decltype(vocab_)::SortLevel::TOTAL);
     };
     LOG(TIMING) << "Start sorting of vocabulary with #elements: " << vec.size()
                 << std::endl;
@@ -1132,7 +1132,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
 
 // ____________________________________________________________________________
 IndexImpl::NumNormalAndInternal IndexImpl::numTriples() const {
-  return {_numTriplesNormal, PSO()._meta.getNofTriples() - _numTriplesNormal};
+  return {numTriplesNormal_, PSO()._meta.getNofTriples() - numTriplesNormal_};
 }
 
 // ____________________________________________________________________________
@@ -1140,17 +1140,17 @@ IndexImpl::PermutationImpl& IndexImpl::getPermutation(Index::Permutation p) {
   using enum Index::Permutation;
   switch (p) {
     case PSO:
-      return _PSO;
+      return PSO_;
     case POS:
-      return _POS;
+      return POS_;
     case SPO:
-      return _SPO;
+      return SPO_;
     case SOP:
-      return _SOP;
+      return SOP_;
     case OSP:
-      return _OSP;
+      return OSP_;
     case OPS:
-      return _OPS;
+      return OPS_;
   }
   AD_FAIL();
 }
@@ -1164,8 +1164,8 @@ const IndexImpl::PermutationImpl& IndexImpl::getPermutation(
 // __________________________________________________________________________
 Index::NumNormalAndInternal IndexImpl::numDistinctSubjects() const {
   if (hasAllPermutations()) {
-    auto numActually = _numSubjectsNormal;
-    return {numActually, _SPO.metaData().getNofDistinctC1() - numActually};
+    auto numActually = numSubjectsNormal_;
+    return {numActually, SPO_.metaData().getNofDistinctC1() - numActually};
   } else {
     AD_THROW(
         "Can only get # distinct subjects if all 6 permutations "
@@ -1177,8 +1177,8 @@ Index::NumNormalAndInternal IndexImpl::numDistinctSubjects() const {
 // __________________________________________________________________________
 Index::NumNormalAndInternal IndexImpl::numDistinctObjects() const {
   if (hasAllPermutations()) {
-    auto numActually = _numObjectsNormal;
-    return {numActually, _OSP.metaData().getNofDistinctC1() - numActually};
+    auto numActually = numObjectsNormal_;
+    return {numActually, OSP_.metaData().getNofDistinctC1() - numActually};
   } else {
     AD_THROW(
         "Can only get # distinct objects if all 6 permutations "
@@ -1189,8 +1189,8 @@ Index::NumNormalAndInternal IndexImpl::numDistinctObjects() const {
 
 // __________________________________________________________________________
 Index::NumNormalAndInternal IndexImpl::numDistinctPredicates() const {
-  auto numActually = _numPredicatesNormal;
-  return {numActually, _PSO.metaData().getNofDistinctC1() - numActually};
+  auto numActually = numPredicatesNormal_;
+  return {numActually, PSO_.metaData().getNofDistinctC1() - numActually};
 }
 
 // __________________________________________________________________________
@@ -1249,7 +1249,7 @@ std::optional<string> IndexImpl::idToOptionalString(Id id) const {
     case Datatype::Int:
       return std::to_string(id.getInt());
     case Datatype::VocabIndex: {
-      auto result = _vocab.indexToOptionalString(id.getVocabIndex());
+      auto result = vocab_.indexToOptionalString(id.getVocabIndex());
       if (result.has_value() && result.value().starts_with(VALUE_PREFIX)) {
         result = ad_utility::convertIndexWordToValueLiteral(result.value());
       }
@@ -1278,7 +1278,7 @@ bool IndexImpl::getId(const string& element, Id* id) const {
 // ___________________________________________________________________________
 std::pair<Id, Id> IndexImpl::prefix_range(const std::string& prefix) const {
   // TODO<joka921> Do we need prefix ranges for numbers?
-  auto [begin, end] = _vocab.prefix_range(prefix);
+  auto [begin, end] = vocab_.prefix_range(prefix);
   return {Id::makeFromVocabIndex(begin), Id::makeFromVocabIndex(end)};
 }
 
@@ -1354,7 +1354,7 @@ void IndexImpl::scan(const TripleComponent& col0String,
 
 // _____________________________________________________________________________
 void IndexImpl::deleteTemporaryFile(const string& path) {
-  if (!_keepTempFiles) {
+  if (!keepTempFiles_) {
     ad_utility::deleteFile(path);
   }
 }

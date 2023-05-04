@@ -60,7 +60,8 @@ inline std::vector<std::string> getAllIndexFilenames(
 // for the subclasses of `SparqlExpression`.
 // The concrete triple contents are currently used in `GroupByTest.cpp`.
 inline Index makeTestIndex(const std::string& indexBasename,
-                           std::string turtleInput = "", bool loadAllPermutations = true) {
+                           std::string turtleInput = "",
+                           bool loadAllPermutations = true) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
@@ -95,7 +96,8 @@ inline Index makeTestIndex(const std::string& indexBasename,
 // build using `makeTestIndex` (see above). The index (most notably its
 // vocabulary) is the only part of the `QueryExecutionContext` that is actually
 // relevant for these tests, so the other members are defaulted.
-inline QueryExecutionContext* getQec(std::string turtleInput = "", bool loadAllPermutations = true) {
+inline QueryExecutionContext* getQec(std::string turtleInput = "",
+                                     bool loadAllPermutations = true) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -126,17 +128,17 @@ inline QueryExecutionContext* getQec(std::string turtleInput = "", bool loadAllP
         "_staticGlobalTestIndex" + std::to_string(contextMap.size());
     contextMap.emplace(
         key, Context{TypeErasedCleanup{[testIndexBasename]() {
-                               for (const std::string& indexFilename :
-                                    getAllIndexFilenames(testIndexBasename)) {
-                                 // Don't log when a file can't be deleted,
-                                 // because the logging might already be
-                                 // destroyed.
-                                 ad_utility::deleteFile(indexFilename, false);
-                               }
-                             }},
-                             std::make_unique<Index>(
-                                 makeTestIndex(testIndexBasename, turtleInput, loadAllPermutations)),
-                             std::make_unique<QueryResultCache>()});
+                       for (const std::string& indexFilename :
+                            getAllIndexFilenames(testIndexBasename)) {
+                         // Don't log when a file can't be deleted,
+                         // because the logging might already be
+                         // destroyed.
+                         ad_utility::deleteFile(indexFilename, false);
+                       }
+                     }},
+                     std::make_unique<Index>(makeTestIndex(
+                         testIndexBasename, turtleInput, loadAllPermutations)),
+                     std::make_unique<QueryResultCache>()});
   }
   return contextMap.at(key).qec_.get();
 }

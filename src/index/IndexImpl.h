@@ -108,67 +108,66 @@ class IndexImpl {
 
   // Private data members.
  private:
-  string _onDiskBase;
-  string _settingsFileName;
-  bool _onlyAsciiTurtlePrefixes = false;
-  TurtleParserIntegerOverflowBehavior _turtleParserIntegerOverflowBehavior =
+  string onDiskBase_;
+  string settingsFileName_;
+  bool onlyAsciiTurtlePrefixes_ = false;
+  TurtleParserIntegerOverflowBehavior turtleParserIntegerOverflowBehavior_ =
       TurtleParserIntegerOverflowBehavior::Error;
-  bool _turtleParserSkipIllegalLiterals = false;
-  bool _keepTempFiles = false;
-  uint64_t _stxxlMemoryInBytes = DEFAULT_STXXL_MEMORY_IN_BYTES;
-  json _configurationJson;
-  Vocabulary<CompressedString, TripleComponentComparator> _vocab;
-  size_t _totalVocabularySize = 0;
-  bool _vocabPrefixCompressed = true;
-  Vocabulary<std::string, SimpleStringComparator> _textVocab;
+  bool turtleParserSkipIllegalLiterals_ = false;
+  bool keepTempFiles_ = false;
+  uint64_t stxxlMemoryInBytes_ = DEFAULT_STXXL_MEMORY_IN_BYTES;
+  json configurationJson_;
+  Vocabulary<CompressedString, TripleComponentComparator> vocab_;
+  size_t totalVocabularySize_ = 0;
+  bool vocabPrefixCompressed_ = true;
+  Vocabulary<std::string, SimpleStringComparator> textVocab_;
 
-  TextMetaData _textMeta;
-  DocsDB _docsDB;
-  vector<WordIndex> _blockBoundaries;
-  off_t _currentoff_t;
-  mutable ad_utility::File _textIndexFile;
+  TextMetaData textMeta_;
+  DocsDB docsDB_;
+  vector<WordIndex> blockBoundaries_;
+  off_t currentoff_t_;
+  mutable ad_utility::File textIndexFile_;
 
   // If false, only PSO and POS permutations are loaded and expected.
-  bool _loadAllPermutations = true;
+  bool loadAllPermutations_ = true;
 
   // Pattern trick data
-  bool _usePatterns;
-  double _avgNumDistinctPredicatesPerSubject;
-  double _avgNumDistinctSubjectsPerPredicate;
-  size_t _numDistinctSubjectPredicatePairs;
+  bool usePatterns_;
+  double avgNumDistinctPredicatesPerSubject_;
+  double avgNumDistinctSubjectsPerPredicate_;
+  size_t numDistinctSubjectPredicatePairs_;
 
-  size_t _parserBatchSize = PARSER_BATCH_SIZE;
-  size_t _numTriplesPerBatch = NUM_TRIPLES_PER_PARTIAL_VOCAB;
+  size_t parserBatchSize_ = PARSER_BATCH_SIZE;
+  size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
   // These statistics all do *not* include the triples that are added by
   // QLever for more efficient query processing.
-  size_t _numSubjectsNormal = 0;
-  size_t _numPredicatesNormal = 0;
-  size_t _numObjectsNormal = 0;
-  size_t _numTriplesNormal = 0;
+  size_t numSubjectsNormal_ = 0;
+  size_t numPredicatesNormal_ = 0;
+  size_t numObjectsNormal_ = 0;
+  size_t numTriplesNormal_ = 0;
   /**
    * @brief Maps pattern ids to sets of predicate ids.
    */
-  CompactVectorOfStrings<Id> _patterns;
+  CompactVectorOfStrings<Id> patterns_;
   /**
    * @brief Maps entity ids to pattern ids.
    */
-  std::vector<PatternID> _hasPattern;
+  std::vector<PatternID> hasPattern_;
   /**
    * @brief Maps entity ids to sets of predicate ids
    */
-  CompactVectorOfStrings<Id> _hasPredicate;
+  CompactVectorOfStrings<Id> hasPredicate_;
 
- public:
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
-  PermutationImpl _POS{"POS", ".pos", {1, 2, 0}};
-  PermutationImpl _PSO{"PSO", ".pso", {1, 0, 2}};
-  PermutationImpl _SOP{"SOP", ".sop", {0, 2, 1}};
-  PermutationImpl _SPO{"SPO", ".spo", {0, 1, 2}};
-  PermutationImpl _OPS{"OPS", ".ops", {2, 1, 0}};
-  PermutationImpl _OSP{"OSP", ".osp", {2, 0, 1}};
+  PermutationImpl POS_{"POS", ".pos", {1, 2, 0}};
+  PermutationImpl PSO_{"PSO", ".pso", {1, 0, 2}};
+  PermutationImpl SOP_{"SOP", ".sop", {0, 2, 1}};
+  PermutationImpl SPO_{"SPO", ".spo", {0, 1, 2}};
+  PermutationImpl OPS_{"OPS", ".ops", {2, 1, 0}};
+  PermutationImpl OSP_{"OSP", ".osp", {2, 0, 1}};
 
  public:
   IndexImpl();
@@ -181,21 +180,21 @@ class IndexImpl {
   IndexImpl& operator=(IndexImpl&&) = delete;
   IndexImpl(IndexImpl&&) = delete;
 
-  const auto& POS() const { return _POS; }
-  auto& POS() { return _POS; }
-  const auto& PSO() const { return _PSO; }
-  auto& PSO() { return _PSO; }
-  const auto& SPO() const { return _SPO; }
-  auto& SPO() { return _SPO; }
-  const auto& SOP() const { return _SOP; }
-  auto& SOP() { return _SOP; }
-  const auto& OPS() const { return _OPS; }
-  auto& OPS() { return _OPS; }
-  const auto& OSP() const { return _OSP; }
-  auto& OSP() { return _OSP; }
+  const auto& POS() const { return POS_; }
+  auto& POS() { return POS_; }
+  const auto& PSO() const { return PSO_; }
+  auto& PSO() { return PSO_; }
+  const auto& SPO() const { return SPO_; }
+  auto& SPO() { return SPO_; }
+  const auto& SOP() const { return SOP_; }
+  auto& SOP() { return SOP_; }
+  const auto& OPS() const { return OPS_; }
+  auto& OPS() { return OPS_; }
+  const auto& OSP() const { return OSP_; }
+  auto& OSP() { return OSP_; }
 
   // For a given `Permutation` (e.g. `PSO`) return the corresponding
-  // `PermutationImpl` object by reference (`_PSO`).
+  // `PermutationImpl` object by reference (`PSO_`).
   PermutationImpl& getPermutation(Index::Permutation p);
   const PermutationImpl& getPermutation(Index::Permutation p) const;
 
@@ -225,10 +224,10 @@ class IndexImpl {
   // Read necessary meta data into memory and opens file handles.
   void addTextFromOnDiskIndex();
 
-  const auto& getVocab() const { return _vocab; };
-  auto& getNonConstVocabForTesting() { return _vocab; }
+  const auto& getVocab() const { return vocab_; };
+  auto& getNonConstVocabForTesting() { return vocab_; }
 
-  const auto& getTextVocab() const { return _textVocab; };
+  const auto& getTextVocab() const { return textVocab_; };
 
   // --------------------------------------------------------------------------
   //  -- RETRIEVAL ---
@@ -346,10 +345,10 @@ class IndexImpl {
                                 vector<Score>& scores) const;
 
   string getTextExcerpt(TextRecordIndex cid) const {
-    if (cid.get() >= _docsDB._size) {
+    if (cid.get() >= docsDB_._size) {
       return "";
     }
-    return _docsDB.getTextExcerpt(cid);
+    return docsDB_.getTextExcerpt(cid);
   }
 
   // Only for debug reasons and external encoding tests.
@@ -359,7 +358,7 @@ class IndexImpl {
   void dumpAsciiLists(const TextBlockMetaData& tbmd) const;
 
   float getAverageNofEntityContexts() const {
-    return _textMeta.getAverageNofEntityContexts();
+    return textMeta_.getAverageNofEntityContexts();
   };
 
   void setKbName(const string& name);
@@ -372,8 +371,8 @@ class IndexImpl {
 
   void setKeepTempFiles(bool keepTempFiles);
 
-  uint64_t& stxxlMemoryInBytes() { return _stxxlMemoryInBytes; }
-  const uint64_t& stxxlMemoryInBytes() const { return _stxxlMemoryInBytes; }
+  uint64_t& stxxlMemoryInBytes() { return stxxlMemoryInBytes_; }
+  const uint64_t& stxxlMemoryInBytes() const { return stxxlMemoryInBytes_; }
 
   void setOnDiskBase(const std::string& onDiskBase);
 
@@ -382,17 +381,17 @@ class IndexImpl {
   void setPrefixCompression(bool compressed);
 
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
-    _numTriplesPerBatch = numTriplesPerBatch;
+    numTriplesPerBatch_ = numTriplesPerBatch;
   }
 
-  const string& getTextName() const { return _textMeta.getName(); }
+  const string& getTextName() const { return textMeta_.getName(); }
 
-  const string& getKbName() const { return _PSO.metaData().getName(); }
+  const string& getKbName() const { return PSO_.metaData().getName(); }
 
-  size_t getNofTextRecords() const { return _textMeta.getNofTextRecords(); }
-  size_t getNofWordPostings() const { return _textMeta.getNofWordPostings(); }
+  size_t getNofTextRecords() const { return textMeta_.getNofTextRecords(); }
+  size_t getNofWordPostings() const { return textMeta_.getNofWordPostings(); }
   size_t getNofEntityPostings() const {
-    return _textMeta.getNofEntityPostings();
+    return textMeta_.getNofEntityPostings();
   }
 
   bool hasAllPermutations() const { return SPO()._isLoaded; }
@@ -457,7 +456,7 @@ class IndexImpl {
 
   // Create Vocabulary and directly write it to disk. Create TripleVec with all
   // the triples converted to id space. This Vec can be used for creating
-  // permutations. Member _vocab will be empty after this because it is not
+  // permutations. Member vocab_ will be empty after this because it is not
   // needed for index creation once the TripleVec is set up and it would be a
   // waste of RAM.
   template <class Parser>
@@ -570,7 +569,7 @@ class IndexImpl {
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 
   /// Calculate the block boundaries for the text index. The boundary of a
-  /// block is the index in the `_textVocab` of the last word that belongs
+  /// block is the index in the `textVocab_` of the last word that belongs
   /// to this block.
   /// This implementation takes a reference to an `IndexImpl` and a callable,
   /// that is called once for each blockBoundary, with the `size_t`
@@ -581,7 +580,7 @@ class IndexImpl {
       I&& index, const BlockBoundaryAction& blockBoundaryAction);
 
   /// Calculate the block boundaries for the text index, and store them in the
-  /// _blockBoundaries member.
+  /// blockBoundaries_ member.
   void calculateBlockBoundaries();
 
   /// Calculate the block boundaries for the text index, and store the
@@ -654,7 +653,7 @@ class IndexImpl {
   void readIndexBuilderSettingsFromFile();
 
   /**
-   * Delete a temporary file unless the _keepTempFiles flag is set
+   * Delete a temporary file unless the keepTempFiles_ flag is set
    * @param path
    */
   void deleteTemporaryFile(const string& path);

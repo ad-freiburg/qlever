@@ -72,14 +72,14 @@ TEST(IndexTest, createFromTurtleTest) {
     Id c2 = getId("<c2>");
 
     // TODO<joka921> We could also test the multiplicities here.
-    ASSERT_TRUE(index._PSO.metaData().col0IdExists(b));
-    ASSERT_TRUE(index._PSO.metaData().col0IdExists(b2));
-    ASSERT_FALSE(index._PSO.metaData().col0IdExists(a));
-    ASSERT_FALSE(index._PSO.metaData().col0IdExists(c));
-    ASSERT_FALSE(index._PSO.metaData().col0IdExists(
+    ASSERT_TRUE(index.PSO().metaData().col0IdExists(b));
+    ASSERT_TRUE(index.PSO().metaData().col0IdExists(b2));
+    ASSERT_FALSE(index.PSO().metaData().col0IdExists(a));
+    ASSERT_FALSE(index.PSO().metaData().col0IdExists(c));
+    ASSERT_FALSE(index.PSO().metaData().col0IdExists(
         Id::makeFromVocabIndex(VocabIndex::make(735))));
-    ASSERT_FALSE(index._PSO.metaData().getMetaData(b).isFunctional());
-    ASSERT_TRUE(index._PSO.metaData().getMetaData(b2).isFunctional());
+    ASSERT_FALSE(index.PSO().metaData().getMetaData(b).isFunctional());
+    ASSERT_TRUE(index.PSO().metaData().getMetaData(b2).isFunctional());
 
     ASSERT_TRUE(index.POS().metaData().col0IdExists(b));
     ASSERT_TRUE(index.POS().metaData().col0IdExists(b2));
@@ -130,10 +130,10 @@ TEST(IndexTest, createFromTurtleTest) {
     Id c = getId("<c>");
     Id isA = getId("<is-a>");
 
-    ASSERT_TRUE(index._PSO.metaData().col0IdExists(isA));
-    ASSERT_FALSE(index._PSO.metaData().col0IdExists(a));
+    ASSERT_TRUE(index.PSO().metaData().col0IdExists(isA));
+    ASSERT_FALSE(index.PSO().metaData().col0IdExists(a));
 
-    ASSERT_FALSE(index._PSO.metaData().getMetaData(isA).isFunctional());
+    ASSERT_FALSE(index.PSO().metaData().getMetaData(isA).isFunctional());
 
     ASSERT_TRUE(index.POS().metaData().col0IdExists(isA));
     ASSERT_FALSE(index.POS().metaData().getMetaData(isA).isFunctional());
@@ -494,12 +494,15 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_EQ(numTriples.normal_, 7);
   // Two added triples for each triple that has an object with a language tag.
   EXPECT_EQ(numTriples.internal_, 2);
-
 }
 
 TEST(IndexTest, NumDistinctEntitiesCornerCases) {
   const IndexImpl& index = getQec("", false)->getIndex().getImpl();
-  AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctSubjects(), ::testing::ContainsRegex("if all 6"));
-  AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctObjects(), ::testing::ContainsRegex("if all 6"));
-  AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctCol0(static_cast<Index::Permutation>(42)), ::testing::ContainsRegex("should be unreachable"));
+  AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctSubjects(),
+                               ::testing::ContainsRegex("if all 6"));
+  AD_EXPECT_THROW_WITH_MESSAGE(index.numDistinctObjects(),
+                               ::testing::ContainsRegex("if all 6"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      index.numDistinctCol0(static_cast<Index::Permutation>(42)),
+      ::testing::ContainsRegex("should be unreachable"));
 }
