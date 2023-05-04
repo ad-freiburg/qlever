@@ -1322,14 +1322,9 @@ void IndexImpl::scan(const TripleComponent& key, IdTable* result,
                      Index::Permutation permutation,
                      ad_utility::SharedConcurrentTimeoutTimer timer) const {
   const auto& p = getPermutation(permutation);
-  LOG(DEBUG) << "Performing " << p._readableName
-             << " scan for full list for: " << key << "\n";
-
   if (std::optional<Id> id = key.toValueId(getVocab()); id.has_value()) {
-    LOG(TRACE) << "Successfully got key ID.\n";
     scan(id.value(), result, permutation, std::move(timer));
   }
-  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
 }
 
 // _____________________________________________________________________________

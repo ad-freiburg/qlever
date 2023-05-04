@@ -165,7 +165,9 @@ template <
   // element of `left` or `right`) constains no UNDEF values. It is used inside
   // the following `mergeWithUndefRight` function.
   auto containsNoUndefined = []<typename T>(const T& row) {
-    if constexpr (std::is_same_v<T, Id>) {
+    if constexpr (isSimilar<FindSmallerUndefRangesLeft, Noop> && isSimilar<FindSmallerUndefRangesRight, Noop>) {
+      return true;
+    } else if constexpr (std::is_same_v<T, Id>) {
       return row != Id::makeUndefined();
     } else {
       return (std::ranges::none_of(

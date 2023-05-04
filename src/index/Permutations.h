@@ -88,7 +88,7 @@ class PermutationImpl {
     if (!_meta.col0IdExists(col0Id)) {
       return std::nullopt;
     }
-    return {_meta.getMetaData(col0Id), _meta.blockData()};
+    return MetaDataAndBlocks{_meta.getMetaData(col0Id), _meta.blockData()};
   }
 
   cppcoro::generator<IdTable> lazyScan(Id col0Id, const std::vector<CompressedBlockMetadata>& blocks, ad_utility::AllocatorWithLimit<Id> allocator, ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) {

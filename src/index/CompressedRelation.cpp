@@ -301,7 +301,6 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   return result;
 }
 
-
 std::array<std::vector<CompressedBlockMetadata>, 2> CompressedRelationReader::getBlocksForJoin(const CompressedRelationMetadata& md1, const CompressedRelationMetadata& md2, std::span<const CompressedBlockMetadata> blockMetadata) {
   // get all the blocks where col0FirstId_ <= col0Id <= col0LastId_
   struct KeyLhs {
@@ -334,24 +333,28 @@ std::array<std::vector<CompressedBlockMetadata>, 2> CompressedRelationReader::ge
         return a.col0FirstId_ < b.col0FirstId_ && a.col0LastId_ < b.col0LastId_;
       });
 
-  auto blockLessThanId = [](const CompressedBlockMetadata& block1, const CompressedBlockMetadata& block2) {
+  auto blockLessThanBlock = [](const CompressedBlockMetadata& block1, const CompressedBlockMetadata& block2) {
     if (block1.col0LastId_ < block2.col0FirstId_ || block1.col0FirstId_ > block2.col0LastId_) {
       return block1.col0LastId_ < block2.col0LastId_;
+    } else {
+      return false;
     }
   };
 
-  auto lessThan =
-      ad_utility::OverloadCallOperator{idLessThanBlock, blockLessThanId};
 
-  std::vector<CompressedBlockMetadata> result;
+  std::array<std::vector<CompressedBlockMetadata>, 2> result;
   auto addRow = [&result]([[maybe_unused]] auto it1, auto it2) {
-    result.push_back(*it2);
+    result[0].push_back(*it1);
+    result[1].push_back(*it2);
   };
 
   auto noop = ad_utility::noop;
   [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef<false>(
-      joinColum, std::span<const CompressedBlockMetadata>(beginBlock, endBlock),
-      lessThan, addRow, noop, noop);
+      std::span<const CompressedBlockMetadata>{beginBlock1, endBlock1}, std::span<const CompressedBlockMetadata>(beginBlock2, endBlock2),
+      blockLessThanBlock, addRow, noop, noop);
+  for (auto& vec : result) {
+    vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
+  }
   return result;
 
 }
@@ -720,3 +723,5 @@ CompressedRelationWriter::compressAndWriteColumn(std::span<const Id> column) {
   outfile_.write(compressedBlock.data(), compressedBlock.size());
   return {offsetInFile, compressedSize};
 };
+
+//CompressedRelationWriter::getBlocksFromMetadata

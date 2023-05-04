@@ -279,4 +279,5 @@ void IndexScan::computeFullScan(IdTable* result,
 
 std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   const auto& index = s1.getExecutionContext()->getIndex().getImpl();
+
 }
