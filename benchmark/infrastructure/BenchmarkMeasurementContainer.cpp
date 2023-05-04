@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/string_view.h>
@@ -12,7 +10,9 @@
 #include <memory>
 #include <sstream>
 #include <string_view>
+#include <utility>
 
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
@@ -140,24 +140,37 @@ ResultTable::operator std::string() const {
   auto addStringWithPadding = [](std::ostringstream& stream,
                                  const std::string& text,
                                  const size_t wantedLength) {
-    const std::string padding(wantedLength - text.length(), ' ');
+    const std::string padding(
+        wantedLength >= text.length() ? wantedLength - text.length() : 0, ' ');
     stream << text << padding;
   };
+
+  /*
+  @brief Adds a row of the table to the stream.
+
+  @param stream The string stream, it will add to.
+  @param rowEntries The entries for the rows. The `size_t` says, how long the
+  printed string should be and the string is the string, that will printed.
+  */
+  auto addRow =
+      [&columnSeperator, &addStringWithPadding](
+          std::ostringstream& stream,
+          const std::vector<std::pair<std::string, size_t>>& rowEntries) {
+        forEachExcludingTheLastOne(
+            rowEntries,
+            [&stream, &columnSeperator,
+             &addStringWithPadding](const auto& pair) {
+              addStringWithPadding(stream, pair.first, pair.second);
+              stream << columnSeperator;
+            },
+            [&stream, &addStringWithPadding](const auto& pair) {
+              addStringWithPadding(stream, pair.first, pair.second);
+            });
+      };
 
   // The prefix. Everything after this will be indented, so it's better
   // to only combine them at the end.
   std::string prefix = absl::StrCat("Table '", descriptor_, "'\n");
-
-  // It's allowed to have tables without rows. In that case, we are already
-  // done, because there is no table content to print.
-  if (numRows() == 0) {
-    // In the case of no metadata, we don't need the line break at the end of
-    // the prefix.
-    return absl::StrCat(
-        prefix.substr(0, prefix.size() - 1),
-        addIndentation(getMetadataPrettyString(metadata(), "\nmetadata: ", ""),
-                       1));
-  }
 
   // For printing the table.
   std::ostringstream stream;
@@ -165,9 +178,23 @@ ResultTable::operator std::string() const {
   // Adding the metadata.
   stream << getMetadataPrettyString(metadata(), "metadata: ", "\n");
 
+  // It's allowed to have tables without rows. In that case, we are already
+  // nearly done,ause we only to have add the column names.
+  if (numRows() == 0) {
+    // Adding the column names. We don't need any padding.
+    addRow(stream, ad_utility::transform(columnNames_, [](const auto& name) {
+             return std::make_pair(name, name.length());
+           }));
+
+    // Signal, that the table is empty.
+    stream << "\n## Empty Table (0 rows) ##";
+
+    return absl::StrCat(prefix, addIndentation(stream.str(), 1));
+  }
+
   // For easier usage.
-  const size_t numberColumns = columnNames_.size();
-  const size_t numberRows = rowNames_.size();
+  const size_t numberColumns = numColumns();
+  const size_t numberRows = numRows();
 
   // For formating: What is the maximum string width of a column, if you
   // compare all it's entries?
@@ -201,29 +228,49 @@ ResultTable::operator std::string() const {
             : columnNames_[column].length();
   }
 
-  // Because the column of row names also has a width, we create an empty
-  // string of that size, before actually printing the row of column names.
-  stream << std::string(rowNameMaxStringWidth, ' ');
-
   // Print the top row of names.
-  for (size_t column = 0; column < numberColumns; column++) {
-    stream << columnSeperator;
-    addStringWithPadding(stream, columnNames_[column],
-                         columnMaxStringWidth[column]);
+  {
+    // Because the column of row names also has a width, we create an empty
+    // string of that size, before actually printing the row of column names.
+    std::vector<std::pair<std::string, size_t>> columnNames{std::make_pair(
+        std::string(rowNameMaxStringWidth, ' '), rowNameMaxStringWidth)};
+
+    // We know exactly, how many entries there will be. The `+1` is for the row
+    // name.
+    columnNames.reserve(1 + numColumns());
+
+    // The actual column names.
+    ad_utility::appendVector(
+        columnNames,
+        ad_utility::zipVectors(columnNames_, columnMaxStringWidth));
+
+    // Actually printing them.
+    addRow(stream, columnNames);
   }
 
   // Print the rows.
   for (size_t row = 0; row < numberRows; row++) {
-    // Row name
+    // Line break between rows.
     stream << "\n";
-    addStringWithPadding(stream, rowNames_[row], rowNameMaxStringWidth);
+
+    // Vector representing a row.
+    std::vector<std::pair<std::string, size_t>> rowVector{};
+
+    // We know exactly, how many entries there will be. The `+1` is for the row
+    // name.
+    rowVector.reserve(1 + numColumns());
+
+    // Row name
+    rowVector.push_back(std::make_pair(rowNames_[row], rowNameMaxStringWidth));
 
     // Row content.
-    for (size_t column = 0; column < numberColumns; column++) {
-      stream << columnSeperator;
-      addStringWithPadding(stream, entryToString(entries_[row][column]),
-                           columnMaxStringWidth[column]);
-    }
+    ad_utility::appendVector(
+        rowVector, ad_utility::zipVectors(
+                       ad_utility::transform(entries_.at(row), entryToString),
+                       columnMaxStringWidth));
+
+    // Actually printing the row.
+    addRow(stream, rowVector);
   }
 
   return absl::StrCat(prefix, addIndentation(stream.str(), 1));

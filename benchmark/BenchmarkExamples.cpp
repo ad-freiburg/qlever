@@ -217,6 +217,9 @@ class BMTables : public BenchmarkInterface {
     tableAddingExponents.setEntry(2, 0, "1024+1024 and 1024+2048");
     tableAddingExponents.setEntry(2, 1, "1024+2048 and 2048+2048");
 
+    // TODO Delete.
+    results.addTable("empty table", {}, {"column 1", "column 2"});
+
     return results;
   }
 };

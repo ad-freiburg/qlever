@@ -2,12 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel February of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkResultToString.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
 #include <bits/ranges_algo.h>
 
+#include "../benchmark/infrastructure/BenchmarkResultToString.h"
 #include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
 #include "util/Exception.h"
@@ -56,25 +55,6 @@ std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
   } else {
     return "";
   }
-}
-
-/*
-@brief Applies the given function `regularFunction` to all elements in `r`,
-except for the last one. Instead, `lastOneFunction` is applied to that one.
-
-@tparam Range Needs to be a data type supported by `std::ranges`.
-
-@param r Must hold at least one element.
-*/
-template <typename Range, typename RegularFunction, typename LastOneFunction>
-static void forEachExcludingTheLastOne(Range&& r,
-                                       RegularFunction regularFunction,
-                                       LastOneFunction lastOneFunction) {
-  // Throw an error, if there are no elements in `r`.
-  AD_CONTRACT_CHECK(r.size() > 0);
-
-  std::ranges::for_each_n(r.begin(), r.size() - 1, regularFunction, {});
-  lastOneFunction(r.back());
 }
 
 /*
