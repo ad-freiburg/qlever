@@ -27,7 +27,10 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 // scan matches `expected`.
 auto makeTestScanWidthOne = [](const IndexImpl& index) {
   return [&index](const std::string& c0, const std::string& c1,
-                  const auto& permutation, const VectorTable& expected) {
+                  Index::Permutation permutation, const VectorTable& expected,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) {
+    auto t = generateLocationTrace(l);
     IdTable result(1, makeAllocator());
     index.scan(c0, c1, &result, permutation);
     ASSERT_EQ(result, makeIdTableFromVector(expected));
@@ -39,7 +42,7 @@ auto makeTestScanWidthOne = [](const IndexImpl& index) {
 // of the `index` and checks whether the result of the
 // scan matches `expected`.
 auto makeTestScanWidthTwo = [](const IndexImpl& index) {
-  return [&index](const std::string& c0, const auto& permutation,
+  return [&index](const std::string& c0, Index::Permutation permutation,
                   const VectorTable& expected,
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) {
@@ -88,11 +91,11 @@ TEST(IndexTest, createFromTurtleTest) {
     // Relation b
     // Pair index
     auto testTwo = makeTestScanWidthTwo(index);
-    testTwo("<b>", index.PSO(), {{a, c}, {a, c2}});
+    testTwo("<b>", Index::Permutation::PSO, {{a, c}, {a, c2}});
     std::vector<std::array<Id, 2>> buffer;
 
     // Relation b2
-    testTwo("<b2>", index.PSO(), {{a, c}, {a2, c2}});
+    testTwo("<b2>", Index::Permutation::PSO, {{a, c}, {a2, c2}});
 
     {
       // Test for a previous bug in the scan of two fixed elements: An assertion
@@ -102,7 +105,7 @@ TEST(IndexTest, createFromTurtleTest) {
       // predicate that occurs and <c2> is larger than the largest subject that
       // appears with <b2>.
       auto testOne = makeTestScanWidthOne(index);
-      testOne("<b2>", "<c2>", index.PSO(), {});
+      testOne("<b2>", "<c2>", Index::Permutation::PSO, {});
     }
   }
   {
@@ -136,7 +139,7 @@ TEST(IndexTest, createFromTurtleTest) {
     ASSERT_FALSE(index.POS().metaData().getMetaData(isA).isFunctional());
 
     auto testTwo = makeTestScanWidthTwo(index);
-    testTwo("<is-a>", index.PSO(),
+    testTwo("<is-a>", Index::Permutation::PSO,
             {{a, zero},
              {a, one},
              {a, two},
@@ -146,7 +149,7 @@ TEST(IndexTest, createFromTurtleTest) {
              {c, two}});
 
     // is-a for POS
-    testTwo("<is-a>", index.POS(),
+    testTwo("<is-a>", Index::Permutation::POS,
             {{zero, a},
              {zero, b},
              {one, a},
@@ -231,6 +234,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
 };
 
 TEST(IndexTest, scanTest) {
+  using enum Index::Permutation;
   std::string kb =
       "<a>  <b>  <c>  . \n"
       "<a>  <b>  <c2> . \n"
@@ -249,19 +253,19 @@ TEST(IndexTest, scanTest) {
     Id c2 = getId("<c2>");
     auto testTwo = makeTestScanWidthTwo(index);
 
-    testTwo("<b>", index._PSO, {{a, c}, {a, c2}});
-    testTwo("<x>", index._PSO, {});
-    testTwo("<c>", index._PSO, {});
-    testTwo("<b>", index._POS, {{c, a}, {c2, a}});
-    testTwo("<x>", index._POS, {});
-    testTwo("<c>", index._POS, {});
+    testTwo("<b>", PSO, {{a, c}, {a, c2}});
+    testTwo("<x>", PSO, {});
+    testTwo("<c>", PSO, {});
+    testTwo("<b>", POS, {{c, a}, {c2, a}});
+    testTwo("<x>", POS, {});
+    testTwo("<c>", POS, {});
 
     auto testOne = makeTestScanWidthOne(index);
 
-    testOne("<b>", "<a>", index._PSO, {{c}, {c2}});
-    testOne("<b>", "<c>", index._PSO, {});
-    testOne("<b2>", "<c2>", index._POS, {{a2}});
-    testOne("<notExisting>", "<a>", index._PSO, {});
+    testOne("<b>", "<a>", PSO, {{c}, {c2}});
+    testOne("<b>", "<c>", PSO, {});
+    testOne("<b2>", "<c2>", POS, {{a2}});
+    testOne("<notExisting>", "<a>", PSO, {});
   }
   kb = "<a> <is-a> <1> . \n"
        "<a> <is-a> <2> . \n"
@@ -285,7 +289,7 @@ TEST(IndexTest, scanTest) {
     Id three = getId("<3>");
 
     auto testTwo = makeTestScanWidthTwo(index);
-    testTwo("<is-a>", index._PSO,
+    testTwo("<is-a>", PSO,
             {{{a, zero},
               {a, one},
               {a, two},
@@ -293,7 +297,7 @@ TEST(IndexTest, scanTest) {
               {b, three},
               {c, one},
               {c, two}}});
-    testTwo("<is-a>", index._POS,
+    testTwo("<is-a>", POS,
             {{zero, a},
              {zero, b},
              {one, a},
@@ -304,13 +308,13 @@ TEST(IndexTest, scanTest) {
 
     auto testWidthOne = makeTestScanWidthOne(index);
 
-    testWidthOne("<is-a>", "<0>", index._POS, {{a}, {b}});
-    testWidthOne("<is-a>", "<1>", index._POS, {{a}, {c}});
-    testWidthOne("<is-a>", "<2>", index._POS, {{a}, {c}});
-    testWidthOne("<is-a>", "<3>", index._POS, {{b}});
-    testWidthOne("<is-a>", "<a>", index._PSO, {{zero}, {one}, {two}});
-    testWidthOne("<is-a>", "<b>", index._PSO, {{zero}, {three}});
-    testWidthOne("<is-a>", "<c>", index._PSO, {{one}, {two}});
+    testWidthOne("<is-a>", "<0>", POS, {{a}, {b}});
+    testWidthOne("<is-a>", "<1>", POS, {{a}, {c}});
+    testWidthOne("<is-a>", "<2>", POS, {{a}, {c}});
+    testWidthOne("<is-a>", "<3>", POS, {{b}});
+    testWidthOne("<is-a>", "<a>", PSO, {{zero}, {one}, {two}});
+    testWidthOne("<is-a>", "<b>", PSO, {{zero}, {three}});
+    testWidthOne("<is-a>", "<c>", PSO, {{one}, {two}});
   }
 };
 

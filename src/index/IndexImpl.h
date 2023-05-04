@@ -194,6 +194,28 @@ class IndexImpl {
   const auto& OSP() const { return _OSP; }
   auto& OSP() { return _OSP; }
 
+  PermutationImpl& getPermutation(Index::Permutation p) {
+    using enum Index::Permutation;
+    switch (p) {
+      case PSO:
+        return _PSO;
+      case POS:
+        return _POS;
+      case SPO:
+        return _SPO;
+      case SOP:
+        return _SOP;
+      case OSP:
+        return _OSP;
+      case OPS:
+        return _OPS;
+    }
+  }
+
+  const PermutationImpl& getPermutation(Index::Permutation p) const {
+    return const_cast<IndexImpl&>(*this).getPermutation(p);
+  }
+
   // Creates an index from a file. Parameter Parser must be able to split the
   // file's format into triples.
   // Will write vocabulary and on-disk index data.
@@ -288,18 +310,18 @@ class IndexImpl {
     }
   }
 
-  template <typename Permutation>
-  size_t getCardinality(Id id, const Permutation& permutation) const {
-    if (permutation.metaData().col0IdExists(id)) {
-      return permutation.metaData().getMetaData(id).getNofElements();
+  // ___________________________________________________________________________
+  size_t getCardinality(Id id, Index::Permutation permutation) const {
+    const auto& p = getPermutation(permutation);
+    if (p.metaData().col0IdExists(id)) {
+      return p.metaData().getMetaData(id).getNofElements();
     }
     return 0;
   }
 
   // ___________________________________________________________________________
-  template <typename Permutation>
   size_t getCardinality(const TripleComponent& comp,
-                        const Permutation& permutation) const {
+                        Index::Permutation permutation) const {
     // TODO<joka921> This special case is only relevant for the `PSO` and `POS`
     // permutations, but this internal predicate should never appear in subjects
     // or objects anyway.
@@ -488,9 +510,9 @@ class IndexImpl {
   bool hasAllPermutations() const { return SPO()._isLoaded; }
 
   // _____________________________________________________________________________
-  template <class PermutationImpl>
   vector<float> getMultiplicities(const TripleComponent& key,
-                                  const PermutationImpl& p) const {
+                                  Index::Permutation permutation) const {
+    const auto& p = getPermutation(permutation);
     std::optional<Id> keyId = key.toValueId(getVocab());
     vector<float> res;
     if (keyId.has_value() && p._meta.col0IdExists(keyId.value())) {
@@ -505,8 +527,8 @@ class IndexImpl {
   }
 
   // ___________________________________________________________________
-  template <class PermutationImpl>
-  vector<float> getMultiplicities(const PermutationImpl& p) const {
+  vector<float> getMultiplicities(Index::Permutation permutation) const {
+    const auto& p = getPermutation(permutation);
     auto numTriples =
         static_cast<float>(this->numTriples().normalAndInternal_());
     std::array<float, 3> m{
@@ -527,10 +549,9 @@ class IndexImpl {
    * @param p The Permutation to use (in particularly POS(), SOP,... members of
    * IndexImpl class).
    */
-  template <class Permutation>
-  void scan(Id key, IdTable* result, const Permutation& p,
+  void scan(Id key, IdTable* result, const Index::Permutation& p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
-    p.scan(key, result, std::move(timer));
+    getPermutation(p).scan(key, result, std::move(timer));
   }
 
   /**
@@ -544,15 +565,16 @@ class IndexImpl {
    * @param p The Permutation to use (in particularly POS(), SOP,... members of
    * IndexImpl class).
    */
-  template <class Permutation>
-  void scan(const TripleComponent& key, IdTable* result, const Permutation& p,
+  void scan(const TripleComponent& key, IdTable* result,
+            Index::Permutation permutation,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
+    const auto& p = getPermutation(permutation);
     LOG(DEBUG) << "Performing " << p._readableName
                << " scan for full list for: " << key << "\n";
     std::optional<Id> optionalId = key.toValueId(getVocab());
     if (optionalId.has_value()) {
       LOG(TRACE) << "Successfully got key ID.\n";
-      scan(optionalId.value(), result, p, std::move(timer));
+      scan(optionalId.value(), result, permutation, std::move(timer));
     }
     LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
   }
@@ -560,8 +582,6 @@ class IndexImpl {
   /**
    * @brief Perform a scan for two keys i.e. retrieve all Z from the XYZ
    * permutation for specific key values of X and Y.
-   * @tparam Permutation The permutations IndexImpl::POS()... have different
-   * types
    * @param col0String The first key (as a raw string that is yet to be
    * transformed to index space) for which to search, e.g. fixed value for O in
    * OSP permutation.
@@ -573,13 +593,13 @@ class IndexImpl {
    * IndexImpl class).
    */
   // _____________________________________________________________________________
-  template <class PermutationInfo>
   void scan(const TripleComponent& col0String,
             const TripleComponent& col1String, IdTable* result,
-            const PermutationInfo& p,
+            const Index::Permutation& permutation,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
     std::optional<Id> col0Id = col0String.toValueId(getVocab());
     std::optional<Id> col1Id = col1String.toValueId(getVocab());
+    const auto& p = getPermutation(permutation);
     if (!col0Id.has_value() || !col1Id.has_value()) {
       LOG(DEBUG) << "Key " << col0String << " or key " << col1String
                  << " were not found in the vocabulary \n";
@@ -591,44 +611,6 @@ class IndexImpl {
                << "...\n";
 
     p.scan(col0Id.value(), col1Id.value(), result, timer);
-  }
-
-  // Internal implementation for `applyToPermutation` (see below).
-  // TODO<C++23> : Use "deducing this"
- private:
-  static decltype(auto) applyToPermutationImpl(auto&& self,
-                                               Index::Permutation permutation,
-                                               auto&& F) {
-    using enum Index::Permutation;
-    switch (permutation) {
-      case POS:
-        return AD_FWD(F)(self._POS);
-      case PSO:
-        return AD_FWD(F)(self._PSO);
-      case SPO:
-        return AD_FWD(F)(self._SPO);
-      case SOP:
-        return AD_FWD(F)(self._SOP);
-      case OSP:
-        return AD_FWD(F)(self._OSP);
-      case OPS:
-        return AD_FWD(F)(self._OPS);
-      default:
-        AD_FAIL();
-    }
-  }
-
- public:
-  // Apply the function `F` to the permutation that corresponds to the
-  // `permutation` argument.
-  decltype(auto) applyToPermutation(Index::Permutation permutation, auto&& F) {
-    return applyToPermutationImpl(*this, permutation, AD_FWD(F));
-  }
-
-  // TODO<joka921, C++23> reduce code duplication here using `deducing this`.
-  decltype(auto) applyToPermutation(Index::Permutation permutation,
-                                    auto&& F) const {
-    return applyToPermutationImpl(*this, permutation, AD_FWD(F));
   }
 
  private:
@@ -705,7 +687,6 @@ class IndexImpl {
   // the SPO permutation is also needed for patterns (see usage in
   // IndexImpl::createFromFile function)
 
-  template <>
   void createPermutationPair(auto&& sortedTriples, const PermutationImpl& p1,
                              const PermutationImpl& p2,
                              auto&&... perTripleCallbacks);
