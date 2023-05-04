@@ -857,14 +857,18 @@ auto createDefaultGrowthLambda(const size_t& base,
 
 /*
 @brief Create and return a lambda, that returns true, if none of the
-measurements of the given benchmark table took to long and if the bigger
-`IdTable` doesn't have more rows, than what is allowed
+measurements of the given benchmark table took to long. Optionally, is also
+checks, if the bigger `IdTable` doesn't have more rows, than what is allowed. In
+that case, both conditions must be met, before it returns true.
 
 @tparam Function A lambda function, that takes a `const size_t&` and return a
 `size_t`.
 
 @param maxTime The maximum amount of time, a function measurements is allowed to
 take.
+@param checkMemory If true, a maximal amount of memory, that the bigger
+`IdTable` is allowed to use, must have been told, and the returned function will
+check for it. If false, it wasn't and the memory used can be ignored.
 @param maxAmountRowInBiggerTable How many rows the bigger `IdTable` is allowed
 to have at maximum.
 @param biggerTableAmountRowsFunction A function for calculating the amount of
@@ -873,9 +877,10 @@ given is the row number in the benchmark table.
 */
 template <invocableWithReturnType<size_t, const size_t&> Function>
 auto createDefaultStoppingLambda(
-    const float& maxTime, const size_t& maxAmountRowInBiggerTable,
+    const float& maxTime, bool checkMemory,
+    const size_t& maxAmountRowInBiggerTable,
     const Function& biggerTableAmountRowsFunction) {
-  return [maxTime, maxAmountRowInBiggerTable,
+  return [maxTime, maxAmountRowInBiggerTable, checkMemory,
           &biggerTableAmountRowsFunction](const ResultTable& table) -> bool {
     // If the tables has no rows, that's an automatic pass.
     if (table.numRows() == 0) {
@@ -888,7 +893,9 @@ auto createDefaultStoppingLambda(
     // Did any measurement take to long in the newest row? Or does the bigger
     // tables have to many rows?
     return checkIfFunctionMeasurementOfRowUnderMaxtime(table, row, maxTime) &&
-           (biggerTableAmountRowsFunction(row) <= maxAmountRowInBiggerTable);
+           (checkMemory ? biggerTableAmountRowsFunction(row) <=
+                              maxAmountRowInBiggerTable
+                        : true);
   };
 }
 
@@ -943,7 +950,8 @@ class BmOnlyBiggerTableSizeChanges final
           table = &makeGrowingBenchmarkTable(
               &results, tableName,
               createDefaultStoppingLambda(
-                  maxTimeSingleMeasurement_.value(), maxBiggerTableRows_,
+                  maxTimeSingleMeasurement_.value(), maxMemoryInMBWasGiven_,
+                  maxBiggerTableRows_,
                   [this, &growthFunction](const size_t& row) {
                     return smallerTableAmountRows_ * growthFunction(row);
                   }),
@@ -1032,7 +1040,8 @@ class BmOnlySmallerTableSizeChanges final
             table = &makeGrowingBenchmarkTable(
                 &results, tableName,
                 createDefaultStoppingLambda(
-                    maxTimeSingleMeasurement_.value(), maxBiggerTableRows_,
+                    maxTimeSingleMeasurement_.value(), maxMemoryInMBWasGiven_,
+                    maxBiggerTableRows_,
                     [&growthFunction, &ratioRows](const size_t& row) {
                       return growthFunction(row) * ratioRows;
                     }),
@@ -1109,6 +1118,7 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
           table = &makeGrowingBenchmarkTable(
               &results, tableName,
               createDefaultStoppingLambda(maxTimeSingleMeasurement_.value(),
+                                          maxMemoryInMBWasGiven_,
                                           maxBiggerTableRows_, growthFunction),
               overlapChance_, smallerTableSorted, biggerTableSorted,
               static_cast<size_t>(1), growthFunction,
