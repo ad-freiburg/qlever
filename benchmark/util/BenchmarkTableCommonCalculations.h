@@ -12,7 +12,7 @@
 namespace ad_benchmark {
 
 // Helper function, because this one line call happens very often in this file.
-static float getTableEntryAsFloat(ResultTable* table, const size_t& row,
+static float getTableEntryAsFloat(const ResultTable* table, const size_t& row,
                                   const size_t& column) {
   /*
   This will cause an exception, if the row and column is bigger

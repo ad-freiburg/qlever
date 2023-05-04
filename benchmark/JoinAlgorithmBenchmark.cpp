@@ -247,10 +247,10 @@ static void addMeasurementsToRowOfBenchmarkTable(
   // Sort the `IdTables`, if they should be.
   if (smallerTableSorted) {
     sortIdTableByJoinColumnInPlace(smallerTable);
-  };
+  }
   if (biggerTableSorted) {
     sortIdTableByJoinColumnInPlace(biggerTable);
-  };
+  }
 
   // Adding the benchmark measurements to the current row.
 
@@ -675,7 +675,7 @@ static std::vector<size_t> createExponentVectorUntilSize(
   round up. This should give us the $x$ of the first $base^x$ bigger
   than `startingPoint`.
   */
-  size_t currentExponent = static_cast<size_t>(
+  auto currentExponent = static_cast<size_t>(
       std::pow(base, calculateNextWholeExponent(base, startingPoint)));
 
   // The rest of the exponents.
@@ -850,8 +850,8 @@ $log_base(startingPoint)$ rounded up.
 auto createDefaultGrowthLambda(const size_t& base,
                                const size_t& startingPoint) {
   return [base, startingExponent{calculateNextWholeExponent(
-                    base, startingPoint)}](const size_t& row) -> size_t {
-    return std::pow(base, startingExponent + row);
+                    base, startingPoint)}](const size_t& row) {
+    return static_cast<size_t>(std::pow(base, startingExponent + row));
   };
 }
 
