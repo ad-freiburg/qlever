@@ -277,6 +277,7 @@ void IndexScan::computeFullScan(IdTable* result,
   *result = std::move(table).toDynamic();
 }
 
+// __________________________________________________________________________________________________________
 std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
     const IndexScan& s1, const IndexScan& s2) {
   const auto& index = s1.getExecutionContext()->getIndex().getImpl();
@@ -287,11 +288,11 @@ std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
       -> std::optional<Permutation::PermutationImpl::MetaDataAndBlocks> {
     auto permutedTriple = s.getPermutedTriple();
     std::optional<Id> optId =
-        s.getPermutedTriple()[0]->toValueId(index.getVocab());
+        permutedTriple[0]->toValueId(index.getVocab());
     std::optional<Id> optId2 =
         s._numVariables == 2
             ? std::nullopt
-            : s.getPermutedTriple()[1]->toValueId(index.getVocab());
+            : permutedTriple[1]->toValueId(index.getVocab());
     if (!optId.has_value() || (!optId2.has_value() && s._numVariables == 1)) {
       return std::nullopt;
     }

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <ranges>
 
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
@@ -93,11 +94,11 @@ concept BinaryIteratorFunction =
  * be exploited to fix the result in a cheaper way than a full sort.
  */
 template <
-    bool addDuplicatesFromLeft = true, std::ranges::random_access_range Range1,
+    bool addDuplicatesFromLeft = true, bool returnIteratorsOfLastMatch = false, std::ranges::random_access_range Range1,
     std::ranges::random_access_range Range2, typename LessThan,
     typename FindSmallerUndefRangesLeft, typename FindSmallerUndefRangesRight,
     typename ElFromFirstNotFoundAction = decltype(noop)>
-[[nodiscard]] size_t zipperJoinWithUndef(
+[[nodiscard]] auto zipperJoinWithUndef(
     const Range1& left, const Range2& right, const LessThan& lessThan,
     const auto& compatibleRowAction,
     const FindSmallerUndefRangesLeft& findSmallerUndefRangesLeft,
@@ -116,6 +117,10 @@ template <
   auto end1 = std::end(left);
   auto it2 = std::begin(right);
   auto end2 = std::end(right);
+
+  // Keep track of the last iterators that had an exact match
+  auto exactMatchIt1 = it1;
+  auto exactMatchIt2 = it2;
 
   // If this is an OPTIONAL join or a MINUS then we have to keep track of the
   // information for which elements from the left input we have already found a
@@ -225,6 +230,7 @@ template <
         mergeWithUndefRight(it1, std::begin(right), it2, true);
         ++it1;
         if (it1 >= end1) {
+          exactMatchIt2 = it2;
           return;
         }
       }
@@ -232,6 +238,7 @@ template <
         mergeWithUndefLeft(it2, std::begin(left), it1);
         ++it2;
         if (it2 >= end2) {
+          exactMatchIt1 = it1;
           return;
         }
       }
@@ -249,12 +256,19 @@ template <
       auto endSame2 = std::find_if_not(
           it2, end2, [&](const auto& row) { return eq(*it1, row); });
 
+      if constexpr (returnIteratorsOfLastMatch) {
+        if (endSame1 != it1) {
+          exactMatchIt1 = it1;
+          exactMatchIt2 = it2;
+        }
+      }
       for (auto it = it1; it != endSame1; ++it) {
         mergeWithUndefRight(it, std::begin(right), it2, false);
       }
       for (auto it = it2; it != endSame2; ++it) {
         mergeWithUndefLeft(it, std::begin(left), it1);
       }
+
 
       for (; it1 != endSame1; ++it1) {
         cover(it1);
@@ -297,8 +311,13 @@ template <
   // `max()` then we can provide no guarantees about the sorting of the result.
   // Otherwise, the result consists of two consecutive sorted ranges, the second
   // of which has length `returnValue`.
-  return outOfOrderFound ? std::numeric_limits<size_t>::max()
+  size_t numOutOfOrder =  outOfOrderFound ? std::numeric_limits<size_t>::max()
                          : numOutOfOrderAtEnd;
+  if constexpr (returnIteratorsOfLastMatch) {
+    return std::tuple{numOutOfOrder, exactMatchIt1, exactMatchIt2};
+  } else {
+    return numOutOfOrder;
+  }
 }
 
 /**
@@ -531,4 +550,36 @@ void specialOptionalJoin(
     elFromFirstNotFoundAction(it);
   }
 }
+
+
+template <
+    typename LessThan>
+void zipperJoinForBlocksWithoutUndef(
+    auto&& leftBlocks, auto&&rightBlocks, const LessThan& lessThan,
+    const auto& compatibleRowAction) {
+  auto it1 = leftBlocks.begin();
+  auto end1 = leftBlocks.end();
+  auto it2 = rightBlocks.begin();
+  auto end2 = rightBlocks.end();
+  std::optional<decltype(it1)> lastMatch1;
+  std::optional<decltype(it2)> lastMatch2;
+  while (it1 != end1 && it2 != end2) {
+    const auto& block1 = *it1;
+    const auto& block2 = *it2;
+    auto view1 = std::ranges::subrange(block1.begin(), block1.end());
+    auto view2 = std::ranges::subrange(block2.begin(), block2.end());
+    if (lastMatch1.has_value()) {
+      view1 = std::ranges::subrange(lastMatch1.value(), block1.end());
+    }
+    if (lastMatch2.has_value()) {
+      view2 = std::ranges::subrange(lastMatch2.value(), block2.end());
+    }
+    auto [numOutOfOrder, lastMatchNew1, lastMatchNew2] = zipperJoinWithUndef<true, true>(view1, view2, lessThan, compatibleRowAction, noop, noop);
+    AD_CONTRACT_CHECK(numOutOfOrder == 0);
+    if (lastMatchNew1 != )
+
+  }
+
+}
+
 }  // namespace ad_utility
