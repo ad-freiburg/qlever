@@ -35,7 +35,7 @@ class Index {
 
  public:
   /// Identifiers for the six possible permutations.
-  enum struct Permutation { PSO, POS, SPO, SOP, OPS, OSP };
+  enum struct PermutationEnum { PSO, POS, SPO, SOP, OPS, OSP };
 
   // Alongside the actual knowledge graph QLever stores additional triples
   // for optimized query processing. This struct is used to report various
@@ -123,8 +123,8 @@ class Index {
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------
   [[nodiscard]] size_t getCardinality(const TripleComponent& comp,
-                                      Permutation permutation) const;
-  [[nodiscard]] size_t getCardinality(Id id, Permutation permutation) const;
+                                      PermutationEnum permutation) const;
+  [[nodiscard]] size_t getCardinality(Id id, PermutationEnum permutation) const;
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
@@ -259,10 +259,10 @@ class Index {
 
   // _____________________________________________________________________________
   vector<float> getMultiplicities(const TripleComponent& key,
-                                  Permutation permutation) const;
+                                  PermutationEnum permutation) const;
 
   // ___________________________________________________________________
-  vector<float> getMultiplicities(Permutation p) const;
+  vector<float> getMultiplicities(PermutationEnum p) const;
 
   /**
    * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
@@ -271,10 +271,10 @@ class Index {
    * @param key The key (in Id space) for which to search, e.g. fixed value for
    * O in OSP permutation.
    * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation to use (in particularly POS(), SOP,... members of
-   * Index class).
+   * @param p The PermutationEnum to use (in particularly POS(), SOP,... members
+   * of Index class).
    */
-  void scan(Id key, IdTable* result, Permutation p,
+  void scan(Id key, IdTable* result, PermutationEnum p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   /**
@@ -284,10 +284,11 @@ class Index {
    * @param key The key (as a raw string that is yet to be transformed to index
    * space) for which to search, e.g. fixed value for O in OSP permutation.
    * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation to use (in particularly POS(), SOP,... members of
-   * Index class).
+   * @param p The PermutationEnum to use (in particularly POS(), SOP,... members
+   * of Index class).
    */
-  void scan(const TripleComponent& key, IdTable* result, const Permutation& p,
+  void scan(const TripleComponent& key, IdTable* result,
+            const PermutationEnum& p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   /**
@@ -301,12 +302,13 @@ class Index {
    * transformed to index space) for which to search, e.g. fixed value for S in
    * OSP permutation.
    * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation to use (in particularly POS(), SOP,... members of
-   * Index class).
+   * @param p The PermutationEnum to use (in particularly POS(), SOP,... members
+   * of Index class).
    */
   // _____________________________________________________________________________
   void scan(const TripleComponent& col0String,
-            const TripleComponent& col1String, IdTable* result, Permutation p,
+            const TripleComponent& col1String, IdTable* result,
+            PermutationEnum p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   // Get access to the implementation. This should be used rarely as it

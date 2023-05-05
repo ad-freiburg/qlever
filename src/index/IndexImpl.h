@@ -102,7 +102,7 @@ class IndexImpl {
     using ReadType = IndexMetaDataMmapView;
   };
 
-  using PermutationImpl = Permutation::PermutationImpl;
+  using PermutationImpl = Permutation::Permutation;
 
   using NumNormalAndInternal = Index::NumNormalAndInternal;
 
@@ -193,10 +193,10 @@ class IndexImpl {
   const auto& OSP() const { return osp_; }
   auto& OSP() { return osp_; }
 
-  // For a given `Permutation` (e.g. `PSO`) return the corresponding
-  // `PermutationImpl` object by reference (`pso_`).
-  PermutationImpl& getPermutation(Index::Permutation p);
-  const PermutationImpl& getPermutation(Index::Permutation p) const;
+  // For a given `PermutationEnum` (e.g. `PSO`) return the corresponding
+  // `Permutation` object by reference (`pso_`).
+  PermutationImpl& getPermutation(Index::PermutationEnum p);
+  const PermutationImpl& getPermutation(Index::PermutationEnum p) const;
 
   // Creates an index from a file. Parameter Parser must be able to split the
   // file's format into triples.
@@ -247,14 +247,15 @@ class IndexImpl {
   NumNormalAndInternal numDistinctPredicates() const;
 
   // __________________________________________________________________________
-  NumNormalAndInternal numDistinctCol0(Index::Permutation permutation) const;
+  NumNormalAndInternal numDistinctCol0(
+      Index::PermutationEnum permutation) const;
 
   // ___________________________________________________________________________
-  size_t getCardinality(Id id, Index::Permutation permutation) const;
+  size_t getCardinality(Id id, Index::PermutationEnum permutation) const;
 
   // ___________________________________________________________________________
   size_t getCardinality(const TripleComponent& comp,
-                        Index::Permutation permutation) const;
+                        Index::PermutationEnum permutation) const;
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
@@ -398,10 +399,10 @@ class IndexImpl {
 
   // _____________________________________________________________________________
   vector<float> getMultiplicities(const TripleComponent& key,
-                                  Index::Permutation permutation) const;
+                                  Index::PermutationEnum permutation) const;
 
   // ___________________________________________________________________
-  vector<float> getMultiplicities(Index::Permutation permutation) const;
+  vector<float> getMultiplicities(Index::PermutationEnum permutation) const;
 
   /**
    * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
@@ -411,10 +412,10 @@ class IndexImpl {
    * @param key The key (in Id space) for which to search, e.g. fixed value for
    * O in OSP permutation.
    * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation to use (in particularly POS(), SOP,... members of
-   * IndexImpl class).
+   * @param p The PermutationEnum to use (in particularly POS(), SOP,... members
+   * of IndexImpl class).
    */
-  void scan(Id key, IdTable* result, const Index::Permutation& p,
+  void scan(Id key, IdTable* result, const Index::PermutationEnum& p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   /**
@@ -425,11 +426,11 @@ class IndexImpl {
    * @param key The key (as a raw string that is yet to be transformed to index
    * space) for which to search, e.g. fixed value for O in OSP permutation.
    * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation to use (in particularly POS(), SOP,... members of
-   * IndexImpl class).
+   * @param p The PermutationEnum to use (in particularly POS(), SOP,... members
+   * of IndexImpl class).
    */
   void scan(const TripleComponent& key, IdTable* result,
-            Index::Permutation permutation,
+            Index::PermutationEnum permutation,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   /**
@@ -442,13 +443,13 @@ class IndexImpl {
    * transformed to index space) for which to search, e.g. fixed value for S in
    * OSP permutation.
    * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation to use (in particularly POS(), SOP,... members of
-   * IndexImpl class).
+   * @param p The PermutationEnum to use (in particularly POS(), SOP,... members
+   * of IndexImpl class).
    */
   // _____________________________________________________________________________
   void scan(const TripleComponent& col0String,
             const TripleComponent& col1String, IdTable* result,
-            const Index::Permutation& permutation,
+            const Index::PermutationEnum& permutation,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
  private:
@@ -660,9 +661,9 @@ class IndexImpl {
 
   // The index contains several triples that are not part of the "actual"
   // knowledge graph, but are added by QLever for internal reasons (e.g. for an
-  // efficient implementation of language filters). For a given `Permutation`,
-  // returns the following `std::pair`:
-  // First: A `vector<pair<Id, Id>>` that denotes ranges in the first column
+  // efficient implementation of language filters). For a given
+  // `PermutationEnum`, returns the following `std::pair`: First: A
+  // `vector<pair<Id, Id>>` that denotes ranges in the first column
   //        of the permutation that imply that a triple is added. For example
   //        in the `SPO` and `SOP` permutation a literal subject means that the
   //        triple was added (literals are not legal subjects in RDF), so the
@@ -678,7 +679,7 @@ class IndexImpl {
   //       the lambda `second` returns true for that triple.
   // For example usages see `IndexScan.cpp` (the implementation of the full
   // index scan) and `GroupBy.cpp`.
-  auto getIgnoredIdRanges(const Index::Permutation permutation) const {
+  auto getIgnoredIdRanges(const Index::PermutationEnum permutation) const {
     std::vector<std::pair<Id, Id>> ignoredRanges;
 
     auto literalRange = getVocab().prefix_range("\"");
@@ -689,7 +690,7 @@ class IndexImpl {
         Id::makeFromVocabIndex(internalEntitiesRange.first),
         Id::makeFromVocabIndex(internalEntitiesRange.second));
 
-    using enum Index::Permutation;
+    using enum Index::PermutationEnum;
     if (permutation == SPO || permutation == SOP) {
       ignoredRanges.push_back({Id::makeFromVocabIndex(literalRange.first),
                                Id::makeFromVocabIndex(literalRange.second)});

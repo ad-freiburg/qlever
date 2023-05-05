@@ -169,7 +169,7 @@ class GroupBy : public Operation {
     // the JOIN, etc. `SPO` if the variable that joins the three variable triple
     // and the rest of the query body is the subject of the three variable
     // triple, `PSO` if it is the predicate, `OSP` if it is the object.
-    Index::Permutation permutation_;
+    Index::PermutationEnum permutation_;
     // The column index wrt the `otherSubtree_` of the variable that joins the
     // three variable triple and the rest of the query body.
     size_t subtreeColumnIndex_;
@@ -186,7 +186,8 @@ class GroupBy : public Operation {
   // fails, `std::nullopt` is returned. Else the permutation corresponding to
   // `variableByWhichToSort` is returned, for example `SPO` if the
   // `variableByWhichToSort` is the subject of the triple.
-  static std::optional<Index::Permutation> getPermutationForThreeVariableTriple(
+  static std::optional<Index::PermutationEnum>
+  getPermutationForThreeVariableTriple(
       const QueryExecutionTree& tree, const Variable& variableByWhichToSort,
       const Variable& variableThatMustBeContained);
 

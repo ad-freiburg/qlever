@@ -128,7 +128,8 @@ class IndexScan : public Operation {
 
   void computeOSPfreeS(IdTable* result) const;
 
-  void computeFullScan(IdTable* result, Index::Permutation permutation) const;
+  void computeFullScan(IdTable* result,
+                       Index::PermutationEnum permutation) const;
 
   size_t computeSizeEstimate();
 

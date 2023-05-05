@@ -19,10 +19,10 @@ using std::string;
 // Helper class to store static properties of the different permutations to
 // avoid code duplication. The first template parameter is a search functor for
 // STXXL.
-class PermutationImpl {
+class Permutation {
  public:
   using MetaData = IndexMetaDataMmapView;
-  PermutationImpl(string name, string suffix, array<unsigned short, 3> order)
+  Permutation(string name, string suffix, array<unsigned short, 3> order)
       : _readableName(std::move(name)),
         _fileSuffix(std::move(suffix)),
         _keyOrder(order) {}
