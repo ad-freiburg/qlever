@@ -454,7 +454,7 @@ TEST_F(GroupBySpecialCount, checkIfJoinWithFullScan) {
       groupBy.checkIfJoinWithFullScan(getJoinPtr(validJoinWhenGroupingByX));
   ASSERT_TRUE(optimizedAggregateData.has_value());
   ASSERT_EQ(&optimizedAggregateData->otherSubtree_, xScan.get());
-  ASSERT_EQ(optimizedAggregateData->permutation_, Permutation::Enum::SPO);
+  ASSERT_EQ(optimizedAggregateData->permutation_, Permutation::SPO);
   ASSERT_EQ(optimizedAggregateData->subtreeColumnIndex_, 0);
 }
 

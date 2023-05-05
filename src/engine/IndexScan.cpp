@@ -275,28 +275,28 @@ ResultTable IndexScan::computeResult() {
 void IndexScan::computePSOboundS(IdTable* result) const {
   result->setNumColumns(1);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, _subject, result, Permutation::Enum::PSO, _timeoutTimer);
+  idx.scan(_predicate, _subject, result, Permutation::PSO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computePSOfreeS(IdTable* result) const {
   result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, result, Permutation::Enum::PSO, _timeoutTimer);
+  idx.scan(_predicate, result, Permutation::PSO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computePOSboundO(IdTable* result) const {
   result->setNumColumns(1);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, _object, result, Permutation::Enum::POS, _timeoutTimer);
+  idx.scan(_predicate, _object, result, Permutation::POS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computePOSfreeO(IdTable* result) const {
   result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, result, Permutation::Enum::POS, _timeoutTimer);
+  idx.scan(_predicate, result, Permutation::POS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -334,11 +334,11 @@ size_t IndexScan::computeSizeEstimate() {
     // TODO<joka921> Should be a oneliner
     // getIndex().cardinality(getPermutation(), getFirstKey());
     if (_type == SPO_FREE_P || _type == SOP_FREE_O) {
-      return getIndex().getCardinality(_subject, Permutation::Enum::SPO);
+      return getIndex().getCardinality(_subject, Permutation::SPO);
     } else if (_type == POS_FREE_O || _type == PSO_FREE_S) {
-      return getIndex().getCardinality(_predicate, Permutation::Enum::PSO);
+      return getIndex().getCardinality(_predicate, Permutation::PSO);
     } else if (_type == OPS_FREE_P || _type == OSP_FREE_S) {
-      return getIndex().getCardinality(_object, Permutation::Enum::OSP);
+      return getIndex().getCardinality(_object, Permutation::OSP);
     }
     // The triple consists of three variables.
     // TODO<joka921> As soon as all implementations of a full index scan
@@ -390,35 +390,35 @@ size_t IndexScan::getCostEstimate() {
 void IndexScan::computeSPOfreeP(IdTable* result) const {
   result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, result, Permutation::Enum::SPO, _timeoutTimer);
+  idx.scan(_subject, result, Permutation::SPO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computeSOPboundO(IdTable* result) const {
   result->setNumColumns(1);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, _object, result, Permutation::Enum::SOP, _timeoutTimer);
+  idx.scan(_subject, _object, result, Permutation::SOP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computeSOPfreeO(IdTable* result) const {
   result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, result, Permutation::Enum::SOP, _timeoutTimer);
+  idx.scan(_subject, result, Permutation::SOP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computeOPSfreeP(IdTable* result) const {
   result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_object, result, Permutation::Enum::OPS, _timeoutTimer);
+  idx.scan(_object, result, Permutation::OPS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computeOSPfreeS(IdTable* result) const {
   result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_object, result, Permutation::Enum::OSP, _timeoutTimer);
+  idx.scan(_object, result, Permutation::OSP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -431,46 +431,40 @@ void IndexScan::determineMultiplicities() {
       const auto& idx = getIndex();
       switch (_type) {
         case PSO_FREE_S:
-          _multiplicity =
-              idx.getMultiplicities(_predicate, Permutation::Enum::PSO);
+          _multiplicity = idx.getMultiplicities(_predicate, Permutation::PSO);
           break;
         case POS_FREE_O:
-          _multiplicity =
-              idx.getMultiplicities(_predicate, Permutation::Enum::POS);
+          _multiplicity = idx.getMultiplicities(_predicate, Permutation::POS);
           break;
         case SPO_FREE_P:
-          _multiplicity =
-              idx.getMultiplicities(_subject, Permutation::Enum::SPO);
+          _multiplicity = idx.getMultiplicities(_subject, Permutation::SPO);
           break;
         case SOP_FREE_O:
-          _multiplicity =
-              idx.getMultiplicities(_subject, Permutation::Enum::SOP);
+          _multiplicity = idx.getMultiplicities(_subject, Permutation::SOP);
           break;
         case OSP_FREE_S:
-          _multiplicity =
-              idx.getMultiplicities(_object, Permutation::Enum::OSP);
+          _multiplicity = idx.getMultiplicities(_object, Permutation::OSP);
           break;
         case OPS_FREE_P:
-          _multiplicity =
-              idx.getMultiplicities(_object, Permutation::Enum::OPS);
+          _multiplicity = idx.getMultiplicities(_object, Permutation::OPS);
           break;
         case FULL_INDEX_SCAN_SPO:
-          _multiplicity = idx.getMultiplicities(Permutation::Enum::SPO);
+          _multiplicity = idx.getMultiplicities(Permutation::SPO);
           break;
         case FULL_INDEX_SCAN_SOP:
-          _multiplicity = idx.getMultiplicities(Permutation::Enum::SOP);
+          _multiplicity = idx.getMultiplicities(Permutation::SOP);
           break;
         case FULL_INDEX_SCAN_PSO:
-          _multiplicity = idx.getMultiplicities(Permutation::Enum::PSO);
+          _multiplicity = idx.getMultiplicities(Permutation::PSO);
           break;
         case FULL_INDEX_SCAN_POS:
-          _multiplicity = idx.getMultiplicities(Permutation::Enum::POS);
+          _multiplicity = idx.getMultiplicities(Permutation::POS);
           break;
         case FULL_INDEX_SCAN_OSP:
-          _multiplicity = idx.getMultiplicities(Permutation::Enum::OSP);
+          _multiplicity = idx.getMultiplicities(Permutation::OSP);
           break;
         case FULL_INDEX_SCAN_OPS:
-          _multiplicity = idx.getMultiplicities(Permutation::Enum::OPS);
+          _multiplicity = idx.getMultiplicities(Permutation::OPS);
           break;
         default:
           AD_FAIL();

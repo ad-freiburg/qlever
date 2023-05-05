@@ -1187,14 +1187,14 @@ Index::NumNormalAndInternal IndexImpl::numDistinctPredicates() const {
 Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
     Permutation::Enum permutation) const {
   switch (permutation) {
-    case Permutation::Enum::SOP:
-    case Permutation::Enum::SPO:
+    case Permutation::SOP:
+    case Permutation::SPO:
       return numDistinctSubjects();
-    case Permutation::Enum::OPS:
-    case Permutation::Enum::OSP:
+    case Permutation::OPS:
+    case Permutation::OSP:
       return numDistinctObjects();
-    case Permutation::Enum::POS:
-    case Permutation::Enum::PSO:
+    case Permutation::POS:
+    case Permutation::PSO:
       return numDistinctPredicates();
     default:
       AD_FAIL();

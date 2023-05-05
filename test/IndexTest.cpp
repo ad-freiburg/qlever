@@ -91,11 +91,11 @@ TEST(IndexTest, createFromTurtleTest) {
     // Relation b
     // Pair index
     auto testTwo = makeTestScanWidthTwo(index);
-    testTwo("<b>", Permutation::Enum::PSO, {{a, c}, {a, c2}});
+    testTwo("<b>", Permutation::PSO, {{a, c}, {a, c2}});
     std::vector<std::array<Id, 2>> buffer;
 
     // Relation b2
-    testTwo("<b2>", Permutation::Enum::PSO, {{a, c}, {a2, c2}});
+    testTwo("<b2>", Permutation::PSO, {{a, c}, {a2, c2}});
 
     {
       // Test for a previous bug in the scan of two fixed elements: An assertion
@@ -105,7 +105,7 @@ TEST(IndexTest, createFromTurtleTest) {
       // predicate that occurs and <c2> is larger than the largest subject that
       // appears with <b2>.
       auto testOne = makeTestScanWidthOne(index);
-      testOne("<b2>", "<c2>", Permutation::Enum::PSO, {});
+      testOne("<b2>", "<c2>", Permutation::PSO, {});
     }
   }
   {
@@ -139,7 +139,7 @@ TEST(IndexTest, createFromTurtleTest) {
     ASSERT_FALSE(index.POS().metaData().getMetaData(isA).isFunctional());
 
     auto testTwo = makeTestScanWidthTwo(index);
-    testTwo("<is-a>", Permutation::Enum::PSO,
+    testTwo("<is-a>", Permutation::PSO,
             {{a, zero},
              {a, one},
              {a, two},
@@ -149,7 +149,7 @@ TEST(IndexTest, createFromTurtleTest) {
              {c, two}});
 
     // is-a for POS
-    testTwo("<is-a>", Permutation::Enum::POS,
+    testTwo("<is-a>", Permutation::POS,
             {{zero, a},
              {zero, b},
              {one, a},
@@ -403,7 +403,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
   auto literals = std::pair{firstLiteral, increment(lastLiteral)};
 
   {
-    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::Enum::POS);
+    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::POS);
     ASSERT_FALSE(lambda(std::array{label, firstLiteral, x}));
 
     // Note: The following triple is added, but it should be filtered out via
@@ -417,7 +417,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_EQ(ranges[1], predicatesWithLangtag);
   }
   {
-    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::Enum::PSO);
+    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::PSO);
     ASSERT_FALSE(lambda(std::array{label, x, firstLiteral}));
 
     // Note: The following triple is added, but it should be filtered out via
@@ -431,7 +431,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_EQ(ranges[1], predicatesWithLangtag);
   }
   {
-    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::Enum::SOP);
+    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::SOP);
     ASSERT_TRUE(lambda(std::array{x, firstLiteral, enLabel}));
     ASSERT_FALSE(lambda(std::array{x, firstLiteral, label}));
     ASSERT_FALSE(lambda(std::array{x, x, label}));
@@ -441,7 +441,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_EQ(ranges[1], literals);
   }
   {
-    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::Enum::SPO);
+    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::SPO);
     ASSERT_TRUE(lambda(std::array{x, enLabel, firstLiteral}));
     ASSERT_FALSE(lambda(std::array{x, label, firstLiteral}));
     ASSERT_FALSE(lambda(std::array{x, label, x}));
@@ -451,7 +451,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_EQ(ranges[1], literals);
   }
   {
-    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::Enum::OSP);
+    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::OSP);
     ASSERT_TRUE(lambda(std::array{firstLiteral, x, enLabel}));
     ASSERT_FALSE(lambda(std::array{firstLiteral, x, label}));
     ASSERT_FALSE(lambda(std::array{x, x, label}));
@@ -459,7 +459,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_EQ(ranges[0], internalEntities);
   }
   {
-    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::Enum::OPS);
+    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::OPS);
     ASSERT_TRUE(lambda(std::array{firstLiteral, enLabel, x}));
     ASSERT_FALSE(lambda(std::array{firstLiteral, label, x}));
     ASSERT_FALSE(lambda(std::array{x, label, x}));
@@ -483,8 +483,8 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_EQ(subjects.normal_, 3);
   // All literals with language tags are added subjects.
   EXPECT_EQ(subjects.internal_, 1);
-  EXPECT_EQ(subjects, index.numDistinctCol0(Permutation::Enum::SPO));
-  EXPECT_EQ(subjects, index.numDistinctCol0(Permutation::Enum::SOP));
+  EXPECT_EQ(subjects, index.numDistinctCol0(Permutation::SPO));
+  EXPECT_EQ(subjects, index.numDistinctCol0(Permutation::SOP));
 
   auto predicates = index.numDistinctPredicates();
   EXPECT_EQ(predicates.normal_, 2);
@@ -492,27 +492,27 @@ TEST(IndexTest, NumDistinctEntities) {
   // each combination of predicate+language that is actually used (e.g.
   // `@en@label`).
   EXPECT_EQ(predicates.internal_, 2);
-  EXPECT_EQ(predicates, index.numDistinctCol0(Permutation::Enum::PSO));
-  EXPECT_EQ(predicates, index.numDistinctCol0(Permutation::Enum::POS));
+  EXPECT_EQ(predicates, index.numDistinctCol0(Permutation::PSO));
+  EXPECT_EQ(predicates, index.numDistinctCol0(Permutation::POS));
 
   auto objects = index.numDistinctObjects();
   EXPECT_EQ(objects.normal_, 7);
   // One added object for each language that is used
   EXPECT_EQ(objects.internal_, 1);
-  EXPECT_EQ(objects, index.numDistinctCol0(Permutation::Enum::OSP));
-  EXPECT_EQ(objects, index.numDistinctCol0(Permutation::Enum::OPS));
+  EXPECT_EQ(objects, index.numDistinctCol0(Permutation::OSP));
+  EXPECT_EQ(objects, index.numDistinctCol0(Permutation::OPS));
 
   auto numTriples = index.numTriples();
   EXPECT_EQ(numTriples.normal_, 7);
   // Two added triples for each triple that has an object with a language tag.
   EXPECT_EQ(numTriples.internal_, 2);
 
-  auto multiplicities = index.getMultiplicities(Permutation::Enum::SPO);
+  auto multiplicities = index.getMultiplicities(Permutation::SPO);
   EXPECT_FLOAT_EQ(multiplicities[0], 9.0 / 4.0);
   EXPECT_FLOAT_EQ(multiplicities[1], 9.0 / 4.0);
   EXPECT_FLOAT_EQ(multiplicities[2], 9.0 / 8.0);
 
-  multiplicities = index.getMultiplicities("<x>", Permutation::Enum::SPO);
+  multiplicities = index.getMultiplicities("<x>", Permutation::SPO);
   EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
   EXPECT_FLOAT_EQ(multiplicities[1], 1);
 }

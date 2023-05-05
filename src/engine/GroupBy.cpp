@@ -545,11 +545,11 @@ std::optional<Permutation::Enum> GroupBy::getPermutationForThreeVariableTriple(
   }
 
   if (variableByWhichToSort == indexScan->getSubject()) {
-    return Permutation::Enum::SPO;
+    return Permutation::SPO;
   } else if (variableByWhichToSort.name() == indexScan->getPredicate()) {
-    return Permutation::Enum::POS;
+    return Permutation::POS;
   } else if (variableByWhichToSort == indexScan->getObject()) {
-    return Permutation::Enum::OSP;
+    return Permutation::OSP;
   } else {
     return std::nullopt;
   }
