@@ -9,7 +9,8 @@
 
 #pragma once
 
-#if defined(__clang__)
+#include <source_location>
+#if false
 #include <experimental/source_location>
 namespace ad_utility {
 using source_location = std::experimental::source_location;

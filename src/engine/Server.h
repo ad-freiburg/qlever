@@ -7,6 +7,7 @@
 
 #include <string>
 #include <vector>
+#include <semaphore>
 
 #include "engine/Engine.h"
 #include "engine/QueryExecutionContext.h"

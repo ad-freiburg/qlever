@@ -111,7 +111,8 @@ class stream_generator_promise {
 
  private:
   bool isBufferLargeEnough() {
-    return _stream.view().length() >= MIN_BUFFER_SIZE;
+    // TODO<joka921> Very inefficient, but try to make this work with libcpp
+    return _stream.str().length() >= MIN_BUFFER_SIZE;
   }
 };
 

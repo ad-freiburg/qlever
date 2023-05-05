@@ -74,12 +74,15 @@ void RuntimeValueToCompileTimeValue(const size_t& value,
 
 namespace detail {
 
+template <typename T, T... values>
+struct ValueSequence {};
+
 // The implementation for the `toIntegerSequence` function (see below).
 // For the ideas and alternative implementations see
 // https://stackoverflow.com/questions/56799396/
 template <auto Array, size_t... indexes>
 constexpr auto toIntegerSequenceHelper(std::index_sequence<indexes...>) {
-  return std::integer_sequence<typename decltype(Array)::value_type,
+  return ValueSequence<typename decltype(Array)::value_type,
                                std::get<indexes>(Array)...>{};
 }
 }  // namespace detail

@@ -5,6 +5,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <thread>
+
 #include "util/Timer.h"
 
 using ad_utility::TimeoutTimer;
