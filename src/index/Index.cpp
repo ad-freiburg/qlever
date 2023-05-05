@@ -79,7 +79,7 @@ size_t Index::getCardinality(Id id, Index::Permutation p) const {
 }
 
 // _______________________________________________
-std::optional<std::string> Index::idToOptionalString(Id id) const {
+std::optional<std::string> Index::idToOptionalString(VocabIndex id) const {
   return pimpl_->idToOptionalString(id);
 }
 

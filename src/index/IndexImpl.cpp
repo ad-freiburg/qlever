@@ -742,11 +742,6 @@ bool IndexImpl::isLiteral(const string& object) const {
 }
 
 // _____________________________________________________________________________
-bool IndexImpl::shouldBeExternalized(const string& object) {
-  return vocab_.shouldBeExternalized(object);
-}
-
-// _____________________________________________________________________________
 void IndexImpl::setKbName(const string& name) {
   pos_.setKbName(name);
   pso_.setKbName(name);
@@ -1235,30 +1230,12 @@ size_t IndexImpl::getCardinality(const TripleComponent& comp,
 
 // TODO<joka921> Once we have an overview over the folding this logic should
 // probably not be in the index class.
-std::optional<string> IndexImpl::idToOptionalString(Id id) const {
-  using enum Datatype;
-  switch (id.getDatatype()) {
-    case Undefined:
-      return std::nullopt;
-    case Double:
-      return std::to_string(id.getDouble());
-    case Int:
-      return std::to_string(id.getInt());
-    case VocabIndex: {
-      auto result = vocab_.indexToOptionalString(id.getVocabIndex());
-      if (result.has_value() && result.value().starts_with(VALUE_PREFIX)) {
-        result = ad_utility::convertIndexWordToValueLiteral(result.value());
-      }
-      return result;
-    }
-    case LocalVocabIndex:
-      // TODO:: this is why this shouldn't be here
-      return std::nullopt;
-    case TextRecordIndex:
-      return getTextExcerpt(id.getTextRecordIndex());
+std::optional<string> IndexImpl::idToOptionalString(VocabIndex id) const {
+  auto result = vocab_.indexToOptionalString(id);
+  if (result.has_value() && result.value().starts_with(VALUE_PREFIX)) {
+    result = ad_utility::convertIndexWordToValueLiteral(result.value());
   }
-  // should be unreachable because the enum is exhaustive.
-  AD_FAIL();
+  return result;
 }
 
 // ___________________________________________________________________________

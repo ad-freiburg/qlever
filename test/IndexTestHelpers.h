@@ -61,7 +61,9 @@ inline std::vector<std::string> getAllIndexFilenames(
 // The concrete triple contents are currently used in `GroupByTest.cpp`.
 inline Index makeTestIndex(const std::string& indexBasename,
                            std::string turtleInput = "",
-                           bool loadAllPermutations = true) {
+                           bool loadAllPermutations = true,
+                           bool usePatterns = true,
+                           bool usePrefixCompression = true) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
@@ -82,11 +84,12 @@ inline Index makeTestIndex(const std::string& indexBasename,
   {
     Index index = makeIndexWithTestSettings();
     index.setOnDiskBase(indexBasename);
-    index.setUsePatterns(true);
+    index.setUsePatterns(usePatterns);
+    index.setPrefixCompression(usePrefixCompression);
     index.createFromFile<TurtleParserAuto>(inputFilename);
   }
   Index index;
-  index.setUsePatterns(true);
+  index.setUsePatterns(usePatterns);
   index.setLoadAllPermutations(loadAllPermutations);
   index.createFromOnDiskIndex(indexBasename);
   return index;
@@ -97,7 +100,9 @@ inline Index makeTestIndex(const std::string& indexBasename,
 // vocabulary) is the only part of the `QueryExecutionContext` that is actually
 // relevant for these tests, so the other members are defaulted.
 inline QueryExecutionContext* getQec(std::string turtleInput = "",
-                                     bool loadAllPermutations = true) {
+                                     bool loadAllPermutations = true,
+                                     bool usePatterns = true,
+                                     bool usePrefixCompression = true) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -119,9 +124,11 @@ inline QueryExecutionContext* getQec(std::string turtleInput = "",
             *index_, cache_.get(), makeAllocator(), SortPerformanceEstimator{});
   };
 
-  static ad_utility::HashMap<std::pair<std::string, bool>, Context> contextMap;
+  using Key = std::tuple<std::string, bool, bool, bool>;
+  static ad_utility::HashMap<Key, Context> contextMap;
 
-  auto key = std::pair{turtleInput, loadAllPermutations};
+  auto key =
+      Key{turtleInput, loadAllPermutations, usePatterns, usePrefixCompression};
 
   if (!contextMap.contains(key)) {
     std::string testIndexBasename =
@@ -137,7 +144,8 @@ inline QueryExecutionContext* getQec(std::string turtleInput = "",
                        }
                      }},
                      std::make_unique<Index>(makeTestIndex(
-                         testIndexBasename, turtleInput, loadAllPermutations)),
+                         testIndexBasename, turtleInput, loadAllPermutations,
+                         usePatterns, usePrefixCompression)),
                      std::make_unique<QueryResultCache>()});
   }
   return contextMap.at(key).qec_.get();

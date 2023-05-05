@@ -258,7 +258,7 @@ class IndexImpl {
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
-  std::optional<string> idToOptionalString(Id id) const;
+  std::optional<string> idToOptionalString(VocabIndex id) const;
 
   // ___________________________________________________________________________
   bool getId(const string& element, Id* id) const;
@@ -629,11 +629,6 @@ class IndexImpl {
 
   bool isLiteral(const string& object) const;
 
-  bool shouldBeExternalized(const string& object);
-  // convert value literals to internal representation
-  // and add externalization characters if necessary.
-  // Returns the language tag of spo[2] (the object) or ""
-  // if there is none.
  public:
   LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple) const;
 

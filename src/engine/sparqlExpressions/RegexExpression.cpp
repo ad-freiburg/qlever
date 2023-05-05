@@ -182,12 +182,10 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
   }
   std::vector<ad_utility::SetOfIntervals> resultSetOfIntervals;
   std::vector<std::pair<Id, Id>> lowerAndUpperIds;
+  lowerAndUpperIds.reserve(actualPrefixes.size());
   for (const auto& prefix : actualPrefixes) {
-    auto [lowerIndex, upperIndex] =
-        context->_qec.getIndex().getVocab().prefix_range(prefix);
-    Id lowerId = Id::makeFromVocabIndex(lowerIndex);
-    Id upperId = Id::makeFromVocabIndex(upperIndex);
-    lowerAndUpperIds.emplace_back(lowerId, upperId);
+    lowerAndUpperIds.emplace_back(
+        context->_qec.getIndex().prefix_range(prefix));
   }
   auto beg = context->_inputTable.begin() + context->_beginIndex;
   auto end = context->_inputTable.begin() + context->_endIndex;
