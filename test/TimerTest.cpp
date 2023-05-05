@@ -14,7 +14,7 @@ using namespace std::chrono_literals;
 void testTime(Timer::Duration duration, size_t msecs,
               std::chrono::milliseconds expected) {
   auto lowerBound = 0.9 * expected;
-  auto upperBound = 1.1 * (expected) + 3ms;
+  auto upperBound = 1.1 * expected + 3ms;
   ASSERT_GE(duration, lowerBound);
   ASSERT_LE(duration, upperBound);
 
