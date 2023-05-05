@@ -600,14 +600,12 @@ TEST(RelationalExpression, VariableAndConstant) {
   testWithExplicitResult<LT>("\"atm\""s, Variable{"?vocab"},
                              {true, false, false});
 
-  // ?mixed column is `1, -0.1, A`
-  testWithExplicitResult<GT>("\"atm\""s, Variable{"?mixed"},
-                             {false, false, true});
-  testWithExplicitResult<LT>("\"atm\""s, Variable{"?mixed"},
-                             {false, false, false});
+  // ?mixed column is `1, -0.1, <x>`
+  testWithExplicitResult<GT>("<xa>"s, Variable{"?mixed"}, {false, false, true});
+  testWithExplicitResult<LT>("<u>"s, Variable{"?mixed"}, {false, false, true});
 
-  // Note: `1` and `A` are "not compatible", so even the "not equal" comparison
-  // returns false.
+  // Note: `1` and `<x>` are "not compatible", so even the "not equal"
+  // comparison returns false.
   testWithExplicitResult<NE>(int64_t{1}, Variable{"?mixed"},
                              {false, true, false});
   testWithExplicitResult<GE>(Variable{"?mixed"}, DoubleId(-0.1),
@@ -632,11 +630,11 @@ TEST(RelationalExpression, VariableAndVariable) {
   // ?doubles column is `0.1, -0.1, 2.8`
   // ?numeric column is 1, -0.1, 3.4
   // ?vocab column is `"Beta", "alpha", "älpha"
-  // ?mixed column is `1, -0.1, A`
+  // ?mixed column is `1, -0.1, <x>`
 
   testWithExplicitResult<GT>(doubles, ints, {false, false, true});
   testWithExplicitResult<LE>(numeric, doubles, {false, true, false});
-  // Note: `1` and `A` are "not compatible" so even the "not equal" comparison
+  // Note: `1` and `<x>` are "not compatible" so even the "not equal" comparison
   // returns false (this is the third entry in the expected result).
   testWithExplicitResult<NE>(ints, mixed, {false, true, false});
 
@@ -646,7 +644,7 @@ TEST(RelationalExpression, VariableAndVariable) {
   testWithExplicitResult<LE>(vocab, doubles, {false, false, false});
   testWithExplicitResult<GE>(vocab, doubles, {false, false, false});
 
-  testWithExplicitResult<GT>(vocab, mixed, {false, false, true});
+  testWithExplicitResult<LT>(vocab, mixed, {false, false, true});
 }
 
 // `rightValue` must be a constant. Sort the `IdTable` of the `TestContext`
@@ -708,7 +706,7 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   // Note: only *numeric* values that are not equal to 1.0 are considered here.
   testSortedVariableAndConstant<NE>(mixed, 1.0, {{{1, 2}}});
   testSortedVariableAndConstant<GT>(mixed, -inf, {{{0, 2}}});
-  testSortedVariableAndConstant<LE>(mixed, "\"b\""s, {{{2, 3}}});
+  testSortedVariableAndConstant<LE>(mixed, "<z>"s, {{{2, 3}}});
 }
 
 // TODO<joka921> We currently do not have tests for the `LocalVocab` case,

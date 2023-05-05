@@ -108,14 +108,19 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
     };
     ((check(wantedContent)), ...);
   };
+
   /*
-  Special case: A table with no rows, or columns. Should throw an exception
-  on creation, because it's quite the stupid idea.
-  Additionally, operations on such an empty table can create segmentation
-  faults. The string conversion of `ResultTable` uses `std::ranges::max`, which
-  really doesn't play well with empty vectors.
+  Special case: A table with no columns. Should throw an exception
+  on creation, because you can't add columns after creation and a table without
+  columns is quite the stupid idea. Additionally, operations on such an empty
+  table can create segmentation faults. The string conversion of `ResultTable`
+  uses `std::ranges::max`, which really doesn't play well with empty vectors.
   */
-  ASSERT_ANY_THROW(ResultTable("0 by 0 table", {}, {}));
+  ASSERT_ANY_THROW(ResultTable("1 by 0 table", {"Test"}, {}));
+
+  // In the same sense, because you can add rows after creation, a table without
+  // rows should be creatable.
+  ASSERT_NO_THROW(ResultTable("0 by 1 table", {}, {"Test"}));
 
   // Normal case.
   const std::vector<std::string> rowNames{"row1", "row2"};

@@ -31,6 +31,25 @@ void addCategoryTitleToOStringstream(std::ostringstream* stream,
                                      std::string_view categoryTitle);
 
 /*
+@brief Applies the given function `regularFunction` to all elements in `r`,
+except for the last one. Instead, `lastOneFunction` is applied to that one.
+
+@tparam Range Needs to be a data type supported by `std::ranges`.
+
+@param r Must hold at least one element.
+*/
+template <typename Range, typename RegularFunction, typename LastOneFunction>
+static void forEachExcludingTheLastOne(const Range& r,
+                                       RegularFunction regularFunction,
+                                       LastOneFunction lastOneFunction) {
+  // Throw an error, if there are no elements in `r`.
+  AD_CONTRACT_CHECK(r.size() > 0);
+
+  std::ranges::for_each_n(r.begin(), r.size() - 1, regularFunction, {});
+  lastOneFunction(r.back());
+}
+
+/*
 @brief Adds indention before the given string and directly after new line
 characters.
 

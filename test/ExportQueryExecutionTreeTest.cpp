@@ -180,7 +180,7 @@ TEST(ExportQueryExecutionTree, Integers) {
       "42\n"
       "4012934858173560\n",
       // CSV
-      "?o\n"
+      "o\n"
       "-42019234865781\n"
       "42\n"
       "4012934858173560\n",
@@ -240,7 +240,7 @@ TEST(ExportQueryExecutionTree, Floats) {
       "4.01293e-12\n"
       "42.2\n",
       // CSV
-      "?o\n"
+      "o\n"
       "-42019234865780982022144\n"
       "4.01293e-12\n"
       "42.2\n",
@@ -296,9 +296,8 @@ TEST(ExportQueryExecutionTree, Dates) {
       "?o\n"
       "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>\n",
       // Note: the duplicate quotes are due to the escaping for CSV.
-      "?o\n"
-      "\"\"\"1950-01-01T00:00:00\"\"^^<http://www.w3.org/2001/"
-      "XMLSchema#dateTime>\"\n",
+      "o\n"
+      "1950-01-01T00:00:00\n",
       makeExpectedQLeverJSON(
           {"\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"s}),
       makeExpectedSparqlJSON(
@@ -344,8 +343,8 @@ TEST(ExportQueryExecutionTree, Entities) {
       "?o\n"
       "<http://qlever.com/o>\n",
       // CSV
-      "?o\n"
-      "<http://qlever.com/o>\n",
+      "o\n"
+      "http://qlever.com/o\n",
       makeExpectedQLeverJSON({"<http://qlever.com/o>"s}),
       makeExpectedSparqlJSON(
           {makeJSONBinding(std::nullopt, "uri", "http://qlever.com/o")}),
@@ -386,8 +385,8 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
       "?o\n"
       "\"Some\"Where Over,\"@en-ca\n",
       // CSV
-      "?o\n"
-      "\"\"\"Some\"\"Where\tOver,\"\"@en-ca\"\n",
+      "o\n"
+      "\"Some\"\"Where\tOver,\"\n",
       makeExpectedQLeverJSON({"\"Some\"Where\tOver,\"@en-ca"s}),
       makeExpectedSparqlJSON({makeJSONBinding(std::nullopt, "literal",
                                               "Some\"Where\tOver,", "en-ca")})};
@@ -429,7 +428,7 @@ TEST(ExportQueryExecutionTree, UndefinedValues) {
       query,
       1,
       "?o\n\n",
-      "?o\n\n",
+      "o\n\n",
       nlohmann::json{std::vector{std::vector{nullptr}}},
       []() {
         nlohmann::json j;
@@ -463,7 +462,7 @@ TEST(ExportQueryExecutionTree, BlankNode) {
       "?o\n"
       "_:u_blank\n",
       // CSV
-      "?o\n"
+      "o\n"
       "_:u_blank\n",
       makeExpectedQLeverJSON({"_:u_blank"s}),
       makeExpectedSparqlJSON(
@@ -484,8 +483,8 @@ TEST(ExportQueryExecutionTree, MultipleVariables) {
       "?p\t?o\n"
       "<p>\t<o>\n",
       // CSV
-      "?p,?o\n"
-      "<p>,<o>\n",
+      "p,o\n"
+      "p,o\n",
       []() {
         nlohmann::json j;
         j.push_back(std::vector{"<p>"s, "<o>"s});

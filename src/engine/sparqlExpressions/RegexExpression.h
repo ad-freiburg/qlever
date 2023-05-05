@@ -20,6 +20,10 @@ class RegexExpression : public SparqlExpression {
   // The regex as a string, used for the cache key.
   std::string regexAsString_;
 
+  // True if the STR() function is to be applied on the child before evaluating
+  // the regex.
+  bool childIsStrExpression_ = false;
+
  public:
   // `child` must be a `VariableExpression` and `regex` must be a
   // `LiteralExpression` that stores a string, else an exception will be thrown.
@@ -41,6 +45,15 @@ class RegexExpression : public SparqlExpression {
   Estimates getEstimatesForFilterExpression(
       uint64_t inputSize,
       const std::optional<Variable>& firstSortedVariable) const override;
+
+ private:
+  // Internal implementations that are called by `evaluate`.
+  ExpressionResult evaluatePrefixRegex(
+      const Variable& variable,
+      sparqlExpression::EvaluationContext* context) const;
+  ExpressionResult evaluateNonPrefixRegex(
+      const Variable& variable,
+      sparqlExpression::EvaluationContext* context) const;
 };
 namespace detail {
 // Check if `regex` is a prefix regex which means that it starts with `^` and
