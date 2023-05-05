@@ -580,8 +580,8 @@ CompressedRelationMetadata IndexImpl::writeSwitchedRel(
 // ________________________________________________________________________
 std::optional<std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
                         IndexImpl::IndexMetaDataMmapDispatcher::WriteType>>
-IndexImpl::createPermutations(auto&& sortedTriples, const PermutationImpl& p1,
-                              const PermutationImpl& p2,
+IndexImpl::createPermutations(auto&& sortedTriples, const Permutation& p1,
+                              const Permutation& p2,
                               auto&&... perTripleCallbacks) {
   auto metaData = createPermutationPairImpl(
       onDiskBase_ + ".index" + p1._fileSuffix,
@@ -602,8 +602,8 @@ IndexImpl::createPermutations(auto&& sortedTriples, const PermutationImpl& p1,
 
 // ________________________________________________________________________
 void IndexImpl::createPermutationPair(auto&& sortedTriples,
-                                      const PermutationImpl& p1,
-                                      const PermutationImpl& p2,
+                                      const Permutation& p1,
+                                      const Permutation& p2,
                                       auto&&... perTripleCallbacks) {
   auto metaData = createPermutations(AD_FWD(sortedTriples), p1, p2,
                                      AD_FWD(perTripleCallbacks)...);
@@ -1127,9 +1127,8 @@ IndexImpl::NumNormalAndInternal IndexImpl::numTriples() const {
 }
 
 // ____________________________________________________________________________
-IndexImpl::PermutationImpl& IndexImpl::getPermutation(
-    Index::PermutationEnum p) {
-  using enum Index::PermutationEnum;
+Permutation& IndexImpl::getPermutation(PermutationEnum p) {
+  using enum PermutationEnum;
   switch (p) {
     case PSO:
       return pso_;
@@ -1148,8 +1147,7 @@ IndexImpl::PermutationImpl& IndexImpl::getPermutation(
 }
 
 // ____________________________________________________________________________
-const IndexImpl::PermutationImpl& IndexImpl::getPermutation(
-    Index::PermutationEnum p) const {
+const Permutation& IndexImpl::getPermutation(PermutationEnum p) const {
   return const_cast<IndexImpl&>(*this).getPermutation(p);
 }
 
@@ -1187,16 +1185,16 @@ Index::NumNormalAndInternal IndexImpl::numDistinctPredicates() const {
 
 // __________________________________________________________________________
 Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
-    Index::PermutationEnum permutation) const {
+    PermutationEnum permutation) const {
   switch (permutation) {
-    case Index::PermutationEnum::SOP:
-    case Index::PermutationEnum::SPO:
+    case PermutationEnum::SOP:
+    case PermutationEnum::SPO:
       return numDistinctSubjects();
-    case Index::PermutationEnum::OPS:
-    case Index::PermutationEnum::OSP:
+    case PermutationEnum::OPS:
+    case PermutationEnum::OSP:
       return numDistinctObjects();
-    case Index::PermutationEnum::POS:
-    case Index::PermutationEnum::PSO:
+    case PermutationEnum::POS:
+    case PermutationEnum::PSO:
       return numDistinctPredicates();
     default:
       AD_FAIL();
@@ -1204,8 +1202,7 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
 }
 
 // ___________________________________________________________________________
-size_t IndexImpl::getCardinality(Id id,
-                                 Index::PermutationEnum permutation) const {
+size_t IndexImpl::getCardinality(Id id, PermutationEnum permutation) const {
   if (const auto& p = getPermutation(permutation);
       p.metaData().col0IdExists(id)) {
     return p.metaData().getMetaData(id).getNofElements();
@@ -1215,7 +1212,7 @@ size_t IndexImpl::getCardinality(Id id,
 
 // ___________________________________________________________________________
 size_t IndexImpl::getCardinality(const TripleComponent& comp,
-                                 Index::PermutationEnum permutation) const {
+                                 PermutationEnum permutation) const {
   // TODO<joka921> This special case is only relevant for the `PSO` and `POS`
   // permutations, but this internal predicate should never appear in subjects
   // or objects anyway.
@@ -1258,8 +1255,8 @@ std::pair<Id, Id> IndexImpl::prefix_range(const std::string& prefix) const {
 }
 
 // _____________________________________________________________________________
-vector<float> IndexImpl::getMultiplicities(
-    const TripleComponent& key, Index::PermutationEnum permutation) const {
+vector<float> IndexImpl::getMultiplicities(const TripleComponent& key,
+                                           PermutationEnum permutation) const {
   const auto& p = getPermutation(permutation);
   std::optional<Id> keyId = key.toValueId(getVocab());
   vector<float> res;
@@ -1275,8 +1272,7 @@ vector<float> IndexImpl::getMultiplicities(
 }
 
 // ___________________________________________________________________
-vector<float> IndexImpl::getMultiplicities(
-    Index::PermutationEnum permutation) const {
+vector<float> IndexImpl::getMultiplicities(PermutationEnum permutation) const {
   const auto& p = getPermutation(permutation);
   auto numTriples = static_cast<float>(this->numTriples().normalAndInternal_());
   std::array<float, 3> m{
@@ -1287,14 +1283,14 @@ vector<float> IndexImpl::getMultiplicities(
 }
 
 // ___________________________________________________________________
-void IndexImpl::scan(Id key, IdTable* result, const Index::PermutationEnum& p,
+void IndexImpl::scan(Id key, IdTable* result, const PermutationEnum& p,
                      ad_utility::SharedConcurrentTimeoutTimer timer) const {
   getPermutation(p).scan(key, result, std::move(timer));
 }
 
 // ___________________________________________________________________
 void IndexImpl::scan(const TripleComponent& key, IdTable* result,
-                     Index::PermutationEnum permutation,
+                     PermutationEnum permutation,
                      ad_utility::SharedConcurrentTimeoutTimer timer) const {
   const auto& p = getPermutation(permutation);
   LOG(DEBUG) << "Performing " << p._readableName
@@ -1310,7 +1306,7 @@ void IndexImpl::scan(const TripleComponent& key, IdTable* result,
 // _____________________________________________________________________________
 void IndexImpl::scan(const TripleComponent& col0String,
                      const TripleComponent& col1String, IdTable* result,
-                     const Index::PermutationEnum& permutation,
+                     const PermutationEnum& permutation,
                      ad_utility::SharedConcurrentTimeoutTimer timer) const {
   std::optional<Id> col0Id = col0String.toValueId(getVocab());
   std::optional<Id> col1Id = col1String.toValueId(getVocab());

@@ -430,10 +430,10 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
 
   // The child must be an `IndexScan` with three variables that contains
   // the grouped variable.
-  auto permutation = getPermutationForThreeVariableTriple(
+  auto permutationEnum = getPermutationForThreeVariableTriple(
       *_subtree, groupByVariable, groupByVariable);
 
-  if (!permutation.has_value()) {
+  if (!permutationEnum.has_value()) {
     return false;
   }
 
@@ -472,22 +472,22 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
   auto doComputationForNumberOfColumns = [&]<int NUM_COLS>(
                                              IdTable* idTable) mutable {
     auto ignoredRanges =
-        getIndex().getImpl().getIgnoredIdRanges(permutation.value()).first;
-    const auto& permutationImpl =
+        getIndex().getImpl().getIgnoredIdRanges(permutationEnum.value()).first;
+    const auto& permutation =
         getExecutionContext()->getIndex().getPimpl().getPermutation(
-            permutation.value());
+            permutationEnum.value());
     IdTableStatic<NUM_COLS> table = std::move(*idTable).toStatic<NUM_COLS>();
-    const auto& metaData = permutationImpl._meta.data();
+    const auto& metaData = permutation._meta.data();
     // TODO<joka921> the reserve is too large because of the ignored
     // triples. We would need to incorporate the information how many
-    // added "relations" are in each permutation during index building.
+    // added "relations" are in each permutationEnum during index building.
     table.reserve(metaData.size());
     for (auto it = metaData.ordered_begin(); it != metaData.ordered_end();
          ++it) {
       Id id = decltype(metaData.ordered_begin())::getIdFromElement(*it);
 
       // Check whether this is an `@en@...` predicate in a `Pxx`
-      // permutation, a literal in a `Sxx` permutation or some other
+      // permutationEnum, a literal in a `Sxx` permutationEnum or some other
       // entity that was added only for internal reasons.
       if (std::ranges::any_of(ignoredRanges, [&id](const auto& pair) {
             return id >= pair.first && id < pair.second;
@@ -527,8 +527,7 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
 }
 
 // _____________________________________________________________________________
-std::optional<Index::PermutationEnum>
-GroupBy::getPermutationForThreeVariableTriple(
+std::optional<PermutationEnum> GroupBy::getPermutationForThreeVariableTriple(
     const QueryExecutionTree& tree, const Variable& variableByWhichToSort,
     const Variable& variableThatMustBeContained) {
   auto indexScan =
@@ -546,11 +545,11 @@ GroupBy::getPermutationForThreeVariableTriple(
   }
 
   if (variableByWhichToSort == indexScan->getSubject()) {
-    return Index::PermutationEnum::SPO;
+    return PermutationEnum::SPO;
   } else if (variableByWhichToSort.name() == indexScan->getPredicate()) {
-    return Index::PermutationEnum::POS;
+    return PermutationEnum::POS;
   } else if (variableByWhichToSort == indexScan->getObject()) {
-    return Index::PermutationEnum::OSP;
+    return PermutationEnum::OSP;
   } else {
     return std::nullopt;
   }

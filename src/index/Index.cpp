@@ -69,12 +69,12 @@ auto Index::getTextVocab() const -> const TextVocab& {
 
 // _____________________________________________________________________________
 size_t Index::getCardinality(const TripleComponent& comp,
-                             Index::PermutationEnum p) const {
+                             PermutationEnum p) const {
   return pimpl_->getCardinality(comp, p);
 }
 
 // _____________________________________________________________________________
-size_t Index::getCardinality(Id id, Index::PermutationEnum p) const {
+size_t Index::getCardinality(Id id, PermutationEnum p) const {
   return pimpl_->getCardinality(id, p);
 }
 

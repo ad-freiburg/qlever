@@ -12,6 +12,7 @@
 
 #include "global/Id.h"
 #include "index/CompressedString.h"
+#include "index/PermutationEnum.h"
 #include "index/StringSortComparator.h"
 #include "index/Vocabulary.h"
 #include "parser/TripleComponent.h"
@@ -34,9 +35,6 @@ class Index {
   std::unique_ptr<IndexImpl> pimpl_;
 
  public:
-  /// Identifiers for the six possible permutations.
-  enum struct PermutationEnum { PSO, POS, SPO, SOP, OPS, OSP };
-
   // Alongside the actual knowledge graph QLever stores additional triples
   // for optimized query processing. This struct is used to report various
   // statistics (number of triples, distinct number of subjects, etc.) for which

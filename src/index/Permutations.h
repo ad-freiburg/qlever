@@ -6,15 +6,11 @@
 #include <array>
 #include <string>
 
-#include "../global/Constants.h"
-#include "../util/File.h"
-#include "../util/Log.h"
-#include "./IndexMetaData.h"
-#include "./StxxlSortFunctors.h"
-
-namespace Permutation {
-using std::array;
-using std::string;
+#include "global/Constants.h"
+#include "index/IndexMetaData.h"
+#include "index/StxxlSortFunctors.h"
+#include "util/File.h"
+#include "util/Log.h"
 
 // Helper class to store static properties of the different permutations to
 // avoid code duplication. The first template parameter is a search functor for
@@ -100,5 +96,3 @@ class Permutation {
 
   bool _isLoaded = false;
 };
-
-}  // namespace Permutation

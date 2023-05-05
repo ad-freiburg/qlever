@@ -102,8 +102,6 @@ class IndexImpl {
     using ReadType = IndexMetaDataMmapView;
   };
 
-  using PermutationImpl = Permutation::Permutation;
-
   using NumNormalAndInternal = Index::NumNormalAndInternal;
 
   // Private data members.
@@ -162,12 +160,12 @@ class IndexImpl {
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
-  PermutationImpl pos_{"POS", ".pos", {1, 2, 0}};
-  PermutationImpl pso_{"PSO", ".pso", {1, 0, 2}};
-  PermutationImpl sop_{"SOP", ".sop", {0, 2, 1}};
-  PermutationImpl spo_{"SPO", ".spo", {0, 1, 2}};
-  PermutationImpl ops_{"OPS", ".ops", {2, 1, 0}};
-  PermutationImpl osp_{"OSP", ".osp", {2, 0, 1}};
+  Permutation pos_{"POS", ".pos", {1, 2, 0}};
+  Permutation pso_{"PSO", ".pso", {1, 0, 2}};
+  Permutation sop_{"SOP", ".sop", {0, 2, 1}};
+  Permutation spo_{"SPO", ".spo", {0, 1, 2}};
+  Permutation ops_{"OPS", ".ops", {2, 1, 0}};
+  Permutation osp_{"OSP", ".osp", {2, 0, 1}};
 
  public:
   IndexImpl();
@@ -195,8 +193,8 @@ class IndexImpl {
 
   // For a given `PermutationEnum` (e.g. `PSO`) return the corresponding
   // `Permutation` object by reference (`pso_`).
-  PermutationImpl& getPermutation(Index::PermutationEnum p);
-  const PermutationImpl& getPermutation(Index::PermutationEnum p) const;
+  Permutation& getPermutation(PermutationEnum p);
+  const Permutation& getPermutation(PermutationEnum p) const;
 
   // Creates an index from a file. Parameter Parser must be able to split the
   // file's format into triples.
@@ -247,15 +245,14 @@ class IndexImpl {
   NumNormalAndInternal numDistinctPredicates() const;
 
   // __________________________________________________________________________
-  NumNormalAndInternal numDistinctCol0(
-      Index::PermutationEnum permutation) const;
+  NumNormalAndInternal numDistinctCol0(PermutationEnum permutation) const;
 
   // ___________________________________________________________________________
-  size_t getCardinality(Id id, Index::PermutationEnum permutation) const;
+  size_t getCardinality(Id id, PermutationEnum permutation) const;
 
   // ___________________________________________________________________________
   size_t getCardinality(const TripleComponent& comp,
-                        Index::PermutationEnum permutation) const;
+                        PermutationEnum permutation) const;
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
@@ -399,10 +396,10 @@ class IndexImpl {
 
   // _____________________________________________________________________________
   vector<float> getMultiplicities(const TripleComponent& key,
-                                  Index::PermutationEnum permutation) const;
+                                  PermutationEnum permutation) const;
 
   // ___________________________________________________________________
-  vector<float> getMultiplicities(Index::PermutationEnum permutation) const;
+  vector<float> getMultiplicities(PermutationEnum permutation) const;
 
   /**
    * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
@@ -415,7 +412,7 @@ class IndexImpl {
    * @param p The PermutationEnum to use (in particularly POS(), SOP,... members
    * of IndexImpl class).
    */
-  void scan(Id key, IdTable* result, const Index::PermutationEnum& p,
+  void scan(Id key, IdTable* result, const PermutationEnum& p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   /**
@@ -430,7 +427,7 @@ class IndexImpl {
    * of IndexImpl class).
    */
   void scan(const TripleComponent& key, IdTable* result,
-            Index::PermutationEnum permutation,
+            PermutationEnum permutation,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   /**
@@ -449,7 +446,7 @@ class IndexImpl {
   // _____________________________________________________________________________
   void scan(const TripleComponent& col0String,
             const TripleComponent& col1String, IdTable* result,
-            const Index::PermutationEnum& permutation,
+            const PermutationEnum& permutation,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
  private:
@@ -526,8 +523,8 @@ class IndexImpl {
   // the SPO permutation is also needed for patterns (see usage in
   // IndexImpl::createFromFile function)
 
-  void createPermutationPair(auto&& sortedTriples, const PermutationImpl& p1,
-                             const PermutationImpl& p2,
+  void createPermutationPair(auto&& sortedTriples, const Permutation& p1,
+                             const Permutation& p2,
                              auto&&... perTripleCallbacks);
 
   // wrapper for createPermutation that saves a lot of code duplications
@@ -541,8 +538,8 @@ class IndexImpl {
   // the optional is std::nullopt if vec and thus the index is empty
   std::optional<std::pair<IndexMetaDataMmapDispatcher::WriteType,
                           IndexMetaDataMmapDispatcher::WriteType>>
-  createPermutations(auto&& sortedTriples, const PermutationImpl& p1,
-                     const PermutationImpl& p2, auto&&... perTripleCallbacks);
+  createPermutations(auto&& sortedTriples, const Permutation& p1,
+                     const Permutation& p2, auto&&... perTripleCallbacks);
 
   void createTextIndex(const string& filename, const TextVec& vec);
 
@@ -679,7 +676,7 @@ class IndexImpl {
   //       the lambda `second` returns true for that triple.
   // For example usages see `IndexScan.cpp` (the implementation of the full
   // index scan) and `GroupBy.cpp`.
-  auto getIgnoredIdRanges(const Index::PermutationEnum permutation) const {
+  auto getIgnoredIdRanges(const PermutationEnum permutation) const {
     std::vector<std::pair<Id, Id>> ignoredRanges;
 
     auto literalRange = getVocab().prefix_range("\"");
@@ -690,7 +687,7 @@ class IndexImpl {
         Id::makeFromVocabIndex(internalEntitiesRange.first),
         Id::makeFromVocabIndex(internalEntitiesRange.second));
 
-    using enum Index::PermutationEnum;
+    using enum PermutationEnum;
     if (permutation == SPO || permutation == SOP) {
       ignoredRanges.push_back({Id::makeFromVocabIndex(literalRange.first),
                                Id::makeFromVocabIndex(literalRange.second)});
