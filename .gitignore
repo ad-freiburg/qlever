@@ -45,3 +45,5 @@ tags
 src/tags
 /build/
 sourcelist
+.cache/
+.vscode/
