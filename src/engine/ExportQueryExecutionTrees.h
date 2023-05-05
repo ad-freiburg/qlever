@@ -75,7 +75,9 @@ class ExportQueryExecutionTrees {
   //
   // TODO<joka921> Make it private again as soon as the evaluation of construct
   // queries is completely performed inside this module.
-  template <typename EscapeFunction = std::identity>
+  template <bool removeQuotesAndAngleBrackets = false,
+            bool returnOnlyLiterals = false,
+            typename EscapeFunction = std::identity>
   [[nodiscard]] static std::optional<std::pair<std::string, const char*>>
   idToStringAndType(const Index& index, Id id, const LocalVocab& localVocab,
                     EscapeFunction&& escapeFunction = EscapeFunction{});

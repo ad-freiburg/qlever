@@ -9,6 +9,7 @@
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "gtest/gtest.h"
 
@@ -20,7 +21,7 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 
 RegexExpression makeRegexExpression(
     std::string variable, std::string regex,
-    std::optional<std::string> flags = std::nullopt) {
+    std::optional<std::string> flags = std::nullopt, bool childAsStr = false) {
   // The regex and the flags both have to be enquoted. This is normally ensured
   // by the SPARQL parser. For easier readability of the tests we add those
   // quotes here.
@@ -28,8 +29,12 @@ RegexExpression makeRegexExpression(
   if (flags.has_value()) {
     flags.value() = absl::StrCat("\"", flags.value(), "\"");
   }
-  auto variableExpression =
+  SparqlExpression::Ptr variableExpression =
       std::make_unique<VariableExpression>(Variable{std::move(variable)});
+  if (childAsStr) {
+    variableExpression =
+        std::make_unique<StrExpression>(std::move(variableExpression));
+  }
   auto regexExpression = std::make_unique<StringLiteralExpression>(lit(regex));
   std::optional<SparqlExpression::Ptr> flagsExpression = std::nullopt;
   if (flags.has_value()) {
@@ -51,24 +56,23 @@ void testWithExplicitResult(const SparqlExpression& expression,
   auto trace = generateLocationTrace(l, "testWithExplicitResult");
   auto resultAsVariant = expression.evaluate(&ctx.context);
   const auto& result = std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
-  ASSERT_EQ(expected.size(), result.size());
-  for (size_t i = 0; i < result.size(); ++i) {
-    EXPECT_EQ(expected[i], result[i]) << "i = " << i;
-  }
+  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
 }
 
 auto testNonPrefixRegex = [](std::string variable, std::string regex,
                              const std::vector<Bool>& expectedResult,
+                             bool childAsStr = false,
                              source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l, "testNonPrefixRegex");
-  auto expr = makeRegexExpression(std::move(variable), std::move(regex));
+  auto expr = makeRegexExpression(std::move(variable), std::move(regex),
+                                  std::nullopt, childAsStr);
   ASSERT_FALSE(expr.isPrefixExpression());
   testWithExplicitResult(expr, expectedResult);
 };
 
 TEST(RegexExpression, nonPrefixRegex) {
   // ?vocab column is `"Beta", "alpha", "älpha"
-  // ?mixed column is `1, -0.1, A`
+  // ?mixed column is `1, -0.1, <x>`
   auto test = testNonPrefixRegex;
   test("?vocab", "ph", {false, true, true});
   test("?vocab", "l.h", {false, true, true});
@@ -79,7 +83,17 @@ TEST(RegexExpression, nonPrefixRegex) {
   test("?vocab", "b", {false, false, false});
 
   // Not a prefix expression because of the "special" regex characters
-  test("?vocab", "^\"a.*", {false, true, false});
+  test("?vocab", "^a.*", {false, true, false});
+
+  test("?mixed", "x", {false, false, false});
+  test("?mixed", "x", {false, false, true}, true);
+  test("?mixed", "1$", {false, false, false});
+  test("?mixed", "1$", {true, true, false}, true);
+
+  // ?localVocab column is "notInVocabA", "notInVocabB", <"notInVocabD">
+  test("?localVocab", "InV", {true, true, false});
+  // The IRI is only considered when testing with a STR expression
+  test("?localVocab", "Vocab[AD]", {true, false, true}, true);
 }
 
 auto testNonPrefixRegexWithFlags =
@@ -118,7 +132,7 @@ TEST(RegexExpression, nonPrefixRegexWithFlags) {
   // TODO<joka921> check whether the SPARQL STARTSWITH function is consistent
   // with the behavior of our prefix filter.
 
-  test("?vocab", "^\"alp", "i", {false, true, false});
+  test("?vocab", "^alp", "i", {false, true, false});
 
   // TODO<joka921>  Add tests for other flags (maybe the non-greedy one?)
 }
@@ -138,10 +152,11 @@ TEST(RegexExpression, getPrefixRegex) {
 
 auto testPrefixRegexUnorderedColumn =
     [](std::string variable, std::string regex,
-       const std::vector<Bool>& expectedResult,
+       const std::vector<Bool>& expectedResult, bool childAsStr = false,
        source_location l = source_location::current()) {
       auto trace = generateLocationTrace(l, "testUnorderedPrefix");
-      auto expr = makeRegexExpression(std::move(variable), std::move(regex));
+      auto expr = makeRegexExpression(std::move(variable), std::move(regex),
+                                      std::nullopt, childAsStr);
       ASSERT_TRUE(expr.isPrefixExpression());
       testWithExplicitResult(expr, expectedResult);
     };
@@ -149,46 +164,55 @@ auto testPrefixRegexUnorderedColumn =
 TEST(RegexExpression, unorderedPrefixRegexUnorderedColumn) {
   auto test = testPrefixRegexUnorderedColumn;
   // ?vocab column is `"Beta", "alpha", "älpha"
-  // ?mixed column is `1, -0.1, A`
-  test("?vocab", "^\"Be", {true, false, false});
+  // ?mixed column is `1, -0.1, <x>`
+
+  test("?vocab", "^Be", {true, false, false});
   // Prefix filters are currently always case-insensitive.
-  test("?vocab", "^\"be", {true, false, false});
+  test("?vocab", "^be", {true, false, false});
   // Prefix filters currently always work on the primary level, where `a` and
   // `ä` are considered equal.
-  test("?vocab", "^\"al", {false, true, true});
-  test("?vocab", "^\"äl", {false, true, true});
+  test("?vocab", "^al", {false, true, true});
+  test("?vocab", "^äl", {false, true, true});
 
-  test("?vocab", "^\"c", {false, false, false});
+  test("?vocab", "^c", {false, false, false});
+
+  // We explicitly need to pass the STR() function for non-literal entries.
+  test("?mixed", "^x", {false, false, true}, true);
+  test("?mixed", "^x", {false, false, false}, false);
+
+  // TODO<joka921> Prefix filters on numbers do not yet work.
 }
 
-auto testPrefixRegexOrderedColumn = [](std::string variableAsString,
-                                       std::string regex,
-                                       ad_utility::SetOfIntervals expected,
-                                       source_location l =
-                                           source_location::current()) {
-  auto trace = generateLocationTrace(l, "testPrefixRegexOrderedColumn");
-  auto variable = Variable{variableAsString};
-  TestContext ctx = TestContext::sortedBy(variable);
-  auto expression = makeRegexExpression(variableAsString, regex);
-  ASSERT_TRUE(expression.isPrefixExpression());
-  auto resultAsVariant = expression.evaluate(&ctx.context);
-  const auto& result = std::get<ad_utility::SetOfIntervals>(resultAsVariant);
-  ASSERT_EQ(result, expected);
-};
+auto testPrefixRegexOrderedColumn =
+    [](std::string variableAsString, std::string regex,
+       ad_utility::SetOfIntervals expected, bool childAsStr = false,
+       source_location l = source_location::current()) {
+      auto trace = generateLocationTrace(l, "testPrefixRegexOrderedColumn");
+      auto variable = Variable{variableAsString};
+      TestContext ctx = TestContext::sortedBy(variable);
+      auto expression = makeRegexExpression(variableAsString, regex,
+                                            std::nullopt, childAsStr);
+      ASSERT_TRUE(expression.isPrefixExpression());
+      auto resultAsVariant = expression.evaluate(&ctx.context);
+      const auto& result =
+          std::get<ad_utility::SetOfIntervals>(resultAsVariant);
+      ASSERT_EQ(result, expected);
+    };
 
 TEST(RegexExpression, prefixRegexOrderedColumn) {
   auto test = testPrefixRegexOrderedColumn;
   // Sorted order (by bits of the valueIds):
   // ?vocab column is  "alpha", "älpha", "Beta"
-  // ?mixed column is `1, -0.1, A`
-  test("?vocab", "^\"Be", {{{2, 3}}});
+  // ?mixed column is `1, -0.1, <x>`
+  test("?vocab", "^Be", {{{2, 3}}});
   // Prefix filters are currently always case-insensitive.
-  test("?vocab", "^\"be", {{{2, 3}}});
+  test("?vocab", "^be", {{{2, 3}}});
   // Prefix filters currently always work on the primary level, where `a` and
   // `ä` are considered equal.
-  test("?vocab", "^\"al", {{{0, 2}}});
-  test("?vocab", "^\"äl", {{{0, 2}}});
-  test("?vocab", "^\"c", {});
+  test("?vocab", "^al", {{{0, 2}}});
+  test("?vocab", "^äl", {{{0, 2}}});
+  test("?vocab", "^c", {});
+  test("?mixed", "^x", {{{2, 3}}}, true);
 }
 
 TEST(RegexExpression, getCacheKey) {

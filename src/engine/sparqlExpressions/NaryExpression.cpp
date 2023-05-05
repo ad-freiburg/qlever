@@ -79,7 +79,7 @@ INSTANTIATE_NARY(2, FV<decltype(ad_utility::wktDist), StringValueGetter>);
 INSTANTIATE_NARY(1, FV<decltype(extractYear), StringValueGetter>);
 INSTANTIATE_NARY(1, FV<decltype(extractMonth), StringValueGetter>);
 INSTANTIATE_NARY(1, FV<decltype(extractDay), StringValueGetter>);
-INSTANTIATE_NARY(1, FV<decltype(str), StringValueGetter>);
+INSTANTIATE_NARY(1, FV<std::identity, StringValueGetter>);
 INSTANTIATE_NARY(1, FV<decltype(strlen), StringValueGetter>);
 }  // namespace detail
 }  // namespace sparqlExpression

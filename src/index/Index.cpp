@@ -174,11 +174,9 @@ void Index::getFilteredECListForWordsWidthOne(const std::string& words,
 }
 
 // _______________________________
-void Index::getContextEntityScoreListsForWords(const std::string& words,
-                                               vector<TextRecordIndex>& cids,
-                                               vector<Id>& eids,
-                                               vector<Score>& scores) const {
-  return pimpl_->getContextEntityScoreListsForWords(words, cids, eids, scores);
+Index::WordEntityPostings Index::getContextEntityScoreListsForWords(
+    const std::string& words) const {
+  return pimpl_->getContextEntityScoreListsForWords(words);
 }
 
 // ______________________________
@@ -209,18 +207,15 @@ void Index::getECListForWordsAndSubtrees(
 }
 
 // ___________________________
-void Index::getWordPostingsForTerm(const std::string& term,
-                                   vector<TextRecordIndex>& cids,
-                                   vector<Score>& scores) const {
-  return pimpl_->getWordPostingsForTerm(term, cids, scores);
+Index::WordEntityPostings Index::getWordPostingsForTerm(
+    const std::string& term) const {
+  return pimpl_->getWordPostingsForTerm(term);
 }
 
 // __________________________
-void Index::getEntityPostingsForTerm(const std::string& term,
-                                     vector<TextRecordIndex>& cids,
-                                     vector<Id>& eids,
-                                     vector<Score>& scores) const {
-  return pimpl_->getEntityPostingsForTerm(term, cids, eids, scores);
+Index::WordEntityPostings Index::getEntityPostingsForTerm(
+    const std::string& term) const {
+  return pimpl_->getEntityPostingsForTerm(term);
 }
 
 // _________________________

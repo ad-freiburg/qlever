@@ -112,7 +112,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   /*
   Special case: A table with no columns. Should throw an exception
   on creation, because you can't add columns after creation and a table without
-  columns is quite the stupid idea.. Additionally, operations on such an empty
+  columns is quite the stupid idea. Additionally, operations on such an empty
   table can create segmentation faults. The string conversion of `ResultTable`
   uses `std::ranges::max`, which really doesn't play well with empty vectors.
   */

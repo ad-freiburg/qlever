@@ -148,6 +148,12 @@ class SparqlExpression {
     return children();
   }
 
+  virtual std::vector<SparqlExpression::Ptr> moveChildrenOut() && final {
+    auto span = children();
+    return {std::make_move_iterator(span.begin()),
+            std::make_move_iterator(span.end())};
+  }
+
  private:
   // Get the direct child expressions.
   virtual std::span<SparqlExpression::Ptr> children() = 0;
