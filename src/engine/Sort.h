@@ -21,20 +21,28 @@ class Sort : public Operation {
   std::shared_ptr<QueryExecutionTree> subtree_;
   std::vector<ColumnIndex> sortColumnIndices_;
 
- public:
+  // The constructor is private. The only way to create a `Sort` operation is
+  // via `ad_utility::createSortedTree` (in `QueryExecutionTree.h`). The reason
+  // for this is that the `createdSortedTree` function has an optimization if
+  // the argument is already (implicitly) sorted, but has to perform additional
+  // operations on the argument if this optimization applies. So calling the
+  // constructor of `Sort` without going through `createSortedTree` would very
+  // likely be a bug.
   Sort(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
        std::vector<ColumnIndex> sortColumnIndices);
 
+  // The actual way to create a `Sort` operation. Declared and defined in
+  // `QueryExecutionTree.h/.cpp`.
+  friend std::shared_ptr<QueryExecutionTree> ad_utility::createSortedTree(
+      std::shared_ptr<QueryExecutionTree> qet,
+      const vector<size_t>& sortColumns);
+
  public:
-  virtual string getDescriptor() const override;
+  string getDescriptor() const override;
 
-  virtual vector<size_t> resultSortedOn() const override {
-    return sortColumnIndices_;
-  }
+  vector<size_t> resultSortedOn() const override { return sortColumnIndices_; }
 
-  virtual void setTextLimit(size_t limit) override {
-    subtree_->setTextLimit(limit);
-  }
+  void setTextLimit(size_t limit) override { subtree_->setTextLimit(limit); }
 
  private:
   size_t getSizeEstimateBeforeLimit() override {
@@ -42,13 +50,13 @@ class Sort : public Operation {
   }
 
  public:
-  virtual float getMultiplicity(size_t col) override {
+  float getMultiplicity(size_t col) override {
     return subtree_->getMultiplicity(col);
   }
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return subtree_; }
 
-  virtual size_t getCostEstimate() override {
+  size_t getCostEstimate() override {
     size_t size = getSizeEstimateBeforeLimit();
     size_t logSize = std::max(
         size_t(2), static_cast<size_t>(logb(static_cast<double>(size))));
@@ -57,9 +65,7 @@ class Sort : public Operation {
     return nlogn + subcost;
   }
 
-  virtual bool knownEmptyResult() override {
-    return subtree_->knownEmptyResult();
-  }
+  bool knownEmptyResult() override { return subtree_->knownEmptyResult(); }
 
   [[nodiscard]] size_t getResultWidth() const override;
 
@@ -68,12 +74,12 @@ class Sort : public Operation {
   }
 
  private:
-  virtual ResultTable computeResult() override;
+  ResultTable computeResult() override;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
       const override {
     return subtree_->getVariableColumns();
   }
 
-  virtual string asStringImpl(size_t indent = 0) const override;
+  string asStringImpl(size_t indent = 0) const override;
 };

@@ -34,6 +34,10 @@ class QueryExecutionTree {
       : QueryExecutionTree(qec) {
     setOperation(std::move(operation));
   }
+  template <typename Op>
+  QueryExecutionTree(QueryExecutionContext* const qec,
+                     std::unique_ptr<Op> operation)
+      : QueryExecutionTree(qec, std::shared_ptr<Op>{std::move(operation)}) {}
 
   enum OperationType {
     UNDEFINED,
@@ -189,22 +193,6 @@ class QueryExecutionTree {
   bool& isRoot() noexcept { return _isRoot; }
   [[nodiscard]] const bool& isRoot() const noexcept { return _isRoot; }
 
-  // Create a `QueryExecutionTree` that produces exactly the same result as
-  // `qet`, but sorted according to the `sortColumns`. If `qet` is already
-  // sorted accordingly, it is simply returned.
-  static std::shared_ptr<QueryExecutionTree> createSortedTree(
-      std::shared_ptr<QueryExecutionTree> qet,
-      const vector<size_t>& sortColumns);
-
-  // Similar to `createSortedTree` (see directly above), but create the sorted
-  // trees for two different trees, the sort columns of which are specified as
-  // a vector of two-dimensional arrays. This format often appears in
-  // `QueryPlanner.cpp`.
-  static std::array<std::shared_ptr<QueryExecutionTree>, 2> createSortedTrees(
-      std::shared_ptr<QueryExecutionTree> qetA,
-      std::shared_ptr<QueryExecutionTree> qetB,
-      const vector<std::array<size_t, 2>>& sortColumns);
-
   // If the result of this `Operation` is sorted (either because this
   // `Operation` enforces this sorting, or because it preserves the sorting of
   // its children), return the variable that is the primary sort key. Else
@@ -252,4 +240,19 @@ std::shared_ptr<QueryExecutionTree> makeExecutionTree(
   return std::make_shared<QueryExecutionTree>(
       qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
 }
+
+// Create a `QueryExecutionTree` that produces exactly the same result as
+// `qet`, but sorted according to the `sortColumns`. If `qet` is already
+// sorted accordingly, it is simply returned.
+std::shared_ptr<QueryExecutionTree> createSortedTree(
+    std::shared_ptr<QueryExecutionTree> qet, const vector<size_t>& sortColumns);
+
+// Similar to `createSortedTree` (see directly above), but create the sorted
+// trees for two different trees, the sort columns of which are specified as
+// a vector of two-dimensional arrays. This format often appears in
+// `QueryPlanner.cpp`.
+std::array<std::shared_ptr<QueryExecutionTree>, 2> createSortedTrees(
+    std::shared_ptr<QueryExecutionTree> qetA,
+    std::shared_ptr<QueryExecutionTree> qetB,
+    const vector<std::array<size_t, 2>>& sortColumns);
 }  // namespace ad_utility

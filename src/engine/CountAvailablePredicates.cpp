@@ -22,8 +22,8 @@ CountAvailablePredicates::CountAvailablePredicates(
     size_t subjectColumnIndex, Variable predicateVariable,
     Variable countVariable)
     : Operation(qec),
-      _subtree(QueryExecutionTree::createSortedTree(std::move(subtree),
-                                                    {subjectColumnIndex})),
+      _subtree(ad_utility::createSortedTree(std::move(subtree),
+                                            {subjectColumnIndex})),
       _subjectColumnIndex(subjectColumnIndex),
       _predicateVariable(std::move(predicateVariable)),
       _countVariable(std::move(countVariable)) {}
@@ -119,11 +119,11 @@ ResultTable CountAvailablePredicates::computeResult() {
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
 
   const std::vector<PatternID>& hasPattern =
-      _executionContext->getIndex().getHasPattern();
+      executionContext_->getIndex().getHasPattern();
   const CompactVectorOfStrings<Id>& hasPredicate =
-      _executionContext->getIndex().getHasPredicate();
+      executionContext_->getIndex().getHasPredicate();
   const CompactVectorOfStrings<Id>& patterns =
-      _executionContext->getIndex().getPatterns();
+      executionContext_->getIndex().getPatterns();
 
   if (_subtree == nullptr) {
     // Compute the predicates for all entities

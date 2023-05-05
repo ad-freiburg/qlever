@@ -274,7 +274,7 @@ ResultTable IndexScan::computeResult() {
 // _____________________________________________________________________________
 void IndexScan::computePSOboundS(IdTable* result) const {
   result->setNumColumns(1);
-  const auto& idx = _executionContext->getIndex();
+  const auto& idx = executionContext_->getIndex();
   idx.scan(_predicate, _subject, result, Index::Permutation::PSO,
            _timeoutTimer);
 }
@@ -282,27 +282,27 @@ void IndexScan::computePSOboundS(IdTable* result) const {
 // _____________________________________________________________________________
 void IndexScan::computePSOfreeS(IdTable* result) const {
   result->setNumColumns(2);
-  const auto& idx = _executionContext->getIndex();
+  const auto& idx = executionContext_->getIndex();
   idx.scan(_predicate, result, Index::Permutation::PSO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computePOSboundO(IdTable* result) const {
   result->setNumColumns(1);
-  const auto& idx = _executionContext->getIndex();
+  const auto& idx = executionContext_->getIndex();
   idx.scan(_predicate, _object, result, Index::Permutation::POS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computePOSfreeO(IdTable* result) const {
   result->setNumColumns(2);
-  const auto& idx = _executionContext->getIndex();
+  const auto& idx = executionContext_->getIndex();
   idx.scan(_predicate, result, Index::Permutation::POS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 size_t IndexScan::computeSizeEstimate() {
-  if (_executionContext) {
+  if (executionContext_) {
     // Should always be in this branch. Else is only for test cases.
 
     // We have to do a simple scan anyway so might as well do it now
@@ -390,42 +390,42 @@ size_t IndexScan::getCostEstimate() {
 // _____________________________________________________________________________
 void IndexScan::computeSPOfreeP(IdTable* result) const {
   result->setNumColumns(2);
-  const auto& idx = _executionContext->getIndex();
+  const auto& idx = executionContext_->getIndex();
   idx.scan(_subject, result, Index::Permutation::SPO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computeSOPboundO(IdTable* result) const {
   result->setNumColumns(1);
-  const auto& idx = _executionContext->getIndex();
+  const auto& idx = executionContext_->getIndex();
   idx.scan(_subject, _object, result, Index::Permutation::SOP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computeSOPfreeO(IdTable* result) const {
   result->setNumColumns(2);
-  const auto& idx = _executionContext->getIndex();
+  const auto& idx = executionContext_->getIndex();
   idx.scan(_subject, result, Index::Permutation::SOP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computeOPSfreeP(IdTable* result) const {
   result->setNumColumns(2);
-  const auto& idx = _executionContext->getIndex();
+  const auto& idx = executionContext_->getIndex();
   idx.scan(_object, result, Index::Permutation::OPS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computeOSPfreeS(IdTable* result) const {
   result->setNumColumns(2);
-  const auto& idx = _executionContext->getIndex();
+  const auto& idx = executionContext_->getIndex();
   idx.scan(_object, result, Index::Permutation::OSP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::determineMultiplicities() {
   _multiplicity.clear();
-  if (_executionContext) {
+  if (executionContext_) {
     if (getResultWidth() == 1) {
       _multiplicity.emplace_back(1);
     } else {

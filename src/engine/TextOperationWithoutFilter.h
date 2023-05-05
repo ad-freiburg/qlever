@@ -72,8 +72,8 @@ class TextOperationWithoutFilter : public Operation {
   const Variable& getCVar() const { return _cvar; }
 
   virtual bool knownEmptyResult() override {
-    return _executionContext &&
-           _executionContext->getIndex().getSizeEstimate(_words) == 0;
+    return executionContext_ &&
+           executionContext_->getIndex().getSizeEstimate(_words) == 0;
   }
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }

@@ -511,7 +511,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
   vector<SubtreePlan> added;
   added.reserve(previous.size());
   for (const auto& parent : previous) {
-    SubtreePlan distinctPlan(_qec);
     vector<size_t> keepIndices;
     ad_utility::HashSet<size_t> indDone;
     const auto& colMap = parent._qet->getVariableColumns();
@@ -526,22 +525,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
         }
       }
     }
-    const std::vector<size_t>& resultSortedOn =
-        parent._qet->getRootOperation()->getResultSortedOn();
-    // check if the current result is sorted on all columns of the distinct
-    // with the order of the sorting
-    bool isSorted = resultSortedOn.size() >= keepIndices.size();
-    for (size_t i = 0; isSorted && i < keepIndices.size(); i++) {
-      isSorted = isSorted && resultSortedOn[i] == keepIndices[i];
-    }
-    if (isSorted) {
-      distinctPlan._qet =
-          makeExecutionTree<Distinct>(_qec, parent._qet, keepIndices);
-    } else {
-      auto tree = makeExecutionTree<Sort>(_qec, parent._qet, keepIndices);
-      distinctPlan._qet = makeExecutionTree<Distinct>(_qec, tree, keepIndices);
-    }
-    added.push_back(distinctPlan);
+    added.push_back(makeSubtreePlan<Distinct>(_qec, parent._qet, keepIndices));
   }
   return added;
 }
@@ -647,7 +631,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
         AD_CONTRACT_CHECK(!isDescending);
         sortColumns.push_back(index);
       }
-      tree = QueryExecutionTree::createSortedTree(parent._qet, sortColumns);
+      tree = ad_utility::createSortedTree(parent._qet, sortColumns);
     } else {
       AD_CONTRACT_CHECK(pq._isInternalSort == IsInternalSort::False);
       // Note: As the internal ordering is different from the semantic ordering
@@ -1251,8 +1235,7 @@ QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
   // TODO: We could probably also accept permutations of the join columns
   // as the order of a here and then permute the join columns to match the
   // sorted columns of a or b (whichever is larger).
-  auto [qetA, qetB] =
-      QueryExecutionTree::createSortedTrees(a._qet, b._qet, jcs);
+  auto [qetA, qetB] = ad_utility::createSortedTrees(a._qet, b._qet, jcs);
   return makeSubtreePlan<Minus>(_qec, qetA, qetB, jcs);
 }
 
@@ -1269,8 +1252,7 @@ QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
   // as the order of a here and then permute the join columns to match the
   // sorted columns of a or b (whichever is larger).
   std::vector<std::array<ColumnIndex, 2>> jcs = getJoinColumns(a, b);
-  auto [qetA, qetB] =
-      QueryExecutionTree::createSortedTrees(a._qet, b._qet, jcs);
+  auto [qetA, qetB] = ad_utility::createSortedTrees(a._qet, b._qet, jcs);
   return makeSubtreePlan<MultiColumnJoin>(_qec, qetA, qetB, jcs);
 }
 
@@ -2067,7 +2049,7 @@ auto QueryPlanner::createJoinWithTransitivePath(
 
 // ______________________________________________________________________________________
 auto QueryPlanner::createJoinWithHasPredicateScan(
-    SubtreePlan a, SubtreePlan b,
+    const SubtreePlan& a, const SubtreePlan& b,
     const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
   // Check if one of the two operations is a HAS_PREDICATE_SCAN.
@@ -2102,7 +2084,7 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
 
 // ______________________________________________________________________________________
 auto QueryPlanner::createJoinAsTextFilter(
-    SubtreePlan a, SubtreePlan b,
+    const SubtreePlan& a, const SubtreePlan& b,
     const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
   using enum QueryExecutionTree::OperationType;

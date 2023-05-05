@@ -282,7 +282,7 @@ class QueryPlanner {
   // Else returns `std::nullopt`.
   [[nodiscard]] static std::optional<SubtreePlan>
   createJoinWithHasPredicateScan(
-      SubtreePlan a, SubtreePlan b,
+      const SubtreePlan& a, const SubtreePlan& b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
   // Used internally by `createJoinCandidates`. If  `a` or `b` is a
@@ -290,7 +290,7 @@ class QueryPlanner {
   // the result of the other input as the filter input. Else return
   // `std::nullopt`.
   [[nodiscard]] static std::optional<SubtreePlan> createJoinAsTextFilter(
-      SubtreePlan a, SubtreePlan b,
+      const SubtreePlan& a, const SubtreePlan& b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
   [[nodiscard]] vector<SubtreePlan> getOrderByRow(

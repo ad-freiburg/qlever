@@ -29,8 +29,8 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   AD_CONTRACT_CHECK(t1 && t2);
   // Currently all join algorithms require both inputs to be sorted, so we
   // enforce the sorting here.
-  t1 = QueryExecutionTree::createSortedTree(std::move(t1), {t1JoinCol});
-  t2 = QueryExecutionTree::createSortedTree(std::move(t2), {t2JoinCol});
+  t1 = ad_utility::createSortedTree(std::move(t1), {t1JoinCol});
+  t2 = ad_utility::createSortedTree(std::move(t2), {t2JoinCol});
 
   // Make sure subtrees are ordered so that identical queries can be identified.
   if (t1->asString() > t2->asString()) {
@@ -227,7 +227,7 @@ Join::ScanMethodType Join::getScanMethod(
 
   // this works because the join operations execution Context never changes
   // during its lifetime
-  const auto& idx = _executionContext->getIndex();
+  const auto& idx = executionContext_->getIndex();
   const auto scanLambda = [&idx](const Index::Permutation perm) {
     return
         [&idx, perm](Id id, IdTable* idTable) { idx.scan(id, idTable, perm); };
@@ -281,7 +281,7 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
       // The scan is a relatively expensive disk operation, so we can afford to
       // check for timeouts before each call.
       checkTimeout();
-      IdTable jr(2, _executionContext->getAllocator());
+      IdTable jr(2, executionContext_->getAllocator());
       scan(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
@@ -295,7 +295,7 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
   }
   // Do the scan for the final element.
   LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
-  IdTable jr(2, _executionContext->getAllocator());
+  IdTable jr(2, executionContext_->getAllocator());
   scan(currentJoinId, &jr);
   LOG(TRACE) << "Got #items: " << jr.size() << endl;
   // Build the cross product.
@@ -329,11 +329,11 @@ void Join::computeSizeEstimateAndMultiplicities() {
       (static_cast<double>(nofDistinctInResult) / nofDistinctRight);
 
   double corrFactor =
-      _executionContext
+      executionContext_
           ? ((isFullScanDummy(_left) || isFullScanDummy(_right))
-                 ? _executionContext->getCostFactor(
+                 ? executionContext_->getCostFactor(
                        "DUMMY_JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR")
-                 : _executionContext->getCostFactor(
+                 : executionContext_->getCostFactor(
                        "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR"))
           : 1;
 

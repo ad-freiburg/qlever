@@ -34,8 +34,7 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
   std::ranges::sort(_groupByVariables, std::less<>{}, &Variable::name);
 
   auto sortColumns = computeSortColumns(subtree.get());
-  _subtree =
-      QueryExecutionTree::createSortedTree(std::move(subtree), sortColumns);
+  _subtree = ad_utility::createSortedTree(std::move(subtree), sortColumns);
 }
 
 string GroupBy::asStringImpl(size_t indent) const {

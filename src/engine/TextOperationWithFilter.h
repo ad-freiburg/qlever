@@ -77,8 +77,8 @@ class TextOperationWithFilter : public Operation {
 
   virtual bool knownEmptyResult() override {
     return _filterResult->knownEmptyResult() ||
-           (_executionContext &&
-            _executionContext->getIndex().getSizeEstimate(_words) == 0);
+           (executionContext_ &&
+            executionContext_->getIndex().getSizeEstimate(_words) == 0);
   }
 
   vector<QueryExecutionTree*> getChildren() override {

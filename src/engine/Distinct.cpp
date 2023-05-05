@@ -18,7 +18,9 @@ size_t Distinct::getResultWidth() const { return _subtree->getResultWidth(); }
 Distinct::Distinct(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,
                    const vector<size_t>& keepIndices)
-    : Operation(qec), _subtree(subtree), _keepIndices(keepIndices) {}
+    : Operation(qec),
+      _subtree(ad_utility::createSortedTree(std::move(subtree), keepIndices)),
+      _keepIndices(keepIndices) {}
 
 // _____________________________________________________________________________
 string Distinct::asStringImpl(size_t indent) const {

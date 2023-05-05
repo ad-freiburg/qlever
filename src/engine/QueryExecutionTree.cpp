@@ -228,7 +228,6 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
 template void QueryExecutionTree::setOperation(std::shared_ptr<IndexScan>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Union>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Bind>);
-template void QueryExecutionTree::setOperation(std::shared_ptr<Sort>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Distinct>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Values>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Service>);
@@ -252,8 +251,9 @@ template void QueryExecutionTree::setOperation(
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<ValuesForTesting>);
 
+namespace ad_utility {
 // ________________________________________________________________________________________________________________
-std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
+std::shared_ptr<QueryExecutionTree> createSortedTree(
     std::shared_ptr<QueryExecutionTree> qet,
     const vector<size_t>& sortColumns) {
   auto inputSortedOn = qet->resultSortedOn();
@@ -262,17 +262,29 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     inputSorted = sortColumns[i] == inputSortedOn[i];
   }
   if (sortColumns.empty() || inputSorted) {
+    qet->getRootOperation()->sortingIsRequired() = true;
+    // The result from the cache might be invalidated because we have changed
+    // the sorting requirements, so we have to reload.
+    // TODO<joka921> Refactor the cache as well as the `QueryExecutionTree` to
+    // make their interfaces more robust against such changes.
+    qet->readFromCache();
     return qet;
   }
 
   QueryExecutionContext* qec = qet->getRootOperation()->getExecutionContext();
-  auto sort = std::make_shared<Sort>(qec, std::move(qet), sortColumns);
+  // The constructor of `Sort` is private and this function (`createSorted`) is
+  // a friend of `Sort`. That way we ensure that in the case that no explicit
+  // sorting has to be done (see above), the `sortingIsRequired()` member is
+  // always set. Because  the constructor is private we cannot use `make_unique`
+  // or `make_shared` and have to resort to an explicit `new` which is then
+  // immediately passed on to a smart pointer. See also
+  // https://abseil.io/tips/126 for details of this usage of `WrapUnique`.
+  auto sort = absl::WrapUnique(new Sort(qec, std::move(qet), sortColumns));
   return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
 }
 
-// ____________________________________________________________________________
-std::array<std::shared_ptr<QueryExecutionTree>, 2>
-QueryExecutionTree::createSortedTrees(
+// _____________________________________________________________________________
+std::array<std::shared_ptr<QueryExecutionTree>, 2> createSortedTrees(
     std::shared_ptr<QueryExecutionTree> qetA,
     std::shared_ptr<QueryExecutionTree> qetB,
     const vector<std::array<size_t, 2>>& sortColumns) {
@@ -285,6 +297,7 @@ QueryExecutionTree::createSortedTrees(
   return {createSortedTree(std::move(qetA), sortColumnsA),
           createSortedTree(std::move(qetB), sortColumnsB)};
 }
+}  // namespace ad_utility
 
 // _____________________________________________________________________________
 const VariableToColumnMap::value_type&
