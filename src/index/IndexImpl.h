@@ -125,14 +125,14 @@ class IndexImpl {
   TextMetaData textMeta_;
   DocsDB docsDB_;
   vector<WordIndex> blockBoundaries_;
-  off_t currentoff_t_;
+  off_t currenttOffset_;
   mutable ad_utility::File textIndexFile_;
 
   // If false, only PSO and POS permutations are loaded and expected.
   bool loadAllPermutations_ = true;
 
   // Pattern trick data
-  bool usePatterns_;
+  bool usePatterns_ = false;
   double avgNumDistinctPredicatesPerSubject_;
   double avgNumDistinctSubjectsPerPredicate_;
   size_t numDistinctSubjectPredicatePairs_;
@@ -162,12 +162,12 @@ class IndexImpl {
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
-  PermutationImpl POS_{"POS", ".pos", {1, 2, 0}};
-  PermutationImpl PSO_{"PSO", ".pso", {1, 0, 2}};
-  PermutationImpl SOP_{"SOP", ".sop", {0, 2, 1}};
-  PermutationImpl SPO_{"SPO", ".spo", {0, 1, 2}};
-  PermutationImpl OPS_{"OPS", ".ops", {2, 1, 0}};
-  PermutationImpl OSP_{"OSP", ".osp", {2, 0, 1}};
+  PermutationImpl pos_{"POS", ".pos", {1, 2, 0}};
+  PermutationImpl pso_{"PSO", ".pso", {1, 0, 2}};
+  PermutationImpl sop_{"SOP", ".sop", {0, 2, 1}};
+  PermutationImpl spo_{"SPO", ".spo", {0, 1, 2}};
+  PermutationImpl ops_{"OPS", ".ops", {2, 1, 0}};
+  PermutationImpl osp_{"OSP", ".osp", {2, 0, 1}};
 
  public:
   IndexImpl();
@@ -180,21 +180,21 @@ class IndexImpl {
   IndexImpl& operator=(IndexImpl&&) = delete;
   IndexImpl(IndexImpl&&) = delete;
 
-  const auto& POS() const { return POS_; }
-  auto& POS() { return POS_; }
-  const auto& PSO() const { return PSO_; }
-  auto& PSO() { return PSO_; }
-  const auto& SPO() const { return SPO_; }
-  auto& SPO() { return SPO_; }
-  const auto& SOP() const { return SOP_; }
-  auto& SOP() { return SOP_; }
-  const auto& OPS() const { return OPS_; }
-  auto& OPS() { return OPS_; }
-  const auto& OSP() const { return OSP_; }
-  auto& OSP() { return OSP_; }
+  const auto& POS() const { return pos_; }
+  auto& POS() { return pos_; }
+  const auto& PSO() const { return pso_; }
+  auto& PSO() { return pso_; }
+  const auto& SPO() const { return spo_; }
+  auto& SPO() { return spo_; }
+  const auto& SOP() const { return sop_; }
+  auto& SOP() { return sop_; }
+  const auto& OPS() const { return ops_; }
+  auto& OPS() { return ops_; }
+  const auto& OSP() const { return osp_; }
+  auto& OSP() { return osp_; }
 
   // For a given `Permutation` (e.g. `PSO`) return the corresponding
-  // `PermutationImpl` object by reference (`PSO_`).
+  // `PermutationImpl` object by reference (`pso_`).
   PermutationImpl& getPermutation(Index::Permutation p);
   const PermutationImpl& getPermutation(Index::Permutation p) const;
 
@@ -258,7 +258,7 @@ class IndexImpl {
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
-  std::optional<string> idToOptionalString(Id id) const;
+  std::optional<string> idToOptionalString(VocabIndex id) const;
 
   // ___________________________________________________________________________
   bool getId(const string& element, Id* id) const;
@@ -315,10 +315,8 @@ class IndexImpl {
                                          const IdTable& filter, size_t nofVars,
                                          size_t limit, IdTable* result) const;
 
-  void getContextEntityScoreListsForWords(const string& words,
-                                          vector<TextRecordIndex>& cids,
-                                          vector<Id>& eids,
-                                          vector<Score>& scores) const;
+  Index::WordEntityPostings getContextEntityScoreListsForWords(
+      const string& words) const;
 
   template <size_t I>
   void getECListForWordsAndSingleSub(const string& words,
@@ -337,12 +335,14 @@ class IndexImpl {
       const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
       size_t limit, vector<vector<Id>>& res) const;
 
-  void getWordPostingsForTerm(const string& term, vector<TextRecordIndex>& cids,
-                              vector<Score>& scores) const;
+  Index::WordEntityPostings getWordPostingsForTerm(const string& term) const;
 
-  void getEntityPostingsForTerm(const string& term,
-                                vector<TextRecordIndex>& cids, vector<Id>& eids,
-                                vector<Score>& scores) const;
+  Index::WordEntityPostings getEntityPostingsForTerm(const string& term) const;
+
+  Index::WordEntityPostings readWordCl(const TextBlockMetaData& tbmd) const;
+
+  Index::WordEntityPostings readWordEntityCl(
+      const TextBlockMetaData& tbmd) const;
 
   string getTextExcerpt(TextRecordIndex cid) const {
     if (cid.get() >= docsDB_._size) {
@@ -386,7 +386,7 @@ class IndexImpl {
 
   const string& getTextName() const { return textMeta_.getName(); }
 
-  const string& getKbName() const { return PSO_.metaData().getName(); }
+  const string& getKbName() const { return pso_.metaData().getName(); }
 
   size_t getNofTextRecords() const { return textMeta_.getNofTextRecords(); }
   size_t getNofWordPostings() const { return textMeta_.getNofWordPostings(); }
@@ -556,14 +556,13 @@ class IndexImpl {
                           const ad_utility::HashMap<WordIndex, Score>& words,
                           const ad_utility::HashMap<Id, Score>& entities);
 
-  template <typename T, typename MakeFromUint64t = std::identity>
-  void readGapComprList(
-      size_t nofElements, off_t from, size_t nofBytes, vector<T>& result,
-      MakeFromUint64t makeFromUint64t = MakeFromUint64t{}) const;
+  template <typename T, typename MakeFromUint64t>
+  vector<T> readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
+                             MakeFromUint64t makeFromUint64t) const;
 
   template <typename T, typename MakeFromUint64t = std::identity>
-  void readFreqComprList(
-      size_t nofElements, off_t from, size_t nofBytes, vector<T>& result,
+  vector<T> readFreqComprList(
+      size_t nofElements, off_t from, size_t nofBytes,
       MakeFromUint64t makeFromUint = MakeFromUint64t{}) const;
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
@@ -629,11 +628,6 @@ class IndexImpl {
 
   bool isLiteral(const string& object) const;
 
-  bool shouldBeExternalized(const string& object);
-  // convert value literals to internal representation
-  // and add externalization characters if necessary.
-  // Returns the language tag of spo[2] (the object) or ""
-  // if there is none.
  public:
   LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple) const;
 

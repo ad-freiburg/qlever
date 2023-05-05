@@ -234,88 +234,95 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
 };
 
 TEST(IndexTest, scanTest) {
-  using enum Index::Permutation;
-  std::string kb =
-      "<a>  <b>  <c>  . \n"
-      "<a>  <b>  <c2> . \n"
-      "<a>  <b2> <c>  . \n"
-      "<a2> <b2> <c2> .   ";
-  {
-    const IndexImpl& index = getQec(kb)->getIndex().getImpl();
+  auto testWithAndWithoutPrefixCompression = [](bool useCompression) {
+    using enum Index::Permutation;
+    std::string kb =
+        "<a>  <b>  <c>  . \n"
+        "<a>  <b>  <c2> . \n"
+        "<a>  <b2> <c>  . \n"
+        "<a2> <b2> <c2> .   ";
+    {
+      const IndexImpl& index =
+          getQec(kb, true, true, useCompression)->getIndex().getImpl();
 
-    IdTable wol(1, makeAllocator());
-    IdTable wtl(2, makeAllocator());
+      IdTable wol(1, makeAllocator());
+      IdTable wtl(2, makeAllocator());
 
-    auto getId = makeGetId(getQec(kb)->getIndex());
-    Id a = getId("<a>");
-    Id c = getId("<c>");
-    Id a2 = getId("<a2>");
-    Id c2 = getId("<c2>");
-    auto testTwo = makeTestScanWidthTwo(index);
+      auto getId = makeGetId(getQec(kb)->getIndex());
+      Id a = getId("<a>");
+      Id c = getId("<c>");
+      Id a2 = getId("<a2>");
+      Id c2 = getId("<c2>");
+      auto testTwo = makeTestScanWidthTwo(index);
 
-    testTwo("<b>", PSO, {{a, c}, {a, c2}});
-    testTwo("<x>", PSO, {});
-    testTwo("<c>", PSO, {});
-    testTwo("<b>", POS, {{c, a}, {c2, a}});
-    testTwo("<x>", POS, {});
-    testTwo("<c>", POS, {});
+      testTwo("<b>", PSO, {{a, c}, {a, c2}});
+      testTwo("<x>", PSO, {});
+      testTwo("<c>", PSO, {});
+      testTwo("<b>", POS, {{c, a}, {c2, a}});
+      testTwo("<x>", POS, {});
+      testTwo("<c>", POS, {});
 
-    auto testOne = makeTestScanWidthOne(index);
+      auto testOne = makeTestScanWidthOne(index);
 
-    testOne("<b>", "<a>", PSO, {{c}, {c2}});
-    testOne("<b>", "<c>", PSO, {});
-    testOne("<b2>", "<c2>", POS, {{a2}});
-    testOne("<notExisting>", "<a>", PSO, {});
-  }
-  kb = "<a> <is-a> <1> . \n"
-       "<a> <is-a> <2> . \n"
-       "<a> <is-a> <0> . \n"
-       "<b> <is-a> <3> . \n"
-       "<b> <is-a> <0> . \n"
-       "<c> <is-a> <1> . \n"
-       "<c> <is-a> <2> . \n";
+      testOne("<b>", "<a>", PSO, {{c}, {c2}});
+      testOne("<b>", "<c>", PSO, {});
+      testOne("<b2>", "<c2>", POS, {{a2}});
+      testOne("<notExisting>", "<a>", PSO, {});
+    }
+    kb = "<a> <is-a> <1> . \n"
+         "<a> <is-a> <2> . \n"
+         "<a> <is-a> <0> . \n"
+         "<b> <is-a> <3> . \n"
+         "<b> <is-a> <0> . \n"
+         "<c> <is-a> <1> . \n"
+         "<c> <is-a> <2> . \n";
 
-  {
-    const IndexImpl& index =
-        ad_utility::testing::getQec(kb)->getIndex().getImpl();
+    {
+      const IndexImpl& index =
+          ad_utility::testing::getQec(kb, true, true, useCompression)
+              ->getIndex()
+              .getImpl();
 
-    auto getId = makeGetId(ad_utility::testing::getQec(kb)->getIndex());
-    Id a = getId("<a>");
-    Id b = getId("<b>");
-    Id c = getId("<c>");
-    Id zero = getId("<0>");
-    Id one = getId("<1>");
-    Id two = getId("<2>");
-    Id three = getId("<3>");
+      auto getId = makeGetId(ad_utility::testing::getQec(kb)->getIndex());
+      Id a = getId("<a>");
+      Id b = getId("<b>");
+      Id c = getId("<c>");
+      Id zero = getId("<0>");
+      Id one = getId("<1>");
+      Id two = getId("<2>");
+      Id three = getId("<3>");
 
-    auto testTwo = makeTestScanWidthTwo(index);
-    testTwo("<is-a>", PSO,
-            {{{a, zero},
-              {a, one},
-              {a, two},
-              {b, zero},
-              {b, three},
-              {c, one},
-              {c, two}}});
-    testTwo("<is-a>", POS,
-            {{zero, a},
-             {zero, b},
-             {one, a},
-             {one, c},
-             {two, a},
-             {two, c},
-             {three, b}});
+      auto testTwo = makeTestScanWidthTwo(index);
+      testTwo("<is-a>", PSO,
+              {{{a, zero},
+                {a, one},
+                {a, two},
+                {b, zero},
+                {b, three},
+                {c, one},
+                {c, two}}});
+      testTwo("<is-a>", POS,
+              {{zero, a},
+               {zero, b},
+               {one, a},
+               {one, c},
+               {two, a},
+               {two, c},
+               {three, b}});
 
-    auto testWidthOne = makeTestScanWidthOne(index);
+      auto testWidthOne = makeTestScanWidthOne(index);
 
-    testWidthOne("<is-a>", "<0>", POS, {{a}, {b}});
-    testWidthOne("<is-a>", "<1>", POS, {{a}, {c}});
-    testWidthOne("<is-a>", "<2>", POS, {{a}, {c}});
-    testWidthOne("<is-a>", "<3>", POS, {{b}});
-    testWidthOne("<is-a>", "<a>", PSO, {{zero}, {one}, {two}});
-    testWidthOne("<is-a>", "<b>", PSO, {{zero}, {three}});
-    testWidthOne("<is-a>", "<c>", PSO, {{one}, {two}});
-  }
+      testWidthOne("<is-a>", "<0>", POS, {{a}, {b}});
+      testWidthOne("<is-a>", "<1>", POS, {{a}, {c}});
+      testWidthOne("<is-a>", "<2>", POS, {{a}, {c}});
+      testWidthOne("<is-a>", "<3>", POS, {{b}});
+      testWidthOne("<is-a>", "<a>", PSO, {{zero}, {one}, {two}});
+      testWidthOne("<is-a>", "<b>", PSO, {{zero}, {three}});
+      testWidthOne("<is-a>", "<c>", PSO, {{one}, {two}});
+    }
+  };
+  testWithAndWithoutPrefixCompression(true);
+  testWithAndWithoutPrefixCompression(false);
 };
 
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
@@ -462,7 +469,12 @@ TEST(IndexTest, getIgnoredIdRanges) {
 }
 
 TEST(IndexTest, NumDistinctEntities) {
-  const IndexImpl& index = getQec()->getIndex().getImpl();
+  std::string turtleInput =
+      "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
+      "<x> "
+      "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
+      "\"zz\"@en";
+  const IndexImpl& index = getQec(turtleInput)->getIndex().getImpl();
   // Note: Those numbers might change as the triples of the test index in
   // `IndexTestHelpers.cpp` change.
   // TODO<joka921> Also check the number of triples and the number of
@@ -494,6 +506,15 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_EQ(numTriples.normal_, 7);
   // Two added triples for each triple that has an object with a language tag.
   EXPECT_EQ(numTriples.internal_, 2);
+
+  auto multiplicities = index.getMultiplicities(Index::Permutation::SPO);
+  EXPECT_FLOAT_EQ(multiplicities[0], 9.0 / 4.0);
+  EXPECT_FLOAT_EQ(multiplicities[1], 9.0 / 4.0);
+  EXPECT_FLOAT_EQ(multiplicities[2], 9.0 / 8.0);
+
+  multiplicities = index.getMultiplicities("<x>", Index::Permutation::SPO);
+  EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
+  EXPECT_FLOAT_EQ(multiplicities[1], 1);
 }
 
 TEST(IndexTest, NumDistinctEntitiesCornerCases) {
@@ -505,4 +526,24 @@ TEST(IndexTest, NumDistinctEntitiesCornerCases) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       index.numDistinctCol0(static_cast<Index::Permutation>(42)),
       ::testing::ContainsRegex("should be unreachable"));
+
+  const IndexImpl& indexNoPatterns =
+      getQec("", true, false)->getIndex().getImpl();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      indexNoPatterns.getAvgNumDistinctPredicatesPerSubject(),
+      ::testing::ContainsRegex("requires a loaded patterns file"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      indexNoPatterns.getAvgNumDistinctSubjectsPerPredicate(),
+      ::testing::ContainsRegex("requires a loaded patterns file"));
+}
+
+TEST(IndexTest, getPermutation) {
+  using enum Index::Permutation;
+  const IndexImpl& index = getQec()->getIndex().getImpl();
+  EXPECT_EQ(&index.PSO(), &index.getPermutation(PSO));
+  EXPECT_EQ(&index.POS(), &index.getPermutation(POS));
+  EXPECT_EQ(&index.SOP(), &index.getPermutation(SOP));
+  EXPECT_EQ(&index.SPO(), &index.getPermutation(SPO));
+  EXPECT_EQ(&index.OPS(), &index.getPermutation(OPS));
+  EXPECT_EQ(&index.OSP(), &index.getPermutation(OSP));
 }

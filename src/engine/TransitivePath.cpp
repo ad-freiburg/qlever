@@ -7,6 +7,7 @@
 #include <limits>
 
 #include "engine/CallFixedSize.h"
+#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "util/Exception.h"
 
@@ -75,13 +76,20 @@ std::string TransitivePath::getDescriptor() const {
   if (_minDist > 1 || _maxDist < std::numeric_limits<size_t>::max()) {
     os << "[" << _minDist << ", " << _maxDist << "] ";
   }
+  auto getName = [this](ValueId id) {
+    auto optStringAndType =
+        ExportQueryExecutionTrees::idToStringAndType(getIndex(), id, {});
+    if (optStringAndType.has_value()) {
+      return optStringAndType.value().first;
+    } else {
+      return absl::StrCat("#", id.getBits());
+    }
+  };
   // Left variable or entity name.
   if (_leftIsVar) {
     os << _leftColName;
   } else {
-    os << getIndex()
-              .idToOptionalString(_leftValue)
-              .value_or("#" + std::to_string(_leftValue.getBits()));
+    os << getName(_leftValue);
   }
   // The predicate.
   auto scanOperation =
@@ -90,15 +98,13 @@ std::string TransitivePath::getDescriptor() const {
     os << " " << scanOperation->getPredicate() << " ";
   } else {
     // Escaped the question marks to avoid a warning about ignored trigraphs.
-    os << " <\?\?\?> ";
+    os << R"( <???> )";
   }
   // Right variable or entity name.
   if (_rightIsVar) {
     os << _rightColName;
   } else {
-    os << getIndex()
-              .idToOptionalString(_rightValue)
-              .value_or("#" + std::to_string(_rightValue.getBits()));
+    os << getName(_rightValue);
   }
   return std::move(os).str();
 }
