@@ -130,8 +130,8 @@ class Vocabulary {
   //! Get the word with the given idx or an empty optional if the
   //! word is not in the vocabulary. Returns an lvalue because compressed or
   //! externalized words don't allow references
-  template <typename U = StringType, typename = enable_if_compressed<U>>
-  [[nodiscard]] const std::optional<string> indexToOptionalString(
+  template <typename U = StringType>
+  [[nodiscard]] std::optional<string> indexToOptionalString(
       VocabIndex idx) const;
 
   //! Get the word with the given idx.
@@ -306,3 +306,19 @@ class Vocabulary {
 
 using RdfsVocabulary = Vocabulary<CompressedString, TripleComponentComparator>;
 using TextVocabulary = Vocabulary<std::string, SimpleStringComparator>;
+using TextVocabulary = Vocabulary<std::string, SimpleStringComparator>;
+
+// _______________________________________________________________
+template <typename S, typename C>
+template <typename>
+std::optional<string> Vocabulary<S, C>::indexToOptionalString(
+    VocabIndex idx) const {
+  if (idx.get() < _internalVocabulary.size()) {
+    return std::optional<string>(_internalVocabulary[idx.get()]);
+  } else {
+    // this word must be externalized
+    idx.get() -= _internalVocabulary.size();
+    AD_CONTRACT_CHECK(idx.get() < _externalVocabulary.size());
+    return _externalVocabulary[idx.get()];
+  }
+}

@@ -412,10 +412,8 @@ class IndexImpl {
                                          const IdTable& filter, size_t nofVars,
                                          size_t limit, IdTable* result) const;
 
-  void getContextEntityScoreListsForWords(const string& words,
-                                          vector<TextRecordIndex>& cids,
-                                          vector<Id>& eids,
-                                          vector<Score>& scores) const;
+  Index::WordEntityPostings getContextEntityScoreListsForWords(
+      const string& words) const;
 
   template <size_t I>
   void getECListForWordsAndSingleSub(const string& words,
@@ -434,12 +432,14 @@ class IndexImpl {
       const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
       size_t limit, vector<vector<Id>>& res) const;
 
-  void getWordPostingsForTerm(const string& term, vector<TextRecordIndex>& cids,
-                              vector<Score>& scores) const;
+  Index::WordEntityPostings getWordPostingsForTerm(const string& term) const;
 
-  void getEntityPostingsForTerm(const string& term,
-                                vector<TextRecordIndex>& cids, vector<Id>& eids,
-                                vector<Score>& scores) const;
+  Index::WordEntityPostings getEntityPostingsForTerm(const string& term) const;
+
+  Index::WordEntityPostings readWordCl(const TextBlockMetaData& tbmd) const;
+
+  Index::WordEntityPostings readWordEntityCl(
+      const TextBlockMetaData& tbmd) const;
 
   string getTextExcerpt(TextRecordIndex cid) const {
     if (cid.get() >= _docsDB._size) {
@@ -754,14 +754,13 @@ class IndexImpl {
                           const ad_utility::HashMap<WordIndex, Score>& words,
                           const ad_utility::HashMap<Id, Score>& entities);
 
-  template <typename T, typename MakeFromUint64t = std::identity>
-  void readGapComprList(
-      size_t nofElements, off_t from, size_t nofBytes, vector<T>& result,
-      MakeFromUint64t makeFromUint64t = MakeFromUint64t{}) const;
+  template <typename T, typename MakeFromUint64t>
+  vector<T> readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
+                             MakeFromUint64t makeFromUint64t) const;
 
   template <typename T, typename MakeFromUint64t = std::identity>
-  void readFreqComprList(
-      size_t nofElements, off_t from, size_t nofBytes, vector<T>& result,
+  vector<T> readFreqComprList(
+      size_t nofElements, off_t from, size_t nofBytes,
       MakeFromUint64t makeFromUint = MakeFromUint64t{}) const;
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
