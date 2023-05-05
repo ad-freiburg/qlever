@@ -16,6 +16,7 @@
 #include <string_view>
 #include <tuple>
 #include <type_traits>
+#include <valarray>
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
@@ -783,8 +784,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                                        "smallerTableAmountRows",
                                        static_cast<size_t>(1000));
 
+    constexpr size_t minBiggerTableRowsDefault = 100000;
     setToValueInConfigurationOrDefault(
-        minBiggerTableRows_, "minBiggerTableRows", static_cast<size_t>(100000));
+        minBiggerTableRows_, "minBiggerTableRows", minBiggerTableRowsDefault);
     setToValueInConfigurationOrDefault(maxBiggerTableRows_,
                                        "maxBiggerTableRows",
                                        static_cast<size_t>(10000000));
@@ -816,16 +818,15 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         config.getValueByNestedKeys<size_t>("maxMemoryInMB");
     maxMemoryInMBWasGiven_ = maxMemoryInMB.has_value();
 
-    if (maxMemoryInMBWasGiven_) {
-      /*
-      The overhead can be, more or less, ignored. We are just concerned over
-      the space needed for the entries.
-      */
-      constexpr size_t memoryPerIdTableEntryInByte =
-          sizeof(IdTable::value_type);
-      const size_t memoryPerRowInByte =
-          memoryPerIdTableEntryInByte * biggerTableAmountColumns_;
+    /*
+    The overhead can be, more or less, ignored. We are just concerned over
+    the space needed for the entries.
+    */
+    constexpr size_t memoryPerIdTableEntryInByte = sizeof(IdTable::value_type);
+    const size_t memoryPerRowInByte =
+        memoryPerIdTableEntryInByte * biggerTableAmountColumns_;
 
+    if (maxMemoryInMBWasGiven_) {
       // Does a single row take more memory, than is allowed?
       if (maxMemoryInMB.value() * 1000000 < memoryPerRowInByte) {
         throw ad_utility::Exception(absl::StrCat(
@@ -840,6 +841,92 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 
     maxTimeSingleMeasurement_ =
         config.getValueByNestedKeys<float>("maxTimeSingleMeasurement");
+
+    // Checking, if all the given values are valid.
+
+    // Default way of checking, if a value is bigger than a constant.
+    auto checkAtLeast = []<typename T>(std::string_view valueToCheckName,
+                                       const T& valueToCheck,
+                                       const T& minimumValue, bool canBeEqual) {
+      if ((!canBeEqual && valueToCheck <= minimumValue) ||
+          valueToCheck < minimumValue) {
+        throw ad_utility::Exception(absl::StrCat(
+            "Configuration option '", valueToCheckName, "', set to ",
+            valueToCheck, ", needs to be",
+            (canBeEqual) ? " at least " : " bigger ", minimumValue, "."));
+      }
+    };
+
+    // Default way of checking, if a value is smaller than a different value.
+    auto checkSmallerThan =
+        []<typename T>(std::string_view smallerValueName, const T& smallerValue,
+                       std::string_view biggerValueName, const T& biggerValue,
+                       bool canBeEqual) {
+          if ((!canBeEqual && biggerValue <= smallerValue) ||
+              biggerValue < smallerValue) {
+            throw ad_utility::Exception(absl::StrCat(
+                "Configuration option '", smallerValueName, "', set to ",
+                smallerValue, " , must be smaller than",
+                (canBeEqual) ? ", or equal to," : "", " '", biggerValueName,
+                "', set to ", biggerValue, "."));
+          }
+        };
+
+    // Is `smallerTableAmountRows_` a valid value?
+    checkAtLeast("smallerTableAmountRows_", smallerTableAmountRows_,
+                 static_cast<size_t>(1), true);
+
+    // Is `smallerTableAmountRows_` smaller than `minBiggerTableRows_`?
+    checkSmallerThan("smallerTableAmountRows", smallerTableAmountRows_,
+                     "minBiggerTableRows", minBiggerTableRows_, true);
+
+    // Is `minBiggerTableRows_` big enough, to deliver interesting measurements?
+    if (minBiggerTableRows_ < minBiggerTableRowsDefault) {
+      throw ad_utility::Exception(absl::StrCat(
+          "The configuration option '`minBiggerTableRows_`' with ",
+          minBiggerTableRows_,
+          " rows, is to small. Interessting measurement values only start to "
+          "turn up at ",
+          minBiggerTableRowsDefault, " rows, or more."));
+    }
+
+    // Is `minBiggerTableRows_` smaller, or equal, to `maxBiggerTableRows_`?
+    if (minBiggerTableRows_ > maxBiggerTableRows_) {
+      // What's the reason, that it's smaller?
+      if (maxMemoryInMBWasGiven_) {
+        throw ad_utility::Exception(absl::StrCat(
+            "The configuration option 'maxMemoryInMB' with ",
+            maxMemoryInMB.value(),
+            " MB doesn't allow enough memory, to create a table "
+            "with at least ",
+            minBiggerTableRows_,
+            " ('minBiggerTableRows') rows. It needs at least ",
+            static_cast<size_t>(std::ceil(
+                static_cast<double>(minBiggerTableRows_ * memoryPerRowInByte) /
+                1000000.0)),
+            " MB."));
+      } else {
+        checkSmallerThan("minBiggerTableRows", minBiggerTableRows_,
+                         "maxBiggerTableRows", maxBiggerTableRows_, true);
+      }
+    }
+
+    // Do we have at least 1 column?
+    checkAtLeast("smallerTableAmountColumns", smallerTableAmountColumns_,
+                 static_cast<size_t>(1), true);
+    checkAtLeast("biggerTableAmountColumns", biggerTableAmountColumns_,
+                 static_cast<size_t>(1), true);
+
+    // Is `overlapChance_` bigger than 0?
+    checkAtLeast("overlapChance", overlapChance_, static_cast<float>(0), false);
+
+    // Is the ratio of rows at least 1?
+    checkAtLeast("ratioRows", ratioRows_, static_cast<size_t>(1), true);
+    checkAtLeast("minRatioRows", minRatioRows_, static_cast<size_t>(1), true);
+
+    // Is `minRatioRows` smaller than `maxRatioRows`?
+    checkSmallerThan("minRatioRows", minRatioRows_, "maxRatioRows",
+                     maxRatioRows_, true);
   }
 
   /*
