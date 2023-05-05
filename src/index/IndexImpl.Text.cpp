@@ -758,7 +758,7 @@ size_t IndexImpl::writeCodebook(const vector<T>& codebook,
 // _____________________________________________________________________________
 void IndexImpl::openTextFileHandle() {
   AD_CONTRACT_CHECK(!onDiskBase_.empty());
-  _textIndexFile.open(string(onDiskBase_ + ".text.index").c_str(), "r");
+  textIndexFile_.open(string(onDiskBase_ + ".text.index").c_str(), "r");
 }
 
 // _____________________________________________________________________________
