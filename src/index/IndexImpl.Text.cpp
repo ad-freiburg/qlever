@@ -342,7 +342,7 @@ void IndexImpl::addContextToVector(
 void IndexImpl::createTextIndex(const string& filename,
                                 const IndexImpl::TextVec& vec) {
   ad_utility::File out(filename.c_str(), "w");
-  currentoff_t_ = 0;
+  currenttOffset_ = 0;
   // Detect block boundaries from the main key of the vec.
   // Write the data for each block.
   // First, there's the classic lists, then the additional entity ones.
@@ -425,10 +425,10 @@ ContextListMetaData IndexImpl::writePostings(ad_utility::File& out,
   ContextListMetaData meta;
   meta._nofElements = postings.size();
   if (meta._nofElements == 0) {
-    meta._startContextlist = currentoff_t_;
-    meta._startWordlist = currentoff_t_;
-    meta._startScorelist = currentoff_t_;
-    meta._lastByte = currentoff_t_ - 1;
+    meta._startContextlist = currenttOffset_;
+    meta._startWordlist = currenttOffset_;
+    meta._startScorelist = currenttOffset_;
+    meta._lastByte = currenttOffset_ - 1;
     return meta;
   }
 
@@ -471,28 +471,28 @@ ContextListMetaData IndexImpl::writePostings(ad_utility::File& out,
   size_t bytes = 0;
 
   // Write context list:
-  meta._startContextlist = currentoff_t_;
+  meta._startContextlist = currenttOffset_;
   bytes = writeList(contextList, meta._nofElements, out);
-  currentoff_t_ += bytes;
+  currenttOffset_ += bytes;
 
   // Write word list:
   // This can be skipped if we're writing classic lists and there
   // is only one distinct wordId in the block, since this Id is already
   // stored in the meta data.
-  meta._startWordlist = currentoff_t_;
+  meta._startWordlist = currenttOffset_;
   if (!skipWordlistIfAllTheSame || wordCodebook.size() > 1) {
-    currentoff_t_ += writeCodebook(wordCodebook, out);
+    currenttOffset_ += writeCodebook(wordCodebook, out);
     bytes = writeList(wordList, meta._nofElements, out);
-    currentoff_t_ += bytes;
+    currenttOffset_ += bytes;
   }
 
   // Write scores
-  meta._startScorelist = currentoff_t_;
-  currentoff_t_ += writeCodebook(scoreCodebook, out);
+  meta._startScorelist = currenttOffset_;
+  currenttOffset_ += writeCodebook(scoreCodebook, out);
   bytes = writeList(scoreList, meta._nofElements, out);
-  currentoff_t_ += bytes;
+  currenttOffset_ += bytes;
 
-  meta._lastByte = currentoff_t_ - 1;
+  meta._lastByte = currenttOffset_ - 1;
 
   delete[] contextList;
   delete[] wordList;

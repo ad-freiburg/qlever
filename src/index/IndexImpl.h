@@ -125,14 +125,14 @@ class IndexImpl {
   TextMetaData textMeta_;
   DocsDB docsDB_;
   vector<WordIndex> blockBoundaries_;
-  off_t currentoff_t_;
+  off_t currenttOffset_;
   mutable ad_utility::File textIndexFile_;
 
   // If false, only PSO and POS permutations are loaded and expected.
   bool loadAllPermutations_ = true;
 
   // Pattern trick data
-  bool usePatterns_;
+  bool usePatterns_ = false;
   double avgNumDistinctPredicatesPerSubject_;
   double avgNumDistinctSubjectsPerPredicate_;
   size_t numDistinctSubjectPredicatePairs_;
@@ -162,12 +162,12 @@ class IndexImpl {
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
-  PermutationImpl POS_{"POS", ".pos", {1, 2, 0}};
-  PermutationImpl PSO_{"PSO", ".pso", {1, 0, 2}};
-  PermutationImpl SOP_{"SOP", ".sop", {0, 2, 1}};
-  PermutationImpl SPO_{"SPO", ".spo", {0, 1, 2}};
-  PermutationImpl OPS_{"OPS", ".ops", {2, 1, 0}};
-  PermutationImpl OSP_{"OSP", ".osp", {2, 0, 1}};
+  PermutationImpl pos_{"POS", ".pos", {1, 2, 0}};
+  PermutationImpl pso_{"PSO", ".pso", {1, 0, 2}};
+  PermutationImpl sop_{"SOP", ".sop", {0, 2, 1}};
+  PermutationImpl spo_{"SPO", ".spo", {0, 1, 2}};
+  PermutationImpl ops_{"OPS", ".ops", {2, 1, 0}};
+  PermutationImpl osp_{"OSP", ".osp", {2, 0, 1}};
 
  public:
   IndexImpl();
@@ -180,21 +180,21 @@ class IndexImpl {
   IndexImpl& operator=(IndexImpl&&) = delete;
   IndexImpl(IndexImpl&&) = delete;
 
-  const auto& POS() const { return POS_; }
-  auto& POS() { return POS_; }
-  const auto& PSO() const { return PSO_; }
-  auto& PSO() { return PSO_; }
-  const auto& SPO() const { return SPO_; }
-  auto& SPO() { return SPO_; }
-  const auto& SOP() const { return SOP_; }
-  auto& SOP() { return SOP_; }
-  const auto& OPS() const { return OPS_; }
-  auto& OPS() { return OPS_; }
-  const auto& OSP() const { return OSP_; }
-  auto& OSP() { return OSP_; }
+  const auto& POS() const { return pos_; }
+  auto& POS() { return pos_; }
+  const auto& PSO() const { return pso_; }
+  auto& PSO() { return pso_; }
+  const auto& SPO() const { return spo_; }
+  auto& SPO() { return spo_; }
+  const auto& SOP() const { return sop_; }
+  auto& SOP() { return sop_; }
+  const auto& OPS() const { return ops_; }
+  auto& OPS() { return ops_; }
+  const auto& OSP() const { return osp_; }
+  auto& OSP() { return osp_; }
 
   // For a given `Permutation` (e.g. `PSO`) return the corresponding
-  // `PermutationImpl` object by reference (`PSO_`).
+  // `PermutationImpl` object by reference (`pso_`).
   PermutationImpl& getPermutation(Index::Permutation p);
   const PermutationImpl& getPermutation(Index::Permutation p) const;
 
@@ -386,7 +386,7 @@ class IndexImpl {
 
   const string& getTextName() const { return textMeta_.getName(); }
 
-  const string& getKbName() const { return PSO_.metaData().getName(); }
+  const string& getKbName() const { return pso_.metaData().getName(); }
 
   size_t getNofTextRecords() const { return textMeta_.getNofTextRecords(); }
   size_t getNofWordPostings() const { return textMeta_.getNofWordPostings(); }

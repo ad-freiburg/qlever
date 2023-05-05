@@ -30,7 +30,7 @@
 using std::array;
 
 // _____________________________________________________________________________
-IndexImpl::IndexImpl() : usePatterns_(false) {}
+IndexImpl::IndexImpl() = default;
 
 // _____________________________________________________________________________
 template <class Parser>
@@ -172,7 +172,7 @@ void IndexImpl::createFromFile(const string& filename) {
 
   size_t numPredicatesNormal = 0;
   createPermutationPair(
-      std::move(uniqueSorter), PSO_, POS_, spoSorter.makePushCallback(),
+      std::move(uniqueSorter), pso_, pos_, spoSorter.makePushCallback(),
       makeNumEntitiesCounter(numPredicatesNormal, 1), countActualTriples);
   configurationJson_["num-predicates-normal"] = numPredicatesNormal;
   configurationJson_["num-triples-normal"] = numTriplesNormal;
@@ -192,12 +192,12 @@ void IndexImpl::createFromFile(const string& filename) {
           patternCreator.processTriple(triple);
         }
       };
-      createPermutationPair(spoSorter.sortedView(), SPO_, SOP_,
+      createPermutationPair(spoSorter.sortedView(), spo_, sop_,
                             ospSorter.makePushCallback(), pushTripleToPatterns,
                             numSubjectCounter);
       patternCreator.finish();
     } else {
-      createPermutationPair(spoSorter.sortedView(), SPO_, SOP_,
+      createPermutationPair(spoSorter.sortedView(), spo_, sop_,
                             ospSorter.makePushCallback(), numSubjectCounter);
     }
     spoSorter.clear();
@@ -207,7 +207,7 @@ void IndexImpl::createFromFile(const string& filename) {
     // For the last pair of permutations we don't need a next sorter, so we have
     // no fourth argument.
     size_t numObjectsNormal = 0;
-    createPermutationPair(ospSorter.sortedView(), OSP_, OPS_,
+    createPermutationPair(ospSorter.sortedView(), osp_, ops_,
                           makeNumEntitiesCounter(numObjectsNormal, 2));
     configurationJson_["num-objects-normal"] = numObjectsNormal;
     configurationJson_["has-all-permutations"] = true;
@@ -414,13 +414,10 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 
   LOG(INFO) << "Removing temporary files ..." << std::endl;
   for (size_t n = 0; n < numFiles; ++n) {
-    string partialFilename =
-        onDiskBase_ + PARTIAL_VOCAB_FILE_NAME + std::to_string(n);
-    deleteTemporaryFile(partialFilename);
+    deleteTemporaryFile(absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, n));
     if (vocabPrefixCompressed_) {
-      partialFilename = onDiskBase_ + TMP_BASENAME_COMPRESSION +
-                        PARTIAL_VOCAB_FILE_NAME + std::to_string(n);
-      deleteTemporaryFile(partialFilename);
+      deleteTemporaryFile(absl::StrCat(onDiskBase_, TMP_BASENAME_COMPRESSION,
+                                       PARTIAL_VOCAB_FILE_NAME, n));
     }
   }
 
@@ -443,8 +440,8 @@ std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
   size_t i = 0;
   for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();
        partialNum++) {
-    std::string mmapFilename(onDiskBase_ + PARTIAL_MMAP_IDS +
-                             std::to_string(partialNum));
+    std::string mmapFilename =
+        absl::StrCat(onDiskBase_, PARTIAL_MMAP_IDS, partialNum);
     LOG(DEBUG) << "Reading ID map from: " << mmapFilename << std::endl;
     ad_utility::HashMap<Id, Id> idMap = IdMapFromPartialIdMapFile(mmapFilename);
     // Delete the temporary file in which we stored this map
@@ -611,8 +608,8 @@ void IndexImpl::createPermutationPair(auto&& sortedTriples,
   auto metaData = createPermutations(AD_FWD(sortedTriples), p1, p2,
                                      AD_FWD(perTripleCallbacks)...);
   // Set the name of this newly created pair of `IndexMetaData` objects.
-  // NOTE: When `setKbName` was called, it set the name of PSO_._meta,
-  // PSO_._meta, ... which however are not used during index building.
+  // NOTE: When `setKbName` was called, it set the name of pso_._meta,
+  // pso_._meta, ... which however are not used during index building.
   // `getKbName` simple reads one of these names.
   metaData.value().first.setName(getKbName());
   metaData.value().second.setName(getKbName());
@@ -637,7 +634,7 @@ void IndexImpl::addPatternsToExistingIndex() {
   ad_utility::AllocatorWithLimit<Id> allocator{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
           std::numeric_limits<uint64_t>::max())};
-  auto iterator = TriplesView(SPO_, allocator);
+  auto iterator = TriplesView(spo_, allocator);
   createPatternsFromSpoTriplesView(iterator, onDiskBase_ + ".index.patterns",
                                    Id::makeFromVocabIndex(langPredLowerBound),
                                    Id::makeFromVocabIndex(langPredUpperBound));
@@ -655,14 +652,14 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   totalVocabularySize_ = vocab_.size() + vocab_.getExternalVocab().size();
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << totalVocabularySize_ << std::endl;
-  PSO_.loadFromDisk(onDiskBase_);
-  POS_.loadFromDisk(onDiskBase_);
+  pso_.loadFromDisk(onDiskBase_);
+  pos_.loadFromDisk(onDiskBase_);
 
   if (loadAllPermutations_) {
-    OPS_.loadFromDisk(onDiskBase_);
-    OSP_.loadFromDisk(onDiskBase_);
-    SPO_.loadFromDisk(onDiskBase_);
-    SOP_.loadFromDisk(onDiskBase_);
+    ops_.loadFromDisk(onDiskBase_);
+    osp_.loadFromDisk(onDiskBase_);
+    spo_.loadFromDisk(onDiskBase_);
+    sop_.loadFromDisk(onDiskBase_);
   } else {
     LOG(INFO) << "Only the PSO and POS permutation were loaded, SPARQL queries "
                  "with predicate variables will therefore not work"
@@ -751,12 +748,12 @@ bool IndexImpl::shouldBeExternalized(const string& object) {
 
 // _____________________________________________________________________________
 void IndexImpl::setKbName(const string& name) {
-  POS_.setKbName(name);
-  PSO_.setKbName(name);
-  SOP_.setKbName(name);
-  SPO_.setKbName(name);
-  OPS_.setKbName(name);
-  OSP_.setKbName(name);
+  pos_.setKbName(name);
+  pso_.setKbName(name);
+  sop_.setKbName(name);
+  spo_.setKbName(name);
+  ops_.setKbName(name);
+  osp_.setKbName(name);
 }
 
 // ____________________________________________________________________________
@@ -1068,10 +1065,9 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       << actualCurrentPartialSize << std::endl;
   std::future<void> resultFuture;
   string partialFilename =
-      onDiskBase_ + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
-  string partialCompressionFilename = onDiskBase_ + TMP_BASENAME_COMPRESSION +
-                                      PARTIAL_VOCAB_FILE_NAME +
-                                      std::to_string(numFiles);
+      absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, numFiles);
+  string partialCompressionFilename = absl::StrCat(
+      onDiskBase_, TMP_BASENAME_COMPRESSION, PARTIAL_VOCAB_FILE_NAME, numFiles);
 
   auto lambda = [localIds = std::move(localIds), globalWritePtr,
                  items = std::move(items), vocab = &vocab_, partialFilename,
@@ -1140,17 +1136,17 @@ IndexImpl::PermutationImpl& IndexImpl::getPermutation(Index::Permutation p) {
   using enum Index::Permutation;
   switch (p) {
     case PSO:
-      return PSO_;
+      return pso_;
     case POS:
-      return POS_;
+      return pos_;
     case SPO:
-      return SPO_;
+      return spo_;
     case SOP:
-      return SOP_;
+      return sop_;
     case OSP:
-      return OSP_;
+      return osp_;
     case OPS:
-      return OPS_;
+      return ops_;
   }
   AD_FAIL();
 }
@@ -1165,7 +1161,7 @@ const IndexImpl::PermutationImpl& IndexImpl::getPermutation(
 Index::NumNormalAndInternal IndexImpl::numDistinctSubjects() const {
   if (hasAllPermutations()) {
     auto numActually = numSubjectsNormal_;
-    return {numActually, SPO_.metaData().getNofDistinctC1() - numActually};
+    return {numActually, spo_.metaData().getNofDistinctC1() - numActually};
   } else {
     AD_THROW(
         "Can only get # distinct subjects if all 6 permutations "
@@ -1178,7 +1174,7 @@ Index::NumNormalAndInternal IndexImpl::numDistinctSubjects() const {
 Index::NumNormalAndInternal IndexImpl::numDistinctObjects() const {
   if (hasAllPermutations()) {
     auto numActually = numObjectsNormal_;
-    return {numActually, OSP_.metaData().getNofDistinctC1() - numActually};
+    return {numActually, osp_.metaData().getNofDistinctC1() - numActually};
   } else {
     AD_THROW(
         "Can only get # distinct objects if all 6 permutations "
@@ -1190,7 +1186,7 @@ Index::NumNormalAndInternal IndexImpl::numDistinctObjects() const {
 // __________________________________________________________________________
 Index::NumNormalAndInternal IndexImpl::numDistinctPredicates() const {
   auto numActually = numPredicatesNormal_;
-  return {numActually, PSO_.metaData().getNofDistinctC1() - numActually};
+  return {numActually, pso_.metaData().getNofDistinctC1() - numActually};
 }
 
 // __________________________________________________________________________
