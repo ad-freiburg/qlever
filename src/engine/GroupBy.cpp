@@ -527,7 +527,7 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
 }
 
 // _____________________________________________________________________________
-std::optional<PermutationEnum> GroupBy::getPermutationForThreeVariableTriple(
+std::optional<Permutation::Enum> GroupBy::getPermutationForThreeVariableTriple(
     const QueryExecutionTree& tree, const Variable& variableByWhichToSort,
     const Variable& variableThatMustBeContained) {
   auto indexScan =
@@ -545,11 +545,11 @@ std::optional<PermutationEnum> GroupBy::getPermutationForThreeVariableTriple(
   }
 
   if (variableByWhichToSort == indexScan->getSubject()) {
-    return PermutationEnum::SPO;
+    return Permutation::Enum::SPO;
   } else if (variableByWhichToSort.name() == indexScan->getPredicate()) {
-    return PermutationEnum::POS;
+    return Permutation::Enum::POS;
   } else if (variableByWhichToSort == indexScan->getObject()) {
-    return PermutationEnum::OSP;
+    return Permutation::Enum::OSP;
   } else {
     return std::nullopt;
   }

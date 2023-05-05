@@ -8,7 +8,6 @@
 
 #include "global/Constants.h"
 #include "index/IndexMetaData.h"
-#include "index/StxxlSortFunctors.h"
 #include "util/File.h"
 #include "util/Log.h"
 
@@ -17,6 +16,16 @@
 // STXXL.
 class Permutation {
  public:
+  /// Identifiers for the six possible permutations.
+  enum struct Enum { PSO, POS, SPO, SOP, OPS, OSP };
+  // Unfortunately there is a bug in GCC that doesn't allow use to simply use
+  // `using enum`.
+  static constexpr auto PSO = Enum::PSO;
+  static constexpr auto POS = Enum::POS;
+  static constexpr auto SPO = Enum::SPO;
+  static constexpr auto SOP = Enum::SOP;
+  static constexpr auto OPS = Enum::OPS;
+  static constexpr auto OSP = Enum::OSP;
   using MetaData = IndexMetaDataMmapView;
   Permutation(string name, string suffix, array<unsigned short, 3> order)
       : _readableName(std::move(name)),

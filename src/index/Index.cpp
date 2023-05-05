@@ -69,12 +69,12 @@ auto Index::getTextVocab() const -> const TextVocab& {
 
 // _____________________________________________________________________________
 size_t Index::getCardinality(const TripleComponent& comp,
-                             PermutationEnum p) const {
+                             Permutation::Enum p) const {
   return pimpl_->getCardinality(comp, p);
 }
 
 // _____________________________________________________________________________
-size_t Index::getCardinality(Id id, PermutationEnum p) const {
+size_t Index::getCardinality(Id id, Permutation::Enum p) const {
   return pimpl_->getCardinality(id, p);
 }
 
@@ -335,25 +335,25 @@ Index::NumNormalAndInternal Index::numDistinctPredicates() const {
 bool Index::hasAllPermutations() const { return pimpl_->hasAllPermutations(); }
 
 // _____________________________________________________
-vector<float> Index::getMultiplicities(PermutationEnum p) const {
+vector<float> Index::getMultiplicities(Permutation::Enum p) const {
   return pimpl_->getMultiplicities(p);
 }
 
 // _____________________________________________________
 vector<float> Index::getMultiplicities(const TripleComponent& key,
-                                       PermutationEnum p) const {
+                                       Permutation::Enum p) const {
   return pimpl_->getMultiplicities(key, p);
 }
 
 // _____________________________________________________
-void Index::scan(Id key, IdTable* result, PermutationEnum p,
+void Index::scan(Id key, IdTable* result, Permutation::Enum p,
                  ad_utility::SharedConcurrentTimeoutTimer timer) const {
   return pimpl_->scan(key, result, p, std::move(timer));
 }
 
 // _____________________________________________________
 void Index::scan(const TripleComponent& key, IdTable* result,
-                 const PermutationEnum& p,
+                 const Permutation::Enum& p,
                  ad_utility::SharedConcurrentTimeoutTimer timer) const {
   return pimpl_->scan(key, result, p, std::move(timer));
 }
@@ -361,7 +361,7 @@ void Index::scan(const TripleComponent& key, IdTable* result,
 // _____________________________________________________
 void Index::scan(const TripleComponent& col0String,
                  const TripleComponent& col1String, IdTable* result,
-                 PermutationEnum p,
+                 Permutation::Enum p,
                  ad_utility::SharedConcurrentTimeoutTimer timer) const {
   return pimpl_->scan(col0String, col1String, result, p, std::move(timer));
 }
