@@ -462,7 +462,12 @@ TEST(IndexTest, getIgnoredIdRanges) {
 }
 
 TEST(IndexTest, NumDistinctEntities) {
-  const IndexImpl& index = getQec()->getIndex().getImpl();
+  std::string turtleInput =
+      "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
+      "<x> "
+      "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
+      "\"zz\"@en";
+  const IndexImpl& index = getQec(turtleInput)->getIndex().getImpl();
   // Note: Those numbers might change as the triples of the test index in
   // `IndexTestHelpers.cpp` change.
   // TODO<joka921> Also check the number of triples and the number of
@@ -494,6 +499,15 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_EQ(numTriples.normal_, 7);
   // Two added triples for each triple that has an object with a language tag.
   EXPECT_EQ(numTriples.internal_, 2);
+
+  auto multiplicities = index.getMultiplicities(Index::Permutation::SPO);
+  EXPECT_FLOAT_EQ(multiplicities[0], 9.0 / 4.0);
+  EXPECT_FLOAT_EQ(multiplicities[1], 9.0 / 4.0);
+  EXPECT_FLOAT_EQ(multiplicities[2], 9.0 / 8.0);
+
+  multiplicities = index.getMultiplicities("<x>", Index::Permutation::SPO);
+  EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
+  EXPECT_FLOAT_EQ(multiplicities[1], 1);
 }
 
 TEST(IndexTest, NumDistinctEntitiesCornerCases) {
