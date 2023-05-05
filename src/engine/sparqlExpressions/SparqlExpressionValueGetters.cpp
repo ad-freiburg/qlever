@@ -1,14 +1,12 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
-
-//
-// Created by johannes on 23.09.21.
-//
+//  Copyright 2021, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #include "SparqlExpressionValueGetters.h"
 
-#include "../../global/Constants.h"
-#include "../../util/Conversions.h"
+#include "engine/ExportQueryExecutionTrees.h"
+#include "global/Constants.h"
+#include "util/Conversions.h"
 
 using namespace sparqlExpression::detail;
 // _____________________________________________________________________________
@@ -60,25 +58,27 @@ bool EffectiveBooleanValueGetter::operator()(ValueId id,
 
 // ____________________________________________________________________________
 string StringValueGetter::operator()(Id id, EvaluationContext* context) const {
-  switch (id.getDatatype()) {
-    case Datatype::Undefined:
-      return "";
-    case Datatype::Double:
-      return std::to_string(id.getDouble());
-    case Datatype::Int:
-      return std::to_string(id.getInt());
-    case Datatype::VocabIndex:
-      return context->_qec.getIndex()
-          .getVocab()
-          .indexToOptionalString(id.getVocabIndex())
-          .value_or("");
-    case Datatype::LocalVocabIndex: {
-      return context->_localVocab.getWord(id.getLocalVocabIndex());
-    }
-    case Datatype::TextRecordIndex:
-      return context->_qec.getIndex().getTextExcerpt(id.getTextRecordIndex());
+  auto optionalStringAndType =
+      ExportQueryExecutionTrees::idToStringAndType<true>(
+          context->_qec.getIndex(), id, context->_localVocab);
+  if (optionalStringAndType.has_value()) {
+    return std::move(optionalStringAndType.value().first);
+  } else {
+    return "";
   }
-  AD_FAIL();
+}
+
+// ____________________________________________________________________________
+std::optional<string> LiteralFromIdGetter::operator()(
+    ValueId id, const sparqlExpression::EvaluationContext* context) const {
+  auto optionalStringAndType =
+      ExportQueryExecutionTrees::idToStringAndType<true, true>(
+          context->_qec.getIndex(), id, context->_localVocab);
+  if (optionalStringAndType.has_value()) {
+    return std::move(optionalStringAndType.value().first);
+  } else {
+    return std::nullopt;
+  }
 }
 
 // ____________________________________________________________________________

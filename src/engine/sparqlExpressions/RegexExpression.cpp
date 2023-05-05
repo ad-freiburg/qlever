@@ -5,6 +5,7 @@
 #include "./RegexExpression.h"
 
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "global/ValueIdComparators.h"
 #include "re2/re2.h"
@@ -81,6 +82,10 @@ RegexExpression::RegexExpression(
     SparqlExpression::Ptr child, SparqlExpression::Ptr regex,
     std::optional<SparqlExpression::Ptr> optionalFlags)
     : child_{std::move(child)} {
+  if (dynamic_cast<const StrExpression*>(child_.get())) {
+    child_ = std::move(std::move(*child_).moveChildrenOut().at(0));
+    childIsStrExpression_ = true;
+  }
   if (!dynamic_cast<const VariableExpression*>(child_.get())) {
     throw std::runtime_error(
         "REGEX expressions are currently supported only on variables.");
@@ -152,8 +157,8 @@ RegexExpression::RegexExpression(
 // ___________________________________________________________________________
 string RegexExpression::getCacheKey(
     const VariableToColumnMap& varColMap) const {
-  return "REGEX expression " + child_->getCacheKey(varColMap) + " with " +
-         regexAsString_;
+  return absl::StrCat("REGEX expression ", child_->getCacheKey(varColMap),
+                      " with ", regexAsString_, "str:", childIsStrExpression_);
 }
 
 // ___________________________________________________________________________
@@ -161,57 +166,109 @@ std::span<SparqlExpression::Ptr> RegexExpression::children() {
   return {&child_, 1};
 }
 
+// ___________________________________________________________________________
+ExpressionResult RegexExpression::evaluatePrefixRegex(
+    const Variable& variable,
+    sparqlExpression::EvaluationContext* context) const {
+  std::string prefixRegex = std::get<std::string>(regex_);
+  std::vector<std::string> actualPrefixes;
+  actualPrefixes.push_back("\"" + prefixRegex);
+  // If the STR function was applied, we also look for prefix matches for IRIs.
+  // TODO<joka921> prefix filters currently never find numbers or local vocab
+  // entries, numbers, or other datatypes that are encoded directly inside the
+  // IDs.
+  if (childIsStrExpression_) {
+    actualPrefixes.push_back("<" + prefixRegex);
+  }
+  std::vector<ad_utility::SetOfIntervals> resultSetOfIntervals;
+  std::vector<std::pair<Id, Id>> lowerAndUpperIds;
+  for (const auto& prefix : actualPrefixes) {
+    auto [lowerIndex, upperIndex] =
+        context->_qec.getIndex().getVocab().prefix_range(prefix);
+    Id lowerId = Id::makeFromVocabIndex(lowerIndex);
+    Id upperId = Id::makeFromVocabIndex(upperIndex);
+    lowerAndUpperIds.emplace_back(lowerId, upperId);
+  }
+  auto beg = context->_inputTable.begin() + context->_beginIndex;
+  auto end = context->_inputTable.begin() + context->_endIndex;
+  AD_CONTRACT_CHECK(end <= context->_inputTable.end());
+  if (context->isResultSortedBy(variable)) {
+    auto column = context->getColumnIndexForVariable(variable);
+    for (auto [lowerId, upperId] : lowerAndUpperIds) {
+      auto lower = std::lower_bound(
+          beg, end, nullptr,
+          [column, lowerId = lowerId](const auto& l, const auto&) {
+            return l[column] < lowerId;
+          });
+      auto upper = std::lower_bound(
+          beg, end, nullptr,
+          [column, upperId = upperId](const auto& l, const auto&) {
+            return l[column] < upperId;
+          });
+
+      // Return the empty result as an empty `SetOfIntervals` instead of as an
+      // empty range.
+      if (lower != upper) {
+        resultSetOfIntervals.push_back(
+            ad_utility::SetOfIntervals{{{lower - beg, upper - beg}}});
+      }
+    }
+    return std::reduce(resultSetOfIntervals.begin(), resultSetOfIntervals.end(),
+                       ad_utility::SetOfIntervals{},
+                       ad_utility::SetOfIntervals::Union{});
+  } else {
+    auto resultSize = context->size();
+    VectorWithMemoryLimit<Bool> result{context->_allocator};
+    result.reserve(resultSize);
+    for (auto id : detail::makeGenerator(variable, resultSize, context)) {
+      result.push_back(
+          std::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
+            return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
+                   valueIdComparators::compareByBits(id, lowerUpper.second);
+          }));
+    }
+    return result;
+  }
+}
+
+// ___________________________________________________________________________
+ExpressionResult RegexExpression::evaluateNonPrefixRegex(
+    const Variable& variable,
+    sparqlExpression::EvaluationContext* context) const {
+  AD_CONTRACT_CHECK(std::holds_alternative<RE2>(regex_));
+  auto resultSize = context->size();
+  VectorWithMemoryLimit<Bool> result{context->_allocator};
+  result.reserve(resultSize);
+  if (childIsStrExpression_) {
+    for (auto id : detail::makeGenerator(variable, resultSize, context)) {
+      result.push_back(RE2::PartialMatch(
+          detail::StringValueGetter{}(id, context), std::get<RE2>(regex_)));
+    }
+  } else {
+    for (auto id : detail::makeGenerator(variable, resultSize, context)) {
+      auto optionalString = detail::LiteralFromIdGetter{}(id, context);
+      if (optionalString.has_value()) {
+        result.push_back(
+            RE2::PartialMatch(optionalString.value(), std::get<RE2>(regex_)));
+      } else {
+        result.push_back(false);
+      }
+    }
+  }
+  return result;
+}
+
+// ___________________________________________________________________________
 ExpressionResult RegexExpression::evaluate(
     sparqlExpression::EvaluationContext* context) const {
   auto resultAsVariant = child_->evaluate(context);
   auto variablePtr = std::get_if<Variable>(&resultAsVariant);
   AD_CONTRACT_CHECK(variablePtr);
 
-  if (auto prefixRegex = std::get_if<std::string>(&regex_)) {
-    auto prefixRange =
-        context->_qec.getIndex().getVocab().prefix_range(*prefixRegex);
-    Id lowerId = Id::makeFromVocabIndex(prefixRange.first);
-    Id upperId = Id::makeFromVocabIndex(prefixRange.second);
-    auto beg = context->_inputTable.begin() + context->_beginIndex;
-    auto end = context->_inputTable.begin() + context->_endIndex;
-    AD_CONTRACT_CHECK(end <= context->_inputTable.end());
-    if (context->isResultSortedBy(*variablePtr)) {
-      auto column = context->getColumnIndexForVariable(*variablePtr);
-      auto lower = std::lower_bound(
-          beg, end, nullptr, [column, lowerId](const auto& l, const auto&) {
-            return l[column] < lowerId;
-          });
-      auto upper = std::lower_bound(
-          beg, end, nullptr, [column, upperId](const auto& l, const auto&) {
-            return l[column] < upperId;
-          });
-
-      // Return the empty result as an empty `SetOfIntervals` instead of as an
-      // empty range.
-      if (lower == upper) {
-        return ad_utility::SetOfIntervals{};
-      }
-      return ad_utility::SetOfIntervals{{{lower - beg, upper - beg}}};
-    } else {
-      auto resultSize = context->size();
-      VectorWithMemoryLimit<Bool> result{context->_allocator};
-      result.reserve(resultSize);
-      for (auto id : detail::makeGenerator(*variablePtr, resultSize, context)) {
-        result.push_back(!valueIdComparators::compareByBits(id, lowerId) &&
-                         valueIdComparators::compareByBits(id, upperId));
-      }
-      return result;
-    }
+  if (std::holds_alternative<std::string>(regex_)) {
+    return evaluatePrefixRegex(*variablePtr, context);
   } else {
-    AD_CONTRACT_CHECK(std::holds_alternative<RE2>(regex_));
-    auto resultSize = context->size();
-    VectorWithMemoryLimit<Bool> result{context->_allocator};
-    result.reserve(resultSize);
-    for (auto id : detail::makeGenerator(*variablePtr, resultSize, context)) {
-      result.push_back(RE2::PartialMatch(
-          detail::StringValueGetter{}(id, context), std::get<RE2>(regex_)));
-    }
-    return result;
+    return evaluateNonPrefixRegex(*variablePtr, context);
   }
 }
 
