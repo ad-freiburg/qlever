@@ -13,11 +13,12 @@
 namespace ad_utility::query_state {
 
 static std::mutex queryStatesMutex{};
-static absl::flat_hash_map<QueryId, RuntimeInformationSnapshot> queryStates{};
+static absl::flat_hash_map<QueryId, TimedClientPayload> queryStates{};
 
 void signalUpdateForQuery(const QueryId& queryId,
-                          RuntimeInformation runtimeInformation) {
-  RuntimeInformationSnapshot snapshot{std::move(runtimeInformation),
+                          const RuntimeInformation& runtimeInformation) {
+  std::string payload = nlohmann::ordered_json(runtimeInformation).dump();
+  TimedClientPayload snapshot{std::move(payload),
                                       std::chrono::steady_clock::now()};
   // Only insert data if there are additional waiting websockets
   if (websocket::fireAllCallbacksForQuery(queryId, snapshot)) {
@@ -31,7 +32,7 @@ void clearQueryInfo(const QueryId& queryId) {
   queryStates.erase(queryId);
 }
 
-std::optional<RuntimeInformationSnapshot> getIfUpdatedSince(
+std::optional<TimedClientPayload> getIfUpdatedSince(
     const QueryId& queryId, websocket::common::TimeStamp timeStamp) {
   std::lock_guard lock{queryStatesMutex};
   if (queryStates.count(queryId)) {

@@ -42,8 +42,8 @@ class QueryId {
 
 using TimeStamp = std::chrono::time_point<std::chrono::steady_clock>;
 
-struct RuntimeInformationSnapshot {
-  RuntimeInformation runtimeInformation;
+struct TimedClientPayload {
+  std::string payload;
   TimeStamp updateMoment;
 };
 }  // namespace ad_utility::websocket::common

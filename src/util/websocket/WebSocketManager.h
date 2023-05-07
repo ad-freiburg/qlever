@@ -1,3 +1,7 @@
+//  Copyright 2023, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+
 #pragma once
 
 #include <boost/beast/websocket.hpp>
@@ -11,14 +15,14 @@ namespace beast = boost::beast;
 namespace http = beast::http;
 using boost::asio::ip::tcp;
 using websocket::common::QueryId;
-using websocket::common::RuntimeInformationSnapshot;
+using websocket::common::TimedClientPayload;
 
 net::awaitable<void> manageConnection(tcp::socket socket,
                                       http::request<http::string_body> request);
 // Returns true if there are other active connections that do no currently wait.
 bool fireAllCallbacksForQuery(
     const QueryId& queryId,
-    RuntimeInformationSnapshot runtimeInformationSnapshot);
+                              TimedClientPayload runtimeInformationSnapshot);
 
 std::optional<http::response<http::string_body>> checkPathIsValid(
     const http::request<http::string_body>& request);
