@@ -224,7 +224,6 @@ class HttpServer {
           } else {
             // prevent cleanup after socket has been moved from
             std::move(releaseConnection).Cancel();
-            // TODO make sure error handling is correct
             co_await ad_utility::websocket::manageConnection(
                 std::move(stream.socket()), std::move(req));
             co_return;
