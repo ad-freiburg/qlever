@@ -16,7 +16,7 @@ using websocket::common::TimedClientPayload;
 void signalUpdateForQuery(const QueryId& queryId,
                           const RuntimeInformation& runtimeInformation);
 void clearQueryInfo(const QueryId& queryId);
-std::optional<TimedClientPayload> getIfUpdatedSince(
-    const QueryId& queryId, websocket::common::TimeStamp timeStamp);
+TimedClientPayload getIfUpdatedSince(const QueryId& queryId,
+                                     websocket::common::TimeStamp timeStamp);
 
 }  // namespace ad_utility::query_state

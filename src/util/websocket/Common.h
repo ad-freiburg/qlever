@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <random>
 
 #include "../../engine/RuntimeInformation.h"
@@ -21,9 +22,7 @@ class QueryId {
     //  where something keeps track of active queries
     return QueryId{std::move(id)};
   }
-  static QueryId idFromString(std::string id) {
-    return QueryId{std::move(id)};
-  }
+  static QueryId idFromString(std::string id) { return QueryId{std::move(id)}; }
 
   static QueryId uniqueId() {
     static std::mt19937 generator(std::random_device{}());
@@ -42,10 +41,12 @@ class QueryId {
 
 using TimeStamp = std::chrono::time_point<std::chrono::steady_clock>;
 
-struct TimedClientPayload {
+struct TimedClientPayloadStruct {
   std::string payload;
   TimeStamp updateMoment;
 };
+
+using TimedClientPayload = std::shared_ptr<const TimedClientPayloadStruct>;
 }  // namespace ad_utility::websocket::common
 
 template <>

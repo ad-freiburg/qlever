@@ -54,9 +54,7 @@ using namespace boost::asio::experimental::awaitable_operators;
 using websocket = beast::websocket::stream<tcp::socket>;
 using common::TimedClientPayload;
 
-// We need a copy here due to the async nature of the lifetime of those objects
-using QueryUpdateCallback =
-    std::function<void(std::optional<TimedClientPayload>)>;
+using QueryUpdateCallback = std::function<void(TimedClientPayload)>;
 
 static std::mutex activeWebSocketsMutex{};
 static absl::btree_multimap<QueryId, WebSocketId> activeWebSockets{};
@@ -80,32 +78,28 @@ void registerCallback(const QueryId& queryId, WebSocketId webSocketId,
 }
 
 // ONLY CALL THIS IF YOU HOLD the listeningWebSocketsMutex!!!
-void fireCallbackAndRemoveIfPresentNoLock(
-    WebSocketId webSocketId,
-    std::optional<TimedClientPayload> runtimeInformation) {
+void fireCallbackAndRemoveIfPresentNoLock(WebSocketId webSocketId,
+                                          TimedClientPayload payload) {
   if (listeningWebSockets.count(webSocketId) != 0) {
-    listeningWebSockets.at(webSocketId)(std::move(runtimeInformation));
+    listeningWebSockets.at(webSocketId)(std::move(payload));
     listeningWebSockets.erase(webSocketId);
   }
 }
 
-void fireCallbackAndRemoveIfPresent(
-    WebSocketId webSocketId,
-    std::optional<TimedClientPayload> runtimeInformation) {
+void fireCallbackAndRemoveIfPresent(WebSocketId webSocketId,
+                                    TimedClientPayload payload) {
   std::lock_guard lock{listeningWebSocketsMutex};
-  fireCallbackAndRemoveIfPresentNoLock(webSocketId,
-                                       std::move(runtimeInformation));
+  fireCallbackAndRemoveIfPresentNoLock(webSocketId, std::move(payload));
 }
 
 bool fireAllCallbacksForQuery(const QueryId& queryId,
-                              TimedClientPayload runtimeInformationSnapshot) {
+                              TimedClientPayload payload) {
   std::lock_guard lock1{activeWebSocketsMutex};
   std::lock_guard lock2{listeningWebSocketsMutex};
   auto range = activeWebSockets.equal_range(queryId);
   size_t counter = 0;
   for (auto it = range.first; it != range.second; it++) {
-    fireCallbackAndRemoveIfPresentNoLock(it->second,
-                                         runtimeInformationSnapshot);
+    fireCallbackAndRemoveIfPresentNoLock(it->second, payload);
     counter++;
   }
   return counter < activeWebSockets.count(queryId);
@@ -121,7 +115,7 @@ void disableWebSocket(WebSocketId webSocketId, const QueryId& queryId) {
   {
     std::lock_guard lock{activeWebSocketsMutex};
     removeKeyValuePair(activeWebSockets, queryId, webSocketId);
-    fireCallbackAndRemoveIfPresent(webSocketId, std::nullopt);
+    fireCallbackAndRemoveIfPresent(webSocketId, nullptr);
     noListenersLeft = activeWebSockets.count(queryId) == 0;
   }
   if (noListenersLeft) {
@@ -138,20 +132,18 @@ auto waitForEvent(const QueryId& queryId, WebSocketId webSocketId,
                       WebSocketId webSocketId) mutable {
     auto callback =
         [self = std::make_shared<Handler>(std::forward<Handler>(self))](
-            std::optional<TimedClientPayload> snapshot) { (*self)(snapshot); };
+            TimedClientPayload snapshot) { (*self)(std::move(snapshot)); };
     auto potentialUpdate = query_state::getIfUpdatedSince(queryId, lastUpdate);
-    if (potentialUpdate.has_value()) {
-      callback(*potentialUpdate);
+    if (potentialUpdate != nullptr) {
+      callback(std::move(potentialUpdate));
     } else {
       registerCallback(queryId, webSocketId, std::move(callback));
     }
   };
-  // TODO match this to QueryUpdateCallback
   // TODO don't pass token directly and instead wrap it inside
   // "bind_cancellation_slot"
   //  to remove the callback in case it gets cancelled
-  return net::async_initiate<CompletionToken,
-                             void(std::optional<TimedClientPayload>)>(
+  return net::async_initiate<CompletionToken, void(TimedClientPayload)>(
       initiate, token, queryId, webSocketId);
 }
 
@@ -180,7 +172,7 @@ net::awaitable<void> waitForServerEvents(websocket& ws, WebSocketId webSocketId,
   while (ws.is_open()) {
     auto update = co_await waitForEvent(queryId, webSocketId, lastUpdate,
                                         net::use_awaitable);
-    if (!update.has_value()) {
+    if (update == nullptr) {
       if (ws.is_open()) {
         co_await ws.async_close(beast::websocket::close_code::normal,
                                 net::use_awaitable);

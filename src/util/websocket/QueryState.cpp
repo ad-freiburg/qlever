@@ -18,8 +18,8 @@ static absl::flat_hash_map<QueryId, TimedClientPayload> queryStates{};
 void signalUpdateForQuery(const QueryId& queryId,
                           const RuntimeInformation& runtimeInformation) {
   std::string payload = nlohmann::ordered_json(runtimeInformation).dump();
-  TimedClientPayload snapshot{std::move(payload),
-                                      std::chrono::steady_clock::now()};
+  auto snapshot = std::make_shared<TimedClientPayload::element_type>(
+      std::move(payload), std::chrono::steady_clock::now());
   // Only insert data if there are additional waiting websockets
   if (websocket::fireAllCallbacksForQuery(queryId, snapshot)) {
     std::lock_guard lock{queryStatesMutex};
@@ -32,16 +32,16 @@ void clearQueryInfo(const QueryId& queryId) {
   queryStates.erase(queryId);
 }
 
-std::optional<TimedClientPayload> getIfUpdatedSince(
-    const QueryId& queryId, websocket::common::TimeStamp timeStamp) {
+TimedClientPayload getIfUpdatedSince(const QueryId& queryId,
+                                     websocket::common::TimeStamp timeStamp) {
   std::lock_guard lock{queryStatesMutex};
   if (queryStates.count(queryId)) {
     auto snapshot = queryStates[queryId];
-    if (snapshot.updateMoment > timeStamp) {
+    if (snapshot->updateMoment > timeStamp) {
       return snapshot;
     }
   }
-  return std::nullopt;
+  return nullptr;
 }
 
 }  // namespace ad_utility::query_state
