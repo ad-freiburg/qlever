@@ -1,3 +1,7 @@
+//  Copyright 2023, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+
 #include "WebSocketManager.h"
 
 #include <absl/cleanup/cleanup.h>
@@ -48,12 +52,11 @@ struct std::hash<ad_utility::websocket::WebSocketId> {
 namespace ad_utility::websocket {
 using namespace boost::asio::experimental::awaitable_operators;
 using websocket = beast::websocket::stream<tcp::socket>;
-using common::RuntimeInformationSnapshot;
+using common::TimedClientPayload;
 
 // We need a copy here due to the async nature of the lifetime of those objects
-// TODO evaluate if using a shared const ptr is more efficient here
 using QueryUpdateCallback =
-    std::function<void(std::optional<RuntimeInformationSnapshot>)>;
+    std::function<void(std::optional<TimedClientPayload>)>;
 
 static std::mutex activeWebSocketsMutex{};
 static absl::btree_multimap<QueryId, WebSocketId> activeWebSockets{};
@@ -79,7 +82,7 @@ void registerCallback(const QueryId& queryId, WebSocketId webSocketId,
 // ONLY CALL THIS IF YOU HOLD the listeningWebSocketsMutex!!!
 void fireCallbackAndRemoveIfPresentNoLock(
     WebSocketId webSocketId,
-    std::optional<RuntimeInformationSnapshot> runtimeInformation) {
+    std::optional<TimedClientPayload> runtimeInformation) {
   if (listeningWebSockets.count(webSocketId) != 0) {
     listeningWebSockets.at(webSocketId)(std::move(runtimeInformation));
     listeningWebSockets.erase(webSocketId);
@@ -88,15 +91,14 @@ void fireCallbackAndRemoveIfPresentNoLock(
 
 void fireCallbackAndRemoveIfPresent(
     WebSocketId webSocketId,
-    std::optional<RuntimeInformationSnapshot> runtimeInformation) {
+    std::optional<TimedClientPayload> runtimeInformation) {
   std::lock_guard lock{listeningWebSocketsMutex};
   fireCallbackAndRemoveIfPresentNoLock(webSocketId,
                                        std::move(runtimeInformation));
 }
 
-bool fireAllCallbacksForQuery(
-    const QueryId& queryId,
-    RuntimeInformationSnapshot runtimeInformationSnapshot) {
+bool fireAllCallbacksForQuery(const QueryId& queryId,
+                              TimedClientPayload runtimeInformationSnapshot) {
   std::lock_guard lock1{activeWebSocketsMutex};
   std::lock_guard lock2{listeningWebSocketsMutex};
   auto range = activeWebSockets.equal_range(queryId);
@@ -136,9 +138,7 @@ auto waitForEvent(const QueryId& queryId, WebSocketId webSocketId,
                       WebSocketId webSocketId) mutable {
     auto callback =
         [self = std::make_shared<Handler>(std::forward<Handler>(self))](
-            std::optional<RuntimeInformationSnapshot> snapshot) {
-          (*self)(snapshot);
-        };
+            std::optional<TimedClientPayload> snapshot) { (*self)(snapshot); };
     auto potentialUpdate = query_state::getIfUpdatedSince(queryId, lastUpdate);
     if (potentialUpdate.has_value()) {
       callback(*potentialUpdate);
@@ -151,7 +151,7 @@ auto waitForEvent(const QueryId& queryId, WebSocketId webSocketId,
   // "bind_cancellation_slot"
   //  to remove the callback in case it gets cancelled
   return net::async_initiate<CompletionToken,
-                             void(std::optional<RuntimeInformationSnapshot>)>(
+                             void(std::optional<TimedClientPayload>)>(
       initiate, token, queryId, webSocketId);
 }
 
@@ -188,8 +188,7 @@ net::awaitable<void> waitForServerEvents(websocket& ws, WebSocketId webSocketId,
       break;
     }
     ws.text(true);
-    std::string json =
-        nlohmann::ordered_json(update->runtimeInformation).dump();
+    const auto& json = update->payload;
     lastUpdate = update->updateMoment;
     co_await ws.async_write(net::buffer(json.data(), json.length()),
                             net::use_awaitable);
