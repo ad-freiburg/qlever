@@ -480,7 +480,8 @@ ad_utility::websocket::common::QueryId getQueryId(
   }
   auto queryId = QueryId::uniqueIdFromString(std::string(queryIdHeader));
   if (!queryId) {
-    throw std::runtime_error{"QueryId '" + queryIdHeader + "' is already in use!"};
+    throw std::runtime_error{"QueryId '" + queryIdHeader +
+                             "' is already in use!"};
   }
   return *queryId;
 }
@@ -647,7 +648,7 @@ boost::asio::awaitable<void> Server::processQuery(
         auto response =
             createOkResponse(std::move(responseGenerator), request, mediaType);
         co_await send(std::move(response));
-        // TODO signal end of updates causing all websockets to disconnect
+        // TODO<RobinTF> unregister QueryId
       } catch (...) {
         if (exceptionPtr) {
           std::rethrow_exception(exceptionPtr);

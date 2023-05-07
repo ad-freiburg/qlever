@@ -140,9 +140,6 @@ auto waitForEvent(const QueryId& queryId, WebSocketId webSocketId,
       registerCallback(queryId, webSocketId, std::move(callback));
     }
   };
-  // TODO don't pass token directly and instead wrap it inside
-  // "bind_cancellation_slot"
-  //  to remove the callback in case it gets cancelled
   return net::async_initiate<CompletionToken, void(TimedClientPayload)>(
       initiate, token, queryId, webSocketId);
 }
@@ -150,16 +147,13 @@ auto waitForEvent(const QueryId& queryId, WebSocketId webSocketId,
 net::awaitable<void> handleClientCommands(websocket& ws,
                                           WebSocketId webSocketId,
                                           const QueryId& queryId) {
-  absl::Cleanup cleanup{[webSocketId, queryId]() {
-    // TODO is this properly cleaned up when this coroutine is cancelled?
-    std::cout << "Disabling WebSocket..." << std::endl;
-    disableWebSocket(webSocketId, queryId);
-  }};
+  absl::Cleanup cleanup{
+      [webSocketId, queryId]() { disableWebSocket(webSocketId, queryId); }};
   beast::flat_buffer buffer;
 
   while (ws.is_open()) {
     co_await ws.async_read(buffer, net::use_awaitable);
-    // TODO replace with cancellation process
+    // TODO<RobinTF> replace with cancellation process
     ws.text(ws.got_text());
     co_await ws.async_write(buffer.data(), net::use_awaitable);
     buffer.clear();
@@ -185,8 +179,6 @@ net::awaitable<void> waitForServerEvents(websocket& ws, WebSocketId webSocketId,
     co_await ws.async_write(net::buffer(json.data(), json.length()),
                             net::use_awaitable);
   }
-  // TODO remove
-  std::cout << "End of server events" << std::endl;
 }
 
 net::awaitable<void> connectionLifecycle(
@@ -213,19 +205,18 @@ net::awaitable<void> connectionLifecycle(
         net::co_spawn(strand, handleClientCommands(ws, webSocketId, queryId),
                       net::use_awaitable));
 
-    // TODO can this happen?
-    if (ws.is_open()) {
-      co_await ws.async_close(beast::websocket::close_code::normal,
-                              net::use_awaitable);
-    }
-
   } catch (boost::system::system_error& error) {
-    if (error.code() != beast::websocket::error::closed) {
-      // There was an unexpected error, rethrow
-      throw;
+    if (error.code() == beast::websocket::error::closed) {
+      co_return;
     }
-    // TODO check if there are errors where the socket needs to be closed
-    // explicitly
+    // There was an unexpected error, rethrow
+    throw;
+  }
+
+  // In case an unexpected exception is thrown, close the connection gracefully.
+  if (ws.is_open()) {
+    co_await ws.async_close(beast::websocket::close_code::internal_error,
+                            net::use_awaitable);
   }
 }
 
