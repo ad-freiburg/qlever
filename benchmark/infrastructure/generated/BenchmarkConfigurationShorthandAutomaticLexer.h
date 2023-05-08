@@ -3,23 +3,29 @@
 
 #pragma once
 
-
 #include "antlr4-runtime.h"
 
-
-
-
-class  BenchmarkConfigurationShorthandAutomaticLexer : public antlr4::Lexer {
-public:
+class BenchmarkConfigurationShorthandAutomaticLexer : public antlr4::Lexer {
+ public:
   enum {
-    T__0 = 1, T__1 = 2, T__2 = 3, T__3 = 4, T__4 = 5, LITERAL = 6, BOOL = 7, 
-    INTEGER = 8, FLOAT = 9, STRING = 10, NAME = 11, WHITESPACE = 12
+    T__0 = 1,
+    T__1 = 2,
+    T__2 = 3,
+    T__3 = 4,
+    T__4 = 5,
+    LITERAL = 6,
+    BOOL = 7,
+    INTEGER = 8,
+    FLOAT = 9,
+    STRING = 10,
+    NAME = 11,
+    WHITESPACE = 12
   };
 
-  explicit BenchmarkConfigurationShorthandAutomaticLexer(antlr4::CharStream *input);
+  explicit BenchmarkConfigurationShorthandAutomaticLexer(
+      antlr4::CharStream* input);
 
   ~BenchmarkConfigurationShorthandAutomaticLexer() override;
-
 
   std::string getGrammarFileName() const override;
 
@@ -35,16 +41,13 @@ public:
 
   const antlr4::atn::ATN& getATN() const override;
 
-  // By default the static state used to implement the lexer is lazily initialized during the first
-  // call to the constructor. You can call this function if you wish to initialize the static state
-  // ahead of time.
+  // By default the static state used to implement the lexer is lazily
+  // initialized during the first call to the constructor. You can call this
+  // function if you wish to initialize the static state ahead of time.
   static void initialize();
 
-private:
-
+ private:
   // Individual action functions triggered by action() above.
 
   // Individual semantic predicate functions triggered by sempred() above.
-
 };
-
