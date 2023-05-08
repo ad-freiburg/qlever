@@ -47,7 +47,6 @@ jobs:
       working-directory: ${{github.workspace}}/build
       run: >
         sudo pip3 install "conan==1.58.0";
-        conan profile detect;
         conan --version;
         conan install .. -pr:h ../conanprofiles/clang-libcpp -pr:b ../conanprofiles/clang-libcpp;
     - name: Install clang 15
