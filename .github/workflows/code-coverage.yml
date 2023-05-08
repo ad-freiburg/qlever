@@ -28,7 +28,7 @@ jobs:
           # we disable the `assert()` macro as it messes with the coverage reports
           asan-flags: "-fsanitize=address -fno-omit-frame-pointer -DNDEBUG"
           ubsan-flags: " -fsanitize=undefined"
-          coverage-flags: "-fprofile-instr-generate -fcoverage-mapping"
+          coverage-flags: "-fprofile-instr-generate -fcoverage-mapping -fexperimental-library"
           cmake-flags: "-DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15 -DCMAKE_EXE_LINKER_FLAGS=\"-stdlib=libc++ -lc++abi\""
 
     runs-on: ubuntu-22.04
