@@ -13,7 +13,7 @@
 // Represents the data returned by a limitOffsetClause.
 struct LimitOffsetClause {
   std::optional<uint64_t> _limit;
-  uint64_t _textLimit = 1;
+  uint64_t _textLimit = 9999;
   uint64_t _offset = 0;
 
   // If a limit is specified, return the limit, else return the maximal
