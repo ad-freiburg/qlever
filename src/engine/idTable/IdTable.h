@@ -153,9 +153,8 @@ class IdTable {
   using row_reference_restricted = row_reference;
   using const_row_reference_restricted = const_row_reference;
   using const_row_reference_view_restricted =
-      RowReference<
-          IdTable<T, NumColumns, ColumnStorage, IsView::True>,
-          ad_utility::IsConst::True>;
+      RowReference<IdTable<T, NumColumns, ColumnStorage, IsView::True>,
+                   ad_utility::IsConst::True>;
 
  private:
   Data data_;

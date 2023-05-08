@@ -90,10 +90,10 @@ auto callLambdaForIntArray(std::array<Int, NumValues> array, auto&& lambda,
 
   // Lambda: call `applyIf` for all the compile-time integers `Is...`. The
   // runtime parameter always is `array`.
-  auto f =
-      [&applyIf]<ArrayType... Is>(ad_utility::detail::ValueSequence<ArrayType, Is...>) {
-        (..., applyIf.template operator()<Is>());
-      };
+  auto f = [&applyIf]<ArrayType... Is>(
+               ad_utility::detail::ValueSequence<ArrayType, Is...>) {
+    (..., applyIf.template operator()<Is>());
+  };
 
   // Call f for all combinations of compileTimeIntegers in `M x NumValues` where
   // `M` is `[0, ..., maxValue]` and `x` denotes the cartesian product of sets.

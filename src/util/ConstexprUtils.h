@@ -83,7 +83,7 @@ struct ValueSequence {};
 template <auto Array, size_t... indexes>
 constexpr auto toIntegerSequenceHelper(std::index_sequence<indexes...>) {
   return ValueSequence<typename decltype(Array)::value_type,
-                               std::get<indexes>(Array)...>{};
+                       std::get<indexes>(Array)...>{};
 }
 }  // namespace detail
 

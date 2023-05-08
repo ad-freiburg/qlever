@@ -151,7 +151,9 @@ class RowReferenceImpl {
 
    protected:
     // The actual implementation of operator[].
-    static T& operatorBracketImpl(auto& self, size_t i) requires (!std::is_const_v<std::remove_reference_t<decltype(self)>> && !isConst) {
+    static T& operatorBracketImpl(auto& self, size_t i)
+        requires(!std::is_const_v<std::remove_reference_t<decltype(self)>> &&
+                 !isConst) {
       return (*self.table_)(self.row_, i);
     }
     static const T& operatorBracketImpl(const auto& self, size_t i) {
