@@ -48,6 +48,8 @@ jobs:
       run: >
         sudo pip3 install conan;
         conan profile detect;
+        conan list boost/1.81:* -r=remote;
+        conan --version;
         conan install .. -pr:h ../conanprofiles/clang-libcpp -pr:b ../conanprofiles/clang-libcpp;
     - name: Install clang 15
       # The sed command fixes a bug in `llvm.sh` in combination with the latest version of
