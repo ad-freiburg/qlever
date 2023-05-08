@@ -43,5 +43,6 @@ class source_location {
   }
 };
 
+#define QLEVER_NO_SOURCE_LOCATION
 }
 #endif
