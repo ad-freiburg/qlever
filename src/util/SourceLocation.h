@@ -14,9 +14,34 @@
 namespace ad_utility {
 using source_location = std::source_location;
 }
-#else
+#elif __has_include(<experimental/source_location>)
 #include <experimental/source_location>
 namespace ad_utility {
 using source_location = std::experimental::source_location;
+}
+#else
+namespace ad_utility {
+class source_location {
+ public:
+  constexpr std::uint32_t line() const noexcept {
+    return 42;
+  }
+  constexpr std::uint32_t column() const noexcept {
+    return 42;
+  }
+
+  constexpr const char* file_name() const noexcept {
+    return "QLever was compiled without support for std::source_location";
+  }
+
+  constexpr const char* function_name() const noexcept {
+    return "QLever was compiled without support for std::source_location";
+  }
+
+  static source_location current() {
+    return {};
+  }
+};
+
 }
 #endif

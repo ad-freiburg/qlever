@@ -30,16 +30,7 @@ QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {
 // _____________________________________________________________________________
 
 float toFloat(std::string_view view) {
-  float factor;
-  auto last = view.data() + view.size();
-  factor = std::stof(std::string{view});
-  /*
-  auto [ptr, ec] = std::from_chars(view.data(), last, factor);
-  if (ec != std::errc() || ptr != last) {
-    throw std::runtime_error{std::string{"Invalid float: "} + view};
-  }
-   */
-  return factor;
+  return std::stof(std::string{view});
 }
 
 // _____________________________________________________________________________
