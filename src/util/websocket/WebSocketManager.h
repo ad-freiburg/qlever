@@ -6,8 +6,8 @@
 
 #include <boost/beast/websocket.hpp>
 
-#include "../http/beast.h"
-#include "./Common.h"
+#include "util/http/beast.h"
+#include "util/websocket/Common.h"
 
 namespace ad_utility::websocket {
 namespace net = boost::asio;

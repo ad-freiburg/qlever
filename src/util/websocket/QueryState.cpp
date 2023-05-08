@@ -8,7 +8,7 @@
 
 #include <mutex>
 
-#include "./WebSocketManager.h"
+#include "util/websocket/WebSocketManager.h"
 
 namespace ad_utility::query_state {
 
