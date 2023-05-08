@@ -2,11 +2,14 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
+#include <antlr4-runtime.h>
 
 #include <regex>
 #include <string>
 
+#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
+#include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandAutomaticLexer.h"
+#include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandAutomaticParser.h"
 #include "util/Exception.h"
 #include "util/json.h"
 

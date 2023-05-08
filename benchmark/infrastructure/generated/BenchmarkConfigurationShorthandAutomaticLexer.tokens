@@ -1,0 +1,17 @@
+T__0=1
+T__1=2
+T__2=3
+T__3=4
+T__4=5
+LITERAL=6
+BOOL=7
+INTEGER=8
+FLOAT=9
+STRING=10
+NAME=11
+WHITESPACE=12
+'='=1
+';'=2
+'['=3
+','=4
+']'=5

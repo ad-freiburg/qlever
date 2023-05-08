@@ -25,20 +25,12 @@ class BenchmarkConfiguration {
   nlohmann::json data_ = nlohmann::json(nlohmann::json::value_t::object);
 
   /*
-   * @brief Parses the given short hand and returns it as a json object,
-   *  that contains all the described configuration data..
-   *
-   * @param shortHandString The language of the short hand is a number of
-   *  assigments `variableName = variableContent;`.
-   *  `variableName` is the name of the configuration option. As long as it's
-   *  a valid variable name in JSON everything should be good.
-   *  `variableContent` can a boolean literal, an integer literal,  a string
-   *  literal, or a list of those literals in the form of
-   *  `[value1, value2, ...]`.
-   *  An example for a short hand string:
-   *  `"isSorted=false;numberOfLoops=2;numberOfItems={4,5,6,7];myName =
-   * "Bernd";`
-   */
+  @brief Parses the given short hand and returns it as a json object,
+   that contains all the described configuration data..
+
+  @param shortHandString The language of the short hand is defined in
+  `generated/BenchmarkConfigurationShorthandAutomatic.g4`.
+  */
   static nlohmann::json parseShortHand(const std::string& shortHandString);
 
  public:
