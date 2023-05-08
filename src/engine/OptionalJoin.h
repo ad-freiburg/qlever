@@ -16,6 +16,14 @@ class OptionalJoin : public Operation {
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 
+  enum struct ImplementationEnum {
+    GeneralAlgorithm,
+    NoUndef,
+    OnlyUndefInLastJoinColumnOfLeft
+  };
+
+  ImplementationEnum implementationEnum_ = ImplementationEnum::GeneralAlgorithm;
+
   std::vector<std::array<ColumnIndex, 2>> _joinColumns;
 
   std::vector<float> _multiplicities;
@@ -69,7 +77,8 @@ class OptionalJoin : public Operation {
   static void optionalJoin(
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
-      IdTable* dynResult);
+      IdTable* dynResult,
+      ImplementationEnum implementation = ImplementationEnum::GeneralAlgorithm);
 
  private:
   void computeSizeEstimateAndMultiplicities();

@@ -45,8 +45,11 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
       rightHasUndefColumn = true;
     }
   }
-  if (!rightHasUndefColumn && numUndefColumnsLeft == 1) {
+  if (!rightHasUndefColumn && numUndefColumnsLeft == 0) {
+    implementationEnum_ = ImplementationEnum::NoUndef;
+  } else if (!rightHasUndefColumn && numUndefColumnsLeft == 1) {
     std::swap(_joinColumns.at(undefColumnLeftIndex), _joinColumns.back());
+    implementationEnum_ = ImplementationEnum::OnlyUndefInLastJoinColumnOfLeft;
   }
 
   // The inputs must be sorted by the join columns.
@@ -110,7 +113,7 @@ ResultTable OptionalJoin::computeResult() {
              << leftResult->size() << " and " << rightResult->size() << endl;
 
   optionalJoin(leftResult->idTable(), rightResult->idTable(), _joinColumns,
-               &idTable);
+               &idTable, implementationEnum_);
 
   LOG(DEBUG) << "OptionalJoin result computation done." << endl;
   // If only one of the two operands has a non-empty local vocabulary, share
@@ -247,26 +250,36 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
 // ______________________________________________________________
 void OptionalJoin::optionalJoin(
     const IdTable& left, const IdTable& right,
-    const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
-    IdTable* result) {
+    const std::vector<std::array<ColumnIndex, 2>>& joinColumns, IdTable* result,
+    ImplementationEnum implementation) {
   // check for trivial cases
   if (left.empty()) {
     return;
   }
 
-  // `isCheap` is true iff we can apply the `specialOptionalJoin`. This is the
-  // case when only the last column of the left input contains UNDEF values.
-  bool isCheap = true;
-  for (size_t i = 0; i < joinColumns.size(); ++i) {
-    auto [leftCol, rightCol] = joinColumns.at(i);
-    if (std::ranges::any_of(right.getColumn(rightCol),
-                            [](Id id) { return id.isUndefined(); })) {
-      isCheap = false;
-    }
-    if ((i != joinColumns.size() - 1) &&
-        std::ranges::any_of(left.getColumn(leftCol),
-                            [](Id id) { return id.isUndefined(); })) {
-      isCheap = false;
+  // If we could not determine statically whether a cheaper implementation could
+  // be chosen, we still try to determine dynamically by checking all the
+  // columns for UNDEF values. `isCheap` is true iff we can apply the
+  // `specialOptionalJoin`. This is the case when only the last column of the
+  // left input contains UNDEF values.
+  if (implementation == ImplementationEnum::GeneralAlgorithm) {
+    implementation = ImplementationEnum::NoUndef;
+    for (size_t i = 0; i < joinColumns.size(); ++i) {
+      auto [leftCol, rightCol] = joinColumns.at(i);
+      if (std::ranges::any_of(right.getColumn(rightCol),
+                              [](Id id) { return id.isUndefined(); })) {
+        implementation = ImplementationEnum::GeneralAlgorithm;
+        break;
+      }
+      if (std::ranges::any_of(left.getColumn(leftCol),
+                              [](Id id) { return id.isUndefined(); })) {
+        if (i == joinColumns.size() - 1) {
+          implementation = ImplementationEnum::OnlyUndefInLastJoinColumnOfLeft;
+        } else {
+          implementation = ImplementationEnum::GeneralAlgorithm;
+          break;
+        }
+      }
     }
   }
 
@@ -303,9 +316,20 @@ void OptionalJoin::optionalJoin(
   };
 
   const size_t numOutOfOrder = [&]() {
-    if (isCheap) {
+    if (implementation == ImplementationEnum::OnlyUndefInLastJoinColumnOfLeft) {
       ad_utility::specialOptionalJoin(joinColumnsLeft, joinColumnsRight, addRow,
                                       addOptionalRow);
+      return 0UL;
+    } else if (implementation == ImplementationEnum::NoUndef) {
+      if (right.size() / left.size() > GALLOP_THRESHOLD) {
+        ad_utility::gallopingJoin(joinColumnsLeft, joinColumnsRight,
+                                  lessThanBoth, addRow, addOptionalRow);
+      } else {
+        auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
+            joinColumnsLeft, joinColumnsRight, lessThanBoth, addRow,
+            ad_utility::noop, ad_utility::noop, addOptionalRow);
+        AD_CORRECTNESS_CHECK(numOutOfOrder == 0UL);
+      }
       return 0UL;
     } else {
       return ad_utility::zipperJoinWithUndef(
