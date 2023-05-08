@@ -9,15 +9,14 @@
 
 #pragma once
 
-#include <source_location>
-#if false
-#include <experimental/source_location>
-namespace ad_utility {
-using source_location = std::experimental::source_location;
-}
-#else
+#if __has_include(<source_location>)
 #include <source_location>
 namespace ad_utility {
 using source_location = std::source_location;
+}
+#else
+#include <experimental/source_location>
+namespace ad_utility {
+using source_location = std::experimental::source_location;
 }
 #endif
