@@ -4,10 +4,10 @@
 
 #include "./Operation.h"
 
-#include "../util/websocket/QueryState.h"
 #include "engine/QueryExecutionTree.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
+#include "util/websocket/QueryState.h"
 
 template <typename F>
 void Operation::forAllDescendants(F f) {

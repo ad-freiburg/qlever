@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include "../util/websocket/Common.h"
+#include "util/websocket/Common.h"
 
 using std::shared_ptr;
 using std::string;

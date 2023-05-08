@@ -6,7 +6,7 @@
 
 #include <optional>
 
-#include "./Common.h"
+#include "util/websocket/Common.h"
 
 namespace ad_utility::query_state {
 

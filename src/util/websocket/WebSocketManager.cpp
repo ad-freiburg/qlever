@@ -14,10 +14,10 @@
 #include <mutex>
 #include <optional>
 
-#include "../MultiMap.h"
-#include "../http/HttpUtils.h"
-#include "./Common.h"
-#include "./QueryState.h"
+#include "util/MultiMap.h"
+#include "util/http/HttpUtils.h"
+#include "util/websocket/Common.h"
+#include "util/websocket/QueryState.h"
 
 namespace ad_utility::websocket {
 
