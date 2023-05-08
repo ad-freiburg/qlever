@@ -471,19 +471,19 @@ nlohmann::json Server::composeCacheStatsJson() const {
 
 // _____________________________________________
 
-ad_utility::websocket::common::QueryId getQueryId(
+ad_utility::websocket::common::OwningQueryId getQueryId(
     const ad_utility::httpUtils::HttpRequest auto& request) {
-  using ad_utility::websocket::common::QueryId;
+  using ad_utility::websocket::common::OwningQueryId;
   std::string_view queryIdHeader = request.base()["Query-Id"];
   if (queryIdHeader.empty()) {
-    return QueryId::uniqueId();
+    return OwningQueryId::uniqueId();
   }
-  auto queryId = QueryId::uniqueIdFromString(std::string(queryIdHeader));
+  auto queryId = OwningQueryId::uniqueIdFromString(std::string(queryIdHeader));
   if (!queryId) {
     throw std::runtime_error{"QueryId '" + queryIdHeader +
                              "' is already in use!"};
   }
-  return *queryId;
+  return std::move(queryId.value());
 }
 
 // ____________________________________________________________________________
@@ -648,7 +648,6 @@ boost::asio::awaitable<void> Server::processQuery(
         auto response =
             createOkResponse(std::move(responseGenerator), request, mediaType);
         co_await send(std::move(response));
-        // TODO<RobinTF> unregister QueryId
       } catch (...) {
         if (exceptionPtr) {
           std::rethrow_exception(exceptionPtr);
