@@ -20,8 +20,7 @@ using websocket::common::TimedClientPayload;
 net::awaitable<void> manageConnection(tcp::socket socket,
                                       http::request<http::string_body> request);
 // Returns true if there are other active connections that do no currently wait.
-bool fireAllCallbacksForQuery(
-    const QueryId& queryId,
+bool fireAllCallbacksForQuery(const QueryId& queryId,
                               TimedClientPayload runtimeInformationSnapshot);
 
 std::optional<http::response<http::string_body>> checkPathIsValid(
