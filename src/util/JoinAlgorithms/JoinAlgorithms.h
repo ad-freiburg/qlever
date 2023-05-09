@@ -311,6 +311,10 @@ template <
  * entryFromLarger), this function is called with the iterators to the matching
  * entries as arguments. These calls will be in ascending order wrt `lessThan`,
  * meaning that the result will be sorted.
+ * @param elementFromSmallerNotFoundAction Is called for each element in
+ * `smaller` that has no matching counterpart in `larger`. Can be used to
+ * implement very efficient OPTIONAL or MINUS if neither of the inputs contains
+ * UNDEF values, and if the left operand is much smaller.
  */
 template <std::ranges::random_access_range Range,
           typename ElementFromSmallerNotFoundAction = Noop>

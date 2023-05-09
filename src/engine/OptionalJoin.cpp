@@ -248,6 +248,31 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
 }
 
 // ______________________________________________________________
+auto OptionalJoin::computeImplementationFromIdTables(
+    const IdTable& left, const IdTable& right,
+    const std::vector<std::array<ColumnIndex, 2>>& joinColumns)
+    -> ImplementationEnum {
+  auto implementation = ImplementationEnum::NoUndef;
+  auto anyIsUndefined = [](auto column) {
+    return std::ranges::any_of(column, &Id::isUndefined);
+  };
+  for (size_t i = 0; i < joinColumns.size(); ++i) {
+    auto [leftCol, rightCol] = joinColumns.at(i);
+    if (anyIsUndefined(right.getColumn(rightCol))) {
+      return ImplementationEnum::GeneralAlgorithm;
+    }
+    if (anyIsUndefined(left.getColumn(leftCol))) {
+      if (i == joinColumns.size() - 1) {
+        implementation = ImplementationEnum::OnlyUndefInLastJoinColumnOfLeft;
+      } else {
+        return ImplementationEnum::GeneralAlgorithm;
+      }
+    }
+  }
+  return implementation;
+}
+
+// ______________________________________________________________
 void OptionalJoin::optionalJoin(
     const IdTable& left, const IdTable& right,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns, IdTable* result,
@@ -263,24 +288,8 @@ void OptionalJoin::optionalJoin(
   // `specialOptionalJoin`. This is the case when only the last column of the
   // left input contains UNDEF values.
   if (implementation == ImplementationEnum::GeneralAlgorithm) {
-    implementation = ImplementationEnum::NoUndef;
-    for (size_t i = 0; i < joinColumns.size(); ++i) {
-      auto [leftCol, rightCol] = joinColumns.at(i);
-      if (std::ranges::any_of(right.getColumn(rightCol),
-                              [](Id id) { return id.isUndefined(); })) {
-        implementation = ImplementationEnum::GeneralAlgorithm;
-        break;
-      }
-      if (std::ranges::any_of(left.getColumn(leftCol),
-                              [](Id id) { return id.isUndefined(); })) {
-        if (i == joinColumns.size() - 1) {
-          implementation = ImplementationEnum::OnlyUndefInLastJoinColumnOfLeft;
-        } else {
-          implementation = ImplementationEnum::GeneralAlgorithm;
-          break;
-        }
-      }
-    }
+    implementation =
+        computeImplementationFromIdTables(left, right, joinColumns);
   }
 
   ad_utility::JoinColumnMapping joinColumnData{joinColumns, left.numColumns(),
@@ -325,10 +334,10 @@ void OptionalJoin::optionalJoin(
         ad_utility::gallopingJoin(joinColumnsLeft, joinColumnsRight,
                                   lessThanBoth, addRow, addOptionalRow);
       } else {
-        auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
+        auto shouldBeZero = ad_utility::zipperJoinWithUndef(
             joinColumnsLeft, joinColumnsRight, lessThanBoth, addRow,
             ad_utility::noop, ad_utility::noop, addOptionalRow);
-        AD_CORRECTNESS_CHECK(numOutOfOrder == 0UL);
+        AD_CORRECTNESS_CHECK(shouldBeZero == 0UL);
       }
       return 0UL;
     } else {

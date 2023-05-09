@@ -16,9 +16,11 @@ class OptionalJoin : public Operation {
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 
+  // This enum keeps track of which columns in the input contain UNDEF values.
+  // This is then used to choose the cheapest possible implementation.
   enum struct ImplementationEnum {
-    GeneralAlgorithm,
-    NoUndef,
+    GeneralAlgorithm,  // No special implementation possible
+    NoUndef,           // None of the join columns contains UNDEF
     OnlyUndefInLastJoinColumnOfLeft
   };
 
@@ -86,4 +88,10 @@ class OptionalJoin : public Operation {
   ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  // Check which of the join columns in `left` and `right` contain UNDEF values
+  // and return the appropriate `ImplementationEnum`.
+  static ImplementationEnum computeImplementationFromIdTables(
+      const IdTable& left, const IdTable& right,
+      const std::vector<std::array<ColumnIndex, 2>>&);
 };

@@ -329,10 +329,9 @@ TEST(OptionalJoin, specialOptionalJoinTwoColumns) {
 
 TEST(OptionalJoin, gallopingJoin) {
   {
-    IdTable a{
-        makeIdTableFromVector({{5}, {327}, {4938}, {100000000}})};
-    IdTable expectedResult{
-        makeIdTableFromVector({{5, 17}, {327, U}, {4938, 4950}, {100000000, U}})};
+    IdTable a{makeIdTableFromVector({{5}, {327}, {4938}, {100000000}})};
+    IdTable expectedResult{makeIdTableFromVector(
+        {{5, 17}, {327, U}, {4938, 4950}, {100000000, U}})};
 
     VectorTable bInput;
     for (int64_t i = 0; i < 300; ++i) {
