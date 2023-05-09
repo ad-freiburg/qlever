@@ -110,7 +110,9 @@ class stream_generator_promise {
   }
 
  private:
-  bool isBufferLargeEnough() { return _stream.tellp() >= MIN_BUFFER_SIZE; }
+  bool isBufferLargeEnough() {
+    return static_cast<size_t>(_stream.tellp()) >= MIN_BUFFER_SIZE;
+  }
 };
 
 struct stream_generator_sentinel {};
