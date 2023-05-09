@@ -52,12 +52,12 @@ class Index {
   // Every vector is either empty or has the same size as the others.
   struct WordEntityPostings {
     vector<TextRecordIndex>
-        cids;  // Stores the index of the TextRecord of each result.
+        cids_;  // Stores the index of the TextRecord of each result.
     vector<WordIndex>
-        wids;  // For prefix-queries stores for each result the index of the
+        wids_;  // For prefix-queries stores for each result the index of the
                // Word the prefixed-word was completed to.
-    vector<Id> eids;       // Stores the index of the entity of each result.
-    vector<Score> scores;  // Stores for each result how often an entity
+    vector<Id> eids_;       // Stores the index of the entity of each result.
+    vector<Score> scores_;  // Stores for each result how often an entity
                            // appears in its associated TextRecord.
   };
 

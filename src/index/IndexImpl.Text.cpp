@@ -783,8 +783,8 @@ void IndexImpl::getContextListForWords(const string& words,
     }
     if (wepVecs.size() == 2) {
       FTSAlgorithms::intersectTwoPostingLists(
-          wepVecs[0].cids, wepVecs[1].scores, wepVecs[1].cids,
-          wepVecs[1].scores, wep.cids, wep.scores);
+          wepVecs[0].cids_, wepVecs[1].scores_, wepVecs[1].cids_,
+          wepVecs[1].scores_, wep.cids_, wep.scores_);
     } else {
       wep = FTSAlgorithms::intersectKWay(wepVecs, nullptr);
     }
@@ -794,10 +794,10 @@ void IndexImpl::getContextListForWords(const string& words,
 
   LOG(DEBUG) << "Packing lists into a ResultTable\n...";
   IdTableStatic<2> result = std::move(*dynResult).toStatic<2>();
-  result.resize(wep.cids.size());
-  for (size_t i = 0; i < wep.cids.size(); ++i) {
-    result(i, 0) = Id::makeFromTextRecordIndex(wep.cids[i]);
-    result(i, 1) = Id::makeFromInt(wep.scores[i]);
+  result.resize(wep.cids_.size());
+  for (size_t i = 0; i < wep.cids_.size(); ++i) {
+    result(i, 0) = Id::makeFromTextRecordIndex(wep.cids_[i]);
+    result(i, 1) = Id::makeFromInt(wep.scores_[i]);
   }
   *dynResult = std::move(result).toDynamic();
   LOG(DEBUG) << "Done with getContextListForWords.\n";
@@ -807,14 +807,14 @@ void IndexImpl::getContextListForWords(const string& words,
 Index::WordEntityPostings IndexImpl::readWordCl(
     const TextBlockMetaData& tbmd) const {
   Index::WordEntityPostings wep;
-  wep.cids = readGapComprList<TextRecordIndex>(
+  wep.cids_ = readGapComprList<TextRecordIndex>(
       tbmd._cl._nofElements, tbmd._cl._startContextlist,
       static_cast<size_t>(tbmd._cl._startWordlist - tbmd._cl._startContextlist),
       &TextRecordIndex::make);
-  wep.wids = readFreqComprList<WordIndex>(
+  wep.wids_ = readFreqComprList<WordIndex>(
       tbmd._cl._nofElements, tbmd._cl._startWordlist,
       static_cast<size_t>(tbmd._cl._startScorelist - tbmd._cl._startWordlist));
-  wep.scores = readFreqComprList<Score>(
+  wep.scores_ = readFreqComprList<Score>(
       tbmd._cl._nofElements, tbmd._cl._startScorelist,
       static_cast<size_t>(tbmd._cl._lastByte + 1 - tbmd._cl._startScorelist));
   return wep;
@@ -824,17 +824,17 @@ Index::WordEntityPostings IndexImpl::readWordCl(
 Index::WordEntityPostings IndexImpl::readWordEntityCl(
     const TextBlockMetaData& tbmd) const {
   Index::WordEntityPostings wep;
-  wep.cids = readGapComprList<TextRecordIndex>(
+  wep.cids_ = readGapComprList<TextRecordIndex>(
       tbmd._entityCl._nofElements, tbmd._entityCl._startContextlist,
       static_cast<size_t>(tbmd._entityCl._startWordlist -
                           tbmd._entityCl._startContextlist),
       &TextRecordIndex::make);
-  wep.eids = readFreqComprList<Id>(
+  wep.eids_ = readFreqComprList<Id>(
       tbmd._entityCl._nofElements, tbmd._entityCl._startWordlist,
       static_cast<size_t>(tbmd._entityCl._startScorelist -
                           tbmd._entityCl._startWordlist),
       &Id::fromBits);
-  wep.scores = readFreqComprList<Score>(
+  wep.scores_ = readFreqComprList<Score>(
       tbmd._entityCl._nofElements, tbmd._entityCl._startScorelist,
       static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
                           tbmd._entityCl._startScorelist));
@@ -882,7 +882,7 @@ Index::WordEntityPostings IndexImpl::getWordPostingsForTerm(
     wep = FTSAlgorithms::filterByRange(idRange, wep);
   }
   LOG(DEBUG) << "Word postings for term: " << term
-             << ": cids: " << wep.cids.size() << " scores " << wep.scores.size()
+             << ": cids: " << wep.cids_.size() << " scores " << wep.scores_.size()
              << '\n';
   return wep;
 }
@@ -929,7 +929,7 @@ Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
       wepVecs.push_back(getEntityPostingsForTerm(terms[useElFromTerm]));
       resultWep = FTSAlgorithms::intersectKWay(
           wepVecs,
-          &wepVecs.back().eids);  // TODO: rewrite into crossIntersectKWay so
+          &wepVecs.back().eids_);  // TODO: rewrite into crossIntersectKWay so
                                   // that word id  is also considered
     }
   } else {
@@ -937,7 +937,7 @@ Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
     resultWep = getEntityPostingsForTerm(terms[0]);
   }
   LOG(INFO) << "Done with getEntityContextScoreListsForWords. "
-            << "Got " << resultWep.cids.size() << " elements. \n";
+            << "Got " << resultWep.cids_.size() << " elements. \n";
   return resultWep;
 }
 
@@ -1467,7 +1467,7 @@ void IndexImpl::getECListForWordsAndSingleSub(
 
   LOG(DEBUG) << "Filtering matching contexts and building cross-product...\n";
   vector<array<Id, 3 + I>> nonAggRes;
-  if (wep.cids.size() > 0) {
+  if (wep.cids_.size() > 0) {
     // Transform the sub res into a map from key entity to tuples
     ad_utility::HashMap<Id, vector<array<Id, I>>> subEs;
     for (size_t i = 0; i < subres.size(); ++i) {
@@ -1476,20 +1476,20 @@ void IndexImpl::getECListForWordsAndSingleSub(
     }
     // Test if each context is fitting.
     size_t currentContextFrom = 0;
-    TextRecordIndex currentContext = wep.cids[0];
+    TextRecordIndex currentContext = wep.cids_[0];
     bool matched = false;
-    for (size_t i = 0; i < wep.cids.size(); ++i) {
-      if (wep.cids[i] != currentContext) {
+    for (size_t i = 0; i < wep.cids_.size(); ++i) {
+      if (wep.cids_[i] != currentContext) {
         if (matched) {
           FTSAlgorithms::appendCrossProduct(wep, currentContextFrom, i, subEs,
                                             nonAggRes);
         }
         matched = false;
-        currentContext = wep.cids[i];
+        currentContext = wep.cids_[i];
         currentContextFrom = i;
       }
       if (!matched) {
-        matched = (subEs.count(wep.eids[i]) > 0);
+        matched = (subEs.count(wep.eids_[i]) > 0);
       }
     }
   }
@@ -1519,7 +1519,7 @@ void IndexImpl::getECListForWordsAndTwoW1Subs(
 
   LOG(DEBUG) << "Filtering matching contexts and building cross-product...\n";
   vector<array<Id, 5>> nonAggRes;
-  if (wep.cids.size() > 0) {
+  if (wep.cids_.size() > 0) {
     // Transform the sub res' into sets of entity Ids
     ad_utility::HashSet<Id> subEs1;
     ad_utility::HashSet<Id> subEs2;
@@ -1531,12 +1531,12 @@ void IndexImpl::getECListForWordsAndTwoW1Subs(
     }
     // Test if each context is fitting.
     size_t currentContextFrom = 0;
-    TextRecordIndex currentContext = wep.cids[0];
+    TextRecordIndex currentContext = wep.cids_[0];
     bool matched = false;
     bool matched1 = false;
     bool matched2 = false;
-    for (size_t i = 0; i < wep.cids.size(); ++i) {
-      if (wep.cids[i] != currentContext) {
+    for (size_t i = 0; i < wep.cids_.size(); ++i) {
+      if (wep.cids_[i] != currentContext) {
         if (matched) {
           FTSAlgorithms::appendCrossProduct(wep, currentContextFrom, i, subEs1,
                                             subEs2, nonAggRes);
@@ -1544,15 +1544,15 @@ void IndexImpl::getECListForWordsAndTwoW1Subs(
         matched = false;
         matched1 = false;
         matched2 = false;
-        currentContext = wep.cids[i];
+        currentContext = wep.cids_[i];
         currentContextFrom = i;
       }
       if (!matched) {
         if (!matched1) {
-          matched1 = (subEs1.count(wep.eids[i]) > 0);
+          matched1 = (subEs1.count(wep.eids_[i]) > 0);
         }
         if (!matched2) {
-          matched2 = (subEs2.count(wep.eids[i]) > 0);
+          matched2 = (subEs2.count(wep.eids_[i]) > 0);
         }
         matched = matched1 && matched2;
       }
@@ -1571,29 +1571,29 @@ void IndexImpl::getECListForWordsAndSubtrees(
 
   LOG(DEBUG) << "Filtering matching contexts and building cross-product...\n";
   vector<vector<Id>> nonAggRes;
-  if (wep.cids.size() > 0) {
+  if (wep.cids_.size() > 0) {
     // Test if each context is fitting.
     size_t currentContextFrom = 0;
-    TextRecordIndex currentContext = wep.cids[0];
+    TextRecordIndex currentContext = wep.cids_[0];
     bool matched = false;
     vector<bool> matchedSubs;
     matchedSubs.resize(subResMaps.size(), false);
-    for (size_t i = 0; i < wep.cids.size(); ++i) {
-      if (wep.cids[i] != currentContext) {
+    for (size_t i = 0; i < wep.cids_.size(); ++i) {
+      if (wep.cids_[i] != currentContext) {
         if (matched) {
           FTSAlgorithms::appendCrossProduct(wep, currentContextFrom, i,
                                             subResMaps, nonAggRes);
         }
         matched = false;
         std::fill(matchedSubs.begin(), matchedSubs.end(), false);
-        currentContext = wep.cids[i];
+        currentContext = wep.cids_[i];
         currentContextFrom = i;
       }
       if (!matched) {
         matched = true;
         for (size_t j = 0; j < matchedSubs.size(); ++j) {
           if (!matchedSubs[j]) {
-            if (subResMaps[j].count(wep.eids[i]) > 0) {
+            if (subResMaps[j].count(wep.eids_[i]) > 0) {
               matchedSubs[j] = true;
             } else {
               matched = false;

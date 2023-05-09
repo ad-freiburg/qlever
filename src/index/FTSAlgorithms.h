@@ -94,7 +94,7 @@ class FTSAlgorithms {
                << toExclusive - from << " postings.\n";
     vector<array<Id, I>> contextSubRes;
     for (size_t i = from; i < toExclusive; ++i) {
-      auto it = subRes.find(wep.eids[i]);
+      auto it = subRes.find(wep.eids_[i]);
       if (it != subRes.end()) {
         for (auto& tup : it->second) {
           contextSubRes.push_back(tup);
@@ -104,8 +104,8 @@ class FTSAlgorithms {
     for (size_t i = from; i < toExclusive; ++i) {
       for (auto& tup : contextSubRes) {
         res.emplace_back(concatTupleOld(
-            wep.eids[i], Id::makeFromInt(wep.scores[i]),
-            Id::makeFromTextRecordIndex(wep.cids[i]), tup, GenSeq<I>()));
+            wep.eids_[i], Id::makeFromInt(wep.scores_[i]),
+            Id::makeFromTextRecordIndex(wep.cids_[i]), tup, GenSeq<I>()));
       }
     }
   }
