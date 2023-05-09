@@ -775,7 +775,7 @@ TEST(QueryExecutionTreeTest, testTextQuerySE) {
   ASSERT_EQ(
       "{\n  TEXT OPERATION WITHOUT FILTER: co-occurrence with words:"
       " \"search engine\" and 0 variables with textLimit = 1\n"
-      "  qet-width: 2 \n}",
+      "  qet-width: 3 \n}",
       qet.asString());
 }
 

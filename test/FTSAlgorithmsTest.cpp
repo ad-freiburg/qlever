@@ -65,12 +65,9 @@ TEST(FTSAlgorithmsTest, crossIntersectTest) {
   ASSERT_EQ(0u, resultWep.eids_.size());
   ASSERT_EQ(0u, resultWep.scores_.size());
 
-  matchingContextsWep.cids_.push_back(T(0));
-  matchingContextsWep.cids_.push_back(T(2));
-  matchingContextsWep.wids_.push_back(1);
-  matchingContextsWep.wids_.push_back(4);
-  matchingContextsWep.scores_.push_back(1);
-  matchingContextsWep.scores_.push_back(1);
+  matchingContextsWep.cids_ = {T(0), T(2)};
+  matchingContextsWep.wids_ = {1, 4};
+  matchingContextsWep.scores_ = {1, 1};
 
   resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
   ASSERT_EQ(0u, resultWep.wids_.size());
@@ -78,18 +75,9 @@ TEST(FTSAlgorithmsTest, crossIntersectTest) {
   ASSERT_EQ(0u, resultWep.eids_.size());
   ASSERT_EQ(0u, resultWep.scores_.size());
 
-  eBlockWep.cids_.push_back(T(1));
-  eBlockWep.cids_.push_back(T(2));
-  eBlockWep.cids_.push_back(T(2));
-  eBlockWep.cids_.push_back(T(4));
-  eBlockWep.eids_.push_back(V(10));
-  eBlockWep.eids_.push_back(V(1));
-  eBlockWep.eids_.push_back(V(1));
-  eBlockWep.eids_.push_back(V(2));
-  eBlockWep.scores_.push_back(1);
-  eBlockWep.scores_.push_back(1);
-  eBlockWep.scores_.push_back(1);
-  eBlockWep.scores_.push_back(1);
+  eBlockWep.cids_ = {T(1), T(2), T(2), T(4)};
+  eBlockWep.eids_ = {V(10), V(1), V(1), V(2)};
+  eBlockWep.scores_ = {1, 1, 1, 1};
 
   resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
   ASSERT_EQ(2u, resultWep.wids_.size());
@@ -97,9 +85,9 @@ TEST(FTSAlgorithmsTest, crossIntersectTest) {
   ASSERT_EQ(2u, resultWep.eids_.size());
   ASSERT_EQ(2u, resultWep.scores_.size());
 
-  matchingContextsWep.cids_.push_back(T(2));
-  matchingContextsWep.wids_.push_back(8);
-  matchingContextsWep.scores_.push_back(1);
+  matchingContextsWep.cids_ = {T(0), T(2), T(2)};
+  matchingContextsWep.wids_ = {1, 4, 8};
+  matchingContextsWep.scores_ = {1, 1, 1};
 
   resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
   ASSERT_EQ(4u, resultWep.wids_.size());
@@ -251,7 +239,7 @@ TEST(FTSAlgorithmsTest, intersectKWayTest) {
 
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
   IdTable result{makeAllocator()};
-  result.setNumColumns(3);
+  result.setNumColumns(4);
   Index::WordEntityPostings wep;
 
   FTSAlgorithms::aggScoresAndTakeTopKContexts(wep, 2, &result);
@@ -286,7 +274,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
 
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   IdTable result{makeAllocator()};
-  result.setNumColumns(3);
+  result.setNumColumns(4);
   Index::WordEntityPostings wep;
   int width = result.numColumns();
 

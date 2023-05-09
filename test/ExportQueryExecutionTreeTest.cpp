@@ -175,19 +175,23 @@ TEST(ExportQueryExecutionTree, Integers) {
       kg, query, 3,
       // TODO<joka921> the ORDER BY of negative numbers is incorrect.
       // TSV
-      "?o\n"
-      "-42019234865781\n"
-      "42\n"
-      "4012934858173560\n",
+      "?o\t?completedWord\n"
+      "-42019234865781\t\n"
+      "42\t\n"
+      "4012934858173560\t\n",
       // CSV
-      "?o\n"
-      "-42019234865781\n"
-      "42\n"
-      "4012934858173560\n",
-      makeExpectedQLeverJSON(
-          {"\"-42019234865781\"^^<http://www.w3.org/2001/XMLSchema#int>"s,
-           "\"42\"^^<http://www.w3.org/2001/XMLSchema#int>"s,
-           "\"4012934858173560\"^^<http://www.w3.org/2001/XMLSchema#int>"s}),
+      "?o,?completedWord\n"
+      "-42019234865781,\n"
+      "42,\n"
+      "4012934858173560,\n",
+      []() {
+        nlohmann::json j;
+        nlohmann::json null;
+        j.push_back({"\"-42019234865781\"^^<http://www.w3.org/2001/XMLSchema#int>"s, null});
+        j.push_back({"\"42\"^^<http://www.w3.org/2001/XMLSchema#int>"s, null});
+        j.push_back({"\"4012934858173560\"^^<http://www.w3.org/2001/XMLSchema#int>"s, null});
+        return j;
+      }(),
       makeExpectedSparqlJSON(
           {makeJSONBinding("http://www.w3.org/2001/XMLSchema#int", "literal",
                            "-42019234865781"),
@@ -235,19 +239,22 @@ TEST(ExportQueryExecutionTree, Floats) {
       // TODO<joka921> The sorting is wrong, and the formatting of the negative
       // number is strange.
       // TSV
-      "?o\n"
-      "-42019234865780982022144\n"
-      "4.01293e-12\n"
-      "42.2\n",
+      "?o\t?completedWord\n"
+      "-42019234865780982022144\t\n"
+      "4.01293e-12\t\n"
+      "42.2\t\n",
       // CSV
-      "?o\n"
-      "-42019234865780982022144\n"
-      "4.01293e-12\n"
-      "42.2\n",
-      makeExpectedQLeverJSON(
-          {"\"-42019234865780982022144\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
-           "\"4.01293e-12\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
-           "\"42.2\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s}),
+      "?o,?completedWord\n"
+      "-42019234865780982022144,\n"
+      "4.01293e-12,\n"
+      "42.2,\n",
+      []() {
+        nlohmann::json j;
+        j.push_back({"\"-42019234865780982022144\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s, nullptr});
+        j.push_back({"\"4.01293e-12\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s, nullptr});
+        j.push_back({"\"42.2\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s, nullptr});
+        return j;
+      }(),
       makeExpectedSparqlJSON(
           {makeJSONBinding("http://www.w3.org/2001/XMLSchema#decimal",
                            "literal", "-42019234865780982022144"),
@@ -293,14 +300,17 @@ TEST(ExportQueryExecutionTree, Dates) {
       query,
       1,
       // TSV
-      "?o\n"
-      "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>\n",
+      "?o\t?completedWord\n"
+      "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>\t\n",
       // Note: the duplicate quotes are due to the escaping for CSV.
-      "?o\n"
+      "?o,?completedWord\n"
       "\"\"\"1950-01-01T00:00:00\"\"^^<http://www.w3.org/2001/"
-      "XMLSchema#dateTime>\"\n",
-      makeExpectedQLeverJSON(
-          {"\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"s}),
+      "XMLSchema#dateTime>\",\n",
+      []() {
+        nlohmann::json j;
+        j.push_back({"\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"s, nullptr});
+        return j;
+      }(),
       makeExpectedSparqlJSON(
           {makeJSONBinding("http://www.w3.org/2001/XMLSchema#dateTime",
                            "literal", "1950-01-01T00:00:00")}),
@@ -341,12 +351,16 @@ TEST(ExportQueryExecutionTree, Entities) {
       query,
       1,
       // TSV
-      "?o\n"
-      "<http://qlever.com/o>\n",
+      "?o\t?completedWord\n"
+      "<http://qlever.com/o>\t\n",
       // CSV
-      "?o\n"
-      "<http://qlever.com/o>\n",
-      makeExpectedQLeverJSON({"<http://qlever.com/o>"s}),
+      "?o,?completedWord\n"
+      "<http://qlever.com/o>,\n",
+      []() {
+        nlohmann::json j;
+        j.push_back({"<http://qlever.com/o>"s, nullptr});
+        return j;
+      }(),
       makeExpectedSparqlJSON(
           {makeJSONBinding(std::nullopt, "uri", "http://qlever.com/o")}),
   };
@@ -383,12 +397,16 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
   TestCaseSelectQuery testCase{
       kg, query, 1,
       // TSV
-      "?o\n"
-      "\"Some\"Where Over,\"@en-ca\n",
+      "?o\t?completedWord\n"
+      "\"Some\"Where Over,\"@en-ca\t\n",
       // CSV
-      "?o\n"
-      "\"\"\"Some\"\"Where\tOver,\"\"@en-ca\"\n",
-      makeExpectedQLeverJSON({"\"Some\"Where\tOver,\"@en-ca"s}),
+      "?o,?completedWord\n"
+      "\"\"\"Some\"\"Where\tOver,\"\"@en-ca\",\n",
+      []() {
+        nlohmann::json j;
+        j.push_back({"\"Some\"Where\tOver,\"@en-ca"s, nullptr});
+        return j;
+      }(),
       makeExpectedSparqlJSON({makeJSONBinding(std::nullopt, "literal",
                                               "Some\"Where\tOver,", "en-ca")})};
   runSelectQueryTestCase(testCase);
@@ -428,9 +446,9 @@ TEST(ExportQueryExecutionTree, UndefinedValues) {
       kg,
       query,
       1,
-      "?o\n\n",
-      "?o\n\n",
-      nlohmann::json{std::vector{std::vector{nullptr}}},
+      "?o\t?completedWord\n\t\n",
+      "?o,?completedWord\n,\n",
+      nlohmann::json{std::vector{nullptr, nullptr}},
       []() {
         nlohmann::json j;
         j["head"]["vars"].push_back("o");
@@ -460,12 +478,16 @@ TEST(ExportQueryExecutionTree, BlankNode) {
   TestCaseSelectQuery testCaseBlankNode{
       kg, objectQuery, 1,
       // TSV
-      "?o\n"
-      "_:u_blank\n",
+      "?o\t?completedWord\n"
+      "_:u_blank\t\n",
       // CSV
-      "?o\n"
-      "_:u_blank\n",
-      makeExpectedQLeverJSON({"_:u_blank"s}),
+      "?o,?completedWord\n"
+      "_:u_blank,\n",
+      []() {
+        nlohmann::json j;
+        j.push_back({"_:u_blank"s, nullptr});
+        return j;
+      }(),
       makeExpectedSparqlJSON(
           {makeJSONBinding(std::nullopt, "bnode", "u_blank")})};
   runSelectQueryTestCase(testCaseBlankNode);
@@ -481,14 +503,14 @@ TEST(ExportQueryExecutionTree, MultipleVariables) {
   TestCaseSelectQuery testCaseMultipleVariables{
       kg, objectQuery, 1,
       // TSV
-      "?p\t?o\n"
-      "<p>\t<o>\n",
+      "?p\t?o\t?completedWord\n"
+      "<p>\t<o>\t\n",
       // CSV
-      "?p,?o\n"
-      "<p>,<o>\n",
+      "?p,?o,?completedWord\n"
+      "<p>,<o>,\n",
       []() {
         nlohmann::json j;
-        j.push_back(std::vector{"<p>"s, "<o>"s});
+        j.push_back({"<p>"s, "<o>"s, nullptr});
         return j;
       }(),
       []() {
