@@ -14,11 +14,6 @@
 namespace ad_utility {
 using source_location = std::source_location;
 }
-#elif __has_include(<experimental/source_location>)
-#include <experimental/source_location>
-namespace ad_utility {
-using source_location = std::experimental::source_location;
-}
 #else
 namespace ad_utility {
 class source_location {
