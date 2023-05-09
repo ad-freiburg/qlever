@@ -247,7 +247,7 @@ TEST(SparqlExpression, dateOperators) {
   // result on the given date.
   auto check = [](const string& date, int expectedYear, int expectedMonth,
                   int expectedDay) {
-    std::string dateAsIndexWord = ad_utility::convertDateToIndexWord(date);
+    const std::string& dateAsIndexWord = date;
     auto checkYear = testUnaryExpression<YearExpression, std::string, long int>;
     auto checkMonth =
         testUnaryExpression<MonthExpression, std::string, long int>;
