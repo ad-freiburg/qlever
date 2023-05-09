@@ -346,4 +346,24 @@ TEST(OptionalJoin, gallopingJoin) {
 
     testOptionalJoin(a, b, jcls, expectedResult);
   }
+  // Also test the case that the largest element of `a` is less than the largest
+  // element of `b`.
+  {
+    IdTable a{makeIdTableFromVector({{5}, {327}, {328}})};
+    IdTable expectedResult{
+        makeIdTableFromVector({{5, 17}, {327, U}, {328, U}})};
+
+    VectorTable bInput;
+    for (int64_t i = 0; i < 300; ++i) {
+      bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
+    }
+    for (int64_t i = 400; i < 10000; ++i) {
+      bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
+    }
+    IdTable b{makeIdTableFromVector(bInput)};
+    // Join on the first column
+    JoinColumns jcls{{0, 0}};
+
+    testOptionalJoin(a, b, jcls, expectedResult);
+  }
 }
