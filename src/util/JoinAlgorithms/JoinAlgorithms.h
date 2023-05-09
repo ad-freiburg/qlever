@@ -372,7 +372,7 @@ void gallopingJoin(
                            return lessThan(a, b);
                          });
     if (itLarge == endLarge) {
-      return;
+      break;
     }
 
     // Find the ranges where both inputs are equal and add them to the result.
@@ -389,6 +389,13 @@ void gallopingJoin(
     }
     itSmall = endSameSmall;
     itLarge = endSameLarge;
+  }
+  if constexpr (!ad_utility::isSimilar<ElementFromSmallerNotFoundAction,
+                                       Noop>) {
+    while (itSmall != endSmall) {
+      elementFromSmallerNotFoundAction(itSmall);
+      ++itSmall;
+    }
   }
 }
 
