@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <antlr4-runtime.h>
@@ -12,8 +10,9 @@
 #include <regex>
 #include <string>
 
-#include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandAutomaticLexer.h"
-#include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandAutomaticParser.h"
+#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
+#include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandLexer.h"
+#include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandParser.h"
 #include "BenchmarkConfigurationShorthandVisitor.h"
 #include "util/Exception.h"
 #include "util/json.h"
@@ -48,18 +47,19 @@ nlohmann::json BenchmarkConfiguration::parseShortHand(
     const std::string& shortHandString) {
   // I use ANTLR expressions to parse the short hand.
   antlr4::ANTLRInputStream input(shortHandString);
-  BenchmarkConfigurationShorthandAutomaticLexer lexer(&input);
+  BenchmarkConfigurationShorthandLexer lexer(&input);
   antlr4::CommonTokenStream tokens(&lexer);
-  BenchmarkConfigurationShorthandAutomaticParser parser(&tokens);
+  BenchmarkConfigurationShorthandParser parser(&tokens);
 
   // Get the top node.
-  BenchmarkConfigurationShorthandAutomaticParser::AssignmentsContext*
-      assignments{parser.assignments()};
+  BenchmarkConfigurationShorthandParser::ShortHandStringContext*
+      shortHandStringContext{parser.shortHandString()};
 
   // Walk through the parser tree and build the json equivalent out of the short
   // hand.
   return std::any_cast<nlohmann::json>(
-      BenchmarkConfigurationShorthandVisitor{}.visitAssignments(assignments));
+      ToJsonBenchmarkConfigurationShorthandVisitor{}.visitShortHandString(
+          shortHandStringContext));
 }
 
 // ____________________________________________________________________________

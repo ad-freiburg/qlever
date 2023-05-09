@@ -124,8 +124,8 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
     // Parse recursiv.
     function(R"(object1 : { object2 : [[{object3 : [4, 2, "This one"]}], 6]})");
     ASSERT_EQ("This one", config
-                              .getValueByNestedKeys<int>("object1", "object2",
-                                                         0, 0, "object3", 2)
+                              .getValueByNestedKeys<std::string>(
+                                  "object1", "object2", 0, 0, "object3", 2)
                               .value());
   };
 
