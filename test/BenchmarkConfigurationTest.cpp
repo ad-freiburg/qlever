@@ -148,6 +148,10 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
   // Is the `myWishAverage` still there?
   ASSERT_TRUE(config.getValueByNestedKeys<int>("myWishAverage").has_value());
   ASSERT_EQ(1, config.getValueByNestedKeys<int>("myWishAverage").value());
+
+  // Final test: Is there an exception, if we try to parse the wrong syntax?
+  ASSERT_ANY_THROW(config.setShortHand(R"({"myName" : "Bernd")}"));
+  ASSERT_ANY_THROW(config.addShortHand(R"("myName" = "Bernd";)"));
 }
 
 // Testing the exceptions of set and add json string.

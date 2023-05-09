@@ -5,7 +5,6 @@
 #include <any>
 
 #include "../benchmark/infrastructure/BenchmarkConfigurationShorthandVisitor.h"
-#include "nlohmann/json.hpp"
 #include "util/json.h"
 
 std::any ToJsonBenchmarkConfigurationShorthandVisitor::visitShortHandString(

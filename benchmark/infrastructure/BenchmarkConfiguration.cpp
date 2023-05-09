@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
+
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <antlr4-runtime.h>
@@ -10,11 +12,11 @@
 #include <regex>
 #include <string>
 
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandLexer.h"
 #include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandParser.h"
 #include "BenchmarkConfigurationShorthandVisitor.h"
 #include "util/Exception.h"
+#include "util/antlr/ANTLRErrorHandling.h"
 #include "util/json.h"
 
 namespace ad_benchmark {
@@ -51,7 +53,16 @@ nlohmann::json BenchmarkConfiguration::parseShortHand(
   antlr4::CommonTokenStream tokens(&lexer);
   BenchmarkConfigurationShorthandParser parser(&tokens);
 
-  // Get the top node.
+  // The default in ANTLR is to log all errors to the console and to continue
+  // the parsing. We need to turn parse errors into exceptions instead to
+  // propagate them to the user.
+  ThrowingErrorListener errorListener{};
+  parser.removeErrorListeners();
+  parser.addErrorListener(&errorListener);
+  lexer.removeErrorListeners();
+  lexer.addErrorListener(&errorListener);
+
+  // Get the top node. That is, the node of the first grammar rule.
   BenchmarkConfigurationShorthandParser::ShortHandStringContext*
       shortHandStringContext{parser.shortHandString()};
 
