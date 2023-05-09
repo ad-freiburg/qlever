@@ -2,9 +2,10 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "../benchmark/infrastructure/BenchmarkConfigurationShorthandVisitor.h"
+
 #include <any>
 
-#include "../benchmark/infrastructure/BenchmarkConfigurationShorthandVisitor.h"
 #include "util/json.h"
 
 std::any ToJsonBenchmarkConfigurationShorthandVisitor::visitShortHandString(
