@@ -110,10 +110,7 @@ class stream_generator_promise {
   }
 
  private:
-  bool isBufferLargeEnough() {
-    // TODO<joka921> Very inefficient, but try to make this work with libcpp
-    return _stream.str().length() >= MIN_BUFFER_SIZE;
-  }
+  bool isBufferLargeEnough() { return _stream.tellp() >= MIN_BUFFER_SIZE; }
 };
 
 struct stream_generator_sentinel {};

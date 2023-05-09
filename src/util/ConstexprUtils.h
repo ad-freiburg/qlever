@@ -72,11 +72,20 @@ void RuntimeValueToCompileTimeValue(const size_t& value,
                    });
 }
 
+// An `ad_utility::ValueSequence<T, values...>` has the same functionality as
+// `std::integer_sequence` This is needed to compile
+// QLever with libc++ which strictly enforces the `std::integral` constraint for
+// `std::integer_sequence`,because we need a compile-time set of non-integral
+// values for some of the functions below.
 namespace detail {
+template <typename T, T... values>
+struct ValueSequenceImpl {};
+};  // namespace detail
 
 template <typename T, T... values>
-struct ValueSequence {};
+using ValueSequence = detail::ValueSequenceImpl<T, values...>;
 
+namespace detail {
 // The implementation for the `toIntegerSequence` function (see below).
 // For the ideas and alternative implementations see
 // https://stackoverflow.com/questions/56799396/
@@ -87,9 +96,9 @@ constexpr auto toIntegerSequenceHelper(std::index_sequence<indexes...>) {
 }
 }  // namespace detail
 
-// Convert a compile-time `std::array` to a `std::integer_sequence` that
+// Convert a compile-time `std::array` to a `ValueSequence` that
 // contains the same values. This is useful because arrays can be easily created
-// in constexpr functions using `normal` syntax, whereas `integer_sequences` are
+// in constexpr functions using `normal` syntax, whereas `ValueSequence`s are
 // useful for working with templates that take several ints as template
 // parameters. For an example usage see `CallFixedSize.h`
 template <auto Array>

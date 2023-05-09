@@ -21,7 +21,6 @@ TEST(Exception, AbortException) {
   ASSERT_STREQ(b.what(), "errorB");
 }
 
-#ifndef QLEVER_NO_SOURCE_LOCATION
 TEST(Exception, Exception) {
   ad_utility::source_location l = ad_utility::source_location::current();
   Exception e{"exceptionE"};
@@ -79,7 +78,6 @@ TEST(Exception, AD_CORRECTNESS_CHECK) {
     checkContains(e, l.file_name());
   }
 }
-#endif
 
 TEST(Exception, AD_FAIL) {
   try {

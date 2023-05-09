@@ -330,6 +330,8 @@ class RowReference
   // want the following code to work:
   // `RowReference r = someFunctionThatReturnsABase();`
   RowReference(Base b) : Base{std::move(b)} {}
+
+  // Inherit the constructors from the base class.
   using Base::Base;
 
   // Access to the `i`-th column of this row.

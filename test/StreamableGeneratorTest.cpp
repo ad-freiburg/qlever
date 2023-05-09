@@ -30,7 +30,6 @@ TEST(StreamableGeneratorTest, TestGeneratorExceptionResultsInException) {
   }
 }
 
-
 TEST(StreamableGeneratorTest, TestEmptyGeneratorReturnsEmptyResult) {
   auto generator = generateNothing();
   auto iterator = generator.begin();

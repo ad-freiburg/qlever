@@ -111,12 +111,7 @@ endif()
 ######################################
 # BOOST
 ######################################
-get_property(importTargets DIRECTORY "${CMAKE_SOURCE_DIR}" PROPERTY IMPORTED_TARGETS)
 find_package(Boost 1.74 COMPONENTS iostreams program_options REQUIRED)
-get_property(importTargetsAfter DIRECTORY "${CMAKE_SOURCE_DIR}" PROPERTY IMPORTED_TARGETS)
-list(REMOVE_ITEM importTargetsAfter ${importTargets})
-
-#message(ERROR "Boost imported targets ${importTargetsAfter}")
 include_directories(${Boost_INCLUDE_DIR})
 
 

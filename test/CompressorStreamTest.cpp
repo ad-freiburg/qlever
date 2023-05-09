@@ -19,7 +19,7 @@ cppcoro::generator<std::string> generateNChars(size_t n) {
     co_yield "A";
   }
 }
-}
+}  // namespace
 
 class CompressorStreamTestFixture
     : public ::testing::TestWithParam<CompressionMethod> {

@@ -30,6 +30,8 @@ QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {
 // _____________________________________________________________________________
 
 float toFloat(std::string_view view) {
+  // TODO<joka921> We can use `std::from_chars` as soon as it is supported
+  // by Clang and GCC.
   return std::stof(std::string{view});
 }
 
