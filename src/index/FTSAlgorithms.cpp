@@ -1009,9 +1009,8 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
         inner.insert(std::make_pair(wep.scores_[i], wep.cids_[i]));
         map[wep.eids_[i]] = std::make_pair(1, inner);
       } else {
-        ScoreAndStC& val = map[wep.eids_[i]];
-        ++val.first;
-        ScoreToContext& stc = val.second;
+        auto& [score, stc] = map[wep.eids_[i]];
+        score++;
         if (stc.size() < k || stc.begin()->first < wep.scores_[i]) {
           if (stc.size() == k) {
             stc.erase(*stc.begin());
@@ -1114,9 +1113,8 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
         inner.insert(std::make_pair(wep.scores_[i], wep.cids_[i]));
         map[wep.eids_[i]] = std::make_pair(1, inner);
       } else {
-        ScoreAndStC& val = map[wep.eids_[i]];
-        ++val.first;
-        ScoreToContext& stc = val.second;
+        auto& [score, stc] = map[wep.eids_[i]];
+        score++;
         if (stc.size() < k || stc.begin()->first < wep.scores_[i]) {
           if (stc.size() == k) {
             stc.erase(*stc.begin());
