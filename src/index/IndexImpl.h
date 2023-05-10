@@ -343,7 +343,7 @@ class IndexImpl {
         return std::nullopt;
       case Datatype::TextRecordIndex:
         return getTextExcerpt(id.getTextRecordIndex());
-      case Datatype::WordVocabIndex:  // QUESTION: ist das so richtig?
+      case Datatype::WordVocabIndex:
         auto result = _textVocab.indexToOptionalString(id.getVocabIndex());
         if (result.has_value() && result.value().starts_with(VALUE_PREFIX)) {
           result.value() =

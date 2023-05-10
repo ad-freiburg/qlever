@@ -38,7 +38,7 @@ bool EffectiveBooleanValueGetter::operator()(ValueId id,
       return id.getInt() != 0;
     case Datatype::Undefined:
       return false;
-    case Datatype::WordVocabIndex: {  // QUESTION: ist das richtig so?
+    case Datatype::WordVocabIndex: {
       auto index = id.getVocabIndex();
       return !context->_qec.getIndex()
                   .getTextVocab()

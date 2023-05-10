@@ -450,7 +450,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
       result.push_back(
           {Id::makeFromTextRecordIndex(std::get<1>(*itt)), entityScore, eid,
            Id::makeFromWordVocabIndex(WordVocabIndex::make(std::get<2>(
-               *itt)))});  // QUESTION: gibt es ne elegantere Lösung???
+               *itt)))});
     }
   }
   *dynResult = std::move(result).toDynamic();
