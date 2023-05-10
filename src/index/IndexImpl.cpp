@@ -17,6 +17,7 @@
 #include <util/HashMap.h>
 #include <util/Serializer/FileSerializer.h>
 #include <util/TupleHelpers.h>
+#include <Rtree.h>
 
 #include <algorithm>
 #include <cmath>
@@ -365,14 +366,20 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     auto compressionOutfile = ad_utility::makeOfstream(
         _onDiskBase + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX);
     auto internalVocabularyActionCompression =
-        [&compressionOutfile](const auto& word) {
+        [&compressionOutfile](const auto& word, const auto& index) {
           compressionOutfile << RdfEscaping::escapeNewlinesAndBackslashes(word)
                              << '\n';
+
+          // TODO write the word with index into the rtree file
         };
+    auto externalVocabularyActionCompression =
+            [](const auto& word, const auto& index) {
+                // TODO write the word with index into the rtree file
+    };
     m._noIdMapsAndIgnoreExternalVocab = true;
     auto mergeResult =
         m.mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles,
-                          std::less<>(), internalVocabularyActionCompression);
+                          std::less<>(), internalVocabularyActionCompression, externalVocabularyActionCompression);
     sizeInternalVocabulary = mergeResult.numWordsTotal_;
     LOG(INFO) << "Number of words in internal vocabulary: "
               << sizeInternalVocabulary << std::endl;
@@ -397,11 +404,17 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     };
     auto wordWriter =
         _vocab.makeUncompressingWordWriter(_onDiskBase + INTERNAL_VOCAB_SUFFIX);
-    auto internalVocabularyAction = [&wordWriter](const auto& word) {
+    auto internalVocabularyAction = [&wordWriter](const auto& word, const auto& index) {
       wordWriter.push(word.data(), word.size());
+      // TODO write the word with index into the rtree file
     };
+
+    auto externalVocabularyAction = [](const auto& word, const auto& index) {
+      // TODO write the word with index into the rtree file
+    };
+
     return v.mergeVocabulary(_onDiskBase, numFiles, sortPred,
-                             internalVocabularyAction);
+                             internalVocabularyAction, externalVocabularyAction);
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;

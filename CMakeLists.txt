@@ -208,6 +208,12 @@ if (ENABLE_EXPENSIVE_CHECKS)
     add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")
 endif()
 
+###############################
+# RTREE
+###############################
+add_subdirectory(third_party/rtree EXCLUDE_FROM_ALL)
+include_directories(SYSTEM third_party/rtree)
+
 ################################
 # STXXL
 ################################
@@ -218,6 +224,7 @@ set(USE_OPENMP OFF CACHE BOOL "Don't use OPENMP as default" FORCE)
 add_subdirectory(third_party/stxxl EXCLUDE_FROM_ALL)
 
 # apply STXXL CXXFLAGS
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STXXL_CXX_FLAGS}")
 include_directories(SYSTEM ${STXXL_INCLUDE_DIRS})
 
@@ -288,7 +295,7 @@ add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 ##################################################
 # Precompiled headers
 set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)
-set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h third_party/ctre/include/ctre/ctre.h third_party/antlr4/runtime/Cpp/runtime/src/antlr4-runtime.h)
+set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h third_party/ctre/include/ctre/ctre.h third_party/antlr4/runtime/Cpp/runtime/src/antlr4-runtime.h third_party/rtree/Rtree.h)
 
 add_subdirectory(src/parser)
 target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})

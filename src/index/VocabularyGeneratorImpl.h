@@ -25,10 +25,10 @@
 #include "./VocabularyGenerator.h"
 
 // ___________________________________________________________________
-template <typename Comparator, typename InternalVocabularyAction>
+template <typename Comparator, typename InternalVocabularyAction, typename ExternalVocabularyAction>
 VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
     const std::string& basename, size_t numFiles, Comparator comparator,
-    InternalVocabularyAction& internalVocabularyAction) {
+    InternalVocabularyAction& internalVocabularyAction, ExternalVocabularyAction& externalVocabularyAction) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
   // or literal. All internal IRIs or literals come before all external ones.
   // TODO<joka921> Change this as soon as we have Interleaved Ids via the
@@ -102,8 +102,8 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
       // asynchronously write the next batch of sorted
       // queue words
       auto writeTask = [this, buf = std::move(sortedBuffer),
-                        &internalVocabularyAction]() {
-        this->writeQueueWordsToIdVec(buf, internalVocabularyAction);
+                        &internalVocabularyAction, &externalVocabularyAction]() {
+        this->writeQueueWordsToIdVec(buf, internalVocabularyAction, externalVocabularyAction);
       };
       sortedBuffer.clear();
       sortedBuffer.reserve(_bufferSize);
@@ -128,7 +128,7 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
 
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdVec(sortedBuffer, internalVocabularyAction);
+    writeQueueWordsToIdVec(sortedBuffer, internalVocabularyAction, externalVocabularyAction);
   }
 
   auto metaData = std::move(metaData_);
@@ -138,10 +138,11 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
 }
 
 // ________________________________________________________________________________
-template <typename InternalVocabularyAction>
+template <typename InternalVocabularyAction, typename ExternalVocabularyAction>
 void VocabularyMerger::writeQueueWordsToIdVec(
     const std::vector<QueueWord>& buffer,
-    InternalVocabularyAction& internalVocabularyAction) {
+    InternalVocabularyAction& internalVocabularyAction,
+    ExternalVocabularyAction& externalVocabularyAction) {
   LOG(TIMING) << "Start writing a batch of merged words\n";
 
   // smaller grained buffer for the actual inner write
@@ -164,8 +165,9 @@ void VocabularyMerger::writeQueueWordsToIdVec(
 
       // write the new word to the vocabulary
       if (!lastTripleComponent_.value().isExternal()) {
-        internalVocabularyAction(lastTripleComponent_.value().iriOrLiteral());
+        internalVocabularyAction(lastTripleComponent_.value().iriOrLiteral(), lastTripleComponent_.value()._index);
       } else {
+        externalVocabularyAction(lastTripleComponent_.value().iriOrLiteral(), lastTripleComponent_.value()._index);
         outfileExternal_ << RdfEscaping::escapeNewlinesAndBackslashes(
                                 lastTripleComponent_.value().iriOrLiteral())
                          << '\n';

@@ -101,10 +101,11 @@ class VocabularyMerger {
   // Argument comparator gives the way to order strings (case-sensitive or not)
   // This automatically resets the inner members after finishing, to leave the
   // external interface stateless
-  template <typename Comp, typename InternalVocabularyAction>
+  template <typename Comp, typename InternalVocabularyAction, typename ExternalVocabularyAction>
   VocabularyMetaData mergeVocabulary(const std::string& basename,
                                      size_t numFiles, Comp comparator,
-                                     InternalVocabularyAction& action);
+                                     InternalVocabularyAction& action,
+                                     ExternalVocabularyAction& externalVocabularyAction);
 
  private:
   // helper struct used in the priority queue for merging.
@@ -132,10 +133,11 @@ class VocabularyMerger {
   // write the queu words in the buffer to their corresponding idPairVecs.
   // Requires that all the QueueWords that are ever passed are ordered
   // alphabetically (Also across multiple calls)
-  template <typename InternalVocabularyAction>
+  template <typename InternalVocabularyAction, typename ExternalVocabularyAction>
   void writeQueueWordsToIdVec(
       const std::vector<QueueWord>& buffer,
-      InternalVocabularyAction& internalVocabularyAction);
+      InternalVocabularyAction& internalVocabularyAction,
+      ExternalVocabularyAction& externalVocabularyAction);
 
   // close all associated files and MmapVectors and reset all internal variables
   void clear() {
