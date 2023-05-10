@@ -15,20 +15,21 @@ class ToJsonBenchmarkConfigurationShorthandVisitor final
     : public BenchmarkConfigurationShorthandVisitor {
  public:
   std::any visitShortHandString(
-      BenchmarkConfigurationShorthandParser::ShortHandStringContext* context);
+      BenchmarkConfigurationShorthandParser::ShortHandStringContext* context)
+      final;
 
   std::any visitAssignments(
-      BenchmarkConfigurationShorthandParser::AssignmentsContext* context);
+      BenchmarkConfigurationShorthandParser::AssignmentsContext* context) final;
 
   std::any visitAssignment(
-      BenchmarkConfigurationShorthandParser::AssignmentContext* context);
+      BenchmarkConfigurationShorthandParser::AssignmentContext* context) final;
 
   std::any visitObject(
-      BenchmarkConfigurationShorthandParser::ObjectContext* context);
+      BenchmarkConfigurationShorthandParser::ObjectContext* context) final;
 
   std::any visitList(
-      BenchmarkConfigurationShorthandParser::ListContext* context);
+      BenchmarkConfigurationShorthandParser::ListContext* context) final;
 
   std::any visitContent(
-      BenchmarkConfigurationShorthandParser::ContentContext* context);
+      BenchmarkConfigurationShorthandParser::ContentContext* context) final;
 };
