@@ -12,6 +12,8 @@
 
 #include "engine/RuntimeInformation.h"
 
+// Provides types required by all the other *.cpp files in this directory
+// and a select few other places
 namespace ad_utility::websocket::common {
 
 class QueryId {
@@ -22,29 +24,22 @@ class QueryId {
   static QueryId idFromString(std::string id) { return QueryId{std::move(id)}; }
   bool empty() const noexcept { return id_.empty(); }
 
+  template <typename H>
+  friend H AbslHashValue(H h, const QueryId& c) {
+    return H::combine(std::move(h), c.id_);
+  }
+
   // Starting with gcc 12 and clang 15 these can be constexpr
   bool operator==(const QueryId&) const noexcept = default;
   // required for multimap
   auto operator<=>(const QueryId&) const noexcept = default;
-
-  friend std::hash<QueryId>;
-};
-}  // namespace ad_utility::websocket::common
-
-template <>
-struct std::hash<ad_utility::websocket::common::QueryId> {
-  auto operator()(
-      const ad_utility::websocket::common::QueryId& queryId) const noexcept {
-    return std::hash<std::string>{}(queryId.id_);
-  }
 };
 
-namespace ad_utility::websocket::common {
 class OwningQueryId {
   QueryId id_;
 
   inline static std::recursive_mutex registryMutex_{};
-  inline static std::unordered_set<QueryId> registry_{};
+  inline static std::unordered_set<QueryId, absl::Hash<QueryId>> registry_{};
 
   explicit OwningQueryId(QueryId id) : id_{std::move(id)} {
     AD_CORRECTNESS_CHECK(!id_.empty());
@@ -97,12 +92,12 @@ class OwningQueryId {
 static_assert(!std::is_copy_constructible_v<OwningQueryId>);
 static_assert(!std::is_copy_assignable_v<OwningQueryId>);
 
-using TimeStamp = std::chrono::time_point<std::chrono::steady_clock>;
+using Timestamp = std::chrono::time_point<std::chrono::steady_clock>;
 
-struct TimedClientPayloadStruct {
+struct PayloadAndTimestamp {
   std::string payload;
-  TimeStamp updateMoment;
+  Timestamp updateMoment;
 };
 
-using TimedClientPayload = std::shared_ptr<const TimedClientPayloadStruct>;
+using SharedPayloadAndTimestamp = std::shared_ptr<const PayloadAndTimestamp>;
 }  // namespace ad_utility::websocket::common
