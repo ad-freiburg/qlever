@@ -34,8 +34,26 @@ class BenchmarkMetadata {
 
   /*
    * @brief Returns the metadata in form of a json string.
+   *
+   * @param prettyPrint If false, the json string will contain no new lines
+   * and will be in the most compact form available. If true, the json string
+   * will have new lines and indention, if his compact form is longer than 50
+   * symbols.
    */
-  std::string asJsonString() const { return data_.dump(); }
+  std::string asJsonString(bool prettyPrint) const {
+    std::string stringToReturn = data_.dump();
+
+    /*
+    Only if the string representation is to long for a single line, do we
+    actually listen to `prettyPrint`. Otherwise, a short representation it
+    always better.
+    */
+    if (stringToReturn.length() > 50 && prettyPrint) {
+      stringToReturn = data_.dump(2);
+    }
+
+    return stringToReturn;
+  }
 
   // JSON serialization.
   friend void to_json(nlohmann::json& j, const BenchmarkMetadata& metadata) {

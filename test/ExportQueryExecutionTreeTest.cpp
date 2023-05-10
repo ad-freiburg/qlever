@@ -180,7 +180,7 @@ TEST(ExportQueryExecutionTree, Integers) {
       "42\t\n"
       "4012934858173560\t\n",
       // CSV
-      "?o,?completedWord\n"
+      "o,completedWord\n"
       "-42019234865781,\n"
       "42,\n"
       "4012934858173560,\n",
@@ -248,7 +248,7 @@ TEST(ExportQueryExecutionTree, Floats) {
       "4.01293e-12\t\n"
       "42.2\t\n",
       // CSV
-      "?o,?completedWord\n"
+      "o,completedWord\n"
       "-42019234865780982022144,\n"
       "4.01293e-12,\n"
       "42.2,\n",
@@ -313,9 +313,8 @@ TEST(ExportQueryExecutionTree, Dates) {
       "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/"
       "XMLSchema#dateTime>\t\n",
       // Note: the duplicate quotes are due to the escaping for CSV.
-      "?o,?completedWord\n"
-      "\"\"\"1950-01-01T00:00:00\"\"^^<http://www.w3.org/2001/"
-      "XMLSchema#dateTime>\",\n",
+      "o,completedWord\n"
+      "1950-01-01T00:00:00,\n",
       []() {
         nlohmann::json j;
         j.push_back(
@@ -366,8 +365,8 @@ TEST(ExportQueryExecutionTree, Entities) {
       "?o\t?completedWord\n"
       "<http://qlever.com/o>\t\n",
       // CSV
-      "?o,?completedWord\n"
-      "<http://qlever.com/o>,\n",
+      "o,completedWord\n"
+      "http://qlever.com/o,\n",
       []() {
         nlohmann::json j;
         j.push_back({"<http://qlever.com/o>"s, nullptr});
@@ -412,8 +411,8 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
       "?o\t?completedWord\n"
       "\"Some\"Where Over,\"@en-ca\t\n",
       // CSV
-      "?o,?completedWord\n"
-      "\"\"\"Some\"\"Where\tOver,\"\"@en-ca\",\n",
+      "o,completedWord\n"
+      "\"Some\"\"Where\tOver,\",\n",
       []() {
         nlohmann::json j;
         j.push_back({"\"Some\"Where\tOver,\"@en-ca"s, nullptr});
@@ -458,7 +457,7 @@ TEST(ExportQueryExecutionTree, UndefinedValues) {
                                query,
                                1,
                                "?o\t?completedWord\n\t\n",
-                               "?o,?completedWord\n,\n",
+                               "o,completedWord\n,\n",
                                nlohmann::json{std::vector{nullptr, nullptr}},
                                []() {
                                  nlohmann::json j;
@@ -492,7 +491,7 @@ TEST(ExportQueryExecutionTree, BlankNode) {
       "?o\t?completedWord\n"
       "_:u_blank\t\n",
       // CSV
-      "?o,?completedWord\n"
+      "o,completedWord\n"
       "_:u_blank,\n",
       []() {
         nlohmann::json j;
@@ -517,8 +516,8 @@ TEST(ExportQueryExecutionTree, MultipleVariables) {
       "?p\t?o\t?completedWord\n"
       "<p>\t<o>\t\n",
       // CSV
-      "?p,?o,?completedWord\n"
-      "<p>,<o>,\n",
+      "p,o,completedWord\n"
+      "p,o,\n",
       []() {
         nlohmann::json j;
         j.push_back({"<p>"s, "<o>"s, nullptr});

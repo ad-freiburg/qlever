@@ -5,6 +5,7 @@
 #include "parser/RdfEscaping.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
 #include <ctre/ctre.h>
 #include <unicode/ustream.h>
 
@@ -146,17 +147,6 @@ void unescapeStringAndNumericEscapes(InputIterator beginIterator,
     beginIterator = nextBackslashIterator + numCharactersFromInput;
   }
 }
-
-// _____________________________________________________________________________
-std::string replaceAll(std::string str, const std::string_view from,
-                       const std::string_view to) {
-  size_t start_pos = 0;
-  while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
-    str.replace(start_pos, from.length(), to);
-    start_pos += to.length();
-  }
-  return str;
-}
 }  // namespace detail
 
 // _____________________________________________________________________________
@@ -169,26 +159,7 @@ std::string unescapeNewlinesAndBackslashes(std::string_view literal) {
 
 // ____________________________________________________________________________
 std::string escapeNewlinesAndBackslashes(std::string_view literal) {
-  std::string result;
-  while (true) {
-    auto pos = std::min(literal.find_first_of("\n\\"), literal.size());
-    result.append(literal.begin(), literal.begin() + pos);
-    if (pos == literal.size()) {
-      break;
-    }
-    switch (literal[pos]) {
-      case '\n':
-        result.append("\\n");
-        break;
-      case '\\':
-        result.append("\\\\");
-        break;
-      default:
-        AD_FAIL();
-    }
-    literal.remove_prefix(pos + 1);
-  }
-  return result;
+  return absl::StrReplaceAll(literal, {{"\n", "\\n"}, {R"(\)", R"(\\)"}});
 }
 
 // ________________________________________________________________________
@@ -233,11 +204,10 @@ std::string validRDFLiteralFromNormalized(std::string_view normLiteral) {
   // Otherwise escape first all backlashes then all quotes (the order is
   // important) in the part between the first and the last quote and leave the
   // rest unchanged.
-  std::string content = std::string(normLiteral.substr(1, posLastQuote - 1));
-  content = detail::replaceAll(std::move(content), "\\", "\\\\");
-  content = detail::replaceAll(std::move(content), "\n", "\\n");
-  content = detail::replaceAll(std::move(content), "\r", "\\r");
-  content = detail::replaceAll(std::move(content), "\"", "\\\"");
+  std::string_view normalizedContent = normLiteral.substr(1, posLastQuote - 1);
+  std::string content = absl::StrReplaceAll(
+      normalizedContent,
+      {{R"(\)", R"(\\)"}, {"\n", "\\n"}, {"\r", "\\r"}, {R"(")", R"(\")"}});
   return absl::StrCat("\"", content, normLiteral.substr(posLastQuote));
 }
 
@@ -289,18 +259,35 @@ std::string unescapePrefixedIri(std::string_view literal) {
   return res;
 }
 
+// __________________________________________________________________________
 std::string escapeForCsv(std::string input) {
   if (!ctre::search<"[\r\n\",]">(input)) [[likely]] {
     return input;
   }
-  return '"' + detail::replaceAll(std::move(input), "\"", "\"\"") + '"';
+  return absl::StrCat("\"", absl::StrReplaceAll(input, {{"\"", "\"\""}}), "\"");
 }
 
+// __________________________________________________________________________
 std::string escapeForTsv(std::string input) {
-  if (!ctre::search<"[\n\t]">(input)) [[likely]] {
-    return input;
+  if (ctre::search<"[\n\t]">(input)) [[unlikely]] {
+    absl::StrReplaceAll({{"\t", " "}, {"\n", "\\n"}}, &input);
   }
-  auto stage1 = detail::replaceAll(std::move(input), "\t", " ");
-  return detail::replaceAll(std::move(stage1), "\n", "\\n");
+  return input;
 }
+
+// __________________________________________________________________________
+std::string normalizedContentFromLiteralOrIri(std::string&& input) {
+  if (input.starts_with('<')) {
+    AD_CORRECTNESS_CHECK(input.ends_with('>'));
+    std::shift_left(input.begin(), input.end(), 1);
+    input.resize(input.size() - 2);
+  } else if (input.starts_with('"')) {
+    auto posLastQuote = static_cast<int64_t>(input.rfind('"'));
+    AD_CORRECTNESS_CHECK(posLastQuote > 0);
+    std::shift_left(input.begin(), input.begin() + posLastQuote, 1);
+    input.resize(posLastQuote - 1);
+  }
+  return std::move(input);
+}
+
 }  // namespace RdfEscaping

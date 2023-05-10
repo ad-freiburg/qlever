@@ -86,7 +86,7 @@ It will now be compiled. The compiled version can be found inside the `benchmark
 
 # Using advanced benchmark features
 ## Metadata
-Setting metadata is handled by the `BenchmarkMetadata` class. The set metadata information will not be included in the printed output of a compiled benchmark file, but it will be included in the JSON file export.
+Setting metadata is handled by the `BenchmarkMetadata` class. The set metadata information will be included in the printed output of a compiled benchmark file and in the JSON file export.
 
 You can find instances of `BenchmarkMetadata` for your usage at 4 locations:
 - At `metadata_` of created `ResultEntry` objects, in order to give metadata information about the benchmark measurement.

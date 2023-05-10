@@ -127,6 +127,9 @@ the processing/management of those benchmarks.
 */
 class BenchmarkInterface {
  public:
+  // A human-readable name that will be printed as part of the output.
+  virtual std::string name() const = 0;
+
   // Used to transport values, that you want to set at runtime.
   virtual void parseConfiguration(
       [[maybe_unused]] const BenchmarkConfiguration& config) {
@@ -204,13 +207,9 @@ class BenchmarkRegister {
   static std::vector<BenchmarkResults> runAllRegisteredBenchmarks();
 
   /*
-   * @brief Returns the general metadata of all the registered benchmarks. As
-   *  in, it collects and return the outputs of all those `getMetadata`
-   *  functions from the interface.
-   *
-   * @return They should be in the same order as the registrations.
-   */
-  static std::vector<BenchmarkMetadata> getAllGeneralMetadata();
+  @brief Returns pointers to all the registered benchmark class objects.
+  */
+  static std::vector<const BenchmarkInterface*> getAllRegisteredBenchmarks();
 };
 
 /*

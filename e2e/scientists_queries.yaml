@@ -333,10 +333,10 @@ queries:
       - num_rows: 124
       - num_cols: 2
       - selected: ["?x", "?partners"]
-      - contains_row: ["<Aaron_Antonovsky>","<Helen_Antonovsky>"]
+      - contains_row: ["<Aaron_Antonovsky>","Helen_Antonovsky"]
       - contains_row: ["<Abraham_Zelmanov>", ""]
-      - contains_row: ["<Abraham_Pais>","<Ida_Nicolaisen>;<Lila_Lee_Pais>"]
-      - contains_row: ["<Aafia_Siddiqui>","<Amjad_Mohammed_Khan>;<Ammar_al-Baluchi>"]
+      - contains_row: ["<Abraham_Pais>","Ida_Nicolaisen;Lila_Lee_Pais"]
+      - contains_row: ["<Aafia_Siddiqui>","Amjad_Mohammed_Khan;Ammar_al-Baluchi"]
 
 
   - query: giant-int-scientists
@@ -386,7 +386,7 @@ queries:
       SELECT ?s WHERE {
           ?s <Profession> <Scientist> .
           ?s <is-a> <Person> .
-          FILTER regex(?s, "^<A[a-z]*_E[a-z]*>$")
+          FILTER regex(STR(?s), "^A[a-z]*_E[a-z]*$")
       }
     checks:
       - num_rows: 22
@@ -403,7 +403,7 @@ queries:
       SELECT ?s WHERE {
           ?s <Profession> <Scientist> .
           ?s <is-a> <Person> .
-          FILTER regex(?s, "^<[a-z]*_[a-z]*stein[a-z]*>$", "i")
+          FILTER regex(STR(?s), "^[a-z]*_[a-z]*stein[a-z]*$", "i")
       }
     checks:
       - num_rows: 68
@@ -420,9 +420,9 @@ queries:
     sparql: |
       SELECT ?s ?a WHERE {
           ?s <is-a> <Scientist> .
-          FILTER regex(?s, "^<Albert") .
+          FILTER regex(STR(?s), "^Albert") .
           ?s <Award_Won> ?a .
-          FILTER regex(?a, "physic", "i")
+          FILTER regex(STR(?a), "physic", "i")
       }
     checks:
       - num_rows: 6
@@ -902,7 +902,7 @@ queries:
       SELECT ?s ?a WHERE {
           ?s <is-a> <Scientist> .
           OPTIONAL { ?s <Award_Won> ?a }
-          FILTER regex(?a, "^<Nob")
+          FILTER regex(STR(?a), "^Nob")
       }
     checks:
       - num_rows: 543
@@ -918,7 +918,7 @@ queries:
     sparql: |
       SELECT ?s ?a WHERE {
           ?s <is-a> <Scientist> .
-          FILTER regex(?a, "^<Nob")
+          FILTER regex(STR(?a), "^Nob")
           OPTIONAL { ?s <Award_Won> ?a }
       }
     checks:
@@ -953,7 +953,7 @@ queries:
     sparql: |
       SELECT ?s  WHERE {
                 ?s <is-a> <Scientist> .
-                FILTER ((regex(?s, "^<Albert") || regex(?s, "^<Marie"))) .
+                FILTER ((regex(STR(?s), "^Albert") || regex(STR(?s), "^Marie"))) .
             }
     checks:
       - num_rows: 106
@@ -971,7 +971,7 @@ queries:
       SELECT ?s ?a WHERE {
           ?s <is-a> <Scientist> .
           ?s <Award_Won> ?a .
-          FILTER (regex(?s, "^<Albert") || regex(?a, "^<Nobel"))
+          FILTER (regex(STR(?s), "^Albert") || regex(STR(?a), "^Nobel"))
       }
     checks:
       - num_rows: 579
@@ -1092,7 +1092,7 @@ queries:
     sparql: |
       SELECT *  WHERE {
                 ?s <is-a> <Scientist> .
-                FILTER ((regex(?s, "^<Albert") || regex(?s, "^<Marie"))) .
+                FILTER ((regex(STR(?s), "^Albert") || regex(STR(?s), "^Marie"))) .
             }
     checks:
       - num_rows: 106
@@ -1142,7 +1142,7 @@ queries:
       SELECT * WHERE {
           ?s <Profession> <Scientist> .
           ?s <is-a> <Person> .
-          FILTER regex(?s, "^<[a-z]*_[a-z]*stein[a-z]*>$", "i")
+          FILTER regex(STR(?s), "^[a-z]*_[a-z]*stein[a-z]*$", "i")
       }
     checks:
       - num_rows: 68
