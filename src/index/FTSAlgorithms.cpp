@@ -447,10 +447,10 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
     const Id entityScore = Id::makeFromInt(it->second.first);
     const ScoreToContextAndWord& stcaw = it->second.second;
     for (auto itt = stcaw.rbegin(); itt != stcaw.rend(); ++itt) {
-      result.push_back(
-          {Id::makeFromTextRecordIndex(std::get<1>(*itt)), entityScore, eid,
-           Id::makeFromWordVocabIndex(WordVocabIndex::make(std::get<2>(
-               *itt)))});
+      result.push_back({Id::makeFromTextRecordIndex(std::get<1>(*itt)),
+                        entityScore, eid,
+                        Id::makeFromWordVocabIndex(
+                            WordVocabIndex::make(std::get<2>(*itt)))});
     }
   }
   *dynResult = std::move(result).toDynamic();
