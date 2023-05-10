@@ -43,6 +43,7 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
 
   resultWep = FTSAlgorithms::filterByRange(idRange, wep);
   ASSERT_EQ(4u, resultWep.cids_.size());
+  ASSERT_EQ(4u, resultWep.wids_.size());
   ASSERT_EQ(4u, resultWep.scores_.size());
 
   wep.cids_ = {T(0), T(0), T(1), T(2), T(3), T(4)};
@@ -52,6 +53,7 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
   // Partial
   resultWep = FTSAlgorithms::filterByRange(idRange, wep);
   ASSERT_EQ(4u, resultWep.cids_.size());
+  ASSERT_EQ(4u, resultWep.wids_.size());
   ASSERT_EQ(4u, resultWep.scores_.size());
 };
 
@@ -248,19 +250,23 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
   wep.cids_ = {T(0), T(1), T(2)};
   wep.eids_ = {V(0), V(0), V(0)};
   wep.scores_ = {0, 1, 2};
+  wep.wids_ = {1, 1, 2};
 
   FTSAlgorithms::aggScoresAndTakeTopKContexts(wep, 2, &result);
   ASSERT_EQ(2u, result.size());
   ASSERT_EQ(TextRecordId(2u), result(0, 0));
   ASSERT_EQ(IntId(3u), result(0, 1));
   ASSERT_EQ(V(0u), result(0, 2));
+  ASSERT_EQ(WordVocabId(2u), result(0, 3));
   ASSERT_EQ(TextRecordId(1u), result(1, 0));
   ASSERT_EQ(IntId(3u), result(1, 1));
   ASSERT_EQ(V(0u), result(1, 2));
+  ASSERT_EQ(WordVocabId(1u), result(1, 3));
 
   wep.cids_ = {T(0), T(1), T(2), T(4)};
   wep.eids_ = {V(0), V(0), V(0), V(1)};
   wep.scores_ = {0, 1, 2, 1};
+  wep.wids_ = {1, 1, 2, 4};
 
   result.clear();
   FTSAlgorithms::aggScoresAndTakeTopKContexts(wep, 2, &result);
@@ -270,6 +276,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
   ASSERT_EQ(TextRecordId(4u), result(2, 0));
   ASSERT_EQ(IntId(1u), result(2, 1));
   ASSERT_EQ(V(1u), result(2, 2));
+  ASSERT_EQ(WordVocabId(4u), result(2, 3));
 };
 
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
@@ -293,16 +300,19 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   wep.cids_ = {T(0), T(1), T(2)};
   wep.eids_ = {V(0), V(0), V(0)};
   wep.scores_ = {0, 1, 2};
+  wep.wids_ = {1, 1, 2};
 
   callFixed(width, wep, &result);
   ASSERT_EQ(1u, result.size());
   ASSERT_EQ(TextRecordId(2u), result(0, 0));
   ASSERT_EQ(IntId(3u), result(0, 1));
   ASSERT_EQ(V(0u), result(0, 2));
+  ASSERT_EQ(WordVocabId(2u), result(0, 3));
 
   wep.cids_ = {T(0), T(1), T(2), T(3)};
   wep.eids_ = {V(0), V(0), V(0), V(1)};
   wep.scores_ = {0, 1, 2, 1};
+  wep.wids_ = {1, 1, 2, 4};
 
   callFixed(width, wep, &result);
   ASSERT_EQ(2u, result.size());
@@ -311,13 +321,16 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   ASSERT_EQ(TextRecordId(2u), result(0, 0));
   ASSERT_EQ(IntId(3u), result(0, 1));
   ASSERT_EQ(V(0u), result(0, 2));
+  ASSERT_EQ(WordVocabId(2u), result(0, 3));
   ASSERT_EQ(TextRecordId(3u), result(1, 0));
   ASSERT_EQ(IntId(1u), result(1, 1));
   ASSERT_EQ(V(1u), result(1, 2));
+  ASSERT_EQ(WordVocabId(4u), result(1, 3));
 
   wep.cids_ = {T(0), T(1), T(2), T(3), T(4)};
   wep.eids_ = {V(0), V(0), V(0), V(1), V(0)};
   wep.scores_ = {0, 1, 2, 1, 10};
+  wep.wids_ = {1, 1, 2, 4, 4};
 
   ad_utility::callFixedSize(width, [&wep, &result]<int WIDTH>() mutable {
     FTSAlgorithms::aggScoresAndTakeTopContext<WIDTH>(wep, &result);
@@ -329,9 +342,11 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   ASSERT_EQ(TextRecordId(4u), result(0, 0));
   ASSERT_EQ(IntId(4u), result(0, 1));
   ASSERT_EQ(V(0u), result(0, 2));
+  ASSERT_EQ(WordVocabId(4u), result(0, 3));
   ASSERT_EQ(TextRecordId(3u), result(1, 0));
   ASSERT_EQ(IntId(1u), result(1, 1));
   ASSERT_EQ(V(1u), result(1, 2));
+  ASSERT_EQ(WordVocabId(4u), result(1, 3));
 };
 
 TEST(FTSAlgorithmsTest, appendCrossProductWithSingleOtherTest) {
