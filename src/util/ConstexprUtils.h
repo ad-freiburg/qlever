@@ -73,10 +73,10 @@ void RuntimeValueToCompileTimeValue(const size_t& value,
 }
 
 // An `ad_utility::ValueSequence<T, values...>` has the same functionality as
-// `std::integer_sequence` This is needed to compile
-// QLever with libc++ which strictly enforces the `std::integral` constraint for
-// `std::integer_sequence`,because we need a compile-time set of non-integral
-// values for some of the functions below.
+// `std::integer_sequence`. This replacement is needed to compile QLever with
+// libc++, because libc++ strictly enforces the `std::integral` constraint for
+// `std::integer_sequence`, and we also need non-integral types as values, for
+// example `std::array<...>`.
 namespace detail {
 template <typename T, T... values>
 struct ValueSequenceImpl {};

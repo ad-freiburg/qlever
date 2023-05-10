@@ -4,9 +4,9 @@
 
 #include "./QueryPlanningCostFactors.h"
 
+#include <absl/strings/charconv.h>
 #include <absl/strings/str_split.h>
 
-#include <charconv>
 #include <fstream>
 
 #include "../util/Exception.h"
@@ -30,9 +30,13 @@ QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {
 // _____________________________________________________________________________
 
 float toFloat(std::string_view view) {
-  // TODO<joka921> We can use `std::from_chars` as soon as it is supported
-  // by Clang and GCC.
-  return std::stof(std::string{view});
+  float factor;
+  auto last = view.data() + view.size();
+  auto [ptr, ec] = absl::from_chars(view.data(), last, factor);
+  if (ec != std::errc() || ptr != last) {
+    throw std::runtime_error{std::string{"Invalid float: "} + view};
+  }
+  return factor;
 }
 
 // _____________________________________________________________________________
