@@ -430,10 +430,10 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
 
   // The child must be an `IndexScan` with three variables that contains
   // the grouped variable.
-  auto permutation = getPermutationForThreeVariableTriple(
+  auto permutationEnum = getPermutationForThreeVariableTriple(
       *_subtree, groupByVariable, groupByVariable);
 
-  if (!permutation.has_value()) {
+  if (!permutationEnum.has_value()) {
     return false;
   }
 
@@ -472,56 +472,51 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
   auto doComputationForNumberOfColumns = [&]<int NUM_COLS>(
                                              IdTable* idTable) mutable {
     auto ignoredRanges =
-        getIndex().getImpl().getIgnoredIdRanges(permutation.value()).first;
-    // The permutations in the `Index` class have different types, so we
-    // also have to write a generic lambda here that will be passed to
-    // `IndexImpl::applyToPermutation`.
-    auto applyForPermutation = [&](const auto& permutation) mutable {
-      IdTableStatic<NUM_COLS> table = std::move(*idTable).toStatic<NUM_COLS>();
-      const auto& metaData = permutation._meta.data();
-      // TODO<joka921> the reserve is too large because of the ignored
-      // triples. We would need to incorporate the information how many
-      // added "relations" are in each permutation during index building.
-      table.reserve(metaData.size());
-      for (auto it = metaData.ordered_begin(); it != metaData.ordered_end();
-           ++it) {
-        Id id = decltype(metaData.ordered_begin())::getIdFromElement(*it);
+        getIndex().getImpl().getIgnoredIdRanges(permutationEnum.value()).first;
+    const auto& permutation =
+        getExecutionContext()->getIndex().getPimpl().getPermutation(
+            permutationEnum.value());
+    IdTableStatic<NUM_COLS> table = std::move(*idTable).toStatic<NUM_COLS>();
+    const auto& metaData = permutation._meta.data();
+    // TODO<joka921> the reserve is too large because of the ignored
+    // triples. We would need to incorporate the information how many
+    // added "relations" are in each permutationEnum during index building.
+    table.reserve(metaData.size());
+    for (auto it = metaData.ordered_begin(); it != metaData.ordered_end();
+         ++it) {
+      Id id = decltype(metaData.ordered_begin())::getIdFromElement(*it);
 
-        // Check whether this is an `@en@...` predicate in a `Pxx`
-        // permutation, a literal in a `Sxx` permutation or some other
-        // entity that was added only for internal reasons.
-        if (std::ranges::any_of(ignoredRanges, [&id](const auto& pair) {
-              return id >= pair.first && id < pair.second;
-            })) {
-          continue;
-        }
-        Id count = Id::makeFromInt(
-            decltype(metaData.ordered_begin())::getNumRowsFromElement(*it));
-        // TODO<joka921> The count is actually not accurate at least for the
-        // `Sxx` and `Oxx` permutations because it contains the triples with
-        // predicate
-        // `@en@rdfs:label` etc. The probably easiest way to fix this is to
-        // exclude these triples from those permutations (they are only
-        // relevant for queries with a fixed subject), but then we would
-        // need to make sure, that we don't accidentally break the language
-        // filters for queries like
-        // `<fixedSubject> @en@rdfs:label ?labels`, for which the best
-        // query plan potentially goes through the `SPO` relation.
-        // Alternatively we would have to write an additional number
-        // `numNonAddedTriples` to the `IndexMetaData` which would further
-        // increase their size.
-        // TODO<joka921> Discuss this with Hannah.
-        table.emplace_back();
-        table(table.size() - 1, 0) = id;
-        if (numCounts == 1) {
-          table(table.size() - 1, 1) = count;
-        }
+      // Check whether this is an `@en@...` predicate in a `Pxx`
+      // permutationEnum, a literal in a `Sxx` permutationEnum or some other
+      // entity that was added only for internal reasons.
+      if (std::ranges::any_of(ignoredRanges, [&id](const auto& pair) {
+            return id >= pair.first && id < pair.second;
+          })) {
+        continue;
       }
-      *idTable = std::move(table).toDynamic();
-    };
-
-    getExecutionContext()->getIndex().getPimpl().applyToPermutation(
-        permutation.value(), applyForPermutation);
+      Id count = Id::makeFromInt(
+          decltype(metaData.ordered_begin())::getNumRowsFromElement(*it));
+      // TODO<joka921> The count is actually not accurate at least for the
+      // `Sxx` and `Oxx` permutations because it contains the triples with
+      // predicate
+      // `@en@rdfs:label` etc. The probably easiest way to fix this is to
+      // exclude these triples from those permutations (they are only
+      // relevant for queries with a fixed subject), but then we would
+      // need to make sure, that we don't accidentally break the language
+      // filters for queries like
+      // `<fixedSubject> @en@rdfs:label ?labels`, for which the best
+      // query plan potentially goes through the `SPO` relation.
+      // Alternatively we would have to write an additional number
+      // `numNonAddedTriples` to the `IndexMetaData` which would further
+      // increase their size.
+      // TODO<joka921> Discuss this with Hannah.
+      table.emplace_back();
+      table(table.size() - 1, 0) = id;
+      if (numCounts == 1) {
+        table(table.size() - 1, 1) = count;
+      }
+    }
+    *idTable = std::move(table).toDynamic();
   };
   ad_utility::callFixedSize(numCols, doComputationForNumberOfColumns, result);
 
@@ -532,7 +527,7 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
 }
 
 // _____________________________________________________________________________
-std::optional<Index::Permutation> GroupBy::getPermutationForThreeVariableTriple(
+std::optional<Permutation::Enum> GroupBy::getPermutationForThreeVariableTriple(
     const QueryExecutionTree& tree, const Variable& variableByWhichToSort,
     const Variable& variableThatMustBeContained) {
   auto indexScan =
@@ -550,11 +545,11 @@ std::optional<Index::Permutation> GroupBy::getPermutationForThreeVariableTriple(
   }
 
   if (variableByWhichToSort == indexScan->getSubject()) {
-    return Index::Permutation::SPO;
+    return Permutation::SPO;
   } else if (variableByWhichToSort.name() == indexScan->getPredicate()) {
-    return Index::Permutation::POS;
+    return Permutation::POS;
   } else if (variableByWhichToSort == indexScan->getObject()) {
-    return Index::Permutation::OSP;
+    return Permutation::OSP;
   } else {
     return std::nullopt;
   }

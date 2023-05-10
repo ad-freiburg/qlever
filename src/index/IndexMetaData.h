@@ -227,9 +227,6 @@ using MetaWrapperMmap =
     MetaDataWrapperDense<ad_utility::MmapVector<CompressedRelationMetadata>>;
 using MetaWrapperMmapView = MetaDataWrapperDense<
     ad_utility::MmapVectorView<CompressedRelationMetadata>>;
-using MetaWrapperHashMap =
-    MetaDataWrapperHashMap<ad_utility::HashMap<Id, CompressedRelationMetadata>>;
-using IndexMetaDataHmap = IndexMetaData<MetaWrapperHashMap>;
 using IndexMetaDataMmap = IndexMetaData<MetaWrapperMmap>;
 using IndexMetaDataMmapView = IndexMetaData<MetaWrapperMmapView>;
 
