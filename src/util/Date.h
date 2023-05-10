@@ -9,6 +9,7 @@
 #include <cmath>
 #include <exception>
 #include <sstream>
+#include "ctre/ctre.h"
 
 // Exception that is thrown when a value for a component of the `Date`, `Time`
 // or `Datetime` classes below is out of range (e.g. the month 13, or the hour
@@ -240,6 +241,11 @@ class Date {
     detail::checkBoundsIncludingMax(timezone, minTimezone, maxTimezone,
                                     "timezone");
     _timezone = static_cast<unsigned>(timezone - minTimezone);
+  }
+
+  static Date parseXsdDatetime(std::string_view dateString) {
+    auto result = ctre::match<"-?(dddd)-(dd)-(dd)T(dd):(dd):(dd)">;
+
   }
 };
 

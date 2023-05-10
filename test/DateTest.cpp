@@ -254,3 +254,14 @@ TEST(Date, OrderRandomValues) {
   }
   testSorting(dates);
 }
+
+TEST(Date, parseDateTime) {
+  if (auto [whole, year, month, day, min, hours, secs, subsecs] =ctre::match<"(-?\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2}(\\.\\d{1,12})?)">("2034-12-24T02:12:60.34")) {
+    EXPECT_EQ(year, "2034");
+    EXPECT_EQ(secs, "60.34");
+    EXPECT_EQ(subsecs, ".34");
+  } else {
+    FAIL();
+  }
+  EXPECT_TRUE((ctre::match<"(-?\\d{4})-(\\d{2})-(\\d{2})T">("2034-12-24T")));
+}
