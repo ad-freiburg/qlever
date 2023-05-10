@@ -187,9 +187,13 @@ TEST(ExportQueryExecutionTree, Integers) {
       []() {
         nlohmann::json j;
         nlohmann::json null;
-        j.push_back({"\"-42019234865781\"^^<http://www.w3.org/2001/XMLSchema#int>"s, null});
+        j.push_back(
+            {"\"-42019234865781\"^^<http://www.w3.org/2001/XMLSchema#int>"s,
+             null});
         j.push_back({"\"42\"^^<http://www.w3.org/2001/XMLSchema#int>"s, null});
-        j.push_back({"\"4012934858173560\"^^<http://www.w3.org/2001/XMLSchema#int>"s, null});
+        j.push_back(
+            {"\"4012934858173560\"^^<http://www.w3.org/2001/XMLSchema#int>"s,
+             null});
         return j;
       }(),
       makeExpectedSparqlJSON(
@@ -250,9 +254,14 @@ TEST(ExportQueryExecutionTree, Floats) {
       "42.2,\n",
       []() {
         nlohmann::json j;
-        j.push_back({"\"-42019234865780982022144\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s, nullptr});
-        j.push_back({"\"4.01293e-12\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s, nullptr});
-        j.push_back({"\"42.2\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s, nullptr});
+        j.push_back(
+            {"\"-42019234865780982022144\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
+             nullptr});
+        j.push_back(
+            {"\"4.01293e-12\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s,
+             nullptr});
+        j.push_back(
+            {"\"42.2\"^^<http://www.w3.org/2001/XMLSchema#decimal>"s, nullptr});
         return j;
       }(),
       makeExpectedSparqlJSON(
@@ -301,14 +310,17 @@ TEST(ExportQueryExecutionTree, Dates) {
       1,
       // TSV
       "?o\t?completedWord\n"
-      "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>\t\n",
+      "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/"
+      "XMLSchema#dateTime>\t\n",
       // Note: the duplicate quotes are due to the escaping for CSV.
       "?o,?completedWord\n"
       "\"\"\"1950-01-01T00:00:00\"\"^^<http://www.w3.org/2001/"
       "XMLSchema#dateTime>\",\n",
       []() {
         nlohmann::json j;
-        j.push_back({"\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"s, nullptr});
+        j.push_back(
+            {"\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"s,
+             nullptr});
         return j;
       }(),
       makeExpectedSparqlJSON(
@@ -442,19 +454,18 @@ TEST(ExportQueryExecutionTree, UndefinedValues) {
   std::string kg = "<s> <p> <o>";
   std::string query =
       "SELECT ?o WHERE {?s <p> <o> OPTIONAL {?s <p2> ?o}} ORDER BY ?o";
-  TestCaseSelectQuery testCase{
-      kg,
-      query,
-      1,
-      "?o\t?completedWord\n\t\n",
-      "?o,?completedWord\n,\n",
-      nlohmann::json{std::vector{nullptr, nullptr}},
-      []() {
-        nlohmann::json j;
-        j["head"]["vars"].push_back("o");
-        j["results"]["bindings"].push_back(nullptr);
-        return j;
-      }()};
+  TestCaseSelectQuery testCase{kg,
+                               query,
+                               1,
+                               "?o\t?completedWord\n\t\n",
+                               "?o,?completedWord\n,\n",
+                               nlohmann::json{std::vector{nullptr, nullptr}},
+                               []() {
+                                 nlohmann::json j;
+                                 j["head"]["vars"].push_back("o");
+                                 j["results"]["bindings"].push_back(nullptr);
+                                 return j;
+                               }()};
   runSelectQueryTestCase(testCase);
 
   // In CONSTRUCT queries, results with undefined values in the exported

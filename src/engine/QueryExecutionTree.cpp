@@ -100,7 +100,7 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
   ColumnIndicesAndTypes exportColumns;
 
   auto variables = selectClause.getSelectedVariables();
-  variables.push_back(Variable("?completedWord")); //TODO: more elgant solution
+  variables.push_back(Variable("?completedWord"));
   for (const auto& var : variables) {
     std::string varString = var.name();
     if (getVariableColumns().contains(var)) {

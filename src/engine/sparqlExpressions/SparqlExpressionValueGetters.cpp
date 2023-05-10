@@ -40,7 +40,7 @@ bool EffectiveBooleanValueGetter::operator()(ValueId id,
       return id.getInt() != 0;
     case Datatype::Undefined:
       return false;
-    case Datatype::WordVocabIndex: { //QUESTION: ist das richtig so?
+    case Datatype::WordVocabIndex: {  // QUESTION: ist das richtig so?
       auto index = id.getVocabIndex();
       return !context->_qec.getIndex()
                   .getTextVocab()
@@ -76,7 +76,7 @@ string StringValueGetter::operator()(Id id, EvaluationContext* context) const {
       return std::to_string(id.getDouble());
     case Datatype::Int:
       return std::to_string(id.getInt());
-    case Datatype::WordVocabIndex:{ //QUESTION: ist das richtig so?
+    case Datatype::WordVocabIndex: {  // QUESTION: ist das richtig so?
       return context->_qec.getIndex()
           .getTextVocab()
           .indexToOptionalString(id.getVocabIndex())
