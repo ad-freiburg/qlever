@@ -15,13 +15,14 @@ namespace beast = boost::beast;
 namespace http = beast::http;
 using boost::asio::ip::tcp;
 using websocket::common::QueryId;
-using websocket::common::TimedClientPayload;
+using websocket::common::SharedPayloadAndTimestamp;
 
 net::awaitable<void> manageConnection(tcp::socket socket,
                                       http::request<http::string_body> request);
 // Returns true if there are other active connections that do no currently wait.
-bool fireAllCallbacksForQuery(const QueryId& queryId,
-                              TimedClientPayload runtimeInformationSnapshot);
+bool fireAllCallbacksForQuery(
+    const QueryId& queryId,
+    SharedPayloadAndTimestamp runtimeInformationSnapshot);
 
 std::optional<http::response<http::string_body>> checkPathIsValid(
     const http::request<http::string_body>& request);

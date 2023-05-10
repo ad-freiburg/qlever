@@ -20,41 +20,27 @@
 #include "util/websocket/QueryState.h"
 
 namespace ad_utility::websocket {
-
-class WebSocketId {
-  uint32_t id_;
-  explicit WebSocketId(uint32_t id) : id_{id} {}
-
- public:
-  // Generate unique webSocketIds until it overflows and hopefully the old
-  // ids are gone by then.
-  static WebSocketId uniqueId() {
-    static std::atomic<uint32_t> webSocketIdCounter{0};
-    return WebSocketId(webSocketIdCounter++);
-  }
-
-  constexpr bool operator==(const WebSocketId&) const noexcept = default;
-  constexpr bool operator!=(const WebSocketId&) const noexcept = default;
-
-  friend std::hash<WebSocketId>;
-};
-
-}  // namespace ad_utility::websocket
-
-template <>
-struct std::hash<ad_utility::websocket::WebSocketId> {
-  auto operator()(
-      const ad_utility::websocket::WebSocketId& webSocketId) const noexcept {
-    return std::hash<uint32_t>{}(webSocketId.id_);
-  }
-};
-
-namespace ad_utility::websocket {
 using namespace boost::asio::experimental::awaitable_operators;
 using websocket = beast::websocket::stream<tcp::socket>;
-using common::TimedClientPayload;
+using common::SharedPayloadAndTimestamp;
 
-using QueryUpdateCallback = std::function<void(TimedClientPayload)>;
+class WebSocketId {
+  const void* address_;
+
+ public:
+  // Generate unique webSocketIds based on the address of the passed reference.
+  // Make sure you're not moving the socket anywhere!
+  explicit WebSocketId(const websocket& webSocket) : address_{&webSocket} {}
+
+  constexpr bool operator==(const WebSocketId&) const noexcept = default;
+
+  template <typename H>
+  friend H AbslHashValue(H h, const WebSocketId& c) {
+    return H::combine(std::move(h), c.address_);
+  }
+};
+
+using QueryUpdateCallback = std::function<void(SharedPayloadAndTimestamp)>;
 
 static std::mutex activeWebSocketsMutex{};
 static absl::btree_multimap<QueryId, WebSocketId> activeWebSockets{};
@@ -72,28 +58,28 @@ void registerCallback(const QueryId& queryId, WebSocketId webSocketId,
     std::lock_guard lock2{listeningWebSocketsMutex};
     // Ensure last callback has been fired, otherwise co_await will wait
     // indefinitely
-    AD_CORRECTNESS_CHECK(listeningWebSockets.count(webSocketId) == 0);
+    AD_CORRECTNESS_CHECK(!listeningWebSockets.contains(webSocketId));
     listeningWebSockets[webSocketId] = std::move(callback);
   }
 }
 
 // ONLY CALL THIS IF YOU HOLD the listeningWebSocketsMutex!!!
 void fireCallbackAndRemoveIfPresentNoLock(WebSocketId webSocketId,
-                                          TimedClientPayload payload) {
-  if (listeningWebSockets.count(webSocketId) != 0) {
+                                          SharedPayloadAndTimestamp payload) {
+  if (listeningWebSockets.contains(webSocketId)) {
     listeningWebSockets.at(webSocketId)(std::move(payload));
     listeningWebSockets.erase(webSocketId);
   }
 }
 
 void fireCallbackAndRemoveIfPresent(WebSocketId webSocketId,
-                                    TimedClientPayload payload) {
+                                    SharedPayloadAndTimestamp payload) {
   std::lock_guard lock{listeningWebSocketsMutex};
   fireCallbackAndRemoveIfPresentNoLock(webSocketId, std::move(payload));
 }
 
 bool fireAllCallbacksForQuery(const QueryId& queryId,
-                              TimedClientPayload payload) {
+                              SharedPayloadAndTimestamp payload) {
   std::lock_guard lock1{activeWebSocketsMutex};
   std::lock_guard lock2{listeningWebSocketsMutex};
   auto range = activeWebSockets.equal_range(queryId);
@@ -116,7 +102,7 @@ void disableWebSocket(WebSocketId webSocketId, const QueryId& queryId) {
     std::lock_guard lock{activeWebSocketsMutex};
     removeKeyValuePair(activeWebSockets, queryId, webSocketId);
     fireCallbackAndRemoveIfPresent(webSocketId, nullptr);
-    noListenersLeft = activeWebSockets.count(queryId) == 0;
+    noListenersLeft = !activeWebSockets.contains(queryId);
   }
   if (noListenersLeft) {
     query_state::clearQueryInfo(queryId);
@@ -126,13 +112,14 @@ void disableWebSocket(WebSocketId webSocketId, const QueryId& queryId) {
 // Based on https://stackoverflow.com/a/69285751
 template <typename CompletionToken>
 auto waitForEvent(const QueryId& queryId, WebSocketId webSocketId,
-                  common::TimeStamp lastUpdate, CompletionToken&& token) {
+                  common::Timestamp lastUpdate, CompletionToken&& token) {
   auto initiate = [lastUpdate]<typename Handler>(
                       Handler&& self, const QueryId& queryId,
                       WebSocketId webSocketId) mutable {
-    auto callback =
-        [self = std::make_shared<Handler>(std::forward<Handler>(self))](
-            TimedClientPayload snapshot) { (*self)(std::move(snapshot)); };
+    auto callback = [self = std::make_shared<Handler>(std::forward<Handler>(
+                         self))](SharedPayloadAndTimestamp snapshot) {
+      (*self)(std::move(snapshot));
+    };
     auto potentialUpdate = query_state::getIfUpdatedSince(queryId, lastUpdate);
     if (potentialUpdate != nullptr) {
       callback(std::move(potentialUpdate));
@@ -140,7 +127,7 @@ auto waitForEvent(const QueryId& queryId, WebSocketId webSocketId,
       registerCallback(queryId, webSocketId, std::move(callback));
     }
   };
-  return net::async_initiate<CompletionToken, void(TimedClientPayload)>(
+  return net::async_initiate<CompletionToken, void(SharedPayloadAndTimestamp)>(
       initiate, token, queryId, webSocketId);
 }
 
@@ -162,7 +149,7 @@ net::awaitable<void> handleClientCommands(websocket& ws,
 
 net::awaitable<void> waitForServerEvents(websocket& ws, WebSocketId webSocketId,
                                          const QueryId& queryId) {
-  common::TimeStamp lastUpdate = std::chrono::steady_clock::now();
+  common::Timestamp lastUpdate = std::chrono::steady_clock::now();
   while (ws.is_open()) {
     auto update = co_await waitForEvent(queryId, webSocketId, lastUpdate,
                                         net::use_awaitable);
@@ -194,7 +181,7 @@ net::awaitable<void> connectionLifecycle(
 
     co_await ws.async_accept(request, boost::asio::use_awaitable);
 
-    WebSocketId webSocketId = WebSocketId::uniqueId();
+    WebSocketId webSocketId{ws};
     enableWebSocket(webSocketId, queryId);
     auto strand = net::make_strand(ws.get_executor());
 
