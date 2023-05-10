@@ -6,14 +6,18 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <any>
 #include <optional>
 #include <sstream>
 #include <type_traits>
+#include <typeinfo>
 
+#include "../benchmark/infrastructure/BenchmarkConfigurationOption.h"
 #include "util/Exception.h"
 #include "util/json.h"
 
 namespace ad_benchmark {
+
 /*
  * A rather basic wrapper for nlohmann::json, which only allows reading of
  * information and setting the configuration by parsing strings.
