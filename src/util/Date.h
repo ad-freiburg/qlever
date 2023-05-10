@@ -9,7 +9,10 @@
 #include <cmath>
 #include <exception>
 #include <sstream>
+#include <charconv>
 #include "ctre/ctre.h"
+
+#include "util/CtreHelpers.h"
 
 // Exception that is thrown when a value for a component of the `Date`, `Time`
 // or `Datetime` classes below is out of range (e.g. the month 13, or the hour
@@ -243,9 +246,105 @@ class Date {
     _timezone = static_cast<unsigned>(timezone - minTimezone);
   }
 
-  static Date parseXsdDatetime(std::string_view dateString) {
-    auto result = ctre::match<"-?(dddd)-(dd)-(dd)T(dd):(dd):(dd)">;
+  template <ctll::fixed_string Name>
+  static int toInt(const auto& match) {
+    int result = 0;
+    const auto& s = match.template get<Name>();
+    // TODO<joka921> Check the result.
+    std::from_chars(s.data(), s.data() + s.size(), result);
+    return result;
+  }
+  constexpr static ctll::fixed_string dateRegex{R"((?<year>-?\d{4})-(?<month>\d{2})-(?<day>\d{2}))"};
+  constexpr static ctll::fixed_string timeRegex{R"((?<hour>\d{2}):(?<minute>\d{2}):(?<second>\d{2}(\.\d{1,12})?))"};
+  constexpr static ctll::fixed_string timezoneRegex{R"(Z|(?<tzSign>[+\-])(?<tzHours>\d{2}):(?<tzMinutes>\d{2}))"};
+ public:
 
+  static Date parseXsdDatetime(std::string_view dateString) {
+    constexpr static ctll::fixed_string dateTime =
+        dateRegex + "T" + timeRegex + grp(timezoneRegex) + "?" ;
+    auto match = ctre::match<dateTime>(dateString);
+    if (!match) {
+      throw std::runtime_error{"Illegal xsd:dateTime"};
+    }
+    int year = toInt<"year">(match);
+    int month = toInt<"month">(match);
+    int day = toInt<"day">(match);
+    int hour = toInt<"hour">(match);
+    int minute = toInt<"minute">(match);
+    double second = std::strtod(match.get<"second">().data(), nullptr);
+
+    // TODO<joka921> parse Timezone.
+    int tz = toInt<"tzHours">(match);
+    if (match.get<"tzSign">() == "-") {
+      tz *= -1;
+    }
+    if (match.get<"tzMinutes">() != "00") {
+      throw std::runtime_error {"Qlever supports only full hours as timezones"};
+    }
+    return Date{year, month, day, hour, minute, second, tz};
+  }
+
+  static Date parseXsdDate(std::string_view dateString) {
+    constexpr static ctll::fixed_string dateTime =
+        dateRegex + grp(timezoneRegex) + "?" ;
+    auto match = ctre::match<dateTime>(dateString);
+    if (!match) {
+      throw std::runtime_error{"Illegal xsd:dateTime"};
+    }
+    int year = toInt<"year">(match);
+    int month = toInt<"month">(match);
+    int day = toInt<"day">(match);
+    int tz = toInt<"tzHours">(match);
+    if (match.get<"tzSign">() == "-") {
+      tz *= -1;
+    }
+    if (match.get<"tzMinutes">() != "00") {
+      throw std::runtime_error {"Qlever supports only full hours as timezones"};
+    }
+    return Date{year, month, day, 0, 0, 0.0, tz};
+  }
+
+  static Date parseGYear(std::string_view dateString) {
+    constexpr static ctll::fixed_string yearRegex ="(?<year>-?\\d{4})";
+    constexpr static ctll::fixed_string dateTime =
+        yearRegex + grp(timezoneRegex) + "?" ;
+    auto match = ctre::match<dateTime>(dateString);
+    if (!match) {
+      throw std::runtime_error{"Illegal xsd:dateTime"};
+    }
+    int year = toInt<"year">(match);
+    int tz = toInt<"tzHours">(match);
+    if (match.get<"tzSign">() == "-") {
+      tz *= -1;
+    }
+    if (match.get<"tzMinutes">() != "00") {
+      throw std::runtime_error {"Qlever supports only full hours as timezones"};
+    }
+    // TODO<joka921> How should we distinguish between `dateTime`, `date`, `year` and `yearMonth` in the
+    // underlying representation?
+    return Date{year, 1, 1, 0, 0, 0.0, tz};
+  }
+
+  static Date parseGYearMonth(std::string_view dateString) {
+    constexpr static ctll::fixed_string yearRegex ="(?<year>-?\\d{4})-(?<month>\\d{2})";
+    constexpr static ctll::fixed_string dateTime =
+        yearRegex + grp(timezoneRegex) + "?" ;
+    auto match = ctre::match<dateTime>(dateString);
+    if (!match) {
+      throw std::runtime_error{"Illegal xsd:dateTime"};
+    }
+    int year = toInt<"year">(match);
+    int month = toInt<"month">(match);
+    int tz = toInt<"tzHours">(match);
+    if (match.get<"tzSign">() == "-") {
+      tz *= -1;
+    }
+    if (match.get<"tzMinutes">() != "00") {
+      throw std::runtime_error {"Qlever supports only full hours as timezones"};
+    }
+    // TODO<joka921> How should we distinguish between `dateTime`, `date`, `year` and `yearMonth` in the
+    // underlying representation?
+    return Date{year, month, 1, 0, 0, 0.0, tz};
   }
 };
 

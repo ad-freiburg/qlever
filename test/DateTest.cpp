@@ -8,6 +8,9 @@
 
 #include "util/Date.h"
 #include "util/Random.h"
+#include "./util/GTestHelpers.h"
+
+using ad_utility::source_location;
 
 SlowRandomIntGenerator yearGenerator{-9999, 9999};
 SlowRandomIntGenerator monthGenerator{1, 12};
@@ -255,7 +258,82 @@ TEST(Date, OrderRandomValues) {
   testSorting(dates);
 }
 
+namespace {
+auto testDatetime(std::string_view input, int year, int month, int day, int hour, int minute = 0, double second = 0.0, int timezone = 0) {
+  auto d = Date::parseXsdDatetime(input);
+  EXPECT_EQ(year, d.getYear());
+  EXPECT_EQ(month, d.getMonth());
+  EXPECT_EQ(day, d.getDay());
+  EXPECT_EQ(hour, d.getHour());
+  EXPECT_EQ(minute, d.getMinute());
+  EXPECT_NEAR(second, d.getSecond(), 0.001);
+  EXPECT_EQ(timezone, d.getTimezone());
+}
+
+auto testDate(std::string_view input, int year, int month, int day, int timezone = 0, source_location l = source_location::current()) {
+  auto t = generateLocationTrace(l);
+  ASSERT_NO_THROW(Date::parseXsdDate(input));
+  auto d = Date::parseXsdDate(input);
+  EXPECT_EQ(year, d.getYear());
+  EXPECT_EQ(month, d.getMonth());
+  EXPECT_EQ(day, d.getDay());
+  EXPECT_EQ(timezone, d.getTimezone());
+}
+
+auto testYear(std::string_view input, int year, int timezone = 0, source_location l = source_location::current()) {
+  auto t = generateLocationTrace(l);
+  ASSERT_NO_THROW(Date::parseGYear(input));
+  auto d = Date::parseGYear(input);
+  EXPECT_EQ(year, d.getYear());
+  EXPECT_EQ(timezone, d.getTimezone());
+}
+
+auto testYearMonth(std::string_view input, int year, int month, int timezone = 0, source_location l = source_location::current()) {
+  auto t = generateLocationTrace(l);
+  ASSERT_NO_THROW(Date::parseGYearMonth(input));
+  auto d = Date::parseGYearMonth(input);
+  EXPECT_EQ(year, d.getYear());
+  EXPECT_EQ(timezone, d.getTimezone());
+}
+}
+
 TEST(Date, parseDateTime) {
+testDatetime("2034-12-24T02:12:42.34+12:00", 2034, 12, 24, 2, 12, 42.34, 12);
+testDatetime("2034-12-24T02:12:42.34-03:00", 2034, 12, 24, 2, 12, 42.34, -3);
+testDatetime("2034-12-24T02:12:42.34Z", 2034, 12, 24, 2, 12, 42.34, 0);
+testDatetime("2034-12-24T02:12:42.34", 2034, 12, 24, 2, 12, 42.34, 0);
+testDatetime("-2034-12-24T02:12:42.34", -2034, 12, 24, 2, 12, 42.34, 0);
+}
+
+TEST(Date, parseDate) {
+  testDate("2034-12-24+12:00", 2034, 12, 24, 12);
+  testDate("2034-12-24-03:00", 2034, 12, 24, -3);
+  testDate("2034-12-24Z", 2034, 12, 24,  0);
+  testDate("2034-12-24", 2034, 12, 24,  0);
+  testDate("-2034-12-24", -2034, 12, 24, 0);
+}
+
+TEST(Date, parseYearMonth) {
+  testYearMonth("2034-12+12:00", 2034, 12, 12);
+  testYearMonth("2034-12-03:00", 2034, 12, -3);
+  testYearMonth("2034-12Z", 2034, 12, 0);
+  testYearMonth("2034-12", 2034, 12, 0);
+  testYearMonth("-2034-12", -2034, 12, 0);
+}
+
+TEST(Date, parseYear) {
+  testYear("2034+12:00", 2034, 12);
+  testYear("2034-03:00", 2034, -3);
+  testYear("2034Z", 2034, 0);
+  testYear("2034", 2034, 0);
+  testYear("-2034", -2034, 0);
+}
+
+TEST(Date, parseDateTimeBlubb) {
+  constexpr static ctll::fixed_string date{R"((?<year>-?\d{4})-(?<month>\d{2})-(?<day>\d{2}))"};
+  constexpr static ctll::fixed_string time{R"((?<hour>\d{2}):(?<minute>\d{2}):(?<second>\d{2}(\.\d{1,12})?))"};
+  constexpr static ctll::fixed_string timezone{R"(Z|([+\-](\d{2}):(\d{2})))"};
+  constexpr static ctll::fixed_string dateTime = date + "T" + time + grp(timezone) + "?" ;
   if (auto [whole, year, month, day, min, hours, secs, subsecs] =ctre::match<"(-?\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2}(\\.\\d{1,12})?)">("2034-12-24T02:12:60.34")) {
     EXPECT_EQ(year, "2034");
     EXPECT_EQ(secs, "60.34");
@@ -264,4 +342,24 @@ TEST(Date, parseDateTime) {
     FAIL();
   }
   EXPECT_TRUE((ctre::match<"(-?\\d{4})-(\\d{2})-(\\d{2})T">("2034-12-24T")));
+  EXPECT_TRUE((ctre::match<timezone>("Z")));
+  EXPECT_TRUE((ctre::match<timezone>("-00:24")));
+  EXPECT_FALSE((ctre::match<timezone>("00:24")));
+
+  EXPECT_TRUE((ctre::match<date>("2034-12-24")));
+  EXPECT_TRUE((ctre::match<time>("02:12:60.34")));
+  EXPECT_TRUE((ctre::match<dateTime>("2034-12-24T02:12:60.34Z")));
+
+  EXPECT_TRUE((ctre::match<dateTime>("2034-12-24T02:12:60.34+12:34")));
+  EXPECT_TRUE((ctre::match<timezone + "?">("")));
+
+  auto match = ctre::match<dateTime>("2034-12-24T02:12:60.34+12:34");
+  EXPECT_TRUE(match);
+  EXPECT_EQ(match.get<"year">(), "2034");
+  EXPECT_EQ(match.get<"month">(), "12");
+  EXPECT_EQ(match.get<"day">(), "24");
+  EXPECT_EQ(match.get<"hour">(), "02");
+  EXPECT_EQ(match.get<"minute">(), "12");
+  EXPECT_EQ(match.get<"second">(), "60.34");
 }
+
