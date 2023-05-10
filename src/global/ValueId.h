@@ -13,11 +13,12 @@
 #include <limits>
 #include <sstream>
 
-#include "../util/BitUtils.h"
-#include "../util/NBitInteger.h"
-#include "../util/Serializer/Serializer.h"
-#include "../util/SourceLocation.h"
-#include "./IndexTypes.h"
+#include "util/BitUtils.h"
+#include "util/NBitInteger.h"
+#include "util/Serializer/Serializer.h"
+#include "util/SourceLocation.h"
+#include "util/Date.h"
+#include "global/IndexTypes.h"
 
 /// The different Datatypes that a `ValueId` (see below) can encode.
 enum struct Datatype {
@@ -27,7 +28,8 @@ enum struct Datatype {
   VocabIndex,
   LocalVocabIndex,
   TextRecordIndex,
-  MaxValue = TextRecordIndex
+  Date,
+  MaxValue = Date
   // TODO<joka921> At least "date" is missing and not yet folded.
   // Note: Unfortunately we cannot easily get the size of an enum.
   // If members are added to this enum, then the `MaxValue`
@@ -50,6 +52,8 @@ constexpr std::string_view toString(Datatype type) {
       return "LocalVocabIndex";
     case Datatype::TextRecordIndex:
       return "TextRecordIndex";
+    case Datatype::Date:
+      return "Date";
   }
   // This line is reachable if we cast an arbitrary invalid int to this enum
   AD_FAIL();
@@ -200,6 +204,17 @@ class ValueId {
   [[nodiscard]] constexpr LocalVocabIndex getLocalVocabIndex() const noexcept {
     return LocalVocabIndex::make(removeDatatypeBits(_bits));
   }
+
+  // Store or load a `Date` object.
+  static ValueId makeFromDate(Date d) noexcept {
+    return addDatatypeBits(d.toBits(), Datatype::Int);
+  }
+
+  Date getDate() const noexcept {
+    return Date::fromBits(removeDatatypeBits(_bits));
+  }
+
+
 
   // TODO<joka921> implement dates
 

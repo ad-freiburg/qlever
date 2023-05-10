@@ -343,6 +343,9 @@ class IndexImpl {
         return std::nullopt;
       case Datatype::TextRecordIndex:
         return getTextExcerpt(id.getTextRecordIndex());
+      case Datatype::Date:
+        // This code will be removed by a different PR.
+        return std::nullopt;
     }
     // should be unreachable because the enum is exhaustive.
     AD_FAIL();
