@@ -1,9 +1,7 @@
 *** How to update the benchmark configuration shorthand grammar***
 
 All files in this folder except for `BenchmarkConfigurationShorthandAutomatic.g4` are automatically generated.
-Please leave them untouched. In case the Sparql grammar has to be changed (e.g. to support
-a custom language extension for QLever),
-the workflow is as follows:
+Please leave them untouched. In case the benchmark configuration shorthand grammar has to be changed (e.g. to support a language extension), the workflow is as follows:
 
 *Change the `BenchmarkConfigurationShorthandAutomatic
      .g4` file according to your needs
@@ -19,7 +17,6 @@ the workflow is as follows:
 ``` java - Xmx500M
            - cp "./antlr-4.11.1-complete.jar:$CLASSPATH" org.antlr.v4.Tool
            - Dlanguage = Cpp BenchmarkConfigurationShorthandAutomatic.g4
-                         - visitor
 ```
 
                                * If necessary,
