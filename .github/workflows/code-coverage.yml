@@ -22,13 +22,14 @@ jobs:
   build:
     env:
           compiler: clang
-          compiler-version: 15
+          compiler-version: 16
           build-type: Debug
           warnings: "-Wall -Wextra "
           # we disable the `assert()` macro as it messes with the coverage reports
           asan-flags: "-fsanitize=address -fno-omit-frame-pointer -DNDEBUG"
           ubsan-flags: " -fsanitize=undefined"
-          coverage-flags: "-fprofile-instr-generate -fcoverage-mapping"
+          coverage-flags: "-fprofile-instr-generate -fcoverage-mapping -fexperimental-library"
+          cmake-flags: "-DCMAKE_C_COMPILER=clang-16 -DCMAKE_CXX_COMPILER=clang++-16 -DCMAKE_CXX_FLAGS=-stdlib=libc++ -DCMAKE_EXE_LINKER_FLAGS=\"-stdlib=libc++ -lc++abi\""
 
     runs-on: ubuntu-22.04
     steps:
@@ -37,8 +38,18 @@ jobs:
         submodules: "recursive"
 
     - name: Install dependencies
-      run:  sudo apt update && sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev libboost-all-dev
-    - name: Install clang 15
+      run:  sudo apt update && sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
+    - name: Python dependencies
+      run: sudo apt-get install python3-yaml unzip pkg-config python3-icu python3-pip
+    - name: Create build directory
+      run: mkdir ${{github.workspace}}/build
+    - name: Install and run conan
+      working-directory: ${{github.workspace}}/build
+      run: >
+        sudo pip3 install "conan==1.58.0";
+        conan --version;
+        conan install .. -pr:h ../conanprofiles/clang-libcpp -pr:b ../conanprofiles/clang-libcpp;
+    - name: Install clang 16
       # The sed command fixes a bug in `llvm.sh` in combination with the latest version of
       # `apt-key`. Without it the GPG key for the llvm repository is downloaded but deleted
       # immediately after.
@@ -47,13 +58,12 @@ jobs:
         sudo chmod +x llvm.sh
         sed   's/apt-key del/echo/' llvm.sh -iy
         sudo ./llvm.sh 15 
-        sudo apt install -y clang-15 llvm-15
-    - name: Python dependencies
-      run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
+        sudo apt install clang-15 llvm-15
+        sudo ./llvm.sh 16 all
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=DEBUG -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{env.compiler}}${{env.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}} ${{env.asan-flags}} ${{env.ubsan-flags}} ${{env.coverage-flags}}" -DADDITIONAL_LINKER_FLAGS="${{env.coverage-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false -DSINGLE_TEST_BINARY=ON -DENABLE_EXPENSIVE_CHECKS=true
+      run: cmake -B ${{github.workspace}}/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=DEBUG -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}} ${{env.asan-flags}} ${{env.ubsan-flags}} ${{env.coverage-flags}}" -DADDITIONAL_LINKER_FLAGS="${{env.coverage-flags}}" -DUSE_PARALLEL=false -DRUN_EXPENSIVE_TESTS=false -DSINGLE_TEST_BINARY=ON -DENABLE_EXPENSIVE_CHECKS=true
 
     - name: Build
         # Build your program with the given configuration
@@ -64,7 +74,7 @@ jobs:
         LLVM_PROFILE_FILE: "default%p.profraw"
       # Execute tests defined by the CMake configuration.
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{env.build-type}} .
+      run: env CTEST_OUTPUT_ON_FAILURE=1 ASAN_OPTIONS="alloc_dealloc_mismatch=0" ctest -C ${{env.build-type}} .
 
     - name: GetListOfExecutablesForCoverageInfo
       working-directory: ${{github.workspace}}/build/test

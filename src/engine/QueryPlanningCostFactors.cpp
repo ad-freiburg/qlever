@@ -4,9 +4,9 @@
 
 #include "./QueryPlanningCostFactors.h"
 
+#include <absl/strings/charconv.h>
 #include <absl/strings/str_split.h>
 
-#include <charconv>
 #include <fstream>
 
 #include "../util/Exception.h"
@@ -32,7 +32,7 @@ QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {
 float toFloat(std::string_view view) {
   float factor;
   auto last = view.data() + view.size();
-  auto [ptr, ec] = std::from_chars(view.data(), last, factor);
+  auto [ptr, ec] = absl::from_chars(view.data(), last, factor);
   if (ec != std::errc() || ptr != last) {
     throw std::runtime_error{std::string{"Invalid float: "} + view};
   }
