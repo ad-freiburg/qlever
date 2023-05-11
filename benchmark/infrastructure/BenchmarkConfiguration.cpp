@@ -2,13 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
-
 #include <absl/strings/str_cat.h>
 
 #include <regex>
 #include <string>
 
+#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "BenchmarkConfigurationOption.h"
 #include "nlohmann/json.hpp"
 #include "util/Exception.h"
@@ -38,6 +37,12 @@ class ShortHandSyntaxException : public std::exception {
 
   const char* what() const throw() override { return message_.c_str(); }
 };
+
+// ____________________________________________________________________________
+const std::vector<BenchmarkConfigurationOption>&
+BenchmarkConfiguration::getConfigurationOptions() const {
+  return configurationOptions_;
+}
 
 // ____________________________________________________________________________
 nlohmann::json BenchmarkConfiguration::parseShortHand(

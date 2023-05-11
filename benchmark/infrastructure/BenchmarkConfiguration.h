@@ -22,6 +22,23 @@
 
 namespace ad_benchmark {
 
+// The types, that can be used for access keys in `nlohmann::json` objects.
+template <typename T>
+concept KeyForJson = (std::convertible_to<T, std::string> || std::integral<T>);
+
+// Only returns true, if all the given keys, that are numbers, are bigger/equal
+// than 0.
+static bool allArgumentsBiggerOrEqualToZero(const auto&... keys) {
+  auto biggerOrEqual = []<typename T>(const T& key) {
+    if constexpr (std::is_arithmetic_v<T>) {
+      return key >= 0;
+    } else {
+      return true;
+    }
+  };
+  return (biggerOrEqual(keys) && ...);
+}
+
 /*
 Manages a bunch of `BenchmarkConfigurationOption`s.
 */
@@ -51,27 +68,23 @@ class BenchmarkConfiguration {
 
   @tparam Keys Positive whole numbers, or strings.
   */
-  template <std::convertible_to<std::string>... Keys>
-  static nlohmann::json::json_pointer createJsonPointer(const Keys&... keys) {
-    // A json pointer needs special characters, if a `/`, or `~`, is used in a
-    // key. So here a special conversion function for our keys, that adds those,
-    // if needed.
-    auto toString = []<typename T>(const T& key) -> std::string {
-      std::string transformedKey = static_cast<std::string>(key);
-
-      // Replace special character `~` with `~0`.
-      transformedKey = absl::StrReplaceAll(transformedKey, {{"~", "~0"}});
-
-      // Replace special character `/` with `~1`.
-      return absl::StrReplaceAll(transformedKey, {{"/", "~1"}});
-    };
+  static nlohmann::json::json_pointer createJsonPointer(
+      const KeyForJson auto&... keys) {
+    // A numeric key, must be `>=0`.
+    AD_CONTRACT_CHECK(allArgumentsBiggerOrEqualToZero(keys...));
 
     // Creating the string for the pointer.
     std::ostringstream pointerString;
     pointerString << "/";
-    ((pointerString << toString(keys) << "/"), ...);
+    ((pointerString << keys << "/"), ...);
 
-    return nlohmann::json::json_pointer(pointerString.str());
+    // A json pointer needs special characters, if a `/`, or `~`, is used in it.
+    // Unfortunaly, I don't know the behavior of `StrReplaceAll` good enoguh, to
+    // be able to tell, if it would lead to no complications, if we replace both
+    // symbols at once.
+    return nlohmann::json::json_pointer(absl::StrReplaceAll(
+        absl::StrReplaceAll(pointerString.str(), {{"~", "~0"}}),
+        {{"/", "~1"}}));
   }
 
   /*
@@ -92,9 +105,19 @@ class BenchmarkConfiguration {
   static nlohmann::json parseShortHand(const std::string& shortHandString);
 
  public:
-  void addConfigurationOption(BenchmarkConfigurationOption&& option,
-                              const auto&... keys) requires(sizeof...(keys) > 0)
-  {
+  /*
+  @brief Add the given configuration option in such a way, that it can be
+  accessed by calling `getConfigurationOptionByNestedKeys` with the here given
+  keys, follwed by the name of the configuration option.
+  Example: Given a configuration option `numberOfRows` and the keys `"general
+  Options", 1, "Table"`, then it can be accessed with `"general Options", 1,
+  "Table", "numberOfRows"`.
+  */
+  void addConfigurationOption(const BenchmarkConfigurationOption& option,
+                              const KeyForJson auto&... keys) {
+    // A numeric key, must be `>=0`.
+    AD_CONTRACT_CHECK(allArgumentsBiggerOrEqualToZero(keys...));
+
     // The position in the json object literal, our keys point to.
     const nlohmann::json::json_pointer ptr{createJsonPointer(AD_FWD(keys)...)};
 
@@ -114,7 +137,8 @@ class BenchmarkConfiguration {
   /*
   Get all the added configuration options.
   */
-  std::vector<BenchmarkConfigurationOption> getConfigurationOptions() const;
+  const std::vector<BenchmarkConfigurationOption>& getConfigurationOptions()
+      const;
 
   /*
   @brief Return the underlying configuration option, if it's at the position
@@ -126,7 +150,10 @@ class BenchmarkConfiguration {
    to see, what's possible.
   */
   const BenchmarkConfigurationOption& getConfigurationOptionByNestedKeys(
-      const auto&... keys) const requires(sizeof...(keys) > 0) {
+      const KeyForJson auto&... keys) const requires(sizeof...(keys) > 0) {
+    // A numeric key, must be `>=0`.
+    AD_CONTRACT_CHECK(allArgumentsBiggerOrEqualToZero(keys...));
+
     // If there is an entry at the described location, this should point to the
     // index number of the configuration option in `configurationOptions_`.
     const nlohmann::json::json_pointer ptr{createJsonPointer(AD_FWD(keys)...)};
