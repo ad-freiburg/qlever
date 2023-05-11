@@ -10,6 +10,7 @@
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
+#include "infrastructure/BenchmarkConfigurationOption.h"
 #include "util/Random.h"
 
 namespace ad_benchmark {
@@ -234,24 +235,44 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
     return "Example for the usage of configuration and metadata";
   }
 
+  void addConfigurationOptions(BenchmarkConfiguration* config) {
+    // Add some arbitrary values.
+    config->addConfigurationOption(BenchmarkConfigurationOption(
+        std::string{"22.3.2023"}, "date",
+        "The current date. Has the default value \"22.3.2023\"."));
+
+    config->addConfigurationOption(BenchmarkConfigurationOption(
+        size_t{10}, "numSigns",
+        "The number of street signs. Has the default value 10."));
+
+    config->addConfigurationOption(BenchmarkConfigurationOption(
+        std::vector<bool>{false, false, false, false, false}, "Coin flip try",
+        "The number of succesful coin flips. As default, 5 unsuccesful coin "
+        "flips."));
+
+    config->addConfigurationOption(
+        BenchmarkConfigurationOption(
+            float{-41.9}, "Steve",
+            "Steves saving account balance. Has the default value -41.9."),
+        "Accounts", "Personal");
+  }
+
   void parseConfiguration(const BenchmarkConfiguration& config) final {
     // Collect some arbitrary values.
-    std::string dateString{
-        config.getValueByNestedKeys<std::string>("exampleDate")
-            .value_or("22.3.2023")};
+    std::string dateString{config.getConfigurationOptionByNestedKeys("date")
+                               .getValue<std::string>()};
     size_t numberOfStreetSigns{
-        config.getValueByNestedKeys<size_t>("numSigns").value_or(10)};
+        config.getConfigurationOptionByNestedKeys("numSigns")
+            .getValue<size_t>()};
 
-    std::vector<bool> wonOnTryX{};
-    wonOnTryX.reserve(5);
-    for (size_t i = 0; i < 5; i++) {
-      wonOnTryX.push_back(config.getValueByNestedKeys<bool>("Coin_flip_try", i)
-                              .value_or(false));
-    }
+    std::vector<bool> wonOnTryX{
+        config.getConfigurationOptionByNestedKeys("Coin flip try")
+            .getValue<std::vector<bool>>()};
 
     float balanceOnStevesSavingAccount{
-        config.getValueByNestedKeys<float>("Accounts", "Personal", "Steve")
-            .value_or(-41.9)};
+        config
+            .getConfigurationOptionByNestedKeys("Accounts", "Personal", "Steve")
+            .getValue<float>()};
 
     // Transcribe the collected values.
     generalMetadata_.addKeyValuePair("date", dateString);
