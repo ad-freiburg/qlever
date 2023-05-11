@@ -6,15 +6,14 @@
 
 #include <ctre/ctre.h>
 #include <gtest/gtest.h>
-#include <cstdlib>
 
+#include <cstdlib>
 #include <string>
 
+#include "parser/TurtleTokenId.h"
 #include "util/CtreHelpers.h"
 #include "util/Log.h"
 #include "util/StringUtils.h"
-#include "parser/TurtleTokenId.h"
-
 
 using ctll::fixed_string;
 using namespace ctre::literals;

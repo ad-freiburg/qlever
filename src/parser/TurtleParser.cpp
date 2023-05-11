@@ -397,15 +397,17 @@ bool TurtleParser<T>::rdfLiteral() {
     } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
                type == XSD_FLOAT_TYPE) {
       parseDoubleConstant(strippedLiteral);
+    } else if (type == XSD_DATETIME_TYPE) {
+      _lastParseResult = Date::parseXsdDatetime(strippedLiteral);
+    } else if (type == XSD_DATE_TYPE) {
+      _lastParseResult = Date::parseXsdDate(strippedLiteral);
+    } else if (type == XSD_GYEARMONTH_TYPE) {
+      _lastParseResult = Date::parseGYearMonth(strippedLiteral);
+    } else if (type == XSD_GYEAR_TYPE) {
+      _lastParseResult = Date::parseGYear(strippedLiteral);
     } else {
       _lastParseResult =
           TripleComponent::Literal{literalString, absl::StrCat("^^", typeIri)};
-      // TODO: remove this once the dates become value IDs, too.
-      if (type == XSD_DATETIME_TYPE || type == XSD_DATE_TYPE ||
-          type == XSD_GYEAR_TYPE || type == XSD_GYEARMONTH_TYPE) {
-        _lastParseResult = ad_utility::convertValueLiteralToIndexWord(
-            _lastParseResult.toRdfLiteral());
-      }
     }
     return true;
   } else {

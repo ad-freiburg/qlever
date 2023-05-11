@@ -187,6 +187,12 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
           nullptr};
+    case Datatype::Date:
+      auto str = id.getDate().toString();
+      if constexpr (!removeQuotesAndAngleBrackets) {
+        str = absl::StrCat("\"", str, "\"");
+      }
+      return std::pair{escapeFunction(str), XSD_DATETIME_TYPE};
   }
   AD_FAIL();
 }

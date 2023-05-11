@@ -13,12 +13,12 @@
 #include <limits>
 #include <sstream>
 
+#include "global/IndexTypes.h"
 #include "util/BitUtils.h"
+#include "util/Date.h"
 #include "util/NBitInteger.h"
 #include "util/Serializer/Serializer.h"
 #include "util/SourceLocation.h"
-#include "util/Date.h"
-#include "global/IndexTypes.h"
 
 /// The different Datatypes that a `ValueId` (see below) can encode.
 enum struct Datatype {
@@ -207,14 +207,12 @@ class ValueId {
 
   // Store or load a `Date` object.
   static ValueId makeFromDate(Date d) noexcept {
-    return addDatatypeBits(d.toBits(), Datatype::Int);
+    return addDatatypeBits(d.toBits(), Datatype::Date);
   }
 
   Date getDate() const noexcept {
     return Date::fromBits(removeDatatypeBits(_bits));
   }
-
-
 
   // TODO<joka921> implement dates
 
@@ -262,9 +260,10 @@ class ValueId {
         return std::invoke(visitor, getLocalVocabIndex());
       case Datatype::TextRecordIndex:
         return std::invoke(visitor, getTextRecordIndex());
-      default:
-        AD_FAIL();
+      case Datatype::Date:
+        return std::invoke(visitor, getDate());
     }
+    AD_FAIL();
   }
 
   /// Similar to `visit` (see above). Extracts the values from `a` and `b` and
@@ -290,6 +289,8 @@ class ValueId {
       } else if constexpr (ad_utility::isSimilar<T, double> ||
                            ad_utility::isSimilar<T, int64_t>) {
         ostr << std::to_string(value);
+      } else if constexpr (ad_utility::isSimilar<T, Date>) {
+        ostr << value.toString();
       } else {
         // T is `VocabIndex || LocalVocabIndex || TextRecordIndex`
         ostr << std::to_string(value.get());

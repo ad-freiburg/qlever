@@ -512,11 +512,8 @@ TEST(TurtleParserTest, DateLiterals) {
       R"("-2014-03-16T12:13:52"^^<)"s + XSD_DATETIME_TYPE + ">",
       R"("2084"^^<)"s + XSD_GYEAR_TYPE + ">",
       R"("2083-12"^^<)"s + XSD_GYEARMONTH_TYPE + ">"};
-  std::vector<std::string> expected{
-      ":v:date:0000000000000002000-10-15T00:00:00",
-      ":v:date:-999999999999997985-03-16T12:13:52",
-      ":v:date:0000000000000002084-00-00T00:00:00",
-      ":v:date:0000000000000002083-12-00T00:00:00"};
+  std::vector<Date> expected{
+      {2000, 10, 15}, {-2014, 3, 16, 12, 13, 52}, {2084, 1, 1}, {2083, 12, 1}};
 
   for (size_t i = 0; i < dateLiterals.size(); ++i) {
     checkParseResult<Re2Parser, &Re2Parser::object>(dateLiterals[i],

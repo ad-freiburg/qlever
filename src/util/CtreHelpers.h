@@ -49,4 +49,3 @@ template <size_t N>
 static constexpr auto cls(const ctll::fixed_string<N>& s) {
   return ctll::fixed_string("[") + s + ctll::fixed_string("]");
 }
-

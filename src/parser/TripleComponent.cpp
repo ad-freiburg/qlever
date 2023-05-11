@@ -17,6 +17,8 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
           stream << "UNDEF";
         } else if constexpr (std::is_same_v<T, TripleComponent::Literal>) {
           stream << value.rawContent();
+        } else if constexpr (std::is_same_v<T, Date>) {
+          stream << "DATE: " << value.toString();
         } else {
           stream << value;
         }
@@ -59,6 +61,8 @@ std::optional<Id> TripleComponent::toValueIdIfNotString() const {
       return Id::makeFromDouble(value);
     } else if constexpr (std::is_same_v<T, UNDEF>) {
       return Id::makeUndefined();
+    } else if constexpr (std::is_same_v<T, Date>) {
+      return Id::makeFromDate(value);
     } else if constexpr (std::is_same_v<T, Variable>) {
       // Cannot turn a variable into a ValueId.
       AD_FAIL();

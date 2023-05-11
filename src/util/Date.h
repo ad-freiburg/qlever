@@ -6,12 +6,14 @@
 #define QLEVER_DATE_H
 
 #include <bit>
+#include <charconv>
 #include <cmath>
 #include <exception>
 #include <sstream>
-#include <charconv>
-#include "ctre/ctre.h"
 
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
+#include "ctre/ctre.h"
 #include "util/CtreHelpers.h"
 
 // Exception that is thrown when a value for a component of the `Date`, `Time`
@@ -185,6 +187,11 @@ class Date {
     return toBits() <=> rhs.toBits();
   }
 
+  template <typename H>
+  friend H AbslHashValue(H h, const Date& d) {
+    return H::combine(std::move(h), d.toBits());
+  }
+
   /// Getters and setters for the different components. The setters will check,
   /// if the input is valid for the respective component. Otherwise a
   /// `DateOutOfRangeException` is thrown.
@@ -254,17 +261,20 @@ class Date {
     std::from_chars(s.data(), s.data() + s.size(), result);
     return result;
   }
-  constexpr static ctll::fixed_string dateRegex{R"((?<year>-?\d{4})-(?<month>\d{2})-(?<day>\d{2}))"};
-  constexpr static ctll::fixed_string timeRegex{R"((?<hour>\d{2}):(?<minute>\d{2}):(?<second>\d{2}(\.\d{1,12})?))"};
-  constexpr static ctll::fixed_string timezoneRegex{R"(Z|(?<tzSign>[+\-])(?<tzHours>\d{2}):(?<tzMinutes>\d{2}))"};
- public:
+  constexpr static ctll::fixed_string dateRegex{
+      R"((?<year>-?\d{4})-(?<month>\d{2})-(?<day>\d{2}))"};
+  constexpr static ctll::fixed_string timeRegex{
+      R"((?<hour>\d{2}):(?<minute>\d{2}):(?<second>\d{2}(\.\d{1,12})?))"};
+  constexpr static ctll::fixed_string timezoneRegex{
+      R"(Z|(?<tzSign>[+\-])(?<tzHours>\d{2}):(?<tzMinutes>\d{2}))"};
 
+ public:
   static Date parseXsdDatetime(std::string_view dateString) {
     constexpr static ctll::fixed_string dateTime =
-        dateRegex + "T" + timeRegex + grp(timezoneRegex) + "?" ;
+        dateRegex + "T" + timeRegex + grp(timezoneRegex) + "?";
     auto match = ctre::match<dateTime>(dateString);
     if (!match) {
-      throw std::runtime_error{"Illegal xsd:dateTime"};
+      throw std::runtime_error{absl::StrCat("Illegal dateTime ", dateString)};
     }
     int year = toInt<"year">(match);
     int month = toInt<"month">(match);
@@ -279,17 +289,17 @@ class Date {
       tz *= -1;
     }
     if (match.get<"tzMinutes">() != "00") {
-      throw std::runtime_error {"Qlever supports only full hours as timezones"};
+      throw std::runtime_error{"Qlever supports only full hours as timezones"};
     }
     return Date{year, month, day, hour, minute, second, tz};
   }
 
   static Date parseXsdDate(std::string_view dateString) {
     constexpr static ctll::fixed_string dateTime =
-        dateRegex + grp(timezoneRegex) + "?" ;
+        dateRegex + grp(timezoneRegex) + "?";
     auto match = ctre::match<dateTime>(dateString);
     if (!match) {
-      throw std::runtime_error{"Illegal xsd:dateTime"};
+      throw std::runtime_error{absl::StrCat("Illegal date ", dateString)};
     }
     int year = toInt<"year">(match);
     int month = toInt<"month">(match);
@@ -299,18 +309,18 @@ class Date {
       tz *= -1;
     }
     if (match.get<"tzMinutes">() != "00") {
-      throw std::runtime_error {"Qlever supports only full hours as timezones"};
+      throw std::runtime_error{"Qlever supports only full hours as timezones"};
     }
     return Date{year, month, day, 0, 0, 0.0, tz};
   }
 
   static Date parseGYear(std::string_view dateString) {
-    constexpr static ctll::fixed_string yearRegex ="(?<year>-?\\d{4})";
+    constexpr static ctll::fixed_string yearRegex = "(?<year>-?\\d{4})";
     constexpr static ctll::fixed_string dateTime =
-        yearRegex + grp(timezoneRegex) + "?" ;
+        yearRegex + grp(timezoneRegex) + "?";
     auto match = ctre::match<dateTime>(dateString);
     if (!match) {
-      throw std::runtime_error{"Illegal xsd:dateTime"};
+      throw std::runtime_error{absl::StrCat("Illegal gyear", dateString)};
     }
     int year = toInt<"year">(match);
     int tz = toInt<"tzHours">(match);
@@ -318,20 +328,21 @@ class Date {
       tz *= -1;
     }
     if (match.get<"tzMinutes">() != "00") {
-      throw std::runtime_error {"Qlever supports only full hours as timezones"};
+      throw std::runtime_error{"Qlever supports only full hours as timezones"};
     }
-    // TODO<joka921> How should we distinguish between `dateTime`, `date`, `year` and `yearMonth` in the
-    // underlying representation?
+    // TODO<joka921> How should we distinguish between `dateTime`, `date`,
+    // `year` and `yearMonth` in the underlying representation?
     return Date{year, 1, 1, 0, 0, 0.0, tz};
   }
 
   static Date parseGYearMonth(std::string_view dateString) {
-    constexpr static ctll::fixed_string yearRegex ="(?<year>-?\\d{4})-(?<month>\\d{2})";
+    constexpr static ctll::fixed_string yearRegex =
+        "(?<year>-?\\d{4})-(?<month>\\d{2})";
     constexpr static ctll::fixed_string dateTime =
-        yearRegex + grp(timezoneRegex) + "?" ;
+        yearRegex + grp(timezoneRegex) + "?";
     auto match = ctre::match<dateTime>(dateString);
     if (!match) {
-      throw std::runtime_error{"Illegal xsd:dateTime"};
+      throw std::runtime_error{absl::StrCat("Illegal yearMonth", dateString)};
     }
     int year = toInt<"year">(match);
     int month = toInt<"month">(match);
@@ -340,11 +351,20 @@ class Date {
       tz *= -1;
     }
     if (match.get<"tzMinutes">() != "00") {
-      throw std::runtime_error {"Qlever supports only full hours as timezones"};
+      throw std::runtime_error{"Qlever supports only full hours as timezones"};
     }
-    // TODO<joka921> How should we distinguish between `dateTime`, `date`, `year` and `yearMonth` in the
-    // underlying representation?
+    // TODO<joka921> How should we distinguish between `dateTime`, `date`,
+    // `year` and `yearMonth` in the underlying representation?
     return Date{year, month, 1, 0, 0, 0.0, tz};
+  }
+
+  std::string toString() const {
+    // TODO<joka921> This still lacks many different cases
+    // Timezones, precision of the seconds, is it `date` `dateTime` `gYear` etc.
+    constexpr std::string_view formatString =
+        "%04d-%02d-%02dT%02d:%02d:%05.2fZ";
+    return absl::StrFormat(formatString, getYear(), getMonth(), getDay(),
+                           getHour(), getMinute(), getSecond());
   }
 };
 
