@@ -157,7 +157,8 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     case Datatype::VocabIndex: {
       // TODO<joka921> As soon as we get rid of the special encoding of date
       // values, we can use `index.getVocab().indexToOptionalString()` directly.
-      std::optional<string> entity = index.idToOptionalString(id);
+      std::optional<string> entity =
+          index.idToOptionalString(id.getVocabIndex());
       AD_CONTRACT_CHECK(entity.has_value());
       if constexpr (onlyReturnLiterals) {
         if (!entity.value().starts_with('"')) {

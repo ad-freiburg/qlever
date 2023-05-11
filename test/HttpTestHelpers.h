@@ -14,6 +14,7 @@
 #include "util/http/HttpClient.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
+#include "util/jthread.h"
 
 using namespace std::literals;
 
@@ -29,7 +30,7 @@ class TestHttpServer {
   // NOTE: It is important that this thread object lives as long as the server
   // lives. If it would be destroyed while the server is still running, the
   // program would hang because the thread would wait for the server to exit.
-  std::unique_ptr<std::jthread> serverThread_;
+  std::unique_ptr<ad_utility::JThread> serverThread_;
 
   // Indicator whether the server has been shut down. We need this because
   // `HttpServer::shutDown` must only be called once.
@@ -78,7 +79,7 @@ class TestHttpServer {
     std::exception_ptr exception_ptr = nullptr;
     std::shared_ptr<HttpServer<HttpHandler>> serverCopy = server_;
     serverThread_ =
-        std::make_unique<std::jthread>([&exception_ptr, serverCopy]() {
+        std::make_unique<ad_utility::JThread>([&exception_ptr, serverCopy]() {
           try {
             serverCopy->run();
           } catch (...) {

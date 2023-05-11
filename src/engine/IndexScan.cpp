@@ -218,7 +218,7 @@ ResultTable IndexScan::computeResult() {
   LOG(DEBUG) << "IndexScan result computation...\n";
   IdTable idTable{getExecutionContext()->getAllocator()};
 
-  using enum Index::Permutation;
+  using enum Permutation::Enum;
   switch (_type) {
     case PSO_BOUND_S:
       computePSOboundS(&idTable);
@@ -275,29 +275,28 @@ ResultTable IndexScan::computeResult() {
 void IndexScan::computePSOboundS(IdTable* result) const {
   result->setNumColumns(1);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, _subject, result, Index::Permutation::PSO,
-           _timeoutTimer);
+  idx.scan(_predicate, _subject, result, Permutation::PSO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computePSOfreeS(IdTable* result) const {
   result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, result, Index::Permutation::PSO, _timeoutTimer);
+  idx.scan(_predicate, result, Permutation::PSO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computePOSboundO(IdTable* result) const {
   result->setNumColumns(1);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, _object, result, Index::Permutation::POS, _timeoutTimer);
+  idx.scan(_predicate, _object, result, Permutation::POS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computePOSfreeO(IdTable* result) const {
   result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, result, Index::Permutation::POS, _timeoutTimer);
+  idx.scan(_predicate, result, Permutation::POS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -335,11 +334,11 @@ size_t IndexScan::computeSizeEstimate() {
     // TODO<joka921> Should be a oneliner
     // getIndex().cardinality(getPermutation(), getFirstKey());
     if (_type == SPO_FREE_P || _type == SOP_FREE_O) {
-      return getIndex().getCardinality(_subject, Index::Permutation::SPO);
+      return getIndex().getCardinality(_subject, Permutation::SPO);
     } else if (_type == POS_FREE_O || _type == PSO_FREE_S) {
-      return getIndex().getCardinality(_predicate, Index::Permutation::PSO);
+      return getIndex().getCardinality(_predicate, Permutation::PSO);
     } else if (_type == OPS_FREE_P || _type == OSP_FREE_S) {
-      return getIndex().getCardinality(_object, Index::Permutation::OSP);
+      return getIndex().getCardinality(_object, Permutation::OSP);
     }
     // The triple consists of three variables.
     // TODO<joka921> As soon as all implementations of a full index scan
@@ -391,35 +390,35 @@ size_t IndexScan::getCostEstimate() {
 void IndexScan::computeSPOfreeP(IdTable* result) const {
   result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, result, Index::Permutation::SPO, _timeoutTimer);
+  idx.scan(_subject, result, Permutation::SPO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computeSOPboundO(IdTable* result) const {
   result->setNumColumns(1);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, _object, result, Index::Permutation::SOP, _timeoutTimer);
+  idx.scan(_subject, _object, result, Permutation::SOP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computeSOPfreeO(IdTable* result) const {
   result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, result, Index::Permutation::SOP, _timeoutTimer);
+  idx.scan(_subject, result, Permutation::SOP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computeOPSfreeP(IdTable* result) const {
   result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_object, result, Index::Permutation::OPS, _timeoutTimer);
+  idx.scan(_object, result, Permutation::OPS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computeOSPfreeS(IdTable* result) const {
   result->setNumColumns(2);
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_object, result, Index::Permutation::OSP, _timeoutTimer);
+  idx.scan(_object, result, Permutation::OSP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -432,46 +431,40 @@ void IndexScan::determineMultiplicities() {
       const auto& idx = getIndex();
       switch (_type) {
         case PSO_FREE_S:
-          _multiplicity =
-              idx.getMultiplicities(_predicate, Index::Permutation::PSO);
+          _multiplicity = idx.getMultiplicities(_predicate, Permutation::PSO);
           break;
         case POS_FREE_O:
-          _multiplicity =
-              idx.getMultiplicities(_predicate, Index::Permutation::POS);
+          _multiplicity = idx.getMultiplicities(_predicate, Permutation::POS);
           break;
         case SPO_FREE_P:
-          _multiplicity =
-              idx.getMultiplicities(_subject, Index::Permutation::SPO);
+          _multiplicity = idx.getMultiplicities(_subject, Permutation::SPO);
           break;
         case SOP_FREE_O:
-          _multiplicity =
-              idx.getMultiplicities(_subject, Index::Permutation::SOP);
+          _multiplicity = idx.getMultiplicities(_subject, Permutation::SOP);
           break;
         case OSP_FREE_S:
-          _multiplicity =
-              idx.getMultiplicities(_object, Index::Permutation::OSP);
+          _multiplicity = idx.getMultiplicities(_object, Permutation::OSP);
           break;
         case OPS_FREE_P:
-          _multiplicity =
-              idx.getMultiplicities(_object, Index::Permutation::OPS);
+          _multiplicity = idx.getMultiplicities(_object, Permutation::OPS);
           break;
         case FULL_INDEX_SCAN_SPO:
-          _multiplicity = idx.getMultiplicities(Index::Permutation::SPO);
+          _multiplicity = idx.getMultiplicities(Permutation::SPO);
           break;
         case FULL_INDEX_SCAN_SOP:
-          _multiplicity = idx.getMultiplicities(Index::Permutation::SOP);
+          _multiplicity = idx.getMultiplicities(Permutation::SOP);
           break;
         case FULL_INDEX_SCAN_PSO:
-          _multiplicity = idx.getMultiplicities(Index::Permutation::PSO);
+          _multiplicity = idx.getMultiplicities(Permutation::PSO);
           break;
         case FULL_INDEX_SCAN_POS:
-          _multiplicity = idx.getMultiplicities(Index::Permutation::POS);
+          _multiplicity = idx.getMultiplicities(Permutation::POS);
           break;
         case FULL_INDEX_SCAN_OSP:
-          _multiplicity = idx.getMultiplicities(Index::Permutation::OSP);
+          _multiplicity = idx.getMultiplicities(Permutation::OSP);
           break;
         case FULL_INDEX_SCAN_OPS:
-          _multiplicity = idx.getMultiplicities(Index::Permutation::OPS);
+          _multiplicity = idx.getMultiplicities(Permutation::OPS);
           break;
         default:
           AD_FAIL();
@@ -489,7 +482,7 @@ void IndexScan::determineMultiplicities() {
 
 // ________________________________________________________________________
 void IndexScan::computeFullScan(IdTable* result,
-                                const Index::Permutation permutation) const {
+                                const Permutation::Enum permutation) const {
   auto [ignoredRanges, isTripleIgnored] =
       getIndex().getImpl().getIgnoredIdRanges(permutation);
 
@@ -511,13 +504,11 @@ void IndexScan::computeFullScan(IdTable* result,
   result->reserve(resultSize);
   auto table = std::move(*result).toStatic<3>();
   size_t i = 0;
+  const auto& permutationImpl =
+      getExecutionContext()->getIndex().getImpl().getPermutation(permutation);
   auto triplesView =
-      getExecutionContext()->getIndex().getImpl().applyToPermutation(
-          permutation, [&, ignoredRanges = ignoredRanges,
-                        isTripleIgnored = isTripleIgnored](const auto& p) {
-            return TriplesView(p, getExecutionContext()->getAllocator(),
-                               ignoredRanges, isTripleIgnored);
-          });
+      TriplesView(permutationImpl, getExecutionContext()->getAllocator(),
+                  ignoredRanges, isTripleIgnored);
   for (const auto& triple : triplesView) {
     if (i >= resultSize) {
       break;
