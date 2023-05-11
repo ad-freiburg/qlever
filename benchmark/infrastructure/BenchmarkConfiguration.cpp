@@ -4,9 +4,13 @@
 
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 
+#include <absl/strings/str_cat.h>
+
 #include <regex>
 #include <string>
 
+#include "BenchmarkConfigurationOption.h"
+#include "nlohmann/json.hpp"
 #include "util/Exception.h"
 #include "util/json.h"
 
@@ -99,45 +103,90 @@ nlohmann::json BenchmarkConfiguration::parseShortHand(
 
 // ____________________________________________________________________________
 void BenchmarkConfiguration::setShortHand(const std::string& shortHandString) {
-  data_ = parseShortHand(shortHandString);
-}
-
-// ____________________________________________________________________________
-void BenchmarkConfiguration::addShortHand(const std::string& shortHandString) {
-  // This will cause an exception, if `data_` contains a json literal, or array.
-  // But that is intended, because, trying to add dictionary like entries to
-  // an array, sounds more like a problem on the user side of things.
-  data_.update(parseShortHand(shortHandString));
+  setJsonString(parseShortHand(shortHandString).dump());
 }
 
 // ____________________________________________________________________________
 void BenchmarkConfiguration::setJsonString(const std::string& jsonString) {
-  data_ = nlohmann::json::parse(jsonString);
-  // It should only possible for `data_` to be an json object.
-  if (!data_.is_object()) {
+  const nlohmann::json& stringAsJson = nlohmann::json::parse(jsonString);
+  // Anything else but a literal json object is not something, we want.
+  if (!stringAsJson.is_object()) {
     throw ad_utility::Exception(
         "A BenchmarkConfiguration"
-        " should only be set to a json object.");
-  }
-}
-
-// ____________________________________________________________________________
-void BenchmarkConfiguration::addJsonString(const std::string& jsonString) {
-  nlohmann::json::const_reference parsedJsonString =
-      nlohmann::json::parse(jsonString);
-
-  // Only a `jsonString` representing a json object is allowed.
-  if (!parsedJsonString.is_object()) {
-    throw ad_utility::Exception(
-        "The given json string must"
-        " represent a valid json object.");
+        " should only be set with a json object literal.");
   }
 
-  data_.update(parsedJsonString);
+  /*
+  Does `stringAsJson` only contain valid configuration options?
+  That is, does it only contain paths to entries, that are the same paths as we
+  have saved there?
+
+  For example: If on of our paths in `keyToConfigurationOptionIndex_` was
+  `{"classA": [..., {"entryNumber5" : 5}]}`, then a path like `{"clasA": [...,
+  {"entryNumber5" : 5}]}` would be invalid, because of the typo.
+  */
+  for (const auto& item : stringAsJson.flatten().items()) {
+    /*
+    We go over ALL valid json pointers in `stringAsJson` and check, if they, or
+    a valid sub json pointer of them, are contained in
+    `keyToConfigurationOptionIndex_`. This will only find paths, that point to
+    non existent configuration options, or have typos.
+    */
+    nlohmann::json::json_pointer currentPtr{item.key()};
+
+    while (!keyToConfigurationOptionIndex_.contains(currentPtr)) {
+      // Go to the parent pointer.
+      currentPtr = currentPtr.parent_pointer();
+
+      // If we reach the root, it's a completly non-valid path.
+      if (currentPtr.empty()) {
+        throw ad_utility::Exception(absl::StrCat(
+            "Error while trying to set configuration option: There is no valid "
+            "sub json pointer in '",
+            item.key(), "', that points to a valid configuration option."));
+      }
+    }
+  }
+
+  /*
+  Alright, time to actually set the configuration options. This will only throw
+  an exception, if a configuration option was given a value of the wrong type,
+  or if it HAD to be set, but wasn't.
+  */
+  for (const auto& configurationOptionIndex :
+       keyToConfigurationOptionIndex_.flatten().items()) {
+    // Pointer to the position of the current configuration in json.
+    const nlohmann::json::json_pointer configurationOptionJsonPosition{
+        configurationOptionIndex.key()};
+
+    BenchmarkConfigurationOption* configurationOption =
+        &(configurationOptions_.at(
+            keyToConfigurationOptionIndex_.at(configurationOptionJsonPosition)
+                .get<size_t>()));
+
+    // Set the option, if possible.
+    if (stringAsJson.contains(configurationOptionJsonPosition)) {
+      // This will throw an exception, if the json object can't be interpreted
+      // with the wanted type.
+      configurationOption->setValueWithJson(
+          stringAsJson.at(configurationOptionJsonPosition));
+    }
+
+    // If the option has no value now, that means, it didn't have a default
+    // value, and needs to be set by the user at runtime, but wasn't.
+    if (configurationOption->hasValue()) {
+      throw ad_utility::Exception(
+          absl::StrCat("Error while trying to set configuration options: The "
+                       "configuration option at '",
+                       configurationOptionJsonPosition.to_string(),
+                       "' wasn't defined by the user, even though, this "
+                       "configuration option has no default value."));
+    }
+  }
 }
 
 // JSON serialization.
 void to_json(nlohmann::json& j, const BenchmarkConfiguration& configuration) {
-  j = configuration.data_;
+  // TODO Implement.
 }
 }  // namespace ad_benchmark

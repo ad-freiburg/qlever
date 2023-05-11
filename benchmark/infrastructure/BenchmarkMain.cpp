@@ -114,15 +114,19 @@ int main(int argc, char** argv) {
   // Did we get any configuration?
   BenchmarkConfiguration config{};
 
+  // Add all the configuration options.
+  BenchmarkRegister::addConfigurationOptionsWtihAllRegisteredBenchmarks(
+      &config);
+
   if (vm.count("configuration-json")) {
     config.setJsonString(readFileToString(jsonConfigurationFileName));
   }
   if (vm.count("configuration-shorthand")) {
-    config.addShortHand(shortHandConfigurationString);
+    config.setShortHand(shortHandConfigurationString);
   }
 
   // Pass the configuration, even if it is empty.
-  BenchmarkRegister::passConfigurationToAllRegisteredBenchmarks(config);
+  BenchmarkRegister::parseConfigurationWithAllRegisteredBenchmarks(config);
 
   // Measuring the time for all registered benchmarks.
   // For measuring and saving the times.

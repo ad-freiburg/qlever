@@ -130,6 +130,18 @@ class BenchmarkInterface {
   // A human-readable name that will be printed as part of the output.
   virtual std::string name() const = 0;
 
+  /*
+  Add the configuration option, that you will be able to read out in
+  `parseConfiguration`. The values of the configuration options will be set
+  by the user at runtime. Note: Setting the values will happen AFTER this
+  function was called.
+  */
+  virtual void addConfigurationOptions(
+      [[maybe_unused]] BenchmarkConfiguration* config) {
+    // Default behaviour.
+    return;
+  }
+
   // Used to transport values, that you want to set at runtime.
   virtual void parseConfiguration(
       [[maybe_unused]] const BenchmarkConfiguration& config) {
@@ -193,8 +205,15 @@ class BenchmarkRegister {
   @brief Passes the `BenchmarkConfiguration` to the `parseConfiguration`
    function of all the registered instances of benchmark classes.
   */
-  static void passConfigurationToAllRegisteredBenchmarks(
+  static void parseConfigurationWithAllRegisteredBenchmarks(
       const BenchmarkConfiguration& config = BenchmarkConfiguration{});
+
+  /*
+  @brief Passes the `BenchmarkConfiguration` to the `addConfigurationOptions`
+   function of all the registered instances of benchmark classes.
+  */
+  static void addConfigurationOptionsWtihAllRegisteredBenchmarks(
+      BenchmarkConfiguration* config);
 
   /*
    * @brief Measures all the registered benchmarks and returns the resulting
