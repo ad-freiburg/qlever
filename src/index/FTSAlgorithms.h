@@ -29,7 +29,7 @@ class FTSAlgorithms {
   typedef vector<vector<Id>> VarWidthList;
 
   static Index::WordEntityPostings filterByRange(
-      const IdRange<Index::WordVocabIndex>& idRange,
+      const IdRange<WordVocabIndex>& idRange,
       const Index::WordEntityPostings& wepPreFilter);
 
   static Index::WordEntityPostings intersect(

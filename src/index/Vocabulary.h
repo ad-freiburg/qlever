@@ -39,7 +39,7 @@ using AccessReturnType_t =
     std::conditional_t<std::is_same_v<StringType, CompressedString>,
                        std::string, std::string_view>;
 
-template <typename IndexT = VocabIndex>
+template <typename IndexT = WordVocabIndex>
 struct IdRange {
   IdRange() : _first(), _last() {}
 
@@ -300,9 +300,10 @@ class Vocabulary {
   }
 };
 
-using RdfsVocabulary = Vocabulary<CompressedString, TripleComponentComparator>;
-using TextVocabulary = Vocabulary<std::string, SimpleStringComparator>;
-using TextVocabulary = Vocabulary<std::string, SimpleStringComparator>;
+using RdfsVocabulary =
+    Vocabulary<CompressedString, TripleComponentComparator, VocabIndex>;
+using TextVocabulary =
+    Vocabulary<std::string, SimpleStringComparator, WordVocabIndex>;
 
 // _______________________________________________________________
 template <typename S, typename C, typename I>

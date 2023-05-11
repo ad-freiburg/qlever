@@ -19,7 +19,7 @@ TEST(VocabularyTest, getIdForWordTest) {
   ad_utility::HashSet<std::string> s{"a", "ab", "ba", "car"};
   for (auto& v : vec) {
     v.createFromSet(s);
-    VocabIndex idx;
+    WordVocabIndex idx;
     ASSERT_TRUE(v.getId("ba", &idx));
     ASSERT_EQ(2u, idx.get());
     ASSERT_TRUE(v.getId("a", &idx));
@@ -32,14 +32,14 @@ TEST(VocabularyTest, getIdForWordTest) {
   voc.setLocale("en", "US", false);
   ad_utility::HashSet<string> s2{"a", "A", "Ba", "car"};
   voc.createFromSet(s2);
-  VocabIndex idx;
+  WordVocabIndex idx;
   ASSERT_TRUE(voc.getId("Ba", &idx));
   ASSERT_EQ(2u, idx.get());
   ASSERT_TRUE(voc.getId("a", &idx));
   ASSERT_EQ(0u, idx.get());
   // getId only gets exact matches;
   ASSERT_FALSE(voc.getId("ba", &idx));
-};
+}
 
 TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
   TextVocabulary v;
@@ -97,13 +97,13 @@ TEST(VocabularyTest, createFromSetTest) {
   s.insert("car");
   TextVocabulary v;
   v.createFromSet(s);
-  VocabIndex idx;
+  WordVocabIndex idx;
   ASSERT_TRUE(v.getId("ba", &idx));
   ASSERT_EQ(2u, idx.get());
   ASSERT_TRUE(v.getId("a", &idx));
   ASSERT_EQ(0u, idx.get());
   ASSERT_FALSE(v.getId("foo", &idx));
-};
+}
 
 TEST(VocabularyTest, IncompleteLiterals) {
   TripleComponentComparator comp("en", "US", false);

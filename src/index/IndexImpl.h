@@ -115,10 +115,10 @@ class IndexImpl {
   bool keepTempFiles_ = false;
   uint64_t stxxlMemoryInBytes_ = DEFAULT_STXXL_MEMORY_IN_BYTES;
   json configurationJson_;
-  Vocabulary<CompressedString, TripleComponentComparator> vocab_;
+  Index::Vocab vocab_;
   size_t totalVocabularySize_ = 0;
   bool vocabPrefixCompressed_ = true;
-  Vocabulary<std::string, SimpleStringComparator> textVocab_;
+  Index::TextVocab textVocab_;
 
   TextMetaData textMeta_;
   DocsDB docsDB_;

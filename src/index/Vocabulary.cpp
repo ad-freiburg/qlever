@@ -311,8 +311,9 @@ template std::optional<string>
 RdfsVocabulary::indexToOptionalString<CompressedString>(IndexType idx) const;
 
 // Explicit template instantiations
-template class Vocabulary<CompressedString, TripleComponentComparator>;
-template class Vocabulary<std::string, SimpleStringComparator>;
+template class Vocabulary<CompressedString, TripleComponentComparator,
+                          VocabIndex>;
+template class Vocabulary<std::string, SimpleStringComparator, WordVocabIndex>;
 
 template void RdfsVocabulary::buildCodebookForPrefixCompression<
     std::vector<std::string>, CompressedString, void>(
