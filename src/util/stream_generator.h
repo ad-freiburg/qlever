@@ -111,7 +111,7 @@ class stream_generator_promise {
 
  private:
   bool isBufferLargeEnough() {
-    return _stream.view().length() >= MIN_BUFFER_SIZE;
+    return static_cast<size_t>(_stream.tellp()) >= MIN_BUFFER_SIZE;
   }
 };
 

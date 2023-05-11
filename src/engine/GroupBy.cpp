@@ -162,10 +162,9 @@ size_t GroupBy::getSizeEstimateBeforeLimit() {
 
   // TODO<joka921> Once we can use `std::views` this can be solved
   // more elegantly.
-  std::vector<float> multiplicites;
-  std::ranges::transform(_groupByVariables, std::back_inserter(multiplicites),
-                         varToMultiplicity);
-  return _subtree->getSizeEstimate() / std::ranges::min(multiplicites);
+  float minMultiplicity = std::ranges::min(
+      _groupByVariables | std::views::transform(varToMultiplicity));
+  return _subtree->getSizeEstimate() / minMultiplicity;
 }
 
 size_t GroupBy::getCostEstimate() {
