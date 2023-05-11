@@ -143,32 +143,6 @@ class Vocabulary {
   //! Return value signals if something was found at all.
   bool getId(const string& word, IndexType* idx) const;
 
-  IndexType getValueIdForLT(const string& indexWord,
-                            const SortLevel level) const {
-    IndexType lb = lower_bound(indexWord, level);
-    return lb;
-  }
-  IndexType getValueIdForGE(const string& indexWord,
-                            const SortLevel level) const {
-    return getValueIdForLT(indexWord, level);
-  }
-
-  IndexType getValueIdForLE(const string& indexWord,
-                            const SortLevel level) const {
-    IndexType lb = upper_bound(indexWord, level);
-    if (lb.get() > 0) {
-      // We actually retrieved the first word that is bigger than our entry.
-      // TODO<joka921>: What to do, if the 0th entry is already too big?
-      lb = lb.decremented();
-    }
-    return lb;
-  }
-
-  IndexType getValueIdForGT(const string& indexWord,
-                            const SortLevel level) const {
-    return getValueIdForLE(indexWord, level);
-  }
-
   //! Get an Id range that matches a prefix.
   //! Return value signals if something was found at all.
   //! CAVEAT! TODO<discovered by joka921>: This is only used for the text index,

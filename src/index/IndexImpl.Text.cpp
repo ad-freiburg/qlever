@@ -650,20 +650,6 @@ void IndexImpl::calculateBlockBoundaries() {
 }
 
 // _____________________________________________________________________________
-void IndexImpl::printBlockBoundariesToFile(const string& filename) const {
-  std::ofstream of{filename};
-  of << "Printing block boundaries ot text vocabulary\n"
-     << "Format: <Last word of Block> <First word of next Block>\n";
-  auto printBlockToFile = [this, &of](size_t i) {
-    of << textVocab_[WordVocabIndex::make(i)].value() << " ";
-    if (i + 1 < textVocab_.size()) {
-      of << textVocab_[WordVocabIndex::make(i + 1)].value() << '\n';
-    }
-  };
-  return calculateBlockBoundariesImpl(*this, printBlockToFile);
-}
-
-// _____________________________________________________________________________
 TextBlockIndex IndexImpl::getWordBlockId(WordIndex wordIndex) const {
   return std::lower_bound(blockBoundaries_.begin(), blockBoundaries_.end(),
                           wordIndex) -

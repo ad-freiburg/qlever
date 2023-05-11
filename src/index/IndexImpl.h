@@ -597,12 +597,6 @@ class IndexImpl {
   /// blockBoundaries_ member.
   void calculateBlockBoundaries();
 
-  /// Calculate the block boundaries for the text index, and store the
-  /// corresponding words in a human-readable text file at `filename`.
-  /// This is for debugging the text index. Internally uses
-  /// `caluclateBlockBoundariesImpl`.
-  void printBlockBoundariesToFile(const string& filename) const;
-
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 
   TextBlockIndex getEntityBlockId(Id entityId) const;
