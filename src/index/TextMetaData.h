@@ -76,15 +76,14 @@ class TextMetaData {
   const TextBlockMetaData& getBlockInfoByWordRange(const uint64_t lower,
                                                    const uint64_t upper) const;
 
-  const TextBlockMetaData& getBlockInfoByEntityId(const uint64_t eid) const;
-
-  bool existsTextBlockForEntityId(const uint64_t eid) const;
-
   size_t getBlockCount() const;
 
   string statistics() const;
 
   void addBlock(const TextBlockMetaData& md, bool isEntityBlock);
+
+  // TODO<joka921> This is just for testing.
+  void removeEntityBlocks();
 
   off_t getOffsetAfter();
 

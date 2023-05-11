@@ -185,6 +185,7 @@ void IndexImpl::addTextFromOnDiskIndex() {
       std::move(textIndexFile_));
   serializer.setSerializationPosition(metaFrom);
   serializer >> textMeta_;
+  textMeta_.removeEntityBlocks();
   textIndexFile_ = std::move(serializer).file();
   LOG(INFO) << "Registered text index: " << textMeta_.statistics() << std::endl;
 
