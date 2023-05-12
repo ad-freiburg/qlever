@@ -248,7 +248,7 @@ addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
 addLinkAndDiscoverTest(HttpUtilsTest util http)
 
-addLinkAndDiscoverTest(DateTest)
+addLinkAndDiscoverTest(DateTest util)
 
 addLinkAndDiscoverTest(TripleComponentTest parser)
 

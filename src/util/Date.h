@@ -15,6 +15,7 @@
 #include "absl/strings/str_format.h"
 #include "ctre/ctre.h"
 #include "util/CtreHelpers.h"
+#include "util/NBitInteger.h"
 
 // Exception that is thrown when a value for a component of the `Date`, `Time`
 // or `Datetime` classes below is out of range (e.g. the month 13, or the hour
@@ -84,6 +85,8 @@ class Date {
  public:
   // Define the minimal and maximal values for the different fields (year, day,
   // ...) and calculate the number of bits required to store these values.
+
+
 
   // Year takes values in -9999..9999, which are stored shifted to
   // the positive range 0.. 2*9999 This makes the sorting of dates easier.
@@ -216,6 +219,8 @@ class Date {
     detail::checkBoundsIncludingMax(year, minYear, maxYear, "year");
     _year = static_cast<unsigned>(year - minYear);
   }
+
+
 
   /// Getter and setter for the month.
   [[nodiscard]] int getMonth() const { return static_cast<int>(_month); }
@@ -395,6 +400,7 @@ class Date {
     };
     return std::visit(impl, getTimezone());
   }
+
   std::string toString() const {
     // TODO<joka921> This still lacks many different cases
     // Timezones, precision of the seconds, is it `date` `dateTime` `gYear` etc.
@@ -414,6 +420,35 @@ class Date {
                           getHour(), getMinute(), getSecond());
     }
     return absl::StrCat(dateString, formatTimezone());
+  }
+};
+
+class DateOrLargeYear {
+ private:
+  static constexpr uint64_t negativeYear = 0, datetime = 1, positiveYear = 2;
+  static constexpr uint8_t numPayloadBits = 64 - Date::numUnusedBits;
+  using NBit = ad_utility::NBitInteger<numPayloadBits>;
+  uint64_t bits_;
+ public:
+
+  explicit DateOrLargeYear(Date d) {
+    bits_ = std::bit_cast<uint64_t>(d) | (datetime << (numPayloadBits));
+  }
+  explicit DateOrLargeYear(int64_t year) {
+    auto flag = year < 0 ? negativeYear : positiveYear;
+    bits_ = ad_utility::NBitInteger<numPayloadBits>::toNBit(year);
+    bits_ |= flag << numPayloadBits;
+  }
+
+  // TODO<joka921> Also include gyear etc.
+  std::string toString() const {
+    auto flag = bits_ >> numPayloadBits;
+    if (flag == datetime) {
+      return std::bit_cast<Date>(bits_).toString();
+    }
+    int64_t date = NBit::fromNBit(bits_);
+    constexpr std::string_view formatString = "%d-01-01T00:00:00";
+    return absl::StrFormat(formatString, date);
   }
 };
 
