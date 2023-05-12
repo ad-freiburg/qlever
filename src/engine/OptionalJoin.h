@@ -16,15 +16,15 @@ class OptionalJoin : public Operation {
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 
-  // This enum keeps track of which columns in the input contain UNDEF values.
+  // This `enum` keeps track of which columns in the input contain UNDEF values.
   // This is then used to choose the cheapest possible implementation.
-  enum struct ImplementationEnum {
-    GeneralAlgorithm,  // No special implementation possible
-    NoUndef,           // None of the join columns contains UNDEF
+  enum struct Implementation {
+    GeneralCase,  // No special implementation possible
+    NoUndef,      // None of the join columns contains UNDEF
     OnlyUndefInLastJoinColumnOfLeft
   };
 
-  ImplementationEnum implementationEnum_ = ImplementationEnum::GeneralAlgorithm;
+  Implementation implementation_ = Implementation::GeneralCase;
 
   std::vector<std::array<ColumnIndex, 2>> _joinColumns;
 
@@ -80,7 +80,7 @@ class OptionalJoin : public Operation {
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
       IdTable* dynResult,
-      ImplementationEnum implementation = ImplementationEnum::GeneralAlgorithm);
+      Implementation implementation = Implementation::GeneralCase);
 
  private:
   void computeSizeEstimateAndMultiplicities();
@@ -90,8 +90,8 @@ class OptionalJoin : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   // Check which of the join columns in `left` and `right` contain UNDEF values
-  // and return the appropriate `ImplementationEnum`.
-  static ImplementationEnum computeImplementationFromIdTables(
+  // and return the appropriate `Implementation`.
+  static Implementation computeImplementationFromIdTables(
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<ColumnIndex, 2>>&);
 };

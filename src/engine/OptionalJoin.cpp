@@ -46,10 +46,10 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
     }
   }
   if (!rightHasUndefColumn && numUndefColumnsLeft == 0) {
-    implementationEnum_ = ImplementationEnum::NoUndef;
+    implementation_ = Implementation::NoUndef;
   } else if (!rightHasUndefColumn && numUndefColumnsLeft == 1) {
     std::swap(_joinColumns.at(undefColumnLeftIndex), _joinColumns.back());
-    implementationEnum_ = ImplementationEnum::OnlyUndefInLastJoinColumnOfLeft;
+    implementation_ = Implementation::OnlyUndefInLastJoinColumnOfLeft;
   }
 
   // The inputs must be sorted by the join columns.
@@ -113,7 +113,7 @@ ResultTable OptionalJoin::computeResult() {
              << leftResult->size() << " and " << rightResult->size() << endl;
 
   optionalJoin(leftResult->idTable(), rightResult->idTable(), _joinColumns,
-               &idTable, implementationEnum_);
+               &idTable, implementation_);
 
   LOG(DEBUG) << "OptionalJoin result computation done." << endl;
   // If only one of the two operands has a non-empty local vocabulary, share
@@ -251,21 +251,21 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
 auto OptionalJoin::computeImplementationFromIdTables(
     const IdTable& left, const IdTable& right,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns)
-    -> ImplementationEnum {
-  auto implementation = ImplementationEnum::NoUndef;
+    -> Implementation {
+  auto implementation = Implementation::NoUndef;
   auto anyIsUndefined = [](auto column) {
     return std::ranges::any_of(column, &Id::isUndefined);
   };
   for (size_t i = 0; i < joinColumns.size(); ++i) {
     auto [leftCol, rightCol] = joinColumns.at(i);
     if (anyIsUndefined(right.getColumn(rightCol))) {
-      return ImplementationEnum::GeneralAlgorithm;
+      return Implementation::GeneralCase;
     }
     if (anyIsUndefined(left.getColumn(leftCol))) {
       if (i == joinColumns.size() - 1) {
-        implementation = ImplementationEnum::OnlyUndefInLastJoinColumnOfLeft;
+        implementation = Implementation::OnlyUndefInLastJoinColumnOfLeft;
       } else {
-        return ImplementationEnum::GeneralAlgorithm;
+        return Implementation::GeneralCase;
       }
     }
   }
@@ -276,18 +276,16 @@ auto OptionalJoin::computeImplementationFromIdTables(
 void OptionalJoin::optionalJoin(
     const IdTable& left, const IdTable& right,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns, IdTable* result,
-    ImplementationEnum implementation) {
+    Implementation implementation) {
   // check for trivial cases
   if (left.empty()) {
     return;
   }
 
-  // If we could not determine statically whether a cheaper implementation could
-  // be chosen, we still try to determine dynamically by checking all the
-  // columns for UNDEF values. `isCheap` is true iff we can apply the
-  // `specialOptionalJoin`. This is the case when only the last column of the
-  // left input contains UNDEF values.
-  if (implementation == ImplementationEnum::GeneralAlgorithm) {
+  // If we cannot determine statically whether a cheaper implementation can
+  // be chosen, we try to determine this dynamically by checking all the join
+  // columns for UNDEF values.
+  if (implementation == Implementation::GeneralCase) {
     implementation =
         computeImplementationFromIdTables(left, right, joinColumns);
   }
@@ -325,11 +323,11 @@ void OptionalJoin::optionalJoin(
   };
 
   const size_t numOutOfOrder = [&]() {
-    if (implementation == ImplementationEnum::OnlyUndefInLastJoinColumnOfLeft) {
+    if (implementation == Implementation::OnlyUndefInLastJoinColumnOfLeft) {
       ad_utility::specialOptionalJoin(joinColumnsLeft, joinColumnsRight, addRow,
                                       addOptionalRow);
       return 0UL;
-    } else if (implementation == ImplementationEnum::NoUndef) {
+    } else if (implementation == Implementation::NoUndef) {
       if (right.size() / left.size() > GALLOP_THRESHOLD) {
         ad_utility::gallopingJoin(joinColumnsLeft, joinColumnsRight,
                                   lessThanBoth, addRow, addOptionalRow);
