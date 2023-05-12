@@ -260,49 +260,46 @@ TEST(Date, OrderRandomValues) {
 }
 
 namespace {
-auto testDatetime(std::string_view input, int year, int month, int day,
+    auto testDatetimeImpl(auto parseFunction, std::string_view input, int year, int month, int day,
+                      int hour, int minute = 0, double second = 0.0,
+                      Date::Timezone timezone = 0) {
+        ASSERT_NO_THROW(std::invoke(parseFunction, input));
+        DateOrLargeYear dateLarge = std::invoke(parseFunction, input);
+        EXPECT_TRUE(dateLarge.isDate());
+        EXPECT_EQ(dateLarge.getYear(), year);
+        auto d = dateLarge.getDate();
+        EXPECT_EQ(year, d.getYear());
+        EXPECT_EQ(month, d.getMonth());
+        EXPECT_EQ(day, d.getDay());
+        EXPECT_EQ(hour, d.getHour());
+        EXPECT_EQ(minute, d.getMinute());
+        EXPECT_NEAR(second, d.getSecond(), 0.001);
+        EXPECT_EQ(timezone, d.getTimezone());
+    }
+    auto testDatetime(std::string_view input, int year, int month, int day,
                   int hour, int minute = 0, double second = 0.0,
                   Date::Timezone timezone = 0) {
-  auto d = Date::parseXsdDatetime(input);
-  EXPECT_EQ(year, d.getYear());
-  EXPECT_EQ(month, d.getMonth());
-  EXPECT_EQ(day, d.getDay());
-  EXPECT_EQ(hour, d.getHour());
-  EXPECT_EQ(minute, d.getMinute());
-  EXPECT_NEAR(second, d.getSecond(), 0.001);
-  EXPECT_EQ(timezone, d.getTimezone());
+        return testDatetimeImpl(DateOrLargeYear::parseXsdDatetime, input, year, month, day, hour, minute, second, timezone);
 }
 
 auto testDate(std::string_view input, int year, int month, int day,
               Date::Timezone timezone = 0,
               source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  ASSERT_NO_THROW(Date::parseXsdDate(input));
-  auto d = Date::parseXsdDate(input);
-  EXPECT_EQ(year, d.getYear());
-  EXPECT_EQ(month, d.getMonth());
-  EXPECT_EQ(day, d.getDay());
-  EXPECT_EQ(timezone, d.getTimezone());
+  return testDatetimeImpl(DateOrLargeYear::parseXsdDate, input, year, month, day, 0, 0, 0, timezone);
 }
 
 auto testYear(std::string_view input, int year, Date::Timezone timezone = 0,
               source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  ASSERT_NO_THROW(Date::parseGYear(input));
-  auto d = Date::parseGYear(input);
-  EXPECT_EQ(year, d.getYear());
-  EXPECT_EQ(timezone, d.getTimezone());
+  return testDatetimeImpl(DateOrLargeYear::parseGYear, input, year, 1, 1, 0, 0, 0, timezone);
 }
 
 auto testYearMonth(std::string_view input, int year, int month,
                    Date::Timezone timezone = 0,
                    source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  ASSERT_NO_THROW(Date::parseGYearMonth(input));
-  auto d = Date::parseGYearMonth(input);
-  EXPECT_EQ(year, d.getYear());
-  EXPECT_EQ(month, d.getMonth());
-  EXPECT_EQ(timezone, d.getTimezone());
+  return testDatetimeImpl(DateOrLargeYear::parseGYearMonth, input, year, month, 1, 0, 0, 0, timezone);
 }
 }  // namespace
 

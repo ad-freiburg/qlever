@@ -753,7 +753,7 @@ TEST(ParserTest, testLiterals) {
   ASSERT_EQ(10, c._triples[0]._o);
   ASSERT_EQ(10.2, c._triples[1]._s);
   ASSERT_EQ("<test:myrel>", c._triples[1]._p._iri);
-  ASSERT_EQ(Date(2000, 1, 1), c._triples[1]._o);
+  ASSERT_EQ(DateOrLargeYear{Date(2000, 1, 1)}, c._triples[1]._o);
 }
 
 TEST(ParserTest, testSolutionModifiers) {
@@ -892,7 +892,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(2u, c._triples.size());
     ASSERT_EQ(Var{"?movie"}, c._triples[0]._s);
     ASSERT_EQ("<from-year>", c._triples[0]._p._iri);
-    ASSERT_EQ(Date(2000, 1, 1), c._triples[0]._o);
+    ASSERT_EQ(DateOrLargeYear{Date(2000, 1, 1)}, c._triples[0]._o);
     ASSERT_EQ(Var{"?movie"}, c._triples[1]._s);
     ASSERT_EQ("<directed-by>", c._triples[1]._p._iri);
     ASSERT_EQ("<Scott%2C%20Ridley>", c._triples[1]._o);
@@ -915,7 +915,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(2u, c._triples.size());
     ASSERT_EQ(Var{"?movie"}, c._triples[0]._s);
     ASSERT_EQ("<from-year>", c._triples[0]._p._iri);
-    ASSERT_EQ(Date(2000, 1, 1), c._triples[0]._o);
+    ASSERT_EQ(DateOrLargeYear{Date(2000, 1, 1)}, c._triples[0]._o);
     ASSERT_EQ(Var{"?movie"}, c._triples[1]._s);
     ASSERT_EQ("<directed-by>", c._triples[1]._p._iri);
     ASSERT_EQ("<Scott%2C%20Ridley>", c._triples[1]._o);

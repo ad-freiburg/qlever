@@ -42,7 +42,7 @@ static DateOrLargeYear makeDateOrLargeYear(int64_t year, int month, int day, int
     return DateOrLargeYear{Date{static_cast<int>(year), month, day, hour, minute, second, timezone}};
 }
 
-    static DateOrLargeYear parseXsdDatetime(std::string_view dateString) {
+    DateOrLargeYear DateOrLargeYear::parseXsdDatetime(std::string_view dateString) {
   constexpr static ctll::fixed_string dateTime =
       dateRegex + "T" + timeRegex + grp(timezoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
@@ -58,7 +58,7 @@ static DateOrLargeYear makeDateOrLargeYear(int64_t year, int month, int day, int
   return makeDateOrLargeYear(year, month, day, hour, minute, second, parseTimezone(match));
 }
 
-static DateOrLargeYear parseXsdDate(std::string_view dateString) {
+DateOrLargeYear DateOrLargeYear::parseXsdDate(std::string_view dateString) {
   constexpr static ctll::fixed_string dateTime =
       dateRegex + grp(timezoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
@@ -71,7 +71,7 @@ static DateOrLargeYear parseXsdDate(std::string_view dateString) {
   return makeDateOrLargeYear(year, month, day, 0, 0, 0.0, parseTimezone(match));
 }
 
-static DateOrLargeYear parseGYear(std::string_view dateString) {
+DateOrLargeYear DateOrLargeYear::parseGYear(std::string_view dateString) {
   constexpr static ctll::fixed_string yearRegex = "(?<year>-?\\d{4})";
   constexpr static ctll::fixed_string dateTime =
       yearRegex + grp(timezoneRegex) + "?";
@@ -85,7 +85,7 @@ static DateOrLargeYear parseGYear(std::string_view dateString) {
   return makeDateOrLargeYear(year, 1, 1, 0, 0, 0.0, parseTimezone(match));
 }
 
-static DateOrLargeYear parseGYearMonth(std::string_view dateString) {
+DateOrLargeYear DateOrLargeYear::parseGYearMonth(std::string_view dateString) {
   constexpr static ctll::fixed_string yearRegex =
       "(?<year>-?\\d{4})-(?<month>\\d{2})";
   constexpr static ctll::fixed_string dateTime =

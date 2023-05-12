@@ -294,98 +294,7 @@ class Date {
     _timezone = static_cast<unsigned>(actualTimezone - minTimezoneActually);
   }
 
-  template <ctll::fixed_string Name>
-  static int toInt(const auto& match) {
-    int result = 0;
-    const auto& s = match.template get<Name>();
-    // TODO<joka921> Check the result.
-    std::from_chars(s.data(), s.data() + s.size(), result);
-    return result;
-  }
-  constexpr static ctll::fixed_string dateRegex{
-      R"((?<year>-?\d{4})-(?<month>\d{2})-(?<day>\d{2}))"};
-  constexpr static ctll::fixed_string timeRegex{
-      R"((?<hour>\d{2}):(?<minute>\d{2}):(?<second>\d{2}(\.\d{1,12})?))"};
-  constexpr static ctll::fixed_string timezoneRegex{
-      R"((?<tzZ>Z)|(?<tzSign>[+\-])(?<tzHours>\d{2}):(?<tzMinutes>\d{2}))"};
-
-  static Timezone parseTimezone(const auto& match) {
-    if (match.template get<"tzZ">() == "Z") {
-      return TimezoneZ{};
-    } else if (!match.template get<"tzHours">()) {
-      return NoTimezone{};
-    }
-
-    int tz = toInt<"tzHours">(match);
-    if (match.template get<"tzSign">() == "-") {
-      tz *= -1;
-    }
-    if (match.template get<"tzMinutes">() != "00") {
-      throw std::runtime_error{"Qlever supports only full hours as timezones"};
-    }
-    return tz;
-  }
-
  public:
-  static Date parseXsdDatetime(std::string_view dateString) {
-    constexpr static ctll::fixed_string dateTime =
-        dateRegex + "T" + timeRegex + grp(timezoneRegex) + "?";
-    auto match = ctre::match<dateTime>(dateString);
-    if (!match) {
-      throw std::runtime_error{absl::StrCat("Illegal dateTime ", dateString)};
-    }
-    int year = toInt<"year">(match);
-    int month = toInt<"month">(match);
-    int day = toInt<"day">(match);
-    int hour = toInt<"hour">(match);
-    int minute = toInt<"minute">(match);
-    double second = std::strtod(match.get<"second">().data(), nullptr);
-    return Date{year, month, day, hour, minute, second, parseTimezone(match)};
-  }
-
-  static Date parseXsdDate(std::string_view dateString) {
-    constexpr static ctll::fixed_string dateTime =
-        dateRegex + grp(timezoneRegex) + "?";
-    auto match = ctre::match<dateTime>(dateString);
-    if (!match) {
-      throw std::runtime_error{absl::StrCat("Illegal date ", dateString)};
-    }
-    int year = toInt<"year">(match);
-    int month = toInt<"month">(match);
-    int day = toInt<"day">(match);
-    return Date{year, month, day, 0, 0, 0.0, parseTimezone(match)};
-  }
-
-  static Date parseGYear(std::string_view dateString) {
-    constexpr static ctll::fixed_string yearRegex = "(?<year>-?\\d{4})";
-    constexpr static ctll::fixed_string dateTime =
-        yearRegex + grp(timezoneRegex) + "?";
-    auto match = ctre::match<dateTime>(dateString);
-    if (!match) {
-      throw std::runtime_error{absl::StrCat("Illegal gyear", dateString)};
-    }
-    int year = toInt<"year">(match);
-    // TODO<joka921> How should we distinguish between `dateTime`, `date`,
-    // `year` and `yearMonth` in the underlying representation?
-    return Date{year, 1, 1, 0, 0, 0.0, parseTimezone(match)};
-  }
-
-  static Date parseGYearMonth(std::string_view dateString) {
-    constexpr static ctll::fixed_string yearRegex =
-        "(?<year>-?\\d{4})-(?<month>\\d{2})";
-    constexpr static ctll::fixed_string dateTime =
-        yearRegex + grp(timezoneRegex) + "?";
-    auto match = ctre::match<dateTime>(dateString);
-    if (!match) {
-      throw std::runtime_error{absl::StrCat("Illegal yearMonth", dateString)};
-    }
-    int year = toInt<"year">(match);
-    int month = toInt<"month">(match);
-    // TODO<joka921> How should we distinguish between `dateTime`, `date`,
-    // `year` and `yearMonth` in the underlying representation?
-    return Date{year, month, 1, 0, 0, 0.0, parseTimezone(match)};
-  }
-
   std::string formatTimezone() const {
     auto impl = []<typename T>(const T& value) -> std::string {
       if constexpr (std::is_same_v<T, NoTimezone>) {
@@ -440,6 +349,28 @@ class DateOrLargeYear {
     bits_ |= flag << numPayloadBits;
   }
 
+  bool isDate() const {
+    return bits_ >>numPayloadBits == datetime;
+  }
+
+    Date getDateUnchecked() const {
+        return std::bit_cast<Date>(bits_);
+    }
+
+    Date getDate() const {
+      AD_CONTRACT_CHECK(bits_ >>numPayloadBits == datetime);
+      return getDateUnchecked();
+  }
+
+  // Get the stored year, no matter if it's stored inside a `Date` object or directly.
+  int64_t getYear() {
+      if (isDate()) {
+      return getDateUnchecked().getYear();
+      } else {
+      return NBit::fromNBit(bits_);
+      }
+  }
+
   // TODO<joka921> Also include gyear etc.
   std::string toString() const {
     auto flag = bits_ >> numPayloadBits;
@@ -450,6 +381,21 @@ class DateOrLargeYear {
     constexpr std::string_view formatString = "%d-01-01T00:00:00";
     return absl::StrFormat(formatString, date);
   }
+
+  auto operator<=>(const DateOrLargeYear&) const = default;
+
+    template <typename H>
+    friend H AbslHashValue(H h, const DateOrLargeYear& d) {
+        return H::combine(std::move(h), d.bits_);
+    }
+
+    static DateOrLargeYear parseXsdDatetime(std::string_view dateString);
+
+    static DateOrLargeYear parseXsdDate(std::string_view dateString);
+
+    static DateOrLargeYear parseGYear(std::string_view dateString);
+
+    static DateOrLargeYear parseGYearMonth(std::string_view dateString);
 };
 
 #endif  // QLEVER_DATE_H

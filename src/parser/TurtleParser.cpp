@@ -398,13 +398,13 @@ bool TurtleParser<T>::rdfLiteral() {
                type == XSD_FLOAT_TYPE) {
       parseDoubleConstant(strippedLiteral);
     } else if (type == XSD_DATETIME_TYPE) {
-      _lastParseResult = Date::parseXsdDatetime(strippedLiteral);
+      _lastParseResult = DateOrLargeYear::parseXsdDatetime(strippedLiteral);
     } else if (type == XSD_DATE_TYPE) {
-      _lastParseResult = Date::parseXsdDate(strippedLiteral);
+      _lastParseResult = DateOrLargeYear::parseXsdDate(strippedLiteral);
     } else if (type == XSD_GYEARMONTH_TYPE) {
-      _lastParseResult = Date::parseGYearMonth(strippedLiteral);
+      _lastParseResult = DateOrLargeYear::parseGYearMonth(strippedLiteral);
     } else if (type == XSD_GYEAR_TYPE) {
-      _lastParseResult = Date::parseGYear(strippedLiteral);
+      _lastParseResult = DateOrLargeYear::parseGYear(strippedLiteral);
     } else {
       _lastParseResult =
           TripleComponent::Literal{literalString, absl::StrCat("^^", typeIri)};

@@ -206,12 +206,12 @@ class ValueId {
   }
 
   // Store or load a `Date` object.
-  static ValueId makeFromDate(Date d) noexcept {
-    return addDatatypeBits(d.toBits(), Datatype::Date);
+  static ValueId makeFromDate(DateOrLargeYear d) noexcept {
+    return addDatatypeBits(std::bit_cast<uint64_t>(d), Datatype::Date);
   }
 
-  Date getDate() const noexcept {
-    return Date::fromBits(removeDatatypeBits(_bits));
+  DateOrLargeYear getDate() const noexcept {
+    return std::bit_cast<DateOrLargeYear>(removeDatatypeBits(_bits));
   }
 
   // TODO<joka921> implement dates
@@ -289,7 +289,7 @@ class ValueId {
       } else if constexpr (ad_utility::isSimilar<T, double> ||
                            ad_utility::isSimilar<T, int64_t>) {
         ostr << std::to_string(value);
-      } else if constexpr (ad_utility::isSimilar<T, Date>) {
+      } else if constexpr (ad_utility::isSimilar<T, DateOrLargeYear>) {
         ostr << value.toString();
       } else {
         // T is `VocabIndex || LocalVocabIndex || TextRecordIndex`
