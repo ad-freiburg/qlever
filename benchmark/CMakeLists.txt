@@ -3,7 +3,7 @@
 
 # This part compiles 'just' the benchmark infrastructure and doesn't provide a main function.
 add_library(benchmark infrastructure/Benchmark.cpp infrastructure/BenchmarkMeasurementContainer.cpp infrastructure/BenchmarkToJson.cpp infrastructure/BenchmarkResultToString.cpp infrastructure/BenchmarkConfiguration.cpp)
-qlever_target_link_libraries(benchmark boost_program_options absl::str_format)
+qlever_target_link_libraries(benchmark Boost::program_options absl::str_format)
 
 # This provides the library of the benchmark infrastructure together with its default main function.
 add_library(benchmarkWithMain infrastructure/BenchmarkMain.cpp)

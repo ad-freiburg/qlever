@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <semaphore>
 #include <string>
 #include <vector>
 

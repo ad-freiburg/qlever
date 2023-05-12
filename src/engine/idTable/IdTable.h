@@ -136,7 +136,11 @@ class IdTable {
  private:
   // Assign shorter aliases for some types that are important for the correct
   // handling of the proxy reference, but that are not visible to the outside.
-  // For details see `IdTableRow.h`
+  // For details see `IdTableRow.h`.
+  // Note: Using the (safer) `restricted` row references is not supported by
+  // `libc++` as it enforces that the `reference_type` of an iterator and the
+  // type returned by `operator*` are exactly the same.
+#ifdef __GLIBCXX__
   using row_reference_restricted =
       RowReferenceImpl::RowReferenceWithRestrictedAccess<
           IdTable, ad_utility::IsConst::False>;
@@ -147,6 +151,13 @@ class IdTable {
       RowReferenceImpl::RowReferenceWithRestrictedAccess<
           IdTable<T, NumColumns, ColumnStorage, IsView::True>,
           ad_utility::IsConst::True>;
+#else
+  using row_reference_restricted = row_reference;
+  using const_row_reference_restricted = const_row_reference;
+  using const_row_reference_view_restricted =
+      RowReference<IdTable<T, NumColumns, ColumnStorage, IsView::True>,
+                   ad_utility::IsConst::True>;
+#endif
 
  private:
   Data data_;

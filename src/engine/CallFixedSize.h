@@ -62,7 +62,7 @@ auto callLambdaForIntArray(std::array<Int, NumValues> array, auto&& lambda,
   // Call the `lambda` when the correct compile-time `Int`s are given as a
   // `std::integer_sequence`.
   auto applyOnIntegerSequence =
-      [&]<Int... Is>(std::integer_sequence<Int, Is...>) {
+      [&]<Int... Is>(ad_utility::ValueSequence<Int, Is...>) {
         return lambda.template operator()<Is...>(AD_FWD(args)...);
       };
 
@@ -91,7 +91,7 @@ auto callLambdaForIntArray(std::array<Int, NumValues> array, auto&& lambda,
   // Lambda: call `applyIf` for all the compile-time integers `Is...`. The
   // runtime parameter always is `array`.
   auto f =
-      [&applyIf]<ArrayType... Is>(std::integer_sequence<ArrayType, Is...>) {
+      [&applyIf]<ArrayType... Is>(ad_utility::ValueSequence<ArrayType, Is...>) {
         (..., applyIf.template operator()<Is>());
       };
 
