@@ -39,7 +39,7 @@ TEST(BenchmarkConfigurationTest, GetConfigurationOptionByNestedKeysTest) {
   compareConfigurationOptions.template operator()<size_t>(
       withoutDefault,
       config.getConfigurationOptionByNestedKeys("Shared part", "Unique part 2",
-                                                "Sense of existence"));
+                                                3, "Sense of existence"));
 
   // Trying to add a configuration option with the same name at the same place,
   // should cause an error.
@@ -89,7 +89,7 @@ TEST(BenchmarkConfigurationTest, SetJsonStringTest) {
       };
 
   // Does the option with the default already have a value?
-  checkOption(getOption(2), 2);
+  checkOption(getOption(2), size_t{2});
 
   // The other two should have no value.
   ASSERT_FALSE(getOption(0).hasValue());
@@ -98,21 +98,21 @@ TEST(BenchmarkConfigurationTest, SetJsonStringTest) {
   // The json string for testing `setJsonString`. Sets all of the configuration
   // options.
   const std::string testJsonString{R"--({
-    "depth 0" : {
-        "Option 0" : 10,
-        "depth 1": {
-            "Option 1" : 11
-        }
-    },
-    "Option 2" : 12
-  })--"};
+"depth 0": {
+  "Option 0": 10,
+  "depth 1": {
+    "Option 1": 11
+  }
+},
+"Option 2": 12
+})--"};
 
   // Set and check.
   config.setJsonString(testJsonString);
 
-  checkOption(getOption(0), 10);
-  checkOption(getOption(1), 11);
-  checkOption(getOption(2), 12);
+  checkOption(getOption(0), size_t{10});
+  checkOption(getOption(1), size_t{11});
+  checkOption(getOption(2), size_t{12});
 }
 
 TEST(BenchmarkConfigurationTest, SetJsonStringExceptionTest) {

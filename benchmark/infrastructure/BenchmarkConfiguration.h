@@ -11,6 +11,7 @@
 #include <concepts>
 #include <optional>
 #include <sstream>
+#include <string>
 #include <type_traits>
 #include <typeinfo>
 
@@ -22,9 +23,13 @@
 
 namespace ad_benchmark {
 
-// The types, that can be used for access keys in `nlohmann::json` objects.
+// The types, that can be used for access keys in `nlohmann::json` objects. In
+// short: Only whole numbers and everything, that could be converted into a
+// string.
 template <typename T>
-concept KeyForJson = (std::convertible_to<T, std::string> || std::integral<T>);
+concept KeyForJson =
+    std::convertible_to<T, std::string> ||
+    std::constructible_from<std::string, T> || std::integral<T>;
 
 // Only returns true, if all the given keys, that are numbers, are bigger/equal
 // than 0.
@@ -69,22 +74,47 @@ class BenchmarkConfiguration {
   @tparam Keys Positive whole numbers, or strings.
   */
   static nlohmann::json::json_pointer createJsonPointer(
-      const KeyForJson auto&... keys) {
+      const KeyForJson auto&... keys) requires(sizeof...(keys) > 0) {
     // A numeric key, must be `>=0`.
     AD_CONTRACT_CHECK(allArgumentsBiggerOrEqualToZero(keys...));
 
+    /*
+    A json pointer needs special characters, if a `/`, or `~`, is used in a
+    key. So here a special conversion function for our keys, that adds those,
+    if needed.
+    */
+    auto toString = []<typename T>(const T& key) -> std::string {
+      // Our transformed key.
+      std::string transformedKey;
+
+      /*
+      Transforming the key. We simply check through the way, we can convert
+      them into a string and do the one, that works first.
+      */
+      if constexpr (std::is_convertible_v<T, std::string>) {
+        transformedKey = static_cast<std::string>(key);
+      } else if constexpr (std::is_constructible_v<std::string, T>) {
+        transformedKey = std::string(key);
+      } else {
+        /*
+        Must have been a number. I mean, `KeyForJson` doesn't allow anything
+        else, than those 3 possibilities and this the the last one.
+        */
+        transformedKey = std::to_string(key);
+      }
+
+      // Replace special character `~` with `~0`.
+      transformedKey = absl::StrReplaceAll(transformedKey, {{"~", "~0"}});
+
+      // Replace special character `/` with `~1`.
+      return absl::StrReplaceAll(transformedKey, {{"/", "~1"}});
+    };
+
     // Creating the string for the pointer.
     std::ostringstream pointerString;
-    pointerString << "/";
-    ((pointerString << keys << "/"), ...);
+    ((pointerString << "/" << toString(keys)), ...);
 
-    // A json pointer needs special characters, if a `/`, or `~`, is used in it.
-    // Unfortunaly, I don't know the behavior of `StrReplaceAll` good enoguh, to
-    // be able to tell, if it would lead to no complications, if we replace both
-    // symbols at once.
-    return nlohmann::json::json_pointer(absl::StrReplaceAll(
-        absl::StrReplaceAll(pointerString.str(), {{"~", "~0"}}),
-        {{"/", "~1"}}));
+    return nlohmann::json::json_pointer(pointerString.str());
   }
 
   /*
@@ -119,7 +149,8 @@ class BenchmarkConfiguration {
     AD_CONTRACT_CHECK(allArgumentsBiggerOrEqualToZero(keys...));
 
     // The position in the json object literal, our keys point to.
-    const nlohmann::json::json_pointer ptr{createJsonPointer(AD_FWD(keys)...)};
+    const nlohmann::json::json_pointer ptr{
+        createJsonPointer(AD_FWD(keys)..., option.getIdentifier())};
 
     // Is there already a configuration option with the same identifier at the
     // same location?

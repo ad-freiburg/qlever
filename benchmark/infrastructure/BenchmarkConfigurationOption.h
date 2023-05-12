@@ -76,6 +76,8 @@ class BenchmarkConfigurationOption {
         description_(description),
         valueType_(typeid(possibleDefaultValue)),
         setWithJson_(&setAnyToInterpretedJsonObject<T>) {
+    // The `identifier` must be a string unlike `""`.
+    AD_CONTRACT_CHECK(identifier != "");
     // We only initialize `value_`, if it should have a default value.
     if (!mustBeSet) {
       value_ = possibleDefaultValue;

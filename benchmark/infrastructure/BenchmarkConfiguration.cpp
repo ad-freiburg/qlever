@@ -122,6 +122,19 @@ void BenchmarkConfiguration::setJsonString(const std::string& jsonString) {
   }
 
   /*
+  According to the documentation, when iterating over the entries of a
+  `nlohmann::json` object using `items()`, there can be error/problems, IF the
+  life time of the object, on which one called `items()` on, doesn't exceeds the
+  life time of the iteration. (See the documentation for more information.)
+
+  Because we iterate over the 'flattend' verions of two `nlohmann::json`
+  objects, I gave them const references here.
+  */
+  const auto& stringAsJsonFlattend = stringAsJson.flatten();
+  const auto& keyToConfigurationOptionIndexFlattend =
+      keyToConfigurationOptionIndex_.flatten();
+
+  /*
   Does `stringAsJson` only contain valid configuration options?
   That is, does it only contain paths to entries, that are the same paths as we
   have saved there?
@@ -130,7 +143,7 @@ void BenchmarkConfiguration::setJsonString(const std::string& jsonString) {
   `{"classA": [..., {"entryNumber5" : 5}]}`, then a path like `{"clasA": [...,
   {"entryNumber5" : 5}]}` would be invalid, because of the typo.
   */
-  for (const auto& item : stringAsJson.flatten().items()) {
+  for (const auto& item : stringAsJsonFlattend.items()) {
     /*
     We go over ALL valid json pointers in `stringAsJson` and check, if they, or
     a valid sub json pointer of them, are contained in
@@ -159,7 +172,7 @@ void BenchmarkConfiguration::setJsonString(const std::string& jsonString) {
   or if it HAD to be set, but wasn't.
   */
   for (const auto& configurationOptionIndex :
-       keyToConfigurationOptionIndex_.flatten().items()) {
+       keyToConfigurationOptionIndexFlattend.items()) {
     // Pointer to the position of the current configuration in json.
     const nlohmann::json::json_pointer configurationOptionJsonPosition{
         configurationOptionIndex.key()};
@@ -179,7 +192,7 @@ void BenchmarkConfiguration::setJsonString(const std::string& jsonString) {
 
     // If the option has no value now, that means, it didn't have a default
     // value, and needs to be set by the user at runtime, but wasn't.
-    if (configurationOption->hasValue()) {
+    if (!configurationOption->hasValue()) {
       throw ad_utility::Exception(
           absl::StrCat("Error while trying to set configuration options: The "
                        "configuration option at '",
