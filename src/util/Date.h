@@ -117,11 +117,16 @@ class Date {
       std::bit_width(static_cast<unsigned>(maxSecond * secondMultiplier));
 
   // The timezone is an hour in -23..23. It is shifted to the positive range
-  // 0..46 (similar to the years)
+  // 0..22 (similar to the years). There are two additional "special" timezones:
+  // `no timezone` (undefined) `Z` (a special encoding for UTC/ 00:00). We
+  // store these as values `1` and `2` to be able to retrieve them again when
+  // exporting, all other timezones are shifted accordingly.
+  static constexpr int minTimezoneActually = -23;
+  static constexpr int maxTimezoneActually = 25;
   static constexpr int minTimezone = -23;
   static constexpr int maxTimezone = 23;
-  static constexpr uint8_t numBitsTimezone =
-      std::bit_width(static_cast<unsigned>(maxTimezone - minTimezone));
+  static constexpr uint8_t numBitsTimezone = std::bit_width(
+      static_cast<unsigned>(maxTimezoneActually - minTimezoneActually));
 
   // The number of bits that are not needed for the encoding of the Date value.
   static constexpr uint8_t numUnusedBits =
@@ -146,10 +151,17 @@ class Date {
   uint64_t _unusedBits : numUnusedBits = 0;
 
  public:
+  struct NoTimezone {
+    bool operator==(const NoTimezone&) const = default;
+  };
+  struct TimezoneZ {
+    bool operator==(const TimezoneZ&) const = default;
+  };
+  using Timezone = std::variant<NoTimezone, TimezoneZ, int>;
   /// Construct a `Date` from values for the different components. If any of the
   /// components is out of range, a `DateOutOfRangeException` is thrown.
   constexpr Date(int year, int month, int day, int hour = 0, int minute = 0,
-                 double second = 0.0, int timezone = 0) {
+                 double second = 0.0, Timezone timezone = NoTimezone{}) {
     setYear(year);
     setMonth(month);
     setDay(day);
@@ -244,13 +256,37 @@ class Date {
   }
 
   /// Getter and setter for the timezone.
-  [[nodiscard]] int getTimezone() const {
-    return static_cast<int>(_timezone) + minTimezone;
+  [[nodiscard]] Timezone getTimezone() const {
+    auto tz = static_cast<int>(_timezone) + minTimezoneActually;
+    // Again factor out the special values.
+    if (tz == 0) {
+      return NoTimezone{};
+    } else if (tz == 1) {
+      return TimezoneZ{};
+    } else {
+      return tz > 0 ? tz - 2 : tz;
+    }
   }
-  constexpr void setTimezone(int timezone) {
-    detail::checkBoundsIncludingMax(timezone, minTimezone, maxTimezone,
-                                    "timezone");
-    _timezone = static_cast<unsigned>(timezone - minTimezone);
+  int getTimezoneAsInternalIntForTesting() const {
+    return static_cast<int>(_timezone) + minTimezoneActually;
+  }
+
+  constexpr void setTimezone(Timezone timezone) {
+    auto getTimezone = []<typename T>(const T& value) -> int {
+      if constexpr (std::is_same_v<T, NoTimezone>) {
+        return 0;
+      } else if constexpr (std::is_same_v<T, TimezoneZ>) {
+        return 1;
+      } else {
+        static_assert(std::is_same_v<T, int>);
+        detail::checkBoundsIncludingMax(value, minTimezone, maxTimezone,
+                                        "timezone");
+        // Make room for the special timezone values `0` and `1` from above.
+        return value < 0 ? value : value + 2;
+      }
+    };
+    auto actualTimezone = std::visit(getTimezone, timezone);
+    _timezone = static_cast<unsigned>(actualTimezone - minTimezoneActually);
   }
 
   template <ctll::fixed_string Name>
@@ -266,7 +302,24 @@ class Date {
   constexpr static ctll::fixed_string timeRegex{
       R"((?<hour>\d{2}):(?<minute>\d{2}):(?<second>\d{2}(\.\d{1,12})?))"};
   constexpr static ctll::fixed_string timezoneRegex{
-      R"(Z|(?<tzSign>[+\-])(?<tzHours>\d{2}):(?<tzMinutes>\d{2}))"};
+      R"((?<tzZ>Z)|(?<tzSign>[+\-])(?<tzHours>\d{2}):(?<tzMinutes>\d{2}))"};
+
+  static Timezone parseTimezone(const auto& match) {
+    if (match.template get<"tzZ">() == "Z") {
+      return TimezoneZ{};
+    } else if (!match.template get<"tzHours">()) {
+      return NoTimezone{};
+    }
+
+    int tz = toInt<"tzHours">(match);
+    if (match.template get<"tzSign">() == "-") {
+      tz *= -1;
+    }
+    if (match.template get<"tzMinutes">() != "00") {
+      throw std::runtime_error{"Qlever supports only full hours as timezones"};
+    }
+    return tz;
+  }
 
  public:
   static Date parseXsdDatetime(std::string_view dateString) {
@@ -282,16 +335,7 @@ class Date {
     int hour = toInt<"hour">(match);
     int minute = toInt<"minute">(match);
     double second = std::strtod(match.get<"second">().data(), nullptr);
-
-    // TODO<joka921> parse Timezone.
-    int tz = toInt<"tzHours">(match);
-    if (match.get<"tzSign">() == "-") {
-      tz *= -1;
-    }
-    if (match.get<"tzMinutes">() != "00") {
-      throw std::runtime_error{"Qlever supports only full hours as timezones"};
-    }
-    return Date{year, month, day, hour, minute, second, tz};
+    return Date{year, month, day, hour, minute, second, parseTimezone(match)};
   }
 
   static Date parseXsdDate(std::string_view dateString) {
@@ -304,14 +348,7 @@ class Date {
     int year = toInt<"year">(match);
     int month = toInt<"month">(match);
     int day = toInt<"day">(match);
-    int tz = toInt<"tzHours">(match);
-    if (match.get<"tzSign">() == "-") {
-      tz *= -1;
-    }
-    if (match.get<"tzMinutes">() != "00") {
-      throw std::runtime_error{"Qlever supports only full hours as timezones"};
-    }
-    return Date{year, month, day, 0, 0, 0.0, tz};
+    return Date{year, month, day, 0, 0, 0.0, parseTimezone(match)};
   }
 
   static Date parseGYear(std::string_view dateString) {
@@ -323,16 +360,9 @@ class Date {
       throw std::runtime_error{absl::StrCat("Illegal gyear", dateString)};
     }
     int year = toInt<"year">(match);
-    int tz = toInt<"tzHours">(match);
-    if (match.get<"tzSign">() == "-") {
-      tz *= -1;
-    }
-    if (match.get<"tzMinutes">() != "00") {
-      throw std::runtime_error{"Qlever supports only full hours as timezones"};
-    }
     // TODO<joka921> How should we distinguish between `dateTime`, `date`,
     // `year` and `yearMonth` in the underlying representation?
-    return Date{year, 1, 1, 0, 0, 0.0, tz};
+    return Date{year, 1, 1, 0, 0, 0.0, parseTimezone(match)};
   }
 
   static Date parseGYearMonth(std::string_view dateString) {
@@ -346,25 +376,44 @@ class Date {
     }
     int year = toInt<"year">(match);
     int month = toInt<"month">(match);
-    int tz = toInt<"tzHours">(match);
-    if (match.get<"tzSign">() == "-") {
-      tz *= -1;
-    }
-    if (match.get<"tzMinutes">() != "00") {
-      throw std::runtime_error{"Qlever supports only full hours as timezones"};
-    }
     // TODO<joka921> How should we distinguish between `dateTime`, `date`,
     // `year` and `yearMonth` in the underlying representation?
-    return Date{year, month, 1, 0, 0, 0.0, tz};
+    return Date{year, month, 1, 0, 0, 0.0, parseTimezone(match)};
   }
 
+  std::string formatTimezone() const {
+    auto impl = []<typename T>(const T& value) -> std::string {
+      if constexpr (std::is_same_v<T, NoTimezone>) {
+        return "";
+      } else if constexpr (std::is_same_v<T, TimezoneZ>) {
+        return "Z";
+      } else {
+        static_assert(std::is_same_v<T, int>);
+        constexpr static std::string_view format = "%0+2d:00";
+        return absl::StrFormat(format, value);
+      }
+    };
+    return std::visit(impl, getTimezone());
+  }
   std::string toString() const {
     // TODO<joka921> This still lacks many different cases
     // Timezones, precision of the seconds, is it `date` `dateTime` `gYear` etc.
-    constexpr std::string_view formatString =
-        "%04d-%02d-%02dT%02d:%02d:%05.2fZ";
-    return absl::StrFormat(formatString, getYear(), getMonth(), getDay(),
-                           getHour(), getMinute(), getSecond());
+    std::string dateString;
+    double seconds = getSecond();
+    double dIntPart;
+    if (std::modf(seconds, &dIntPart) == 0.0) {
+      constexpr std::string_view formatString = "%04d-%02d-%02dT%02d:%02d:%02d";
+      dateString =
+          absl::StrFormat(formatString, getYear(), getMonth(), getDay(),
+                          getHour(), getMinute(), static_cast<int>(dIntPart));
+    } else {
+      constexpr std::string_view formatString =
+          "%04d-%02d-%02dT%02d:%02d:%05.2f";
+      dateString =
+          absl::StrFormat(formatString, getYear(), getMonth(), getDay(),
+                          getHour(), getMinute(), getSecond());
+    }
+    return absl::StrCat(dateString, formatTimezone());
   }
 };
 
