@@ -135,6 +135,9 @@ class BenchmarkConfigurationOption {
     }
   }
 
+  // For printing.
+  explicit operator std::string() const;
+
   // Get the identifier for this option.
   std::string_view getIdentifier() const;
 };

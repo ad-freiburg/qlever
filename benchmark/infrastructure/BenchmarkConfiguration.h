@@ -23,7 +23,7 @@
 
 namespace ad_benchmark {
 
-// The types, that can be used for access keys in `nlohmann::json` objects. In
+// The types, that can be used as access keys in `nlohmann::json` objects. In
 // short: Only whole numbers and everything, that could be converted into a
 // string.
 template <typename T>
@@ -221,8 +221,7 @@ class BenchmarkConfiguration {
    */
   void setShortHand(const std::string& shortHandString);
 
-  // JSON serialization.
-  friend void to_json(nlohmann::json& j,
-                      const BenchmarkConfiguration& configuration);
+  // For printing.
+  explicit operator std::string() const;
 };
 }  // namespace ad_benchmark

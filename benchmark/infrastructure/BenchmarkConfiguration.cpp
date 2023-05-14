@@ -5,10 +5,12 @@
 #include <absl/strings/str_cat.h>
 
 #include <regex>
+#include <sstream>
 #include <string>
 
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "BenchmarkConfigurationOption.h"
+#include "BenchmarkResultToString.h"
 #include "nlohmann/json.hpp"
 #include "util/Exception.h"
 #include "util/json.h"
@@ -203,8 +205,34 @@ void BenchmarkConfiguration::setJsonString(const std::string& jsonString) {
   }
 }
 
-// JSON serialization.
-void to_json(nlohmann::json& j, const BenchmarkConfiguration& configuration) {
-  // TODO Implement.
+// ____________________________________________________________________________
+BenchmarkConfiguration::operator std::string() const {
+  // For listing all available configuration options.
+  std::ostringstream stream;
+
+  /*
+  `nlohmann::json` has a weird bug with iterating over `items()`, where there
+  will be bugs/glitches, if the object, one called `items()` with, doesn't
+  have a longer life time than the iteration itself.
+  */
+  const nlohmann::json flattendKeyToConfigurationOptionIndex{
+      keyToConfigurationOptionIndex_.flatten()};
+  for (const auto& keyValuePair :
+       flattendKeyToConfigurationOptionIndex.items()) {
+    // The interpreted value, that point to the configuration option, that we
+    // are looking at.
+    const size_t value = keyValuePair.value().get<size_t>();
+
+    // Add the location of the option and the option itself.
+    stream << "Location : " << keyValuePair.key() << "\n"
+           << static_cast<std::string>(configurationOptions_.at(value));
+
+    // The last entry doesn't get linebreaks.
+    if (value < configurationOptions_.size() - 1) {
+      stream << "\n\n";
+    }
+  }
+
+  return absl::StrCat("Available configuration options:\n\n", stream.str());
 }
 }  // namespace ad_benchmark

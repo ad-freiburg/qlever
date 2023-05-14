@@ -2,7 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include <absl/strings/str_cat.h>
+
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
+#include "../benchmark/infrastructure/BenchmarkResultToString.h"
+#include "BenchmarkConfigurationOption.h"
 
 namespace ad_benchmark {
 // ____________________________________________________________________________
@@ -20,6 +24,15 @@ void BenchmarkConfigurationOption::setValueWithJson(
 // ____________________________________________________________________________
 std::string_view BenchmarkConfigurationOption::getIdentifier() const {
   return static_cast<std::string_view>(identifier_);
+}
+
+// ____________________________________________________________________________
+BenchmarkConfigurationOption::operator std::string() const {
+  return absl::StrCat(
+      "Benchmark configuration option '", identifier_, "'\n",
+      addIndentation(absl::StrCat("Value type: ", valueType_.name(),
+                                  "\nDescription: ", description_),
+                     1));
 }
 
 }  // namespace ad_benchmark

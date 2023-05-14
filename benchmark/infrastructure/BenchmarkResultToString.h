@@ -50,6 +50,36 @@ static void forEachExcludingTheLastOne(const Range& r,
 }
 
 /*
+@brief Adds the elements of the given range to the stream in form of a list.
+
+@tparam TranslationFunction Must take the elements of the range and return a
+string.
+
+@param translationFunction Converts range elements into string.
+@param listItemSeparator Will be put between each of the string representations
+of the range elements.
+*/
+template <typename Range, typename TranslationFunction>
+static void addListToOStringStream(std::ostringstream* stream, Range&& r,
+                                   TranslationFunction translationFunction,
+                                   std::string_view listItemSeparator = "\n") {
+  /*
+  TODO<C++23>: This can be a combination of `std::views::transform` and
+  `std::views::join_with`. After that, we just have to insert all the elements
+  of the new view into the stream.
+  */
+  forEachExcludingTheLastOne(
+      AD_FWD(r),
+      [&stream, &translationFunction,
+       &listItemSeparator](const auto& listItem) {
+        (*stream) << translationFunction(listItem) << listItemSeparator;
+      },
+      [&stream, &translationFunction](const auto& listItem) {
+        (*stream) << translationFunction(listItem);
+      });
+}
+
+/*
 @brief Adds indention before the given string and directly after new line
 characters.
 
