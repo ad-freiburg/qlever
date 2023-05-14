@@ -4,6 +4,7 @@
 
 #include <absl/strings/str_cat.h>
 
+#include <iostream>
 #include <regex>
 #include <sstream>
 #include <string>
@@ -163,7 +164,8 @@ void BenchmarkConfiguration::setJsonString(const std::string& jsonString) {
         throw ad_utility::Exception(absl::StrCat(
             "Error while trying to set configuration option: There is no valid "
             "sub json pointer in '",
-            item.key(), "', that points to a valid configuration option."));
+            item.key(), "', that points to a valid configuration option.\n",
+            static_cast<std::string>(*this)));
       }
     }
   }
@@ -200,7 +202,8 @@ void BenchmarkConfiguration::setJsonString(const std::string& jsonString) {
                        "configuration option at '",
                        configurationOptionJsonPosition.to_string(),
                        "' wasn't defined by the user, even though, this "
-                       "configuration option has no default value."));
+                       "configuration option has no default value.\n",
+                       static_cast<std::string>(*this)));
     }
   }
 }
@@ -215,24 +218,22 @@ BenchmarkConfiguration::operator std::string() const {
   will be bugs/glitches, if the object, one called `items()` with, doesn't
   have a longer life time than the iteration itself.
   */
-  const nlohmann::json flattendKeyToConfigurationOptionIndex{
+  const nlohmann::json& flattendKeyToConfigurationOptionIndex{
       keyToConfigurationOptionIndex_.flatten()};
   for (const auto& keyValuePair :
        flattendKeyToConfigurationOptionIndex.items()) {
-    // The interpreted value, that point to the configuration option, that we
-    // are looking at.
-    const size_t value = keyValuePair.value().get<size_t>();
-
     // Add the location of the option and the option itself.
     stream << "Location : " << keyValuePair.key() << "\n"
-           << static_cast<std::string>(configurationOptions_.at(value));
+           << static_cast<std::string>(
+                  configurationOptions_.at(keyValuePair.value().get<size_t>()));
 
     // The last entry doesn't get linebreaks.
-    if (value < configurationOptions_.size() - 1) {
+    if (keyValuePair.value() != flattendKeyToConfigurationOptionIndex.back()) {
       stream << "\n\n";
     }
   }
 
-  return absl::StrCat("Available configuration options:\n\n", stream.str());
+  return absl::StrCat("Available configuration options:\n",
+                      addIndentation(stream.str(), 1));
 }
 }  // namespace ad_benchmark
