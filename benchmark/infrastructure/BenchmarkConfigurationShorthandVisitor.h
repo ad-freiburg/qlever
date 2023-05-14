@@ -16,15 +16,21 @@ class ToJsonBenchmarkConfigurationShorthandVisitor final {
  public:
   using Parser = BenchmarkConfigurationShorthandParser;
 
+  // __________________________________________________________________________
   nlohmann::json visitShortHandString(Parser::ShortHandStringContext* context);
 
+  // __________________________________________________________________________
   nlohmann::json visitAssignments(Parser::AssignmentsContext* context);
 
+  // __________________________________________________________________________
   nlohmann::json visitAssignment(Parser::AssignmentContext* context);
 
+  // __________________________________________________________________________
   nlohmann::json visitObject(Parser::ObjectContext* context);
 
+  // __________________________________________________________________________
   nlohmann::json visitList(Parser::ListContext* context);
 
+  // __________________________________________________________________________
   nlohmann::json visitContent(Parser::ContentContext* context);
 };

@@ -6,6 +6,7 @@
 
 #include "../benchmark/infrastructure/BenchmarkConfigurationShorthandVisitor.h"
 
+// __________________________________________________________________________
 nlohmann::json
 ToJsonBenchmarkConfigurationShorthandVisitor::visitShortHandString(
     Parser::ShortHandStringContext* context) {
@@ -24,17 +25,20 @@ nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignments(
   return contextAsJson;
 }
 
+// __________________________________________________________________________
 nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignment(
     Parser::AssignmentContext* context) {
   return nlohmann::json{
       {context->NAME()->getText(), visitContent(context->content())}};
 }
 
+// __________________________________________________________________________
 nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitObject(
     Parser::ObjectContext* context) {
   return visitAssignments(context->assignments());
 }
 
+// __________________________________________________________________________
 nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitList(
     Parser::ListContext* context) {
   nlohmann::json contextAsJson(nlohmann::json::value_t::array);
@@ -48,6 +52,7 @@ nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitList(
   return contextAsJson;
 }
 
+// __________________________________________________________________________
 nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitContent(
     Parser::ContentContext* context) {
   if (context->LITERAL()) {
