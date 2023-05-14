@@ -5,33 +5,26 @@
 
 #include <antlr4-runtime.h>
 
-#include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandVisitor.h"
+#include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandParser.h"
+#include "util/json.h"
 
 /*
 This visitor will translate the parsed short hand into a `nlohmann::json`
 object.
 */
-class ToJsonBenchmarkConfigurationShorthandVisitor final
-    : public BenchmarkConfigurationShorthandVisitor {
+class ToJsonBenchmarkConfigurationShorthandVisitor final {
  public:
-  std::any visitShortHandString(
-      BenchmarkConfigurationShorthandParser::ShortHandStringContext* context)
-      override;
+  using Parser = BenchmarkConfigurationShorthandParser;
 
-  std::any visitAssignments(
-      BenchmarkConfigurationShorthandParser::AssignmentsContext* context)
-      override;
+  nlohmann::json visitShortHandString(Parser::ShortHandStringContext* context);
 
-  std::any visitAssignment(
-      BenchmarkConfigurationShorthandParser::AssignmentContext* context)
-      override;
+  nlohmann::json visitAssignments(Parser::AssignmentsContext* context);
 
-  std::any visitObject(
-      BenchmarkConfigurationShorthandParser::ObjectContext* context) override;
+  nlohmann::json visitAssignment(Parser::AssignmentContext* context);
 
-  std::any visitList(
-      BenchmarkConfigurationShorthandParser::ListContext* context) override;
+  nlohmann::json visitObject(Parser::ObjectContext* context);
 
-  std::any visitContent(
-      BenchmarkConfigurationShorthandParser::ContentContext* context) override;
+  nlohmann::json visitList(Parser::ListContext* context);
+
+  nlohmann::json visitContent(Parser::ContentContext* context);
 };

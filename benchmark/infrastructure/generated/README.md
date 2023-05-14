@@ -8,8 +8,6 @@ All files in this folder except for `BenchmarkConfigurationShorthandAutomatic.g4
 
 - Generate new parser and lexer for `cpp`, following: `https://github.com/antlr/antlr4/blob/master/doc/getting-started.md#generating-parser-code`
 
-- Delete any generated visitors and/or listeners. We don't use them anywhere.
-
 - If necessary, adapt the `BenchmarkConfigurationShorthandVisitor.h /.cpp` (one folder above)
 
 - Commit all the changed files, except the `antlr.jar`.
