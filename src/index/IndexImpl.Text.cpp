@@ -834,7 +834,7 @@ Index::WordEntityPostings IndexImpl::getWordPostingsForTerm(
     const string& term) const {
   LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
   Index::WordEntityPostings wep;
-  auto optionalTbmd = getTextBlockMetaDataForWordOrPrefix(term);
+  auto optionalTbmd = getTextBlockMetadataForWordOrPrefix(term);
   if (!optionalTbmd.has_value()) {
     return wep;
   }
@@ -1006,7 +1006,7 @@ Index::WordEntityPostings IndexImpl::getEntityPostingsForTerm(
     const string& term) const {
   LOG(DEBUG) << "Getting entity postings for term: " << term << '\n';
   Index::WordEntityPostings resultWep;
-  auto optTbmd = getTextBlockMetaDataForWordOrPrefix(term);
+  auto optTbmd = getTextBlockMetadataForWordOrPrefix(term);
   if (!optTbmd.has_value()) {
     return resultWep;
   }
@@ -1352,7 +1352,7 @@ size_t IndexImpl::getIndexOfBestSuitedElTerm(
   // pick the one with the smallest EL block to be read.
   std::vector<std::tuple<size_t, bool, size_t>> toBeSorted;
   for (size_t i = 0; i < terms.size(); ++i) {
-    auto optTbmd = getTextBlockMetaDataForWordOrPrefix(terms[i]);
+    auto optTbmd = getTextBlockMetadataForWordOrPrefix(terms[i]);
     if (!optTbmd.has_value()) {
       return i;
     }
@@ -1536,7 +1536,7 @@ size_t IndexImpl::getSizeEstimate(const string& words) const {
     return 0;
   }
   auto termToEstimate = [&](const std::string& term) -> size_t {
-    auto optTbmd = getTextBlockMetaDataForWordOrPrefix(term);
+    auto optTbmd = getTextBlockMetadataForWordOrPrefix(term);
     // TODO<C++23> Use `std::optional::transform`.
     if (!optTbmd.has_value()) {
       return 0;
@@ -1574,8 +1574,8 @@ void IndexImpl::getRhsForSingleLhs(const IdTable& in, Id lhsId,
 void IndexImpl::setTextName(const string& name) { textMeta_.setName(name); }
 
 // _____________________________________________________________________________
-auto IndexImpl::getTextBlockMetaDataForWordOrPrefix(const std::string& word)
-    const -> std::optional<TextBlockMetaDataAndWordInfo> {
+auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
+    const -> std::optional<TextBlockMetadataAndWordInfo> {
   AD_CORRECTNESS_CHECK(!word.empty());
   IdRange<WordVocabIndex> idRange;
   if (word.ends_with(PREFIX_CHAR)) {
@@ -1595,5 +1595,5 @@ auto IndexImpl::getTextBlockMetaDataForWordOrPrefix(const std::string& word)
   bool hasToBeFiltered = tbmd._cl.hasMultipleWords() &&
                          !(tbmd._firstWordId == idRange._first.get() &&
                            tbmd._lastWordId == idRange._last.get());
-  return TextBlockMetaDataAndWordInfo{tbmd, hasToBeFiltered, idRange};
+  return TextBlockMetadataAndWordInfo{tbmd, hasToBeFiltered, idRange};
 }
