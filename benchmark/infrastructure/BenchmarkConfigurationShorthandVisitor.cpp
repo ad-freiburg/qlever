@@ -9,13 +9,13 @@
 // __________________________________________________________________________
 nlohmann::json
 ToJsonBenchmarkConfigurationShorthandVisitor::visitShortHandString(
-    Parser::ShortHandStringContext* context) {
+    Parser::ShortHandStringContext* context) const {
   return visitAssignments(context->assignments());
 }
 
 // __________________________________________________________________________
 nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignments(
-    Parser::AssignmentsContext* context) {
+    const Parser::AssignmentsContext* context) const {
   nlohmann::json contextAsJson(nlohmann::json::value_t::object);
 
   for (auto assignment : context->listOfAssignments) {
@@ -28,20 +28,20 @@ nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignments(
 
 // __________________________________________________________________________
 nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignment(
-    Parser::AssignmentContext* context) {
+    Parser::AssignmentContext* context) const {
   return nlohmann::json{
       {context->NAME()->getText(), visitContent(context->content())}};
 }
 
 // __________________________________________________________________________
 nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitObject(
-    Parser::ObjectContext* context) {
+    Parser::ObjectContext* context) const {
   return visitAssignments(context->assignments());
 }
 
 // __________________________________________________________________________
 nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitList(
-    Parser::ListContext* context) {
+    const Parser::ListContext* context) const {
   nlohmann::json contextAsJson(nlohmann::json::value_t::array);
 
   // Convert the content of the list.
@@ -55,7 +55,7 @@ nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitList(
 
 // __________________________________________________________________________
 nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitContent(
-    Parser::ContentContext* context) {
+    Parser::ContentContext* context) const {
   if (context->LITERAL()) {
     return nlohmann::json::parse(context->LITERAL()->getText());
   } else if (context->list()) {
