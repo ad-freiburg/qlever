@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
+
 #include <absl/strings/str_cat.h>
 
 #include <iostream>
@@ -9,7 +11,6 @@
 #include <sstream>
 #include <string>
 
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "BenchmarkConfigurationOption.h"
 #include "BenchmarkResultToString.h"
 #include "nlohmann/json.hpp"
