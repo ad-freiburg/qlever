@@ -246,7 +246,7 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
         "The number of street signs. Has the default value 10."));
 
     config->addConfigurationOption(BenchmarkConfigurationOption(
-        std::vector<bool>{false, false, false, false, false}, "Coin flip try",
+        std::vector<bool>{false, false, false, false, false}, "CoinFlipTry",
         "The number of succesful coin flips. As default, 5 unsuccesful coin "
         "flips."));
 
@@ -266,7 +266,7 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
             .getValue<size_t>()};
 
     std::vector<bool> wonOnTryX{
-        config.getConfigurationOptionByNestedKeys("Coin flip try")
+        config.getConfigurationOptionByNestedKeys("CoinFlipTry")
             .getValue<std::vector<bool>>()};
 
     float balanceOnStevesSavingAccount{
