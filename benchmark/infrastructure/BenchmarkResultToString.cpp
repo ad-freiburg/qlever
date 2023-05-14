@@ -6,7 +6,6 @@
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
-#include <bits/ranges_algo.h>
 
 #include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"

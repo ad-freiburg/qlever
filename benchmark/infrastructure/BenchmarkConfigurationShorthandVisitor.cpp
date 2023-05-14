@@ -2,9 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include <any>
-
 #include "../benchmark/infrastructure/BenchmarkConfigurationShorthandVisitor.h"
+
+#include <any>
 
 // __________________________________________________________________________
 nlohmann::json

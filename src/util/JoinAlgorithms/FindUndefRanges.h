@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <ranges>
+
 namespace ad_utility {
 // The following functions `findSmallerUndefRanges...` have the following in
 // common: For a single `row` of IDs find all the iterators in the sorted range

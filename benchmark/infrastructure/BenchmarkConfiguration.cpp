@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
+
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <antlr4-runtime.h>
@@ -9,7 +11,6 @@
 #include <regex>
 #include <string>
 
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandLexer.h"
 #include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandParser.h"
 #include "BenchmarkConfigurationShorthandVisitor.h"
