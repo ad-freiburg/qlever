@@ -165,7 +165,7 @@ void BenchmarkConfiguration::setJsonString(const std::string& jsonString) {
             "Error while trying to set configuration option: There is no valid "
             "sub json pointer in '",
             item.key(), "', that points to a valid configuration option.\n",
-            static_cast<std::string>(*this)));
+            static_cast<std::string>(*this), "\n"));
       }
     }
   }
@@ -203,7 +203,7 @@ void BenchmarkConfiguration::setJsonString(const std::string& jsonString) {
                        configurationOptionJsonPosition.to_string(),
                        "' wasn't defined by the user, even though, this "
                        "configuration option has no default value.\n",
-                       static_cast<std::string>(*this)));
+                       static_cast<std::string>(*this), "\n"));
     }
   }
 }

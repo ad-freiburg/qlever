@@ -157,7 +157,7 @@ class BenchmarkConfiguration {
     if (keyToConfigurationOptionIndex_.contains(ptr)) {
       throw ad_utility::Exception(absl::StrCat(
           "Key error: There was already a configuration option found at '",
-          ptr.to_string(), "'\n", static_cast<std::string>(*this)));
+          ptr.to_string(), "'\n", static_cast<std::string>(*this), "\n"));
     }
 
     // Add the location of the new configuration option to the json.
@@ -195,7 +195,7 @@ class BenchmarkConfiguration {
     } else {
       throw ad_utility::Exception(absl::StrCat(
           "Key error: There was no configuration option found at '",
-          ptr.to_string(), "'\n", static_cast<std::string>(*this)));
+          ptr.to_string(), "'\n", static_cast<std::string>(*this), "\n"));
     }
   }
 

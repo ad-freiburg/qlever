@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <boost/program_options.hpp>
 #include <boost/program_options/value_semantic.hpp>
+#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <ios>
@@ -84,7 +85,9 @@ int main(int argc, char** argv) {
       "configuration-shorthand,s",
       po::value<std::string>(&shortHandConfigurationString),
       "Allows you to add options to configuration of the benchmarks using the"
-      " short hand described in `BenchmarkConfiguration.h:parseShortHand`.");
+      " short hand described in `BenchmarkConfiguration.h:parseShortHand`.")(
+      "configuration-options,o",
+      "Prints all available benchmark configuration options.");
 
   // Prints how to use the file correctly and exits.
   auto printUsageAndExit = [&options]() {
@@ -95,7 +98,7 @@ int main(int argc, char** argv) {
   // Calling without using ANY arguments makes no sense.
   if (argc == 1) {
     std::cerr << "You have to specify at least one of the options of `--print`,"
-                 " or `--write`.\n";
+                 "`--configuration-options` or `--write`.\n";
     printUsageAndExit();
   }
 
@@ -107,7 +110,8 @@ int main(int argc, char** argv) {
   // Did they set any option, that would require anything to actually happen?
   // If not, don't do anything. This should also happen, if they explicitly
   // wanted to see the `help` option.
-  if (vm.count("help") || !(vm.count("print") || vm.count("write"))) {
+  if (vm.count("help") || !(vm.count("print") || vm.count("write") ||
+                            vm.count("configuration-options"))) {
     printUsageAndExit();
   }
 
@@ -118,6 +122,14 @@ int main(int argc, char** argv) {
   BenchmarkRegister::addConfigurationOptionsWtihAllRegisteredBenchmarks(
       &config);
 
+  // Print all the available configuration options, if wanted.
+  if (vm.count("configuration-options")) {
+    std::cerr << static_cast<std::string>(config) << "\n";
+    exit(0);
+  }
+
+  // Set all the configuration options, if there was any runtime configuration
+  // given.
   if (vm.count("configuration-json")) {
     config.setJsonString(readFileToString(jsonConfigurationFileName));
   }
