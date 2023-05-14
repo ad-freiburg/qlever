@@ -149,6 +149,12 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
   ASSERT_TRUE(config.getValueByNestedKeys<int>("myWishAverage").has_value());
   ASSERT_EQ(1, config.getValueByNestedKeys<int>("myWishAverage").value());
 
+  // Are multiple key value pairs with the same key valid and is the final value
+  // the last one?
+  config.setShortHand(R"(a:42, a:43)");
+  ASSERT_TRUE(config.getValueByNestedKeys<int>("a").has_value());
+  ASSERT_EQ(43, config.getValueByNestedKeys<int>("a").value());
+
   // Final test: Is there an exception, if we try to parse the wrong syntax?
   ASSERT_ANY_THROW(config.setShortHand(R"({"myName" : "Bernd")}"));
   ASSERT_ANY_THROW(config.addShortHand(R"("myName" = "Bernd";)"));

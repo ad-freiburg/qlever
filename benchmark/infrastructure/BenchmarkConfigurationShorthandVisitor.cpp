@@ -13,6 +13,7 @@ ToJsonBenchmarkConfigurationShorthandVisitor::visitShortHandString(
   return visitAssignments(context->assignments());
 }
 
+// __________________________________________________________________________
 nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignments(
     Parser::AssignmentsContext* context) {
   nlohmann::json contextAsJson(nlohmann::json::value_t::object);
