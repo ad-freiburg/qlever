@@ -194,11 +194,6 @@ inline auto extractNumberFromDate = [](const auto& dateAsString) -> long int {
   static_assert(pos2 > pos1);
   if (dateAsString.size() < pos2) {
     return 0;
-  } else if (pos1 == yearIndexBegin && dateAsString[pos1] == '-') {
-    static_assert(pos2 > pos1 + 1);
-    return -std::atol(ad_utility::getBase10ComplementOfIntegerString(
-                          dateAsString.substr(pos1 + 1, pos2 - pos1 - 1))
-                          .data());
   } else {
     return std::atol(dateAsString.data() + pos1);
   }

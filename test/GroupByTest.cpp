@@ -98,9 +98,6 @@ TEST_F(GroupByTest, doGroupBy) {
   s.insert("<entity1>");
   s.insert("<entity2>");
   s.insert("<entity3>");
-  s.insert(ad_utility::convertFloatStringToIndexWord("1.1231"));
-  s.insert(ad_utility::convertFloatStringToIndexWord("-5"));
-  s.insert(ad_utility::convertFloatStringToIndexWord("17"));
   vocab.createFromSet(s);
 
   // Create an input result table with a local vocabulary.

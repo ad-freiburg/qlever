@@ -3,7 +3,7 @@ include(GoogleTest)
 # Link binary ${basename} against `gmock_main`, the threading library,
 # and all libraries that are specified as additional arguments.
 function (linkTest basename)
-    qlever_target_link_libraries(${basename} ${ARGN} gmock_main ${CMAKE_THREAD_LIBS_INIT} util)
+    qlever_target_link_libraries(${basename} ${ARGN} gmock_main ${CMAKE_THREAD_LIBS_INIT})
 endfunction()
 
 # Add the exectutable ${basename} that is compiled from the source file
@@ -236,7 +236,7 @@ addLinkAndDiscoverTest(CompressorStreamTest engine)
 
 addLinkAndDiscoverTest(AsyncStreamTest)
 
-addLinkAndDiscoverTest(TriplesViewTest)
+addLinkAndDiscoverTest(TriplesViewTest util)
 
 addLinkAndDiscoverTest(BitUtilsTest)
 
@@ -250,7 +250,7 @@ addLinkAndDiscoverTest(DateTest util)
 
 addLinkAndDiscoverTest(TripleComponentTest parser)
 
-addLinkAndDiscoverTest(ValueIdTest)
+addLinkAndDiscoverTest(ValueIdTest util)
 
 addLinkAndDiscoverTest(LambdaHelpersTest)
 
@@ -304,7 +304,7 @@ addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 
 addLinkAndDiscoverTest(ExceptionHandlingTest)
 
-addLinkAndDiscoverTest(SparqlExpressionTypesTest)
+addLinkAndDiscoverTest(SparqlExpressionTypesTest util)
 
 addLinkAndDiscoverTest(LimitOffsetClauseTest)
 
@@ -312,7 +312,7 @@ addLinkAndDiscoverTest(OperationTest engine)
 
 addLinkAndDiscoverTest(RuntimeInformationTest engine)
 
-addLinkAndDiscoverTest(VariableToColumnMapTest engine)
+addLinkAndDiscoverTest(VariableToColumnMapTest parser)
 
 addLinkAndDiscoverTest(CopyableUniquePtrTest)
 
@@ -324,4 +324,4 @@ addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
 
 addLinkAndDiscoverTest(FindUndefRangesTest)
 
-addLinkAndDiscoverTest(AddCombinedRowToTableTest)
+addLinkAndDiscoverTest(AddCombinedRowToTableTest util)
