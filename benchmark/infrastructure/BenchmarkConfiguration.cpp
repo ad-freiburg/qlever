@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
-
 #include <absl/strings/str_cat.h>
 
 #include <iostream>
@@ -11,6 +9,7 @@
 #include <sstream>
 #include <string>
 
+#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "BenchmarkConfigurationOption.h"
 #include "BenchmarkResultToString.h"
 #include "nlohmann/json.hpp"
@@ -221,6 +220,23 @@ BenchmarkConfiguration::operator std::string() const {
   */
   const nlohmann::json& flattendKeyToConfigurationOptionIndex{
       keyToConfigurationOptionIndex_.flatten()};
+
+  // Setup for printing the locations of the option in json format, so that
+  // people can easier underrstand, where everything is.
+  nlohmann::json prettyKeyToConfigurationOptionIndex(
+      keyToConfigurationOptionIndex_);
+  // Replace the numbers in the 'leaves' of the 'tree' with a reference to the
+  // option list.
+  for (const auto& keyToLeaf : flattendKeyToConfigurationOptionIndex.items()) {
+    prettyKeyToConfigurationOptionIndex.at(
+        nlohmann::json::json_pointer{keyToLeaf.key()}) =
+        absl::StrCat("See configuration option '",
+                     configurationOptions_.at(keyToLeaf.value().get<size_t>())
+                         .getIdentifier(),
+                     "' in the list of available configuration options below.");
+  }
+
+  // List the configuration options themselves.
   for (const auto& keyValuePair :
        flattendKeyToConfigurationOptionIndex.items()) {
     // Add the location of the option and the option itself.
@@ -234,7 +250,10 @@ BenchmarkConfiguration::operator std::string() const {
     }
   }
 
-  return absl::StrCat("Available configuration options:\n",
-                      addIndentation(stream.str(), 1));
+  return absl::StrCat(
+      "Locations of available configuration options:\n",
+      addIndentation(prettyKeyToConfigurationOptionIndex.dump(2), 1),
+      "\n\nAvailable configuration options:\n",
+      addIndentation(stream.str(), 1));
 }
 }  // namespace ad_benchmark
