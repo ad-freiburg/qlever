@@ -35,31 +35,24 @@ using std::string;
 using std::vector;
 
 template <class StringType>
-struct AccessReturnTypeGetter {};
+using AccessReturnType_t =
+    std::conditional_t<std::is_same_v<StringType, CompressedString>,
+                       std::string, std::string_view>;
 
-template <>
-struct AccessReturnTypeGetter<string> {
-  using type = std::string_view;
-};
-template <>
-struct AccessReturnTypeGetter<CompressedString> {
-  using type = string;
-};
-
-template <class StringType>
-using AccessReturnType_t = typename AccessReturnTypeGetter<StringType>::type;
-
+template <typename IndexT = WordVocabIndex>
 struct IdRange {
   IdRange() : _first(), _last() {}
 
-  IdRange(VocabIndex first, VocabIndex last) : _first(first), _last(last) {}
+  IdRange(IndexT first, IndexT last) : _first(first), _last(last) {}
 
-  VocabIndex _first;
-  VocabIndex _last;
+  IndexT _first;
+  IndexT _last;
 };
 
 //! Stream operator for convenience.
-inline std::ostream& operator<<(std::ostream& stream, const IdRange& idRange) {
+template <typename IndexType>
+inline std::ostream& operator<<(std::ostream& stream,
+                                const IdRange<IndexType>& idRange) {
   return stream << '[' << idRange._first << ", " << idRange._last << ']';
 }
 
@@ -78,7 +71,7 @@ struct Prefix {
 //! Template parameters that are supported are:
 //! std::string -> no compression is applied
 //! CompressedString -> prefix compression is applied
-template <class StringType, class ComparatorType>
+template <typename StringType, typename ComparatorType, typename IndexT>
 class Vocabulary {
   // The different type of data that is stored in the vocabulary
   enum class Datatypes { Literal, Iri, Float, Date };
@@ -93,6 +86,7 @@ class Vocabulary {
 
  public:
   using SortLevel = typename ComparatorType::Level;
+  using IndexType = IndexT;
 
   template <
       typename = std::enable_if_t<std::is_same_v<StringType, string> ||
@@ -125,20 +119,20 @@ class Vocabulary {
   //! word is not in the vocabulary.
   //! Only enabled when uncompressed which also means no externalization
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  const std::optional<std::string_view> operator[](VocabIndex idx) const;
+  std::optional<std::string_view> operator[](IndexType idx) const;
 
   //! Get the word with the given idx or an empty optional if the
   //! word is not in the vocabulary. Returns an lvalue because compressed or
   //! externalized words don't allow references
   template <typename U = StringType>
   [[nodiscard]] std::optional<string> indexToOptionalString(
-      VocabIndex idx) const;
+      IndexType idx) const;
 
   //! Get the word with the given idx.
   //! lvalue for compressedString and const& for string-based vocabulary
-  AccessReturnType_t<StringType> at(VocabIndex idx) const;
+  AccessReturnType_t<StringType> at(IndexType idx) const;
 
-  // AccessReturnType_t<StringType> at(VocabIndex idx) const { return
+  // AccessReturnType_t<StringType> at(IndexType idx) const { return
   // operator[](id); }
 
   //! Get the number of words in the vocabulary.
@@ -146,33 +140,7 @@ class Vocabulary {
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
-  bool getId(const string& word, VocabIndex* idx) const;
-
-  VocabIndex getValueIdForLT(const string& indexWord,
-                             const SortLevel level) const {
-    VocabIndex lb = lower_bound(indexWord, level);
-    return lb;
-  }
-  VocabIndex getValueIdForGE(const string& indexWord,
-                             const SortLevel level) const {
-    return getValueIdForLT(indexWord, level);
-  }
-
-  VocabIndex getValueIdForLE(const string& indexWord,
-                             const SortLevel level) const {
-    VocabIndex lb = upper_bound(indexWord, level);
-    if (lb.get() > 0) {
-      // We actually retrieved the first word that is bigger than our entry.
-      // TODO<joka921>: What to do, if the 0th entry is already too big?
-      lb = lb.decremented();
-    }
-    return lb;
-  }
-
-  VocabIndex getValueIdForGT(const string& indexWord,
-                             const SortLevel level) const {
-    return getValueIdForLE(indexWord, level);
-  }
+  bool getId(const string& word, IndexType* idx) const;
 
   //! Get an Id range that matches a prefix.
   //! Return value signals if something was found at all.
@@ -180,9 +148,10 @@ class Vocabulary {
   //! and uses a range, where the last index is still within the range which is
   //! against C++ conventions!
   // consider using the prefixRange function.
-  bool getIdRangeForFullTextPrefix(const string& word, IdRange* range) const;
+  bool getIdRangeForFullTextPrefix(const string& word,
+                                   IdRange<IndexType>* range) const;
 
-  ad_utility::HashMap<Datatypes, std::pair<VocabIndex, VocabIndex>>
+  ad_utility::HashMap<Datatypes, std::pair<IndexType, IndexType>>
   getRangesForDatatypes() const;
 
   template <typename U = StringType, typename = enable_if_compressed<U>>
@@ -249,18 +218,18 @@ class Vocabulary {
   /// prefix according to the collation level the first Id is included in the
   /// range, the last one not. Currently only supports the Primary collation
   /// level, due to limitations in the StringSortComparators
-  std::pair<VocabIndex, VocabIndex> prefix_range(const string& prefix) const;
+  std::pair<IndexType, IndexType> prefix_range(const string& prefix) const;
 
   [[nodiscard]] const LocaleManager& getLocaleManager() const {
     return getCaseComparator().getLocaleManager();
   }
 
   // Wraps std::lower_bound and returns an index instead of an iterator
-  VocabIndex lower_bound(const string& word,
-                         const SortLevel level = SortLevel::QUARTERNARY) const;
+  IndexType lower_bound(const string& word,
+                        const SortLevel level = SortLevel::QUARTERNARY) const;
 
   // _______________________________________________________________
-  VocabIndex upper_bound(const string& word, const SortLevel level) const;
+  IndexType upper_bound(const string& word, const SortLevel level) const;
 
  private:
   // If a word starts with one of those prefixes it will be externalized
@@ -304,15 +273,16 @@ class Vocabulary {
   }
 };
 
-using RdfsVocabulary = Vocabulary<CompressedString, TripleComponentComparator>;
-using TextVocabulary = Vocabulary<std::string, SimpleStringComparator>;
-using TextVocabulary = Vocabulary<std::string, SimpleStringComparator>;
+using RdfsVocabulary =
+    Vocabulary<CompressedString, TripleComponentComparator, VocabIndex>;
+using TextVocabulary =
+    Vocabulary<std::string, SimpleStringComparator, WordVocabIndex>;
 
 // _______________________________________________________________
-template <typename S, typename C>
+template <typename S, typename C, typename I>
 template <typename>
-std::optional<string> Vocabulary<S, C>::indexToOptionalString(
-    VocabIndex idx) const {
+std::optional<string> Vocabulary<S, C, I>::indexToOptionalString(
+    IndexType idx) const {
   if (idx.get() < _internalVocabulary.size()) {
     return std::optional<string>(_internalVocabulary[idx.get()]);
   } else {

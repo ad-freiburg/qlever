@@ -115,10 +115,10 @@ class IndexImpl {
   bool keepTempFiles_ = false;
   uint64_t stxxlMemoryInBytes_ = DEFAULT_STXXL_MEMORY_IN_BYTES;
   json configurationJson_;
-  Vocabulary<CompressedString, TripleComponentComparator> vocab_;
+  Index::Vocab vocab_;
   size_t totalVocabularySize_ = 0;
   bool vocabPrefixCompressed_ = true;
-  Vocabulary<std::string, SimpleStringComparator> textVocab_;
+  Index::TextVocab textVocab_;
 
   TextMetaData textMeta_;
   DocsDB docsDB_;
@@ -565,6 +565,23 @@ class IndexImpl {
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 
+  // Get the metadata for the block from the text index that contains the
+  // `word`. Also works for prefixes that are terminated with `PREFIX_CHAR` like
+  // "astro*". Returns `nullopt` if no suitable block was found because no
+  // matching word is contained in the text index. Some additional information
+  // is also returned that is often required by the calling functions:
+  // `hasToBeFiltered_` is true iff `word` is NOT the only word in the text
+  // block, and additional filtering is thus required. `idRange_` is the range
+  // `[first, last]` of the `WordVocabIndex`es that correspond to the word
+  // (which might also be a prefix, thus it is a range).
+  struct TextBlockMetadataAndWordInfo {
+    TextBlockMetaData tbmd_;
+    bool hasToBeFiltered_;
+    IdRange<WordVocabIndex> idRange_;
+  };
+  std::optional<TextBlockMetadataAndWordInfo>
+  getTextBlockMetadataForWordOrPrefix(const std::string& word) const;
+
   /// Calculate the block boundaries for the text index. The boundary of a
   /// block is the index in the `textVocab_` of the last word that belongs
   /// to this block.
@@ -579,12 +596,6 @@ class IndexImpl {
   /// Calculate the block boundaries for the text index, and store them in the
   /// blockBoundaries_ member.
   void calculateBlockBoundaries();
-
-  /// Calculate the block boundaries for the text index, and store the
-  /// corresponding words in a human-readable text file at `filename`.
-  /// This is for debugging the text index. Internally uses
-  /// `caluclateBlockBoundariesImpl`.
-  void printBlockBoundariesToFile(const string& filename) const;
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 

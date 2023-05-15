@@ -1170,4 +1170,44 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
                   "<QLever-internal-function/@en>"}),
               triples[1]);
   }
+
+  // Test that the language filter never changes triples with
+  // `ql:contains-entity` etc.
+  {
+    ParsedQuery q = SparqlParser::parseQuery(
+        "SELECT * WHERE {?x <label> ?y . ?text ql:contains-entity ?y. FILTER "
+        "(LANG(?y) = \"en\")}");
+    ASSERT_TRUE(q._rootGraphPattern._filters.empty());
+    const auto& triples =
+        q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
+    ASSERT_EQ(2u, triples.size());
+    ASSERT_EQ((SparqlTriple{Var{"?x"}, PropertyPath::fromIri("@en@<label>"),
+                            Var{"?y"}}),
+              triples[0]);
+    ASSERT_EQ((SparqlTriple{Var{"?text"},
+                            PropertyPath::fromIri(CONTAINS_ENTITY_PREDICATE),
+                            Var{"?y"}}),
+              triples[1]);
+  }
+  {
+    ParsedQuery q = SparqlParser::parseQuery(
+        "SELECT * WHERE {<somebody> ?p ?y . ?text ql:contains-entity ?y FILTER "
+        "(LANG(?y) = \"en\")}");
+    ASSERT_TRUE(q._rootGraphPattern._filters.empty());
+    const auto& triples =
+        q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
+    ASSERT_EQ(3u, triples.size());
+    ASSERT_EQ(
+        (SparqlTriple{"<somebody>", PropertyPath::fromIri("?p"), Var{"?y"}}),
+        triples[0]);
+    ASSERT_EQ((SparqlTriple{Var{"?text"},
+                            PropertyPath::fromIri(CONTAINS_ENTITY_PREDICATE),
+                            Var{"?y"}}),
+              triples[1]);
+    ASSERT_EQ((SparqlTriple{
+                  Var{"?y"},
+                  PropertyPath::fromIri("<QLever-internal-function/langtag>"),
+                  "<QLever-internal-function/@en>"}),
+              triples[2]);
+  }
 }

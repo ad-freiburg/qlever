@@ -16,7 +16,8 @@ using std::pair;
 
 // _____________________________________________________________________________
 Index::WordEntityPostings FTSAlgorithms::filterByRange(
-    const IdRange& idRange, const Index::WordEntityPostings& wepPreFilter) {
+    const IdRange<WordVocabIndex>& idRange,
+    const Index::WordEntityPostings& wepPreFilter) {
   AD_CONTRACT_CHECK(wepPreFilter.cids_.size() == wepPreFilter.wids_.size());
   AD_CONTRACT_CHECK(wepPreFilter.cids_.size() == wepPreFilter.scores_.size());
   LOG(DEBUG) << "Filtering " << wepPreFilter.cids_.size()
