@@ -313,14 +313,6 @@ void IndexImpl::addContextToVector(
     writer << std::make_tuple(blockId, context, it->first, it->second, false);
   }
 
-  for (auto it = entities.begin(); it != entities.end(); ++it) {
-    TextBlockIndex blockId = getEntityBlockId(it->first);
-    touchedBlocks.insert(blockId);
-    AD_CONTRACT_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
-    writer << std::make_tuple(blockId, context, it->first.getVocabIndex().get(),
-                              it->second, false);
-  }
-
   // All entities have to be written in the entity list part for each block.
   // Ensure that they are added only once for each block.
   // For example, there could be both words computer and computing
@@ -328,10 +320,6 @@ void IndexImpl::addContextToVector(
   // written to a comp* block once.
   for (TextBlockIndex blockId : touchedBlocks) {
     for (auto it = entities.begin(); it != entities.end(); ++it) {
-      // Don't add an entity to its own block..
-      // FIX JUN 07 2017: DO add it. It's needed so that it is returned
-      // as a result itself.
-      // if (blockId == getEntityBlockId(it->first)) { continue; }
       AD_CONTRACT_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
       writer << std::make_tuple(
           blockId, context, it->first.getVocabIndex().get(), it->second, true);
@@ -352,23 +340,14 @@ void IndexImpl::createTextIndex(const string& filename,
   WordIndex currentMaxWordIndex = std::numeric_limits<WordIndex>::min();
   vector<Posting> classicPostings;
   vector<Posting> entityPostings;
-  size_t nofEntities = 0;
-  size_t nofEntityContexts = 0;
   for (TextVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if (std::get<0>(*reader) != currentBlockIndex) {
       AD_CONTRACT_CHECK(!classicPostings.empty());
 
-      bool isEntityBlock = isEntityBlockId(currentBlockIndex);
-      if (isEntityBlock) {
-        ++nofEntities;
-        nofEntityContexts += classicPostings.size();
-      }
       ContextListMetaData classic = writePostings(out, classicPostings, true);
       ContextListMetaData entity = writePostings(out, entityPostings, false);
-      textMeta_.addBlock(
-          TextBlockMetaData(currentMinWordIndex, currentMaxWordIndex, classic,
-                            entity),
-          isEntityBlock);
+      textMeta_.addBlock(TextBlockMetaData(
+          currentMinWordIndex, currentMaxWordIndex, classic, entity));
       classicPostings.clear();
       entityPostings.clear();
       currentBlockIndex = std::get<0>(*reader);
@@ -376,8 +355,8 @@ void IndexImpl::createTextIndex(const string& filename,
       currentMaxWordIndex = std::get<2>(*reader);
     }
     if (!std::get<4>(*reader)) {
-      classicPostings.emplace_back(std::make_tuple(
-          std::get<1>(*reader), std::get<2>(*reader), std::get<3>(*reader)));
+      classicPostings.emplace_back(std::get<1>(*reader), std::get<2>(*reader),
+                                   std::get<3>(*reader));
       if (std::get<2>(*reader) < currentMinWordIndex) {
         currentMinWordIndex = std::get<2>(*reader);
       }
@@ -386,23 +365,16 @@ void IndexImpl::createTextIndex(const string& filename,
       }
 
     } else {
-      entityPostings.emplace_back(std::make_tuple(
-          std::get<1>(*reader), std::get<2>(*reader), std::get<3>(*reader)));
+      entityPostings.emplace_back(std::get<1>(*reader), std::get<2>(*reader),
+                                  std::get<3>(*reader));
     }
   }
   // Write the last block
   AD_CONTRACT_CHECK(!classicPostings.empty());
-  if (isEntityBlockId(currentBlockIndex)) {
-    ++nofEntities;
-    nofEntityContexts += classicPostings.size();
-  }
   ContextListMetaData classic = writePostings(out, classicPostings, true);
   ContextListMetaData entity = writePostings(out, entityPostings, false);
   textMeta_.addBlock(TextBlockMetaData(currentMinWordIndex, currentMaxWordIndex,
-                                       classic, entity),
-                     isEntityBlockId(currentMaxWordIndex));
-  textMeta_.setNofEntities(nofEntities);
-  textMeta_.setNofEntityContexts(nofEntityContexts);
+                                       classic, entity));
   classicPostings.clear();
   entityPostings.clear();
   LOG(DEBUG) << "Done creating text index." << std::endl;
@@ -654,12 +626,6 @@ TextBlockIndex IndexImpl::getWordBlockId(WordIndex wordIndex) const {
   return std::lower_bound(blockBoundaries_.begin(), blockBoundaries_.end(),
                           wordIndex) -
          blockBoundaries_.begin();
-}
-
-// _____________________________________________________________________________
-TextBlockIndex IndexImpl::getEntityBlockId(Id entityId) const {
-  AD_CONTRACT_CHECK(entityId.getDatatype() == Datatype::VocabIndex);
-  return entityId.getVocabIndex().get() + blockBoundaries_.size();
 }
 
 // _____________________________________________________________________________
