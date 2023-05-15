@@ -34,14 +34,24 @@ concept KeyForJson =
 // Only returns true, if all the given keys, that are numbers, are bigger/equal
 // than 0.
 static bool allArgumentsBiggerOrEqualToZero(const auto&... keys) {
-  auto biggerOrEqual = []<typename T>(const T& key) {
-    if constexpr (std::is_arithmetic_v<T>) {
-      return key >= 0;
-    } else {
-      return true;
-    }
-  };
-  return (biggerOrEqual(keys) && ...);
+  /*
+  By checking, if we actually need to do anything, we can save on creating
+  `biggerOrEqual`, if we don't actually use it. Gets rid of the accompanying
+  warning while compiling to.
+  */
+  if constexpr (sizeof...(keys) == 0) {
+    return true;
+  } else {
+    auto biggerOrEqual = []<typename T>(const T& key) {
+      if constexpr (std::is_arithmetic_v<T>) {
+        return key >= 0;
+      } else {
+        return true;
+      }
+    };
+
+    return (biggerOrEqual(keys) && ...);
+  }
 }
 
 /*
