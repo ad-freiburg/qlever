@@ -566,21 +566,21 @@ class IndexImpl {
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 
   // Get the metadata for the block from the text index that contains the
-  // `word`. Also works for prefixes that are terminated with a * like "astro*".
-  // Returns `nullopt` if no suitable block was found because no matching word
-  // is contained in the text index. Some additional information is also
-  // returned that is often required by the calling functions:
+  // `word`. Also works for prefixes that are terminated with `PREFIX_CHAR` like
+  // "astro*". Returns `nullopt` if no suitable block was found because no
+  // matching word is contained in the text index. Some additional information
+  // is also returned that is often required by the calling functions:
   // `hasToBeFiltered_` is true iff `word` is NOT the only word in the text
   // block, and additional filtering is thus required. `idRange_` is the range
   // `[first, last]` of the `WordVocabIndex`es that correspond to the word
   // (which might also be a prefix, thus it is a range).
-  struct TextBlockMetaDataAndWordInfo {
+  struct TextBlockMetadataAndWordInfo {
     TextBlockMetaData tbmd_;
     bool hasToBeFiltered_;
     IdRange<WordVocabIndex> idRange_;
   };
-  std::optional<TextBlockMetaDataAndWordInfo>
-  getTextBlockMetaDataForWordOrPrefix(const std::string& word) const;
+  std::optional<TextBlockMetadataAndWordInfo>
+  getTextBlockMetadataForWordOrPrefix(const std::string& word) const;
 
   /// Calculate the block boundaries for the text index. The boundary of a
   /// block is the index in the `textVocab_` of the last word that belongs

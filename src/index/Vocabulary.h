@@ -50,9 +50,9 @@ struct IdRange {
 };
 
 //! Stream operator for convenience.
-template <typename IndexT>
+template <typename IndexType>
 inline std::ostream& operator<<(std::ostream& stream,
-                                const IdRange<IndexT>& idRange) {
+                                const IdRange<IndexType>& idRange) {
   return stream << '[' << idRange._first << ", " << idRange._last << ']';
 }
 
@@ -71,8 +71,7 @@ struct Prefix {
 //! Template parameters that are supported are:
 //! std::string -> no compression is applied
 //! CompressedString -> prefix compression is applied
-template <typename StringType, typename ComparatorType,
-          typename IndexT = VocabIndex>
+template <typename StringType, typename ComparatorType, typename IndexT>
 class Vocabulary {
   // The different type of data that is stored in the vocabulary
   enum class Datatypes { Literal, Iri, Float, Date };
