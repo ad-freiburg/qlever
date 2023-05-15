@@ -2,9 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkConfigurationShorthandVisitor.h"
-
 #include <any>
+
+#include "../benchmark/infrastructure/BenchmarkConfigurationShorthandVisitor.h"
 
 // __________________________________________________________________________
 nlohmann::json
@@ -40,9 +40,9 @@ nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitObject(
 }
 
 // __________________________________________________________________________
-nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitList(
+nlohmann::json::array_t ToJsonBenchmarkConfigurationShorthandVisitor::visitList(
     const Parser::ListContext* context) const {
-  nlohmann::json contextAsJson(nlohmann::json::value_t::array);
+  nlohmann::json::array_t contextAsJson;
 
   // Convert the content of the list.
   for (auto element : context->listElement) {

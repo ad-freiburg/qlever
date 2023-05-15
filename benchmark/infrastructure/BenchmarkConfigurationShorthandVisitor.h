@@ -31,7 +31,7 @@ class ToJsonBenchmarkConfigurationShorthandVisitor final {
   nlohmann::json visitObject(Parser::ObjectContext* context) const;
 
   // __________________________________________________________________________
-  nlohmann::json visitList(const Parser::ListContext* context) const;
+  nlohmann::json::array_t visitList(const Parser::ListContext* context) const;
 
   // __________________________________________________________________________
   nlohmann::json visitContent(Parser::ContentContext* context) const;
