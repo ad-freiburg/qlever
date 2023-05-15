@@ -69,21 +69,17 @@ auto Index::getTextVocab() const -> const TextVocab& {
 
 // _____________________________________________________________________________
 size_t Index::getCardinality(const TripleComponent& comp,
-                             Index::Permutation p) const {
-  return pimpl_->applyToPermutation(p, [&](const auto& permutation) {
-    return pimpl_->getCardinality(comp, permutation);
-  });
+                             Permutation::Enum p) const {
+  return pimpl_->getCardinality(comp, p);
 }
 
 // _____________________________________________________________________________
-size_t Index::getCardinality(Id id, Index::Permutation p) const {
-  return pimpl_->applyToPermutation(p, [&](const auto& permutation) {
-    return pimpl_->getCardinality(id, permutation);
-  });
+size_t Index::getCardinality(Id id, Permutation::Enum p) const {
+  return pimpl_->getCardinality(id, p);
 }
 
 // _______________________________________________
-std::optional<std::string> Index::idToOptionalString(Id id) const {
+std::optional<std::string> Index::idToOptionalString(VocabIndex id) const {
   return pimpl_->idToOptionalString(id);
 }
 
@@ -339,43 +335,33 @@ Index::NumNormalAndInternal Index::numDistinctPredicates() const {
 bool Index::hasAllPermutations() const { return pimpl_->hasAllPermutations(); }
 
 // _____________________________________________________
-vector<float> Index::getMultiplicities(Permutation p) const {
-  return pimpl_->applyToPermutation(p, [this](const auto& permutation) {
-    return pimpl_->getMultiplicities(permutation);
-  });
+vector<float> Index::getMultiplicities(Permutation::Enum p) const {
+  return pimpl_->getMultiplicities(p);
 }
 
 // _____________________________________________________
 vector<float> Index::getMultiplicities(const TripleComponent& key,
-                                       Permutation permutation) const {
-  return pimpl_->applyToPermutation(permutation, [this, key](const auto& p) {
-    return pimpl_->getMultiplicities(key, p);
-  });
+                                       Permutation::Enum p) const {
+  return pimpl_->getMultiplicities(key, p);
 }
 
 // _____________________________________________________
-void Index::scan(Id key, IdTable* result, Permutation p,
+void Index::scan(Id key, IdTable* result, Permutation::Enum p,
                  ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  return pimpl_->applyToPermutation(p, [&](const auto& perm) {
-    return pimpl_->scan(key, result, perm, std::move(timer));
-  });
+  return pimpl_->scan(key, result, p, std::move(timer));
 }
 
 // _____________________________________________________
 void Index::scan(const TripleComponent& key, IdTable* result,
-                 const Permutation& p,
+                 const Permutation::Enum& p,
                  ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  return pimpl_->applyToPermutation(p, [&](const auto& perm) {
-    return pimpl_->scan(key, result, perm, std::move(timer));
-  });
+  return pimpl_->scan(key, result, p, std::move(timer));
 }
 
 // _____________________________________________________
 void Index::scan(const TripleComponent& col0String,
                  const TripleComponent& col1String, IdTable* result,
-                 Permutation p,
+                 Permutation::Enum p,
                  ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  return pimpl_->applyToPermutation(p, [&](const auto& perm) {
-    return pimpl_->scan(col0String, col1String, result, perm, std::move(timer));
-  });
+  return pimpl_->scan(col0String, col1String, result, p, std::move(timer));
 }
