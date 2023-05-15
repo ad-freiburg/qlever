@@ -290,7 +290,7 @@ class ValueId {
                            ad_utility::isSimilar<T, int64_t>) {
         ostr << std::to_string(value);
       } else if constexpr (ad_utility::isSimilar<T, DateOrLargeYear>) {
-        ostr << value.toString();
+        ostr << value.toStringAndType().first;
       } else {
         // T is `VocabIndex || LocalVocabIndex || TextRecordIndex`
         ostr << std::to_string(value.get());

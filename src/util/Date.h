@@ -14,6 +14,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "ctre/ctre.h"
+#include "global/Constants.h"
 #include "util/CtreHelpers.h"
 #include "util/NBitInteger.h"
 
@@ -310,7 +311,7 @@ class Date {
     return std::visit(impl, getTimezone());
   }
 
-  std::string toString() const {
+  std::pair<std::string, const char*> toStringAndType() const {
     // TODO<joka921> This still lacks many different cases
     // Timezones, precision of the seconds, is it `date` `dateTime` `gYear` etc.
     std::string dateString;
@@ -328,74 +329,100 @@ class Date {
           absl::StrFormat(formatString, getYear(), getMonth(), getDay(),
                           getHour(), getMinute(), getSecond());
     }
-    return absl::StrCat(dateString, formatTimezone());
+    return {absl::StrCat(dateString, formatTimezone()), XSD_DATETIME_TYPE};
   }
 };
 
+// This class either encodes a `Date` or a year that is outside the range that can be currently represented
+// by the year class [-9999, 9999]. The underlying format is as follows (starting from the most significant bit):
+// - 5 bits that are always zero and ignored by the representation.
+// - 2 bits that store 0 (negative year), 1 (datetime with a year in [-9999, 9999]), or 2 (positive year).
+//   These values are chosen s.t. that the order of the bits is correct.
+// - 57 bits that either encode the `Date`, or a year as a signed integer via the `ad_utility::NBitInteger` class.
 class DateOrLargeYear {
  private:
+  // The tags to discriminate between the stored formats.
   static constexpr uint64_t negativeYear = 0, datetime = 1, positiveYear = 2;
+  // The number of bits for the actual value.
   static constexpr uint8_t numPayloadBits = 64 - Date::numUnusedBits;
+    // The integer type for the case of a large year.
   using NBit = ad_utility::NBitInteger<numPayloadBits>;
+  // The bits.
   uint64_t bits_;
  public:
+  // The number of high bits that are unused by this class (currently 5).
+  static constexpr uint64_t numUnusedBits = Date::numUnusedBits - 2;
+  static constexpr int64_t maxYear = NBit::max();
+  static constexpr int64_t minYear = NBit::min();
 
+  // Construct from a `Date`.
   explicit DateOrLargeYear(Date d) {
     bits_ = std::bit_cast<uint64_t>(d) | (datetime << (numPayloadBits));
   }
+
+  // Construct from a `year`. Only valid if the year is outside the legal range for a year in the `Date` class.
   explicit DateOrLargeYear(int64_t year) {
+    AD_CONTRACT_CHECK(year < Date::minYear || year > Date::maxYear);
     auto flag = year < 0 ? negativeYear : positiveYear;
     bits_ = ad_utility::NBitInteger<numPayloadBits>::toNBit(year);
     bits_ |= flag << numPayloadBits;
   }
 
+  // True iff a complete `Date` is stored and not only a large year.
   bool isDate() const {
     return bits_ >>numPayloadBits == datetime;
   }
 
-    Date getDateUnchecked() const {
-        return std::bit_cast<Date>(bits_);
-    }
+  // Return the underlying `Date` object. The behavior is undefined if `isDate()` is `false`.
+  Date getDateUnchecked() const { return std::bit_cast<Date>(bits_); }
 
-    Date getDate() const {
-      AD_CONTRACT_CHECK(bits_ >>numPayloadBits == datetime);
-      return getDateUnchecked();
+    // Return the underlying `Date` object. An assertion fails if `isDate()` is `false`.
+  Date getDate() const {
+    AD_CONTRACT_CHECK(bits_ >> numPayloadBits == datetime);
+    return getDateUnchecked();
   }
 
-  // Get the stored year, no matter if it's stored inside a `Date` object or directly.
-  int64_t getYear() {
-      if (isDate()) {
+  // Get the stored year, no matter if it's stored inside a `Date` object or
+  // directly.
+  int64_t getYear() const {
+    if (isDate()) {
       return getDateUnchecked().getYear();
-      } else {
+    } else {
       return NBit::fromNBit(bits_);
-      }
-  }
-
-  // TODO<joka921> Also include gyear etc.
-  std::string toString() const {
-    auto flag = bits_ >> numPayloadBits;
-    if (flag == datetime) {
-      return std::bit_cast<Date>(bits_).toString();
     }
-    int64_t date = NBit::fromNBit(bits_);
-    constexpr std::string_view formatString = "%d-01-01T00:00:00";
-    return absl::StrFormat(formatString, date);
   }
 
+   // Convert to a string (without quotes) that represents the stored date, and a pointer to the
+  // IRI of the corresponding datatype (currently always `xsd:dateTime`).
+  // Large years are currently always exported as `xsd:dateTime` pointing to the January 1st, 00:00 hours.
+  // (This is the format used by Wikidata).
+   std::pair<std::string, const char*> toStringAndType() const;
+
+   // The bitwise comparison also correpsonds to the semantic ordering of years and dates.
   auto operator<=>(const DateOrLargeYear&) const = default;
 
+  // Bitwise hashing.
     template <typename H>
     friend H AbslHashValue(H h, const DateOrLargeYear& d) {
         return H::combine(std::move(h), d.bits_);
     }
 
+    // Parsing functions. They all have the following properties:
+    // * The input is not contained in quotes (for example 1900-12-13 for a date, not "1900-12-13").
+    // * If the year is outside the range [-9999, 9999], then the date must be January 1st, at 00:00 hours.
+
+    // Parse from xsd:dateTime (e.g. 1900-12-13T03:12:00.33Z)
     static DateOrLargeYear parseXsdDatetime(std::string_view dateString);
 
+    // Parse from xsd:date (e.g. 1900-12-13)
     static DateOrLargeYear parseXsdDate(std::string_view dateString);
 
+    // Parse from xsd:gYearMonth (e.g. 1900-03)
+    static DateOrLargeYear parseGYearMonth(std::string_view dateString);
+
+    // Parse from xsd:gYear (e.g. 1900)
     static DateOrLargeYear parseGYear(std::string_view dateString);
 
-    static DateOrLargeYear parseGYearMonth(std::string_view dateString);
 };
 
 #endif  // QLEVER_DATE_H

@@ -18,7 +18,7 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
         } else if constexpr (std::is_same_v<T, TripleComponent::Literal>) {
           stream << value.rawContent();
         } else if constexpr (std::is_same_v<T, DateOrLargeYear>) {
-          stream << "DATE: " << value.toString();
+          stream << "DATE: " << value.toStringAndType().first;
         } else {
           stream << value;
         }
@@ -85,7 +85,8 @@ std::string TripleComponent::toRdfLiteral() const {
     return absl::StrCat("\"", getDouble(), "\"^^<", XSD_DOUBLE_TYPE, ">");
   } else if (isDate()) {
     // TODO<joka921> This should also handle Date GYEAR MONTH etc. correctly.
-    return absl::StrCat("\"", getDate().toString(), "\"^^<", XSD_DATETIME_TYPE,
+    auto [date, type] = getDate().toStringAndType();
+    return absl::StrCat("\"", date, "\"^^<", type,
                         ">");
   } else {
     AD_CORRECTNESS_CHECK(isInt());
