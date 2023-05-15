@@ -327,74 +327,6 @@ string convertIndexWordToFloatString(const string& indexWord) {
 }
 
 // _____________________________________________________________________________
-float convertIndexWordToFloat(const string& indexWord) {
-  size_t prefixLength = std::char_traits<char>::length(VALUE_FLOAT_PREFIX);
-  AD_CONTRACT_CHECK(indexWord.size() > prefixLength + 1);
-  // the -1 accounts for the originally float/int identifier suffix
-  string number =
-      indexWord.substr(prefixLength, indexWord.size() - prefixLength - 1);
-  // Handle the special case 0.0
-  if (number == "N0") {
-    return 0;
-  }
-  assert(number.size() >= 5);
-  bool negaMantissa = number[0] == 'M';
-  bool negaExponent = number[1] == 'M' || number[1] == '-';
-
-  size_t posOfE = number.find('E');
-  assert(posOfE != string::npos && posOfE > 0 && posOfE < number.size() - 1);
-
-  string exponentString =
-      ((negaMantissa == negaExponent)
-           ? number.substr(2, posOfE - 2)
-           : getBase10ComplementOfIntegerString(number.substr(2, posOfE - 2)));
-  long absExponent = static_cast<size_t>(atoi(exponentString.c_str()));
-  string mantissa =
-      (!negaMantissa
-           ? number.substr(posOfE + 1)
-           : getBase10ComplementOfIntegerString(number.substr(posOfE + 1)));
-  size_t mStart, mStop;
-  for (mStart = 0; mStart < mantissa.size() && mantissa[mStart] == '0';
-       mStart++)
-    ;
-  for (mStop = mantissa.size() - 1; mStop > mStart && mantissa[mStop] == '0';
-       mStop--)
-    ;
-  double absMantissa = 0;
-  try {
-    auto mantissaSubstr = mantissa.substr(mStart, mStop - mStart + 1);
-    // empty mantissa means "0.0"
-    if (!mantissaSubstr.empty()) {
-      absMantissa = stod(mantissa.substr(mStart, mStop - mStart + 1));
-    }
-  } catch (const std::exception& e) {
-    string substr = mantissa.substr(mStart, mStop - mStart + 1);
-    throw std::runtime_error(
-        ""
-        "Error in stol while trying to convert index word " +
-        indexWord + ". The mantissa " + substr +
-        " could not be parsed via stod");
-  }
-  if (absMantissa == 0) {
-    return 0.0f;
-  }
-  unsigned int mantissaLog = std::log10(absMantissa);
-  if (negaMantissa) {
-    if (negaExponent) {
-      return -absMantissa * std::pow(10, -absExponent - mantissaLog);
-    } else {
-      return -absMantissa * std::pow(10, absExponent - mantissaLog);
-    }
-  } else {
-    if (negaExponent) {
-      return absMantissa * std::pow(10, -absExponent - mantissaLog);
-    } else {
-      return absMantissa * std::pow(10, absExponent - mantissaLog);
-    }
-  }
-}
-
-// _____________________________________________________________________________
 string normalizeDate(const string& orig) {
   string value(orig);
   // Remove timezone information if present.
@@ -559,24 +491,6 @@ bool isXsdValue(string_view value) {
   static constexpr auto xsdValueRegex = ctll::fixed_string(
       "\"\\^\\^<http://www\\.w3\\.org/2001/XMLSchema#[a-zA-Z]+>$");
   return ctre::search<xsdValueRegex>(value);
-}
-
-// _____________________________________________________________________________
-bool isNumeric(const string& value) {
-  if (ctre::match<TurtleTokenCtre::Double>(value)) {
-    throw std::out_of_range{
-        "Decimal numbers with an explicit exponent are currently not supported "
-        "by QLever, but the following number was encountered: " +
-        value};
-  }
-
-  if (ctre::match<TurtleTokenCtre::Integer>(value)) {
-    return true;
-  }
-  if (ctre::match<TurtleTokenCtre::Decimal>(value)) {
-    return true;
-  }
-  return false;
 }
 
 // _____________________________________________________________________________

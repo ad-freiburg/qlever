@@ -3,7 +3,7 @@ include(GoogleTest)
 # Link binary ${basename} against `gmock_main`, the threading library,
 # and all libraries that are specified as additional arguments.
 function (linkTest basename)
-    qlever_target_link_libraries(${basename} ${ARGN} gmock_main ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(${basename} ${ARGN} gmock_main ${CMAKE_THREAD_LIBS_INIT} util)
 endfunction()
 
 # Add the exectutable ${basename} that is compiled from the source file
@@ -80,7 +80,7 @@ function(addAndLinkTest basename)
     linkTest(${basename} ${ARGN})
 endfunction()
 
-addLinkAndDiscoverTest(ValueIdComparatorsTest)
+addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
 addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions ${ICU_LIBRARIES})
 
@@ -112,8 +112,6 @@ addLinkAndDiscoverTest(JoinTest engine)
 
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
-addLinkAndDiscoverTest(ConversionsTest util)
-
 addLinkAndDiscoverTest(HashMapTest)
 
 addLinkAndDiscoverTest(HashSetTest)
@@ -143,7 +141,7 @@ addLinkAndDiscoverTest(TurtleParserTest parser re2)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
-addLinkAndDiscoverTest(IdTableTest)
+addLinkAndDiscoverTest(IdTableTest util)
 
 addLinkAndDiscoverTest(TransitivePathTest engine)
 

@@ -43,10 +43,6 @@ std::string convertFloatStringToIndexWord(
 //! :v:float:M-0*1E9*876F to "-0.123".
 std::string convertIndexWordToFloatString(const std::string& indexWord);
 
-//! Converts strings like this: ":v:float:PP0*2E0*1234F to "12.34 and
-//! :v:float:M-0*1E9*876F to -0.123".
-float convertIndexWordToFloat(const std::string& indexWord);
-
 //! Brings a date to the format:
 //! return std::string(VALUE_DATE_PREFIX) + year + month + day +
 //!        VALUE_DATE_TIME_SEPARATOR + hour + minute + second;
@@ -66,11 +62,6 @@ std::string removeLeadingZeros(const std::string& orig);
 
 //! Check if this looks like an value literal
 bool isXsdValue(std::string_view value);
-
-//! Check if the given std::string is numeric, i.e. a decimal integer or float
-//! string i.e. "42", "42.2", "0123", ".3" are all numeric while "a", "1F",
-//! "0x32" are not
-bool isNumeric(const std::string& val);
 
 //! Converts numeric strings (as determined by isNumeric()) into index words
 std::string convertNumericToIndexWord(const std::string& val);
@@ -100,9 +91,6 @@ std::string convertFloatStringToIndexWord(const std::string& orig,
 std::string convertIndexWordToFloatString(const std::string& indexWord);
 
 // _____________________________________________________________________________
-float convertIndexWordToFloat(const std::string& indexWord);
-
-// _____________________________________________________________________________
 std::string normalizeDate(const std::string& orig);
 
 // _____________________________________________________________________________
@@ -119,9 +107,6 @@ std::string removeLeadingZeros(const std::string& orig);
 
 // _____________________________________________________________________________
 bool isXsdValue(std::string_view value);
-
-// _____________________________________________________________________________
-bool isNumeric(const std::string& value);
 
 // _____________________________________________________________________________
 std::string convertNumericToIndexWord(const std::string& val);

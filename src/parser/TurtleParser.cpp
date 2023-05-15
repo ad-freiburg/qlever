@@ -380,40 +380,46 @@ bool TurtleParser<T>::rdfLiteral() {
     // TODO<joka921> this allows spaces here since the ^^ is unique in the
     // sparql syntax. is this correct?
   } else if (skip<TurtleTokenId::DoubleCircumflex>() && check(iri())) {
-    const auto typeIri = std::move(_lastParseResult.getString());
-    auto type = stripAngleBrackets(typeIri);
-    std::string strippedLiteral{stripDoubleQuotes(literalString.get())};
-    // TODO<joka921> clean this up by moving the check for the types to a
-    // separate module.
-    if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE ||
-        type == XSD_NON_POSITIVE_INTEGER_TYPE ||
-        type == XSD_NEGATIVE_INTEGER_TYPE || type == XSD_LONG_TYPE ||
-        type == XSD_SHORT_TYPE || type == XSD_BYTE_TYPE ||
-        type == XSD_NON_NEGATIVE_INTEGER_TYPE ||
-        type == XSD_UNSIGNED_LONG_TYPE || type == XSD_UNSIGNED_INT_TYPE ||
-        type == XSD_UNSIGNED_SHORT_TYPE || type == XSD_POSITIVE_INTEGER_TYPE) {
-      // type == XSD_BOOLEAN_TYPE) {
-      parseIntegerConstant(strippedLiteral);
-    } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
-               type == XSD_FLOAT_TYPE) {
-      parseDoubleConstant(strippedLiteral);
-    } else if (type == XSD_DATETIME_TYPE) {
-      _lastParseResult = DateOrLargeYear::parseXsdDatetime(strippedLiteral);
-    } else if (type == XSD_DATE_TYPE) {
-      _lastParseResult = DateOrLargeYear::parseXsdDate(strippedLiteral);
-    } else if (type == XSD_GYEARMONTH_TYPE) {
-      _lastParseResult = DateOrLargeYear::parseGYearMonth(strippedLiteral);
-    } else if (type == XSD_GYEAR_TYPE) {
-      _lastParseResult = DateOrLargeYear::parseGYear(strippedLiteral);
-    } else {
-      _lastParseResult =
-          TripleComponent::Literal{literalString, absl::StrCat("^^", typeIri)};
+    try {
+      const auto typeIri = std::move(_lastParseResult.getString());
+      auto type = stripAngleBrackets(typeIri);
+      std::string strippedLiteral{stripDoubleQuotes(literalString.get())};
+      // TODO<joka921> clean this up by moving the check for the types to a
+      // separate module.
+      if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE ||
+          type == XSD_NON_POSITIVE_INTEGER_TYPE ||
+          type == XSD_NEGATIVE_INTEGER_TYPE || type == XSD_LONG_TYPE ||
+          type == XSD_SHORT_TYPE || type == XSD_BYTE_TYPE ||
+          type == XSD_NON_NEGATIVE_INTEGER_TYPE ||
+          type == XSD_UNSIGNED_LONG_TYPE || type == XSD_UNSIGNED_INT_TYPE ||
+          type == XSD_UNSIGNED_SHORT_TYPE ||
+          type == XSD_POSITIVE_INTEGER_TYPE) {
+        // type == XSD_BOOLEAN_TYPE) {
+        parseIntegerConstant(strippedLiteral);
+      } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
+                 type == XSD_FLOAT_TYPE) {
+        parseDoubleConstant(strippedLiteral);
+      } else if (type == XSD_DATETIME_TYPE) {
+        _lastParseResult = DateOrLargeYear::parseXsdDatetime(strippedLiteral);
+      } else if (type == XSD_DATE_TYPE) {
+        _lastParseResult = DateOrLargeYear::parseXsdDate(strippedLiteral);
+      } else if (type == XSD_GYEARMONTH_TYPE) {
+        _lastParseResult = DateOrLargeYear::parseGYearMonth(strippedLiteral);
+      } else if (type == XSD_GYEAR_TYPE) {
+        _lastParseResult = DateOrLargeYear::parseGYear(strippedLiteral);
+      } else {
+        _lastParseResult = TripleComponent::Literal{
+            literalString, absl::StrCat("^^", typeIri)};
+      }
+      return true;
+    } catch (const std::exception& e) {
+        raise(e.what());
     }
-    return true;
-  } else {
-    // It is okay to neither have a langtag nor an XSD datatype.
-    return true;
-  }
+    }
+    else {
+      // It is okay to neither have a langtag nor an XSD datatype.
+      return true;
+    }
 }
 
 // ______________________________________________________________________

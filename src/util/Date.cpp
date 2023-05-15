@@ -58,6 +58,9 @@ static DateOrLargeYear makeDateOrLargeYear(int64_t year, int month, int day, int
       if (month != 1 || day != 1 || hour != 0 || minute != 0 || second != 0.0) {
         throw std::runtime_error{"When the year of a datetime object is smaller than -9999 or larger than 9999 then the month and day have to be 1 and the hour, minute, and second must be all 0 in QLever's implementation of Dates."};
       }
+      if (year < DateOrLargeYear::minYear || year > DateOrLargeYear::maxYear) {
+        throw std::runtime_error{absl::StrCat("QLever cannot encode dates that are less than ", DateOrLargeYear::minYear, " or larger than ", DateOrLargeYear::maxYear)};
+      }
         return DateOrLargeYear(year);
     }
     return DateOrLargeYear{Date{static_cast<int>(year), month, day, hour, minute, second, timezone}};
@@ -69,7 +72,7 @@ static DateOrLargeYear makeDateOrLargeYear(int64_t year, int month, int day, int
       dateRegex + "T" + timeRegex + grp(timezoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
   if (!match) {
-    throw std::runtime_error{absl::StrCat("Illegal dateTime ", dateString)};
+    throw std::runtime_error{absl::StrCat("The value ", dateString, " cannot be parsed as an `xsd:dateTime`.")};
   }
   int64_t year = toInt<"year">(match);
   int month = toInt<"month">(match);
@@ -86,7 +89,7 @@ DateOrLargeYear DateOrLargeYear::parseXsdDate(std::string_view dateString) {
       dateRegex + grp(timezoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
   if (!match) {
-    throw std::runtime_error{absl::StrCat("Illegal date ", dateString)};
+      throw std::runtime_error{absl::StrCat("The value ", dateString, " cannot be parsed as an `xsd:date`.")};
   }
   int64_t year = toInt<"year">(match);
   int month = toInt<"month">(match);
@@ -101,7 +104,7 @@ DateOrLargeYear DateOrLargeYear::parseGYear(std::string_view dateString) {
       yearRegex + grp(timezoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
   if (!match) {
-    throw std::runtime_error{absl::StrCat("Illegal gyear", dateString)};
+      throw std::runtime_error{absl::StrCat("The value ", dateString, " cannot be parsed as an `xsd:gYear`.")};
   }
   int64_t year = toInt<"year">(match);
   // TODO<joka921> How should we distinguish between `dateTime`, `date`,
@@ -117,7 +120,7 @@ DateOrLargeYear DateOrLargeYear::parseGYearMonth(std::string_view dateString) {
       yearRegex + grp(timezoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
   if (!match) {
-    throw std::runtime_error{absl::StrCat("Illegal yearMonth", dateString)};
+      throw std::runtime_error{absl::StrCat("The value ", dateString, " cannot be parsed as an `xsd:gYearMonth`.")};
   }
   int64_t year = toInt<"year">(match);
   int month = toInt<"month">(match);
