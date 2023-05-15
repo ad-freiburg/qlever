@@ -8,6 +8,7 @@
 #include "./QueryPlannerTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/QueryPlanner.h"
+#include "global/Constants.h"
 #include "parser/SparqlParser.h"
 
 namespace h = queryPlannerTestHelpers;
@@ -772,11 +773,11 @@ TEST(QueryExecutionTreeTest, testTextQuerySE) {
       "WHERE  {?c ql:contains-word \"search engine\"}");
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(
-      "{\n  TEXT OPERATION WITHOUT FILTER: co-occurrence with words:"
-      " \"search engine\" and 0 variables with textLimit = 1\n"
-      "  qet-width: 2 \n}",
-      qet.asString());
+  ASSERT_EQ(absl::StrCat(
+                "{\n  TEXT OPERATION WITHOUT FILTER: co-occurrence with words:",
+                " \"search engine\" and 0 variables with textLimit = ",
+                TEXT_LIMIT_DEFAULT, "\n", "  qet-width: 2 \n}"),
+            qet.asString());
 }
 
 TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
@@ -788,7 +789,7 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
       "?y :Contained_by :Europe ."
       "?c ql:contains-entity ?x ."
       "?c ql:contains-word \"cocaine\" ."
-      "}");
+      "} TEXTLIMIT 1");
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
@@ -814,7 +815,7 @@ TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
       "?c ql:contains-entity ?x ."
       "?c ql:contains-word \"friend*\" ."
       "?c ql:contains-entity ?y ."
-      "}");
+      "} TEXTLIMIT 1");
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
@@ -836,7 +837,7 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
       "?c ql:contains-entity ?s ."
       "?s <is-a> <Scientist> ."
       "?c2 ql:contains-entity ?s ."
-      "?c2 ql:contains-word \"manhattan project\"}");
+      "?c2 ql:contains-word \"manhattan project\"} TEXTLIMIT 1");
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(

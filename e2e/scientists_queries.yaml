@@ -10,7 +10,8 @@ queries:
           ?t ql:contains-entity ?x .
           ?t ql:contains-word "relati*"
       }
-          ORDER BY DESC(?ql_textscore_t)
+      ORDER BY DESC(?ql_textscore_t)
+      TEXTLIMIT 1
     checks:
       - num_cols: 3
       - num_rows: 1653
@@ -35,7 +36,8 @@ queries:
           ?t ql:contains-entity ?x .
           ?t ql:contains-word "relati*"
       }
-          ORDER BY DESC(?ql_textscore_t)
+      ORDER BY DESC(?ql_textscore_t)
+      TEXTLIMIT 1
     checks:
       - num_cols: 3
       - num_rows: 1
@@ -57,7 +59,8 @@ queries:
           ?t ql:contains-entity ?x .
           ?t ql:contains-word "algo*"
       }
-          ORDER BY DESC(?ql_textscore_t)
+      ORDER BY DESC(?ql_textscore_t)
+      TEXTLIMIT 1
     checks:
       - num_cols: 2
       - num_rows: 11
@@ -66,7 +69,7 @@ queries:
       - order_numeric: {"dir": "DESC", "var" : "?ql_textscore_t"}
 
 
-  - query: algor-start-female-born-before-1940
+  - query: algo-start-female-born-before-1940
     type: text
     sparql: |
       PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
@@ -80,6 +83,7 @@ queries:
         FILTER (?date < "1940-01-01"^^xsd:date)
       }
       ORDER BY DESC(?ql_textscore_t)
+      TEXTLIMIT 1
     checks:
       - num_cols: 4
       - num_rows: 3
@@ -1128,7 +1132,7 @@ queries:
           ?x <Gender> <Female> .
           ?t ql:contains-entity ?x .
           ?t ql:contains-word "algo*"
-      }
+      } TEXTLIMIT 1
     checks:
       - num_cols: 3
       - num_rows: 11

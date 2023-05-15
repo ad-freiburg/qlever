@@ -26,6 +26,7 @@ static const size_t DISTINCT_LHS_PER_BLOCK = 10'000;
 static const size_t USE_BLOCKS_INDEX_SIZE_TRESHOLD = 20'000;
 
 static const size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
+static const size_t TEXT_LIMIT_DEFAULT = 9999;
 
 static const size_t GALLOP_THRESHOLD = 1000;
 

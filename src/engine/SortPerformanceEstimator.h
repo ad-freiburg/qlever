@@ -57,7 +57,7 @@ class SortPerformanceEstimator {
   // The number of rows for which we will sample the sorting time as a base for
   // the estimates.
   static constexpr std::array<size_t, 4> sampleValuesRows{
-      10'000, 100'000, 1'000'000, 10'000'000 };
+      10'000, 100'000, 1'000'000, 10'000'000};
   static constexpr size_t NUM_SAMPLES_COLS = sampleValuesCols.size();
   static constexpr size_t NUM_SAMPLES_ROWS = sampleValuesRows.size();
 
