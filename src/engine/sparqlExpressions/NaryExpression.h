@@ -5,9 +5,9 @@
 
 #pragma once
 
+#include <charconv>
 #include <concepts>
 #include <cstdlib>
-#include <charconv>
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
@@ -191,7 +191,8 @@ const size_t dayIndex = monthIndex + 3;
 // Helper function that extracts a part of a date string. Note the extra work
 // for year because of the potential two's complement.
 template <size_t Pos1, size_t Pos2>
-inline auto extractNumberFromDate = [](std::string_view dateAsString) -> long int {
+inline auto extractNumberFromDate =
+    [](std::string_view dateAsString) -> long int {
   static_assert(Pos2 > Pos1);
   auto pos1 = Pos1;
   auto pos2 = Pos2;
