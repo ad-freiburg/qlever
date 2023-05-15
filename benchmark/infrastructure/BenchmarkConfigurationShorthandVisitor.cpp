@@ -3,38 +3,46 @@
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
 #include <any>
+#include <utility>
 
 #include "../benchmark/infrastructure/BenchmarkConfigurationShorthandVisitor.h"
 
 // __________________________________________________________________________
-nlohmann::json
+nlohmann::json::object_t
 ToJsonBenchmarkConfigurationShorthandVisitor::visitShortHandString(
     Parser::ShortHandStringContext* context) const {
   return visitAssignments(context->assignments());
 }
 
 // __________________________________________________________________________
-nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignments(
+nlohmann::json::object_t
+ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignments(
     const Parser::AssignmentsContext* context) const {
-  nlohmann::json contextAsJson(nlohmann::json::value_t::object);
+  nlohmann::json::object_t contextAsJson;
 
   for (auto assignment : context->listOfAssignments) {
+    const std::pair<std::string, nlohmann::json>& interpretedAssignment =
+        visitAssignment(assignment);
+
     // Add the json representation of the assignment.
-    contextAsJson.update(visitAssignment(assignment));
+    contextAsJson.insert_or_assign(interpretedAssignment.first,
+                                   interpretedAssignment.second);
   }
 
   return contextAsJson;
 }
 
 // __________________________________________________________________________
-nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignment(
+std::pair<std::string, nlohmann::json>
+ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignment(
     Parser::AssignmentContext* context) const {
-  return nlohmann::json{
-      {context->NAME()->getText(), visitContent(context->content())}};
+  return std::make_pair(context->NAME()->getText(),
+                        visitContent(context->content()));
 }
 
 // __________________________________________________________________________
-nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitObject(
+nlohmann::json::object_t
+ToJsonBenchmarkConfigurationShorthandVisitor::visitObject(
     Parser::ObjectContext* context) const {
   return visitAssignments(context->assignments());
 }

@@ -17,18 +17,19 @@ class ToJsonBenchmarkConfigurationShorthandVisitor final {
   using Parser = BenchmarkConfigurationShorthandParser;
 
   // __________________________________________________________________________
-  nlohmann::json visitShortHandString(
+  nlohmann::json::object_t visitShortHandString(
       Parser::ShortHandStringContext* context) const;
 
   // __________________________________________________________________________
-  nlohmann::json visitAssignments(
+  nlohmann::json::object_t visitAssignments(
       const Parser::AssignmentsContext* context) const;
 
   // __________________________________________________________________________
-  nlohmann::json visitAssignment(Parser::AssignmentContext* context) const;
+  std::pair<std::string, nlohmann::json> visitAssignment(
+      Parser::AssignmentContext* context) const;
 
   // __________________________________________________________________________
-  nlohmann::json visitObject(Parser::ObjectContext* context) const;
+  nlohmann::json::object_t visitObject(Parser::ObjectContext* context) const;
 
   // __________________________________________________________________________
   nlohmann::json::array_t visitList(const Parser::ListContext* context) const;
