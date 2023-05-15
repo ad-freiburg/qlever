@@ -599,8 +599,6 @@ class IndexImpl {
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 
-  TextBlockIndex getEntityBlockId(Id entityId) const;
-
   bool isEntityBlockId(TextBlockIndex blockIndex) const;
 
   //! Writes a list of elements (have to be able to be cast to unit64_t)

@@ -12,8 +12,7 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
     const uint64_t lower, const uint64_t upper) const {
   AD_CONTRACT_CHECK(upper >= lower);
   assert(_blocks.size() > 0);
-  assert(_blocks.size() ==
-         _blockUpperBoundWordIds.size() + _blockUpperBoundEntityIds.size());
+  assert(_blocks.size() == _blockUpperBoundWordIds.size());
 
   // Binary search in the sorted _blockUpperBoundWordIds vector.
   auto it = std::lower_bound(_blockUpperBoundWordIds.begin(),
@@ -64,29 +63,18 @@ string TextMetaData::statistics() const {
   ad_utility::ReadableNumberFacet facet(1);
   std::locale locWithNumberGrouping(loc, &facet);
   os.imbue(locWithNumberGrouping);
-  os << "#records = " << _nofEntityContexts
-     << ", #words = " << totalElementsClassicLists
-     << ", #entities = " << _nofEntities << ", #blocks = " << _blocks.size();
+  os << "#words = " << totalElementsClassicLists
+     << ", #blocks = " << _blocks.size();
   return std::move(os).str();
 }
 
 // _____________________________________________________________________________
-void TextMetaData::addBlock(const TextBlockMetaData& md, bool isEntityBlock) {
+void TextMetaData::addBlock(const TextBlockMetaData& md) {
   _blocks.push_back(md);
-  if (isEntityBlock) {
-    _blockUpperBoundEntityIds.push_back(md._lastWordId);
-  } else {
-    _blockUpperBoundWordIds.push_back(md._lastWordId);
-  }
+  _blockUpperBoundWordIds.push_back(md._lastWordId);
 }
 
 // _____________________________________________________________________________
 off_t TextMetaData::getOffsetAfter() {
   return _blocks.back()._entityCl._lastByte + 1;
-}
-
-void TextMetaData::removeEntityBlocks() {
-  _blocks.resize(_blockUpperBoundWordIds.size());
-  _blocks.shrink_to_fit();
-  _blockUpperBoundEntityIds.clear();
 }
