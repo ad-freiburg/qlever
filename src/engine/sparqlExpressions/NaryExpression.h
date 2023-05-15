@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <charconv>
 #include <concepts>
 #include <cstdlib>
 
@@ -183,8 +184,8 @@ using DistExpression =
 // TODO: These are currently inefficient because they still operate on our old
 // ":v:date:..." strings. It will be easy to make more efficient, once we switch
 // to representing dates directly in an `Id`, see `util/Date.h`.
-const size_t yearIndexBegin = sizeof(VALUE_DATE_PREFIX) - 1;
-const size_t yearIndexEnd = yearIndexBegin + DEFAULT_NOF_DATE_YEAR_DIGITS;
+const size_t yearIndexBegin = 0;
+const size_t yearIndexEnd = yearIndexBegin + 4;
 const size_t monthIndex = yearIndexEnd + 1;
 const size_t dayIndex = monthIndex + 3;
 // Helper function that extracts a part of a date string. Note the extra work
@@ -195,7 +196,10 @@ inline auto extractNumberFromDate = [](const auto& dateAsString) -> long int {
   if (dateAsString.size() < pos2) {
     return 0;
   } else {
-    return std::atol(dateAsString.data() + pos1);
+    long int result = 0;
+    std::from_chars(dateAsString.data() + pos1, dateAsString.data() + pos2,
+                    result);
+    return result;
   }
 };
 inline auto extractYear = extractNumberFromDate<yearIndexBegin, yearIndexEnd>;
