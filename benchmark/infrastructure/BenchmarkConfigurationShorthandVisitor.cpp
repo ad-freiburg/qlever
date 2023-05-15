@@ -2,10 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include <any>
+#include "../benchmark/infrastructure/BenchmarkConfigurationShorthandVisitor.h"
+
+#include <absl/strings/str_cat.h>
+
 #include <utility>
 
-#include "../benchmark/infrastructure/BenchmarkConfigurationShorthandVisitor.h"
+#include "util/Exception.h"
 
 // __________________________________________________________________________
 nlohmann::json::object_t
@@ -24,9 +27,18 @@ ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignments(
     const std::pair<std::string, nlohmann::json>& interpretedAssignment =
         visitAssignment(assignment);
 
+    // The same key twice isn't allowed.
+    if (contextAsJson.contains(interpretedAssignment.first)) {
+      throw ad_utility::Exception(absl::StrCat(
+          "Key error in the short hand: There are at least two key value "
+          "pairs, at the same level of depth, with the key '",
+          interpretedAssignment.first,
+          "' given. This is not allowed, keys must be unique in their level of "
+          "depth"));
+    }
+
     // Add the json representation of the assignment.
-    contextAsJson.insert_or_assign(interpretedAssignment.first,
-                                   interpretedAssignment.second);
+    contextAsJson.insert(interpretedAssignment);
   }
 
   return contextAsJson;
