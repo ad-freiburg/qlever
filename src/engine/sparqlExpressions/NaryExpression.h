@@ -190,9 +190,15 @@ const size_t monthIndex = yearIndexEnd + 1;
 const size_t dayIndex = monthIndex + 3;
 // Helper function that extracts a part of a date string. Note the extra work
 // for year because of the potential two's complement.
-template <size_t pos1, size_t pos2>
+template <size_t Pos1, size_t Pos2>
 inline auto extractNumberFromDate = [](const auto& dateAsString) -> long int {
-  static_assert(pos2 > pos1);
+  static_assert(Pos2 > Pos1);
+  auto pos1 = Pos1;
+  auto pos2 = Pos2;
+  if (dateAsString.starts_with('-')) {
+    ++pos1;
+    ++pos2;
+  }
   if (dateAsString.size() < pos2) {
     return 0;
   } else {
@@ -202,7 +208,14 @@ inline auto extractNumberFromDate = [](const auto& dateAsString) -> long int {
     return result;
   }
 };
-inline auto extractYear = extractNumberFromDate<yearIndexBegin, yearIndexEnd>;
+
+inline auto extractYear = [](std::string_view sv) {
+  auto year = extractNumberFromDate<yearIndexBegin, yearIndexEnd>(sv);
+  if (sv.starts_with("-")) {
+    year *= -1;
+  }
+  return year;
+};
 inline auto extractMonth = extractNumberFromDate<monthIndex, monthIndex + 2>;
 inline auto extractDay = extractNumberFromDate<dayIndex, dayIndex + 2>;
 using YearExpression = NARY<1, FV<decltype(extractYear), StringValueGetter>>;

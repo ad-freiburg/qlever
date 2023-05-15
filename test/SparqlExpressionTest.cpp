@@ -262,8 +262,8 @@ TEST(SparqlExpression, dateOperators) {
   check("1970-04-22", 1970, 4, 22);
   check("1970-04-22", 1970, 4, 22);
   check("1970-04-22", 1970, 4, 22);
-  check("42-12-24", 42, 12, 24);
-  check("-99-07-01", -99, 7, 1);
+  check("0042-12-24", 42, 12, 24);
+  check("-0099-07-01", -99, 7, 1);
 }
 
 // Test `StrlenExpression` and `StrExpression`.
