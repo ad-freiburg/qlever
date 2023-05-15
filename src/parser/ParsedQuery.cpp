@@ -407,7 +407,8 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
     for (auto& triple : basicPattern->_triples) {
       if (triple._o == variable &&
           (triple._p._operation == PropertyPath::Operation::IRI &&
-           !isVariable(triple._p))) {
+           !isVariable(triple._p)) &&
+          !triple._p._iri.starts_with(INTERNAL_ENTITIES_URI_PREFIX)) {
         matchingTriples.push_back(&triple);
       }
     }

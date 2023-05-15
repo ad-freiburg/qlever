@@ -100,11 +100,13 @@ class Index {
   // Read necessary metadata into memory and open file handles.
   void addTextFromOnDiskIndex();
 
-  using Vocab = Vocabulary<CompressedString, TripleComponentComparator>;
+  using Vocab =
+      Vocabulary<CompressedString, TripleComponentComparator, VocabIndex>;
   [[nodiscard]] const Vocab& getVocab() const;
   Vocab& getNonConstVocabForTesting();
 
-  using TextVocab = Vocabulary<std::string, SimpleStringComparator>;
+  using TextVocab =
+      Vocabulary<std::string, SimpleStringComparator, WordVocabIndex>;
   [[nodiscard]] const TextVocab& getTextVocab() const;
 
   // --------------------------------------------------------------------------
