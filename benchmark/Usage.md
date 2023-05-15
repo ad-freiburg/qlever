@@ -23,12 +23,16 @@ Those class implementations should have their own `.cpp` file in the folder `ben
 To write your own class, first include `benchmark/infrastructure/Benchmark.h` in you file. It includes all needed classes, interfaces and types.  
 Secondly, you should write your class inside the `ad_benchmark` namespace, where all benchmark infrastructure can be found.
 
-Now, the interface for benchmark classes has 3 functions:
+Now, the interface for benchmark classes has 5 functions:
+- `name`
+- `addConfigurationOptions`
 - `parseConfiguration`
 - `getMetadata`
 - `runAllBenchmarks`  
 
-`parseConfiguration` and `getMetadata` are for advanced features, and come with default implementations, that don't actually do anything. So they can be safely ignored for the time being.  
+`addConfigurationOptions`, `parseConfiguration` and `getMetadata` are for advanced features, and come with default implementations, that don't actually do anything. So they can be safely ignored for the time being.  
+
+`name` should just return the name of your benchmark class, so that you can easily identify it later.
 
 `runAllBenchmarks` is where you actually measure your functions using the classes of `BenchmarkMeasurementContainer.h`, which should be created using `BenchmarkResults`, who will save them and later pass them on for processing by the infrastructure.
 Which could look like this:
@@ -95,12 +99,37 @@ You can find instances of `BenchmarkMetadata` for your usage at 4 locations:
 - Writing a `getMetadata` function, like in the `BenchmarkInterface`, in order to give more general metadata information about your benchmark class. This is mostly, so that you don't have to constantly repeat metadata information, that are true for all the things you are measuring, in other places. For example, this would be a good place to give the name of an algorithm, if your whole benchmark class is about measuring the runtimes of one. Or you could give the time, at which those benchmark measurements were taken.
 
 ## Runtime configuration
-Passing values at runtime to your benchmark classes can be done in two ways:
+Passing values to your benchmark at runtime is possible and has its own system, split up into two phases.  
+Adding the configuration options and passing values to them.
+
+### Adding options
+Adding configuration options is done with the `addConfigurationOptions` function. More specifically, it's done by adding `BenchmarkConfigurationOption` objects to the passed instance of `BenchmarkConfiguration`, using the apt named `addConfigurationOption` function.
+
+A `BenchmarkConfigurationOption` describes four things about a configuration option:
+
+1. What **type** of values it takes. Integer, boolean, basically everything is possible, as long as there is a converter from JSON back to its own type defined in `nlohmann::json`. Or written by you.
+
+2. The name of the option.
+
+3. A description of the option. Should there be a default value, you should write it down here for other users.
+
+4. If it has a default value. If it hasn't, people will always have to provide their own value at run time.
+
+Additionally, to those four properties, you can also add a path before your configuration option, when adding it with `addConfigurationOption`. This is mainly for organizational purpose on your end and works like in JSON.
+
+### Passing values
+Setting the values of the configuration options at runtime can be done in two ways:
+
 1. Writing a JSON file and passing the file location via CLI.
-2. Using the shorthand described in `BenchmarkConfiguration::parseShortHand`, by writing it directly as an argument via CLI. Note: The shorthand will overwrite any values of the same name from the JSON file, if both ways are used.
 
-Using those two, a `BenchmarkConfiguration` object will be created and configured to hold all passed information, in a not interpreted form.
+2. Using the shorthand described in `BenchmarkConfiguration::parseShortHand`, by writing it directly as an argument via CLI.
 
-Your class can read this `BenchmarkConfiguration` by having a `parseConfiguration` function, as described in `BenchmarkInterface`. In this function, you can read out and interpret values using `BenchmarkConfiguration::getValueByNestedKeys`.
+In both of those, you have to write out the complete path to your configuration option and write the value, you wish to set it to, at the end.  
+For example: Let's say, you defined a configuration option `someNumber` and added it with the path `tableSizes/3`. Then, if you wanted to set it to `20` using JSON, you would have to write:
+```json
+{"tableSizes": [..., {"someNumber": 20}]}
+````
 
-Currently, `BenchmarkConfiguration` is a rather simple wrapper for a `nlohmann::json` object. If `nlohmann::json` can convert pure JSON to a wanted type, or if you wrote a custom converter for this type, `BenchmarkConfiguration::getValueByNestedKeys` can interpret and return values of this type for you.
+However, **if** the passed values can't be interpreted as the correct types for the configuration options, an exception will be thrown.
+
+The so created and set `BenchmarkConfiguration` can be read by your class, by having a `parseConfiguration` function, as described in `BenchmarkInterface`. In this function, you can read out and interpret values using `BenchmarkConfiguration::getConfigurationOptionByNestedKeys`.
