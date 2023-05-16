@@ -6,7 +6,7 @@ ENV LC_CTYPE C.UTF-8
 ENV DEBIAN_FRONTEND=noninteractive
 
 FROM base as builder
-RUN apt update && apt install ruby
+RUN apt update && apt install -y ruby
 RUN gem install apt-spy2 && sudo apt-spy2 fix --commit --launchpad --country=US
 RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost1.74-dev libboost-program-options1.74-dev libboost-iostreams1.74-dev
 
