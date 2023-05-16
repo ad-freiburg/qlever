@@ -38,7 +38,7 @@ ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignments(
     }
 
     // Add the json representation of the assignment.
-    contextAsJson.insert(interpretedAssignment);
+    contextAsJson.insert(std::move(interpretedAssignment));
   }
 
   return contextAsJson;
@@ -48,8 +48,7 @@ ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignments(
 std::pair<std::string, nlohmann::json>
 ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignment(
     Parser::AssignmentContext* context) const {
-  return std::make_pair(context->NAME()->getText(),
-                        visitContent(context->content()));
+  return {context->NAME()->getText(), visitContent(context->content())};
 }
 
 // __________________________________________________________________________
