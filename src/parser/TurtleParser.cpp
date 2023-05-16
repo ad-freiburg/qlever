@@ -413,13 +413,12 @@ bool TurtleParser<T>::rdfLiteral() {
       }
       return true;
     } catch (const std::exception& e) {
-        raise(e.what());
+      raise(e.what());
     }
-    }
-    else {
-      // It is okay to neither have a langtag nor an XSD datatype.
-      return true;
-    }
+  } else {
+    // It is okay to neither have a langtag nor an XSD datatype.
+    return true;
+  }
 }
 
 // ______________________________________________________________________

@@ -514,7 +514,8 @@ TEST(TurtleParserTest, DateLiterals) {
       R"("2083-12"^^<)"s + XSD_GYEARMONTH_TYPE + ">"};
   using L = DateOrLargeYear;
   std::vector<DateOrLargeYear> expected{
-      L{Date{2000, 10, 15}}, L{Date{-2014, 3, 16, 12, 13, 52}}, L{Date{2084, 1, 1}}, L{Date{2083, 12, 1}}};
+      L{Date{2000, 10, 15}}, L{Date{-2014, 3, 16, 12, 13, 52}},
+      L{Date{2084, 1, 1}}, L{Date{2083, 12, 1}}};
 
   for (size_t i = 0; i < dateLiterals.size(); ++i) {
     checkParseResult<Re2Parser, &Re2Parser::object>(dateLiterals[i],

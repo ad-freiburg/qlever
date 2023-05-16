@@ -314,12 +314,15 @@ TEST(ExportQueryExecutionTree, Dates) {
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
       1,
       // TSV
-      "<s>\t<p>\t\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>\n",  // missing
-                                              // "^^<http://www.w3.org/2001/XMLSchema#dateTime>\n",
+      "<s>\t<p>\t\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/"
+      "XMLSchema#dateTime>\n",  // missing
+                                // "^^<http://www.w3.org/2001/XMLSchema#dateTime>\n",
       // CSV
-      // TODO<joka921> This format is wrong, but this is is due to the way that CONSTRUCT queries
-      // are currently exported. This has to be fixed in a different PR.
-      "<s>,<p>,\"\"\"1950-01-01T00:00:00\"\"^^<http://www.w3.org/2001/XMLSchema#dateTime>\"\n",
+      // TODO<joka921> This format is wrong, but this is is due to the way that
+      // CONSTRUCT queries are currently exported. This has to be fixed in a
+      // different PR.
+      "<s>,<p>,\"\"\"1950-01-01T00:00:00\"\"^^<http://www.w3.org/2001/"
+      "XMLSchema#dateTime>\"\n",
       // Turtle
       "<s> <p> "
       "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime> "

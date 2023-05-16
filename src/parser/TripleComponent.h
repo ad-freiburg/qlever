@@ -183,8 +183,12 @@ class TripleComponent {
 
   bool isUndef() const { return std::holds_alternative<UNDEF>(_variant); }
 
-  bool isDate() const { return std::holds_alternative<DateOrLargeYear>(_variant); }
-  DateOrLargeYear getDate() const { return std::get<DateOrLargeYear>(_variant); }
+  bool isDate() const {
+    return std::holds_alternative<DateOrLargeYear>(_variant);
+  }
+  DateOrLargeYear getDate() const {
+    return std::get<DateOrLargeYear>(_variant);
+  }
 
   /// Access the value. If one of those methods is called but the variant
   /// doesn't hold the correct type, an exception is thrown.

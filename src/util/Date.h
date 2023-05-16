@@ -87,8 +87,6 @@ class Date {
   // Define the minimal and maximal values for the different fields (year, day,
   // ...) and calculate the number of bits required to store these values.
 
-
-
   // Year takes values in -9999..9999, which are stored shifted to
   // the positive range 0.. 2*9999 This makes the sorting of dates easier.
   static constexpr int minYear = -9999;
@@ -96,20 +94,24 @@ class Date {
   static constexpr uint8_t numBitsYear =
       std::bit_width(unsigned{maxYear - minYear});
 
-  // The special month value `0` is used to encode "no month was specified" (i.e "This is a `xsd:gYear`).
+  // The special month value `0` is used to encode "no month was specified" (i.e
+  // "This is a `xsd:gYear`).
   static constexpr int minMonth = 0;
   static constexpr unsigned maxMonth = 12;
   static constexpr uint8_t numBitsMonth = std::bit_width(maxMonth);
 
-  // The special day value `0` is used to encode "no day was specified" (i.e "This is a `xsd:gYearMonth`).
+  // The special day value `0` is used to encode "no day was specified" (i.e
+  // "This is a `xsd:gYearMonth`).
   static constexpr int minDay = 0;
   static constexpr unsigned maxDay = 31;
   static constexpr uint8_t numBitsDay = std::bit_width(maxDay);
 
-  // The special hour value `-1` is used to encode "no hour was specified" (i.e "This is a `xsd:Date`).
+  // The special hour value `-1` is used to encode "no hour was specified" (i.e
+  // "This is a `xsd:Date`).
   static constexpr int minHour = -1;
   static constexpr unsigned maxHour = 23;
-  static constexpr uint8_t numBitsHour = std::bit_width(unsigned{maxHour - minHour});
+  static constexpr uint8_t numBitsHour =
+      std::bit_width(unsigned{maxHour - minHour});
 
   static constexpr int minMinute = 0;
   static constexpr unsigned maxMinute = 59;
@@ -224,8 +226,6 @@ class Date {
     _year = static_cast<unsigned>(year - minYear);
   }
 
-
-
   /// Getter and setter for the month.
   [[nodiscard]] int getMonth() const { return static_cast<int>(_month); }
   constexpr void setMonth(int month) {
@@ -241,7 +241,9 @@ class Date {
   }
 
   /// Getter and setter for the hour.
-  [[nodiscard]] int getHour() const { return static_cast<int>(_hour + minHour); }
+  [[nodiscard]] int getHour() const {
+    return static_cast<int>(_hour + minHour);
+  }
   constexpr void setHour(int hour) {
     detail::checkBoundsIncludingMax(hour, minHour, int{maxHour}, "hour");
     _hour = static_cast<unsigned>(hour - minHour);
@@ -298,23 +300,27 @@ class Date {
     _timezone = static_cast<unsigned>(actualTimezone - minTimezoneActually);
   }
 
-  // Correctly format the timezone according to the `xsd` standard. This is a helper function for
-  // `toStringAndType` below.
+  // Correctly format the timezone according to the `xsd` standard. This is a
+  // helper function for `toStringAndType` below.
   std::string formatTimezone() const;
 
-  // Convert to a string (without quotes) that represents the stored date, and a pointer to the
-  // IRI of the corresponding datatype (currently always `xsd:dateTime`).
-  // Large years are currently always exported as `xsd:dateTime` pointing to the January 1st, 00:00 hours.
-  // (This is the format used by Wikidata).
+  // Convert to a string (without quotes) that represents the stored date, and a
+  // pointer to the IRI of the corresponding datatype (currently always
+  // `xsd:dateTime`). Large years are currently always exported as
+  // `xsd:dateTime` pointing to the January 1st, 00:00 hours. (This is the
+  // format used by Wikidata).
   std::pair<std::string, const char*> toStringAndType() const;
 };
 
-// This class either encodes a `Date` or a year that is outside the range that can be currently represented
-// by the year class [-9999, 9999]. The underlying format is as follows (starting from the most significant bit):
+// This class either encodes a `Date` or a year that is outside the range that
+// can be currently represented by the year class [-9999, 9999]. The underlying
+// format is as follows (starting from the most significant bit):
 // - 5 bits that are always zero and ignored by the representation.
-// - 2 bits that store 0 (negative year), 1 (datetime with a year in [-9999, 9999]), or 2 (positive year).
+// - 2 bits that store 0 (negative year), 1 (datetime with a year in [-9999,
+// 9999]), or 2 (positive year).
 //   These values are chosen s.t. that the order of the bits is correct.
-// - 57 bits that either encode the `Date`, or a year as a signed integer via the `ad_utility::NBitInteger` class.
+// - 57 bits that either encode the `Date`, or a year as a signed integer via
+// the `ad_utility::NBitInteger` class.
 class DateOrLargeYear {
  private:
   // The tags to discriminate between the stored formats.
@@ -324,15 +330,13 @@ class DateOrLargeYear {
 
   // The number of bits used to distinguish the different XSD types.
   static constexpr uint8_t numTypeBits = 2;
-    // The integer type for the case of a large year.
+  // The integer type for the case of a large year.
   using NBit = ad_utility::NBitInteger<numPayloadBits - numTypeBits>;
   // The bits.
   uint64_t bits_;
 
  public:
-  enum struct Type {
-    Year = 0, YearMonth, Date, DateTime
-  };
+  enum struct Type { Year = 0, YearMonth, Date, DateTime };
 
   // The number of high bits that are unused by this class (currently 5).
   static constexpr uint64_t numUnusedBits = Date::numUnusedBits - 2;
@@ -344,7 +348,8 @@ class DateOrLargeYear {
     bits_ = std::bit_cast<uint64_t>(d) | (datetime << (numPayloadBits));
   }
 
-  // Construct from a `year`. Only valid if the year is outside the legal range for a year in the `Date` class.
+  // Construct from a `year`. Only valid if the year is outside the legal range
+  // for a year in the `Date` class.
   explicit DateOrLargeYear(int64_t year, Type type) {
     AD_CONTRACT_CHECK(year < Date::minYear || year > Date::maxYear);
     auto flag = year < 0 ? negativeYear : positiveYear;
@@ -354,14 +359,14 @@ class DateOrLargeYear {
   }
 
   // True iff a complete `Date` is stored and not only a large year.
-  bool isDate() const {
-    return bits_ >>numPayloadBits == datetime;
-  }
+  bool isDate() const { return bits_ >> numPayloadBits == datetime; }
 
-  // Return the underlying `Date` object. The behavior is undefined if `isDate()` is `false`.
+  // Return the underlying `Date` object. The behavior is undefined if
+  // `isDate()` is `false`.
   Date getDateUnchecked() const { return std::bit_cast<Date>(bits_); }
 
-    // Return the underlying `Date` object. An assertion fails if `isDate()` is `false`.
+  // Return the underlying `Date` object. An assertion fails if `isDate()` is
+  // `false`.
   Date getDate() const {
     AD_CONTRACT_CHECK(bits_ >> numPayloadBits == datetime);
     return getDateUnchecked();
@@ -377,37 +382,45 @@ class DateOrLargeYear {
     }
   }
 
-   // Convert to a string (without quotes) that represents the stored date, and a pointer to the
-  // IRI of the corresponding datatype (currently always `xsd:dateTime`).
-  // Large years are currently always exported as `xsd:dateTime` pointing to the January 1st, 00:00 hours.
-  // (This is the format used by Wikidata).
-   std::pair<std::string, const char*> toStringAndType() const;
+  Type getType() const {
+    return static_cast<Type>(ad_utility::bitMaskForLowerBits(numTypeBits) &
+                             bits_);
+  }
 
-   // The bitwise comparison also correpsonds to the semantic ordering of years and dates.
+  // Convert to a string (without quotes) that represents the stored date, and a
+  // pointer to the
+  // IRI of the corresponding datatype (currently always `xsd:dateTime`).
+  // Large years are currently always exported as `xsd:dateTime` pointing to the
+  // January 1st, 00:00 hours. (This is the format used by Wikidata).
+  std::pair<std::string, const char*> toStringAndType() const;
+
+  // The bitwise comparison also correpsonds to the semantic ordering of years
+  // and dates.
   auto operator<=>(const DateOrLargeYear&) const = default;
 
   // Bitwise hashing.
-    template <typename H>
-    friend H AbslHashValue(H h, const DateOrLargeYear& d) {
-        return H::combine(std::move(h), d.bits_);
-    }
+  template <typename H>
+  friend H AbslHashValue(H h, const DateOrLargeYear& d) {
+    return H::combine(std::move(h), d.bits_);
+  }
 
-    // Parsing functions. They all have the following properties:
-    // * The input is not contained in quotes (for example 1900-12-13 for a date, not "1900-12-13").
-    // * If the year is outside the range [-9999, 9999], then the date must be January 1st, at 00:00 hours.
+  // Parsing functions. They all have the following properties:
+  // * The input is not contained in quotes (for example 1900-12-13 for a date,
+  // not "1900-12-13").
+  // * If the year is outside the range [-9999, 9999], then the date must be
+  // January 1st, at 00:00 hours.
 
-    // Parse from xsd:dateTime (e.g. 1900-12-13T03:12:00.33Z)
-    static DateOrLargeYear parseXsdDatetime(std::string_view dateString);
+  // Parse from xsd:dateTime (e.g. 1900-12-13T03:12:00.33Z)
+  static DateOrLargeYear parseXsdDatetime(std::string_view dateString);
 
-    // Parse from xsd:date (e.g. 1900-12-13)
-    static DateOrLargeYear parseXsdDate(std::string_view dateString);
+  // Parse from xsd:date (e.g. 1900-12-13)
+  static DateOrLargeYear parseXsdDate(std::string_view dateString);
 
-    // Parse from xsd:gYearMonth (e.g. 1900-03)
-    static DateOrLargeYear parseGYearMonth(std::string_view dateString);
+  // Parse from xsd:gYearMonth (e.g. 1900-03)
+  static DateOrLargeYear parseGYearMonth(std::string_view dateString);
 
-    // Parse from xsd:gYear (e.g. 1900)
-    static DateOrLargeYear parseGYear(std::string_view dateString);
-
+  // Parse from xsd:gYear (e.g. 1900)
+  static DateOrLargeYear parseGYear(std::string_view dateString);
 };
 
 #endif  // QLEVER_DATE_H
