@@ -43,7 +43,9 @@ e2e_data/*
 # ctags generated tag file
 tags
 src/tags
-/build/
 sourcelist
 .cache/
 .vscode/
+
+/cmake-build*
+/localIndices
