@@ -11,25 +11,34 @@
 #include <string_view>
 #include <type_traits>
 #include <typeinfo>
+#include <variant>
 
+#include "util/ConstexprUtils.h"
 #include "util/Exception.h"
+#include "util/TypeTraits.h"
 #include "util/json.h"
 
 namespace ad_benchmark {
 
-/*
-@brief Sets the given `std::any` to the interpreted value of the json.
-
-@tparam T What to interpret the json as.
-*/
-template <typename T>
-static void setAnyToInterpretedJsonObject(std::any& any,
-                                          const nlohmann::json& json) {
-  any = json.get<T>();
-}
-
 // Describes a configuration option.
 class BenchmarkConfigurationOption {
+ public:
+  // The type of value, that can be held by this option.
+  using ValueType = std::variant<std::monostate, bool, std::string, int, double,
+                                 std::vector<bool>, std::vector<std::string>,
+                                 std::vector<int>, std::vector<double>>;
+  enum TypesForValue {
+    boolean = 1,
+    string,
+    integer,
+    floattingPoint,
+    booleanList,
+    stringList,
+    integerList,
+    floattingPointList
+  };
+
+ private:
   // The name of the configuration option.
   const std::string identifier_;
 
@@ -38,14 +47,20 @@ class BenchmarkConfigurationOption {
   const std::string description_;
 
   // The type of value, that is held by this option.
-  const std::type_info& valueType_;
+  const TypesForValue type_;
 
   // What this configuration option was set to. Can be empty.
-  std::any value_;
+  ValueType value_;
 
-  // A pointer to a function, that will set `value` using `nlohmann::json`, by
-  // interpreting the json object as `optionType`.
-  void (*setWithJson_)(std::any&, const nlohmann::json&);
+  // Converts the index of `Valuetype` into their string representation.
+  static std::string typesForValueToString(const size_t& value) {
+    constexpr std::string_view indexToString[]{
+        "std::monostate",  "boolean",          "string",
+        "integer",         "double",           "list of booleans",
+        "list of strings", "list of integers", "list of doubles"};
+
+    return std::string{indexToString[value]};
+  }
 
  public:
   /*
@@ -67,21 +82,16 @@ class BenchmarkConfigurationOption {
   the default value will be used, should somebody try to read the value, when
   the option wasn't set at runtime.
   */
-  template <std::copy_constructible T>
-  BenchmarkConfigurationOption(const T& possibleDefaultValue,
-                               std::string_view identifier,
+  BenchmarkConfigurationOption(std::string_view identifier,
                                std::string_view description,
-                               const bool mustBeSet = false)
-      : identifier_(identifier),
-        description_(description),
-        valueType_(typeid(possibleDefaultValue)),
-        setWithJson_(&setAnyToInterpretedJsonObject<T>) {
+                               const TypesForValue& type,
+                               const ValueType& defaultValue = std::monostate{})
+      : identifier_{identifier},
+        description_{description},
+        type_{type},
+        value_{defaultValue} {
     // The `identifier` must be a string unlike `""`.
     AD_CONTRACT_CHECK(identifier != "");
-    // We only initialize `value_`, if it should have a default value.
-    if (!mustBeSet) {
-      value_ = possibleDefaultValue;
-    }
   }
 
   /*
@@ -94,16 +104,16 @@ class BenchmarkConfigurationOption {
   should the given value have a different type, than what the configuration
   option was set to.
   */
-  void setValue(auto value) {
+  void setValue(const ValueType& value) {
     // Only set our value, if the given value is of the right type.
-    if (typeid(value) == valueType_) {
+    if (type_ == value.index()) {
       value_ = value;
     } else {
       throw ad_utility::Exception(
           absl::StrCat("The type of the value in configuration option '",
-                       identifier_, "' is '", valueType_.name(),
+                       identifier_, "' is '", typesForValueToString(type_),
                        "'. It can't be set to a value of type '",
-                       typeid(value).name(), "'."));
+                       typesForValueToString(value.index()), "'."));
     }
   }
 
@@ -117,21 +127,30 @@ class BenchmarkConfigurationOption {
   @brief Return the content of the value held by the configuration option. If
   there is no value, or `T` is the wrong type, then it will throw an exception.
   */
-  template <std::copy_constructible T>
-  T getValue() const {
-    if (typeid(T) == valueType_ && hasValue()) {
-      return std::any_cast<T>(value_);
+  template <typename T>
+  requires ad_utility::isTypeContainedIn<T, ValueType>
+  std::decay_t<T> getValue() const {
+    if (std::holds_alternative<std::decay_t<T>>(value_)) {
+      return std::get<std::decay_t<T>>(value_);
     } else if (!hasValue()) {
       // The value was never set.
       throw ad_utility::Exception(
           absl::StrCat("The value in configuration option '", identifier_,
                        "' was never set."));
     } else {
+      // The index value of the type `T` in our variant.
+      // TODO Take a look, if there is a better alternative, than just copying
+      // the types held by std variant.
+      constexpr size_t index = ad_utility::getIndexOfFirstTypeToPassCheck<
+          []<typename D>() { return std::is_same_v<D, std::decay_t<T>>; },
+          std::monostate, bool, std::string, int, double, std::vector<bool>,
+          std::vector<std::string>, std::vector<int>, std::vector<double>>();
+
       // They used the wrong type.
-      throw ad_utility::Exception(
-          absl::StrCat("The type of the value in configuration option '",
-                       identifier_, "' is '", valueType_.name(),
-                       "'. It can't be cast as '", typeid(T).name(), "'."));
+      throw ad_utility::Exception(absl::StrCat(
+          "The type of the value in configuration option '", identifier_,
+          "' is '", typesForValueToString(type_), "'. It can't be cast as '",
+          typesForValueToString(index), "'."));
     }
   }
 

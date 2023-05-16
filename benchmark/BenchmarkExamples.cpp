@@ -238,22 +238,25 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
   void addConfigurationOptions(BenchmarkConfiguration* config) {
     // Add some arbitrary values.
     config->addConfigurationOption(BenchmarkConfigurationOption(
-        std::string{"22.3.2023"}, "date",
-        "The current date. Has the default value \"22.3.2023\"."));
+        "date", "The current date. Has the default value \"22.3.2023\".",
+        BenchmarkConfigurationOption::string, std::string{"22.3.2023"}));
 
     config->addConfigurationOption(BenchmarkConfigurationOption(
-        size_t{10}, "numSigns",
-        "The number of street signs. Has the default value 10."));
+        "numSigns", "The number of street signs. Has the default value 10.",
+        BenchmarkConfigurationOption::integer, 10));
 
     config->addConfigurationOption(BenchmarkConfigurationOption(
-        std::vector<bool>{false, false, false, false, false}, "CoinFlipTry",
-        "The number of succesful coin flips. As default, 5 unsuccesful coin "
-        "flips."));
+        "CoinFlipTry",
+        "The number of succesful coin flips. As default, 5 unsuccesful "
+        "coin flips.",
+        BenchmarkConfigurationOption::booleanList,
+        std::vector<bool>{false, false, false, false, false}));
 
     config->addConfigurationOption(
         BenchmarkConfigurationOption(
-            float{-41.9}, "Steve",
-            "Steves saving account balance. Has the default value -41.9."),
+            "Steve",
+            "Steves saving account balance. Has the default value -41.9.",
+            BenchmarkConfigurationOption::floattingPoint, -41.9),
         "Accounts", "Personal");
   }
 
@@ -261,18 +264,17 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
     // Collect some arbitrary values.
     std::string dateString{config.getConfigurationOptionByNestedKeys("date")
                                .getValue<std::string>()};
-    size_t numberOfStreetSigns{
-        config.getConfigurationOptionByNestedKeys("numSigns")
-            .getValue<size_t>()};
+    int numberOfStreetSigns{
+        config.getConfigurationOptionByNestedKeys("numSigns").getValue<int>()};
 
     std::vector<bool> wonOnTryX{
         config.getConfigurationOptionByNestedKeys("CoinFlipTry")
             .getValue<std::vector<bool>>()};
 
-    float balanceOnStevesSavingAccount{
+    double balanceOnStevesSavingAccount{
         config
             .getConfigurationOptionByNestedKeys("Accounts", "Personal", "Steve")
-            .getValue<float>()};
+            .getValue<double>()};
 
     // Transcribe the collected values.
     generalMetadata_.addKeyValuePair("date", dateString);
