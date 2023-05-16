@@ -24,7 +24,7 @@ ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignments(
   nlohmann::json::object_t contextAsJson;
 
   for (auto assignment : context->listOfAssignments) {
-    const std::pair<std::string, nlohmann::json>& interpretedAssignment =
+    std::pair<std::string, nlohmann::json> interpretedAssignment =
         visitAssignment(assignment);
 
     // The same key twice isn't allowed.
