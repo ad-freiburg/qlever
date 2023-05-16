@@ -383,6 +383,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
         onDiskBase_ + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX;
     prefixes = calculatePrefixes(vocabFileForPrefixCalculation,
                                  NUM_COMPRESSION_PREFIXES, 1, true);
+    ad_utility::deleteFile(vocabFileForPrefixCalculation);
   }
 
   LOG(INFO) << "Merging partial vocabularies in Unicode order "
