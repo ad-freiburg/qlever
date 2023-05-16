@@ -7,8 +7,11 @@
 #include <bitset>
 
 #include "./util/GTestHelpers.h"
+#include "global/Constants.h"
 #include "util/Date.h"
 #include "util/Random.h"
+#include "parser/TurtleParser.h"
+#include "parser/TokenizerCtre.h"
 
 using ad_utility::source_location;
 
@@ -82,23 +85,26 @@ TEST(Date, RangeChecks) {
   ASSERT_EQ(date, dateCopy);
 
   ASSERT_NO_THROW(date.setMonth(1));
+  ASSERT_NO_THROW(date.setMonth(0));
   ASSERT_NO_THROW(date.setMonth(12));
   dateCopy = date;
-  ASSERT_THROW(date.setMonth(0), DateOutOfRangeException);
+  ASSERT_THROW(date.setMonth(-1), DateOutOfRangeException);
   ASSERT_THROW(date.setMonth(13), DateOutOfRangeException);
   ASSERT_EQ(date, dateCopy);
 
   ASSERT_NO_THROW(date.setDay(1));
+  ASSERT_NO_THROW(date.setDay(0));
   ASSERT_NO_THROW(date.setDay(31));
   dateCopy = date;
-  ASSERT_THROW(date.setDay(0), DateOutOfRangeException);
+  ASSERT_THROW(date.setDay(-1), DateOutOfRangeException);
   ASSERT_THROW(date.setDay(32), DateOutOfRangeException);
   ASSERT_EQ(date, dateCopy);
 
   ASSERT_NO_THROW(date.setHour(0));
+  ASSERT_NO_THROW(date.setHour(-1));
   ASSERT_NO_THROW(date.setHour(23));
   dateCopy = date;
-  ASSERT_THROW(date.setHour(-1), DateOutOfRangeException);
+  ASSERT_THROW(date.setHour(-2), DateOutOfRangeException);
   ASSERT_THROW(date.setHour(24), DateOutOfRangeException);
   ASSERT_EQ(date, dateCopy);
 
@@ -260,7 +266,7 @@ TEST(Date, OrderRandomValues) {
 }
 
 namespace {
-    auto testDatetimeImpl(auto parseFunction, std::string_view input, int year, int month, int day,
+    auto testDatetimeImpl(auto parseFunction, std::string_view input, const char* type, int year, int month, int day,
                       int hour, int minute = 0, double second = 0.0,
                       Date::Timezone timezone = 0) {
         ASSERT_NO_THROW(std::invoke(parseFunction, input));
@@ -275,31 +281,42 @@ namespace {
         EXPECT_EQ(minute, d.getMinute());
         EXPECT_NEAR(second, d.getSecond(), 0.001);
         EXPECT_EQ(timezone, d.getTimezone());
+        const auto& [literal, outputType] = d.toStringAndType();
+        EXPECT_EQ(literal, input);
+        EXPECT_STREQ(type, outputType);
+
+        TripleComponent parsedAsTurtle =
+            TurtleStringParser<TokenizerCtre>::parseTripleObject(
+                absl::StrCat("\"", input, "\"^^<", type, ">"));
+        auto optionalId = parsedAsTurtle.toValueIdIfNotString();
+        ASSERT_TRUE(optionalId.has_value());
+        ASSERT_TRUE(optionalId.value().getDatatype() == Datatype::Date);
+        ASSERT_EQ(optionalId.value().getDate(), dateLarge);
     }
     auto testDatetime(std::string_view input, int year, int month, int day,
                   int hour, int minute = 0, double second = 0.0,
                   Date::Timezone timezone = 0) {
-        return testDatetimeImpl(DateOrLargeYear::parseXsdDatetime, input, year, month, day, hour, minute, second, timezone);
+        return testDatetimeImpl(DateOrLargeYear::parseXsdDatetime, input, XSD_DATETIME_TYPE, year, month, day, hour, minute, second, timezone);
 }
 
 auto testDate(std::string_view input, int year, int month, int day,
               Date::Timezone timezone = 0,
               source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  return testDatetimeImpl(DateOrLargeYear::parseXsdDate, input, year, month, day, 0, 0, 0, timezone);
+  return testDatetimeImpl(DateOrLargeYear::parseXsdDate, input, XSD_DATE_TYPE, year, month, day, -1, 0, 0, timezone);
 }
 
 auto testYear(std::string_view input, int year, Date::Timezone timezone = 0,
               source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  return testDatetimeImpl(DateOrLargeYear::parseGYear, input, year, 1, 1, 0, 0, 0, timezone);
+  return testDatetimeImpl(DateOrLargeYear::parseGYear, input, XSD_GYEAR_TYPE, year, 0, 0, 0, 0, 0, timezone);
 }
 
 auto testYearMonth(std::string_view input, int year, int month,
                    Date::Timezone timezone = 0,
                    source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  return testDatetimeImpl(DateOrLargeYear::parseGYearMonth, input, year, month, 1, 0, 0, 0, timezone);
+  return testDatetimeImpl(DateOrLargeYear::parseGYearMonth, input, XSD_GYEARMONTH_TYPE, year, month, 0, 0, 0, 0, timezone);
 }
 }  // namespace
 
@@ -336,4 +353,51 @@ TEST(Date, parseYear) {
   testYear("2034Z", 2034, Date::TimezoneZ{});
   testYear("2034", 2034, Date::NoTimezone{});
   testYear("-2034", -2034, Date::NoTimezone{});
+}
+
+
+namespace {
+auto testLargeYearImpl(auto parseFunction, std::string_view input,
+                       const char* type, int year) {
+  ASSERT_NO_THROW(std::invoke(parseFunction, input));
+  DateOrLargeYear dateLarge = std::invoke(parseFunction, input);
+  ASSERT_FALSE(dateLarge.isDate());
+  EXPECT_EQ(dateLarge.getYear(), year);
+  const auto& [literal, outputType] = dateLarge.toStringAndType();
+  EXPECT_EQ(literal, input);
+  EXPECT_STREQ(type, outputType);
+
+  TripleComponent parsedAsTurtle =
+      TurtleStringParser<TokenizerCtre>::parseTripleObject(
+          absl::StrCat("\"", input, "\"^^<", type, ">"));
+  auto optionalId = parsedAsTurtle.toValueIdIfNotString();
+  ASSERT_TRUE(optionalId.has_value());
+  ASSERT_TRUE(optionalId.value().getDatatype() == Datatype::Date);
+  ASSERT_EQ(optionalId.value().getDate(), dateLarge);
+}
+
+auto testLargeYearDatetime(std::string_view input, int year) {
+  return testLargeYearImpl(DateOrLargeYear::parseXsdDatetime, input,
+                           XSD_DATETIME_TYPE, year);
+}
+
+auto testLargeYearDate(std::string_view input, int year) {
+  return testLargeYearImpl(DateOrLargeYear::parseXsdDate, input, XSD_DATE_TYPE,
+                           year);
+}
+
+auto testLargeYearGYearMonth(std::string_view input, int year) {
+  return testLargeYearImpl(DateOrLargeYear::parseGYearMonth, input,
+                           XSD_GYEARMONTH_TYPE, year);
+}
+
+auto testLargeYearGYear(std::string_view input, int year) {
+  return testLargeYearImpl(DateOrLargeYear::parseGYear, input, XSD_GYEAR_TYPE,
+                           year);
+}
+}
+
+TEST(Date, parseLargeYear) {
+  testLargeYearGYear("2039481726", 2039481726);
+  testLargeYearGYear("2039481726Z", 2039481726);
 }

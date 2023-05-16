@@ -4,6 +4,63 @@
 
 #include "util/Date.h"
 
+// ____________________________________________________________________________________________________
+std::string Date::formatTimezone() const {
+  auto impl = []<typename T>(const T& value) -> std::string {
+    if constexpr (std::is_same_v<T, NoTimezone>) {
+      return "";
+    } else if constexpr (std::is_same_v<T, TimezoneZ>) {
+      return "Z";
+    } else {
+      static_assert(std::is_same_v<T, int>);
+      constexpr static std::string_view format = "%0+3d:00";
+      return absl::StrFormat(format, value);
+    }
+  };
+  return std::visit(impl, getTimezone());
+}
+
+// ____________________________________________________________________________________________________
+std::pair<std::string, const char*> Date::toStringAndType() const {
+  std::string dateString;
+  const char* type = nullptr;
+
+  if (getMonth() == 0) {
+    constexpr static std::string_view formatString = "%04d";
+    dateString =
+        absl::StrFormat(formatString, getYear());
+    type = XSD_GYEAR_TYPE;
+  } else if (getDay() == 0) {
+    constexpr static std::string_view formatString = "%04d-%02d";
+    dateString =
+        absl::StrFormat(formatString, getYear(), getMonth());
+    type = XSD_GYEARMONTH_TYPE;
+  } else if (getHour() == -1) {
+    constexpr static std::string_view formatString = "%04d-%02d-%02d";
+    dateString =
+        absl::StrFormat(formatString, getYear(), getMonth(), getDay());
+    type = XSD_DATE_TYPE;
+  } else {
+    type = XSD_DATETIME_TYPE;
+    double seconds = getSecond();
+    double dIntPart;
+    if (std::modf(seconds, &dIntPart) == 0.0) {
+      constexpr std::string_view formatString =
+          "%04d-%02d-%02dT%02d:%02d:%02d";
+      dateString =
+          absl::StrFormat(formatString, getYear(), getMonth(), getDay(),
+                          getHour(), getMinute(), static_cast<int>(dIntPart));
+    } else {
+      constexpr std::string_view formatString =
+          "%04d-%02d-%02dT%02d:%02d:%05.2f";
+      dateString =
+          absl::StrFormat(formatString, getYear(), getMonth(), getDay(),
+                          getHour(), getMinute(), getSecond());
+    }
+  }
+  return {absl::StrCat(dateString, formatTimezone()), type};
+}
+
 // _________________________________________________________________
 std::pair<std::string, const char*> DateOrLargeYear::toStringAndType() const {
     auto flag = bits_ >> numPayloadBits;
@@ -55,13 +112,30 @@ static Date::Timezone parseTimezone(const auto& match) {
 // `hour, minute, second` are all `0`.
 static DateOrLargeYear makeDateOrLargeYear(int64_t year, int month, int day, int hour, int minute, double second, Date::Timezone timezone) {
     if (year < Date::minYear || year > Date::maxYear) {
-      if (month != 1 || day != 1 || hour != 0 || minute != 0 || second != 0.0) {
-        throw std::runtime_error{"When the year of a datetime object is smaller than -9999 or larger than 9999 then the month and day have to be 1 and the hour, minute, and second must be all 0 in QLever's implementation of Dates."};
-      }
       if (year < DateOrLargeYear::minYear || year > DateOrLargeYear::maxYear) {
         throw std::runtime_error{absl::StrCat("QLever cannot encode dates that are less than ", DateOrLargeYear::minYear, " or larger than ", DateOrLargeYear::maxYear)};
       }
-        return DateOrLargeYear(year);
+
+      if (month == 0) {
+        return DateOrLargeYear(year, DateOrLargeYear::Type::Year);
+      } else if (month != 1) {
+        throw std::runtime_error{"When the year of a datetime object is smaller than -9999 or larger than 9999 then the month has to be 1 in QLever's implementation of Dates"};
+      }
+      if (day == 0) {
+        return DateOrLargeYear(year, DateOrLargeYear::Type::YearMonth);
+      } else if (day != 1) {
+        throw std::runtime_error{"When the year of a datetime object is smaller than -9999 or larger than 9999 then the day has to be 1 in QLever's implementation of Dates"};
+      }
+      if (hour == -1) {
+        return DateOrLargeYear(year, DateOrLargeYear::Type::Date);
+      } else if (hour != 0) {
+        throw std::runtime_error{"When the year of a datetime object is smaller than -9999 or larger than 9999 then the hour has to be 0 in QLever's implementation of Dates"};
+      }
+
+      if (minute != 0 || second != 0.0) {
+        throw std::runtime_error{"When the year of a datetime object is smaller than -9999 or larger than 9999 then the minute and second must both be 0 in QLever's implementation of Dates."};
+      }
+      return DateOrLargeYear(year, DateOrLargeYear::Type::DateTime);
     }
     return DateOrLargeYear{Date{static_cast<int>(year), month, day, hour, minute, second, timezone}};
 }
@@ -94,12 +168,12 @@ DateOrLargeYear DateOrLargeYear::parseXsdDate(std::string_view dateString) {
   int64_t year = toInt<"year">(match);
   int month = toInt<"month">(match);
   int day = toInt<"day">(match);
-  return makeDateOrLargeYear(year, month, day, 0, 0, 0.0, parseTimezone(match));
+  return makeDateOrLargeYear(year, month, day, -1, 0, 0.0, parseTimezone(match));
 }
 
 // __________________________________________________________________________________
 DateOrLargeYear DateOrLargeYear::parseGYear(std::string_view dateString) {
-  constexpr static ctll::fixed_string yearRegex = "(?<year>-?\\d{4})";
+  constexpr static ctll::fixed_string yearRegex = "(?<year>-?\\d{4,})";
   constexpr static ctll::fixed_string dateTime =
       yearRegex + grp(timezoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
@@ -109,7 +183,7 @@ DateOrLargeYear DateOrLargeYear::parseGYear(std::string_view dateString) {
   int64_t year = toInt<"year">(match);
   // TODO<joka921> How should we distinguish between `dateTime`, `date`,
   // `year` and `yearMonth` in the underlying representation?
-  return makeDateOrLargeYear(year, 1, 1, 0, 0, 0.0, parseTimezone(match));
+  return makeDateOrLargeYear(year, 0, 0, 0, 0, 0.0, parseTimezone(match));
 }
 
 // __________________________________________________________________________________
@@ -126,5 +200,5 @@ DateOrLargeYear DateOrLargeYear::parseGYearMonth(std::string_view dateString) {
   int month = toInt<"month">(match);
   // TODO<joka921> How should we distinguish between `dateTime`, `date`,
   // `year` and `yearMonth` in the underlying representation?
-  return makeDateOrLargeYear(year, month, 1, 0, 0, 0.0, parseTimezone(match));
+  return makeDateOrLargeYear(year, month, 0, 0, 0, 0.0, parseTimezone(match));
 }
