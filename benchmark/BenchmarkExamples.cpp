@@ -256,7 +256,7 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
         BenchmarkConfigurationOption(
             "Steve",
             "Steves saving account balance. Has the default value -41.9.",
-            BenchmarkConfigurationOption::floattingPoint, -41.9),
+            BenchmarkConfigurationOption::floatingPoint, -41.9),
         "Accounts", "Personal");
   }
 

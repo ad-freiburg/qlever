@@ -27,15 +27,15 @@ class BenchmarkConfigurationOption {
   using ValueType = std::variant<std::monostate, bool, std::string, int, double,
                                  std::vector<bool>, std::vector<std::string>,
                                  std::vector<int>, std::vector<double>>;
-  enum TypesForValue {
+  enum ValueTypeIndexes {
     boolean = 1,
     string,
     integer,
-    floattingPoint,
+    floatingPoint,
     booleanList,
     stringList,
     integerList,
-    floattingPointList
+    floatingPointList
   };
 
  private:
@@ -47,7 +47,7 @@ class BenchmarkConfigurationOption {
   const std::string description_;
 
   // The type of value, that is held by this option.
-  const TypesForValue type_;
+  const ValueTypeIndexes type_;
 
   // What this configuration option was set to. Can be empty.
   ValueType value_;
@@ -65,26 +65,20 @@ class BenchmarkConfigurationOption {
  public:
   /*
   @brief Create a configuration option, whose internal value can only be set to
-  values of a specific type. Note: This type must be copy constructible.
+  values of a specific type in a set of types.
 
-  @param possibleDefaultValue Because constructors can't be called with explicit
-  template arguments, we pass the type of the value, that you want the
-  configuration option to hold, indirectly. If `mustBeSet` is `false`, the
-  internal value of the configuration option will be set to
-  `possibleDefaultValue`, as a kind of default value. Otherwise, it will be
-  discarded.
   @param identifier The name of the configuration option, with which it can be
   identified later.
   @param description Describes, what the configuration option stands for. For
   example: "The amount of rows in the table. Has a default value of 3."
-  @param mustBeSet Must this option be set per runtime arguments? If yes, trying
-  to read the held value will cause an exception, if it was never set. If no,
-  the default value will be used, should somebody try to read the value, when
-  the option wasn't set at runtime.
+  @param type The index nummer for the type of value, that you want to save
+  here. Managed per enum.
+  @param defaultValue The default value, if the option isn't set at runtime.
+  `std::monostate` counts as no default value.
   */
   BenchmarkConfigurationOption(std::string_view identifier,
                                std::string_view description,
-                               const TypesForValue& type,
+                               const ValueTypeIndexes& type,
                                const ValueType& defaultValue = std::monostate{})
       : identifier_{identifier},
         description_{description},
