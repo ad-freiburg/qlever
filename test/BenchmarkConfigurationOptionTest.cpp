@@ -204,6 +204,9 @@ TEST(BenchmarkConfigurationOptionTest, SetValueWithJson) {
                 .json););
       }
     });
+
+    ASSERT_ANY_THROW(option.setValueWithJson(
+        nlohmann::json::parse(R"--("the value is in here " : [true, 4, 4.2])--")));
   };
 
   // Do the test case for every possible type.
