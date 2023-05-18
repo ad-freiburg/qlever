@@ -222,18 +222,75 @@ BenchmarkConfiguration::operator std::string() const {
       keyToConfigurationOptionIndex_.flatten()};
 
   // Setup for printing the locations of the option in json format, so that
-  // people can easier underrstand, where everything is.
+  // people can easier understand, where everything is.
   nlohmann::json prettyKeyToConfigurationOptionIndex(
       keyToConfigurationOptionIndex_);
-  // Replace the numbers in the 'leaves' of the 'tree' with a reference to the
-  // option list.
+
+  /*
+  Replace the numbers in the 'leaves' of the 'tree' with the default value of
+  the option, or a random value of that type, if it doesn't have a
+  default value.
+  */
   for (const auto& keyToLeaf : flattendKeyToConfigurationOptionIndex.items()) {
-    prettyKeyToConfigurationOptionIndex.at(
-        nlohmann::json::json_pointer{keyToLeaf.key()}) =
-        absl::StrCat("See configuration option '",
-                     configurationOptions_.at(keyToLeaf.value().get<size_t>())
-                         .getIdentifier(),
-                     "' in the list of available configuration options below.");
+    // Pointer to the position of this option in
+    // `prettyKeyToConfigurationOptionIndex`.
+    const nlohmann::json::json_pointer jsonOptionPointer{keyToLeaf.key()};
+    // What configuration option are we currently, indirectly, looking at?
+    const BenchmarkConfigurationOption& option =
+        configurationOptions_.at(keyToLeaf.value().get<size_t>());
+
+    // What kind of type does it hold?
+    const BenchmarkConfigurationOption::ValueTypeIndexes& typeIndex =
+        option.getActualValueType();
+
+    if (option.hasDefaultValue()) {
+      /*
+      Getting the default value requires us to provide a type. In order to
+      convert `typeIndex` to this type, we have to get creative.
+      */
+      ad_utility::RuntimeValueToCompileTimeValue<
+          std::variant_size_v<BenchmarkConfigurationOption::ValueType> - 1>(
+          typeIndex, [&jsonOptionPointer, &option,
+                      &prettyKeyToConfigurationOptionIndex]<size_t index>() {
+            prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
+                option.getDefaultValue<std::variant_alternative_t<
+                    index, BenchmarkConfigurationOption::ValueType>>();
+          });
+    } else {
+      // Some premade example value.
+      using ValueTypeIndexes = BenchmarkConfigurationOption::ValueTypeIndexes;
+      switch (typeIndex) {
+        case ValueTypeIndexes::boolean:
+          prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) = false;
+          break;
+        case ValueTypeIndexes::string:
+          prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
+              "Example string";
+          break;
+        case ValueTypeIndexes::integer:
+          prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) = 42;
+          break;
+        case ValueTypeIndexes::floatingPoint:
+          prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) = 4.2;
+          break;
+        case ValueTypeIndexes::booleanList:
+          prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
+              std::vector{true, false};
+          break;
+        case ValueTypeIndexes::stringList:
+          prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
+              std::vector{"Example", "string", "list"};
+          break;
+        case ValueTypeIndexes::integerList:
+          prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
+              std::vector{40, 41, 42};
+          break;
+        case ValueTypeIndexes::floatingPointList:
+          prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
+              std::vector{40.0, 41.1, 42.2};
+          break;
+      }
+    }
   }
 
   // List the configuration options themselves.
@@ -251,7 +308,8 @@ BenchmarkConfiguration::operator std::string() const {
   }
 
   return absl::StrCat(
-      "Locations of available configuration options:\n",
+      "Locations of available configuration options with example "
+      "values:\n",
       addIndentation(prettyKeyToConfigurationOptionIndex.dump(2), 1),
       "\n\nAvailable configuration options:\n",
       addIndentation(stream.str(), 1));
