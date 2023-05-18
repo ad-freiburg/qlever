@@ -122,12 +122,6 @@ int main(int argc, char** argv) {
   BenchmarkRegister::addConfigurationOptionsWtihAllRegisteredBenchmarks(
       &config);
 
-  // Print all the available configuration options, if wanted.
-  if (vm.count("configuration-options")) {
-    std::cerr << static_cast<std::string>(config) << "\n";
-    exit(0);
-  }
-
   // Set all the configuration options, if there was any runtime configuration
   // given.
   if (vm.count("configuration-json")) {
@@ -135,6 +129,12 @@ int main(int argc, char** argv) {
   }
   if (vm.count("configuration-shorthand")) {
     config.setShortHand(shortHandConfigurationString);
+  }
+
+  // Print all the available configuration options, if wanted.
+  if (vm.count("configuration-options")) {
+    std::cerr << static_cast<std::string>(config) << "\n";
+    exit(0);
   }
 
   // Pass the configuration, even if it is empty.
