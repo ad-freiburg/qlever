@@ -121,10 +121,12 @@ inline QueryExecutionContext* getQec(std::string turtleInput = "",
     std::unique_ptr<QueryResultCache> cache_;
     std::unique_ptr<query_state::QueryStateManager> queryStateManager_ =
         std::make_unique<query_state::QueryStateManager>();
+    std::unique_ptr<websocket::WebSocketManager> webSocketManager_ =
+        std::make_unique<websocket::WebSocketManager>();
     std::unique_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
             *index_, cache_.get(), makeAllocator(), SortPerformanceEstimator{},
-            *queryStateManager_,
+            *queryStateManager_, *webSocketManager_,
             ad_utility::websocket::common::OwningQueryId::uniqueId());
   };
 

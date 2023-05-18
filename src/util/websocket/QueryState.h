@@ -4,9 +4,17 @@
 
 #pragma once
 
+#include <absl/container/flat_hash_map.h>
+
+#include <mutex>
 #include <optional>
 
 #include "util/websocket/Common.h"
+#include "util/websocket/WebSocketManager.h"
+
+namespace ad_utility::websocket {
+class WebSocketManager;
+}
 
 namespace ad_utility::query_state {
 
@@ -19,8 +27,9 @@ class QueryStateManager {
 
  public:
   QueryStateManager() = default;
-  void signalUpdateForQuery(const QueryId& queryId,
-                            const RuntimeInformation& runtimeInformation);
+  void signalUpdateForQuery(
+      const QueryId& queryId, const RuntimeInformation& runtimeInformation,
+      ad_utility::websocket::WebSocketManager& webSocketManager);
   void clearQueryInfo(const QueryId& queryId);
   SharedPayloadAndTimestamp getIfUpdatedSince(
       const QueryId& queryId, websocket::common::Timestamp timeStamp);

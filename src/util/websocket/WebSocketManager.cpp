@@ -5,12 +5,9 @@
 #include "WebSocketManager.h"
 
 #include <absl/cleanup/cleanup.h>
-#include <absl/container/btree_map.h>
-#include <absl/container/flat_hash_map.h>
 #include <ctre/ctre.h>
 
 #include <boost/asio/experimental/awaitable_operators.hpp>
-#include <iostream>
 #include <mutex>
 #include <optional>
 
@@ -20,37 +17,10 @@
 
 namespace ad_utility::websocket {
 using namespace boost::asio::experimental::awaitable_operators;
-using websocket = beast::websocket::stream<tcp::socket>;
-using common::SharedPayloadAndTimestamp;
 
-class WebSocketId {
-  const void* address_;
-
- public:
-  // Generate unique webSocketIds based on the address of the passed reference.
-  // Make sure you're not moving the socket anywhere!
-  explicit WebSocketId(const websocket& webSocket) : address_{&webSocket} {}
-
-  constexpr bool operator==(const WebSocketId&) const noexcept = default;
-
-  template <typename H>
-  friend H AbslHashValue(H h, const WebSocketId& c) {
-    return H::combine(std::move(h), c.address_);
-  }
-};
-
-using QueryUpdateCallback = std::function<void(SharedPayloadAndTimestamp)>;
-
-static std::mutex activeWebSocketsMutex{};
-static absl::btree_multimap<QueryId, WebSocketId> activeWebSockets{};
-// Note there may be active websockets that are not currently listening
-// because of concurrency.
-static std::mutex listeningWebSocketsMutex{};
-static absl::flat_hash_map<WebSocketId, QueryUpdateCallback>
-    listeningWebSockets{};
-
-void registerCallback(const QueryId& queryId, WebSocketId webSocketId,
-                      QueryUpdateCallback callback) {
+void WebSocketManager::registerCallback(const QueryId& queryId,
+                                        WebSocketId webSocketId,
+                                        QueryUpdateCallback callback) {
   std::lock_guard lock1{activeWebSocketsMutex};
   // make sure websocket has not been shut down right before acquiring the lock
   if (containsKeyValuePair(activeWebSockets, queryId, webSocketId)) {
@@ -63,22 +33,22 @@ void registerCallback(const QueryId& queryId, WebSocketId webSocketId,
 }
 
 // ONLY CALL THIS IF YOU HOLD the listeningWebSocketsMutex!!!
-void fireCallbackAndRemoveIfPresentNoLock(WebSocketId webSocketId,
-                                          SharedPayloadAndTimestamp payload) {
+void WebSocketManager::fireCallbackAndRemoveIfPresentNoLock(
+    WebSocketId webSocketId, SharedPayloadAndTimestamp payload) {
   if (listeningWebSockets.contains(webSocketId)) {
     listeningWebSockets.at(webSocketId)(std::move(payload));
     listeningWebSockets.erase(webSocketId);
   }
 }
 
-void fireCallbackAndRemoveIfPresent(WebSocketId webSocketId,
-                                    SharedPayloadAndTimestamp payload) {
+void WebSocketManager::fireCallbackAndRemoveIfPresent(
+    WebSocketId webSocketId, SharedPayloadAndTimestamp payload) {
   std::lock_guard lock{listeningWebSocketsMutex};
   fireCallbackAndRemoveIfPresentNoLock(webSocketId, std::move(payload));
 }
 
-bool fireAllCallbacksForQuery(const QueryId& queryId,
-                              SharedPayloadAndTimestamp payload) {
+bool WebSocketManager::fireAllCallbacksForQuery(
+    const QueryId& queryId, SharedPayloadAndTimestamp payload) {
   std::lock_guard lock1{activeWebSocketsMutex};
   std::lock_guard lock2{listeningWebSocketsMutex};
   auto range = activeWebSockets.equal_range(queryId);
@@ -90,12 +60,13 @@ bool fireAllCallbacksForQuery(const QueryId& queryId,
   return counter < activeWebSockets.count(queryId);
 }
 
-void enableWebSocket(WebSocketId webSocketId, const QueryId& queryId) {
+void WebSocketManager::enableWebSocket(WebSocketId webSocketId,
+                                       const QueryId& queryId) {
   std::lock_guard lock{activeWebSocketsMutex};
   activeWebSockets.insert({queryId, webSocketId});
 }
 
-void disableWebSocket(
+void WebSocketManager::disableWebSocket(
     WebSocketId webSocketId, const QueryId& queryId,
     ad_utility::query_state::QueryStateManager& queryStateManager) {
   bool noListenersLeft;
@@ -112,11 +83,12 @@ void disableWebSocket(
 
 // Based on https://stackoverflow.com/a/69285751
 template <typename CompletionToken>
-auto waitForEvent(const QueryId& queryId, WebSocketId webSocketId,
-                  common::Timestamp lastUpdate,
-                  ad_utility::query_state::QueryStateManager& queryStateManager,
-                  CompletionToken&& token) {
-  auto initiate = [lastUpdate, &queryStateManager]<typename Handler>(
+auto WebSocketManager::waitForEvent(
+    const QueryId& queryId, WebSocketId webSocketId,
+    common::Timestamp lastUpdate,
+    ad_utility::query_state::QueryStateManager& queryStateManager,
+    CompletionToken&& token) {
+  auto initiate = [this, lastUpdate, &queryStateManager]<typename Handler>(
                       Handler&& self, const QueryId& queryId,
                       WebSocketId webSocketId) mutable {
     auto callback = [self = std::make_shared<Handler>(std::forward<Handler>(
@@ -135,10 +107,10 @@ auto waitForEvent(const QueryId& queryId, WebSocketId webSocketId,
       initiate, token, queryId, webSocketId);
 }
 
-net::awaitable<void> handleClientCommands(
+net::awaitable<void> WebSocketManager::handleClientCommands(
     websocket& ws, WebSocketId webSocketId, const QueryId& queryId,
     ad_utility::query_state::QueryStateManager& queryStateManager) {
-  absl::Cleanup cleanup{[webSocketId, queryId, &queryStateManager]() {
+  absl::Cleanup cleanup{[this, webSocketId, queryId, &queryStateManager]() {
     disableWebSocket(webSocketId, queryId, queryStateManager);
   }};
   beast::flat_buffer buffer;
@@ -152,7 +124,7 @@ net::awaitable<void> handleClientCommands(
   }
 }
 
-net::awaitable<void> waitForServerEvents(
+net::awaitable<void> WebSocketManager::waitForServerEvents(
     websocket& ws, WebSocketId webSocketId, const QueryId& queryId,
     ad_utility::query_state::QueryStateManager& queryStateManager) {
   common::Timestamp lastUpdate = std::chrono::steady_clock::now();
@@ -174,7 +146,7 @@ net::awaitable<void> waitForServerEvents(
   }
 }
 
-net::awaitable<void> connectionLifecycle(
+net::awaitable<void> WebSocketManager::connectionLifecycle(
     tcp::socket socket, http::request<http::string_body> request,
     ad_utility::query_state::QueryStateManager& queryStateManager) {
   auto match = ctre::match<"/watch/([^/?]+)">(request.target());
@@ -217,7 +189,7 @@ net::awaitable<void> connectionLifecycle(
   }
 }
 
-net::awaitable<void> manageConnection(
+net::awaitable<void> WebSocketManager::manageConnection(
     tcp::socket socket, http::request<http::string_body> request,
     ad_utility::query_state::QueryStateManager& queryStateManager) {
   auto executor = socket.get_executor();

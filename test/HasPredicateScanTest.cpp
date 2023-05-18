@@ -248,9 +248,10 @@ TEST(HasPredicateScan, subtreeS) {
   Index index;
   QueryResultCache cache{};
   ad_utility::query_state::QueryStateManager queryStateManager{};
+  ad_utility::websocket::WebSocketManager webSocketManager{};
   QueryExecutionContext ctx(
       index, &cache, makeAllocator(), SortPerformanceEstimator{},
-      queryStateManager,
+      queryStateManager, webSocketManager,
       ad_utility::websocket::common::OwningQueryId::uniqueId());
 
   // create the subtree operation
