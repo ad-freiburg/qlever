@@ -12,8 +12,7 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
     const uint64_t lower, const uint64_t upper) const {
   AD_CONTRACT_CHECK(upper >= lower);
   assert(_blocks.size() > 0);
-  assert(_blocks.size() ==
-         _blockUpperBoundWordIds.size() + _blockUpperBoundEntityIds.size());
+  assert(_blocks.size() == _blockUpperBoundWordIds.size());
 
   // Binary search in the sorted _blockUpperBoundWordIds vector.
   auto it = std::lower_bound(_blockUpperBoundWordIds.begin(),
@@ -44,40 +43,6 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
 }
 
 // _____________________________________________________________________________
-bool TextMetaData::existsTextBlockForEntityId(const uint64_t eid) const {
-  assert(_blocks.size() > 0);
-  assert(_blocks.size() ==
-         _blockUpperBoundWordIds.size() + _blockUpperBoundEntityIds.size());
-
-  // Binary search in the sorted _blockUpperBoundWordIds vector.
-  auto it = std::lower_bound(_blockUpperBoundEntityIds.begin(),
-                             _blockUpperBoundEntityIds.end(), eid);
-
-  return (*it == eid);
-}
-
-// _____________________________________________________________________________
-const TextBlockMetaData& TextMetaData::getBlockInfoByEntityId(
-    const uint64_t eid) const {
-  assert(_blocks.size() > 0);
-  assert(_blocks.size() ==
-         _blockUpperBoundWordIds.size() + _blockUpperBoundEntityIds.size());
-
-  // Binary search in the sorted _blockUpperBoundWordIds vector.
-  auto it = std::lower_bound(_blockUpperBoundEntityIds.begin(),
-                             _blockUpperBoundEntityIds.end(), eid);
-
-  assert(*it == eid);
-
-  // Use the info to retrieve an index.
-  size_t index = static_cast<size_t>(it - _blockUpperBoundEntityIds.begin()) +
-                 _blockUpperBoundWordIds.size();
-  assert(eid == _blocks[index]._lastWordId);
-  assert(eid == _blocks[index]._firstWordId);
-  return _blocks[index];
-}
-
-// _____________________________________________________________________________
 size_t TextMetaData::getBlockCount() const { return _blocks.size(); }
 
 // _____________________________________________________________________________
@@ -98,20 +63,15 @@ string TextMetaData::statistics() const {
   ad_utility::ReadableNumberFacet facet(1);
   std::locale locWithNumberGrouping(loc, &facet);
   os.imbue(locWithNumberGrouping);
-  os << "#records = " << _nofEntityContexts
-     << ", #words = " << totalElementsClassicLists
-     << ", #entities = " << _nofEntities << ", #blocks = " << _blocks.size();
+  os << "#words = " << totalElementsClassicLists
+     << ", #blocks = " << _blocks.size();
   return std::move(os).str();
 }
 
 // _____________________________________________________________________________
-void TextMetaData::addBlock(const TextBlockMetaData& md, bool isEntityBlock) {
+void TextMetaData::addBlock(const TextBlockMetaData& md) {
   _blocks.push_back(md);
-  if (isEntityBlock) {
-    _blockUpperBoundEntityIds.push_back(md._lastWordId);
-  } else {
-    _blockUpperBoundWordIds.push_back(md._lastWordId);
-  }
+  _blockUpperBoundWordIds.push_back(md._lastWordId);
 }
 
 // _____________________________________________________________________________
