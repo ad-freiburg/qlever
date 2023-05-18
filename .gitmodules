@@ -13,3 +13,6 @@
 [submodule "third_party/antlr4"]
 	path = third_party/antlr4
 	url = https://github.com/antlr/antlr4.git
+[submodule "third_party/rtree"]
+	path = third_party/rtree
+	url = https://github.com/noahnock/Bachelorprojekt.git

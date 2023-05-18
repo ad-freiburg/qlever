@@ -161,11 +161,12 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   {
     VocabularyMerger m;
     auto file = ad_utility::makeOfstream(_basePath + INTERNAL_VOCAB_SUFFIX);
-    auto internalVocabularyAction = [&file](const auto& word) {
+    auto internalVocabularyAction = [&file](const auto& word, const auto& index) {
       file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
     };
+    auto externalVocabularyAction = [](const auto& word, const auto& index) {};
     res = m.mergeVocabulary(_basePath, 2, TripleComponentComparator(),
-                            internalVocabularyAction);
+                            internalVocabularyAction, externalVocabularyAction);
   }
 
   // No language tags in text file
@@ -206,11 +207,13 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     {
       VocabularyMerger m;
       auto file = ad_utility::makeOfstream(basename + INTERNAL_VOCAB_SUFFIX);
-      auto internalVocabularyAction = [&file](const auto& word) {
+      auto internalVocabularyAction = [&file](const auto& word, const auto& index) {
         file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
       };
+
+      auto externalVocabularyAction = [](const auto& word, const auto& index) {};
       m.mergeVocabulary(basename, 1, v.getCaseComparator(),
-                        internalVocabularyAction);
+                        internalVocabularyAction, externalVocabularyAction);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
     ASSERT_EQ(V(0), idMap[V(5)]);
@@ -249,11 +252,12 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     {
       VocabularyMerger m;
       auto file = ad_utility::makeOfstream(basename + INTERNAL_VOCAB_SUFFIX);
-      auto internalVocabularyAction = [&file](const auto& word) {
+      auto internalVocabularyAction = [&file](const auto& word, const auto& index) {
         file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
       };
+      auto externalVocabularyAction = [](const auto& word, const auto& index) {};
       m.mergeVocabulary(basename, 1, v.getCaseComparator(),
-                        internalVocabularyAction);
+                        internalVocabularyAction, externalVocabularyAction);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
     EXPECT_EQ(V(0), idMap[V(6)]);

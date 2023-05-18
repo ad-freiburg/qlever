@@ -17,7 +17,7 @@
 #include <util/HashMap.h>
 #include <util/Serializer/FileSerializer.h>
 #include <util/TupleHelpers.h>
-#include <Rtree.h>
+//#include <Rtree/Rtree.h>
 
 #include <algorithm>
 #include <cmath>
@@ -369,12 +369,9 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
         [&compressionOutfile](const auto& word, const auto& index) {
           compressionOutfile << RdfEscaping::escapeNewlinesAndBackslashes(word)
                              << '\n';
-
-          // TODO write the word with index into the rtree file
         };
     auto externalVocabularyActionCompression =
             [](const auto& word, const auto& index) {
-                // TODO write the word with index into the rtree file
     };
     m._noIdMapsAndIgnoreExternalVocab = true;
     auto mergeResult =
@@ -404,17 +401,27 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     };
     auto wordWriter =
         _vocab.makeUncompressingWordWriter(_onDiskBase + INTERNAL_VOCAB_SUFFIX);
-    auto internalVocabularyAction = [&wordWriter](const auto& word, const auto& index) {
+
+    //Rtree rtree = Rtree();
+    std::ofstream testOfStream = std::ofstream("/local/data/nockn/forkqlever/qlever/third_party/rtree/convertedTest.txt", std::ios_base::app);
+
+    auto internalVocabularyAction = [&wordWriter/*, &rtree*/, &testOfStream](const auto& word, const auto& index) {
       wordWriter.push(word.data(), word.size());
-      // TODO write the word with index into the rtree file
+      //rtree.ConvertWordToRtreeEntry(word.data(), word.size(), index);
+      testOfStream << word.data() << std::endl;
     };
 
-    auto externalVocabularyAction = [](const auto& word, const auto& index) {
-      // TODO write the word with index into the rtree file
+    auto externalVocabularyAction = [/*&rtree*/&testOfStream](const auto& word, const auto& index) {
+      //rtree.ConvertWordToRtreeEntry(word.data(), word.size(), index);
+      testOfStream << word.data() << std::endl;
     };
 
-    return v.mergeVocabulary(_onDiskBase, numFiles, sortPred,
+    //rtree.OpenConversion("../../third_party/rtree/ConversionTest");
+    VocabularyMerger::VocabularyMetaData result = v.mergeVocabulary(_onDiskBase, numFiles, sortPred,
                              internalVocabularyAction, externalVocabularyAction);
+    //rtree.CloseConversion();
+    testOfStream.close();
+    return result;
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;
@@ -423,6 +430,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   LOG(INFO) << "Number of words in external vocabulary: "
             << res.vocabularyMetaData_.numWordsTotal_ - sizeInternalVocabulary
             << std::endl;
+
+  // TODO RTREE
 
   res.idTriples = std::move(idTriples);
   res.actualPartialSizes = std::move(actualPartialSizes);
@@ -701,6 +710,8 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
         _avgNumDistinctPredicatesPerSubject, _numDistinctSubjectPredicatePairs,
         _patterns, _hasPattern);
   }
+
+  // TODO Load the RTREE
 }
 
 // _____________________________________________________________________________

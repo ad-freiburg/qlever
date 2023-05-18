@@ -212,7 +212,9 @@ endif()
 # RTREE
 ###############################
 add_subdirectory(third_party/rtree EXCLUDE_FROM_ALL)
-include_directories(SYSTEM third_party/rtree)
+include_directories(SYSTEM third_party/rtree/)
+add_executable(${PROJECT_NAME} third_party/rtree/Rtree/Rtree.cpp)
+target_include_directories(${PROJECT_NAME} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/rtree>)
 
 ################################
 # STXXL
@@ -295,7 +297,7 @@ add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 ##################################################
 # Precompiled headers
 set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)
-set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h third_party/ctre/include/ctre/ctre.h third_party/antlr4/runtime/Cpp/runtime/src/antlr4-runtime.h third_party/rtree/Rtree.h)
+set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h third_party/ctre/include/ctre/ctre.h third_party/antlr4/runtime/Cpp/runtime/src/antlr4-runtime.h)
 
 add_subdirectory(src/parser)
 target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})

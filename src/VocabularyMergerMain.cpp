@@ -21,9 +21,10 @@ int main(int argc, char** argv) {
   VocabularyMerger m;
 
   auto file = ad_utility::makeOfstream(basename + INTERNAL_VOCAB_SUFFIX);
-  auto internalVocabularyAction = [&file](const auto& word) {
+  auto internalVocabularyAction = [&file](const auto& word, const auto& index) {
     file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
   };
+  auto externalVocabularyAction = [](const auto& word, const auto& index) {};
   m.mergeVocabulary(basename, numFiles, TripleComponentComparator(),
-                    internalVocabularyAction);
+                    internalVocabularyAction, externalVocabularyAction);
 }
