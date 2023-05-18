@@ -23,7 +23,7 @@ namespace ad_benchmark {
 // Describes a configuration option.
 class BenchmarkConfigurationOption {
  public:
-  // The type of value, that can be held by this option.
+  // The possible types of the value, that can be held by this option.
   using ValueType = std::variant<std::monostate, bool, std::string, int, double,
                                  std::vector<bool>, std::vector<std::string>,
                                  std::vector<int>, std::vector<double>>;
@@ -51,6 +51,13 @@ class BenchmarkConfigurationOption {
 
   // What this configuration option was set to. Can be empty.
   ValueType value_;
+
+  // Has this option been set at runtime? Any `set` function will set this to
+  // true, if they are used.
+  bool configurationOptionWasSet_ = false;
+
+  // The default value of the configuration option.
+  const ValueType defaultValue_;
 
   // Converts the index of `Valuetype` into their string representation.
   static std::string typesForValueToString(const size_t& value) {
@@ -83,13 +90,25 @@ class BenchmarkConfigurationOption {
       : identifier_{identifier},
         description_{description},
         type_{type},
-        value_{defaultValue} {
+        value_{defaultValue},
+        defaultValue_{defaultValue} {
     // The `identifier` must be a string unlike `""`.
     AD_CONTRACT_CHECK(identifier != "");
   }
 
   /*
-  Does the configuration option hold a value?
+  Was the configuration option set to a value at runtime?
+  */
+  bool wasSetAtRuntime() const;
+
+  /*
+  Does the configuration option hold a default value?
+  */
+  bool hasDefaultValue() const;
+
+  /*
+  @brief Does the configuration option hold a value, regardless, if it's the
+  default value, or a value given at runtime?
   */
   bool hasValue() const;
 
@@ -101,6 +120,7 @@ class BenchmarkConfigurationOption {
   void setValue(const ValueType& value) {
     // Only set our value, if the given value is of the right type.
     if (type_ == value.index()) {
+      configurationOptionWasSet_ = true;
       value_ = value;
     } else {
       throw ad_utility::Exception(
@@ -118,13 +138,38 @@ class BenchmarkConfigurationOption {
   void setValueWithJson(const nlohmann::json& json);
 
   /*
+  @brief Return the default value of the the configuration option. If
+  there is no default value, or `T` is the wrong type, then it will throw an
+  exception.
+  */
+  template <typename T>
+  requires ad_utility::isTypeContainedIn<std::decay_t<T>, ValueType>
+  std::decay_t<T> getDefaultValue() const {
+    if (hasDefaultValue() &&
+        std::holds_alternative<std::decay_t<T>>(defaultValue_)) {
+      return std::get<std::decay_t<T>>(defaultValue_);
+    } else if (!hasDefaultValue()) {
+      throw ad_utility::Exception(
+          absl::StrCat("Configuration option '", identifier_,
+                       "' was not created with a default value."));
+    } else {
+      // They used the wrong type.
+      throw ad_utility::Exception(absl::StrCat(
+          "The type of the value in configuration option '", identifier_,
+          "' is '", typesForValueToString(type_), "'. It can't be cast as '",
+          typesForValueToString(getIndexOfTypeInVariant<T>(defaultValue_)),
+          "'."));
+    }
+  }
+
+  /*
   @brief Return the content of the value held by the configuration option. If
   there is no value, or `T` is the wrong type, then it will throw an exception.
   */
   template <typename T>
-  requires ad_utility::isTypeContainedIn<T, ValueType>
+  requires ad_utility::isTypeContainedIn<std::decay_t<T>, ValueType>
   std::decay_t<T> getValue() const {
-    if (std::holds_alternative<std::decay_t<T>>(value_)) {
+    if (hasValue() && std::holds_alternative<std::decay_t<T>>(value_)) {
       return std::get<std::decay_t<T>>(value_);
     } else if (!hasValue()) {
       // The value was never set.
@@ -132,19 +177,11 @@ class BenchmarkConfigurationOption {
           absl::StrCat("The value in configuration option '", identifier_,
                        "' was never set."));
     } else {
-      // The index value of the type `T` in our variant.
-      // TODO Take a look, if there is a better alternative, than just copying
-      // the types held by std variant.
-      constexpr size_t index = ad_utility::getIndexOfFirstTypeToPassCheck<
-          []<typename D>() { return std::is_same_v<D, std::decay_t<T>>; },
-          std::monostate, bool, std::string, int, double, std::vector<bool>,
-          std::vector<std::string>, std::vector<int>, std::vector<double>>();
-
       // They used the wrong type.
       throw ad_utility::Exception(absl::StrCat(
           "The type of the value in configuration option '", identifier_,
           "' is '", typesForValueToString(type_), "'. It can't be cast as '",
-          typesForValueToString(index), "'."));
+          typesForValueToString(getIndexOfTypeInVariant<T>(value_)), "'."));
     }
   }
 
@@ -153,5 +190,24 @@ class BenchmarkConfigurationOption {
 
   // Get the identifier for this option.
   std::string_view getIdentifier() const;
+
+  /*
+  @brief Returns the actual type of value, that can be set with this SPECIFIC
+  configuration option instance. For example: Integer.
+  */
+  ValueTypeIndexes getActualValueType() const;
+
+ private:
+  /*
+  @brief Returns the index position of a type in `std::variant` type.
+  */
+  template <typename T, typename... Ts>
+  requires(std::same_as<std::decay_t<T>, std::decay_t<Ts>> || ...)
+  constexpr size_t getIndexOfTypeInVariant(const std::variant<Ts...>&) const {
+    return ad_utility::getIndexOfFirstTypeToPassCheck<[]<typename D>() {
+      return std::is_same_v<D, std::decay_t<T>>;
+    },
+                                                      std::decay_t<Ts>...>();
+  }
 };
 }  // namespace ad_benchmark

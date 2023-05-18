@@ -16,9 +16,19 @@
 
 namespace ad_benchmark {
 // ____________________________________________________________________________
+bool BenchmarkConfigurationOption::wasSetAtRuntime() const {
+  return configurationOptionWasSet_;
+}
+
+// ____________________________________________________________________________
+bool BenchmarkConfigurationOption::hasDefaultValue() const {
+  // We only have `std::monostate`, if no default value was given.
+  return !std::holds_alternative<std::monostate>(defaultValue_);
+}
+
+// ____________________________________________________________________________
 bool BenchmarkConfigurationOption::hasValue() const {
-  // We only have `std::monostate`, if the value wasn't set.
-  return !std::holds_alternative<std::monostate>(value_);
+  return wasSetAtRuntime() || hasDefaultValue();
 }
 
 // ____________________________________________________________________________
@@ -53,6 +63,8 @@ void BenchmarkConfigurationOption::setValueWithJson(
                          AD_FWD(isValueTypeIndex));
                    });
         break;
+      default:
+        return false;
     };
   };
 
@@ -97,6 +109,7 @@ void BenchmarkConfigurationOption::setValueWithJson(
       type_, [&json, this]<size_t index>() {
         value_ = json.get<std::variant_alternative_t<index, ValueType>>();
       });
+  configurationOptionWasSet_ = true;
 }
 
 // ____________________________________________________________________________
@@ -111,6 +124,12 @@ BenchmarkConfigurationOption::operator std::string() const {
       addIndentation(absl::StrCat("Value type: ", typesForValueToString(type_),
                                   "\nDescription: ", description_),
                      1));
+}
+
+// ____________________________________________________________________________
+auto BenchmarkConfigurationOption::getActualValueType() const
+    -> ValueTypeIndexes {
+  return type_;
 }
 
 }  // namespace ad_benchmark

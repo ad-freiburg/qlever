@@ -37,6 +37,9 @@ TEST(BenchmarkConfigurationOptionTest, CreateSetAndTest) {
             ASSERT_ANY_THROW(
                 (option.getValue<
                     std::variant_alternative_t<index, ConfigurationOption::ValueType>>()));
+            ASSERT_ANY_THROW(
+                (option.getDefaultValue<
+                    std::variant_alternative_t<index, ConfigurationOption::ValueType>>()));
           } else {
             ASSERT_NO_THROW((option.getValue<
                              std::variant_alternative_t<index, ConfigurationOption::ValueType>>()));
@@ -52,9 +55,14 @@ TEST(BenchmarkConfigurationOptionTest, CreateSetAndTest) {
       ConfigurationOption::ValueTypeIndexes typeIndex,
       typename Type = std::variant_alternative_t<typeIndex, ConfigurationOption::ValueType>>(
       ConfigurationOption & option, const Type& valueToSetTo) {
+    // Do we even have the right type for this option?
+    ASSERT_EQ(typeIndex, option.getActualValueType());
+
+    ASSERT_FALSE(option.wasSetAtRuntime());
+
     option.setValue(valueToSetTo);
 
-    ASSERT_TRUE(option.hasValue());
+    ASSERT_TRUE(option.hasValue() && option.wasSetAtRuntime());
     ASSERT_EQ(valueToSetTo, option.getValue<Type>());
 
     // Make sure, that the other getters don't work.
@@ -66,15 +74,24 @@ TEST(BenchmarkConfigurationOptionTest, CreateSetAndTest) {
   setting it. With or without a default value.
   */
   auto testCaseWithDefault =
-      [&setAndTest]<ConfigurationOption::ValueTypeIndexes typeIndex,
-                    typename Type =
-                        std::variant_alternative_t<typeIndex, ConfigurationOption::ValueType>>(
+      [
+        &setAndTest, &otherGettersDontWork
+      ]<ConfigurationOption::ValueTypeIndexes typeIndex,
+        typename Type = std::variant_alternative_t<typeIndex, ConfigurationOption::ValueType>>(
           const Type& defaultValue, const Type& valueToSetTo) {
-    ConfigurationOption option("t", "", typeIndex, defaultValue);
+    ConfigurationOption option("With default", "", typeIndex, defaultValue);
 
-    ASSERT_TRUE(option.hasValue());
+    // Can we use the default value correctly?
+    ASSERT_TRUE(option.hasValue() && option.hasDefaultValue());
+    ASSERT_EQ(defaultValue, option.getDefaultValue<Type>());
+    ASSERT_EQ(defaultValue, option.getValue<Type>());
+    otherGettersDontWork.template operator()<typeIndex>(option);
 
     setAndTest.template operator()<typeIndex>(option, valueToSetTo);
+
+    // Is the default value unchanged?
+    ASSERT_TRUE(option.hasDefaultValue());
+    ASSERT_EQ(defaultValue, option.getDefaultValue<Type>());
   };
 
   auto testCaseWithoutDefault =
@@ -82,14 +99,25 @@ TEST(BenchmarkConfigurationOptionTest, CreateSetAndTest) {
                     typename Type =
                         std::variant_alternative_t<typeIndex, ConfigurationOption::ValueType>>(
           const Type& valueToSetTo) {
-    ConfigurationOption option("t", "", typeIndex);
+    ConfigurationOption option("Without default", "", typeIndex);
 
-    ASSERT_FALSE(option.hasValue());
-
-    // Trying to access the value before it was set, should cause an error.
-    ASSERT_ANY_THROW(option.getValue<Type>());
+    // Make sure, that we truly don't have a value, that can be gotten.
+    ASSERT_TRUE(!option.hasValue() && !option.hasDefaultValue());
+    ad_utility::ConstexprForLoop(
+        std::make_index_sequence<std::variant_size_v<ConfigurationOption::ValueType>>{},
+        [&option]<size_t index>() {
+          ASSERT_ANY_THROW(
+              (option
+                   .getValue<std::variant_alternative_t<index, ConfigurationOption::ValueType>>()));
+          ASSERT_ANY_THROW((option.getDefaultValue<
+                            std::variant_alternative_t<index, ConfigurationOption::ValueType>>()));
+        });
 
     setAndTest.template operator()<typeIndex>(option, valueToSetTo);
+
+    // Is it still the case, that we don't have a default value?
+    ASSERT_TRUE(!option.hasDefaultValue());
+    ASSERT_ANY_THROW(option.getDefaultValue<Type>());
   };
 
   // Do a test case for every possible type.
