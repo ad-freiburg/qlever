@@ -8,6 +8,7 @@
 
 #include "util/http/beast.h"
 #include "util/websocket/Common.h"
+#include "util/websocket/QueryState.h"
 
 namespace ad_utility::websocket {
 namespace net = boost::asio;
@@ -17,8 +18,9 @@ using boost::asio::ip::tcp;
 using websocket::common::QueryId;
 using websocket::common::SharedPayloadAndTimestamp;
 
-net::awaitable<void> manageConnection(tcp::socket socket,
-                                      http::request<http::string_body> request);
+net::awaitable<void> manageConnection(
+    tcp::socket socket, http::request<http::string_body> request,
+    ad_utility::query_state::QueryStateManager& queryStateManager);
 // Returns true if there are other active connections that do no currently wait.
 bool fireAllCallbacksForQuery(
     const QueryId& queryId,

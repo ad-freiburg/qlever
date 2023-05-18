@@ -21,6 +21,7 @@
 #include "util/Timer.h"
 #include "util/http/HttpServer.h"
 #include "util/http/streamable_body.h"
+#include "util/websocket/QueryState.h"
 
 using nlohmann::json;
 using std::string;
@@ -58,6 +59,7 @@ class Server {
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
+  ad_utility::query_state::QueryStateManager queryStateManager_{};
 
   bool enablePatternTrick_;
 
