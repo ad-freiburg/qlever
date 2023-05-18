@@ -96,6 +96,7 @@ class QueryExecutionContext {
       ad_utility::AllocatorWithLimit<Id> allocator,
       SortPerformanceEstimator sortPerformanceEstimator,
       ad_utility::query_state::QueryStateManager& queryStateManager,
+      ad_utility::websocket::WebSocketManager& webSocketManager,
       ad_utility::websocket::common::OwningQueryId queryId,
       const bool pinSubtrees = false, const bool pinResult = false)
       : _pinSubtrees(pinSubtrees),
@@ -106,7 +107,8 @@ class QueryExecutionContext {
         _costFactors(),
         _sortPerformanceEstimator(sortPerformanceEstimator),
         owningQueryId_(std::move(queryId)),
-        queryStateManager_(queryStateManager) {}
+        queryStateManager_(queryStateManager),
+        webSocketManager_(webSocketManager) {}
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
@@ -126,8 +128,8 @@ class QueryExecutionContext {
   ad_utility::AllocatorWithLimit<Id> getAllocator() { return _allocator; }
 
   void signalQueryUpdate(const RuntimeInformation& runtimeInformation) {
-    queryStateManager_.signalUpdateForQuery(owningQueryId_.toQueryId(),
-                                            runtimeInformation);
+    queryStateManager_.signalUpdateForQuery(
+        owningQueryId_.toQueryId(), runtimeInformation, webSocketManager_);
   }
 
   const bool _pinSubtrees;
@@ -142,4 +144,5 @@ class QueryExecutionContext {
   SortPerformanceEstimator _sortPerformanceEstimator;
   ad_utility::websocket::common::OwningQueryId owningQueryId_;
   ad_utility::query_state::QueryStateManager& queryStateManager_;
+  ad_utility::websocket::WebSocketManager& webSocketManager_;
 };

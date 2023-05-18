@@ -4,21 +4,16 @@
 
 #include "QueryState.h"
 
-#include <absl/container/flat_hash_map.h>
-
-#include <mutex>
-
-#include "util/websocket/WebSocketManager.h"
-
 namespace ad_utility::query_state {
 
 void QueryStateManager::signalUpdateForQuery(
-    const QueryId& queryId, const RuntimeInformation& runtimeInformation) {
+    const QueryId& queryId, const RuntimeInformation& runtimeInformation,
+    ad_utility::websocket::WebSocketManager& webSocketManager) {
   std::string payload = nlohmann::ordered_json(runtimeInformation).dump();
   auto snapshot = std::make_shared<SharedPayloadAndTimestamp::element_type>(
       std::move(payload), std::chrono::steady_clock::now());
   // Only insert data if there are additional waiting websockets
-  if (websocket::fireAllCallbacksForQuery(queryId, snapshot)) {
+  if (webSocketManager.fireAllCallbacksForQuery(queryId, snapshot)) {
     std::lock_guard lock{queryStatesMutex};
     queryStates[queryId] = std::move(snapshot);
   }

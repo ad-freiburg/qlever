@@ -36,6 +36,7 @@ class TestHttpServer {
   // `HttpServer::shutDown` must only be called once.
   bool hasBeenShutDown_ = false;
   ad_utility::query_state::QueryStateManager queryStateManager_{};
+  ad_utility::websocket::WebSocketManager webSocketManager_{};
 
  public:
   // Create server on localhost. Try out 10 different ports, if connection
@@ -51,8 +52,8 @@ class TestHttpServer {
     for (const short unsigned int port : ports) {
       try {
         server_ = std::make_shared<HttpServer<HttpHandler>>(
-            port, queryStateManager_, ipAddress, numServerThreads,
-            std::move(httpHandler));
+            port, queryStateManager_, webSocketManager_, ipAddress,
+            numServerThreads, std::move(httpHandler));
         return;
       } catch (const boost::system::system_error& b) {
         LOG(INFO) << "Starting test HTTP server on port " << port

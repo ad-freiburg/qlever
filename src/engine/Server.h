@@ -60,6 +60,7 @@ class Server {
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
   ad_utility::query_state::QueryStateManager queryStateManager_{};
+  ad_utility::websocket::WebSocketManager webSocketManager_{};
 
   bool enablePatternTrick_;
 

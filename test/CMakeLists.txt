@@ -306,7 +306,7 @@ addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 
 addLinkAndDiscoverTest(ExceptionHandlingTest)
 
-addLinkAndDiscoverTest(SparqlExpressionTypesTest)
+addLinkAndDiscoverTest(SparqlExpressionTypesTest sparqlExpressions)
 
 addLinkAndDiscoverTest(LimitOffsetClauseTest)
 
@@ -324,6 +324,6 @@ addLinkAndDiscoverTest(BenchmarkConfigurationTest benchmark)
 
 addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
 
-addLinkAndDiscoverTest(FindUndefRangesTest)
+addLinkAndDiscoverTest(FindUndefRangesTest engine)
 
-addLinkAndDiscoverTest(AddCombinedRowToTableTest)
+addLinkAndDiscoverTest(AddCombinedRowToTableTest engine)

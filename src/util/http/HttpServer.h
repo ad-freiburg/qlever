@@ -59,6 +59,7 @@ class HttpServer {
       net::make_strand(ioContext_);
   std::atomic<bool> serverIsReady_ = false;
   ad_utility::query_state::QueryStateManager& queryStateManager_;
+  ad_utility::websocket::WebSocketManager& webSocketManager_;
 
  public:
   /// Construct from the port and ip address, on which this server will listen,
@@ -67,6 +68,7 @@ class HttpServer {
   explicit HttpServer(
       unsigned short port,
       ad_utility::query_state::QueryStateManager& queryStateManager,
+      ad_utility::websocket::WebSocketManager& webSocketManager,
       const std::string& ipAddress = "0.0.0.0", int numServerThreads = 1,
       HttpHandler handler = HttpHandler{})
       : ipAddress_{net::ip::make_address(ipAddress)},
@@ -77,7 +79,8 @@ class HttpServer {
         numServerThreads_{std::max(2, numServerThreads)},
         ioContext_{numServerThreads_},
         acceptor_{ioContext_},
-        queryStateManager_{queryStateManager} {
+        queryStateManager_{queryStateManager},
+        webSocketManager_{webSocketManager} {
     try {
       tcp::endpoint endpoint{ipAddress_, port_};
       // Open the acceptor.
@@ -227,7 +230,7 @@ class HttpServer {
           } else {
             // prevent cleanup after socket has been moved from
             std::move(releaseConnection).Cancel();
-            co_await ad_utility::websocket::manageConnection(
+            co_await webSocketManager_.manageConnection(
                 std::move(stream.socket()), std::move(req), queryStateManager_);
             co_return;
           }
