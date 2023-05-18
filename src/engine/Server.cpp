@@ -472,14 +472,14 @@ nlohmann::json Server::composeCacheStatsJson() const {
 
 // _____________________________________________
 
-ad_utility::websocket::common::OwningQueryId getQueryId(
+ad_utility::websocket::common::OwningQueryId Server::getQueryId(
     const ad_utility::httpUtils::HttpRequest auto& request) {
   using ad_utility::websocket::common::OwningQueryId;
   std::string_view queryIdHeader = request.base()["Query-Id"];
   if (queryIdHeader.empty()) {
-    return OwningQueryId::uniqueId();
+    return queryRegistry_.uniqueId();
   }
-  auto queryId = OwningQueryId::uniqueIdFromString(std::string(queryIdHeader));
+  auto queryId = queryRegistry_.uniqueIdFromString(std::string(queryIdHeader));
   if (!queryId) {
     throw std::runtime_error{"QueryId '" + queryIdHeader +
                              "' is already in use!"};

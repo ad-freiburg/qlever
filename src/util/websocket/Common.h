@@ -37,18 +37,13 @@ class QueryId {
 
 class OwningQueryId {
   QueryId id_;
+  std::function<void(const QueryId&)> unregister_;
 
-  inline static std::recursive_mutex registryMutex_{};
-  inline static std::unordered_set<QueryId, absl::Hash<QueryId>> registry_{};
+  friend class QueryRegistry;
 
-  explicit OwningQueryId(QueryId id) : id_{std::move(id)} {
+  OwningQueryId(QueryId id, std::function<void(const QueryId&)> unregister)
+      : id_{std::move(id)}, unregister_{unregister} {
     AD_CORRECTNESS_CHECK(!id_.empty());
-    // Because of this sanity check std::recursive_mutex is used
-    // to prevent a deadlock
-    AD_EXPENSIVE_CHECK(([this]() {
-      std::lock_guard lock{registryMutex_};
-      return registry_.count(id_);
-    })());
   }
 
  public:
@@ -59,17 +54,37 @@ class OwningQueryId {
   OwningQueryId(OwningQueryId&&) = default;
   OwningQueryId& operator=(OwningQueryId&&) = default;
 
-  static std::optional<OwningQueryId> uniqueIdFromString(std::string id) {
+  [[nodiscard]] const QueryId& toQueryId() const noexcept { return id_; }
+
+  ~OwningQueryId() { unregister_(id_); }
+};
+
+static_assert(!std::is_copy_constructible_v<OwningQueryId>);
+static_assert(!std::is_copy_assignable_v<OwningQueryId>);
+
+class QueryRegistry {
+  std::mutex registryMutex_{};
+  std::unordered_set<QueryId, absl::Hash<QueryId>> registry_{};
+
+ public:
+  QueryRegistry() = default;
+
+  std::optional<OwningQueryId> uniqueIdFromString(std::string id) {
     auto queryId = QueryId::idFromString(std::move(id));
     std::lock_guard lock{registryMutex_};
     if (registry_.count(queryId)) {
       return std::nullopt;
     }
     registry_.insert(queryId);
-    return OwningQueryId{std::move(queryId)};
+    return OwningQueryId{std::move(queryId), [this](const QueryId& id) {
+                           if (!id.empty()) {
+                             std::lock_guard lock{registryMutex_};
+                             registry_.erase(id);
+                           }
+                         }};
   }
 
-  static OwningQueryId uniqueId() {
+  OwningQueryId uniqueId() {
     static thread_local std::mt19937 generator(std::random_device{}());
     std::uniform_int_distribution<uint64_t> distrib{};
     std::optional<OwningQueryId> result = std::nullopt;
@@ -78,19 +93,7 @@ class OwningQueryId {
     }
     return std::move(result.value());
   }
-
-  const QueryId& toQueryId() const noexcept { return id_; }
-
-  ~OwningQueryId() {
-    if (!id_.empty()) {
-      std::lock_guard lock{registryMutex_};
-      registry_.erase(id_);
-    }
-  }
 };
-
-static_assert(!std::is_copy_constructible_v<OwningQueryId>);
-static_assert(!std::is_copy_assignable_v<OwningQueryId>);
 
 using Timestamp = std::chrono::time_point<std::chrono::steady_clock>;
 

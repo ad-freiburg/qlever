@@ -61,6 +61,7 @@ class Server {
   Index index_;
   ad_utility::query_state::QueryStateManager queryStateManager_{};
   ad_utility::websocket::WebSocketManager webSocketManager_{};
+  ad_utility::websocket::common::QueryRegistry queryRegistry_{};
 
   bool enablePatternTrick_;
 
@@ -113,4 +114,7 @@ class Server {
   // Returns an awaitable of the return value of `function`
   template <typename Function, typename T = std::invoke_result_t<Function>>
   Awaitable<T> computeInNewThread(Function function) const;
+
+  ad_utility::websocket::common::OwningQueryId getQueryId(
+      const ad_utility::httpUtils::HttpRequest auto& request);
 };
