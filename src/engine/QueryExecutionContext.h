@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "util/websocket/Common.h"
+#include "util/websocket/QueryState.h"
 
 using std::shared_ptr;
 using std::string;
@@ -90,12 +91,13 @@ class QueryResultCache : public ConcurrentLruCache {
 // Holds references to index and engine, implements caching.
 class QueryExecutionContext {
  public:
-  QueryExecutionContext(const Index& index, QueryResultCache* const cache,
-                        ad_utility::AllocatorWithLimit<Id> allocator,
-                        SortPerformanceEstimator sortPerformanceEstimator,
-                        ad_utility::websocket::common::OwningQueryId queryId,
-                        const bool pinSubtrees = false,
-                        const bool pinResult = false)
+  QueryExecutionContext(
+      const Index& index, QueryResultCache* const cache,
+      ad_utility::AllocatorWithLimit<Id> allocator,
+      SortPerformanceEstimator sortPerformanceEstimator,
+      ad_utility::query_state::QueryStateManager& queryStateManager,
+      ad_utility::websocket::common::OwningQueryId queryId,
+      const bool pinSubtrees = false, const bool pinResult = false)
       : _pinSubtrees(pinSubtrees),
         _pinResult(pinResult),
         _index(index),
@@ -103,7 +105,8 @@ class QueryExecutionContext {
         _allocator(std::move(allocator)),
         _costFactors(),
         _sortPerformanceEstimator(sortPerformanceEstimator),
-        owningQueryId_(std::move(queryId)) {}
+        owningQueryId_(std::move(queryId)),
+        queryStateManager_(queryStateManager) {}
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
@@ -122,9 +125,9 @@ class QueryExecutionContext {
 
   ad_utility::AllocatorWithLimit<Id> getAllocator() { return _allocator; }
 
-  [[nodiscard]] const ad_utility::websocket::common::QueryId& getQueryId()
-      const {
-    return owningQueryId_.toQueryId();
+  void signalQueryUpdate(const RuntimeInformation& runtimeInformation) {
+    queryStateManager_.signalUpdateForQuery(owningQueryId_.toQueryId(),
+                                            runtimeInformation);
   }
 
   const bool _pinSubtrees;
@@ -138,4 +141,5 @@ class QueryExecutionContext {
   QueryPlanningCostFactors _costFactors;
   SortPerformanceEstimator _sortPerformanceEstimator;
   ad_utility::websocket::common::OwningQueryId owningQueryId_;
+  ad_utility::query_state::QueryStateManager& queryStateManager_;
 };

@@ -58,15 +58,17 @@ class HttpServer {
   net::strand<net::io_context::executor_type> acceptorStrand_ =
       net::make_strand(ioContext_);
   std::atomic<bool> serverIsReady_ = false;
+  ad_utility::query_state::QueryStateManager& queryStateManager_;
 
  public:
   /// Construct from the port and ip address, on which this server will listen,
   /// as well as the HttpHandler. This constructor only initializes several
   /// member functions
-  explicit HttpServer(unsigned short port,
-                      const std::string& ipAddress = "0.0.0.0",
-                      int numServerThreads = 1,
-                      HttpHandler handler = HttpHandler{})
+  explicit HttpServer(
+      unsigned short port,
+      ad_utility::query_state::QueryStateManager& queryStateManager,
+      const std::string& ipAddress = "0.0.0.0", int numServerThreads = 1,
+      HttpHandler handler = HttpHandler{})
       : ipAddress_{net::ip::make_address(ipAddress)},
         port_{port},
         httpHandler_{std::move(handler)},
@@ -74,7 +76,8 @@ class HttpServer {
         // TODO<joka921> why is that?
         numServerThreads_{std::max(2, numServerThreads)},
         ioContext_{numServerThreads_},
-        acceptor_{ioContext_} {
+        acceptor_{ioContext_},
+        queryStateManager_{queryStateManager} {
     try {
       tcp::endpoint endpoint{ipAddress_, port_};
       // Open the acceptor.
@@ -225,7 +228,7 @@ class HttpServer {
             // prevent cleanup after socket has been moved from
             std::move(releaseConnection).Cancel();
             co_await ad_utility::websocket::manageConnection(
-                std::move(stream.socket()), std::move(req));
+                std::move(stream.socket()), std::move(req), queryStateManager_);
             co_return;
           }
         } else {

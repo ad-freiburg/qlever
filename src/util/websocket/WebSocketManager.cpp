@@ -17,7 +17,6 @@
 #include "util/MultiMap.h"
 #include "util/http/HttpUtils.h"
 #include "util/websocket/Common.h"
-#include "util/websocket/QueryState.h"
 
 namespace ad_utility::websocket {
 using namespace boost::asio::experimental::awaitable_operators;
@@ -96,7 +95,9 @@ void enableWebSocket(WebSocketId webSocketId, const QueryId& queryId) {
   activeWebSockets.insert({queryId, webSocketId});
 }
 
-void disableWebSocket(WebSocketId webSocketId, const QueryId& queryId) {
+void disableWebSocket(
+    WebSocketId webSocketId, const QueryId& queryId,
+    ad_utility::query_state::QueryStateManager& queryStateManager) {
   bool noListenersLeft;
   {
     std::lock_guard lock{activeWebSocketsMutex};
@@ -105,22 +106,25 @@ void disableWebSocket(WebSocketId webSocketId, const QueryId& queryId) {
     noListenersLeft = !activeWebSockets.contains(queryId);
   }
   if (noListenersLeft) {
-    query_state::clearQueryInfo(queryId);
+    queryStateManager.clearQueryInfo(queryId);
   }
 }
 
 // Based on https://stackoverflow.com/a/69285751
 template <typename CompletionToken>
 auto waitForEvent(const QueryId& queryId, WebSocketId webSocketId,
-                  common::Timestamp lastUpdate, CompletionToken&& token) {
-  auto initiate = [lastUpdate]<typename Handler>(
+                  common::Timestamp lastUpdate,
+                  ad_utility::query_state::QueryStateManager& queryStateManager,
+                  CompletionToken&& token) {
+  auto initiate = [lastUpdate, &queryStateManager]<typename Handler>(
                       Handler&& self, const QueryId& queryId,
                       WebSocketId webSocketId) mutable {
     auto callback = [self = std::make_shared<Handler>(std::forward<Handler>(
                          self))](SharedPayloadAndTimestamp snapshot) {
       (*self)(std::move(snapshot));
     };
-    auto potentialUpdate = query_state::getIfUpdatedSince(queryId, lastUpdate);
+    auto potentialUpdate =
+        queryStateManager.getIfUpdatedSince(queryId, lastUpdate);
     if (potentialUpdate != nullptr) {
       callback(std::move(potentialUpdate));
     } else {
@@ -131,11 +135,12 @@ auto waitForEvent(const QueryId& queryId, WebSocketId webSocketId,
       initiate, token, queryId, webSocketId);
 }
 
-net::awaitable<void> handleClientCommands(websocket& ws,
-                                          WebSocketId webSocketId,
-                                          const QueryId& queryId) {
-  absl::Cleanup cleanup{
-      [webSocketId, queryId]() { disableWebSocket(webSocketId, queryId); }};
+net::awaitable<void> handleClientCommands(
+    websocket& ws, WebSocketId webSocketId, const QueryId& queryId,
+    ad_utility::query_state::QueryStateManager& queryStateManager) {
+  absl::Cleanup cleanup{[webSocketId, queryId, &queryStateManager]() {
+    disableWebSocket(webSocketId, queryId, queryStateManager);
+  }};
   beast::flat_buffer buffer;
 
   while (ws.is_open()) {
@@ -147,12 +152,13 @@ net::awaitable<void> handleClientCommands(websocket& ws,
   }
 }
 
-net::awaitable<void> waitForServerEvents(websocket& ws, WebSocketId webSocketId,
-                                         const QueryId& queryId) {
+net::awaitable<void> waitForServerEvents(
+    websocket& ws, WebSocketId webSocketId, const QueryId& queryId,
+    ad_utility::query_state::QueryStateManager& queryStateManager) {
   common::Timestamp lastUpdate = std::chrono::steady_clock::now();
   while (ws.is_open()) {
     auto update = co_await waitForEvent(queryId, webSocketId, lastUpdate,
-                                        net::use_awaitable);
+                                        queryStateManager, net::use_awaitable);
     if (update == nullptr) {
       if (ws.is_open()) {
         co_await ws.async_close(beast::websocket::close_code::normal,
@@ -169,7 +175,8 @@ net::awaitable<void> waitForServerEvents(websocket& ws, WebSocketId webSocketId,
 }
 
 net::awaitable<void> connectionLifecycle(
-    tcp::socket socket, http::request<http::string_body> request) {
+    tcp::socket socket, http::request<http::string_body> request,
+    ad_utility::query_state::QueryStateManager& queryStateManager) {
   auto match = ctre::match<"/watch/([^/?]+)">(request.target());
   AD_CORRECTNESS_CHECK(match);
   QueryId queryId = QueryId::idFromString(match.get<1>().to_string());
@@ -186,11 +193,14 @@ net::awaitable<void> connectionLifecycle(
     auto strand = net::make_strand(ws.get_executor());
 
     // experimental operators
-    co_await (
-        net::co_spawn(strand, waitForServerEvents(ws, webSocketId, queryId),
-                      net::use_awaitable) &&
-        net::co_spawn(strand, handleClientCommands(ws, webSocketId, queryId),
-                      net::use_awaitable));
+    co_await (net::co_spawn(strand,
+                            waitForServerEvents(ws, webSocketId, queryId,
+                                                queryStateManager),
+                            net::use_awaitable) &&
+              net::co_spawn(strand,
+                            handleClientCommands(ws, webSocketId, queryId,
+                                                 queryStateManager),
+                            net::use_awaitable));
 
   } catch (boost::system::system_error& error) {
     if (error.code() == beast::websocket::error::closed) {
@@ -208,10 +218,13 @@ net::awaitable<void> connectionLifecycle(
 }
 
 net::awaitable<void> manageConnection(
-    tcp::socket socket, http::request<http::string_body> request) {
+    tcp::socket socket, http::request<http::string_body> request,
+    ad_utility::query_state::QueryStateManager& queryStateManager) {
   auto executor = socket.get_executor();
   return net::co_spawn(
-      executor, connectionLifecycle(std::move(socket), std::move(request)),
+      executor,
+      connectionLifecycle(std::move(socket), std::move(request),
+                          queryStateManager),
       net::use_awaitable);
 }
 

@@ -12,11 +12,8 @@
 
 namespace ad_utility::query_state {
 
-static std::mutex queryStatesMutex{};
-static absl::flat_hash_map<QueryId, SharedPayloadAndTimestamp> queryStates{};
-
-void signalUpdateForQuery(const QueryId& queryId,
-                          const RuntimeInformation& runtimeInformation) {
+void QueryStateManager::signalUpdateForQuery(
+    const QueryId& queryId, const RuntimeInformation& runtimeInformation) {
   std::string payload = nlohmann::ordered_json(runtimeInformation).dump();
   auto snapshot = std::make_shared<SharedPayloadAndTimestamp::element_type>(
       std::move(payload), std::chrono::steady_clock::now());
@@ -27,12 +24,12 @@ void signalUpdateForQuery(const QueryId& queryId,
   }
 }
 
-void clearQueryInfo(const QueryId& queryId) {
+void QueryStateManager::clearQueryInfo(const QueryId& queryId) {
   std::lock_guard lock{queryStatesMutex};
   queryStates.erase(queryId);
 }
 
-SharedPayloadAndTimestamp getIfUpdatedSince(
+SharedPayloadAndTimestamp QueryStateManager::getIfUpdatedSince(
     const QueryId& queryId, websocket::common::Timestamp timeStamp) {
   std::lock_guard lock{queryStatesMutex};
   if (queryStates.contains(queryId)) {
