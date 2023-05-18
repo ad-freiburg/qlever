@@ -42,7 +42,7 @@ class OwningQueryId {
   friend class QueryRegistry;
 
   OwningQueryId(QueryId id, std::function<void(const QueryId&)> unregister)
-      : id_{std::move(id)}, unregister_{unregister} {
+      : id_{std::move(id)}, unregister_{std::move(unregister)} {
     AD_CORRECTNESS_CHECK(!id_.empty());
   }
 
@@ -56,7 +56,11 @@ class OwningQueryId {
 
   [[nodiscard]] const QueryId& toQueryId() const noexcept { return id_; }
 
-  ~OwningQueryId() { unregister_(id_); }
+  ~OwningQueryId() {
+    if (unregister_) {
+      unregister_(id_);
+    }
+  }
 };
 
 static_assert(!std::is_copy_constructible_v<OwningQueryId>);
@@ -77,10 +81,9 @@ class QueryRegistry {
     }
     registry_.insert(queryId);
     return OwningQueryId{std::move(queryId), [this](const QueryId& id) {
-                           if (!id.empty()) {
-                             std::lock_guard lock{registryMutex_};
-                             registry_.erase(id);
-                           }
+                           AD_CORRECTNESS_CHECK(!id.empty());
+                           std::lock_guard lock{registryMutex_};
+                           registry_.erase(id);
                          }};
   }
 
