@@ -5,6 +5,7 @@
 #include "./CheckUsePatternTrick.h"
 
 #include <algorithm>
+#include <ranges>
 
 namespace checkUsePatternTrick {
 // __________________________________________________________________________

@@ -40,6 +40,45 @@ struct SecondImpl {
     return std::get<1>(AD_FWD(pair));
   }
 };
+
+// Implementation of `holdsAlternative` (see below).
+template <typename T>
+struct HoldsAlternativeImpl {
+  constexpr decltype(auto) operator()(auto&& variant) const {
+    return std::holds_alternative<T>(AD_FWD(variant));
+  }
+};
+
+// Implementation of `get` (see below).
+template <typename T>
+struct GetImpl {
+  constexpr decltype(auto) operator()(auto&& variant) const {
+    return std::get<T>(AD_FWD(variant));
+  }
+};
+
+// Implementation of `getIf` (see below).
+template <typename T>
+struct GetIfImpl {
+  template <typename Ptr>
+  requires std::is_pointer_v<std::remove_cvref_t<Ptr>>
+  constexpr decltype(auto) operator()(Ptr& variantPtr) const {
+    return std::get_if<T>(variantPtr);
+  }
+  template <typename Ptr>
+  requires(!std::is_pointer_v<std::remove_cvref_t<Ptr>>)
+  constexpr decltype(auto) operator()(Ptr& variant) const {
+    return std::get_if<T>(&variant);
+  }
+};
+
+// Implementation of `toBool` (see below).
+struct ToBoolImpl {
+  constexpr decltype(auto) operator()(const auto& x) const {
+    return static_cast<bool>(x);
+  }
+};
+
 }  // namespace detail
 
 /// Return the first element via perfect forwarding of any type for which
@@ -51,6 +90,23 @@ static constexpr detail::FirstImpl first;
 /// `std::get<1>(x)` is valid. This holds e.g. for `std::pair`, `std::tuple`,
 /// and `std::array`.
 static constexpr detail::SecondImpl second;
+
+/// Transparent functor for `std::holds_alternative`
+template <typename T>
+static constexpr detail::HoldsAlternativeImpl<T> holdsAlternative;
+
+/// Transparent functor for `std::get`. Currently only works for `std::variant`
+/// and not for `std::array` or `std::tuple`.
+template <typename T>
+static constexpr detail::HoldsAlternativeImpl<T> get;
+
+/// Transparent functor for `std::get_if`. As an extension to `std::get_if`,
+/// `ad_utility::getIf` may also be called with a `variant` object or reference,
+/// not only with a pointer.
+template <typename T>
+static constexpr detail::GetIfImpl<T> getIf;
+
+static constexpr detail::ToBoolImpl toBool;
 }  // namespace ad_utility
 
 #endif  // QLEVER_TRANSPARENTFUNCTORS_H

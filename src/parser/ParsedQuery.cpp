@@ -398,12 +398,12 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
   // TODO<joka921> Also support property paths (^rdfs:label,
   // skos:altLabel|rdfs:label, ...)
   std::vector<SparqlTriple*> matchingTriples;
-  for (auto& graphPattern : _graphPatterns) {
-    auto* basicPattern =
-        std::get_if<parsedQuery::BasicGraphPattern>(&graphPattern);
-    if (!basicPattern) {
-      continue;
-    }
+  using BasicPattern = parsedQuery::BasicGraphPattern;
+  namespace ad = ad_utility;
+  namespace stdv = std::views;
+  for (BasicPattern* basicPattern :
+       _graphPatterns | stdv::transform(ad::getIf<BasicPattern>) |
+           stdv::filter(ad::toBool)) {
     for (auto& triple : basicPattern->_triples) {
       if (triple._o == variable &&
           (triple._p._operation == PropertyPath::Operation::IRI &&
@@ -557,11 +557,9 @@ void ParsedQuery::addHavingClause(std::vector<SparqlFilter> havingClauses,
         havingClause.expression_, "HAVING", variablesFromAliases,
         " and also not bound inside the SELECT clause");
     auto newVariable = addInternalAlias(std::move(havingClause.expression_));
-    // TODO<C++23, Clang16> simply use `emplace_back` to initialize the
-    // aggregate `SparqlFilter`.
-    _havingClauses.push_back(SparqlFilter{
+    _havingClauses.emplace_back(
         sparqlExpression::SparqlExpressionPimpl::makeVariableExpression(
-            newVariable)});
+            newVariable));
   }
 }
 

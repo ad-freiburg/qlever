@@ -90,6 +90,20 @@ queries:
         - null
       - order_numeric: {"dir": "DESC", "var" : "?ql_textscore_t"}
 
+  - query: people-born-in-1901
+    type: no-text
+    sparql: |
+      PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+      SELECT ?x ?date  WHERE {
+        ?x <Date_of_birth> ?date .
+      FILTER (YEAR(?date) = 1901) .
+      }
+    checks:
+      - num_cols: 2
+      - num_rows: 103
+      - contains_row:
+          - "<Grete_Hermann>"
+          - "1901-03-02T00:00:00"
 
   - query: scientists-from-new-york
     type: no-text

@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <charconv>
 #include <concepts>
 #include <cstdlib>
 
@@ -183,27 +184,46 @@ using DistExpression =
 // TODO: These are currently inefficient because they still operate on our old
 // ":v:date:..." strings. It will be easy to make more efficient, once we switch
 // to representing dates directly in an `Id`, see `util/Date.h`.
-const size_t yearIndexBegin = sizeof(VALUE_DATE_PREFIX) - 1;
-const size_t yearIndexEnd = yearIndexBegin + DEFAULT_NOF_DATE_YEAR_DIGITS;
+const size_t yearIndexBegin = 0;
+const size_t yearIndexEnd = yearIndexBegin + 4;
 const size_t monthIndex = yearIndexEnd + 1;
 const size_t dayIndex = monthIndex + 3;
 // Helper function that extracts a part of a date string. Note the extra work
 // for year because of the potential two's complement.
-template <size_t pos1, size_t pos2>
-inline auto extractNumberFromDate = [](const auto& dateAsString) -> long int {
-  static_assert(pos2 > pos1);
+template <size_t Pos1, size_t Pos2>
+inline auto extractNumberFromDate =
+    [](std::string_view dateAsString) -> long int {
+  static_assert(Pos2 > Pos1);
+  auto pos1 = Pos1;
+  auto pos2 = Pos2;
+  if (dateAsString.starts_with('-')) {
+    dateAsString.remove_prefix(1);
+  }
+  int posFirstDash = dateAsString.find('-', 1);
+  if (Pos2 == yearIndexEnd) {
+    pos2 = posFirstDash;
+  } else {
+    auto offset = posFirstDash - 4;
+    pos1 += offset;
+    pos2 += offset;
+  }
   if (dateAsString.size() < pos2) {
     return 0;
-  } else if (pos1 == yearIndexBegin && dateAsString[pos1] == '-') {
-    static_assert(pos2 > pos1 + 1);
-    return -std::atol(ad_utility::getBase10ComplementOfIntegerString(
-                          dateAsString.substr(pos1 + 1, pos2 - pos1 - 1))
-                          .data());
   } else {
-    return std::atol(dateAsString.data() + pos1);
+    long int result = 0;
+    std::from_chars(dateAsString.data() + pos1, dateAsString.data() + pos2,
+                    result);
+    return result;
   }
 };
-inline auto extractYear = extractNumberFromDate<yearIndexBegin, yearIndexEnd>;
+
+inline auto extractYear = [](std::string_view sv) {
+  auto year = extractNumberFromDate<yearIndexBegin, yearIndexEnd>(sv);
+  if (sv.starts_with("-")) {
+    year *= -1;
+  }
+  return year;
+};
 inline auto extractMonth = extractNumberFromDate<monthIndex, monthIndex + 2>;
 inline auto extractDay = extractNumberFromDate<dayIndex, dayIndex + 2>;
 using YearExpression = NARY<1, FV<decltype(extractYear), StringValueGetter>>;

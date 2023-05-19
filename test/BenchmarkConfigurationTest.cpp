@@ -151,6 +151,9 @@ TEST(BenchmarkConfigurationTest, SetJsonStringExceptionTest) {
 TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
   ad_benchmark::BenchmarkConfiguration config{};
 
+  // TODO More than one level of depth. Oh, and also all possibilities for
+  // types.
+
   // Add integer options.
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "somePositiveNumber", "Must be set. Has no default value.",
@@ -177,9 +180,15 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
       "list", "Must be set. Has no default value.",
       ad_benchmark::BenchmarkConfigurationOption::integerList));
 
+  // This one will not be changed, in order to test, that options, that are not
+  // set at run time, are not changed.
+  config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
+      "No change", "", ad_benchmark::BenchmarkConfigurationOption::integer,
+      10));
+
   // Set those.
   config.setShortHand(
-      R"(somePositiveNumber=42; someNegativNumber=-42; boolTrue = true; boolFalse = false; myName = "Bernd"; list = [42, -42];)");
+      R"--(somePositiveNumber : 42, someNegativNumber : -42, boolTrue : true, boolFalse : false, myName : "Bernd", list : [42, -42])--");
 
   // Check, if an option was set to the value, you wanted.
   auto checkOption = [&config](const std::string& optionName,
@@ -198,4 +207,14 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
   checkOption("myName", std::string{"Bernd"});
 
   checkOption("list", std::vector{42, -42});
+
+  // Is the "No Change" unchanged?
+  checkOption("No change", static_cast<int>(10));
+
+  // Multiple key value pairs with the same key are not allowed.
+  ASSERT_ANY_THROW(config.setShortHand(R"(a:42, a:43)"););
+
+  // Final test: Is there an exception, if we try to parse the wrong syntax?
+  ASSERT_ANY_THROW(config.setShortHand(R"--({"myName" : "Bernd")})--"));
+  ASSERT_ANY_THROW(config.setShortHand(R"--("myName" = "Bernd";)--"));
 }
