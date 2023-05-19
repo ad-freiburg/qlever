@@ -18,9 +18,7 @@ namespace beast = boost::beast;
 namespace http = beast::http;
 using boost::asio::ip::tcp;
 using websocket::common::QueryId;
-using websocket::common::SharedPayloadAndTimestamp;
 using websocket = beast::websocket::stream<tcp::socket>;
-using common::SharedPayloadAndTimestamp;
 
 class UpdateFetcher {
   using payload_type = std::shared_ptr<const std::string>;

@@ -7,10 +7,8 @@
 #include <ctre/ctre.h>
 
 #include <boost/asio/experimental/awaitable_operators.hpp>
-#include <mutex>
 #include <optional>
 
-#include "util/MultiMap.h"
 #include "util/http/HttpUtils.h"
 #include "util/websocket/Common.h"
 
