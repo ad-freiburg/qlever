@@ -104,9 +104,7 @@ struct DateValueGetter {
     return std::nullopt;
   }
 
-   Opt operator()(Bool, EvaluationContext*) const {
-    return std::nullopt;
-  }
+  Opt operator()(Bool, EvaluationContext*) const { return std::nullopt; }
 
   Opt operator()(ValueId id, EvaluationContext*) const {
     if (id.getDatatype() == Datatype::Date) {

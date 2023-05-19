@@ -245,28 +245,35 @@ auto testUnaryExpression =
 TEST(SparqlExpression, dateOperators) {
   // Helper function that asserts that the date operators give the expected
   // result on the given date.
-  auto check = [](const string& date, int expectedYear, int expectedMonth,
-                  int expectedDay) {
-    auto checkYear = testUnaryExpression<YearExpression, std::string, long int>;
-    auto checkMonth =
-        testUnaryExpression<MonthExpression, std::string, long int>;
-    auto checkDay = testUnaryExpression<DayExpression, std::string, long int>;
-    checkYear({date}, {expectedYear});
-    checkMonth({date}, {expectedMonth});
-    checkDay({date}, {expectedDay});
+  auto check = [](const DateOrLargeYear& date, std::optional<int> expectedYear,
+                  std::optional<int> expectedMonth,
+                  std::optional<int> expectedDay) {
+    auto optToId = [](const auto& opt) {
+      if (opt.has_value()) {
+        return Id::makeFromInt(opt.value());
+      } else {
+        return Id::makeUndefined();
+      }
+    };
+    auto checkYear = testUnaryExpression<YearExpression, Id, Id>;
+    auto checkMonth = testUnaryExpression<MonthExpression, Id, Id>;
+    auto checkDay = testUnaryExpression<DayExpression, Id, Id>;
+    checkYear({Id::makeFromDate(date)}, {optToId(expectedYear)});
+    checkMonth({Id::makeFromDate(date)}, {optToId(expectedMonth)});
+    checkDay({Id::makeFromDate(date)}, {optToId(expectedDay)});
   };
 
+  using D = DateOrLargeYear;
   // Now the checks for dates with varying level of detail.
-  check("1970-04-22T11:53:00", 1970, 4, 22);
-  check("1970-04-22", 1970, 4, 22);
-  check("1970-04-22", 1970, 4, 22);
-  check("1970-04-22", 1970, 4, 22);
-  check("0042-12-24", 42, 12, 24);
-  check("-0099-07-01", -99, 7, 1);
-  check("-99-07-01", -99, 7, 1);
-  check("-12345699-07-01", -12345699, 7, 1);
-  check("321-07-01", 321, 7, 1);
-  check("12321-07-01", 12321, 7, 1);
+  check(D::parseXsdDatetime("1970-04-22T11:53:00"), 1970, 4, 22);
+  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
+  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
+  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
+  check(D::parseXsdDate("0042-12-24"), 42, 12, 24);
+  check(D::parseXsdDate("-0099-07-01"), -99, 7, 1);
+  check(D::parseGYear("-1234"), -1234, std::nullopt, std::nullopt);
+  check(D::parseXsdDate("0321-07-01"), 321, 7, 1);
+  check(D::parseXsdDate("2321-07-01"), 2321, 7, 1);
 }
 
 // Test `StrlenExpression` and `StrExpression`.
