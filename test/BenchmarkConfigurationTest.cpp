@@ -151,9 +151,6 @@ TEST(BenchmarkConfigurationTest, SetJsonStringExceptionTest) {
 TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
   ad_benchmark::BenchmarkConfiguration config{};
 
-  // TODO More than one level of depth. Oh, and also all possibilities for
-  // types.
-
   // Add integer options.
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "somePositiveNumber", "Must be set. Has no default value.",
@@ -161,6 +158,24 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "someNegativNumber", "Must be set. Has no default value.",
       ad_benchmark::BenchmarkConfigurationOption::integer));
+
+  // Add integer list.
+  config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
+      "someIntegerlist", "Must be set. Has no default value.",
+      ad_benchmark::BenchmarkConfigurationOption::integerList));
+
+  // Add floating point options.
+  config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
+      "somePositiveFloatingPoint", "Must be set. Has no default value.",
+      ad_benchmark::BenchmarkConfigurationOption::floatingPoint));
+  config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
+      "someNegativFloatingPoint", "Must be set. Has no default value.",
+      ad_benchmark::BenchmarkConfigurationOption::floatingPoint));
+
+  // Add floating point list.
+  config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
+      "someFloatingPointList", "Must be set. Has no default value.",
+      ad_benchmark::BenchmarkConfigurationOption::floatingPointList));
 
   // Add boolean options.
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
@@ -170,15 +185,27 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
       "boolFalse", "Must be set. Has no default value.",
       ad_benchmark::BenchmarkConfigurationOption::boolean));
 
+  // Add boolean list.
+  config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
+      "someBooleanList", "Must be set. Has no default value.",
+      ad_benchmark::BenchmarkConfigurationOption::booleanList));
+
   // Add string option.
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "myName", "Must be set. Has no default value.",
       ad_benchmark::BenchmarkConfigurationOption::string));
 
-  // Add list option.
+  // Add string list.
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
-      "list", "Must be set. Has no default value.",
-      ad_benchmark::BenchmarkConfigurationOption::integerList));
+      "someStringList", "Must be set. Has no default value.",
+      ad_benchmark::BenchmarkConfigurationOption::stringList));
+
+  // Add option with deeper level.
+  config.addConfigurationOption(
+      ad_benchmark::BenchmarkConfigurationOption(
+          "list", "Must be set. Has no default value.",
+          ad_benchmark::BenchmarkConfigurationOption::integerList),
+      "depth", 0);
 
   // This one will not be changed, in order to test, that options, that are not
   // set at run time, are not changed.
@@ -188,28 +215,38 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
 
   // Set those.
   config.setShortHand(
-      R"--(somePositiveNumber : 42, someNegativNumber : -42, boolTrue : true, boolFalse : false, myName : "Bernd", list : [42, -42])--");
+      R"--(somePositiveNumber : 42, someNegativNumber : -42, someIntegerlist : [40, 41], somePositiveFloatingPoint : 4.2, someNegativFloatingPoint : -4.2, someFloatingPointList : [4.1, 4.2], boolTrue : true, boolFalse : false, someBooleanList : [true, false, true], myName : "Bernd", someStringList : ["t1", "t2"], depth : [{list : [7,8]}])--");
 
   // Check, if an option was set to the value, you wanted.
-  auto checkOption = [&config](const std::string& optionName,
-                               const auto& content) {
-    const auto& option = config.getConfigurationOptionByNestedKeys(optionName);
+  auto checkOption = [&config](const auto& content, const auto&... keys) {
+    const auto& option = config.getConfigurationOptionByNestedKeys(keys...);
     ASSERT_TRUE(option.hasValue());
-    ASSERT_EQ(content, option.getValue<decltype(content)>());
+    ASSERT_EQ(content, option.template getValue<decltype(content)>());
   };
 
-  checkOption("somePositiveNumber", static_cast<int>(42));
-  checkOption("someNegativNumber", static_cast<int>(-42));
+  checkOption(static_cast<int>(42), "somePositiveNumber");
+  checkOption(static_cast<int>(-42), "someNegativNumber");
 
-  checkOption("boolTrue", true);
-  checkOption("boolFalse", false);
+  checkOption(std::vector{40, 41}, "someIntegerlist");
 
-  checkOption("myName", std::string{"Bernd"});
+  checkOption(static_cast<double>(4.2), "somePositiveFloatingPoint");
+  checkOption(static_cast<double>(-4.2), "someNegativFloatingPoint");
 
-  checkOption("list", std::vector{42, -42});
+  checkOption(std::vector{4.1, 4.2}, "someFloatingPointList");
+
+  checkOption(true, "boolTrue");
+  checkOption(false, "boolFalse");
+
+  checkOption(std::vector{true, false, true}, "someBooleanList");
+
+  checkOption(std::string{"Bernd"}, "myName");
+
+  checkOption(std::vector<std::string>{"t1", "t2"}, "someStringList");
+
+  checkOption(std::vector{7, 8}, "depth", 0, "list");
 
   // Is the "No Change" unchanged?
-  checkOption("No change", static_cast<int>(10));
+  checkOption(static_cast<int>(10), "No change");
 
   // Multiple key value pairs with the same key are not allowed.
   ASSERT_ANY_THROW(config.setShortHand(R"(a:42, a:43)"););
