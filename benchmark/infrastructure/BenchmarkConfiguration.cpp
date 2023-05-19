@@ -11,7 +11,7 @@
 
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "BenchmarkConfigurationOption.h"
-#include "BenchmarkResultToString.h"
+#include "BenchmarkToString.h"
 #include "nlohmann/json.hpp"
 #include "util/Exception.h"
 #include "util/json.h"
