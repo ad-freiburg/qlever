@@ -217,7 +217,7 @@ std::optional<MediaType> getMediaTypeFromAcceptHeader(
 // ______________________________________________________________________
 std::string getErrorMessageForSupportedMediaTypes(
     const std::vector<MediaType>& supportedMediaTypes) {
-  // TODO<joka921> Refactor this, as soon as clang supports ranges.
+  // TODO<C++23> Refactor this using `join_view` and the formatting of ranges.
   std::vector<std::string> asString;
   for (const auto& type : supportedMediaTypes) {
     asString.push_back(toString(type));

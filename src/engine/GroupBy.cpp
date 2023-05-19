@@ -74,12 +74,9 @@ string GroupBy::asStringImpl(size_t indent) const {
 }
 
 string GroupBy::getDescriptor() const {
-  // TODO<C++20 Views (clang16): Do this lazily using std::views::transform.
   // TODO<C++23>:: Use std::views::join_with.
-  return "GroupBy on " + absl::StrJoin(_groupByVariables, " ",
-                                       [](std::string* out, const Variable& v) {
-                                         absl::StrAppend(out, v.name());
-                                       });
+  return "GroupBy on " +
+         absl::StrJoin(_groupByVariables, " ", &Variable::AbslFormatter);
 }
 
 size_t GroupBy::getResultWidth() const {
