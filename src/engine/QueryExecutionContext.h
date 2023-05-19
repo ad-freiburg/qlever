@@ -131,6 +131,10 @@ class QueryExecutionContext {
         nlohmann::ordered_json(runtimeInformation).dump());
   }
 
+  ~QueryExecutionContext() {
+    webSocketManager_.releaseQuery(owningQueryId_.toQueryId());
+  }
+
   const bool _pinSubtrees;
   const bool _pinResult;
 
