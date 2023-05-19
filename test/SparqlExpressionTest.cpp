@@ -247,14 +247,13 @@ TEST(SparqlExpression, dateOperators) {
   // result on the given date.
   auto check = [](const string& date, int expectedYear, int expectedMonth,
                   int expectedDay) {
-    std::string dateAsIndexWord = ad_utility::convertDateToIndexWord(date);
     auto checkYear = testUnaryExpression<YearExpression, std::string, long int>;
     auto checkMonth =
         testUnaryExpression<MonthExpression, std::string, long int>;
     auto checkDay = testUnaryExpression<DayExpression, std::string, long int>;
-    checkYear({dateAsIndexWord}, {expectedYear});
-    checkMonth({dateAsIndexWord}, {expectedMonth});
-    checkDay({dateAsIndexWord}, {expectedDay});
+    checkYear({date}, {expectedYear});
+    checkMonth({date}, {expectedMonth});
+    checkDay({date}, {expectedDay});
   };
 
   // Now the checks for dates with varying level of detail.
@@ -262,8 +261,12 @@ TEST(SparqlExpression, dateOperators) {
   check("1970-04-22", 1970, 4, 22);
   check("1970-04-22", 1970, 4, 22);
   check("1970-04-22", 1970, 4, 22);
-  check("42-12-24", 42, 12, 24);
+  check("0042-12-24", 42, 12, 24);
+  check("-0099-07-01", -99, 7, 1);
   check("-99-07-01", -99, 7, 1);
+  check("-12345699-07-01", -12345699, 7, 1);
+  check("321-07-01", 321, 7, 1);
+  check("12321-07-01", 12321, 7, 1);
 }
 
 // Test `StrlenExpression` and `StrExpression`.
