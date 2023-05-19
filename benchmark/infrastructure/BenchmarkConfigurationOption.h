@@ -24,9 +24,8 @@ namespace ad_benchmark {
 class BenchmarkConfigurationOption {
  public:
   // The possible types of the value, that can be held by this option.
-  using ValueType = std::variant<std::monostate, bool, std::string, int, double,
-                                 std::vector<bool>, std::vector<std::string>,
-                                 std::vector<int>, std::vector<double>>;
+  using ValueType = std::variant<std::monostate, bool, std::string, int, double, std::vector<bool>,
+                                 std::vector<std::string>, std::vector<int>, std::vector<double>>;
   enum ValueTypeIndexes {
     boolean = 1,
     string,
@@ -62,9 +61,8 @@ class BenchmarkConfigurationOption {
   // Converts the index of `Valuetype` into their string representation.
   static std::string typesForValueToString(const size_t& value) {
     constexpr std::string_view indexToString[]{
-        "std::monostate",  "boolean",          "string",
-        "integer",         "double",           "list of booleans",
-        "list of strings", "list of integers", "list of doubles"};
+        "std::monostate",   "boolean",         "string",           "integer",        "double",
+        "list of booleans", "list of strings", "list of integers", "list of doubles"};
 
     return std::string{indexToString[value]};
   }
@@ -83,10 +81,9 @@ class BenchmarkConfigurationOption {
   @param defaultValue The default value, if the option isn't set at runtime.
   `std::monostate` counts as no default value.
   */
-  BenchmarkConfigurationOption(
-      std::string_view identifier, std::string_view description,
-      const ValueTypeIndexes& type,
-      const ValueType& defaultValue = std::monostate{});
+  BenchmarkConfigurationOption(std::string_view identifier, std::string_view description,
+                               const ValueTypeIndexes& type,
+                               const ValueType& defaultValue = std::monostate{});
 
   /*
   Was the configuration option set to a value at runtime?
@@ -115,11 +112,10 @@ class BenchmarkConfigurationOption {
       configurationOptionWasSet_ = true;
       value_ = value;
     } else {
-      throw ad_utility::Exception(
-          absl::StrCat("The type of the value in configuration option '",
-                       identifier_, "' is '", typesForValueToString(type_),
-                       "'. It can't be set to a value of type '",
-                       typesForValueToString(value.index()), "'."));
+      throw ad_utility::Exception(absl::StrCat("The type of the value in configuration option '",
+                                               identifier_, "' is '", typesForValueToString(type_),
+                                               "'. It can't be set to a value of type '",
+                                               typesForValueToString(value.index()), "'."));
     }
   }
 
@@ -137,20 +133,17 @@ class BenchmarkConfigurationOption {
   template <typename T>
   requires ad_utility::isTypeContainedIn<std::decay_t<T>, ValueType>
   std::decay_t<T> getDefaultValue() const {
-    if (hasDefaultValue() &&
-        std::holds_alternative<std::decay_t<T>>(defaultValue_)) {
+    if (hasDefaultValue() && std::holds_alternative<std::decay_t<T>>(defaultValue_)) {
       return std::get<std::decay_t<T>>(defaultValue_);
     } else if (!hasDefaultValue()) {
-      throw ad_utility::Exception(
-          absl::StrCat("Configuration option '", identifier_,
-                       "' was not created with a default value."));
+      throw ad_utility::Exception(absl::StrCat("Configuration option '", identifier_,
+                                               "' was not created with a default value."));
     } else {
       // They used the wrong type.
-      throw ad_utility::Exception(absl::StrCat(
-          "The type of the value in configuration option '", identifier_,
-          "' is '", typesForValueToString(type_), "'. It can't be cast as '",
-          typesForValueToString(getIndexOfTypeInVariant<T>(defaultValue_)),
-          "'."));
+      throw ad_utility::Exception(
+          absl::StrCat("The type of the value in configuration option '", identifier_, "' is '",
+                       typesForValueToString(type_), "'. It can't be cast as '",
+                       typesForValueToString(getIndexOfTypeInVariant<T>(defaultValue_)), "'."));
     }
   }
 
@@ -166,14 +159,13 @@ class BenchmarkConfigurationOption {
     } else if (!hasValue()) {
       // The value was never set.
       throw ad_utility::Exception(
-          absl::StrCat("The value in configuration option '", identifier_,
-                       "' was never set."));
+          absl::StrCat("The value in configuration option '", identifier_, "' was never set."));
     } else {
       // They used the wrong type.
-      throw ad_utility::Exception(absl::StrCat(
-          "The type of the value in configuration option '", identifier_,
-          "' is '", typesForValueToString(type_), "'. It can't be cast as '",
-          typesForValueToString(getIndexOfTypeInVariant<T>(value_)), "'."));
+      throw ad_utility::Exception(
+          absl::StrCat("The type of the value in configuration option '", identifier_, "' is '",
+                       typesForValueToString(type_), "'. It can't be cast as '",
+                       typesForValueToString(getIndexOfTypeInVariant<T>(value_)), "'."));
     }
   }
 
@@ -189,6 +181,25 @@ class BenchmarkConfigurationOption {
   */
   ValueTypeIndexes getActualValueType() const;
 
+  /*
+  @brief Calls the given function with the type of the value, that is held in this configuration
+  option. As in, the actual type, no enum value.
+
+  @tparam Function A generic lambda function, that takes an explicit template type argument and no
+  function agruments. Should also return nothing.
+  Example: `[&someOption]<typename T>(){std::cout << someOption.getValue<T>();}`
+   */
+  template <typename Function>
+  void callFunctionWithTypeOfOption(const Function& function) const {
+    ad_utility::RuntimeValueToCompileTimeValue<
+        std::variant_size_v<BenchmarkConfigurationOption::ValueType> - 1>(
+        getActualValueType(),
+        [&function]<size_t index, typename Type = std::variant_alternative_t<
+                                      index, BenchmarkConfigurationOption::ValueType>>() {
+          function.template operator()<Type>();
+        });
+  }
+
  private:
   /*
   @brief Returns the index position of a type in `std::variant` type.
@@ -196,10 +207,8 @@ class BenchmarkConfigurationOption {
   template <typename T, typename... Ts>
   requires(std::same_as<std::decay_t<T>, std::decay_t<Ts>> || ...)
   constexpr size_t getIndexOfTypeInVariant(const std::variant<Ts...>&) const {
-    return ad_utility::getIndexOfFirstTypeToPassCheck<[]<typename D>() {
-      return std::is_same_v<D, std::decay_t<T>>;
-    },
-                                                      std::decay_t<Ts>...>();
+    return ad_utility::getIndexOfFirstTypeToPassCheck<
+        []<typename D>() { return std::is_same_v<D, std::decay_t<T>>; }, std::decay_t<Ts>...>();
   }
 };
 }  // namespace ad_benchmark

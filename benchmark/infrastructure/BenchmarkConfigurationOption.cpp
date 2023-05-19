@@ -151,54 +151,15 @@ std::string_view BenchmarkConfigurationOption::getIdentifier() const {
 
 // ____________________________________________________________________________
 BenchmarkConfigurationOption::operator std::string() const {
-  // Converts a type in `ValueType` to their string representation.
-  auto variantSubTypeToString =
-      []<typename T>(const T& val,
-                     auto&& variantSubTypetoString) -> std::string {
-    if constexpr (std::is_same_v<T, std::string>) {
-      return val;
-    } else if constexpr (std::is_same_v<T, bool>) {
-      return val ? "true" : "false";
-    } else if constexpr (std::is_arithmetic_v<T>) {
-      return std::to_string(val);
-    } else if constexpr (ad_utility::isVector<T>) {
-      std::ostringstream stream;
-      stream << "{";
-      forEachExcludingTheLastOne(
-          val,
-          [&stream, &variantSubTypetoString](const auto& val) {
-            stream << variantSubTypetoString(val, variantSubTypetoString)
-                   << ", ";
-          },
-          [&stream, &variantSubTypetoString](const auto& val) {
-            stream << variantSubTypetoString(val, variantSubTypetoString);
-          });
-      stream << "}";
-      return stream.str();
-    } else {
-      // Should be a `std::monostate`.
-      return "None";
-    }
-  };
-
-  // Converts an `ValueType` to it's string representation.
-  auto variantToString =
-      [&variantSubTypeToString](const ValueType& val) -> std::string {
-    return std::visit(
-        [&variantSubTypeToString](const auto& val) {
-          return variantSubTypeToString(val, variantSubTypeToString);
-        },
-        val);
-  };
-
-  // The actual string representation.
   return absl::StrCat(
       "Benchmark configuration option '", identifier_, "'\n",
       addIndentation(
-          absl::StrCat("Value type: ", typesForValueToString(type_),
-                       "\nDefault value: ", variantToString(defaultValue_),
-                       "\nCurrently held value: ", variantToString(value_),
-                       "\nDescription: ", description_),
+          absl::StrCat(
+              "Value type: ", typesForValueToString(type_), "\nDefault value: ",
+              benchmarkConfigurationOptionValueTypeToString(defaultValue_),
+              "\nCurrently held value: ",
+              benchmarkConfigurationOptionValueTypeToString(value_),
+              "\nDescription: ", description_),
           1));
 }
 

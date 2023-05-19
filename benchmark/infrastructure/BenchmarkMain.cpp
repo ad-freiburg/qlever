@@ -156,6 +156,14 @@ int main(int argc, char** argv) {
 
   // Actually processing the arguments.
   if (vm.count("print")) {
+    // Print the configuration options with default values, if there were any.
+    const std::string& defaultConfigurationOptionString{
+        getDefaultValueBenchmarkConfigurationOptions(config)};
+    if (defaultConfigurationOptionString != "") {
+      std::cout << defaultConfigurationOptionString << "\n\n";
+    }
+
+    // Print the results and metadata.
     std::ranges::for_each(benchmarkClassAndResults,
                           [](const auto& pair) {
                             std::cout << benchmarkResultsToString(pair.first,

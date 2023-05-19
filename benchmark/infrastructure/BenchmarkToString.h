@@ -11,6 +11,8 @@
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
+#include "BenchmarkConfiguration.h"
+#include "BenchmarkConfigurationOption.h"
 #include "BenchmarkMetadata.h"
 #include "util/json.h"
 
@@ -97,6 +99,20 @@ json string representation. Otherwise, return an empty string.
 std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
                                     std::string_view prefix,
                                     std::string_view suffix);
+
+/*
+@brief Returns the content of a `BenchmarkConfigurationOption::ValueType` object
+as a string representation.
+*/
+std::string benchmarkConfigurationOptionValueTypeToString(
+    const BenchmarkConfigurationOption::ValueType& val);
+
+/*
+@brief Return a string, containing a list of all configuration options, that
+weren't set at runtime, with their default values.
+*/
+std::string getDefaultValueBenchmarkConfigurationOptions(
+    const BenchmarkConfiguration& config);
 
 /*
 @brief Add a vector of `ResultEntry` in their string form to the string stream

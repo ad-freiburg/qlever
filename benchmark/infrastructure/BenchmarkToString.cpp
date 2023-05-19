@@ -6,8 +6,10 @@
 #include <absl/strings/str_replace.h>
 
 #include "../benchmark/infrastructure/BenchmarkToString.h"
+#include "BenchmarkConfigurationOption.h"
 #include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
+#include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 
@@ -128,6 +130,90 @@ static void addMetadataToOStringstream(std::ostringstream* stream,
   } else {
     (*stream) << metaString;
   }
+}
+
+// ___________________________________________________________________________
+std::string benchmarkConfigurationOptionValueTypeToString(
+    const BenchmarkConfigurationOption::ValueType& val) {
+  // Converts a type in `ValueType` to their string representation.
+  auto variantSubTypeToString =
+      []<typename T>(const T& val,
+                     auto&& variantSubTypetoString) -> std::string {
+    if constexpr (std::is_same_v<T, std::string>) {
+      return val;
+    } else if constexpr (std::is_same_v<T, bool>) {
+      return val ? "true" : "false";
+    } else if constexpr (std::is_arithmetic_v<T>) {
+      return std::to_string(val);
+    } else if constexpr (ad_utility::isVector<T>) {
+      std::ostringstream stream;
+      stream << "{";
+      forEachExcludingTheLastOne(
+          val,
+          [&stream, &variantSubTypetoString](const auto& val) {
+            stream << variantSubTypetoString(val, variantSubTypetoString)
+                   << ", ";
+          },
+          [&stream, &variantSubTypetoString](const auto& val) {
+            stream << variantSubTypetoString(val, variantSubTypetoString);
+          });
+      stream << "}";
+      return stream.str();
+    } else {
+      // Should be a `std::monostate`.
+      return "None";
+    }
+  };
+
+  return std::visit(
+      [&variantSubTypeToString](const auto& val) {
+        return variantSubTypeToString(val, variantSubTypeToString);
+      },
+      val);
+}
+
+// ___________________________________________________________________________
+std::string getDefaultValueBenchmarkConfigurationOptions(
+    const BenchmarkConfiguration& config) {
+  /*
+  Because we want to create a list, we don't know how many entries there will be
+  and need a string stream.
+  */
+  std::ostringstream stream;
+
+  // Prints the default value of a configuration option and the accompanying
+  // text.
+  auto defaultConfigurationOptionToString =
+      [](const BenchmarkConfigurationOption& option) -> std::string {
+    std::string defaultValueAsString{};
+
+    option.callFunctionWithTypeOfOption(
+        [&defaultValueAsString, &option]<typename Type>() {
+          defaultValueAsString = benchmarkConfigurationOptionValueTypeToString(
+              option.getDefaultValue<Type>());
+        });
+
+    return absl::StrCat("Configuration option '", option.getIdentifier(),
+                        "' was not set at runtime, using default value '",
+                        defaultValueAsString, "'.");
+  };
+
+  forEachExcludingTheLastOne(
+      config.getConfigurationOptions(),
+      [&stream, &defaultConfigurationOptionToString](
+          const BenchmarkConfigurationOption& option) {
+        if (option.hasDefaultValue() && !option.wasSetAtRuntime()) {
+          stream << defaultConfigurationOptionToString(option) << "\n";
+        }
+      },
+      [&stream, &defaultConfigurationOptionToString](
+          const BenchmarkConfigurationOption& option) {
+        if (option.hasDefaultValue() && !option.wasSetAtRuntime()) {
+          stream << defaultConfigurationOptionToString(option);
+        }
+      });
+
+  return stream.str();
 }
 
 // ___________________________________________________________________________
