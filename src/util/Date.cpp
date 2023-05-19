@@ -150,33 +150,41 @@ static DateOrLargeYear makeDateOrLargeYear(int64_t year, int month, int day,
     if (month == 0) {
       return DateOrLargeYear(year, DateOrLargeYear::Type::Year);
     } else if (month != 1) {
+      /*
       throw std::runtime_error{
           "When the year of a datetime object is smaller than -9999 or larger "
           "than 9999 then the month has to be 1 in QLever's implementation of "
           "dates"};
+          */
     }
     if (day == 0) {
       return DateOrLargeYear(year, DateOrLargeYear::Type::YearMonth);
     } else if (day != 1) {
+      /*
       throw std::runtime_error{
           "When the year of a datetime object is smaller than -9999 or larger "
           "than 9999 then the day has to be 1 in QLever's implementation of "
           "dates"};
+          */
     }
     if (hour == -1) {
       return DateOrLargeYear(year, DateOrLargeYear::Type::Date);
     } else if (hour != 0) {
+      /*
       throw std::runtime_error{
           "When the year of a datetime object is smaller than -9999 or larger "
           "than 9999 then the hour has to be 0 in QLever's implementation of "
           "dates"};
+          */
     }
 
     if (minute != 0 || second != 0.0) {
+      /*
       throw std::runtime_error{
           "When the year of a datetime object is smaller than -9999 or larger "
           "than 9999 then the minute and second must both be 0 in QLever's "
           "implementation of Dates."};
+          */
     }
     return DateOrLargeYear(year, DateOrLargeYear::Type::DateTime);
   }
