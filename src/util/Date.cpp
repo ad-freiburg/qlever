@@ -230,7 +230,7 @@ DateOrLargeYear DateOrLargeYear::parseGYear(std::string_view dateString) {
         "The value ", dateString, " cannot be parsed as an `xsd:gYear`.")};
   }
   int64_t year = toInt<"year">(match);
-  return makeDateOrLargeYear(year, 0, 0, 0, 0, 0.0, parseTimezone(match));
+  return makeDateOrLargeYear(year, 0, 0, -1, 0, 0.0, parseTimezone(match));
 }
 
 // __________________________________________________________________________________
@@ -246,5 +246,5 @@ DateOrLargeYear DateOrLargeYear::parseGYearMonth(std::string_view dateString) {
   }
   int64_t year = toInt<"year">(match);
   int month = toInt<"month">(match);
-  return makeDateOrLargeYear(year, month, 0, 0, 0, 0.0, parseTimezone(match));
+  return makeDateOrLargeYear(year, month, 0, -1, 0, 0.0, parseTimezone(match));
 }

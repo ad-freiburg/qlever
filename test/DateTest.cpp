@@ -314,7 +314,7 @@ auto testYear(std::string_view input, int year, Date::Timezone timezone = 0,
               source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
   return testDatetimeImpl(DateOrLargeYear::parseGYear, input, XSD_GYEAR_TYPE,
-                          year, 0, 0, 0, 0, 0, timezone);
+                          year, 0, 0, -1, 0, 0, timezone);
 }
 
 auto testYearMonth(std::string_view input, int year, int month,
@@ -322,7 +322,7 @@ auto testYearMonth(std::string_view input, int year, int month,
                    source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
   return testDatetimeImpl(DateOrLargeYear::parseGYearMonth, input,
-                          XSD_GYEARMONTH_TYPE, year, month, 0, 0, 0, 0,
+                          XSD_GYEARMONTH_TYPE, year, month, 0, -1, 0, 0,
                           timezone);
 }
 }  // namespace

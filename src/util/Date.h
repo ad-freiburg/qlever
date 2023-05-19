@@ -169,7 +169,7 @@ class Date {
   using Timezone = std::variant<NoTimezone, TimezoneZ, int>;
   /// Construct a `Date` from values for the different components. If any of the
   /// components is out of range, a `DateOutOfRangeException` is thrown.
-  constexpr Date(int year, int month, int day, int hour = 0, int minute = 0,
+  constexpr Date(int year, int month, int day, int hour = -1, int minute = 0,
                  double second = 0.0, Timezone timezone = NoTimezone{}) {
     setYear(year);
     setMonth(month);
