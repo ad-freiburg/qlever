@@ -125,18 +125,27 @@ TEST(BenchmarkConfigurationTest, SetJsonStringTest) {
 TEST(BenchmarkConfigurationTest, SetJsonStringExceptionTest) {
   ad_benchmark::BenchmarkConfiguration config{};
 
-  // Add one option.
+  // Add one option with default and one without.
   config.addConfigurationOption(
       ad_benchmark::BenchmarkConfigurationOption(
-          "Option", "Must be set. Has no default value.",
+          "Without default", "Must be set. Has no default value.",
           ad_benchmark::BenchmarkConfigurationOption::integer),
       "depth 0");
-
-  // Should throw an exception, if we try set an option, that isn't there.
-  ASSERT_ANY_THROW(config.setJsonString(R"--({"depth 0":{"option":42}})--"));
+  config.addConfigurationOption(
+      ad_benchmark::BenchmarkConfigurationOption(
+          "With default", "Must not be set. Has default value.",
+          ad_benchmark::BenchmarkConfigurationOption::integerList,
+          std::vector{40, 41}),
+      "depth 0");
 
   // Should throw an exception, if we don't set all options, that must be set.
   ASSERT_ANY_THROW(config.setJsonString(R"--({})--"));
+
+  // Should throw an exception, if we try set an option, that isn't there.
+  ASSERT_ANY_THROW(config.setJsonString(
+      R"--({"depth 0":{"Without default":42, "with default" : [39]}})--"));
+  ASSERT_ANY_THROW(config.setJsonString(
+      R"--({"depth 0":{"Without default":42, "test string" : "test"}})--"));
 }
 
 TEST(BenchmarkConfigurationTest, ParseShortHandTest) {

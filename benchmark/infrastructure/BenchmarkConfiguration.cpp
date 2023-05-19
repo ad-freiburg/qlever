@@ -147,26 +147,38 @@ void BenchmarkConfiguration::setJsonString(const std::string& jsonString) {
   {"entryNumber5" : 5}]}` would be invalid, because of the typo.
   */
   for (const auto& item : stringAsJsonFlattend.items()) {
+    // Only returns true, if the given pointer is the EXACT path to a
+    // configuration option. Partial doesn't count!
+    auto isPointerToConfigurationOption =
+        [this](const nlohmann::json::json_pointer& ptr) {
+          // We only have numbers at the end of paths to configuration options.
+          return keyToConfigurationOptionIndex_.contains(ptr) &&
+                 keyToConfigurationOptionIndex_.at(ptr).is_number_integer();
+        };
+
     /*
-    We go over ALL valid json pointers in `stringAsJson` and check, if they, or
-    a valid sub json pointer of them, are contained in
-    `keyToConfigurationOptionIndex_`. This will only find paths, that point to
-    non existent configuration options, or have typos.
+    Because a configuration option can only hold json literal primitives, or
+    json literal arrays, we only have to to look at `currentPtr` and its father.
+    If `currentPtr` points at a json literal primitive, then it's valid, if
+    it's the exact path to a configuration option, or if its father is the exact
+    path to a configuration option, and in the `stringAsJson` it points to an
+    array.
     */
-    nlohmann::json::json_pointer currentPtr{item.key()};
+    const nlohmann::json::json_pointer currentPtr{item.key()};
 
-    while (!keyToConfigurationOptionIndex_.contains(currentPtr)) {
-      // Go to the parent pointer.
-      currentPtr = currentPtr.parent_pointer();
-
-      // If we reach the root, it's a completly non-valid path.
-      if (currentPtr.empty()) {
-        throw ad_utility::Exception(absl::StrCat(
-            "Error while trying to set configuration option: There is no valid "
-            "sub json pointer in '",
-            item.key(), "', that points to a valid configuration option.\n",
-            static_cast<std::string>(*this), "\n"));
-      }
+    if ((!isPointerToConfigurationOption(currentPtr) ||
+         !stringAsJson.at(currentPtr).is_primitive()) &&
+        (!isPointerToConfigurationOption(currentPtr.parent_pointer()) ||
+         !stringAsJson.at(currentPtr.parent_pointer()).is_array())) {
+      throw ad_utility::Exception(absl::StrCat(
+          "Error while trying to set configuration option: '",
+          currentPtr.to_string(), "'",
+          currentPtr.parent_pointer().empty()
+              ? " doesn't"
+              : absl::StrCat(" and '", currentPtr.parent_pointer().to_string(),
+                             "' both don't"),
+          " point to a valid configuration option.\n",
+          static_cast<std::string>(*this), "\n"));
     }
   }
 
