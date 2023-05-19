@@ -152,6 +152,54 @@ TEST(BenchmarkConfigurationOptionTest, CreateSetAndTest) {
   testCaseWithoutDefault.template operator()<ConfigurationOption::floatingPointList>({42.8, 42.8});
 }
 
+/*
+@brief Call the function with `size_t` versions of each of the possible
+`ad_benchmark::BenchmarkConfigurationOption::ValueTypIndexes` as template parameter.
+
+@tparam Function The loop body should be a templated function, with one
+size_t template argument and no more. It also shouldn't take any function
+arguments. Should be passed per deduction.
+*/
+template <typename Function>
+static void doForTypeIndex(const Function& function) {
+  // Add one to every element of a `std::index_sequence`.
+  constexpr auto addOneToIndexSequence =
+      []<size_t... Indexes>(const std::index_sequence<Indexes...>&) {
+        return std::index_sequence<(Indexes + 1)...>{};
+      };
+
+  // The index sequence for `ad_benchmark::BenchmarkConfigurationOption::ValueTypIndexes`.
+  constexpr auto valueTypeIndexesSequence = addOneToIndexSequence(
+      std::make_index_sequence<std::variant_size_v<ConfigurationOption::ValueType> - 1>{});
+
+  ad_utility::ConstexprForLoop(valueTypeIndexesSequence, function);
+}
+
+// `BenchmarkConfigurationOption` should always throw an exception, when created like this.
+TEST(BenchmarkConfigurationOptionTest, ExceptionOnCreation) {
+  // No identifier.
+  ASSERT_ANY_THROW(
+      ConfigurationOption option("", "", ad_benchmark::BenchmarkConfigurationOption::boolean););
+
+  // Wrong type for the defaultValue.
+  doForTypeIndex([]<size_t actualTypeIndex>() {
+    doForTypeIndex(
+        []<size_t wrongTypeIndex,
+           typename WrongType =
+               std::variant_alternative_t<wrongTypeIndex, ConfigurationOption::ValueType>>() {
+          if constexpr (actualTypeIndex != wrongTypeIndex) {
+            // Just creat some random default value with the wrong type.
+            ASSERT_ANY_THROW(
+                ConfigurationOption option(
+                    "Wrong default type", "",
+                    static_cast<ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes>(
+                        actualTypeIndex),
+                    WrongType{}););
+          }
+        });
+  });
+}
+
 // The form of a generic test case for the test `SetValueWithJson`.
 template <typename T>
 struct JsonTestCase {
@@ -192,24 +240,14 @@ TEST(BenchmarkConfigurationOptionTest, SetValueWithJson) {
     }
   };
 
-  // Add one to every element of a `std::index_sequence`.
-  constexpr auto addOneToIndexSequence =
-      []<size_t... Indexes>(const std::index_sequence<Indexes...>&) {
-        return std::index_sequence<(Indexes + 1)...>{};
-      };
-  // The index sequence for `ConfigurationOption::ValueTypIndexes`.
-  constexpr auto valueTypeIndexesSequence = addOneToIndexSequence(
-      std::make_index_sequence<std::variant_size_v<ConfigurationOption::ValueType> - 1>{});
-
   /*
   Set the value of a configuration option and check, that it was set
   correctly.
   */
   auto doTestCase =
-      [
-        &getTestCase, &valueTypeIndexesSequence
-      ]<size_t typeIndex,
-        typename Type = std::variant_alternative_t<typeIndex, ConfigurationOption::ValueType>>() {
+      [&getTestCase]<size_t typeIndex,
+                     typename Type =
+                         std::variant_alternative_t<typeIndex, ConfigurationOption::ValueType>>() {
     constexpr auto typeIndexAsEnum = static_cast<ConfigurationOption::ValueTypeIndexes>(typeIndex);
 
     ConfigurationOption option("t", "", typeIndexAsEnum);
@@ -224,7 +262,7 @@ TEST(BenchmarkConfigurationOptionTest, SetValueWithJson) {
 
     // Does the setter cause an exception, when given any json, that can't be interpreted as the
     // wanted type?
-    ad_utility::ConstexprForLoop(valueTypeIndexesSequence, [&getTestCase, &option]<size_t index>() {
+    doForTypeIndex([&getTestCase, &option]<size_t index>() {
       if constexpr (typeIndexAsEnum != index) {
         ASSERT_ANY_THROW(option.setValueWithJson(
             getTestCase
@@ -238,5 +276,5 @@ TEST(BenchmarkConfigurationOptionTest, SetValueWithJson) {
   };
 
   // Do the test case for every possible type.
-  ad_utility::ConstexprForLoop(valueTypeIndexesSequence, doTestCase);
+  doForTypeIndex(doTestCase);
 }

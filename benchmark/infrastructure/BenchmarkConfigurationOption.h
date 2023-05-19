@@ -83,18 +83,10 @@ class BenchmarkConfigurationOption {
   @param defaultValue The default value, if the option isn't set at runtime.
   `std::monostate` counts as no default value.
   */
-  BenchmarkConfigurationOption(std::string_view identifier,
-                               std::string_view description,
-                               const ValueTypeIndexes& type,
-                               const ValueType& defaultValue = std::monostate{})
-      : identifier_{identifier},
-        description_{description},
-        type_{type},
-        value_{defaultValue},
-        defaultValue_{defaultValue} {
-    // The `identifier` must be a string unlike `""`.
-    AD_CONTRACT_CHECK(identifier != "");
-  }
+  BenchmarkConfigurationOption(
+      std::string_view identifier, std::string_view description,
+      const ValueTypeIndexes& type,
+      const ValueType& defaultValue = std::monostate{});
 
   /*
   Was the configuration option set to a value at runtime?

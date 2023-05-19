@@ -20,6 +20,34 @@
 
 namespace ad_benchmark {
 // ____________________________________________________________________________
+BenchmarkConfigurationOption::BenchmarkConfigurationOption(
+    std::string_view identifier, std::string_view description,
+    const ValueTypeIndexes& type, const ValueType& defaultValue)
+    : identifier_{identifier},
+      description_{description},
+      type_{type},
+      value_{defaultValue},
+      defaultValue_{defaultValue} {
+  // The `identifier` must be a string unlike `""`.
+  AD_CONTRACT_CHECK(identifier != "");
+
+  /*
+  Is the default value of the right type? `std::monostate` is always alright,
+  because it signifies, that we have no default value.
+  */
+  if (type != defaultValue.index() &&
+      !std::holds_alternative<std::monostate>(defaultValue)) {
+    throw ad_utility::Exception(absl::StrCat(
+        "Error while constructing configuraion option: Configuration option '",
+        identifier, "' was given a default value of type '",
+        typesForValueToString(defaultValue.index()),
+        "', but the configuration option was set to only ever hold values of "
+        "type '",
+        typesForValueToString(type), "'."));
+  }
+}
+
+// ____________________________________________________________________________
 bool BenchmarkConfigurationOption::wasSetAtRuntime() const {
   return configurationOptionWasSet_;
 }
