@@ -196,9 +196,6 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
           nullptr};
     case Datatype::Date:
-      if constexpr (!removeQuotesAndAngleBrackets) {
-        // str = absl::StrCat("\"", str, "\"");
-      }
       return id.getDate().toStringAndType();
   }
   AD_FAIL();

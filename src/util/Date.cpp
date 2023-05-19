@@ -97,7 +97,7 @@ std::pair<std::string, const char*> DateOrLargeYear::toStringAndType() const {
   return {std::move(dateString), type};
 }
 
-// Convert a `match` from `ctre` to an integer. The behavior is undefined if
+// Convert a CTRE `match` to an integer. The behavior is undefined if
 // the `match` cannot be completely converted to an integer.
 template <ctll::fixed_string Name>
 static int64_t toInt(const auto& match) {

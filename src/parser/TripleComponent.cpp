@@ -84,7 +84,6 @@ std::string TripleComponent::toRdfLiteral() const {
   } else if (isDouble()) {
     return absl::StrCat("\"", getDouble(), "\"^^<", XSD_DOUBLE_TYPE, ">");
   } else if (isDate()) {
-    // TODO<joka921> This should also handle Date GYEAR MONTH etc. correctly.
     auto [date, type] = getDate().toStringAndType();
     return absl::StrCat("\"", date, "\"^^<", type, ">");
   } else {

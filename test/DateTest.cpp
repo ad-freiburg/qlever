@@ -266,6 +266,10 @@ TEST(Date, OrderRandomValues) {
 }
 
 namespace {
+// Test that `parseFunction(input)` results in a `DateOrLargeYear` object that
+// stores a `Date` with the given xsd `type` and the given `year, month, ... ,
+// timezone`. Also test that the result of this parsing, when converted back to
+// a string, yields `input` again.
 auto testDatetimeImpl(auto parseFunction, std::string_view input,
                       const char* type, int year, int month, int day, int hour,
                       int minute = 0, double second = 0.0,
@@ -294,6 +298,8 @@ auto testDatetimeImpl(auto parseFunction, std::string_view input,
   ASSERT_TRUE(optionalId.value().getDatatype() == Datatype::Date);
   ASSERT_EQ(optionalId.value().getDate(), dateLarge);
 }
+
+// Specializations of `testDatetimeImpl` for parsing `xsd:dateTime`.
 auto testDatetime(std::string_view input, int year, int month, int day,
                   int hour, int minute = 0, double second = 0.0,
                   Date::Timezone timezone = 0) {
@@ -302,6 +308,7 @@ auto testDatetime(std::string_view input, int year, int month, int day,
                           second, timezone);
 }
 
+// Specializations of `testDatetimeImpl` for parsing `xsd:date`.
 auto testDate(std::string_view input, int year, int month, int day,
               Date::Timezone timezone = 0,
               source_location l = source_location::current()) {
@@ -310,6 +317,7 @@ auto testDate(std::string_view input, int year, int month, int day,
                           year, month, day, -1, 0, 0, timezone);
 }
 
+// Specializations of `testDatetimeImpl` for parsing `xsd:gYear`.
 auto testYear(std::string_view input, int year, Date::Timezone timezone = 0,
               source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
@@ -317,6 +325,7 @@ auto testYear(std::string_view input, int year, Date::Timezone timezone = 0,
                           year, 0, 0, -1, 0, 0, timezone);
 }
 
+// Specializations of `testDatetimeImpl` for parsing `xsd:gYearMonth`.
 auto testYearMonth(std::string_view input, int year, int month,
                    Date::Timezone timezone = 0,
                    source_location l = source_location::current()) {
@@ -368,6 +377,10 @@ TEST(Date, parseYear) {
 }
 
 namespace {
+// Test that `parseFunction(input)` results in a `DateOrLargeYear` object that
+// stores a large year with the given xsd `type` and the given `year. Also test
+// that the result of this parsing, when converted back to a string, yields
+// `input` again.
 auto testLargeYearImpl(auto parseFunction, std::string_view input,
                        const char* type, DateOrLargeYear::Type typeEnum,
                        int year) {
@@ -389,23 +402,27 @@ auto testLargeYearImpl(auto parseFunction, std::string_view input,
   ASSERT_EQ(optionalId.value().getDate(), dateLarge);
 }
 
+// Specialization of `testLargeYearImpl` for `xsd:dateTime`
 auto testLargeYearDatetime(std::string_view input, int year) {
   return testLargeYearImpl(DateOrLargeYear::parseXsdDatetime, input,
                            XSD_DATETIME_TYPE, DateOrLargeYear::Type::DateTime,
                            year);
 }
 
+// Specialization of `testLargeYearImpl` for `xsd:date`
 auto testLargeYearDate(std::string_view input, int year) {
   return testLargeYearImpl(DateOrLargeYear::parseXsdDate, input, XSD_DATE_TYPE,
                            DateOrLargeYear::Type::Date, year);
 }
 
+// Specialization of `testLargeYearImpl` for `xsd:gYearMonth`
 auto testLargeYearGYearMonth(std::string_view input, int year) {
   return testLargeYearImpl(DateOrLargeYear::parseGYearMonth, input,
                            XSD_GYEARMONTH_TYPE,
                            DateOrLargeYear::Type::YearMonth, year);
 }
 
+// Specialization of `testLargeYearImpl` for `xsd:gYear`
 auto testLargeYearGYear(std::string_view input, int year) {
   return testLargeYearImpl(DateOrLargeYear::parseGYear, input, XSD_GYEAR_TYPE,
                            DateOrLargeYear::Type::Year, year);
