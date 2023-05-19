@@ -109,7 +109,11 @@ jobs:
       - name: Install sonar-scanner and build-wrapper
         uses: SonarSource/sonarcloud-github-c-cpp@v1
       - name: Install dependencies
-        run:  sudo apt update && sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
+        run:  |
+          sudo gem install apt-spy2
+          sudo apt-spy2 fix --commit --launchpad --country=US
+          sudo apt-get update
+          sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
       - name: Install boost Ubuntu 22.04
         run : sudo apt update && sudo apt install -y libboost-all-dev
       - name: Install clang 16
