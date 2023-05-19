@@ -11,7 +11,7 @@
 #include <variant>
 
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
-#include "../benchmark/infrastructure/BenchmarkResultToString.h"
+#include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkConfigurationOption.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
