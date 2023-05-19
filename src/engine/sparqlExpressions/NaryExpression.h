@@ -217,16 +217,16 @@ inline auto extractNumberFromDate =
   }
 };
 
-inline auto extractYear = [](std::string_view sv) {
-  auto year = extractNumberFromDate<yearIndexBegin, yearIndexEnd>(sv);
-  if (sv.starts_with("-")) {
-    year *= -1;
+inline auto extractYear = [](std::optional<DateOrLargeYear> d) -> Id {
+  if (!d.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    return Id::makeFromInt(d->getYear());
   }
-  return year;
 };
 inline auto extractMonth = extractNumberFromDate<monthIndex, monthIndex + 2>;
 inline auto extractDay = extractNumberFromDate<dayIndex, dayIndex + 2>;
-using YearExpression = NARY<1, FV<decltype(extractYear), StringValueGetter>>;
+using YearExpression = NARY<1, FV<decltype(extractYear), DateValueGetter>>;
 using MonthExpression = NARY<1, FV<decltype(extractMonth), StringValueGetter>>;
 using DayExpression = NARY<1, FV<decltype(extractDay), StringValueGetter>>;
 
