@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <ranges>
+
 #include "util/Exception.h"
 
 // Various helper functions for compile-time programming.
@@ -116,9 +118,8 @@ template <std::integral Int, size_t NumIntegers>
 constexpr std::array<Int, NumIntegers> integerToArray(Int value,
                                                       Int numValues) {
   std::array<Int, NumIntegers> res;
-  // TODO<joka921, clang16> use views for reversion.
-  for (size_t i = 0; i < res.size(); ++i) {
-    res[res.size() - 1 - i] = value % numValues;
+  for (auto& el : res | std::views::reverse) {
+    el = value % numValues;
     value /= numValues;
   }
   return res;
