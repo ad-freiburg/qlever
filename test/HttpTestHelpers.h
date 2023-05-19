@@ -51,8 +51,8 @@ class TestHttpServer {
     for (const short unsigned int port : ports) {
       try {
         server_ = std::make_shared<HttpServer<HttpHandler>>(
-            port, webSocketManager_, ipAddress,
-            numServerThreads, std::move(httpHandler));
+            port, webSocketManager_, ipAddress, numServerThreads,
+            std::move(httpHandler));
         return;
       } catch (const boost::system::system_error& b) {
         LOG(INFO) << "Starting test HTTP server on port " << port
