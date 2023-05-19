@@ -388,10 +388,10 @@ class DateOrLargeYear {
   }
 
   // Convert to a string (without quotes) that represents the stored date, and a
-  // pointer to the
-  // IRI of the corresponding datatype (currently always `xsd:dateTime`).
-  // Large years are currently always exported as `xsd:dateTime` pointing to the
-  // January 1st, 00:00 hours. (This is the format used by Wikidata).
+  // pointer to the IRI of the corresponding datatype (currently always
+  // `xsd:dateTime`). Large years are currently always exported as
+  // `xsd:dateTime` with January 1, 00:00 hours (This is the
+  // format used by Wikidata).
   std::pair<std::string, const char*> toStringAndType() const;
 
   // The bitwise comparison also correpsonds to the semantic ordering of years
@@ -405,10 +405,10 @@ class DateOrLargeYear {
   }
 
   // Parsing functions. They all have the following properties:
-  // * The input is not contained in quotes (for example 1900-12-13 for a date,
+  // 1. The input is not contained in quotes (for example 1900-12-13 for a date,
   // not "1900-12-13").
-  // * If the year is outside the range [-9999, 9999], then the date must be
-  // January 1st, at 00:00 hours.
+  // 2. If the year is outside the range [-9999, 9999], then the date must be
+  // January 1, 00:00 hours.
 
   // Parse from xsd:dateTime (e.g. 1900-12-13T03:12:00.33Z)
   static DateOrLargeYear parseXsdDatetime(std::string_view dateString);

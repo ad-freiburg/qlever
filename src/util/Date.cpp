@@ -45,10 +45,10 @@ std::pair<std::string, const char*> Date::toStringAndType() const {
       constexpr std::string_view formatString = "%04d-%02d-%02dT%02d:%02d:%02d";
       dateString =
           absl::StrFormat(formatString, getYear(), getMonth(), getDay(),
-                          getHour(), getMinute(), static_cast<int>(dIntPart));
+                          getHour(), getMinute(), static_cast<int>(seconds));
     } else {
       constexpr std::string_view formatString =
-          "%04d-%02d-%02dT%02d:%02d:%05.2f";
+          "%04d-%02d-%02dT%02d:%02d:%06.3f";
       dateString =
           absl::StrFormat(formatString, getYear(), getMonth(), getDay(),
                           getHour(), getMinute(), getSecond());
@@ -71,21 +71,25 @@ std::pair<std::string, const char*> DateOrLargeYear::toStringAndType() const {
       constexpr std::string_view formatString = "%d-01-01T00:00:00";
       dateString = absl::StrFormat(formatString, getYear());
       type = XSD_DATETIME_TYPE;
+      break;
     }
     case Type::Date: {
       constexpr std::string_view formatString = "%d-01-01";
       dateString = absl::StrFormat(formatString, getYear());
       type = XSD_DATE_TYPE;
+      break;
     }
     case Type::YearMonth: {
       constexpr std::string_view formatString = "%d-01";
       dateString = absl::StrFormat(formatString, getYear());
       type = XSD_GYEARMONTH_TYPE;
+      break;
     }
     case Type::Year: {
       constexpr std::string_view formatString = "%d";
       dateString = absl::StrFormat(formatString, getYear());
       type = XSD_GYEAR_TYPE;
+      break;
     }
     default:
       AD_FAIL();
@@ -93,9 +97,8 @@ std::pair<std::string, const char*> DateOrLargeYear::toStringAndType() const {
   return {std::move(dateString), type};
 }
 
-//  Convert a `match` from `ctre` to an integer. The behavior is undefined if
-//  the `match` cannot be completely
-// converted to an integer.
+// Convert a `match` from `ctre` to an integer. The behavior is undefined if
+// the `match` cannot be completely converted to an integer.
 template <ctll::fixed_string Name>
 static int64_t toInt(const auto& match) {
   int64_t result = 0;
@@ -104,7 +107,7 @@ static int64_t toInt(const auto& match) {
   return result;
 }
 
-// Regex objects with explicitly named groupes to parse dates and times.
+// Regex objects with explicitly named groups to parse dates and times.
 constexpr static ctll::fixed_string dateRegex{
     R"((?<year>-?\d{4,})-(?<month>\d{2})-(?<day>\d{2}))"};
 constexpr static ctll::fixed_string timeRegex{
@@ -150,7 +153,7 @@ static DateOrLargeYear makeDateOrLargeYear(int64_t year, int month, int day,
       throw std::runtime_error{
           "When the year of a datetime object is smaller than -9999 or larger "
           "than 9999 then the month has to be 1 in QLever's implementation of "
-          "Dates"};
+          "dates"};
     }
     if (day == 0) {
       return DateOrLargeYear(year, DateOrLargeYear::Type::YearMonth);
@@ -158,7 +161,7 @@ static DateOrLargeYear makeDateOrLargeYear(int64_t year, int month, int day,
       throw std::runtime_error{
           "When the year of a datetime object is smaller than -9999 or larger "
           "than 9999 then the day has to be 1 in QLever's implementation of "
-          "Dates"};
+          "dates"};
     }
     if (hour == -1) {
       return DateOrLargeYear(year, DateOrLargeYear::Type::Date);
@@ -166,7 +169,7 @@ static DateOrLargeYear makeDateOrLargeYear(int64_t year, int month, int day,
       throw std::runtime_error{
           "When the year of a datetime object is smaller than -9999 or larger "
           "than 9999 then the hour has to be 0 in QLever's implementation of "
-          "Dates"};
+          "dates"};
     }
 
     if (minute != 0 || second != 0.0) {
@@ -227,15 +230,13 @@ DateOrLargeYear DateOrLargeYear::parseGYear(std::string_view dateString) {
         "The value ", dateString, " cannot be parsed as an `xsd:gYear`.")};
   }
   int64_t year = toInt<"year">(match);
-  // TODO<joka921> How should we distinguish between `dateTime`, `date`,
-  // `year` and `yearMonth` in the underlying representation?
   return makeDateOrLargeYear(year, 0, 0, 0, 0, 0.0, parseTimezone(match));
 }
 
 // __________________________________________________________________________________
 DateOrLargeYear DateOrLargeYear::parseGYearMonth(std::string_view dateString) {
   constexpr static ctll::fixed_string yearRegex =
-      "(?<year>-?\\d{4})-(?<month>\\d{2})";
+      "(?<year>-?\\d{4,})-(?<month>\\d{2})";
   constexpr static ctll::fixed_string dateTime =
       yearRegex + grp(timezoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
@@ -245,7 +246,5 @@ DateOrLargeYear DateOrLargeYear::parseGYearMonth(std::string_view dateString) {
   }
   int64_t year = toInt<"year">(match);
   int month = toInt<"month">(match);
-  // TODO<joka921> How should we distinguish between `dateTime`, `date`,
-  // `year` and `yearMonth` in the underlying representation?
   return makeDateOrLargeYear(year, month, 0, 0, 0, 0.0, parseTimezone(match));
 }

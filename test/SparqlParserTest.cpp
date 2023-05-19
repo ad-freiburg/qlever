@@ -753,7 +753,7 @@ TEST(ParserTest, testLiterals) {
   ASSERT_EQ(10, c._triples[0]._o);
   ASSERT_EQ(10.2, c._triples[1]._s);
   ASSERT_EQ("<test:myrel>", c._triples[1]._p._iri);
-  ASSERT_EQ(DateOrLargeYear{Date(2000, 1, 1)}, c._triples[1]._o);
+  ASSERT_EQ(DateOrLargeYear{Date(2000, 1, 1, -1)}, c._triples[1]._o);
 }
 
 TEST(ParserTest, testSolutionModifiers) {

@@ -328,14 +328,19 @@ auto testYearMonth(std::string_view input, int year, int month,
 }  // namespace
 
 TEST(Date, parseDateTime) {
-  testDatetime("2034-12-24T02:12:42.34+12:00", 2034, 12, 24, 2, 12, 42.34, 12);
-  testDatetime("2034-12-24T02:12:42.34-03:00", 2034, 12, 24, 2, 12, 42.34, -3);
-  testDatetime("2034-12-24T02:12:42.34Z", 2034, 12, 24, 2, 12, 42.34,
+  testDatetime("2034-12-24T02:12:42.340+12:00", 2034, 12, 24, 2, 12, 42.34, 12);
+  testDatetime("2034-12-24T02:12:42.342-03:00", 2034, 12, 24, 2, 12, 42.342,
+               -3);
+  testDatetime("2034-12-24T02:12:42.340Z", 2034, 12, 24, 2, 12, 42.34,
                Date::TimezoneZ{});
-  testDatetime("2034-12-24T02:12:42.34", 2034, 12, 24, 2, 12, 42.34,
+  testDatetime("2034-12-24T02:12:42.341", 2034, 12, 24, 2, 12, 42.341,
                Date::NoTimezone{});
-  testDatetime("-2034-12-24T02:12:42.34", -2034, 12, 24, 2, 12, 42.34,
+  testDatetime("-2034-12-24T02:12:42.340", -2034, 12, 24, 2, 12, 42.34,
                Date::NoTimezone{});
+  testDatetime("-2034-12-24T02:12:42", -2034, 12, 24, 2, 12, 42.0,
+               Date::NoTimezone{});
+  testDatetime("-2034-12-24T02:12:42Z", -2034, 12, 24, 2, 12, 42.0,
+               Date::TimezoneZ{});
 }
 
 TEST(Date, parseDate) {
@@ -409,5 +414,14 @@ auto testLargeYearGYear(std::string_view input, int year) {
 
 TEST(Date, parseLargeYear) {
   testLargeYearGYear("2039481726", 2039481726);
-  testLargeYearGYear("2039481726Z", 2039481726);
+  testLargeYearGYear("-2039481726", -2039481726);
+
+  testLargeYearGYearMonth("2039481726-01", 2039481726);
+  testLargeYearGYearMonth("-2039481726-01", -2039481726);
+
+  testLargeYearDate("2039481726-01-01", 2039481726);
+  testLargeYearDate("-2039481726-01-01", -2039481726);
+
+  testLargeYearDatetime("2039481726-01-01T00:00:00", 2039481726);
+  testLargeYearDatetime("-2039481726-01-01T00:00:00", -2039481726);
 }
