@@ -4,13 +4,9 @@
 
 #pragma once
 
-#include <chrono>
 #include <cstdint>
-#include <memory>
 #include <random>
 #include <type_traits>
-
-#include "engine/RuntimeInformation.h"
 
 // Provides types required by all the other *.cpp files in this directory
 // and a select few other places
@@ -97,13 +93,4 @@ class QueryRegistry {
     return std::move(result.value());
   }
 };
-
-using Timestamp = std::chrono::time_point<std::chrono::steady_clock>;
-
-struct PayloadAndTimestamp {
-  std::string payload;
-  Timestamp updateMoment;
-};
-
-using SharedPayloadAndTimestamp = std::shared_ptr<const PayloadAndTimestamp>;
 }  // namespace ad_utility::websocket::common
