@@ -62,6 +62,8 @@ class WebSocketManager {
   net::awaitable<void> connectionLifecycle(tcp::socket,
                                            http::request<http::string_body>);
 
+  void wakeUpWebSocketsForQuery(const QueryId& queryId);
+
  public:
   void setIoContext(net::io_context& ioContext) {
     registryStrand_ = net::make_strand(ioContext);
@@ -70,7 +72,7 @@ class WebSocketManager {
                                         http::request<http::string_body>);
   void addQueryStatusUpdate(const QueryId& queryId, std::string);
 
-  void wakeUpWebSocketsForQuery(const QueryId& queryId);
+  void releaseQuery(QueryId queryId);
 };
 
 std::optional<http::response<http::string_body>> checkPathIsValid(

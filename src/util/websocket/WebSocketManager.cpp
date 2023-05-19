@@ -44,6 +44,17 @@ void WebSocketManager::wakeUpWebSocketsForQuery(const QueryId& queryId) {
   });
 }
 
+void WebSocketManager::releaseQuery(QueryId queryId) {
+  net::post(registryStrand_.value(), [this, queryId = std::move(queryId)]() {
+    informationQueues_.erase(queryId);
+    auto range = wakeupCalls_.equal_range(queryId);
+    for (auto it = range.first; it != range.second; ++it) {
+      it->second();
+    }
+    wakeupCalls_.erase(queryId);
+  });
+}
+
 // Based on https://stackoverflow.com/a/69285751
 template <typename CompletionToken>
 auto UpdateFetcher::waitForEvent(CompletionToken&& token) {
