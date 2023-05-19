@@ -135,9 +135,9 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 
   // First set up the HTTP server, so that it binds to the socket, and
   // the "socket already in use" error appears quickly.
-  auto httpServer =
-      HttpServer{port_,     queryStateManager_, webSocketManager_,
-                 "0.0.0.0", numThreads_,        std::move(httpSessionHandler)};
+  auto httpServer = HttpServer{port_, webSocketManager_, "0.0.0.0", numThreads_,
+                               std::move(httpSessionHandler)};
+  webSocketManager_.setIoContext(httpServer.getIoContext());
 
   // Initialize the index
   initialize(indexBaseName, useText, usePatterns, loadAllPermutations);
@@ -604,9 +604,8 @@ boost::asio::awaitable<void> Server::processQuery(
     // do index scans) and then we get an error message afterwards that a
     // certain media type is not supported.
     QueryExecutionContext qec(index_, &cache_, allocator_,
-                              sortPerformanceEstimator_, queryStateManager_,
-                              webSocketManager_, getQueryId(request),
-                              pinSubtrees, pinResult);
+                              sortPerformanceEstimator_, webSocketManager_,
+                              getQueryId(request), pinSubtrees, pinResult);
     QueryPlanner qp(&qec);
     qp.setEnablePatternTrick(enablePatternTrick_);
     queryExecutionTree = qp.createExecutionTree(pq);

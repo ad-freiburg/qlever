@@ -24,7 +24,7 @@
 #include <vector>
 
 #include "util/websocket/Common.h"
-#include "util/websocket/QueryState.h"
+#include "util/websocket/WebSocketManager.h"
 
 using std::shared_ptr;
 using std::string;
@@ -95,7 +95,6 @@ class QueryExecutionContext {
       const Index& index, QueryResultCache* const cache,
       ad_utility::AllocatorWithLimit<Id> allocator,
       SortPerformanceEstimator sortPerformanceEstimator,
-      ad_utility::query_state::QueryStateManager& queryStateManager,
       ad_utility::websocket::WebSocketManager& webSocketManager,
       ad_utility::websocket::common::OwningQueryId queryId,
       const bool pinSubtrees = false, const bool pinResult = false)
@@ -107,7 +106,6 @@ class QueryExecutionContext {
         _costFactors(),
         _sortPerformanceEstimator(sortPerformanceEstimator),
         owningQueryId_(std::move(queryId)),
-        queryStateManager_(queryStateManager),
         webSocketManager_(webSocketManager) {}
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
@@ -128,8 +126,9 @@ class QueryExecutionContext {
   ad_utility::AllocatorWithLimit<Id> getAllocator() { return _allocator; }
 
   void signalQueryUpdate(const RuntimeInformation& runtimeInformation) {
-    queryStateManager_.signalUpdateForQuery(
-        owningQueryId_.toQueryId(), runtimeInformation, webSocketManager_);
+    webSocketManager_.addQueryStatusUpdate(
+        owningQueryId_.toQueryId(),
+        nlohmann::ordered_json(runtimeInformation).dump());
   }
 
   const bool _pinSubtrees;
@@ -143,6 +142,5 @@ class QueryExecutionContext {
   QueryPlanningCostFactors _costFactors;
   SortPerformanceEstimator _sortPerformanceEstimator;
   ad_utility::websocket::common::OwningQueryId owningQueryId_;
-  ad_utility::query_state::QueryStateManager& queryStateManager_;
   ad_utility::websocket::WebSocketManager& webSocketManager_;
 };

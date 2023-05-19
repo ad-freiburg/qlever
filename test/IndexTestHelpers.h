@@ -119,8 +119,6 @@ inline QueryExecutionContext* getQec(std::string turtleInput = "",
     TypeErasedCleanup cleanup_;
     std::unique_ptr<Index> index_;
     std::unique_ptr<QueryResultCache> cache_;
-    std::unique_ptr<query_state::QueryStateManager> queryStateManager_ =
-        std::make_unique<query_state::QueryStateManager>();
     std::unique_ptr<websocket::WebSocketManager> webSocketManager_ =
         std::make_unique<websocket::WebSocketManager>();
     std::unique_ptr<websocket::common::QueryRegistry> queryRegistry_ =
@@ -128,8 +126,7 @@ inline QueryExecutionContext* getQec(std::string turtleInput = "",
     std::unique_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
             *index_, cache_.get(), makeAllocator(), SortPerformanceEstimator{},
-            *queryStateManager_, *webSocketManager_,
-            queryRegistry_->uniqueId());
+            *webSocketManager_, queryRegistry_->uniqueId());
   };
 
   using Key = std::tuple<std::string, bool, bool, bool>;
@@ -141,7 +138,6 @@ inline QueryExecutionContext* getQec(std::string turtleInput = "",
   if (!contextMap.contains(key)) {
     std::string testIndexBasename =
         "_staticGlobalTestIndex" + std::to_string(contextMap.size());
-    auto queryStateManager = std::make_unique<query_state::QueryStateManager>();
     contextMap.emplace(
         key, Context{TypeErasedCleanup{[testIndexBasename]() {
                        for (const std::string& indexFilename :

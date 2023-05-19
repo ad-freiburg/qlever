@@ -3,18 +3,14 @@
 //  Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
 #pragma once
-
 #include <absl/container/btree_map.h>
 #include <absl/container/flat_hash_map.h>
 
 #include <boost/beast/websocket.hpp>
 
+#include "util/LinkedList.h"
 #include "util/http/beast.h"
 #include "util/websocket/Common.h"
-#include "util/websocket/QueryState.h"
-namespace ad_utility::query_state {
-class QueryStateManager;
-};
 
 namespace ad_utility::websocket {
 namespace net = boost::asio;
@@ -26,78 +22,57 @@ using websocket::common::SharedPayloadAndTimestamp;
 using websocket = beast::websocket::stream<tcp::socket>;
 using common::SharedPayloadAndTimestamp;
 
-class WebSocketId {
-  const void* address_;
+class UpdateFetcher {
+  using payload_type = std::shared_ptr<const std::string>;
+  absl::flat_hash_map<QueryId, ad_utility::LinkedList<payload_type>>&
+      informationQueues_;
+  absl::btree_multimap<QueryId, std::function<void()>>& wakeupCalls_;
+  const QueryId& queryId_;
+  net::strand<net::io_context::executor_type>& registryStrand_;
+  std::shared_ptr<ad_utility::Node<payload_type>> currentNode_{nullptr};
 
  public:
-  // Generate unique webSocketIds based on the address of the passed reference.
-  // Make sure you're not moving the socket anywhere!
-  explicit WebSocketId(const websocket& webSocket) : address_{&webSocket} {}
-
-  constexpr bool operator==(const WebSocketId&) const noexcept = default;
-
-  template <typename H>
-  friend H AbslHashValue(H h, const WebSocketId& c) {
-    return H::combine(std::move(h), c.address_);
-  }
-};
-
-using QueryUpdateCallback = std::function<void(SharedPayloadAndTimestamp)>;
-
-class WebSocketManager {
-  std::mutex activeWebSocketsMutex{};
-  absl::btree_multimap<QueryId, WebSocketId> activeWebSockets{};
-  // Note there may be active websockets that are not currently listening
-  // because of concurrency.
-  std::mutex listeningWebSocketsMutex{};
-  absl::flat_hash_map<WebSocketId, QueryUpdateCallback> listeningWebSockets{};
-
-  void registerCallback(const QueryId& queryId, WebSocketId webSocketId,
-                        QueryUpdateCallback callback);
-
-  // ONLY CALL THIS IF YOU HOLD the listeningWebSocketsMutex!!!
-  void fireCallbackAndRemoveIfPresentNoLock(WebSocketId webSocketId,
-                                            SharedPayloadAndTimestamp payload);
-
-  void fireCallbackAndRemoveIfPresent(WebSocketId webSocketId,
-                                      SharedPayloadAndTimestamp payload);
-
-  void enableWebSocket(WebSocketId webSocketId, const QueryId& queryId);
-
-  void disableWebSocket(
-      WebSocketId webSocketId, const QueryId& queryId,
-      ad_utility::query_state::QueryStateManager& queryStateManager);
+  UpdateFetcher(
+      absl::flat_hash_map<QueryId, ad_utility::LinkedList<payload_type>>&
+          informationQueues,
+      absl::btree_multimap<QueryId, std::function<void()>>& wakeupCalls,
+      const QueryId& queryId,
+      net::strand<net::io_context::executor_type>& registryStrand)
+      : informationQueues_{informationQueues},
+        wakeupCalls_{wakeupCalls},
+        queryId_{queryId},
+        registryStrand_{registryStrand} {}
 
   template <typename CompletionToken>
-  auto waitForEvent(
-      const QueryId& queryId, WebSocketId webSocketId,
-      common::Timestamp lastUpdate,
-      ad_utility::query_state::QueryStateManager& queryStateManager,
-      CompletionToken&& token);
+  auto waitForEvent(CompletionToken&& token);
+};
 
-  net::awaitable<void> handleClientCommands(
-      websocket& ws, WebSocketId webSocketId, const QueryId& queryId,
-      ad_utility::query_state::QueryStateManager& queryStateManager);
+class WebSocketManager {
+  absl::flat_hash_map<
+      QueryId, ad_utility::LinkedList<std::shared_ptr<const std::string>>>
+      informationQueues_{};
+  absl::btree_multimap<QueryId, std::function<void()>> wakeupCalls_{};
 
-  net::awaitable<void> waitForServerEvents(
-      websocket& ws, WebSocketId webSocketId, const QueryId& queryId,
-      ad_utility::query_state::QueryStateManager& queryStateManager);
+  std::optional<net::strand<net::io_context::executor_type>> registryStrand_{};
 
-  net::awaitable<void> connectionLifecycle(
-      tcp::socket socket, http::request<http::string_body> request,
-      ad_utility::query_state::QueryStateManager& queryStateManager);
+  net::awaitable<void> handleClientCommands(websocket&);
+
+  net::awaitable<void> waitForServerEvents(websocket&, const QueryId&);
+
+  net::awaitable<void> connectionLifecycle(tcp::socket,
+                                           http::request<http::string_body>);
 
  public:
-  net::awaitable<void> manageConnection(
-      tcp::socket socket, http::request<http::string_body> request,
-      ad_utility::query_state::QueryStateManager& queryStateManager);
-  // Returns true if there are other active connections that do no currently
-  // wait.
-  bool fireAllCallbacksForQuery(
-      const QueryId& queryId,
-      SharedPayloadAndTimestamp runtimeInformationSnapshot);
+  void setIoContext(net::io_context& ioContext) {
+    registryStrand_ = net::make_strand(ioContext);
+  }
+  net::awaitable<void> manageConnection(tcp::socket,
+                                        http::request<http::string_body>);
+  void addQueryStatusUpdate(const QueryId& queryId, std::string);
+
+  void wakeUpWebSocketsForQuery(const QueryId& queryId);
 };
 
 std::optional<http::response<http::string_body>> checkPathIsValid(
-    const http::request<http::string_body>& request);
+    const http::request<http::string_body>&);
 };  // namespace ad_utility::websocket
