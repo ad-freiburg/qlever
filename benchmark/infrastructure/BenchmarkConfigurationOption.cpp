@@ -84,22 +84,23 @@ void BenchmarkConfigurationOption::setValueWithJson(
                              const ValueTypeIndexes& index,
                              auto& isValueTypeIndex) -> bool {
     switch (index) {
-      case ValueTypeIndexes::boolean:
+      using enum ValueTypeIndexes;
+      case boolean:
         return j.is_boolean();
         break;
-      case ValueTypeIndexes::string:
+      case string:
         return j.is_string();
         break;
-      case ValueTypeIndexes::integer:
+      case integer:
         return j.is_number_integer();
         break;
-      case ValueTypeIndexes::floatingPoint:
+      case floatingPoint:
         return j.is_number_float();
         break;
-      case ValueTypeIndexes::booleanList:
-      case ValueTypeIndexes::stringList:
-      case ValueTypeIndexes::integerList:
-      case ValueTypeIndexes::floatingPointList:
+      case booleanList:
+      case stringList:
+      case integerList:
+      case floatingPointList:
         return j.is_array() &&
                std::ranges::all_of(j, [&index,
                                        &isValueTypeIndex](const auto& entry) {
@@ -128,7 +129,7 @@ void BenchmarkConfigurationOption::setValueWithJson(
 
     // Does the json represent one of the types in our `ValueType`? If yes, we
     // can create a better exception message.
-    for (size_t index = static_cast<size_t>(ValueTypeIndexes::boolean);
+    for (auto index = static_cast<size_t>(ValueTypeIndexes::boolean);
          index <= static_cast<size_t>(ValueTypeIndexes::floatingPointList);
          index++) {
       if (isValueTypeIndex(json, static_cast<ValueTypeIndexes>(index),

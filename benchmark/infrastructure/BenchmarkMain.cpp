@@ -157,9 +157,10 @@ int main(int argc, char** argv) {
   // Actually processing the arguments.
   if (vm.count("print")) {
     // Print the configuration options with default values, if there were any.
-    const std::string& defaultConfigurationOptionString{
-        getDefaultValueBenchmarkConfigurationOptions(config)};
-    if (defaultConfigurationOptionString != "") {
+    if (const std::string &
+            defaultConfigurationOptionString{
+                getDefaultValueBenchmarkConfigurationOptions(config)};
+        defaultConfigurationOptionString != "") {
       std::cout << defaultConfigurationOptionString << "\n\n";
     }
 

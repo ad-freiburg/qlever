@@ -137,19 +137,19 @@ static void addMetadataToOStringstream(std::ostringstream* stream,
 std::string benchmarkConfigurationOptionValueTypeToString(
     const BenchmarkConfigurationOption::ValueType& val) {
   // Converts a type in `ValueType` to their string representation.
-  auto variantSubTypeToString = []<typename T>(const T& val,
+  auto variantSubTypeToString = []<typename T>(const T& v,
                                                auto&& variantSubTypetoString) {
     if constexpr (std::is_same_v<T, std::string>) {
-      return val;
+      return v;
     } else if constexpr (std::is_same_v<T, bool>) {
-      return val ? std::string{"true"} : std::string{"false"};
+      return v ? std::string{"true"} : std::string{"false"};
     } else if constexpr (std::is_arithmetic_v<T>) {
-      return std::to_string(val);
+      return std::to_string(v);
     } else if constexpr (ad_utility::isVector<T>) {
       std::ostringstream stream;
       stream << "{";
       forEachExcludingTheLastOne(
-          val,
+          v,
           [&stream, &variantSubTypetoString](const auto& v) {
             stream << variantSubTypetoString(v, variantSubTypetoString) << ", ";
           },
@@ -183,19 +183,19 @@ std::string getDefaultValueBenchmarkConfigurationOptions(
   // Prints the default value of a configuration option and the accompanying
   // text.
   auto defaultConfigurationOptionToString =
-      [](const BenchmarkConfigurationOption& option) -> std::string {
-    std::string defaultValueAsString{};
+      [](const BenchmarkConfigurationOption& option) {
+        std::string defaultValueAsString{};
 
-    option.callFunctionWithTypeOfOption(
-        [&defaultValueAsString, &option]<typename Type>() {
+        option.callFunctionWithTypeOfOption([&defaultValueAsString,
+                                             &option]<typename Type>() {
           defaultValueAsString = benchmarkConfigurationOptionValueTypeToString(
               option.getDefaultValue<Type>());
         });
 
-    return absl::StrCat("Configuration option '", option.getIdentifier(),
-                        "' was not set at runtime, using default value '",
-                        defaultValueAsString, "'.");
-  };
+        return absl::StrCat("Configuration option '", option.getIdentifier(),
+                            "' was not set at runtime, using default value '",
+                            defaultValueAsString, "'.");
+      };
 
   forEachExcludingTheLastOne(
       config.getConfigurationOptions(),
