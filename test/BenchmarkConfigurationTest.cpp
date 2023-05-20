@@ -14,11 +14,13 @@ TEST(BenchmarkConfigurationTest, GetConfigurationOptionByNestedKeysTest) {
   const ad_benchmark::BenchmarkConfigurationOption& withDefault{
       ad_benchmark::BenchmarkConfigurationOption(
           "Sense of existence", "",
-          ad_benchmark::BenchmarkConfigurationOption::integer, 42)};
+          ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::integer,
+          42)};
   const ad_benchmark::BenchmarkConfigurationOption& withoutDefault{
       ad_benchmark::BenchmarkConfigurationOption(
           "Sense of existence", "",
-          ad_benchmark::BenchmarkConfigurationOption::integer, 1)};
+          ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::integer,
+          1)};
 
   // 'Compare' two benchmark configuration options
   auto compareConfigurationOptions =
@@ -48,7 +50,8 @@ TEST(BenchmarkConfigurationTest, GetConfigurationOptionByNestedKeysTest) {
   ASSERT_ANY_THROW(config.addConfigurationOption(
       ad_benchmark::BenchmarkConfigurationOption(
           "Sense of existence", "",
-          ad_benchmark::BenchmarkConfigurationOption::integer, 42),
+          ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::integer,
+          42),
       "Shared part", "Unique part 1"));
 
   // Trying to get a configuration option, that does not exist, should cause an
@@ -64,16 +67,19 @@ TEST(BenchmarkConfigurationTest, SetJsonStringTest) {
   config.addConfigurationOption(
       ad_benchmark::BenchmarkConfigurationOption(
           "Option 0", "Must be set. Has no default value.",
-          ad_benchmark::BenchmarkConfigurationOption::integer),
+          ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::
+              integer),
       "depth 0");
   config.addConfigurationOption(
       ad_benchmark::BenchmarkConfigurationOption(
           "Option 1", "Must be set. Has no default value.",
-          ad_benchmark::BenchmarkConfigurationOption::integer),
+          ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::
+              integer),
       "depth 0", "depth 1");
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "Option 2", "Has a default value.",
-      ad_benchmark::BenchmarkConfigurationOption::integer, 2));
+      ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::integer,
+      2));
 
   // For easier access to the options.
   auto getOption = [&config](const size_t& optionNumber) {
@@ -129,12 +135,14 @@ TEST(BenchmarkConfigurationTest, SetJsonStringExceptionTest) {
   config.addConfigurationOption(
       ad_benchmark::BenchmarkConfigurationOption(
           "Without default", "Must be set. Has no default value.",
-          ad_benchmark::BenchmarkConfigurationOption::integer),
+          ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::
+              integer),
       "depth 0");
   config.addConfigurationOption(
       ad_benchmark::BenchmarkConfigurationOption(
           "With default", "Must not be set. Has default value.",
-          ad_benchmark::BenchmarkConfigurationOption::integerList,
+          ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::
+              integerList,
           std::vector{40, 41}),
       "depth 0");
 
@@ -154,63 +162,71 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
   // Add integer options.
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "somePositiveNumber", "Must be set. Has no default value.",
-      ad_benchmark::BenchmarkConfigurationOption::integer));
+      ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::integer));
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "someNegativNumber", "Must be set. Has no default value.",
-      ad_benchmark::BenchmarkConfigurationOption::integer));
+      ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::integer));
 
   // Add integer list.
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "someIntegerlist", "Must be set. Has no default value.",
-      ad_benchmark::BenchmarkConfigurationOption::integerList));
+      ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::
+          integerList));
 
   // Add floating point options.
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "somePositiveFloatingPoint", "Must be set. Has no default value.",
-      ad_benchmark::BenchmarkConfigurationOption::floatingPoint));
+      ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::
+          floatingPoint));
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "someNegativFloatingPoint", "Must be set. Has no default value.",
-      ad_benchmark::BenchmarkConfigurationOption::floatingPoint));
+      ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::
+          floatingPoint));
 
   // Add floating point list.
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "someFloatingPointList", "Must be set. Has no default value.",
-      ad_benchmark::BenchmarkConfigurationOption::floatingPointList));
+      ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::
+          floatingPointList));
 
   // Add boolean options.
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "boolTrue", "Must be set. Has no default value.",
-      ad_benchmark::BenchmarkConfigurationOption::boolean));
+      ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::boolean));
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "boolFalse", "Must be set. Has no default value.",
-      ad_benchmark::BenchmarkConfigurationOption::boolean));
+      ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::boolean));
 
   // Add boolean list.
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "someBooleanList", "Must be set. Has no default value.",
-      ad_benchmark::BenchmarkConfigurationOption::booleanList));
+      ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::
+          booleanList));
 
   // Add string option.
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "myName", "Must be set. Has no default value.",
-      ad_benchmark::BenchmarkConfigurationOption::string));
+      ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::string));
 
   // Add string list.
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "someStringList", "Must be set. Has no default value.",
-      ad_benchmark::BenchmarkConfigurationOption::stringList));
+      ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::
+          stringList));
 
   // Add option with deeper level.
   config.addConfigurationOption(
       ad_benchmark::BenchmarkConfigurationOption(
           "list", "Must be set. Has no default value.",
-          ad_benchmark::BenchmarkConfigurationOption::integerList),
+          ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::
+              integerList),
       "depth", 0);
 
   // This one will not be changed, in order to test, that options, that are not
   // set at run time, are not changed.
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
-      "No change", "", ad_benchmark::BenchmarkConfigurationOption::integer,
+      "No change", "",
+      ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::integer,
       10));
 
   // Set those.

@@ -228,17 +228,11 @@ BenchmarkConfiguration::operator std::string() const {
         option.getActualValueType();
 
     if (option.hasDefaultValue()) {
-      /*
-      Getting the default value requires us to provide a type. In order to
-      convert `typeIndex` to this type, we have to get creative.
-      */
-      ad_utility::RuntimeValueToCompileTimeValue<
-          std::variant_size_v<BenchmarkConfigurationOption::ValueType> - 1>(
-          typeIndex, [&jsonOptionPointer, &option,
-                      &prettyKeyToConfigurationOptionIndex]<size_t index>() {
+      option.callFunctionWithTypeOfOption(
+          [&jsonOptionPointer, &option,
+           &prettyKeyToConfigurationOptionIndex]<typename T>() {
             prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
-                option.getDefaultValue<std::variant_alternative_t<
-                    index, BenchmarkConfigurationOption::ValueType>>();
+                option.getDefaultValue<T>();
           });
     } else {
       // Some premade example value.

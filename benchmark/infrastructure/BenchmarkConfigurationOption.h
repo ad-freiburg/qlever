@@ -26,7 +26,7 @@ class BenchmarkConfigurationOption {
   // The possible types of the value, that can be held by this option.
   using ValueType = std::variant<std::monostate, bool, std::string, int, double, std::vector<bool>,
                                  std::vector<std::string>, std::vector<int>, std::vector<double>>;
-  enum ValueTypeIndexes {
+  enum class ValueTypeIndexes {
     boolean = 1,
     string,
     integer,
@@ -108,14 +108,14 @@ class BenchmarkConfigurationOption {
   */
   void setValue(const ValueType& value) {
     // Only set our value, if the given value is of the right type.
-    if (type_ == value.index()) {
+    if (type_ == static_cast<ValueTypeIndexes>(value.index())) {
       configurationOptionWasSet_ = true;
       value_ = value;
     } else {
-      throw ad_utility::Exception(absl::StrCat("The type of the value in configuration option '",
-                                               identifier_, "' is '", typesForValueToString(type_),
-                                               "'. It can't be set to a value of type '",
-                                               typesForValueToString(value.index()), "'."));
+      throw ad_utility::Exception(absl::StrCat(
+          "The type of the value in configuration option '", identifier_, "' is '",
+          typesForValueToString(static_cast<size_t>(type_)),
+          "'. It can't be set to a value of type '", typesForValueToString(value.index()), "'."));
     }
   }
 
@@ -140,10 +140,10 @@ class BenchmarkConfigurationOption {
                                                "' was not created with a default value."));
     } else {
       // They used the wrong type.
-      throw ad_utility::Exception(
-          absl::StrCat("The type of the value in configuration option '", identifier_, "' is '",
-                       typesForValueToString(type_), "'. It can't be cast as '",
-                       typesForValueToString(getIndexOfTypeInVariant<T>(defaultValue_)), "'."));
+      throw ad_utility::Exception(absl::StrCat(
+          "The type of the value in configuration option '", identifier_, "' is '",
+          typesForValueToString(static_cast<size_t>(type_)), "'. It can't be cast as '",
+          typesForValueToString(getIndexOfTypeInVariant<T>(defaultValue_)), "'."));
     }
   }
 
@@ -162,10 +162,10 @@ class BenchmarkConfigurationOption {
           absl::StrCat("The value in configuration option '", identifier_, "' was never set."));
     } else {
       // They used the wrong type.
-      throw ad_utility::Exception(
-          absl::StrCat("The type of the value in configuration option '", identifier_, "' is '",
-                       typesForValueToString(type_), "'. It can't be cast as '",
-                       typesForValueToString(getIndexOfTypeInVariant<T>(value_)), "'."));
+      throw ad_utility::Exception(absl::StrCat(
+          "The type of the value in configuration option '", identifier_, "' is '",
+          typesForValueToString(static_cast<size_t>(type_)), "'. It can't be cast as '",
+          typesForValueToString(getIndexOfTypeInVariant<T>(value_)), "'."));
     }
   }
 
@@ -193,7 +193,7 @@ class BenchmarkConfigurationOption {
   void callFunctionWithTypeOfOption(const Function& function) const {
     ad_utility::RuntimeValueToCompileTimeValue<
         std::variant_size_v<BenchmarkConfigurationOption::ValueType> - 1>(
-        getActualValueType(),
+        static_cast<size_t>(getActualValueType()),
         [&function]<size_t index, typename Type = std::variant_alternative_t<
                                       index, BenchmarkConfigurationOption::ValueType>>() {
           function.template operator()<Type>();

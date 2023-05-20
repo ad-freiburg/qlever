@@ -239,24 +239,26 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
     // Add some arbitrary values.
     config->addConfigurationOption(BenchmarkConfigurationOption(
         "date", "The current date. Has the default value \"22.3.2023\".",
-        BenchmarkConfigurationOption::string, std::string{"22.3.2023"}));
+        BenchmarkConfigurationOption::ValueTypeIndexes::string,
+        std::string{"22.3.2023"}));
 
     config->addConfigurationOption(BenchmarkConfigurationOption(
         "numSigns", "The number of street signs. Has the default value 10.",
-        BenchmarkConfigurationOption::integer, 10));
+        BenchmarkConfigurationOption::ValueTypeIndexes::integer, 10));
 
     config->addConfigurationOption(BenchmarkConfigurationOption(
         "CoinFlipTry",
         "The number of succesful coin flips. As default, 5 unsuccesful "
         "coin flips.",
-        BenchmarkConfigurationOption::booleanList,
+        BenchmarkConfigurationOption::ValueTypeIndexes::booleanList,
         std::vector<bool>{false, false, false, false, false}));
 
     config->addConfigurationOption(
         BenchmarkConfigurationOption(
             "Steve",
             "Steves saving account balance. Has the default value -41.9.",
-            BenchmarkConfigurationOption::floatingPoint, -41.9),
+            BenchmarkConfigurationOption::ValueTypeIndexes::floatingPoint,
+            -41.9),
         "Accounts", "Personal");
   }
 

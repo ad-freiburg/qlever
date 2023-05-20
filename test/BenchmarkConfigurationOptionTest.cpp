@@ -33,7 +33,7 @@ TEST(BenchmarkConfigurationOptionTest, CreateSetAndTest) {
           Make sure, that the type at position `index` of type `ValueType` causes an exception
           to be thrown by the getter.
           */
-          if constexpr (index != WorkingTypeIndex) {
+          if constexpr (index != static_cast<size_t>(WorkingTypeIndex)) {
             ASSERT_ANY_THROW(
                 (option.getValue<
                     std::variant_alternative_t<index, ConfigurationOption::ValueType>>()));
@@ -51,10 +51,11 @@ TEST(BenchmarkConfigurationOptionTest, CreateSetAndTest) {
   Set the value of a configuration option and check, that it was set
   correctly.
   */
-  auto setAndTest = [&otherGettersDontWork]<
-      ConfigurationOption::ValueTypeIndexes typeIndex,
-      typename Type = std::variant_alternative_t<typeIndex, ConfigurationOption::ValueType>>(
-      ConfigurationOption & option, const Type& valueToSetTo) {
+  auto setAndTest =
+      [&otherGettersDontWork]<ConfigurationOption::ValueTypeIndexes typeIndex,
+                              typename Type = std::variant_alternative_t<
+                                  static_cast<size_t>(typeIndex), ConfigurationOption::ValueType>>(
+          ConfigurationOption & option, const Type& valueToSetTo) {
     // Do we even have the right type for this option?
     ASSERT_EQ(typeIndex, option.getActualValueType());
 
@@ -77,7 +78,8 @@ TEST(BenchmarkConfigurationOptionTest, CreateSetAndTest) {
       [
         &setAndTest, &otherGettersDontWork
       ]<ConfigurationOption::ValueTypeIndexes typeIndex,
-        typename Type = std::variant_alternative_t<typeIndex, ConfigurationOption::ValueType>>(
+        typename Type = std::variant_alternative_t<static_cast<size_t>(typeIndex),
+                                                   ConfigurationOption::ValueType>>(
           const Type& defaultValue, const Type& valueToSetTo) {
     ConfigurationOption option("With default", "", typeIndex, defaultValue);
 
@@ -96,8 +98,8 @@ TEST(BenchmarkConfigurationOptionTest, CreateSetAndTest) {
 
   auto testCaseWithoutDefault =
       [&setAndTest]<ConfigurationOption::ValueTypeIndexes typeIndex,
-                    typename Type =
-                        std::variant_alternative_t<typeIndex, ConfigurationOption::ValueType>>(
+                    typename Type = std::variant_alternative_t<static_cast<size_t>(typeIndex),
+                                                               ConfigurationOption::ValueType>>(
           const Type& valueToSetTo) {
     ConfigurationOption option("Without default", "", typeIndex);
 
@@ -121,35 +123,43 @@ TEST(BenchmarkConfigurationOptionTest, CreateSetAndTest) {
   };
 
   // Do a test case for every possible type.
-  testCaseWithDefault.template operator()<ConfigurationOption::boolean>(false, true);
-  testCaseWithoutDefault.template operator()<ConfigurationOption::boolean>(true);
+  testCaseWithDefault.template operator()<ConfigurationOption::ValueTypeIndexes::boolean>(false,
+                                                                                          true);
+  testCaseWithoutDefault.template operator()<ConfigurationOption::ValueTypeIndexes::boolean>(true);
 
-  testCaseWithDefault.template operator()<ConfigurationOption::string>(std::string{"unset"},
-                                                                       std::string{"set"});
-  testCaseWithoutDefault.template operator()<ConfigurationOption::string>(std::string{"set"});
+  testCaseWithDefault.template operator()<ConfigurationOption::ValueTypeIndexes::string>(
+      std::string{"unset"}, std::string{"set"});
+  testCaseWithoutDefault.template operator()<ConfigurationOption::ValueTypeIndexes::string>(
+      std::string{"set"});
 
-  testCaseWithDefault.template operator()<ConfigurationOption::integer>(40, 42);
-  testCaseWithoutDefault.template operator()<ConfigurationOption::integer>(42);
+  testCaseWithDefault.template operator()<ConfigurationOption::ValueTypeIndexes::integer>(40, 42);
+  testCaseWithoutDefault.template operator()<ConfigurationOption::ValueTypeIndexes::integer>(42);
 
-  testCaseWithDefault.template operator()<ConfigurationOption::floatingPoint>(40.5, 42.5);
-  testCaseWithoutDefault.template operator()<ConfigurationOption::floatingPoint>(42.5);
+  testCaseWithDefault.template operator()<ConfigurationOption::ValueTypeIndexes::floatingPoint>(
+      40.5, 42.5);
+  testCaseWithoutDefault.template operator()<ConfigurationOption::ValueTypeIndexes::floatingPoint>(
+      42.5);
 
-  testCaseWithDefault.template operator()<ConfigurationOption::booleanList>({false, true},
-                                                                            {true, true});
-  testCaseWithoutDefault.template operator()<ConfigurationOption::booleanList>({true, true});
+  testCaseWithDefault.template operator()<ConfigurationOption::ValueTypeIndexes::booleanList>(
+      {false, true}, {true, true});
+  testCaseWithoutDefault.template operator()<ConfigurationOption::ValueTypeIndexes::booleanList>(
+      {true, true});
 
-  testCaseWithDefault.template operator()<ConfigurationOption::stringList>(
+  testCaseWithDefault.template operator()<ConfigurationOption::ValueTypeIndexes::stringList>(
       {std::string{"First string"}, std::string{"Second string"}},
       {std::string{"Second string"}, std::string{"Second string"}});
-  testCaseWithoutDefault.template operator()<ConfigurationOption::stringList>(
+  testCaseWithoutDefault.template operator()<ConfigurationOption::ValueTypeIndexes::stringList>(
       {std::string{"Second string"}, std::string{"Second string"}});
 
-  testCaseWithDefault.template operator()<ConfigurationOption::integerList>({40, 42}, {42, 42});
-  testCaseWithoutDefault.template operator()<ConfigurationOption::integerList>({42, 42});
+  testCaseWithDefault.template operator()<ConfigurationOption::ValueTypeIndexes::integerList>(
+      {40, 42}, {42, 42});
+  testCaseWithoutDefault.template operator()<ConfigurationOption::ValueTypeIndexes::integerList>(
+      {42, 42});
 
-  testCaseWithDefault.template operator()<ConfigurationOption::floatingPointList>({40.8, 42.8},
-                                                                                  {42.8, 42.8});
-  testCaseWithoutDefault.template operator()<ConfigurationOption::floatingPointList>({42.8, 42.8});
+  testCaseWithDefault.template operator()<ConfigurationOption::ValueTypeIndexes::floatingPointList>(
+      {40.8, 42.8}, {42.8, 42.8});
+  testCaseWithoutDefault
+      .template operator()<ConfigurationOption::ValueTypeIndexes::floatingPointList>({42.8, 42.8});
 }
 
 /*
@@ -179,7 +189,8 @@ static void doForTypeIndex(const Function& function) {
 TEST(BenchmarkConfigurationOptionTest, ExceptionOnCreation) {
   // No identifier.
   ASSERT_ANY_THROW(
-      ConfigurationOption option("", "", ad_benchmark::BenchmarkConfigurationOption::boolean););
+      ConfigurationOption option(
+          "", "", ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::boolean););
 
   // Wrong type for the defaultValue.
   doForTypeIndex([]<size_t actualTypeIndex>() {
@@ -263,7 +274,7 @@ TEST(BenchmarkConfigurationOptionTest, SetValueWithJson) {
     // Does the setter cause an exception, when given any json, that can't be interpreted as the
     // wanted type?
     doForTypeIndex([&getTestCase, &option]<size_t index>() {
-      if constexpr (typeIndexAsEnum != index) {
+      if constexpr (typeIndex != index) {
         ASSERT_ANY_THROW(option.setValueWithJson(
             getTestCase
                 .template operator()<static_cast<ConfigurationOption::ValueTypeIndexes>(index)>()

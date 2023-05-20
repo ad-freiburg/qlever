@@ -35,7 +35,7 @@ BenchmarkConfigurationOption::BenchmarkConfigurationOption(
   Is the default value of the right type? `std::monostate` is always alright,
   because it signifies, that we have no default value.
   */
-  if (type != defaultValue.index() &&
+  if (type != static_cast<ValueTypeIndexes>(defaultValue.index()) &&
       !std::holds_alternative<std::monostate>(defaultValue)) {
     throw ad_utility::Exception(absl::StrCat(
         "Error while constructing configuraion option: Configuration option '",
@@ -43,7 +43,7 @@ BenchmarkConfigurationOption::BenchmarkConfigurationOption(
         typesForValueToString(defaultValue.index()),
         "', but the configuration option was set to only ever hold values of "
         "type '",
-        typesForValueToString(type), "'."));
+        typesForValueToString(static_cast<size_t>(type)), "'."));
   }
 }
 
@@ -71,29 +71,30 @@ void BenchmarkConfigurationOption::setValueWithJson(
                              const ValueTypeIndexes& index,
                              auto& isValueTypeIndex) -> bool {
     switch (index) {
-      case boolean:
+      case ValueTypeIndexes::boolean:
         return j.is_boolean();
         break;
-      case string:
+      case ValueTypeIndexes::string:
         return j.is_string();
         break;
-      case integer:
+      case ValueTypeIndexes::integer:
         return j.is_number_integer();
         break;
-      case floatingPoint:
+      case ValueTypeIndexes::floatingPoint:
         return j.is_number_float();
         break;
-      case booleanList:
-      case stringList:
-      case integerList:
-      case floatingPointList:
+      case ValueTypeIndexes::booleanList:
+      case ValueTypeIndexes::stringList:
+      case ValueTypeIndexes::integerList:
+      case ValueTypeIndexes::floatingPointList:
         return j.is_array() &&
-               std::ranges::all_of(
-                   j, [&index, &isValueTypeIndex](const auto& entry) {
-                     return isValueTypeIndex(
-                         entry, static_cast<ValueTypeIndexes>(index - 4),
-                         AD_FWD(isValueTypeIndex));
-                   });
+               std::ranges::all_of(j, [&index,
+                                       &isValueTypeIndex](const auto& entry) {
+                 return isValueTypeIndex(entry,
+                                         static_cast<ValueTypeIndexes>(
+                                             static_cast<size_t>(index) - 4),
+                                         AD_FWD(isValueTypeIndex));
+               });
         break;
       default:
         return false;
@@ -109,13 +110,14 @@ void BenchmarkConfigurationOption::setValueWithJson(
     // error message.
     const std::string& commonPrefix{absl::StrCat(
         "The type of value, that configuration option '", identifier_,
-        "' can hold, is '", typesForValueToString(type_),
+        "' can hold, is '", typesForValueToString(static_cast<size_t>(type_)),
         "'. The given json however represents a value of ")};
 
     // Does the json represent one of the types in our `ValueType`? If yes, we
     // can create a better exception message.
-    for (size_t index = ValueTypeIndexes::boolean;
-         index <= ValueTypeIndexes::floatingPointList; index++) {
+    for (size_t index = static_cast<size_t>(ValueTypeIndexes::boolean);
+         index <= static_cast<size_t>(ValueTypeIndexes::floatingPointList);
+         index++) {
       if (isValueTypeIndex(json, static_cast<ValueTypeIndexes>(index),
                            isValueTypeIndex)) {
         throw ad_utility::Exception(absl::StrCat(
@@ -128,19 +130,8 @@ void BenchmarkConfigurationOption::setValueWithJson(
     throw ad_utility::Exception(absl::StrCat(commonPrefix, " unknown type."));
   }
 
-  /*
-  Interpreting a json value requires a compile time value, that specifies
-  the return type. We can find out our type using `type_` and
-  `std::variant_alternative`, but that isn't compile time, because `type_`
-  is bound to a non constexpr class. However, because we only have a finite
-  amount of types, that we want to interpret the json as, we can simply
-  cheat with `ad_utility::RuntimeValueToCompileTimeValue`.
-  */
-  ad_utility::RuntimeValueToCompileTimeValue<std::variant_size_v<ValueType> -
-                                             1>(
-      type_, [&json, this]<size_t index>() {
-        value_ = json.get<std::variant_alternative_t<index, ValueType>>();
-      });
+  callFunctionWithTypeOfOption(
+      [&json, this]<typename T>() { value_ = json.get<T>(); });
   configurationOptionWasSet_ = true;
 }
 
@@ -155,7 +146,8 @@ BenchmarkConfigurationOption::operator std::string() const {
       "Benchmark configuration option '", identifier_, "'\n",
       addIndentation(
           absl::StrCat(
-              "Value type: ", typesForValueToString(type_), "\nDefault value: ",
+              "Value type: ", typesForValueToString(static_cast<size_t>(type_)),
+              "\nDefault value: ",
               benchmarkConfigurationOptionValueTypeToString(defaultValue_),
               "\nCurrently held value: ",
               benchmarkConfigurationOptionValueTypeToString(value_),
