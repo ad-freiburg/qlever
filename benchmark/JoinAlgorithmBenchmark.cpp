@@ -802,10 +802,10 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                                        static_cast<float>(42.0));
 
     setToValueInConfigurationOrDefault(ratioRows_, "ratioRows",
-                                       static_cast<size_t>(1));
+                                       static_cast<size_t>(10));
 
     setToValueInConfigurationOrDefault(minRatioRows_, "minRatioRows",
-                                       static_cast<size_t>(1));
+                                       static_cast<size_t>(10));
     setToValueInConfigurationOrDefault(maxRatioRows_, "maxRatioRows",
                                        static_cast<size_t>(1000));
 
@@ -920,9 +920,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     // Is `overlapChance_` bigger than 0?
     checkAtLeast("overlapChance", overlapChance_, static_cast<float>(0), false);
 
-    // Is the ratio of rows at least 1?
-    checkAtLeast("ratioRows", ratioRows_, static_cast<size_t>(1), true);
-    checkAtLeast("minRatioRows", minRatioRows_, static_cast<size_t>(1), true);
+    // Is the ratio of rows at least 10?
+    checkAtLeast("ratioRows", ratioRows_, static_cast<size_t>(10), true);
+    checkAtLeast("minRatioRows", minRatioRows_, static_cast<size_t>(10), true);
 
     // Is `minRatioRows` smaller than `maxRatioRows`?
     checkSmallerThan("minRatioRows", minRatioRows_, "maxRatioRows",
