@@ -1081,7 +1081,7 @@ class BmOnlyBiggerTableSizeChanges final
     BenchmarkMetadata meta{};
 
     meta.addKeyValuePair("Value changing with every row", "ratioRows");
-    meta.addKeyValuePair("overlap", overlapChance_);
+    meta.addKeyValuePair("overlapChance", overlapChance_);
     meta.addKeyValuePair("smallerTableAmountRows", smallerTableAmountRows_);
     meta.addKeyValuePair("smallerTableAmountColumns",
                          smallerTableAmountColumns_);
@@ -1176,7 +1176,7 @@ class BmOnlySmallerTableSizeChanges final
 
     meta.addKeyValuePair("Value changing with every row",
                          "smallerTableAmountRows");
-    meta.addKeyValuePair("overlap", overlapChance_);
+    meta.addKeyValuePair("overlapChance", overlapChance_);
     meta.addKeyValuePair("smallerTableAmountColumns",
                          smallerTableAmountColumns_);
     meta.addKeyValuePair("biggerTableAmountColumns", biggerTableAmountColumns_);
@@ -1250,7 +1250,7 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 
     meta.addKeyValuePair("Value changing with every row",
                          "smallerTableAmountRows");
-    meta.addKeyValuePair("overlap", overlapChance_);
+    meta.addKeyValuePair("overlapChance", overlapChance_);
     meta.addKeyValuePair("ratioRows", 1);
     meta.addKeyValuePair("smallerTableAmountColumns",
                          smallerTableAmountColumns_);
