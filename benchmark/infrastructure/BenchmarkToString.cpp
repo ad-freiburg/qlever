@@ -137,24 +137,25 @@ static void addMetadataToOStringstream(std::ostringstream* stream,
 std::string benchmarkConfigurationOptionValueTypeToString(
     const BenchmarkConfigurationOption::ValueType& val) {
   // Converts a type in `ValueType` to their string representation.
-  auto variantSubTypeToString = []<typename T>(const T& v,
+  auto variantSubTypeToString = []<typename T>(const T& variantEntry,
                                                auto&& variantSubTypetoString) {
     if constexpr (std::is_same_v<T, std::string>) {
-      return v;
+      return variantEntry;
     } else if constexpr (std::is_same_v<T, bool>) {
-      return v ? std::string{"true"} : std::string{"false"};
+      return variantEntry ? std::string{"true"} : std::string{"false"};
     } else if constexpr (std::is_arithmetic_v<T>) {
-      return std::to_string(v);
+      return std::to_string(variantEntry);
     } else if constexpr (ad_utility::isVector<T>) {
       std::ostringstream stream;
       stream << "{";
       forEachExcludingTheLastOne(
-          v,
-          [&stream, &variantSubTypetoString](const auto& v) {
-            stream << variantSubTypetoString(v, variantSubTypetoString) << ", ";
+          variantEntry,
+          [&stream, &variantSubTypetoString](const auto& entry) {
+            stream << variantSubTypetoString(entry, variantSubTypetoString)
+                   << ", ";
           },
-          [&stream, &variantSubTypetoString](const auto& v) {
-            stream << variantSubTypetoString(v, variantSubTypetoString);
+          [&stream, &variantSubTypetoString](const auto& entry) {
+            stream << variantSubTypetoString(entry, variantSubTypetoString);
           });
       stream << "}";
       return stream.str();
