@@ -5,6 +5,7 @@
 #include <absl/strings/str_cat.h>
 #include <bits/ranges_algo.h>
 
+#include <array>
 #include <sstream>
 #include <string>
 #include <type_traits>
@@ -19,6 +20,17 @@
 #include "util/TypeTraits.h"
 
 namespace ad_benchmark {
+// ____________________________________________________________________________
+std::string BenchmarkConfigurationOption::typesForValueToString(
+    const size_t& value) {
+  constexpr std::array<std::string_view, 9> indexToString{
+      "std::monostate",  "boolean",          "string",
+      "integer",         "double",           "list of booleans",
+      "list of strings", "list of integers", "list of doubles"};
+
+  return std::string{indexToString.at(value)};
+}
+
 // ____________________________________________________________________________
 BenchmarkConfigurationOption::BenchmarkConfigurationOption(
     std::string_view identifier, std::string_view description,

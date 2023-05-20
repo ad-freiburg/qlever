@@ -59,13 +59,7 @@ class BenchmarkConfigurationOption {
   const ValueType defaultValue_;
 
   // Converts the index of `Valuetype` into their string representation.
-  static std::string typesForValueToString(const size_t& value) {
-    constexpr std::string_view indexToString[]{
-        "std::monostate",   "boolean",         "string",           "integer",        "double",
-        "list of booleans", "list of strings", "list of integers", "list of doubles"};
-
-    return std::string{indexToString[value]};
-  }
+  static std::string typesForValueToString(const size_t& value);
 
  public:
   /*
