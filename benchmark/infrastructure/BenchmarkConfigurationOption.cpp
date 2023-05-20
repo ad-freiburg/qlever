@@ -67,29 +67,29 @@ bool BenchmarkConfigurationOption::hasValue() const {
 void BenchmarkConfigurationOption::setValueWithJson(
     const nlohmann::json& json) {
   // Manually checks, if the json represents one of the `ValueTupeIndexes`.
-  auto isValueTypeIndex = [](const nlohmann::json& json,
+  auto isValueTypeIndex = [](const nlohmann::json& j,
                              const ValueTypeIndexes& index,
-                             auto&& isValueTypeIndex) -> bool {
+                             auto& isValueTypeIndex) -> bool {
     switch (index) {
       case boolean:
-        return json.is_boolean();
+        return j.is_boolean();
         break;
       case string:
-        return json.is_string();
+        return j.is_string();
         break;
       case integer:
-        return json.is_number_integer();
+        return j.is_number_integer();
         break;
       case floatingPoint:
-        return json.is_number_float();
+        return j.is_number_float();
         break;
       case booleanList:
       case stringList:
       case integerList:
       case floatingPointList:
-        return json.is_array() &&
+        return j.is_array() &&
                std::ranges::all_of(
-                   json, [&index, &isValueTypeIndex](const auto& entry) {
+                   j, [&index, &isValueTypeIndex](const auto& entry) {
                      return isValueTypeIndex(
                          entry, static_cast<ValueTypeIndexes>(index - 4),
                          AD_FWD(isValueTypeIndex));

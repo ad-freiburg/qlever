@@ -200,6 +200,10 @@ class BenchmarkConfigurationOption {
         });
   }
 
+  // Default move and copy constructor.
+  BenchmarkConfigurationOption(BenchmarkConfigurationOption&&) noexcept = default;
+  BenchmarkConfigurationOption(const BenchmarkConfigurationOption&) = default;
+
  private:
   /*
   @brief Returns the index position of a type in `std::variant` type.

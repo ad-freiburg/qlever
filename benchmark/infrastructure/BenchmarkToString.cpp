@@ -136,13 +136,12 @@ static void addMetadataToOStringstream(std::ostringstream* stream,
 std::string benchmarkConfigurationOptionValueTypeToString(
     const BenchmarkConfigurationOption::ValueType& val) {
   // Converts a type in `ValueType` to their string representation.
-  auto variantSubTypeToString =
-      []<typename T>(const T& val,
-                     auto&& variantSubTypetoString) -> std::string {
+  auto variantSubTypeToString = []<typename T>(const T& val,
+                                               auto&& variantSubTypetoString) {
     if constexpr (std::is_same_v<T, std::string>) {
       return val;
     } else if constexpr (std::is_same_v<T, bool>) {
-      return val ? "true" : "false";
+      return val ? std::string{"true"} : std::string{"false"};
     } else if constexpr (std::is_arithmetic_v<T>) {
       return std::to_string(val);
     } else if constexpr (ad_utility::isVector<T>) {
@@ -150,24 +149,23 @@ std::string benchmarkConfigurationOptionValueTypeToString(
       stream << "{";
       forEachExcludingTheLastOne(
           val,
-          [&stream, &variantSubTypetoString](const auto& val) {
-            stream << variantSubTypetoString(val, variantSubTypetoString)
-                   << ", ";
+          [&stream, &variantSubTypetoString](const auto& v) {
+            stream << variantSubTypetoString(v, variantSubTypetoString) << ", ";
           },
-          [&stream, &variantSubTypetoString](const auto& val) {
-            stream << variantSubTypetoString(val, variantSubTypetoString);
+          [&stream, &variantSubTypetoString](const auto& v) {
+            stream << variantSubTypetoString(v, variantSubTypetoString);
           });
       stream << "}";
       return stream.str();
     } else {
       // Should be a `std::monostate`.
-      return "None";
+      return std::string{"None"};
     }
   };
 
   return std::visit(
-      [&variantSubTypeToString](const auto& val) {
-        return variantSubTypeToString(val, variantSubTypeToString);
+      [&variantSubTypeToString](const auto& v) {
+        return variantSubTypeToString(v, variantSubTypeToString);
       },
       val);
 }

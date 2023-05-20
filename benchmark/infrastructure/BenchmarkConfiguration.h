@@ -93,7 +93,7 @@ class BenchmarkConfiguration {
     key. So here a special conversion function for our keys, that adds those,
     if needed.
     */
-    auto toString = []<typename T>(const T& key) -> std::string {
+    auto toString = []<typename T>(const T& key) {
       // Our transformed key.
       std::string transformedKey;
 
@@ -164,7 +164,7 @@ class BenchmarkConfiguration {
 
     // Add the location of the new configuration option to the json.
     keyToConfigurationOptionIndex_[ptr] = configurationOptions_.size();
-    configurationOptions_.push_back(std::move(option));
+    configurationOptions_.push_back(option);
   }
 
   /*

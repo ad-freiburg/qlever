@@ -235,7 +235,7 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
     return "Example for the usage of configuration and metadata";
   }
 
-  void addConfigurationOptions(BenchmarkConfiguration* config) {
+  void addConfigurationOptions(BenchmarkConfiguration* config) final {
     // Add some arbitrary values.
     config->addConfigurationOption(BenchmarkConfigurationOption(
         "date", "The current date. Has the default value \"22.3.2023\".",
