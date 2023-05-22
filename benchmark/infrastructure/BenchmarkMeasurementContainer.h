@@ -144,7 +144,7 @@ class ResultTable : public BenchmarkMetadataGetter {
   // The names of the columns.
   std::vector<std::string> columnNames_;
   // The entries in the table. Access is [row, column]. Can be the time in
-  // seconds, a string, or empty. This is also, where you can put in row names.
+  // seconds, a string, or empty.
   using EntryType = std::variant<std::monostate, float, std::string>;
   std::vector<std::vector<EntryType>> entries_;
 
