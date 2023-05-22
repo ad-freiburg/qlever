@@ -147,8 +147,8 @@ static DateOrLargeYear makeDateOrLargeYear(std::string_view fullInput,
     }
 
     auto warn = [&fullInput, alreadyWarned = false](std::string_view component,
-                                                    int actualValue,
-                                                    int defaultValue) mutable {
+                                                    auto actualValue,
+                                                    auto defaultValue) mutable {
       if (actualValue == defaultValue || alreadyWarned) {
         return;
       }
