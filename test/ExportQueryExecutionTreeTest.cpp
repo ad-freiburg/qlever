@@ -426,6 +426,49 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
 }
 
 // ____________________________________________________________________________
+TEST(ExportQueryExecutionTree, LiteralWithDatatype) {
+  std::string kg = "<s> <p> \"something\"^^<www.example.org/bim>";
+  std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
+  TestCaseSelectQuery testCase{
+      kg, query, 1,
+      // TSV
+      "?o\n"
+      "\"something\"^^<www.example.org/bim>\n",
+      // CSV
+      "o\n"
+      "something\n",
+      makeExpectedQLeverJSON({"\"something\"^^<www.example.org/bim>"s}),
+      makeExpectedSparqlJSON(
+          {makeJSONBinding("www.example.org/bim", "literal", "something")})};
+  runSelectQueryTestCase(testCase);
+  testCase.kg = "<s> <x> <y>";
+  testCase.query =
+      "SELECT ?o WHERE { VALUES ?o {\"something\"^^<www.example.org/bim>}} "
+      "ORDER BY ?o";
+  runSelectQueryTestCase(testCase);
+
+  TestCaseConstructQuery testCaseConstruct{
+      kg,
+      "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
+      // TODO<joka921> the ORDER BY of negative numbers is incorrect.
+      // TSV
+      "<s>\t<p>\t\"something\"^^<www.example.org/bim>\n",
+      // CSV
+      "<s>,<p>,\"\"\"something\"\"^^<www.example.org/bim>\"\n",
+      // Turtle
+      "<s> <p> \"something\"^^<www.example.org/bim> .\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{"<s>"s, "<p>"s,
+                                "\"something\"^^<www.example.org/bim>"s});
+        return j;
+      }(),
+  };
+  runConstructQueryTestCase(testCaseConstruct);
+}
+
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTree, UndefinedValues) {
   std::string kg = "<s> <p> <o>";
   std::string query =

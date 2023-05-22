@@ -181,14 +181,14 @@ using DistExpression =
 
 // Date functions.
 //
-inline auto extractYear = [](std::optional<DateOrLargeYear> d) -> Id {
+inline auto extractYear = [](std::optional<DateOrLargeYear> d) {
   if (!d.has_value()) {
     return Id::makeUndefined();
   } else {
     return Id::makeFromInt(d->getYear());
   }
 };
-inline auto extractMonth = [](std::optional<DateOrLargeYear> d) -> Id {
+inline auto extractMonth = [](std::optional<DateOrLargeYear> d) {
   if (!d.has_value() || !d.value().isDate()) {
     return Id::makeUndefined();
   }
@@ -196,7 +196,7 @@ inline auto extractMonth = [](std::optional<DateOrLargeYear> d) -> Id {
   return month == 0 ? Id::makeUndefined() : Id::makeFromInt(month);
 };
 
-inline auto extractDay = [](std::optional<DateOrLargeYear> d) -> Id {
+inline auto extractDay = [](std::optional<DateOrLargeYear> d) {
   if (!d.has_value() || !d.value().isDate()) {
     return Id::makeUndefined();
   }

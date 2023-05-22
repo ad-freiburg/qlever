@@ -383,14 +383,19 @@ namespace {
 // `input` again.
 auto testLargeYearImpl(auto parseFunction, std::string_view input,
                        const char* type, DateOrLargeYear::Type typeEnum,
-                       int year) {
+                       int64_t year,
+                       std::optional<std::string> actualOutput = std::nullopt) {
   ASSERT_NO_THROW(std::invoke(parseFunction, input));
   DateOrLargeYear dateLarge = std::invoke(parseFunction, input);
   ASSERT_FALSE(dateLarge.isDate());
   EXPECT_EQ(dateLarge.getYear(), year);
   ASSERT_EQ(dateLarge.getType(), typeEnum);
   const auto& [literal, outputType] = dateLarge.toStringAndType();
-  EXPECT_EQ(literal, input);
+  if (!actualOutput.has_value()) {
+    EXPECT_EQ(literal, input);
+  } else {
+    EXPECT_EQ(literal, actualOutput.value());
+  }
   EXPECT_STREQ(type, outputType);
 
   TripleComponent parsedAsTurtle =
@@ -403,29 +408,38 @@ auto testLargeYearImpl(auto parseFunction, std::string_view input,
 }
 
 // Specialization of `testLargeYearImpl` for `xsd:dateTime`
-auto testLargeYearDatetime(std::string_view input, int year) {
+auto testLargeYearDatetime(
+    std::string_view input, int64_t year,
+    std::optional<std::string> actualOutput = std::nullopt) {
   return testLargeYearImpl(DateOrLargeYear::parseXsdDatetime, input,
                            XSD_DATETIME_TYPE, DateOrLargeYear::Type::DateTime,
-                           year);
+                           year, std::move(actualOutput));
 }
 
 // Specialization of `testLargeYearImpl` for `xsd:date`
-auto testLargeYearDate(std::string_view input, int year) {
+auto testLargeYearDate(std::string_view input, int64_t year,
+                       std::optional<std::string> actualOutput = std::nullopt) {
   return testLargeYearImpl(DateOrLargeYear::parseXsdDate, input, XSD_DATE_TYPE,
-                           DateOrLargeYear::Type::Date, year);
+                           DateOrLargeYear::Type::Date, year,
+                           std::move(actualOutput));
 }
 
 // Specialization of `testLargeYearImpl` for `xsd:gYearMonth`
-auto testLargeYearGYearMonth(std::string_view input, int year) {
-  return testLargeYearImpl(DateOrLargeYear::parseGYearMonth, input,
-                           XSD_GYEARMONTH_TYPE,
-                           DateOrLargeYear::Type::YearMonth, year);
+auto testLargeYearGYearMonth(
+    std::string_view input, int64_t year,
+    std::optional<std::string> actualOutput = std::nullopt) {
+  return testLargeYearImpl(
+      DateOrLargeYear::parseGYearMonth, input, XSD_GYEARMONTH_TYPE,
+      DateOrLargeYear::Type::YearMonth, year, std::move(actualOutput));
 }
 
 // Specialization of `testLargeYearImpl` for `xsd:gYear`
-auto testLargeYearGYear(std::string_view input, int year) {
+auto testLargeYearGYear(
+    std::string_view input, int64_t year,
+    std::optional<std::string> actualOutput = std::nullopt) {
   return testLargeYearImpl(DateOrLargeYear::parseGYear, input, XSD_GYEAR_TYPE,
-                           DateOrLargeYear::Type::Year, year);
+                           DateOrLargeYear::Type::Year, year,
+                           std::move(actualOutput));
 }
 }  // namespace
 
@@ -441,4 +455,70 @@ TEST(Date, parseLargeYear) {
 
   testLargeYearDatetime("2039481726-01-01T00:00:00", 2039481726);
   testLargeYearDatetime("-2039481726-01-01T00:00:00", -2039481726);
+}
+
+TEST(Date, parseLargeYearCornerCases) {
+  // If the date is too low or too high, a warning is printed and the year is
+  // clipped to the min or max value that is representable.
+  testLargeYearGYear(std::to_string(std::numeric_limits<int64_t>::max()),
+                     DateOrLargeYear::maxYear,
+                     std::to_string(DateOrLargeYear::maxYear));
+  testLargeYearGYear(std::to_string(std::numeric_limits<int64_t>::min()),
+                     DateOrLargeYear::minYear,
+                     std::to_string(DateOrLargeYear::minYear));
+
+  // When the year has more than four digits, then the information about the
+  // date and time is lost.
+  testLargeYearGYearMonth("2039481726-03", 2039481726, "2039481726-01");
+  testLargeYearGYearMonth("-2039481726-07", -2039481726, "-2039481726-01");
+
+  testLargeYearDate("2039481726-03-01", 2039481726, "2039481726-01-01");
+  testLargeYearDate("-2039481726-02-05", -2039481726, "-2039481726-01-01");
+
+  testLargeYearDatetime("2039481726-01-01T12:00:00", 2039481726,
+                        "2039481726-01-01T00:00:00");
+  testLargeYearDatetime("-2039481726-01-01T00:00:14", -2039481726,
+                        "-2039481726-01-01T00:00:00");
+}
+
+TEST(Date, parseErrors) {
+  using D = DateOrLargeYear;
+  using E = DateParseException;
+  ASSERT_THROW(D::parseGYear("1994-12"), E);
+  ASSERT_THROW(D::parseGYear("Kartoffelsalat"), E);
+  ASSERT_THROW(D::parseGYearMonth("1994"), E);
+  ASSERT_THROW(D::parseGYearMonth("Kartoffelsalat"), E);
+  ASSERT_THROW(D::parseXsdDate("1994-##-##"), E);
+  ASSERT_THROW(D::parseXsdDate("Kartoffelsalat"), E);
+  ASSERT_THROW(D::parseXsdDatetime("1994-12-13"), E);
+  ASSERT_THROW(D::parseXsdDate("Kartoffelsalat"), E);
+}
+
+TEST(DateOrLargeYear, AssertionFailures) {
+  // These values are out of range.
+  ASSERT_ANY_THROW(DateOrLargeYear(std::numeric_limits<int64_t>::min(),
+                                   DateOrLargeYear::Type::Year));
+  ASSERT_ANY_THROW(DateOrLargeYear(std::numeric_limits<int64_t>::max(),
+                                   DateOrLargeYear::Type::Year));
+
+  // These years have to be stored as a `Date`, not as a large year.
+  ASSERT_ANY_THROW(DateOrLargeYear(-9998, DateOrLargeYear::Type::Year));
+  ASSERT_ANY_THROW(DateOrLargeYear(2021, DateOrLargeYear::Type::Year));
+
+  // Calling `getDate` on an object that is stored as a large year.
+  DateOrLargeYear d{123456, DateOrLargeYear::Type::Year};
+  ASSERT_ANY_THROW(d.getDate());
+}
+
+TEST(DateOrLargeYear, Order) {
+  DateOrLargeYear d1{-12345, DateOrLargeYear::Type::Year};
+  DateOrLargeYear d2{Date{2022, 7, 16}};
+  DateOrLargeYear d3{12345, DateOrLargeYear::Type::Year};
+
+  ASSERT_EQ(d1, d1);
+  ASSERT_EQ(d2, d2);
+  ASSERT_EQ(d3, d3);
+  ASSERT_LT(d1, d2);
+  ASSERT_LT(d2, d3);
+  ASSERT_LT(d1, d3);
 }

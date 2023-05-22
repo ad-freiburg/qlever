@@ -4,6 +4,8 @@
 
 #include "util/Date.h"
 
+#include "util/Log.h"
+
 // ____________________________________________________________________________________________________
 std::string Date::formatTimezone() const {
   auto impl = []<typename T>(const T& value) -> std::string {
@@ -100,11 +102,18 @@ std::pair<std::string, const char*> DateOrLargeYear::toStringAndType() const {
 // Convert a CTRE `match` to an integer. The behavior is undefined if
 // the `match` cannot be completely converted to an integer.
 template <ctll::fixed_string Name>
-static int64_t toInt(const auto& match) {
+static int64_t toInt64(const auto& match) {
   int64_t result = 0;
   const auto& s = match.template get<Name>();
   std::from_chars(s.data(), s.data() + s.size(), result);
   return result;
+}
+template <ctll::fixed_string Name>
+static int toInt(const auto& match) {
+  int64_t result = toInt64<Name>(match);
+  AD_CORRECTNESS_CHECK(result >= std::numeric_limits<int>::min());
+  AD_CORRECTNESS_CHECK(result <= std::numeric_limits<int>::max());
+  return static_cast<int>(result);
 }
 
 // Regex objects with explicitly named groups to parse dates and times.
@@ -127,7 +136,9 @@ static Date::Timezone parseTimezone(const auto& match) {
     tz *= -1;
   }
   if (match.template get<"tzMinutes">() != "00") {
-    throw std::runtime_error{"Qlever supports only full hours as timezones"};
+    LOG(WARN) << "Qlever supports only full hours as timezones, timezone"
+              << match.template get<0>() << "will be rounded down to " << tz
+              << ":00" << std::endl;
   }
   return tz;
 }
@@ -136,60 +147,56 @@ static Date::Timezone parseTimezone(const auto& match) {
 // range `[-9999, 9999]` then the date is stored regularly, otherwise only the
 // year is stored, and it is checked whether `month` and `day` are both `1`, and
 // `hour, minute, second` are all `0`.
-static DateOrLargeYear makeDateOrLargeYear(int64_t year, int month, int day,
+static DateOrLargeYear makeDateOrLargeYear(std::string_view fullInput,
+                                           int64_t year, int month, int day,
                                            int hour, int minute, double second,
-                                           Date::Timezone timezone) {
+                                           Date::Timezone timeZone) {
   if (year < Date::minYear || year > Date::maxYear) {
     if (year < DateOrLargeYear::minYear || year > DateOrLargeYear::maxYear) {
-      throw std::runtime_error{
-          absl::StrCat("QLever cannot encode dates that are less than ",
-                       DateOrLargeYear::minYear, " or larger than ",
-                       DateOrLargeYear::maxYear)};
+      LOG(WARN) << "QLever cannot encode dates that are less than "
+                << DateOrLargeYear::minYear << " or larger than "
+                << DateOrLargeYear::maxYear << ". Input " << fullInput
+                << " will be capped to fit this input";
+      year =
+          std::clamp(year, DateOrLargeYear::minYear, DateOrLargeYear::maxYear);
     }
+
+    auto warn = [&fullInput, alreadyWarned = false](std::string_view component,
+                                                    int actualValue,
+                                                    int defaultValue) mutable {
+      if (actualValue == defaultValue || alreadyWarned) {
+        return;
+      }
+      // Warn only for one component per input.
+      alreadyWarned = true;
+      LOG(WARN) << "When the year of a datetime object is smaller than -9999 "
+                   "or larger "
+                   "than 9999 then the "
+                << component << " will always be set to " << defaultValue
+                << " in QLever's implementation of "
+                   "dates. Full input was "
+                << fullInput << std::endl;
+    };
 
     if (month == 0) {
       return DateOrLargeYear(year, DateOrLargeYear::Type::Year);
-    } else if (month != 1) {
-      /*
-      throw std::runtime_error{
-          "When the year of a datetime object is smaller than -9999 or larger "
-          "than 9999 then the month has to be 1 in QLever's implementation of "
-          "dates"};
-          */
     }
+    warn("month", month, 1);
+
     if (day == 0) {
       return DateOrLargeYear(year, DateOrLargeYear::Type::YearMonth);
-    } else if (day != 1) {
-      /*
-      throw std::runtime_error{
-          "When the year of a datetime object is smaller than -9999 or larger "
-          "than 9999 then the day has to be 1 in QLever's implementation of "
-          "dates"};
-          */
     }
+    warn("day", day, 1);
     if (hour == -1) {
       return DateOrLargeYear(year, DateOrLargeYear::Type::Date);
-    } else if (hour != 0) {
-      /*
-      throw std::runtime_error{
-          "When the year of a datetime object is smaller than -9999 or larger "
-          "than 9999 then the hour has to be 0 in QLever's implementation of "
-          "dates"};
-          */
     }
-
-    if (minute != 0 || second != 0.0) {
-      /*
-      throw std::runtime_error{
-          "When the year of a datetime object is smaller than -9999 or larger "
-          "than 9999 then the minute and second must both be 0 in QLever's "
-          "implementation of Dates."};
-          */
-    }
+    warn("hour", hour, 0);
+    warn("minute", minute, 0);
+    warn("second", second, 0.0);
     return DateOrLargeYear(year, DateOrLargeYear::Type::DateTime);
   }
   return DateOrLargeYear{
-      Date{static_cast<int>(year), month, day, hour, minute, second, timezone}};
+      Date{static_cast<int>(year), month, day, hour, minute, second, timeZone}};
 }
 
 // __________________________________________________________________________________
@@ -198,16 +205,16 @@ DateOrLargeYear DateOrLargeYear::parseXsdDatetime(std::string_view dateString) {
       dateRegex + "T" + timeRegex + grp(timezoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
   if (!match) {
-    throw std::runtime_error{absl::StrCat(
+    throw DateParseException{absl::StrCat(
         "The value ", dateString, " cannot be parsed as an `xsd:dateTime`.")};
   }
-  int64_t year = toInt<"year">(match);
+  int64_t year = toInt64<"year">(match);
   int month = toInt<"month">(match);
   int day = toInt<"day">(match);
   int hour = toInt<"hour">(match);
   int minute = toInt<"minute">(match);
   double second = std::strtod(match.get<"second">().data(), nullptr);
-  return makeDateOrLargeYear(year, month, day, hour, minute, second,
+  return makeDateOrLargeYear(dateString, year, month, day, hour, minute, second,
                              parseTimezone(match));
 }
 
@@ -217,13 +224,13 @@ DateOrLargeYear DateOrLargeYear::parseXsdDate(std::string_view dateString) {
       dateRegex + grp(timezoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
   if (!match) {
-    throw std::runtime_error{absl::StrCat(
+    throw DateParseException{absl::StrCat(
         "The value ", dateString, " cannot be parsed as an `xsd:date`.")};
   }
-  int64_t year = toInt<"year">(match);
+  int64_t year = toInt64<"year">(match);
   int month = toInt<"month">(match);
   int day = toInt<"day">(match);
-  return makeDateOrLargeYear(year, month, day, -1, 0, 0.0,
+  return makeDateOrLargeYear(dateString, year, month, day, -1, 0, 0.0,
                              parseTimezone(match));
 }
 
@@ -234,11 +241,12 @@ DateOrLargeYear DateOrLargeYear::parseGYear(std::string_view dateString) {
       yearRegex + grp(timezoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
   if (!match) {
-    throw std::runtime_error{absl::StrCat(
+    throw DateParseException{absl::StrCat(
         "The value ", dateString, " cannot be parsed as an `xsd:gYear`.")};
   }
-  int64_t year = toInt<"year">(match);
-  return makeDateOrLargeYear(year, 0, 0, -1, 0, 0.0, parseTimezone(match));
+  int64_t year = toInt64<"year">(match);
+  return makeDateOrLargeYear(dateString, year, 0, 0, -1, 0, 0.0,
+                             parseTimezone(match));
 }
 
 // __________________________________________________________________________________
@@ -249,10 +257,11 @@ DateOrLargeYear DateOrLargeYear::parseGYearMonth(std::string_view dateString) {
       yearRegex + grp(timezoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
   if (!match) {
-    throw std::runtime_error{absl::StrCat(
+    throw DateParseException{absl::StrCat(
         "The value ", dateString, " cannot be parsed as an `xsd:gYearMonth`.")};
   }
-  int64_t year = toInt<"year">(match);
+  int64_t year = toInt64<"year">(match);
   int month = toInt<"month">(match);
-  return makeDateOrLargeYear(year, month, 0, -1, 0, 0.0, parseTimezone(match));
+  return makeDateOrLargeYear(dateString, year, month, 0, -1, 0, 0.0,
+                             parseTimezone(match));
 }

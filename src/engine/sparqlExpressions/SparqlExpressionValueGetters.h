@@ -100,13 +100,13 @@ struct DateValueGetter {
   using Opt = std::optional<DateOrLargeYear>;
   template <typename T>
   requires(std::is_arithmetic_v<T>)
-  Opt operator()(T, EvaluationContext*) const {
+  Opt operator()(T, const EvaluationContext*) const {
     return std::nullopt;
   }
 
-  Opt operator()(Bool, EvaluationContext*) const { return std::nullopt; }
+  Opt operator()(Bool, const EvaluationContext*) const { return std::nullopt; }
 
-  Opt operator()(ValueId id, EvaluationContext*) const {
+  Opt operator()(ValueId id, const EvaluationContext*) const {
     if (id.getDatatype() == Datatype::Date) {
       return id.getDate();
     } else {
@@ -114,7 +114,9 @@ struct DateValueGetter {
     }
   }
 
-  Opt operator()(string, EvaluationContext*) const { return std::nullopt; }
+  Opt operator()(const std::string&, const EvaluationContext*) const {
+    return std::nullopt;
+  }
 };
 
 // If the `id` points to a literal, return the contents of that literal (without

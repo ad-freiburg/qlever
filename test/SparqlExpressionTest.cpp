@@ -245,9 +245,13 @@ auto testUnaryExpression =
 TEST(SparqlExpression, dateOperators) {
   // Helper function that asserts that the date operators give the expected
   // result on the given date.
-  auto check = [](const DateOrLargeYear& date, std::optional<int> expectedYear,
-                  std::optional<int> expectedMonth,
-                  std::optional<int> expectedDay) {
+  auto checkYear = testUnaryExpression<YearExpression, Id, Id>;
+  auto checkMonth = testUnaryExpression<MonthExpression, Id, Id>;
+  auto checkDay = testUnaryExpression<DayExpression, Id, Id>;
+  auto check = [&checkYear, &checkMonth, &checkDay](
+                   const DateOrLargeYear& date, std::optional<int> expectedYear,
+                   std::optional<int> expectedMonth,
+                   std::optional<int> expectedDay) {
     auto optToId = [](const auto& opt) {
       if (opt.has_value()) {
         return Id::makeFromInt(opt.value());
@@ -255,9 +259,6 @@ TEST(SparqlExpression, dateOperators) {
         return Id::makeUndefined();
       }
     };
-    auto checkYear = testUnaryExpression<YearExpression, Id, Id>;
-    auto checkMonth = testUnaryExpression<MonthExpression, Id, Id>;
-    auto checkDay = testUnaryExpression<DayExpression, Id, Id>;
     checkYear({Id::makeFromDate(date)}, {optToId(expectedYear)});
     checkMonth({Id::makeFromDate(date)}, {optToId(expectedMonth)});
     checkDay({Id::makeFromDate(date)}, {optToId(expectedDay)});
@@ -274,6 +275,16 @@ TEST(SparqlExpression, dateOperators) {
   check(D::parseGYear("-1234"), -1234, std::nullopt, std::nullopt);
   check(D::parseXsdDate("0321-07-01"), 321, 7, 1);
   check(D::parseXsdDate("2321-07-01"), 2321, 7, 1);
+
+  // Invalid inputs for date expressions.
+  checkYear({Id::makeFromInt(42)}, {Id::makeUndefined()});
+  checkMonth({Id::makeFromInt(42)}, {Id::makeUndefined()});
+  checkDay({Id::makeFromInt(42)}, {Id::makeUndefined()});
+  testUnaryExpression<YearExpression, double, Id>({42.0},
+                                                  {Id::makeUndefined()});
+  testUnaryExpression<YearExpression, Bool, Id>({false}, {Id::makeUndefined()});
+  testUnaryExpression<YearExpression, std::string, Id>({"noDate"},
+                                                       {Id::makeUndefined()});
 }
 
 // Test `StrlenExpression` and `StrExpression`.
