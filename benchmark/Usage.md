@@ -51,7 +51,7 @@ BenchmarkResults runAllBenchmarks(){
   // organization, require an identifier. A.k.a. a name.
   const std::string identifier = "Some identifier";
 
-  // Just saves the meausered execution time.
+  // Just saves the measured execution time.
   results.addMeasurement(identifier, dummyFunctionToMeasure);
 
   // Creates an enpty group. Doesn't measure anything.
