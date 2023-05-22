@@ -65,38 +65,23 @@ std::pair<std::string, const char*> DateOrLargeYear::toStringAndType() const {
     return getDateUnchecked().toStringAndType();
   }
 
-  std::string dateString;
-  const char* type = nullptr;
+  using F = absl::ParsedFormat<'d'>;
+
+  auto impl = [this](const F& format, const char* actualType) {
+    return std::pair{absl::StrFormat(format, getYear()), actualType};
+  };
 
   switch (getType()) {
-    case Type::DateTime: {
-      constexpr std::string_view formatString = "%d-01-01T00:00:00";
-      dateString = absl::StrFormat(formatString, getYear());
-      type = XSD_DATETIME_TYPE;
-      break;
-    }
-    case Type::Date: {
-      constexpr std::string_view formatString = "%d-01-01";
-      dateString = absl::StrFormat(formatString, getYear());
-      type = XSD_DATE_TYPE;
-      break;
-    }
-    case Type::YearMonth: {
-      constexpr std::string_view formatString = "%d-01";
-      dateString = absl::StrFormat(formatString, getYear());
-      type = XSD_GYEARMONTH_TYPE;
-      break;
-    }
-    case Type::Year: {
-      constexpr std::string_view formatString = "%d";
-      dateString = absl::StrFormat(formatString, getYear());
-      type = XSD_GYEAR_TYPE;
-      break;
-    }
-    default:
-      AD_FAIL();
+    case Type::DateTime:
+      return impl(F{"%d-01-01T00:00:00"}, XSD_DATETIME_TYPE);
+    case Type::Date:
+      return impl(F{"%d-01-01"}, XSD_DATE_TYPE);
+    case Type::YearMonth:
+      return impl(F{"%d-01"}, XSD_GYEARMONTH_TYPE);
+    case Type::Year:
+      return impl(F{"%d"}, XSD_GYEAR_TYPE);
   }
-  return {std::move(dateString), type};
+  AD_FAIL();
 }
 
 // Convert a CTRE `match` to an integer. The behavior is undefined if
@@ -264,4 +249,45 @@ DateOrLargeYear DateOrLargeYear::parseGYearMonth(std::string_view dateString) {
   int month = toInt<"month">(match);
   return makeDateOrLargeYear(dateString, year, month, 0, -1, 0, 0.0,
                              parseTimezone(match));
+}
+
+// _____________________________________________________________________-
+int64_t DateOrLargeYear::getYear() const {
+  if (isDate()) {
+    return getDateUnchecked().getYear();
+  } else {
+    return NBit::fromNBit(bits_ >> numTypeBits);
+  }
+}
+
+// _____________________________________________________________________-
+std::optional<int> DateOrLargeYear::getMonth() const {
+  if (isDate()) {
+    int month = getDateUnchecked().getMonth();
+    if (month == 0) {
+      return std::nullopt;
+    } else {
+      return month;
+    }
+  } else if (getType() != Type::Year) {
+    return 1;
+  } else {
+    return std::nullopt;
+  }
+}
+
+// _____________________________________________________________________-
+std::optional<int> DateOrLargeYear::getDay() const {
+  if (isDate()) {
+    int day = getDateUnchecked().getDay();
+    if (day == 0) {
+      return std::nullopt;
+    } else {
+      return day;
+    }
+  } else if (getType() == Type::Year || getType() == Type::YearMonth) {
+    return std::nullopt;
+  } else {
+    return 1;
+  }
 }

@@ -380,13 +380,16 @@ class DateOrLargeYear {
 
   // Get the stored year, no matter if it's stored inside a `Date` object or
   // directly.
-  int64_t getYear() const {
-    if (isDate()) {
-      return getDateUnchecked().getYear();
-    } else {
-      return NBit::fromNBit(bits_ >> numTypeBits);
-    }
-  }
+  int64_t getYear() const;
+
+  // Get the stored month. If the datatype actually stores a month (all the
+  // types except for `xsd:gYear` do), then the month is returned, else
+  // `std::nullopt` is returned. In the case of a large year with a datatype
+  // that stores a month, the month will always be `1`.
+  std::optional<int> getMonth() const;
+
+  // Similar to `getMonth`, but get the day.
+  std::optional<int> getDay() const;
 
   Type getType() const {
     return static_cast<Type>(ad_utility::bitMaskForLowerBits(numTypeBits) &

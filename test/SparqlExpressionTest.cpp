@@ -8,6 +8,7 @@
 #include <string>
 
 #include "./SparqlExpressionTestHelpers.h"
+#include "./util/GTestHelpers.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
@@ -251,7 +252,9 @@ TEST(SparqlExpression, dateOperators) {
   auto check = [&checkYear, &checkMonth, &checkDay](
                    const DateOrLargeYear& date, std::optional<int> expectedYear,
                    std::optional<int> expectedMonth,
-                   std::optional<int> expectedDay) {
+                   std::optional<int> expectedDay,
+                   std::source_location l = std::source_location::current()) {
+    auto trace = generateLocationTrace(l);
     auto optToId = [](const auto& opt) {
       if (opt.has_value()) {
         return Id::makeFromInt(opt.value());
@@ -275,6 +278,14 @@ TEST(SparqlExpression, dateOperators) {
   check(D::parseGYear("-1234"), -1234, std::nullopt, std::nullopt);
   check(D::parseXsdDate("0321-07-01"), 321, 7, 1);
   check(D::parseXsdDate("2321-07-01"), 2321, 7, 1);
+
+  // Test behavior of the `largeYear` representation that doesn't store the
+  // actual date.
+  check(D::parseGYear("123456"), 123456, std::nullopt, std::nullopt);
+  check(D::parseGYearMonth("-12345-01"), -12345, 1, std::nullopt);
+  check(D::parseGYearMonth("-12345-03"), -12345, 1, std::nullopt);
+  check(D::parseXsdDate("-12345-01-01"), -12345, 1, 1);
+  check(D::parseXsdDate("-12345-03-04"), -12345, 1, 1);
 
   // Invalid inputs for date expressions.
   checkYear({Id::makeFromInt(42)}, {Id::makeUndefined()});

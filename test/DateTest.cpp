@@ -376,6 +376,12 @@ TEST(Date, parseYear) {
   testYear("-2034", -2034, Date::NoTimezone{});
 }
 
+TEST(Date, timezoneWithMinutes) {
+  auto d = DateOrLargeYear::parseGYear("2034+01:13");
+  // `1:13` as a timezone is silently rounded down to `1`.
+  ASSERT_EQ(std::get<int>(d.getDate().getTimezone()), 1);
+}
+
 namespace {
 // Test that `parseFunction(input)` results in a `DateOrLargeYear` object that
 // stores a large year with the given xsd `type` and the given `year. Also test

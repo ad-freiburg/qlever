@@ -380,10 +380,10 @@ bool TurtleParser<T>::rdfLiteral() {
     // TODO<joka921> this allows spaces here since the ^^ is unique in the
     // sparql syntax. is this correct?
   } else if (skip<TurtleTokenId::DoubleCircumflex>() && check(iri())) {
+    const auto typeIri = std::move(_lastParseResult.getString());
+    auto type = stripAngleBrackets(typeIri);
+    std::string strippedLiteral{stripDoubleQuotes(literalString.get())};
     try {
-      const auto typeIri = std::move(_lastParseResult.getString());
-      auto type = stripAngleBrackets(typeIri);
-      std::string strippedLiteral{stripDoubleQuotes(literalString.get())};
       // TODO<joka921> clean this up by moving the check for the types to a
       // separate module.
       if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE ||
@@ -411,6 +411,14 @@ bool TurtleParser<T>::rdfLiteral() {
         _lastParseResult = TripleComponent::Literal{
             literalString, absl::StrCat("^^", typeIri)};
       }
+      return true;
+    } catch (const DateParseException&) {
+      LOG(WARN) << literalString.get()
+                << " could not be parsed as a date object of type " << typeIri
+                << ". It is treated as a plain string literal without datatype "
+                   "instead"
+                << std::endl;
+      _lastParseResult = TripleComponent::Literal{literalString};
       return true;
     } catch (const std::exception& e) {
       raise(e.what());

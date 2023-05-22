@@ -523,6 +523,23 @@ TEST(TurtleParserTest, DateLiterals) {
     checkParseResult<CtreParser, &CtreParser::object>(dateLiterals[i],
                                                       expected[i]);
   }
+
+  std::vector<std::string> invalidDateLiterals{
+      R"("2000-10"^^<)"s + XSD_DATE_TYPE + ">",
+      R"("-2014-03-16T12:13"^^<)"s + XSD_DATETIME_TYPE + ">",
+      R"("2084-12"^^<)"s + XSD_GYEAR_TYPE + ">",
+      R"("20##"^^<)"s + XSD_GYEAR_TYPE + ">",
+      R"("2083-12-13"^^<)"s + XSD_GYEARMONTH_TYPE + ">"};
+  std::vector<TripleComponent::Literal> expectedInvalidDateLiterals{
+      lit("\"2000-10\""), lit(R"("-2014-03-16T12:13")"s), lit(R"("2084-12")"s),
+      lit(R"("20##")"s), lit(R"("2083-12-13")"s)};
+  using L = DateOrLargeYear;
+  for (size_t i = 0; i < invalidDateLiterals.size(); ++i) {
+    checkParseResult<Re2Parser, &Re2Parser::object>(
+        invalidDateLiterals[i], expectedInvalidDateLiterals[i]);
+    checkParseResult<CtreParser, &CtreParser::object>(
+        invalidDateLiterals[i], expectedInvalidDateLiterals[i]);
+  }
 }
 
 TEST(TurtleParserTest, booleanLiteral) {

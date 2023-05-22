@@ -188,20 +188,29 @@ inline auto extractYear = [](std::optional<DateOrLargeYear> d) {
     return Id::makeFromInt(d->getYear());
   }
 };
+
 inline auto extractMonth = [](std::optional<DateOrLargeYear> d) {
-  if (!d.has_value() || !d.value().isDate()) {
+  // TODO<C++23> Use the monadic operations for std::optional
+  if (!d.has_value()) {
     return Id::makeUndefined();
   }
-  auto month = d.value().getDate().getMonth();
-  return month == 0 ? Id::makeUndefined() : Id::makeFromInt(month);
+  auto optionalMonth = d.value().getMonth();
+  if (!optionalMonth.has_value()) {
+    return Id::makeUndefined();
+  }
+  return Id::makeFromInt(optionalMonth.value());
 };
 
 inline auto extractDay = [](std::optional<DateOrLargeYear> d) {
-  if (!d.has_value() || !d.value().isDate()) {
+  // TODO<C++23> Use the monadic operations for `std::optional`.
+  if (!d.has_value()) {
     return Id::makeUndefined();
   }
-  auto day = d.value().getDate().getDay();
-  return day == 0 ? Id::makeUndefined() : Id::makeFromInt(day);
+  auto optionalDay = d.value().getDay();
+  if (!optionalDay.has_value()) {
+    return Id::makeUndefined();
+  }
+  return Id::makeFromInt(optionalDay.value());
 };
 
 using YearExpression = NARY<1, FV<decltype(extractYear), DateValueGetter>>;
