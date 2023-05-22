@@ -8,6 +8,8 @@
 #include <random>
 #include <type_traits>
 
+#include "util/Exception.h"
+
 // Provides types required by all the other *.cpp files in this directory
 // and a select few other places
 namespace ad_utility::websocket::common {
