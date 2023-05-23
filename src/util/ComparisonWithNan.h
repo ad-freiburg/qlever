@@ -40,7 +40,9 @@ inline auto makeComparatorForNans(Comparator comparator)
         ad_utility::isSimilar<Comparator, std::not_equal_to<>>;
     static constexpr bool isEqual =
         ad_utility::isSimilar<Comparator, std::equal_to<>>;
-    if constexpr (std::is_floating_point_v<A> && std::is_floating_point_v<B>) {
+    static constexpr bool aIsFloat = std::is_floating_point_v<A>;
+    static constexpr bool bIsFloat = std::is_floating_point_v<B>;
+    if constexpr (aIsFloat && bIsFloat) {
       bool aNan = std::isnan(a);
       bool bNan = std::isnan(b);
       if (aNan && bNan) {
@@ -52,13 +54,13 @@ inline auto makeComparatorForNans(Comparator comparator)
       } else {
         return comparator(a, b);
       }
-    } else if constexpr (std::is_floating_point_v<A>) {
+    } else if constexpr (aIsFloat) {
       if constexpr (isNotEqual) {
         return std::isnan(a) || comparator(a, b);
       } else {
         return !std::isnan(a) && comparator(a, b);
       }
-    } else if constexpr (std::is_floating_point_v<B>) {
+    } else if constexpr (bIsFloat) {
       return (std::isnan(b) && !isEqual) || comparator(a, b);
     } else {
       return comparator(a, b);
