@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "global/ValueId.h"
+#include "util/ComparisonWithNan.h"
 #include "util/OverloadCallOperator.h"
 
 namespace valueIdComparators {
@@ -443,9 +444,18 @@ template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
 inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
   // A helper lambda to factor out common code
   auto compare = [&](auto comparator) {
-    return detail::compareIdsImpl<comparisonForIncompatibleTypes>(a, b,
-                                                                  comparator);
+    // For the `compareByType` mode, which is used by ORDER BY, we also need a
+    // proper order of NaN values to not run into undefined behavior.
+    if constexpr (comparisonForIncompatibleTypes ==
+                  ComparisonForIncompatibleTypes::CompareByType) {
+      return detail::compareIdsImpl<comparisonForIncompatibleTypes>(
+          a, b, ad_utility::makeComparatorForNans(comparator));
+    } else {
+      return detail::compareIdsImpl<comparisonForIncompatibleTypes>(a, b,
+                                                                    comparator);
+    }
   };
+
   using enum Comparison;
   switch (comparison) {
     case LT:
