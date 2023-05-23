@@ -329,3 +329,5 @@ addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
 addLinkAndDiscoverTest(FindUndefRangesTest)
 
 addLinkAndDiscoverTest(AddCombinedRowToTableTest)
+
+addLinkAndDiscoverTest(ANTLR4UtilTests antlr4_static)
