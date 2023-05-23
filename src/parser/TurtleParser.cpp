@@ -420,6 +420,14 @@ bool TurtleParser<T>::rdfLiteral() {
                 << std::endl;
       _lastParseResult = TripleComponent::Literal{literalString};
       return true;
+    } catch (const DateOutOfRangeException& ex) {
+      LOG(WARN)
+          << literalString.get()
+          << " could not be parsed as a date object for the following reason: "
+          << ex.what()
+          << ". It is treated as a plain string literal without datatype "
+             "instead"
+          << std::endl;
     } catch (const std::exception& e) {
       raise(e.what());
     }
