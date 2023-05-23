@@ -192,7 +192,7 @@ const size_t dayIndex = monthIndex + 3;
 // for year because of the potential two's complement.
 template <size_t Pos1, size_t Pos2>
 inline auto extractNumberFromDate =
-    [](std::string_view dateAsString) -> long int {
+    [](std::string_view dateAsString) -> int64_t {
   static_assert(Pos2 > Pos1);
   auto pos1 = Pos1;
   auto pos2 = Pos2;
@@ -234,7 +234,7 @@ using DayExpression = NARY<1, FV<decltype(extractDay), StringValueGetter>>;
 using StrExpression = NARY<1, FV<std::identity, StringValueGetter>>;
 
 // Compute string length.
-inline auto strlen = [](const auto& s) -> long int { return s.size(); };
+inline auto strlen = [](const auto& s) -> int64_t { return s.size(); };
 using StrlenExpression = NARY<1, FV<decltype(strlen), StringValueGetter>>;
 
 }  // namespace detail

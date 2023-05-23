@@ -247,10 +247,10 @@ TEST(SparqlExpression, dateOperators) {
   // result on the given date.
   auto check = [](const string& date, int expectedYear, int expectedMonth,
                   int expectedDay) {
-    auto checkYear = testUnaryExpression<YearExpression, std::string, long int>;
+    auto checkYear = testUnaryExpression<YearExpression, std::string, int64_t>;
     auto checkMonth =
-        testUnaryExpression<MonthExpression, std::string, long int>;
-    auto checkDay = testUnaryExpression<DayExpression, std::string, long int>;
+        testUnaryExpression<MonthExpression, std::string, int64_t>;
+    auto checkDay = testUnaryExpression<DayExpression, std::string, int64_t>;
     checkYear({date}, {expectedYear});
     checkMonth({date}, {expectedMonth});
     checkDay({date}, {expectedDay});
@@ -270,7 +270,7 @@ TEST(SparqlExpression, dateOperators) {
 }
 
 // Test `StrlenExpression` and `StrExpression`.
-auto checkStrlen = testUnaryExpression<StrlenExpression, std::string, long int>;
+auto checkStrlen = testUnaryExpression<StrlenExpression, std::string, int64_t>;
 template <typename OperandType>
 auto checkStr = [](std::vector<OperandType>&& operand,
                    std::vector<std::string>&& expected) {
