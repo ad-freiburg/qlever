@@ -7,11 +7,11 @@
 #include "util/Log.h"
 
 // ____________________________________________________________________________________________________
-std::string Date::formatTimezone() const {
+std::string Date::formatTimeZone() const {
   auto impl = []<typename T>(const T& value) -> std::string {
-    if constexpr (std::is_same_v<T, NoTimezone>) {
+    if constexpr (std::is_same_v<T, NoTimeZone>) {
       return "";
-    } else if constexpr (std::is_same_v<T, TimezoneZ>) {
+    } else if constexpr (std::is_same_v<T, TimeZoneZ>) {
       return "Z";
     } else {
       static_assert(std::is_same_v<T, int>);
@@ -19,7 +19,7 @@ std::string Date::formatTimezone() const {
       return absl::StrFormat(format, value);
     }
   };
-  return std::visit(impl, getTimezone());
+  return std::visit(impl, getTimeZone());
 }
 
 // ____________________________________________________________________________________________________
@@ -56,7 +56,7 @@ std::pair<std::string, const char*> Date::toStringAndType() const {
                           getHour(), getMinute(), getSecond());
     }
   }
-  return {absl::StrCat(dateString, formatTimezone()), type};
+  return {absl::StrCat(dateString, formatTimeZone()), type};
 }
 
 // _________________________________________________________________
@@ -67,6 +67,8 @@ std::pair<std::string, const char*> DateOrLargeYear::toStringAndType() const {
 
   using F = absl::ParsedFormat<'d'>;
 
+  // Format the year using `format` and return the pair of `(formattedYear,
+  // type)`.
   auto impl = [this](const F& format, const char* actualType) {
     return std::pair{absl::StrFormat(format, getYear()), actualType};
   };
@@ -86,6 +88,8 @@ std::pair<std::string, const char*> DateOrLargeYear::toStringAndType() const {
 
 // Convert a CTRE `match` to an integer. The behavior is undefined if
 // the `match` cannot be completely converted to an integer.
+// We need this for `int64_t` as well as plain `int` because both these types
+// are used in the date representations.
 template <ctll::fixed_string Name>
 static int64_t toInt64(const auto& match) {
   int64_t result = 0;
@@ -106,15 +110,15 @@ constexpr static ctll::fixed_string dateRegex{
     R"((?<year>-?\d{4,})-(?<month>\d{2})-(?<day>\d{2}))"};
 constexpr static ctll::fixed_string timeRegex{
     R"((?<hour>\d{2}):(?<minute>\d{2}):(?<second>\d{2}(\.\d+)?))"};
-constexpr static ctll::fixed_string timezoneRegex{
+constexpr static ctll::fixed_string timeZoneRegex{
     R"((?<tzZ>Z)|(?<tzSign>[+\-])(?<tzHours>\d{2}):(?<tzMinutes>\d{2}))"};
 
-// Get the correct `Timezone` from a regex match for the `timezoneRegex`.
-static Date::Timezone parseTimezone(const auto& match) {
+// Get the correct `TimeZone` from a regex match for the `timeZoneRegex`.
+static Date::TimeZone parseTimeZone(const auto& match) {
   if (match.template get<"tzZ">() == "Z") {
-    return Date::TimezoneZ{};
+    return Date::TimeZoneZ{};
   } else if (!match.template get<"tzHours">()) {
-    return Date::NoTimezone{};
+    return Date::NoTimeZone{};
   }
   int tz = toInt<"tzHours">(match);
   if (match.template get<"tzSign">() == "-") {
@@ -135,17 +139,19 @@ static Date::Timezone parseTimezone(const auto& match) {
 static DateOrLargeYear makeDateOrLargeYear(std::string_view fullInput,
                                            int64_t year, int month, int day,
                                            int hour, int minute, double second,
-                                           Date::Timezone timeZone) {
+                                           Date::TimeZone timeZone) {
   if (year < Date::minYear || year > Date::maxYear) {
     if (year < DateOrLargeYear::minYear || year > DateOrLargeYear::maxYear) {
       LOG(WARN) << "QLever cannot encode dates that are less than "
                 << DateOrLargeYear::minYear << " or larger than "
                 << DateOrLargeYear::maxYear << ". Input " << fullInput
-                << " will be capped to fit this input";
+                << " will be clamped to this range";
       year =
           std::clamp(year, DateOrLargeYear::minYear, DateOrLargeYear::maxYear);
     }
 
+    // Print a warning if the value of a component of a date (e.g. month or day)
+    // will be lost because of the large year representation.
     auto warn = [&fullInput, alreadyWarned = false](std::string_view component,
                                                     auto actualValue,
                                                     auto defaultValue) mutable {
@@ -155,11 +161,9 @@ static DateOrLargeYear makeDateOrLargeYear(std::string_view fullInput,
       // Warn only for one component per input.
       alreadyWarned = true;
       LOG(WARN) << "When the year of a datetime object is smaller than -9999 "
-                   "or larger "
-                   "than 9999 then the "
+                   "or larger than 9999 then the "
                 << component << " will always be set to " << defaultValue
-                << " in QLever's implementation of "
-                   "dates. Full input was "
+                << " in QLever's implementation of dates. Full input was "
                 << fullInput << std::endl;
     };
 
@@ -187,7 +191,7 @@ static DateOrLargeYear makeDateOrLargeYear(std::string_view fullInput,
 // __________________________________________________________________________________
 DateOrLargeYear DateOrLargeYear::parseXsdDatetime(std::string_view dateString) {
   constexpr static ctll::fixed_string dateTime =
-      dateRegex + "T" + timeRegex + grp(timezoneRegex) + "?";
+      dateRegex + "T" + timeRegex + grp(timeZoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
   if (!match) {
     throw DateParseException{absl::StrCat(
@@ -200,13 +204,13 @@ DateOrLargeYear DateOrLargeYear::parseXsdDatetime(std::string_view dateString) {
   int minute = toInt<"minute">(match);
   double second = std::strtod(match.get<"second">().data(), nullptr);
   return makeDateOrLargeYear(dateString, year, month, day, hour, minute, second,
-                             parseTimezone(match));
+                             parseTimeZone(match));
 }
 
 // __________________________________________________________________________________
 DateOrLargeYear DateOrLargeYear::parseXsdDate(std::string_view dateString) {
   constexpr static ctll::fixed_string dateTime =
-      dateRegex + grp(timezoneRegex) + "?";
+      dateRegex + grp(timeZoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
   if (!match) {
     throw DateParseException{absl::StrCat(
@@ -216,14 +220,14 @@ DateOrLargeYear DateOrLargeYear::parseXsdDate(std::string_view dateString) {
   int month = toInt<"month">(match);
   int day = toInt<"day">(match);
   return makeDateOrLargeYear(dateString, year, month, day, -1, 0, 0.0,
-                             parseTimezone(match));
+                             parseTimeZone(match));
 }
 
 // __________________________________________________________________________________
 DateOrLargeYear DateOrLargeYear::parseGYear(std::string_view dateString) {
   constexpr static ctll::fixed_string yearRegex = "(?<year>-?\\d{4,})";
   constexpr static ctll::fixed_string dateTime =
-      yearRegex + grp(timezoneRegex) + "?";
+      yearRegex + grp(timeZoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
   if (!match) {
     throw DateParseException{absl::StrCat(
@@ -231,7 +235,7 @@ DateOrLargeYear DateOrLargeYear::parseGYear(std::string_view dateString) {
   }
   int64_t year = toInt64<"year">(match);
   return makeDateOrLargeYear(dateString, year, 0, 0, -1, 0, 0.0,
-                             parseTimezone(match));
+                             parseTimeZone(match));
 }
 
 // __________________________________________________________________________________
@@ -239,7 +243,7 @@ DateOrLargeYear DateOrLargeYear::parseGYearMonth(std::string_view dateString) {
   constexpr static ctll::fixed_string yearRegex =
       "(?<year>-?\\d{4,})-(?<month>\\d{2})";
   constexpr static ctll::fixed_string dateTime =
-      yearRegex + grp(timezoneRegex) + "?";
+      yearRegex + grp(timeZoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
   if (!match) {
     throw DateParseException{absl::StrCat(
@@ -248,7 +252,7 @@ DateOrLargeYear DateOrLargeYear::parseGYearMonth(std::string_view dateString) {
   int64_t year = toInt64<"year">(match);
   int month = toInt<"month">(match);
   return makeDateOrLargeYear(dateString, year, month, 0, -1, 0, 0.0,
-                             parseTimezone(match));
+                             parseTimeZone(match));
 }
 
 // _____________________________________________________________________-

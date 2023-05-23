@@ -6,8 +6,8 @@
 
 #include "util/CtreHelpers.h"
 
-// Test that two `ctll::fixed_string`s are equal. They don't have the necessary
-// internal layout to reuse existing GTest/GMock matchers.
+// Test that two `ctll::fixed_string`s are equal. This function is necessary
+// because `ctll::fixed_string` is not compatible with `GTest/GMock` directly.
 static void testEqual(auto s1, auto s2) {
   ASSERT_EQ(s1.size(), s2.size());
   for (size_t i = 0; i < s1.size(); ++i) {

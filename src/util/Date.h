@@ -36,7 +36,7 @@ class DateOutOfRangeException : public std::exception {
   }
 };
 
-// An exception that is thrown when the parsing of a date fails, because the
+// An exception that is thrown when the parsing of a date fails because the
 // input does not match the expected regular expression.
 class DateParseException : public std::runtime_error {
  public:
@@ -77,13 +77,13 @@ constexpr void checkBoundsExcludingMax(const auto& element, const auto& min,
  * The following limitations hold:
  * - Years can be in the range -9999...9999
  * - Seconds are stored with a millisecond precision.
- * - Timezones can only be encoded as full hours.
- * - The ordering via operator <=> uses the timezone only as a tie breaker when
+ * - Time zones can only be encoded as full hours.
+ * - The ordering via operator <=> uses the time zone only as a tie breaker when
  *   all other values are equal. This means that for example the timestamp
- *   "12:00 with a timezone of 0" (Central Europe) will be sorted before
- *   "13:00 with a timezone of -6" (US East coast) because 12 < 13, although
+ *   "12:00 with a time zone of 0" (Central Europe) will be sorted before
+ *   "13:00 with a time zone of -6" (US East coast) because 12 < 13, although
  *   the second timestamp actually happens before the first one.
- * TODO<joka921> Use this class as "all times are in UTC, and the timezone is
+ * TODO<joka921> Use this class as "all times are in UTC, and the time zone is
  * stored additionally" and write converters for this (correctly comparable)
  * format for the input and output to and from string literals.0
  */
@@ -130,22 +130,22 @@ class Date {
   static constexpr uint8_t numBitsSecond =
       std::bit_width(static_cast<unsigned>(maxSecond * secondMultiplier));
 
-  // The timezone is an hour in -23..23. It is shifted to the positive range
-  // 0..22 (similar to the years). There are two additional "special" timezones:
-  // `no timezone` (undefined) `Z` (a special encoding for UTC/ 00:00). We
-  // store these as values `1` and `2` to be able to retrieve them again when
-  // exporting, all other timezones are shifted accordingly.
-  static constexpr int minTimezoneActually = -23;
-  static constexpr int maxTimezoneActually = 25;
-  static constexpr int minTimezone = -23;
-  static constexpr int maxTimezone = 23;
-  static constexpr uint8_t numBitsTimezone = std::bit_width(
-      static_cast<unsigned>(maxTimezoneActually - minTimezoneActually));
+  // The time zone is an hour in -23..23. It is shifted to the positive range
+  // 0..22 (similar to the years). There are two additional "special" time
+  // zones: `no time zone` (undefined) `Z` (a special encoding for UTC/ 00:00).
+  // We store these as values `1` and `2` to be able to retrieve them again when
+  // exporting, all other time zones are shifted accordingly.
+  static constexpr int minTimeZoneActually = -23;
+  static constexpr int maxTimeZoneActually = 25;
+  static constexpr int minTimeZone = -23;
+  static constexpr int maxTimeZone = 23;
+  static constexpr uint8_t numBitsTimeZone = std::bit_width(
+      static_cast<unsigned>(maxTimeZoneActually - minTimeZoneActually));
 
   // The number of bits that are not needed for the encoding of the Date value.
   static constexpr uint8_t numUnusedBits =
       64 - numBitsYear - numBitsMonth - numBitsDay - numBitsHour -
-      numBitsMinute - numBitsSecond - numBitsTimezone;
+      numBitsMinute - numBitsSecond - numBitsTimeZone;
 
  private:
   // TODO<joka921> The details of bitfields are implementation-specific, but
@@ -154,7 +154,7 @@ class Date {
   // significant bits. If this is not the case for a platform, then the unit
   // tests will fail. If we need support for such platforms, we have to
   // implement the bitfields manually using bit shifting.
-  uint64_t timezone_ : numBitsTimezone = 0;
+  uint64_t timeZone_ : numBitsTimeZone = 0;
   uint64_t second_ : numBitsSecond = 0;
   uint64_t minute_ : numBitsMinute = 0;
   uint64_t hour_ : numBitsHour = 0;
@@ -165,24 +165,24 @@ class Date {
   uint64_t unusedBits_ : numUnusedBits = 0;
 
  public:
-  struct NoTimezone {
-    bool operator==(const NoTimezone&) const = default;
+  struct NoTimeZone {
+    bool operator==(const NoTimeZone&) const = default;
   };
-  struct TimezoneZ {
-    bool operator==(const TimezoneZ&) const = default;
+  struct TimeZoneZ {
+    bool operator==(const TimeZoneZ&) const = default;
   };
-  using Timezone = std::variant<NoTimezone, TimezoneZ, int>;
+  using TimeZone = std::variant<NoTimeZone, TimeZoneZ, int>;
   /// Construct a `Date` from values for the different components. If any of the
   /// components is out of range, a `DateOutOfRangeException` is thrown.
   constexpr Date(int year, int month, int day, int hour = -1, int minute = 0,
-                 double second = 0.0, Timezone timeZone = NoTimezone{}) {
+                 double second = 0.0, TimeZone timeZone = NoTimeZone{}) {
     setYear(year);
     setMonth(month);
     setDay(day);
     setHour(hour);
     setMinute(minute);
     setSecond(second);
-    setTimezone(timeZone);
+    setTimeZone(timeZone);
     // Suppress the "unused member" warning on clang.
     (void)unusedBits_;
   }
@@ -208,7 +208,7 @@ class Date {
 
   /// Comparison is performed directly on the underlying representation. This is
   /// very efficient but has some caveats concerning the ordering of dates with
-  /// different timezone values (see the docstring of this class).
+  /// different time zone values (see the docstring of this class).
   [[nodiscard]] constexpr auto operator<=>(const Date& rhs) const {
     return toBits() <=> rhs.toBits();
   }
@@ -269,43 +269,43 @@ class Date {
     second_ = static_cast<unsigned>(std::round(second * secondMultiplier));
   }
 
-  /// Getter and setter for the timezone.
-  [[nodiscard]] Timezone getTimezone() const {
-    auto tz = static_cast<int>(timezone_) + minTimezoneActually;
+  /// Getter and setter for the time zone.
+  [[nodiscard]] TimeZone getTimeZone() const {
+    auto tz = static_cast<int>(timeZone_) + minTimeZoneActually;
     // Again factor out the special values.
     if (tz == 0) {
-      return NoTimezone{};
+      return NoTimeZone{};
     } else if (tz == 1) {
-      return TimezoneZ{};
+      return TimeZoneZ{};
     } else {
       return tz > 0 ? tz - 2 : tz;
     }
   }
-  int getTimezoneAsInternalIntForTesting() const {
-    return static_cast<int>(timezone_) + minTimezoneActually;
+  int getTimeZoneAsInternalIntForTesting() const {
+    return static_cast<int>(timeZone_) + minTimeZoneActually;
   }
 
-  constexpr void setTimezone(Timezone timeZone) {
-    auto getTimezone = []<typename T>(const T& value) -> int {
-      if constexpr (std::is_same_v<T, NoTimezone>) {
+  constexpr void setTimeZone(TimeZone timeZone) {
+    auto getTimeZone = []<typename T>(const T& value) -> int {
+      if constexpr (std::is_same_v<T, NoTimeZone>) {
         return 0;
-      } else if constexpr (std::is_same_v<T, TimezoneZ>) {
+      } else if constexpr (std::is_same_v<T, TimeZoneZ>) {
         return 1;
       } else {
         static_assert(std::is_same_v<T, int>);
-        detail::checkBoundsIncludingMax(value, minTimezone, maxTimezone,
+        detail::checkBoundsIncludingMax(value, minTimeZone, maxTimeZone,
                                         "timeZone");
         // Make room for the special timeZone values `0` and `1` from above.
         return value < 0 ? value : value + 2;
       }
     };
-    auto actualTimezone = std::visit(getTimezone, timeZone);
-    timezone_ = static_cast<unsigned>(actualTimezone - minTimezoneActually);
+    auto actualTimeZone = std::visit(getTimeZone, timeZone);
+    timeZone_ = static_cast<unsigned>(actualTimeZone - minTimeZoneActually);
   }
 
-  // Correctly format the timezone according to the `xsd` standard. This is a
+  // Correctly format the time zone according to the `xsd` standard. This is a
   // helper function for `toStringAndType` below.
-  std::string formatTimezone() const;
+  std::string formatTimeZone() const;
 
   // Convert to a string (without quotes) that represents the stored date, and a
   // pointer to the IRI of the corresponding datatype (currently always
@@ -357,7 +357,8 @@ class DateOrLargeYear {
   // for a year in the `Date` class.
   explicit DateOrLargeYear(int64_t year, Type type) {
     AD_CONTRACT_CHECK(year < Date::minYear || year > Date::maxYear);
-    AD_CONTRACT_CHECK(year >= minYear && year <= maxYear);
+    AD_CONTRACT_CHECK(year >= DateOrLargeYear::minYear &&
+                      year <= DateOrLargeYear::maxYear);
     auto flag = year < 0 ? negativeYear : positiveYear;
     bits_ = NBit::toNBit(year) << numTypeBits;
     bits_ |= flag << numPayloadBits;

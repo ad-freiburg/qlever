@@ -21,7 +21,7 @@ SlowRandomIntGenerator dayGenerator{1, 31};
 SlowRandomIntGenerator hourGenerator{0, 23};
 SlowRandomIntGenerator minuteGenerator{0, 59};
 RandomDoubleGenerator secondGenerator{0, 59.9999};
-SlowRandomIntGenerator timezoneGenerator{-23, 23};
+SlowRandomIntGenerator timeZoneGenerator{-23, 23};
 
 TEST(Date, Size) {
   ASSERT_EQ(sizeof(Date), 8);
@@ -36,9 +36,9 @@ TEST(Date, SetAndExtract) {
     auto hour = hourGenerator();
     auto minute = minuteGenerator();
     auto second = secondGenerator();
-    auto timezone = timezoneGenerator();
+    auto timeZone = timeZoneGenerator();
 
-    Date date(year, month, day, hour, minute, second, timezone);
+    Date date(year, month, day, hour, minute, second, timeZone);
 
     ASSERT_EQ(year, date.getYear());
     ASSERT_EQ(month, date.getMonth());
@@ -46,7 +46,7 @@ TEST(Date, SetAndExtract) {
     ASSERT_EQ(hour, date.getHour());
     ASSERT_EQ(minute, date.getMinute());
     ASSERT_NEAR(second, date.getSecond(), 0.001);
-    ASSERT_EQ(Date::Timezone{timezone}, date.getTimezone());
+    ASSERT_EQ(Date::TimeZone{timeZone}, date.getTimeZone());
 
     Date date2 = Date::fromBits(date.toBits());
     ASSERT_EQ(date, date2);
@@ -57,7 +57,7 @@ TEST(Date, SetAndExtract) {
     ASSERT_EQ(hour, date2.getHour());
     ASSERT_EQ(minute, date2.getMinute());
     ASSERT_NEAR(second, date2.getSecond(), 0.002);
-    ASSERT_EQ(Date::Timezone{timezone}, date2.getTimezone());
+    ASSERT_EQ(Date::TimeZone{timeZone}, date2.getTimeZone());
   }
 }
 
@@ -68,9 +68,9 @@ Date getRandomDate() {
   auto hour = hourGenerator();
   auto minute = minuteGenerator();
   auto second = secondGenerator();
-  auto timezone = timezoneGenerator();
+  auto timeZone = timeZoneGenerator();
 
-  return {year, month, day, hour, minute, second, timezone};
+  return {year, month, day, hour, minute, second, timeZone};
 }
 
 TEST(Date, RangeChecks) {
@@ -122,11 +122,11 @@ TEST(Date, RangeChecks) {
   ASSERT_THROW(date.setSecond(60.0), DateOutOfRangeException);
   ASSERT_EQ(date, dateCopy);
 
-  ASSERT_NO_THROW(date.setTimezone(-23));
-  ASSERT_NO_THROW(date.setTimezone(23));
+  ASSERT_NO_THROW(date.setTimeZone(-23));
+  ASSERT_NO_THROW(date.setTimeZone(23));
   dateCopy = date;
-  ASSERT_THROW(date.setTimezone(-24), DateOutOfRangeException);
-  ASSERT_THROW(date.setTimezone(24), DateOutOfRangeException);
+  ASSERT_THROW(date.setTimeZone(-24), DateOutOfRangeException);
+  ASSERT_THROW(date.setTimeZone(24), DateOutOfRangeException);
   ASSERT_EQ(date, dateCopy);
 }
 
@@ -149,8 +149,8 @@ auto dateLessComparator = [](Date a, Date b) -> bool {
   if (a.getSecond() != b.getSecond()) {
     return a.getSecond() < b.getSecond();
   }
-  return a.getTimezoneAsInternalIntForTesting() <
-         b.getTimezoneAsInternalIntForTesting();
+  return a.getTimeZoneAsInternalIntForTesting() <
+         b.getTimeZoneAsInternalIntForTesting();
 };
 
 std::vector<Date> getRandomDates(size_t n) {
@@ -251,7 +251,7 @@ TEST(Date, OrderRandomValues) {
   randomHour = hourGenerator();
   randomMinute = minuteGenerator();
   randomSecond = secondGenerator();
-  auto randomTimezone = timezoneGenerator();
+  auto randomTimeZone = timeZoneGenerator();
   dates = getRandomDates(100);
   for (auto& date : dates) {
     date.setYear(randomYear);
@@ -260,7 +260,7 @@ TEST(Date, OrderRandomValues) {
     date.setHour(randomHour);
     date.setMinute(randomMinute);
     date.setSecond(randomSecond);
-    date.setTimezone(randomTimezone);
+    date.setTimeZone(randomTimeZone);
   }
   testSorting(dates);
 }
@@ -268,12 +268,12 @@ TEST(Date, OrderRandomValues) {
 namespace {
 // Test that `parseFunction(input)` results in a `DateOrLargeYear` object that
 // stores a `Date` with the given xsd `type` and the given `year, month, ... ,
-// timezone`. Also test that the result of this parsing, when converted back to
+// timeZone`. Also test that the result of this parsing, when converted back to
 // a string, yields `input` again.
 auto testDatetimeImpl(auto parseFunction, std::string_view input,
                       const char* type, int year, int month, int day, int hour,
                       int minute = 0, double second = 0.0,
-                      Date::Timezone timezone = 0) {
+                      Date::TimeZone timeZone = 0) {
   ASSERT_NO_THROW(std::invoke(parseFunction, input));
   DateOrLargeYear dateLarge = std::invoke(parseFunction, input);
   EXPECT_TRUE(dateLarge.isDate());
@@ -285,7 +285,7 @@ auto testDatetimeImpl(auto parseFunction, std::string_view input,
   EXPECT_EQ(hour, d.getHour());
   EXPECT_EQ(minute, d.getMinute());
   EXPECT_NEAR(second, d.getSecond(), 0.001);
-  EXPECT_EQ(timezone, d.getTimezone());
+  EXPECT_EQ(timeZone, d.getTimeZone());
   const auto& [literal, outputType] = d.toStringAndType();
   EXPECT_EQ(literal, input);
   EXPECT_STREQ(type, outputType);
@@ -302,37 +302,37 @@ auto testDatetimeImpl(auto parseFunction, std::string_view input,
 // Specialization of `testDatetimeImpl` for parsing `xsd:dateTime`.
 auto testDatetime(std::string_view input, int year, int month, int day,
                   int hour, int minute = 0, double second = 0.0,
-                  Date::Timezone timezone = 0) {
+                  Date::TimeZone timeZone = 0) {
   return testDatetimeImpl(DateOrLargeYear::parseXsdDatetime, input,
                           XSD_DATETIME_TYPE, year, month, day, hour, minute,
-                          second, timezone);
+                          second, timeZone);
 }
 
 // Specialization of `testDatetimeImpl` for parsing `xsd:date`.
 auto testDate(std::string_view input, int year, int month, int day,
-              Date::Timezone timezone = 0,
+              Date::TimeZone timeZone = 0,
               source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
   return testDatetimeImpl(DateOrLargeYear::parseXsdDate, input, XSD_DATE_TYPE,
-                          year, month, day, -1, 0, 0, timezone);
+                          year, month, day, -1, 0, 0, timeZone);
 }
 
 // Specialization of `testDatetimeImpl` for parsing `xsd:gYear`.
-auto testYear(std::string_view input, int year, Date::Timezone timezone = 0,
+auto testYear(std::string_view input, int year, Date::TimeZone timeZone = 0,
               source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
   return testDatetimeImpl(DateOrLargeYear::parseGYear, input, XSD_GYEAR_TYPE,
-                          year, 0, 0, -1, 0, 0, timezone);
+                          year, 0, 0, -1, 0, 0, timeZone);
 }
 
 // Specialization of `testDatetimeImpl` for parsing `xsd:gYearMonth`.
 auto testYearMonth(std::string_view input, int year, int month,
-                   Date::Timezone timezone = 0,
+                   Date::TimeZone timeZone = 0,
                    source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
   return testDatetimeImpl(DateOrLargeYear::parseGYearMonth, input,
                           XSD_GYEARMONTH_TYPE, year, month, 0, -1, 0, 0,
-                          timezone);
+                          timeZone);
 }
 }  // namespace
 
@@ -341,45 +341,45 @@ TEST(Date, parseDateTime) {
   testDatetime("2034-12-24T02:12:42.342-03:00", 2034, 12, 24, 2, 12, 42.342,
                -3);
   testDatetime("2034-12-24T02:12:42.340Z", 2034, 12, 24, 2, 12, 42.34,
-               Date::TimezoneZ{});
+               Date::TimeZoneZ{});
   testDatetime("2034-12-24T02:12:42.341", 2034, 12, 24, 2, 12, 42.341,
-               Date::NoTimezone{});
+               Date::NoTimeZone{});
   testDatetime("-2034-12-24T02:12:42.340", -2034, 12, 24, 2, 12, 42.34,
-               Date::NoTimezone{});
+               Date::NoTimeZone{});
   testDatetime("-2034-12-24T02:12:42", -2034, 12, 24, 2, 12, 42.0,
-               Date::NoTimezone{});
+               Date::NoTimeZone{});
   testDatetime("-2034-12-24T02:12:42Z", -2034, 12, 24, 2, 12, 42.0,
-               Date::TimezoneZ{});
+               Date::TimeZoneZ{});
 }
 
 TEST(Date, parseDate) {
   testDate("2034-12-24+12:00", 2034, 12, 24, 12);
   testDate("2034-12-24-03:00", 2034, 12, 24, -3);
-  testDate("2034-12-24Z", 2034, 12, 24, Date::TimezoneZ{});
-  testDate("2034-12-24", 2034, 12, 24, Date::NoTimezone{});
-  testDate("-2034-12-24", -2034, 12, 24, Date::NoTimezone{});
+  testDate("2034-12-24Z", 2034, 12, 24, Date::TimeZoneZ{});
+  testDate("2034-12-24", 2034, 12, 24, Date::NoTimeZone{});
+  testDate("-2034-12-24", -2034, 12, 24, Date::NoTimeZone{});
 }
 
 TEST(Date, parseYearMonth) {
   testYearMonth("2034-12+12:00", 2034, 12, 12);
   testYearMonth("2034-12-03:00", 2034, 12, -3);
-  testYearMonth("2034-12Z", 2034, 12, Date::TimezoneZ{});
-  testYearMonth("2034-12", 2034, 12, Date::NoTimezone{});
-  testYearMonth("-2034-12", -2034, 12, Date::NoTimezone{});
+  testYearMonth("2034-12Z", 2034, 12, Date::TimeZoneZ{});
+  testYearMonth("2034-12", 2034, 12, Date::NoTimeZone{});
+  testYearMonth("-2034-12", -2034, 12, Date::NoTimeZone{});
 }
 
 TEST(Date, parseYear) {
   testYear("2034+12:00", 2034, 12);
   testYear("2034-03:00", 2034, -3);
-  testYear("2034Z", 2034, Date::TimezoneZ{});
-  testYear("2034", 2034, Date::NoTimezone{});
-  testYear("-2034", -2034, Date::NoTimezone{});
+  testYear("2034Z", 2034, Date::TimeZoneZ{});
+  testYear("2034", 2034, Date::NoTimeZone{});
+  testYear("-2034", -2034, Date::NoTimeZone{});
 }
 
-TEST(Date, timezoneWithMinutes) {
+TEST(Date, timeZoneWithMinutes) {
   auto d = DateOrLargeYear::parseGYear("2034+01:13");
-  // `1:13` as a timezone is silently rounded down to `1`.
-  ASSERT_EQ(std::get<int>(d.getDate().getTimezone()), 1);
+  // `1:13` as a timeZone is silently rounded down to `1`.
+  ASSERT_EQ(std::get<int>(d.getDate().getTimeZone()), 1);
 }
 
 namespace {
@@ -482,6 +482,8 @@ TEST(Date, parseLargeYearCornerCases) {
   testLargeYearDate("-2039481726-02-05", -2039481726, "-2039481726-01-01");
 
   testLargeYearDatetime("2039481726-01-01T12:00:00", 2039481726,
+                        "2039481726-01-01T00:00:00");
+  testLargeYearDatetime("2039481726-01-01T00:13:00", 2039481726,
                         "2039481726-01-01T00:00:00");
   testLargeYearDatetime("-2039481726-01-01T00:00:14", -2039481726,
                         "-2039481726-01-01T00:00:00");
