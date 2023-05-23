@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -14,6 +12,7 @@
 #include <sstream>
 #include <string>
 
+#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandLexer.h"
 #include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandParser.h"
 #include "BenchmarkConfigurationOption.h"
@@ -215,8 +214,25 @@ BenchmarkConfiguration::operator std::string() const {
   Replace the numbers in the 'leaves' of the 'tree' with the default value of
   the option, or a random value of that type, if it doesn't have a
   default value.
+  Note: Users can indirectly create null values in
+  `keyToConfigurationOptionIndex_`, by adding a configuration option with a path
+  containing numbers, for arrays accesses, that are bigger than zero. Those
+  indirectly declared arrays, will always be created/modified in such a way,
+  that the used index numbers are valid. Which means creating empty array
+  entries, if the numbers are bigger than `0` and the arrays don't already have
+  entries in all positions lower than the numbers.
+  Example: A configuration option with the path `"options", 3`, would create 3
+  empty array entries in `"options"`.
+  We will simply ignore those `null` entries, because they are signifiers, that
+  the user didn't think things through and should re-work some stuff. I mean,
+  there is never a good reason, to have empty array elements.
   */
   for (const auto& keyToLeaf : flattendKeyToConfigurationOptionIndex.items()) {
+    // Skip empty array 'leafs'.
+    if (keyToLeaf.value().is_null()) {
+      continue;
+    }
+
     // Pointer to the position of this option in
     // `prettyKeyToConfigurationOptionIndex`.
     const nlohmann::json::json_pointer jsonOptionPointer{keyToLeaf.key()};
@@ -275,6 +291,11 @@ BenchmarkConfiguration::operator std::string() const {
   // List the configuration options themselves.
   for (const auto& keyValuePair :
        flattendKeyToConfigurationOptionIndex.items()) {
+    // Skip empty array 'leafs'.
+    if (keyValuePair.value().is_null()) {
+      continue;
+    }
+
     // Add the location of the option and the option itself.
     stream << "Location : " << keyValuePair.key() << "\n"
            << static_cast<std::string>(
