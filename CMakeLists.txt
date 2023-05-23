@@ -55,6 +55,12 @@ if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU") AND
     else()
 endif ()
 
+IF(APPLE)
+    # Fix linking to homebrew-install libs like jemalloc on MacOS.
+    # See https://stackoverflow.com/questions/54068035
+    LINK_DIRECTORIES(/opt/homebrew/lib /usr/local/lib)
+ENDIF()
+
 ###############################################################################
 ##### Essential settings #####
 ###############################################################################
