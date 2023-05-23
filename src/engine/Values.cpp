@@ -79,7 +79,7 @@ float Values::getMultiplicity(size_t col) {
 }
 
 // ____________________________________________________________________________
-size_t Values::getSizeEstimateBeforeLimit() {
+uint64_t Values::getSizeEstimateBeforeLimit() {
   return parsedValues_._values.size();
 }
 

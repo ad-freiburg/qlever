@@ -14,7 +14,7 @@
 size_t Bind::getResultWidth() const { return _subtree->getResultWidth() + 1; }
 
 // BIND doesn't change the number of result rows
-size_t Bind::getSizeEstimateBeforeLimit() {
+uint64_t Bind::getSizeEstimateBeforeLimit() {
   return _subtree->getSizeEstimate();
 }
 
