@@ -27,7 +27,7 @@ struct ColumnIndexAndTypeInfo {
   static_assert(static_cast<bool>(PossiblyUndefined) == true);
 
   // The column index.
-  size_t columnIndex_;
+  ColumnIndex columnIndex_;
 
   // The information whether this column *might* contain UNDEF values.
   UndefStatus mightContainUndef_;
@@ -39,14 +39,14 @@ struct ColumnIndexAndTypeInfo {
 // Return a `ColumnIndexAndType` info with the given `columnIndex` that is
 // guaranteed to always be defined.
 inline auto makeAlwaysDefinedColumn =
-    [](size_t columnIndex) -> ColumnIndexAndTypeInfo {
+    [](ColumnIndex columnIndex) -> ColumnIndexAndTypeInfo {
   return {columnIndex, ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined};
 };
 
 // Return a `ColumnIndexAndType` info with the given `columnIndex` that might
 // contain UNDEF values.
 inline auto makePossiblyUndefinedColumn =
-    [](size_t columnIndex) -> ColumnIndexAndTypeInfo {
+    [](ColumnIndex columnIndex) -> ColumnIndexAndTypeInfo {
   return {columnIndex, ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined};
 };
 

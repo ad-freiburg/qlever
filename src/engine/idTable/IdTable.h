@@ -523,12 +523,12 @@ class IdTable {
   // the columns that may be permuted. The subset of the columns is specified by
   // the argument `columnIndices`.
   IdTable<T, 0, ColumnStorage, IsView::True> asColumnSubsetView(
-      std::span<const size_t> columnIndices) const requires isDynamic {
+      std::span<const ColumnIndex> columnIndices) const requires isDynamic {
     AD_CONTRACT_CHECK(std::ranges::all_of(
         columnIndices, [this](size_t idx) { return idx < numColumns(); }));
     ViewSpans viewSpans;
     viewSpans.reserve(columnIndices.size());
-    for (size_t idx : columnIndices) {
+    for (auto idx : columnIndices) {
       viewSpans.push_back(getColumn(idx));
     }
     return IdTable<T, 0, ColumnStorage, IsView::True>{
@@ -540,18 +540,18 @@ class IdTable {
   // with the old index `permutation[i]` will become the `i`-th column after the
   // permutation. For example, `permuteColumns({1, 2, 0})` rotates the columns
   // of a table with three columns left by one element.
-  void permuteColumns(std::span<const size_t> permutation) {
+  void permuteColumns(std::span<const ColumnIndex> permutation) {
     // First check that the `permutation` is indeed a permutation of the column
     // indices.
-    std::vector<size_t> check{permutation.begin(), permutation.end()};
+    std::vector<ColumnIndex> check{permutation.begin(), permutation.end()};
     std::ranges::sort(check);
-    std::vector<size_t> expected(numColumns());
-    std::iota(expected.begin(), expected.end(), size_t{0});
+    std::vector<ColumnIndex> expected(numColumns());
+    std::iota(expected.begin(), expected.end(), ColumnIndex{0});
     AD_CONTRACT_CHECK(check == expected);
 
     Data newData;
     newData.reserve(numColumns());
-    for (size_t colIdx : permutation) {
+    for (auto colIdx : permutation) {
       newData.push_back(std::move(data().at(colIdx)));
     }
     data() = std::move(newData);

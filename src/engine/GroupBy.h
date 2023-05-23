@@ -53,7 +53,7 @@ class GroupBy : public Operation {
 
   virtual size_t getResultWidth() const override;
 
-  virtual vector<size_t> resultSortedOn() const override;
+  virtual vector<ColumnIndex> resultSortedOn() const override;
 
   virtual void setTextLimit(size_t limit) override {
     _subtree->setTextLimit(limit);
@@ -77,7 +77,7 @@ class GroupBy : public Operation {
    * @param subtree The QueryExecutionTree that contains the operations
    *                  creating the sorting operation inputs.
    */
-  vector<size_t> computeSortColumns(const QueryExecutionTree* subtree);
+  vector<ColumnIndex> computeSortColumns(const QueryExecutionTree* subtree);
 
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtree.get()};

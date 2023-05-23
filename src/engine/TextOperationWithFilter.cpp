@@ -36,9 +36,9 @@ VariableToColumnMap TextOperationWithFilter::computeVariableToColumnMap()
   VariableToColumnMap vcmap;
   // Subtract one because the entity that we filtered on
   // is provided by the filter table and still has the same place there.
-  vcmap[_cvar] = makeAlwaysDefinedColumn(0);
-  vcmap[_cvar.getTextScoreVariable()] = makeAlwaysDefinedColumn(1);
-  size_t colN = 2;
+  vcmap[_cvar] = makeAlwaysDefinedColumn(ColumnIndex{0});
+  vcmap[_cvar.getTextScoreVariable()] = makeAlwaysDefinedColumn(ColumnIndex{1});
+  auto colN = ColumnIndex{2};
   const auto& filterColumns = _filterResult->getVariableColumns();
   // TODO<joka921> The order of the `_variables` is not deterministic,
   // check whether this is correct (especially in the presence of caching).
@@ -58,7 +58,7 @@ VariableToColumnMap TextOperationWithFilter::computeVariableToColumnMap()
     // TODO<joka921> It is possible that UNDEF values in the filter are never
     // propagated to the  result, but this has to be further examined.
     vcmap[varcol.first] = ColumnIndexAndTypeInfo{
-        colN + varcol.second.columnIndex_, varcol.second.mightContainUndef_};
+        ColumnIndex{colN + varcol.second.columnIndex_}, varcol.second.mightContainUndef_};
   }
   return vcmap;
 }
