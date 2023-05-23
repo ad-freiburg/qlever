@@ -16,7 +16,9 @@
 #include <typeinfo>
 
 #include "../benchmark/infrastructure/BenchmarkConfigurationOption.h"
+#include "generated/BenchmarkConfigurationShorthandLexer.h"
 #include "nlohmann/json.hpp"
+#include "util/ANTLRLexerHelper.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/json.h"
@@ -141,9 +143,9 @@ class BenchmarkConfiguration {
   @brief Add the given configuration option in such a way, that it can be
   accessed by calling `getConfigurationOptionByNestedKeys` with the here given
   keys, follwed by the name of the configuration option.
-  Example: Given a configuration option `numberOfRows` and the keys `"general
-  Options", 1, "Table"`, then it can be accessed with `"general Options", 1,
-  "Table", "numberOfRows"`.
+  Example: Given a configuration option `numberOfRows` and the keys
+  `"generalOptions", 1, "Table"`, then it can be accessed with
+  `"generalOptions", 1, "Table", "numberOfRows"`.
   */
   void addConfigurationOption(const BenchmarkConfigurationOption& option,
                               const KeyForJson auto&... keys) {
@@ -153,6 +155,41 @@ class BenchmarkConfiguration {
     // The position in the json object literal, our keys point to.
     const nlohmann::json::json_pointer ptr{
         createJsonPointer(AD_FWD(keys)..., option.getIdentifier())};
+
+    /*
+    The string keys must be a valid `NAME` in the short hand. Otherwise, the
+    option can't get accessed with the short hand..
+    */
+    if constexpr (sizeof...(keys) > 0) {
+      // For saving, which key failed the test.
+      std::string_view lastCheckedKey;
+
+      auto checkIfValidName = [&lastCheckedKey]<typename T>(const T& key) {
+        // Only actually check, if we have a string, or string like, type `T`.
+        if constexpr (std::is_constructible_v<std::string_view,
+                                              std::decay<T>>) {
+          lastCheckedKey = key;
+          return stringOnlyContainsSpecifiedTokens<
+              BenchmarkConfigurationShorthandLexer>(
+              AD_FWD(key),
+              static_cast<size_t>(BenchmarkConfigurationShorthandLexer::NAME));
+        } else {
+          return true;
+        }
+      };
+
+      if ((!checkIfValidName(keys) || ...)) {
+        /*
+        One of the keys failed. Because how the logical `or` is evaluated, left
+        to right, until a `true` is found, the `string_view` must hold the
+        failed key.
+        */
+        throw ad_utility::Exception(absl::StrCat(
+            "Key error: The key '", lastCheckedKey, "' in '", ptr.to_string(),
+            "' doesn't describe a valid name, according to the short hand "
+            "grammar."));
+      }
+    }
 
     // Is there already a configuration option with the same identifier at the
     // same location?

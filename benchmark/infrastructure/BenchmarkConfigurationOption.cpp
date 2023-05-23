@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "BenchmarkConfigurationOption.h"
-
 #include <absl/strings/str_cat.h>
 #include <bits/ranges_algo.h>
 
@@ -15,6 +13,9 @@
 
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "../benchmark/infrastructure/BenchmarkToString.h"
+#include "BenchmarkConfigurationOption.h"
+#include "generated/BenchmarkConfigurationShorthandLexer.h"
+#include "util/ANTLRLexerHelper.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -41,8 +42,16 @@ BenchmarkConfigurationOption::BenchmarkConfigurationOption(
       type_{type},
       value_{defaultValue},
       defaultValue_{defaultValue} {
-  // The `identifier` must be a string unlike `""`.
-  AD_CONTRACT_CHECK(identifier != "");
+  // The `identifier` must be a valid `NAME` in the short hand for
+  // configurations.
+  if (!stringOnlyContainsSpecifiedTokens<BenchmarkConfigurationShorthandLexer>(
+          identifier,
+          static_cast<size_t>(BenchmarkConfigurationShorthandLexer::NAME))) {
+    throw ad_utility::Exception(absl::StrCat(
+        "Error while constructing configuraion option: The identifier must be "
+        "a 'NAME' in the configuration short hand grammar, which '",
+        identifier, "' doesn't fullfil."));
+  }
 
   /*
   Is the default value of the right type? `std::monostate` is always alright,
@@ -51,7 +60,8 @@ BenchmarkConfigurationOption::BenchmarkConfigurationOption(
   if (type != static_cast<ValueTypeIndexes>(defaultValue.index()) &&
       !std::holds_alternative<std::monostate>(defaultValue)) {
     throw ad_utility::Exception(absl::StrCat(
-        "Error while constructing configuraion option: Configuration option '",
+        "Error while constructing configuraion option: Configuration option "
+        "'",
         identifier, "' was given a default value of type '",
         typesForValueToString(defaultValue.index()),
         "', but the configuration option was set to only ever hold values of "
