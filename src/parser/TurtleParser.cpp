@@ -428,6 +428,8 @@ bool TurtleParser<T>::rdfLiteral() {
           << ". It is treated as a plain string literal without datatype "
              "instead"
           << std::endl;
+      _lastParseResult = TripleComponent::Literal{literalString};
+      return true;
     } catch (const std::exception& e) {
       raise(e.what());
     }
