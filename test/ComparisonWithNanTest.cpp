@@ -4,109 +4,93 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <functional>
 
 #include "util/ComparisonWithNan.h"
 
+namespace {
 static constexpr double NaN = std::numeric_limits<double>::quiet_NaN();
+static constexpr double inf = std::numeric_limits<double>::infinity();
+static constexpr double negInf = -inf;
+auto lt = ad_utility::makeComparatorForNans(std::less{});
+auto le = ad_utility::makeComparatorForNans(std::less_equal{});
+auto eq = ad_utility::makeComparatorForNans(std::equal_to{});
+auto ne = ad_utility::makeComparatorForNans(std::not_equal_to{});
+auto ge = ad_utility::makeComparatorForNans(std::greater_equal{});
+auto gt = ad_utility::makeComparatorForNans(std::greater{});
+}  // namespace
+
+// ___________________________________________________________
+TEST(ComparisonWithNan, Sorting) {
+  std::vector<double> input{NaN, 3.0, -3.0, NaN, negInf, NaN, inf};
+  std::vector<double> expected{negInf, -3.0, 3.0, inf, NaN, NaN, NaN};
+  std::ranges::sort(input, lt);
+  ASSERT_EQ(input.size(), expected.size());
+  for (size_t i = 0; i < input.size(); ++i) {
+    auto a = input[i];
+    auto b = expected[i];
+    EXPECT_TRUE((a == b) || (std::isnan(a) && std::isnan(b)));
+  }
+}
+
+// Test several invariants of the relations `<, <=, ==, !=, >, >=` for two
+// arbitrary inputs `a, b`.
+void testInvariants(auto a, auto b) {
+  // `==` and `!=` are symmetric.
+  ASSERT_EQ(eq(a, b), eq(b, a));
+  ASSERT_EQ(ne(a, b), ne(b, a));
+  // `==` is the opposite of `!=`, `<` is the opposite of `>=` and `<=` is the
+  // opposite of `>`.
+  ASSERT_NE(eq(a, b), ne(a, b));
+  ASSERT_NE(lt(a, b), ge(a, b));
+  ASSERT_NE(lt(b, a), ge(b, a));
+  ASSERT_NE(le(a, b), gt(a, b));
+  ASSERT_NE(le(b, a), gt(b, a));
+}
+
+// Run exhaustive tests for numbers `a, b` where `a < b`.
+void testLess(auto a, auto b) {
+  ASSERT_TRUE(lt(a, b));
+  ASSERT_TRUE(le(a, b));
+  ASSERT_FALSE(eq(a, b));
+  testInvariants(a, b);
+}
+
+// Run exhaustive tests for numbers `a, b` where `a == b`.
+void testEqual(auto a, auto b) {
+  ASSERT_FALSE(lt(a, b));
+  ASSERT_TRUE(le(a, b));
+  ASSERT_TRUE(eq(a, b));
+  testInvariants(a, b);
+}
 
 // ___________________________________________________________
 TEST(ComparisonWithNan, NoFloatingPoint) {
   auto comp = ad_utility::makeComparatorForNans(std::less{});
-  ASSERT_TRUE(comp(3, 4));
-  ASSERT_TRUE(comp(3, 15));
-  ASSERT_FALSE(comp(3, 3));
-  ASSERT_FALSE(comp(3, -2));
+  testLess(3, 4);
+  testLess(-2, 3);
+  testEqual(3, 3);
 }
 
 // ___________________________________________________________
-TEST(ComparisonWithNan, FirstFloatingPoint) {
-  auto comp = ad_utility::makeComparatorForNans(std::less{});
-  ASSERT_TRUE(comp(3.0, 4));
-  ASSERT_TRUE(comp(3.0, 15));
-  ASSERT_FALSE(comp(3.0, 3));
-  ASSERT_FALSE(comp(3.0, -2));
-
-  ASSERT_FALSE(comp(NaN, 6));
-  ASSERT_FALSE(comp(NaN, -7432));
-
-  auto compEq = ad_utility::makeComparatorForNans(std::equal_to{});
-  auto compNe = ad_utility::makeComparatorForNans(std::not_equal_to{});
-
-  ASSERT_TRUE(compEq(3.0, 3));
-  ASSERT_FALSE(compEq(3.0, 5));
-  ASSERT_FALSE(compEq(NaN, 5));
-
-  ASSERT_FALSE(compNe(3.0, 3));
-  ASSERT_TRUE(compNe(3.0, 5));
-
-  ASSERT_TRUE(compNe(NaN, 5));
-
-  auto compLe = ad_utility::makeComparatorForNans(std::less_equal{});
-  ASSERT_TRUE(compLe(3.0, 3));
-  ASSERT_TRUE(compLe(3.0, 4));
-  ASSERT_FALSE(compLe(NaN, 4));
-}
-
-// ___________________________________________________________
-TEST(ComparisonWithNan, SecondFloatingPoint) {
-  auto comp = ad_utility::makeComparatorForNans(std::less{});
-  ASSERT_TRUE(comp(3, 4.0));
-  ASSERT_TRUE(comp(3, 15.2));
-  ASSERT_FALSE(comp(3, 3.0));
-  ASSERT_FALSE(comp(3, -2.3));
-
-  ASSERT_TRUE(comp(6, NaN));
-  ASSERT_TRUE(comp(-7432, NaN));
-
-  auto compEq = ad_utility::makeComparatorForNans(std::equal_to{});
-  auto compNe = ad_utility::makeComparatorForNans(std::not_equal_to{});
-
-  ASSERT_TRUE(compEq(3, 3.0));
-  ASSERT_FALSE(compEq(3, 5.2));
-  ASSERT_FALSE(compEq(5, NaN));
-
-  ASSERT_FALSE(compNe(3, 3.0));
-  ASSERT_TRUE(compNe(3, 5.2));
-
-  ASSERT_TRUE(compNe(5, NaN));
-
-  auto compLe = ad_utility::makeComparatorForNans(std::less_equal{});
-  ASSERT_TRUE(compLe(3, 3.0));
-  ASSERT_TRUE(compLe(3, 3.1));
-  ASSERT_TRUE(compLe(3, NaN));
+TEST(ComparisonWithNan, OneFloatingPoint) {
+  testLess(3.0, 4);
+  testLess(3.0, 15);
+  testLess(6, NaN);
+  testLess(-7432, NaN);
 }
 
 // ___________________________________________________________
 TEST(ComparisonWithNan, BothFloatingPoint) {
-  auto comp = ad_utility::makeComparatorForNans(std::less{});
-  ASSERT_TRUE(comp(3.0, 4.0));
-  ASSERT_TRUE(comp(3.8, 15.2));
-  ASSERT_FALSE(comp(3.0, 3.0));
-  ASSERT_FALSE(comp(3.3, -2.3));
+  testLess(3.0, 4.0);
+  testLess(3.8, 15.2);
+  testEqual(3.0, 3.0);
+  testLess(-2.3, 3.3);
 
-  ASSERT_TRUE(comp(6.2, NaN));
-  ASSERT_TRUE(comp(-7432.5, NaN));
-  ASSERT_FALSE(comp(NaN, 6.2));
-  ASSERT_FALSE(comp(NaN, -7432.5));
-
-  auto compEq = ad_utility::makeComparatorForNans(std::equal_to{});
-  auto compNe = ad_utility::makeComparatorForNans(std::not_equal_to{});
-
-  ASSERT_TRUE(compEq(3.0, 3.0));
-  ASSERT_FALSE(compEq(3.0, 5.2));
-  ASSERT_FALSE(compEq(5.0, NaN));
-  ASSERT_TRUE(compEq(NaN, NaN));
-
-  ASSERT_FALSE(compNe(3.0, 3.0));
-  ASSERT_TRUE(compNe(3.4, 5.2));
-
-  ASSERT_TRUE(compNe(5.0, NaN));
-  ASSERT_FALSE(compNe(NaN, NaN));
-
-  auto compLe = ad_utility::makeComparatorForNans(std::less_equal{});
-  ASSERT_TRUE(compLe(3, 3.0));
-  ASSERT_TRUE(compLe(3, 3.1));
-  ASSERT_TRUE(compLe(3, NaN));
-  ASSERT_TRUE(compLe(NaN, NaN));
+  testLess(6.2, NaN);
+  testLess(-7632.8, NaN);
+  testEqual(NaN, NaN);
+  testLess(negInf, NaN);
+  testLess(inf, NaN);
 }

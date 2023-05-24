@@ -10,12 +10,6 @@
 #include "util/TypeTraits.h"
 
 namespace ad_utility {
-namespace detail {
-template <typename T>
-static constexpr bool isTransparentComparator = isTypeContainedIn<
-    T, std::tuple<std::less<>, std::less_equal<>, std::equal_to<>,
-                  std::not_equal_to<>, std::greater<>, std::greater_equal<>>>;
-}
 
 // Convert one of the transparent comparators from the standard library
 // (`std::less<>, std::equal_to<>, etc.`) into a comparator that imposes a
@@ -24,44 +18,31 @@ static constexpr bool isTransparentComparator = isTypeContainedIn<
 // which has undefined behavior for the "normal" comparisons as soon as the
 // input contains NaN values. The semantics are that of the `comparator` with
 // the following changes:
-// 1. NaN values are always at the end of the ordering, so  `3 < Nan` and
-//    `!(Nan < 3)`, but also `3 > Nan` and `!(Nan > 3)`.
-//    Note that for this reason `<` is NOT the exact opposite of `>=` because of
-//    the position of the `NaN` values, but
-// 2. Nan == Nan (other than the default comparison where Nan != Nan).
-// For detailed examples see the corresponding tests which contain all relevant
-// corner cases.
+// 1. NaN values are greater than any other value (`Nan > infinity`).
+// 2. NaN values compare equal to other NaN values (`Nan == Nan`, other than the
+// default comparison where Nan != Nan). For detailed examples see the
+// corresponding tests which contain all relevant corner cases.
 template <typename Comparator>
-inline auto makeComparatorForNans(Comparator comparator)
-    requires detail::isTransparentComparator<Comparator> {
+inline auto makeComparatorForNans(Comparator comparator) {
   return [comparator]<typename A, typename B>(const A& a, const B& b)
       requires std::is_invocable_r_v<bool, Comparator, A, B> {
-    static constexpr bool isNotEqual =
-        ad_utility::isSimilar<Comparator, std::not_equal_to<>>;
-    static constexpr bool isEqual =
-        ad_utility::isSimilar<Comparator, std::equal_to<>>;
-    static constexpr bool aIsFloat = std::is_floating_point_v<A>;
-    static constexpr bool bIsFloat = std::is_floating_point_v<B>;
-    if constexpr (aIsFloat && bIsFloat) {
-      bool aNan = std::isnan(a);
-      bool bNan = std::isnan(b);
-      if (aNan && bNan) {
-        return comparator(0.0, 0.0);
-      } else if (aNan) {
-        return isNotEqual;
-      } else if (bNan) {
-        return !isEqual;
+    auto isNan = []<typename T>(const T& t) {
+      if constexpr (std::is_floating_point_v<T>) {
+        return std::isnan(t);
       } else {
-        return comparator(a, b);
+        (void)t;
+        return false;
       }
-    } else if constexpr (aIsFloat) {
-      if constexpr (isNotEqual) {
-        return std::isnan(a) || comparator(a, b);
-      } else {
-        return !std::isnan(a) && comparator(a, b);
-      }
-    } else if constexpr (bIsFloat) {
-      return (std::isnan(b) && !isEqual) || comparator(a, b);
+    };
+
+    bool aIsNan = isNan(a);
+    bool bIsNan = isNan(b);
+    if (aIsNan && bIsNan) {
+      return comparator(0.0, 0.0);
+    } else if (aIsNan) {
+      return comparator(1.0, 0.0);
+    } else if (bIsNan) {
+      return comparator(0.0, 1.0);
     } else {
       return comparator(a, b);
     }
