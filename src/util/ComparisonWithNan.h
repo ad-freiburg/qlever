@@ -20,7 +20,7 @@ namespace ad_utility {
 // the following changes:
 // 1. NaN values are greater than any other value (in particular, `Nan >
 // infinity`).
-// 2. NaN values compare equal to other NaN values (that is `Nan == Nan`, other
+// 2. NaN values compare equal to other NaN values (that is, `Nan == Nan`, other
 // than for the default comparison, where `Nan != Nan`). For detailed examples
 // see the corresponding tests which contain all relevant corner cases.
 template <typename Comparator>
