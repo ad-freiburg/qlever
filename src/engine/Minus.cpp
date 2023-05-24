@@ -81,7 +81,9 @@ VariableToColumnMap Minus::computeVariableToColumnMap() const {
 size_t Minus::getResultWidth() const { return _left->getResultWidth(); }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> Minus::resultSortedOn() const { return _left->resultSortedOn(); }
+vector<ColumnIndex> Minus::resultSortedOn() const {
+  return _left->resultSortedOn();
+}
 
 // _____________________________________________________________________________
 float Minus::getMultiplicity(size_t col) {

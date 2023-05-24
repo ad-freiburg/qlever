@@ -334,5 +334,6 @@ class Operation {
   mutable CopyableMutex _resultSortedColumnsMutex;
 
   // Store the list of columns by which the result is sorted.
-  mutable std::optional<vector<ColumnIndex>> _resultSortedColumns = std::nullopt;
+  mutable std::optional<vector<ColumnIndex>> _resultSortedColumns =
+      std::nullopt;
 };

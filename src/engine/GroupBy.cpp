@@ -96,7 +96,8 @@ vector<ColumnIndex> GroupBy::resultSortedOn() const {
   return sortedOn;
 }
 
-vector<ColumnIndex> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
+vector<ColumnIndex> GroupBy::computeSortColumns(
+    const QueryExecutionTree* subtree) {
   vector<ColumnIndex> cols;
   if (_groupByVariables.empty()) {
     // the entire input is a single group, no sorting needs to be done

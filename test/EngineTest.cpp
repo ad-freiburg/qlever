@@ -56,7 +56,8 @@ TEST(EngineTest, distinctWithEmptyInput) {
   // Deliberately input a non-empty result to check that it is
   // overwritten by the (empty) input.
   IdTable result = makeIdTableFromVector({{3}});
-  CALL_FIXED_SIZE(1, Engine::distinct, input, std::vector<ColumnIndex>{}, &result);
+  CALL_FIXED_SIZE(1, Engine::distinct, input, std::vector<ColumnIndex>{},
+                  &result);
   ASSERT_EQ(input, result);
 }
 

@@ -347,8 +347,8 @@ void Join::computeSizeEstimateAndMultiplicities() {
              << " * " << jcMultiplicityInResult << " * " << nofDistinctInResult
              << std::endl;
 
-  for (auto i = isFullScanDummy(_left) ? ColumnIndex{1} : ColumnIndex{0}; i < _left->getResultWidth();
-       ++i) {
+  for (auto i = isFullScanDummy(_left) ? ColumnIndex{1} : ColumnIndex{0};
+       i < _left->getResultWidth(); ++i) {
     double oldMult = _left->getMultiplicity(i);
     double m = std::max(
         1.0, oldMult * _right->getMultiplicity(_rightJoinCol) * corrFactor);
@@ -401,8 +401,8 @@ void Join::appendCrossProduct(const IdTable::const_iterator& leftBegin,
 
 // ______________________________________________________________________________
 
-void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b, ColumnIndex jc2,
-                IdTable* result) const {
+void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
+                ColumnIndex jc2, IdTable* result) const {
   LOG(DEBUG) << "Performing join between two tables.\n";
   LOG(DEBUG) << "A: width = " << a.numColumns() << ", size = " << a.size()
              << "\n";
@@ -501,8 +501,8 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b, ColumnIndex
 
 // ______________________________________________________________________________
 template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-void Join::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1, const IdTable& dynB,
-                        ColumnIndex jc2, IdTable* dynRes) {
+void Join::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
+                        const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes) {
   const IdTableView<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
   const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
 
