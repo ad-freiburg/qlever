@@ -67,7 +67,6 @@ void testEqual(auto a, auto b) {
 
 // ___________________________________________________________
 TEST(ComparisonWithNan, NoFloatingPoint) {
-  auto comp = ad_utility::makeComparatorForNans(std::less{});
   testLess(3, 4);
   testLess(-2, 3);
   testEqual(3, 3);
