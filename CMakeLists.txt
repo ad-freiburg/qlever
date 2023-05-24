@@ -17,11 +17,8 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   endif()
 
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "14.0.0")
-        MESSAGE(FATAL_ERROR "Clang++ versions older than 14.0 are not supported by QLever")
-    elseif(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
-        add_compile_options(-fcoroutines-ts)
-        # starting from Clang 16, coroutines are enabled by default for C++ 20
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
+        MESSAGE(FATAL_ERROR "Clang++ versions older than 16.0 are not supported by QLever")
     endif()
 else()
     MESSAGE(FATAL_ERROR "QLever currently only supports the G++ or LLVM-Clang++ compilers. Found ${CMAKE_CXX_COMPILER_ID}")
