@@ -9,8 +9,9 @@
 #include <set>
 #include <utility>
 
-#include "../util/HashMap.h"
-#include "../util/HashSet.h"
+#include "util/HashMap.h"
+#include "util/HashSet.h"
+#include "util/SuppressWarnings.h"
 
 using std::pair;
 
@@ -400,12 +401,11 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(vector<Row>& nonAggRes,
       return l[0] < r[0];
     }
     for (size_t i = 3; i < width; ++i) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Warray-bounds"
+      DISABLE_WARNINGS_GCC_13
       if (l[i] != r[i]) {
+        ENABLE_WARNINGS_GCC_13
         return l[i] < r[i];
       }
-#pragma GCC diagnostic pop
     }
     return l[1] < r[1];
   });
