@@ -51,7 +51,7 @@ BenchmarkResults runAllBenchmarks(){
   // organization, require an identifier. A.k.a. a name.
   const std::string identifier = "Some identifier";
 
-  // Just saves the meausred execution time.
+  // Just saves the measured execution time.
   results.addMeasurement(identifier, dummyFunctionToMeasure);
 
   // Creates an enpty group. Doesn't measure anything.
@@ -59,15 +59,23 @@ BenchmarkResults runAllBenchmarks(){
   // You add the measurements as group members.
   group.addMeasurement(identifier, dummyFunctionToMeasure);
 
-  // Create an empty table with a set number of rows and columns. Doesn't
-  // measure anything.
+  /*
+  Create an empty table with a set number of rows and columns. Doesn't
+  measure anything.
+  Important: The row names aren't saved in a seperate container, but INSIDE the
+  first column of the table.
+  */
   auto& table = results.addTable(identifier, {"rowName1", "rowName2", "etc."},
-    {"columnName1", "columnName2", "etc."});
+    {"Column for row names", "columnName1", "columnName2", "etc."});
+
   // You can add measurements to the table as entries, but you can also
   // read and set entries.
-  table.addMeasurement(0, 1, dummyFunctionToMeasure); // Row 0, column 1.
-  table.setEntry(0, 0, "A custom entry can be a float, or a string.");
-  table.getEntry(0, 1); // The measured time of the dummy function.
+  table.addMeasurement(0, 2, dummyFunctionToMeasure); // Row 0, column 1.
+  table.setEntry(0, 1, "A custom entry can be a float, or a string.");
+  table.getEntry(0, 2); // The measured time of the dummy function.
+
+  // Replacing a row name.
+  table.setEntry(0, 0, "rowName1++");
 
   return results;
 }

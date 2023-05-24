@@ -141,8 +141,7 @@ class ResultGroup : public BenchmarkMetadataGetter {
 class ResultTable : public BenchmarkMetadataGetter {
   // For identification.
   std::string descriptor_;
-  // The names of the columns and rows.
-  std::vector<std::string> rowNames_;
+  // The names of the columns.
   std::vector<std::string> columnNames_;
   // The entries in the table. Access is [row, column]. Can be the time in
   // seconds, a string, or empty.
@@ -158,7 +157,8 @@ class ResultTable : public BenchmarkMetadataGetter {
 
   @param descriptor A string to identify this instance in json format later.
   @param rowNames The names for the rows. The amount of rows in this table is
-  equal to the amount of row names.
+  equal to the amount of row names. Important: This first column will be filled
+  with those names.
   @param columnNames The names for the columns. The amount of columns in this
   table is equal to the amount of column names.
   */
@@ -180,7 +180,7 @@ class ResultTable : public BenchmarkMetadataGetter {
   requires std::invocable<Function>
   void addMeasurement(const size_t& row, const size_t& column,
                       const Function& functionToMeasure) {
-    AD_CONTRACT_CHECK(row < rowNames_.size() && column < columnNames_.size());
+    AD_CONTRACT_CHECK(row < numRows() && column < numColumns());
     entries_.at(row).at(column) = measureTimeOfFunction(functionToMeasure);
   }
 
@@ -207,6 +207,8 @@ class ResultTable : public BenchmarkMetadataGetter {
   template <typename T>
   requires std::is_same_v<T, float> || std::is_same_v<T, std::string>
   T getEntry(const size_t row, const size_t column) const {
+    AD_CONTRACT_CHECK(row < numRows() && column < numColumns());
+
     // There is a chance, that the entry of the table does NOT have type T,
     // in which case this will cause an error. As this is a mistake on the
     // side of the user, we don't really care.
@@ -218,10 +220,8 @@ class ResultTable : public BenchmarkMetadataGetter {
 
   /*
   @brief Adds a new empty row at the bottom of the table.
-
-  @param rowName The name of the row.
   */
-  void addRow(std::string_view rowName);
+  void addRow();
 
   /*
   The number of rows.
