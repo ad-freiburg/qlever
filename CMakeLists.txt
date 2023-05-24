@@ -129,7 +129,7 @@ find_package(OpenSSL REQUIRED)
 # `target_link_libraries` that additionally links against the common
 # libraries.
 function (qlever_target_link_libraries target)
-    target_link_libraries(${target} ${ARGN} absl::flat_hash_map absl::flat_hash_set absl::strings)
+    target_link_libraries(${target} ${ARGN} absl::flat_hash_map absl::flat_hash_set absl::strings rtree)
 endfunction()
 
 
@@ -211,10 +211,8 @@ endif()
 ###############################
 # RTREE
 ###############################
-add_subdirectory(third_party/rtree EXCLUDE_FROM_ALL)
+add_subdirectory(third_party/rtree)
 include_directories(SYSTEM third_party/rtree/)
-add_executable(${PROJECT_NAME} third_party/rtree/Rtree/Rtree.cpp)
-target_include_directories(${PROJECT_NAME} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/rtree>)
 
 ################################
 # STXXL
