@@ -163,7 +163,7 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     case Datatype::Int:
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
     case Datatype::WordVocabIndex: {
-      std::optional<string> entity = index.idToOptionalString(id);
+      std::optional<string> entity = index.idToOptionalString(id.getWordVocabIndex());
       AD_CONTRACT_CHECK(entity.has_value());
       return std::pair{escapeFunction(std::move(entity.value())), nullptr};
     }

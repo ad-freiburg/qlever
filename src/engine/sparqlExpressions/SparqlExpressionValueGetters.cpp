@@ -39,7 +39,7 @@ bool EffectiveBooleanValueGetter::operator()(ValueId id,
     case Datatype::Undefined:
       return false;
     case Datatype::WordVocabIndex: {
-      auto index = id.getVocabIndex();
+      auto index = id.getWordVocabIndex();
       return !context->_qec.getIndex()
                   .getTextVocab()
                   .indexToOptionalString(index)
