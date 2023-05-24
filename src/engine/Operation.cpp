@@ -313,10 +313,14 @@ void Operation::createRuntimeInfoFromEstimates() {
     return;
   }
   // TODO<joka921> If the above stuff works, this can be removed.
-  std::optional<RuntimeInformation::Status> statusFromPrecomputedResult =
-      getPrecomputedResultFromQueryPlanning().has_value()
-          ? std::optional{_runtimeInfo.status_}
-          : std::nullopt;
+  auto statusFromPrecomputedResult =
+      [this]() -> std::optional<RuntimeInformation::Status> {
+    if (getPrecomputedResultFromQueryPlanning().has_value()) {
+      return _runtimeInfo.status_;
+    } else {
+      return std::nullopt;
+    }
+  }();
   _runtimeInfo.setColumnNames(getInternallyVisibleVariableColumns());
   const auto numCols = getResultWidth();
   _runtimeInfo.numCols_ = numCols;
