@@ -66,14 +66,14 @@ void testEqual(auto a, auto b) {
 }
 
 // ___________________________________________________________
-TEST(ComparisonWithNan, NoFloatingPoint) {
+TEST(ComparisonWithNan, NoFloatingPointOrNaN) {
   testLess(3, 4);
   testLess(-2, 3);
   testEqual(3, 3);
 }
 
 // ___________________________________________________________
-TEST(ComparisonWithNan, OneFloatingPoint) {
+TEST(ComparisonWithNan, OneFloatingPointOrNaN) {
   testLess(3.0, 4);
   testLess(3.0, 15);
   testLess(6, NaN);
@@ -81,7 +81,7 @@ TEST(ComparisonWithNan, OneFloatingPoint) {
 }
 
 // ___________________________________________________________
-TEST(ComparisonWithNan, BothFloatingPoint) {
+TEST(ComparisonWithNan, BothFloatingPointOrNan) {
   testLess(3.0, 4.0);
   testLess(3.8, 15.2);
   testEqual(3.0, 3.0);
