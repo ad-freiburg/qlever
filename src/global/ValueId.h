@@ -28,7 +28,7 @@ enum struct Datatype {
   LocalVocabIndex,
   TextRecordIndex,
   WordVocabIndex,
-  MaxValue = TextRecordIndex
+  MaxValue = WordVocabIndex
   // TODO<joka921> At least "date" is missing and not yet folded.
   // Note: Unfortunately we cannot easily get the size of an enum.
   // If members are added to this enum, then the `MaxValue`
