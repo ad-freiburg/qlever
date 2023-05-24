@@ -6,7 +6,7 @@
 
 #include "util/Exception.h"
 
-// Various helper functions for compile-time programming
+// Various helper functions for compile-time programming.
 
 namespace ad_utility {
 
@@ -26,21 +26,79 @@ constexpr auto pow(auto base, int exponent) {
   return result;
 };
 
-namespace detail {
+/*
+ * @brief A compile time for loop, which passes the loop index to the
+ *  given loop body.
+ *
+ * @tparam Function The loop body should be a templated function, with one
+ *  size_t template argument and no more. It also shouldn't take any function
+ *  arguments. Should be passed per deduction.
+ * @tparam ForLoopIndexes The indexes, that the for loop goes over. Should be
+ *  passed per deduction.
+ *
+ * @param loopBody The body of the for loop.
+ */
+template <typename Function, size_t... ForLoopIndexes>
+void ConstexprForLoop(const std::index_sequence<ForLoopIndexes...>&,
+                      const Function& loopBody) {
+  ((loopBody.template operator()<ForLoopIndexes>()), ...);
+}
 
+/*
+ * @brief 'Converts' a run time value of `size_t` to a compile time value and
+ * then calls `function.template operator()<value>()`. `value < MaxValue` must
+ * be true, else an exception is thrown. *
+ *
+ * @tparam MaxValue The maximal value, that the function parameter value could
+ *  take.
+ * @tparam Function The given function should be a templated function, with one
+ *  size_t template argument and no more. It also shouldn't take any function
+ *  arguments. This parameter should be passed per deduction.
+ *
+ * @param value Value that you need as a compile time value.
+ * @param function The templated function, which you wish to execute. Must be
+ *  a function object (for example a lambda expression) that has an
+ *  `operator()` which is templated on a single `size_t`.
+ */
+template <size_t MaxValue, typename Function>
+void RuntimeValueToCompileTimeValue(const size_t& value,
+                                    const Function& function) {
+  AD_CONTRACT_CHECK(value <= MaxValue);  // Is the value valid?
+  ConstexprForLoop(std::make_index_sequence<MaxValue + 1>{},
+                   [&function, &value]<size_t Index>() {
+                     if (Index == value) {
+                       function.template operator()<Index>();
+                     }
+                   });
+}
+
+// An `ad_utility::ValueSequence<T, values...>` has the same functionality as
+// `std::integer_sequence`. This replacement is needed to compile QLever with
+// libc++, because libc++ strictly enforces the `std::integral` constraint for
+// `std::integer_sequence`, and we also need non-integral types as values, for
+// example `std::array<...>`.
+namespace detail {
+template <typename T, T... values>
+struct ValueSequenceImpl {};
+};  // namespace detail
+
+template <typename T, T... values>
+using ValueSequence = detail::ValueSequenceImpl<T, values...>;
+
+namespace detail {
 // The implementation for the `toIntegerSequence` function (see below).
 // For the ideas and alternative implementations see
 // https://stackoverflow.com/questions/56799396/
 template <auto Array, size_t... indexes>
 constexpr auto toIntegerSequenceHelper(std::index_sequence<indexes...>) {
-  return std::integer_sequence<typename decltype(Array)::value_type,
-                               std::get<indexes>(Array)...>{};
+  return ValueSequence<typename decltype(Array)::value_type,
+                       std::get<indexes>(Array)...>{};
 }
 }  // namespace detail
 
-// Convert a compile-time `std::array` to a `std::integer_sequence` that
+// Convert a compile-time `std::array` to a `ValueSequence` that
 // contains the same values. This is useful because arrays can be easily created
-// in constexpr functions using `normal` syntax, whereas `integer_sequences` are
+// in constexpr functions using `normal` syntax, whereas `ValueSequence`s are
 // useful for working with templates that take several ints as template
 // parameters. For an example usage see `CallFixedSize.h`
 template <auto Array>

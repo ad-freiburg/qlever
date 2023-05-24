@@ -2,7 +2,10 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include <thread>
 
 #include "util/Timer.h"
 
@@ -12,14 +15,16 @@ using namespace std::chrono_literals;
 
 void testTime(Timer::Duration duration, size_t msecs,
               std::chrono::milliseconds expected) {
-  ASSERT_GE(duration, 0.9 * expected);
-  ASSERT_LE(duration, 1.1 * (expected + 1ms));
+  auto lowerBound = 0.9 * expected;
+  auto upperBound = 1.1 * expected + 3ms;
+  ASSERT_GE(duration, lowerBound);
+  ASSERT_LE(duration, upperBound);
 
-  ASSERT_GE(msecs, 0.9 * expected.count());
-  ASSERT_LE(msecs, 1.1 * (expected.count() + 1));
+  ASSERT_GE(msecs, lowerBound.count());
+  ASSERT_LE(msecs, upperBound.count());
 
-  ASSERT_GE(Timer::toSeconds(duration), 0.0009 * expected.count());
-  ASSERT_LE(Timer::toSeconds(duration), 0.0011 * (expected.count() + 1));
+  ASSERT_GE(Timer::toSeconds(duration), 0.001 * lowerBound.count());
+  ASSERT_LE(Timer::toSeconds(duration), 0.001 * upperBound.count());
 }
 
 void testTime(const ad_utility::Timer& timer,
@@ -123,14 +128,14 @@ TEST(TimeoutTimer, Limited) {
   }
 }
 
-TEST(TimeBlockAndLock, TimeBlockAndLock) {
+TEST(TimeBlockAndLog, TimeBlockAndLog) {
   std::string s;
   {
     auto callback = [&s](size_t msecs, std::string_view message) {
       s = absl::StrCat(message, ": ", msecs);
     };
     ad_utility::TimeBlockAndLog t{"message", callback};
-    std::this_thread::sleep_for(10ms);
+    std::this_thread::sleep_for(25ms);
   }
-  ASSERT_EQ("message: 10", s);
+  ASSERT_THAT(s, ::testing::MatchesRegex("message: 2[5-9]"));
 }

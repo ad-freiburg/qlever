@@ -98,15 +98,11 @@ AD_SERIALIZE_FUNCTION(testNamespaceA::G) { serializer | arg.a; }
 
 // Test that the claims about serializability are in fact true.
 template <typename T>
-static constexpr bool isReadSerializable = requires(ByteBufferReadSerializer s,
-                                                    T& t) {
-  serialize(s, t);
-};
+static constexpr bool isReadSerializable =
+    requires(ByteBufferReadSerializer s, T& t) { serialize(s, t); };
 template <typename T>
 static constexpr bool isWriteSerializable =
-    requires(ByteBufferWriteSerializer s, T t) {
-  serialize(s, t);
-};
+    requires(ByteBufferWriteSerializer s, T t) { serialize(s, t); };
 
 TEST(Serializer, Serializability) {
   using testNamespaceA::A;
@@ -375,7 +371,9 @@ TEST(Serializer, CopyAndMove) {
     using Writer = std::decay_t<decltype(writer)>;
 
     // Assert that write serializers cannot be copied.
-    static_assert(!requires(Writer w1, Writer w2) { {w1 = w2}; });
+    static_assert(!requires(Writer w1, Writer w2) {
+      { w1 = w2 };
+    });
     static_assert(!std::constructible_from<Writer, const Writer&>);
 
     // Assert that moving writers consistently writes to the same resource.
@@ -388,7 +386,9 @@ TEST(Serializer, CopyAndMove) {
     auto reader = makeReaderFromWriter();
     // Assert that read serializers cannot be copied.
     using Reader = decltype(reader);
-    static_assert(!requires(Reader r1, Reader r2) { {r1 = r2}; });
+    static_assert(!requires(Reader r1, Reader r2) {
+      { r1 = r2 };
+    });
     static_assert(!std::constructible_from<Reader, const Reader&>);
     // Assert that moving writers consistently reads from the same resource.
     int i;

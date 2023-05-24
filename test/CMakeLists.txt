@@ -278,7 +278,7 @@ addLinkAndDiscoverTestSerial(ValuesTest engine)
 
 addLinkAndDiscoverTestSerial(ServiceTest engine)
 
-addLinkAndDiscoverTest(HttpTest boost_iostreams http)
+addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
 
 addLinkAndDiscoverTest(CallFixedSizeTest)
 
@@ -319,3 +319,15 @@ addLinkAndDiscoverTest(OperationTest engine)
 addLinkAndDiscoverTest(RuntimeInformationTest engine)
 
 addLinkAndDiscoverTest(VariableToColumnMapTest engine)
+
+addLinkAndDiscoverTest(CopyableUniquePtrTest)
+
+addLinkAndDiscoverTest(JsonCustomConverterForThirdPartyTest)
+
+addLinkAndDiscoverTest(BenchmarkConfigurationTest benchmark)
+
+addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
+
+addLinkAndDiscoverTest(FindUndefRangesTest)
+
+addLinkAndDiscoverTest(AddCombinedRowToTableTest)

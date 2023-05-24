@@ -138,6 +138,8 @@ class Engine {
     LOG(DEBUG) << "Sort done.\n";
   }
 
+  static void sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols);
+
   /**
    * @brief Removes all duplicates from input with regards to the columns
    *        in keepIndices. The input needs to be sorted on the keep indices,
@@ -150,9 +152,9 @@ class Engine {
     LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
     const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
     IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
+    result = input.clone();
     if (!input.empty()) {
       AD_CONTRACT_CHECK(keepIndices.size() <= input.numColumns());
-      result = input.clone();
 
       auto last = std::unique(result.begin(), result.end(),
                               [&keepIndices](const auto& a, const auto& b) {
@@ -164,8 +166,8 @@ class Engine {
                                 return true;
                               });
       result.erase(last, result.end());
-      *dynResult = std::move(result).toDynamic();
-      LOG(DEBUG) << "Distinct done.\n";
     }
+    *dynResult = std::move(result).toDynamic();
+    LOG(DEBUG) << "Distinct done.\n";
   }
 };

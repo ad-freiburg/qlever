@@ -1233,17 +1233,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
 // _____________________________________________________________________________
 QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
     const SubtreePlan& a, const SubtreePlan& b) const {
-  // Joining two optional patterns is illegal
-  // TODO<joka921/kramerfl> : actually the second one must be the optional
-  AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL ||
-                    b.type != SubtreePlan::OPTIONAL);
-
-  auto jcs = getJoinColumns(a, b);
-  auto [qetA, qetB] =
-      QueryExecutionTree::createSortedTrees(a._qet, b._qet, jcs);
-  return makeSubtreePlan<OptionalJoin>(_qec, qetA,
-                                       a.type == SubtreePlan::OPTIONAL, qetB,
-                                       b.type == SubtreePlan::OPTIONAL, jcs);
+  // The second tree must be the OPTIONAL tree, OPTIONAL joins are not
+  // symmetric.
+  AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL &&
+                    b.type == SubtreePlan::OPTIONAL);
+  return makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet,
+                                       getJoinColumns(a, b));
 }
 
 // _____________________________________________________________________________
@@ -1923,12 +1918,10 @@ size_t QueryPlanner::findCheapestExecutionTree(
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     const SubtreePlan& ain, const SubtreePlan& bin,
     std::optional<TripleGraph> tg) const {
-  const auto& a = !isInTestMode() || ain._qet->asString() < bin._qet->asString()
-                      ? ain
-                      : bin;
-  const auto& b = !isInTestMode() || ain._qet->asString() < bin._qet->asString()
-                      ? bin
-                      : ain;
+  bool swapForTesting = isInTestMode() && bin.type != SubtreePlan::OPTIONAL &&
+                        ain._qet->asString() < bin._qet->asString();
+  const auto& a = !swapForTesting ? ain : bin;
+  const auto& b = !swapForTesting ? bin : ain;
   std::vector<SubtreePlan> candidates;
 
   // We often query for the type of an operation, so we shorten these checks.
@@ -1972,8 +1965,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     return std::vector{minus(a, b)};
   }
 
-  // TODO<joka921> OPTIONAL JOINS are not symmetric!
-  if (a.type == SubtreePlan::OPTIONAL || b.type == SubtreePlan::OPTIONAL) {
+  // OPTIONAL JOINS are not symmetric!
+  AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL);
+  if (b.type == SubtreePlan::OPTIONAL) {
     // Join the two optional columns using an optional join
     return std::vector{optionalJoin(a, b)};
   }

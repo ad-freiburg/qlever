@@ -51,29 +51,40 @@ struct TestContext {
     // First get some IDs for strings from the vocabulary to later reuse them
     Id alpha;
     Id aelpha;
-    Id A;
+    Id x;
     Id Beta;
 
     bool b = qec->getIndex().getId("\"alpha\"", &alpha);
     AD_CONTRACT_CHECK(b);
     b = qec->getIndex().getId("\"älpha\"", &aelpha);
     AD_CONTRACT_CHECK(b);
-    b = qec->getIndex().getId("\"A\"", &A);
+    b = qec->getIndex().getId("<x>", &x);
     AD_CONTRACT_CHECK(b);
     b = qec->getIndex().getId("\"Beta\"", &Beta);
     AD_CONTRACT_CHECK(b);
+
+    Id notInVocabA = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained("\"notInVocabA\""));
+    Id notInVocabB = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained("\"notInVocabB\""));
+    Id notInVocabC = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained("<notInVocabC>"));
+    Id notInVocabD = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained("<notInVocabD>"));
 
     // Set up the `table` that represents the previous partial query results. It
     // has five columns/variables: ?ints (only integers), ?doubles (only
     // doubles), ?numeric (int and double), ?vocab (only entries from the
     // vocabulary), ?mixed (all of the previous). None of the columns is sorted.
-    table.setNumColumns(5);
+    table.setNumColumns(7);
     // Order of the columns:
-    // ?ints ?doubles ?numeric ?vocab ?mixed
-    table.push_back({IntId(1), DoubleId(0.1), IntId(1), Beta, IntId(1)});
-    table.push_back(
-        {IntId(0), DoubleId(-.1), DoubleId(-.1), alpha, DoubleId(-.1)});
-    table.push_back({IntId(-1), DoubleId(2.8), DoubleId(3.4), aelpha, A});
+    // ?ints ?doubles ?numeric ?vocab ?mixed ?localVocab ?everything
+    table.push_back({IntId(1), DoubleId(0.1), IntId(1), Beta, IntId(1),
+                     notInVocabA, notInVocabC});
+    table.push_back({IntId(0), DoubleId(-.1), DoubleId(-.1), alpha,
+                     DoubleId(-.1), notInVocabB, alpha});
+    table.push_back({IntId(-1), DoubleId(2.8), DoubleId(3.4), aelpha, x,
+                     notInVocabD, Id::makeUndefined()});
 
     context._beginIndex = 0;
     context._endIndex = table.size();
@@ -84,6 +95,8 @@ struct TestContext {
     varToColMap[V{"?numeric"}] = makeAlwaysDefinedColumn(2);
     varToColMap[V{"?vocab"}] = makeAlwaysDefinedColumn(3);
     varToColMap[V{"?mixed"}] = makeAlwaysDefinedColumn(4);
+    varToColMap[V{"?localVocab"}] = makeAlwaysDefinedColumn(5);
+    varToColMap[V{"?everything"}] = makePossiblyUndefinedColumn(6);
   }
 
   // Get a test context where the rows are the same as by default, but sorted by

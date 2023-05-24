@@ -2,7 +2,7 @@ add_subdirectory(sparqlExpressions)
 add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp SortPerformanceEstimator.h)
 qlever_target_link_libraries(SortPerformanceEstimator)
 add_library(engine
-        Engine.h
+        Engine.cpp
         IndexSequence.h
         QueryExecutionTree.h QueryExecutionTree.cpp
         Operation.h Operation.cpp
@@ -41,4 +41,4 @@ add_library(engine
         ../util/Parameters.h RuntimeInformation.cpp CheckUsePatternTrick.cpp CheckUsePatternTrick.h
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp )
 
-qlever_target_link_libraries(engine index parser sparqlExpressions http SortPerformanceEstimator ${ICU_LIBRARIES} boost_iostreams)
+qlever_target_link_libraries(engine index parser sparqlExpressions http SortPerformanceEstimator ${ICU_LIBRARIES} Boost::iostreams)

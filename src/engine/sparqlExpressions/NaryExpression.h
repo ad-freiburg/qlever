@@ -34,8 +34,8 @@ namespace detail {
 // @tparam BinaryOperations The actual binary operations. They must be callable
 // with the result types of the `ValueGetter`.
 template <typename NaryOperation>
-requires(isOperation<NaryOperation>) class NaryExpression
-    : public SparqlExpression {
+requires(isOperation<NaryOperation>)
+class NaryExpression : public SparqlExpression {
  public:
   static constexpr size_t N = NaryOperation::N;
   using Children = std::array<SparqlExpression::Ptr, N>;
@@ -46,9 +46,8 @@ requires(isOperation<NaryOperation>) class NaryExpression
   // Construct from `N` child expressions. Each of the children must have a type
   // `std::unique_ptr<SubclassOfSparqlExpression>`.
   explicit NaryExpression(
-      std::convertible_to<
-          SparqlExpression::
-              Ptr> auto... children) requires(sizeof...(children) == N)
+      std::convertible_to<SparqlExpression::Ptr> auto... children)
+      requires(sizeof...(children) == N)
       : NaryExpression{Children{std::move(children)...}} {}
 
  public:
@@ -212,19 +211,10 @@ using MonthExpression = NARY<1, FV<decltype(extractMonth), StringValueGetter>>;
 using DayExpression = NARY<1, FV<decltype(extractDay), StringValueGetter>>;
 
 // String functions.
-inline auto str = [](const auto& s) -> std::string { return s; };
-using StrExpression = NARY<1, FV<decltype(str), StringValueGetter>>;
+using StrExpression = NARY<1, FV<std::identity, StringValueGetter>>;
 
-// Compute string length. NOTE: The implementation assumes that if the string
-// contains one quote, it contains at least two.
-inline auto strlen = [](const auto& s) -> long int {
-  auto pos = s.find_last_of('"');
-  if (pos == std::string::npos || pos == 0) {
-    return static_cast<long int>(s.size());
-  } else {
-    return static_cast<long int>(pos - 1);
-  }
-};
+// Compute string length.
+inline auto strlen = [](const auto& s) -> long int { return s.size(); };
 using StrlenExpression = NARY<1, FV<decltype(strlen), StringValueGetter>>;
 
 }  // namespace detail

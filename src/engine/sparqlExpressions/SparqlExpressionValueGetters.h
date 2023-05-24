@@ -80,8 +80,8 @@ struct EffectiveBooleanValueGetter {
 /// templates. It produces a string value.
 struct StringValueGetter {
   template <typename T>
-  requires(std::is_arithmetic_v<T>) string operator()(
-      T v, EvaluationContext*) const {
+  requires(std::is_arithmetic_v<T>)
+  string operator()(T v, EvaluationContext*) const {
     return std::to_string(v);
   }
 
@@ -93,6 +93,16 @@ struct StringValueGetter {
 
   string operator()(string s, EvaluationContext*) const { return s; }
 };
+
+// If the `id` points to a literal, return the contents of that literal (without
+// the quotation marks). For all other types (IRIs, numbers, etc.) return
+// `std::nullopt`. This is used for expressions that work on strings, but for
+// the input of which the `STR()` function was not used in a query.
+struct LiteralFromIdGetter {
+  std::optional<string> operator()(ValueId id,
+                                   const EvaluationContext* context) const;
+};
+
 }  // namespace sparqlExpression::detail
 
 #endif  // QLEVER_SPARQLEXPRESSIONVALUEGETTERS_H

@@ -21,11 +21,11 @@ auto V = ad_utility::testing::VocabId;
 // A simple test for computing a union.
 TEST(UnionTest, computeUnion) {
   auto* qec = ad_utility::testing::getQec();
-  IdTable left = makeIdTableFromIdVector({{V(1)}, {V(2)}, {V(3)}});
+  IdTable left = makeIdTableFromVector({{V(1)}, {V(2)}, {V(3)}});
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, left.clone(), std::vector{Variable{"?x"}});
 
-  IdTable right = makeIdTableFromIdVector({{V(4), V(5)}, {V(6), V(7)}});
+  IdTable right = makeIdTableFromVector({{V(4), V(5)}, {V(6), V(7)}});
   auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, right.clone(), std::vector{Variable{"?u"}, Variable{"?x"}});
 
@@ -34,7 +34,7 @@ TEST(UnionTest, computeUnion) {
   const auto& result = resultTable.idTable();
 
   auto U = Id::makeUndefined();
-  auto expected = makeIdTableFromIdVector(
+  auto expected = makeIdTableFromVector(
       {{V(1), U}, {V(2), U}, {V(3), U}, {V(5), V(4)}, {V(7), V(6)}});
   ASSERT_EQ(result, expected);
 }
@@ -43,7 +43,7 @@ TEST(UnionTest, computeUnion) {
 // timeout checks.
 TEST(UnionTest, computeUnionLarge) {
   auto* qec = ad_utility::testing::getQec();
-  std::vector<std::vector<Id>> leftInput, rightInput, expected;
+  VectorTable leftInput, rightInput, expected;
   size_t numInputsL = 1'500'000u;
   size_t numInputsR = 5;
   size_t numInputs = numInputsL + numInputsR;
@@ -51,22 +51,22 @@ TEST(UnionTest, computeUnionLarge) {
   leftInput.reserve(numInputsL);
   expected.reserve(numInputs);
   for (size_t i = 0; i < numInputsL; ++i) {
-    leftInput.push_back(std::vector{V(i)});
-    expected.push_back(std::vector{V(i), U});
+    leftInput.push_back(std::vector<IntOrId>{V(i)});
+    expected.push_back(std::vector<IntOrId>{V(i), U});
   }
   for (size_t i = 0; i < numInputsR; ++i) {
-    rightInput.push_back(std::vector{V(i + 425)});
-    expected.push_back(std::vector{U, V(i + 425)});
+    rightInput.push_back(std::vector<IntOrId>{V(i + 425)});
+    expected.push_back(std::vector<IntOrId>{U, V(i + 425)});
   }
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, makeIdTableFromIdVector(leftInput), std::vector{Variable{"?x"}});
+      qec, makeIdTableFromVector(leftInput), std::vector{Variable{"?x"}});
 
   auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, makeIdTableFromIdVector(rightInput), std::vector{Variable{"?u"}});
+      qec, makeIdTableFromVector(rightInput), std::vector{Variable{"?u"}});
 
   Union u{ad_utility::testing::getQec(), leftT, rightT};
   auto resultTable = u.computeResultOnlyForTesting();
   const auto& result = resultTable.idTable();
 
-  ASSERT_EQ(result, makeIdTableFromIdVector(expected));
+  ASSERT_EQ(result, makeIdTableFromVector(expected));
 }

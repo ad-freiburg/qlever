@@ -399,7 +399,7 @@ struct GroupBySpecialCount : ::testing::Test {
 
 // _____________________________________________________________________________
 TEST_F(GroupBySpecialCount, getPermutationForThreeVariableTriple) {
-  using enum Index::Permutation;
+  using enum Permutation::Enum;
   const QueryExecutionTree& xyzScan = *xyzScanSortedByX;
 
   // Valid inputs.
@@ -454,7 +454,7 @@ TEST_F(GroupBySpecialCount, checkIfJoinWithFullScan) {
       groupBy.checkIfJoinWithFullScan(getJoinPtr(validJoinWhenGroupingByX));
   ASSERT_TRUE(optimizedAggregateData.has_value());
   ASSERT_EQ(&optimizedAggregateData->otherSubtree_, xScan.get());
-  ASSERT_EQ(optimizedAggregateData->permutation_, Index::Permutation::SPO);
+  ASSERT_EQ(optimizedAggregateData->permutation_, Permutation::SPO);
   ASSERT_EQ(optimizedAggregateData->subtreeColumnIndex_, 0);
 }
 
@@ -742,7 +742,7 @@ TEST(GroupBy, GroupedVariableInExpressions) {
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected =
-      makeIdTableFromIdVector({{d(1), d(6), d(3)}, {d(5), d(9), d(6)}});
+      makeIdTableFromVector({{d(1), d(6), d(3)}, {d(5), d(9), d(6)}});
   EXPECT_EQ(table, expected);
 }
 
@@ -804,7 +804,7 @@ TEST(GroupBy, AliasResultReused) {
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected =
-      makeIdTableFromIdVector({{d(1), d(6), d(8)}, {d(5), d(9), d(10)}});
+      makeIdTableFromVector({{d(1), d(6), d(8)}, {d(5), d(9), d(10)}});
   EXPECT_EQ(table, expected);
 }
 
@@ -836,6 +836,6 @@ TEST(GroupBy, AddedHavingRows) {
               ::testing::UnorderedElementsAreArray(expectedVariables));
   const auto& table = res->idTable();
   auto i = IntId;
-  auto expected = makeIdTableFromIdVector({{i(0), i(3), i(1)}});
+  auto expected = makeIdTableFromVector({{i(0), i(3), i(1)}});
   EXPECT_EQ(table, expected);
 }

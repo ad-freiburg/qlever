@@ -13,13 +13,13 @@ namespace http = boost::beast::http;
 using ad_utility::content_encoding::CompressionMethod;
 using ad_utility::streams::compressStream;
 
-cppcoro::generator<std::string> generateNothing() { co_return; }
-
+namespace {
 cppcoro::generator<std::string> generateNChars(size_t n) {
   for (size_t i = 0; i < n; i++) {
     co_yield "A";
   }
 }
+}  // namespace
 
 class CompressorStreamTestFixture
     : public ::testing::TestWithParam<CompressionMethod> {
