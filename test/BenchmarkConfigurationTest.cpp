@@ -15,12 +15,12 @@ TEST(BenchmarkConfigurationTest, GetConfigurationOptionByNestedKeysTest) {
       ad_benchmark::BenchmarkConfigurationOption(
           "Sense_of_existence", "",
           ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::integer,
-          42)};
+          std::optional{42})};
   const ad_benchmark::BenchmarkConfigurationOption& withoutDefault{
       ad_benchmark::BenchmarkConfigurationOption(
           "Sense_of_existence", "",
           ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::integer,
-          1)};
+          std::optional{1})};
 
   // 'Compare' two benchmark configuration options
   auto compareConfigurationOptions =
@@ -45,8 +45,8 @@ TEST(BenchmarkConfigurationTest, GetConfigurationOptionByNestedKeysTest) {
       config.getConfigurationOptionByNestedKeys("Shared_part", "Unique_part_2",
                                                 3, "Sense_of_existence"));
 
-  // Trying to get a configuration option, that does not exist, should cause an
-  // exception.
+  // Trying to get a configuration option, that does not exist, should cause
+  // an exception.
   ASSERT_ANY_THROW(
       config.getConfigurationOptionByNestedKeys("Shared_part", "Getsbourgh"));
 }
@@ -62,25 +62,25 @@ TEST(BenchmarkConfigurationTest, AddConfigurationOptionExceptionTest) {
       ad_benchmark::BenchmarkConfigurationOption(
           "Sense_of_existence", "",
           ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::integer,
-          42)};
+          std::optional{42})};
 
   config.addConfigurationOption(withDefault, "Shared_part", "Unique_part_1");
 
-  // Trying to add a configuration option with the same name at the same place,
-  // should cause an error.
+  // Trying to add a configuration option with the same name at the same
+  // place, should cause an error.
   ASSERT_ANY_THROW(config.addConfigurationOption(
       ad_benchmark::BenchmarkConfigurationOption(
           "Sense_of_existence", "",
           ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::integer,
-          42),
+          std::optional{42}),
       "Shared_part", "Unique_part_1"));
 
   /*
   If the first key for the path given is a number, that should cause an
   exception.
   Reason: We want our `tree` (a `nlohmann::json` object) to be a json
-  object literal, so that user can easier find things. Ordering your options by
-  just giving them numbers, would be bad practice, so we should prevent it.
+  object literal, so that user can easier find things. Ordering your options
+  by just giving them numbers, would be bad practice, so we should prevent it.
   */
   ASSERT_ANY_THROW(config.addConfigurationOption(withDefault, 0););
   ASSERT_ANY_THROW(config.addConfigurationOption(withDefault, 3););
@@ -90,8 +90,8 @@ TEST(BenchmarkConfigurationTest, AddConfigurationOptionExceptionTest) {
   spaces, or integers smaller than 0, should cause an error.
   Reason:
   - A string with spaces in it, can't be read by the short hand configuration
-  grammar. Ergo, you can't set values, with such paths per short hand, which we
-  don't want.
+  grammar. Ergo, you can't set values, with such paths per short hand, which
+  we don't want.
 
   - An integer smaller than 0, is not a valid key in json. Ergo, you can't set
   options like that with json, which we dont want. Furthermore, we use
@@ -121,7 +121,7 @@ TEST(BenchmarkConfigurationTest, SetJsonStringTest) {
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "Option_2", "Has a default value.",
       ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::integer,
-      2));
+      std::optional{2}));
 
   // For easier access to the options.
   auto getOption = [&config](const size_t& optionNumber) {
@@ -150,8 +150,8 @@ TEST(BenchmarkConfigurationTest, SetJsonStringTest) {
   ASSERT_FALSE(getOption(0).hasValue());
   ASSERT_FALSE(getOption(1).hasValue());
 
-  // The json string for testing `setJsonString`. Sets all of the configuration
-  // options.
+  // The json string for testing `setJsonString`. Sets all of the
+  // configuration options.
   const std::string testJsonString{R"--({
 "depth_0": {
   "Option_0": 10,
@@ -264,12 +264,12 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
               integerList),
       "depth", 0);
 
-  // This one will not be changed, in order to test, that options, that are not
-  // set at run time, are not changed.
+  // This one will not be changed, in order to test, that options, that are
+  // not set at run time, are not changed.
   config.addConfigurationOption(ad_benchmark::BenchmarkConfigurationOption(
       "No_change", "",
       ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::integer,
-      10));
+      std::optional{10}));
 
   // Set those.
   config.setShortHand(
@@ -287,10 +287,10 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
 
   checkOption(std::vector{40, 41}, "someIntegerlist");
 
-  checkOption(static_cast<double>(4.2), "somePositiveFloatingPoint");
-  checkOption(static_cast<double>(-4.2), "someNegativFloatingPoint");
+  checkOption(static_cast<float>(4.2), "somePositiveFloatingPoint");
+  checkOption(static_cast<float>(-4.2), "someNegativFloatingPoint");
 
-  checkOption(std::vector{4.1, 4.2}, "someFloatingPointList");
+  checkOption(std::vector<float>{4.1, 4.2}, "someFloatingPointList");
 
   checkOption(true, "boolTrue");
   checkOption(false, "boolFalse");

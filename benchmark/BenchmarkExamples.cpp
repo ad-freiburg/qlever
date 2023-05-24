@@ -244,7 +244,8 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
 
     config->addConfigurationOption(BenchmarkConfigurationOption(
         "numSigns", "The number of street signs. Has the default value 10.",
-        BenchmarkConfigurationOption::ValueTypeIndexes::integer, 10));
+        BenchmarkConfigurationOption::ValueTypeIndexes::integer,
+        std::optional<int>{10}));
 
     config->addConfigurationOption(BenchmarkConfigurationOption(
         "CoinFlipTry",
@@ -258,7 +259,7 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
             "Steve",
             "Steves saving account balance. Has the default value -41.9.",
             BenchmarkConfigurationOption::ValueTypeIndexes::floatingPoint,
-            -41.9),
+            std::optional<float>{-41.9}),
         "Accounts", "Personal");
   }
 
@@ -273,10 +274,10 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
         config.getConfigurationOptionByNestedKeys("CoinFlipTry")
             .getValue<std::vector<bool>>()};
 
-    double balanceOnStevesSavingAccount{
+    float balanceOnStevesSavingAccount{
         config
             .getConfigurationOptionByNestedKeys("Accounts", "Personal", "Steve")
-            .getValue<double>()};
+            .getValue<float>()};
 
     // Transcribe the collected values.
     generalMetadata_.addKeyValuePair("date", dateString);

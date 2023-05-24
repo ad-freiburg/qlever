@@ -58,7 +58,7 @@ BenchmarkConfigurationOption::BenchmarkConfigurationOption(
   because it signifies, that we have no default value.
   */
   if (type != static_cast<ValueTypeIndexes>(defaultValue.index()) &&
-      !std::holds_alternative<std::monostate>(defaultValue)) {
+      !std::holds_alternative<std::optional<std::monostate>>(defaultValue)) {
     throw ad_utility::Exception(absl::StrCat(
         "Error while constructing configuraion option: Configuration option "
         "'",
@@ -78,7 +78,7 @@ bool BenchmarkConfigurationOption::wasSetAtRuntime() const {
 // ____________________________________________________________________________
 bool BenchmarkConfigurationOption::hasDefaultValue() const {
   // We only have `std::monostate`, if no default value was given.
-  return !std::holds_alternative<std::monostate>(defaultValue_);
+  return !std::holds_alternative<std::optional<std::monostate>>(defaultValue_);
 }
 
 // ____________________________________________________________________________
@@ -154,8 +154,9 @@ void BenchmarkConfigurationOption::setValueWithJson(
     throw ad_utility::Exception(absl::StrCat(commonPrefix, " unknown type."));
   }
 
-  callFunctionWithTypeOfOption(
-      [&json, this]<typename T>() { value_ = json.get<T>(); });
+  callFunctionWithTypeOfOption([&json, this]<typename T>() {
+    value_ = std::optional<T>{json.get<T>()};
+  });
   configurationOptionWasSet_ = true;
 }
 

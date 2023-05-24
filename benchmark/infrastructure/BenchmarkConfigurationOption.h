@@ -8,6 +8,7 @@
 
 #include <any>
 #include <concepts>
+#include <optional>
 #include <string_view>
 #include <type_traits>
 #include <typeinfo>
@@ -22,10 +23,15 @@ namespace ad_benchmark {
 
 // Describes a configuration option.
 class BenchmarkConfigurationOption {
+  // An `std::variant`, where every entry is a `std::optional`.
+  template <typename... Ts>
+  using OptionalVariant = std::variant<std::optional<Ts>...>;
+
  public:
   // The possible types of the value, that can be held by this option.
-  using ValueType = std::variant<std::monostate, bool, std::string, int, double, std::vector<bool>,
-                                 std::vector<std::string>, std::vector<int>, std::vector<double>>;
+  using ValueType =
+      OptionalVariant<std::monostate, bool, std::string, int, float, std::vector<bool>,
+                      std::vector<std::string>, std::vector<int>, std::vector<float>>;
   enum class ValueTypeIndexes {
     boolean = 1,
     string,
@@ -77,7 +83,7 @@ class BenchmarkConfigurationOption {
   */
   BenchmarkConfigurationOption(std::string_view identifier, std::string_view description,
                                const ValueTypeIndexes& type,
-                               const ValueType& defaultValue = std::monostate{});
+                               const ValueType& defaultValue = std::optional<std::monostate>{});
 
   /*
   Was the configuration option set to a value at runtime?
@@ -125,10 +131,11 @@ class BenchmarkConfigurationOption {
   exception.
   */
   template <typename T>
-  requires ad_utility::isTypeContainedIn<std::decay_t<T>, ValueType>
+  requires ad_utility::isTypeContainedIn<std::optional<std::decay_t<T>>, ValueType>
   std::decay_t<T> getDefaultValue() const {
-    if (hasDefaultValue() && std::holds_alternative<std::decay_t<T>>(defaultValue_)) {
-      return std::get<std::decay_t<T>>(defaultValue_);
+    if (hasDefaultValue() &&
+        std::holds_alternative<std::optional<std::decay_t<T>>>(defaultValue_)) {
+      return std::get<std::optional<std::decay_t<T>>>(defaultValue_).value();
     } else if (!hasDefaultValue()) {
       throw ad_utility::Exception(absl::StrCat("Configuration option '", identifier_,
                                                "' was not created with a default value."));
@@ -137,7 +144,9 @@ class BenchmarkConfigurationOption {
       throw ad_utility::Exception(absl::StrCat(
           "The type of the value in configuration option '", identifier_, "' is '",
           typesForValueToString(static_cast<size_t>(type_)), "'. It can't be cast as '",
-          typesForValueToString(getIndexOfTypeInVariant<T>(defaultValue_)), "'."));
+          typesForValueToString(
+              getIndexOfTypeInVariant<std::optional<std::decay_t<T>>>(defaultValue_)),
+          "'."));
     }
   }
 
@@ -146,10 +155,10 @@ class BenchmarkConfigurationOption {
   there is no value, or `T` is the wrong type, then it will throw an exception.
   */
   template <typename T>
-  requires ad_utility::isTypeContainedIn<std::decay_t<T>, ValueType>
+  requires ad_utility::isTypeContainedIn<std::optional<std::decay_t<T>>, ValueType>
   std::decay_t<T> getValue() const {
-    if (hasValue() && std::holds_alternative<std::decay_t<T>>(value_)) {
-      return std::get<std::decay_t<T>>(value_);
+    if (hasValue() && std::holds_alternative<std::optional<std::decay_t<T>>>(value_)) {
+      return std::get<std::optional<std::decay_t<T>>>(value_).value();
     } else if (!hasValue()) {
       // The value was never set.
       throw ad_utility::Exception(
@@ -159,7 +168,8 @@ class BenchmarkConfigurationOption {
       throw ad_utility::Exception(absl::StrCat(
           "The type of the value in configuration option '", identifier_, "' is '",
           typesForValueToString(static_cast<size_t>(type_)), "'. It can't be cast as '",
-          typesForValueToString(getIndexOfTypeInVariant<T>(value_)), "'."));
+          typesForValueToString(getIndexOfTypeInVariant<std::optional<std::decay_t<T>>>(value_)),
+          "'."));
     }
   }
 
@@ -188,8 +198,9 @@ class BenchmarkConfigurationOption {
     ad_utility::RuntimeValueToCompileTimeValue<
         std::variant_size_v<BenchmarkConfigurationOption::ValueType> - 1>(
         static_cast<size_t>(getActualValueType()),
-        [&function]<size_t index, typename Type = std::variant_alternative_t<
-                                      index, BenchmarkConfigurationOption::ValueType>>() {
+        [&function]<size_t index,
+                    typename Type = std::variant_alternative_t<
+                        index, BenchmarkConfigurationOption::ValueType>::value_type>() {
           function.template operator()<Type>();
         });
   }
