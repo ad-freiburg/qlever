@@ -45,6 +45,27 @@ TEST(BenchmarkConfigurationTest, GetConfigurationOptionByNestedKeysTest) {
       config.getConfigurationOptionByNestedKeys("Shared_part", "Unique_part_2",
                                                 3, "Sense_of_existence"));
 
+  // Trying to get a configuration option, that does not exist, should cause an
+  // exception.
+  ASSERT_ANY_THROW(
+      config.getConfigurationOptionByNestedKeys("Shared_part", "Getsbourgh"));
+}
+
+/*
+The exceptions for adding configuration options.
+*/
+TEST(BenchmarkConfigurationTest, AddConfigurationOptionExceptionTest) {
+  ad_benchmark::BenchmarkConfiguration config{};
+
+  // Configuration options for testing.
+  const ad_benchmark::BenchmarkConfigurationOption& withDefault{
+      ad_benchmark::BenchmarkConfigurationOption(
+          "Sense_of_existence", "",
+          ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::integer,
+          42)};
+
+  config.addConfigurationOption(withDefault, "Shared_part", "Unique_part_1");
+
   // Trying to add a configuration option with the same name at the same place,
   // should cause an error.
   ASSERT_ANY_THROW(config.addConfigurationOption(
@@ -53,6 +74,16 @@ TEST(BenchmarkConfigurationTest, GetConfigurationOptionByNestedKeysTest) {
           ad_benchmark::BenchmarkConfigurationOption::ValueTypeIndexes::integer,
           42),
       "Shared_part", "Unique_part_1"));
+
+  /*
+  If the first key for the path given is a number, that should cause an
+  exception.
+  Reason: We want our `tree` (a `nlohmann::json` object) to be a json
+  object literal, so that user can easier find things. Ordering your options by
+  just giving them numbers, would be bad practice, so we should prevent it.
+  */
+  ASSERT_ANY_THROW(config.addConfigurationOption(withDefault, 0););
+  ASSERT_ANY_THROW(config.addConfigurationOption(withDefault, 3););
 
   /*
   Trying to add a configuration option with a path containing strings with
@@ -67,16 +98,8 @@ TEST(BenchmarkConfigurationTest, GetConfigurationOptionByNestedKeysTest) {
   `nlohmann::json` to save those key paths, so we couldn't even save them.
   */
   ASSERT_ANY_THROW(config.addConfigurationOption(withDefault, "Shared part"););
-  ASSERT_ANY_THROW(config.addConfigurationOption(withDefault, -4););
   ASSERT_ANY_THROW(
       config.addConfigurationOption(withDefault, "Shared part", -2););
-  ASSERT_ANY_THROW(config.addConfigurationOption(
-      withDefault, -10, "Somewhere over the rainbow"););
-
-  // Trying to get a configuration option, that does not exist, should cause an
-  // exception.
-  ASSERT_ANY_THROW(
-      config.getConfigurationOptionByNestedKeys("Shared_part", "Getsbourgh"));
 }
 
 TEST(BenchmarkConfigurationTest, SetJsonStringTest) {

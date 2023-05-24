@@ -149,14 +149,32 @@ class BenchmarkConfiguration {
   `"generalOptions", 1, "Table"`, then it can be accessed with
   `"generalOptions", 1, "Table", "numberOfRows"`.
   */
+  template <KeyForJson... Keys>
   void addConfigurationOption(const BenchmarkConfigurationOption& option,
-                              const KeyForJson auto&... keys) {
-    // A numeric key, must be `>=0`.
+                              const Keys&... keys) {
+    // All numeric key, must be `>=0`.
     AD_CONTRACT_CHECK(allArgumentsBiggerOrEqualToZero(keys...));
 
     // The position in the json object literal, our keys point to.
     const nlohmann::json::json_pointer ptr{
         createJsonPointer(AD_FWD(keys)..., option.getIdentifier())};
+
+    /*
+    The first key must be a string, not a number. Having an array at the
+    highest level, would be bad practice, because setting and reading options,
+    that are just identified with numbers, is rather difficult.
+    */
+    if constexpr (sizeof...(keys) > 0) {
+      constexpr auto firstIsString = []<typename T, typename...>() constexpr {
+        return isString<T>;
+      };
+
+      if (!firstIsString.template operator()<Keys...>()) {
+        throw ad_utility::Exception(
+            absl::StrCat("Key error: The first key in '", ptr.to_string(),
+                         "' isn't a string."));
+      }
+    }
 
     /*
     The string keys must be a valid `NAME` in the short hand. Otherwise, the
