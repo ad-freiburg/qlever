@@ -18,7 +18,7 @@ namespace ad_utility {
 // which has undefined behavior for the "normal" comparisons as soon as the
 // input contains NaN values. The semantics are that of the `comparator` with
 // the following changes:
-// 1. NaN values are greater than any other value (in particular `Nan >
+// 1. NaN values are greater than any other value (in particular, `Nan >
 // infinity`).
 // 2. NaN values compare equal to other NaN values (that is `Nan == Nan`, other
 // than for the default comparison, where `Nan != Nan`). For detailed examples
