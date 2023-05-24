@@ -311,11 +311,18 @@ template <
  * entryFromLarger), this function is called with the iterators to the matching
  * entries as arguments. These calls will be in ascending order wrt `lessThan`,
  * meaning that the result will be sorted.
+ * @param elementFromSmallerNotFoundAction Is called for each element in
+ * `smaller` that has no matching counterpart in `larger`. Can be used to
+ * implement very efficient OPTIONAL or MINUS if neither of the inputs contains
+ * UNDEF values, and if the left operand is much smaller.
  */
-template <std::ranges::random_access_range Range>
-void gallopingJoin(const Range& smaller, const Range& larger,
-                   BinaryRangePredicate<Range> auto const& lessThan,
-                   BinaryIteratorFunction<Range> auto const& action) {
+template <std::ranges::random_access_range Range,
+          typename ElementFromSmallerNotFoundAction = Noop>
+void gallopingJoin(
+    const Range& smaller, const Range& larger,
+    BinaryRangePredicate<Range> auto const& lessThan,
+    BinaryIteratorFunction<Range> auto const& action,
+    ElementFromSmallerNotFoundAction elementFromSmallerNotFoundAction = {}) {
   auto itSmall = std::begin(smaller);
   auto endSmall = std::end(smaller);
   auto itLarge = std::begin(larger);
@@ -348,14 +355,18 @@ void gallopingJoin(const Range& smaller, const Range& larger,
     return std::pair{lower, itL + 1};
   };
   while (itSmall < endSmall && itLarge < endLarge) {
+    const auto& elLarge = *itLarge;
     // Linear search in the smaller input.
-    itSmall = std::find_if_not(
-        itSmall, endSmall,
-        [&lessThan, &itLarge](auto el) { return lessThan(el, *itLarge); });
-    if (itSmall >= endSmall) {
-      return;
+    while (lessThan(*itSmall, elLarge)) {
+      if constexpr (!ad_utility::isSimilar<ElementFromSmallerNotFoundAction,
+                                           Noop>) {
+        elementFromSmallerNotFoundAction(itSmall);
+      }
+      ++itSmall;
+      if (itSmall >= endSmall) {
+        return;
+      }
     }
-
     // Exponential search followed by binary search on the larger input.
     auto [lower, upper] = exponentialSearch(itLarge, itSmall);
     const auto& needle = *itSmall;
@@ -365,7 +376,7 @@ void gallopingJoin(const Range& smaller, const Range& larger,
                            return lessThan(a, b);
                          });
     if (itLarge == endLarge) {
-      return;
+      break;
     }
 
     // Find the ranges where both inputs are equal and add them to the result.
@@ -382,6 +393,13 @@ void gallopingJoin(const Range& smaller, const Range& larger,
     }
     itSmall = endSameSmall;
     itLarge = endSameLarge;
+  }
+  if constexpr (!ad_utility::isSimilar<ElementFromSmallerNotFoundAction,
+                                       Noop>) {
+    while (itSmall != endSmall) {
+      elementFromSmallerNotFoundAction(itSmall);
+      ++itSmall;
+    }
   }
 }
 

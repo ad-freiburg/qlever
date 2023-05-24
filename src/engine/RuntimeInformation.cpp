@@ -2,11 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author:
 //   2022-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
-
 #include <engine/RuntimeInformation.h>
 #include <util/Exception.h>
 #include <util/Log.h>
 #include <util/TransparentFunctors.h>
+
+#include <ranges>
 
 // ________________________________________________________________________________________________________________
 std::string RuntimeInformation::toString() const {
@@ -85,21 +86,17 @@ void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
   if (columnMap.empty()) {
     return;
   }
+
+  ColumnIndex maxColumnIndex = std::ranges::max(
+      columnMap | std::views::values |
+      std::views::transform(&ColumnIndexAndTypeInfo::columnIndex_));
   // Resize the `columnNames_` vector such that we can use the keys from
   // columnMap (which are not necessarily consecutive) as indexes.
-
-  // TODO<joka921, Clang16> This is `stdr::max(columnMap | stdv::values |
-  // stdv::transform(&ColumnIndexAndTypeInfo::columnIndex_))`
-  ColumnIndex maxColumnIndex =
-      std::ranges::max_element(columnMap, std::less{}, [](const auto& pair) {
-        return pair.second.columnIndex_;
-      })->second.columnIndex_;
   columnNames_.resize(maxColumnIndex + 1);
   // Now copy the (variable, index) pairs to the vector.
   for (const auto& [variable, columnIndexAndType] : columnMap) {
     ColumnIndex columnIndex = columnIndexAndType.columnIndex_;
-    AD_CONTRACT_CHECK(columnIndex < columnNames_.size());
-    columnNames_[columnIndex] = variable.name();
+    columnNames_.at(columnIndex) = variable.name();
   }
 }
 

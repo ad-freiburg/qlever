@@ -228,12 +228,12 @@ Join::ScanMethodType Join::getScanMethod(
   // this works because the join operations execution Context never changes
   // during its lifetime
   const auto& idx = _executionContext->getIndex();
-  const auto scanLambda = [&idx](const Index::Permutation perm) {
+  const auto scanLambda = [&idx](const Permutation::Enum perm) {
     return
         [&idx, perm](Id id, IdTable* idTable) { idx.scan(id, idTable, perm); };
   };
 
-  using enum Index::Permutation;
+  using enum Permutation::Enum;
   switch (scan.getType()) {
     case IndexScan::FULL_INDEX_SCAN_SPO:
       scanMethod = scanLambda(SPO);
