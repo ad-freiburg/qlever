@@ -4,7 +4,6 @@
 #pragma once
 
 #include <absl/strings/str_cat.h>
-// #include <boost/serialization/strong_typedef.hpp>
 
 #include <cstdint>
 #include <limits>
@@ -17,7 +16,6 @@ using Id = ValueId;
 typedef uint16_t Score;
 
 // TODO<joka921> Make the following ID and index types strong.
-// BOOST_STRONG_TYPEDEF(uint64_t, ColumnIndex)
 using ColumnIndex = uint64_t;
 
 // TODO<joka921> The following IDs only appear within the text index in the
