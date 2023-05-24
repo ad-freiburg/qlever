@@ -25,13 +25,17 @@
 
 namespace ad_benchmark {
 
+// Only returns true, if the given type can be seen as a string.
+template <typename T>
+inline constexpr bool isString =
+    std::is_constructible_v<std::string, std::decay_t<T>>;
+
 // The types, that can be used as access keys in `nlohmann::json` objects. In
 // short: Only whole numbers and everything, that could be converted into a
 // string.
 template <typename T>
-concept KeyForJson =
-    std::convertible_to<T, std::string> ||
-    std::constructible_from<std::string, T> || std::integral<T>;
+concept KeyForJson = std::constructible_from<std::string, std::decay_t<T>> ||
+                     std::integral<std::decay_t<T>>;
 
 // Only returns true, if all the given keys, that are numbers, are bigger/equal
 // than 0.
@@ -103,9 +107,7 @@ class BenchmarkConfiguration {
       Transforming the key. We simply check through the way, we can convert
       them into a string and do the one, that works first.
       */
-      if constexpr (std::is_convertible_v<T, std::string>) {
-        transformedKey = static_cast<std::string>(key);
-      } else if constexpr (std::is_constructible_v<std::string, T>) {
+      if constexpr (std::is_constructible_v<std::string, T>) {
         transformedKey = std::string(key);
       } else {
         /*
@@ -158,7 +160,7 @@ class BenchmarkConfiguration {
 
     /*
     The string keys must be a valid `NAME` in the short hand. Otherwise, the
-    option can't get accessed with the short hand..
+    option can't get accessed with the short hand.
     */
     if constexpr (sizeof...(keys) > 0) {
       // For saving, which key failed the test.
@@ -166,8 +168,7 @@ class BenchmarkConfiguration {
 
       auto checkIfValidName = [&lastCheckedKey]<typename T>(const T& key) {
         // Only actually check, if we have a string, or string like, type `T`.
-        if constexpr (std::is_constructible_v<std::string_view,
-                                              std::decay<T>>) {
+        if constexpr (isString<T>) {
           lastCheckedKey = key;
           return stringOnlyContainsSpecifiedTokens<
               BenchmarkConfigurationShorthandLexer>(

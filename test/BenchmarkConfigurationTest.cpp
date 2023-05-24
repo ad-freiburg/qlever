@@ -39,7 +39,7 @@ TEST(BenchmarkConfigurationTest, GetConfigurationOptionByNestedKeysTest) {
 
   compareConfigurationOptions.template operator()<int>(
       withDefault, config.getConfigurationOptionByNestedKeys(
-                       "Shared_part", "Unique_part 1", "Sense_of_existence"));
+                       "Shared_part", "Unique_part_1", "Sense_of_existence"));
   compareConfigurationOptions.template operator()<int>(
       withoutDefault,
       config.getConfigurationOptionByNestedKeys("Shared_part", "Unique_part_2",
