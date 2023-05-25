@@ -57,7 +57,7 @@ class Service : public Operation {
   // Methods inherited from base class `Operation`.
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
-  std::vector<size_t> resultSortedOn() const override { return {}; }
+  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
   float getMultiplicity(size_t col) override;
 
  private:

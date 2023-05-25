@@ -19,19 +19,19 @@ using std::vector;
 class Distinct : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
-  vector<size_t> _keepIndices;
+  vector<ColumnIndex> _keepIndices;
 
  public:
   Distinct(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
-           const vector<size_t>& keepIndices);
+           const vector<ColumnIndex>& keepIndices);
 
   [[nodiscard]] size_t getResultWidth() const override;
 
  public:
   [[nodiscard]] string getDescriptor() const override;
 
-  [[nodiscard]] vector<size_t> resultSortedOn() const override {
+  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override {
     return _subtree->resultSortedOn();
   }
 

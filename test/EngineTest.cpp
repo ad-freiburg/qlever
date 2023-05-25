@@ -42,7 +42,7 @@ TEST(EngineTest, distinctTest) {
 
   IdTable result{4, makeAllocator()};
 
-  std::vector<size_t> keepIndices{{1, 2}};
+  std::vector<ColumnIndex> keepIndices{{1, 2}};
   CALL_FIXED_SIZE(4, Engine::distinct, input, keepIndices, &result);
 
   // For easier checking.
@@ -56,7 +56,8 @@ TEST(EngineTest, distinctWithEmptyInput) {
   // Deliberately input a non-empty result to check that it is
   // overwritten by the (empty) input.
   IdTable result = makeIdTableFromVector({{3}});
-  CALL_FIXED_SIZE(1, Engine::distinct, input, std::vector<size_t>{}, &result);
+  CALL_FIXED_SIZE(1, Engine::distinct, input, std::vector<ColumnIndex>{},
+                  &result);
   ASSERT_EQ(input, result);
 }
 

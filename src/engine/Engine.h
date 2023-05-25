@@ -147,7 +147,7 @@ class Engine {
    **/
   template <size_t WIDTH>
   static void distinct(const IdTable& dynInput,
-                       const std::vector<size_t>& keepIndices,
+                       const std::vector<ColumnIndex>& keepIndices,
                        IdTable* dynResult) {
     LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
     const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
@@ -158,7 +158,7 @@ class Engine {
 
       auto last = std::unique(result.begin(), result.end(),
                               [&keepIndices](const auto& a, const auto& b) {
-                                for (size_t i : keepIndices) {
+                                for (ColumnIndex i : keepIndices) {
                                   if (a[i] != b[i]) {
                                     return false;
                                   }
