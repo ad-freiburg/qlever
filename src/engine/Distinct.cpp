@@ -17,7 +17,7 @@ size_t Distinct::getResultWidth() const { return _subtree->getResultWidth(); }
 // _____________________________________________________________________________
 Distinct::Distinct(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,
-                   const vector<size_t>& keepIndices)
+                   const vector<ColumnIndex>& keepIndices)
     : Operation(qec), _subtree(subtree), _keepIndices(keepIndices) {}
 
 // _____________________________________________________________________________

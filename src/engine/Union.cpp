@@ -66,7 +66,7 @@ size_t Union::getResultWidth() const {
   return _columnOrigins.size();
 }
 
-vector<size_t> Union::resultSortedOn() const { return {}; }
+vector<ColumnIndex> Union::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
 VariableToColumnMap Union::computeVariableToColumnMap() const {

@@ -170,7 +170,7 @@ struct EvaluationContext {
 
   /// The input is sorted on these columns. This information can be used to
   /// perform efficient relational operations like `equal` or `less than`
-  std::vector<size_t> _columnsByWhichResultIsSorted;
+  std::vector<ColumnIndex> _columnsByWhichResultIsSorted;
 
   /// Let the expression evaluation also respect the memory limit.
   ad_utility::AllocatorWithLimit<Id> _allocator;
@@ -236,7 +236,8 @@ struct EvaluationContext {
   [[nodiscard]] size_t size() const { return _endIndex - _beginIndex; }
 
   // ____________________________________________________________________________
-  [[nodiscard]] size_t getColumnIndexForVariable(const Variable& var) const {
+  [[nodiscard]] ColumnIndex getColumnIndexForVariable(
+      const Variable& var) const {
     const auto& map = _variableToColumnMap;
     if (!map.contains(var)) {
       throw std::runtime_error(absl::StrCat(

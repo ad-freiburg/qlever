@@ -17,7 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
-        compiler-version: [11, 12, 16]
+        compiler-version: [11, 12, 13, 16]
         warnings: [  "-Wall -Wextra -Werror " ]
         build-type: [Release]
         exclude:
@@ -27,6 +27,8 @@ jobs:
             compiler-version: 11
           - compiler: clang
             compiler-version: 12
+          - compiler: clang
+            compiler-version: 13
         include:
           - compiler: clang
             asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
@@ -55,6 +57,11 @@ jobs:
     - name: Install gcc 12
       run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-12 g++-12
       if :  matrix.compiler == 'gcc' && matrix.compiler-version == 12
+
+    - name: Install gcc 13
+      run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-13 g++-13
+      if :  matrix.compiler == 'gcc' && matrix.compiler-version == 13
+      
     - name: Install clang 16
       # The sed command fixes a bug in `llvm.sh` in combination with the latest version of
       # `apt-key`. Without it the GPG key for the llvm repository is downloaded but deleted

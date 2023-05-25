@@ -46,7 +46,7 @@ class TextOperationWithFilter : public Operation {
 
   virtual size_t getResultWidth() const override;
 
-  virtual vector<size_t> resultSortedOn() const override {
+  virtual vector<ColumnIndex> resultSortedOn() const override {
     // unsorted, obtained from iterating over a hash map.
     return {};
   }
