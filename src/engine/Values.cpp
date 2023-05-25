@@ -42,7 +42,7 @@ size_t Values::getResultWidth() const {
 }
 
 // ____________________________________________________________________________
-vector<size_t> Values::resultSortedOn() const { return {}; }
+vector<ColumnIndex> Values::resultSortedOn() const { return {}; }
 
 // ____________________________________________________________________________
 VariableToColumnMap Values::computeVariableToColumnMap() const {

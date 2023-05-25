@@ -42,7 +42,7 @@ float Bind::getMultiplicity(size_t col) {
 string Bind::getDescriptor() const { return _bind.getDescriptor(); }
 
 // _____________________________________________________________________________
-[[nodiscard]] vector<size_t> Bind::resultSortedOn() const {
+[[nodiscard]] vector<ColumnIndex> Bind::resultSortedOn() const {
   // We always append the result column of the BIND at the end and this column
   // is not sorted, so the sequence of indices of the sorted columns do not
   // change.

@@ -31,7 +31,8 @@ TextOperationWithoutFilter::TextOperationWithoutFilter(
 VariableToColumnMap TextOperationWithoutFilter::computeVariableToColumnMap()
     const {
   VariableToColumnMap vcmap;
-  auto addDefinedVar = [&vcmap, index = 0](const Variable& var) mutable {
+  auto addDefinedVar = [&vcmap,
+                        index = ColumnIndex{0}](const Variable& var) mutable {
     vcmap[var] = makeAlwaysDefinedColumn(index);
     ++index;
   };

@@ -93,7 +93,7 @@ size_t HasPredicateScan::getResultWidth() const {
   return -1;
 }
 
-vector<size_t> HasPredicateScan::resultSortedOn() const {
+vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
   switch (_type) {
     case ScanType::FREE_S:
       // is the lack of sorting here a problem?

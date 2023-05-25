@@ -422,7 +422,7 @@ std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
 }
 
 // ___________________________________________________________________________
-const vector<size_t>& Operation::getResultSortedOn() const {
+const vector<ColumnIndex>& Operation::getResultSortedOn() const {
   // TODO<joka921> refactor this without a mutex (for details see the
   // `getVariableColumns` method for details.
   std::lock_guard l{_resultSortedColumnsMutex};

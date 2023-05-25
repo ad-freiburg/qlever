@@ -32,7 +32,7 @@ class Filter : public Operation {
  public:
   string getDescriptor() const override;
 
-  std::vector<size_t> resultSortedOn() const override {
+  std::vector<ColumnIndex> resultSortedOn() const override {
     return _subtree->resultSortedOn();
   }
 
