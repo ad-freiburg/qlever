@@ -108,7 +108,7 @@ endif()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.81 COMPONENTS iostreams program_options REQUIRED)
+find_package(Boost 1.81 COMPONENTS iostreams program_options regex REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
 

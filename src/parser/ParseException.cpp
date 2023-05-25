@@ -5,6 +5,7 @@
 #include <Token.h>
 #include <parser/ParseException.h>
 #include <util/Exception.h>
+#include "util/StringUtils.h"
 
 // ___________________________________________________________________________
 std::string ExceptionMetadata::coloredError() const {

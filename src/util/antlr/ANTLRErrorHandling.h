@@ -32,4 +32,5 @@ struct ThrowingErrorListener : public antlr4::BaseErrorListener {
                    antlr4::Token* offendingSymbol, size_t line,
                    size_t charPositionInLine, const std::string& msg,
                    std::exception_ptr e) override;
+  virtual ~ThrowingErrorListener() = default;
 };

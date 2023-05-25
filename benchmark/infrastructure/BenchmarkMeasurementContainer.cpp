@@ -247,7 +247,7 @@ void ResultTable::addRow() {
 }
 
 // ____________________________________________________________________________
-size_t ResultTable::numRows() const { return rowNames_.size(); }
+size_t ResultTable::numRows() const { return entries_.size(); }
 
 // ____________________________________________________________________________
 size_t ResultTable::numColumns() const {
