@@ -114,8 +114,8 @@ size_t MultiColumnJoin::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-vector<size_t> MultiColumnJoin::resultSortedOn() const {
-  std::vector<size_t> sortedOn;
+vector<ColumnIndex> MultiColumnJoin::resultSortedOn() const {
+  std::vector<ColumnIndex> sortedOn;
   // The result is sorted on all join columns from the left subtree.
   for (const auto& a : _joinColumns) {
     sortedOn.push_back(a[0]);

@@ -43,7 +43,7 @@ class DummyOperation : public Operation {
 
   virtual size_t getResultWidth() const override { return 2; }
 
-  virtual vector<size_t> resultSortedOn() const override { return {1}; }
+  virtual vector<ColumnIndex> resultSortedOn() const override { return {1}; }
 
   virtual void setTextLimit(size_t limit) override { (void)limit; }
 

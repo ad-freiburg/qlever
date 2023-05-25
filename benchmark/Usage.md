@@ -51,7 +51,7 @@ BenchmarkResults runAllBenchmarks(){
   // organization, require an identifier. A.k.a. a name.
   const std::string identifier = "Some identifier";
 
-  // Just saves the meausred execution time.
+  // Just saves the measured execution time.
   results.addMeasurement(identifier, dummyFunctionToMeasure);
 
   // Creates an enpty group. Doesn't measure anything.
@@ -59,15 +59,23 @@ BenchmarkResults runAllBenchmarks(){
   // You add the measurements as group members.
   group.addMeasurement(identifier, dummyFunctionToMeasure);
 
-  // Create an empty table with a set number of rows and columns. Doesn't
-  // measure anything.
+  /*
+  Create an empty table with a set number of rows and columns. Doesn't
+  measure anything.
+  Important: The row names aren't saved in a seperate container, but INSIDE the
+  first column of the table.
+  */
   auto& table = results.addTable(identifier, {"rowName1", "rowName2", "etc."},
-    {"columnName1", "columnName2", "etc."});
+    {"Column for row names", "columnName1", "columnName2", "etc."});
+
   // You can add measurements to the table as entries, but you can also
   // read and set entries.
-  table.addMeasurement(0, 1, dummyFunctionToMeasure); // Row 0, column 1.
-  table.setEntry(0, 0, "A custom entry can be a float, or a string.");
-  table.getEntry(0, 1); // The measured time of the dummy function.
+  table.addMeasurement(0, 2, dummyFunctionToMeasure); // Row 0, column 1.
+  table.setEntry(0, 1, "A custom entry can be a float, or a string.");
+  table.getEntry(0, 2); // The measured time of the dummy function.
+
+  // Replacing a row name.
+  table.setEntry(0, 0, "rowName1++");
 
   return results;
 }
@@ -97,9 +105,14 @@ You can find instances of `BenchmarkMetadata` for your usage at 4 locations:
 ## Runtime configuration
 Passing values at runtime to your benchmark classes can be done in two ways:
 1. Writing a JSON file and passing the file location via CLI.
-2. Using the shorthand described in `BenchmarkConfiguration::parseShortHand`, by writing it directly as an argument via CLI. Note: The shorthand will overwrite any values of the same name from the JSON file, if both ways are used.
+2. Using the shorthand described in `benchmark/infrastructure/generated/BenchmarkConfigurationShorthand.g4`, by writing it directly as an argument via CLI. Note: The shorthand will overwrite any values of the same name from the JSON file, if both ways are used.
 
-Using those two, a `BenchmarkConfiguration` object will be created and configured to hold all passed information, in a not interpreted form.
+The shorthand is basically just normal JSON, but adjusted for easier usage. There are 3 big changes.  
+First, there are no line breaks allowed. The shorthand is build for usage directly in the CLI, so that is an unneeded feature
+Second, because a configuration is always represented by a JSON object, a shorthand string is always treated, as if it had `{}` braces at the beginning and end.  
+Third, the keys of key-value pairs, for example `"key" : value`, don't need to be surrounded with `"`. `"` is a special symbol in the CLI, and we want to save you the extra work of always typing `\"key\"`.
+
+Using those two ways of passing information, a `BenchmarkConfiguration` object will be created and configured to hold all passed information, in a not interpreted form.
 
 Your class can read this `BenchmarkConfiguration` by having a `parseConfiguration` function, as described in `BenchmarkInterface`. In this function, you can read out and interpret values using `BenchmarkConfiguration::getValueByNestedKeys`.
 

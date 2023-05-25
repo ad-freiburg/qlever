@@ -4,10 +4,18 @@
 
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 
+#include <ANTLRInputStream.h>
+#include <CommonTokenStream.h>
+#include <antlr4-runtime.h>
+
 #include <regex>
 #include <string>
 
+#include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandLexer.h"
+#include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandParser.h"
+#include "BenchmarkConfigurationShorthandVisitor.h"
 #include "util/Exception.h"
+#include "util/antlr/ANTLRErrorHandling.h"
 #include "util/json.h"
 
 namespace ad_benchmark {
@@ -38,63 +46,29 @@ class ShortHandSyntaxException : public std::exception {
 // ____________________________________________________________________________
 nlohmann::json BenchmarkConfiguration::parseShortHand(
     const std::string& shortHandString) {
-  // I use regular expressions to parse the short hand. In order to easier
-  // reuse parts of my patterns, I defined some contants here.
+  // I use ANTLR expressions to parse the short hand.
+  antlr4::ANTLRInputStream input(shortHandString);
+  BenchmarkConfigurationShorthandLexer lexer(&input);
+  antlr4::CommonTokenStream tokens(&lexer);
+  BenchmarkConfigurationShorthandParser parser(&tokens);
 
-  // Boolean literal, integer literal, or string literal.
-  const std::string valueLiterals{R"--(true|false|-?\d+|".*")--"};
-  // How a list of `valueLiterals` looks like.
-  const std::string listOfValueLiterals{R"--(\[(\s*()--" + valueLiterals +
-                                        R"--()\s*,)*\s*()--" + valueLiterals +
-                                        R"--()\s*\])--"};
-  // What kind of names can the left side of the assigment
-  // `variableName = variableContent;` have?
-  const std::string variableName{R"--([\w]+)--"};
-  // What kind of names can the right side of the assigment
-  // `variableName = variableContent;` have?
-  const std::string variableContent{valueLiterals + R"(|)" +
-                                    listOfValueLiterals};
-  // How does one assigment look like?
-  // Note: I made the variableName and variableContent into their own groups
-  // within regular expressions, because `regex` allows direct access to
-  // sub-matches when it found a match. That should make iteration and parsing
-  // easier.
-  const std::string assigment{R"--(\s*()--" + variableName +
-                              R"--()\s*=\s*()--" + variableContent +
-                              R"--()\s*;)--"};
+  // The default in ANTLR is to log all errors to the console and to continue
+  // the parsing. We need to turn parse errors into exceptions instead to
+  // propagate them to the user.
+  ThrowingErrorListener errorListener{};
+  parser.removeErrorListeners();
+  parser.addErrorListener(&errorListener);
+  lexer.removeErrorListeners();
+  lexer.addErrorListener(&errorListener);
 
-  // Use regular expressions to check, if the given string uses the correct
-  // grammar/syntax.
-  if (!std::regex_match(shortHandString,
-                        std::regex{R"--(()--" + assigment + R"--()*)--"})) {
-    throw ShortHandSyntaxException{shortHandString};
-  }
+  // Get the top node. That is, the node of the first grammar rule.
+  BenchmarkConfigurationShorthandParser::ShortHandStringContext*
+      shortHandStringContext{parser.shortHandString()};
 
-  // The json object for returning. Will always be an 'object' in json terms.
-  nlohmann::json jsonObject(nlohmann::json::value_t::object);
-
-  // Create the regular expression of an assigment.
-  std::regex assigmentRegex(assigment);
-  // `std::sregex_iterator` have no `begin()`, or `end()`. Instead, the default
-  // constructed `std::sregex_iterator` is the end-of-sequence iterator.
-  const std::sregex_iterator endOfIterator;
-  // Iterate over all assigments in the short hand string.
-  for (auto iterator = std::sregex_iterator(
-           shortHandString.begin(), shortHandString.end(), assigmentRegex);
-       iterator != endOfIterator; iterator++) {
-    std::smatch match{*iterator};
-
-    // Get the variable name. It should be in the first sub-match.
-    std::string assigmentVariableName{match.str(1)};
-    // Get the not yet interpreted variable content. It should be in the second
-    // sub-match.
-    std::string assigmentVariableContentUninterpreted{match.str(2)};
-
-    jsonObject[assigmentVariableName] =
-        nlohmann::json::parse(assigmentVariableContentUninterpreted);
-  }
-
-  return jsonObject;
+  // Walk through the parser tree and build the json equivalent out of the short
+  // hand.
+  return ToJsonBenchmarkConfigurationShorthandVisitor{}.visitShortHandString(
+      shortHandStringContext);
 }
 
 // ____________________________________________________________________________

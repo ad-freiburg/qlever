@@ -37,7 +37,7 @@ class Union : public Operation {
 
   virtual size_t getResultWidth() const override;
 
-  virtual vector<size_t> resultSortedOn() const override;
+  virtual vector<ColumnIndex> resultSortedOn() const override;
 
   virtual void setTextLimit(size_t limit) override;
 
