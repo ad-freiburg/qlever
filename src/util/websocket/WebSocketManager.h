@@ -3,10 +3,10 @@
 //  Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
 #pragma once
-#include <absl/container/btree_map.h>
 #include <absl/container/flat_hash_map.h>
 
 #include <boost/beast/websocket.hpp>
+#include <unordered_map>
 
 #include "util/LinkedList.h"
 #include "util/http/beast.h"
@@ -22,9 +22,12 @@ using websocket = beast::websocket::stream<tcp::socket>;
 
 class UpdateFetcher {
   using payload_type = std::shared_ptr<const std::string>;
+  using QueryToCallback =
+      std::unordered_multimap<QueryId, std::function<void()>,
+                              absl::Hash<QueryId>>;
   absl::flat_hash_map<QueryId, ad_utility::LinkedList<payload_type>>&
       informationQueues_;
-  absl::btree_multimap<QueryId, std::function<void()>>& wakeupCalls_;
+  QueryToCallback& wakeupCalls_;
   const QueryId& queryId_;
   net::strand<net::io_context::executor_type>& registryStrand_;
   std::shared_ptr<ad_utility::Node<payload_type>> currentNode_{nullptr};
@@ -33,8 +36,7 @@ class UpdateFetcher {
   UpdateFetcher(
       absl::flat_hash_map<QueryId, ad_utility::LinkedList<payload_type>>&
           informationQueues,
-      absl::btree_multimap<QueryId, std::function<void()>>& wakeupCalls,
-      const QueryId& queryId,
+      QueryToCallback& wakeupCalls, const QueryId& queryId,
       net::strand<net::io_context::executor_type>& registryStrand)
       : informationQueues_{informationQueues},
         wakeupCalls_{wakeupCalls},
@@ -49,7 +51,8 @@ class WebSocketManager {
   absl::flat_hash_map<
       QueryId, ad_utility::LinkedList<std::shared_ptr<const std::string>>>
       informationQueues_{};
-  absl::btree_multimap<QueryId, std::function<void()>> wakeupCalls_{};
+  std::unordered_multimap<QueryId, std::function<void()>, absl::Hash<QueryId>>
+      wakeupCalls_{};
 
   std::optional<net::strand<net::io_context::executor_type>> registryStrand_{};
 

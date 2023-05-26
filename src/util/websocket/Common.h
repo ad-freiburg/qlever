@@ -27,10 +27,8 @@ class QueryId {
     return H::combine(std::move(h), c.id_);
   }
 
-  // Starting with gcc 12 and clang 15 these can be constexpr
+  // Starting with gcc 12 and clang 15 this can be constexpr
   bool operator==(const QueryId&) const noexcept = default;
-  // required for multimap
-  auto operator<=>(const QueryId&) const noexcept = default;
 };
 
 class OwningQueryId {
