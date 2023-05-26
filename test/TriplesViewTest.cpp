@@ -12,8 +12,8 @@ using ad_utility::testing::makeAllocator;
 namespace {
 auto V = ad_utility::testing::VocabId;
 
-// This struct mocks the structure of the actual `Permutation` types used in
-// QLever for testing the `TriplesView`.
+// This struct mocks the structure of the actual `Permutation::Enum` types used
+// in QLever for testing the `TriplesView`.
 struct DummyPermutation {
   void scan(Id col0Id, auto* result) const {
     result->reserve(col0Id.getVocabIndex().get());

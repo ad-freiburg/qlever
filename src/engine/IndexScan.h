@@ -143,7 +143,7 @@ class IndexScan : public Operation {
 
   size_t getResultWidth() const override;
 
-  vector<size_t> resultSortedOn() const override;
+  vector<ColumnIndex> resultSortedOn() const override;
 
   void setTextLimit(size_t) override {
     // Do nothing.
@@ -191,6 +191,25 @@ class IndexScan : public Operation {
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   void computeFullScan(IdTable* result, Index::Permutation permutation) const;
+  void computePSOboundS(IdTable* result) const;
+
+  void computePSOfreeS(IdTable* result) const;
+
+  void computePOSboundO(IdTable* result) const;
+
+  void computePOSfreeO(IdTable* result) const;
+
+  void computeSPOfreeP(IdTable* result) const;
+
+  void computeSOPboundO(IdTable* result) const;
+
+  void computeSOPfreeO(IdTable* result) const;
+
+  void computeOPSfreeP(IdTable* result) const;
+
+  void computeOSPfreeS(IdTable* result) const;
+
+  void computeFullScan(IdTable* result, Permutation::Enum permutation) const;
 
   size_t computeSizeEstimate();
 

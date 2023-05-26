@@ -74,21 +74,18 @@ string GroupBy::asStringImpl(size_t indent) const {
 }
 
 string GroupBy::getDescriptor() const {
-  // TODO<C++20 Views (clang16): Do this lazily using std::views::transform.
   // TODO<C++23>:: Use std::views::join_with.
-  return "GroupBy on " + absl::StrJoin(_groupByVariables, " ",
-                                       [](std::string* out, const Variable& v) {
-                                         absl::StrAppend(out, v.name());
-                                       });
+  return "GroupBy on " +
+         absl::StrJoin(_groupByVariables, " ", &Variable::AbslFormatter);
 }
 
 size_t GroupBy::getResultWidth() const {
   return getInternallyVisibleVariableColumns().size();
 }
 
-vector<size_t> GroupBy::resultSortedOn() const {
+vector<ColumnIndex> GroupBy::resultSortedOn() const {
   auto varCols = getInternallyVisibleVariableColumns();
-  vector<size_t> sortedOn;
+  vector<ColumnIndex> sortedOn;
   sortedOn.reserve(_groupByVariables.size());
   for (const auto& var : _groupByVariables) {
     sortedOn.push_back(varCols[var].columnIndex_);
@@ -96,8 +93,9 @@ vector<size_t> GroupBy::resultSortedOn() const {
   return sortedOn;
 }
 
-vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
-  vector<size_t> cols;
+vector<ColumnIndex> GroupBy::computeSortColumns(
+    const QueryExecutionTree* subtree) {
+  vector<ColumnIndex> cols;
   if (_groupByVariables.empty()) {
     // the entire input is a single group, no sorting needs to be done
     return cols;
@@ -105,10 +103,10 @@ vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
 
   const auto& inVarColMap = subtree->getVariableColumns();
 
-  std::unordered_set<size_t> sortColSet;
+  std::unordered_set<ColumnIndex> sortColSet;
 
   for (const auto& var : _groupByVariables) {
-    size_t col = inVarColMap.at(var).columnIndex_;
+    ColumnIndex col = inVarColMap.at(var).columnIndex_;
     // avoid sorting by a column twice
     if (sortColSet.find(col) == sortColSet.end()) {
       sortColSet.insert(col);
@@ -162,10 +160,9 @@ size_t GroupBy::getSizeEstimateBeforeLimit() {
 
   // TODO<joka921> Once we can use `std::views` this can be solved
   // more elegantly.
-  std::vector<float> multiplicites;
-  std::ranges::transform(_groupByVariables, std::back_inserter(multiplicites),
-                         varToMultiplicity);
-  return _subtree->getSizeEstimate() / std::ranges::min(multiplicites);
+  float minMultiplicity = std::ranges::min(
+      _groupByVariables | std::views::transform(varToMultiplicity));
+  return _subtree->getSizeEstimate() / minMultiplicity;
 }
 
 size_t GroupBy::getCostEstimate() {
@@ -430,10 +427,10 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
 
   // The child must be an `IndexScan` with three variables that contains
   // the grouped variable.
-  auto permutation = getPermutationForThreeVariableTriple(
+  auto permutationEnum = getPermutationForThreeVariableTriple(
       *_subtree, groupByVariable, groupByVariable);
 
-  if (!permutation.has_value()) {
+  if (!permutationEnum.has_value()) {
     return false;
   }
 
@@ -472,22 +469,22 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
   auto doComputationForNumberOfColumns = [&]<int NUM_COLS>(
                                              IdTable* idTable) mutable {
     auto ignoredRanges =
-        getIndex().getImpl().getIgnoredIdRanges(permutation.value()).first;
-    const auto& permutationImpl =
+        getIndex().getImpl().getIgnoredIdRanges(permutationEnum.value()).first;
+    const auto& permutation =
         getExecutionContext()->getIndex().getPimpl().getPermutation(
-            permutation.value());
+            permutationEnum.value());
     IdTableStatic<NUM_COLS> table = std::move(*idTable).toStatic<NUM_COLS>();
-    const auto& metaData = permutationImpl._meta.data();
+    const auto& metaData = permutation._meta.data();
     // TODO<joka921> the reserve is too large because of the ignored
     // triples. We would need to incorporate the information how many
-    // added "relations" are in each permutation during index building.
+    // added "relations" are in each permutationEnum during index building.
     table.reserve(metaData.size());
     for (auto it = metaData.ordered_begin(); it != metaData.ordered_end();
          ++it) {
       Id id = decltype(metaData.ordered_begin())::getIdFromElement(*it);
 
       // Check whether this is an `@en@...` predicate in a `Pxx`
-      // permutation, a literal in a `Sxx` permutation or some other
+      // permutationEnum, a literal in a `Sxx` permutationEnum or some other
       // entity that was added only for internal reasons.
       if (std::ranges::any_of(ignoredRanges, [&id](const auto& pair) {
             return id >= pair.first && id < pair.second;
@@ -527,7 +524,7 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
 }
 
 // _____________________________________________________________________________
-std::optional<Index::Permutation> GroupBy::getPermutationForThreeVariableTriple(
+std::optional<Permutation::Enum> GroupBy::getPermutationForThreeVariableTriple(
     const QueryExecutionTree& tree, const Variable& variableByWhichToSort,
     const Variable& variableThatMustBeContained) {
   auto indexScan =
@@ -545,11 +542,11 @@ std::optional<Index::Permutation> GroupBy::getPermutationForThreeVariableTriple(
   }
 
   if (variableByWhichToSort == indexScan->getSubject()) {
-    return Index::Permutation::SPO;
-  } else if (variableByWhichToSort == indexScan->getPredicate()) {
-    return Index::Permutation::POS;
+    return Permutation::SPO;
+  } else if (variableByWhichToSort.name() == indexScan->getPredicate()) {
+    return Permutation::POS;
   } else if (variableByWhichToSort == indexScan->getObject()) {
-    return Index::Permutation::OSP;
+    return Permutation::OSP;
   } else {
     return std::nullopt;
   }

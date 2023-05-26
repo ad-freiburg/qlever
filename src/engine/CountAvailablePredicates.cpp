@@ -55,7 +55,7 @@ string CountAvailablePredicates::getDescriptor() const {
 size_t CountAvailablePredicates::getResultWidth() const { return 2; }
 
 // _____________________________________________________________________________
-vector<size_t> CountAvailablePredicates::resultSortedOn() const {
+vector<ColumnIndex> CountAvailablePredicates::resultSortedOn() const {
   // The result is not sorted on any column.
   return {};
 }

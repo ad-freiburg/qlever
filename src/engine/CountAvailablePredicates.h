@@ -58,7 +58,7 @@ class CountAvailablePredicates : public Operation {
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  [[nodiscard]] vector<size_t> resultSortedOn() const override;
+  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
 
   vector<QueryExecutionTree*> getChildren() override {
     using R = vector<QueryExecutionTree*>;

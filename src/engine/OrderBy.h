@@ -41,7 +41,7 @@ class OrderBy : public Operation {
   // The function `resultSortedOn` refers to the `internal` sorting by ID value.
   // This is different from the `semantic` sorting that the ORDER BY operation
   // computes.
-  std::vector<size_t> resultSortedOn() const override { return {}; }
+  std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
 
   void setTextLimit(size_t limit) override { subtree_->setTextLimit(limit); }
 

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 project(QLever C CXX)
 
 # C/C++ Versions
-set (CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,20 +11,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # on clang and g++
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0")
-      MESSAGE(FATAL_ERROR, "G++ versions older than 11.0 are not supported by QLever")
+      MESSAGE(FATAL_ERROR "G++ versions older than 11.0 are not supported by QLever")
   else()
       add_compile_options(-fcoroutines)
   endif()
 
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "14.0.0")
-        MESSAGE(FATAL_ERROR, "Clang++ versions older than 14.0 are not supported by QLever")
-    elseif(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
-        add_compile_options(-fcoroutines-ts)
-        # starting from Clang 16, coroutines are enabled by default for C++ 20
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
+        MESSAGE(FATAL_ERROR "Clang++ versions older than 16.0 are not supported by QLever")
     endif()
 else()
-    MESSAGE(FATAL_ERROR, "QLever currently only supports the G++ or LLVM-Clang++ compilers")
+    MESSAGE(FATAL_ERROR "QLever currently only supports the G++ or LLVM-Clang++ compilers. Found ${CMAKE_CXX_COMPILER_ID}")
 endif()
 
 ## Build targets for address sanitizer
@@ -311,13 +308,13 @@ configure_file(src/web/script.js script.js)
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
-qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
+qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
 
 add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp src/util/ConstexprSmallString.h)
 qlever_target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(ServerMain src/ServerMain.cpp)
-qlever_target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
+qlever_target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
 target_precompile_headers(ServerMain REUSE_FROM engine)
 
 add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)

@@ -78,14 +78,14 @@ string IndexScan::getDescriptor() const {
 size_t IndexScan::getResultWidth() const { return _numVariables; }
 
 // _____________________________________________________________________________
-vector<size_t> IndexScan::resultSortedOn() const {
+vector<ColumnIndex> IndexScan::resultSortedOn() const {
   switch (getResultWidth()) {
     case 1:
-      return {0};
+      return {ColumnIndex{0}};
     case 2:
-      return {0, 1};
+      return {ColumnIndex{0}, ColumnIndex{1}};
     case 3:
-      return {0, 1, 2};
+      return {ColumnIndex{0}, ColumnIndex{1}, ColumnIndex{2};
     default:
       AD_FAIL();
   }
@@ -96,7 +96,7 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   VariableToColumnMap res;
   // All the columns of an index scan only contain defined values.
   auto makeCol = makeAlwaysDefinedColumn;
-  size_t col = 0;
+  auto col = ColumnIndex{0};
 
   for (const TripleComponent* const ptr : getPermutedTriple()) {
     if (ptr->isVariable()) {
@@ -111,7 +111,7 @@ ResultTable IndexScan::computeResult() {
   LOG(DEBUG) << "IndexScan result computation...\n";
   IdTable idTable{getExecutionContext()->getAllocator()};
 
-  using enum Index::Permutation;
+  using enum Permutation::Enum;
   idTable.setNumColumns(_numVariables);
   const auto& idx = _executionContext->getIndex();
   const auto permutedTriple = getPermutedTriple();
@@ -240,7 +240,7 @@ void IndexScan::determineMultiplicities() {
 
 // ________________________________________________________________________
 void IndexScan::computeFullScan(IdTable* result,
-                                const Index::Permutation permutation) const {
+                                const Permutation::Enum permutation) const {
   auto [ignoredRanges, isTripleIgnored] =
       getIndex().getImpl().getIgnoredIdRanges(permutation);
 

@@ -1013,11 +1013,8 @@ vector<TripleWithPropertyPath> Visitor::visit(
     auto subject = visit(ctx->varOrTerm());
     auto tuples = visit(ctx->propertyListPathNotEmpty());
     for (auto& [predicate, object] : tuples) {
-      // TODO<clang,c++20> clang does not yet support emplace_back for
-      // aggregates.
       setTextscoreVisibleIfPresent(subject, predicate);
-      triples.push_back(TripleWithPropertyPath{subject, std::move(predicate),
-                                               std::move(object)});
+      triples.emplace_back(subject, std::move(predicate), std::move(object));
     }
     return triples;
   } else {

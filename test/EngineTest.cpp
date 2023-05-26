@@ -42,7 +42,7 @@ TEST(EngineTest, distinctTest) {
 
   IdTable result{4, makeAllocator()};
 
-  std::vector<size_t> keepIndices{{1, 2}};
+  std::vector<ColumnIndex> keepIndices{{1, 2}};
   CALL_FIXED_SIZE(4, Engine::distinct, input, keepIndices, &result);
 
   // For easier checking.
@@ -56,7 +56,8 @@ TEST(EngineTest, distinctWithEmptyInput) {
   // Deliberately input a non-empty result to check that it is
   // overwritten by the (empty) input.
   IdTable result = makeIdTableFromVector({{3}});
-  CALL_FIXED_SIZE(1, Engine::distinct, input, std::vector<size_t>{}, &result);
+  CALL_FIXED_SIZE(1, Engine::distinct, input, std::vector<ColumnIndex>{},
+                  &result);
   ASSERT_EQ(input, result);
 }
 
@@ -322,6 +323,51 @@ TEST(OptionalJoin, specialOptionalJoinTwoColumns) {
 
     IdTable expectedResult = makeIdTableFromVector(
         {{4, 1, 2, U}, {2, 1, 3, 3}, {1, 1, 4, U}, {2, 2, 2, 4}, {1, 3, 1, 1}});
+
+    testOptionalJoin(a, b, jcls, expectedResult);
+  }
+}
+
+TEST(OptionalJoin, gallopingJoin) {
+  {
+    IdTable a{makeIdTableFromVector({{5}, {327}, {4938}, {100000000}})};
+    IdTable expectedResult{makeIdTableFromVector(
+        {{5, 17}, {327, U}, {4938, 4950}, {100000000, U}})};
+
+    VectorTable bInput;
+    for (int64_t i = 0; i < 300; ++i) {
+      bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
+    }
+    auto numElementsInLarger = static_cast<int64_t>(
+        std::max(10000ul, a.numRows() * GALLOP_THRESHOLD + 1));
+    for (int64_t i = 400; i < numElementsInLarger; ++i) {
+      bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
+    }
+    IdTable b{makeIdTableFromVector(bInput)};
+    // Join on the first column
+    JoinColumns jcls{{0, 0}};
+
+    testOptionalJoin(a, b, jcls, expectedResult);
+  }
+  // Also test the case that the largest element of `a` is less than the largest
+  // element of `b`.
+  {
+    IdTable a{makeIdTableFromVector({{5}, {327}, {328}})};
+    IdTable expectedResult{
+        makeIdTableFromVector({{5, 17}, {327, U}, {328, U}})};
+
+    VectorTable bInput;
+    for (int64_t i = 0; i < 300; ++i) {
+      bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
+    }
+    auto numElementsInLarger = static_cast<int64_t>(
+        std::max(10000ul, a.numRows() * GALLOP_THRESHOLD + 1));
+    for (int64_t i = 400; i < numElementsInLarger; ++i) {
+      bInput.emplace_back(std::vector<IntOrId>{i, i + 12});
+    }
+    IdTable b{makeIdTableFromVector(bInput)};
+    // Join on the first column
+    JoinColumns jcls{{0, 0}};
 
     testOptionalJoin(a, b, jcls, expectedResult);
   }

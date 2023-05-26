@@ -12,6 +12,7 @@
 
 #include "global/Id.h"
 #include "index/CompressedString.h"
+#include "index/Permutations.h"
 #include "index/StringSortComparator.h"
 #include "index/Vocabulary.h"
 #include "parser/TripleComponent.h"
@@ -34,9 +35,6 @@ class Index {
   std::unique_ptr<IndexImpl> pimpl_;
 
  public:
-  /// Identifiers for the six possible permutations.
-  enum struct Permutation { PSO, POS, SPO, SOP, OPS, OSP };
-
   // Alongside the actual knowledge graph QLever stores additional triples
   // for optimized query processing. This struct is used to report various
   // statistics (number of triples, distinct number of subjects, etc.) for which
@@ -102,11 +100,13 @@ class Index {
   // Read necessary metadata into memory and open file handles.
   void addTextFromOnDiskIndex();
 
-  using Vocab = Vocabulary<CompressedString, TripleComponentComparator>;
+  using Vocab =
+      Vocabulary<CompressedString, TripleComponentComparator, VocabIndex>;
   [[nodiscard]] const Vocab& getVocab() const;
   Vocab& getNonConstVocabForTesting();
 
-  using TextVocab = Vocabulary<std::string, SimpleStringComparator>;
+  using TextVocab =
+      Vocabulary<std::string, SimpleStringComparator, WordVocabIndex>;
   [[nodiscard]] const TextVocab& getTextVocab() const;
 
   // --------------------------------------------------------------------------
@@ -123,8 +123,9 @@ class Index {
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------
   [[nodiscard]] size_t getCardinality(const TripleComponent& comp,
-                                      Permutation permutation) const;
-  [[nodiscard]] size_t getCardinality(Id id, Permutation permutation) const;
+                                      Permutation::Enum permutation) const;
+  [[nodiscard]] size_t getCardinality(Id id,
+                                      Permutation::Enum permutation) const;
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
@@ -259,10 +260,10 @@ class Index {
 
   // _____________________________________________________________________________
   vector<float> getMultiplicities(const TripleComponent& key,
-                                  Permutation permutation) const;
+                                  Permutation::Enum permutation) const;
 
   // ___________________________________________________________________
-  vector<float> getMultiplicities(Permutation p) const;
+  vector<float> getMultiplicities(Permutation::Enum p) const;
 
   /**
    * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
@@ -271,10 +272,10 @@ class Index {
    * @param key The key (in Id space) for which to search, e.g. fixed value for
    * O in OSP permutation.
    * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation to use (in particularly POS(), SOP,... members of
-   * Index class).
+   * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
+   * members of Index class).
    */
-  void scan(Id key, IdTable* result, Permutation p,
+  void scan(Id key, IdTable* result, Permutation::Enum p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   /**
@@ -284,10 +285,11 @@ class Index {
    * @param key The key (as a raw string that is yet to be transformed to index
    * space) for which to search, e.g. fixed value for O in OSP permutation.
    * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation to use (in particularly POS(), SOP,... members of
-   * Index class).
+   * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
+   * members of Index class).
    */
-  void scan(const TripleComponent& key, IdTable* result, const Permutation& p,
+  void scan(const TripleComponent& key, IdTable* result,
+            const Permutation::Enum& p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   /**
@@ -301,12 +303,13 @@ class Index {
    * transformed to index space) for which to search, e.g. fixed value for S in
    * OSP permutation.
    * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation to use (in particularly POS(), SOP,... members of
-   * Index class).
+   * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
+   * members of Index class).
    */
   // _____________________________________________________________________________
   void scan(const TripleComponent& col0String,
-            const TripleComponent& col1String, IdTable* result, Permutation p,
+            const TripleComponent& col1String, IdTable* result,
+            Permutation::Enum p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   // Get access to the implementation. This should be used rarely as it

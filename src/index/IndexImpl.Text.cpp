@@ -9,6 +9,7 @@
 #include <absl/strings/str_split.h>
 
 #include <algorithm>
+#include <ranges>
 #include <stxxl/algorithm>
 #include <tuple>
 #include <utility>
@@ -271,7 +272,7 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
     } else {
       ++nofWordPostings;
       // TODO<joka921> Let the `textVocab_` return a `WordIndex` directly.
-      VocabIndex vid;
+      WordVocabIndex vid;
       bool ret = textVocab_.getId(line._word, &vid);
       WordIndex wid = vid.get();
       if (!ret) {
@@ -312,14 +313,6 @@ void IndexImpl::addContextToVector(
     writer << std::make_tuple(blockId, context, it->first, it->second, false);
   }
 
-  for (auto it = entities.begin(); it != entities.end(); ++it) {
-    TextBlockIndex blockId = getEntityBlockId(it->first);
-    touchedBlocks.insert(blockId);
-    AD_CONTRACT_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
-    writer << std::make_tuple(blockId, context, it->first.getVocabIndex().get(),
-                              it->second, false);
-  }
-
   // All entities have to be written in the entity list part for each block.
   // Ensure that they are added only once for each block.
   // For example, there could be both words computer and computing
@@ -327,10 +320,6 @@ void IndexImpl::addContextToVector(
   // written to a comp* block once.
   for (TextBlockIndex blockId : touchedBlocks) {
     for (auto it = entities.begin(); it != entities.end(); ++it) {
-      // Don't add an entity to its own block..
-      // FIX JUN 07 2017: DO add it. It's needed so that it is returned
-      // as a result itself.
-      // if (blockId == getEntityBlockId(it->first)) { continue; }
       AD_CONTRACT_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
       writer << std::make_tuple(
           blockId, context, it->first.getVocabIndex().get(), it->second, true);
@@ -351,23 +340,14 @@ void IndexImpl::createTextIndex(const string& filename,
   WordIndex currentMaxWordIndex = std::numeric_limits<WordIndex>::min();
   vector<Posting> classicPostings;
   vector<Posting> entityPostings;
-  size_t nofEntities = 0;
-  size_t nofEntityContexts = 0;
   for (TextVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if (std::get<0>(*reader) != currentBlockIndex) {
       AD_CONTRACT_CHECK(!classicPostings.empty());
 
-      bool isEntityBlock = isEntityBlockId(currentBlockIndex);
-      if (isEntityBlock) {
-        ++nofEntities;
-        nofEntityContexts += classicPostings.size();
-      }
       ContextListMetaData classic = writePostings(out, classicPostings, true);
       ContextListMetaData entity = writePostings(out, entityPostings, false);
-      textMeta_.addBlock(
-          TextBlockMetaData(currentMinWordIndex, currentMaxWordIndex, classic,
-                            entity),
-          isEntityBlock);
+      textMeta_.addBlock(TextBlockMetaData(
+          currentMinWordIndex, currentMaxWordIndex, classic, entity));
       classicPostings.clear();
       entityPostings.clear();
       currentBlockIndex = std::get<0>(*reader);
@@ -375,8 +355,8 @@ void IndexImpl::createTextIndex(const string& filename,
       currentMaxWordIndex = std::get<2>(*reader);
     }
     if (!std::get<4>(*reader)) {
-      classicPostings.emplace_back(std::make_tuple(
-          std::get<1>(*reader), std::get<2>(*reader), std::get<3>(*reader)));
+      classicPostings.emplace_back(std::get<1>(*reader), std::get<2>(*reader),
+                                   std::get<3>(*reader));
       if (std::get<2>(*reader) < currentMinWordIndex) {
         currentMinWordIndex = std::get<2>(*reader);
       }
@@ -385,23 +365,16 @@ void IndexImpl::createTextIndex(const string& filename,
       }
 
     } else {
-      entityPostings.emplace_back(std::make_tuple(
-          std::get<1>(*reader), std::get<2>(*reader), std::get<3>(*reader)));
+      entityPostings.emplace_back(std::get<1>(*reader), std::get<2>(*reader),
+                                  std::get<3>(*reader));
     }
   }
   // Write the last block
   AD_CONTRACT_CHECK(!classicPostings.empty());
-  if (isEntityBlockId(currentBlockIndex)) {
-    ++nofEntities;
-    nofEntityContexts += classicPostings.size();
-  }
   ContextListMetaData classic = writePostings(out, classicPostings, true);
   ContextListMetaData entity = writePostings(out, entityPostings, false);
   textMeta_.addBlock(TextBlockMetaData(currentMinWordIndex, currentMaxWordIndex,
-                                       classic, entity),
-                     isEntityBlockId(currentMaxWordIndex));
-  textMeta_.setNofEntities(nofEntities);
-  textMeta_.setNofEntityContexts(nofEntityContexts);
+                                       classic, entity));
   classicPostings.clear();
   entityPostings.clear();
   LOG(DEBUG) << "Done creating text index." << std::endl;
@@ -597,7 +570,7 @@ void IndexImpl::calculateBlockBoundariesImpl(
     }
   };
 
-  auto getLengthAndPrefixSortKey = [&](VocabIndex i) {
+  auto getLengthAndPrefixSortKey = [&](WordVocabIndex i) {
     auto word = index.textVocab_[i].value();
     auto [len, prefixSortKey] =
         locManager.getPrefixSortKey(word, MIN_WORD_PREFIX_SIZE);
@@ -612,13 +585,13 @@ void IndexImpl::calculateBlockBoundariesImpl(
     return std::tuple{std::move(len), std::move(prefixSortKey)};
   };
   auto [currentLen, prefixSortKey] =
-      getLengthAndPrefixSortKey(VocabIndex::make(0));
+      getLengthAndPrefixSortKey(WordVocabIndex::make(0));
   for (size_t i = 0; i < index.textVocab_.size() - 1; ++i) {
     // we need foo.value().get() because the vocab returns
     // a std::optional<std::reference_wrapper<string>> and the "." currently
     // doesn't implicitly convert to a true reference (unlike function calls)
     const auto& [nextLen, nextPrefixSortKey] =
-        getLengthAndPrefixSortKey(VocabIndex::make(i + 1));
+        getLengthAndPrefixSortKey(WordVocabIndex::make(i + 1));
 
     bool tooShortButNotEqual =
         (currentLen < MIN_WORD_PREFIX_SIZE || nextLen < MIN_WORD_PREFIX_SIZE) &&
@@ -649,30 +622,10 @@ void IndexImpl::calculateBlockBoundaries() {
 }
 
 // _____________________________________________________________________________
-void IndexImpl::printBlockBoundariesToFile(const string& filename) const {
-  std::ofstream of{filename};
-  of << "Printing block boundaries ot text vocabulary\n"
-     << "Format: <Last word of Block> <First word of next Block>\n";
-  auto printBlockToFile = [this, &of](size_t i) {
-    of << textVocab_[VocabIndex::make(i)].value() << " ";
-    if (i + 1 < textVocab_.size()) {
-      of << textVocab_[VocabIndex::make(i + 1)].value() << '\n';
-    }
-  };
-  return calculateBlockBoundariesImpl(*this, printBlockToFile);
-}
-
-// _____________________________________________________________________________
 TextBlockIndex IndexImpl::getWordBlockId(WordIndex wordIndex) const {
   return std::lower_bound(blockBoundaries_.begin(), blockBoundaries_.end(),
                           wordIndex) -
          blockBoundaries_.begin();
-}
-
-// _____________________________________________________________________________
-TextBlockIndex IndexImpl::getEntityBlockId(Id entityId) const {
-  AD_CONTRACT_CHECK(entityId.getDatatype() == Datatype::VocabIndex);
-  return entityId.getVocabIndex().get() + blockBoundaries_.size();
 }
 
 // _____________________________________________________________________________
@@ -763,7 +716,7 @@ void IndexImpl::openTextFileHandle() {
 
 // _____________________________________________________________________________
 std::string_view IndexImpl::wordIdToString(WordIndex wordIndex) const {
-  return textVocab_[VocabIndex::make(wordIndex)].value();
+  return textVocab_[WordVocabIndex::make(wordIndex)].value();
 }
 
 // _____________________________________________________________________________
@@ -844,42 +797,16 @@ Index::WordEntityPostings IndexImpl::readWordEntityCl(
 // _____________________________________________________________________________
 Index::WordEntityPostings IndexImpl::getWordPostingsForTerm(
     const string& term) const {
-  assert(!term.empty());
   LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
-  IdRange idRange;
   Index::WordEntityPostings wep;
-  bool entityTerm = (term[0] == '<' && term.back() == '>');
-  if (term[term.size() - 1] == PREFIX_CHAR) {
-    if (!textVocab_.getIdRangeForFullTextPrefix(term, &idRange)) {
-      LOG(INFO) << "Prefix: " << term << " not in vocabulary\n";
-      return wep;
-    }
-  } else {
-    if (entityTerm) {
-      if (!vocab_.getId(term, &idRange._first)) {
-        LOG(INFO) << "Term: " << term << " not in entity vocabulary\n";
-        return wep;
-      }
-    } else if (!textVocab_.getId(term, &idRange._first)) {
-      LOG(INFO) << "Term: " << term << " not in vocabulary\n";
-      return wep;
-    }
-    idRange._last = idRange._first;
-  }
-  if (entityTerm &&
-      !textMeta_.existsTextBlockForEntityId(idRange._first.get())) {
-    LOG(INFO) << "Entity " << term << " not contained in the text.\n";
+  auto optionalTbmd = getTextBlockMetadataForWordOrPrefix(term);
+  if (!optionalTbmd.has_value()) {
     return wep;
   }
-  const auto& tbmd =
-      entityTerm ? textMeta_.getBlockInfoByEntityId(idRange._first.get())
-                 : textMeta_.getBlockInfoByWordRange(idRange._first.get(),
-                                                     idRange._last.get());
+  const auto& tbmd = optionalTbmd.value().tbmd_;
   wep = readWordCl(tbmd);
-  if (tbmd._cl.hasMultipleWords() &&
-      !(tbmd._firstWordId == idRange._first.get() &&
-        tbmd._lastWordId == idRange._last.get())) {
-    wep = FTSAlgorithms::filterByRange(idRange, wep);
+  if (optionalTbmd.value().hasToBeFiltered_) {
+    wep = FTSAlgorithms::filterByRange(optionalTbmd.value().idRange_, wep);
   }
   LOG(DEBUG) << "Word postings for term: " << term
              << ": cids: " << wep.cids_.size() << " scores "
@@ -1043,37 +970,13 @@ void IndexImpl::getFilteredECListForWordsWidthOne(const string& words,
 Index::WordEntityPostings IndexImpl::getEntityPostingsForTerm(
     const string& term) const {
   LOG(DEBUG) << "Getting entity postings for term: " << term << '\n';
-  IdRange idRange;
   Index::WordEntityPostings resultWep;
-  bool entityTerm = (term[0] == '<' && term.back() == '>');
-  if (term.back() == PREFIX_CHAR) {
-    if (!textVocab_.getIdRangeForFullTextPrefix(term, &idRange)) {
-      LOG(INFO) << "Prefix: " << term << " not in vocabulary\n";
-      return resultWep;
-    }
-  } else {
-    if (entityTerm) {
-      if (!vocab_.getId(term, &idRange._first)) {
-        LOG(DEBUG) << "Term: " << term << " not in entity vocabulary\n";
-        return resultWep;
-      }
-    } else if (!textVocab_.getId(term, &idRange._first)) {
-      LOG(DEBUG) << "Term: " << term << " not in vocabulary\n";
-      return resultWep;
-    }
-    idRange._last = idRange._first;
+  auto optTbmd = getTextBlockMetadataForWordOrPrefix(term);
+  if (!optTbmd.has_value()) {
+    return resultWep;
   }
-
-  // TODO<joka921> Find out which ID types the `getBlockInfo...` functions
-  // should take.
-  const auto& tbmd =
-      entityTerm ? textMeta_.getBlockInfoByEntityId(idRange._first.get())
-                 : textMeta_.getBlockInfoByWordRange(idRange._first.get(),
-                                                     idRange._last.get());
-
-  if (!tbmd._cl.hasMultipleWords() ||
-      (tbmd._firstWordId == idRange._first.get() &&
-       tbmd._lastWordId == idRange._last.get())) {
+  const auto& tbmd = optTbmd.value().tbmd_;
+  if (!optTbmd.value().hasToBeFiltered_) {
     // CASE: Only one word in the block or full block should be matched.
     // Hence we can just read the entity CL lists for co-occurring
     // entity postings.
@@ -1410,33 +1313,17 @@ size_t IndexImpl::getIndexOfBestSuitedElTerm(
   // Apart from that, entity lists are usually larger by a factor.
   // Hence it makes sense to choose the smallest.
 
-  // Heuristic: Always prefer no-filtering terms over otheres, then
+  // Heuristic: Always prefer no-filtering terms over others, then
   // pick the one with the smallest EL block to be read.
   std::vector<std::tuple<size_t, bool, size_t>> toBeSorted;
   for (size_t i = 0; i < terms.size(); ++i) {
-    bool entityTerm = (terms[i][0] == '<' && terms[i].back() == '>');
-    IdRange range;
-    if (terms[i].back() == PREFIX_CHAR) {
-      textVocab_.getIdRangeForFullTextPrefix(terms[i], &range);
-    } else {
-      if (entityTerm) {
-        if (!vocab_.getId(terms[i], &range._first)) {
-          LOG(DEBUG) << "Term: " << terms[i] << " not in entity vocabulary\n";
-          return i;
-        } else {
-        }
-      } else if (!textVocab_.getId(terms[i], &range._first)) {
-        LOG(DEBUG) << "Term: " << terms[i] << " not in vocabulary\n";
-        return i;
-      }
-      range._last = range._first;
+    auto optTbmd = getTextBlockMetadataForWordOrPrefix(terms[i]);
+    if (!optTbmd.has_value()) {
+      return i;
     }
-    const auto& tbmd =
-        entityTerm ? textMeta_.getBlockInfoByEntityId(range._first.get())
-                   : textMeta_.getBlockInfoByWordRange(range._first.get(),
-                                                       range._last.get());
-    toBeSorted.emplace_back(std::make_tuple(
-        i, tbmd._firstWordId == tbmd._lastWordId, tbmd._entityCl._nofElements));
+    const auto& tbmd = optTbmd.value().tbmd_;
+    toBeSorted.emplace_back(i, tbmd._firstWordId == tbmd._lastWordId,
+                            tbmd._entityCl._nofElements);
   }
   std::sort(toBeSorted.begin(), toBeSorted.end(),
             [](const std::tuple<size_t, bool, size_t>& a,
@@ -1607,38 +1494,21 @@ void IndexImpl::getECListForWordsAndSubtrees(
 
 // _____________________________________________________________________________
 size_t IndexImpl::getSizeEstimate(const string& words) const {
-  size_t minElLength = std::numeric_limits<size_t>::max();
   // TODO vector can be of type std::string_view if called functions
   //  are updated to accept std::string_view instead of const std::string&
   std::vector<std::string> terms = absl::StrSplit(words, ' ');
-  for (size_t i = 0; i < terms.size(); ++i) {
-    IdRange range;
-    bool entityTerm = (terms[i][0] == '<' && terms[i].back() == '>');
-    if (terms[i].back() == PREFIX_CHAR) {
-      if (!textVocab_.getIdRangeForFullTextPrefix(terms[i], &range)) {
-        return 0;
-      }
-    } else {
-      if (entityTerm) {
-        if (!vocab_.getId(terms[i], &range._first)) {
-          LOG(DEBUG) << "Term: " << terms[i] << " not in entity vocabulary\n";
-          return 0;
-        }
-      } else if (!textVocab_.getId(terms[i], &range._first)) {
-        LOG(DEBUG) << "Term: " << terms[i] << " not in vocabulary\n";
-        return 0;
-      }
-      range._last = range._first;
-    }
-    const auto& tbmd =
-        entityTerm ? textMeta_.getBlockInfoByEntityId(range._first.get())
-                   : textMeta_.getBlockInfoByWordRange(range._first.get(),
-                                                       range._last.get());
-    if (minElLength > tbmd._entityCl._nofElements) {
-      minElLength = tbmd._entityCl._nofElements;
-    }
+  if (terms.empty()) {
+    return 0;
   }
-  return 1 + minElLength / 100;
+  auto termToEstimate = [&](const std::string& term) -> size_t {
+    auto optTbmd = getTextBlockMetadataForWordOrPrefix(term);
+    // TODO<C++23> Use `std::optional::transform`.
+    if (!optTbmd.has_value()) {
+      return 0;
+    }
+    return 1 + optTbmd.value().tbmd_._entityCl._nofElements / 100;
+  };
+  return std::ranges::min(terms | std::views::transform(termToEstimate));
 }
 
 // _____________________________________________________________________________
@@ -1667,3 +1537,28 @@ void IndexImpl::getRhsForSingleLhs(const IdTable& in, Id lhsId,
 
 // _____________________________________________________________________________
 void IndexImpl::setTextName(const string& name) { textMeta_.setName(name); }
+
+// _____________________________________________________________________________
+auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
+    const -> std::optional<TextBlockMetadataAndWordInfo> {
+  AD_CORRECTNESS_CHECK(!word.empty());
+  IdRange<WordVocabIndex> idRange;
+  if (word.ends_with(PREFIX_CHAR)) {
+    if (!textVocab_.getIdRangeForFullTextPrefix(word, &idRange)) {
+      LOG(INFO) << "Prefix: " << word << " not in vocabulary\n";
+      return std::nullopt;
+    }
+  } else {
+    if (!textVocab_.getId(word, &idRange._first)) {
+      LOG(INFO) << "Term: " << word << " not in vocabulary\n";
+      return std::nullopt;
+    }
+    idRange._last = idRange._first;
+  }
+  const auto& tbmd = textMeta_.getBlockInfoByWordRange(idRange._first.get(),
+                                                       idRange._last.get());
+  bool hasToBeFiltered = tbmd._cl.hasMultipleWords() &&
+                         !(tbmd._firstWordId == idRange._first.get() &&
+                           tbmd._lastWordId == idRange._last.get());
+  return TextBlockMetadataAndWordInfo{tbmd, hasToBeFiltered, idRange};
+}

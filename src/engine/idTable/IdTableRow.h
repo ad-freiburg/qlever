@@ -151,7 +151,9 @@ class RowReferenceImpl {
 
    protected:
     // The actual implementation of operator[].
-    static T& operatorBracketImpl(auto& self, size_t i) {
+    static T& operatorBracketImpl(auto& self, size_t i)
+        requires(!std::is_const_v<std::remove_reference_t<decltype(self)>> &&
+                 !isConst) {
       return (*self.table_)(self.row_, i);
     }
     static const T& operatorBracketImpl(const auto& self, size_t i) {
@@ -192,8 +194,8 @@ class RowReferenceImpl {
     iterator begin() && { return {this, 0}; };
     iterator end() && { return {this, numColumns()}; };
     // Const iterators are always fine.
-    const_iterator cbegin() { return {this, 0}; };
-    const_iterator cend() { return {this, numColumns()}; };
+    const_iterator cbegin() const { return {this, 0}; };
+    const_iterator cend() const { return {this, numColumns()}; };
     const_iterator begin() const& { return {this, 0}; };
     const_iterator end() const& { return {this, numColumns()}; };
     const_iterator begin() const&& { return {this, 0}; };
@@ -329,6 +331,9 @@ class RowReference
   // `RowReference r = someFunctionThatReturnsABase();`
   RowReference(Base b) : Base{std::move(b)} {}
 
+  // Inherit the constructors from the base class.
+  using Base::Base;
+
   // Access to the `i`-th column of this row.
   T& operator[](size_t i) requires(!isConst) {
     return Base::operatorBracketImpl(base(), i);
@@ -362,23 +367,27 @@ class RowReference
  public:
   // Assignment from a `Row` with the same number of columns.
   RowReference& operator=(const Row<T, numStaticColumns>& other) & {
-    return this->assignmentImpl(base(), other);
+    this->assignmentImpl(base(), other);
+    return *this;
   }
   RowReference& operator=(const Row<T, numStaticColumns>& other) && {
-    return this->assignmentImpl(base(), other);
+    this->assignmentImpl(base(), other);
+    return *this;
   }
   RowReference& operator=(const Row<T, numStaticColumns>& other) const&&;
 
   // Assignment from a `RowReference` with the same number of columns.
   RowReference& operator=(const RowReference& other) {
-    return assignmentImpl(base(), other);
+    this->assignmentImpl(base(), other);
+    return *this;
   }
 
   // Assignment from a `const` RowReference to a `mutable` RowReference
   RowReference& operator=(
       const RowReference<Table, ad_utility::IsConst::True>& other)
       requires(!isConst) {
-    return assignmentImpl(base(), other);
+    this->assignmentImpl(base(), other);
+    return *this;
   }
 
   // No need to copy `RowReference`s, because that is also most likely a bug.

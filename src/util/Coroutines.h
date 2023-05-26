@@ -12,28 +12,6 @@
 #ifndef QLEVER_COROUTINES_H
 #define QLEVER_COROUTINES_H
 
-#include <version>
-
-#if defined(__clang__) && defined(__GLIBCXX__) && !__cpp_impl_coroutine
-// This is the constant that is defined by g++ when using the
-// -fcoroutines flag. We have to specify it manually for clang
-// before including the coroutine header.
-#define __cpp_impl_coroutine 1
-
 #include <coroutine>
-
-namespace std::experimental {
-template <typename T, typename... Ts>
-struct coroutine_traits : std::coroutine_traits<T, Ts...> {};
-
-template <typename T = void>
-struct coroutine_handle : std::coroutine_handle<T> {};
-}  // namespace std::experimental
-
-#else
-// Simply include the coroutine header, no special treatment
-// necessary.
-#include <coroutine>
-#endif
 
 #endif  // QLEVER_COROUTINES_H

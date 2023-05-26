@@ -399,7 +399,7 @@ struct GroupBySpecialCount : ::testing::Test {
 
 // _____________________________________________________________________________
 TEST_F(GroupBySpecialCount, getPermutationForThreeVariableTriple) {
-  using enum Index::Permutation;
+  using enum Permutation::Enum;
   const QueryExecutionTree& xyzScan = *xyzScanSortedByX;
 
   // Valid inputs.
@@ -454,7 +454,7 @@ TEST_F(GroupBySpecialCount, checkIfJoinWithFullScan) {
       groupBy.checkIfJoinWithFullScan(getJoinPtr(validJoinWhenGroupingByX));
   ASSERT_TRUE(optimizedAggregateData.has_value());
   ASSERT_EQ(&optimizedAggregateData->otherSubtree_, xScan.get());
-  ASSERT_EQ(optimizedAggregateData->permutation_, Index::Permutation::SPO);
+  ASSERT_EQ(optimizedAggregateData->permutation_, Permutation::SPO);
   ASSERT_EQ(optimizedAggregateData->subtreeColumnIndex_, 0);
 }
 

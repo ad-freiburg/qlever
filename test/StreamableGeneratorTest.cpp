@@ -15,6 +15,9 @@ stream_generator generateException() {
   throw std::runtime_error("Test Exception");
   co_return;
 }
+
+stream_generator generateNothing() { co_return; }
+
 }  // namespace
 
 TEST(StreamableGeneratorTest, TestGeneratorExceptionResultsInException) {
@@ -26,8 +29,6 @@ TEST(StreamableGeneratorTest, TestGeneratorExceptionResultsInException) {
     ASSERT_STREQ(e.what(), "Test Exception");
   }
 }
-
-stream_generator generateNothing() { co_return; }
 
 TEST(StreamableGeneratorTest, TestEmptyGeneratorReturnsEmptyResult) {
   auto generator = generateNothing();

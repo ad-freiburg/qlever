@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <ranges>
+
 #include "util/Exception.h"
 
 // Various helper functions for compile-time programming.
@@ -72,21 +74,33 @@ void RuntimeValueToCompileTimeValue(const size_t& value,
                    });
 }
 
+// An `ad_utility::ValueSequence<T, values...>` has the same functionality as
+// `std::integer_sequence`. This replacement is needed to compile QLever with
+// libc++, because libc++ strictly enforces the `std::integral` constraint for
+// `std::integer_sequence`, and we also need non-integral types as values, for
+// example `std::array<...>`.
 namespace detail {
+template <typename T, T... values>
+struct ValueSequenceImpl {};
+};  // namespace detail
 
+template <typename T, T... values>
+using ValueSequence = detail::ValueSequenceImpl<T, values...>;
+
+namespace detail {
 // The implementation for the `toIntegerSequence` function (see below).
 // For the ideas and alternative implementations see
 // https://stackoverflow.com/questions/56799396/
 template <auto Array, size_t... indexes>
 constexpr auto toIntegerSequenceHelper(std::index_sequence<indexes...>) {
-  return std::integer_sequence<typename decltype(Array)::value_type,
-                               std::get<indexes>(Array)...>{};
+  return ValueSequence<typename decltype(Array)::value_type,
+                       std::get<indexes>(Array)...>{};
 }
 }  // namespace detail
 
-// Convert a compile-time `std::array` to a `std::integer_sequence` that
+// Convert a compile-time `std::array` to a `ValueSequence` that
 // contains the same values. This is useful because arrays can be easily created
-// in constexpr functions using `normal` syntax, whereas `integer_sequences` are
+// in constexpr functions using `normal` syntax, whereas `ValueSequence`s are
 // useful for working with templates that take several ints as template
 // parameters. For an example usage see `CallFixedSize.h`
 template <auto Array>
@@ -104,9 +118,8 @@ template <std::integral Int, size_t NumIntegers>
 constexpr std::array<Int, NumIntegers> integerToArray(Int value,
                                                       Int numValues) {
   std::array<Int, NumIntegers> res;
-  // TODO<joka921, clang16> use views for reversion.
-  for (size_t i = 0; i < res.size(); ++i) {
-    res[res.size() - 1 - i] = value % numValues;
+  for (auto& el : res | std::views::reverse) {
+    el = value % numValues;
     value /= numValues;
   }
   return res;

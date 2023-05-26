@@ -36,7 +36,9 @@ class NeutralElementOperation : public Operation {
   bool knownEmptyResult() override { return false; };
 
  protected:
-  [[nodiscard]] vector<size_t> resultSortedOn() const override { return {}; };
+  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override {
+    return {};
+  };
 
  private:
   ResultTable computeResult() override {

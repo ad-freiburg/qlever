@@ -5,6 +5,7 @@
 #ifndef QLEVER_ITERATORS_H
 #define QLEVER_ITERATORS_H
 
+#include <cstdint>
 #include <iterator>
 #include <type_traits>
 
