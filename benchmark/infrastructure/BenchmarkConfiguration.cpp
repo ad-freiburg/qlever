@@ -240,51 +240,46 @@ BenchmarkConfiguration::operator std::string() const {
     const BenchmarkConfigurationOption& option =
         configurationOptions_.at(keyToLeaf.value().get<size_t>());
 
-    // What kind of type does it hold?
-    const BenchmarkConfigurationOption::ValueTypeIndexes& typeIndex =
-        option.getActualValueType();
-
     if (option.hasDefaultValue()) {
-      option.callFunctionWithTypeOfOption(
-          [&jsonOptionPointer, &option,
-           &prettyKeyToConfigurationOptionIndex]<typename T>() {
+      option.visitDefaultValue(
+          [&jsonOptionPointer,
+           &prettyKeyToConfigurationOptionIndex](const auto& defaultValue) {
             prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
-                option.getDefaultValue<T>();
+                defaultValue.value();
           });
     } else {
-      // Some premade example value.
-      using ValueTypeIndexes = BenchmarkConfigurationOption::ValueTypeIndexes;
-      switch (typeIndex) {
-        case ValueTypeIndexes::boolean:
-          prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) = false;
-          break;
-        case ValueTypeIndexes::string:
-          prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
-              "Example string";
-          break;
-        case ValueTypeIndexes::integer:
-          prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) = 42;
-          break;
-        case ValueTypeIndexes::floatingPoint:
-          prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) = 4.2;
-          break;
-        case ValueTypeIndexes::booleanList:
-          prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
-              std::vector{true, false};
-          break;
-        case ValueTypeIndexes::stringList:
-          prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
-              std::vector{"Example", "string", "list"};
-          break;
-        case ValueTypeIndexes::integerList:
-          prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
-              std::vector{40, 41, 42};
-          break;
-        case ValueTypeIndexes::floatingPointList:
-          prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
-              std::vector{40.0, 41.1, 42.2};
-          break;
-      }
+      option.visitDefaultValue(
+          [&jsonOptionPointer,
+           &prettyKeyToConfigurationOptionIndex]<typename T>(const T&) {
+            if constexpr (std::is_same_v<typename T::value_type, bool>) {
+              prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) = false;
+            } else if constexpr (std::is_same_v<typename T::value_type,
+                                                std::string>) {
+              prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
+                  "Example string";
+            } else if constexpr (std::is_same_v<typename T::value_type, int>) {
+              prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) = 42;
+            } else if constexpr (std::is_same_v<typename T::value_type,
+                                                float>) {
+              prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) = 4.2;
+            } else if constexpr (std::is_same_v<typename T::value_type,
+                                                std::vector<bool>>) {
+              prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
+                  std::vector{true, false};
+            } else if constexpr (std::is_same_v<typename T::value_type,
+                                                std::vector<std::string>>) {
+              prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
+                  std::vector{"Example", "string", "list"};
+            } else if constexpr (std::is_same_v<typename T::value_type,
+                                                std::vector<int>>) {
+              prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
+                  std::vector{40, 41, 42};
+            } else if constexpr (std::is_same_v<typename T::value_type,
+                                                std::vector<float>>) {
+              prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
+                  std::vector{40.0, 41.1, 42.2};
+            }
+          });
     }
   }
 

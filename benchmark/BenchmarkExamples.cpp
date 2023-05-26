@@ -237,29 +237,27 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
 
   void addConfigurationOptions(BenchmarkConfiguration* config) final {
     // Add some arbitrary values.
-    config->addConfigurationOption(BenchmarkConfigurationOption(
-        "date", "The current date. Has the default value \"22.3.2023\".",
-        BenchmarkConfigurationOption::ValueTypeIndexes::string,
-        std::string{"22.3.2023"}));
+    config->addConfigurationOption(
+        makeBenchmarkConfigurationOption<std::string>(
+            "date", "The current date. Has the default value \"22.3.2023\".",
+            std::string{"22.3.2023"}));
 
-    config->addConfigurationOption(BenchmarkConfigurationOption(
+    config->addConfigurationOption(makeBenchmarkConfigurationOption<int>(
         "numSigns", "The number of street signs. Has the default value 10.",
-        BenchmarkConfigurationOption::ValueTypeIndexes::integer,
         std::optional<int>{10}));
 
-    config->addConfigurationOption(BenchmarkConfigurationOption(
-        "CoinFlipTry",
-        "The number of succesful coin flips. As default, 5 unsuccesful "
-        "coin flips.",
-        BenchmarkConfigurationOption::ValueTypeIndexes::booleanList,
-        std::vector<bool>{false, false, false, false, false}));
+    config->addConfigurationOption(
+        makeBenchmarkConfigurationOption<std::vector<bool>>(
+            "CoinFlipTry",
+            "The number of succesful coin flips. As default, 5 unsuccesful "
+            "coin flips.",
+            std::vector<bool>{false, false, false, false, false}));
 
     config->addConfigurationOption(
-        BenchmarkConfigurationOption(
+        makeBenchmarkConfigurationOption<float>(
             "Steve",
             "Steves saving account balance. Has the default value -41.9.",
-            BenchmarkConfigurationOption::ValueTypeIndexes::floatingPoint,
-            std::optional<float>{-41.9}),
+            -41.9),
         "Accounts", "Personal");
   }
 

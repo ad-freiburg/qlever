@@ -184,17 +184,13 @@ std::string getDefaultValueBenchmarkConfigurationOptions(
   // text.
   auto defaultConfigurationOptionToString =
       [](const BenchmarkConfigurationOption& option) {
-        std::string defaultValueAsString{};
-
-        option.callFunctionWithTypeOfOption([&defaultValueAsString,
-                                             &option]<typename Type>() {
-          defaultValueAsString = benchmarkConfigurationOptionValueTypeToString(
-              std::optional<Type>(option.getDefaultValue<Type>()));
-        });
-
-        return absl::StrCat("Configuration option '", option.getIdentifier(),
-                            "' was not set at runtime, using default value '",
-                            defaultValueAsString, "'.");
+        return absl::StrCat(
+            "Configuration option '", option.getIdentifier(),
+            "' was not set at runtime, using default value '",
+            option.visitDefaultValue([](const auto& opt) {
+              return benchmarkConfigurationOptionValueTypeToString(opt);
+            }),
+            "'.");
       };
 
   forEachExcludingTheLastOne(

@@ -14,12 +14,23 @@
 #include <typeinfo>
 #include <variant>
 
+#include "generated/BenchmarkConfigurationShorthandLexer.h"
+#include "util/ANTLRLexerHelper.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
+#include "util/Forward.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
 
 namespace ad_benchmark {
+// Forward declaration, so that `makeBenchmarkConfigurationOption` can be friend
+// of the class.
+class BenchmarkConfigurationOption;
+
+template <typename T>
+BenchmarkConfigurationOption makeBenchmarkConfigurationOption(
+    std::string_view identifier, std::string_view description,
+    const std::optional<T>& defaultValue = std::optional<T>(std::nullopt));
 
 // Describes a configuration option.
 class BenchmarkConfigurationOption {
@@ -29,19 +40,8 @@ class BenchmarkConfigurationOption {
 
  public:
   // The possible types of the value, that can be held by this option.
-  using ValueType =
-      OptionalVariant<std::monostate, bool, std::string, int, float, std::vector<bool>,
-                      std::vector<std::string>, std::vector<int>, std::vector<float>>;
-  enum class ValueTypeIndexes {
-    boolean = 1,
-    string,
-    integer,
-    floatingPoint,
-    booleanList,
-    stringList,
-    integerList,
-    floatingPointList
-  };
+  using ValueType = OptionalVariant<bool, std::string, int, float, std::vector<bool>,
+                                    std::vector<std::string>, std::vector<int>, std::vector<float>>;
 
  private:
   // The name of the configuration option.
@@ -51,8 +51,9 @@ class BenchmarkConfigurationOption {
   // default value, if there is one.
   const std::string description_;
 
-  // The type of value, that is held by this option.
-  const ValueTypeIndexes type_;
+  // The index of the type of value in `ValueType`, that this configuration
+  // option takes.
+  const size_t type_;
 
   // What this configuration option was set to. Can be empty.
   ValueType value_;
@@ -65,25 +66,11 @@ class BenchmarkConfigurationOption {
   const ValueType defaultValue_;
 
   // Converts the index of `Valuetype` into their string representation.
-  static std::string typesForValueToString(const size_t& value);
+  static std::string valueTypeToString(const ValueType& value);
 
  public:
-  /*
-  @brief Create a configuration option, whose internal value can only be set to
-  values of a specific type in a set of types.
-
-  @param identifier The name of the configuration option, with which it can be
-  identified later.
-  @param description Describes, what the configuration option stands for. For
-  example: "The amount of rows in the table. Has a default value of 3."
-  @param type The index nummer for the type of value, that you want to save
-  here. Managed per enum.
-  @param defaultValue The default value, if the option isn't set at runtime.
-  `std::monostate` counts as no default value.
-  */
-  BenchmarkConfigurationOption(std::string_view identifier, std::string_view description,
-                               const ValueTypeIndexes& type,
-                               const ValueType& defaultValue = std::optional<std::monostate>{});
+  // No consturctor. Must be created using `makeConfigurationOption`.
+  BenchmarkConfigurationOption() = delete;
 
   /*
   Was the configuration option set to a value at runtime?
@@ -106,16 +93,18 @@ class BenchmarkConfigurationOption {
   should the given value have a different type, than what the configuration
   option was set to.
   */
-  void setValue(const ValueType& value) {
+  template <typename T>
+  requires ad_utility::isTypeContainedIn<std::optional<T>, ValueType>
+  void setValue(const T& value) {
     // Only set our value, if the given value is of the right type.
-    if (type_ == static_cast<ValueTypeIndexes>(value.index())) {
+    if (type_ == getIndexOfTypeInVariant<T>(value_)) {
       configurationOptionWasSet_ = true;
-      value_ = value;
+      value_ = std::optional<T>{value};
     } else {
-      throw ad_utility::Exception(absl::StrCat(
-          "The type of the value in configuration option '", identifier_, "' is '",
-          typesForValueToString(static_cast<size_t>(type_)),
-          "'. It can't be set to a value of type '", typesForValueToString(value.index()), "'."));
+      throw ad_utility::Exception(absl::StrCat("The type of the value in configuration option '",
+                                               identifier_, "' is '", valueTypeToString(value_),
+                                               "'. It can't be set to a value of type '",
+                                               valueTypeToString(std::optional<T>{}), "'."));
     }
   }
 
@@ -131,22 +120,19 @@ class BenchmarkConfigurationOption {
   exception.
   */
   template <typename T>
-  requires ad_utility::isTypeContainedIn<std::optional<std::decay_t<T>>, ValueType>
+  requires ad_utility::isTypeContainedIn<std::optional<T>, ValueType>
   std::decay_t<T> getDefaultValue() const {
-    if (hasDefaultValue() &&
-        std::holds_alternative<std::optional<std::decay_t<T>>>(defaultValue_)) {
-      return std::get<std::optional<std::decay_t<T>>>(defaultValue_).value();
+    if (hasDefaultValue() && std::holds_alternative<std::optional<T>>(defaultValue_)) {
+      return std::get<std::optional<T>>(defaultValue_).value();
     } else if (!hasDefaultValue()) {
       throw ad_utility::Exception(absl::StrCat("Configuration option '", identifier_,
                                                "' was not created with a default value."));
     } else {
       // They used the wrong type.
-      throw ad_utility::Exception(absl::StrCat(
-          "The type of the value in configuration option '", identifier_, "' is '",
-          typesForValueToString(static_cast<size_t>(type_)), "'. It can't be cast as '",
-          typesForValueToString(
-              getIndexOfTypeInVariant<std::optional<std::decay_t<T>>>(defaultValue_)),
-          "'."));
+      throw ad_utility::Exception(absl::StrCat("The type of the value in configuration option '",
+                                               identifier_, "' is '", valueTypeToString(value_),
+                                               "'. It can't be cast as '",
+                                               valueTypeToString(std::optional<T>{}), "'."));
     }
   }
 
@@ -155,21 +141,19 @@ class BenchmarkConfigurationOption {
   there is no value, or `T` is the wrong type, then it will throw an exception.
   */
   template <typename T>
-  requires ad_utility::isTypeContainedIn<std::optional<std::decay_t<T>>, ValueType>
-  std::decay_t<T> getValue() const {
-    if (hasValue() && std::holds_alternative<std::optional<std::decay_t<T>>>(value_)) {
-      return std::get<std::optional<std::decay_t<T>>>(value_).value();
+  requires ad_utility::isTypeContainedIn<std::optional<T>, ValueType> T getValue() const {
+    if (hasValue() && std::holds_alternative<std::optional<T>>(value_)) {
+      return std::get<std::optional<T>>(value_).value();
     } else if (!hasValue()) {
       // The value was never set.
       throw ad_utility::Exception(
           absl::StrCat("The value in configuration option '", identifier_, "' was never set."));
     } else {
       // They used the wrong type.
-      throw ad_utility::Exception(absl::StrCat(
-          "The type of the value in configuration option '", identifier_, "' is '",
-          typesForValueToString(static_cast<size_t>(type_)), "'. It can't be cast as '",
-          typesForValueToString(getIndexOfTypeInVariant<std::optional<std::decay_t<T>>>(value_)),
-          "'."));
+      throw ad_utility::Exception(absl::StrCat("The type of the value in configuration option '",
+                                               identifier_, "' is '", valueTypeToString(value_),
+                                               "'. It can't be cast as '",
+                                               valueTypeToString(std::optional<T>{}), "'."));
     }
   }
 
@@ -181,28 +165,24 @@ class BenchmarkConfigurationOption {
 
   /*
   @brief Returns the actual type of value, that can be set with this SPECIFIC
-  configuration option instance. For example: Integer.
+  configuration option instance.
   */
-  ValueTypeIndexes getActualValueType() const;
+  size_t getActualValueType() const;
 
   /*
-  @brief Calls the given function with the type of the value, that is held in this configuration
-  option. As in, the actual type, no enum value.
-
-  @tparam Function A generic lambda function, that takes an explicit template type argument and no
-  function agruments. Should also return nothing.
-  Example: `[&someOption]<typename T>(){std::cout << someOption.getValue<T>();}`
+  @brief Calls `std::visit` on the contained value of type `ValueType`.
    */
-  template <typename Function>
-  void callFunctionWithTypeOfOption(const Function& function) const {
-    ad_utility::RuntimeValueToCompileTimeValue<
-        std::variant_size_v<BenchmarkConfigurationOption::ValueType> - 1>(
-        static_cast<size_t>(getActualValueType()),
-        [&function]<size_t index,
-                    typename Type = std::variant_alternative_t<
-                        index, BenchmarkConfigurationOption::ValueType>::value_type>() {
-          function.template operator()<Type>();
-        });
+  template <typename VisitorFunction>
+  constexpr auto visitValue(VisitorFunction&& vis) const {
+    return std::visit(AD_FWD(vis), value_);
+  }
+
+  /*
+  @brief Calls `std::visit` on the contained default value of type `ValueType`.
+   */
+  template <typename VisitorFunction>
+  constexpr auto visitDefaultValue(VisitorFunction&& vis) const {
+    return std::visit(AD_FWD(vis), defaultValue_);
   }
 
   // Default move and copy constructor.
@@ -211,13 +191,119 @@ class BenchmarkConfigurationOption {
 
  private:
   /*
-  @brief Returns the index position of a type in `std::variant` type.
+  @brief Create a configuration option, whose internal value can only be set to
+  values of a specific type in a set of types.
+
+  @tparam T The value, this configuration holds.
+
+  @param identifier The name of the configuration option, with which it can be
+  identified later.
+  @param description Describes, what the configuration option stands for. For
+  example: "The amount of rows in the table. Has a default value of 3."
+  @param type The index number for the type of value, that you want to save
+  here. See `ValueType`.
+  @param defaultValue The default value, if the option isn't set at runtime. An
+  empty `std::optional` of the right type signifies, that there is no default
+  value.
+  */
+  template <typename T>
+  requires ad_utility::isTypeContainedIn<std::optional<T>, BenchmarkConfigurationOption::ValueType>
+  BenchmarkConfigurationOption(
+      std::string_view identifier, std::string_view description, const size_t& type,
+      const std::optional<T>& defaultValue = std::optional<T>(std::nullopt))
+      : identifier_{identifier},
+        description_{description},
+        type_{type},
+        value_{defaultValue},
+        defaultValue_{defaultValue} {
+    // The `identifier` must be a valid `NAME` in the short hand for
+    // configurations.
+    if (!stringOnlyContainsSpecifiedTokens<BenchmarkConfigurationShorthandLexer>(
+            identifier, static_cast<size_t>(BenchmarkConfigurationShorthandLexer::NAME))) {
+      throw ad_utility::Exception(
+          absl::StrCat("Error while constructing configuraion option: The identifier must be "
+                       "a 'NAME' in the configuration short hand grammar, which '",
+                       identifier, "' doesn't fullfil."));
+    }
+
+    /*
+    Is the default value of the right type? An empty `std::optional` signifies, that we don't have a
+    default value, but it still must be of the right variant in `ValueType`.
+    */
+    if (type != getIndexOfTypeInVariant<T>(ValueType{})) {
+      /*
+      Finding out, what type the option should have. After all, our `value_` is set to the wrong
+      variant, because it just contains `defaultValue`, so we can't use `valueTypeToString()`.
+      */
+      std::string valueType;
+      ad_utility::RuntimeValueToCompileTimeValue<std::variant_size_v<ValueType> - 1>(
+          type, [&valueType]<size_t index, typename TypeOptional =
+                                               std::variant_alternative_t<index, ValueType>>() {
+            valueType = valueTypeToString(TypeOptional{});
+          });
+
+      throw ad_utility::Exception(absl::StrCat(
+          "Error while constructing configuraion option: Configuration option "
+          "'",
+          identifier, "' was given a default value of type '", valueTypeToString(defaultValue),
+          "', but the configuration option was set to only ever hold values of "
+          "type '",
+          valueType,
+          "'. This rule must also be followed, if there is no default value and an empty "
+          "'std::optional' was given."));
+    }
+  }
+
+  /*
+  @brief Returns the index position of a type in `std::variant<std::optional>`
+  type.
+  Example: For the type `std::variant<std::optional<int>, std::optional<bool>>`
+  a call with `T = int` would return `1`.
   */
   template <typename T, typename... Ts>
-  requires(std::same_as<std::decay_t<T>, std::decay_t<Ts>> || ...)
-  constexpr size_t getIndexOfTypeInVariant(const std::variant<Ts...>&) const {
+  requires(std::same_as<std::optional<T>, Ts> || ...)
+  static constexpr size_t getIndexOfTypeInVariant(const std::variant<Ts...>&) {
     return ad_utility::getIndexOfFirstTypeToPassCheck<
-        []<typename D>() { return std::is_same_v<D, std::decay_t<T>>; }, std::decay_t<Ts>...>();
+        []<typename D>() { return std::is_same_v<D, std::optional<T>>; }, Ts...>();
   }
+
+  /*
+  @brief Create an instance of `ValueType`, set to an empty `std::optional`, of
+  the alternative type specified by `typeIndex`.
+  */
+  static ValueType createValueTypeWithEmptyOptional(const size_t& typeIndex);
+
+  // Needed for explicitly passing a type, when creating an option.
+  template <typename T>
+  friend BenchmarkConfigurationOption makeBenchmarkConfigurationOption(
+      std::string_view identifier, std::string_view description,
+      const std::optional<T>& defaultValue);
 };
+
+/*
+@brief Create a benchmark configuration option.
+
+@tparam T The type of value, that the configuration option can hold.
+
+@param identifier The name of the configuration option, with which it can be
+identified later.
+@param description Describes, what the configuration option stands for. For
+example: "The amount of rows in the table. Has a default value of 3."
+@param defaultValue The default value, if the option isn't set at runtime. An
+empty `std::optional<T>` signifies, that there is no default value.
+*/
+template <typename T>
+BenchmarkConfigurationOption makeBenchmarkConfigurationOption(
+    std::string_view identifier, std::string_view description,
+    const std::optional<T>& defaultValue) {
+  /*
+  The part for determining the type index is a bit ugly, but there isn't
+  really a better way, that is also typesafe and doesn't need any adjusting,
+  when changing `BenchmarkConfigurationOption::ValueType`.
+  */
+  return BenchmarkConfigurationOption(identifier, description,
+                                      BenchmarkConfigurationOption::getIndexOfTypeInVariant<T>(
+                                          BenchmarkConfigurationOption::ValueType{}),
+                                      defaultValue);
+}
 }  // namespace ad_benchmark
