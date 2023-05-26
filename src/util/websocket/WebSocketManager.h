@@ -81,6 +81,6 @@ class WebSocketManager {
   void releaseQuery(QueryId queryId);
 };
 
-std::optional<http::response<http::string_body>> checkPathIsValid(
+std::optional<http::response<http::string_body>> getErrorResponseIfPathIsValid(
     const http::request<http::string_body>&);
 };  // namespace ad_utility::websocket

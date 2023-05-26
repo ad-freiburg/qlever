@@ -122,11 +122,20 @@ net::awaitable<void> WebSocketManager::waitForServerEvents(
   }
 }
 
+// Extracts the query id from a URL path. Returns the empty string when invalid.
+std::string extractQueryId(std::string_view path) {
+  auto match = ctre::match<"/watch/([^/?]+)">(path);
+  if (match) {
+    return match.get<1>().to_string();
+  }
+  return "";
+}
+
 net::awaitable<void> WebSocketManager::connectionLifecycle(
     tcp::socket socket, http::request<http::string_body> request) {
-  auto match = ctre::match<"/watch/([^/?]+)">(request.target());
-  AD_CORRECTNESS_CHECK(match);
-  QueryId queryId = QueryId::idFromString(match.get<1>().to_string());
+  auto queryIdString = extractQueryId(request.target());
+  AD_CORRECTNESS_CHECK(!queryIdString.empty());
+  QueryId queryId = QueryId::idFromString(queryIdString);
   websocket ws{std::move(socket)};
 
   try {
@@ -166,14 +175,15 @@ net::awaitable<void> WebSocketManager::manageConnection(
       net::use_awaitable);
 }
 
-std::optional<http::response<http::string_body>> checkPathIsValid(
+// TODO<C++23> use std::expected<void, ErrorResponse>
+std::optional<http::response<http::string_body>> getErrorResponseIfPathIsValid(
     const http::request<http::string_body>& request) {
   auto path = request.target();
 
-  if (ctre::match<"/watch/[^/?]+">(path)) {
-    return std::nullopt;
+  if (extractQueryId(path).empty()) {
+    return ad_utility::httpUtils::createNotFoundResponse(
+        "No WebSocket on this path", request);
   }
-  return ad_utility::httpUtils::createNotFoundResponse(
-      "No WebSocket on this path", request);
+  return std::nullopt;
 }
 }  // namespace ad_utility::websocket

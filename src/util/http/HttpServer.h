@@ -223,7 +223,8 @@ class HttpServer {
                                   boost::asio::use_awaitable);
 
         if (beast::websocket::is_upgrade(req)) {
-          auto errorResponse = ad_utility::websocket::checkPathIsValid(req);
+          auto errorResponse =
+              ad_utility::websocket::getErrorResponseIfPathIsValid(req);
           if (errorResponse) {
             co_await sendMessage(*errorResponse);
           } else {
