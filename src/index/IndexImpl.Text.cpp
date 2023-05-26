@@ -15,10 +15,10 @@
 #include <utility>
 
 #include "engine/CallFixedSize.h"
+#include "index/FTSAlgorithms.h"
 #include "parser/ContextFileParser.h"
 #include "util/Conversions.h"
 #include "util/Simple8bCode.h"
-#include "index/FTSAlgorithms.h"
 
 namespace {
 

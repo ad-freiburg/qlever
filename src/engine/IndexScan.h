@@ -54,35 +54,36 @@ class IndexScan : public Operation {
     }
   }
 
-  static Index::Permutation scanTypeToPermutation(ScanType scanType) {
+  static Permutation::Enum scanTypeToPermutation(ScanType scanType) {
+    using enum Permutation::Enum;
     switch (scanType) {
       case PSO_BOUND_S:
       case PSO_FREE_S:
       case FULL_INDEX_SCAN_PSO:
-        return Index::Permutation::PSO;
+        return PSO;
       case POS_FREE_O:
       case POS_BOUND_O:
       case FULL_INDEX_SCAN_POS:
-        return Index::Permutation::POS;
+        return POS;
       case SPO_FREE_P:
       case FULL_INDEX_SCAN_SPO:
-        return Index::Permutation::SPO;
+        return SPO;
       case SOP_FREE_O:
       case SOP_BOUND_O:
       case FULL_INDEX_SCAN_SOP:
-        return Index::Permutation::SOP;
+        return SOP;
       case OSP_FREE_S:
       case FULL_INDEX_SCAN_OSP:
-        return Index::Permutation::OSP;
+        return OSP;
       case OPS_FREE_P:
       case FULL_INDEX_SCAN_OPS:
-        return Index::Permutation::OPS;
+        return OPS;
     }
   }
 
   static std::array<size_t, 3> permutationToKeyOrder(
-      Index::Permutation permutation) {
-    using enum Index::Permutation;
+      Permutation::Enum permutation) {
+    using enum Permutation::Enum;
     switch (permutation) {
       case POS:
         return {1, 2, 0};
@@ -99,8 +100,8 @@ class IndexScan : public Operation {
     }
   }
 
-  static std::string_view permutationToString(Index::Permutation permutation) {
-    using enum Index::Permutation;
+  static std::string_view permutationToString(Permutation::Enum permutation) {
+    using enum Permutation::Enum;
     switch (permutation) {
       case POS:
         return "POS";
@@ -118,7 +119,7 @@ class IndexScan : public Operation {
   }
 
  private:
-  Index::Permutation _permutation;
+  Permutation::Enum _permutation;
   size_t _numVariables;
   TripleComponent _subject;
   TripleComponent _predicate;
@@ -183,31 +184,12 @@ class IndexScan : public Operation {
     return getResultWidth() == 3;
   }
 
-  Index::Permutation permutation() const { return _permutation; }
+  Permutation::Enum permutation() const { return _permutation; }
 
  private:
   ResultTable computeResult() override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
-
-  void computeFullScan(IdTable* result, Index::Permutation permutation) const;
-  void computePSOboundS(IdTable* result) const;
-
-  void computePSOfreeS(IdTable* result) const;
-
-  void computePOSboundO(IdTable* result) const;
-
-  void computePOSfreeO(IdTable* result) const;
-
-  void computeSPOfreeP(IdTable* result) const;
-
-  void computeSOPboundO(IdTable* result) const;
-
-  void computeSOPfreeO(IdTable* result) const;
-
-  void computeOPSfreeP(IdTable* result) const;
-
-  void computeOSPfreeS(IdTable* result) const;
 
   void computeFullScan(IdTable* result, Permutation::Enum permutation) const;
 

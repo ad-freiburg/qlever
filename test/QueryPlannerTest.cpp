@@ -1017,7 +1017,7 @@ TEST(QueryPlannerTest, testSimpleOptional) {
 }
 
 TEST(QueryPlannerTest, SimpleTripleOneVariable) {
-  using enum Index::Permutation;
+  using enum Permutation::Enum;
 
   // With only one variable, there are always two permutations that will yield
   // exactly the same result. The query planner consistently chosses one of
@@ -1031,7 +1031,7 @@ TEST(QueryPlannerTest, SimpleTripleOneVariable) {
 }
 
 TEST(QueryPlannerTest, SimpleTripleTwoVariables) {
-  using enum Index::Permutation;
+  using enum Permutation::Enum;
 
   // Fixed predicate.
 
@@ -1062,7 +1062,7 @@ TEST(QueryPlannerTest, SimpleTripleTwoVariables) {
 }
 
 TEST(QueryPlannerTest, SimpleTripleThreeVariables) {
-  using enum Index::Permutation;
+  using enum Permutation::Enum;
 
   // Fixed predicate.
   // Don't care about the sorting.

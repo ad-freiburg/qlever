@@ -543,7 +543,7 @@ std::optional<Permutation::Enum> GroupBy::getPermutationForThreeVariableTriple(
 
   if (variableByWhichToSort == indexScan->getSubject()) {
     return Permutation::SPO;
-  } else if (variableByWhichToSort.name() == indexScan->getPredicate()) {
+  } else if (variableByWhichToSort == indexScan->getPredicate()) {
     return Permutation::POS;
   } else if (variableByWhichToSort == indexScan->getObject()) {
     return Permutation::OSP;

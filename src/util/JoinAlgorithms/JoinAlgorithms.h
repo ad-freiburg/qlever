@@ -94,7 +94,8 @@ concept BinaryIteratorFunction =
  * be exploited to fix the result in a cheaper way than a full sort.
  */
 template <
-    bool addDuplicatesFromLeft = true, bool returnIteratorsOfLastMatch = false, std::ranges::random_access_range Range1,
+    bool addDuplicatesFromLeft = true, bool returnIteratorsOfLastMatch = false,
+    std::ranges::random_access_range Range1,
     std::ranges::random_access_range Range2, typename LessThan,
     typename FindSmallerUndefRangesLeft, typename FindSmallerUndefRangesRight,
     typename ElFromFirstNotFoundAction = decltype(noop)>
@@ -269,7 +270,6 @@ template <
         mergeWithUndefLeft(it, std::begin(left), it1);
       }
 
-
       for (; it1 != endSame1; ++it1) {
         cover(it1);
         for (auto innerIt2 = it2; innerIt2 != endSame2; ++innerIt2) {
@@ -311,8 +311,8 @@ template <
   // `max()` then we can provide no guarantees about the sorting of the result.
   // Otherwise, the result consists of two consecutive sorted ranges, the second
   // of which has length `returnValue`.
-  size_t numOutOfOrder =  outOfOrderFound ? std::numeric_limits<size_t>::max()
-                         : numOutOfOrderAtEnd;
+  size_t numOutOfOrder =
+      outOfOrderFound ? std::numeric_limits<size_t>::max() : numOutOfOrderAtEnd;
   if constexpr (returnIteratorsOfLastMatch) {
     return std::tuple{numOutOfOrder, exactMatchIt1, exactMatchIt2};
   } else {
@@ -569,12 +569,11 @@ void specialOptionalJoin(
   }
 }
 
-
-template < typename LeftBlocks, typename RightBlocks,
-    typename LessThan>
-void zipperJoinForBlocksWithoutUndef(
-    LeftBlocks&& leftBlocks, RightBlocks&&rightBlocks, const LessThan& lessThan,
-    const auto& compatibleRowAction) {
+template <typename LeftBlocks, typename RightBlocks, typename LessThan>
+void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
+                                     RightBlocks&& rightBlocks,
+                                     const LessThan& lessThan,
+                                     const auto& compatibleRowAction) {
   using LeftBlock = typename LeftBlocks::value_type;
   using RightBlock = typename RightBlocks::value_type;
   auto it1 = leftBlocks.begin();
@@ -590,13 +589,13 @@ void zipperJoinForBlocksWithoutUndef(
   auto fillBuffer = [&]() {
     AD_CORRECTNESS_CHECK(sameBlocksLeft.size() == 1);
     AD_CORRECTNESS_CHECK(sameBlocksRight.size() == 1);
-  while (it1 != end1) {
-    sameBlocksLeft.push_back(std::move(*it1));
-    if (!eq(sameBlocksLeft.back().back, sameBlocksLeft.front().back())) {
-      break;
+    while (it1 != end1) {
+      sameBlocksLeft.push_back(std::move(*it1));
+      if (!eq(sameBlocksLeft.back().back, sameBlocksLeft.front().back())) {
+        break;
+      }
+      ++it1;
     }
-    ++it1;
-  }
     while (it2 != end2) {
       sameBlocksRight.push_back(std::move(*it2));
       if (!eq(sameBlocksRight.back().back, sameBlocksRight.front().back())) {
@@ -607,7 +606,8 @@ void zipperJoinForBlocksWithoutUndef(
   };
 
   auto join = [&](const auto& l, const auto& r) {
-    return zipperJoinWithUndef<true, true>(l , r, lessThan, compatibleRowAction, noop, noop);
+    return zipperJoinWithUndef<true, true>(l, r, lessThan, compatibleRowAction,
+                                           noop, noop);
   };
 
   auto addAll = [&](const auto& l, const auto& r) {
@@ -624,8 +624,10 @@ void zipperJoinForBlocksWithoutUndef(
 
   auto joinBuffers = [&]() {
     join(sameBlocksLeft.at(0), sameBlocksRight.at(0));
-    auto subrangeLeft = std::ranges::equal_range(sameBlocksLeft.front(), sameBlocksLeft.front().back(), lessThan);
-    auto subrangeRight = std::ranges::equal_range(sameBlocksRight.front(), sameBlocksRight.front().back(), lessThan);
+    auto subrangeLeft = std::ranges::equal_range(
+        sameBlocksLeft.front(), sameBlocksLeft.front().back(), lessThan);
+    auto subrangeRight = std::ranges::equal_range(
+        sameBlocksRight.front(), sameBlocksRight.front().back(), lessThan);
     using SubLeft = decltype(subrangeLeft);
     using SubRight = decltype(subrangeRight);
     std::vector<SubLeft> l;
@@ -635,7 +637,8 @@ void zipperJoinForBlocksWithoutUndef(
       l.push_back(sameBlocksLeft[i]);
     }
     if (sameBlocksLeft.size() > 1) {
-      l.push_back(std::ranges::equal_range(sameBlocksLeft.back(), sameBlocksLeft.front().back(), lessThan));
+      l.push_back(std::ranges::equal_range(
+          sameBlocksLeft.back(), sameBlocksLeft.front().back(), lessThan));
     }
     r.push_back(subrangeRight);
     for (size_t i = 1; i < sameBlocksRight.size() - 1; ++i) {
@@ -651,12 +654,9 @@ void zipperJoinForBlocksWithoutUndef(
       sameBlocksLeft.resize(1);
       auto& b = sameBlocksLeft.front();
       // TODO<joka921> delete the range that has already been dealt with.
-      b.erase(b.begin(), std::upper_bound(b.begin(), b.end(), ))
-
+      //  b.erase(b.begin(), std::upper_bound(b.begin(), b.end(), ))
     }
-
   };
-
 
   std::optional<decltype(it1)> lastMatch1;
   std::optional<decltype(it2)> lastMatch2;
@@ -671,18 +671,16 @@ void zipperJoinForBlocksWithoutUndef(
     if (lastMatch2.has_value()) {
       view2 = std::ranges::subrange(lastMatch2.value(), block2.end());
     }
-    auto [numOutOfOrder, lastMatchNew1, lastMatchNew2] = zipperJoinWithUndef<true, true>(view1, view2, lessThan, compatibleRowAction, noop, noop);
+    auto [numOutOfOrder, lastMatchNew1, lastMatchNew2] =
+        zipperJoinWithUndef<true, true>(view1, view2, lessThan,
+                                        compatibleRowAction, noop, noop);
     AD_CONTRACT_CHECK(numOutOfOrder == 0);
     if (lessThan(block1.back(), block2.back())) {
       ++it1;
     } else if (lessThan(block2.back(), block1.back())) {
       ++it2;
     } else {
-
     }
-
-
   }
-
 }
 }  // namespace ad_utility

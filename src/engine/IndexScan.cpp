@@ -85,7 +85,7 @@ vector<ColumnIndex> IndexScan::resultSortedOn() const {
     case 2:
       return {ColumnIndex{0}, ColumnIndex{1}};
     case 3:
-      return {ColumnIndex{0}, ColumnIndex{1}, ColumnIndex{2};
+      return {ColumnIndex{0}, ColumnIndex{1}, ColumnIndex{2}};
     default:
       AD_FAIL();
   }
@@ -284,15 +284,13 @@ std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
   AD_CONTRACT_CHECK(s1._numVariables < 3 && s2._numVariables < 3);
 
   const auto& s = s1;
-  auto f = [&](const IndexScan& s)
-      -> std::optional<Permutation::PermutationImpl::MetaDataAndBlocks> {
+  auto f =
+      [&](const IndexScan& s) -> std::optional<Permutation::MetaDataAndBlocks> {
     auto permutedTriple = s.getPermutedTriple();
-    std::optional<Id> optId =
-        permutedTriple[0]->toValueId(index.getVocab());
+    std::optional<Id> optId = permutedTriple[0]->toValueId(index.getVocab());
     std::optional<Id> optId2 =
-        s._numVariables == 2
-            ? std::nullopt
-            : permutedTriple[1]->toValueId(index.getVocab());
+        s._numVariables == 2 ? std::nullopt
+                             : permutedTriple[1]->toValueId(index.getVocab());
     if (!optId.has_value() || (!optId2.has_value() && s._numVariables == 1)) {
       return std::nullopt;
     }
