@@ -9,6 +9,8 @@
 #include <type_traits>
 
 #include "util/Exception.h"
+#include "util/HashSet.h"
+#include "util/Synchronized.h"
 
 // Provides types required by all the other *.cpp files in this directory
 // and a select few other places
@@ -63,24 +65,27 @@ static_assert(!std::is_copy_constructible_v<OwningQueryId>);
 static_assert(!std::is_copy_assignable_v<OwningQueryId>);
 
 class QueryRegistry {
-  std::mutex registryMutex_{};
-  std::unordered_set<QueryId, absl::Hash<QueryId>> registry_{};
+  ad_utility::Synchronized<ad_utility::HashSet<QueryId>> registry_{};
 
  public:
   QueryRegistry() = default;
 
   std::optional<OwningQueryId> uniqueIdFromString(std::string id) {
     auto queryId = QueryId::idFromString(std::move(id));
-    std::lock_guard lock{registryMutex_};
-    if (registry_.count(queryId)) {
-      return std::nullopt;
+    bool success = registry_.withWriteLock([&queryId](auto& registry) {
+      if (registry.count(queryId)) {
+        return false;
+      }
+      registry.insert(queryId);
+      return true;
+    });
+    if (success) {
+      return OwningQueryId{std::move(queryId), [this](const QueryId& id) {
+                             AD_CORRECTNESS_CHECK(!id.empty());
+                             registry_.wlock()->erase(id);
+                           }};
     }
-    registry_.insert(queryId);
-    return OwningQueryId{std::move(queryId), [this](const QueryId& id) {
-                           AD_CORRECTNESS_CHECK(!id.empty());
-                           std::lock_guard lock{registryMutex_};
-                           registry_.erase(id);
-                         }};
+    return std::nullopt;
   }
 
   OwningQueryId uniqueId() {
