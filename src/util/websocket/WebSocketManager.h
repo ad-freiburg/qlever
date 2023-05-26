@@ -69,6 +69,7 @@ class WebSocketManager {
                                            http::request<http::string_body>);
 
   void wakeUpWebSocketsForQuery(const QueryId& queryId);
+  void runAndEraseWakeUpCallsSynchronously(const QueryId& queryId);
 
  public:
   void setIoContext(net::io_context& ioContext) {

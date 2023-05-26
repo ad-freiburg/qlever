@@ -34,24 +34,25 @@ void WebSocketManager::addQueryStatusUpdate(const QueryId& queryId,
       });
 }
 
+void WebSocketManager::runAndEraseWakeUpCallsSynchronously(
+    const QueryId& queryId) {
+  auto range = wakeupCalls_.equal_range(queryId);
+  for (auto it = range.first; it != range.second; ++it) {
+    it->second();
+  }
+  wakeupCalls_.erase(queryId);
+}
+
 void WebSocketManager::wakeUpWebSocketsForQuery(const QueryId& queryId) {
   net::post(registryStrand_.value(), [this, &queryId]() {
-    auto range = wakeupCalls_.equal_range(queryId);
-    for (auto it = range.first; it != range.second; ++it) {
-      it->second();
-    }
-    wakeupCalls_.erase(queryId);
+    runAndEraseWakeUpCallsSynchronously(queryId);
   });
 }
 
 void WebSocketManager::releaseQuery(QueryId queryId) {
   net::post(registryStrand_.value(), [this, queryId = std::move(queryId)]() {
     informationQueues_.erase(queryId);
-    auto range = wakeupCalls_.equal_range(queryId);
-    for (auto it = range.first; it != range.second; ++it) {
-      it->second();
-    }
-    wakeupCalls_.erase(queryId);
+    runAndEraseWakeUpCallsSynchronously(queryId);
   });
 }
 
