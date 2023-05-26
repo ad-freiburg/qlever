@@ -6,23 +6,22 @@
 
 #pragma once
 
-#include <engine/Engine.h>
-#include <engine/QueryPlanningCostFactors.h>
-#include <engine/ResultTable.h>
-#include <engine/RuntimeInformation.h>
-#include <engine/SortPerformanceEstimator.h>
-#include <global/Constants.h>
-#include <index/Index.h>
-#include <util/Cache.h>
-#include <util/ConcurrentCache.h>
-#include <util/Log.h>
-#include <util/Synchronized.h>
-
 #include <memory>
 #include <shared_mutex>
 #include <string>
 #include <vector>
 
+#include "engine/Engine.h"
+#include "engine/QueryPlanningCostFactors.h"
+#include "engine/ResultTable.h"
+#include "engine/RuntimeInformation.h"
+#include "engine/SortPerformanceEstimator.h"
+#include "global/Constants.h"
+#include "index/Index.h"
+#include "util/Cache.h"
+#include "util/ConcurrentCache.h"
+#include "util/Log.h"
+#include "util/Synchronized.h"
 #include "util/websocket/Common.h"
 #include "util/websocket/WebSocketManager.h"
 
