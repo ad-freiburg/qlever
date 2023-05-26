@@ -7,8 +7,8 @@
 
 #include <boost/beast/websocket.hpp>
 #include <unordered_map>
+#include <vector>
 
-#include "util/LinkedList.h"
 #include "util/http/beast.h"
 #include "util/websocket/Common.h"
 
@@ -25,16 +25,21 @@ class UpdateFetcher {
   using QueryToCallback =
       std::unordered_multimap<QueryId, std::function<void()>,
                               absl::Hash<QueryId>>;
-  absl::flat_hash_map<QueryId, ad_utility::LinkedList<payload_type>>&
+  absl::flat_hash_map<QueryId, std::shared_ptr<std::vector<payload_type>>>&
       informationQueues_;
   QueryToCallback& wakeupCalls_;
   const QueryId& queryId_;
   net::strand<net::io_context::executor_type>& registryStrand_;
-  std::shared_ptr<ad_utility::Node<payload_type>> currentNode_{nullptr};
+  std::shared_ptr<std::vector<payload_type>> queryEventQueue_{nullptr};
+  size_t nextIndex_ = 0;
+
+  // Return the next element from queryEventQueue and increment nextIndex_ by 1
+  // if nextIndex_ is still within bounds and returns a nullptr otherwise
+  payload_type optionalFetchAndAdvance();
 
  public:
   UpdateFetcher(
-      absl::flat_hash_map<QueryId, ad_utility::LinkedList<payload_type>>&
+      absl::flat_hash_map<QueryId, std::shared_ptr<std::vector<payload_type>>>&
           informationQueues,
       QueryToCallback& wakeupCalls, const QueryId& queryId,
       net::strand<net::io_context::executor_type>& registryStrand)
@@ -49,7 +54,7 @@ class UpdateFetcher {
 
 class WebSocketManager {
   absl::flat_hash_map<
-      QueryId, ad_utility::LinkedList<std::shared_ptr<const std::string>>>
+      QueryId, std::shared_ptr<std::vector<std::shared_ptr<const std::string>>>>
       informationQueues_{};
   std::unordered_multimap<QueryId, std::function<void()>, absl::Hash<QueryId>>
       wakeupCalls_{};

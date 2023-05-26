@@ -18,18 +18,20 @@ using namespace boost::asio::experimental::awaitable_operators;
 void WebSocketManager::addQueryStatusUpdate(const QueryId& queryId,
                                             std::string payload) {
   auto sharedPayload = std::make_shared<const std::string>(std::move(payload));
-  net::post(registryStrand_.value(),
-            [this, sharedPayload = std::move(sharedPayload), &queryId]() {
-              if (informationQueues_.contains(queryId)) {
-                informationQueues_.at(queryId).append(std::move(sharedPayload));
-              } else {
-                informationQueues_.emplace(
-                    queryId,
-                    ad_utility::LinkedList<std::shared_ptr<const std::string>>{
-                        std::move(sharedPayload)});
-              }
-              wakeUpWebSocketsForQuery(queryId);
-            });
+  net::post(
+      registryStrand_.value(),
+      [this, sharedPayload = std::move(sharedPayload), &queryId]() {
+        if (informationQueues_.contains(queryId)) {
+          informationQueues_.at(queryId)->push_back(std::move(sharedPayload));
+        } else {
+          using ptr_type = std::shared_ptr<const std::string>;
+          informationQueues_.emplace(
+              queryId,
+              std::make_shared<std::vector<ptr_type>>(
+                  std::initializer_list<ptr_type>{std::move(sharedPayload)}));
+        }
+        wakeUpWebSocketsForQuery(queryId);
+      });
 }
 
 void WebSocketManager::wakeUpWebSocketsForQuery(const QueryId& queryId) {
@@ -53,35 +55,35 @@ void WebSocketManager::releaseQuery(QueryId queryId) {
   });
 }
 
+UpdateFetcher::payload_type UpdateFetcher::optionalFetchAndAdvance() {
+  return nextIndex_ < queryEventQueue_->size()
+             ? queryEventQueue_->at(nextIndex_++)
+             : nullptr;
+}
+
 // Based on https://stackoverflow.com/a/69285751
 template <typename CompletionToken>
 auto UpdateFetcher::waitForEvent(CompletionToken&& token) {
   auto initiate = [this]<typename Handler>(Handler&& self) mutable {
     auto sharedSelf = std::make_shared<Handler>(std::forward<Handler>(self));
 
-    if (currentNode_ && currentNode_->hasNext()) {
-      currentNode_ = currentNode_->next();
-      (*sharedSelf)(currentNode_->getPayload());
+    if (queryEventQueue_) {
+      (*sharedSelf)(optionalFetchAndAdvance());
     } else {
       net::post(registryStrand_, [this, sharedSelf]() {
-        wakeupCalls_.insert(
-            {queryId_, [this, sharedSelf]() {
-               if (currentNode_) {
-                 if (!currentNode_->hasNext()) {
-                   (*sharedSelf)(nullptr);
-                 } else {
-                   currentNode_ = currentNode_->next();
-                   (*sharedSelf)(currentNode_->getPayload());
-                 }
-               } else {
-                 if (informationQueues_.contains(queryId_)) {
-                   currentNode_ = informationQueues_.at(queryId_).getHead();
-                   (*sharedSelf)(currentNode_->getPayload());
-                 } else {
-                   (*sharedSelf)(nullptr);
-                 }
-               }
-             }});
+        wakeupCalls_.insert({queryId_, [this, sharedSelf]() {
+                               if (!queryEventQueue_) {
+                                 if (!informationQueues_.contains(queryId_)) {
+                                   // Note this can only happen if a query is
+                                   // closed without any updates happening to it
+                                   (*sharedSelf)(nullptr);
+                                   return;
+                                 }
+                                 queryEventQueue_ =
+                                     informationQueues_.at(queryId_);
+                               }
+                               (*sharedSelf)(optionalFetchAndAdvance());
+                             }});
       });
     }
   };
