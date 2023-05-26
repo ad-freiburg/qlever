@@ -472,6 +472,15 @@ nlohmann::json Server::composeCacheStatsJson() const {
 
 // _____________________________________________
 
+class QueryAlreadyInUseError : public std::runtime_error {
+ public:
+  QueryAlreadyInUseError(std::string_view proposedQueryId)
+      : std::runtime_error{"Query id '" + proposedQueryId +
+                           "' is already in use!"} {}
+};
+
+// _____________________________________________
+
 ad_utility::websocket::common::OwningQueryId Server::getQueryId(
     const ad_utility::httpUtils::HttpRequest auto& request) {
   using ad_utility::websocket::common::OwningQueryId;
@@ -481,8 +490,7 @@ ad_utility::websocket::common::OwningQueryId Server::getQueryId(
   }
   auto queryId = queryRegistry_.uniqueIdFromString(std::string(queryIdHeader));
   if (!queryId) {
-    throw std::runtime_error{"QueryId '" + queryIdHeader +
-                             "' is already in use!"};
+    throw QueryAlreadyInUseError{queryIdHeader};
   }
   return std::move(queryId.value());
 }
@@ -496,11 +504,11 @@ boost::asio::awaitable<void> Server::processQuery(
   const auto& query = params.at("query");
   AD_CONTRACT_CHECK(!query.empty());
 
-  auto sendJson = [&request, &send](
-                      const json& jsonString,
-                      http::status status =
-                          http::status::ok) -> boost::asio::awaitable<void> {
-    auto response = createJsonResponse(jsonString, request, status);
+  http::status responseStatus = http::status::ok;
+
+  auto sendJson = [&request, &send, &responseStatus](
+                      const json& jsonString) -> boost::asio::awaitable<void> {
+    auto response = createJsonResponse(jsonString, request, responseStatus);
     co_return co_await send(std::move(response));
   };
 
@@ -698,9 +706,14 @@ boost::asio::awaitable<void> Server::processQuery(
                << qet.getRootOperation()->getRuntimeInfo().toString()
                << std::endl;
   } catch (const ParseException& e) {
+    responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
     metadata = e.metadata();
+  } catch (const QueryAlreadyInUseError& e) {
+    responseStatus = http::status::conflict;
+    exceptionErrorMsg = e.what();
   } catch (const std::exception& e) {
+    responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();
   }
   // TODO<qup42> at this stage should probably have a wrapper that takes
@@ -728,7 +741,7 @@ boost::asio::awaitable<void> Server::processQuery(
       errorResponseJson["runtimeInformation"] = nlohmann::ordered_json(
           queryExecutionTree->getRootOperation()->getRuntimeInfo());
     }
-    co_return co_await sendJson(errorResponseJson, http::status::bad_request);
+    co_return co_await sendJson(errorResponseJson);
   }
 }
 
