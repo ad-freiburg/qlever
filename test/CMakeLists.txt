@@ -327,3 +327,5 @@ addLinkAndDiscoverTest(FindUndefRangesTest)
 addLinkAndDiscoverTest(AddCombinedRowToTableTest util)
 
 addLinkAndDiscoverTest(CtreHelpersTest)
+
+addLinkAndDiscoverTest(ComparisonWithNanTest)

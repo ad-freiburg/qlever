@@ -512,8 +512,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
   added.reserve(previous.size());
   for (const auto& parent : previous) {
     SubtreePlan distinctPlan(_qec);
-    vector<size_t> keepIndices;
-    ad_utility::HashSet<size_t> indDone;
+    vector<ColumnIndex> keepIndices;
+    ad_utility::HashSet<ColumnIndex> indDone;
     const auto& colMap = parent._qet->getVariableColumns();
     for (const auto& var : selectClause.getSelectedVariables()) {
       // There used to be a special treatment for `?ql_textscore_` variables
@@ -526,7 +526,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
         }
       }
     }
-    const std::vector<size_t>& resultSortedOn =
+    const std::vector<ColumnIndex>& resultSortedOn =
         parent._qet->getRootOperation()->getResultSortedOn();
     // check if the current result is sorted on all columns of the distinct
     // with the order of the sorting
@@ -635,14 +635,14 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     auto& tree = plan._qet;
     plan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
     plan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
-    vector<pair<size_t, bool>> sortIndices;
+    vector<pair<ColumnIndex, bool>> sortIndices;
     for (auto& ord : pq._orderBy) {
       sortIndices.emplace_back(parent._qet->getVariableColumn(ord.variable_),
                                ord.isDescending_);
     }
 
     if (pq._isInternalSort == IsInternalSort::True) {
-      std::vector<size_t> sortColumns;
+      std::vector<ColumnIndex> sortColumns;
       for (auto& [index, isDescending] : sortIndices) {
         AD_CONTRACT_CHECK(!isDescending);
         sortColumns.push_back(index);
@@ -1366,11 +1366,11 @@ std::vector<std::array<ColumnIndex, 2>> QueryPlanner::getJoinColumns(
 // _____________________________________________________________________________
 string QueryPlanner::getPruningKey(
     const QueryPlanner::SubtreePlan& plan,
-    const vector<size_t>& orderedOnColumns) const {
+    const vector<ColumnIndex>& orderedOnColumns) const {
   // Get the ordered var
   std::ostringstream os;
   const auto& varCols = plan._qet->getVariableColumns();
-  for (size_t orderedOnCol : orderedOnColumns) {
+  for (ColumnIndex orderedOnCol : orderedOnColumns) {
     for (const auto& [variable, columnIndexWithType] : varCols) {
       if (columnIndexWithType.columnIndex_ == orderedOnCol) {
         os << variable.name() << ", ";

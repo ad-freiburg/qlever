@@ -113,8 +113,8 @@ std::string TransitivePath::getDescriptor() const {
 size_t TransitivePath::getResultWidth() const { return _resultWidth; }
 
 // _____________________________________________________________________________
-vector<size_t> TransitivePath::resultSortedOn() const {
-  const std::vector<size_t>& subSortedOn =
+vector<ColumnIndex> TransitivePath::resultSortedOn() const {
+  const std::vector<ColumnIndex>& subSortedOn =
       _subtree->getRootOperation()->getResultSortedOn();
   if (_leftSideTree == nullptr && _rightSideTree == nullptr && _leftIsVar &&
       _rightIsVar && subSortedOn.size() > 0 && subSortedOn[0] == _leftSubCol) {
@@ -122,14 +122,14 @@ vector<size_t> TransitivePath::resultSortedOn() const {
     return {0};
   }
   if (_leftSideTree != nullptr) {
-    const std::vector<size_t>& leftSortedOn =
+    const std::vector<ColumnIndex>& leftSortedOn =
         _leftSideTree->getRootOperation()->getResultSortedOn();
     if (leftSortedOn.size() > 0 && leftSortedOn[0] == _leftSideCol) {
       return {0};
     }
   }
   if (_rightSideTree != nullptr) {
-    const std::vector<size_t>& rightSortedOn =
+    const std::vector<ColumnIndex>& rightSortedOn =
         _rightSideTree->getRootOperation()->getResultSortedOn();
     if (rightSortedOn.size() > 0 && rightSortedOn[0] == _rightSideCol) {
       return {1};

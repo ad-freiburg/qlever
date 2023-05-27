@@ -58,7 +58,7 @@ class ValuesForTesting : public Operation {
 
   // TODO<joka921> Maybe we will need to store sorted tables for future unit
   // tests.
-  vector<size_t> resultSortedOn() const override { return {}; }
+  vector<ColumnIndex> resultSortedOn() const override { return {}; }
 
   void setTextLimit(size_t limit) override { (void)limit; }
 
@@ -82,7 +82,7 @@ class ValuesForTesting : public Operation {
  private:
   VariableToColumnMap computeVariableToColumnMap() const override {
     VariableToColumnMap m;
-    for (size_t i = 0; i < variables_.size(); ++i) {
+    for (auto i = ColumnIndex{0}; i < variables_.size(); ++i) {
       bool containsUndef =
           ad_utility::contains(table_.getColumn(i), Id::makeUndefined());
       using enum ColumnIndexAndTypeInfo::UndefStatus;
