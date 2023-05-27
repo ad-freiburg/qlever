@@ -51,10 +51,6 @@ class BenchmarkConfigurationOption {
   // default value, if there is one.
   const std::string description_;
 
-  // The index of the type of value in `ValueType`, that this configuration
-  // option takes.
-  const size_t type_;
-
   // What this configuration option was set to. Can be empty.
   ValueType value_;
 
@@ -97,7 +93,7 @@ class BenchmarkConfigurationOption {
   requires ad_utility::isTypeContainedIn<std::optional<T>, ValueType>
   void setValue(const T& value) {
     // Only set our value, if the given value is of the right type.
-    if (type_ == getIndexOfTypeInVariant<T>(value_)) {
+    if (getActualValueType() == getIndexOfTypeInVariant<T>(value_)) {
       configurationOptionWasSet_ = true;
       value_ = std::optional<T>{value};
     } else {
@@ -164,8 +160,7 @@ class BenchmarkConfigurationOption {
   std::string_view getIdentifier() const;
 
   /*
-  @brief Returns the actual type of value, that can be set with this SPECIFIC
-  configuration option instance.
+  @brief Returns the index of the variant in `ValueType`, that this configuration option holds..
   */
   size_t getActualValueType() const;
 
@@ -208,14 +203,12 @@ class BenchmarkConfigurationOption {
   */
   template <typename T>
   requires ad_utility::isTypeContainedIn<std::optional<T>, BenchmarkConfigurationOption::ValueType>
-  BenchmarkConfigurationOption(
-      std::string_view identifier, std::string_view description, const size_t& type,
-      const std::optional<T>& defaultValue = std::optional<T>(std::nullopt))
+  BenchmarkConfigurationOption(std::string_view identifier, std::string_view description,
+                               const size_t& type, const std::optional<T>& defaultValue)
       : identifier_{identifier},
         description_{description},
-        type_{type},
-        value_{defaultValue},
-        defaultValue_{defaultValue} {
+        value_(defaultValue),
+        defaultValue_(defaultValue) {
     // The `identifier` must be a valid `NAME` in the short hand for
     // configurations.
     if (!stringOnlyContainsSpecifiedTokens<BenchmarkConfigurationShorthandLexer>(

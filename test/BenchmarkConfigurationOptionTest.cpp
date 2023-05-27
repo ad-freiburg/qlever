@@ -4,9 +4,12 @@
 
 #include <gtest/gtest.h>
 
+#include <optional>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include "../benchmark/infrastructure/BenchmarkConfigurationOption.h"
 #include "util/ConstexprUtils.h"
@@ -28,6 +31,24 @@ TEST(BenchmarkConfigurationOptionTest, ConstructorException) {
 }
 
 /*
+@brief Call the function with `T` of `std::optional<T>` for each of the variantss in
+`ad_benchmark::BenchmarkConfigurationOption::ValueType` as template parameter.
+
+@tparam Function The loop body should be a templated function, with one
+`typename` template argument and no more. It also shouldn't take any function
+arguments. Should be passed per deduction.
+*/
+template <typename Function>
+static void doForTypeInValueType(Function function) {
+  ad_utility::ConstexprForLoop(
+      std::make_index_sequence<std::variant_size_v<ConfigurationOption::ValueType>>{},
+      [&function]<size_t index, typename IndexType = std::variant_alternative_t<
+                                    index, ConfigurationOption::ValueType>::value_type>() {
+        function.template operator()<IndexType>();
+      });
+}
+
+/*
 Check if the creation of configuration options, their direct setting and the
 getter works as intended.
 */
@@ -38,21 +59,14 @@ TEST(BenchmarkConfigurationOptionTest, CreateSetAndTest) {
   exception.
   */
   auto otherGettersDontWork = []<typename WorkingType>(const ConfigurationOption& option) {
-    ad_utility::ConstexprForLoop(
-        std::make_index_sequence<std::variant_size_v<ConfigurationOption::ValueType>>{},
-        [&option]<size_t index, typename CurrentType = std::variant_alternative_t<
-                                    index, ConfigurationOption::ValueType>::value_type>() {
-          /*
-          Make sure, that the type at position `index` of type `ValueType`
-          causes an exception to be thrown by the getter.
-          */
-          if constexpr (!std::is_same_v<WorkingType, CurrentType>) {
-            ASSERT_ANY_THROW((option.getValue<CurrentType>()));
-            ASSERT_ANY_THROW((option.getDefaultValue<CurrentType>()));
-          } else {
-            ASSERT_NO_THROW((option.getValue<CurrentType>()));
-          }
-        });
+    doForTypeInValueType([&option]<typename CurrentType>() {
+      if constexpr (!std::is_same_v<WorkingType, CurrentType>) {
+        ASSERT_ANY_THROW((option.getValue<CurrentType>()));
+        ASSERT_ANY_THROW((option.getDefaultValue<CurrentType>()));
+      } else {
+        ASSERT_NO_THROW((option.getValue<CurrentType>()));
+      }
+    });
   };
 
   /*
@@ -151,24 +165,6 @@ TEST(BenchmarkConfigurationOptionTest, CreateSetAndTest) {
   testCaseWithoutDefault.template operator()<std::vector<float>>(std::vector<float>{42.8, 42.8});
 }
 
-/*
-@brief Call the function with `T` of `std::optional<T>` for each of the variantss in
-`ad_benchmark::BenchmarkConfigurationOption::ValueType` as template parameter.
-
-@tparam Function The loop body should be a templated function, with one
-`typename` template argument and no more. It also shouldn't take any function
-arguments. Should be passed per deduction.
-*/
-template <typename Function>
-static void doForTypeInValueType(Function function) {
-  ad_utility::ConstexprForLoop(
-      std::make_index_sequence<std::variant_size_v<ConfigurationOption::ValueType>>{},
-      [&function]<size_t index, typename IndexType = std::variant_alternative_t<
-                                    index, ConfigurationOption::ValueType>::value_type>() {
-        function.template operator()<IndexType>();
-      });
-}
-
 // `BenchmarkConfigurationOption` should always throw an exception, when created
 // like this.
 TEST(BenchmarkConfigurationOptionTest, ExceptionOnCreation) {
@@ -244,4 +240,99 @@ TEST(BenchmarkConfigurationOptionTest, SetValueWithJson) {
 
   // Do the test case for every possible type.
   doForTypeInValueType(doTestCase);
+}
+
+// Just testing the visit functions.
+TEST(BenchmarkConfigurationOptionTest, Visit) {
+  /*
+  Creates a visitor for `ad_benchmark::BenchmarkConfigurationOption::visit...`, that looks, if the
+  the given value and the value in the internal variant, are equal
+  */
+  auto createComparisonVisitor = []<typename ComparatorType>(const ComparatorType& comparator) {
+    return [comparator]<typename T>(const std::optional<T>& val) {
+      if constexpr (std::is_same_v<T, ComparatorType>) {
+        /*
+        Remember: The visitor is not allowed to be misformed and a comparison between two types
+        without a valid comparision function is always misformed.
+        */
+        ASSERT_TRUE(val.has_value());
+        ASSERT_EQ(comparator, val.value());
+      } else {
+        ASSERT_TRUE(false);
+      }
+    };
+  };
+
+  /*
+  Set the value of a configuration option and check, that the visit reads the correct value.
+  */
+  auto setAndTest = [&createComparisonVisitor]<typename Type>(ConfigurationOption& option,
+                                                              const Type& valueToSetTo) {
+    option.setValue(valueToSetTo);
+
+    option.visitValue(createComparisonVisitor(valueToSetTo));
+  };
+
+  /*
+  Values for the test cases. One for usage as a default value and the other for setting a
+  configuration optioner, when we have a default value.
+  */
+  auto testValues = []<typename Type>() {
+    if constexpr (std::is_same_v<Type, bool>) {
+      return std::make_pair(true, false);
+    } else if constexpr (std::is_same_v<Type, std::string>) {
+      return std::make_pair(std::string{"set1"}, std::string{"set2"});
+    } else if constexpr (std::is_same_v<Type, int>) {
+      return std::make_pair(int{42}, int{43});
+    } else if constexpr (std::is_same_v<Type, float>) {
+      return std::make_pair(float{42.5}, float{6.8});
+    } else if constexpr (std::is_same_v<Type, std::vector<bool>>) {
+      return std::make_pair(std::vector{true, true}, std::vector{false, false});
+    } else if constexpr (std::is_same_v<Type, std::vector<std::string>>) {
+      return std::make_pair(std::vector{std::string{"str1"}, std::string{"str1"}},
+                            std::vector{std::string{"str2"}, std::string{"str2"}});
+    } else if constexpr (std::is_same_v<Type, std::vector<int>>) {
+      return std::make_pair(std::vector<int>{42, 42}, std::vector<int>{44, 43});
+    } else if constexpr (std::is_same_v<Type, std::vector<float>>) {
+      return std::make_pair(std::vector<float>{42.8, 42.8}, std::vector<float>{52.8, 42.9});
+    }
+  };
+
+  /*
+  Run a normal test case of creating a configuration option, checking it and
+  setting it. With or without a default value.
+  */
+  auto testCaseWithDefault = [&createComparisonVisitor, &setAndTest, &testValues]<typename Type>() {
+    const auto& values = testValues.template operator()<Type>();
+
+    ConfigurationOption option{
+        ad_benchmark::makeBenchmarkConfigurationOption<Type>("With_default", "", values.first)};
+
+    option.visitValue(createComparisonVisitor(values.first));
+    option.visitDefaultValue(createComparisonVisitor(values.first));
+
+    setAndTest.template operator()<Type>(option, values.second);
+
+    // Is the default value unchanged?
+    option.visitDefaultValue(createComparisonVisitor(values.first));
+  };
+
+  auto testCaseWithoutDefault = [&setAndTest, &testValues]<typename Type>() {
+    const auto& values = testValues.template operator()<Type>();
+
+    ConfigurationOption option{
+        ad_benchmark::makeBenchmarkConfigurationOption<Type>("Without_default", "")};
+
+    // Make sure, that we truly don't have a value, that can be gotten.
+    option.visitValue([](const auto& val) { ASSERT_FALSE(val.has_value()); });
+    option.visitDefaultValue([](const auto& val) { ASSERT_FALSE(val.has_value()); });
+
+    setAndTest.template operator()<Type>(option, values.first);
+
+    // Is it still the case, that we don't have a default value?
+    option.visitDefaultValue([](const auto& val) { ASSERT_FALSE(val.has_value()); });
+  };
+
+  doForTypeInValueType(testCaseWithDefault);
+  doForTypeInValueType(testCaseWithoutDefault);
 }

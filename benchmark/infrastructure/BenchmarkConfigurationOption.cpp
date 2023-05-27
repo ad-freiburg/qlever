@@ -165,6 +165,6 @@ BenchmarkConfigurationOption::operator std::string() const {
 }
 
 // ____________________________________________________________________________
-auto BenchmarkConfigurationOption::getActualValueType() const -> size_t { return type_; }
+auto BenchmarkConfigurationOption::getActualValueType() const -> size_t { return value_.index(); }
 
 }  // namespace ad_benchmark
