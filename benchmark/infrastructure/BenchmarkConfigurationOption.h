@@ -273,37 +273,32 @@ class BenchmarkConfigurationOption {
   */
   static ValueType createValueTypeWithEmptyOptional(const size_t& typeIndex);
 
-  // Needed for explicitly passing a type, when creating an option.
+  /*
+  @brief Create a benchmark configuration option.
+
+  @tparam T The type of value, that the configuration option can hold.
+
+  @param identifier The name of the configuration option, with which it can be
+  identified later.
+  @param description Describes, what the configuration option stands for. For
+  example: "The amount of rows in the table. Has a default value of 3."
+  @param defaultValue The default value, if the option isn't set at runtime. An
+  empty `std::optional<T>` signifies, that there is no default value.
+  */
   template <typename T>
   friend BenchmarkConfigurationOption makeBenchmarkConfigurationOption(
       std::string_view identifier, std::string_view description,
-      const std::optional<T>& defaultValue);
+      const std::optional<T>& defaultValue) {
+    /*
+    The part for determining the type index is a bit ugly, but there isn't
+    really a better way, that is also typesafe and doesn't need any adjusting,
+    when changing `BenchmarkConfigurationOption::ValueType`.
+    */
+    return BenchmarkConfigurationOption(identifier, description,
+                                        BenchmarkConfigurationOption::getIndexOfTypeInVariant<T>(
+                                            BenchmarkConfigurationOption::ValueType{}),
+                                        defaultValue);
+  }
 };
 
-/*
-@brief Create a benchmark configuration option.
-
-@tparam T The type of value, that the configuration option can hold.
-
-@param identifier The name of the configuration option, with which it can be
-identified later.
-@param description Describes, what the configuration option stands for. For
-example: "The amount of rows in the table. Has a default value of 3."
-@param defaultValue The default value, if the option isn't set at runtime. An
-empty `std::optional<T>` signifies, that there is no default value.
-*/
-template <typename T>
-BenchmarkConfigurationOption makeBenchmarkConfigurationOption(
-    std::string_view identifier, std::string_view description,
-    const std::optional<T>& defaultValue) {
-  /*
-  The part for determining the type index is a bit ugly, but there isn't
-  really a better way, that is also typesafe and doesn't need any adjusting,
-  when changing `BenchmarkConfigurationOption::ValueType`.
-  */
-  return BenchmarkConfigurationOption(identifier, description,
-                                      BenchmarkConfigurationOption::getIndexOfTypeInVariant<T>(
-                                          BenchmarkConfigurationOption::ValueType{}),
-                                      defaultValue);
-}
 }  // namespace ad_benchmark
