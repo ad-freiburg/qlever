@@ -327,3 +327,5 @@ addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
 addLinkAndDiscoverTest(FindUndefRangesTest)
 
 addLinkAndDiscoverTest(AddCombinedRowToTableTest)
+
+addLinkAndDiscoverTest(ComparisonWithNanTest)
