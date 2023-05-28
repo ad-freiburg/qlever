@@ -4,8 +4,22 @@
 
 #include "ExportQueryExecutionTrees.h"
 
+#include <ranges>
+
 #include "parser/RdfEscaping.h"
 #include "util/http/MediaTypes.h"
+
+// __________________________________________________________________________
+namespace {
+// Return a range that contains the indices of the rows that have to be exported
+// from the `idTable` given the `LimitOffsetClause`. It takes into account the
+// LIMIT, the OFFSET, and the actual size of the `idTable`
+auto getRowIndices(const LimitOffsetClause& limitOffset,
+                   const IdTable& idTable) {
+  return std::views::iota(limitOffset.actualOffset(idTable.size()),
+                          limitOffset.upperBound(idTable.size()));
+}
+}  // namespace
 
 // _____________________________________________________________________________
 cppcoro::generator<QueryExecutionTree::StringTriple>
@@ -13,10 +27,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res) {
-  // TODO<C++20, Clang16> Use views to create an abstraction for the repeated
-  // `upperBound` code.
-  size_t upperBound = limitAndOffset.upperBound(res->idTable().size());
-  for (size_t i = limitAndOffset._offset; i < upperBound; i++) {
+  for (size_t i : getRowIndices(limitAndOffset, res->idTable())) {
     ConstructQueryExportContext context{i, *res, qet.getVariableColumns(),
                                         qet.getQec()->getIndex()};
     using enum PositionInTriple;
@@ -94,10 +105,7 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
   const IdTable& data = resultTable->idTable();
   nlohmann::json json = nlohmann::json::array();
 
-  const auto offset = limitAndOffset._offset;
-  const auto upperBound = limitAndOffset.upperBound(data.size());
-
-  for (size_t rowIndex = offset; rowIndex < upperBound; ++rowIndex) {
+  for (size_t rowIndex : getRowIndices(limitAndOffset, data)) {
     json.emplace_back();
     auto& row = json.back();
     for (const auto& opt : columns) {
@@ -298,9 +306,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
     return b;
   };
 
-  const auto upperBound = limitAndOffset.upperBound(idTable.size());
-  for (size_t rowIndex = limitAndOffset._offset; rowIndex < upperBound;
-       ++rowIndex) {
+  for (size_t rowIndex : getRowIndices(limitAndOffset, idTable)) {
     // TODO: ordered_json` entries are ordered alphabetically, but insertion
     // order would be preferable.
     nlohmann::ordered_json binding;
@@ -380,14 +386,9 @@ ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary(
   AD_CONTRACT_CHECK(!selectedColumnIndices.empty());
 
   const auto& idTable = resultTable->idTable();
-  // TODO<C++20/Clang16> There are a lot of redundant computations of
-  // `upperBound` in this file. Those can be abstracted away using
-  // `std::views::iota`: `for (auto i : getRangeFromLimitOffset(limitAndOffset,
-  // idTable)` Or maybe even use a view that iterates over the idTable directly.
-  size_t upperBound = limitAndOffset.upperBound(idTable.size());
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
-    for (size_t i = limitAndOffset._offset; i < upperBound; ++i) {
+    for (size_t i : getRowIndices(limitAndOffset, idTable)) {
       for (const auto& columnIndex : selectedColumnIndices) {
         if (columnIndex.has_value()) {
           co_yield std::string_view{reinterpret_cast<const char*>(&idTable(
@@ -414,7 +415,7 @@ ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary(
   constexpr auto& escapeFunction = format == MediaType::tsv
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
-  for (size_t i = limitAndOffset._offset; i < upperBound; ++i) {
+  for (size_t i : getRowIndices(limitAndOffset, idTable)) {
     for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
       if (selectedColumnIndices[j].has_value()) {
         const auto& val = selectedColumnIndices[j].value();

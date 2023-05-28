@@ -17,10 +17,10 @@ using ad_utility::source_location;
 namespace {
 
 // Create a `Sort` operation that sorts the `input` by the `sortColumns`.
-Sort makeSort(IdTable input, const std::vector<size_t>& sortColumns) {
+Sort makeSort(IdTable input, const std::vector<ColumnIndex>& sortColumns) {
   std::vector<Variable> vars;
   auto qec = ad_utility::testing::getQec();
-  for (size_t i = 0; i < input.numColumns(); ++i) {
+  for (ColumnIndex i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));
   }
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -39,8 +39,8 @@ void testSort(IdTable input, const IdTable& expected,
   auto qec = ad_utility::testing::getQec();
 
   // Set up the vector of sort columns. Those will later be permuted.
-  std::vector<size_t> sortColumns;
-  for (size_t i = 0; i < input.numColumns(); ++i) {
+  std::vector<ColumnIndex> sortColumns;
+  for (ColumnIndex i = 0; i < input.numColumns(); ++i) {
     sortColumns.push_back(i);
   }
 

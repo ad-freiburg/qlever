@@ -43,7 +43,7 @@ class Bind : public Operation {
   }
 
  protected:
-  [[nodiscard]] vector<size_t> resultSortedOn() const override;
+  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
 
  private:
   ResultTable computeResult() override;

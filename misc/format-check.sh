@@ -18,7 +18,7 @@ for source in "${SOURCE_FILES[@]}" ;do
 		printf "Use clang-format with the .clang-format provided in the QLever\n"
 		printf "repository's root to ensure all code files are formatted "
 		printf "properly. We currently use clang-format 16\n"
-		printf "(See `.github/workflows/format-check.yml` for instructions on how to install it.\n"
+		printf "(See '.github/workflows/format-check.yml' for instructions on how to install it.\n"
 		printf "\x1b[m"
 		ERROR=1
 	fi

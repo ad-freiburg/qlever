@@ -88,30 +88,45 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
   // Used to set/add all the values, that we test and check them too.
   auto doAndCheck = [&config](const auto& function) {
     // Parse integers.
-    function(R"(somePositiveNumber=42;someNegativNumber=-42;)");
+    function(R"(somePositiveNumber : 42, someNegativNumber : -42)");
     ASSERT_EQ(42,
               config.getValueByNestedKeys<int>("somePositiveNumber").value());
     ASSERT_EQ(-42,
               config.getValueByNestedKeys<int>("someNegativNumber").value());
 
+    // Parse floats.
+    function(R"(somePositiveFloat : 4.2, someNegativFloat : -4.2)");
+    ASSERT_FLOAT_EQ(
+        4.2, config.getValueByNestedKeys<float>("somePositiveFloat").value());
+    ASSERT_FLOAT_EQ(
+        -4.2, config.getValueByNestedKeys<float>("someNegativFloat").value());
+
     // Parse booleans.
-    function(R"(boolTrue = true; boolFalse = false;)");
+    function(R"(boolTrue : true, boolFalse : false)");
     ASSERT_TRUE(config.getValueByNestedKeys<bool>("boolTrue").value());
     ASSERT_FALSE(config.getValueByNestedKeys<bool>("boolFalse").value());
 
     // Parse strings.
-    function(R"(myName = "Bernd";)");
+    function(R"(myName : "Bernd")");
     ASSERT_EQ("Bernd",
               config.getValueByNestedKeys<std::string>("myName").value());
 
     // Parse a list of mixed literals.
-    function(R"(list = [42, -42, true, false, "Johannes"];)");
+    function(R"(list : [42, -42, true, false, "Johannes", 2.8])");
     ASSERT_EQ(42, config.getValueByNestedKeys<int>("list", 0).value());
     ASSERT_EQ(-42, config.getValueByNestedKeys<int>("list", 1).value());
     ASSERT_TRUE(config.getValueByNestedKeys<bool>("list", 2).value());
     ASSERT_FALSE(config.getValueByNestedKeys<bool>("list", 3).value());
     ASSERT_EQ("Johannes",
               config.getValueByNestedKeys<std::string>("list", 4).value());
+    ASSERT_FLOAT_EQ(2.8, config.getValueByNestedKeys<float>("list", 5).value());
+
+    // Parse recursiv.
+    function(R"(object1 : { object2 : [[{object3 : [4, 2, "This one"]}], 6]})");
+    ASSERT_EQ("This one", config
+                              .getValueByNestedKeys<std::string>(
+                                  "object1", "object2", 0, 0, "object3", 2)
+                              .value());
   };
 
   // Do the test for set.
@@ -119,7 +134,7 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
       [&config](const std::string& toPass) { config.setShortHand(toPass); });
 
   // Reset the config to a simpler value.
-  config.setShortHand(R"(myWishAverage = 1;)");
+  config.setShortHand(R"(myWishAverage : 1)");
   // Everything else should have vanished. Lets take a quick sample.
   ASSERT_FALSE(
       config.getValueByNestedKeys<int>("somePositiveNumber").has_value());
@@ -133,6 +148,13 @@ TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
   // Is the `myWishAverage` still there?
   ASSERT_TRUE(config.getValueByNestedKeys<int>("myWishAverage").has_value());
   ASSERT_EQ(1, config.getValueByNestedKeys<int>("myWishAverage").value());
+
+  // Multiple key value pairs with the same key are not allowed.
+  ASSERT_ANY_THROW(config.setShortHand(R"(a:42, a:43)"););
+
+  // Final test: Is there an exception, if we try to parse the wrong syntax?
+  ASSERT_ANY_THROW(config.setShortHand(R"({"myName" : "Bernd")}"));
+  ASSERT_ANY_THROW(config.addShortHand(R"("myName" = "Bernd";)"));
 }
 
 // Testing the exceptions of set and add json string.

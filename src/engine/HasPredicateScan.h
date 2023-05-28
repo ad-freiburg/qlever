@@ -56,7 +56,7 @@ class HasPredicateScan : public Operation {
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  [[nodiscard]] vector<size_t> resultSortedOn() const override;
+  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
 
   void setTextLimit(size_t limit) override;
 

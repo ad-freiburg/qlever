@@ -43,7 +43,7 @@ LocalVocab ResultTable::getCopyOfLocalVocab() const {
 }
 
 // _____________________________________________________________________________
-ResultTable::ResultTable(IdTable idTable, vector<size_t> sortedBy,
+ResultTable::ResultTable(IdTable idTable, vector<ColumnIndex> sortedBy,
                          SharedLocalVocabWrapper localVocab)
     : _idTable{std::move(idTable)},
       _sortedBy{std::move(sortedBy)},
@@ -67,7 +67,7 @@ ResultTable::ResultTable(IdTable idTable, vector<size_t> sortedBy,
 }
 
 // _____________________________________________________________________________
-ResultTable::ResultTable(IdTable idTable, vector<size_t> sortedBy,
+ResultTable::ResultTable(IdTable idTable, vector<ColumnIndex> sortedBy,
                          LocalVocab&& localVocab)
     : ResultTable(std::move(idTable), std::move(sortedBy),
                   SharedLocalVocabWrapper{std::move(localVocab)}) {}

@@ -115,26 +115,26 @@ size_t IndexScan::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-vector<size_t> IndexScan::resultSortedOn() const {
+vector<ColumnIndex> IndexScan::resultSortedOn() const {
   switch (_type) {
     case PSO_BOUND_S:
     case POS_BOUND_O:
     case SOP_BOUND_O:
-      return {0};
+      return {ColumnIndex{0}};
     case PSO_FREE_S:
     case POS_FREE_O:
     case SPO_FREE_P:
     case SOP_FREE_O:
     case OSP_FREE_S:
     case OPS_FREE_P:
-      return {0, 1};
+      return {ColumnIndex{0}, ColumnIndex{1}};
     case FULL_INDEX_SCAN_SPO:
     case FULL_INDEX_SCAN_SOP:
     case FULL_INDEX_SCAN_PSO:
     case FULL_INDEX_SCAN_POS:
     case FULL_INDEX_SCAN_OSP:
     case FULL_INDEX_SCAN_OPS:
-      return {0, 1, 2};
+      return {ColumnIndex{0}, ColumnIndex{1}, ColumnIndex{2}};
     default:
       AD_FAIL();
   }
@@ -145,7 +145,7 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   VariableToColumnMap res;
   // All the columns of an index scan only contain defined values.
   auto makeCol = makeAlwaysDefinedColumn;
-  size_t col = 0;
+  auto col = ColumnIndex{0};
 
   // Helper lambdas that add the respective triple component as the next column.
   auto addSubject = [&]() {
