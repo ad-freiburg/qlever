@@ -622,12 +622,22 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     }
   };
 
+  auto joinAndRemoveBeginning = [&]() {
+    auto& l = sameBlocksLeft.at(0);
+    auto& r = sameBlocksRight.at(0);
+    auto itL = std::ranges::lower_bound(l, l.back(), lessThan);
+    auto itR = std::ranges::lower_bound(r, r.back(), lessThan);
+    join(std::ranges::subrange{l.begin(), itL},
+         std::ranges::subrange{r.begin(), itR});
+    return std::pair{std::ranges::subrange{itL, l.end()}, std::ranges::subrange{itR, r.end()}};
+  };
+
   auto joinBuffers = [&]() {
-    join(sameBlocksLeft.at(0), sameBlocksRight.at(0));
-    auto subrangeLeft = std::ranges::equal_range(
-        sameBlocksLeft.front(), sameBlocksLeft.front().back(), lessThan);
-    auto subrangeRight = std::ranges::equal_range(
-        sameBlocksRight.front(), sameBlocksRight.front().back(), lessThan);
+    if (sameBlocksLeft.size() == 1) {
+      AD_CORRECTNESS_CHECK(sameBlocksRight.size() == 1);
+      join (sameBlocksLeft.at(0), sameBlocksRight.at(0));
+    }
+    auto [subrangeLeft, subrangeRight] = joinAndRemoveBeginning();
     using SubLeft = decltype(subrangeLeft);
     using SubRight = decltype(subrangeRight);
     std::vector<SubLeft> l;
