@@ -82,104 +82,6 @@ static void createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   }
 }
 
-// Benchmarks for unsorted and sorted tables, with and without overlapping
-// values in IdTables. Done with normal join and hash join.
-class BmUnsortedAndSortedIdTable : public BenchmarkInterface {
-  // The amount of rows and columns of the tables.
-  size_t numberRows_;
-  size_t numberColumns_;
-
- public:
-  std::string name() const override {
-    return "Basic benchmarks, for which I had no time to delete yet.";
-  }
-
-  /*
-  Sets the amount of rows and columns based on the configuration options
-  `numberRows_` and `numberColumns_`.
-  */
-  void parseConfiguration(const BenchmarkConfiguration& config) final {
-    numberRows_ =
-        config.getValueByNestedKeys<size_t>("numberRows").value_or(100);
-
-    // The maximum number of columns, we should ever have, is 20.
-    numberColumns_ = std::min(
-        static_cast<size_t>(20),
-        config.getValueByNestedKeys<size_t>("numberColumns").value_or(10));
-  }
-
-  BenchmarkResults runAllBenchmarks() final {
-    BenchmarkResults results{};
-
-    auto hashJoinLambda = makeHashJoinLambda();
-    auto joinLambda = makeJoinLambda();
-
-    // Tables, that have no overlapping values in their join columns.
-    IdTableAndJoinColumn a{
-        createRandomlyFilledIdTable(numberRows_, numberColumns_, 0, 0, 10), 0};
-    IdTableAndJoinColumn b{
-        createRandomlyFilledIdTable(numberRows_, numberColumns_, 0, 20, 30), 0};
-
-    // Lambda wrapper for the functions, that I measure.
-
-    // Sorts the table IN PLACE and the uses the normal join on them.
-    auto sortThenJoinLambdaWrapper = [&a, &b, &joinLambda]() {
-      // Sorting the tables by the join column.
-      sortIdTableByJoinColumnInPlace(a);
-      sortIdTableByJoinColumnInPlace(b);
-
-      useJoinFunctionOnIdTables(a, b, joinLambda);
-    };
-
-    auto joinLambdaWrapper = [&a, &b, &joinLambda]() {
-      useJoinFunctionOnIdTables(a, b, joinLambda);
-    };
-
-    auto hashJoinLambdaWrapper = [&a, &b, &hashJoinLambda]() {
-      useJoinFunctionOnIdTables(a, b, hashJoinLambda);
-    };
-
-    // Because it's easier to read/interpret, the benchmarks are entries in
-    // tables.
-    auto& sortedIdTablesTable = results.addTable(
-        "Sorted IdTables", {"Merge/Galloping join", "Hashed join"},
-        {"Overlapping join column entries",
-         "Non-overlapping join column entries"});
-    auto& unsortedIdTablesTable = results.addTable(
-        "Unsorted IdTables", {"Merge/Galloping join", "Hashed join"},
-        {"Overlapping join column entries",
-         "Non-overlapping join column entries"});
-
-    // Benchmarking with non-overlapping IdTables.
-
-    unsortedIdTablesTable.addMeasurement(1, 1, hashJoinLambdaWrapper);
-    unsortedIdTablesTable.addMeasurement(0, 1, sortThenJoinLambdaWrapper);
-
-    // Because the sortThenJoinLambdaWrapper sorts tables IN PLACE, a and b are
-    // now sorted.
-    sortedIdTablesTable.addMeasurement(1, 1, hashJoinLambdaWrapper);
-    sortedIdTablesTable.addMeasurement(0, 1, joinLambdaWrapper);
-
-    // Benchmarking with overlapping IdTables.
-
-    // We make the tables overlapping and then randomly shuffle them.
-    createOverlapRandomly(&a, b, 10.0);
-
-    randomShuffle(a.idTable.begin(), a.idTable.end());
-    randomShuffle(b.idTable.begin(), b.idTable.end());
-
-    unsortedIdTablesTable.addMeasurement(1, 0, hashJoinLambdaWrapper);
-    unsortedIdTablesTable.addMeasurement(0, 0, sortThenJoinLambdaWrapper);
-
-    // Because the sortThenJoinLambdaWrapper sorts tables IN PLACE, a and b are
-    // now sorted.
-    sortedIdTablesTable.addMeasurement(1, 0, hashJoinLambdaWrapper);
-    sortedIdTablesTable.addMeasurement(0, 0, joinLambdaWrapper);
-
-    return results;
-  }
-};
-
 /*
 @brief Adds the function time measurements to a row of the benchmark table
 in `makeBenchmarkTable`.
@@ -1263,7 +1165,6 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 };
 
 // Registering the benchmarks
-AD_REGISTER_BENCHMARK(BmUnsortedAndSortedIdTable);
 AD_REGISTER_BENCHMARK(BmSameSizeRowGrowth);
 AD_REGISTER_BENCHMARK(BmOnlySmallerTableSizeChanges);
 AD_REGISTER_BENCHMARK(BmOnlyBiggerTableSizeChanges);
