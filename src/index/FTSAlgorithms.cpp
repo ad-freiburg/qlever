@@ -9,8 +9,9 @@
 #include <set>
 #include <utility>
 
-#include "../util/HashMap.h"
-#include "../util/HashSet.h"
+#include "util/HashMap.h"
+#include "util/HashSet.h"
+#include "util/SuppressWarnings.h"
 
 using std::pair;
 
@@ -395,17 +396,19 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(vector<Row>& nonAggRes,
   if (nonAggRes.empty()) return;
 
   size_t width = nonAggRes[0].size();
-  std::sort(nonAggRes.begin(), nonAggRes.end(),
-            [&width](const Row& l, const Row& r) {
-              if (l[0] == r[0]) {
-                for (size_t i = 3; i < width; ++i) {
-                  if (l[i] == r[i]) continue;
-                  return l[i] < r[i];
-                }
-                return l[1] < r[1];
-              }
-              return l[0] < r[0];
-            });
+  std::ranges::sort(nonAggRes, [width](const Row& l, const Row& r) {
+    if (l[0] != r[0]) {
+      return l[0] < r[0];
+    }
+    for (size_t i = 3; i < width; ++i) {
+      DISABLE_WARNINGS_GCC_13
+      if (l[i] != r[i]) {
+        ENABLE_WARNINGS_GCC_13
+        return l[i] < r[i];
+      }
+    }
+    return l[1] < r[1];
+  });
 
   res.push_back(nonAggRes[0]);
   size_t contextsInResult = 1;

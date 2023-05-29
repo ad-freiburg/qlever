@@ -20,7 +20,7 @@ size_t OrderBy::getResultWidth() const { return subtree_->getResultWidth(); }
 // _____________________________________________________________________________
 OrderBy::OrderBy(QueryExecutionContext* qec,
                  std::shared_ptr<QueryExecutionTree> subtree,
-                 vector<pair<size_t, bool>> sortIndices)
+                 vector<pair<ColumnIndex, bool>> sortIndices)
     : Operation{qec},
       subtree_{std::move(subtree)},
       sortIndices_{std::move(sortIndices)} {

@@ -15,14 +15,14 @@ class Minus : public Operation {
   std::shared_ptr<QueryExecutionTree> _right;
 
   vector<float> _multiplicities;
-  std::vector<std::array<size_t, 2>> _matchedColumns;
+  std::vector<std::array<ColumnIndex, 2>> _matchedColumns;
 
   enum class RowComparison { EQUAL, LEFT_SMALLER, RIGHT_SMALLER };
 
  public:
   Minus(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> left,
         std::shared_ptr<QueryExecutionTree> right,
-        std::vector<std::array<size_t, 2>> matchedColumns);
+        std::vector<std::array<ColumnIndex, 2>> matchedColumns);
 
   // Uninitialized Object for testing the computeMinus method
   struct OnlyForTestingTag {};
@@ -36,7 +36,7 @@ class Minus : public Operation {
 
   size_t getResultWidth() const override;
 
-  vector<size_t> resultSortedOn() const override;
+  vector<ColumnIndex> resultSortedOn() const override;
 
   void setTextLimit(size_t limit) override {
     _left->setTextLimit(limit);
@@ -65,7 +65,7 @@ class Minus : public Operation {
    **/
   template <int A_WIDTH, int B_WIDTH>
   void computeMinus(const IdTable& a, const IdTable& b,
-                    const vector<std::array<size_t, 2>>& matchedColumns,
+                    const vector<std::array<ColumnIndex, 2>>& matchedColumns,
                     IdTable* result) const;
 
  private:
@@ -76,7 +76,7 @@ class Minus : public Operation {
   template <int A_WIDTH, int B_WIDTH>
   static RowComparison isRowEqSkipFirst(
       const IdTableView<A_WIDTH>& a, const IdTableView<B_WIDTH>& b, size_t ia,
-      size_t ib, const vector<std::array<size_t, 2>>& matchedColumns);
+      size_t ib, const vector<std::array<ColumnIndex, 2>>& matchedColumns);
 
   ResultTable computeResult() override;
 

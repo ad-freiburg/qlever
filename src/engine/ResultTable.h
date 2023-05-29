@@ -31,7 +31,7 @@ class ResultTable {
 
   // The column indices by which the result is sorted (primary sort key first).
   // Empty if the result is not sorted on any column.
-  std::vector<size_t> _sortedBy;
+  std::vector<ColumnIndex> _sortedBy;
 
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
   // The local vocabulary of the result.
@@ -85,9 +85,9 @@ class ResultTable {
   // The first overload of the constructor is for local vocabs that are shared
   // with another `ResultTable` via the `getSharedLocalVocab...` methods below.
   // The second overload is for newly created local vocabularies.
-  ResultTable(IdTable idTable, std::vector<size_t> sortedBy,
+  ResultTable(IdTable idTable, std::vector<ColumnIndex> sortedBy,
               SharedLocalVocabWrapper localVocab);
-  ResultTable(IdTable idTable, std::vector<size_t> sortedBy,
+  ResultTable(IdTable idTable, std::vector<ColumnIndex> sortedBy,
               LocalVocab&& localVocab);
 
   // Prevent accidental copying of a result table.
@@ -111,7 +111,7 @@ class ResultTable {
   const IdTable& idTable() const { return _idTable; }
 
   // Const access to the columns by which the `idTable()` is sorted.
-  const std::vector<size_t>& sortedBy() const { return _sortedBy; }
+  const std::vector<ColumnIndex>& sortedBy() const { return _sortedBy; }
 
   // Get the local vocabulary of this result, used for lookup only.
   //

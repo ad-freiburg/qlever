@@ -57,7 +57,7 @@ class Operation {
   /**
    * @return A list of columns on which the result of this operation is sorted.
    */
-  const vector<size_t>& getResultSortedOn() const;
+  const vector<ColumnIndex>& getResultSortedOn() const;
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
@@ -181,7 +181,7 @@ class Operation {
    * @brief Compute and return the columns on which the result will be sorted
    * @return The columns on which the result will be sorted.
    */
-  [[nodiscard]] virtual vector<size_t> resultSortedOn() const = 0;
+  [[nodiscard]] virtual vector<ColumnIndex> resultSortedOn() const = 0;
 
   const auto& getLimit() const { return _limit; }
 
@@ -334,5 +334,6 @@ class Operation {
   mutable CopyableMutex _resultSortedColumnsMutex;
 
   // Store the list of columns by which the result is sorted.
-  mutable std::optional<vector<size_t>> _resultSortedColumns = std::nullopt;
+  mutable std::optional<vector<ColumnIndex>> _resultSortedColumns =
+      std::nullopt;
 };

@@ -320,7 +320,8 @@ class QueryPlanner {
       const SubtreePlan& a, const SubtreePlan& b) const;
 
   [[nodiscard]] string getPruningKey(
-      const SubtreePlan& plan, const vector<size_t>& orderedOnColumns) const;
+      const SubtreePlan& plan,
+      const vector<ColumnIndex>& orderedOnColumns) const;
 
   [[nodiscard]] void applyFiltersIfPossible(
       std::vector<SubtreePlan>& row, const std::vector<SparqlFilter>& filters,

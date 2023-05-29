@@ -3,22 +3,15 @@
 
 #pragma once
 
-
 #include "antlr4-runtime.h"
 
+class ANTLR4MockupLexer : public antlr4::Lexer {
+ public:
+  enum { BOOL = 1, INTEGER = 2, FLOAT = 3, STRING = 4, WHITESPACE = 5 };
 
-
-
-class  ANTLR4MockupLexer : public antlr4::Lexer {
-public:
-  enum {
-    BOOL = 1, INTEGER = 2, FLOAT = 3, STRING = 4, WHITESPACE = 5
-  };
-
-  explicit ANTLR4MockupLexer(antlr4::CharStream *input);
+  explicit ANTLR4MockupLexer(antlr4::CharStream* input);
 
   ~ANTLR4MockupLexer() override;
-
 
   std::string getGrammarFileName() const override;
 
@@ -34,16 +27,13 @@ public:
 
   const antlr4::atn::ATN& getATN() const override;
 
-  // By default the static state used to implement the lexer is lazily initialized during the first
-  // call to the constructor. You can call this function if you wish to initialize the static state
-  // ahead of time.
+  // By default the static state used to implement the lexer is lazily
+  // initialized during the first call to the constructor. You can call this
+  // function if you wish to initialize the static state ahead of time.
   static void initialize();
 
-private:
-
+ private:
   // Individual action functions triggered by action() above.
 
   // Individual semantic predicate functions triggered by sempred() above.
-
 };
-
