@@ -57,7 +57,8 @@ bool stringOnlyContainsSpecifiedTokens(
   */
   auto checkToken = [i = size_t{0}, &allTokenTypeIndexes](
                         const size_t& tokenTypeIndex) mutable {
-    return tokenTypeIndex == allTokenTypeIndexes.at(i++);
+    i += 1;
+    return tokenTypeIndex == allTokenTypeIndexes.at(i - 1);
   };
 
   return (allTokenTypeIndexes.size() == sizeof...(tokenTypeIds)) &&
