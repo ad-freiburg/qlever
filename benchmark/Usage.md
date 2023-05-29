@@ -103,15 +103,20 @@ Passing values to your benchmark at runtime is possible and has its own system, 
 Adding the configuration options and passing values to them.
 
 ### Adding options
-Adding configuration options is done with the `addConfigurationOptions` function. More specifically, it's done by adding `BenchmarkConfigurationOption` objects to the passed instance of `BenchmarkConfiguration`, using the apt named `addConfigurationOption` function.
+Adding configuration options is done with the `addConfigurationOptions` function. More specifically, it's done by adding `BenchmarkConfigurationOption` objects to the passed instance of `BenchmarkConfiguration`, using the apt named `addConfigurationOption` function. These `BenchmarkConfigurationOption` objects are created using the `makeBenchmarkConfigurationOption` function.
 
 A `BenchmarkConfigurationOption` describes four things about a configuration option:
 
-1. What **type** of values it takes. Integer, boolean, basically everything is possible, as long as there is a converter from JSON back to its own type defined in `nlohmann::json`. Or written by you.
+1. What **type** of values it takes. The following types are available:
+  - Boolean.
+  - `std::string`.
+  - Integer.
+  - Floating point.
+  - A `std::vector` of the previous options.
 
 2. The name of the option.
 
-3. A description of the option. Should there be a default value, you should write it down here for other users.
+3. A description of the option.
 
 4. If it has a default value. If it hasn't, people will always have to provide their own value at run time.
 
@@ -122,14 +127,14 @@ Setting the values of the configuration options at runtime can be done in two wa
 
 1. Writing a JSON file and passing the file location via CLI.
 
-2. Using the shorthand described in `benchmark/infrastructure/generated/BenchmarkConfigurationShorthand.g4`, by writing it directly as an argument via CLI. Note: The shorthand will overwrite any values of the same name from the JSON file, if both ways are used.
+2. Using the shorthand described in `benchmark/infrastructure/generated/BenchmarkConfigurationShorthand.g4`, by writing it directly as an argument via CLI. Note: The shorthand will overwrite the value of any configuration option, if both ways try to set it..
 
 The shorthand is basically just normal JSON, but adjusted for easier usage. There are 3 big changes.  
 First, there are no line breaks allowed. The shorthand is build for usage directly in the CLI, so that is an unneeded feature
 Second, because a configuration is always represented by a JSON object, a shorthand string is always treated, as if it had `{}` braces at the beginning and end.  
 Third, the keys of key-value pairs, for example `"key" : value`, don't need to be surrounded with `"`. `"` is a special symbol in the CLI, and we want to save you the extra work of always typing `\"key\"`.
 
-Using those two ways of passing information, a `BenchmarkConfiguration` object will be created and configured to hold all passed information, in a not interpreted form.
+Using those two ways of passing information, the configuration options held by an internally created `BenchmarkConfiguration` object, will be set.
 
 In both of those, you have to write out the complete path to your configuration option and write the value, you wish to set it to, at the end.  
 For example: Let's say, you defined a configuration option `someNumber` and added it with the path `tableSizes/3`. Then, if you wanted to set it to `20` using JSON, you would have to write:
