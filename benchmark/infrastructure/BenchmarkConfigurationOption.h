@@ -68,9 +68,7 @@ class BenchmarkConfigurationOption {
   // No consturctor. Must be created using `makeConfigurationOption`.
   BenchmarkConfigurationOption() = delete;
 
-  /*
-  Was the configuration option set to a value at runtime?
-  */
+  // Was the configuration option set to a value at runtime?
   bool wasSetAtRuntime() const;
 
   /*
