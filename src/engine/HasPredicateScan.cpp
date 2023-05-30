@@ -180,7 +180,7 @@ float HasPredicateScan::getMultiplicity(size_t col) {
   return 1;
 }
 
-size_t HasPredicateScan::getSizeEstimateBeforeLimit() {
+uint64_t HasPredicateScan::getSizeEstimateBeforeLimit() {
   switch (_type) {
     case ScanType::FREE_S:
       return static_cast<size_t>(

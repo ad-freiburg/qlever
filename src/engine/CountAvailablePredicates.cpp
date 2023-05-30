@@ -79,7 +79,7 @@ float CountAvailablePredicates::getMultiplicity([[maybe_unused]] size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t CountAvailablePredicates::getSizeEstimateBeforeLimit() {
+uint64_t CountAvailablePredicates::getSizeEstimateBeforeLimit() {
   if (_subtree.get() != nullptr) {
     // Predicates are only computed for entities in the subtrees result.
 

@@ -69,7 +69,7 @@ class IndexScan : public Operation {
  private:
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for
   // ALL the `Operations`.
-  size_t getSizeEstimateBeforeLimit() override { return getExactSize(); }
+  uint64_t getSizeEstimateBeforeLimit() override { return getExactSize(); }
 
  public:
   size_t getCostEstimate() override;
