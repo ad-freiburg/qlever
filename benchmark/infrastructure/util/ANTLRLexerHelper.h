@@ -26,7 +26,8 @@ given lexer.
 identfication. You should find yours as an enum inside your lexer class.
 IMPORTANT: Remember, the highest possible lexer rule will always be used by the
 lexer to generate a token. That INCLUDES rules, that are just `or` collections
-of other lexer rules. For example:
+of other lexer rules.
+For example: Let's say, those are all of your lexer rules:
 ```
 LITERAL : BOOL | INTEGER;
 BOOL : 'true' | 'false';
@@ -35,6 +36,19 @@ INTEGER : '-'?[0-9]+;
 With this grammar, you will NEVER get a token of type `BOOL`, or `INTEGER`,
 because `LITERAL` has higher priority and includes all the cases of the other
 two.
+Input example:
+Given the input `true -48`, the lexer would start with trying to find matches
+for lexer rule with the highest priority, generate the tokens, and then repeat,
+following the order from the lexer rule with the highest priority, to the lexer
+rule with the lowes priority.
+Priority of the lexer rules is dicated by the order, there are written in the
+grammar. In our example that order would be `LITERAL`, `BOOL`, and then
+`INTEGER`.
+Now, `true -48` could be seen as the tokens `BOOL INTEGER`, but, because the
+lexer first looks at `LITERAL`, which is a superset of the two other lexer
+rules, they are seen as `LITERAL LITERAL`. After that, it looks for matches for
+`BOOL`, but only finds two tokens of `LITERAL`. No `BOOL` tokens are generated.
+Same for `INTEGER` after him.
 */
 template <std::derived_from<antlr4::Lexer> Lexer>
 bool stringOnlyContainsSpecifiedTokens(
