@@ -21,6 +21,7 @@
 #include "util/ANTLRLexerHelper.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/TypeTraits.h"
 #include "util/json.h"
 
 namespace ad_benchmark {
@@ -153,11 +154,7 @@ class BenchmarkConfiguration {
     that are just identified with numbers, is rather difficult.
     */
     if constexpr (sizeof...(keys) > 0) {
-      constexpr auto firstIsString = []<typename T, typename...>() constexpr {
-        return isString<T>;
-      };
-
-      if (!firstIsString.template operator()<Keys...>()) {
+      if constexpr (!isString<ad_utility::First<Keys...>>) {
         throw ad_utility::Exception(
             absl::StrCat("Key error: The first key in '", ptr.to_string(),
                          "' isn't a string."));
