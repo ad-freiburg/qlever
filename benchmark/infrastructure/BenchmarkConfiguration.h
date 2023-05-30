@@ -104,7 +104,7 @@ class BenchmarkConfiguration {
         Must have been a number. I mean, `KeyForJson` doesn't allow anything
         else, than those 2 possibilities and this the the last one.
         */
-        AD_CONTRACT_CHECK(std::integral<std::decay_t<T>>);
+        static_assert(std::integral<std::decay_t<T>>);
         transformedKey = std::to_string(key);
       }
 
