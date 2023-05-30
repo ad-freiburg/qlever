@@ -39,7 +39,7 @@ concept KeyForJson = std::constructible_from<std::string, std::decay_t<T>> ||
 
 // Only returns true, if all the given keys, that are numbers, are bigger/equal
 // than 0.
-static bool allArgumentsBiggerOrEqualToZero(const auto&... keys) {
+static bool allArgumentsBiggerOrEqualToZero(const KeyForJson auto&... keys) {
   /*
   By checking, if we actually need to do anything, we can save on creating
   `biggerOrEqual`, if we don't actually use it. Gets rid of the accompanying
