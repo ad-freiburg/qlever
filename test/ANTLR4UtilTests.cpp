@@ -7,7 +7,6 @@
 #include <gtest/gtest.h>
 
 #include "../benchmark/infrastructure/util/ANTLRLexerHelper.h"
-#include "../test/util/ANTLR4Mockup/ANTLR4MockupLexer.cpp"  // The mockup lexer is used NOWHERE else, so this should be alright.
 #include "../test/util/ANTLR4Mockup/ANTLR4MockupLexer.h"
 
 /*
