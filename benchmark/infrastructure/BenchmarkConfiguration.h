@@ -156,8 +156,12 @@ class BenchmarkConfiguration {
     if constexpr (sizeof...(keys) > 0) {
       if constexpr (!isString<ad_utility::First<Keys...>>) {
         throw ad_utility::Exception(
-            absl::StrCat("Key error: The first key in '", ptr.to_string(),
-                         "' isn't a string."));
+            absl::StrCat("Key error, while trying to add a configuration "
+                         "option: The first key in '",
+                         ptr.to_string(),
+                         "' isn't a string. It needs to be a string, because "
+                         "internally we save locations in a json format, more "
+                         "specificly in a json object literal."));
       }
     }
 
