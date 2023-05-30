@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <ctime>
+#include <string>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
@@ -591,6 +592,22 @@ static std::vector<size_t> createExponentVectorUntilSize(
 }
 
 /*
+@brief Approximates the amount of memory (in byte), that a `IdTable` needs.
+
+@param amountRows, amountColumns How many rows and columns the `IdTable` has.
+*/
+size_t approximateMemoryNeededByIdTable(const size_t& amountRows,
+                                        const size_t& amountColumns) {
+  /*
+  The overhead can be, more or less, ignored. We are just concerned over
+  the space needed for the entries.
+  */
+  constexpr size_t memoryPerIdTableEntryInByte = sizeof(IdTable::value_type);
+
+  return amountRows * amountColumns * memoryPerIdTableEntryInByte;
+}
+
+/*
 Partly implements the interface `BenchmarkInterface`, by:
 
 - Providing the member variables, that most of the benchmark classes here set
@@ -655,10 +672,10 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   std::optional<float> maxTimeSingleMeasurement_;
 
   /*
-  Only true, if there was configuration option given about the maximum amount of
-  MB, a single `IdTable` is allowed to use.
+  The maximal amount of memory, a `IdTable` is allowed to take up in memory. If
+  there is no limit, it holds no value.
   */
-  bool maxMemoryInMBWasGiven_;
+  std::optional<size_t> maxMemoryInByte_;
 
  public:
   void parseConfiguration(const BenchmarkConfiguration& config) final {
@@ -712,33 +729,12 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                                        static_cast<size_t>(1000));
 
     /*
-    `maxMemoryInMB` is the max amount, that the bigger `IdTable` is allowed to
-    take up in memory. If the option was set, we adjust `maxBiggerTableRows`, so
-    that it now conforms to it.
-    */
-    const std::optional<size_t>& maxMemoryInMB =
-        config.getValueByNestedKeys<size_t>("maxMemoryInMB");
-    maxMemoryInMBWasGiven_ = maxMemoryInMB.has_value();
-
-    /*
-    The overhead can be, more or less, ignored. We are just concerned over
-    the space needed for the entries.
-    */
-    constexpr size_t memoryPerIdTableEntryInByte = sizeof(IdTable::value_type);
-    const size_t memoryPerRowInByte =
-        memoryPerIdTableEntryInByte * biggerTableAmountColumns_;
-
-    if (maxMemoryInMBWasGiven_) {
-      // Does a single row take more memory, than is allowed?
-      if (maxMemoryInMB.value() * 1000000 < memoryPerRowInByte) {
-        throw ad_utility::Exception(absl::StrCat(
-            "A single row of an", " IdTable, with ", biggerTableAmountColumns_,
-            " columns, takes more", " memory, than what was allowed."));
-      }
-
-      // Approximate, how many rows that would be at maximum memory usage.
-      maxBiggerTableRows_ =
-          (maxMemoryInMB.value() * 1000000) / memoryPerRowInByte;
+    `maxMemoryInMB` is the max amount, that a `IdTable` is allowed to
+    take up in memory.    */
+    maxMemoryInByte_ = config.getValueByNestedKeys<size_t>("maxMemoryInMB");
+    if (maxMemoryInByte_.has_value()) {
+      // Convert to bytes.
+      maxMemoryInByte_ = maxMemoryInByte_.value() * 1000000;
     }
 
     maxTimeSingleMeasurement_ =
@@ -774,6 +770,42 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
           }
         };
 
+    /*
+    Is `maxMemoryInByte_` big enough, to even allow for one row of the smaller
+    table, bigger table, or the table resulting from joining the smaller and
+    bigger table?`
+    */
+    if (maxMemoryInByte_.has_value()) {
+      // Throw the error message.
+      auto throwMessage = [](std::string_view tableName,
+                             const size_t& tableAmountColumens) {
+        const size_t memoryForOneRow =
+            approximateMemoryNeededByIdTable(1, tableAmountColumens);
+        throw ad_utility::Exception(absl::StrCat(
+            "The configuration option 'maxMemoryInMB' is set too small. A "
+            "single row of ",
+            tableName, " requires at least ", memoryForOneRow,
+            " Byte (Rounded up, ",
+            static_cast<size_t>(std::ceil(memoryForOneRow / 1000000.0)),
+            " MB)."));
+      };
+
+      if (maxMemoryInByte_.value() <
+          approximateMemoryNeededByIdTable(1, smallerTableAmountColumns_)) {
+        throwMessage("the smaller table", smallerTableAmountColumns_);
+      } else if (maxMemoryInByte_.value() < approximateMemoryNeededByIdTable(
+                                                1, biggerTableAmountColumns_)) {
+        throwMessage("the bigger table", biggerTableAmountColumns_);
+      } else if (maxMemoryInByte_.value() <
+                 approximateMemoryNeededByIdTable(
+                     1, smallerTableAmountColumns_ + biggerTableAmountColumns_ -
+                            1)) {
+        throwMessage(
+            "the table, resulting from joining the smaller and bigger table,",
+            smallerTableAmountColumns_ + biggerTableAmountColumns_ - 1);
+      }
+    }
+
     // Is `smallerTableAmountRows_` a valid value?
     checkAtLeast("smallerTableAmountRows_", smallerTableAmountRows_,
                  static_cast<size_t>(1), true);
@@ -793,25 +825,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     }
 
     // Is `minBiggerTableRows_` smaller, or equal, to `maxBiggerTableRows_`?
-    if (minBiggerTableRows_ > maxBiggerTableRows_) {
-      // What's the reason, that it's smaller?
-      if (maxMemoryInMBWasGiven_) {
-        throw ad_utility::Exception(absl::StrCat(
-            "The configuration option 'maxMemoryInMB' with ",
-            maxMemoryInMB.value(),
-            " MB doesn't allow enough memory, to create a table "
-            "with at least ",
-            minBiggerTableRows_,
-            " ('minBiggerTableRows') rows. It needs at least ",
-            static_cast<size_t>(std::ceil(
-                static_cast<double>(minBiggerTableRows_ * memoryPerRowInByte) /
-                1000000.0)),
-            " MB."));
-      } else {
-        checkSmallerThan("minBiggerTableRows", minBiggerTableRows_,
-                         "maxBiggerTableRows", maxBiggerTableRows_, true);
-      }
-    }
+    checkSmallerThan("minBiggerTableRows", minBiggerTableRows_,
+                     "maxBiggerTableRows", maxBiggerTableRows_, true);
 
     // Do we have at least 1 column?
     checkAtLeast("smallerTableAmountColumns", smallerTableAmountColumns_,
@@ -844,8 +859,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                             maxTimeSingleMeasurement_.value());
     }
 
-    if (maxMemoryInMBWasGiven_) {
-      meta->addKeyValuePair("maxBiggerTableRows", maxBiggerTableRows_);
+    if (maxMemoryInByte_.has_value()) {
+      meta->addKeyValuePair("maxMemoryInMB",
+                            maxMemoryInByte_.value() / 1000000);
     }
   }
 };
@@ -864,32 +880,38 @@ auto createDefaultGrowthLambda(const size_t& base,
 }
 
 /*
-@brief Create and return a lambda, that returns true, if none of the
-measurements of the given benchmark table took to long. Optionally, is also
-checks, if the bigger `IdTable` doesn't have more rows, than what is allowed. In
-that case, both conditions must be met, before it returns true.
+@brief Create and return a lambda, that returns true, iff:
+- (Can be turned off) None of the benchmark measurements took to long.
+- (Can be turned off) None of the generated `IdTable`s are to big.
 
-@tparam Function A lambda function, that takes a `const size_t&` and return a
-`size_t`.
+@tparam SmallerTableMemorySizeFunction, BiggerTableMemorySizeFunction A lambda
+function, that takes a `const size_t&` and return a `size_t`.
 
-@param maxTime The maximum amount of time, a function measurements is allowed to
-take.
-@param checkMemory If true, a maximal amount of memory, that the bigger
-`IdTable` is allowed to use, must have been told, and the returned function will
-check for it. If false, it wasn't and the memory used can be ignored.
-@param maxAmountRowInBiggerTable How many rows the bigger `IdTable` is allowed
-to have at maximum.
-@param biggerTableAmountRowsFunction A function for calculating the amount of
-rows of the bigger table, in the row of a benchmark table. The only parameter
-given is the row number in the benchmark table.
+@param maxTime The maximum amount of time, a single function measurements is
+allowed to take. If no value is given, it will not be tested.
+@param maxMemoryInByte How much memory space a `IdTable` is allowed to have at
+maximum. If no value is given, it will not be tested.
+@param smallerTableMemorySizeFunction, biggerTableMemorySizeFunction These
+functions should calculate/approximate the amount of memory, the bigger and
+smaller `IdTable` take, in byte. The only parameter given is the row number in
+the benchmark table.
+@param resultTableAmountColumns How many columns the result of joining the
+smaller and bigger `IdTable` has. Used for calculating/approximating the memory
+space, that this result table takes up.
 */
-template <invocableWithReturnType<size_t, const size_t&> Function>
+template <invocableWithReturnType<size_t, const size_t&>
+              SmallerTableMemorySizeFunction,
+          invocableWithReturnType<size_t, const size_t&>
+              BiggerTableMemorySizeFunction>
 auto createDefaultStoppingLambda(
-    const float& maxTime, bool checkMemory,
-    const size_t& maxAmountRowInBiggerTable,
-    const Function& biggerTableAmountRowsFunction) {
-  return [maxTime, maxAmountRowInBiggerTable, checkMemory,
-          &biggerTableAmountRowsFunction](const ResultTable& table) -> bool {
+    const std::optional<float>& maxTime,
+    const std::optional<size_t>& maxMemoryInByte,
+    const SmallerTableMemorySizeFunction& smallerTableMemorySizeFunction,
+    const BiggerTableMemorySizeFunction& biggerTableMemorySizeFunction,
+    const size_t& resultTableAmountColumns) {
+  return [maxTime, maxMemoryInByte, &smallerTableMemorySizeFunction,
+          &biggerTableMemorySizeFunction,
+          resultTableAmountColumns](const ResultTable& table) -> bool {
     // If the tables has no rows, that's an automatic pass.
     if (table.numRows() == 0) {
       return true;
@@ -898,12 +920,30 @@ auto createDefaultStoppingLambda(
     // The row, that we are looking at.
     const size_t row = table.numRows() - 1;
 
-    // Did any measurement take to long in the newest row? Or does the bigger
-    // tables have to many rows?
-    return checkIfFunctionMeasurementOfRowUnderMaxtime(table, row, maxTime) &&
-           (checkMemory ? biggerTableAmountRowsFunction(row) <=
-                              maxAmountRowInBiggerTable
-                        : true);
+    // Checks, if all tables don't take up to much memory space. Takes the
+    // number of the current row in the benchmark table.
+    auto checkMemorySizeOfTables =
+        [&smallerTableMemorySizeFunction, &biggerTableMemorySizeFunction,
+         &maxMemoryInByte, &resultTableAmountColumns,
+         &table](const size_t& benchmarkTableRowNumber) {
+          return (smallerTableMemorySizeFunction(benchmarkTableRowNumber) <=
+                  maxMemoryInByte.value()) &&
+                 (biggerTableMemorySizeFunction(benchmarkTableRowNumber) <=
+                  maxMemoryInByte.value()) &&
+                 (approximateMemoryNeededByIdTable(
+                      std::stoull(table.getEntry<std::string>(
+                          benchmarkTableRowNumber, 4)),
+                      resultTableAmountColumns) <= maxMemoryInByte.value());
+        };
+
+    // Did any measurement take to long in the newest row? Or did any table have
+    // to many rows?
+    return (!maxTime.has_value() && !maxMemoryInByte.has_value()) ||
+           ((maxTime.has_value() ? checkIfFunctionMeasurementOfRowUnderMaxtime(
+                                       table, row, maxTime.value())
+                                 : true) &&
+            (maxMemoryInByte.has_value() ? checkMemorySizeOfTables(row)
+                                         : true));
   };
 }
 
@@ -930,10 +970,14 @@ class BmOnlyBiggerTableSizeChanges final
             absl::StrCat("Smaller table stays at ", smallerTableAmountRows_,
                          " rows, ratio to rows of bigger table grows.");
 
-        // We have to call different functions depending on if there was a max
-        // time limit to a single measurement.
+        /*
+        We have to call different functions depending on if there was a max time
+        limit to a single measurement, or a max memory usage limit for a single
+        table.
+        */
         ResultTable* table;
-        if (!maxTimeSingleMeasurement_.has_value()) {
+        if (!maxTimeSingleMeasurement_.has_value() &&
+            !maxMemoryInByte_.has_value()) {
           /*
           We got the fixed amount of rows for the smaller table and the variable
           amount of rows for the bigger table. Those can be used to calculate
@@ -958,11 +1002,17 @@ class BmOnlyBiggerTableSizeChanges final
           table = &makeGrowingBenchmarkTable(
               &results, tableName,
               createDefaultStoppingLambda(
-                  maxTimeSingleMeasurement_.value(), maxMemoryInMBWasGiven_,
-                  maxBiggerTableRows_,
+                  maxTimeSingleMeasurement_, maxMemoryInByte_,
+                  [this](const size_t&) {
+                    return approximateMemoryNeededByIdTable(
+                        smallerTableAmountRows_, smallerTableAmountColumns_);
+                  },
                   [this, &growthFunction](const size_t& row) {
-                    return smallerTableAmountRows_ * growthFunction(row);
-                  }),
+                    return approximateMemoryNeededByIdTable(
+                        smallerTableAmountRows_ * growthFunction(row),
+                        biggerTableAmountColumns_);
+                  },
+                  smallerTableAmountColumns_ + biggerTableAmountColumns_ - 1),
               overlapChance_, smallerTableSorted, biggerTableSorted,
               growthFunction, smallerTableAmountRows_,
               smallerTableAmountColumns_, biggerTableAmountColumns_);
@@ -1019,10 +1069,14 @@ class BmOnlySmallerTableSizeChanges final
               "the amount of rows in the bigger table, stays at ",
               ratioRows, ".");
 
-          // We have to call different functions depending on if there was a max
-          // time limit to a single measurement.
+          /*
+          We have to call different functions depending on if there was a max
+          time limit to a single measurement, or a max memory usage limit for a
+          single table.
+          */
           ResultTable* table;
-          if (!maxTimeSingleMeasurement_.has_value()) {
+          if (!maxTimeSingleMeasurement_.has_value() &&
+              !maxMemoryInByte_.has_value()) {
             /*
             We got the fixed ratio and the variable amount of rows for the
             bigger table. Those can be used to calculate the number of rows in
@@ -1050,11 +1104,17 @@ class BmOnlySmallerTableSizeChanges final
             table = &makeGrowingBenchmarkTable(
                 &results, tableName,
                 createDefaultStoppingLambda(
-                    maxTimeSingleMeasurement_.value(), maxMemoryInMBWasGiven_,
-                    maxBiggerTableRows_,
-                    [&growthFunction, &ratioRows](const size_t& row) {
-                      return growthFunction(row) * ratioRows;
-                    }),
+                    maxTimeSingleMeasurement_, maxMemoryInByte_,
+                    [this, &growthFunction](const size_t& row) {
+                      return approximateMemoryNeededByIdTable(
+                          growthFunction(row), smallerTableAmountColumns_);
+                    },
+                    [this, &growthFunction, &ratioRows](const size_t& row) {
+                      return approximateMemoryNeededByIdTable(
+                          growthFunction(row) * ratioRows,
+                          biggerTableAmountColumns_);
+                    },
+                    smallerTableAmountColumns_ + biggerTableAmountColumns_ - 1),
                 overlapChance_, smallerTableSorted, biggerTableSorted,
                 ratioRows, growthFunction, smallerTableAmountColumns_,
                 biggerTableAmountColumns_);
@@ -1108,10 +1168,14 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
             "Both tables always have the same amount of rows and that amount "
             "grows.";
 
-        // We have to call different functions depending on if there was a max
-        // time limit to a single measurement.
+        /*
+        We have to call different functions depending on if there was a max time
+        limit to a single measurement, or a max memory usage limit for a single
+        table.
+        */
         ResultTable* table;
-        if (!maxTimeSingleMeasurement_.has_value()) {
+        if (!maxTimeSingleMeasurement_.has_value() &&
+            !maxMemoryInByte_.has_value()) {
           // Easier reading.
           const std::vector<size_t> smallerTableAmountRows{
               createExponentVectorUntilSize(10, minBiggerTableRows_,
@@ -1129,9 +1193,17 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 
           table = &makeGrowingBenchmarkTable(
               &results, tableName,
-              createDefaultStoppingLambda(maxTimeSingleMeasurement_.value(),
-                                          maxMemoryInMBWasGiven_,
-                                          maxBiggerTableRows_, growthFunction),
+              createDefaultStoppingLambda(
+                  maxTimeSingleMeasurement_, maxMemoryInByte_,
+                  [this, &growthFunction](const size_t& row) {
+                    return approximateMemoryNeededByIdTable(
+                        growthFunction(row), smallerTableAmountColumns_);
+                  },
+                  [this, &growthFunction](const size_t& row) {
+                    return approximateMemoryNeededByIdTable(
+                        growthFunction(row), biggerTableAmountColumns_);
+                  },
+                  smallerTableAmountColumns_ + biggerTableAmountColumns_ - 1),
               overlapChance_, smallerTableSorted, biggerTableSorted,
               static_cast<size_t>(1), growthFunction,
               smallerTableAmountColumns_, biggerTableAmountColumns_);
