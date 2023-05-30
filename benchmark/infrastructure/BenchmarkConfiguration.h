@@ -34,8 +34,7 @@ inline constexpr bool isString =
 // short: Only whole numbers and everything, that could be converted into a
 // string.
 template <typename T>
-concept KeyForJson = std::constructible_from<std::string, std::decay_t<T>> ||
-                     std::integral<std::decay_t<T>>;
+concept KeyForJson = isString<T> || std::integral<std::decay_t<T>>;
 
 // Only returns true, if all the given keys, that are numbers, are bigger/equal
 // than 0.
@@ -103,16 +102,14 @@ class BenchmarkConfiguration {
       } else {
         /*
         Must have been a number. I mean, `KeyForJson` doesn't allow anything
-        else, than those 3 possibilities and this the the last one.
+        else, than those 2 possibilities and this the the last one.
         */
+        AD_CONTRACT_CHECK(std::integral<std::decay_t<T>>);
         transformedKey = std::to_string(key);
       }
 
-      // Replace special character `~` with `~0`.
-      transformedKey = absl::StrReplaceAll(transformedKey, {{"~", "~0"}});
-
-      // Replace special character `/` with `~1`.
-      return absl::StrReplaceAll(transformedKey, {{"/", "~1"}});
+      // Replace special character `~` with `~0` and `/` with `~1`.
+      return absl::StrReplaceAll(transformedKey, {{"~", "~0"}, {"/", "~1"}});
     };
 
     // Creating the string for the pointer.
