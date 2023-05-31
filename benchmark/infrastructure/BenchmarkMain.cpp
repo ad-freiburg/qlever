@@ -15,11 +15,12 @@
 #include <vector>
 
 #include "../benchmark/infrastructure/Benchmark.h"
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "../benchmark/infrastructure/BenchmarkToJson.h"
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
+#include "util/ConfigurationManager/ConfigManager.h"
+#include "util/ConfigurationManager/ConfigurationToString.h"
 #include "util/File.h"
 #include "util/json.h"
 
@@ -159,7 +160,8 @@ int main(int argc, char** argv) {
     // Print the configuration options with default values, if there were any.
     if (const std::string &
             defaultConfigurationOptionString{
-                getDefaultValueBenchmarkConfigurationOptions(config)};
+                ad_utility::getDefaultValueBenchmarkConfigurationOptions(
+                    config)};
         defaultConfigurationOptionString != "") {
       std::cout << defaultConfigurationOptionString << "\n\n";
     }

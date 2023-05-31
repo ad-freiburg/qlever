@@ -7,10 +7,10 @@
 #include <vector>
 
 #include "../benchmark/infrastructure/Benchmark.h"
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
-#include "infrastructure/BenchmarkConfigurationOption.h"
+#include "util/ConfigurationManager/ConfigManager.h"
+#include "util/ConfigurationManager/ConfigurationOption.h"
 #include "util/Random.h"
 
 namespace ad_benchmark {

@@ -2,17 +2,17 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel February of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkToString.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
 
-#include "BenchmarkConfigurationOption.h"
+#include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
+#include "util/ConfigurationManager/ConfigurationOption.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/StringUtils.h"
 
 namespace ad_benchmark {
 
@@ -24,27 +24,6 @@ void addCategoryTitleToOStringstream(std::ostringstream* stream,
   const std::string bar(barLength, '#');
 
   (*stream) << bar << "\n# " << categoryTitle << " #\n" << bar;
-}
-
-// ___________________________________________________________________________
-std::string addIndentation(const std::string_view str,
-                           const size_t& indentationLevel) {
-  // An indention level of 0 makes no sense. Must be an error.
-  AD_CONTRACT_CHECK(indentationLevel > 0);
-
-  // The indention symbols for this level of indention.
-  std::string indentationSymbols{""};
-  indentationSymbols.reserve(outputIndentation.size() * indentationLevel);
-  for (size_t i = 0; i < indentationLevel; i++) {
-    indentationSymbols.append(outputIndentation);
-  }
-
-  // Add an indentation to the beginning and replace a new line with a new line,
-  // directly followed by the indentation.
-  return absl::StrCat(
-      indentationSymbols,
-      absl::StrReplaceAll(str,
-                          {{"\n", absl::StrCat("\n", indentationSymbols)}}));
 }
 
 // ___________________________________________________________________________
@@ -79,7 +58,7 @@ void addVectorOfResultEntryToOStringstream(
   Adding the entries to the stream in such a way, that we don't have a line
   separator at the end of that list.
   */
-  forEachExcludingTheLastOne(
+  ad_utility::forEachExcludingTheLastOne(
       entries,
       [&addResultEntry, &stream, &lineSeparator](const ResultEntry& entry) {
         addResultEntry(entry);
@@ -156,7 +135,7 @@ std::string benchmarkConfigurationOptionValueTypeToString(
       } else if constexpr (ad_utility::isVector<T>) {
         std::ostringstream stream;
         stream << "{";
-        forEachExcludingTheLastOne(
+        ad_utility::forEachExcludingTheLastOne(
             variantEntry.value(),
             [&stream, &variantSubTypetoString](const auto& entry) {
               stream << variantSubTypetoString(std::optional{entry},
@@ -205,7 +184,7 @@ std::string getDefaultValueBenchmarkConfigurationOptions(
             "'.");
       };
 
-  forEachExcludingTheLastOne(
+  ad_utility::forEachExcludingTheLastOne(
       config.getConfigurationOptions(),
       [&stream, &defaultConfigurationOptionToString](
           const BenchmarkConfigurationOption& option) {

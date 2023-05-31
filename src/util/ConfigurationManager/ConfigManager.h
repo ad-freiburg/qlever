@@ -15,10 +15,9 @@
 #include <type_traits>
 #include <typeinfo>
 
-#include "../benchmark/infrastructure/BenchmarkConfigurationOption.h"
-#include "generated/BenchmarkConfigurationShorthandLexer.h"
-#include "nlohmann/json.hpp"
 #include "util/ANTLRLexerHelper.h"
+#include "util/ConfigurationManager/ConfigurationOption.h"
+#include "util/ConfigurationManager/generated/ConfigurationShorthandLexer.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/TypeTraits.h"
@@ -177,10 +176,9 @@ class BenchmarkConfiguration {
         // Only actually check, if we have a string, or string like, type `T`.
         if constexpr (isString<T>) {
           lastCheckedKey = key;
-          return stringOnlyContainsSpecifiedTokens<
-              BenchmarkConfigurationShorthandLexer>(
+          return stringOnlyContainsSpecifiedTokens<ConfigurationShorthandLexer>(
               AD_FWD(key),
-              static_cast<size_t>(BenchmarkConfigurationShorthandLexer::NAME));
+              static_cast<size_t>(ConfigurationShorthandLexer::NAME));
         } else {
           return true;
         }

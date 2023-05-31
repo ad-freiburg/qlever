@@ -24,6 +24,7 @@ indexes.
 given lexer.
 @param tokenTypeIds In `anltr4` every token type has it's own unique index for
 identfication. You should find yours as an enum inside your lexer class.
+
 IMPORTANT: Remember, the highest possible lexer rule will always be used by the
 lexer to generate a token. That INCLUDES rules, that are just `or` collections
 of other lexer rules.

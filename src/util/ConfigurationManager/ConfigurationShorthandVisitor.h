@@ -5,7 +5,7 @@
 
 #include <antlr4-runtime.h>
 
-#include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandParser.h"
+#include "util/ConfigurationManager/generated/ConfigurationShorthandParser.h"
 #include "util/json.h"
 
 /*
@@ -14,7 +14,7 @@ object.
 */
 class ToJsonBenchmarkConfigurationShorthandVisitor final {
  public:
-  using Parser = BenchmarkConfigurationShorthandParser;
+  using Parser = ConfigurationShorthandParser;
 
   // __________________________________________________________________________
   nlohmann::json::object_t visitShortHandString(

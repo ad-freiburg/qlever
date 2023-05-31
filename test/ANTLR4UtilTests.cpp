@@ -6,8 +6,8 @@
 #include <ANTLRInputStream.h>
 #include <gtest/gtest.h>
 
-#include "../benchmark/infrastructure/util/ANTLRLexerHelper.h"
 #include "../test/util/ANTLR4Mockup/ANTLR4MockupLexer.h"
+#include "util/ANTLRLexerHelper.h"
 
 /*
 For the helper function `stringOnlyContainsSpecifiedTokens` in

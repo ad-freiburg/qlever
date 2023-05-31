@@ -14,8 +14,8 @@
 #include <typeinfo>
 #include <variant>
 
-#include "generated/BenchmarkConfigurationShorthandLexer.h"
 #include "util/ANTLRLexerHelper.h"
+#include "util/ConfigurationManager/generated/ConfigurationShorthandLexer.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -209,8 +209,8 @@ class BenchmarkConfigurationOption {
         defaultValue_(defaultValue) {
     // The `identifier` must be a valid `NAME` in the short hand for
     // configurations.
-    if (!stringOnlyContainsSpecifiedTokens<BenchmarkConfigurationShorthandLexer>(
-            identifier, static_cast<size_t>(BenchmarkConfigurationShorthandLexer::NAME))) {
+    if (!stringOnlyContainsSpecifiedTokens<ConfigurationShorthandLexer>(
+            identifier, static_cast<size_t>(ConfigurationShorthandLexer::NAME))) {
       throw ad_utility::Exception(
           absl::StrCat("Error while constructing configuraion option: The identifier must be "
                        "a 'NAME' in the configuration short hand grammar, which '",

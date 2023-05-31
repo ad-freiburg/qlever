@@ -1,0 +1,4 @@
+add_library(configurationManager ConfigManager.cpp
+    ConfigurationOption.cpp generated/ConfigurationShorthandLexer.cpp
+    generated/ConfigurationShorthandParser.cpp ConfigurationShorthandVisitor.cpp ConfigurationToString.cpp)
+qlever_target_link_libraries(configurationManager antlr4_static util)

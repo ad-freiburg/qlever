@@ -11,15 +11,13 @@
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-#include "BenchmarkConfiguration.h"
-#include "BenchmarkConfigurationOption.h"
 #include "BenchmarkMetadata.h"
+#include "util/Algorithm.h"
+#include "util/ConfigurationManager/ConfigManager.h"
+#include "util/ConfigurationManager/ConfigurationOption.h"
 #include "util/json.h"
 
 namespace ad_benchmark {
-
-// How the indention should look like.
-static constexpr std::string_view outputIndentation = "    ";
 
 /*
  * @brief Add a string of the form
@@ -30,25 +28,6 @@ static constexpr std::string_view outputIndentation = "    ";
  */
 void addCategoryTitleToOStringstream(std::ostringstream* stream,
                                      std::string_view categoryTitle);
-
-/*
-@brief Applies the given function `regularFunction` to all elements in `r`,
-except for the last one. Instead, `lastOneFunction` is applied to that one.
-
-@tparam Range Needs to be a data type supported by `std::ranges`.
-
-@param r Must hold at least one element.
-*/
-template <typename Range, typename RegularFunction, typename LastOneFunction>
-static void forEachExcludingTheLastOne(const Range& r,
-                                       RegularFunction regularFunction,
-                                       LastOneFunction lastOneFunction) {
-  // Throw an error, if there are no elements in `r`.
-  AD_CONTRACT_CHECK(r.size() > 0);
-
-  std::ranges::for_each_n(r.begin(), r.size() - 1, regularFunction, {});
-  lastOneFunction(r.back());
-}
 
 /*
 @brief Adds the elements of the given range to the stream in form of a list.
@@ -69,7 +48,7 @@ static void addListToOStringStream(std::ostringstream* stream, Range&& r,
   `std::views::join_with`. After that, we just have to insert all the elements
   of the new view into the stream.
   */
-  forEachExcludingTheLastOne(
+  ad_utility::forEachExcludingTheLastOne(
       AD_FWD(r),
       [&stream, &translationFunction,
        &listItemSeparator](const auto& listItem) {
@@ -81,15 +60,6 @@ static void addListToOStringStream(std::ostringstream* stream, Range&& r,
 }
 
 /*
-@brief Adds indention before the given string and directly after new line
-characters.
-
-@param indentionLevel How deep is the indention? `0` is no indention.
-*/
-std::string addIndentation(const std::string_view str,
-                           const size_t& indentationLevel);
-
-/*
 @brief If `meta` is a non empty metadata object, return it's non compact
 json string representation. Otherwise, return an empty string.
 
@@ -99,20 +69,6 @@ json string representation. Otherwise, return an empty string.
 std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
                                     std::string_view prefix,
                                     std::string_view suffix);
-
-/*
-@brief Returns the content of a `BenchmarkConfigurationOption::ValueType` object
-as a string representation.
-*/
-std::string benchmarkConfigurationOptionValueTypeToString(
-    const BenchmarkConfigurationOption::ValueType& val);
-
-/*
-@brief Return a string, containing a list of all configuration options, that
-weren't set at runtime, with their default values.
-*/
-std::string getDefaultValueBenchmarkConfigurationOptions(
-    const BenchmarkConfiguration& config);
 
 /*
 @brief Add a vector of `ResultEntry` in their string form to the string stream

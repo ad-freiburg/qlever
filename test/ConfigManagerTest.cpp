@@ -7,7 +7,7 @@
 
 #include <vector>
 
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
+#include "util/ConfigurationManager/ConfigManager.h"
 
 TEST(BenchmarkConfigurationTest, GetConfigurationOptionByNestedKeysTest) {
   ad_benchmark::BenchmarkConfiguration config{};

@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
 
@@ -242,6 +244,37 @@ constexpr bool constantTimeEquals(std::string_view view1,
         view.size()};
   };
   return impl(toVolatile(view1), toVolatile(view2));
+}
+
+/*
+@brief Adds indention before the given string and directly after each new line
+character.
+
+@param indentionLevel How deep is the indention? `0` is no indention.
+*/
+inline std::string addIndentation(const std::string_view str,
+                                  const size_t& indentationLevel) {
+  // An indention level of 0 is trivial.
+  if (indentationLevel == 0) {
+    return std::string{str};
+  };
+
+  // How a single level of indention should look like.
+  static constexpr std::string_view outputIndentation = "    ";
+
+  // The indention symbols for this level of indention.
+  std::string indentationSymbols{""};
+  indentationSymbols.reserve(outputIndentation.size() * indentationLevel);
+  for (size_t i = 0; i < indentationLevel; i++) {
+    indentationSymbols.append(outputIndentation);
+  }
+
+  // Add an indentation to the beginning and replace a new line with a new line,
+  // directly followed by the indentation.
+  return absl::StrCat(
+      indentationSymbols,
+      absl::StrReplaceAll(str,
+                          {{"\n", absl::StrCat("\n", indentationSymbols)}}));
 }
 
 }  // namespace ad_utility

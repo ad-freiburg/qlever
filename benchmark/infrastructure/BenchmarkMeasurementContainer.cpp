@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/string_view.h>
@@ -14,12 +12,14 @@
 #include <string_view>
 #include <utility>
 
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/Iterators.h"
+#include "util/StringUtils.h"
 
 namespace ad_benchmark {
 
@@ -35,7 +35,7 @@ const BenchmarkMetadata& BenchmarkMetadataGetter::metadata() const {
 ResultEntry::operator std::string() const {
   return absl::StrCat(
       "Single measurement '", descriptor_, "'\n",
-      addIndentation(
+      ad_utility::addIndentation(
           absl::StrCat(getMetadataPrettyString(metadata(), "metadata: ", "\n"),
                        "time: ", measuredTime_, "s"),
           1));
@@ -67,9 +67,9 @@ ResultGroup::operator std::string() const {
       &stream,
       ad_utility::transform(entries_,
                             [](const auto& pointer) { return (*pointer); }),
-      std::string{outputIndentation}, std::string{outputIndentation});
+      ad_utility::addIndentation("", 1), ad_utility::addIndentation("", 1));
 
-  return absl::StrCat(prefix, addIndentation(stream.str(), 1));
+  return absl::StrCat(prefix, ad_utility::addIndentation(stream.str(), 1));
 }
 
 // ____________________________________________________________________________
@@ -163,7 +163,7 @@ ResultTable::operator std::string() const {
       [&columnSeperator, &addStringWithPadding](
           std::ostringstream& stream,
           const std::vector<std::pair<std::string, size_t>>& rowEntries) {
-        forEachExcludingTheLastOne(
+        ad_utility::forEachExcludingTheLastOne(
             rowEntries,
             [&stream, &columnSeperator,
              &addStringWithPadding](const auto& pair) {
@@ -196,7 +196,7 @@ ResultTable::operator std::string() const {
     // Signal, that the table is empty.
     stream << "\n## Empty Table (0 rows) ##";
 
-    return absl::StrCat(prefix, addIndentation(stream.str(), 1));
+    return absl::StrCat(prefix, ad_utility::addIndentation(stream.str(), 1));
   }
 
   // For easier usage.
@@ -237,7 +237,7 @@ ResultTable::operator std::string() const {
                        columnMaxStringWidth));
   }
 
-  return absl::StrCat(prefix, addIndentation(stream.str(), 1));
+  return absl::StrCat(prefix, ad_utility::addIndentation(stream.str(), 1));
 }
 
 // ____________________________________________________________________________

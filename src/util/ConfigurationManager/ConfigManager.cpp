@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -14,11 +12,12 @@
 #include <sstream>
 #include <string>
 
-#include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandLexer.h"
-#include "../benchmark/infrastructure/generated/BenchmarkConfigurationShorthandParser.h"
-#include "BenchmarkConfigurationOption.h"
-#include "BenchmarkConfigurationShorthandVisitor.h"
-#include "BenchmarkToString.h"
+#include "../benchmark/infrastructure/BenchmarkToString.h"
+#include "util/ConfigurationManager/ConfigManager.h"
+#include "util/ConfigurationManager/ConfigurationOption.h"
+#include "util/ConfigurationManager/ConfigurationShorthandVisitor.h"
+#include "util/ConfigurationManager/generated/ConfigurationShorthandLexer.h"
+#include "util/ConfigurationManager/generated/ConfigurationShorthandParser.h"
 #include "util/Exception.h"
 #include "util/antlr/ANTLRErrorHandling.h"
 #include "util/json.h"
@@ -59,9 +58,9 @@ nlohmann::json BenchmarkConfiguration::parseShortHand(
     const std::string& shortHandString) {
   // I use ANTLR expressions to parse the short hand.
   antlr4::ANTLRInputStream input(shortHandString);
-  BenchmarkConfigurationShorthandLexer lexer(&input);
+  ConfigurationShorthandLexer lexer(&input);
   antlr4::CommonTokenStream tokens(&lexer);
-  BenchmarkConfigurationShorthandParser parser(&tokens);
+  ConfigurationShorthandParser parser(&tokens);
 
   // The default in ANTLR is to log all errors to the console and to continue
   // the parsing. We need to turn parse errors into exceptions instead to
@@ -73,8 +72,8 @@ nlohmann::json BenchmarkConfiguration::parseShortHand(
   lexer.addErrorListener(&errorListener);
 
   // Get the top node. That is, the node of the first grammar rule.
-  BenchmarkConfigurationShorthandParser::ShortHandStringContext*
-      shortHandStringContext{parser.shortHandString()};
+  ConfigurationShorthandParser::ShortHandStringContext* shortHandStringContext{
+      parser.shortHandString()};
 
   // Walk through the parser tree and build the json equivalent out of the short
   // hand.
@@ -306,8 +305,9 @@ BenchmarkConfiguration::operator std::string() const {
   return absl::StrCat(
       "Locations of available configuration options with example "
       "values:\n",
-      addIndentation(prettyKeyToConfigurationOptionIndex.dump(2), 1),
+      ad_utility::addIndentation(prettyKeyToConfigurationOptionIndex.dump(2),
+                                 1),
       "\n\nAvailable configuration options:\n",
-      addIndentation(stream.str(), 1));
+      ad_utility::addIndentation(stream.str(), 1));
 }
 }  // namespace ad_benchmark
