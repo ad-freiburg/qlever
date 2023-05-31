@@ -157,7 +157,7 @@ float Union::getMultiplicity(size_t col) {
   return 1;
 }
 
-size_t Union::getSizeEstimateBeforeLimit() {
+uint64_t Union::getSizeEstimateBeforeLimit() {
   return _subtrees[0]->getSizeEstimate() + _subtrees[1]->getSizeEstimate();
 }
 

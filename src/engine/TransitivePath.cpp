@@ -165,7 +165,7 @@ float TransitivePath::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t TransitivePath::getSizeEstimateBeforeLimit() {
+uint64_t TransitivePath::getSizeEstimateBeforeLimit() {
   if (!_leftIsVar || !_rightIsVar) {
     // If the subject or object is fixed, assume that the number of matching
     // triples is 1000. This will usually be an overestimate, but it will do the
