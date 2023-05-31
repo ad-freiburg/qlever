@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "util/ConfigurationManager/ConfigurationShorthandVisitor.h"
+#include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/Exception.h"
 
 // __________________________________________________________________________

@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigurationManager/ConfigManager.h"
+#include "util/ConfigManager/ConfigManager.h"
 
 #include <absl/strings/str_cat.h>
 #include <bits/ranges_algo.h>
@@ -15,7 +15,7 @@
 #include <utility>
 #include <variant>
 
-#include "util/ConfigurationManager/ConfigurationToString.h"
+#include "util/ConfigManager/ConfigToString.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"

@@ -320,9 +320,9 @@ addLinkAndDiscoverTest(CopyableUniquePtrTest)
 
 addLinkAndDiscoverTest(JsonCustomConverterForThirdPartyTest)
 
-addLinkAndDiscoverTest(ConfigManagerTest configurationManager)
+addLinkAndDiscoverTest(ConfigManagerTest configManager)
 
-addLinkAndDiscoverTest(ConfigurationOptionTest configurationManager)
+addLinkAndDiscoverTest(ConfigOptionTest configManager)
 
 addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
 

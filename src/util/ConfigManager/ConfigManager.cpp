@@ -13,11 +13,11 @@
 #include <string>
 
 #include "../benchmark/infrastructure/BenchmarkToString.h"
-#include "util/ConfigurationManager/ConfigManager.h"
-#include "util/ConfigurationManager/ConfigurationOption.h"
-#include "util/ConfigurationManager/ConfigurationShorthandVisitor.h"
-#include "util/ConfigurationManager/generated/ConfigurationShorthandLexer.h"
-#include "util/ConfigurationManager/generated/ConfigurationShorthandParser.h"
+#include "util/ConfigManager/ConfigManager.h"
+#include "util/ConfigManager/ConfigOption.h"
+#include "util/ConfigManager/ConfigShorthandVisitor.h"
+#include "util/ConfigManager/generated/ConfigShorthandLexer.h"
+#include "util/ConfigManager/generated/ConfigShorthandParser.h"
 #include "util/Exception.h"
 #include "util/antlr/ANTLRErrorHandling.h"
 #include "util/json.h"
@@ -58,9 +58,9 @@ nlohmann::json BenchmarkConfiguration::parseShortHand(
     const std::string& shortHandString) {
   // I use ANTLR expressions to parse the short hand.
   antlr4::ANTLRInputStream input(shortHandString);
-  ConfigurationShorthandLexer lexer(&input);
+  ConfigShorthandLexer lexer(&input);
   antlr4::CommonTokenStream tokens(&lexer);
-  ConfigurationShorthandParser parser(&tokens);
+  ConfigShorthandParser parser(&tokens);
 
   // The default in ANTLR is to log all errors to the console and to continue
   // the parsing. We need to turn parse errors into exceptions instead to
@@ -72,7 +72,7 @@ nlohmann::json BenchmarkConfiguration::parseShortHand(
   lexer.addErrorListener(&errorListener);
 
   // Get the top node. That is, the node of the first grammar rule.
-  ConfigurationShorthandParser::ShortHandStringContext* shortHandStringContext{
+  ConfigShorthandParser::ShortHandStringContext* shortHandStringContext{
       parser.shortHandString()};
 
   // Walk through the parser tree and build the json equivalent out of the short

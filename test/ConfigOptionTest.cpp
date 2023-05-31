@@ -11,7 +11,7 @@
 #include <variant>
 #include <vector>
 
-#include "util/ConfigurationManager/ConfigurationOption.h"
+#include "util/ConfigManager/ConfigOption.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/json.h"

@@ -1,5 +1,5 @@
 
-// Generated from ConfigurationShorthand.g4 by ANTLR 4.13.0
+// Generated from ConfigShorthand.g4 by ANTLR 4.13.0
 
 #pragma once
 
@@ -9,7 +9,7 @@
 
 
 
-class  ConfigurationShorthandParser : public antlr4::Parser {
+class  ConfigShorthandParser : public antlr4::Parser {
 public:
   enum {
     T__0 = 1, T__1 = 2, T__2 = 3, T__3 = 4, T__4 = 5, T__5 = 6, LITERAL = 7, 
@@ -21,11 +21,11 @@ public:
     RuleList = 4, RuleContent = 5
   };
 
-  explicit ConfigurationShorthandParser(antlr4::TokenStream *input);
+  explicit ConfigShorthandParser(antlr4::TokenStream *input);
 
-  ConfigurationShorthandParser(antlr4::TokenStream *input, const antlr4::atn::ParserATNSimulatorOptions &options);
+  ConfigShorthandParser(antlr4::TokenStream *input, const antlr4::atn::ParserATNSimulatorOptions &options);
 
-  ~ConfigurationShorthandParser() override;
+  ~ConfigShorthandParser() override;
 
   std::string getGrammarFileName() const override;
 
@@ -59,7 +59,7 @@ public:
 
   class  AssignmentsContext : public antlr4::ParserRuleContext {
   public:
-    ConfigurationShorthandParser::AssignmentContext *assignmentContext = nullptr;
+    ConfigShorthandParser::AssignmentContext *assignmentContext = nullptr;
     std::vector<AssignmentContext *> listOfAssignments;
     AssignmentsContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -96,7 +96,7 @@ public:
 
   class  ListContext : public antlr4::ParserRuleContext {
   public:
-    ConfigurationShorthandParser::ContentContext *contentContext = nullptr;
+    ConfigShorthandParser::ContentContext *contentContext = nullptr;
     std::vector<ContentContext *> listElement;
     ListContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;

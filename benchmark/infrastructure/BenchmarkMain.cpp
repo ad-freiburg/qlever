@@ -19,8 +19,8 @@
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
-#include "util/ConfigurationManager/ConfigManager.h"
-#include "util/ConfigurationManager/ConfigurationToString.h"
+#include "util/ConfigManager/ConfigManager.h"
+#include "util/ConfigManager/ConfigToString.h"
 #include "util/File.h"
 #include "util/json.h"
 

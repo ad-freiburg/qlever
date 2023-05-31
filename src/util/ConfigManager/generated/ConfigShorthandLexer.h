@@ -1,5 +1,5 @@
 
-// Generated from ConfigurationShorthand.g4 by ANTLR 4.13.0
+// Generated from ConfigShorthand.g4 by ANTLR 4.13.0
 
 #pragma once
 
@@ -9,16 +9,16 @@
 
 
 
-class  ConfigurationShorthandLexer : public antlr4::Lexer {
+class  ConfigShorthandLexer : public antlr4::Lexer {
 public:
   enum {
     T__0 = 1, T__1 = 2, T__2 = 3, T__3 = 4, T__4 = 5, T__5 = 6, LITERAL = 7, 
     BOOL = 8, INTEGER = 9, FLOAT = 10, STRING = 11, NAME = 12, WHITESPACE = 13
   };
 
-  explicit ConfigurationShorthandLexer(antlr4::CharStream *input);
+  explicit ConfigShorthandLexer(antlr4::CharStream *input);
 
-  ~ConfigurationShorthandLexer() override;
+  ~ConfigShorthandLexer() override;
 
 
   std::string getGrammarFileName() const override;

@@ -9,8 +9,8 @@
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
-#include "util/ConfigurationManager/ConfigManager.h"
-#include "util/ConfigurationManager/ConfigurationOption.h"
+#include "util/ConfigManager/ConfigManager.h"
+#include "util/ConfigManager/ConfigOption.h"
 #include "util/Random.h"
 
 namespace ad_benchmark {

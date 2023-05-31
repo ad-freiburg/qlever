@@ -1,8 +1,8 @@
 
-// Generated from ConfigurationShorthand.g4 by ANTLR 4.13.0
+// Generated from ConfigShorthand.g4 by ANTLR 4.13.0
 
 
-#include "ConfigurationShorthandLexer.h"
+#include "ConfigShorthandLexer.h"
 
 
 using namespace antlr4;
@@ -13,8 +13,8 @@ using namespace antlr4;
 
 namespace {
 
-struct ConfigurationShorthandLexerStaticData final {
-  ConfigurationShorthandLexerStaticData(std::vector<std::string> ruleNames,
+struct ConfigShorthandLexerStaticData final {
+  ConfigShorthandLexerStaticData(std::vector<std::string> ruleNames,
                           std::vector<std::string> channelNames,
                           std::vector<std::string> modeNames,
                           std::vector<std::string> literalNames,
@@ -24,10 +24,10 @@ struct ConfigurationShorthandLexerStaticData final {
         symbolicNames(std::move(symbolicNames)),
         vocabulary(this->literalNames, this->symbolicNames) {}
 
-  ConfigurationShorthandLexerStaticData(const ConfigurationShorthandLexerStaticData&) = delete;
-  ConfigurationShorthandLexerStaticData(ConfigurationShorthandLexerStaticData&&) = delete;
-  ConfigurationShorthandLexerStaticData& operator=(const ConfigurationShorthandLexerStaticData&) = delete;
-  ConfigurationShorthandLexerStaticData& operator=(ConfigurationShorthandLexerStaticData&&) = delete;
+  ConfigShorthandLexerStaticData(const ConfigShorthandLexerStaticData&) = delete;
+  ConfigShorthandLexerStaticData(ConfigShorthandLexerStaticData&&) = delete;
+  ConfigShorthandLexerStaticData& operator=(const ConfigShorthandLexerStaticData&) = delete;
+  ConfigShorthandLexerStaticData& operator=(ConfigShorthandLexerStaticData&&) = delete;
 
   std::vector<antlr4::dfa::DFA> decisionToDFA;
   antlr4::atn::PredictionContextCache sharedContextCache;
@@ -41,21 +41,21 @@ struct ConfigurationShorthandLexerStaticData final {
   std::unique_ptr<antlr4::atn::ATN> atn;
 };
 
-::antlr4::internal::OnceFlag configurationshorthandlexerLexerOnceFlag;
+::antlr4::internal::OnceFlag configshorthandlexerLexerOnceFlag;
 #if ANTLR4_USE_THREAD_LOCAL_CACHE
 static thread_local
 #endif
-ConfigurationShorthandLexerStaticData *configurationshorthandlexerLexerStaticData = nullptr;
+ConfigShorthandLexerStaticData *configshorthandlexerLexerStaticData = nullptr;
 
-void configurationshorthandlexerLexerInitialize() {
+void configshorthandlexerLexerInitialize() {
 #if ANTLR4_USE_THREAD_LOCAL_CACHE
-  if (configurationshorthandlexerLexerStaticData != nullptr) {
+  if (configshorthandlexerLexerStaticData != nullptr) {
     return;
   }
 #else
-  assert(configurationshorthandlexerLexerStaticData == nullptr);
+  assert(configshorthandlexerLexerStaticData == nullptr);
 #endif
-  auto staticData = std::make_unique<ConfigurationShorthandLexerStaticData>(
+  auto staticData = std::make_unique<ConfigShorthandLexerStaticData>(
     std::vector<std::string>{
       "T__0", "T__1", "T__2", "T__3", "T__4", "T__5", "LITERAL", "BOOL", 
       "INTEGER", "FLOAT", "STRING", "NAME", "WHITESPACE"
@@ -115,55 +115,55 @@ void configurationshorthandlexerLexerInitialize() {
   for (size_t i = 0; i < count; i++) { 
     staticData->decisionToDFA.emplace_back(staticData->atn->getDecisionState(i), i);
   }
-  configurationshorthandlexerLexerStaticData = staticData.release();
+  configshorthandlexerLexerStaticData = staticData.release();
 }
 
 }
 
-ConfigurationShorthandLexer::ConfigurationShorthandLexer(CharStream *input) : Lexer(input) {
-  ConfigurationShorthandLexer::initialize();
-  _interpreter = new atn::LexerATNSimulator(this, *configurationshorthandlexerLexerStaticData->atn, configurationshorthandlexerLexerStaticData->decisionToDFA, configurationshorthandlexerLexerStaticData->sharedContextCache);
+ConfigShorthandLexer::ConfigShorthandLexer(CharStream *input) : Lexer(input) {
+  ConfigShorthandLexer::initialize();
+  _interpreter = new atn::LexerATNSimulator(this, *configshorthandlexerLexerStaticData->atn, configshorthandlexerLexerStaticData->decisionToDFA, configshorthandlexerLexerStaticData->sharedContextCache);
 }
 
-ConfigurationShorthandLexer::~ConfigurationShorthandLexer() {
+ConfigShorthandLexer::~ConfigShorthandLexer() {
   delete _interpreter;
 }
 
-std::string ConfigurationShorthandLexer::getGrammarFileName() const {
-  return "ConfigurationShorthand.g4";
+std::string ConfigShorthandLexer::getGrammarFileName() const {
+  return "ConfigShorthand.g4";
 }
 
-const std::vector<std::string>& ConfigurationShorthandLexer::getRuleNames() const {
-  return configurationshorthandlexerLexerStaticData->ruleNames;
+const std::vector<std::string>& ConfigShorthandLexer::getRuleNames() const {
+  return configshorthandlexerLexerStaticData->ruleNames;
 }
 
-const std::vector<std::string>& ConfigurationShorthandLexer::getChannelNames() const {
-  return configurationshorthandlexerLexerStaticData->channelNames;
+const std::vector<std::string>& ConfigShorthandLexer::getChannelNames() const {
+  return configshorthandlexerLexerStaticData->channelNames;
 }
 
-const std::vector<std::string>& ConfigurationShorthandLexer::getModeNames() const {
-  return configurationshorthandlexerLexerStaticData->modeNames;
+const std::vector<std::string>& ConfigShorthandLexer::getModeNames() const {
+  return configshorthandlexerLexerStaticData->modeNames;
 }
 
-const dfa::Vocabulary& ConfigurationShorthandLexer::getVocabulary() const {
-  return configurationshorthandlexerLexerStaticData->vocabulary;
+const dfa::Vocabulary& ConfigShorthandLexer::getVocabulary() const {
+  return configshorthandlexerLexerStaticData->vocabulary;
 }
 
-antlr4::atn::SerializedATNView ConfigurationShorthandLexer::getSerializedATN() const {
-  return configurationshorthandlexerLexerStaticData->serializedATN;
+antlr4::atn::SerializedATNView ConfigShorthandLexer::getSerializedATN() const {
+  return configshorthandlexerLexerStaticData->serializedATN;
 }
 
-const atn::ATN& ConfigurationShorthandLexer::getATN() const {
-  return *configurationshorthandlexerLexerStaticData->atn;
+const atn::ATN& ConfigShorthandLexer::getATN() const {
+  return *configshorthandlexerLexerStaticData->atn;
 }
 
 
 
 
-void ConfigurationShorthandLexer::initialize() {
+void ConfigShorthandLexer::initialize() {
 #if ANTLR4_USE_THREAD_LOCAL_CACHE
-  configurationshorthandlexerLexerInitialize();
+  configshorthandlexerLexerInitialize();
 #else
-  ::antlr4::internal::call_once(configurationshorthandlexerLexerOnceFlag, configurationshorthandlexerLexerInitialize);
+  ::antlr4::internal::call_once(configshorthandlexerLexerOnceFlag, configshorthandlexerLexerInitialize);
 #endif
 }

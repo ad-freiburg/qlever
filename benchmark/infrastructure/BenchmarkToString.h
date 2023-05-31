@@ -13,8 +13,8 @@
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
-#include "util/ConfigurationManager/ConfigManager.h"
-#include "util/ConfigurationManager/ConfigurationOption.h"
+#include "util/ConfigManager/ConfigManager.h"
+#include "util/ConfigManager/ConfigOption.h"
 #include "util/json.h"
 
 namespace ad_benchmark {
