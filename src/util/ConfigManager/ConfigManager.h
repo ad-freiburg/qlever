@@ -127,7 +127,10 @@ class ConfigManager {
    */
   void setShortHand(const std::string& shortHandString);
 
-  // For printing.
-  explicit operator std::string() const;
+  /*
+  @brief Returns a string containing an example json configuration and the
+  string representations of all added configuration options.
+  */
+  std::string printConfigurationDoc() const;
 };
 }  // namespace ad_utility

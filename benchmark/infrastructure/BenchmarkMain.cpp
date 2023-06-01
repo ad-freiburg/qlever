@@ -134,7 +134,7 @@ int main(int argc, char** argv) {
 
   // Print all the available configuration options, if wanted.
   if (vm.count("configuration-options")) {
-    std::cerr << static_cast<std::string>(config) << "\n";
+    std::cerr << config.printConfigurationDoc() << "\n";
     exit(0);
   }
 

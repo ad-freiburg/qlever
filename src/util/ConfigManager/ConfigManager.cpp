@@ -108,9 +108,9 @@ const ConfigOption& ConfigManager::getConfigurationOptionByNestedKeys(
     return configurationOptions_.at(
         keyToConfigurationOptionIndex_.at(ptr).get<size_t>());
   } else {
-    throw ad_utility::Exception(absl::StrCat(
-        "Key error: There was no configuration option found at '",
-        ptr.to_string(), "'\n", static_cast<std::string>(*this), "\n"));
+    throw ad_utility::Exception(
+        absl::StrCat("Key error: There was no configuration option found at '",
+                     ptr.to_string(), "'\n", printConfigurationDoc(), "\n"));
   }
 }
 
@@ -203,7 +203,7 @@ void ConfigManager::addConfigurationOption(const ConfigOption& option,
   if (keyToConfigurationOptionIndex_.contains(ptr)) {
     throw ad_utility::Exception(absl::StrCat(
         "Key error: There was already a configuration option found at '",
-        ptr.to_string(), "'\n", static_cast<std::string>(*this), "\n"));
+        ptr.to_string(), "'\n", printConfigurationDoc(), "\n"));
   }
 
   // Add the location of the new configuration option to the json.
@@ -278,8 +278,8 @@ void ConfigManager::setJsonString(const std::string& jsonString) {
               ? " doesn't"
               : absl::StrCat(" and '", currentPtr.parent_pointer().to_string(),
                              "' both don't"),
-          " point to a valid configuration option.\n",
-          static_cast<std::string>(*this), "\n"));
+          " point to a valid configuration option.\n", printConfigurationDoc(),
+          "\n"));
     }
   }
 
@@ -315,13 +315,13 @@ void ConfigManager::setJsonString(const std::string& jsonString) {
                        configurationOptionJsonPosition.to_string(),
                        "' wasn't defined by the user, even though, this "
                        "configuration option has no default value.\n",
-                       static_cast<std::string>(*this), "\n"));
+                       printConfigurationDoc(), "\n"));
     }
   }
 }
 
 // ____________________________________________________________________________
-ConfigManager::operator std::string() const {
+std::string ConfigManager::printConfigurationDoc() const {
   // For listing all available configuration options.
   std::ostringstream stream;
 
