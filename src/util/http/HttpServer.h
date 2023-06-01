@@ -179,11 +179,10 @@ class HttpServer {
     beast::tcp_stream stream{std::move(socket)};
 
     auto releaseConnection = absl::Cleanup{
-
         [&stream]() noexcept {
-          beast::error_code ec;
+          [[maybe_unused]] beast::error_code ec;
           stream.socket().shutdown(tcp::socket::shutdown_send, ec);
-          stream.socket().close();
+          stream.socket().close(ec);
         }};
 
     // Keep track of whether we have to close the session after a
