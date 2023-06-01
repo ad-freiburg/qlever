@@ -137,14 +137,14 @@ class BenchmarkInterface {
   function was called.
   */
   virtual void addConfigurationOptions(
-      [[maybe_unused]] BenchmarkConfiguration* config) {
+      [[maybe_unused]] ad_utility::ConfigManager* config) {
     // Default behaviour.
     return;
   }
 
   // Used to transport values, that you want to set at runtime.
   virtual void parseConfiguration(
-      [[maybe_unused]] const BenchmarkConfiguration& config) {
+      [[maybe_unused]] const ad_utility::ConfigManager& config) {
     // Default behaviour.
     return;
   };
@@ -202,18 +202,18 @@ class BenchmarkRegister {
   explicit BenchmarkRegister(BenchmarkPointer&& benchmarkClasseInstance);
 
   /*
-  @brief Passes the `BenchmarkConfiguration` to the `parseConfiguration`
+  @brief Passes the `ad_utility::ConfigManager` to the `parseConfiguration`
    function of all the registered instances of benchmark classes.
   */
   static void parseConfigurationWithAllRegisteredBenchmarks(
-      const BenchmarkConfiguration& config = BenchmarkConfiguration{});
+      const ad_utility::ConfigManager& config = ad_utility::ConfigManager{});
 
   /*
-  @brief Passes the `BenchmarkConfiguration` to the `addConfigurationOptions`
+  @brief Passes the `ad_utility::ConfigManager` to the `addConfigurationOptions`
    function of all the registered instances of benchmark classes.
   */
   static void addConfigurationOptionsWtihAllRegisteredBenchmarks(
-      BenchmarkConfiguration* config);
+      ad_utility::ConfigManager* config);
 
   /*
    * @brief Measures all the registered benchmarks and returns the resulting

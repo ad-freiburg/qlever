@@ -3,8 +3,6 @@
 // Author: Andre Schlegel (November of 2022,
 // schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/Benchmark.h"
-
 #include <algorithm>
 #include <functional>
 #include <iterator>
@@ -13,9 +11,11 @@
 #include <utility>
 #include <vector>
 
+#include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "util/Algorithm.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/Timer.h"
@@ -23,7 +23,7 @@
 namespace ad_benchmark {
 // ____________________________________________________________________________
 void BenchmarkRegister::parseConfigurationWithAllRegisteredBenchmarks(
-    const BenchmarkConfiguration& config) {
+    const ad_utility::ConfigManager& config) {
   for (BenchmarkPointer& instance : registeredBenchmarks) {
     instance->parseConfiguration(config);
   }
@@ -31,7 +31,7 @@ void BenchmarkRegister::parseConfigurationWithAllRegisteredBenchmarks(
 
 // ____________________________________________________________________________
 void BenchmarkRegister::addConfigurationOptionsWtihAllRegisteredBenchmarks(
-    BenchmarkConfiguration* config) {
+    ad_utility::ConfigManager* config) {
   for (BenchmarkPointer& instance : registeredBenchmarks) {
     instance->addConfigurationOptions(config);
   }

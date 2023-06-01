@@ -14,8 +14,7 @@
 
 namespace ad_utility {
 // ___________________________________________________________________________
-std::string benchmarkConfigurationOptionValueTypeToString(
-    const ad_benchmark::BenchmarkConfigurationOption::ValueType& val) {
+std::string configOptionValueTypeToString(const ConfigOption::ValueType& val) {
   // Converts a type in `ValueType` to their string representation.
   auto variantSubTypeToString = []<typename T>(
                                     const std::optional<T>& variantEntry,
@@ -64,8 +63,7 @@ std::string benchmarkConfigurationOptionValueTypeToString(
 }
 
 // ___________________________________________________________________________
-std::string getDefaultValueBenchmarkConfigurationOptions(
-    const ad_benchmark::BenchmarkConfiguration& config) {
+std::string getDefaultValueConfigOptions(const ConfigManager& config) {
   /*
   Because we want to create a list, we don't know how many entries there will be
   and need a string stream.
@@ -74,27 +72,25 @@ std::string getDefaultValueBenchmarkConfigurationOptions(
 
   // Prints the default value of a configuration option and the accompanying
   // text.
-  auto defaultConfigurationOptionToString =
-      [](const ad_benchmark::BenchmarkConfigurationOption& option) {
-        return absl::StrCat(
-            "Configuration option '", option.getIdentifier(),
-            "' was not set at runtime, using default value '",
-            option.visitDefaultValue([](const auto& opt) {
-              return benchmarkConfigurationOptionValueTypeToString(opt);
-            }),
-            "'.");
-      };
+  auto defaultConfigurationOptionToString = [](const ConfigOption& option) {
+    return absl::StrCat("Configuration option '", option.getIdentifier(),
+                        "' was not set at runtime, using default value '",
+                        option.visitDefaultValue([](const auto& opt) {
+                          return configOptionValueTypeToString(opt);
+                        }),
+                        "'.");
+  };
 
   forEachExcludingTheLastOne(
       config.getConfigurationOptions(),
-      [&stream, &defaultConfigurationOptionToString](
-          const ad_benchmark::BenchmarkConfigurationOption& option) {
+      [&stream,
+       &defaultConfigurationOptionToString](const ConfigOption& option) {
         if (option.hasDefaultValue() && !option.wasSetAtRuntime()) {
           stream << defaultConfigurationOptionToString(option) << "\n";
         }
       },
-      [&stream, &defaultConfigurationOptionToString](
-          const ad_benchmark::BenchmarkConfigurationOption& option) {
+      [&stream,
+       &defaultConfigurationOptionToString](const ConfigOption& option) {
         if (option.hasDefaultValue() && !option.wasSetAtRuntime()) {
           stream << defaultConfigurationOptionToString(option);
         }

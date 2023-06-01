@@ -10,15 +10,13 @@
 #include "util/Exception.h"
 
 // __________________________________________________________________________
-nlohmann::json::object_t
-ToJsonBenchmarkConfigurationShorthandVisitor::visitShortHandString(
+nlohmann::json::object_t ToJsonConfigShorthandVisitor::visitShortHandString(
     Parser::ShortHandStringContext* context) const {
   return visitAssignments(context->assignments());
 }
 
 // __________________________________________________________________________
-nlohmann::json::object_t
-ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignments(
+nlohmann::json::object_t ToJsonConfigShorthandVisitor::visitAssignments(
     const Parser::AssignmentsContext* context) const {
   nlohmann::json::object_t contextAsJson;
 
@@ -45,20 +43,19 @@ ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignments(
 
 // __________________________________________________________________________
 std::pair<std::string, nlohmann::json>
-ToJsonBenchmarkConfigurationShorthandVisitor::visitAssignment(
+ToJsonConfigShorthandVisitor::visitAssignment(
     Parser::AssignmentContext* context) const {
   return {context->NAME()->getText(), visitContent(context->content())};
 }
 
 // __________________________________________________________________________
-nlohmann::json::object_t
-ToJsonBenchmarkConfigurationShorthandVisitor::visitObject(
+nlohmann::json::object_t ToJsonConfigShorthandVisitor::visitObject(
     Parser::ObjectContext* context) const {
   return visitAssignments(context->assignments());
 }
 
 // __________________________________________________________________________
-nlohmann::json::array_t ToJsonBenchmarkConfigurationShorthandVisitor::visitList(
+nlohmann::json::array_t ToJsonConfigShorthandVisitor::visitList(
     const Parser::ListContext* context) const {
   nlohmann::json::array_t contextAsJson;
 
@@ -72,7 +69,7 @@ nlohmann::json::array_t ToJsonBenchmarkConfigurationShorthandVisitor::visitList(
 }
 
 // __________________________________________________________________________
-nlohmann::json ToJsonBenchmarkConfigurationShorthandVisitor::visitContent(
+nlohmann::json ToJsonConfigShorthandVisitor::visitContent(
     Parser::ContentContext* context) const {
   if (context->LITERAL()) {
     return nlohmann::json::parse(context->LITERAL()->getText());

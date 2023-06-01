@@ -117,7 +117,7 @@ int main(int argc, char** argv) {
   }
 
   // Did we get any configuration?
-  BenchmarkConfiguration config{};
+  ad_utility::ConfigManager config{};
 
   // Add all the configuration options.
   BenchmarkRegister::addConfigurationOptionsWtihAllRegisteredBenchmarks(
@@ -160,8 +160,7 @@ int main(int argc, char** argv) {
     // Print the configuration options with default values, if there were any.
     if (const std::string &
             defaultConfigurationOptionString{
-                ad_utility::getDefaultValueBenchmarkConfigurationOptions(
-                    config)};
+                ad_utility::getDefaultValueConfigOptions(config)};
         defaultConfigurationOptionString != "") {
       std::cout << defaultConfigurationOptionString << "\n\n";
     }

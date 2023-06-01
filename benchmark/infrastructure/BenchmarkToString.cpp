@@ -8,6 +8,7 @@
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
@@ -114,7 +115,7 @@ static void addMetadataToOStringstream(std::ostringstream* stream,
 
 // ___________________________________________________________________________
 std::string benchmarkConfigurationOptionValueTypeToString(
-    const BenchmarkConfigurationOption::ValueType& val) {
+    const ad_utility::ConfigOption::ValueType& val) {
   // Converts a type in `ValueType` to their string representation.
   auto variantSubTypeToString = []<typename T>(
                                     const std::optional<T>& variantEntry,
@@ -163,8 +164,7 @@ std::string benchmarkConfigurationOptionValueTypeToString(
 }
 
 // ___________________________________________________________________________
-std::string getDefaultValueBenchmarkConfigurationOptions(
-    const BenchmarkConfiguration& config) {
+std::string ConfigOptions(const ad_utility::ConfigManager& config) {
   /*
   Because we want to create a list, we don't know how many entries there will be
   and need a string stream.
@@ -174,7 +174,7 @@ std::string getDefaultValueBenchmarkConfigurationOptions(
   // Prints the default value of a configuration option and the accompanying
   // text.
   auto defaultConfigurationOptionToString =
-      [](const BenchmarkConfigurationOption& option) {
+      [](const ad_utility::ConfigOption& option) {
         return absl::StrCat(
             "Configuration option '", option.getIdentifier(),
             "' was not set at runtime, using default value '",
@@ -187,13 +187,13 @@ std::string getDefaultValueBenchmarkConfigurationOptions(
   ad_utility::forEachExcludingTheLastOne(
       config.getConfigurationOptions(),
       [&stream, &defaultConfigurationOptionToString](
-          const BenchmarkConfigurationOption& option) {
+          const ad_utility::ConfigOption& option) {
         if (option.hasDefaultValue() && !option.wasSetAtRuntime()) {
           stream << defaultConfigurationOptionToString(option) << "\n";
         }
       },
       [&stream, &defaultConfigurationOptionToString](
-          const BenchmarkConfigurationOption& option) {
+          const ad_utility::ConfigOption& option) {
         if (option.hasDefaultValue() && !option.wasSetAtRuntime()) {
           stream << defaultConfigurationOptionToString(option);
         }

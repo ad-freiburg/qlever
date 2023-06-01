@@ -34,7 +34,7 @@ class BMSingleMeasurements : public BenchmarkInterface {
  public:
   std::string name() const final { return "Example for single measurements"; }
 
-  void parseConfiguration(const BenchmarkConfiguration&) final {
+  void parseConfiguration(const ad_utility::ConfigManager&) final {
     // Nothing to actually do here.
   }
 
@@ -80,7 +80,7 @@ class BMGroups : public BenchmarkInterface {
  public:
   std::string name() const final { return "Example for group benchmarks"; }
 
-  void parseConfiguration(const BenchmarkConfiguration&) final {
+  void parseConfiguration(const ad_utility::ConfigManager&) final {
     // Nothing to actually do here.
   }
 
@@ -149,7 +149,7 @@ class BMTables : public BenchmarkInterface {
  public:
   std::string name() const final { return "Example for table benchmarks"; }
 
-  void parseConfiguration(const BenchmarkConfiguration&) final {
+  void parseConfiguration(const ad_utility::ConfigManager&) final {
     // Nothing to actually do here.
   }
 
@@ -222,7 +222,7 @@ class BMTables : public BenchmarkInterface {
   }
 };
 
-// A simple example of the usage of the `BenchmarkConfiguration` and the
+// A simple example of the usage of the `ad_utility::ConfigManager` and the
 // general `BenchmarkMetadata`.
 class BMConfigurationAndMetadataExample : public BenchmarkInterface {
   // This class will simply transcribe specific configuration options
@@ -235,29 +235,28 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
     return "Example for the usage of configuration and metadata";
   }
 
-  void addConfigurationOptions(BenchmarkConfiguration* config) final {
+  void addConfigurationOptions(ad_utility::ConfigManager* config) final {
     // Add some arbitrary values.
-    config->addConfigurationOption(
-        makeBenchmarkConfigurationOption<std::string>(
-            "date", "The current date.", "22.3.2023"));
+    config->addConfigurationOption(ad_utility::makeConfigOption<std::string>(
+        "date", "The current date.", "22.3.2023"));
 
-    config->addConfigurationOption(makeBenchmarkConfigurationOption<int>(
+    config->addConfigurationOption(ad_utility::makeConfigOption<int>(
         "numSigns", "The number of street signs.", 10));
 
     config->addConfigurationOption(
-        makeBenchmarkConfigurationOption<std::vector<bool>>(
+        ad_utility::makeConfigOption<std::vector<bool>>(
             "CoinFlipTry",
             "The number of succesful coin flips."
             "coin flips.",
             std::vector{false, false, false, false, false}));
 
     config->addConfigurationOption(
-        makeBenchmarkConfigurationOption<float>(
+        ad_utility::makeConfigOption<float>(
             "Steve", "Steves saving account balance.", -41.9),
         "Accounts", "Personal");
   }
 
-  void parseConfiguration(const BenchmarkConfiguration& config) final {
+  void parseConfiguration(const ad_utility::ConfigManager& config) final {
     // Collect some arbitrary values.
     std::string dateString{config.getConfigurationOptionByNestedKeys("date")
                                .getValue<std::string>()};

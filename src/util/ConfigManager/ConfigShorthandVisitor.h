@@ -12,7 +12,7 @@
 This visitor will translate the parsed short hand into a `nlohmann::json`
 object.
 */
-class ToJsonBenchmarkConfigurationShorthandVisitor final {
+class ToJsonConfigShorthandVisitor final {
  public:
   using Parser = ConfigShorthandParser;
 

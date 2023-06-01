@@ -8,25 +8,24 @@
 #include <vector>
 
 #include "util/ConfigManager/ConfigManager.h"
+#include "util/ConfigManager/ConfigOption.h"
 
-TEST(BenchmarkConfigurationTest, GetConfigurationOptionByNestedKeysTest) {
-  ad_benchmark::BenchmarkConfiguration config{};
+TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
+  ad_utility::ConfigManager config{};
 
   // Configuration options for testing.
-  const ad_benchmark::BenchmarkConfigurationOption& withDefault{
-      ad_benchmark::makeBenchmarkConfigurationOption("Sense_of_existence", "",
-                                                     std::optional{42})};
-  const ad_benchmark::BenchmarkConfigurationOption& withoutDefault{
-      ad_benchmark::makeBenchmarkConfigurationOption("Sense_of_existence", "",
-                                                     std::optional{1})};
+  const ad_utility::ConfigOption& withDefault{ad_utility::makeConfigOption(
+      "Sense_of_existence", "", std::optional{42})};
+  const ad_utility::ConfigOption& withoutDefault{
+      ad_utility::makeConfigOption("Sense_of_existence", "", std::optional{1})};
 
-  // 'Compare' two benchmark configuration options
-  auto compareConfigurationOptions =
-      []<typename T>(const ad_benchmark::BenchmarkConfigurationOption& a,
-                     const ad_benchmark::BenchmarkConfigurationOption& b) {
-        ASSERT_EQ(a.hasValue(), b.hasValue());
-        ASSERT_EQ(a.getValue<T>(), b.getValue<T>());
-      };
+  // 'Compare' two configuration options
+  auto compareConfigurationOptions = []<typename T>(
+                                         const ad_utility::ConfigOption& a,
+                                         const ad_utility::ConfigOption& b) {
+    ASSERT_EQ(a.hasValue(), b.hasValue());
+    ASSERT_EQ(a.getValue<T>(), b.getValue<T>());
+  };
 
   config.addConfigurationOption(withDefault, "Shared_part", "Unique_part_1");
   config.addConfigurationOption(withoutDefault, "Shared_part", "Unique_part_2",
@@ -52,21 +51,19 @@ TEST(BenchmarkConfigurationTest, GetConfigurationOptionByNestedKeysTest) {
 /*
 The exceptions for adding configuration options.
 */
-TEST(BenchmarkConfigurationTest, AddConfigurationOptionExceptionTest) {
-  ad_benchmark::BenchmarkConfiguration config{};
+TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
+  ad_utility::ConfigManager config{};
 
   // Configuration options for testing.
-  const ad_benchmark::BenchmarkConfigurationOption& withDefault{
-      ad_benchmark::makeBenchmarkConfigurationOption("Sense_of_existence", "",
-                                                     std::optional{42})};
+  const ad_utility::ConfigOption& withDefault{ad_utility::makeConfigOption(
+      "Sense_of_existence", "", std::optional{42})};
 
   config.addConfigurationOption(withDefault, "Shared_part", "Unique_part_1");
 
   // Trying to add a configuration option with the same name at the same
   // place, should cause an error.
   ASSERT_ANY_THROW(config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption("Sense_of_existence", "",
-                                                     std::optional{42}),
+      ad_utility::makeConfigOption("Sense_of_existence", "", std::optional{42}),
       "Shared_part", "Unique_part_1"));
 
   /*
@@ -96,19 +93,19 @@ TEST(BenchmarkConfigurationTest, AddConfigurationOptionExceptionTest) {
       config.addConfigurationOption(withDefault, "Shared part", -2););
 }
 
-TEST(BenchmarkConfigurationTest, SetJsonStringTest) {
-  ad_benchmark::BenchmarkConfiguration config{};
+TEST(ConfigManagerTest, SetJsonStringTest) {
+  ad_utility::ConfigManager config{};
 
   // Adding the options.
   config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption<int>(
-          "Option_0", "Must be set. Has no default value."),
+      ad_utility::makeConfigOption<int>("Option_0",
+                                        "Must be set. Has no default value."),
       "depth_0");
   config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption<int>(
-          "Option_1", "Must be set. Has no default value."),
+      ad_utility::makeConfigOption<int>("Option_1",
+                                        "Must be set. Has no default value."),
       "depth_0", "depth_1");
-  config.addConfigurationOption(ad_benchmark::makeBenchmarkConfigurationOption(
+  config.addConfigurationOption(ad_utility::makeConfigOption(
       "Option_2", "Has a default value.", std::optional{2}));
 
   // For easier access to the options.
@@ -124,12 +121,11 @@ TEST(BenchmarkConfigurationTest, SetJsonStringTest) {
   };
 
   // For easier checking.
-  auto checkOption =
-      [](const ad_benchmark::BenchmarkConfigurationOption& option,
-         const auto& content) {
-        ASSERT_TRUE(option.hasValue());
-        ASSERT_EQ(content, option.getValue<std::decay_t<decltype(content)>>());
-      };
+  auto checkOption = [](const ad_utility::ConfigOption& option,
+                        const auto& content) {
+    ASSERT_TRUE(option.hasValue());
+    ASSERT_EQ(content, option.getValue<std::decay_t<decltype(content)>>());
+  };
 
   // Does the option with the default already have a value?
   checkOption(getOption(2), 2);
@@ -158,16 +154,16 @@ TEST(BenchmarkConfigurationTest, SetJsonStringTest) {
   checkOption(getOption(2), 12);
 }
 
-TEST(BenchmarkConfigurationTest, SetJsonStringExceptionTest) {
-  ad_benchmark::BenchmarkConfiguration config{};
+TEST(ConfigManagerTest, SetJsonStringExceptionTest) {
+  ad_utility::ConfigManager config{};
 
   // Add one option with default and one without.
   config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption<int>(
-          "Without_default", "Must be set. Has no default value."),
+      ad_utility::makeConfigOption<int>("Without_default",
+                                        "Must be set. Has no default value."),
       "depth_0");
   config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption<std::vector<int>>(
+      ad_utility::makeConfigOption<std::vector<int>>(
           "With_default", "Must not be set. Has default value.",
           std::vector{40, 41}),
       "depth_0");
@@ -182,69 +178,59 @@ TEST(BenchmarkConfigurationTest, SetJsonStringExceptionTest) {
       R"--({"depth 0":{"Without_default":42, "test_string" : "test"}})--"));
 }
 
-TEST(BenchmarkConfigurationTest, ParseShortHandTest) {
-  ad_benchmark::BenchmarkConfiguration config{};
+TEST(ConfigManagerTest, ParseShortHandTest) {
+  ad_utility::ConfigManager config{};
 
   // Add integer options.
-  config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption<int>(
-          "somePositiveNumber", "Must be set. Has no default value."));
-  config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption<int>(
-          "someNegativNumber", "Must be set. Has no default value."));
+  config.addConfigurationOption(ad_utility::makeConfigOption<int>(
+      "somePositiveNumber", "Must be set. Has no default value."));
+  config.addConfigurationOption(ad_utility::makeConfigOption<int>(
+      "someNegativNumber", "Must be set. Has no default value."));
 
   // Add integer list.
-  config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption<std::vector<int>>(
-          "someIntegerlist", "Must be set. Has no default value."));
+  config.addConfigurationOption(ad_utility::makeConfigOption<std::vector<int>>(
+      "someIntegerlist", "Must be set. Has no default value."));
 
   // Add floating point options.
-  config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption<float>(
-          "somePositiveFloatingPoint", "Must be set. Has no default value."));
-  config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption<float>(
-          "someNegativFloatingPoint", "Must be set. Has no default value."));
+  config.addConfigurationOption(ad_utility::makeConfigOption<float>(
+      "somePositiveFloatingPoint", "Must be set. Has no default value."));
+  config.addConfigurationOption(ad_utility::makeConfigOption<float>(
+      "someNegativFloatingPoint", "Must be set. Has no default value."));
 
   // Add floating point list.
   config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption<std::vector<float>>(
+      ad_utility::makeConfigOption<std::vector<float>>(
           "someFloatingPointList", "Must be set. Has no default value."));
 
   // Add boolean options.
-  config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption<bool>(
-          "boolTrue", "Must be set. Has no default value."));
-  config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption<bool>(
-          "boolFalse", "Must be set. Has no default value."));
+  config.addConfigurationOption(ad_utility::makeConfigOption<bool>(
+      "boolTrue", "Must be set. Has no default value."));
+  config.addConfigurationOption(ad_utility::makeConfigOption<bool>(
+      "boolFalse", "Must be set. Has no default value."));
 
   // Add boolean list.
-  config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption<std::vector<bool>>(
-          "someBooleanList", "Must be set. Has no default value."));
+  config.addConfigurationOption(ad_utility::makeConfigOption<std::vector<bool>>(
+      "someBooleanList", "Must be set. Has no default value."));
 
   // Add string option.
-  config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption<std::string>(
-          "myName", "Must be set. Has no default value."));
+  config.addConfigurationOption(ad_utility::makeConfigOption<std::string>(
+      "myName", "Must be set. Has no default value."));
 
   // Add string list.
   config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption<std::vector<std::string>>(
+      ad_utility::makeConfigOption<std::vector<std::string>>(
           "someStringList", "Must be set. Has no default value."));
 
   // Add option with deeper level.
   config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption<std::vector<int>>(
+      ad_utility::makeConfigOption<std::vector<int>>(
           "list", "Must be set. Has no default value."),
       "depth", 0);
 
   // This one will not be changed, in order to test, that options, that are
   // not set at run time, are not changed.
   config.addConfigurationOption(
-      ad_benchmark::makeBenchmarkConfigurationOption<int>("No_change", "",
-                                                          std::optional{10}));
+      ad_utility::makeConfigOption<int>("No_change", "", std::optional{10}));
 
   // Set those.
   config.setShortHand(

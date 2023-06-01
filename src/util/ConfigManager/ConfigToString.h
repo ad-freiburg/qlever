@@ -15,16 +15,14 @@
 namespace ad_utility {
 
 /*
-@brief Returns the content of a `BenchmarkConfigurationOption::ValueType` object
-as a string representation.
+@brief Returns the content of a `ConfigOption::ValueType` object as a string
+representation.
 */
-std::string benchmarkConfigurationOptionValueTypeToString(
-    const ad_benchmark::BenchmarkConfigurationOption::ValueType& val);
+std::string configOptionValueTypeToString(const ConfigOption::ValueType& val);
 
 /*
 @brief Return a string, containing a list of all configuration options, that
 weren't set at runtime, with their default values.
 */
-std::string getDefaultValueBenchmarkConfigurationOptions(
-    const ad_benchmark::BenchmarkConfiguration& config);
+std::string getDefaultValueConfigOptions(const ConfigManager& config);
 }  // namespace ad_utility

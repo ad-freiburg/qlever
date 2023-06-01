@@ -22,18 +22,18 @@
 #include "util/TypeTraits.h"
 #include "util/json.h"
 
-namespace ad_benchmark {
-// Forward declaration, so that `makeBenchmarkConfigurationOption` can be friend
+namespace ad_utility {
+// Forward declaration, so that `makeConfigOption` can be friend
 // of the class.
-class BenchmarkConfigurationOption;
+class ConfigOption;
 
 template <typename T>
-BenchmarkConfigurationOption makeBenchmarkConfigurationOption(
+ConfigOption makeConfigOption(
     std::string_view identifier, std::string_view description,
     const std::optional<T>& defaultValue = std::optional<T>(std::nullopt));
 
 // Describes a configuration option.
-class BenchmarkConfigurationOption {
+class ConfigOption {
   // An `std::variant`, where every entry is a `std::optional`.
   template <typename... Ts>
   using OptionalVariant = std::variant<std::optional<Ts>...>;
@@ -65,8 +65,8 @@ class BenchmarkConfigurationOption {
   static std::string valueTypeToString(const ValueType& value);
 
  public:
-  // No consturctor. Must be created using `makeConfigurationOption`.
-  BenchmarkConfigurationOption() = delete;
+  // No consturctor. Must be created using `makeConfigOption`.
+  ConfigOption() = delete;
 
   // Was the configuration option set to a value at runtime?
   bool wasSetAtRuntime() const;
@@ -179,8 +179,8 @@ class BenchmarkConfigurationOption {
   }
 
   // Default move and copy constructor.
-  BenchmarkConfigurationOption(BenchmarkConfigurationOption&&) noexcept = default;
-  BenchmarkConfigurationOption(const BenchmarkConfigurationOption&) = default;
+  ConfigOption(ConfigOption&&) noexcept = default;
+  ConfigOption(const ConfigOption&) = default;
 
  private:
   /*
@@ -200,9 +200,9 @@ class BenchmarkConfigurationOption {
   value.
   */
   template <typename T>
-  requires ad_utility::isTypeContainedIn<std::optional<T>, BenchmarkConfigurationOption::ValueType>
-  BenchmarkConfigurationOption(std::string_view identifier, std::string_view description,
-                               const size_t& type, const std::optional<T>& defaultValue)
+  requires ad_utility::isTypeContainedIn<std::optional<T>, ConfigOption::ValueType>
+  ConfigOption(std::string_view identifier, std::string_view description, const size_t& type,
+               const std::optional<T>& defaultValue)
       : identifier_{identifier},
         description_{description},
         value_(defaultValue),
@@ -265,7 +265,7 @@ class BenchmarkConfigurationOption {
   static ValueType createValueTypeWithEmptyOptional(const size_t& typeIndex);
 
   /*
-  @brief Create a benchmark configuration option.
+  @brief Create a configuration option.
 
   @tparam T The type of value, that the configuration option can hold.
 
@@ -277,19 +277,17 @@ class BenchmarkConfigurationOption {
   empty `std::optional<T>` signifies, that there is no default value.
   */
   template <typename T>
-  friend BenchmarkConfigurationOption makeBenchmarkConfigurationOption(
-      std::string_view identifier, std::string_view description,
-      const std::optional<T>& defaultValue) {
+  friend ConfigOption makeConfigOption(std::string_view identifier, std::string_view description,
+                                       const std::optional<T>& defaultValue) {
     /*
     The part for determining the type index is a bit ugly, but there isn't
     really a better way, that is also typesafe and doesn't need any adjusting,
-    when changing `BenchmarkConfigurationOption::ValueType`.
+    when changing `ConfigOption::ValueType`.
     */
-    return BenchmarkConfigurationOption(identifier, description,
-                                        BenchmarkConfigurationOption::getIndexOfTypeInVariant<T>(
-                                            BenchmarkConfigurationOption::ValueType{}),
-                                        defaultValue);
+    return ConfigOption(identifier, description,
+                        ConfigOption::getIndexOfTypeInVariant<T>(ConfigOption::ValueType{}),
+                        defaultValue);
   }
 };
 
-}  // namespace ad_benchmark
+}  // namespace ad_utility

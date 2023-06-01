@@ -23,7 +23,7 @@
 #include "util/TypeTraits.h"
 #include "util/json.h"
 
-namespace ad_benchmark {
+namespace ad_utility {
 
 // Only returns true, if the given type can be seen as a string.
 template <typename T>
@@ -51,11 +51,11 @@ static bool allArgumentsBiggerOrEqualToZero(const KeyForJson auto&... keys) {
 }
 
 /*
-Manages a bunch of `BenchmarkConfigurationOption`s.
+Manages a bunch of `ConfigOption`s.
 */
-class BenchmarkConfiguration {
+class ConfigManager {
   // The added configuration options.
-  std::vector<BenchmarkConfigurationOption> configurationOptions_;
+  std::vector<ConfigOption> configurationOptions_;
 
   /*
   A configuration option tends to be placed like a key value pair in a json
@@ -124,7 +124,7 @@ class BenchmarkConfiguration {
    that contains all the described configuration data.
 
   @param shortHandString The language of the short hand is defined in
-  `generated/BenchmarkConfigurationShorthandAutomatic.g4`.
+  `generated/ConfigShorthand.g4`.
   */
   static nlohmann::json parseShortHand(const std::string& shortHandString);
 
@@ -138,8 +138,7 @@ class BenchmarkConfiguration {
   `"generalOptions", 1, "Table", "numberOfRows"`.
   */
   template <KeyForJson... Keys>
-  void addConfigurationOption(const BenchmarkConfigurationOption& option,
-                              const Keys&... keys) {
+  void addConfigurationOption(const ConfigOption& option, const Keys&... keys) {
     // All numeric key, must be `>=0`.
     AD_CONTRACT_CHECK(allArgumentsBiggerOrEqualToZero(keys...));
 
@@ -212,8 +211,7 @@ class BenchmarkConfiguration {
   /*
   Get all the added configuration options.
   */
-  const std::vector<BenchmarkConfigurationOption>& getConfigurationOptions()
-      const;
+  const std::vector<ConfigOption>& getConfigurationOptions() const;
 
   /*
   @brief Return the underlying configuration option, if it's at the position
@@ -224,7 +222,7 @@ class BenchmarkConfiguration {
    Look at the documentation of `nlohmann::basic_json::at`, if you want
    to see, what's possible.
   */
-  const BenchmarkConfigurationOption& getConfigurationOptionByNestedKeys(
+  const ConfigOption& getConfigurationOptionByNestedKeys(
       const KeyForJson auto&... keys) const requires(sizeof...(keys) > 0) {
     // A numeric key, must be `>=0`.
     AD_CONTRACT_CHECK(allArgumentsBiggerOrEqualToZero(keys...));
@@ -268,4 +266,4 @@ class BenchmarkConfiguration {
   // For printing.
   explicit operator std::string() const;
 };
-}  // namespace ad_benchmark
+}  // namespace ad_utility

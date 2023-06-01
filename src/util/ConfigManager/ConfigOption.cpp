@@ -22,9 +22,9 @@
 #include "util/StringUtils.h"
 #include "util/TypeTraits.h"
 
-namespace ad_benchmark {
+namespace ad_utility {
 // ____________________________________________________________________________
-std::string BenchmarkConfigurationOption::valueTypeToString(const ValueType& value) {
+std::string ConfigOption::valueTypeToString(const ValueType& value) {
   auto toStringVisitor = []<typename T>(const std::optional<T>&) {
     if constexpr (std::is_same_v<T, bool>) {
       return "boolean";
@@ -49,8 +49,7 @@ std::string BenchmarkConfigurationOption::valueTypeToString(const ValueType& val
 }
 
 // ____________________________________________________________________________
-auto BenchmarkConfigurationOption::createValueTypeWithEmptyOptional(const size_t& typeIndex)
-    -> ValueType {
+auto ConfigOption::createValueTypeWithEmptyOptional(const size_t& typeIndex) -> ValueType {
   ValueType toReturn;
 
   /*
@@ -67,20 +66,18 @@ auto BenchmarkConfigurationOption::createValueTypeWithEmptyOptional(const size_t
 }
 
 // ____________________________________________________________________________
-bool BenchmarkConfigurationOption::wasSetAtRuntime() const { return configurationOptionWasSet_; }
+bool ConfigOption::wasSetAtRuntime() const { return configurationOptionWasSet_; }
 
 // ____________________________________________________________________________
-bool BenchmarkConfigurationOption::hasDefaultValue() const {
+bool ConfigOption::hasDefaultValue() const {
   return std::visit([](const auto& optional) { return optional.has_value(); }, defaultValue_);
 }
 
 // ____________________________________________________________________________
-bool BenchmarkConfigurationOption::hasValue() const {
-  return wasSetAtRuntime() || hasDefaultValue();
-}
+bool ConfigOption::hasValue() const { return wasSetAtRuntime() || hasDefaultValue(); }
 
 // ____________________________________________________________________________
-void BenchmarkConfigurationOption::setValueWithJson(const nlohmann::json& json) {
+void ConfigOption::setValueWithJson(const nlohmann::json& json) {
   /*
   Manually checks, if the json represents one of the possibilites of
   `ValueType`, without the `std::optional`.
@@ -148,24 +145,24 @@ void BenchmarkConfigurationOption::setValueWithJson(const nlohmann::json& json) 
 }
 
 // ____________________________________________________________________________
-std::string_view BenchmarkConfigurationOption::getIdentifier() const {
+std::string_view ConfigOption::getIdentifier() const {
   return static_cast<std::string_view>(identifier_);
 }
 
 // ____________________________________________________________________________
-BenchmarkConfigurationOption::operator std::string() const {
+ConfigOption::operator std::string() const {
   return absl::StrCat(
-      "Benchmark configuration option '", identifier_, "'\n",
+      "Configuration option '", identifier_, "'\n",
       ad_utility::addIndentation(
-          absl::StrCat("Value type: ", valueTypeToString(value_), "\nDefault value: ",
-                       ad_utility::benchmarkConfigurationOptionValueTypeToString(defaultValue_),
-                       "\nCurrently held value: ",
-                       ad_utility::benchmarkConfigurationOptionValueTypeToString(value_),
-                       "\nDescription: ", description_),
+          absl::StrCat(
+              "Value type: ", valueTypeToString(value_),
+              "\nDefault value: ", ad_utility::configOptionValueTypeToString(defaultValue_),
+              "\nCurrently held value: ", ad_utility::configOptionValueTypeToString(value_),
+              "\nDescription: ", description_),
           1));
 }
 
 // ____________________________________________________________________________
-auto BenchmarkConfigurationOption::getActualValueType() const -> size_t { return value_.index(); }
+auto ConfigOption::getActualValueType() const -> size_t { return value_.index(); }
 
-}  // namespace ad_benchmark
+}  // namespace ad_utility

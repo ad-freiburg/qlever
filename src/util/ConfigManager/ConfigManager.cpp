@@ -12,17 +12,17 @@
 #include <sstream>
 #include <string>
 
-#include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/ConfigManager/generated/ConfigShorthandParser.h"
 #include "util/Exception.h"
+#include "util/StringUtils.h"
 #include "util/antlr/ANTLRErrorHandling.h"
 #include "util/json.h"
 
-namespace ad_benchmark {
+namespace ad_utility {
 
 /*
 @brief A custom exception for `parseShortHand`, for when the short hand
@@ -48,13 +48,13 @@ class ShortHandSyntaxException : public std::exception {
 };
 
 // ____________________________________________________________________________
-const std::vector<BenchmarkConfigurationOption>&
-BenchmarkConfiguration::getConfigurationOptions() const {
+const std::vector<ConfigOption>& ConfigManager::getConfigurationOptions()
+    const {
   return configurationOptions_;
 }
 
 // ____________________________________________________________________________
-nlohmann::json BenchmarkConfiguration::parseShortHand(
+nlohmann::json ConfigManager::parseShortHand(
     const std::string& shortHandString) {
   // I use ANTLR expressions to parse the short hand.
   antlr4::ANTLRInputStream input(shortHandString);
@@ -77,22 +77,22 @@ nlohmann::json BenchmarkConfiguration::parseShortHand(
 
   // Walk through the parser tree and build the json equivalent out of the short
   // hand.
-  return ToJsonBenchmarkConfigurationShorthandVisitor{}.visitShortHandString(
+  return ToJsonConfigShorthandVisitor{}.visitShortHandString(
       shortHandStringContext);
 }
 
 // ____________________________________________________________________________
-void BenchmarkConfiguration::setShortHand(const std::string& shortHandString) {
+void ConfigManager::setShortHand(const std::string& shortHandString) {
   setJsonString(parseShortHand(shortHandString).dump());
 }
 
 // ____________________________________________________________________________
-void BenchmarkConfiguration::setJsonString(const std::string& jsonString) {
+void ConfigManager::setJsonString(const std::string& jsonString) {
   const nlohmann::json& stringAsJson = nlohmann::json::parse(jsonString);
   // Anything else but a literal json object is not something, we want.
   if (!stringAsJson.is_object()) {
     throw ad_utility::Exception(
-        "A BenchmarkConfiguration"
+        "A ConfigManager"
         " should only be set with a json object literal.");
   }
 
@@ -165,10 +165,9 @@ void BenchmarkConfiguration::setJsonString(const std::string& jsonString) {
     const nlohmann::json::json_pointer configurationOptionJsonPosition{
         configurationOptionIndex.key()};
 
-    BenchmarkConfigurationOption* configurationOption =
-        &(configurationOptions_.at(
-            keyToConfigurationOptionIndex_.at(configurationOptionJsonPosition)
-                .get<size_t>()));
+    ConfigOption* configurationOption = &(configurationOptions_.at(
+        keyToConfigurationOptionIndex_.at(configurationOptionJsonPosition)
+            .get<size_t>()));
 
     // Set the option, if possible.
     if (stringAsJson.contains(configurationOptionJsonPosition)) {
@@ -193,7 +192,7 @@ void BenchmarkConfiguration::setJsonString(const std::string& jsonString) {
 }
 
 // ____________________________________________________________________________
-BenchmarkConfiguration::operator std::string() const {
+ConfigManager::operator std::string() const {
   // For listing all available configuration options.
   std::ostringstream stream;
 
@@ -237,7 +236,7 @@ BenchmarkConfiguration::operator std::string() const {
     // `prettyKeyToConfigurationOptionIndex`.
     const nlohmann::json::json_pointer jsonOptionPointer{keyToLeaf.key()};
     // What configuration option are we currently, indirectly, looking at?
-    const BenchmarkConfigurationOption& option =
+    const ConfigOption& option =
         configurationOptions_.at(keyToLeaf.value().get<size_t>());
 
     if (option.hasDefaultValue()) {
@@ -310,4 +309,4 @@ BenchmarkConfiguration::operator std::string() const {
       "\n\nAvailable configuration options:\n",
       ad_utility::addIndentation(stream.str(), 1));
 }
-}  // namespace ad_benchmark
+}  // namespace ad_utility

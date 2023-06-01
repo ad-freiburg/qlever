@@ -17,22 +17,22 @@
 #include "util/json.h"
 
 // Easier usage.
-using ConfigurationOption = ad_benchmark::BenchmarkConfigurationOption;
+using ConfigOption = ad_utility::ConfigOption;
 
 /*
 Not all identifiers are allowed for configuration options.
 */
-TEST(BenchmarkConfigurationOptionTest, ConstructorException) {
+TEST(ConfigOptionTest, ConstructorException) {
   // No name.
-  ASSERT_ANY_THROW(ad_benchmark::makeBenchmarkConfigurationOption<bool>("", ""));
+  ASSERT_ANY_THROW(ad_utility::makeConfigOption<bool>("", ""));
 
   // Names with spaces.
-  ASSERT_ANY_THROW(ad_benchmark::makeBenchmarkConfigurationOption<bool>("Option 1", ""));
+  ASSERT_ANY_THROW(ad_utility::makeConfigOption<bool>("Option 1", ""));
 }
 
 /*
 @brief Call the function with `T` of `std::optional<T>` for each of the
-variantss in `ad_benchmark::BenchmarkConfigurationOption::ValueType` as template
+variantss in `ad_utility::ConfigOption::ValueType` as template
 parameter.
 
 @tparam Function The loop body should be a templated function, with one
@@ -42,9 +42,10 @@ arguments. Should be passed per deduction.
 template <typename Function>
 static void doForTypeInValueType(Function function) {
   ad_utility::ConstexprForLoop(
-      std::make_index_sequence<std::variant_size_v<ConfigurationOption::ValueType>>{},
-      [&function]<size_t index, typename IndexType = std::variant_alternative_t<
-                                    index, ConfigurationOption::ValueType>::value_type>() {
+      std::make_index_sequence<std::variant_size_v<ConfigOption::ValueType>>{},
+      [&function]<size_t index,
+                  typename IndexType =
+                      std::variant_alternative_t<index, ConfigOption::ValueType>::value_type>() {
         function.template operator()<IndexType>();
       });
 }
@@ -53,13 +54,13 @@ static void doForTypeInValueType(Function function) {
 Check if the creation of configuration options, their direct setting and the
 getter works as intended.
 */
-TEST(BenchmarkConfigurationOptionTest, CreateSetAndTest) {
+TEST(ConfigOptionTest, CreateSetAndTest) {
   /*
-  Checks, if the `ConfigurationOption::getValue` only works with the actual type
+  Checks, if the `ConfigOption::getValue` only works with the actual type
   of the value in the configuration option. All the other types should cause an
   exception.
   */
-  auto otherGettersDontWork = []<typename WorkingType>(const ConfigurationOption& option) {
+  auto otherGettersDontWork = []<typename WorkingType>(const ConfigOption& option) {
     doForTypeInValueType([&option]<typename CurrentType>() {
       if constexpr (!std::is_same_v<WorkingType, CurrentType>) {
         ASSERT_ANY_THROW((option.getValue<CurrentType>()));
@@ -74,11 +75,10 @@ TEST(BenchmarkConfigurationOptionTest, CreateSetAndTest) {
   Set the value of a configuration option and check, that it was set
   correctly.
   */
-  auto setAndTest = [&otherGettersDontWork]<typename Type>(ConfigurationOption& option,
+  auto setAndTest = [&otherGettersDontWork]<typename Type>(ConfigOption& option,
                                                            const Type& valueToSetTo) {
     // Do we even have the right type for this option?
-    ASSERT_EQ(ConfigurationOption::ValueType{std::optional<Type>{}}.index(),
-              option.getActualValueType());
+    ASSERT_EQ(ConfigOption::ValueType{std::optional<Type>{}}.index(), option.getActualValueType());
 
     ASSERT_FALSE(option.wasSetAtRuntime());
 
@@ -97,8 +97,7 @@ TEST(BenchmarkConfigurationOptionTest, CreateSetAndTest) {
   */
   auto testCaseWithDefault = [&setAndTest, &otherGettersDontWork]<typename Type>(
                                  const Type& defaultValue, const Type& valueToSetTo) {
-    ConfigurationOption option{
-        ad_benchmark::makeBenchmarkConfigurationOption<Type>("With_default", "", defaultValue)};
+    ConfigOption option{ad_utility::makeConfigOption<Type>("With_default", "", defaultValue)};
 
     // Can we use the default value correctly?
     ASSERT_TRUE(option.hasValue() && option.hasDefaultValue());
@@ -114,15 +113,15 @@ TEST(BenchmarkConfigurationOptionTest, CreateSetAndTest) {
   };
 
   auto testCaseWithoutDefault = [&setAndTest]<typename Type>(const Type& valueToSetTo) {
-    ConfigurationOption option{
-        ad_benchmark::makeBenchmarkConfigurationOption<Type>("Without_default", "")};
+    ConfigOption option{ad_utility::makeConfigOption<Type>("Without_default", "")};
 
     // Make sure, that we truly don't have a value, that can be gotten.
     ASSERT_TRUE(!option.hasValue() && !option.hasDefaultValue());
     ad_utility::ConstexprForLoop(
-        std::make_index_sequence<std::variant_size_v<ConfigurationOption::ValueType>>{},
-        [&option]<size_t index, typename IndexType = std::variant_alternative_t<
-                                    index, ConfigurationOption::ValueType>::value_type>() {
+        std::make_index_sequence<std::variant_size_v<ConfigOption::ValueType>>{},
+        [&option]<size_t index,
+                  typename IndexType =
+                      std::variant_alternative_t<index, ConfigOption::ValueType>::value_type>() {
           ASSERT_ANY_THROW((option.getValue<IndexType>()));
           ASSERT_ANY_THROW((option.getDefaultValue<IndexType>()));
         });
@@ -166,11 +165,11 @@ TEST(BenchmarkConfigurationOptionTest, CreateSetAndTest) {
   testCaseWithoutDefault.template operator()<std::vector<float>>(std::vector<float>{42.8, 42.8});
 }
 
-// `BenchmarkConfigurationOption` should always throw an exception, when created
+// `ConfigOption` should always throw an exception, when created
 // like this.
-TEST(BenchmarkConfigurationOptionTest, ExceptionOnCreation) {
+TEST(ConfigOptionTest, ExceptionOnCreation) {
   // No identifier.
-  ASSERT_ANY_THROW(ad_benchmark::makeBenchmarkConfigurationOption<bool>("", ""););
+  ASSERT_ANY_THROW(ad_utility::makeConfigOption<bool>("", ""););
 }
 
 // The form of a generic test case for the test `SetValueWithJson`.
@@ -181,10 +180,10 @@ struct JsonTestCase {
 };
 
 /*
-`ConfigurationOption::setValueWithJson` interprets the given json as the type of
+`ConfigOption::setValueWithJson` interprets the given json as the type of
 the configuration option. This tests, if this works correctly.
 */
-TEST(BenchmarkConfigurationOptionTest, SetValueWithJson) {
+TEST(ConfigOptionTest, SetValueWithJson) {
   // The test cases for parsing json.
   auto getTestCase = []<typename Type>() {
     if constexpr (std::is_same_v<Type, bool>) {
@@ -216,7 +215,7 @@ TEST(BenchmarkConfigurationOptionTest, SetValueWithJson) {
   correctly.
   */
   auto doTestCase = [&getTestCase]<typename Type>() {
-    ConfigurationOption option{ad_benchmark::makeBenchmarkConfigurationOption<Type>("t", "")};
+    ConfigOption option{ad_utility::makeConfigOption<Type>("t", "")};
 
     const auto& currentTest = getTestCase.template operator()<Type>();
 
@@ -244,9 +243,9 @@ TEST(BenchmarkConfigurationOptionTest, SetValueWithJson) {
 }
 
 // Just testing the visit functions.
-TEST(BenchmarkConfigurationOptionTest, Visit) {
+TEST(ConfigOptionTest, Visit) {
   /*
-  Creates a visitor for `ad_benchmark::BenchmarkConfigurationOption::visit...`,
+  Creates a visitor for `ad_utility::ConfigOption::visit...`,
   that looks, if the the given value and the value in the internal variant, are
   equal
   */
@@ -270,7 +269,7 @@ TEST(BenchmarkConfigurationOptionTest, Visit) {
   Set the value of a configuration option and check, that the visit reads the
   correct value.
   */
-  auto setAndTest = [&createComparisonVisitor]<typename Type>(ConfigurationOption& option,
+  auto setAndTest = [&createComparisonVisitor]<typename Type>(ConfigOption& option,
                                                               const Type& valueToSetTo) {
     option.setValue(valueToSetTo);
 
@@ -309,8 +308,7 @@ TEST(BenchmarkConfigurationOptionTest, Visit) {
   auto testCaseWithDefault = [&createComparisonVisitor, &setAndTest, &testValues]<typename Type>() {
     const auto& values = testValues.template operator()<Type>();
 
-    ConfigurationOption option{
-        ad_benchmark::makeBenchmarkConfigurationOption<Type>("With_default", "", values.first)};
+    ConfigOption option{ad_utility::makeConfigOption<Type>("With_default", "", values.first)};
 
     option.visitValue(createComparisonVisitor(values.first));
     option.visitDefaultValue(createComparisonVisitor(values.first));
@@ -324,8 +322,7 @@ TEST(BenchmarkConfigurationOptionTest, Visit) {
   auto testCaseWithoutDefault = [&setAndTest, &testValues]<typename Type>() {
     const auto& values = testValues.template operator()<Type>();
 
-    ConfigurationOption option{
-        ad_benchmark::makeBenchmarkConfigurationOption<Type>("Without_default", "")};
+    ConfigOption option{ad_utility::makeConfigOption<Type>("Without_default", "")};
 
     // Make sure, that we truly don't have a value, that can be gotten.
     option.visitValue([](const auto& val) { ASSERT_FALSE(val.has_value()); });
