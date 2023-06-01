@@ -5,6 +5,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstddef>
 #include <vector>
 
 #include "util/ConfigManager/ConfigManager.h"
@@ -27,25 +28,25 @@ TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
     ASSERT_EQ(a.getValue<T>(), b.getValue<T>());
   };
 
-  config.addConfigurationOption(withDefault, "Shared_part", "Unique_part_1");
-  config.addConfigurationOption(withoutDefault, "Shared_part", "Unique_part_2",
-                                3);
+  config.addConfigurationOption(withDefault, {"Shared_part", "Unique_part_1"});
+  config.addConfigurationOption(withoutDefault,
+                                {"Shared_part", "Unique_part_2", size_t{3}});
 
   // Where those two options added?
   ASSERT_EQ(config.getConfigurationOptions().size(), 2);
 
   compareConfigurationOptions.template operator()<int>(
       withDefault, config.getConfigurationOptionByNestedKeys(
-                       "Shared_part", "Unique_part_1", "Sense_of_existence"));
+                       {"Shared_part", "Unique_part_1", "Sense_of_existence"}));
   compareConfigurationOptions.template operator()<int>(
       withoutDefault,
-      config.getConfigurationOptionByNestedKeys("Shared_part", "Unique_part_2",
-                                                3, "Sense_of_existence"));
+      config.getConfigurationOptionByNestedKeys(
+          {"Shared_part", "Unique_part_2", size_t{3}, "Sense_of_existence"}));
 
   // Trying to get a configuration option, that does not exist, should cause
   // an exception.
   ASSERT_ANY_THROW(
-      config.getConfigurationOptionByNestedKeys("Shared_part", "Getsbourgh"));
+      config.getConfigurationOptionByNestedKeys({"Shared_part", "Getsbourgh"}));
 }
 
 /*
@@ -58,13 +59,13 @@ TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
   const ad_utility::ConfigOption& withDefault{ad_utility::makeConfigOption(
       "Sense_of_existence", "", std::optional{42})};
 
-  config.addConfigurationOption(withDefault, "Shared_part", "Unique_part_1");
+  config.addConfigurationOption(withDefault, {"Shared_part", "Unique_part_1"});
 
   // Trying to add a configuration option with the same name at the same
   // place, should cause an error.
   ASSERT_ANY_THROW(config.addConfigurationOption(
       ad_utility::makeConfigOption("Sense_of_existence", "", std::optional{42}),
-      "Shared_part", "Unique_part_1"));
+      {"Shared_part", "Unique_part_1"}));
 
   /*
   If the first key for the path given is a number, that should cause an
@@ -73,24 +74,18 @@ TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
   object literal, so that user can easier find things. Ordering your options
   by just giving them numbers, would be bad practice, so we should prevent it.
   */
-  ASSERT_ANY_THROW(config.addConfigurationOption(withDefault, 0););
-  ASSERT_ANY_THROW(config.addConfigurationOption(withDefault, 3););
+  ASSERT_ANY_THROW(config.addConfigurationOption(withDefault, {size_t{0}}););
+  ASSERT_ANY_THROW(config.addConfigurationOption(withDefault, {size_t{3}}););
 
   /*
   Trying to add a configuration option with a path containing strings with
-  spaces, or integers smaller than 0, should cause an error.
-  Reason:
-  - A string with spaces in it, can't be read by the short hand configuration
-  grammar. Ergo, you can't set values, with such paths per short hand, which
-  we don't want.
-
-  - An integer smaller than 0, is not a valid key in json. Ergo, you can't set
-  options like that with json, which we dont want. Furthermore, we use
-  `nlohmann::json` to save those key paths, so we couldn't even save them.
+  spaces should cause an error.
+  Reason: A string with spaces in it, can't be read by the short hand
+  configuration grammar. Ergo, you can't set values, with such paths per short
+  hand, which we don't want.
   */
-  ASSERT_ANY_THROW(config.addConfigurationOption(withDefault, "Shared part"););
   ASSERT_ANY_THROW(
-      config.addConfigurationOption(withDefault, "Shared part", -2););
+      config.addConfigurationOption(withDefault, {"Shared part"}););
 }
 
 TEST(ConfigManagerTest, SetJsonStringTest) {
@@ -100,23 +95,23 @@ TEST(ConfigManagerTest, SetJsonStringTest) {
   config.addConfigurationOption(
       ad_utility::makeConfigOption<int>("Option_0",
                                         "Must be set. Has no default value."),
-      "depth_0");
+      {"depth_0"});
   config.addConfigurationOption(
       ad_utility::makeConfigOption<int>("Option_1",
                                         "Must be set. Has no default value."),
-      "depth_0", "depth_1");
+      {"depth_0", "depth_1"});
   config.addConfigurationOption(ad_utility::makeConfigOption(
       "Option_2", "Has a default value.", std::optional{2}));
 
   // For easier access to the options.
   auto getOption = [&config](const size_t& optionNumber) {
     if (optionNumber == 0) {
-      return config.getConfigurationOptionByNestedKeys("depth_0", "Option_0");
+      return config.getConfigurationOptionByNestedKeys({"depth_0", "Option_0"});
     } else if (optionNumber == 1) {
-      return config.getConfigurationOptionByNestedKeys("depth_0", "depth_1",
-                                                       "Option_1");
+      return config.getConfigurationOptionByNestedKeys(
+          {"depth_0", "depth_1", "Option_1"});
     } else {
-      return config.getConfigurationOptionByNestedKeys("Option_2");
+      return config.getConfigurationOptionByNestedKeys({"Option_2"});
     }
   };
 
@@ -161,12 +156,12 @@ TEST(ConfigManagerTest, SetJsonStringExceptionTest) {
   config.addConfigurationOption(
       ad_utility::makeConfigOption<int>("Without_default",
                                         "Must be set. Has no default value."),
-      "depth_0");
+      {"depth_0"});
   config.addConfigurationOption(
       ad_utility::makeConfigOption<std::vector<int>>(
           "With_default", "Must not be set. Has default value.",
           std::vector{40, 41}),
-      "depth_0");
+      {"depth_0"});
 
   // Should throw an exception, if we don't set all options, that must be set.
   ASSERT_ANY_THROW(config.setJsonString(R"--({})--"));
@@ -225,7 +220,7 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
   config.addConfigurationOption(
       ad_utility::makeConfigOption<std::vector<int>>(
           "list", "Must be set. Has no default value."),
-      "depth", 0);
+      {"depth", size_t{0}});
 
   // This one will not be changed, in order to test, that options, that are
   // not set at run time, are not changed.
@@ -237,36 +232,38 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
       R"--(somePositiveNumber : 42, someNegativNumber : -42, someIntegerlist : [40, 41], somePositiveFloatingPoint : 4.2, someNegativFloatingPoint : -4.2, someFloatingPointList : [4.1, 4.2], boolTrue : true, boolFalse : false, someBooleanList : [true, false, true], myName : "Bernd", someStringList : ["t1", "t2"], depth : [{list : [7,8]}])--");
 
   // Check, if an option was set to the value, you wanted.
-  auto checkOption = [&config](const auto& content, const auto&... keys) {
-    const auto& option = config.getConfigurationOptionByNestedKeys(keys...);
-    ASSERT_TRUE(option.hasValue());
-    ASSERT_EQ(content,
-              option.template getValue<std::decay_t<decltype(content)>>());
-  };
+  auto checkOption =
+      [&config](const auto& content,
+                const ad_utility::ConfigManager::VectorOfKeysForJson& keys) {
+        const auto& option = config.getConfigurationOptionByNestedKeys(keys);
+        ASSERT_TRUE(option.hasValue());
+        ASSERT_EQ(content,
+                  option.template getValue<std::decay_t<decltype(content)>>());
+      };
 
-  checkOption(static_cast<int>(42), "somePositiveNumber");
-  checkOption(static_cast<int>(-42), "someNegativNumber");
+  checkOption(static_cast<int>(42), {"somePositiveNumber"});
+  checkOption(static_cast<int>(-42), {"someNegativNumber"});
 
-  checkOption(std::vector{40, 41}, "someIntegerlist");
+  checkOption(std::vector{40, 41}, {"someIntegerlist"});
 
-  checkOption(static_cast<float>(4.2), "somePositiveFloatingPoint");
-  checkOption(static_cast<float>(-4.2), "someNegativFloatingPoint");
+  checkOption(static_cast<float>(4.2), {"somePositiveFloatingPoint"});
+  checkOption(static_cast<float>(-4.2), {"someNegativFloatingPoint"});
 
-  checkOption(std::vector<float>{4.1, 4.2}, "someFloatingPointList");
+  checkOption(std::vector<float>{4.1, 4.2}, {"someFloatingPointList"});
 
-  checkOption(true, "boolTrue");
-  checkOption(false, "boolFalse");
+  checkOption(true, {"boolTrue"});
+  checkOption(false, {"boolFalse"});
 
-  checkOption(std::vector{true, false, true}, "someBooleanList");
+  checkOption(std::vector{true, false, true}, {"someBooleanList"});
 
-  checkOption(std::string{"Bernd"}, "myName");
+  checkOption(std::string{"Bernd"}, {"myName"});
 
-  checkOption(std::vector<std::string>{"t1", "t2"}, "someStringList");
+  checkOption(std::vector<std::string>{"t1", "t2"}, {"someStringList"});
 
-  checkOption(std::vector{7, 8}, "depth", 0, "list");
+  checkOption(std::vector{7, 8}, {"depth", size_t{0}, "list"});
 
   // Is the "No Change" unchanged?
-  checkOption(static_cast<int>(10), "No_change");
+  checkOption(static_cast<int>(10), {"No_change"});
 
   // Multiple key value pairs with the same key are not allowed.
   ASSERT_ANY_THROW(config.setShortHand(R"(a:42, a:43)"););

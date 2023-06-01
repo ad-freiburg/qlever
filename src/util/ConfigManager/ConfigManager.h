@@ -6,6 +6,8 @@
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
+#include <bits/ranges_algo.h>
+#include <bits/ranges_util.h>
 
 #include <any>
 #include <concepts>
@@ -14,6 +16,7 @@
 #include <string>
 #include <type_traits>
 #include <typeinfo>
+#include <variant>
 
 #include "util/ANTLRLexerHelper.h"
 #include "util/ConfigManager/ConfigOption.h"
@@ -30,30 +33,16 @@ template <typename T>
 inline constexpr bool isString =
     std::is_constructible_v<std::string, std::decay_t<T>>;
 
-// The types, that can be used as access keys in `nlohmann::json` objects. In
-// short: Only whole numbers and everything, that could be converted into a
-// string.
-template <typename T>
-concept KeyForJson = isString<T> || std::integral<std::decay_t<T>>;
-
-// Only returns true, if all the given keys, that are numbers, are bigger/equal
-// than 0.
-static bool allArgumentsBiggerOrEqualToZero(const KeyForJson auto&... keys) {
-  [[maybe_unused]] auto biggerOrEqual = []<typename T>(const T& key) {
-    if constexpr (std::is_arithmetic_v<T>) {
-      return key >= 0;
-    } else {
-      return true;
-    }
-  };
-
-  return (biggerOrEqual(keys) && ...);
-}
-
 /*
 Manages a bunch of `ConfigOption`s.
 */
 class ConfigManager {
+ public:
+  // A list of keys, that are valid keys in json.
+  using KeyForJson = std::variant<nlohmann::json::size_type, std::string>;
+  using VectorOfKeysForJson = std::vector<KeyForJson>;
+
+ private:
   // The added configuration options.
   std::vector<ConfigOption> configurationOptions_;
 
@@ -76,48 +65,9 @@ class ConfigManager {
 
   /*
   @brief Creates a valid `nlohmann::json` pointer based on  the given keys.
-
-  @tparam Keys Positive whole numbers, or strings.
   */
   static nlohmann::json::json_pointer createJsonPointer(
-      const KeyForJson auto&... keys) requires(sizeof...(keys) > 0) {
-    // A numeric key, must be `>=0`.
-    AD_CONTRACT_CHECK(allArgumentsBiggerOrEqualToZero(keys...));
-
-    /*
-    A json pointer needs special characters, if a `/`, or `~`, is used in a
-    key. So here a special conversion function for our keys, that adds those,
-    if needed.
-    */
-    auto toString = []<typename T>(const T& key) {
-      // Our transformed key.
-      std::string transformedKey;
-
-      /*
-      Transforming the key. We simply check through the way, we can convert
-      them into a string and do the one, that works first.
-      */
-      if constexpr (std::is_constructible_v<std::string, T>) {
-        transformedKey = std::string(key);
-      } else {
-        /*
-        Must have been a number. I mean, `KeyForJson` doesn't allow anything
-        else, than those 2 possibilities and this the the last one.
-        */
-        static_assert(std::integral<std::decay_t<T>>);
-        transformedKey = std::to_string(key);
-      }
-
-      // Replace special character `~` with `~0` and `/` with `~1`.
-      return absl::StrReplaceAll(transformedKey, {{"~", "~0"}, {"/", "~1"}});
-    };
-
-    // Creating the string for the pointer.
-    std::ostringstream pointerString;
-    ((pointerString << "/" << toString(keys)), ...);
-
-    return nlohmann::json::json_pointer(pointerString.str());
-  }
+      const VectorOfKeysForJson& keys);
 
   /*
   @brief Parses the given short hand and returns it as a json object,
@@ -134,79 +84,11 @@ class ConfigManager {
   accessed by calling `getConfigurationOptionByNestedKeys` with the here given
   keys, follwed by the name of the configuration option.
   Example: Given a configuration option `numberOfRows` and the keys
-  `"generalOptions", 1, "Table"`, then it can be accessed with
-  `"generalOptions", 1, "Table", "numberOfRows"`.
+  `{"generalOptions", 1, "Table"}`, then it can be accessed with
+  `{"generalOptions", 1, "Table", "numberOfRows"}`.
   */
-  template <KeyForJson... Keys>
-  void addConfigurationOption(const ConfigOption& option, const Keys&... keys) {
-    // All numeric key, must be `>=0`.
-    AD_CONTRACT_CHECK(allArgumentsBiggerOrEqualToZero(keys...));
-
-    // The position in the json object literal, our keys point to.
-    const nlohmann::json::json_pointer ptr{
-        createJsonPointer(AD_FWD(keys)..., option.getIdentifier())};
-
-    /*
-    The first key must be a string, not a number. Having an array at the
-    highest level, would be bad practice, because setting and reading options,
-    that are just identified with numbers, is rather difficult.
-    */
-    if constexpr (sizeof...(keys) > 0) {
-      if constexpr (!isString<ad_utility::First<Keys...>>) {
-        throw ad_utility::Exception(
-            absl::StrCat("Key error, while trying to add a configuration "
-                         "option: The first key in '",
-                         ptr.to_string(),
-                         "' isn't a string. It needs to be a string, because "
-                         "internally we save locations in a json format, more "
-                         "specificly in a json object literal."));
-      }
-    }
-
-    /*
-    The string keys must be a valid `NAME` in the short hand. Otherwise, the
-    option can't get accessed with the short hand.
-    */
-    if constexpr (sizeof...(keys) > 0) {
-      // For saving, which key failed the test.
-      std::string_view lastCheckedKey;
-
-      auto checkIfValidName = [&lastCheckedKey]<typename T>(const T& key) {
-        // Only actually check, if we have a string, or string like, type `T`.
-        if constexpr (isString<T>) {
-          lastCheckedKey = key;
-          return stringOnlyContainsSpecifiedTokens<ConfigShorthandLexer>(
-              AD_FWD(key), static_cast<size_t>(ConfigShorthandLexer::NAME));
-        } else {
-          return true;
-        }
-      };
-
-      if ((!checkIfValidName(keys) || ...)) {
-        /*
-        One of the keys failed. Because how the logical `or` is evaluated, left
-        to right, until a `true` is found, the `string_view` must hold the
-        failed key.
-        */
-        throw ad_utility::Exception(absl::StrCat(
-            "Key error: The key '", lastCheckedKey, "' in '", ptr.to_string(),
-            "' doesn't describe a valid name, according to the short hand "
-            "grammar."));
-      }
-    }
-
-    // Is there already a configuration option with the same identifier at the
-    // same location?
-    if (keyToConfigurationOptionIndex_.contains(ptr)) {
-      throw ad_utility::Exception(absl::StrCat(
-          "Key error: There was already a configuration option found at '",
-          ptr.to_string(), "'\n", static_cast<std::string>(*this), "\n"));
-    }
-
-    // Add the location of the new configuration option to the json.
-    keyToConfigurationOptionIndex_[ptr] = configurationOptions_.size();
-    configurationOptions_.push_back(option);
-  }
+  void addConfigurationOption(const ConfigOption& option,
+                              const VectorOfKeysForJson& keys = {});
 
   /*
   Get all the added configuration options.
@@ -219,27 +101,9 @@ class ConfigManager {
   place, an exception will be thrown.
 
   @param keys The keys for looking up the configuration option.
-   Look at the documentation of `nlohmann::basic_json::at`, if you want
-   to see, what's possible.
   */
   const ConfigOption& getConfigurationOptionByNestedKeys(
-      const KeyForJson auto&... keys) const requires(sizeof...(keys) > 0) {
-    // A numeric key, must be `>=0`.
-    AD_CONTRACT_CHECK(allArgumentsBiggerOrEqualToZero(keys...));
-
-    // If there is an entry at the described location, this should point to the
-    // index number of the configuration option in `configurationOptions_`.
-    const nlohmann::json::json_pointer ptr{createJsonPointer(AD_FWD(keys)...)};
-
-    if (keyToConfigurationOptionIndex_.contains(ptr)) {
-      return configurationOptions_.at(
-          keyToConfigurationOptionIndex_.at(ptr).get<size_t>());
-    } else {
-      throw ad_utility::Exception(absl::StrCat(
-          "Key error: There was no configuration option found at '",
-          ptr.to_string(), "'\n", static_cast<std::string>(*this), "\n"));
-    }
-  }
+      const VectorOfKeysForJson& keys) const;
 
   /*
    * @brief Sets the configuration options based on the given json object

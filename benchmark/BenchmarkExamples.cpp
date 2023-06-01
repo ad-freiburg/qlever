@@ -253,23 +253,25 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
     config->addConfigurationOption(
         ad_utility::makeConfigOption<float>(
             "Steve", "Steves saving account balance.", -41.9),
-        "Accounts", "Personal");
+        {"Accounts", "Personal"});
   }
 
   void parseConfiguration(const ad_utility::ConfigManager& config) final {
     // Collect some arbitrary values.
-    std::string dateString{config.getConfigurationOptionByNestedKeys("date")
+    std::string dateString{config.getConfigurationOptionByNestedKeys({"date"})
                                .getValue<std::string>()};
     int numberOfStreetSigns{
-        config.getConfigurationOptionByNestedKeys("numSigns").getValue<int>()};
+        config.getConfigurationOptionByNestedKeys({"numSigns"})
+            .getValue<int>()};
 
     std::vector<bool> wonOnTryX{
-        config.getConfigurationOptionByNestedKeys("CoinFlipTry")
+        config.getConfigurationOptionByNestedKeys({"CoinFlipTry"})
             .getValue<std::vector<bool>>()};
 
     float balanceOnStevesSavingAccount{
         config
-            .getConfigurationOptionByNestedKeys("Accounts", "Personal", "Steve")
+            .getConfigurationOptionByNestedKeys(
+                {"Accounts", "Personal", "Steve"})
             .getValue<float>()};
 
     // Transcribe the collected values.

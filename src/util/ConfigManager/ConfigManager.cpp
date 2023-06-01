@@ -48,9 +48,70 @@ class ShortHandSyntaxException : public std::exception {
 };
 
 // ____________________________________________________________________________
+nlohmann::json::json_pointer ConfigManager::createJsonPointer(
+    const VectorOfKeysForJson& keys) {
+  /*
+  A json pointer needs special characters, if a `/`, or `~`, is used in a
+  key. So here a special conversion function for our keys, that adds those,
+  if needed.
+  */
+  auto toStringVisitor = []<typename T>(const T& key) {
+    // Our transformed key.
+    std::string transformedKey;
+
+    /*
+    Transforming the key. We simply check through the way, we can convert
+    them into a string and do the one, that works first.
+    */
+    if constexpr (isString<std::decay_t<T>>) {
+      transformedKey = std::string(key);
+    } else {
+      /*
+      Must have been a number. I mean, `KeyForJson` doesn't allow anything
+      else, than those 2 possibilities and this the the last one.
+      */
+      static_assert(std::integral<std::decay_t<T>>);
+      transformedKey = std::to_string(key);
+    }
+
+    // Replace special character `~` with `~0` and `/` with `~1`.
+    return absl::StrReplaceAll(transformedKey, {{"~", "~0"}, {"/", "~1"}});
+  };
+  auto toString = [&toStringVisitor](const KeyForJson& key) {
+    return std::visit(toStringVisitor, key);
+  };
+
+  // Creating the string for the pointer.
+  std::ostringstream pointerString;
+  std::ranges::for_each(keys,
+                        [&toString, &pointerString](const KeyForJson& key) {
+                          pointerString << "/" << toString(key);
+                        });
+
+  return nlohmann::json::json_pointer(pointerString.str());
+}
+
+// ____________________________________________________________________________
 const std::vector<ConfigOption>& ConfigManager::getConfigurationOptions()
     const {
   return configurationOptions_;
+}
+
+// ____________________________________________________________________________
+const ConfigOption& ConfigManager::getConfigurationOptionByNestedKeys(
+    const VectorOfKeysForJson& keys) const {
+  // If there is an entry at the described location, this should point to the
+  // index number of the configuration option in `configurationOptions_`.
+  const nlohmann::json::json_pointer ptr{createJsonPointer(keys)};
+
+  if (keyToConfigurationOptionIndex_.contains(ptr)) {
+    return configurationOptions_.at(
+        keyToConfigurationOptionIndex_.at(ptr).get<size_t>());
+  } else {
+    throw ad_utility::Exception(absl::StrCat(
+        "Key error: There was no configuration option found at '",
+        ptr.to_string(), "'\n", static_cast<std::string>(*this), "\n"));
+  }
 }
 
 // ____________________________________________________________________________
@@ -81,6 +142,74 @@ nlohmann::json ConfigManager::parseShortHand(
       shortHandStringContext);
 }
 
+// ____________________________________________________________________________
+void ConfigManager::addConfigurationOption(const ConfigOption& option,
+                                           const VectorOfKeysForJson& keys) {
+  // The position in the json object literal, our keys point to.
+  VectorOfKeysForJson vectorForPtr{keys};
+  vectorForPtr.push_back(std::string{option.getIdentifier()});
+  const nlohmann::json::json_pointer ptr{
+      createJsonPointer(std::move(vectorForPtr))};
+
+  if (keys.size() > 0) {
+    /*
+    The first key must be a string, not a number. Having an array at the
+    highest level, would be bad practice, because setting and reading options,
+    that are just identified with numbers, is rather difficult.
+    */
+    if (!std::holds_alternative<std::string>(keys.front())) {
+      throw ad_utility::Exception(
+          absl::StrCat("Key error, while trying to add a configuration "
+                       "option: The first key in '",
+                       ptr.to_string(),
+                       "' isn't a string. It needs to be a string, because "
+                       "internally we save locations in a json format, more "
+                       "specificly in a json object literal."));
+    }
+
+    /*
+    The string keys must be a valid `NAME` in the short hand. Otherwise, the
+    option can't get accessed with the short hand.
+    */
+    auto checkIfValidNameVisitor = []<typename T>(const T& key) {
+      // Only actually check, if we have a string.
+      if constexpr (isString<std::decay_t<T>>) {
+        return stringOnlyContainsSpecifiedTokens<ConfigShorthandLexer>(
+            AD_FWD(key), static_cast<size_t>(ConfigShorthandLexer::NAME));
+      } else {
+        return true;
+      }
+    };
+
+    if (auto failedKey = std::ranges::find_if_not(
+            keys,
+            [&checkIfValidNameVisitor](const KeyForJson& key) {
+              return std::visit(checkIfValidNameVisitor, key);
+            });
+        failedKey != keys.end()) {
+      /*
+      One of the keys failed. `failedKey` is an iterator pointing to the key.
+      */
+      throw ad_utility::Exception(absl::StrCat(
+          "Key error: The key '", std::get<std::string>(*failedKey), "' in '",
+          ptr.to_string(),
+          "' doesn't describe a valid name, according to the short hand "
+          "grammar."));
+    }
+  }
+
+  // Is there already a configuration option with the same identifier at the
+  // same location?
+  if (keyToConfigurationOptionIndex_.contains(ptr)) {
+    throw ad_utility::Exception(absl::StrCat(
+        "Key error: There was already a configuration option found at '",
+        ptr.to_string(), "'\n", static_cast<std::string>(*this), "\n"));
+  }
+
+  // Add the location of the new configuration option to the json.
+  keyToConfigurationOptionIndex_[ptr] = configurationOptions_.size();
+  configurationOptions_.push_back(option);
+}
 // ____________________________________________________________________________
 void ConfigManager::setShortHand(const std::string& shortHandString) {
   setJsonString(parseShortHand(shortHandString).dump());
