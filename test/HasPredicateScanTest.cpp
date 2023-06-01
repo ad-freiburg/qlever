@@ -50,7 +50,7 @@ class DummyOperation : public Operation {
   virtual size_t getCostEstimate() override { return 10; }
 
  private:
-  virtual size_t getSizeEstimateBeforeLimit() override { return 10; }
+  virtual uint64_t getSizeEstimateBeforeLimit() override { return 10; }
 
  public:
   virtual float getMultiplicity(size_t col) override {

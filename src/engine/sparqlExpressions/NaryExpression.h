@@ -221,7 +221,7 @@ using DayExpression = NARY<1, FV<decltype(extractDay), DateValueGetter>>;
 using StrExpression = NARY<1, FV<std::identity, StringValueGetter>>;
 
 // Compute string length.
-inline auto strlen = [](const auto& s) -> long int { return s.size(); };
+inline auto strlen = [](const auto& s) -> int64_t { return s.size(); };
 using StrlenExpression = NARY<1, FV<decltype(strlen), StringValueGetter>>;
 
 }  // namespace detail

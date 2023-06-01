@@ -299,7 +299,7 @@ TEST(SparqlExpression, dateOperators) {
 }
 
 // Test `StrlenExpression` and `StrExpression`.
-auto checkStrlen = testUnaryExpression<StrlenExpression, std::string, long int>;
+auto checkStrlen = testUnaryExpression<StrlenExpression, std::string, int64_t>;
 template <typename OperandType>
 auto checkStr = [](std::vector<OperandType>&& operand,
                    std::vector<std::string>&& expected) {
