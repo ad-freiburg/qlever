@@ -88,7 +88,7 @@ TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
       config.addConfigurationOption(withDefault, {"Shared part"}););
 }
 
-TEST(ConfigManagerTest, SetJsonStringTest) {
+TEST(ConfigManagerTest, ParseConfig) {
   ad_utility::ConfigManager config{};
 
   // Adding the options.
@@ -129,9 +129,8 @@ TEST(ConfigManagerTest, SetJsonStringTest) {
   ASSERT_FALSE(getOption(0).hasValue());
   ASSERT_FALSE(getOption(1).hasValue());
 
-  // The json string for testing `setJsonString`. Sets all of the
-  // configuration options.
-  const std::string testJsonString{R"--({
+  // The json for testing `parseConfig`. Sets all of the configuration options.
+  const nlohmann::json testJson(nlohmann::json::parse(R"--({
 "depth_0": {
   "Option_0": 10,
   "depth_1": {
@@ -139,17 +138,17 @@ TEST(ConfigManagerTest, SetJsonStringTest) {
   }
 },
 "Option_2": 12
-})--"};
+})--"));
 
   // Set and check.
-  config.setJsonString(testJsonString);
+  config.parseConfig(testJson);
 
   checkOption(getOption(0), 10);
   checkOption(getOption(1), 11);
   checkOption(getOption(2), 12);
 }
 
-TEST(ConfigManagerTest, SetJsonStringExceptionTest) {
+TEST(ConfigManagerTest, ParseConfigExceptionTest) {
   ad_utility::ConfigManager config{};
 
   // Add one option with default and one without.
@@ -164,13 +163,13 @@ TEST(ConfigManagerTest, SetJsonStringExceptionTest) {
       {"depth_0"});
 
   // Should throw an exception, if we don't set all options, that must be set.
-  ASSERT_ANY_THROW(config.setJsonString(R"--({})--"));
+  ASSERT_ANY_THROW(config.parseConfig(nlohmann::json::parse(R"--({})--")));
 
   // Should throw an exception, if we try set an option, that isn't there.
-  ASSERT_ANY_THROW(config.setJsonString(
-      R"--({"depth 0":{"Without_default":42, "with_default" : [39]}})--"));
-  ASSERT_ANY_THROW(config.setJsonString(
-      R"--({"depth 0":{"Without_default":42, "test_string" : "test"}})--"));
+  ASSERT_ANY_THROW(config.parseConfig(nlohmann::json::parse(
+      R"--({"depth 0":{"Without_default":42, "with_default" : [39]}})--")));
+  ASSERT_ANY_THROW(config.parseConfig(nlohmann::json::parse(
+      R"--({"depth 0":{"Without_default":42, "test_string" : "test"}})--")));
 }
 
 TEST(ConfigManagerTest, ParseShortHandTest) {
@@ -228,8 +227,8 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
       ad_utility::makeConfigOption<int>("No_change", "", std::optional{10}));
 
   // Set those.
-  config.setShortHand(
-      R"--(somePositiveNumber : 42, someNegativNumber : -42, someIntegerlist : [40, 41], somePositiveFloatingPoint : 4.2, someNegativFloatingPoint : -4.2, someFloatingPointList : [4.1, 4.2], boolTrue : true, boolFalse : false, someBooleanList : [true, false, true], myName : "Bernd", someStringList : ["t1", "t2"], depth : [{list : [7,8]}])--");
+  config.parseConfig(ad_utility::ConfigManager::parseShortHand(
+      R"--(somePositiveNumber : 42, someNegativNumber : -42, someIntegerlist : [40, 41], somePositiveFloatingPoint : 4.2, someNegativFloatingPoint : -4.2, someFloatingPointList : [4.1, 4.2], boolTrue : true, boolFalse : false, someBooleanList : [true, false, true], myName : "Bernd", someStringList : ["t1", "t2"], depth : [{list : [7,8]}])--"));
 
   // Check, if an option was set to the value, you wanted.
   auto checkOption =
@@ -266,9 +265,11 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
   checkOption(static_cast<int>(10), {"No_change"});
 
   // Multiple key value pairs with the same key are not allowed.
-  ASSERT_ANY_THROW(config.setShortHand(R"(a:42, a:43)"););
+  ASSERT_ANY_THROW(ad_utility::ConfigManager::parseShortHand(R"(a:42, a:43)"););
 
   // Final test: Is there an exception, if we try to parse the wrong syntax?
-  ASSERT_ANY_THROW(config.setShortHand(R"--({"myName" : "Bernd")})--"));
-  ASSERT_ANY_THROW(config.setShortHand(R"--("myName" = "Bernd";)--"));
+  ASSERT_ANY_THROW(ad_utility::ConfigManager::parseShortHand(
+      R"--({"myName" : "Bernd")})--"));
+  ASSERT_ANY_THROW(
+      ad_utility::ConfigManager::parseShortHand(R"--("myName" = "Bernd";)--"));
 }

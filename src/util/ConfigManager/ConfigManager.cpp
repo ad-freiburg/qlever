@@ -210,19 +210,16 @@ void ConfigManager::addConfigurationOption(const ConfigOption& option,
   keyToConfigurationOptionIndex_[ptr] = configurationOptions_.size();
   configurationOptions_.push_back(option);
 }
-// ____________________________________________________________________________
-void ConfigManager::setShortHand(const std::string& shortHandString) {
-  setJsonString(parseShortHand(shortHandString).dump());
-}
 
 // ____________________________________________________________________________
-void ConfigManager::setJsonString(const std::string& jsonString) {
-  const nlohmann::json& stringAsJson = nlohmann::json::parse(jsonString);
+void ConfigManager::parseConfig(const nlohmann::json& j) {
   // Anything else but a literal json object is not something, we want.
-  if (!stringAsJson.is_object()) {
+  if (!j.is_object()) {
     throw ad_utility::Exception(
-        "A ConfigManager"
-        " should only be set with a json object literal.");
+        absl::StrCat("A ConfigManager should only parse configurations, that "
+                     "are a json object literal. The configuration: \n\n",
+                     j.dump(2), "\n\n is not a json object literal, but a '",
+                     jsonToTypeString(j), "'."));
   }
 
   /*
@@ -234,20 +231,19 @@ void ConfigManager::setJsonString(const std::string& jsonString) {
   Because we iterate over the 'flattend' verions of two `nlohmann::json`
   objects, I gave them const references here.
   */
-  const auto& stringAsJsonFlattend = stringAsJson.flatten();
+  const auto& jFlattend = j.flatten();
   const auto& keyToConfigurationOptionIndexFlattend =
       keyToConfigurationOptionIndex_.flatten();
 
   /*
-  Does `stringAsJson` only contain valid configuration options?
-  That is, does it only contain paths to entries, that are the same paths as we
-  have saved there?
+  Does `j` only contain valid configuration options? That is, does it only
+  contain paths to entries, that are the same paths as we have saved there?
 
   For example: If on of our paths in `keyToConfigurationOptionIndex_` was
   `{"classA": [..., {"entryNumber5" : 5}]}`, then a path like `{"clasA": [...,
   {"entryNumber5" : 5}]}` would be invalid, because of the typo.
   */
-  for (const auto& item : stringAsJsonFlattend.items()) {
+  for (const auto& item : jFlattend.items()) {
     // Only returns true, if the given pointer is the EXACT path to a
     // configuration option. Partial doesn't count!
     auto isPointerToConfigurationOption =
@@ -268,9 +264,9 @@ void ConfigManager::setJsonString(const std::string& jsonString) {
     const nlohmann::json::json_pointer currentPtr{item.key()};
 
     if ((!isPointerToConfigurationOption(currentPtr) ||
-         !stringAsJson.at(currentPtr).is_primitive()) &&
+         !j.at(currentPtr).is_primitive()) &&
         (!isPointerToConfigurationOption(currentPtr.parent_pointer()) ||
-         !stringAsJson.at(currentPtr.parent_pointer()).is_array())) {
+         !j.at(currentPtr.parent_pointer()).is_array())) {
       throw ad_utility::Exception(absl::StrCat(
           "Error while trying to set configuration option: '",
           currentPtr.to_string(), "'",
@@ -299,11 +295,11 @@ void ConfigManager::setJsonString(const std::string& jsonString) {
             .get<size_t>()));
 
     // Set the option, if possible.
-    if (stringAsJson.contains(configurationOptionJsonPosition)) {
+    if (j.contains(configurationOptionJsonPosition)) {
       // This will throw an exception, if the json object can't be interpreted
       // with the wanted type.
       configurationOption->setValueWithJson(
-          stringAsJson.at(configurationOptionJsonPosition));
+          j.at(configurationOptionJsonPosition));
     }
 
     // If the option has no value now, that means, it didn't have a default

@@ -69,15 +69,6 @@ class ConfigManager {
   static nlohmann::json::json_pointer createJsonPointer(
       const VectorOfKeysForJson& keys);
 
-  /*
-  @brief Parses the given short hand and returns it as a json object,
-   that contains all the described configuration data.
-
-  @param shortHandString The language of the short hand is defined in
-  `generated/ConfigShorthand.g4`.
-  */
-  static nlohmann::json parseShortHand(const std::string& shortHandString);
-
  public:
   /*
   @brief Add the given configuration option in such a way, that it can be
@@ -106,26 +97,28 @@ class ConfigManager {
       const VectorOfKeysForJson& keys) const;
 
   /*
-   * @brief Sets the configuration options based on the given json object
-   * literal, represented by the string. Note: This will overwrite values held
-   * by the configuration data, if there were values for them given inside the
-   * string.
-   *
-   * @param jsonString A string representing a json object literal. MUST be an
-   * object, otherwise will cause an exception.
-   */
-  void setJsonString(const std::string& jsonString);
+  @brief Sets the configuration options based on the given json. Note: This will
+  overwrite values held by the configuration data, if there were values for them
+  given inside the string.
+
+  @param j There will be an exception thrown, if:
+  - `j` doesn't contain values for all configuration options, that must be set
+  at runtime.
+
+  - Same, if there are values for configuration options, that do not exist.
+
+  - `j` is anything but a json object literal.
+  */
+  void parseConfig(const nlohmann::json& j);
 
   /*
-   * @brief Parses the given short hand and sets all configuration options, that
-   *  where described with a valid syntax. Note: This will overwrite values held
-   * by the configuration data, if there were values for them given inside the
-   * string.
-   *
-   * @param shortHandString For a description of the short hand syntax, see
-   *  `BenchmarkConfiguration::parseShortHand`
-   */
-  void setShortHand(const std::string& shortHandString);
+  @brief Parses the given short hand and returns it as a json object,
+   that contains all the described configuration data.
+
+  @param shortHandString The language of the short hand is defined in
+  `generated/ConfigShorthand.g4`.
+  */
+  static nlohmann::json parseShortHand(const std::string& shortHandString);
 
   /*
   @brief Returns a string containing an example json configuration and the

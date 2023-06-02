@@ -125,12 +125,18 @@ int main(int argc, char** argv) {
 
   // Set all the configuration options, if there was any runtime configuration
   // given.
+  nlohmann::json jsonConfig(nlohmann::json::value_t::object);
+
   if (vm.count("configuration-json")) {
-    config.setJsonString(readFileToString(jsonConfigurationFileName));
+    jsonConfig.update(
+        nlohmann::json::parse(readFileToString(jsonConfigurationFileName)));
   }
   if (vm.count("configuration-shorthand")) {
-    config.setShortHand(shortHandConfigurationString);
+    jsonConfig.update(ad_utility::ConfigManager::parseShortHand(
+        shortHandConfigurationString));
   }
+
+  config.parseConfig(jsonConfig);
 
   // Print all the available configuration options, if wanted.
   if (vm.count("configuration-options")) {
