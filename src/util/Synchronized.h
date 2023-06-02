@@ -14,6 +14,7 @@
 
 #include "absl/cleanup/cleanup.h"
 #include "util/Forward.h"
+#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 
 namespace ad_utility {
 
@@ -132,11 +133,11 @@ class Synchronized {
     // It is important to create this AFTER the lock, s.t. the
     // nextOrderedRequest_ update is still protected. We must give it a name,
     // s.t. it is not destroyed immediately.
-    absl::Cleanup od{[&]() mutable noexcept {
+    auto od = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([&]() {
       ++nextOrderedRequest_;
       l.unlock();
       requestCv_.notify_all();
-    }};
+    });
     requestCv_.wait(l, [&]() { return requestNumber == nextOrderedRequest_; });
     return f(data_);
   }
