@@ -85,7 +85,7 @@ queries:
       - num_rows: 3
       - contains_row:
         - "<Grete_Hermann>"
-        - "1901-03-02T00:00:00"
+        - "1901-03-02"
         - "Hermann's algorithm for primary decomposition is still in use now."
         - null
       - order_numeric: {"dir": "DESC", "var" : "?ql_textscore_t"}
@@ -103,7 +103,7 @@ queries:
       - num_rows: 103
       - contains_row:
           - "<Grete_Hermann>"
-          - "1901-03-02T00:00:00"
+          - "1901-03-02"
 
   - query: scientists-from-new-york
     type: no-text
@@ -1214,7 +1214,7 @@ queries:
     sparql: |
       PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
       SELECT ?s WHERE {
-        ?s <Date_of_birth> "1970-05-28T17:55Z"^^xsd:dateTime
+        ?s <Date_of_birth> "1970-05-28T17:55:00Z"^^xsd:dateTime
       }
     checks:
       - num_cols: 1
@@ -1228,7 +1228,7 @@ queries:
       PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
       SELECT ?s WHERE {
         ?s <Date_of_birth> ?d .
-        FILTER (?d = "1970-05-28T17:55Z"^^xsd:dateTime)
+        FILTER (?d = "1970-05-28T17:55:00Z"^^xsd:dateTime)
       }
     checks:
       - num_cols: 1
