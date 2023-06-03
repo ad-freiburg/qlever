@@ -31,7 +31,7 @@ class Bind : public Operation {
   size_t getCostEstimate() override;
 
  private:
-  size_t getSizeEstimateBeforeLimit() override;
+  uint64_t getSizeEstimateBeforeLimit() override;
 
  public:
   float getMultiplicity(size_t col) override;

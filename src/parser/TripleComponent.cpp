@@ -17,6 +17,8 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
           stream << "UNDEF";
         } else if constexpr (std::is_same_v<T, TripleComponent::Literal>) {
           stream << value.rawContent();
+        } else if constexpr (std::is_same_v<T, DateOrLargeYear>) {
+          stream << "DATE: " << value.toStringAndType().first;
         } else {
           stream << value;
         }
@@ -59,6 +61,8 @@ std::optional<Id> TripleComponent::toValueIdIfNotString() const {
       return Id::makeFromDouble(value);
     } else if constexpr (std::is_same_v<T, UNDEF>) {
       return Id::makeUndefined();
+    } else if constexpr (std::is_same_v<T, DateOrLargeYear>) {
+      return Id::makeFromDate(value);
     } else if constexpr (std::is_same_v<T, Variable>) {
       // Cannot turn a variable into a ValueId.
       AD_FAIL();
@@ -71,12 +75,17 @@ std::optional<Id> TripleComponent::toValueIdIfNotString() const {
 
 // ____________________________________________________________________________
 std::string TripleComponent::toRdfLiteral() const {
+  // TODO<joka921> This whole method should use the logic from
+  // `ExportQueryExecutionTrees.h`
   if (isString()) {
     return getString();
   } else if (isLiteral()) {
     return getLiteral().rawContent();
   } else if (isDouble()) {
     return absl::StrCat("\"", getDouble(), "\"^^<", XSD_DOUBLE_TYPE, ">");
+  } else if (isDate()) {
+    auto [date, type] = getDate().toStringAndType();
+    return absl::StrCat("\"", date, "\"^^<", type, ">");
   } else {
     AD_CORRECTNESS_CHECK(isInt());
     return absl::StrCat("\"", getInt(), "\"^^<", XSD_INTEGER_TYPE, ">");

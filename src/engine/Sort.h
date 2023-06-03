@@ -37,7 +37,7 @@ class Sort : public Operation {
   }
 
  private:
-  size_t getSizeEstimateBeforeLimit() override {
+  uint64_t getSizeEstimateBeforeLimit() override {
     return subtree_->getSizeEstimate();
   }
 

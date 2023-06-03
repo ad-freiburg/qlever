@@ -61,7 +61,7 @@ class Join : public Operation {
   }
 
  private:
-  size_t getSizeEstimateBeforeLimit() override {
+  uint64_t getSizeEstimateBeforeLimit() override {
     if (!_sizeEstimateComputed) {
       computeSizeEstimateAndMultiplicities();
       _sizeEstimateComputed = true;

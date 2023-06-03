@@ -195,6 +195,8 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
           nullptr};
+    case Datatype::Date:
+      return id.getDate().toStringAndType();
   }
   AD_FAIL();
 }
@@ -469,7 +471,7 @@ ExportQueryExecutionTrees::constructQueryResultToTsvOrCsv(
 // _____________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
     const ParsedQuery& query, const QueryExecutionTree& qet,
-    ad_utility::Timer& requestTimer, size_t maxSend) {
+    ad_utility::Timer& requestTimer, uint64_t maxSend) {
   shared_ptr<const ResultTable> resultTable = qet.getResult();
   resultTable->logResultSize();
   auto timeResultComputation = requestTimer.value();
@@ -562,7 +564,7 @@ ExportQueryExecutionTrees::computeConstructQueryResultAsTurtle(
 // _____________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::computeSelectQueryResultAsSparqlJSON(
     const ParsedQuery& query, const QueryExecutionTree& qet,
-    [[maybe_unused]] ad_utility::Timer& requestTimer, size_t maxSend) {
+    [[maybe_unused]] ad_utility::Timer& requestTimer, uint64_t maxSend) {
   if (!query.hasSelectClause()) {
     AD_THROW(
         "SPARQL-compliant JSON format is only supported for SELECT queries");
@@ -580,7 +582,7 @@ nlohmann::json ExportQueryExecutionTrees::computeSelectQueryResultAsSparqlJSON(
 // _____________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::computeResultAsJSON(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
-    ad_utility::Timer& requestTimer, size_t maxSend,
+    ad_utility::Timer& requestTimer, uint64_t maxSend,
     ad_utility::MediaType mediaType) {
   switch (mediaType) {
     case ad_utility::MediaType::qleverJson:

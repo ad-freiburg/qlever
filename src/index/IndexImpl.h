@@ -133,7 +133,7 @@ class IndexImpl {
   bool usePatterns_ = false;
   double avgNumDistinctPredicatesPerSubject_;
   double avgNumDistinctSubjectsPerPredicate_;
-  size_t numDistinctSubjectPredicatePairs_;
+  uint64_t numDistinctSubjectPredicatePairs_;
 
   size_t parserBatchSize_ = PARSER_BATCH_SIZE;
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
