@@ -14,6 +14,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <typeinfo>
 #include <variant>
@@ -71,15 +72,129 @@ class ConfigManager {
 
  public:
   /*
-  @brief Add the given configuration option in such a way, that it can be
-  accessed by calling `getConfigurationOptionByNestedKeys` with the here given
-  keys, follwed by the name of the configuration option.
-  Example: Given a configuration option `numberOfRows` and the keys
-  `{"generalOptions", 1, "Table"}`, then it can be accessed with
-  `{"generalOptions", 1, "Table", "numberOfRows"}`.
+  @brief Creates and adds a new configuration option.
+
+  @tparam OptionType The type of value, the configuration option can hold.
+
+  @param pathToOption Describes a path in json, that points to the value held by
+  the configuration option. The last key in the vector is the name of the
+  configuration option. NOTE: Both the first, and the last key have to be
+  strings.
+  @param optionDescription A description for the configuration option.
+  @param variableToPutValueOfTheOptionIn The value held by the configuration
+  option will be copied into this variable, whenever the value in the
+  configuration option changes.
+  @param defaultValue A default value for the configuration option. If none is
+  given, signified by an empty optional, then a value for the configuration
+  option MUST be given at runtime.
   */
-  void addConfigurationOption(const ConfigOption& option,
-                              const VectorOfKeysForJson& keys = {});
+  template <typename OptionType>
+  requires ad_utility::isTypeContainedIn<OptionType,
+                                         ConfigOption::AvailableTypes>
+  void createConfigOption(const VectorOfKeysForJson& pathToOption,
+                          std::string_view optionDescription,
+                          OptionType* variableToPutValueOfTheOptionIn,
+                          std::optional<OptionType> defaultValue =
+                              std::optional<OptionType>(std::nullopt)) {
+    // We need at least a name in the path.
+    AD_CONTRACT_CHECK(pathToOption.size() > 0);
+
+    // The position in the json object literal, our `pathToOption` points to.
+    const nlohmann::json::json_pointer ptr{createJsonPointer(pathToOption)};
+
+    /*
+    The first key must be a string, not a number. Having an array at the
+    highest level, would be bad practice, because setting and reading options,
+    that are just identified with numbers, is rather difficult.
+    */
+    if (!std::holds_alternative<std::string>(pathToOption.front())) {
+      throw ad_utility::Exception(
+          absl::StrCat("Key error, while trying to add a configuration "
+                       "option: The first key in '",
+                       ptr.to_string(),
+                       "' isn't a string. It needs to be a string, because "
+                       "internally we save locations in a json format, more "
+                       "specificly in a json object literal."));
+    }
+
+    // The last entry in the path is the name for the configuration option. It
+    // must be a string.
+    // TODO Custom exception.
+    AD_CONTRACT_CHECK(std::holds_alternative<std::string>(pathToOption.back()));
+
+    /*
+    The string keys must be a valid `NAME` in the short hand. Otherwise, the
+    option can't get accessed with the short hand.
+    */
+    auto checkIfValidNameVisitor = []<typename T>(const T& key) {
+      // Only actually check, if we have a string.
+      if constexpr (isString<std::decay_t<T>>) {
+        return stringOnlyContainsSpecifiedTokens<ConfigShorthandLexer>(
+            AD_FWD(key), static_cast<size_t>(ConfigShorthandLexer::NAME));
+      } else {
+        return true;
+      }
+    };
+
+    if (auto failedKey = std::ranges::find_if_not(
+            pathToOption,
+            [&checkIfValidNameVisitor](const KeyForJson& key) {
+              return std::visit(checkIfValidNameVisitor, key);
+            });
+        failedKey != pathToOption.end()) {
+      /*
+      One of the keys failed. `failedKey` is an iterator pointing to the key.
+      */
+      throw ad_utility::Exception(absl::StrCat(
+          "Key error: The key '", std::get<std::string>(*failedKey), "' in '",
+          ptr.to_string(),
+          "' doesn't describe a valid name, according to the short hand "
+          "grammar."));
+    }
+
+    // Is there already a configuration option with the same identifier at the
+    // same location?
+    if (keyToConfigurationOptionIndex_.contains(ptr)) {
+      throw ad_utility::Exception(absl::StrCat(
+          "Key error: There was already a configuration option found at '",
+          ptr.to_string(), "'\n", printConfigurationDoc(), "\n"));
+    }
+
+    // Add the location of the new configuration option to the json.
+    keyToConfigurationOptionIndex_[ptr] = configurationOptions_.size();
+    // Add the new configuration option.
+    configurationOptions_.push_back(makeConfigOption<OptionType>(
+        std::get<std::string>(pathToOption.back()), optionDescription,
+        variableToPutValueOfTheOptionIn, defaultValue));
+  }
+
+  /*
+  @brief Creates and adds a new configuration option.
+
+  @tparam OptionType The type of value, the configuration option can hold.
+
+  @param optionName Name of the option. Additionally, this the one name is the
+  entire path in json, needed to address the value held by this option.
+  @param optionDescription A description for the configuration option.
+  @param variableToPutValueOfTheOptionIn The value held by the configuration
+  option will be copied into this variable, whenever the value in the
+  configuration option changes.
+  @param defaultValue A default value for the configuration option. If none is
+  given, signified by an empty optional, then a value for the configuration
+  option MUST be given at runtime.
+  */
+  template <typename OptionType>
+  requires ad_utility::isTypeContainedIn<OptionType,
+                                         ConfigOption::AvailableTypes>
+  void createConfigOption(std::string_view optionName,
+                          std::string_view optionDescription,
+                          OptionType* variableToPutValueOfTheOptionIn,
+                          std::optional<OptionType> defaultValue =
+                              std::optional<OptionType>(std::nullopt)) {
+    createConfigOption<OptionType>(
+        VectorOfKeysForJson{std::string{optionName}}, optionDescription,
+        variableToPutValueOfTheOptionIn, defaultValue);
+  }
 
   /*
   Get all the added configuration options.

@@ -243,24 +243,19 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
 
   void addConfigurationOptions(ad_utility::ConfigManager* config) final {
     // Add some arbitrary values.
-    config->addConfigurationOption(ad_utility::makeConfigOption<std::string>(
-        "date", "The current date.", &dateString, "22.3.2023"));
+    config->createConfigOption<std::string>("date", "The current date.",
+                                            &dateString, "22.3.2023");
 
-    config->addConfigurationOption(ad_utility::makeConfigOption<int>(
-        "numSigns", "The number of street signs.", &numberOfStreetSigns, 10));
+    config->createConfigOption<int>("numSigns", "The number of street signs.",
+                                    &numberOfStreetSigns, 10);
 
-    config->addConfigurationOption(
-        ad_utility::makeConfigOption<std::vector<bool>>(
-            "CoinFlipTry",
-            "The number of succesful coin flips."
-            "coin flips.",
-            &wonOnTryX, std::vector{false, false, false, false, false}));
+    config->createConfigOption<std::vector<bool>>(
+        "CoinFlipTry", "The number of succesful coin flips.", &wonOnTryX,
+        std::vector{false, false, false, false, false});
 
-    config->addConfigurationOption(
-        ad_utility::makeConfigOption<float>(
-            "Steve", "Steves saving account balance.",
-            &balanceOnStevesSavingAccount, -41.9),
-        {"Accounts", "Personal"});
+    config->createConfigOption<float>({"Accounts", "Personal", "Steve"},
+                                      "Steves saving account balance.",
+                                      &balanceOnStevesSavingAccount, -41.9);
   }
 
   void parseConfiguration(const ad_utility::ConfigManager&) final {

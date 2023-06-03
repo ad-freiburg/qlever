@@ -14,24 +14,31 @@
 TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
   ad_utility::ConfigManager config{};
 
-  // Configuration options for testing.
-  int notUsed;
-  const ad_utility::ConfigOption& withDefault{ad_utility::makeConfigOption(
-      "Sense_of_existence", "", &notUsed, std::optional{42})};
-  const ad_utility::ConfigOption& withoutDefault{ad_utility::makeConfigOption(
-      "Sense_of_existence", "", &notUsed, std::optional{1})};
-
   // 'Compare' two configuration options
   auto compareConfigurationOptions = []<typename T>(
                                          const ad_utility::ConfigOption& a,
                                          const ad_utility::ConfigOption& b) {
     ASSERT_EQ(a.hasValue(), b.hasValue());
-    ASSERT_EQ(a.getValue<T>(), b.getValue<T>());
+
+    if (a.hasValue()) {
+      ASSERT_EQ(a.getValue<T>(), b.getValue<T>());
+    }
   };
 
-  config.addConfigurationOption(withDefault, {"Shared_part", "Unique_part_1"});
-  config.addConfigurationOption(withoutDefault,
-                                {"Shared_part", "Unique_part_2", size_t{3}});
+  // Configuration options for testing.
+  int notUsed;
+
+  config.createConfigOption(
+      {"Shared_part", "Unique_part_1", "Sense_of_existence"}, "", &notUsed,
+      std::optional{42});
+  const ad_utility::ConfigOption& withDefault{ad_utility::makeConfigOption(
+      "Sense_of_existence", "", &notUsed, std::optional{42})};
+
+  config.createConfigOption(
+      {"Shared_part", "Unique_part_2", size_t{3}, "Sense_of_existence"}, "",
+      &notUsed);
+  const ad_utility::ConfigOption& withoutDefault{
+      ad_utility::makeConfigOption("Sense_of_existence", "", &notUsed)};
 
   // Where those two options added?
   ASSERT_EQ(config.getConfigurationOptions().size(), 2);
@@ -58,17 +65,14 @@ TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
 
   // Configuration options for testing.
   int notUsed;
-  const ad_utility::ConfigOption& withDefault{ad_utility::makeConfigOption(
-      "Sense_of_existence", "", &notUsed, std::optional{42})};
-
-  config.addConfigurationOption(withDefault, {"Shared_part", "Unique_part_1"});
+  config.createConfigOption<int>(
+      {"Shared_part", "Unique_part_1", "Sense_of_existence"}, "", &notUsed, 42);
 
   // Trying to add a configuration option with the same name at the same
   // place, should cause an error.
-  ASSERT_ANY_THROW(config.addConfigurationOption(
-      ad_utility::makeConfigOption("Sense_of_existence", "", &notUsed,
-                                   std::optional{42}),
-      {"Shared_part", "Unique_part_1"}));
+  ASSERT_ANY_THROW(config.createConfigOption<int>(
+      {"Shared_part", "Unique_part_1", "Sense_of_existence"}, "", &notUsed,
+      42););
 
   /*
   If the first key for the path given is a number, that should cause an
@@ -77,8 +81,10 @@ TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
   object literal, so that user can easier find things. Ordering your options
   by just giving them numbers, would be bad practice, so we should prevent it.
   */
-  ASSERT_ANY_THROW(config.addConfigurationOption(withDefault, {size_t{0}}););
-  ASSERT_ANY_THROW(config.addConfigurationOption(withDefault, {size_t{3}}););
+  ASSERT_ANY_THROW(config.createConfigOption<int>(
+      {size_t{0}, "Shared_part", "Sense_of_existence"}, "", &notUsed, 42););
+  ASSERT_ANY_THROW(config.createConfigOption<int>(
+      {size_t{3}, "Shared_part", "Sense_of_existence"}, "", &notUsed, 42););
 
   /*
   Trying to add a configuration option with a path containing strings with
@@ -87,8 +93,10 @@ TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
   configuration grammar. Ergo, you can't set values, with such paths per short
   hand, which we don't want.
   */
-  ASSERT_ANY_THROW(
-      config.addConfigurationOption(withDefault, {"Shared part"}););
+  ASSERT_ANY_THROW(config.createConfigOption<int>(
+      ad_utility::ConfigManager::VectorOfKeysForJson{"Shared part",
+                                                     "Sense_of_existence"},
+      "", &notUsed, 42););
 }
 
 TEST(ConfigManagerTest, ParseConfig) {
@@ -96,16 +104,15 @@ TEST(ConfigManagerTest, ParseConfig) {
 
   // Adding the options.
   int notUsed;
-  config.addConfigurationOption(
-      ad_utility::makeConfigOption<int>(
-          "Option_0", "Must be set. Has no default value.", &notUsed),
-      {"depth_0"});
-  config.addConfigurationOption(
-      ad_utility::makeConfigOption<int>(
-          "Option_1", "Must be set. Has no default value.", &notUsed),
-      {"depth_0", "depth_1"});
-  config.addConfigurationOption(ad_utility::makeConfigOption(
-      "Option_2", "Has a default value.", &notUsed, std::optional{2}));
+
+  config.createConfigOption<int>(
+      ad_utility::ConfigManager::VectorOfKeysForJson{"depth_0", "Option_0"},
+      "Must be set. Has no default value.", &notUsed);
+  config.createConfigOption<int>({"depth_0", "depth_1", "Option_1"},
+                                 "Must be set. Has no default value.",
+                                 &notUsed);
+  config.createConfigOption<int>("Option_2", "Has a default value.", &notUsed,
+                                 2);
 
   // For easier access to the options.
   auto getOption = [&config](const size_t& optionNumber) {
@@ -133,7 +140,8 @@ TEST(ConfigManagerTest, ParseConfig) {
   ASSERT_FALSE(getOption(0).hasValue());
   ASSERT_FALSE(getOption(1).hasValue());
 
-  // The json for testing `parseConfig`. Sets all of the configuration options.
+  // The json for testing `parseConfig`. Sets all of the configuration
+  // options.
   const nlohmann::json testJson(nlohmann::json::parse(R"--({
 "depth_0": {
   "Option_0": 10,
@@ -158,15 +166,14 @@ TEST(ConfigManagerTest, ParseConfigExceptionTest) {
   // Add one option with default and one without.
   int notUsedInt;
   std::vector<int> notUsedVector;
-  config.addConfigurationOption(
-      ad_utility::makeConfigOption<int>(
-          "Without_default", "Must be set. Has no default value.", &notUsedInt),
-      {"depth_0"});
-  config.addConfigurationOption(
-      ad_utility::makeConfigOption<std::vector<int>>(
-          "With_default", "Must not be set. Has default value.", &notUsedVector,
-          std::vector{40, 41}),
-      {"depth_0"});
+  config.createConfigOption<int>(
+      ad_utility::ConfigManager::VectorOfKeysForJson{"depth_0",
+                                                     "Without_default"},
+      "Must be set. Has no default value.", &notUsedInt);
+  config.createConfigOption<std::vector<int>>(
+      ad_utility::ConfigManager::VectorOfKeysForJson{"depth_0", "With_default"},
+      "Must not be set. Has default value.", &notUsedVector,
+      std::vector{40, 41});
 
   // Should throw an exception, if we don't set all options, that must be set.
   ASSERT_ANY_THROW(config.parseConfig(nlohmann::json::parse(R"--({})--")));
@@ -183,68 +190,64 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
 
   // Add integer options.
   int notUsedInt;
-  config.addConfigurationOption(ad_utility::makeConfigOption<int>(
-      "somePositiveNumber", "Must be set. Has no default value.", &notUsedInt));
-  config.addConfigurationOption(ad_utility::makeConfigOption<int>(
-      "someNegativNumber", "Must be set. Has no default value.", &notUsedInt));
+  config.createConfigOption<int>(
+      "somePositiveNumber", "Must be set. Has no default value.", &notUsedInt);
+  config.createConfigOption<int>(
+      "someNegativNumber", "Must be set. Has no default value.", &notUsedInt);
 
   // Add integer list.
   std::vector<int> notUsedIntVector;
-  config.addConfigurationOption(ad_utility::makeConfigOption<std::vector<int>>(
+  config.createConfigOption<std::vector<int>>(
       "someIntegerlist", "Must be set. Has no default value.",
-      &notUsedIntVector));
+      &notUsedIntVector);
 
   // Add floating point options.
   float notUsedFloat;
-  config.addConfigurationOption(ad_utility::makeConfigOption<float>(
-      "somePositiveFloatingPoint", "Must be set. Has no default value.",
-      &notUsedFloat));
-  config.addConfigurationOption(ad_utility::makeConfigOption<float>(
-      "someNegativFloatingPoint", "Must be set. Has no default value.",
-      &notUsedFloat));
+  config.createConfigOption<float>("somePositiveFloatingPoint",
+                                   "Must be set. Has no default value.",
+                                   &notUsedFloat);
+  config.createConfigOption<float>("someNegativFloatingPoint",
+                                   "Must be set. Has no default value.",
+                                   &notUsedFloat);
 
   // Add floating point list.
   std::vector<float> notUsedFloatVector;
-  config.addConfigurationOption(
-      ad_utility::makeConfigOption<std::vector<float>>(
-          "someFloatingPointList", "Must be set. Has no default value.",
-          &notUsedFloatVector));
+  config.createConfigOption<std::vector<float>>(
+      "someFloatingPointList", "Must be set. Has no default value.",
+      &notUsedFloatVector);
 
   // Add boolean options.
   bool notUsedBool;
-  config.addConfigurationOption(ad_utility::makeConfigOption<bool>(
-      "boolTrue", "Must be set. Has no default value.", &notUsedBool));
-  config.addConfigurationOption(ad_utility::makeConfigOption<bool>(
-      "boolFalse", "Must be set. Has no default value.", &notUsedBool));
+  config.createConfigOption<bool>(
+      "boolTrue", "Must be set. Has no default value.", &notUsedBool);
+  config.createConfigOption<bool>(
+      "boolFalse", "Must be set. Has no default value.", &notUsedBool);
 
   // Add boolean list.
   std::vector<bool> notUsedBoolVector;
-  config.addConfigurationOption(ad_utility::makeConfigOption<std::vector<bool>>(
+  config.createConfigOption<std::vector<bool>>(
       "someBooleanList", "Must be set. Has no default value.",
-      &notUsedBoolVector));
+      &notUsedBoolVector);
 
   // Add string option.
   std::string notUsedString;
-  config.addConfigurationOption(ad_utility::makeConfigOption<std::string>(
-      "myName", "Must be set. Has no default value.", &notUsedString));
+  config.createConfigOption<std::string>(
+      "myName", "Must be set. Has no default value.", &notUsedString);
 
   // Add string list.
   std::vector<std::string> notUsedStringVector;
-  config.addConfigurationOption(
-      ad_utility::makeConfigOption<std::vector<std::string>>(
-          "someStringList", "Must be set. Has no default value.",
-          &notUsedStringVector));
+  config.createConfigOption<std::vector<std::string>>(
+      "someStringList", "Must be set. Has no default value.",
+      &notUsedStringVector);
 
   // Add option with deeper level.
-  config.addConfigurationOption(
-      ad_utility::makeConfigOption<std::vector<int>>(
-          "list", "Must be set. Has no default value.", &notUsedIntVector),
-      {"depth", size_t{0}});
+  config.createConfigOption<std::vector<int>>(
+      {"depth", size_t{0}, "list"}, "Must be set. Has no default value.",
+      &notUsedIntVector);
 
   // This one will not be changed, in order to test, that options, that are
   // not set at run time, are not changed.
-  config.addConfigurationOption(ad_utility::makeConfigOption<int>(
-      "No_change", "", &notUsedInt, std::optional{10}));
+  config.createConfigOption<int>("No_change", "", &notUsedInt, 10);
 
   // Set those.
   config.parseConfig(ad_utility::ConfigManager::parseShortHand(
