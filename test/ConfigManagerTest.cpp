@@ -15,10 +15,11 @@ TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
   ad_utility::ConfigManager config{};
 
   // Configuration options for testing.
+  int notUsed;
   const ad_utility::ConfigOption& withDefault{ad_utility::makeConfigOption(
-      "Sense_of_existence", "", std::optional{42})};
-  const ad_utility::ConfigOption& withoutDefault{
-      ad_utility::makeConfigOption("Sense_of_existence", "", std::optional{1})};
+      "Sense_of_existence", "", &notUsed, std::optional{42})};
+  const ad_utility::ConfigOption& withoutDefault{ad_utility::makeConfigOption(
+      "Sense_of_existence", "", &notUsed, std::optional{1})};
 
   // 'Compare' two configuration options
   auto compareConfigurationOptions = []<typename T>(
@@ -56,15 +57,17 @@ TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
   ad_utility::ConfigManager config{};
 
   // Configuration options for testing.
+  int notUsed;
   const ad_utility::ConfigOption& withDefault{ad_utility::makeConfigOption(
-      "Sense_of_existence", "", std::optional{42})};
+      "Sense_of_existence", "", &notUsed, std::optional{42})};
 
   config.addConfigurationOption(withDefault, {"Shared_part", "Unique_part_1"});
 
   // Trying to add a configuration option with the same name at the same
   // place, should cause an error.
   ASSERT_ANY_THROW(config.addConfigurationOption(
-      ad_utility::makeConfigOption("Sense_of_existence", "", std::optional{42}),
+      ad_utility::makeConfigOption("Sense_of_existence", "", &notUsed,
+                                   std::optional{42}),
       {"Shared_part", "Unique_part_1"}));
 
   /*
@@ -92,16 +95,17 @@ TEST(ConfigManagerTest, ParseConfig) {
   ad_utility::ConfigManager config{};
 
   // Adding the options.
+  int notUsed;
   config.addConfigurationOption(
-      ad_utility::makeConfigOption<int>("Option_0",
-                                        "Must be set. Has no default value."),
+      ad_utility::makeConfigOption<int>(
+          "Option_0", "Must be set. Has no default value.", &notUsed),
       {"depth_0"});
   config.addConfigurationOption(
-      ad_utility::makeConfigOption<int>("Option_1",
-                                        "Must be set. Has no default value."),
+      ad_utility::makeConfigOption<int>(
+          "Option_1", "Must be set. Has no default value.", &notUsed),
       {"depth_0", "depth_1"});
   config.addConfigurationOption(ad_utility::makeConfigOption(
-      "Option_2", "Has a default value.", std::optional{2}));
+      "Option_2", "Has a default value.", &notUsed, std::optional{2}));
 
   // For easier access to the options.
   auto getOption = [&config](const size_t& optionNumber) {
@@ -152,13 +156,15 @@ TEST(ConfigManagerTest, ParseConfigExceptionTest) {
   ad_utility::ConfigManager config{};
 
   // Add one option with default and one without.
+  int notUsedInt;
+  std::vector<int> notUsedVector;
   config.addConfigurationOption(
-      ad_utility::makeConfigOption<int>("Without_default",
-                                        "Must be set. Has no default value."),
+      ad_utility::makeConfigOption<int>(
+          "Without_default", "Must be set. Has no default value.", &notUsedInt),
       {"depth_0"});
   config.addConfigurationOption(
       ad_utility::makeConfigOption<std::vector<int>>(
-          "With_default", "Must not be set. Has default value.",
+          "With_default", "Must not be set. Has default value.", &notUsedVector,
           std::vector{40, 41}),
       {"depth_0"});
 
@@ -176,55 +182,69 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
   ad_utility::ConfigManager config{};
 
   // Add integer options.
+  int notUsedInt;
   config.addConfigurationOption(ad_utility::makeConfigOption<int>(
-      "somePositiveNumber", "Must be set. Has no default value."));
+      "somePositiveNumber", "Must be set. Has no default value.", &notUsedInt));
   config.addConfigurationOption(ad_utility::makeConfigOption<int>(
-      "someNegativNumber", "Must be set. Has no default value."));
+      "someNegativNumber", "Must be set. Has no default value.", &notUsedInt));
 
   // Add integer list.
+  std::vector<int> notUsedIntVector;
   config.addConfigurationOption(ad_utility::makeConfigOption<std::vector<int>>(
-      "someIntegerlist", "Must be set. Has no default value."));
+      "someIntegerlist", "Must be set. Has no default value.",
+      &notUsedIntVector));
 
   // Add floating point options.
+  float notUsedFloat;
   config.addConfigurationOption(ad_utility::makeConfigOption<float>(
-      "somePositiveFloatingPoint", "Must be set. Has no default value."));
+      "somePositiveFloatingPoint", "Must be set. Has no default value.",
+      &notUsedFloat));
   config.addConfigurationOption(ad_utility::makeConfigOption<float>(
-      "someNegativFloatingPoint", "Must be set. Has no default value."));
+      "someNegativFloatingPoint", "Must be set. Has no default value.",
+      &notUsedFloat));
 
   // Add floating point list.
+  std::vector<float> notUsedFloatVector;
   config.addConfigurationOption(
       ad_utility::makeConfigOption<std::vector<float>>(
-          "someFloatingPointList", "Must be set. Has no default value."));
+          "someFloatingPointList", "Must be set. Has no default value.",
+          &notUsedFloatVector));
 
   // Add boolean options.
+  bool notUsedBool;
   config.addConfigurationOption(ad_utility::makeConfigOption<bool>(
-      "boolTrue", "Must be set. Has no default value."));
+      "boolTrue", "Must be set. Has no default value.", &notUsedBool));
   config.addConfigurationOption(ad_utility::makeConfigOption<bool>(
-      "boolFalse", "Must be set. Has no default value."));
+      "boolFalse", "Must be set. Has no default value.", &notUsedBool));
 
   // Add boolean list.
+  std::vector<bool> notUsedBoolVector;
   config.addConfigurationOption(ad_utility::makeConfigOption<std::vector<bool>>(
-      "someBooleanList", "Must be set. Has no default value."));
+      "someBooleanList", "Must be set. Has no default value.",
+      &notUsedBoolVector));
 
   // Add string option.
+  std::string notUsedString;
   config.addConfigurationOption(ad_utility::makeConfigOption<std::string>(
-      "myName", "Must be set. Has no default value."));
+      "myName", "Must be set. Has no default value.", &notUsedString));
 
   // Add string list.
+  std::vector<std::string> notUsedStringVector;
   config.addConfigurationOption(
       ad_utility::makeConfigOption<std::vector<std::string>>(
-          "someStringList", "Must be set. Has no default value."));
+          "someStringList", "Must be set. Has no default value.",
+          &notUsedStringVector));
 
   // Add option with deeper level.
   config.addConfigurationOption(
       ad_utility::makeConfigOption<std::vector<int>>(
-          "list", "Must be set. Has no default value."),
+          "list", "Must be set. Has no default value.", &notUsedIntVector),
       {"depth", size_t{0}});
 
   // This one will not be changed, in order to test, that options, that are
   // not set at run time, are not changed.
-  config.addConfigurationOption(
-      ad_utility::makeConfigOption<int>("No_change", "", std::optional{10}));
+  config.addConfigurationOption(ad_utility::makeConfigOption<int>(
+      "No_change", "", &notUsedInt, std::optional{10}));
 
   // Set those.
   config.parseConfig(ad_utility::ConfigManager::parseShortHand(

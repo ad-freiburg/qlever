@@ -29,21 +29,29 @@ class ConfigOption;
 
 template <typename T>
 ConfigOption makeConfigOption(
-    std::string_view identifier, std::string_view description,
+    std::string_view identifier, std::string_view description, T* variablePointer,
     const std::optional<T>& defaultValue = std::optional<T>(std::nullopt));
 
 // Describes a configuration option.
 class ConfigOption {
-  // An `std::variant`, where every entry is a `std::optional`.
-  template <typename... Ts>
-  using OptionalVariant = std::variant<std::optional<Ts>...>;
+  // Simply transforms a type into a pointer.
+  template <typename T>
+  using ToPointer = T*;
 
  public:
-  // The possible types of the value, that can be held by this option.
-  using ValueType = OptionalVariant<bool, std::string, int, float, std::vector<bool>,
-                                    std::vector<std::string>, std::vector<int>, std::vector<float>>;
+  // All possible types, that an option can hold.
+  using AvailableTypes =
+      std::variant<bool, std::string, int, float, std::vector<bool>, std::vector<std::string>,
+                   std::vector<int>, std::vector<float>>;
+
+  // How the option actually saves the values internally. Is a variant of `std::optional`s.
+  using ValueType = LiftedVariant<AvailableTypes, std::optional>;
 
  private:
+  // The possible types of the pointer, that points to the variable, where the value held by this
+  // configuration option will be written to.
+  using VariablePointerType = LiftedVariant<AvailableTypes, ToPointer>;
+
   // The name of the configuration option.
   const std::string identifier_;
 
@@ -53,6 +61,12 @@ class ConfigOption {
 
   // What this configuration option was set to. Can be empty.
   ValueType value_;
+
+  /*
+  The variable, this points to, will be overwritten with `value_`, everytime `value_` is set. This
+  should allow for easier access of the configuration option value.
+  */
+  VariablePointerType variablePointer_;
 
   // Has this option been set at runtime? Any `set` function will set this to
   // true, if they are used.
@@ -88,12 +102,12 @@ class ConfigOption {
   option was set to.
   */
   template <typename T>
-  requires ad_utility::isTypeContainedIn<std::optional<T>, ValueType>
-  void setValue(const T& value) {
+  requires ad_utility::isTypeContainedIn<T, AvailableTypes> void setValue(const T& value) {
     // Only set our value, if the given value is of the right type.
     if (getActualValueType() == getIndexOfTypeInVariant<T>(value_)) {
       configurationOptionWasSet_ = true;
       value_ = std::optional<T>{value};
+      updateVariablePointer();
     } else {
       throw ad_utility::Exception(absl::StrCat("The type of the value in configuration option '",
                                                identifier_, "' is '", valueTypeToString(value_),
@@ -114,7 +128,7 @@ class ConfigOption {
   exception.
   */
   template <typename T>
-  requires ad_utility::isTypeContainedIn<std::optional<T>, ValueType>
+  requires ad_utility::isTypeContainedIn<T, AvailableTypes>
   std::decay_t<T> getDefaultValue() const {
     if (hasDefaultValue() && std::holds_alternative<std::optional<T>>(defaultValue_)) {
       return std::get<std::optional<T>>(defaultValue_).value();
@@ -135,7 +149,7 @@ class ConfigOption {
   there is no value, or `T` is the wrong type, then it will throw an exception.
   */
   template <typename T>
-  requires ad_utility::isTypeContainedIn<std::optional<T>, ValueType> T getValue() const {
+  requires ad_utility::isTypeContainedIn<T, AvailableTypes> T getValue() const {
     if (hasValue() && std::holds_alternative<std::optional<T>>(value_)) {
       return std::get<std::optional<T>>(value_).value();
     } else if (!hasValue()) {
@@ -195,6 +209,8 @@ class ConfigOption {
   example: "The amount of rows in the table. Has a default value of 3."
   @param type The index number for the type of value, that you want to save
   here. See `ValueType`.
+  @param variablePointer The variable, this pointer points to, will always be overwritten with the
+  value in this configuration option, when the values changes.
   @param defaultValue The default value, if the option isn't set at runtime. An
   empty `std::optional` of the right type signifies, that there is no default
   value.
@@ -202,10 +218,11 @@ class ConfigOption {
   template <typename T>
   requires ad_utility::isTypeContainedIn<std::optional<T>, ConfigOption::ValueType>
   ConfigOption(std::string_view identifier, std::string_view description, const size_t& type,
-               const std::optional<T>& defaultValue)
+               T* variablePointer, const std::optional<T>& defaultValue)
       : identifier_{identifier},
         description_{description},
         value_(defaultValue),
+        variablePointer_(variablePointer),
         defaultValue_(defaultValue) {
     // The `identifier` must be a valid `NAME` in the short hand for
     // configurations.
@@ -217,33 +234,35 @@ class ConfigOption {
                        identifier, "' doesn't fullfil."));
     }
 
-    /*
-    Is the default value of the right type? An empty `std::optional` signifies, that we don't have a
-    default value, but it still must be of the right variant in `ValueType`.
-    */
+    // Is `type` the right number for `T`?
     if (type != getIndexOfTypeInVariant<T>(ValueType{})) {
-      /*
-      Finding out, what type the option should have. After all, our `value_` is set to the wrong
-      variant, because it just contains `defaultValue`, so we can't use `valueTypeToString()`.
-      */
-      std::string valueType;
+      // Finding out, what type number of `type` stands for.
+      std::string typeString;
       ad_utility::RuntimeValueToCompileTimeValue<std::variant_size_v<ValueType> - 1>(
-          type, [&valueType]<size_t index, typename TypeOptional =
-                                               std::variant_alternative_t<index, ValueType>>() {
-            valueType = valueTypeToString(TypeOptional{});
+          type, [&typeString]<size_t index, typename TypeOptional =
+                                                std::variant_alternative_t<index, ValueType>>() {
+            typeString = valueTypeToString(TypeOptional{});
           });
 
-      throw ad_utility::Exception(absl::StrCat(
-          "Error while constructing configuraion option: Configuration option "
-          "'",
-          identifier, "' was given a default value of type '", valueTypeToString(defaultValue),
-          "', but the configuration option was set to only ever hold values of "
-          "type '",
-          valueType,
-          "'. This rule must also be followed, if there is no default value and an empty "
-          "'std::optional' was given."));
+      throw ad_utility::Exception(
+          absl::StrCat("Error while constructing configuraion option: Configuration option "
+                       "'",
+                       identifier, "' was given a type  of '", type, "', which is '", typeString,
+                       "', but the template parameter is type '", valueTypeToString(value_),
+                       "'. Something must have gone wrong."));
+    }
+
+    // If `defaultValue` has a default value, than `value_` has changed.
+    if (defaultValue.has_value()) {
+      updateVariablePointer();
     }
   }
+
+  /*
+  @brief Writes the value of `value_` to the variable, that `variablePointer_` points to. Doesn't do
+  anything, if `value_` is empty.
+  */
+  void updateVariablePointer() const;
 
   /*
   @brief Returns the index position of a type in `std::variant<std::optional>`
@@ -273,12 +292,14 @@ class ConfigOption {
   identified later.
   @param description Describes, what the configuration option stands for. For
   example: "The amount of rows in the table. Has a default value of 3."
+  @param variablePointer The variable, this pointer points to, will always be overwritten with the
+  value in this configuration option, when the values changes.
   @param defaultValue The default value, if the option isn't set at runtime. An
   empty `std::optional<T>` signifies, that there is no default value.
   */
   template <typename T>
   friend ConfigOption makeConfigOption(std::string_view identifier, std::string_view description,
-                                       const std::optional<T>& defaultValue) {
+                                       T* variablePointer, const std::optional<T>& defaultValue) {
     /*
     The part for determining the type index is a bit ugly, but there isn't
     really a better way, that is also typesafe and doesn't need any adjusting,
@@ -286,7 +307,7 @@ class ConfigOption {
     */
     return ConfigOption(identifier, description,
                         ConfigOption::getIndexOfTypeInVariant<T>(ConfigOption::ValueType{}),
-                        defaultValue);
+                        variablePointer, defaultValue);
   }
 };
 

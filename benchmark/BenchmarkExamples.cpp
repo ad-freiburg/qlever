@@ -230,6 +230,12 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
   // `getMetadata()` function.
   BenchmarkMetadata generalMetadata_;
 
+  // For storing the configuration options.
+  std::string dateString;
+  int numberOfStreetSigns;
+  std::vector<bool> wonOnTryX;
+  float balanceOnStevesSavingAccount;
+
  public:
   std::string name() const final {
     return "Example for the usage of configuration and metadata";
@@ -238,42 +244,26 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
   void addConfigurationOptions(ad_utility::ConfigManager* config) final {
     // Add some arbitrary values.
     config->addConfigurationOption(ad_utility::makeConfigOption<std::string>(
-        "date", "The current date.", "22.3.2023"));
+        "date", "The current date.", &dateString, "22.3.2023"));
 
     config->addConfigurationOption(ad_utility::makeConfigOption<int>(
-        "numSigns", "The number of street signs.", 10));
+        "numSigns", "The number of street signs.", &numberOfStreetSigns, 10));
 
     config->addConfigurationOption(
         ad_utility::makeConfigOption<std::vector<bool>>(
             "CoinFlipTry",
             "The number of succesful coin flips."
             "coin flips.",
-            std::vector{false, false, false, false, false}));
+            &wonOnTryX, std::vector{false, false, false, false, false}));
 
     config->addConfigurationOption(
         ad_utility::makeConfigOption<float>(
-            "Steve", "Steves saving account balance.", -41.9),
+            "Steve", "Steves saving account balance.",
+            &balanceOnStevesSavingAccount, -41.9),
         {"Accounts", "Personal"});
   }
 
-  void parseConfiguration(const ad_utility::ConfigManager& config) final {
-    // Collect some arbitrary values.
-    std::string dateString{config.getConfigurationOptionByNestedKeys({"date"})
-                               .getValue<std::string>()};
-    int numberOfStreetSigns{
-        config.getConfigurationOptionByNestedKeys({"numSigns"})
-            .getValue<int>()};
-
-    std::vector<bool> wonOnTryX{
-        config.getConfigurationOptionByNestedKeys({"CoinFlipTry"})
-            .getValue<std::vector<bool>>()};
-
-    float balanceOnStevesSavingAccount{
-        config
-            .getConfigurationOptionByNestedKeys(
-                {"Accounts", "Personal", "Steve"})
-            .getValue<float>()};
-
+  void parseConfiguration(const ad_utility::ConfigManager&) final {
     // Transcribe the collected values.
     generalMetadata_.addKeyValuePair("date", dateString);
     generalMetadata_.addKeyValuePair("numberOfStreetSigns",

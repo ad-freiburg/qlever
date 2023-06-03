@@ -23,11 +23,13 @@ using ConfigOption = ad_utility::ConfigOption;
 Not all identifiers are allowed for configuration options.
 */
 TEST(ConfigOptionTest, ConstructorException) {
+  bool notUsed;
+
   // No name.
-  ASSERT_ANY_THROW(ad_utility::makeConfigOption<bool>("", ""));
+  ASSERT_ANY_THROW(ad_utility::makeConfigOption<bool>("", "", &notUsed));
 
   // Names with spaces.
-  ASSERT_ANY_THROW(ad_utility::makeConfigOption<bool>("Option 1", ""));
+  ASSERT_ANY_THROW(ad_utility::makeConfigOption<bool>("Option 1", "", &notUsed));
 }
 
 /*
@@ -75,8 +77,8 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
   Set the value of a configuration option and check, that it was set
   correctly.
   */
-  auto setAndTest = [&otherGettersDontWork]<typename Type>(ConfigOption& option,
-                                                           const Type& valueToSetTo) {
+  auto setAndTest = [&otherGettersDontWork]<typename Type>(
+                        ConfigOption& option, Type* variablePointer, const Type& valueToSetTo) {
     // Do we even have the right type for this option?
     ASSERT_EQ(ConfigOption::ValueType{std::optional<Type>{}}.index(), option.getActualValueType());
 
@@ -86,6 +88,7 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
 
     ASSERT_TRUE(option.hasValue() && option.wasSetAtRuntime());
     ASSERT_EQ(valueToSetTo, option.getValue<Type>());
+    ASSERT_EQ(valueToSetTo, *variablePointer);
 
     // Make sure, that the other getters don't work.
     otherGettersDontWork.template operator()<Type>(option);
@@ -97,15 +100,21 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
   */
   auto testCaseWithDefault = [&setAndTest, &otherGettersDontWork]<typename Type>(
                                  const Type& defaultValue, const Type& valueToSetTo) {
-    ConfigOption option{ad_utility::makeConfigOption<Type>("With_default", "", defaultValue)};
+    // Every configuration option keeps updating an external variable with the value, that it itself
+    // holds. This is the one.
+    Type configurationOptionValue;
+
+    ConfigOption option{ad_utility::makeConfigOption<Type>(
+        "With_default", "", &configurationOptionValue, defaultValue)};
 
     // Can we use the default value correctly?
     ASSERT_TRUE(option.hasValue() && option.hasDefaultValue());
     ASSERT_EQ(defaultValue, option.getDefaultValue<Type>());
     ASSERT_EQ(defaultValue, option.getValue<Type>());
+    ASSERT_EQ(defaultValue, configurationOptionValue);
     otherGettersDontWork.template operator()<Type>(option);
 
-    setAndTest.template operator()<Type>(option, valueToSetTo);
+    setAndTest.template operator()<Type>(option, &configurationOptionValue, valueToSetTo);
 
     // Is the default value unchanged?
     ASSERT_TRUE(option.hasDefaultValue());
@@ -113,7 +122,12 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
   };
 
   auto testCaseWithoutDefault = [&setAndTest]<typename Type>(const Type& valueToSetTo) {
-    ConfigOption option{ad_utility::makeConfigOption<Type>("Without_default", "")};
+    // Every configuration option keeps updating an external variable with the value, that it itself
+    // holds. This is the one.
+    Type configurationOptionValue;
+
+    ConfigOption option{
+        ad_utility::makeConfigOption<Type>("Without_default", "", &configurationOptionValue)};
 
     // Make sure, that we truly don't have a value, that can be gotten.
     ASSERT_TRUE(!option.hasValue() && !option.hasDefaultValue());
@@ -126,7 +140,7 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
           ASSERT_ANY_THROW((option.getDefaultValue<IndexType>()));
         });
 
-    setAndTest.template operator()<Type>(option, valueToSetTo);
+    setAndTest.template operator()<Type>(option, &configurationOptionValue, valueToSetTo);
 
     // Is it still the case, that we don't have a default value?
     ASSERT_TRUE(!option.hasDefaultValue());
@@ -169,7 +183,8 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
 // like this.
 TEST(ConfigOptionTest, ExceptionOnCreation) {
   // No identifier.
-  ASSERT_ANY_THROW(ad_utility::makeConfigOption<bool>("", ""););
+  bool notUsed;
+  ASSERT_ANY_THROW(ad_utility::makeConfigOption<bool>("", "", &notUsed););
 }
 
 // The form of a generic test case for the test `SetValueWithJson`.
@@ -215,7 +230,11 @@ TEST(ConfigOptionTest, SetValueWithJson) {
   correctly.
   */
   auto doTestCase = [&getTestCase]<typename Type>() {
-    ConfigOption option{ad_utility::makeConfigOption<Type>("t", "")};
+    // Every configuration option keeps updating an external variable with the value, that it itself
+    // holds. This is the one.
+    Type configurationOptionValue;
+
+    ConfigOption option{ad_utility::makeConfigOption<Type>("t", "", &configurationOptionValue)};
 
     const auto& currentTest = getTestCase.template operator()<Type>();
 
@@ -224,6 +243,7 @@ TEST(ConfigOptionTest, SetValueWithJson) {
     // Is it set correctly?
     ASSERT_TRUE(option.hasValue());
     ASSERT_EQ(currentTest.interpretedJson, option.getValue<Type>());
+    ASSERT_EQ(currentTest.interpretedJson, configurationOptionValue);
 
     // Does the setter cause an exception, when given any json, that can't be
     // interpreted as the wanted type?
@@ -308,7 +328,12 @@ TEST(ConfigOptionTest, Visit) {
   auto testCaseWithDefault = [&createComparisonVisitor, &setAndTest, &testValues]<typename Type>() {
     const auto& values = testValues.template operator()<Type>();
 
-    ConfigOption option{ad_utility::makeConfigOption<Type>("With_default", "", values.first)};
+    // Every configuration option keeps updating an external variable with the value, that it itself
+    // holds. This is the one.
+    Type configurationOptionValue;
+
+    ConfigOption option{ad_utility::makeConfigOption<Type>(
+        "With_default", "", &configurationOptionValue, values.first)};
 
     option.visitValue(createComparisonVisitor(values.first));
     option.visitDefaultValue(createComparisonVisitor(values.first));
@@ -322,7 +347,12 @@ TEST(ConfigOptionTest, Visit) {
   auto testCaseWithoutDefault = [&setAndTest, &testValues]<typename Type>() {
     const auto& values = testValues.template operator()<Type>();
 
-    ConfigOption option{ad_utility::makeConfigOption<Type>("Without_default", "")};
+    // Every configuration option keeps updating an external variable with the value, that it itself
+    // holds. This is the one.
+    Type configurationOptionValue;
+
+    ConfigOption option{
+        ad_utility::makeConfigOption<Type>("Without_default", "", &configurationOptionValue)};
 
     // Make sure, that we truly don't have a value, that can be gotten.
     option.visitValue([](const auto& val) { ASSERT_FALSE(val.has_value()); });

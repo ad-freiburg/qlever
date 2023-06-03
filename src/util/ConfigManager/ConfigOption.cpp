@@ -15,6 +15,7 @@
 #include <utility>
 #include <variant>
 
+#include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigToString.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
@@ -138,10 +139,10 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
     throw ad_utility::Exception(absl::StrCat(commonPrefix, " unknown type."));
   }
 
-  std::visit([&json, this]<typename T>(
-                 const std::optional<T>&) { value_ = std::optional<T>{json.get<T>()}; },
+  std::visit([&json, this]<typename T>(const std::optional<T>&) { setValue(json.get<T>()); },
              value_);
   configurationOptionWasSet_ = true;
+  updateVariablePointer();
 }
 
 // ____________________________________________________________________________
@@ -164,5 +165,19 @@ ConfigOption::operator std::string() const {
 
 // ____________________________________________________________________________
 auto ConfigOption::getActualValueType() const -> size_t { return value_.index(); }
+
+// ____________________________________________________________________________
+void ConfigOption::updateVariablePointer() const {
+  visitValue([this]<typename T, typename PointerType = T*>(const std::optional<T>& currentValue) {
+    // Nothing to do, if there is no value.
+    if (!currentValue.has_value()) {
+      return;
+    }
+
+    // There should ALWAYS be a valid pointer, unless the whole `ConfigOption` object was created
+    // wrong.
+    (*std::get<T*>(variablePointer_)) = currentValue.value();
+  });
+}
 
 }  // namespace ad_utility
