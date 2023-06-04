@@ -80,7 +80,7 @@ function(addAndLinkTest basename)
     linkTest(${basename} ${ARGN})
 endfunction()
 
-addLinkAndDiscoverTest(ValueIdComparatorsTest)
+addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
 addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions ${ICU_LIBRARIES})
 
@@ -112,8 +112,6 @@ addLinkAndDiscoverTest(JoinTest engine)
 
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
-addLinkAndDiscoverTest(ConversionsTest util)
-
 addLinkAndDiscoverTest(HashMapTest)
 
 addLinkAndDiscoverTest(HashSetTest)
@@ -143,7 +141,7 @@ addLinkAndDiscoverTest(TurtleParserTest parser re2)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
-addLinkAndDiscoverTest(IdTableTest)
+addLinkAndDiscoverTest(IdTableTest util)
 
 addLinkAndDiscoverTest(TransitivePathTest engine)
 
@@ -238,7 +236,7 @@ addLinkAndDiscoverTest(CompressorStreamTest engine)
 
 addLinkAndDiscoverTest(AsyncStreamTest)
 
-addLinkAndDiscoverTest(TriplesViewTest)
+addLinkAndDiscoverTest(TriplesViewTest util)
 
 addLinkAndDiscoverTest(BitUtilsTest)
 
@@ -248,11 +246,11 @@ addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
 addLinkAndDiscoverTest(HttpUtilsTest util http)
 
-addLinkAndDiscoverTest(DateTest)
+addLinkAndDiscoverTest(DateTest util parser)
 
 addLinkAndDiscoverTest(TripleComponentTest parser)
 
-addLinkAndDiscoverTest(ValueIdTest)
+addLinkAndDiscoverTest(ValueIdTest util)
 
 addLinkAndDiscoverTest(LambdaHelpersTest)
 
@@ -306,7 +304,7 @@ addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 
 addLinkAndDiscoverTest(ExceptionHandlingTest)
 
-addLinkAndDiscoverTest(SparqlExpressionTypesTest)
+addLinkAndDiscoverTest(SparqlExpressionTypesTest util)
 
 addLinkAndDiscoverTest(LimitOffsetClauseTest)
 
@@ -314,7 +312,7 @@ addLinkAndDiscoverTest(OperationTest engine)
 
 addLinkAndDiscoverTest(RuntimeInformationTest engine)
 
-addLinkAndDiscoverTest(VariableToColumnMapTest engine)
+addLinkAndDiscoverTest(VariableToColumnMapTest parser)
 
 addLinkAndDiscoverTest(CopyableUniquePtrTest)
 
@@ -326,6 +324,8 @@ addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
 
 addLinkAndDiscoverTest(FindUndefRangesTest)
 
-addLinkAndDiscoverTest(AddCombinedRowToTableTest)
+addLinkAndDiscoverTest(AddCombinedRowToTableTest util)
+
+addLinkAndDiscoverTest(CtreHelpersTest)
 
 addLinkAndDiscoverTest(ComparisonWithNanTest)

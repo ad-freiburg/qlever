@@ -740,7 +740,7 @@ TEST(ParserTest, testExpandPrefixes) {
 TEST(ParserTest, testLiterals) {
   ParsedQuery pq = SparqlParser::parseQuery(
       "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> SELECT * WHERE { "
-      "true <test:myrel> 10 . 10.2 <test:myrel> \"2000-00-00\"^^xsd:date }");
+      "true <test:myrel> 10 . 10.2 <test:myrel> \"2000-01-01\"^^xsd:date }");
   ASSERT_TRUE(pq.hasSelectClause());
   const auto& selectClause = pq.selectClause();
   ASSERT_EQ(1u, pq.children().size());
@@ -753,7 +753,7 @@ TEST(ParserTest, testLiterals) {
   ASSERT_EQ(10, c._triples[0]._o);
   ASSERT_EQ(10.2, c._triples[1]._s);
   ASSERT_EQ("<test:myrel>", c._triples[1]._p._iri);
-  ASSERT_EQ(":v:date:0000000000000002000-00-00T00:00:00", c._triples[1]._o);
+  ASSERT_EQ(DateOrLargeYear{Date(2000, 1, 1, -1)}, c._triples[1]._o);
 }
 
 TEST(ParserTest, testSolutionModifiers) {
@@ -880,7 +880,7 @@ TEST(ParserTest, testSolutionModifiers) {
         "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>"
         "SELECT DISTINCT ?movie WHERE { \n"
         "\n"
-        "?movie <from-year> \"2000-00-00\"^^xsd:date .\n"
+        "?movie <from-year> \"2000-01-01\"^^xsd:date .\n"
         "\n"
         "?movie <directed-by> <Scott%2C%20Ridley> .   }  LIMIT 50");
     ASSERT_TRUE(pq.hasSelectClause());
@@ -892,7 +892,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(2u, c._triples.size());
     ASSERT_EQ(Var{"?movie"}, c._triples[0]._s);
     ASSERT_EQ("<from-year>", c._triples[0]._p._iri);
-    ASSERT_EQ(":v:date:0000000000000002000-00-00T00:00:00", c._triples[0]._o);
+    ASSERT_EQ(DateOrLargeYear{Date(2000, 1, 1)}, c._triples[0]._o);
     ASSERT_EQ(Var{"?movie"}, c._triples[1]._s);
     ASSERT_EQ("<directed-by>", c._triples[1]._p._iri);
     ASSERT_EQ("<Scott%2C%20Ridley>", c._triples[1]._o);
@@ -903,7 +903,7 @@ TEST(ParserTest, testSolutionModifiers) {
         "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>"
         "SELECT DISTINCT ?movie WHERE { \n"
         "\n"
-        "?movie <from-year> \"2000-00-00\"^^xsd:date .\n"
+        "?movie <from-year> \"2000-01-01\"^^xsd:date .\n"
         "\n"
         "?movie <directed-by> <Scott%2C%20Ridley> .   }  LIMIT 50");
     ASSERT_TRUE(pq.hasSelectClause());
@@ -915,7 +915,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(2u, c._triples.size());
     ASSERT_EQ(Var{"?movie"}, c._triples[0]._s);
     ASSERT_EQ("<from-year>", c._triples[0]._p._iri);
-    ASSERT_EQ(":v:date:0000000000000002000-00-00T00:00:00", c._triples[0]._o);
+    ASSERT_EQ(DateOrLargeYear{Date(2000, 1, 1)}, c._triples[0]._o);
     ASSERT_EQ(Var{"?movie"}, c._triples[1]._s);
     ASSERT_EQ("<directed-by>", c._triples[1]._p._iri);
     ASSERT_EQ("<Scott%2C%20Ridley>", c._triples[1]._o);

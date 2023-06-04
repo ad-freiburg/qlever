@@ -181,54 +181,41 @@ using DistExpression =
 
 // Date functions.
 //
-// TODO: These are currently inefficient because they still operate on our old
-// ":v:date:..." strings. It will be easy to make more efficient, once we switch
-// to representing dates directly in an `Id`, see `util/Date.h`.
-const size_t yearIndexBegin = 0;
-const size_t yearIndexEnd = yearIndexBegin + 4;
-const size_t monthIndex = yearIndexEnd + 1;
-const size_t dayIndex = monthIndex + 3;
-// Helper function that extracts a part of a date string. Note the extra work
-// for year because of the potential two's complement.
-template <size_t Pos1, size_t Pos2>
-inline auto extractNumberFromDate =
-    [](std::string_view dateAsString) -> int64_t {
-  static_assert(Pos2 > Pos1);
-  auto pos1 = Pos1;
-  auto pos2 = Pos2;
-  if (dateAsString.starts_with('-')) {
-    dateAsString.remove_prefix(1);
-  }
-  int posFirstDash = dateAsString.find('-', 1);
-  if (Pos2 == yearIndexEnd) {
-    pos2 = posFirstDash;
+inline auto extractYear = [](std::optional<DateOrLargeYear> d) {
+  if (!d.has_value()) {
+    return Id::makeUndefined();
   } else {
-    auto offset = posFirstDash - 4;
-    pos1 += offset;
-    pos2 += offset;
-  }
-  if (dateAsString.size() < pos2) {
-    return 0;
-  } else {
-    long int result = 0;
-    std::from_chars(dateAsString.data() + pos1, dateAsString.data() + pos2,
-                    result);
-    return result;
+    return Id::makeFromInt(d->getYear());
   }
 };
 
-inline auto extractYear = [](std::string_view sv) {
-  auto year = extractNumberFromDate<yearIndexBegin, yearIndexEnd>(sv);
-  if (sv.starts_with("-")) {
-    year *= -1;
+inline auto extractMonth = [](std::optional<DateOrLargeYear> d) {
+  // TODO<C++23> Use the monadic operations for std::optional
+  if (!d.has_value()) {
+    return Id::makeUndefined();
   }
-  return year;
+  auto optionalMonth = d.value().getMonth();
+  if (!optionalMonth.has_value()) {
+    return Id::makeUndefined();
+  }
+  return Id::makeFromInt(optionalMonth.value());
 };
-inline auto extractMonth = extractNumberFromDate<monthIndex, monthIndex + 2>;
-inline auto extractDay = extractNumberFromDate<dayIndex, dayIndex + 2>;
-using YearExpression = NARY<1, FV<decltype(extractYear), StringValueGetter>>;
-using MonthExpression = NARY<1, FV<decltype(extractMonth), StringValueGetter>>;
-using DayExpression = NARY<1, FV<decltype(extractDay), StringValueGetter>>;
+
+inline auto extractDay = [](std::optional<DateOrLargeYear> d) {
+  // TODO<C++23> Use the monadic operations for `std::optional`.
+  if (!d.has_value()) {
+    return Id::makeUndefined();
+  }
+  auto optionalDay = d.value().getDay();
+  if (!optionalDay.has_value()) {
+    return Id::makeUndefined();
+  }
+  return Id::makeFromInt(optionalDay.value());
+};
+
+using YearExpression = NARY<1, FV<decltype(extractYear), DateValueGetter>>;
+using MonthExpression = NARY<1, FV<decltype(extractMonth), DateValueGetter>>;
+using DayExpression = NARY<1, FV<decltype(extractDay), DateValueGetter>>;
 
 // String functions.
 using StrExpression = NARY<1, FV<std::identity, StringValueGetter>>;
