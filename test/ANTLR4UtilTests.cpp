@@ -62,4 +62,16 @@ TEST(ANTLRE4UtilTests, stringOnlyContainsSpecifiedTokens) {
       " -429 6.7 true", {static_cast<size_t>(ANTLR4MockupLexer::BOOL),
                          static_cast<size_t>(ANTLR4MockupLexer::INTEGER),
                          static_cast<size_t>(ANTLR4MockupLexer::FLOAT)}));
+
+  // Call with empty string and wanted indexes.
+  ASSERT_FALSE(stringOnlyContainsSpecifiedTokens<ANTLR4MockupLexer>(
+      "", {static_cast<size_t>(ANTLR4MockupLexer::INTEGER),
+           static_cast<size_t>(ANTLR4MockupLexer::BOOL)}));
+
+  // Call with no string and no wanted indexes.
+  ASSERT_TRUE(stringOnlyContainsSpecifiedTokens<ANTLR4MockupLexer>("", {}));
+
+  // Call with string and no wanted indexes.
+  ASSERT_FALSE(
+      stringOnlyContainsSpecifiedTokens<ANTLR4MockupLexer>(" -429 6.7", {}));
 }
