@@ -16,6 +16,7 @@
 #include "global/Id.h"
 #include "parser/RdfEscaping.h"
 #include "parser/data/Variable.h"
+#include "util/Date.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 
@@ -83,8 +84,8 @@ class TripleComponent {
 
  private:
   // The underlying variant type.
-  using Variant =
-      std::variant<std::string, double, int64_t, UNDEF, Variable, Literal>;
+  using Variant = std::variant<std::string, double, int64_t, UNDEF, Variable,
+                               Literal, DateOrLargeYear>;
   Variant _variant;
 
  public:
@@ -181,6 +182,13 @@ class TripleComponent {
   bool isLiteral() const { return std::holds_alternative<Literal>(_variant); }
 
   bool isUndef() const { return std::holds_alternative<UNDEF>(_variant); }
+
+  bool isDate() const {
+    return std::holds_alternative<DateOrLargeYear>(_variant);
+  }
+  DateOrLargeYear getDate() const {
+    return std::get<DateOrLargeYear>(_variant);
+  }
 
   /// Access the value. If one of those methods is called but the variant
   /// doesn't hold the correct type, an exception is thrown.

@@ -195,6 +195,8 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
           nullptr};
+    case Datatype::Date:
+      return id.getDate().toStringAndType();
   }
   AD_FAIL();
 }

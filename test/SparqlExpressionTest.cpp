@@ -8,6 +8,7 @@
 #include <string>
 
 #include "./SparqlExpressionTestHelpers.h"
+#include "./util/GTestHelpers.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
@@ -245,28 +246,56 @@ auto testUnaryExpression =
 TEST(SparqlExpression, dateOperators) {
   // Helper function that asserts that the date operators give the expected
   // result on the given date.
-  auto check = [](const string& date, int expectedYear, int expectedMonth,
-                  int expectedDay) {
-    auto checkYear = testUnaryExpression<YearExpression, std::string, int64_t>;
-    auto checkMonth =
-        testUnaryExpression<MonthExpression, std::string, int64_t>;
-    auto checkDay = testUnaryExpression<DayExpression, std::string, int64_t>;
-    checkYear({date}, {expectedYear});
-    checkMonth({date}, {expectedMonth});
-    checkDay({date}, {expectedDay});
+  auto checkYear = testUnaryExpression<YearExpression, Id, Id>;
+  auto checkMonth = testUnaryExpression<MonthExpression, Id, Id>;
+  auto checkDay = testUnaryExpression<DayExpression, Id, Id>;
+  auto check = [&checkYear, &checkMonth, &checkDay](
+                   const DateOrLargeYear& date, std::optional<int> expectedYear,
+                   std::optional<int> expectedMonth,
+                   std::optional<int> expectedDay,
+                   std::source_location l = std::source_location::current()) {
+    auto trace = generateLocationTrace(l);
+    auto optToId = [](const auto& opt) {
+      if (opt.has_value()) {
+        return Id::makeFromInt(opt.value());
+      } else {
+        return Id::makeUndefined();
+      }
+    };
+    checkYear({Id::makeFromDate(date)}, {optToId(expectedYear)});
+    checkMonth({Id::makeFromDate(date)}, {optToId(expectedMonth)});
+    checkDay({Id::makeFromDate(date)}, {optToId(expectedDay)});
   };
 
+  using D = DateOrLargeYear;
   // Now the checks for dates with varying level of detail.
-  check("1970-04-22T11:53:00", 1970, 4, 22);
-  check("1970-04-22", 1970, 4, 22);
-  check("1970-04-22", 1970, 4, 22);
-  check("1970-04-22", 1970, 4, 22);
-  check("0042-12-24", 42, 12, 24);
-  check("-0099-07-01", -99, 7, 1);
-  check("-99-07-01", -99, 7, 1);
-  check("-12345699-07-01", -12345699, 7, 1);
-  check("321-07-01", 321, 7, 1);
-  check("12321-07-01", 12321, 7, 1);
+  check(D::parseXsdDatetime("1970-04-22T11:53:00"), 1970, 4, 22);
+  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
+  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
+  check(D::parseXsdDate("1970-04-22"), 1970, 4, 22);
+  check(D::parseXsdDate("0042-12-24"), 42, 12, 24);
+  check(D::parseXsdDate("-0099-07-01"), -99, 7, 1);
+  check(D::parseGYear("-1234"), -1234, std::nullopt, std::nullopt);
+  check(D::parseXsdDate("0321-07-01"), 321, 7, 1);
+  check(D::parseXsdDate("2321-07-01"), 2321, 7, 1);
+
+  // Test behavior of the `largeYear` representation that doesn't store the
+  // actual date.
+  check(D::parseGYear("123456"), 123456, std::nullopt, std::nullopt);
+  check(D::parseGYearMonth("-12345-01"), -12345, 1, std::nullopt);
+  check(D::parseGYearMonth("-12345-03"), -12345, 1, std::nullopt);
+  check(D::parseXsdDate("-12345-01-01"), -12345, 1, 1);
+  check(D::parseXsdDate("-12345-03-04"), -12345, 1, 1);
+
+  // Invalid inputs for date expressions.
+  checkYear({Id::makeFromInt(42)}, {Id::makeUndefined()});
+  checkMonth({Id::makeFromInt(42)}, {Id::makeUndefined()});
+  checkDay({Id::makeFromInt(42)}, {Id::makeUndefined()});
+  testUnaryExpression<YearExpression, double, Id>({42.0},
+                                                  {Id::makeUndefined()});
+  testUnaryExpression<YearExpression, Bool, Id>({false}, {Id::makeUndefined()});
+  testUnaryExpression<YearExpression, std::string, Id>({"noDate"},
+                                                       {Id::makeUndefined()});
 }
 
 // Test `StrlenExpression` and `StrExpression`.

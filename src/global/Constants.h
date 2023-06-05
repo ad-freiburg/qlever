@@ -56,12 +56,6 @@ static const std::string INTERNAL_ENTITIES_URI_PREFIX =
 static const std::string LANGUAGE_PREDICATE =
     INTERNAL_ENTITIES_URI_PREFIX + "langtag>";
 
-// NOTE: Only `VALUE_DATE_PREFIX` is still in use (until we switch to our new
-// `Date` class).
-static const char VALUE_PREFIX[] = ":v:";
-static const char VALUE_FLOAT_PREFIX[] = ":v:float:";
-static const char VALUE_DATE_PREFIX[] = ":v:date:";
-
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.
 static const char XSD_DATETIME_TYPE[] =
@@ -71,12 +65,12 @@ static const char XSD_GYEAR_TYPE[] = "http://www.w3.org/2001/XMLSchema#gYear";
 static const char XSD_GYEARMONTH_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#gYearMonth";
 
-static const char XSD_INT_TYPE[] = "http://www.w3.org/2001/XMLSchema#int";
+constexpr inline char XSD_INT_TYPE[] = "http://www.w3.org/2001/XMLSchema#int";
 static const char XSD_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#integer";
 static const char XSD_FLOAT_TYPE[] = "http://www.w3.org/2001/XMLSchema#float";
 static const char XSD_DOUBLE_TYPE[] = "http://www.w3.org/2001/XMLSchema#double";
-static const char XSD_DECIMAL_TYPE[] =
+constexpr inline char XSD_DECIMAL_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#decimal";
 
 static const char XSD_NON_POSITIVE_INTEGER_TYPE[] =
