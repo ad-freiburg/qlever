@@ -48,7 +48,7 @@ VariableToColumnMap TextOperationWithoutFilter::computeVariableToColumnMap()
       addDefinedVar(var);
     }
   }
-  addDefinedVar(Variable("?completedWord"));
+  addDefinedVar(_cvar.getMatchingWordVariable());
   return vcmap;
 }
 // _____________________________________________________________________________

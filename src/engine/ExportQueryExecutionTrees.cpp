@@ -410,8 +410,6 @@ ExportQueryExecutionTrees::selectQueryResultToCsvTsvOrBinary(
   // Print header line
   std::vector<std::string> variables =
       selectClause.getSelectedVariablesAsStrings();
-  variables.push_back(string("?completedWord"));
-
   // In the CSV format, the variables don't include the question mark.
   if (format == MediaType::csv) {
     std::ranges::for_each(variables,
