@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
+#include "util/ConfigManager/ConfigOption.h"
 
 #include <absl/strings/str_cat.h>
 #include <bits/ranges_algo.h>
@@ -15,7 +15,7 @@
 #include <utility>
 #include <variant>
 
-#include "util/ConfigManager/ConfigOption.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigToString.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
@@ -50,16 +50,20 @@ std::string ConfigOption::valueTypeToString(const ValueType& value) {
 }
 
 // ____________________________________________________________________________
-auto ConfigOption::createValueTypeWithEmptyOptional(const size_t& typeIndex) -> ValueType {
+auto ConfigOption::createValueTypeWithEmptyOptional(const size_t& typeIndex)
+    -> ValueType {
   ValueType toReturn;
 
   /*
   Set `toReturn` to a an empty `std::optional` of the type, that is at index
   position `typeIndex` in `ValueType`.
   */
-  ad_utility::RuntimeValueToCompileTimeValue<std::variant_size_v<ValueType> - 1>(
+  ad_utility::RuntimeValueToCompileTimeValue<std::variant_size_v<ValueType> -
+                                             1>(
       typeIndex,
-      [&toReturn]<size_t index, typename Type = std::variant_alternative_t<index, ValueType>>() {
+      [&toReturn]<size_t index,
+                  typename Type =
+                      std::variant_alternative_t<index, ValueType>>() {
         toReturn = Type(std::nullopt);
       });
 
@@ -67,15 +71,20 @@ auto ConfigOption::createValueTypeWithEmptyOptional(const size_t& typeIndex) -> 
 }
 
 // ____________________________________________________________________________
-bool ConfigOption::wasSetAtRuntime() const { return configurationOptionWasSet_; }
-
-// ____________________________________________________________________________
-bool ConfigOption::hasDefaultValue() const {
-  return std::visit([](const auto& optional) { return optional.has_value(); }, defaultValue_);
+bool ConfigOption::wasSetAtRuntime() const {
+  return configurationOptionWasSet_;
 }
 
 // ____________________________________________________________________________
-bool ConfigOption::hasValue() const { return wasSetAtRuntime() || hasDefaultValue(); }
+bool ConfigOption::hasDefaultValue() const {
+  return std::visit([](const auto& optional) { return optional.has_value(); },
+                    defaultValue_);
+}
+
+// ____________________________________________________________________________
+bool ConfigOption::hasValue() const {
+  return wasSetAtRuntime() || hasDefaultValue();
+}
 
 // ____________________________________________________________________________
 void ConfigOption::setValueWithJson(const nlohmann::json& json) {
@@ -94,13 +103,13 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
     } else if constexpr (std::is_same_v<T, float>) {
       return j.is_number_float();
     } else if constexpr (ad_utility::isVector<T>) {
-      return j.is_array() &&
-             [&j, &isValueTypeSubType]<typename InnerType>(const std::vector<InnerType>&) {
-               return std::ranges::all_of(j, [&isValueTypeSubType](const auto& entry) {
-                 return isValueTypeSubType.template operator()<InnerType>(
-                     entry, AD_FWD(isValueTypeSubType));
-               });
-             }(T{});
+      return j.is_array() && [&j, &isValueTypeSubType]<typename InnerType>(
+                                 const std::vector<InnerType>&) {
+        return std::ranges::all_of(j, [&isValueTypeSubType](const auto& entry) {
+          return isValueTypeSubType.template operator()<InnerType>(
+              entry, AD_FWD(isValueTypeSubType));
+        });
+      }(T{});
     }
   };
 
@@ -109,28 +118,34 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
   option is meant to hold?
   */
   if (!std::visit(
-          [&isValueTypeSubType,
-           &json]<typename TypeInsideOptional>(const std::optional<TypeInsideOptional>&) {
-            return isValueTypeSubType.operator()<TypeInsideOptional>(json, isValueTypeSubType);
+          [&isValueTypeSubType, &json]<typename TypeInsideOptional>(
+              const std::optional<TypeInsideOptional>&) {
+            return isValueTypeSubType.operator()<TypeInsideOptional>(
+                json, isValueTypeSubType);
           },
           value_)) {
     // The less and more detailed exception share the same beginning in their
     // error message.
-    const std::string& commonPrefix{absl::StrCat(
-        "The type of value, that configuration option '", identifier_, "' can hold, is '",
-        valueTypeToString(value_), "'. The given json however represents a value of ")};
+    const std::string& commonPrefix{
+        absl::StrCat("The type of value, that configuration option '",
+                     identifier_, "' can hold, is '", valueTypeToString(value_),
+                     "'. The given json however represents a value of ")};
 
     // Does the json represent one of the types in our `ValueType`? If yes, we
     // can create a better exception message.
     ad_utility::ConstexprForLoop(
         std::make_index_sequence<std::variant_size_v<ValueType>>{},
-        [&isValueTypeSubType, &json, &
-         commonPrefix ]<size_t TypeIndex, typename TypeOptional =
-                                              std::variant_alternative_t<TypeIndex, ValueType>>() {
-          if (isValueTypeSubType.template operator()<typename TypeOptional::value_type>(
-                  json, isValueTypeSubType)) {
+        [
+          &isValueTypeSubType, &json, &commonPrefix
+        ]<size_t TypeIndex,
+          typename TypeOptional =
+              std::variant_alternative_t<TypeIndex, ValueType>>() {
+          if (isValueTypeSubType
+                  .template operator()<typename TypeOptional::value_type>(
+                      json, isValueTypeSubType)) {
             throw ad_utility::Exception(absl::StrCat(
-                commonPrefix, " type '", valueTypeToString(TypeOptional(std::nullopt)), "'."));
+                commonPrefix, " type '",
+                valueTypeToString(TypeOptional(std::nullopt)), "'."));
           }
         });
 
@@ -139,7 +154,8 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
     throw ad_utility::Exception(absl::StrCat(commonPrefix, " unknown type."));
   }
 
-  std::visit([&json, this]<typename T>(const std::optional<T>&) { setValue(json.get<T>()); },
+  std::visit([&json, this]<typename T>(
+                 const std::optional<T>&) { setValue(json.get<T>()); },
              value_);
   configurationOptionWasSet_ = true;
   updateVariablePointer();
@@ -155,27 +171,31 @@ ConfigOption::operator std::string() const {
   return absl::StrCat(
       "Configuration option '", identifier_, "'\n",
       ad_utility::addIndentation(
-          absl::StrCat(
-              "Value type: ", valueTypeToString(value_),
-              "\nDefault value: ", ad_utility::configOptionValueTypeToString(defaultValue_),
-              "\nCurrently held value: ", ad_utility::configOptionValueTypeToString(value_),
-              "\nDescription: ", description_),
+          absl::StrCat("Value type: ", valueTypeToString(value_),
+                       "\nDefault value: ",
+                       ad_utility::configOptionValueTypeToString(defaultValue_),
+                       "\nCurrently held value: ",
+                       ad_utility::configOptionValueTypeToString(value_),
+                       "\nDescription: ", description_),
           1));
 }
 
 // ____________________________________________________________________________
-auto ConfigOption::getActualValueType() const -> size_t { return value_.index(); }
+auto ConfigOption::getActualValueType() const -> size_t {
+  return value_.index();
+}
 
 // ____________________________________________________________________________
 void ConfigOption::updateVariablePointer() const {
-  visitValue([this]<typename T, typename PointerType = T*>(const std::optional<T>& currentValue) {
+  visitValue([this]<typename T, typename PointerType = T*>(
+      const std::optional<T>& currentValue) {
     // Nothing to do, if there is no value.
     if (!currentValue.has_value()) {
       return;
     }
 
-    // There should ALWAYS be a valid pointer, unless the whole `ConfigOption` object was created
-    // wrong.
+    // There should ALWAYS be a valid pointer, unless the whole `ConfigOption`
+    // object was created wrong.
     (*std::get<T*>(variablePointer_)) = currentValue.value();
   });
 }

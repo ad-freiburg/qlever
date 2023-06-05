@@ -2,12 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel February of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "util/ConfigManager/ConfigToString.h"
+
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigOption.h"
-#include "util/ConfigManager/ConfigToString.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"

@@ -3,6 +3,8 @@
 // Author: Andre Schlegel (November of 2022,
 // schlegea@informatik.uni-freiburg.de)
 
+#include "../benchmark/infrastructure/Benchmark.h"
+
 #include <algorithm>
 #include <functional>
 #include <iterator>
@@ -11,7 +13,6 @@
 #include <utility>
 #include <vector>
 
-#include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
 #include "util/Algorithm.h"
