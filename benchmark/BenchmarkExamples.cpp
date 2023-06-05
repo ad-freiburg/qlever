@@ -214,10 +214,10 @@ class BMTables : public BenchmarkInterface {
 // general `BenchmarkMetadata`.
 class BMConfigurationAndMetadataExample : public BenchmarkInterface {
   // For storing the configuration options.
-  std::string dateString;
-  int numberOfStreetSigns;
-  std::vector<bool> wonOnTryX;
-  float balanceOnStevesSavingAccount;
+  std::string dateString_;
+  int numberOfStreetSigns_;
+  std::vector<bool> wonOnTryX_;
+  float balanceOnStevesSavingAccount_;
 
  public:
   std::string name() const final {
@@ -229,18 +229,18 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
   */
   BMConfigurationAndMetadataExample() {
     manager_.createConfigOption<std::string>("date", "The current date.",
-                                             &dateString, "22.3.2023");
+                                             &dateString_, "22.3.2023");
 
     manager_.createConfigOption<int>("numSigns", "The number of street signs.",
-                                     &numberOfStreetSigns, 10);
+                                     &numberOfStreetSigns_, 10);
 
     manager_.createConfigOption<std::vector<bool>>(
-        "CoinFlipTry", "The number of succesful coin flips.", &wonOnTryX,
+        "CoinFlipTry", "The number of succesful coin flips.", &wonOnTryX_,
         std::vector{false, false, false, false, false});
 
     manager_.createConfigOption<float>({"Accounts", "Personal", "Steve"},
                                        "Steves saving account balance.",
-                                       &balanceOnStevesSavingAccount, -41.9);
+                                       &balanceOnStevesSavingAccount_, -41.9);
   }
 
   BenchmarkMetadata getMetadata() const final {
@@ -248,11 +248,11 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
     // to this `BenchmarkMetadta` object.
     BenchmarkMetadata meta{};
 
-    meta.addKeyValuePair("date", dateString);
-    meta.addKeyValuePair("numberOfStreetSigns", numberOfStreetSigns);
-    meta.addKeyValuePair("wonOnTryX", wonOnTryX);
+    meta.addKeyValuePair("date", dateString_);
+    meta.addKeyValuePair("numberOfStreetSigns", numberOfStreetSigns_);
+    meta.addKeyValuePair("wonOnTryX", wonOnTryX_);
     meta.addKeyValuePair("Balance on Steves saving account",
-                         balanceOnStevesSavingAccount);
+                         balanceOnStevesSavingAccount_);
 
     return meta;
   }

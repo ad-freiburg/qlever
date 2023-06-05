@@ -257,7 +257,7 @@ inline std::string addIndentation(const std::string_view str,
   // An indention level of 0 is trivial.
   if (indentationLevel == 0) {
     return std::string{str};
-  };
+  }
 
   // How a single level of indention should look like.
   static constexpr std::string_view outputIndentation = "    ";
