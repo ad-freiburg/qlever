@@ -7,7 +7,7 @@
 #include <gtest/gtest.h>
 
 #include "../test/util/ANTLR4Mockup/ANTLR4MockupLexer.h"
-#include "util/ANTLRLexerHelper.h"
+#include "util/ANTLRHelper.h"
 
 /*
 For the helper function `stringOnlyContainsSpecifiedTokens` in
@@ -16,49 +16,50 @@ For the helper function `stringOnlyContainsSpecifiedTokens` in
 TEST(ANTLRE4UtilTests, stringOnlyContainsSpecifiedTokens) {
   // Everything is correct.
   ASSERT_TRUE(stringOnlyContainsSpecifiedTokens<ANTLR4MockupLexer>(
-      "true -429 6.7 \"test\"", static_cast<size_t>(ANTLR4MockupLexer::BOOL),
-      static_cast<size_t>(ANTLR4MockupLexer::INTEGER),
-      static_cast<size_t>(ANTLR4MockupLexer::FLOAT),
-      static_cast<size_t>(ANTLR4MockupLexer::STRING)));
+      "true -429 6.7 \"test\"",
+      {static_cast<size_t>(ANTLR4MockupLexer::BOOL),
+       static_cast<size_t>(ANTLR4MockupLexer::INTEGER),
+       static_cast<size_t>(ANTLR4MockupLexer::FLOAT),
+       static_cast<size_t>(ANTLR4MockupLexer::STRING)}));
   ASSERT_TRUE(stringOnlyContainsSpecifiedTokens<ANTLR4MockupLexer>(
-      "true", static_cast<size_t>(ANTLR4MockupLexer::BOOL)));
+      "true", {static_cast<size_t>(ANTLR4MockupLexer::BOOL)}));
   ASSERT_TRUE(stringOnlyContainsSpecifiedTokens<ANTLR4MockupLexer>(
-      "6.7 6.7 6.7 6.7 6.7", static_cast<size_t>(ANTLR4MockupLexer::FLOAT),
-      static_cast<size_t>(ANTLR4MockupLexer::FLOAT),
-      static_cast<size_t>(ANTLR4MockupLexer::FLOAT),
-      static_cast<size_t>(ANTLR4MockupLexer::FLOAT),
-      static_cast<size_t>(ANTLR4MockupLexer::FLOAT)));
+      "6.7 6.7 6.7 6.7 6.7", {static_cast<size_t>(ANTLR4MockupLexer::FLOAT),
+                              static_cast<size_t>(ANTLR4MockupLexer::FLOAT),
+                              static_cast<size_t>(ANTLR4MockupLexer::FLOAT),
+                              static_cast<size_t>(ANTLR4MockupLexer::FLOAT),
+                              static_cast<size_t>(ANTLR4MockupLexer::FLOAT)}));
 
   // We got more indexes to check, than we have tokens.
   ASSERT_FALSE(stringOnlyContainsSpecifiedTokens<ANTLR4MockupLexer>(
-      "true -429 6.7", static_cast<size_t>(ANTLR4MockupLexer::BOOL),
-      static_cast<size_t>(ANTLR4MockupLexer::INTEGER),
-      static_cast<size_t>(ANTLR4MockupLexer::FLOAT),
-      static_cast<size_t>(ANTLR4MockupLexer::STRING)));
+      "true -429 6.7", {static_cast<size_t>(ANTLR4MockupLexer::BOOL),
+                        static_cast<size_t>(ANTLR4MockupLexer::INTEGER),
+                        static_cast<size_t>(ANTLR4MockupLexer::FLOAT),
+                        static_cast<size_t>(ANTLR4MockupLexer::STRING)}));
 
   // We got more tokens, than we have indexes to check.
   ASSERT_FALSE(stringOnlyContainsSpecifiedTokens<ANTLR4MockupLexer>(
-      "true -429 6.7", static_cast<size_t>(ANTLR4MockupLexer::BOOL)));
+      "true -429 6.7", {static_cast<size_t>(ANTLR4MockupLexer::BOOL)}));
 
   // The first index is wrong.
   ASSERT_FALSE(stringOnlyContainsSpecifiedTokens<ANTLR4MockupLexer>(
-      " -429 6.7", static_cast<size_t>(ANTLR4MockupLexer::BOOL),
-      static_cast<size_t>(ANTLR4MockupLexer::FLOAT)));
+      " -429 6.7", {static_cast<size_t>(ANTLR4MockupLexer::BOOL),
+                    static_cast<size_t>(ANTLR4MockupLexer::FLOAT)}));
 
   // The last index is wrong.
   ASSERT_FALSE(stringOnlyContainsSpecifiedTokens<ANTLR4MockupLexer>(
-      " -429 6.7", static_cast<size_t>(ANTLR4MockupLexer::INTEGER),
-      static_cast<size_t>(ANTLR4MockupLexer::BOOL)));
+      " -429 6.7", {static_cast<size_t>(ANTLR4MockupLexer::INTEGER),
+                    static_cast<size_t>(ANTLR4MockupLexer::BOOL)}));
 
   // One index in the middle is wrong.
   ASSERT_FALSE(stringOnlyContainsSpecifiedTokens<ANTLR4MockupLexer>(
-      "true -429 6.7", static_cast<size_t>(ANTLR4MockupLexer::BOOL),
-      static_cast<size_t>(ANTLR4MockupLexer::STRING),
-      static_cast<size_t>(ANTLR4MockupLexer::FLOAT)));
+      "true -429 6.7", {static_cast<size_t>(ANTLR4MockupLexer::BOOL),
+                        static_cast<size_t>(ANTLR4MockupLexer::STRING),
+                        static_cast<size_t>(ANTLR4MockupLexer::FLOAT)}));
 
   // The indexes are all completly false.
   ASSERT_FALSE(stringOnlyContainsSpecifiedTokens<ANTLR4MockupLexer>(
-      " -429 6.7 true", static_cast<size_t>(ANTLR4MockupLexer::BOOL),
-      static_cast<size_t>(ANTLR4MockupLexer::INTEGER),
-      static_cast<size_t>(ANTLR4MockupLexer::FLOAT)));
+      " -429 6.7 true", {static_cast<size_t>(ANTLR4MockupLexer::BOOL),
+                         static_cast<size_t>(ANTLR4MockupLexer::INTEGER),
+                         static_cast<size_t>(ANTLR4MockupLexer::FLOAT)}));
 }

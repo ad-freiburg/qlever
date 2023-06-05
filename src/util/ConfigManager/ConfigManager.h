@@ -19,7 +19,7 @@
 #include <typeinfo>
 #include <variant>
 
-#include "util/ANTLRLexerHelper.h"
+#include "util/ANTLRHelper.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/Exception.h"
@@ -132,7 +132,7 @@ class ConfigManager {
       // Only actually check, if we have a string.
       if constexpr (isString<std::decay_t<T>>) {
         return stringOnlyContainsSpecifiedTokens<ConfigShorthandLexer>(
-            AD_FWD(key), static_cast<size_t>(ConfigShorthandLexer::NAME));
+            AD_FWD(key), {static_cast<size_t>(ConfigShorthandLexer::NAME)});
       } else {
         return true;
       }
