@@ -2,12 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigShorthandVisitor.h"
-
 #include <absl/strings/str_cat.h>
 
 #include <utility>
 
+#include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/Exception.h"
 
 // __________________________________________________________________________
@@ -27,6 +26,8 @@ nlohmann::json::object_t ToJsonConfigShorthandVisitor::visitAssignments(
 
     // The same key twice isn't allowed.
     if (contextAsJson.contains(interpretedAssignment.first)) {
+      // TODO Add custom exception. This kind of exceptionn is for runtime
+      // qlever.
       throw ad_utility::Exception(absl::StrCat(
           "Key error in the short hand: There are at least two key value "
           "pairs, at the same level of depth, with the key '",

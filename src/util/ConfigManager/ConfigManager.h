@@ -108,6 +108,8 @@ class ConfigManager {
     that are just identified with numbers, is rather difficult.
     */
     if (!std::holds_alternative<std::string>(pathToOption.front())) {
+      // TODO Add custom exception. This kind of exceptionn is for runtime
+      // qlever.
       throw ad_utility::Exception(
           absl::StrCat("Key error, while trying to add a configuration "
                        "option: The first key in '",
@@ -145,6 +147,8 @@ class ConfigManager {
       /*
       One of the keys failed. `failedKey` is an iterator pointing to the key.
       */
+      // TODO Add custom exception. This kind of exceptionn is for runtime
+      // qlever.
       throw ad_utility::Exception(absl::StrCat(
           "Key error: The key '", std::get<std::string>(*failedKey), "' in '",
           ptr.to_string(),
@@ -155,6 +159,8 @@ class ConfigManager {
     // Is there already a configuration option with the same identifier at the
     // same location?
     if (keyToConfigurationOptionIndex_.contains(ptr)) {
+      // TODO Add custom exception. This kind of exceptionn is for runtime
+      // qlever.
       throw ad_utility::Exception(absl::StrCat(
           "Key error: There was already a configuration option found at '",
           ptr.to_string(), "'\n", printConfigurationDoc(), "\n"));
