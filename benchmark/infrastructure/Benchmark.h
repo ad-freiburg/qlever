@@ -126,28 +126,17 @@ between a collection of benchmarks of any type (single, group, table) and
 the processing/management of those benchmarks.
 */
 class BenchmarkInterface {
+ protected:
+  /*
+  For adding configuration options and getting the values passed at runtime.
+  If you want to add configuration options, do it in the constructor of your
+  class.
+  */
+  ad_utility::ConfigManager manager_;
+
  public:
   // A human-readable name that will be printed as part of the output.
   virtual std::string name() const = 0;
-
-  /*
-  Add the configuration option, that you will be able to read out in
-  `parseConfiguration`. The values of the configuration options will be set
-  by the user at runtime. Note: Setting the values will happen AFTER this
-  function was called.
-  */
-  virtual void addConfigurationOptions(
-      [[maybe_unused]] ad_utility::ConfigManager* config) {
-    // Default behaviour.
-    return;
-  }
-
-  // Used to transport values, that you want to set at runtime.
-  virtual void parseConfiguration(
-      [[maybe_unused]] const ad_utility::ConfigManager& config) {
-    // Default behaviour.
-    return;
-  };
 
   /*
   For the general metadata of a class. Mostly information, that is the same
@@ -174,6 +163,10 @@ class BenchmarkInterface {
 
   // Without this, we get memory problems.
   virtual ~BenchmarkInterface() = default;
+
+  // Needed for manipulation by the infrastructure.
+  ad_utility::ConfigManager& getConfigManager() { return manager_; }
+  const ad_utility::ConfigManager& getConfigManager() const { return manager_; }
 };
 
 /*
@@ -202,18 +195,10 @@ class BenchmarkRegister {
   explicit BenchmarkRegister(BenchmarkPointer&& benchmarkClasseInstance);
 
   /*
-  @brief Passes the `ad_utility::ConfigManager` to the `parseConfiguration`
-   function of all the registered instances of benchmark classes.
+  @brief Passes the `nlohmann::json` object to the
+  `ConfigManager::parseConfig()` of every registered benchmark class.
   */
-  static void parseConfigurationWithAllRegisteredBenchmarks(
-      const ad_utility::ConfigManager& config = ad_utility::ConfigManager{});
-
-  /*
-  @brief Passes the `ad_utility::ConfigManager` to the `addConfigurationOptions`
-   function of all the registered instances of benchmark classes.
-  */
-  static void addConfigurationOptionsWtihAllRegisteredBenchmarks(
-      ad_utility::ConfigManager* config);
+  static void parseConfigWithAllRegisteredBenchmarks(const nlohmann::json& j);
 
   /*
    * @brief Measures all the registered benchmarks and returns the resulting

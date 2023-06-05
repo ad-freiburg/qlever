@@ -34,10 +34,6 @@ class BMSingleMeasurements : public BenchmarkInterface {
  public:
   std::string name() const final { return "Example for single measurements"; }
 
-  void parseConfiguration(const ad_utility::ConfigManager&) final {
-    // Nothing to actually do here.
-  }
-
   BenchmarkMetadata getMetadata() const final {
     // Again, nothing to really do here.
     return BenchmarkMetadata{};
@@ -79,10 +75,6 @@ class BMSingleMeasurements : public BenchmarkInterface {
 class BMGroups : public BenchmarkInterface {
  public:
   std::string name() const final { return "Example for group benchmarks"; }
-
-  void parseConfiguration(const ad_utility::ConfigManager&) final {
-    // Nothing to actually do here.
-  }
 
   BenchmarkMetadata getMetadata() const final {
     // Again, nothing to really do here.
@@ -148,10 +140,6 @@ class BMGroups : public BenchmarkInterface {
 class BMTables : public BenchmarkInterface {
  public:
   std::string name() const final { return "Example for table benchmarks"; }
-
-  void parseConfiguration(const ad_utility::ConfigManager&) final {
-    // Nothing to actually do here.
-  }
 
   BenchmarkMetadata getMetadata() const final {
     // Again, nothing to really do here.
@@ -225,11 +213,6 @@ class BMTables : public BenchmarkInterface {
 // A simple example of the usage of the `ad_utility::ConfigManager` and the
 // general `BenchmarkMetadata`.
 class BMConfigurationAndMetadataExample : public BenchmarkInterface {
-  // This class will simply transcribe specific configuration options
-  // to this `BenchmarkMetadta` object and return it later with the
-  // `getMetadata()` function.
-  BenchmarkMetadata generalMetadata_;
-
   // For storing the configuration options.
   std::string dateString;
   int numberOfStreetSigns;
@@ -241,34 +224,38 @@ class BMConfigurationAndMetadataExample : public BenchmarkInterface {
     return "Example for the usage of configuration and metadata";
   }
 
-  void addConfigurationOptions(ad_utility::ConfigManager* config) final {
-    // Add some arbitrary values.
-    config->createConfigOption<std::string>("date", "The current date.",
-                                            &dateString, "22.3.2023");
+  /*
+  Just adds some arbitrary configuration options.
+  */
+  BMConfigurationAndMetadataExample() {
+    manager_.createConfigOption<std::string>("date", "The current date.",
+                                             &dateString, "22.3.2023");
 
-    config->createConfigOption<int>("numSigns", "The number of street signs.",
-                                    &numberOfStreetSigns, 10);
+    manager_.createConfigOption<int>("numSigns", "The number of street signs.",
+                                     &numberOfStreetSigns, 10);
 
-    config->createConfigOption<std::vector<bool>>(
+    manager_.createConfigOption<std::vector<bool>>(
         "CoinFlipTry", "The number of succesful coin flips.", &wonOnTryX,
         std::vector{false, false, false, false, false});
 
-    config->createConfigOption<float>({"Accounts", "Personal", "Steve"},
-                                      "Steves saving account balance.",
-                                      &balanceOnStevesSavingAccount, -41.9);
+    manager_.createConfigOption<float>({"Accounts", "Personal", "Steve"},
+                                       "Steves saving account balance.",
+                                       &balanceOnStevesSavingAccount, -41.9);
   }
 
-  void parseConfiguration(const ad_utility::ConfigManager&) final {
-    // Transcribe the collected values.
-    generalMetadata_.addKeyValuePair("date", dateString);
-    generalMetadata_.addKeyValuePair("numberOfStreetSigns",
-                                     numberOfStreetSigns);
-    generalMetadata_.addKeyValuePair("wonOnTryX", wonOnTryX);
-    generalMetadata_.addKeyValuePair("Balance on Steves saving account",
-                                     balanceOnStevesSavingAccount);
-  }
+  BenchmarkMetadata getMetadata() const final {
+    // This class will simply transcribe the data of the configuration options
+    // to this `BenchmarkMetadta` object.
+    BenchmarkMetadata meta{};
 
-  BenchmarkMetadata getMetadata() const final { return generalMetadata_; }
+    meta.addKeyValuePair("date", dateString);
+    meta.addKeyValuePair("numberOfStreetSigns", numberOfStreetSigns);
+    meta.addKeyValuePair("wonOnTryX", wonOnTryX);
+    meta.addKeyValuePair("Balance on Steves saving account",
+                         balanceOnStevesSavingAccount);
+
+    return meta;
+  }
 
   // This is just a dummy, because this class is only an example for other
   // features of the benchmark infrastructure.

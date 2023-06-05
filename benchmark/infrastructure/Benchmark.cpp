@@ -22,18 +22,10 @@
 
 namespace ad_benchmark {
 // ____________________________________________________________________________
-void BenchmarkRegister::parseConfigurationWithAllRegisteredBenchmarks(
-    const ad_utility::ConfigManager& config) {
+void BenchmarkRegister::parseConfigWithAllRegisteredBenchmarks(
+    const nlohmann::json& j) {
   for (BenchmarkPointer& instance : registeredBenchmarks) {
-    instance->parseConfiguration(config);
-  }
-}
-
-// ____________________________________________________________________________
-void BenchmarkRegister::addConfigurationOptionsWtihAllRegisteredBenchmarks(
-    ad_utility::ConfigManager* config) {
-  for (BenchmarkPointer& instance : registeredBenchmarks) {
-    instance->addConfigurationOptions(config);
+    instance->getConfigManager().parseConfig(j);
   }
 }
 

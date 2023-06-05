@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (November of 2022,
 // schlegea@informatik.uni-freiburg.de)
+
 #include <algorithm>
 #include <boost/program_options.hpp>
 #include <boost/program_options/value_semantic.hpp>
@@ -116,13 +117,6 @@ int main(int argc, char** argv) {
     printUsageAndExit();
   }
 
-  // Did we get any configuration?
-  ad_utility::ConfigManager config{};
-
-  // Add all the configuration options.
-  BenchmarkRegister::addConfigurationOptionsWtihAllRegisteredBenchmarks(
-      &config);
-
   // Set all the configuration options, if there was any runtime configuration
   // given.
   if (vm.count("configuration-json") || vm.count("configuration-shorthand")) {
@@ -137,17 +131,19 @@ int main(int argc, char** argv) {
           shortHandConfigurationString));
     }
 
-    config.parseConfig(jsonConfig);
+    BenchmarkRegister::parseConfigWithAllRegisteredBenchmarks(jsonConfig);
   }
 
   // Print all the available configuration options, if wanted.
   if (vm.count("configuration-options")) {
-    std::cerr << config.printConfigurationDoc() << "\n";
+    std::ranges::for_each(
+        BenchmarkRegister::getAllRegisteredBenchmarks(),
+        [](const BenchmarkInterface* bench) {
+          std::cerr << bench->getConfigManager().printConfigurationDoc()
+                    << "\n";
+        });
     exit(0);
   }
-
-  // Pass the configuration, even if it is empty.
-  BenchmarkRegister::parseConfigurationWithAllRegisteredBenchmarks(config);
 
   // Measuring the time for all registered benchmarks.
   // For measuring and saving the times.
@@ -166,12 +162,17 @@ int main(int argc, char** argv) {
   // Actually processing the arguments.
   if (vm.count("print")) {
     // Print the configuration options with default values, if there were any.
-    if (const std::string &
-            defaultConfigurationOptionString{
-                ad_utility::getDefaultValueConfigOptions(config)};
-        defaultConfigurationOptionString != "") {
-      std::cout << defaultConfigurationOptionString << "\n\n";
-    }
+    std::ranges::for_each(
+        BenchmarkRegister::getAllRegisteredBenchmarks(),
+        [](const BenchmarkInterface* bench) {
+          if (const std::string &
+                  defaultConfigurationOptionString{
+                      ad_utility::getDefaultValueConfigOptions(
+                          bench->getConfigManager())};
+              defaultConfigurationOptionString != "") {
+            std::cout << defaultConfigurationOptionString << "\n\n";
+          }
+        });
 
     // Print the results and metadata.
     std::ranges::for_each(benchmarkClassAndResults,
