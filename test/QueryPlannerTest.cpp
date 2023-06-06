@@ -762,7 +762,7 @@ TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
       "\"edible leaves\" and 1 variables with textLimit = 5 "
       "filtered by\n  {\n    SCAN POS with P = \"<is-a>\", "
       "O = \"<Plant>\"\n    qet-width: 1 \n  }\n   filtered on "
-      "column 0\n  qet-width: 3 \n}",
+      "column 0\n  qet-width: 4 \n}",
       qet.asString());
 }
 
@@ -798,12 +798,12 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
       "O = \"<Europe>\"\n      qet-width: 1 \n    } join-column: [0]\n"
       "    |X|\n    {\n      SCAN POS with P = \"<Place_of_birth>\"\n"
       "      qet-width: 2 \n    } join-column: [0]\n    qet-width: 2 \n"
-      "  }\n   filtered on column 1\n  qet-width: 4 \n}",
+      "  }\n   filtered on column 1\n  qet-width: 5 \n}",
       qet.asString());
   auto c = Variable{"?c"};
   ASSERT_EQ(0u, qet.getVariableColumn(c));
   ASSERT_EQ(1u, qet.getVariableColumn(c.getTextScoreVariable()));
-  ASSERT_EQ(2u, qet.getVariableColumn(Variable{"?y"}));
+  ASSERT_EQ(3u, qet.getVariableColumn(Variable{"?y"}));
 }
 
 TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
@@ -822,7 +822,7 @@ TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
       "\"friend*\" and 2 variables with textLimit = 1 filtered by\n"
       "  {\n    SCAN POS with P = \"<is-a>\", O = \"<Politician>"
       "\"\n    qet-width: 1 \n  }\n   filtered on column 0\n "
-      " qet-width: 4 \n}",
+      " qet-width: 5 \n}",
       qet.asString());
 }
 
@@ -850,9 +850,9 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
       "WITH FILTER: co-occurrence with words: \"friend*\" and 2 variables "
       "with textLimit = 1 filtered by\n        {\n          SCAN POS with P "
       "= \"<is-a>\", O = \"<Politician>\"\n          qet-width: 1 \n        "
-      "}\n         filtered on column 0\n        qet-width: 4 \n      }\n    "
-      "  qet-width: 4 \n    } join-column: [2]\n    qet-width: 4 \n  }\n   "
-      "filtered on column 0\n  qet-width: 6 \n}",
+      "}\n         filtered on column 0\n        qet-width: 5 \n      }\n    "
+      "  qet-width: 5 \n    } join-column: [2]\n    qet-width: 5 \n  }\n   "
+      "filtered on column 0\n  qet-width: 8 \n}",
       qet.asString());
 }
 

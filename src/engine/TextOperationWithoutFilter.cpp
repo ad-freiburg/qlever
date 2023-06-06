@@ -81,7 +81,7 @@ ResultTable TextOperationWithoutFilter::computeResult() {
   } else {
     computeResultMultVars(&table);
   }
-  LOG(DEBUG) << "TextOperationWithoutFilter result computation done." << endl;
+  LOG(INFO) << "TextOperationWithoutFilter result computation done." << endl;
   return {std::move(table), resultSortedOn(), LocalVocab{}};
 }
 
