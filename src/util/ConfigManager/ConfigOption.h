@@ -14,7 +14,7 @@
 #include <typeinfo>
 #include <variant>
 
-#include "util/ANTLRHelper.h"
+#include "util/ConfigManager/ConfigUtils.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
@@ -231,8 +231,7 @@ class ConfigOption {
         defaultValue_(defaultValue) {
     // The `identifier` must be a valid `NAME` in the short hand for
     // configurations.
-    if (!stringOnlyContainsSpecifiedTokens<ConfigShorthandLexer>(
-            identifier, {static_cast<size_t>(ConfigShorthandLexer::NAME)})) {
+    if (!isNameInShortHand(identifier)) {
       // TODO Add custom exception. This kind of exceptionn is for runtime qlever.
       throw ad_utility::Exception(
           absl::StrCat("Error while constructing configuraion option: The identifier must be "

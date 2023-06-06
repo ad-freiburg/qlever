@@ -330,9 +330,4 @@ addLinkAndDiscoverTest(AddCombinedRowToTableTest util)
 
 addLinkAndDiscoverTest(CtreHelpersTest)
 
-# The antlr4 mockup needed for one test.
-add_library(ANTLR4Mockup ../test/util/ANTLR4Mockup/ANTLR4MockupLexer.cpp)
-qlever_target_link_libraries(ANTLR4Mockup antlr4_static)
-addLinkAndDiscoverTest(ANTLR4UtilTests ANTLR4Mockup)
-
 addLinkAndDiscoverTest(ComparisonWithNanTest)

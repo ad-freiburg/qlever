@@ -19,8 +19,8 @@
 #include <typeinfo>
 #include <variant>
 
-#include "util/ANTLRHelper.h"
 #include "util/ConfigManager/ConfigOption.h"
+#include "util/ConfigManager/ConfigUtils.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -131,8 +131,7 @@ class ConfigManager {
     auto checkIfValidNameVisitor = []<typename T>(const T& key) {
       // Only actually check, if we have a string.
       if constexpr (isString<std::decay_t<T>>) {
-        return stringOnlyContainsSpecifiedTokens<ConfigShorthandLexer>(
-            AD_FWD(key), {static_cast<size_t>(ConfigShorthandLexer::NAME)});
+        return isNameInShortHand(AD_FWD(key));
       } else {
         return true;
       }
