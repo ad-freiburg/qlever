@@ -1,4 +1,4 @@
-name: Native build
+name: Native build with conan
 
 on:
   push:
@@ -34,6 +34,8 @@ jobs:
 
     - name: Python dependencies
       run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
+    - name: Create build directory
+      run: mkdir ${{github.workspace}}/build
     - name: Install and run conan
       working-directory: ${{github.workspace}}/build
       run: >
