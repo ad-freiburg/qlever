@@ -80,12 +80,17 @@ find_package(Threads REQUIRED)
 # ICU (for proper collation
 ################################
 find_package(ICU 60 REQUIRED COMPONENTS uc i18n)
-include_directories(${ICU_INCLUDE_DIR})
 
 ###################################
 # JEMALLOC
 ###################################
-if (${JEMALLOC_MANUALLY_INSTALLED})
+
+find_package(jemalloc QUIET)
+if (TARGET jemalloc::jemalloc)
+  MESSAGE(STATUS "Use jemalloc that was installed via conan")
+  link_libraries(jemalloc::jemalloc)
+
+elseif (${JEMALLOC_MANUALLY_INSTALLED})
   link_libraries(jemalloc)
 else()
   find_package(PkgConfig)
@@ -103,6 +108,16 @@ else()
     on Ubuntu 18.04, where pkg-config does not find jemalloc.")
   endif()
 endif()
+
+### ZSTD
+find_package(ZSTD QUIET)
+if (TARGET zstd::libzstd_static)
+    MESSAGE(STATUS "Use zstd that was installed via conan")
+    link_libraries(zstd::libzstd_static)
+else()
+link_libraries(zstd)
+endif()
+
 
 
 ######################################
@@ -126,7 +141,7 @@ find_package(OpenSSL REQUIRED)
 # `target_link_libraries` that additionally links against the common
 # libraries.
 function (qlever_target_link_libraries target)
-    target_link_libraries(${target} ${ARGN} absl::flat_hash_map absl::flat_hash_set absl::strings absl::str_format)
+    target_link_libraries(${target} ${ARGN} absl::flat_hash_map absl::flat_hash_set absl::strings absl::str_format ICU::uc ICU::i18n)
 endfunction()
 
 
