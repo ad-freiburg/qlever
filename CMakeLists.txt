@@ -101,11 +101,12 @@ else()
     include_directories(${JEMALLOC_INCLUDE_DIRS})
     link_libraries(${JEMALLOC_LIBRARIES})
   else ()
-    message(FATAL_ERROR "Jemalloc is required, but could not be found via
+    message(WARNING "Jemalloc could not be found via
     pkg-config. If you are sure that you have installed jemalloc on your system
     (e.g. via `apt install libjemalloc-dev` on Ubuntu), you might try rerunning
     cmake with `-DJEMALLOC_MANUALLY_INSTALLED=True`. This is currently necessary
-    on Ubuntu 18.04, where pkg-config does not find jemalloc.")
+    on Ubuntu 18.04, where pkg-config does not find jemalloc. Continuing without jemalloc,
+    this will impact the performance, most notably of the IndexBuilder")
   endif()
 endif()
 
