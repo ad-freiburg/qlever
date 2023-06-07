@@ -36,6 +36,10 @@ jobs:
       build-type: Release
       BUILD_WRAPPER_OUT_DIR: build_wrapper_output_directory # Directory where build-wrapper output will be placed
     steps:
+      - name: Dump GitHub context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github.event) }}
+        run: echo "$GITHUB_CONTEXT"
       - name: 'Download artifact'
         uses: actions/github-script@v6
         if: github.event.workflow_run.event == 'pull_request'
