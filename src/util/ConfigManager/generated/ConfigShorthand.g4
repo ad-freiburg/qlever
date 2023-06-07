@@ -6,6 +6,9 @@ grammar ConfigShorthand;
 
 // Parser rules
 
+// This rule is just for checking internally, if we have a valid NAME.
+isName : NAME EOF;
+
 // Every string of the shorthand should just be a bunch of assignments, one after the other.
 shortHandString : assignments EOF;
 assignments : (listOfAssignments+=assignment ',')* listOfAssignments+=assignment;

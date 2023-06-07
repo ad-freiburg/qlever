@@ -322,6 +322,8 @@ addLinkAndDiscoverTest(ConfigManagerTest configManager)
 
 addLinkAndDiscoverTest(ConfigOptionTest configManager)
 
+addLinkAndDiscoverTest(ConfigUtilTest configManager)
+
 addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
 
 addLinkAndDiscoverTest(FindUndefRangesTest)

@@ -20,7 +20,7 @@
 #include <variant>
 
 #include "util/ConfigManager/ConfigOption.h"
-#include "util/ConfigManager/ConfigUtils.h"
+#include "util/ConfigManager/ConfigUtil.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
