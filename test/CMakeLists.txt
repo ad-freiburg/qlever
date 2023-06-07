@@ -82,9 +82,9 @@ endfunction()
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
-addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
 
-addLinkAndDiscoverTest(StringUtilsTest ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(StringUtilsTest)
 
 addLinkAndDiscoverTest(CacheTest)
 
@@ -95,7 +95,7 @@ addLinkAndDiscoverTestSerial(FileTest)
 
 addLinkAndDiscoverTest(Simple8bTest)
 
-addLinkAndDiscoverTest(ContextFileParserTest parser ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(ContextFileParserTest parser)
 
 addLinkAndDiscoverTest(IndexMetaDataTest index)
 
@@ -131,10 +131,10 @@ addLinkAndDiscoverTest(UnionTest engine)
 
 if (SINGLE_TEST_BINARY)
     target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
-    qlever_target_link_libraries(QLeverAllUnitTestsMain parser re2 util ${ICU_LIBRARIES})
+    qlever_target_link_libraries(QLeverAllUnitTestsMain parser re2 util)
 else()
     add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
-    linkAndDiscoverTest(TokenTest parser re2 util ${ICU_LIBRARIES})
+    linkAndDiscoverTest(TokenTest parser re2 util)
 endif()
 
 addLinkAndDiscoverTest(TurtleParserTest parser re2)
@@ -149,9 +149,9 @@ addLinkAndDiscoverTest(BatchedPipelineTest)
 
 addLinkAndDiscoverTest(TupleHelpersTest)
 
-addLinkAndDiscoverTest(StringSortComparatorTest ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(StringSortComparatorTest)
 
-addLinkAndDiscoverTest(PriorityQueueTest ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(PriorityQueueTest)
 
 addLinkAndDiscoverTest(SynchronizedTest)
 
@@ -203,7 +203,7 @@ addLinkAndDiscoverTest(VocabularyInMemoryTest vocabulary)
 
 addLinkAndDiscoverTest(CompressedVocabularyTest vocabulary)
 
-addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary)
 
 addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
 
