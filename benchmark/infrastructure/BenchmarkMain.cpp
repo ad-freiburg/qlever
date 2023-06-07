@@ -139,8 +139,10 @@ int main(int argc, char** argv) {
     std::ranges::for_each(
         BenchmarkRegister::getAllRegisteredBenchmarks(),
         [](const BenchmarkInterface* bench) {
-          std::cerr << bench->getConfigManager().printConfigurationDoc()
-                    << "\n";
+          std::cerr << "Configuration option of benchmark class '"
+                    << bench->name() << "'\n"
+                    << bench->getConfigManager().printConfigurationDoc()
+                    << "\n\n";
         });
     exit(0);
   }
@@ -170,7 +172,10 @@ int main(int argc, char** argv) {
                       ad_utility::getDefaultValueConfigOptions(
                           bench->getConfigManager())};
               defaultConfigurationOptionString != "") {
-            std::cout << defaultConfigurationOptionString << "\n\n";
+            std::cout
+                << "Default configuration option values of benchmark class '"
+                << bench->name() << "'\n"
+                << defaultConfigurationOptionString << "\n\n";
           }
         });
 
