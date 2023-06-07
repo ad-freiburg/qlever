@@ -29,8 +29,42 @@ Using the functions described there would require including
 `Google Benchmark` as a  third-party library.
 */
 
+/*
+The general configuration options. Only used by
+`BMConfigurationAndMetadataExample`, but because of how we pass the
+configuration, every benchmark needs to have them, even if they don't use it.
+*/
+class ConfigOptions : public BenchmarkInterface {
+ protected:
+  // For storing the configuration option values.
+  std::string dateString_;
+  int numberOfStreetSigns_;
+  std::vector<bool> wonOnTryX_;
+  float balanceOnStevesSavingAccount_;
+
+ public:
+  /*
+  Just adds some arbitrary configuration options.
+  */
+  ConfigOptions() {
+    manager_.createConfigOption<std::string>("date", "The current date.",
+                                             &dateString_, "22.3.2023");
+
+    manager_.createConfigOption<int>("numSigns", "The number of street signs.",
+                                     &numberOfStreetSigns_, 10);
+
+    manager_.createConfigOption<std::vector<bool>>(
+        "CoinFlipTry", "The number of succesful coin flips.", &wonOnTryX_,
+        std::vector{false, false, false, false, false});
+
+    manager_.createConfigOption<float>({"Accounts", "Personal", "Steve"},
+                                       "Steves saving account balance.",
+                                       &balanceOnStevesSavingAccount_, -41.9);
+  }
+};
+
 // Single Measurements
-class BMSingleMeasurements : public BenchmarkInterface {
+class BMSingleMeasurements : public ConfigOptions {
  public:
   std::string name() const final { return "Example for single measurements"; }
 
@@ -72,7 +106,7 @@ class BMSingleMeasurements : public BenchmarkInterface {
 };
 
 // Groups
-class BMGroups : public BenchmarkInterface {
+class BMGroups : public ConfigOptions {
  public:
   std::string name() const final { return "Example for group benchmarks"; }
 
@@ -137,7 +171,7 @@ class BMGroups : public BenchmarkInterface {
 };
 
 // Tables
-class BMTables : public BenchmarkInterface {
+class BMTables : public ConfigOptions {
  public:
   std::string name() const final { return "Example for table benchmarks"; }
 
@@ -212,35 +246,10 @@ class BMTables : public BenchmarkInterface {
 
 // A simple example of the usage of the `ad_utility::ConfigManager` and the
 // general `BenchmarkMetadata`.
-class BMConfigurationAndMetadataExample : public BenchmarkInterface {
-  // For storing the configuration options.
-  std::string dateString_;
-  int numberOfStreetSigns_;
-  std::vector<bool> wonOnTryX_;
-  float balanceOnStevesSavingAccount_;
-
+class BMConfigurationAndMetadataExample : public ConfigOptions {
  public:
   std::string name() const final {
     return "Example for the usage of configuration and metadata";
-  }
-
-  /*
-  Just adds some arbitrary configuration options.
-  */
-  BMConfigurationAndMetadataExample() {
-    manager_.createConfigOption<std::string>("date", "The current date.",
-                                             &dateString_, "22.3.2023");
-
-    manager_.createConfigOption<int>("numSigns", "The number of street signs.",
-                                     &numberOfStreetSigns_, 10);
-
-    manager_.createConfigOption<std::vector<bool>>(
-        "CoinFlipTry", "The number of succesful coin flips.", &wonOnTryX_,
-        std::vector{false, false, false, false, false});
-
-    manager_.createConfigOption<float>({"Accounts", "Personal", "Steve"},
-                                       "Steves saving account balance.",
-                                       &balanceOnStevesSavingAccount_, -41.9);
   }
 
   BenchmarkMetadata getMetadata() const final {
