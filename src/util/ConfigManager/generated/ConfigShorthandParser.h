@@ -17,8 +17,8 @@ public:
   };
 
   enum {
-    RuleIsName = 0, RuleShortHandString = 1, RuleAssignments = 2, RuleAssignment = 3, 
-    RuleObject = 4, RuleList = 5, RuleContent = 6
+    RuleShortHandString = 0, RuleAssignments = 1, RuleAssignment = 2, RuleObject = 3, 
+    RuleList = 4, RuleContent = 5
   };
 
   explicit ConfigShorthandParser(antlr4::TokenStream *input);
@@ -38,25 +38,12 @@ public:
   antlr4::atn::SerializedATNView getSerializedATN() const override;
 
 
-  class IsNameContext;
   class ShortHandStringContext;
   class AssignmentsContext;
   class AssignmentContext;
   class ObjectContext;
   class ListContext;
   class ContentContext; 
-
-  class  IsNameContext : public antlr4::ParserRuleContext {
-  public:
-    IsNameContext(antlr4::ParserRuleContext *parent, size_t invokingState);
-    virtual size_t getRuleIndex() const override;
-    antlr4::tree::TerminalNode *NAME();
-    antlr4::tree::TerminalNode *EOF();
-
-   
-  };
-
-  IsNameContext* isName();
 
   class  ShortHandStringContext : public antlr4::ParserRuleContext {
   public:

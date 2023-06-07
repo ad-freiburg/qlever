@@ -2,10 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include <ANTLRInputStream.h>
-#include <CommonTokenStream.h>
-#include <absl/strings/str_cat.h>
-#include <antlr4-runtime.h>
+#include <regex>
 
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -16,23 +13,17 @@ namespace ad_utility {
 // ____________________________________________________________________________
 bool isNameInShortHand(std::string_view str) {
   /*
-  The first version was a more general help function, that used the ANTLR
-  tokenstream and token ids to compare a string on correctness. Unfortunaly,
-  ANTLR 4.13.0 seems to have at least one undeterministic bug, which caused a
-  seg fault when used in our main function, but not in our test cases.
-  We switched to checking with a special parser rule, after two days of
-  headaches and running into the same bug again, and again, regardless of how we
-  tried to check the tokens. (We worked our way THROUGH EVERY usable layer.)
+  TODO We originally did this check directly with ANTLR, in order to keep the
+  definition of NAME synchronous with the grammar, but always ran into the same
+  bug, regardless of how we did it. Extra parser rule, reading out the tokens
+  with parser, reading out the tokens with token stream, etc..
+  The tests would always work correctly, but actually using the compiled
+  `ConfigManager` would always result in a segmentation fault. We do not know
+  the exact cause, but it should be fixed in
+  https://github.com/antlr/antlr4/milestone/27
   */
-  antlr4::ANTLRInputStream input(str);
-  ConfigShorthandLexer lexer(&input);
-  antlr4::CommonTokenStream tokens(&lexer);
-  ConfigShorthandParser parser(&tokens);
-
-  /*
-  Parse for the rule `isName`. If we got a valid version, we will have no syntax
-  errors.
-  */
-  return parser.isName() && parser.getNumberOfSyntaxErrors() == 0;
+  // Needs to be keeped up to date with the definition of `NAME` in
+  // `ConfigShortHand.g4`.
+  return std::regex_match(str.data(), std::regex(R"--([a-zA-Z0-9\-_]+)--"));
 }
 }  // namespace ad_utility

@@ -51,8 +51,8 @@ void configshorthandParserInitialize() {
 #endif
   auto staticData = std::make_unique<ConfigShorthandParserStaticData>(
     std::vector<std::string>{
-      "isName", "shortHandString", "assignments", "assignment", "object", 
-      "list", "content"
+      "shortHandString", "assignments", "assignment", "object", "list", 
+      "content"
     },
     std::vector<std::string>{
       "", "','", "':'", "'{'", "'}'", "'['", "']'"
@@ -63,21 +63,20 @@ void configshorthandParserInitialize() {
     }
   );
   static const int32_t serializedATNSegment[] = {
-  	4,1,13,56,2,0,7,0,2,1,7,1,2,2,7,2,2,3,7,3,2,4,7,4,2,5,7,5,2,6,7,6,1,0,
-  	1,0,1,0,1,1,1,1,1,1,1,2,1,2,1,2,5,2,24,8,2,10,2,12,2,27,9,2,1,2,1,2,1,
-  	3,1,3,1,3,1,3,1,4,1,4,1,4,1,4,1,5,1,5,1,5,1,5,5,5,43,8,5,10,5,12,5,46,
-  	9,5,1,5,1,5,1,5,1,6,1,6,1,6,3,6,54,8,6,1,6,0,0,7,0,2,4,6,8,10,12,0,0,
-  	52,0,14,1,0,0,0,2,17,1,0,0,0,4,25,1,0,0,0,6,30,1,0,0,0,8,34,1,0,0,0,10,
-  	38,1,0,0,0,12,53,1,0,0,0,14,15,5,12,0,0,15,16,5,0,0,1,16,1,1,0,0,0,17,
-  	18,3,4,2,0,18,19,5,0,0,1,19,3,1,0,0,0,20,21,3,6,3,0,21,22,5,1,0,0,22,
-  	24,1,0,0,0,23,20,1,0,0,0,24,27,1,0,0,0,25,23,1,0,0,0,25,26,1,0,0,0,26,
-  	28,1,0,0,0,27,25,1,0,0,0,28,29,3,6,3,0,29,5,1,0,0,0,30,31,5,12,0,0,31,
-  	32,5,2,0,0,32,33,3,12,6,0,33,7,1,0,0,0,34,35,5,3,0,0,35,36,3,4,2,0,36,
-  	37,5,4,0,0,37,9,1,0,0,0,38,44,5,5,0,0,39,40,3,12,6,0,40,41,5,1,0,0,41,
-  	43,1,0,0,0,42,39,1,0,0,0,43,46,1,0,0,0,44,42,1,0,0,0,44,45,1,0,0,0,45,
-  	47,1,0,0,0,46,44,1,0,0,0,47,48,3,12,6,0,48,49,5,6,0,0,49,11,1,0,0,0,50,
-  	54,5,7,0,0,51,54,3,10,5,0,52,54,3,8,4,0,53,50,1,0,0,0,53,51,1,0,0,0,53,
-  	52,1,0,0,0,54,13,1,0,0,0,3,25,44,53
+  	4,1,13,51,2,0,7,0,2,1,7,1,2,2,7,2,2,3,7,3,2,4,7,4,2,5,7,5,1,0,1,0,1,0,
+  	1,1,1,1,1,1,5,1,19,8,1,10,1,12,1,22,9,1,1,1,1,1,1,2,1,2,1,2,1,2,1,3,1,
+  	3,1,3,1,3,1,4,1,4,1,4,1,4,5,4,38,8,4,10,4,12,4,41,9,4,1,4,1,4,1,4,1,5,
+  	1,5,1,5,3,5,49,8,5,1,5,0,0,6,0,2,4,6,8,10,0,0,48,0,12,1,0,0,0,2,20,1,
+  	0,0,0,4,25,1,0,0,0,6,29,1,0,0,0,8,33,1,0,0,0,10,48,1,0,0,0,12,13,3,2,
+  	1,0,13,14,5,0,0,1,14,1,1,0,0,0,15,16,3,4,2,0,16,17,5,1,0,0,17,19,1,0,
+  	0,0,18,15,1,0,0,0,19,22,1,0,0,0,20,18,1,0,0,0,20,21,1,0,0,0,21,23,1,0,
+  	0,0,22,20,1,0,0,0,23,24,3,4,2,0,24,3,1,0,0,0,25,26,5,12,0,0,26,27,5,2,
+  	0,0,27,28,3,10,5,0,28,5,1,0,0,0,29,30,5,3,0,0,30,31,3,2,1,0,31,32,5,4,
+  	0,0,32,7,1,0,0,0,33,39,5,5,0,0,34,35,3,10,5,0,35,36,5,1,0,0,36,38,1,0,
+  	0,0,37,34,1,0,0,0,38,41,1,0,0,0,39,37,1,0,0,0,39,40,1,0,0,0,40,42,1,0,
+  	0,0,41,39,1,0,0,0,42,43,3,10,5,0,43,44,5,6,0,0,44,9,1,0,0,0,45,49,5,7,
+  	0,0,46,49,3,8,4,0,47,49,3,6,3,0,48,45,1,0,0,0,48,46,1,0,0,0,48,47,1,0,
+  	0,0,49,11,1,0,0,0,3,20,39,48
   };
   staticData->serializedATN = antlr4::atn::SerializedATNView(serializedATNSegment, sizeof(serializedATNSegment) / sizeof(serializedATNSegment[0]));
 
@@ -126,54 +125,6 @@ antlr4::atn::SerializedATNView ConfigShorthandParser::getSerializedATN() const {
 }
 
 
-//----------------- IsNameContext ------------------------------------------------------------------
-
-ConfigShorthandParser::IsNameContext::IsNameContext(ParserRuleContext *parent, size_t invokingState)
-  : ParserRuleContext(parent, invokingState) {
-}
-
-tree::TerminalNode* ConfigShorthandParser::IsNameContext::NAME() {
-  return getToken(ConfigShorthandParser::NAME, 0);
-}
-
-tree::TerminalNode* ConfigShorthandParser::IsNameContext::EOF() {
-  return getToken(ConfigShorthandParser::EOF, 0);
-}
-
-
-size_t ConfigShorthandParser::IsNameContext::getRuleIndex() const {
-  return ConfigShorthandParser::RuleIsName;
-}
-
-
-ConfigShorthandParser::IsNameContext* ConfigShorthandParser::isName() {
-  IsNameContext *_localctx = _tracker.createInstance<IsNameContext>(_ctx, getState());
-  enterRule(_localctx, 0, ConfigShorthandParser::RuleIsName);
-
-#if __cplusplus > 201703L
-  auto onExit = finally([=, this] {
-#else
-  auto onExit = finally([=] {
-#endif
-    exitRule();
-  });
-  try {
-    enterOuterAlt(_localctx, 1);
-    setState(14);
-    match(ConfigShorthandParser::NAME);
-    setState(15);
-    match(ConfigShorthandParser::EOF);
-   
-  }
-  catch (RecognitionException &e) {
-    _errHandler->reportError(this, e);
-    _localctx->exception = std::current_exception();
-    _errHandler->recover(this, _localctx->exception);
-  }
-
-  return _localctx;
-}
-
 //----------------- ShortHandStringContext ------------------------------------------------------------------
 
 ConfigShorthandParser::ShortHandStringContext::ShortHandStringContext(ParserRuleContext *parent, size_t invokingState)
@@ -196,7 +147,7 @@ size_t ConfigShorthandParser::ShortHandStringContext::getRuleIndex() const {
 
 ConfigShorthandParser::ShortHandStringContext* ConfigShorthandParser::shortHandString() {
   ShortHandStringContext *_localctx = _tracker.createInstance<ShortHandStringContext>(_ctx, getState());
-  enterRule(_localctx, 2, ConfigShorthandParser::RuleShortHandString);
+  enterRule(_localctx, 0, ConfigShorthandParser::RuleShortHandString);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -207,9 +158,9 @@ ConfigShorthandParser::ShortHandStringContext* ConfigShorthandParser::shortHandS
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(17);
+    setState(12);
     assignments();
-    setState(18);
+    setState(13);
     match(ConfigShorthandParser::EOF);
    
   }
@@ -244,7 +195,7 @@ size_t ConfigShorthandParser::AssignmentsContext::getRuleIndex() const {
 
 ConfigShorthandParser::AssignmentsContext* ConfigShorthandParser::assignments() {
   AssignmentsContext *_localctx = _tracker.createInstance<AssignmentsContext>(_ctx, getState());
-  enterRule(_localctx, 4, ConfigShorthandParser::RuleAssignments);
+  enterRule(_localctx, 2, ConfigShorthandParser::RuleAssignments);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -256,22 +207,22 @@ ConfigShorthandParser::AssignmentsContext* ConfigShorthandParser::assignments() 
   try {
     size_t alt;
     enterOuterAlt(_localctx, 1);
-    setState(25);
+    setState(20);
     _errHandler->sync(this);
     alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 0, _ctx);
     while (alt != 2 && alt != atn::ATN::INVALID_ALT_NUMBER) {
       if (alt == 1) {
-        setState(20);
+        setState(15);
         antlrcpp::downCast<AssignmentsContext *>(_localctx)->assignmentContext = assignment();
         antlrcpp::downCast<AssignmentsContext *>(_localctx)->listOfAssignments.push_back(antlrcpp::downCast<AssignmentsContext *>(_localctx)->assignmentContext);
-        setState(21);
+        setState(16);
         match(ConfigShorthandParser::T__0); 
       }
-      setState(27);
+      setState(22);
       _errHandler->sync(this);
       alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 0, _ctx);
     }
-    setState(28);
+    setState(23);
     antlrcpp::downCast<AssignmentsContext *>(_localctx)->assignmentContext = assignment();
     antlrcpp::downCast<AssignmentsContext *>(_localctx)->listOfAssignments.push_back(antlrcpp::downCast<AssignmentsContext *>(_localctx)->assignmentContext);
    
@@ -307,7 +258,7 @@ size_t ConfigShorthandParser::AssignmentContext::getRuleIndex() const {
 
 ConfigShorthandParser::AssignmentContext* ConfigShorthandParser::assignment() {
   AssignmentContext *_localctx = _tracker.createInstance<AssignmentContext>(_ctx, getState());
-  enterRule(_localctx, 6, ConfigShorthandParser::RuleAssignment);
+  enterRule(_localctx, 4, ConfigShorthandParser::RuleAssignment);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -318,11 +269,11 @@ ConfigShorthandParser::AssignmentContext* ConfigShorthandParser::assignment() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(30);
+    setState(25);
     match(ConfigShorthandParser::NAME);
-    setState(31);
+    setState(26);
     match(ConfigShorthandParser::T__1);
-    setState(32);
+    setState(27);
     content();
    
   }
@@ -353,7 +304,7 @@ size_t ConfigShorthandParser::ObjectContext::getRuleIndex() const {
 
 ConfigShorthandParser::ObjectContext* ConfigShorthandParser::object() {
   ObjectContext *_localctx = _tracker.createInstance<ObjectContext>(_ctx, getState());
-  enterRule(_localctx, 8, ConfigShorthandParser::RuleObject);
+  enterRule(_localctx, 6, ConfigShorthandParser::RuleObject);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -364,11 +315,11 @@ ConfigShorthandParser::ObjectContext* ConfigShorthandParser::object() {
   });
   try {
     enterOuterAlt(_localctx, 1);
-    setState(34);
+    setState(29);
     match(ConfigShorthandParser::T__2);
-    setState(35);
+    setState(30);
     assignments();
-    setState(36);
+    setState(31);
     match(ConfigShorthandParser::T__3);
    
   }
@@ -403,7 +354,7 @@ size_t ConfigShorthandParser::ListContext::getRuleIndex() const {
 
 ConfigShorthandParser::ListContext* ConfigShorthandParser::list() {
   ListContext *_localctx = _tracker.createInstance<ListContext>(_ctx, getState());
-  enterRule(_localctx, 10, ConfigShorthandParser::RuleList);
+  enterRule(_localctx, 8, ConfigShorthandParser::RuleList);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -415,27 +366,27 @@ ConfigShorthandParser::ListContext* ConfigShorthandParser::list() {
   try {
     size_t alt;
     enterOuterAlt(_localctx, 1);
-    setState(38);
+    setState(33);
     match(ConfigShorthandParser::T__4);
-    setState(44);
+    setState(39);
     _errHandler->sync(this);
     alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 1, _ctx);
     while (alt != 2 && alt != atn::ATN::INVALID_ALT_NUMBER) {
       if (alt == 1) {
-        setState(39);
+        setState(34);
         antlrcpp::downCast<ListContext *>(_localctx)->contentContext = content();
         antlrcpp::downCast<ListContext *>(_localctx)->listElement.push_back(antlrcpp::downCast<ListContext *>(_localctx)->contentContext);
-        setState(40);
+        setState(35);
         match(ConfigShorthandParser::T__0); 
       }
-      setState(46);
+      setState(41);
       _errHandler->sync(this);
       alt = getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(_input, 1, _ctx);
     }
-    setState(47);
+    setState(42);
     antlrcpp::downCast<ListContext *>(_localctx)->contentContext = content();
     antlrcpp::downCast<ListContext *>(_localctx)->listElement.push_back(antlrcpp::downCast<ListContext *>(_localctx)->contentContext);
-    setState(48);
+    setState(43);
     match(ConfigShorthandParser::T__5);
    
   }
@@ -474,7 +425,7 @@ size_t ConfigShorthandParser::ContentContext::getRuleIndex() const {
 
 ConfigShorthandParser::ContentContext* ConfigShorthandParser::content() {
   ContentContext *_localctx = _tracker.createInstance<ContentContext>(_ctx, getState());
-  enterRule(_localctx, 12, ConfigShorthandParser::RuleContent);
+  enterRule(_localctx, 10, ConfigShorthandParser::RuleContent);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -484,26 +435,26 @@ ConfigShorthandParser::ContentContext* ConfigShorthandParser::content() {
     exitRule();
   });
   try {
-    setState(53);
+    setState(48);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case ConfigShorthandParser::LITERAL: {
         enterOuterAlt(_localctx, 1);
-        setState(50);
+        setState(45);
         match(ConfigShorthandParser::LITERAL);
         break;
       }
 
       case ConfigShorthandParser::T__4: {
         enterOuterAlt(_localctx, 2);
-        setState(51);
+        setState(46);
         list();
         break;
       }
 
       case ConfigShorthandParser::T__2: {
         enterOuterAlt(_localctx, 3);
-        setState(52);
+        setState(47);
         object();
         break;
       }
