@@ -94,6 +94,7 @@ TEST(OnDestruction, OnDestructionDontThrowDuringStackUnwinding) {
   ASSERT_EQ(i, 18);
 }
 
+// ________________________________________________________________
 TEST(OnDestruction, cancel) {
   int i = 12;
   {
