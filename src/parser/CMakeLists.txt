@@ -1,5 +1,5 @@
 add_library(rdfEscaping RdfEscaping.h RdfEscaping.cpp)
-qlever_target_link_libraries(rdfEscaping ${ICU_LIBRARIES})
+qlever_target_link_libraries(rdfEscaping)
 
 add_subdirectory(sparqlParser)
 add_subdirectory(data)
