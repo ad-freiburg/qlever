@@ -41,4 +41,4 @@ add_library(engine
         ../util/Parameters.h RuntimeInformation.cpp CheckUsePatternTrick.cpp CheckUsePatternTrick.h
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp )
 
-qlever_target_link_libraries(engine index parser sparqlExpressions http SortPerformanceEstimator ${ICU_LIBRARIES} Boost::iostreams)
+qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator ${ICU_LIBRARIES} Boost::iostreams)

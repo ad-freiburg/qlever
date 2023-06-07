@@ -54,7 +54,7 @@ class ExportQueryExecutionTrees {
   static nlohmann::json computeResultAsJSON(const ParsedQuery& parsedQuery,
                                             const QueryExecutionTree& qet,
                                             ad_utility::Timer& requestTimer,
-                                            size_t maxSend,
+                                            uint64_t maxSend,
                                             MediaType mediaType);
 
   // Convert the `id` to a human-readable string. The `index` is used to resolve
@@ -92,11 +92,11 @@ class ExportQueryExecutionTrees {
   // Similar to `queryToJSON`, but always returns the `QLeverJSON` format.
   static nlohmann::json computeQueryResultAsQLeverJSON(
       const ParsedQuery& query, const QueryExecutionTree& qet,
-      ad_utility::Timer& requestTimer, size_t maxSend);
+      ad_utility::Timer& requestTimer, uint64_t maxSend);
   // Similar to `queryToJSON`, but always returns the `SparqlJSON` format.
   static nlohmann::json computeSelectQueryResultAsSparqlJSON(
       const ParsedQuery& query, const QueryExecutionTree& qet,
-      ad_utility::Timer& requestTimer, size_t maxSend);
+      ad_utility::Timer& requestTimer, uint64_t maxSend);
 
   // ___________________________________________________________________________
   static ad_utility::streams::stream_generator

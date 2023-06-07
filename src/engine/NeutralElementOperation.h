@@ -29,7 +29,7 @@ class NeutralElementOperation : public Operation {
   size_t getCostEstimate() override { return 0; }
 
  private:
-  size_t getSizeEstimateBeforeLimit() override { return 1; }
+  uint64_t getSizeEstimateBeforeLimit() override { return 1; }
 
  public:
   float getMultiplicity(size_t) override { return 0; };

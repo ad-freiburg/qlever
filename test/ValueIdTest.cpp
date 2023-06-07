@@ -284,6 +284,13 @@ TEST(ValueId, toDebugString) {
   test(makeVocabId(15), "VocabIndex:15");
   test(makeLocalVocabId(25), "LocalVocabIndex:25");
   test(makeTextRecordId(37), "TextRecordIndex:37");
+  test(ValueId::makeFromDate(
+           DateOrLargeYear{123456, DateOrLargeYear::Type::Year}),
+       "Date:123456");
+}
+
+TEST(ValueId, InvalidDatatypeEnumValue) {
+  ASSERT_ANY_THROW(toString(static_cast<Datatype>(2345)));
 }
 
 TEST(ValueId, TriviallyCopyable) {

@@ -132,7 +132,7 @@ float MultiColumnJoin::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t MultiColumnJoin::getSizeEstimateBeforeLimit() {
+uint64_t MultiColumnJoin::getSizeEstimateBeforeLimit() {
   if (!_multiplicitiesComputed) {
     computeSizeEstimateAndMultiplicities();
   }

@@ -100,6 +100,24 @@ TEST(OrderBy, computeOrderBySingleIntColumn) {
 }
 
 // _____________________________________________________________________________
+TEST(OrderBy, computeOrderByFloatWithNan) {
+  auto nan = Id::makeFromDouble(std::numeric_limits<double>::quiet_NaN());
+  VectorTable input{{0},   {1},       {nan}, {-1},  {3},
+                    {-17}, {1230957}, {123}, {nan}, {-1249867132}};
+  VectorTable expectedAscending{{-1249867132}, {-17}, {-1},      {0},   {1},
+                                {3},           {123}, {1230957}, {nan}, {nan}};
+  VectorTable expectedDescending{{nan}, {nan}, {1230957}, {123}, {3},
+                                 {1},   {0},   {-1},      {-17}, {-1249867132}};
+  auto inputTable = makeIdTableFromVector(input, &Id::makeFromDouble);
+  auto expectedAscendingTable =
+      makeIdTableFromVector(expectedAscending, &Id::makeFromDouble);
+  auto expectedDescendingTable =
+      makeIdTableFromVector(expectedDescending, &Id::makeFromDouble);
+  testOrderBy(inputTable.clone(), expectedAscendingTable, {false});
+  testOrderBy(inputTable.clone(), expectedDescendingTable, {true});
+}
+
+// _____________________________________________________________________________
 TEST(OrderBy, twoColumnsIntAndFloat) {
   auto qec = ad_utility::testing::getQec();
   using Vec = std::vector<std::pair<int64_t, double>>;

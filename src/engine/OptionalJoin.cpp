@@ -158,7 +158,7 @@ float OptionalJoin::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t OptionalJoin::getSizeEstimateBeforeLimit() {
+uint64_t OptionalJoin::getSizeEstimateBeforeLimit() {
   if (!_multiplicitiesComputed) {
     computeSizeEstimateAndMultiplicities();
   }

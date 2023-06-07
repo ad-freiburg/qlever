@@ -70,7 +70,7 @@ float Service::getMultiplicity([[maybe_unused]] size_t col) {
 }
 
 // ____________________________________________________________________________
-size_t Service::getSizeEstimateBeforeLimit() {
+uint64_t Service::getSizeEstimateBeforeLimit() {
   // TODO: For now, we don't have any information about the result size at
   // query planning time, so we just return `100'000`.
   return 100'000;
