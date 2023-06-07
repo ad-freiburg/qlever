@@ -12,7 +12,7 @@ using std::string;
 
 // _____________________________________________________________________________
 size_t TextOperationWithFilter::getResultWidth() const {
-  return 1 + getNofVars() + _filterResult->getResultWidth();
+  return 2 + getNofVars() + _filterResult->getResultWidth();
 }
 
 // _____________________________________________________________________________
@@ -54,6 +54,8 @@ VariableToColumnMap TextOperationWithFilter::computeVariableToColumnMap()
       ++colN;
     }
   }
+  vcmap[_cvar.getMatchingWordVariable()] =
+      makeAlwaysDefinedColumn(ColumnIndex{colN++});
   for (const auto& varcol : filterColumns) {
     // TODO<joka921> It is possible that UNDEF values in the filter are never
     // propagated to the  result, but this has to be further examined.

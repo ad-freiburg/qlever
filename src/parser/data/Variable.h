@@ -39,6 +39,9 @@ class Variable {
   // Convert `?someVariable` into `?ql_textscore_someVariable`
   Variable getTextScoreVariable() const;
 
+  // Convert `?someVariable` into `?ql_matchingword_someVariable`
+  Variable getMatchingWordVariable() const;
+
   bool operator==(const Variable&) const = default;
 
   // Make the type hashable for absl, see

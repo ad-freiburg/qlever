@@ -20,6 +20,7 @@ double NumericValueGetter::operator()(ValueId id, EvaluationContext*) const {
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::TextRecordIndex:
+    case Datatype::WordVocabIndex:
     case Datatype::Date:
       return std::numeric_limits<double>::quiet_NaN();
   }
@@ -38,6 +39,14 @@ bool EffectiveBooleanValueGetter::operator()(ValueId id,
       return id.getInt() != 0;
     case Datatype::Undefined:
       return false;
+    case Datatype::WordVocabIndex: {
+      auto index = id.getWordVocabIndex();
+      return !context->_qec.getIndex()
+                  .getTextVocab()
+                  .indexToOptionalString(index)
+                  .value_or("")
+                  .empty();
+    }
     case Datatype::VocabIndex: {
       auto index = id.getVocabIndex();
       // TODO<joka921> We could precompute whether the empty literal or empty

@@ -131,6 +131,8 @@ class Index {
   // probably not be in the index class.
   [[nodiscard]] std::optional<std::string> idToOptionalString(
       VocabIndex id) const;
+  [[nodiscard]] std::optional<std::string> idToOptionalString(
+      WordVocabIndex id) const;
 
   bool getId(const std::string& element, Id* id) const;
 

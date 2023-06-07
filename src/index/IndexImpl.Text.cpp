@@ -843,7 +843,7 @@ Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
           getWordPostingsForTerm(terms[onlyWordsFrom]);
       Index::WordEntityPostings eWep =
           getEntityPostingsForTerm(terms[useElFromTerm]);
-      resultWep = FTSAlgorithms::intersect(wWep, eWep);
+      resultWep = FTSAlgorithms::crossIntersect(wWep, eWep);
     } else {
       // Generic case: Use a k-way intersect whereas the entity postings
       // play a special role.
@@ -990,7 +990,7 @@ Index::WordEntityPostings IndexImpl::getEntityPostingsForTerm(
 
     // Read the full lists
     Index::WordEntityPostings eBlockWep = readWordEntityCl(tbmd);
-    resultWep = FTSAlgorithms::intersect(matchingContextsWep, eBlockWep);
+    resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
   }
   return resultWep;
 }

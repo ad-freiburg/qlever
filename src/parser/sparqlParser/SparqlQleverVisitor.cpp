@@ -996,24 +996,29 @@ vector<TripleWithPropertyPath> Visitor::visit(
   // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
   // <entity>` is contained in the query, then the variable `?ql_textscore_var`
   // is implicitly created and visible in the query body.
-  auto setTextscoreVisibleIfPresent = [this](VarOrTerm& subject,
-                                             VarOrPath& predicate) {
-    if (auto* var = std::get_if<Variable>(&subject)) {
-      if (auto* propertyPath = std::get_if<PropertyPath>(&predicate)) {
-        if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE ||
-            propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
-          addVisibleVariable(var->getTextScoreVariable());
+  // Similarly if a triple `?var ql:contains-word "words"` is contained in the
+  // query, then the variable `ql_matchingword_var` is implicitly created and
+  // visible in the query body.
+  auto setMatchingWordAndTextscoreVisibleIfPresent =
+      [this](VarOrTerm& subject, VarOrPath& predicate) {
+        if (auto* var = std::get_if<Variable>(&subject)) {
+          if (auto* propertyPath = std::get_if<PropertyPath>(&predicate)) {
+            if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
+              addVisibleVariable(var->getTextScoreVariable());
+              addVisibleVariable(var->getMatchingWordVariable());
+            } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
+              addVisibleVariable(var->getTextScoreVariable());
+            }
+          }
         }
-      }
-    }
-  };
+      };
 
   if (ctx->varOrTerm()) {
     vector<TripleWithPropertyPath> triples;
     auto subject = visit(ctx->varOrTerm());
     auto tuples = visit(ctx->propertyListPathNotEmpty());
     for (auto& [predicate, object] : tuples) {
-      setTextscoreVisibleIfPresent(subject, predicate);
+      setMatchingWordAndTextscoreVisibleIfPresent(subject, predicate);
       triples.emplace_back(subject, std::move(predicate), std::move(object));
     }
     return triples;

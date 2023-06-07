@@ -12,7 +12,7 @@ using std::string;
 
 // _____________________________________________________________________________
 size_t TextOperationWithoutFilter::getResultWidth() const {
-  size_t width = 2 + getNofVars();
+  size_t width = 3 + getNofVars();
   return width;
 }
 
@@ -48,6 +48,7 @@ VariableToColumnMap TextOperationWithoutFilter::computeVariableToColumnMap()
       addDefinedVar(var);
     }
   }
+  addDefinedVar(_cvar.getMatchingWordVariable());
   return vcmap;
 }
 // _____________________________________________________________________________
@@ -80,7 +81,7 @@ ResultTable TextOperationWithoutFilter::computeResult() {
   } else {
     computeResultMultVars(&table);
   }
-  LOG(DEBUG) << "TextOperationWithoutFilter result computation done." << endl;
+  LOG(INFO) << "TextOperationWithoutFilter result computation done." << endl;
   return {std::move(table), resultSortedOn(), LocalVocab{}};
 }
 
@@ -92,7 +93,7 @@ void TextOperationWithoutFilter::computeResultNoVar(IdTable* idTable) const {
 
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultOneVar(IdTable* idTable) const {
-  idTable->setNumColumns(3);
+  idTable->setNumColumns(4);
   getExecutionContext()->getIndex().getECListForWordsOneVar(_words, _textLimit,
                                                             idTable);
 }

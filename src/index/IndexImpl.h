@@ -258,6 +258,8 @@ class IndexImpl {
   // probably not be in the index class.
   std::optional<string> idToOptionalString(VocabIndex id) const;
 
+  std::optional<string> idToOptionalString(WordVocabIndex id) const;
+
   // ___________________________________________________________________________
   bool getId(const string& element, Id* id) const;
 
