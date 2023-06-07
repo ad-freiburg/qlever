@@ -10,7 +10,6 @@
 #include <string>
 #include <vector>
 
-#include "absl/cleanup/cleanup.h"
 #include "absl/strings/str_join.h"
 #include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
@@ -20,6 +19,7 @@
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
 #include "parser/data/Variable.h"
+#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/StringUtils.h"
 
 using namespace ad_utility::sparql_types;
@@ -282,12 +282,14 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
   // the graph pattern are visible outside the graph pattern.
   auto visibleVariablesSoFar = std::move(visibleVariables_);
   visibleVariables_.clear();
-  absl::Cleanup mergeVariables{[this, &visibleVariablesSoFar]() noexcept {
-    std::swap(visibleVariables_, visibleVariablesSoFar);
-    visibleVariables_.insert(visibleVariables_.end(),
-                             visibleVariablesSoFar.begin(),
-                             visibleVariablesSoFar.end());
-  }};
+  auto mergeVariables =
+      ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+          [this, &visibleVariablesSoFar]() {
+            std::swap(visibleVariables_, visibleVariablesSoFar);
+            visibleVariables_.insert(visibleVariables_.end(),
+                                     visibleVariablesSoFar.begin(),
+                                     visibleVariablesSoFar.end());
+          });
   pattern._id = numGraphPatterns_++;
   if (ctx->subSelect()) {
     auto [subquery, valuesOpt] = visit(ctx->subSelect());

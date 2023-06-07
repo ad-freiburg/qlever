@@ -20,6 +20,7 @@ class OnDestructionDontThrowDuringStackUnwinding {
  private:
   F f_;
   int numExceptionsDuringConstruction_ = std::uncaught_exceptions();
+  bool isCanceled_ = false;
 
  public:
   // It is forbidden to copy or move these objects.
@@ -28,8 +29,14 @@ class OnDestructionDontThrowDuringStackUnwinding {
   OnDestructionDontThrowDuringStackUnwinding(
       OnDestructionDontThrowDuringStackUnwinding&&) noexcept = delete;
 
+  // Cancel the cleanup. When this has been called, the destructor will do
+  // nothing.
+  void cancel() { isCanceled_ = true; }
   // The destructor that calls `f_`.
   ~OnDestructionDontThrowDuringStackUnwinding() noexcept(false) {
+    if (isCanceled_) {
+      return;
+    }
     // If the number of uncaught exceptions is the same as when then constructor
     // was called, then it is safe to throw a possible exception For details see
     // https://en.cppreference.com/w/cpp/error/uncaught_exception, especially

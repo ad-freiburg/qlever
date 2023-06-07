@@ -11,10 +11,10 @@
 #include <string>
 #include <vector>
 
-#include "absl/cleanup/cleanup.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "util/BoostHelpers/AsyncWaitForFuture.h"
+#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
@@ -720,12 +720,8 @@ Awaitable<T> Server::computeInNewThread(Function function) const {
   auto acquireComputeRelease = [this, function = std::move(function)] {
     LOG(DEBUG) << "Acquiring new thread for query processing\n";
     queryProcessingSemaphore_.acquire();
-    absl::Cleanup f{[this]() noexcept {
-      try {
-        queryProcessingSemaphore_.release();
-      } catch (...) {
-      }
-    }};
+    auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+        [this]() { queryProcessingSemaphore_.release(); });
     return function();
   };
   co_return co_await ad_utility::asio_helpers::async_on_external_thread(
