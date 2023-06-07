@@ -194,6 +194,7 @@ Index::WordEntityPostings FTSAlgorithms::intersectKWay(
       }
     }
   }
+  AD_CORRECTNESS_CHECK(minSize != std::numeric_limits<size_t>::max());
 
   resultWep.cids_.reserve(minSize + 2);
   resultWep.cids_.resize(minSize);
@@ -365,7 +366,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
     }
   }
   IdTableStatic<3> result = std::move(*dynResult).toStatic<3>();
-  result.reserve(map.size() * k + 2);
+  result.reserve(map.size() + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     const Id eid = it->first;
     const Id entityScore = Id::makeFromInt(it->second.first);
@@ -944,7 +945,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     }
   }
   IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
-  result.reserve(map.size() * k + 2);
+  result.reserve(map.size() + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     const Id eid = it->first;
     const Id score = Id::makeFromInt(it->second.first);
@@ -1049,7 +1050,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     }
   }
   IdTableStatic<3> result = std::move(*dynResult).toStatic<3>();
-  result.reserve(map.size() * k + 2);
+  result.reserve(map.size() + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     const Id eid = it->first;
     const Id score = Id::makeFromInt(it->second.first);
