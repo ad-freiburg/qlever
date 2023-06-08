@@ -8,7 +8,7 @@
 #include <string>
 
 #include "global/Constants.h"
-#include "index/DeltaTriples.h"
+// #include "index/DeltaTriples.h"
 #include "index/IndexMetaData.h"
 #include "index/StxxlSortFunctors.h"
 #include "util/File.h"

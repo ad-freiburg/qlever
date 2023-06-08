@@ -10,13 +10,14 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
+#include "index/Permutations.h"
 #include "parser/TurtleParser.h"
 
 // Shortcuts to these full type names used frequently in the following.
 // using IdTriple;
-static const std::vector<Index::Permutation> permutationEnums = {
-    Index::Permutation::PSO, Index::Permutation::POS, Index::Permutation::SPO,
-    Index::Permutation::SOP, Index::Permutation::OPS, Index::Permutation::OSP};
+static const std::vector<Permutation::Enum> permutationEnums = {
+    Permutation::PSO, Permutation::POS, Permutation::SPO,
+    Permutation::SOP, Permutation::OPS, Permutation::OSP};
 
 // Fixture that sets up a test index.
 class DeltaTriplesTest : public ::testing::Test {
@@ -102,7 +103,7 @@ class DeltaTriplesTest : public ::testing::Test {
   // number of `LocatedTriple` objects.
   void checkTriplesWithPositionsPerBlockSize(const DeltaTriples& deltaTriples,
                                              size_t expectedSize) {
-    for (Index::Permutation permutation : permutationEnums) {
+    for (Permutation::Enum permutation : permutationEnums) {
       ASSERT_EQ(deltaTriples.getTriplesWithPositionsPerBlock(permutation)
                     .numTriples(),
                 expectedSize);
@@ -380,27 +381,27 @@ TEST_F(DeltaTriplesTest, insertAndDeleteTriples) {
 
   // Check that all `locatedTriple`s are correct (for all
   // permutations). the given permutation.
-  auto checkAllTriplesWithPositionForAllPermutations = [&](const DeltaTriples&
-                                                               deltaTriples) {
-    checkAllTriplesWithPositionsForPermutation(
-        deltaTriples.getTriplesWithPositionsPerBlock(Index::Permutation::POS),
-        index.getImpl().POS());
-    checkAllTriplesWithPositionsForPermutation(
-        deltaTriples.getTriplesWithPositionsPerBlock(Index::Permutation::PSO),
-        index.getImpl().PSO());
-    checkAllTriplesWithPositionsForPermutation(
-        deltaTriples.getTriplesWithPositionsPerBlock(Index::Permutation::SPO),
-        index.getImpl().SPO());
-    checkAllTriplesWithPositionsForPermutation(
-        deltaTriples.getTriplesWithPositionsPerBlock(Index::Permutation::SOP),
-        index.getImpl().SOP());
-    checkAllTriplesWithPositionsForPermutation(
-        deltaTriples.getTriplesWithPositionsPerBlock(Index::Permutation::OPS),
-        index.getImpl().OPS());
-    checkAllTriplesWithPositionsForPermutation(
-        deltaTriples.getTriplesWithPositionsPerBlock(Index::Permutation::OSP),
-        index.getImpl().OSP());
-  };
+  auto checkAllTriplesWithPositionForAllPermutations =
+      [&](const DeltaTriples& deltaTriples) {
+        checkAllTriplesWithPositionsForPermutation(
+            deltaTriples.getTriplesWithPositionsPerBlock(Permutation::POS),
+            index.getImpl().POS());
+        checkAllTriplesWithPositionsForPermutation(
+            deltaTriples.getTriplesWithPositionsPerBlock(Permutation::PSO),
+            index.getImpl().PSO());
+        checkAllTriplesWithPositionsForPermutation(
+            deltaTriples.getTriplesWithPositionsPerBlock(Permutation::SPO),
+            index.getImpl().SPO());
+        checkAllTriplesWithPositionsForPermutation(
+            deltaTriples.getTriplesWithPositionsPerBlock(Permutation::SOP),
+            index.getImpl().SOP());
+        checkAllTriplesWithPositionsForPermutation(
+            deltaTriples.getTriplesWithPositionsPerBlock(Permutation::OPS),
+            index.getImpl().OPS());
+        checkAllTriplesWithPositionsForPermutation(
+            deltaTriples.getTriplesWithPositionsPerBlock(Permutation::OSP),
+            index.getImpl().OSP());
+      };
 
   // Check if each existing triple is located correctly in every
   // permutation.

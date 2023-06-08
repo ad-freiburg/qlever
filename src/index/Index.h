@@ -3,6 +3,7 @@
 // Author:
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+
 #pragma once
 
 #include <array>
@@ -48,9 +49,6 @@ class Index {
   std::unique_ptr<IndexImpl> pimpl_;
 
  public:
-  // Identifiers for the six possible permutations.
-  enum struct Permutation { PSO, POS, SPO, SOP, OPS, OSP };
-
   // Alongside the actual knowledge graph QLever stores additional triples
   // for optimized query processing. This struct is used to report various
   // statistics (number of triples, distinct number of subjects, etc.) for which

@@ -169,32 +169,32 @@ class IndexImpl {
       "POS",
       ".pos",
       {1, 2, 0},
-      deltaTriples_->getTriplesWithPositionsPerBlock(Index::Permutation::POS)};
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::POS)};
   Permutation pso_{
       "PSO",
       ".pso",
       {1, 0, 2},
-      deltaTriples_->getTriplesWithPositionsPerBlock(Index::Permutation::PSO)};
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::PSO)};
   Permutation sop_{
       "SOP",
       ".sop",
       {0, 2, 1},
-      deltaTriples_->getTriplesWithPositionsPerBlock(Index::Permutation::SOP)};
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::SOP)};
   Permutation spo_{
       "SPO",
       ".spo",
       {0, 1, 2},
-      deltaTriples_->getTriplesWithPositionsPerBlock(Index::Permutation::SPO)};
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::SPO)};
   Permutation ops_{
       "OPS",
       ".ops",
       {2, 1, 0},
-      deltaTriples_->getTriplesWithPositionsPerBlock(Index::Permutation::OPS)};
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::OPS)};
   Permutation osp_{
       "OSP",
       ".osp",
       {2, 0, 1},
-      deltaTriples_->getTriplesWithPositionsPerBlock(Index::Permutation::OSP)};
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::OSP)};
 
  public:
   IndexImpl(std::unique_ptr<DeltaTriples> deltaTriples =

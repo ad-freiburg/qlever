@@ -2,11 +2,13 @@
 // Chair of Algorithms and Data Structures
 // Authors: Hannah Bast <bast@cs.uni-freiburg.de>
 
+#pragma once
+
 #include "engine/idTable/IdTable.h"
 #include "global/IdTriple.h"
 #include "util/HashMap.h"
 
-#pragma once
+class Permutation;
 
 // A triple and its location in a particular permutation.
 //
@@ -30,7 +32,6 @@ struct LocatedTriple {
   bool existsInIndex;
 
   // Locate the given triple in the given permutation.
-  template <typename Permutation>
   static LocatedTriple locateTripleInPermutation(
       Id id1, Id id2, Id id3, const Permutation& permutation);
 

@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
-#ifndef QLEVER_COMPRESSEDRELATION_H
-#define QLEVER_COMPRESSEDRELATION_H
+#pragma once
 
 #include <algorithm>
 #include <vector>
@@ -11,7 +10,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
-#include "index/DeltaTriples.h"
+#include "index/LocatedTriples.h"
 #include "util/BufferedVector.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
@@ -328,5 +327,3 @@ class CompressedRelationReader {
       const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
       std::optional<std::vector<size_t>> columnIndices);
 };
-
-#endif  // QLEVER_COMPRESSEDRELATION_H

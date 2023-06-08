@@ -212,34 +212,35 @@ TEST_F(LocatedTriplesTest, scanWithMergeTriples) {
                                               {30, 20},    // Row 4
                                               {30, 30}});  // Row 5
 
-    // Write it to disk (adapted from `CompressedRelationsTest`). The last value
-    // of the call to `addRelation` is the number of distinct elements.
+    // Write the permutation to disk (adapted from `CompressedRelationsTest`,
+    // `IndexImpl::createPermutationPairImpl`, and `IndexImpl::).
     ad_utility::File permutationFileForWritingRelations{permutationFilename,
                                                         "w"};
-    CompressedRelationWriter writer{
-        std::move(permutationFileForWritingRelations), blockSizeInBytes};
-    for (size_t i = 1; i <= numRelations; ++i) {
-      writer.addRelation(V(i), getBufferedIdTable(relation), relation.size());
+    IndexMetaDataMmap metadataMmap;
+    metadataMmap.setup(permutationFilename + MMAP_FILE_SUFFIX,
+                       ad_utility::CreateTag{});
+    {
+      CompressedRelationWriter writer{
+          std::move(permutationFileForWritingRelations), blockSizeInBytes};
+      for (size_t i = 1; i <= numRelations; ++i) {
+        // The third argument is the number of distinct elements.
+        auto relationMetadata = writer.addRelation(
+            V(i), getBufferedIdTable(relation), relation.size());
+        metadataMmap.add(relationMetadata);
+      }
+      metadataMmap.blockData() = std::move(writer).getFinishedBlocks();
     }
-    writer.finish();
-    auto metadataPerRelation = writer.getFinishedMetaData();
-    auto metadataPerBlock = writer.getFinishedBlocks();
-    AD_CORRECTNESS_CHECK(metadataPerRelation.size() == numRelations);
-
-    // Append the metadata to the index file.
-    IndexMetaDataHmap metadata;
-    std::ranges::for_each(metadataPerRelation,
-                          [&metadata](auto& md) { metadata.add(md); });
-    metadata.blockData() = metadataPerBlock;
-    ad_utility::File permutationFileForWritingMetadata{permutationFilename,
-                                                       "r+"};
-    metadata.appendToFile(&permutationFileForWritingMetadata);
-    permutationFileForWritingMetadata.close();
+    std::cout << "Metadata statistics: " << metadataMmap.statistics()
+              << std::endl;
+    {
+      ad_utility::File permutationFileForWritingMetadata(permutationFilename,
+                                                         "r+");
+      metadataMmap.appendToFile(&permutationFileForWritingMetadata);
+    }
 
     // Create a permutation based on this.
     LocatedTriplesPerBlock locatedTriplesPerBlock;
-    Permutation::PermutationImpl<SortByPSO, IndexMetaDataHmap> permutation{
-        SortByPSO(), "PSO", ".pso", {1, 0, 2}, locatedTriplesPerBlock};
+    Permutation permutation{"PSO", ".pso", {1, 0, 2}, locatedTriplesPerBlock};
     permutation.loadFromDisk(basename);
     // ad_utility::File permutationFileForReading{permutationFilename, "r"};
     // permutation._file = std::move(permutationFileForReading);

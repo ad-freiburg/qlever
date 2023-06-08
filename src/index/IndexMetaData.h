@@ -1,6 +1,7 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+
 #pragma once
 
 #include <stdio.h>
@@ -13,8 +14,8 @@
 #include <utility>
 #include <vector>
 
-#include "CompressedRelation.h"
 #include "global/Id.h"
+#include "index/CompressedRelation.h"
 #include "index/MetaDataHandler.h"
 #include "util/File.h"
 #include "util/HashMap.h"

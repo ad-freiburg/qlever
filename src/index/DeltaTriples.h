@@ -9,6 +9,7 @@
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/LocatedTriples.h"
+#include "index/Permutations.h"
 #include "parser/TurtleParser.h"
 #include "util/HashSet.h"
 
@@ -88,7 +89,7 @@ class DeltaTriples {
 
   // Get `TripleWithPosition` objects for given permutation.
   const LocatedTriplesPerBlock& getTriplesWithPositionsPerBlock(
-      Index::Permutation permutation) const;
+      Permutation::Enum permutation) const;
 
   // TODO: made public as long as we are trying to figure out how this works.
  private:

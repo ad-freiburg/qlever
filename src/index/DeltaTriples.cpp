@@ -139,19 +139,21 @@ void DeltaTriples::deleteTriple(TurtleTriple turtleTriple) {
 
 // ____________________________________________________________________________
 const LocatedTriplesPerBlock& DeltaTriples::getTriplesWithPositionsPerBlock(
-    Index::Permutation permutation) const {
+    Permutation::Enum permutation) const {
+  // TODO: This `switch` would no longer be needed if the six
+  // locatedTriplesPerBlockIn... were a map with the permutation as key.
   switch (permutation) {
-    case Index::Permutation::PSO:
+    case Permutation::PSO:
       return locatedTriplesPerBlockInPSO_;
-    case Index::Permutation::POS:
+    case Permutation::POS:
       return locatedTriplesPerBlockInPOS_;
-    case Index::Permutation::SPO:
+    case Permutation::SPO:
       return locatedTriplesPerBlockInSPO_;
-    case Index::Permutation::SOP:
+    case Permutation::SOP:
       return locatedTriplesPerBlockInSOP_;
-    case Index::Permutation::OSP:
+    case Permutation::OSP:
       return locatedTriplesPerBlockInOSP_;
-    case Index::Permutation::OPS:
+    case Permutation::OPS:
       return locatedTriplesPerBlockInOPS_;
     default:
       AD_FAIL();

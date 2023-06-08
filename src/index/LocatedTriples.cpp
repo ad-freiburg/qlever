@@ -198,7 +198,6 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 }
 
 // ____________________________________________________________________________
-template <typename Permutation>
 LocatedTriple LocatedTriple::locateTripleInPermutation(
     Id id1, Id id2, Id id3, const Permutation& permutation) {
   // Get the internal data structures from the permutation.
@@ -342,15 +341,3 @@ std::ostream& operator<<(std::ostream& os, const LocatedTriplesPerBlock& ltpb) {
   }
   return os;
 }
-
-// Explicit instantiation for the six permutation.
-#define INSTANTIATE_LTIP(Permutation)                               \
-  template LocatedTriple                                            \
-  LocatedTriple::locateTripleInPermutation<Permutation>(Id, Id, Id, \
-                                                        const Permutation&);
-INSTANTIATE_LTIP(Permutation::PSO_T)
-INSTANTIATE_LTIP(Permutation::POS_T)
-INSTANTIATE_LTIP(Permutation::SPO_T)
-INSTANTIATE_LTIP(Permutation::SOP_T)
-INSTANTIATE_LTIP(Permutation::OPS_T)
-INSTANTIATE_LTIP(Permutation::OSP_T)
