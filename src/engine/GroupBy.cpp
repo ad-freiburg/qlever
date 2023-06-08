@@ -74,21 +74,18 @@ string GroupBy::asStringImpl(size_t indent) const {
 }
 
 string GroupBy::getDescriptor() const {
-  // TODO<C++20 Views (clang16): Do this lazily using std::views::transform.
   // TODO<C++23>:: Use std::views::join_with.
-  return "GroupBy on " + absl::StrJoin(_groupByVariables, " ",
-                                       [](std::string* out, const Variable& v) {
-                                         absl::StrAppend(out, v.name());
-                                       });
+  return "GroupBy on " +
+         absl::StrJoin(_groupByVariables, " ", &Variable::AbslFormatter);
 }
 
 size_t GroupBy::getResultWidth() const {
   return getInternallyVisibleVariableColumns().size();
 }
 
-vector<size_t> GroupBy::resultSortedOn() const {
+vector<ColumnIndex> GroupBy::resultSortedOn() const {
   auto varCols = getInternallyVisibleVariableColumns();
-  vector<size_t> sortedOn;
+  vector<ColumnIndex> sortedOn;
   sortedOn.reserve(_groupByVariables.size());
   for (const auto& var : _groupByVariables) {
     sortedOn.push_back(varCols[var].columnIndex_);
@@ -96,8 +93,9 @@ vector<size_t> GroupBy::resultSortedOn() const {
   return sortedOn;
 }
 
-vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
-  vector<size_t> cols;
+vector<ColumnIndex> GroupBy::computeSortColumns(
+    const QueryExecutionTree* subtree) {
+  vector<ColumnIndex> cols;
   if (_groupByVariables.empty()) {
     // the entire input is a single group, no sorting needs to be done
     return cols;
@@ -105,10 +103,10 @@ vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
 
   const auto& inVarColMap = subtree->getVariableColumns();
 
-  std::unordered_set<size_t> sortColSet;
+  std::unordered_set<ColumnIndex> sortColSet;
 
   for (const auto& var : _groupByVariables) {
-    size_t col = inVarColMap.at(var).columnIndex_;
+    ColumnIndex col = inVarColMap.at(var).columnIndex_;
     // avoid sorting by a column twice
     if (sortColSet.find(col) == sortColSet.end()) {
       sortColSet.insert(col);
@@ -150,7 +148,7 @@ float GroupBy::getMultiplicity(size_t col) {
   return 1;
 }
 
-size_t GroupBy::getSizeEstimateBeforeLimit() {
+uint64_t GroupBy::getSizeEstimateBeforeLimit() {
   if (_groupByVariables.empty()) {
     return 1;
   }

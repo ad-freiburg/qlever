@@ -32,14 +32,14 @@ class Filter : public Operation {
  public:
   string getDescriptor() const override;
 
-  std::vector<size_t> resultSortedOn() const override {
+  std::vector<ColumnIndex> resultSortedOn() const override {
     return _subtree->resultSortedOn();
   }
 
   void setTextLimit(size_t limit) override { _subtree->setTextLimit(limit); }
 
  private:
-  size_t getSizeEstimateBeforeLimit() override;
+  uint64_t getSizeEstimateBeforeLimit() override;
 
  public:
   size_t getCostEstimate() override;

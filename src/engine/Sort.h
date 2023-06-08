@@ -28,7 +28,7 @@ class Sort : public Operation {
  public:
   virtual string getDescriptor() const override;
 
-  virtual vector<size_t> resultSortedOn() const override {
+  virtual vector<ColumnIndex> resultSortedOn() const override {
     return sortColumnIndices_;
   }
 
@@ -37,7 +37,7 @@ class Sort : public Operation {
   }
 
  private:
-  size_t getSizeEstimateBeforeLimit() override {
+  uint64_t getSizeEstimateBeforeLimit() override {
     return subtree_->getSizeEstimate();
   }
 

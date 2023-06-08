@@ -41,7 +41,7 @@ class TextOperationWithoutFilter : public Operation {
 
   virtual size_t getResultWidth() const override;
 
-  virtual vector<size_t> resultSortedOn() const override {
+  virtual vector<ColumnIndex> resultSortedOn() const override {
     // unsorted, obtained from iterating over a hash map.
     return {};
   }
@@ -53,7 +53,7 @@ class TextOperationWithoutFilter : public Operation {
   }
 
  private:
-  size_t getSizeEstimateBeforeLimit() override;
+  uint64_t getSizeEstimateBeforeLimit() override;
 
  public:
   virtual size_t getCostEstimate() override;

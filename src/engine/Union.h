@@ -37,7 +37,7 @@ class Union : public Operation {
 
   virtual size_t getResultWidth() const override;
 
-  virtual vector<size_t> resultSortedOn() const override;
+  virtual vector<ColumnIndex> resultSortedOn() const override;
 
   virtual void setTextLimit(size_t limit) override;
 
@@ -46,7 +46,7 @@ class Union : public Operation {
   virtual float getMultiplicity(size_t col) override;
 
  private:
-  size_t getSizeEstimateBeforeLimit() override;
+  uint64_t getSizeEstimateBeforeLimit() override;
 
  public:
   virtual size_t getCostEstimate() override;

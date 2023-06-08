@@ -28,7 +28,7 @@ std::optional<OffsetAndSize> VocabularyOnDisk::getOffsetAndSize(
 
 // ____________________________________________________________________________
 VocabularyOnDisk::OffsetSizeId VocabularyOnDisk::getOffsetSizeIdForIthElement(
-    size_t i) const {
+    uint64_t i) const {
   AD_CONTRACT_CHECK(i < size());
   const auto offset = _idsAndOffsets[i]._offset;
   const auto nextOffset = _idsAndOffsets[i + 1]._offset;

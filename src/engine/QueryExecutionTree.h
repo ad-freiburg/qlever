@@ -117,7 +117,7 @@ class QueryExecutionTree {
       const parsedQuery::SelectClause& selectClause,
       bool includeQuestionMark = true) const;
 
-  const std::vector<size_t>& resultSortedOn() const {
+  const std::vector<ColumnIndex>& resultSortedOn() const {
     return _rootOperation->getResultSortedOn();
   }
 
@@ -194,7 +194,7 @@ class QueryExecutionTree {
   // sorted accordingly, it is simply returned.
   static std::shared_ptr<QueryExecutionTree> createSortedTree(
       std::shared_ptr<QueryExecutionTree> qet,
-      const vector<size_t>& sortColumns);
+      const vector<ColumnIndex>& sortColumns);
 
   // Similar to `createSortedTree` (see directly above), but create the sorted
   // trees for two different trees, the sort columns of which are specified as
@@ -203,7 +203,7 @@ class QueryExecutionTree {
   static std::array<std::shared_ptr<QueryExecutionTree>, 2> createSortedTrees(
       std::shared_ptr<QueryExecutionTree> qetA,
       std::shared_ptr<QueryExecutionTree> qetB,
-      const vector<std::array<size_t, 2>>& sortColumns);
+      const vector<std::array<ColumnIndex, 2>>& sortColumns);
 
   // If the result of this `Operation` is sorted (either because this
   // `Operation` enforces this sorting, or because it preserves the sorting of

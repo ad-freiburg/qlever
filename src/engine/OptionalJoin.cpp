@@ -139,8 +139,8 @@ size_t OptionalJoin::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-vector<size_t> OptionalJoin::resultSortedOn() const {
-  std::vector<size_t> sortedOn;
+vector<ColumnIndex> OptionalJoin::resultSortedOn() const {
+  std::vector<ColumnIndex> sortedOn;
   // The result is sorted on all join columns from the left subtree.
   for (const auto& [joinColumnLeft, joinColumnRight] : _joinColumns) {
     (void)joinColumnRight;
@@ -158,7 +158,7 @@ float OptionalJoin::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t OptionalJoin::getSizeEstimateBeforeLimit() {
+uint64_t OptionalJoin::getSizeEstimateBeforeLimit() {
   if (!_multiplicitiesComputed) {
     computeSizeEstimateAndMultiplicities();
   }

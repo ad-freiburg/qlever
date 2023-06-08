@@ -47,7 +47,7 @@ class OptionalJoin : public Operation {
 
   size_t getResultWidth() const override;
 
-  vector<size_t> resultSortedOn() const override;
+  vector<ColumnIndex> resultSortedOn() const override;
 
   void setTextLimit(size_t limit) override {
     _left->setTextLimit(limit);
@@ -59,7 +59,7 @@ class OptionalJoin : public Operation {
   float getMultiplicity(size_t col) override;
 
  private:
-  size_t getSizeEstimateBeforeLimit() override;
+  uint64_t getSizeEstimateBeforeLimit() override;
 
  public:
   size_t getCostEstimate() override;

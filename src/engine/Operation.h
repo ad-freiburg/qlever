@@ -57,7 +57,7 @@ class Operation {
   /**
    * @return A list of columns on which the result of this operation is sorted.
    */
-  const vector<size_t>& getResultSortedOn() const;
+  const vector<ColumnIndex>& getResultSortedOn() const;
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
@@ -88,7 +88,7 @@ class Operation {
   virtual void setTextLimit(size_t limit) = 0;
   virtual size_t getCostEstimate() = 0;
 
-  virtual size_t getSizeEstimate() final {
+  virtual uint64_t getSizeEstimate() final {
     if (_limit._limit.has_value()) {
       return std::min(_limit._limit.value(), getSizeEstimateBeforeLimit());
     } else {
@@ -97,7 +97,7 @@ class Operation {
   }
 
  private:
-  virtual size_t getSizeEstimateBeforeLimit() = 0;
+  virtual uint64_t getSizeEstimateBeforeLimit() = 0;
 
  public:
   virtual float getMultiplicity(size_t col) = 0;
@@ -181,7 +181,7 @@ class Operation {
    * @brief Compute and return the columns on which the result will be sorted
    * @return The columns on which the result will be sorted.
    */
-  [[nodiscard]] virtual vector<size_t> resultSortedOn() const = 0;
+  [[nodiscard]] virtual vector<ColumnIndex> resultSortedOn() const = 0;
 
   const auto& getLimit() const { return _limit; }
 
@@ -334,5 +334,6 @@ class Operation {
   mutable CopyableMutex _resultSortedColumnsMutex;
 
   // Store the list of columns by which the result is sorted.
-  mutable std::optional<vector<size_t>> _resultSortedColumns = std::nullopt;
+  mutable std::optional<vector<ColumnIndex>> _resultSortedColumns =
+      std::nullopt;
 };

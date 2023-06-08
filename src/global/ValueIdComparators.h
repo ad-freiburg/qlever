@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "global/ValueId.h"
+#include "util/ComparisonWithNan.h"
 #include "util/OverloadCallOperator.h"
 
 namespace valueIdComparators {
@@ -352,6 +353,8 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::TextRecordIndex:
+    case Datatype::Date:
+      // For `Date` the trivial comparison via bits is also correct.
       return detail::simplifyRanges(
           detail::getRangesForIndexTypes(begin, end, valueId, comparison));
   }
@@ -377,6 +380,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
     case Datatype::Double:
     case Datatype::Int:
     case Datatype::Undefined:
+    case Datatype::Date:
       AD_FAIL();
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
@@ -443,9 +447,18 @@ template <ComparisonForIncompatibleTypes comparisonForIncompatibleTypes =
 inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
   // A helper lambda to factor out common code
   auto compare = [&](auto comparator) {
-    return detail::compareIdsImpl<comparisonForIncompatibleTypes>(a, b,
-                                                                  comparator);
+    // For the `compareByType` mode, which is used by ORDER BY, we also need a
+    // proper order of NaN values to not run into undefined behavior.
+    if constexpr (comparisonForIncompatibleTypes ==
+                  ComparisonForIncompatibleTypes::CompareByType) {
+      return detail::compareIdsImpl<comparisonForIncompatibleTypes>(
+          a, b, ad_utility::makeComparatorForNans(comparator));
+    } else {
+      return detail::compareIdsImpl<comparisonForIncompatibleTypes>(a, b,
+                                                                    comparator);
+    }
   };
+
   using enum Comparison;
   switch (comparison) {
     case LT:

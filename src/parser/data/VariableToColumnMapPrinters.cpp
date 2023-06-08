@@ -4,6 +4,7 @@
 
 #include "ctre/ctre.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "global/Constants.h"
 #include "index/Index.h"
 #include "parser/data/ConstructQueryExportContext.h"
 #include "parser/data/Variable.h"
@@ -38,7 +39,14 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
     if (!optionalStringAndType.has_value()) {
       return std::nullopt;
     }
-    return std::move(optionalStringAndType.value().first);
+    auto& [literal, type] = optionalStringAndType.value();
+    const char* i = XSD_INT_TYPE;
+    const char* d = XSD_DECIMAL_TYPE;
+    if (type == nullptr || type == i || type == d) {
+      return std::move(literal);
+    } else {
+      return absl::StrCat("\"", literal, "\"^^<", type, ">");
+    }
   }
   return std::nullopt;
 }

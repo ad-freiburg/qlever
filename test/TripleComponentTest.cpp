@@ -112,6 +112,9 @@ TEST(TripleComponent, toRdfLiteral) {
   object = -43.3;
   ASSERT_EQ(object.toRdfLiteral(),
             R"("-43.3"^^<http://www.w3.org/2001/XMLSchema#double>)");
+  object = DateOrLargeYear{123456, DateOrLargeYear::Type::Year};
+  ASSERT_EQ(object.toRdfLiteral(),
+            R"("123456"^^<http://www.w3.org/2001/XMLSchema#gYear>)");
 }
 
 TEST(TripleComponent, toValueIdIfNotString) {
@@ -119,6 +122,10 @@ TEST(TripleComponent, toValueIdIfNotString) {
   ASSERT_EQ(tc.toValueIdIfNotString().value(), I(42));
   tc = 131.4;
   ASSERT_EQ(tc.toValueIdIfNotString().value(), D(131.4));
+
+  DateOrLargeYear date{123456, DateOrLargeYear::Type::Year};
+  tc = date;
+  ASSERT_EQ(tc.toValueIdIfNotString().value(), Id::makeFromDate(date));
   tc = "<x>";
   ASSERT_FALSE(tc.toValueIdIfNotString().has_value());
   tc = lit("\"a\"");
