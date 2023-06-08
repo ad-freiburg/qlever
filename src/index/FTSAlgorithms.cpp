@@ -578,7 +578,6 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
              << " context-score-entity tuples now.\n";
 }
 
-// QUESTION: was macht das?
 template void FTSAlgorithms::aggScoresAndTakeTopContext<0>(
     const Index::WordEntityPostings& wep, IdTable* dynResult);
 template void FTSAlgorithms::aggScoresAndTakeTopContext<1>(
@@ -989,7 +988,8 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     IdTable* dynResult) {
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.eids_.size());
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.scores_.size());
-  LOG(DEBUG) << "Going from an entity, context and score list of size: "
+  LOG(DEBUG) << "Going from a WordEntityPostings-Element consisting of an entity,"
+             << " context, word and score list of size: "
              << wep.cids_.size()
              << " elements to a table with filtered distinct entities "
              << "and at most " << k << " contexts per entity.\n";
@@ -1002,25 +1002,28 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   // This achieves O(n log k)
   LOG(DEBUG) << "Heap-using case with " << k << " contexts per entity...\n";
 
-  using ScoreToContext = std::set<pair<Score, TextRecordIndex>>;
-  using ScoreAndStC = pair<Score, ScoreToContext>;
-  using AggMap = ad_utility::HashMap<Id, ScoreAndStC>;
+  using ScoreToContextAndWord =
+      std::set<std::tuple<Score, TextRecordIndex, WordIndex>>;
+  using ScoreAndStCaW = pair<Score, ScoreToContextAndWord>;
+  using AggMap = ad_utility::HashMap<Id, ScoreAndStCaW>;
   AggMap map;
   for (size_t i = 0; i < wep.eids_.size(); ++i) {
+    WordIndex wid = wep.wids_.empty() ? 0 : wep.wids_[i];
     if (fMap.contains(wep.eids_[i])) {
       if (!map.contains(wep.eids_[i])) {
-        ScoreToContext inner;
-        inner.insert(std::make_pair(wep.scores_[i], wep.cids_[i]));
+        ScoreToContextAndWord inner;
+        inner.emplace(wep.scores_[i], wep.cids_[i], wid);
         map[wep.eids_[i]] = std::make_pair(1, inner);
       } else {
-        auto& [score, stc] = map[wep.eids_[i]];
-        score++;
-        if (stc.size() < k || stc.begin()->first < wep.scores_[i]) {
-          if (stc.size() == k) {
-            stc.erase(*stc.begin());
+        ScoreAndStCaW& val = map[wep.eids_[i]];
+        ++val.first;
+        ScoreToContextAndWord& stcaw = val.second;
+        if (stcaw.size() < k || std::get<0>(*(stcaw.begin())) < wep.scores_[i]) {
+          if (stcaw.size() == k) {
+            stcaw.erase(*stcaw.begin());
           }
-          stc.insert(std::make_pair(wep.scores_[i], wep.cids_[i]));
-        };
+          stcaw.emplace(wep.scores_[i], wep.cids_[i], wid);
+        }
       }
     }
   }
@@ -1029,16 +1032,19 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   for (auto it = map.begin(); it != map.end(); ++it) {
     const Id eid = it->first;
     const Id score = Id::makeFromInt(it->second.first);
-    ScoreToContext& stc = it->second.second;
+    ScoreToContextAndWord& stc = it->second.second;
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
       for (auto fRow : fMap.find(eid)->second) {
         size_t n = result.size();
         result.emplace_back();
-        result(n, 0) = Id::makeFromTextRecordIndex(itt->second);  // cid
+        result(n, 0) = Id::makeFromTextRecordIndex(std::get<1>(*itt));  // cid
         result(n, 1) = score;
-        for (size_t i = 0; i < fRow.numColumns(); i++) {
+        size_t i;
+        for (i = 0; i < fRow.numColumns(); i++) {
           result(n, 2 + i) = fRow[i];
         }
+        result(n, 2 + i) = Id::makeFromWordVocabIndex(
+                            WordVocabIndex::make(std::get<2>(*itt))); // wid
       }
     }
   }
@@ -1106,36 +1112,42 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   // This achieves O(n log k)
   LOG(DEBUG) << "Heap-using case with " << k << " contexts per entity...\n";
 
-  using ScoreToContext = std::set<pair<Score, TextRecordIndex>>;
-  using ScoreAndStC = pair<Score, ScoreToContext>;
-  using AggMap = ad_utility::HashMap<Id, ScoreAndStC>;
+  using ScoreToContextAndWord =
+      std::set<std::tuple<Score, TextRecordIndex, WordIndex>>;
+  using ScoreAndStCaW = pair<Score, ScoreToContextAndWord>;
+  using AggMap = ad_utility::HashMap<Id, ScoreAndStCaW>;
   AggMap map;
   for (size_t i = 0; i < wep.eids_.size(); ++i) {
+    WordIndex wid = wep.wids_.empty() ? 0 : wep.wids_[i];
     if (fSet.contains(wep.eids_[i])) {
       if (!map.contains(wep.eids_[i])) {
-        ScoreToContext inner;
-        inner.insert(std::make_pair(wep.scores_[i], wep.cids_[i]));
+        ScoreToContextAndWord inner;
+        inner.emplace(wep.scores_[i], wep.cids_[i], wid);
         map[wep.eids_[i]] = std::make_pair(1, inner);
       } else {
-        auto& [score, stc] = map[wep.eids_[i]];
-        score++;
-        if (stc.size() < k || stc.begin()->first < wep.scores_[i]) {
-          if (stc.size() == k) {
-            stc.erase(*stc.begin());
+        ScoreAndStCaW& val = map[wep.eids_[i]];
+        ++val.first;
+        ScoreToContextAndWord& stcaw = val.second;
+        if (stcaw.size() < k || std::get<0>(*(stcaw.begin())) < wep.scores_[i]) {
+          if (stcaw.size() == k) {
+            stcaw.erase(*stcaw.begin());
           }
-          stc.insert(std::make_pair(wep.scores_[i], wep.cids_[i]));
-        };
+          stcaw.emplace(wep.scores_[i], wep.cids_[i], wid);
+        }
       }
     }
   }
-  IdTableStatic<3> result = std::move(*dynResult).toStatic<3>();
+  IdTableStatic<4> result = std::move(*dynResult).toStatic<4>();
   result.reserve(map.size() * k + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     const Id eid = it->first;
-    const Id score = Id::makeFromInt(it->second.first);
-    ScoreToContext& stc = it->second.second;
-    for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
-      result.push_back({Id::makeFromTextRecordIndex(itt->second), score, eid});
+    const Id entityScore = Id::makeFromInt(it->second.first);
+    const ScoreToContextAndWord& stcaw = it->second.second;
+    for (auto itt = stcaw.rbegin(); itt != stcaw.rend(); ++itt) {
+      result.push_back({Id::makeFromTextRecordIndex(std::get<1>(*itt)),
+                        entityScore, eid,
+                        Id::makeFromWordVocabIndex(
+                            WordVocabIndex::make(std::get<2>(*itt)))});
     }
   }
   *dynResult = std::move(result).toDynamic();

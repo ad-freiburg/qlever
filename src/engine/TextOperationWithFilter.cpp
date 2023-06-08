@@ -54,8 +54,6 @@ VariableToColumnMap TextOperationWithFilter::computeVariableToColumnMap()
       ++colN;
     }
   }
-  vcmap[_cvar.getMatchingWordVariable()] =
-      makeAlwaysDefinedColumn(ColumnIndex{colN++});
   for (const auto& varcol : filterColumns) {
     // TODO<joka921> It is possible that UNDEF values in the filter are never
     // propagated to the  result, but this has to be further examined.
@@ -63,6 +61,8 @@ VariableToColumnMap TextOperationWithFilter::computeVariableToColumnMap()
         ColumnIndexAndTypeInfo{ColumnIndex{colN + varcol.second.columnIndex_},
                                varcol.second.mightContainUndef_};
   }
+  vcmap[_cvar.getMatchingWordVariable()] =
+      makeAlwaysDefinedColumn(ColumnIndex{colN + _filterResult->getResultWidth()});
   return vcmap;
 }
 
