@@ -61,8 +61,8 @@ VariableToColumnMap TextOperationWithFilter::computeVariableToColumnMap()
         ColumnIndexAndTypeInfo{ColumnIndex{colN + varcol.second.columnIndex_},
                                varcol.second.mightContainUndef_};
   }
-  vcmap[_cvar.getMatchingWordVariable()] =
-      makeAlwaysDefinedColumn(ColumnIndex{colN + _filterResult->getResultWidth()});
+  vcmap[_cvar.getMatchingWordVariable()] = makeAlwaysDefinedColumn(
+      ColumnIndex{colN + _filterResult->getResultWidth()});
   return vcmap;
 }
 

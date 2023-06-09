@@ -988,11 +988,11 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     IdTable* dynResult) {
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.eids_.size());
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.scores_.size());
-  LOG(DEBUG) << "Going from a WordEntityPostings-Element consisting of an entity,"
-             << " context, word and score list of size: "
-             << wep.cids_.size()
-             << " elements to a table with filtered distinct entities "
-             << "and at most " << k << " contexts per entity.\n";
+  LOG(DEBUG)
+      << "Going from a WordEntityPostings-Element consisting of an entity,"
+      << " context, word and score list of size: " << wep.cids_.size()
+      << " elements to a table with filtered distinct entities "
+      << "and at most " << k << " contexts per entity.\n";
   if (wep.cids_.empty() || fMap.empty()) {
     return;
   }
@@ -1018,7 +1018,8 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
         ScoreAndStCaW& val = map[wep.eids_[i]];
         ++val.first;
         ScoreToContextAndWord& stcaw = val.second;
-        if (stcaw.size() < k || std::get<0>(*(stcaw.begin())) < wep.scores_[i]) {
+        if (stcaw.size() < k ||
+            std::get<0>(*(stcaw.begin())) < wep.scores_[i]) {
           if (stcaw.size() == k) {
             stcaw.erase(*stcaw.begin());
           }
@@ -1044,7 +1045,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
           result(n, 2 + i) = fRow[i];
         }
         result(n, 2 + i) = Id::makeFromWordVocabIndex(
-                            WordVocabIndex::make(std::get<2>(*itt))); // wid
+            WordVocabIndex::make(std::get<2>(*itt)));  // wid
       }
     }
   }
@@ -1128,7 +1129,8 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
         ScoreAndStCaW& val = map[wep.eids_[i]];
         ++val.first;
         ScoreToContextAndWord& stcaw = val.second;
-        if (stcaw.size() < k || std::get<0>(*(stcaw.begin())) < wep.scores_[i]) {
+        if (stcaw.size() < k ||
+            std::get<0>(*(stcaw.begin())) < wep.scores_[i]) {
           if (stcaw.size() == k) {
             stcaw.erase(*stcaw.begin());
           }
