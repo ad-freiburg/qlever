@@ -12,13 +12,18 @@ class Permutation;
 
 // A triple and its location in a particular permutation.
 //
+// If a triple is not contained in the permutation, the location is the location
+// of the next larger triple (which may be in the next block or beyond the last
+// block). For a detailed definition of all border cases, see the definition at
+// the end of this file.
+//
 // NOTE: Technically, `blockIndex` and the `existsInIndex` are redundant in this
-// record because they can be derived when the clas is used. However, both are
-// useful for testing and for a small nuber of delta triples (think millions),
-// the space efficiency of this class is not a significant issue.
+// record because they can be derived when the class is used. However, they are
+// useful for testing, and for a small nuber of delta triples (think millions),
+// space efficiency is not a significant issue for this class.
 struct LocatedTriple {
-  // The index of the block and the position within that block, where the
-  // triple "fits".
+  // The index of the block and the location within that block, according to the
+  // definition above.
   size_t blockIndex;
   size_t rowIndexInBlock;
   // The `Id`s of the triple in the order of the permutation. For example,
@@ -27,21 +32,28 @@ struct LocatedTriple {
   Id id1;
   Id id2;
   Id id3;
-  // True iff the triple exists in the permutation (then it is equal to the
-  // triple at the position given by `blockIndex` and `rowIndexInBlock`).
+  // Flag that is true if and only if the triple exists in the permutation. It
+  // is then equal to the triple at the position given by `blockIndex` and
+  // `rowIndexInBlock`.
   bool existsInIndex;
 
   // Locate the given triple in the given permutation.
   static LocatedTriple locateTripleInPermutation(
       Id id1, Id id2, Id id3, const Permutation& permutation);
 
-  // Special row index for triples that belong to previous block. It is
-  // important that this value plus one is actually greater.
+  // Special row index for triples that belong to the previous block (see the
+  // definition for the location of a triple at the end of this file).
+  //
+  // NOTE: It is important that `NO_ROW_INDEX + 1 > NO_ROW_INDEX`, hence it is
+  // defined as `max() - 1` and not as the seemingly more natural `max()`.
   static const size_t NO_ROW_INDEX = std::numeric_limits<size_t>::max() - 1;
 };
 
-// A sorted set of triples located at the same position in a particular
-// permutation. Note that we could also overload `std::less` here.
+// A sorted set of located triples. In `LocatedTriplesPerBlock` below, we use
+// this to store all located triples with the same `blockIndex`.
+//
+// NOTE: We could also overload `std::less` here, but the explicit specification
+// of the order makes it clearer.
 struct LocatedTripleCompare {
   bool operator()(const LocatedTriple& x, const LocatedTriple& y) const {
     return IdTriple{x.id1, x.id2, x.id3} < IdTriple{y.id1, y.id2, y.id3};
@@ -49,43 +61,53 @@ struct LocatedTripleCompare {
 };
 using LocatedTriples = std::set<LocatedTriple, LocatedTripleCompare>;
 
-// A sorted set of triples located in particular permutation, grouped by block.
+// Sorted sets of located triples, grouped by block. We use this to store all
+// located triples for a permutation.
 class LocatedTriplesPerBlock {
  private:
   // The total number of `LocatedTriple` objects stored (for all blocks).
   size_t numTriples_ = 0;
 
  public:
-  // Map with the list of triples per block.
+  // For each block with a non-empty set of located triples, the located triples
+  // in that block.
   //
-  // TODO: Should be private. Should we make `LocatedTriplesPerBlock` a subclass
-  // of `HashMap<size_t, LocatedTriples>` or is that bad style?
+  // NOTE: This is currently not private because we want access to
+  // `map_.size()`, `map_.clear()`, `map_.contains(...)`, and `map_.at(...)`.
+  // We could also make `LocatedTriplesPerBlock` a subclass of `HashMap<size_t,
+  // LocatedTriples>`, but not sure whether that is good style.
   ad_utility::HashMap<size_t, LocatedTriples> map_;
 
  public:
-  // Get the number of to-be-inserted (first) and to-be-deleted (second) triples
-  // for the given block and that match the `id1` (if provided) and `id2` (if
-  // provided).
+  // Get the number of located triples for the given block that match `id1` (if
+  // provided) and `id2` (if provided). The return value is a pair of numbers:
+  // first, the number of existing triples ("to be deleted") and second, the
+  // number of new triples ("to be inserted").
   std::pair<size_t, size_t> numTriples(size_t blockIndex) const;
   std::pair<size_t, size_t> numTriples(size_t blockIndex, Id id1) const;
   std::pair<size_t, size_t> numTriples(size_t blockIndex, Id id1, Id id2) const;
 
-  // Merge the located triples for `blockIndex` into the given `blockPart` and
-  // write the result to `result`, starting from position `offsetInResult`. If
-  // `blockPart` is a whole index block, `offsetInBlock` is zero, otherwise it's
-  // the offset in the full block, where the part starts.
+  // Merge located triples for `blockIndex` with the given index `block` and
+  // write to `result`, starting from position `offsetInResult`. Consider only
+  // located triples in the range specified by `rowIndexInBlockBegin` and
+  // `rowIndexInBlockEnd`. Consider only triples that match `id1` (if provided)
+  // and `id2` (if provided). Return the number of rows written to `result`.
   //
-  // It is the resposibility of the caller that there is enough space for the
-  // result starting from that offset. Like for `numTriplesInBlock` above,
-  // consider only triples that match `id1` (if provided) and `id2` (if
-  // provided).
+  // PRECONDITIONS:
   //
-  // In the special case where `block == std::nullopt`, we are just inserting
-  // the located triples for block `blockIndex` where the `rowIndexInBlock` is
+  // 1. The set of located triples for `blockIndex` must be non-empty.
+  // Otherwise, there is no need for merging and this method shouldn't be
+  // called for efficiency reasons.
+  //
+  // 2. It is the resposibility of the caller that there is enough space for the
+  // result of the merge in `result` starting from `offsetInResult`.
+  //
+  // 3. If `block == std::nullopt`, we are adding to `result` the located
+  // triples for block `blockIndex` where the `rowIndexInBlock` is
   // `NO_ROW_INDEX`. These actually belong to the previous block, but were
-  // larger than all triples there.
+  // larger than all triples there. This requires that `id1` or both `id1` and
+  // `id2` are specified.
   //
-  // Returns the number of rows written to `result`.
   size_t mergeTriples(size_t blockIndex, std::optional<IdTable> block,
                       IdTable& result, size_t offsetInResult) const;
   size_t mergeTriples(size_t blockIndex, std::optional<IdTable> block,
@@ -97,8 +119,11 @@ class LocatedTriplesPerBlock {
       size_t rowIndexInBlockEnd = LocatedTriple::NO_ROW_INDEX) const;
 
   // Add the given `locatedTriple` to the given `LocatedTriplesPerBlock`.
-  // Returns a handle to where it was added (via which we can easily remove it
-  // again if we need to).
+  // Return a handle to where it was added (`LocatedTriples` is a sorted set,
+  // see above). We need this handle so that we can easily remove the
+  // `locatedTriple` again from the set in case we need to.
+  //
+  // The `locatedTriple` must not already exist in `LocatedTriplesPerBlock`.
   LocatedTriples::iterator add(const LocatedTriple& locatedTriple) {
     LocatedTriples& locatedTriples = map_[locatedTriple.blockIndex];
     auto [handle, wasInserted] = locatedTriples.emplace(locatedTriple);
@@ -111,10 +136,10 @@ class LocatedTriplesPerBlock {
   // Get the total number of `LocatedTriple` objects (for all blocks).
   size_t numTriples() const { return numTriples_; }
 
-  // Get the number of blocks containing `LocatedTriple` objects.
+  // Get the number of blocks with a non-empty set of located triples.
   size_t numBlocks() const { return map_.size(); }
 
-  // Empty the data structure.
+  // Remove all located triples.
   void clear() {
     map_.clear();
     numTriples_ = 0;
@@ -142,7 +167,30 @@ class LocatedTriplesPerBlock {
 };
 
 // Human-readable representation of `LocatedTriple`, `LocatedTriples`, and
-// `LocatedTriplesPerBlock` that are very useful for debugging.
+// `LocatedTriplesPerBlock`, which are very useful for debugging.
 std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt);
 std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts);
 std::ostream& operator<<(std::ostream& os, const LocatedTriplesPerBlock& ltpb);
+
+// DEFINITION OF THE POSITION OF A LOCATED TRIPLE IN A PERMUTATION
+//
+// 1. The position is defined by the index of a block in the permutation and the
+// index of a row within that block.
+//
+// 2. If the triple in contained in the permutation, it is contained exactly
+// once and so there is a well defined block and position in that block.
+//
+// 2. If there is a block, where the first triple is smaller and the last triple
+// is larger, then that is the block and the position in that block is that of
+// the first triple that is (not smaller and hence) larger.
+//
+// 3. If the triple falls "between two blocks" (the last triple of the previous
+// block is smaller and the first triple of the next block is larger), then the
+// position is the first position in that next block.
+//
+// 4. As a special case of 3, if the triple is smaller than all triples in the
+// permutation, the position is the first position of the first block.
+//
+// 5. If the triple is larger than all triples in the permutation, the block
+// index is one after the largest block index and the position within that
+// non-existing block is arbitrary.

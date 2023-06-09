@@ -17,7 +17,7 @@
 // building, we call these delta triples. How it works in principle:
 //
 // 1. For each delta triple, find the location in each permutation (block index
-// and index within that block, see end of the file for an exact definition).
+// and index within that block, see `index/LocatedTriples.h`).
 //
 // 2. For each permutation and each block, store a sorted list of the positions
 // of the delta triples within that block.
@@ -25,6 +25,8 @@
 // 3. In the call of `PermutationImpl::scan`, use the respective lists to merge
 // the relevant delta tripless into the index scan result.
 //
+// NOTE: The delta triples currently do not go well together with CACHING. See
+// the discussion at the end of this file.
 class DeltaTriples {
  private:
   // The index to which these triples are added.
@@ -121,9 +123,7 @@ class DeltaTriples {
   void eraseTripleInAllPermutations(LocatedTripleHandles& handles);
 };
 
-// More detailed discussion and information about the `DeltaTriples` class.
-//
-// A. DELTA TRIPLES AND THE CACHE
+// DELTA TRIPLES AND THE CACHE
 //
 // For now, our approach only works when the results of index scans are not
 // cached (unless there are no relevant delta triples for a particular scan).
@@ -140,26 +140,3 @@ class DeltaTriples {
 // store and maintain the positions in those uncompressed index scans. However,
 // this would only work for the results of index scans. For the results of more
 // complex subqueries, it's hard to figure out which delta triples are relevant.
-//
-// B. DEFINITION OF THE POSITION OF A DELTA TRIPLE IN A PERMUTATION
-//
-// 1. The position is defined by the index of a block in the permutation and the
-// index of a row within that block.
-//
-// 2. If the triple in contained in the permutation, it is contained exactly
-// once and so there is a well defined block and position in that block.
-//
-// 2. If there is a block, where the first triple is smaller and the last triple
-// is larger, then that is the block and the position in that block is that of
-// the first triple that is (not smaller and hence) larger.
-//
-// 3. If the triple falls "between two blocks" (the last triple of the previous
-// block is smaller and the first triple of the next block is larger), then the
-// position is the first position in that next block.
-//
-// 4. As a special case of 3., if the triple is smaller than all triples in the
-// permutation, the position is the first position of the first block.
-//
-// 5. If the triple is larger than all triples in the permutation, the block
-// index is one after the largest block index and the position within that
-// non-existing block is arbitrary.

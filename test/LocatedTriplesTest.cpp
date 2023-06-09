@@ -16,7 +16,7 @@ namespace {
 auto V = ad_utility::testing::VocabId;
 }
 
-// Fixture that ... TODO:explain.
+// Fixture with helper functions.
 class LocatedTriplesTest : public ::testing::Test {
  protected:
   // Make `LocatedTriplesPerBlock` from a list of `LocatedTriple` objects (the
