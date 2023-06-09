@@ -8,14 +8,28 @@
 
 #include "./IndexImpl.h"
 
-// ____________________________________________________________
-Index::Index() : pimpl_{std::make_unique<IndexImpl>()} {}
+// _____________________________________________________________________________
+Index::Index()
+    : deltaTriples_{std::make_unique<DeltaTriples>(*this)},
+      pimpl_{std::make_unique<IndexImpl>(std::move(deltaTriples_))} {}
 Index::Index(Index&&) noexcept = default;
 
 // Needs to be in the .cpp file because of the unique_ptr to a forwarded class.
 // See
 // https://stackoverflow.com/questions/13414652/forward-declaration-with-unique-ptr
 Index::~Index() = default;
+
+// _____________________________________________________________________________
+IndexImpl& Index::getImpl() { return *pimpl_; }
+[[nodiscard]] const IndexImpl& Index::getImpl() const { return *pimpl_; }
+
+// _____________________________________________________________________________
+[[nodiscard]] DeltaTriples& Index::deltaTriples() {
+  return pimpl_->deltaTriples();
+}
+[[nodiscard]] const DeltaTriples& Index::deltaTriples() const {
+  return pimpl_->deltaTriples();
+}
 
 // ___________________________________________________________
 template <class Parser>

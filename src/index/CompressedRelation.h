@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
-#ifndef QLEVER_COMPRESSEDRELATION_H
-#define QLEVER_COMPRESSEDRELATION_H
+#pragma once
 
 #include <algorithm>
 #include <vector>
@@ -11,6 +10,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/LocatedTriples.h"
 #include "util/BufferedVector.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
@@ -71,8 +71,14 @@ struct CompressedBlockMetadata {
   Id col1FirstId_;
   Id col1LastId_;
 
-  // For our `DeltaTriples` (https://github.com/ad-freiburg/qlever/pull/916), we
-  // need to know the least significant `Id` of the last triple as well.
+  // For `DeltaTriples::findTripleInPermutation`, it helps to know the least
+  // significant ID of the last triple as well.
+  //
+  // NOTE: We don't need that information for the first triple of the block and
+  // as a matter of fact, we don't really need `_col0FirstId` and `_col1FirstId`
+  // above either. It doesn't really harm though because the total size of the
+  // blocks is small (even for Wikidata, we have only 50K block, and as you can
+  // see from the members, a block consumes < 100 bytes).
   Id col2LastId_;
 
   // Two of these are equal if all members are equal.
@@ -252,7 +258,9 @@ class CompressedRelationReader {
   void scan(const CompressedRelationMetadata& metadata,
             const vector<CompressedBlockMetadata>& blockMetadata,
             ad_utility::File& file, IdTable* result,
-            ad_utility::SharedConcurrentTimeoutTimer timer) const;
+            ad_utility::SharedConcurrentTimeoutTimer timer,
+            const LocatedTriplesPerBlock& locatedTriplesPerBlock =
+                LocatedTriplesPerBlock{}) const;
 
   /**
    * @brief For a permutation XYZ, retrieve all Z for given X and Y.
@@ -272,7 +280,9 @@ class CompressedRelationReader {
   void scan(const CompressedRelationMetadata& metaData, Id col1Id,
             const vector<CompressedBlockMetadata>& blocks,
             ad_utility::File& file, IdTable* result,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+            ad_utility::SharedConcurrentTimeoutTimer timer,
+            const LocatedTriplesPerBlock& locatedTriplesPerBlock =
+                LocatedTriplesPerBlock{}) const;
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
@@ -295,7 +305,10 @@ class CompressedRelationReader {
   // must have at least `numRowsToRead + offsetInTable` rows.
   static void decompressBlockToExistingIdTable(
       const CompressedBlock& compressedBlock, size_t numRowsToRead,
-      IdTable& table, size_t offsetInTable);
+      IdTable& table, size_t offsetInTable,
+      std::pair<size_t, size_t> numInsAndDel = {0, 0},
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock = {},
+      size_t blockIndex = 0);
 
   // Helper function used by `decompressBlock` and
   // `decompressBlockToExistingIdTable`. Decompress the `compressedColumn` and
@@ -305,6 +318,7 @@ class CompressedRelationReader {
   static void decompressColumn(const std::vector<char>& compressedColumn,
                                size_t numRowsToRead, Iterator iterator);
 
+ public:
   // Read the block that is identified by the `blockMetaData` from the `file`,
   // decompress and return it.
   // If `columnIndices` is `nullopt`, then all columns of the block are read,
@@ -313,5 +327,3 @@ class CompressedRelationReader {
       const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
       std::optional<std::vector<size_t>> columnIndices);
 };
-
-#endif  // QLEVER_COMPRESSEDRELATION_H

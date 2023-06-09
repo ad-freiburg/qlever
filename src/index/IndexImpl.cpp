@@ -30,7 +30,8 @@
 using std::array;
 
 // _____________________________________________________________________________
-IndexImpl::IndexImpl() = default;
+IndexImpl::IndexImpl(std::unique_ptr<DeltaTriples> deltaTriples)
+    : deltaTriples_(std::move(deltaTriples)) {}
 
 // _____________________________________________________________________________
 template <class Parser>

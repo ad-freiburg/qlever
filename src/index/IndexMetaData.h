@@ -1,6 +1,7 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+
 #pragma once
 
 #include <stdio.h>
@@ -13,14 +14,14 @@
 #include <utility>
 #include <vector>
 
-#include "../global/Id.h"
-#include "../util/File.h"
-#include "../util/HashMap.h"
-#include "../util/MmapVector.h"
-#include "../util/ReadableNumberFact.h"
-#include "../util/Serializer/Serializer.h"
-#include "./MetaDataHandler.h"
-#include "CompressedRelation.h"
+#include "global/Id.h"
+#include "index/CompressedRelation.h"
+#include "index/MetaDataHandler.h"
+#include "util/File.h"
+#include "util/HashMap.h"
+#include "util/MmapVector.h"
+#include "util/ReadableNumberFact.h"
+#include "util/Serializer/Serializer.h"
 
 using std::array;
 using std::pair;
@@ -86,7 +87,10 @@ class IndexMetaData {
   // name and the variable name are terrible.
 
   // For each relation, its meta data.
+ public:
   MapType _data;
+
+ private:
   // For each compressed block, its meta data.
   BlocksType _blockData;
 

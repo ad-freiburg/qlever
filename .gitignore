@@ -1,6 +1,10 @@
-# Build directory
+# Build directories
 build/
+debug/
 cmake-build*
+
+# Debugger history file
+.gdb_history
 
 # End-to-End data
 e2e_data/*

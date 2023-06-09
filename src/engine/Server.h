@@ -13,6 +13,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SortPerformanceEstimator.h"
+#include "index/DeltaTriples.h"
 #include "index/Index.h"
 #include "nlohmann/json.hpp"
 #include "parser/ParseException.h"

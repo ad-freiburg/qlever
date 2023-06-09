@@ -5,33 +5,6 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 #pragma once
 
-#include <engine/ResultTable.h>
-#include <global/Pattern.h>
-#include <index/CompressedRelation.h>
-#include <index/ConstantsIndexBuilding.h>
-#include <index/DocsDB.h>
-#include <index/Index.h>
-#include <index/IndexBuilderTypes.h>
-#include <index/IndexMetaData.h>
-#include <index/PatternCreator.h>
-#include <index/Permutations.h>
-#include <index/StxxlSortFunctors.h>
-#include <index/TextMetaData.h>
-#include <index/Vocabulary.h>
-#include <index/VocabularyGenerator.h>
-#include <parser/ContextFileParser.h>
-#include <parser/TripleComponent.h>
-#include <parser/TurtleParser.h>
-#include <util/BackgroundStxxlSorter.h>
-#include <util/BufferedVector.h>
-#include <util/CompressionUsingZstd/ZstdWrapper.h>
-#include <util/File.h>
-#include <util/Forward.h>
-#include <util/HashMap.h>
-#include <util/MmapVector.h>
-#include <util/Timer.h>
-#include <util/json.h>
-
 #include <array>
 #include <fstream>
 #include <memory>
@@ -41,6 +14,34 @@
 #include <stxxl/stream>
 #include <stxxl/vector>
 #include <vector>
+
+#include "engine/ResultTable.h"
+#include "global/Pattern.h"
+#include "index/CompressedRelation.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/DeltaTriples.h"
+#include "index/DocsDB.h"
+#include "index/Index.h"
+#include "index/IndexBuilderTypes.h"
+#include "index/IndexMetaData.h"
+#include "index/PatternCreator.h"
+#include "index/Permutations.h"
+#include "index/StxxlSortFunctors.h"
+#include "index/TextMetaData.h"
+#include "index/Vocabulary.h"
+#include "index/VocabularyGenerator.h"
+#include "parser/ContextFileParser.h"
+#include "parser/TripleComponent.h"
+#include "parser/TurtleParser.h"
+#include "util/BackgroundStxxlSorter.h"
+#include "util/BufferedVector.h"
+#include "util/CompressionUsingZstd/ZstdWrapper.h"
+#include "util/File.h"
+#include "util/Forward.h"
+#include "util/HashMap.h"
+#include "util/MmapVector.h"
+#include "util/Timer.h"
+#include "util/json.h"
 
 using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
@@ -126,6 +127,10 @@ class IndexImpl {
   off_t currenttOffset_;
   mutable ad_utility::File textIndexFile_;
 
+  // Reference to the delta triples from the `Index` class of which this class
+  // is the implementation.
+  std::unique_ptr<DeltaTriples> deltaTriples_;
+
   // If false, only PSO and POS permutations are loaded and expected.
   bool loadAllPermutations_ = true;
 
@@ -160,15 +165,40 @@ class IndexImpl {
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
-  Permutation pos_{"POS", ".pos", {1, 2, 0}};
-  Permutation pso_{"PSO", ".pso", {1, 0, 2}};
-  Permutation sop_{"SOP", ".sop", {0, 2, 1}};
-  Permutation spo_{"SPO", ".spo", {0, 1, 2}};
-  Permutation ops_{"OPS", ".ops", {2, 1, 0}};
-  Permutation osp_{"OSP", ".osp", {2, 0, 1}};
+  Permutation pos_{
+      "POS",
+      ".pos",
+      {1, 2, 0},
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::POS)};
+  Permutation pso_{
+      "PSO",
+      ".pso",
+      {1, 0, 2},
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::PSO)};
+  Permutation sop_{
+      "SOP",
+      ".sop",
+      {0, 2, 1},
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::SOP)};
+  Permutation spo_{
+      "SPO",
+      ".spo",
+      {0, 1, 2},
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::SPO)};
+  Permutation ops_{
+      "OPS",
+      ".ops",
+      {2, 1, 0},
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::OPS)};
+  Permutation osp_{
+      "OSP",
+      ".osp",
+      {2, 0, 1},
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::OSP)};
 
  public:
-  IndexImpl();
+  IndexImpl(std::unique_ptr<DeltaTriples> deltaTriples =
+                std::unique_ptr<DeltaTriples>());
 
   // Forbid copying.
   IndexImpl& operator=(const IndexImpl&) = delete;
@@ -195,6 +225,9 @@ class IndexImpl {
   // `Permutation` object by reference (`pso_`).
   Permutation& getPermutation(Permutation::Enum p);
   const Permutation& getPermutation(Permutation::Enum p) const;
+
+  const DeltaTriples& deltaTriples() const { return *deltaTriples_; }
+  DeltaTriples& deltaTriples() { return *deltaTriples_; }
 
   // Creates an index from a file. Parameter Parser must be able to split the
   // file's format into triples.

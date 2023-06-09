@@ -1,6 +1,6 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
 
@@ -103,8 +103,8 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
   ad_utility::File file{filename, "r"};
   auto timer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
       ad_utility::TimeoutTimer::unlimited());
-  // Check the contents of the metadata.
 
+  // Check the contents of the metadata.
   CompressedRelationReader reader;
   for (size_t i = 0; i < metaData.size(); ++i) {
     const auto& m = metaData[i];

@@ -8,9 +8,9 @@
 #include <cstdint>
 #include <limits>
 
-#include "../util/Exception.h"
-#include "./IndexTypes.h"
-#include "./ValueId.h"
+#include "global/IndexTypes.h"
+#include "global/ValueId.h"
+#include "util/Exception.h"
 
 using Id = ValueId;
 typedef uint16_t Score;
