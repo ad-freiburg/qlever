@@ -214,12 +214,12 @@ TEST_F(LocatedTriplesTest, scanWithMergeTriples) {
 
     // Write the permutation to disk (adapted from `CompressedRelationsTest`,
     // `IndexImpl::createPermutationPairImpl`, and `IndexImpl::).
-    ad_utility::File permutationFileForWritingRelations{permutationFilename,
-                                                        "w"};
-    IndexMetaDataMmap metadataMmap;
-    metadataMmap.setup(permutationFilename + MMAP_FILE_SUFFIX,
-                       ad_utility::CreateTag{});
     {
+      ad_utility::File permutationFileForWritingRelations{permutationFilename,
+                                                          "w"};
+      IndexMetaDataMmap metadataMmap;
+      metadataMmap.setup(permutationFilename + MMAP_FILE_SUFFIX,
+                         ad_utility::CreateTag{});
       CompressedRelationWriter writer{
           std::move(permutationFileForWritingRelations), blockSizeInBytes};
       for (size_t i = 1; i <= numRelations; ++i) {
@@ -229,10 +229,6 @@ TEST_F(LocatedTriplesTest, scanWithMergeTriples) {
         metadataMmap.add(relationMetadata);
       }
       metadataMmap.blockData() = std::move(writer).getFinishedBlocks();
-    }
-    std::cout << "Metadata statistics: " << metadataMmap.statistics()
-              << std::endl;
-    {
       ad_utility::File permutationFileForWritingMetadata(permutationFilename,
                                                          "r+");
       metadataMmap.appendToFile(&permutationFileForWritingMetadata);
