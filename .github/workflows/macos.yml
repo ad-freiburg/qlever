@@ -1,4 +1,4 @@
-name: Native build with conan
+name: Native build with conan on MacOS
 
 on:
   push:
@@ -7,6 +7,10 @@ on:
     branches: [ master ]
   merge_group:
 
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+  
 jobs:
   build:
     # The CMake configure and build commands are platform-agnostic and should work equally
