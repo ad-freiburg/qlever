@@ -77,7 +77,8 @@ jobs:
         source ./conanrun.sh;
         benchmark/BenchmarkExamples -p;
 
-    - name: E2E
-      run: >
-        source ${{github.workspace}}/build/conanrun.sh;
-        ${{github.workspace}}/e2e/e2e.sh
+# Reinstate those once we have the dependencies in the cache
+#    - name: E2E
+#      run: >
+#        source ${{github.workspace}}/build/conanrun.sh;
+#        ${{github.workspace}}/e2e/e2e.sh
