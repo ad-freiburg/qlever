@@ -17,7 +17,6 @@
 #include <util/HashMap.h>
 #include <util/Serializer/FileSerializer.h>
 #include <util/TupleHelpers.h>
-#include <Rtree/Rtree.h>
 
 #include <algorithm>
 #include <cmath>
@@ -364,12 +363,12 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     auto compressionOutfile = ad_utility::makeOfstream(
         onDiskBase_ + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX);
     auto internalVocabularyActionCompression =
-        [&compressionOutfile](const auto& word, const auto& index) {
+        [&compressionOutfile](const auto& word, [[maybe_unused]]const auto& index) {
           compressionOutfile << RdfEscaping::escapeNewlinesAndBackslashes(word)
                              << '\n';
         };
     auto externalVocabularyActionCompression =
-            [](const auto& word, const auto& index) {
+            []([[maybe_unused]]const auto& word, [[maybe_unused]]const auto& index) {
     };
     m._noIdMapsAndIgnoreExternalVocab = true;
     auto mergeResult =
@@ -401,21 +400,17 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     auto wordWriter =
         vocab_.makeUncompressingWordWriter(onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
 
-    Rtree rtree = Rtree();
-
-    auto internalVocabularyAction = [&wordWriter, &rtree](const auto& word, const auto& index) {
+    auto internalVocabularyAction = [&wordWriter](const auto& word, const auto& index) {
       wordWriter.push(word.data(), word.size());
-      rtree.ConvertWordToRtreeEntry(word.data(), word.size(), index);
+      Rtree::ConvertWordToRtreeEntry(word, index, "./ConversionTest");
     };
 
-    auto externalVocabularyAction = [&rtree](const auto& word, const auto& index) {
-      rtree.ConvertWordToRtreeEntry(word.data(), word.size(), index);
+    auto externalVocabularyAction = [](const auto& word, const auto& index) {
+      Rtree::ConvertWordToRtreeEntry(word, index, "./ConversionTest");
     };
 
-    rtree.OpenConversion("../../third_party/rtree/ConversionTest");
     VocabularyMerger::VocabularyMetaData result = v.mergeVocabulary(onDiskBase_, numFiles, sortPred,
                              internalVocabularyAction, externalVocabularyAction);
-    rtree.CloseConversion();
     return result;
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
@@ -426,7 +421,11 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
             << res.vocabularyMetaData_.numWordsTotal_ - sizeInternalVocabulary
             << std::endl;
 
-  // TODO RTREE
+  LOG(INFO) << "Loading the Rtree entries..." << std::endl;
+  Rtree rtree = Rtree();
+  multiBoxGeo entries = rtree.LoadEntries("./ConversionTest");
+  LOG(INFO) << "Building the Rtree..." << std::endl;
+  rtree.BuildTree(entries, 16, "./rtree_build");
 
   res.idTriples = std::move(idTriples);
   res.actualPartialSizes = std::move(actualPartialSizes);
@@ -692,7 +691,8 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
         patterns_, hasPattern_);
   }
 
-  // TODO Load the RTREE
+  // Load the Rtree
+  rtree_ = Rtree();
 }
 
 // _____________________________________________________________________________

@@ -67,6 +67,9 @@ auto Index::getTextVocab() const -> const TextVocab& {
   return pimpl_->getTextVocab();
 }
 
+// ___________________________________________________
+auto Index::getRtree() const -> const Rtree& { return pimpl_->getRtree(); }
+
 // _____________________________________________________________________________
 size_t Index::getCardinality(const TripleComponent& comp,
                              Permutation::Enum p) const {

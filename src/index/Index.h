@@ -16,6 +16,7 @@
 #include "index/StringSortComparator.h"
 #include "index/Vocabulary.h"
 #include "parser/TripleComponent.h"
+#include <Rtree/Rtree.h>
 
 // Forward declarations.
 class IdTable;
@@ -108,6 +109,8 @@ class Index {
   using TextVocab =
       Vocabulary<std::string, SimpleStringComparator, WordVocabIndex>;
   [[nodiscard]] const TextVocab& getTextVocab() const;
+
+  const Rtree& getRtree() const;
 
   // --------------------------------------------------------------------------
   //  -- RETRIEVAL ---

@@ -21,6 +21,7 @@
 #include "parser/TurtleParser.h"
 #include "parser/data/Variable.h"
 #include "util/StringUtils.h"
+#include "engine/sparqlExpressions/ContainsExpression.h"
 
 using namespace ad_utility::sparql_types;
 using namespace sparqlExpression;
@@ -90,6 +91,19 @@ ExpressionPtr Visitor::processIriFunctionCall(
           std::move(argList[0]));
     }
   }
+
+  constexpr static std::string_view geoPrefixRtree =
+      "<http://qlever.cs.uni-freiburg.de/";
+  if (std::string_view iriView = iri; iriView.starts_with(geoPrefixRtree)) {
+    iriView.remove_prefix(geoPrefixRtree.size());
+    AD_CONTRACT_CHECK(iriView.ends_with('>'));
+    iriView.remove_suffix(1);
+    if (iriView == "boundingBoxContains") {
+      checkNumArgs("geoRtree:", iriView, 2);
+      return std::make_unique<ContainsExpression>(std::move(argList[0]), std::move(argList[1]));
+    }
+  }
+
   reportNotSupported(ctx, "Function \"" + iri + "\" is");
 }
 
@@ -986,7 +1000,7 @@ ObjectList Visitor::visit(Parser::ObjectListContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-Node Visitor::visit(Parser::ObjectRContext* ctx) {
+ad_utility::sparql_types::Node Visitor::visit(Parser::ObjectRContext* ctx) {
   return visit(ctx->graphNode());
 }
 
@@ -1183,13 +1197,13 @@ uint64_t Visitor::visit(Parser::IntegerContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-Node Visitor::visit(Parser::TriplesNodeContext* ctx) {
+ad_utility::sparql_types::Node Visitor::visit(Parser::TriplesNodeContext* ctx) {
   return visitAlternative<Node>(ctx->collection(),
                                 ctx->blankNodePropertyList());
 }
 
 // ____________________________________________________________________________________
-Node Visitor::visit(Parser::BlankNodePropertyListContext* ctx) {
+ad_utility::sparql_types::Node Visitor::visit(Parser::BlankNodePropertyListContext* ctx) {
   VarOrTerm var{GraphTerm{newBlankNode()}};
   Triples triples;
   auto propertyList = visit(ctx->propertyListNotEmpty());
@@ -1213,7 +1227,7 @@ void Visitor::visit(Parser::BlankNodePropertyListPathContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-Node Visitor::visit(Parser::CollectionContext* ctx) {
+ad_utility::sparql_types::Node Visitor::visit(Parser::CollectionContext* ctx) {
   Triples triples;
   VarOrTerm nextElement{
       GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}}};
@@ -1245,7 +1259,7 @@ void Visitor::visit(Parser::CollectionPathContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-Node Visitor::visit(Parser::GraphNodeContext* ctx) {
+ad_utility::sparql_types::Node Visitor::visit(Parser::GraphNodeContext* ctx) {
   if (ctx->varOrTerm()) {
     return {visit(ctx->varOrTerm()), Triples{}};
   } else {
