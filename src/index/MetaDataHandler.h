@@ -1,29 +1,39 @@
-// Copyright 2018, University of Freiburg,
+// Copyright 2018 - 2023, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Author: Johannes Kalmbach (johannes.kalmbach@gmail.com)
-//
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
+
 #pragma once
 
 #include <cassert>
 #include <stxxl/vector>
 
-#include "../global/Id.h"
-#include "../util/Exception.h"
-#include "../util/HashMap.h"
-#include "../util/Iterators.h"
-#include "../util/Log.h"
-#include "../util/Serializer/Serializer.h"
-#include "./CompressedRelation.h"
+#include "global/Id.h"
+#include "index/CompressedRelation.h"
+#include "util/Exception.h"
+#include "util/HashMap.h"
+#include "util/Iterators.h"
+#include "util/Log.h"
+#include "util/Serializer/Serializer.h"
 
-// _____________________________________________________________________
+// Class for access to relation metadata stored in a vector. Specifically, our
+// index uses this with `M = MmapVector<CompressedRelationMetadata>>`; see
+// `index/IndexMetaData.h`
 template <class M>
 class MetaDataWrapperDense {
+ private:
+  // A vector of metadata objects.
+  M _vec;
+
  public:
+  // An iterator with an additional method `getId()` that gives the relation ID
+  // of the current metadata object.
   template <typename BaseIterator>
   struct AddGetIdIterator : BaseIterator {
     using BaseIterator::BaseIterator;
     AddGetIdIterator(BaseIterator base) : BaseIterator{base} {}
     [[nodiscard]] Id getId() const { return getIdFromElement(*(*this)); }
+    [[nodiscard]] const auto& getMetaData() const { return *(*this); }
     static Id getIdFromElement(const typename BaseIterator::value_type& v) {
       return v.col0Id_;
     }
@@ -39,6 +49,7 @@ class MetaDataWrapperDense {
   // The underlying array is sorted, so all iterators are ordered iterators
   using ConstOrderedIterator = ConstIterator;
 
+  // The type of the stored metadata objects.
   using value_type = typename M::value_type;
 
   // _________________________________________________________
@@ -109,12 +120,24 @@ class MetaDataWrapperDense {
   // ___________________________________________________________
   std::string getFilename() const { return _vec.getFilename(); }
 
- private:
+  // The following used to be private (because they were only used as
+  // subroutines in the above), but we now need them in
+  // `DeltaTriples::findTripleResult`.
   ConstIterator lower_bound(Id id) const {
     auto cmp = [](const auto& metaData, Id id) {
       return metaData.col0Id_ < id;
     };
     return std::lower_bound(_vec.begin(), _vec.end(), id, cmp);
   }
-  M _vec;
+  Iterator lower_bound(Id id) {
+    auto cmp = [](const auto& metaData, Id id) {
+      return metaData.col0Id_ < id;
+    };
+    return std::lower_bound(_vec.begin(), _vec.end(), id, cmp);
+  }
 };
+
+// =======
+//   M _vec;
+// };
+// >>>>>>> master
