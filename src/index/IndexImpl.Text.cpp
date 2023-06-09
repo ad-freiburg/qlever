@@ -830,9 +830,7 @@ Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
     // the context and not on the word/block used as entry point.
     // Take all other words and get word posting lists for them.
     // Intersect all and keep the entity word ids.
-    size_t useElFromTerm = getIndexOfBestSuitedElTerm(
-        terms);  // QUESTION: funktion umändern oder raus, jetzt wo wordid auch
-                 // wichtig ist
+    size_t useElFromTerm = getIndexOfBestSuitedElTerm(terms);
     LOG(TRACE) << "Best term to take entity list from: " << terms[useElFromTerm]
                << std::endl;
 
@@ -976,22 +974,11 @@ Index::WordEntityPostings IndexImpl::getEntityPostingsForTerm(
     return resultWep;
   }
   const auto& tbmd = optTbmd.value().tbmd_;
-  if (!optTbmd.value().hasToBeFiltered_) {
-    // CASE: Only one word in the block or full block should be matched.
-    // Hence we can just read the entity CL lists for co-occurring
-    // entity postings.
-    resultWep = readWordEntityCl(tbmd);
-  } else {
-    // CASE: more than one word in the block.
-    // Need to obtain matching postings for regular words and intersect for
-    // a list of matching contexts.
-    Index::WordEntityPostings matchingContextsWep =
-        getWordPostingsForTerm(term);
+  Index::WordEntityPostings matchingContextsWep = getWordPostingsForTerm(term);
 
-    // Read the full lists
-    Index::WordEntityPostings eBlockWep = readWordEntityCl(tbmd);
-    resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
-  }
+  // Read the full lists
+  Index::WordEntityPostings eBlockWep = readWordEntityCl(tbmd);
+  resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
   return resultWep;
 }
 
