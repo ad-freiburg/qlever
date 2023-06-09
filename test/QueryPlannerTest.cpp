@@ -803,7 +803,7 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
   auto c = Variable{"?c"};
   ASSERT_EQ(0u, qet.getVariableColumn(c));
   ASSERT_EQ(1u, qet.getVariableColumn(c.getTextScoreVariable()));
-  ASSERT_EQ(3u, qet.getVariableColumn(Variable{"?y"}));
+  ASSERT_EQ(2u, qet.getVariableColumn(Variable{"?y"}));
 }
 
 TEST(QueryExecutionTreeTest, testCoOccFreeVar) {

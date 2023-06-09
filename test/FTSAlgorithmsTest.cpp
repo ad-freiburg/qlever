@@ -522,23 +522,24 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
 TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
   Index::WordEntityPostings wep;
   size_t k = 1;
-  IdTable resW3{3, makeAllocator()};
+  IdTable resW4{4, makeAllocator()};
   ad_utility::HashMap<Id, IdTable> fMap1;
 
-  int width = resW3.numColumns();
+  int width = resW4.numColumns();
   CALL_FIXED_SIZE(width,
                   FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts, wep,
-                  fMap1, k, &resW3);
-  ASSERT_EQ(0u, resW3.size());
+                  fMap1, k, &resW4);
+  ASSERT_EQ(0u, resW4.size());
 
   wep.cids_ = {T(0), T(1), T(1), T(2), T(2), T(2)};
   wep.eids_ = {V(0), V(0), V(1), V(0), V(1), V(2)};
   wep.scores_ = {10, 1, 3, 1, 1, 1};
+  wep.wids_ = {1, 1, 2, 1, 3, 5};
 
   CALL_FIXED_SIZE(width,
                   FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts, wep,
-                  fMap1, k, &resW3);
-  ASSERT_EQ(0u, resW3.size());
+                  fMap1, k, &resW4);
+  ASSERT_EQ(0u, resW4.size());
 
   auto [it, success] = fMap1.emplace(V(1), IdTable{1, makeAllocator()});
   ASSERT_TRUE(success);
@@ -546,25 +547,25 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
 
   CALL_FIXED_SIZE(width,
                   FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts, wep,
-                  fMap1, k, &resW3);
-  ASSERT_EQ(1u, resW3.size());
-  resW3.clear();
+                  fMap1, k, &resW4);
+  ASSERT_EQ(1u, resW4.size());
+  resW4.clear();
   k = 10;
   CALL_FIXED_SIZE(width,
                   FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts, wep,
-                  fMap1, k, &resW3);
-  ASSERT_EQ(2u, resW3.size());
+                  fMap1, k, &resW4);
+  ASSERT_EQ(2u, resW4.size());
 
   {
     auto [it, suc] = fMap1.emplace(V(0), IdTable{1, makeAllocator()});
     ASSERT_TRUE(suc);
     it->second.push_back({V(0)});
   }
-  resW3.clear();
+  resW4.clear();
   CALL_FIXED_SIZE(width,
                   FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts, wep,
-                  fMap1, k, &resW3);
-  ASSERT_EQ(5u, resW3.size());
+                  fMap1, k, &resW4);
+  ASSERT_EQ(5u, resW4.size());
 
   ad_utility::HashMap<Id, IdTable> fMap4;
   {
@@ -575,9 +576,9 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
     el.push_back({V(0), V(1), V(0), V(0)});
     el.push_back({V(0), V(2), V(0), V(0)});
   }
-  IdTable resVar{7, makeAllocator()};
+  IdTable resVar{8, makeAllocator()};
   k = 1;
-  width = 7;
+  width = 8;
   CALL_FIXED_SIZE(width,
                   FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts, wep,
                   fMap4, k, &resVar);
