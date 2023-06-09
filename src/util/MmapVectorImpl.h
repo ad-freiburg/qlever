@@ -111,6 +111,7 @@ void MmapVector<T>::mapForWriting() {
 // ________________________________________________________________
 template <class T>
 void MmapVector<T>::remapLinux(size_t oldBytesize) {
+#ifdef __linux__
   void* ptr =
       mremap(static_cast<void*>(_ptr), oldBytesize, _bytesize, MREMAP_MAYMOVE);
   AD_CONTRACT_CHECK(ptr != MAP_FAILED);
@@ -118,6 +119,9 @@ void MmapVector<T>::remapLinux(size_t oldBytesize) {
   // after closing, because mmap increases the count by one
   _ptr = static_cast<T*>(ptr);
   advise(_pattern);
+#else
+AD_FAIL();
+#endif
 }
 
 // __________________________________________________________________
@@ -153,7 +157,9 @@ void MmapVector<T>::adaptCapacity(size_t newCapacity) {
   writeMetaDataToEnd();
   remapLinux(oldBytesize);
 #else
+  _bytesize = oldBytesize;
   unmap();
+  _bytesize = realSize._bytesize;
   writeMetaDataToEnd();
   // renew the mapping because the file has changed
   mapForWriting();
