@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "util/ConfigManager/ConfigManager.h"
+
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -12,7 +14,6 @@
 #include <sstream>
 #include <string>
 
-#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -24,29 +25,6 @@
 #include "util/json.h"
 
 namespace ad_utility {
-
-/*
-@brief A custom exception for `parseShortHand`, for when the short hand
-syntax wasn't followed.
-*/
-class ShortHandSyntaxException : public std::exception {
- private:
-  // The error message.
-  std::string message_;
-
- public:
-  /*
-  @param shortHandString The string, that was parsed.
-  */
-  explicit ShortHandSyntaxException(const std::string& shortHandString) {
-    message_ =
-        "The following string doesn't follow short hand string syntax "
-        "and couldn't be parsed:\n" +
-        shortHandString;
-  }
-
-  const char* what() const throw() override { return message_.c_str(); }
-};
 
 // ____________________________________________________________________________
 nlohmann::json::json_pointer ConfigManager::createJsonPointer(
@@ -109,10 +87,8 @@ const ConfigOption& ConfigManager::getConfigurationOptionByNestedKeys(
     return configurationOptions_.at(
         keyToConfigurationOptionIndex_.at(ptr).get<size_t>());
   } else {
-    // TODO Add custom exception. This kind of exceptionn is for runtime qlever.
-    throw ad_utility::Exception(
-        absl::StrCat("Key error: There was no configuration option found at '",
-                     ptr.to_string(), "'\n", printConfigurationDoc(), "\n"));
+    throw NoConfigOptionFoundException(vectorOfKeysForJsonToString(keys),
+                                       printConfigurationDoc());
   }
 }
 
@@ -148,12 +124,7 @@ nlohmann::json ConfigManager::parseShortHand(
 void ConfigManager::parseConfig(const nlohmann::json& j) {
   // Anything else but a literal json object is not something, we want.
   if (!j.is_object()) {
-    // TODO Add custom exception. This kind of exceptionn is for runtime qlever.
-    throw ad_utility::Exception(
-        absl::StrCat("A ConfigManager should only parse configurations, that "
-                     "are a json object literal. The configuration: \n\n",
-                     j.dump(2), "\n\n is not a json object literal, but a '",
-                     jsonToTypeString(j), "'."));
+    throw ConfigManagerParseConfigNotJsonObjectLiteralException(j);
   }
 
   /*
@@ -201,17 +172,12 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
          !j.at(currentPtr).is_primitive()) &&
         (!isPointerToConfigurationOption(currentPtr.parent_pointer()) ||
          !j.at(currentPtr.parent_pointer()).is_array())) {
-      // TODO Add custom exception. This kind of exceptionn is for runtime
-      // qlever.
-      throw ad_utility::Exception(absl::StrCat(
-          "Error while trying to set configuration option: '",
-          currentPtr.to_string(), "'",
-          currentPtr.parent_pointer().empty()
-              ? " doesn't"
-              : absl::StrCat(" and '", currentPtr.parent_pointer().to_string(),
-                             "' both don't"),
-          " point to a valid configuration option.\n", printConfigurationDoc(),
-          "\n"));
+      throw j.at(currentPtr.parent_pointer()).is_array()
+          ? NoConfigOptionFoundException(
+                currentPtr.parent_pointer().to_string(),
+                printConfigurationDoc())
+          : NoConfigOptionFoundException(currentPtr.to_string(),
+                                         printConfigurationDoc());
     }
   }
 
@@ -241,15 +207,8 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
     // If the option has no value now, that means, it didn't have a default
     // value, and needs to be set by the user at runtime, but wasn't.
     if (!configurationOption->hasValue()) {
-      // TODO Add custom exception. This kind of exceptionn is for runtime
-      // qlever.
-      throw ad_utility::Exception(
-          absl::StrCat("Error while trying to set configuration options: The "
-                       "configuration option at '",
-                       configurationOptionJsonPosition.to_string(),
-                       "' wasn't defined by the user, even though, this "
-                       "configuration option has no default value.\n",
-                       printConfigurationDoc(), "\n"));
+      throw ConfigOptionWasntSetException(
+          configurationOptionJsonPosition.to_string());
     }
   }
 }
@@ -371,5 +330,17 @@ std::string ConfigManager::printConfigurationDoc() const {
                                  1),
       "\n\nAvailable configuration options:\n",
       ad_utility::addIndentation(stream.str(), 1));
+}
+
+// ____________________________________________________________________________
+std::string ConfigManager::vectorOfKeysForJsonToString(
+    const VectorOfKeysForJson& keys) {
+  std::ostringstream keysToString;
+  std::ranges::for_each(keys, [&keysToString](const auto& key) {
+    std::visit(
+        [&keysToString](const auto& k) { keysToString << "[" << k << "]"; },
+        key);
+  });
+  return keysToString.str();
 }
 }  // namespace ad_utility

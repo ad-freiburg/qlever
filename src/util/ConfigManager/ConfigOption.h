@@ -14,6 +14,7 @@
 #include <typeinfo>
 #include <variant>
 
+#include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigUtil.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
 #include "util/ConstexprUtils.h"
@@ -109,11 +110,8 @@ class ConfigOption {
       value_ = std::optional<T>{value};
       updateVariablePointer();
     } else {
-      // TODO Add custom exception. This kind of exceptionn is for runtime qlever.
-      throw ad_utility::Exception(absl::StrCat("The type of the value in configuration option '",
-                                               identifier_, "' is '", valueTypeToString(value_),
-                                               "'. It can't be set to a value of type '",
-                                               valueTypeToString(std::optional<T>{}), "'."));
+      throw ConfigOptionSetWrongTypeException(identifier_, getActualValueTypeAsString(),
+                                              valueTypeToString(std::optional<T>{}));
     }
   }
 
@@ -134,16 +132,11 @@ class ConfigOption {
     if (hasDefaultValue() && std::holds_alternative<std::optional<T>>(defaultValue_)) {
       return std::get<std::optional<T>>(defaultValue_).value();
     } else if (!hasDefaultValue()) {
-      // TODO Add custom exception. This kind of exceptionn is for runtime qlever.
-      throw ad_utility::Exception(absl::StrCat("Configuration option '", identifier_,
-                                               "' was not created with a default value."));
+      throw ConfigOptionValueNotSetException(identifier_, "default value");
     } else {
       // They used the wrong type.
-      // TODO Add custom exception. This kind of exceptionn is for runtime qlever.
-      throw ad_utility::Exception(absl::StrCat("The type of the value in configuration option '",
-                                               identifier_, "' is '", valueTypeToString(value_),
-                                               "'. It can't be cast as '",
-                                               valueTypeToString(std::optional<T>{}), "'."));
+      throw ConfigOptionGetWrongTypeException(identifier_, valueTypeToString(value_),
+                                              valueTypeToString(std::optional<T>{}));
     }
   }
 
@@ -157,16 +150,11 @@ class ConfigOption {
       return std::get<std::optional<T>>(value_).value();
     } else if (!hasValue()) {
       // The value was never set.
-      // TODO Add custom exception. This kind of exceptionn is for runtime qlever.
-      throw ad_utility::Exception(
-          absl::StrCat("The value in configuration option '", identifier_, "' was never set."));
+      throw ConfigOptionValueNotSetException(identifier_, "held value");
     } else {
       // They used the wrong type.
-      // TODO Add custom exception. This kind of exceptionn is for runtime qlever.
-      throw ad_utility::Exception(absl::StrCat("The type of the value in configuration option '",
-                                               identifier_, "' is '", valueTypeToString(value_),
-                                               "'. It can't be cast as '",
-                                               valueTypeToString(std::optional<T>{}), "'."));
+      throw ConfigOptionGetWrongTypeException(identifier_, valueTypeToString(value_),
+                                              valueTypeToString(std::optional<T>{}));
     }
   }
 
@@ -177,9 +165,14 @@ class ConfigOption {
   std::string_view getIdentifier() const;
 
   /*
-  @brief Returns the index of the variant in `ValueType`, that this configuration option holds..
+  @brief Returns the index of the variant in `ValueType`, that this configuration option holds.
   */
   size_t getActualValueType() const;
+
+  /*
+  @brief Returns the string representation of the current value type.
+  */
+  std::string getActualValueTypeAsString() const;
 
   /*
   @brief Calls `std::visit` on the contained value of type `ValueType`.
@@ -232,11 +225,8 @@ class ConfigOption {
     // The `identifier` must be a valid `NAME` in the short hand for
     // configurations.
     if (!isNameInShortHand(identifier)) {
-      // TODO Add custom exception. This kind of exceptionn is for runtime qlever.
-      throw ad_utility::Exception(
-          absl::StrCat("Error while constructing configuraion option: The identifier must be "
-                       "a 'NAME' in the configuration short hand grammar, which '",
-                       identifier, "' doesn't fullfil."));
+      throw NotValidShortHandNameException(identifier,
+                                           "identifier parameter of ConfigOption constructor");
     }
 
     // Is `type` the right number for `T`?
@@ -249,13 +239,7 @@ class ConfigOption {
             typeString = valueTypeToString(TypeOptional{});
           });
 
-      // TODO Add custom exception. This kind of exceptionn is for runtime qlever.
-      throw ad_utility::Exception(
-          absl::StrCat("Error while constructing configuraion option: Configuration option "
-                       "'",
-                       identifier, "' was given a type  of '", type, "', which is '", typeString,
-                       "', but the template parameter is type '", valueTypeToString(value_),
-                       "'. Something must have gone wrong."));
+      throw ConfigOptionSetWrongTypeException(identifier_, typeString, valueTypeToString(value_));
     }
 
     // If `defaultValue` has a default value, than `value_` has changed.

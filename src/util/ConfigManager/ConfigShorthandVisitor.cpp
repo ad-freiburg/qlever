@@ -2,11 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "util/ConfigManager/ConfigShorthandVisitor.h"
+
 #include <absl/strings/str_cat.h>
 
+#include <exception>
 #include <utility>
 
-#include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/Exception.h"
 
 // __________________________________________________________________________
@@ -14,6 +16,32 @@ nlohmann::json::object_t ToJsonConfigShorthandVisitor::visitShortHandString(
     Parser::ShortHandStringContext* context) const {
   return visitAssignments(context->assignments());
 }
+
+/*
+@brief A custom exception, the `ConfigShortHandVisitor` runs into a key
+collision.
+*/
+class ConfigShortHandVisitorKeyCollisionException : public std::exception {
+ private:
+  // The error message.
+  std::string message_;
+
+ public:
+  /*
+  @param keyName The string representation of the key.
+  */
+  explicit ConfigShortHandVisitorKeyCollisionException(
+      std::string_view keyName) {
+    message_ = absl::StrCat(
+        "Key error in the short hand: There are at least two key value "
+        "pairs, at the same level of depth, with the key '",
+        keyName,
+        "' given. This is not allowed, keys must be unique at their level of "
+        "depth.");
+  }
+
+  const char* what() const throw() override { return message_.c_str(); }
+};
 
 // __________________________________________________________________________
 nlohmann::json::object_t ToJsonConfigShorthandVisitor::visitAssignments(
@@ -26,14 +54,8 @@ nlohmann::json::object_t ToJsonConfigShorthandVisitor::visitAssignments(
 
     // The same key twice isn't allowed.
     if (contextAsJson.contains(interpretedAssignment.first)) {
-      // TODO Add custom exception. This kind of exceptionn is for runtime
-      // qlever.
-      throw ad_utility::Exception(absl::StrCat(
-          "Key error in the short hand: There are at least two key value "
-          "pairs, at the same level of depth, with the key '",
-          interpretedAssignment.first,
-          "' given. This is not allowed, keys must be unique in their level of "
-          "depth"));
+      throw ConfigShortHandVisitorKeyCollisionException(
+          interpretedAssignment.first);
     }
 
     // Add the json representation of the assignment.

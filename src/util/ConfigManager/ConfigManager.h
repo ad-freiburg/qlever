@@ -19,6 +19,7 @@
 #include <typeinfo>
 #include <variant>
 
+#include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigUtil.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
@@ -108,21 +109,16 @@ class ConfigManager {
     that are just identified with numbers, is rather difficult.
     */
     if (!std::holds_alternative<std::string>(pathToOption.front())) {
-      // TODO Add custom exception. This kind of exceptionn is for runtime
-      // qlever.
-      throw ad_utility::Exception(
-          absl::StrCat("Key error, while trying to add a configuration "
-                       "option: The first key in '",
-                       ptr.to_string(),
-                       "' isn't a string. It needs to be a string, because "
-                       "internally we save locations in a json format, more "
-                       "specificly in a json object literal."));
+      throw ConfigManagerOptionPathDoesntStartWithStringException(
+          vectorOfKeysForJsonToString(pathToOption));
     }
 
     // The last entry in the path is the name for the configuration option. It
     // must be a string.
-    // TODO Custom exception.
-    AD_CONTRACT_CHECK(std::holds_alternative<std::string>(pathToOption.back()));
+    if (!std::holds_alternative<std::string>(pathToOption.back())) {
+      throw ConfigManagerOptionPathDoesntEndWithStringException(
+          vectorOfKeysForJsonToString(pathToOption));
+    }
 
     /*
     The string keys must be a valid `NAME` in the short hand. Otherwise, the
@@ -146,23 +142,16 @@ class ConfigManager {
       /*
       One of the keys failed. `failedKey` is an iterator pointing to the key.
       */
-      // TODO Add custom exception. This kind of exceptionn is for runtime
-      // qlever.
-      throw ad_utility::Exception(absl::StrCat(
-          "Key error: The key '", std::get<std::string>(*failedKey), "' in '",
-          ptr.to_string(),
-          "' doesn't describe a valid name, according to the short hand "
-          "grammar."));
+      throw NotValidShortHandNameException(
+          std::get<std::string>(*failedKey),
+          vectorOfKeysForJsonToString(pathToOption));
     }
 
     // Is there already a configuration option with the same identifier at the
     // same location?
     if (keyToConfigurationOptionIndex_.contains(ptr)) {
-      // TODO Add custom exception. This kind of exceptionn is for runtime
-      // qlever.
-      throw ad_utility::Exception(absl::StrCat(
-          "Key error: There was already a configuration option found at '",
-          ptr.to_string(), "'\n", printConfigurationDoc(), "\n"));
+      throw ConfigManagerOptionPathAlreadyinUseException(
+          vectorOfKeysForJsonToString(pathToOption), printConfigurationDoc());
     }
 
     // Add the location of the new configuration option to the json.
@@ -245,5 +234,11 @@ class ConfigManager {
   string representations of all added configuration options.
   */
   std::string printConfigurationDoc() const;
+
+  /*
+  @brief Return string representation of a `VectorOfKeysForJson`.
+  */
+  static std::string vectorOfKeysForJsonToString(
+      const VectorOfKeysForJson& keys);
 };
 }  // namespace ad_utility
