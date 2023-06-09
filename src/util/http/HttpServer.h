@@ -178,13 +178,12 @@ class HttpServer {
     beast::flat_buffer buffer;
     beast::tcp_stream stream{std::move(socket)};
 
-    auto releaseConnection = absl::Cleanup{
-
-        [&stream]() noexcept {
-          beast::error_code ec;
+    auto releaseConnection =
+        ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([&stream]() {
+          [[maybe_unused]] beast::error_code ec;
           stream.socket().shutdown(tcp::socket::shutdown_send, ec);
-          stream.socket().close();
-        }};
+          stream.socket().close(ec);
+        });
 
     // Keep track of whether we have to close the session after a
     // request/response pair.
