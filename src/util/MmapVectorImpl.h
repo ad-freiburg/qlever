@@ -120,7 +120,8 @@ void MmapVector<T>::remapLinux(size_t oldBytesize) {
   _ptr = static_cast<T*>(ptr);
   advise(_pattern);
 #else
-AD_FAIL();
+  (void)oldBytesize;
+  AD_FAIL();
 #endif
 }
 
