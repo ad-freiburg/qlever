@@ -659,12 +659,19 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
           sameBlocksRight.back(), sameBlocksRight.front().back(), lessThan));
     }
     addAll(sameBlocksLeft, sameBlocksRight);
-    if (sameBlocksLeft.size() > 1) {
-      sameBlocksLeft.at(0) = std::move(sameBlocksLeft.back());
-      sameBlocksLeft.resize(1);
-      auto& b = sameBlocksLeft.front();
-      // TODO<joka921> delete the range that has already been dealt with.
-      //  b.erase(b.begin(), std::upper_bound(b.begin(), b.end(), ))
+    if (sameBlocksLeft.size() > 1 && (l.back().end() != sameBlocksLeft.back().end())) {
+      LeftBlock remainder(l.back().end(), sameBlocksLeft.back().end());
+      sameBlocksLeft.clear();
+      sameBlocksLeft.push_back(std::move(remainder));
+    } else {
+    sameBlocksLeft.clear();
+    }
+    if (sameBlocksLeft.size() > 1 && (l.back().end() != sameBlocksLeft.back().end())) {
+      LeftBlock remainder(l.back().end(), sameBlocksLeft.back().end());
+      sameBlocksLeft.clear();
+      sameBlocksLeft.push_back(std::move(remainder));
+    } else {
+      sameBlocksLeft.clear()
     }
   };
 
