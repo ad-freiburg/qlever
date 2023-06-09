@@ -35,6 +35,7 @@ jobs:
         brew install llvm@16
         brew install conan@2
         echo 'export PATH="/usr/local/opt/llvm/bin:$PATH"' >> ~/.bash_profile
+        echo PATH="/usr/local/opt/llvm/bin:$PATH" >> $GITHUB_ENV 
         source ~/.bash_profile
     - name: Pring clang version
       run: clang++ --version
