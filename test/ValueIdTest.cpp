@@ -278,15 +278,15 @@ TEST(ValueId, toDebugString) {
     stream << id;
     ASSERT_EQ(stream.str(), expected);
   };
-  test(ValueId::makeUndefined(), "Undefined:Undefined");
-  test(ValueId::makeFromInt(-42), "Int:-42");
-  test(ValueId::makeFromDouble(42.0), "Double:42.000000");
-  test(makeVocabId(15), "VocabIndex:15");
-  test(makeLocalVocabId(25), "LocalVocabIndex:25");
-  test(makeTextRecordId(37), "TextRecordIndex:37");
+  test(ValueId::makeUndefined(), "U:xx");
+  test(ValueId::makeFromInt(-42), "I:-42");
+  test(ValueId::makeFromDouble(42.0), "D:42.000000");
+  test(makeVocabId(15), "V:15");
+  test(makeLocalVocabId(25), "L:25");
+  test(makeTextRecordId(37), "T:37");
   test(ValueId::makeFromDate(
            DateOrLargeYear{123456, DateOrLargeYear::Type::Year}),
-       "Date:123456");
+       "D:123456");
 }
 
 TEST(ValueId, InvalidDatatypeEnumValue) {

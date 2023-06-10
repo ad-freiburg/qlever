@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "absl/strings/str_join.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexMetaData.h"
 #include "index/Permutations.h"
@@ -190,7 +191,8 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
   AD_CONTRACT_CHECK(map_.contains(blockIndex));
 
   // The special case `block == std::nullopt` (write only located triples to
-  // `result`) is only allowed, when `id1` or `id1` and `id2` are specified.
+  // `result`) is only allowed, when the `matchMode` is `MatchId1` or
+  // `MatchId1AndId2`, but not `MatchAll`.
   AD_CONTRACT_CHECK(block.has_value() || matchMode != MatchMode::MatchAll);
 
   // If `rowIndexInBlockEnd` has the default value (see `LocatedTriples.h`), the
@@ -324,7 +326,7 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt) {
   os << "LT(" << lt.blockIndex << " "
      << (lt.rowIndexInBlock == LocatedTriple::NO_ROW_INDEX
-             ? "NO_ROW_INDEX"
+             ? "x"
              : std::to_string(lt.rowIndexInBlock))
      << " " << lt.id1 << " " << lt.id2 << " " << lt.id3 << " "
      << lt.existsInIndex << ")";
@@ -333,17 +335,43 @@ std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt) {
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts) {
-  os << "{";
+  os << "{ ";
   std::copy(lts.begin(), lts.end(),
-            std::ostream_iterator<LocatedTriple>(std::cout, " "));
+            std::ostream_iterator<LocatedTriple>(os, " "));
   os << "}";
   return os;
 }
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const LocatedTriplesPerBlock& ltpb) {
-  for (auto [blockIndex, lts] : ltpb.map_) {
-    os << "Block #" << blockIndex << ": " << lts << std::endl;
+  // Get the block indices in sorted order.
+  std::vector<size_t> blockIndices;
+  std::transform(ltpb.map_.begin(), ltpb.map_.end(),
+                 std::back_inserter(blockIndices),
+                 [](const auto& entry) { return entry.first; });
+  std::ranges::sort(blockIndices);
+  for (auto blockIndex : blockIndices) {
+    os << "Block #" << blockIndex << ": " << ltpb.map_.at(blockIndex)
+       << std::endl;
   }
+  return os;
+}
+
+// ____________________________________________________________________________
+std::ostream& operator<<(std::ostream& os,
+                         const columnBasedIdTable::Row<Id>& idTableRow) {
+  os << "(";
+  for (size_t i = 0; i < idTableRow.numColumns(); ++i) {
+    os << idTableRow[i] << (i < idTableRow.numColumns() - 1 ? " " : ")");
+  }
+  return os;
+}
+
+// ____________________________________________________________________________
+std::ostream& operator<<(std::ostream& os, const IdTable& idTable) {
+  os << "{ ";
+  std::copy(idTable.begin(), idTable.end(),
+            std::ostream_iterator<columnBasedIdTable::Row<Id>>(os, " "));
+  os << "}";
   return os;
 }

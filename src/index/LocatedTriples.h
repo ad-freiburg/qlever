@@ -171,6 +171,9 @@ class LocatedTriplesPerBlock {
 std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt);
 std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts);
 std::ostream& operator<<(std::ostream& os, const LocatedTriplesPerBlock& ltpb);
+std::ostream& operator<<(std::ostream& os,
+                         const columnBasedIdTable::Row<Id>& idTableRow);
+std::ostream& operator<<(std::ostream& os, const IdTable& idTable);
 
 // DEFINITION OF THE POSITION OF A LOCATED TRIPLE IN A PERMUTATION
 //

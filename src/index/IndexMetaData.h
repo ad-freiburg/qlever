@@ -226,7 +226,8 @@ template <class MapType>
 ad_utility::File& operator<<(ad_utility::File& f,
                              const IndexMetaData<MapType>& imd);
 
-// aliases for easier use in Index class
+// Aliases for easier use in classes that build or query permutations, like
+// `IndexImpl`.
 using MetaWrapperMmap =
     MetaDataWrapperDense<ad_utility::MmapVector<CompressedRelationMetadata>>;
 using MetaWrapperMmapView = MetaDataWrapperDense<
