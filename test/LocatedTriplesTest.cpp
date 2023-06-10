@@ -185,12 +185,13 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
         std::string basename = "LocatedTriplesTest.scanWithMergeTriples";
         std::string permutationFilename = basename + ".index.pso";
 
-        // We currently assume that all triples in `triplesInIndex` have the
-        // same `Id` in the first column.
-        std::vector<Id> relationIds = {triplesInIndex(0, 0)};
-        for (size_t i = 1; i < triplesInIndex.size(); ++i) {
-          ASSERT_EQ(triplesInIndex(i, 0), relationIds[0]);
+        // Collect the distinct relation `Id`s.
+        std::vector<Id> relationIds;
+        for (size_t i = 0; i < triplesInIndex.numRows(); ++i) {
+          relationIds.push_back(triplesInIndex(i, 0));
+          ASSERT_TRUE(i == 0 || relationIds[i - 1] <= relationIds[i]);
         }
+        relationIds = ad_utility::removeDuplicates(relationIds);
 
         // Helper lambda for creating a `BufferedIdTable` from all triples in
         // the given `IdTable` matching `relationId`.
@@ -256,7 +257,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
           IdTable result(2, ad_utility::testing::makeAllocator());
           for (Id relationId : relationIds) {
             permutation.scan(relationId, &result);
-            std::cout << "Relation " << relationId << ": " << result
+            std::cout << "Relation: " << relationId << " -> " << result
                       << std::endl;
           }
         }
@@ -269,16 +270,28 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
               triplesToLocate(i, 2), permutation));
         }
 
+        // Check that the locations are as expected. Process in order of
+        // increasing block index because it's easier to debug.
         std::cout << locatedTriplesPerBlock;
-        for (auto [blockIndex, locatedTriplesString] :
+        std::vector<size_t> blockIndices;
+        for (auto [blockIndex, expectedLocatedTriples] :
              expectedLocatedTriplesPerBlock) {
+          blockIndices.push_back(blockIndex);
+        }
+        std::sort(blockIndices.begin(), blockIndices.end());
+        for (auto blockIndex : blockIndices) {
           ASSERT_TRUE(locatedTriplesPerBlock.map_.contains(blockIndex))
               << "blockIndex = " << blockIndex << " not found";
           std::ostringstream os;
           os << locatedTriplesPerBlock.map_.at(blockIndex);
-          ASSERT_EQ(os.str(), locatedTriplesString)
+          std::string computedLocatedTriples = os.str();
+          std::string expectedLocatedTriples =
+              expectedLocatedTriplesPerBlock.at(blockIndex);
+          ASSERT_EQ(computedLocatedTriples, expectedLocatedTriples)
               << "blockIndex = " << blockIndex;
         }
+        ASSERT_EQ(locatedTriplesPerBlock.map_.size(),
+                  expectedLocatedTriplesPerBlock.size());
 
         // Delete the permutation files.
         ad_utility::deleteFile(permutationFilename);
@@ -287,23 +300,25 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
 
   // Triples in the index.
   IdTable triplesInIndex = makeIdTableFromVector({{1, 10, 10},    // Row 0
-                                                  {1, 15, 20},    // Row 1
-                                                  {1, 15, 30},    // Row 2
-                                                  {1, 20, 10},    // Row 3
-                                                  {1, 30, 20},    // Row 4
-                                                  {1, 30, 30}});  // Row 5
+                                                  {2, 10, 10},    // Row 1
+                                                  {2, 15, 20},    // Row 2
+                                                  {2, 15, 30},    // Row 3
+                                                  {2, 20, 10},    // Row 4
+                                                  {2, 30, 20},    // Row 5
+                                                  {2, 30, 30},    // Row 6
+                                                  {3, 10, 10}});  // Row 7
 
   // Locate the following triples, some of which exist in the relation and some
   // of which do not, and which cover a variety of positons, including triples
   // that are larger than all existing triples.
   IdTable triplesToLocate =
-      makeIdTableFromVector({{1, 15, 20},    // Exists.
-                             {1, 14, 20},    // Does not exist.
-                             {1, 20, 10},    // Exists.
-                             {1, 30, 20},    // Exists.
-                             {1, 30, 30},    // Exists.
-                             {1, 30, 31},    // Larger than all existing.
-                             {1, 30, 32}});  // Larger than all existing.
+      makeIdTableFromVector({{2, 15, 20},    // Equals Row 2
+                             {2, 14, 20},    // Before Row 2
+                             {2, 20, 10},    // Equals Row 4
+                             {2, 30, 20},    // Equals Row 5
+                             {2, 30, 30},    // Equals Row 6
+                             {2, 30, 31},    // Before Row 7
+                             {9, 30, 32}});  // Larger than all.
 
   // Now test for multiple block sizes (16 bytes is the minimum).
   // testing::internal::CaptureStdout();
@@ -313,34 +328,40 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
   // With block size 16, we have each triple in its own block.
   testWithGivenBlockSize(
       triplesInIndex, triplesToLocate, 16,
-      {{1, "{ LT(1 0 V:1 V:14 V:20 0) LT(1 0 V:1 V:15 V:20 1) }"},
-       {3, "{ LT(3 0 V:1 V:20 V:10 1) }"},
-       {4, "{ LT(4 0 V:1 V:30 V:20 1) }"},
-       {5, "{ LT(5 0 V:1 V:30 V:30 1) }"},
-       {6, "{ LT(6 x V:1 V:30 V:31 0) LT(6 x V:1 V:30 V:32 0) }"}});
+      {{2, "{ LT(2 0 V:2 V:14 V:20 0) LT(2 0 V:2 V:15 V:20 1) }"},
+       {4, "{ LT(4 0 V:2 V:20 V:10 1) }"},
+       {5, "{ LT(5 0 V:2 V:30 V:20 1) }"},
+       {6, "{ LT(6 0 V:2 V:30 V:30 1) }"},
+       {7, "{ LT(7 0 V:2 V:30 V:31 0) }"},
+       {8, "{ LT(8 x V:9 V:30 V:32 0) }"}});
 
-  // With block size 32, we have three blocks à two triples each.
+  // With block size 32, we have five blocks (Block 0 = Row 0, Block 1 = Row
+  // 1+2, Block 2 = Row 3+4, Block 3 = Row 5+6, Block 4 = Row 7). Note that a
+  // relation that spans multiple blocks has these blocks on its own.
   testWithGivenBlockSize(
       triplesInIndex, triplesToLocate, 32,
-      {{0, "{ LT(0 1 V:1 V:14 V:20 0) LT(0 1 V:1 V:15 V:20 1) }"},
-       {1, "{ LT(1 1 V:1 V:20 V:10 1) }"},
-       {2, "{ LT(2 0 V:1 V:30 V:20 1) LT(2 1 V:1 V:30 V:30 1) }"},
-       {3, "{ LT(3 x V:1 V:30 V:31 0) LT(3 x V:1 V:30 V:32 0) }"}});
+      {{1, "{ LT(1 1 V:2 V:14 V:20 0) LT(1 1 V:2 V:15 V:20 1) }"},
+       {2, "{ LT(2 1 V:2 V:20 V:10 1) }"},
+       {3, "{ LT(3 0 V:2 V:30 V:20 1) LT(3 1 V:2 V:30 V:30 1) }"},
+       {4, "{ LT(4 0 V:2 V:30 V:31 0) }"},
+       {5, "{ LT(5 x V:9 V:30 V:32 0) }"}});
 
-  // With block size 48, we have two blocks à three triples each.
+  // With block size 48, we have four blocks (Block 0 = Row 0, Block 1 = Row
+  // 1+2+3, Block 2 = Row 4+5+6, Block 3 = Row 7).
   testWithGivenBlockSize(
       triplesInIndex, triplesToLocate, 48,
-      {{0, "{ LT(0 1 V:1 V:14 V:20 0) LT(0 1 V:1 V:15 V:20 1) }"},
-       {1,
-        "{ LT(1 0 V:1 V:20 V:10 1) LT(1 1 V:1 V:30 V:20 1)"
-        " LT(1 2 V:1 V:30 V:30 1) }"},
-       {2, "{ LT(2 x V:1 V:30 V:31 0) LT(2 x V:1 V:30 V:32 0) }"}});
+      {{1, "{ LT(1 1 V:2 V:14 V:20 0) LT(1 1 V:2 V:15 V:20 1) }"},
+       {2,
+        "{ LT(2 0 V:2 V:20 V:10 1) LT(2 1 V:2 V:30 V:20 1)"
+        " LT(2 2 V:2 V:30 V:30 1) }"},
+       {3, "{ LT(3 0 V:2 V:30 V:31 0) }"},
+       {4, "{ LT(4 x V:9 V:30 V:32 0) }"}});
 
   // With block size 100'000, we have one block.
-  testWithGivenBlockSize(
-      triplesInIndex, triplesToLocate, 100'000,
-      {{0,
-        "{ LT(0 1 V:1 V:14 V:20 0) LT(0 1 V:1 V:15 V:20 1) LT(0 3 V:1 V:20 "
-        "V:10 1) LT(0 4 V:1 V:30 V:20 1) LT(0 5 V:1 V:30 V:30 1) }"},
-       {1, "{ LT(1 x V:1 V:30 V:31 0) LT(1 x V:1 V:30 V:32 0) }"}});
+  testWithGivenBlockSize(triplesInIndex, triplesToLocate, 100'000,
+                         {{0,
+                           "{ LT(0 2 V:2 V:14 V:20 0) LT(0 2 V:2 V:15 V:20 1) "
+                           "LT(0 4 V:2 V:20 V:10 1) LT(0 5 V:2 V:30 V:20 1) "
+                           "LT(0 6 V:2 V:30 V:30 1) LT(0 7 V:2 V:30 V:31 0) }"},
+                          {1, "{ LT(1 x V:9 V:30 V:32 0) }"}});
 }
