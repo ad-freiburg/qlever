@@ -11,7 +11,7 @@
 
 namespace ad_utility {
 /*
-@brief Provides the normal structure for exceptions, where the constructor
+@brief Provides the normal structure for exceptions, where the class constructor
 builds a string message, which will be later returned.
 */
 class ExceptionWithMessage : public std::exception {

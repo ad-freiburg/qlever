@@ -8,8 +8,10 @@
 #include <cstddef>
 #include <vector>
 
+#include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
+#include "util/ConfigManager/ConfigShorthandVisitor.h"
 
 TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
   ad_utility::ConfigManager config{};
@@ -53,8 +55,9 @@ TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
 
   // Trying to get a configuration option, that does not exist, should cause
   // an exception.
-  ASSERT_ANY_THROW(
-      config.getConfigurationOptionByNestedKeys({"Shared_part", "Getsbourgh"}));
+  ASSERT_THROW(
+      config.getConfigurationOptionByNestedKeys({"Shared_part", "Getsbourgh"}),
+      ad_utility::NoConfigOptionFoundException);
 }
 
 /*
@@ -70,9 +73,9 @@ TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
 
   // Trying to add a configuration option with the same name at the same
   // place, should cause an error.
-  ASSERT_ANY_THROW(config.createConfigOption<int>(
-      {"Shared_part", "Unique_part_1", "Sense_of_existence"}, "", &notUsed,
-      42););
+  ASSERT_THROW(config.createConfigOption<int>(
+      {"Shared_part", "Unique_part_1", "Sense_of_existence"}, "", &notUsed, 42);
+               , ad_utility::ConfigManagerOptionPathAlreadyinUseException);
 
   /*
   If the first key for the path given is a number, that should cause an
@@ -81,10 +84,14 @@ TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
   object literal, so that user can easier find things. Ordering your options
   by just giving them numbers, would be bad practice, so we should prevent it.
   */
-  ASSERT_ANY_THROW(config.createConfigOption<int>(
-      {size_t{0}, "Shared_part", "Sense_of_existence"}, "", &notUsed, 42););
-  ASSERT_ANY_THROW(config.createConfigOption<int>(
-      {size_t{3}, "Shared_part", "Sense_of_existence"}, "", &notUsed, 42););
+  ASSERT_THROW(
+      config.createConfigOption<int>(
+          {size_t{0}, "Shared_part", "Sense_of_existence"}, "", &notUsed, 42);
+      , ad_utility::ConfigManagerOptionPathDoesntStartWithStringException);
+  ASSERT_THROW(
+      config.createConfigOption<int>(
+          {size_t{3}, "Shared_part", "Sense_of_existence"}, "", &notUsed, 42);
+      , ad_utility::ConfigManagerOptionPathDoesntStartWithStringException);
 
   /*
   Trying to add a configuration option with a path containing strings with
@@ -93,10 +100,11 @@ TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
   configuration grammar. Ergo, you can't set values, with such paths per short
   hand, which we don't want.
   */
-  ASSERT_ANY_THROW(config.createConfigOption<int>(
+  ASSERT_THROW(config.createConfigOption<int>(
       ad_utility::ConfigManager::VectorOfKeysForJson{"Shared part",
                                                      "Sense_of_existence"},
-      "", &notUsed, 42););
+      "", &notUsed, 42);
+               , ad_utility::NotValidShortHandNameException);
 }
 
 TEST(ConfigManagerTest, ParseConfig) {
@@ -176,13 +184,18 @@ TEST(ConfigManagerTest, ParseConfigExceptionTest) {
       std::vector{40, 41});
 
   // Should throw an exception, if we don't set all options, that must be set.
-  ASSERT_ANY_THROW(config.parseConfig(nlohmann::json::parse(R"--({})--")));
+  ASSERT_THROW(config.parseConfig(nlohmann::json::parse(R"--({})--")),
+               ad_utility::ConfigOptionWasntSetException);
 
   // Should throw an exception, if we try set an option, that isn't there.
-  ASSERT_ANY_THROW(config.parseConfig(nlohmann::json::parse(
-      R"--({"depth 0":{"Without_default":42, "with_default" : [39]}})--")));
-  ASSERT_ANY_THROW(config.parseConfig(nlohmann::json::parse(
-      R"--({"depth 0":{"Without_default":42, "test_string" : "test"}})--")));
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json::parse(
+          R"--({"depth 0":{"Without_default":42, "with_default" : [39]}})--")),
+      ad_utility::NoConfigOptionFoundException);
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json::parse(
+          R"--({"depth 0":{"Without_default":42, "test_string" : "test"}})--")),
+      ad_utility::NoConfigOptionFoundException);
 }
 
 TEST(ConfigManagerTest, ParseShortHandTest) {
@@ -288,7 +301,9 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
   checkOption(static_cast<int>(10), {"No_change"});
 
   // Multiple key value pairs with the same key are not allowed.
-  ASSERT_ANY_THROW(ad_utility::ConfigManager::parseShortHand(R"(a:42, a:43)"););
+  ASSERT_THROW(ad_utility::ConfigManager::parseShortHand(R"(a:42, a:43)");
+               , ToJsonConfigShorthandVisitor::
+                     ConfigShortHandVisitorKeyCollisionException);
 
   // Final test: Is there an exception, if we try to parse the wrong syntax?
   ASSERT_ANY_THROW(ad_utility::ConfigManager::parseShortHand(

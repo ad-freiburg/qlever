@@ -2,13 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigShorthandVisitor.h"
-
 #include <absl/strings/str_cat.h>
 
 #include <exception>
 #include <utility>
 
+#include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/Exception.h"
 
 // __________________________________________________________________________
@@ -17,31 +16,22 @@ nlohmann::json::object_t ToJsonConfigShorthandVisitor::visitShortHandString(
   return visitAssignments(context->assignments());
 }
 
-/*
-@brief A custom exception, the `ConfigShortHandVisitor` runs into a key
-collision.
-*/
-class ConfigShortHandVisitorKeyCollisionException : public std::exception {
- private:
-  // The error message.
-  std::string message_;
+// __________________________________________________________________________
+ToJsonConfigShorthandVisitor::ConfigShortHandVisitorKeyCollisionException::
+    ConfigShortHandVisitorKeyCollisionException(std::string_view keyName) {
+  message_ = absl::StrCat(
+      "Key error in the short hand: There are at least two key value "
+      "pairs, at the same level of depth, with the key '",
+      keyName,
+      "' given. This is not allowed, keys must be unique at their level of "
+      "depth.");
+}
 
- public:
-  /*
-  @param keyName The string representation of the key.
-  */
-  explicit ConfigShortHandVisitorKeyCollisionException(
-      std::string_view keyName) {
-    message_ = absl::StrCat(
-        "Key error in the short hand: There are at least two key value "
-        "pairs, at the same level of depth, with the key '",
-        keyName,
-        "' given. This is not allowed, keys must be unique at their level of "
-        "depth.");
-  }
-
-  const char* what() const throw() override { return message_.c_str(); }
-};
+// __________________________________________________________________________
+const char* ToJsonConfigShorthandVisitor::
+    ConfigShortHandVisitorKeyCollisionException::what() const throw() {
+  return message_.c_str();
+}
 
 // __________________________________________________________________________
 nlohmann::json::object_t ToJsonConfigShorthandVisitor::visitAssignments(
