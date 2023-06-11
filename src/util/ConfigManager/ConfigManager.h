@@ -71,6 +71,16 @@ class ConfigManager {
   static nlohmann::json::json_pointer createJsonPointer(
       const VectorOfKeysForJson& keys);
 
+  /*
+  @brief Adds a configuration option, that can be accessed with the given path.
+
+  @param pathToOption Describes a path in json, that points to the value held by
+  the configuration option. NOTE: The first key must be a string, and the last
+  key must be string, equal to the name of the configuration option.
+  */
+  void addConfigOption(const VectorOfKeysForJson& pathToOption,
+                       ConfigOption&& option);
+
  public:
   /*
   @brief Creates and adds a new configuration option.
@@ -97,69 +107,11 @@ class ConfigManager {
                           OptionType* variableToPutValueOfTheOptionIn,
                           std::optional<OptionType> defaultValue =
                               std::optional<OptionType>(std::nullopt)) {
-    // We need at least a name in the path.
-    AD_CONTRACT_CHECK(pathToOption.size() > 0);
-
-    // The position in the json object literal, our `pathToOption` points to.
-    const nlohmann::json::json_pointer ptr{createJsonPointer(pathToOption)};
-
-    /*
-    The first key must be a string, not a number. Having an array at the
-    highest level, would be bad practice, because setting and reading options,
-    that are just identified with numbers, is rather difficult.
-    */
-    if (!std::holds_alternative<std::string>(pathToOption.front())) {
-      throw ConfigManagerOptionPathDoesntStartWithStringException(
-          vectorOfKeysForJsonToString(pathToOption));
-    }
-
-    // The last entry in the path is the name for the configuration option. It
-    // must be a string.
-    if (!std::holds_alternative<std::string>(pathToOption.back())) {
-      throw ConfigManagerOptionPathDoesntEndWithStringException(
-          vectorOfKeysForJsonToString(pathToOption));
-    }
-
-    /*
-    The string keys must be a valid `NAME` in the short hand. Otherwise, the
-    option can't get accessed with the short hand.
-    */
-    auto checkIfValidNameVisitor = []<typename T>(const T& key) {
-      // Only actually check, if we have a string.
-      if constexpr (isString<std::decay_t<T>>) {
-        return isNameInShortHand(AD_FWD(key));
-      } else {
-        return true;
-      }
-    };
-
-    if (auto failedKey = std::ranges::find_if_not(
-            pathToOption,
-            [&checkIfValidNameVisitor](const KeyForJson& key) {
-              return std::visit(checkIfValidNameVisitor, key);
-            });
-        failedKey != pathToOption.end()) {
-      /*
-      One of the keys failed. `failedKey` is an iterator pointing to the key.
-      */
-      throw NotValidShortHandNameException(
-          std::get<std::string>(*failedKey),
-          vectorOfKeysForJsonToString(pathToOption));
-    }
-
-    // Is there already a configuration option with the same identifier at the
-    // same location?
-    if (keyToConfigurationOptionIndex_.contains(ptr)) {
-      throw ConfigManagerOptionPathAlreadyinUseException(
-          vectorOfKeysForJsonToString(pathToOption), printConfigurationDoc());
-    }
-
-    // Add the location of the new configuration option to the json.
-    keyToConfigurationOptionIndex_[ptr] = configurationOptions_.size();
-    // Add the new configuration option.
-    configurationOptions_.push_back(makeConfigOption<OptionType>(
-        std::get<std::string>(pathToOption.back()), optionDescription,
-        variableToPutValueOfTheOptionIn, defaultValue));
+    addConfigOption(
+        pathToOption,
+        makeConfigOption<OptionType>(
+            std::get<std::string>(pathToOption.back()), optionDescription,
+            variableToPutValueOfTheOptionIn, defaultValue));
   }
 
   /*

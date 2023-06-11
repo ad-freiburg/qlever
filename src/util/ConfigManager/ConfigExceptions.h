@@ -6,6 +6,7 @@
 
 #include <exception>
 #include <string>
+#include <string_view>
 
 #include "util/json.h"
 
@@ -186,5 +187,22 @@ class ConfigOptionGetWrongTypeException : public ExceptionWithMessage {
   explicit ConfigOptionGetWrongTypeException(
       std::string_view optionIdentifier, std::string_view valueTypeOfOption,
       std::string_view templateParameterAsString);
+};
+
+/*
+@brief A custom exception, for when somebody tries to add a `ConfigOption` to a
+`ConfigManager` with a path to the option, where the final key of the path isn't
+the name of the config option.
+*/
+class ConfigManagerPathToConfigOptionDoesntEndWithConfigOptionNameException
+    : public ExceptionWithMessage {
+ public:
+  /*
+  @param optionIdentifier The name of the option.
+  @param pathToOption The path, which last key wasn't the name of the
+  configuration option.
+  */
+  explicit ConfigManagerPathToConfigOptionDoesntEndWithConfigOptionNameException(
+      std::string_view optionIdentifier, std::string_view pathToOption);
 };
 }  // namespace ad_utility

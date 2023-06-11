@@ -123,4 +123,14 @@ ConfigOptionGetWrongTypeException::ConfigOptionGetWrongTypeException(
                           "'. It can't be returned as a value of type '",
                           templateParameterAsString, "'.");
 }
+
+//_____________________________________________________________________________
+ConfigManagerPathToConfigOptionDoesntEndWithConfigOptionNameException::
+    ConfigManagerPathToConfigOptionDoesntEndWithConfigOptionNameException(
+        std::string_view optionIdentifier, std::string_view pathToOption) {
+  message_ = absl::StrCat(
+      "Error while trying to add a ConfigOption to a ConfigManager: The path '",
+      pathToOption, "' doesn't end with the name of ConfigOption '",
+      optionIdentifier, "'.");
+}
 }  // namespace ad_utility
