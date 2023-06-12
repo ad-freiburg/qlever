@@ -32,7 +32,10 @@ jobs:
 
     - name: Install python dependencies for E2E tests
       run: |
-        brew install icu4c 
+        brew uninstall --ignore-dependencies icu4c
+        brew install pkg-config icu4c 
+        export PATH="/usr/local/opt/icu4c/bin:/usr/local/opt/icu4c/sbin:$PATH"
+        export PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/opt/icu4c/lib/pkgconfig"
         pip3 install pyaml pyicu
 
     - name: Install dependencies
