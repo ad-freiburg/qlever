@@ -30,6 +30,8 @@ jobs:
       with:
         submodules: 'recursive'
 
+    - name: brew info
+      run: brew info icu4c
     - name: Install python dependencies for E2E tests
       run: |
         brew uninstall --ignore-dependencies icu4c
