@@ -31,7 +31,7 @@ jobs:
         submodules: 'recursive'
 
     - name: Install python dependencies for E2E tests
-      run: pip3 install pyaml icu
+      run: pip3 install pyaml pyicu
 
     - name: Install dependencies
       run:  |
