@@ -49,9 +49,9 @@ TEST(JoinAlgorithms, JoinWithBlocksSingleBlock) {
 }
 
 TEST(JoinAlgorithms, JoinWithBlocksMultipleBlocksOverlap) {
-  NestedBlock a{{1, 4, 18, 42}, {54, 57, 59}};
-  NestedBlock b{{0, 4, 5, 19, 42, 54}, {56, 57, 58}};
+  NestedBlock a{{1, 4, 18, 42}, {54, 57, 59}, {60, 67}};
+  NestedBlock b{{0, 4, 5, 19, 42, 54}, {56, 57, 58, 59}, {61, 67}};
   std::vector<size_t> result;
   zipperJoinForBlocksWithoutUndef(a, b, std::less<>{}, makeRowAdder(result));
-  EXPECT_THAT(result, ::testing::ElementsAre(4, 42, 54, 57));
+  EXPECT_THAT(result, ::testing::ElementsAre(4, 42, 54, 57, 59, 67));
 }

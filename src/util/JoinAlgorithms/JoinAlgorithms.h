@@ -589,12 +589,16 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   auto fillBuffer = [&]() {
     AD_CORRECTNESS_CHECK(sameBlocksLeft.size() <= 1);
     AD_CORRECTNESS_CHECK(sameBlocksRight.size() <= 1);
-    if (sameBlocksLeft.empty() && it1 != end1) {
-      sameBlocksLeft.push_back(std::move(*it1));
+    while (sameBlocksLeft.empty() && it1 != end1) {
+      if (!it1->empty()) {
+        sameBlocksLeft.push_back(std::move(*it1));
+      }
       ++it1;
     }
-    if (sameBlocksRight.empty() && it2 != end2) {
-      sameBlocksRight.push_back(std::move(*it2));
+    while (sameBlocksRight.empty() && it2 != end2) {
+      if (!it2->empty()) {
+        sameBlocksRight.push_back(std::move(*it2));
+      }
       ++it2;
     }
 
@@ -610,17 +614,17 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
 
     while (it1 != end1) {
       sameBlocksLeft.push_back(std::move(*it1));
+      ++it1;
       if (!eq(sameBlocksLeft.back().back(), lastLeft)) {
         break;
       }
-      ++it1;
     }
     while (it2 != end2) {
       sameBlocksRight.push_back(std::move(*it2));
+      ++it2;
       if (!eq(sameBlocksRight.back().back(), lastRight)) {
         break;
       }
-      ++it2;
     }
   };
 
