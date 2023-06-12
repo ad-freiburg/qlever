@@ -608,11 +608,6 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     const auto& lastLeft = sameBlocksLeft.front().back();
     const auto& lastRight = sameBlocksRight.front().back();
 
-    /*
-        if (!eq(lastRight, lastLeft)) {
-        return;
-        }
-    */
     if (!lessThan(lastRight, lastLeft)) {
       while (it1 != end1 && eq((*it1).at(0), lastLeft)) {
         sameBlocksLeft.push_back(std::move(*it1));
@@ -674,16 +669,6 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   };
 
   auto joinBuffers = [&]() {
-    // TODO<joka921> Figure out why we need this base case to make the tests
-    // work.
-    if (sameBlocksLeft.size() == 1 && sameBlocksRight.size() == 1) {
-      join(sameBlocksLeft.at(0), sameBlocksRight.at(0));
-      auto minEl = std::min(sameBlocksLeft.front().back(),
-                            sameBlocksRight.front().back());
-      removeAllButUnjoined(sameBlocksLeft, minEl);
-      removeAllButUnjoined(sameBlocksRight, minEl);
-      return;
-    }
     auto [subrangeLeft, subrangeRight] = joinAndRemoveBeginning();
     using SubLeft = decltype(subrangeLeft);
     using SubRight = decltype(subrangeRight);
@@ -706,12 +691,10 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
           sameBlocksRight.back(), sameBlocksRight.front().back(), lessThan));
     }
     addAll(l, r);
-    // TODO<joka921> If we reach this part of the code, then the following two
-    // should be equal.
-    auto maxEl =
-        std::max(sameBlocksLeft.front().back(), sameBlocksRight.front().back());
-    removeAllButUnjoined(sameBlocksLeft, maxEl);
-    removeAllButUnjoined(sameBlocksRight, maxEl);
+    auto minEl =
+        std::min(sameBlocksLeft.front().back(), sameBlocksRight.front().back());
+    removeAllButUnjoined(sameBlocksLeft, minEl);
+    removeAllButUnjoined(sameBlocksRight, minEl);
   };
 
   while (true) {
