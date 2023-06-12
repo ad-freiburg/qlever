@@ -31,7 +31,10 @@ jobs:
         submodules: 'recursive'
 
     - name: brew info
-      run: brew info icu4c
+      run: |
+        brew info icu4c
+        echo PATH="/usr/local/opt/icu4c/bin:/usr/local/opt/icu4c/sbin:$PATH" >> $GITHUB_ENV
+        eco PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/opt/icu4c/lib/pkgconfig" >> $GITHUB_ENV
     - name: Install python dependencies for E2E tests
       run: |
         brew uninstall --ignore-dependencies icu4c
