@@ -13,8 +13,8 @@ using ad_utility::TimeoutTimer;
 using ad_utility::Timer;
 using namespace std::chrono_literals;
 
-// On MacOS the timer seems to work, but the `sleep_for` is too imprecise.
-#ifndef __APPLE
+// On macOS the timer seems to work, but the `sleep_for` is too imprecise.
+#ifndef __APPLE__
 
 void testTime(Timer::Duration duration, size_t msecs,
               std::chrono::milliseconds expected) {
