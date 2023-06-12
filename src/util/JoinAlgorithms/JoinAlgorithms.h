@@ -574,8 +574,8 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
                                      RightBlocks&& rightBlocks,
                                      const LessThan& lessThan,
                                      const auto& compatibleRowAction) {
-  using LeftBlock = typename LeftBlocks::value_type;
-  using RightBlock = typename RightBlocks::value_type;
+  using LeftBlock = typename std::decay_t<LeftBlocks>::value_type;
+  using RightBlock = typename std::decay_t<RightBlocks>::value_type;
   auto it1 = leftBlocks.begin();
   auto end1 = leftBlocks.end();
   auto it2 = rightBlocks.begin();
@@ -593,8 +593,8 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
       sameBlocksLeft.push_back(std::move(*it1));
       ++it1;
     }
-    if (sameBlocksLeft.empty() && it2 != end2) {
-      sameBlocksLeft.push_back(std::move(*it2));
+    if (sameBlocksRight.empty() && it2 != end2) {
+      sameBlocksRight.push_back(std::move(*it2));
       ++it2;
     }
 
@@ -604,16 +604,20 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     const auto& lastLeft = sameBlocksLeft.front().back();
     const auto& lastRight = sameBlocksRight.front().back();
 
+    if (!eq(lastLeft, lastRight)) {
+      return;
+    }
+
     while (it1 != end1) {
       sameBlocksLeft.push_back(std::move(*it1));
-      if (!eq(sameBlocksLeft.back().back, lastLeft)) {
+      if (!eq(sameBlocksLeft.back().back(), lastLeft)) {
         break;
       }
       ++it1;
     }
     while (it2 != end2) {
       sameBlocksRight.push_back(std::move(*it2));
-      if (!eq(sameBlocksRight.back().back, lastRight)) {
+      if (!eq(sameBlocksRight.back().back(), lastRight)) {
         break;
       }
       ++it2;
@@ -630,7 +634,7 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
       for (const auto& rBlock : r) {
         for (const auto& lEl : lBlock) {
           for (const auto& rEl : rBlock) {
-            compatibleRowAction(&lBlock, &rBlock);
+            compatibleRowAction(&lEl, &rEl);
           }
         }
       }
@@ -640,8 +644,9 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   auto joinAndRemoveBeginning = [&]() {
     auto& l = sameBlocksLeft.at(0);
     auto& r = sameBlocksRight.at(0);
-    auto itL = std::ranges::lower_bound(l, l.back(), lessThan);
-    auto itR = std::ranges::lower_bound(r, r.back(), lessThan);
+    auto maxEl = std::max(l.back(), r.back(), lessThan);
+    auto itL = std::ranges::lower_bound(l, maxEl, lessThan);
+    auto itR = std::ranges::lower_bound(r, maxEl, lessThan);
     join(std::ranges::subrange{l.begin(), itL},
          std::ranges::subrange{r.begin(), itR});
     return std::pair{std::ranges::subrange{itL, l.end()},
@@ -666,6 +671,11 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     if (sameBlocksLeft.size() == 1) {
       AD_CORRECTNESS_CHECK(sameBlocksRight.size() == 1);
       join(sameBlocksLeft.at(0), sameBlocksRight.at(0));
+      auto minEl = std::min(sameBlocksLeft.front().back(),
+                            sameBlocksRight.front().back());
+      removeAllButUnjoined(sameBlocksLeft, minEl);
+      removeAllButUnjoined(sameBlocksRight, minEl);
+      return;
     }
     auto [subrangeLeft, subrangeRight] = joinAndRemoveBeginning();
     using SubLeft = decltype(subrangeLeft);
@@ -688,9 +698,13 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
       r.push_back(std::ranges::equal_range(
           sameBlocksRight.back(), sameBlocksRight.front().back(), lessThan));
     }
-    addAll(sameBlocksLeft, sameBlocksRight);
-    removeAllButUnjoined(sameBlocksLeft, sameBlocksLeft.front().back());
-    removeAllButUnjoined(sameBlocksRight, sameBlocksRight.front().back());
+    addAll(l, r);
+    // TODO<joka921> If we reach this part of the code, then the following two
+    // should be equal.
+    auto maxEl =
+        std::max(sameBlocksLeft.front().back(), sameBlocksRight.front().back());
+    removeAllButUnjoined(sameBlocksLeft, maxEl);
+    removeAllButUnjoined(sameBlocksRight, maxEl);
   };
 
   while (true) {
