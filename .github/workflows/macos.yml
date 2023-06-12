@@ -30,6 +30,9 @@ jobs:
       with:
         submodules: 'recursive'
 
+    - name: Install python dependencies for E2E tests
+      run: pip3 install pyaml icu
+
     - name: Install dependencies
       run:  |
         brew install llvm@16
@@ -77,8 +80,7 @@ jobs:
         source ./conanrun.sh;
         benchmark/BenchmarkExamples -p;
 
-# Reinstate those once we have the dependencies in the cache
-#    - name: E2E
-#      run: >
-#        source ${{github.workspace}}/build/conanrun.sh;
-#        ${{github.workspace}}/e2e/e2e.sh
+    - name: E2E
+      run: >
+        source ${{github.workspace}}/build/conanrun.sh;
+        ${{github.workspace}}/e2e/e2e.sh
