@@ -609,14 +609,15 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     const auto& lastRight = sameBlocksRight.front().back();
 
     if (!lessThan(lastRight, lastLeft)) {
-      while (it1 != end1 && eq((*it1).at(0), lastLeft)) {
+    // TODO<joka921> here and below: use `at`, but it needs to be implemented in the `Row` class.
+      while (it1 != end1 && eq((*it1)[0], lastLeft)) {
         sameBlocksLeft.push_back(std::move(*it1));
         ++it1;
       }
     }
 
     if (!lessThan(lastLeft, lastRight)) {
-      while (it2 != end2 && eq((*it2).at(0), lastRight)) {
+      while (it2 != end2 && eq((*it2)[0], lastRight)) {
         sameBlocksRight.push_back(std::move(*it2));
         ++it2;
         if (!eq(sameBlocksRight.back().back(), lastRight)) {
@@ -646,7 +647,7 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   auto joinAndRemoveBeginning = [&]() {
     auto& l = sameBlocksLeft.at(0);
     auto& r = sameBlocksRight.at(0);
-    auto minEl = std::min(l.back(), r.back(), lessThan);
+    typename std::iterator_traits<decltype(l.begin())>::value_type minEl = std::min(l.back(), r.back(), lessThan);
     auto itL = std::ranges::equal_range(l, minEl, lessThan);
     auto itR = std::ranges::equal_range(r, minEl, lessThan);
     join(std::ranges::subrange{l.begin(), itL.begin()},
@@ -657,14 +658,15 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   auto removeAllButUnjoined = [lessThan]<typename Blocks>(
                                   Blocks& blocks, auto lastHandledElement) {
     AD_CORRECTNESS_CHECK(!blocks.empty());
-    const auto& lastBlock = blocks.back();
+      typename Blocks::value_type remainingBlock = std::move(blocks.back());
     auto beginningOfUnjoined =
-        std::ranges::upper_bound(lastBlock, lastHandledElement, lessThan);
-    typename Blocks::value_type remainingBlock{beginningOfUnjoined,
-                                               lastBlock.end()};
+        std::ranges::upper_bound(remainingBlock, lastHandledElement, lessThan);
+    // TODO<joka921> This is not the most efficient way, but currently necessary because of the
+    // interface of the `IdTable`.
+    remainingBlock.erase(remainingBlock.begin(), beginningOfUnjoined);
     blocks.clear();
     if (!remainingBlock.empty()) {
-      blocks.push_back(remainingBlock);
+      blocks.push_back(std::move(remainingBlock));
     }
   };
 
@@ -691,8 +693,9 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
           sameBlocksRight.back(), sameBlocksRight.front().back(), lessThan));
     }
     addAll(l, r);
-    auto minEl =
-        std::min(sameBlocksLeft.front().back(), sameBlocksRight.front().back());
+    typename std::iterator_traits<decltype(sameBlocksLeft.front().begin())>::value_type minEl =
+        std::min(sameBlocksLeft.front().back(), sameBlocksRight.front().back(),
+                 lessThan);
     removeAllButUnjoined(sameBlocksLeft, minEl);
     removeAllButUnjoined(sameBlocksRight, minEl);
   };

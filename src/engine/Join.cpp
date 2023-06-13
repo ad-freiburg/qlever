@@ -119,8 +119,13 @@ ResultTable Join::computeResult() {
 
   LOG(DEBUG) << "Computing Join result..." << endl;
 
-  join(leftRes->idTable(), _leftJoinCol, rightRes->idTable(), _rightJoinCol,
-       &idTable);
+  if (_left->getType() == QueryExecutionTree::SCAN &&
+      _right->getType() == QueryExecutionTree::SCAN) {
+    computeResultForTwoIndexScans(&idTable);
+  } else {
+    join(leftRes->idTable(), _leftJoinCol, rightRes->idTable(), _rightJoinCol,
+         &idTable);
+  }
 
   LOG(DEBUG) << "Join result computation done" << endl;
 
@@ -609,7 +614,39 @@ void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
 }
 
 // ______________________________________________________________________________________________________
-ResultTable Join::computeResultForTwoIndexScans() {
+void Join::computeResultForTwoIndexScans(IdTable* resultPtr) {
   AD_CORRECTNESS_CHECK(_left->getType() == QueryExecutionTree::SCAN &&
                        _right->getType() == QueryExecutionTree::SCAN);
+  auto& result = *resultPtr;
+  result.setNumColumns(getResultWidth());
+
+  auto addResultRow = [&](auto itLeft, auto itRight) {
+    const auto& l = *itLeft;
+    const auto& r = *itRight;
+    AD_CORRECTNESS_CHECK(l[0] == r[0]);
+    result.emplace_back();
+    IdTable::row_reference lastRow = result.back();
+    lastRow[0] = l[0];
+    size_t nextIndex = 1;
+    for (size_t i = 1; i < l.size(); ++i) {
+      lastRow[nextIndex] = l[i];
+      ++nextIndex;
+    }
+      for (size_t i = 1; i < r.size(); ++i) {
+          lastRow[nextIndex] = r[i];
+          ++nextIndex;
+      }
+  };
+
+  auto lessThan = [](const auto& a, const auto& b) {
+    return a[0] < b[0];
+  };
+
+  auto [leftBlocks, rightBlocks] = IndexScan::lazyScanForJoinOfTwoScans(dynamic_cast<const IndexScan&>(*_left->getRootOperation()), dynamic_cast<const IndexScan&>(*_right->getRootOperation()));
+
+  LOG(WARN) << "num blocks in first: " << std::ranges::distance(leftBlocks) << std::endl;
+  LOG(WARN) << "num blocks in second: " << std::ranges::distance(rightBlocks) << std::endl;
+  AD_FAIL();
+
+  ad_utility::zipperJoinForBlocksWithoutUndef(std::move(leftBlocks), std::move(rightBlocks), lessThan, addResultRow);
 }

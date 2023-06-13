@@ -133,7 +133,7 @@ class Join : public Operation {
 
   ResultTable computeResultForJoinWithFullScanDummy();
 
-  ResultTable computeResultForTwoIndexScans();
+  void computeResultForTwoIndexScans(IdTable* tablePtr);
 
   using ScanMethodType = std::function<void(Id, IdTable*)>;
 

@@ -308,7 +308,9 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
         readCompressedBlockFromFile(block, file, std::vector{1ul});
     co_yield decompressBlock(compressedBuffer, block.numRows_);
   }
-  timer->wlock()->checkTimeoutAndThrow();
+  if (timer) {
+    timer->wlock()->checkTimeoutAndThrow();
+  }
   if (lastBlockResult.has_value()) {
     co_yield lastBlockResult.value();
   }
@@ -371,14 +373,18 @@ CompressedRelationReader::getBlocksForJoin(
   auto beginBlock2 = relevantBlocks2.begin();
   auto endBlock2 = relevantBlocks2.end();
 
-  auto blockLessThanBlock = [](const CompressedBlockMetadata& block1,
-                               const CompressedBlockMetadata& block2) {
-    if (block1.col0LastId_ < block2.col0FirstId_ ||
-        block1.col0FirstId_ > block2.col0LastId_) {
-      return block1.col0LastId_ < block2.col0LastId_;
-    } else {
-      return false;
+    for (size_t i = 0; i < relevantBlocks1.size(); ++i) {
+        LOG(WARN) << "firstIdOfBlockRel1 " << i << ':'
+                  << relevantBlocks1[i].col0FirstId_ << ' ' <<  relevantBlocks1[i].col0FirstId_ << std::endl;
     }
+    for (size_t i = 0; i < relevantBlocks2.size(); ++i) {
+        LOG(WARN) << "firstIdOfBlockRel2 " << i << ':'
+                  << relevantBlocks2[i].col0FirstId_ << ' ' <<  relevantBlocks2[i].col0FirstId_ << std::endl;
+    }
+
+    auto blockLessThanBlock = [](const CompressedBlockMetadata& block1,
+                               const CompressedBlockMetadata& block2) {
+                               return block1.col0LastId_ < block2.col0FirstId_;
   };
 
   std::array<std::vector<CompressedBlockMetadata>, 2> result;
@@ -793,6 +799,7 @@ CompressedRelationReader::getBlocksFromMetadata(
     auto [beginBlock, endBlock] = std::equal_range(
         blockMetadata.begin(), blockMetadata.end(),
         KeyLhs{col0Id, col0Id, col1Id.value(), col1Id.value()}, comp);
+    LOG(WARN) << "number of found blocks: " << endBlock - beginBlock << std::endl;
     return {beginBlock, endBlock};
   }
 }

@@ -283,7 +283,6 @@ std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
   const auto& index = s1.getExecutionContext()->getIndex().getImpl();
   AD_CONTRACT_CHECK(s1._numVariables < 3 && s2._numVariables < 3);
 
-  const auto& s = s1;
   auto f =
       [&](const IndexScan& s) -> std::optional<Permutation::MetaDataAndBlocks> {
     auto permutedTriple = s.getPermutedTriple();

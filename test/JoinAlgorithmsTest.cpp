@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/TransparentFunctors.h"
 
 using namespace ad_utility;
 namespace {
@@ -61,9 +62,9 @@ TEST(JoinAlgorithms, JoinWithBlocksMultipleBlocksOverlap) {
   EXPECT_THAT(result, ::testing::ElementsAre(4, 42, 54, 57, 59, 67));
 }
 
-TEST(JoinAlgorithms, JoinWithBlocksMultipleBlocksDuplicates) {
+TEST(JoinAlgorithms, JoinWithBlocksMultipleBlocksPerElement) {
   using NB = std::vector<std::vector<std::array<size_t, 2>>>;
-  NB a{{{1, 0}, {42, 0}}, {{42, 1}, {42, 2}}, {{42, 3}, {43, 5}, {67, 0}}};
+  NB a{{{1, 0}, {42, 0}}, {{42, 1}, {42, 2}}, {{42, 3}, {48, 5}, {67, 0}}};
   NB b{{{2, 0}, {42, 12}, {43, 1}}, {{67, 13}, {69, 14}}};
   std::vector<std::array<size_t, 3>> result;
   std::vector<std::array<size_t, 3>> expectedResult{
@@ -81,4 +82,30 @@ TEST(JoinAlgorithms, JoinWithBlocksMultipleBlocksDuplicates) {
   }
   zipperJoinForBlocksWithoutUndef(NB{b}, NB{a}, compare, add);
   EXPECT_THAT(result, ::testing::ElementsAreArray(expectedResult));
+}
+
+TEST(JoinAlgorithms, JoinWithBlocksMultipleBlocksPerElementBothSides) {
+    using NB = std::vector<std::vector<std::array<size_t, 2>>>;
+    NB a{{{42, 0}}, {{42, 1}, {42, 2}}, {{42, 3}, {67, 0}}};
+    NB b{{{2, 0}, {42, 12}}, {{42, 13}, {67, 14}}};
+    std::vector<std::array<size_t, 3>> result;
+    std::vector<std::array<size_t, 3>> expectedResult{
+            {42, 0, 12}, {42, 0, 13},{42, 1, 12}, {42, 2, 12}, {42, 1, 13}, {42, 2, 13},{42, 3, 12}, {42, 3, 13}, {67, 0, 14}};
+    auto compare = [](auto l, auto r) { return l[0] < r[0]; };
+    auto add = [&result](auto it1, auto it2) {
+        AD_CORRECTNESS_CHECK((*it1)[0] == (*it1)[0]);
+        result.push_back(std::array{(*it1)[0], (*it1)[1], (*it2)[1]});
+    };
+    zipperJoinForBlocksWithoutUndef(NB{a}, NB{b}, compare, add);
+    // The exact order of the elements with the same first column is not important and depends on implementation
+    // details. We therefore do not enforce it here.
+    EXPECT_TRUE(std::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
+    EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expectedResult));
+    result.clear();
+    for (auto& [x, y, z] : expectedResult) {
+        std::swap(y, z);
+    }
+    zipperJoinForBlocksWithoutUndef(NB{b}, NB{a}, compare, add);
+    EXPECT_TRUE(std::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
+    EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expectedResult));
 }
