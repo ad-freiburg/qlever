@@ -18,6 +18,7 @@
 #include "util/Generator.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/SerializeVector.h"
+#include "util/Serializer/SerializeArray.h"
 #include "util/Serializer/Serializer.h"
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
@@ -67,14 +68,8 @@ struct CompressedBlockMetadata {
   // space efficiency. For example, for Wikidata, we have only around 50K blocks
   // with block size 8M and around 5M blocks with block size 80K; even the
   // latter takes only half a GB in total.
-  Id col0FirstId_;
-  Id col0LastId_;
-  Id col1FirstId_;
-  Id col1LastId_;
-
-  // For our `DeltaTriples` (https://github.com/ad-freiburg/qlever/pull/916), we
-  // need to know the least significant `Id` of the last triple as well.
-  Id col2LastId_;
+  std::array<Id, 3> firstTriple_;
+  std::array<Id, 3> lastTriple_;
 
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadata&) const = default;
@@ -90,11 +85,8 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata::OffsetAndCompressedSize) {
 AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
   serializer | arg.offsetsAndCompressedSize_;
   serializer | arg.numRows_;
-  serializer | arg.col0FirstId_;
-  serializer | arg.col0LastId_;
-  serializer | arg.col1FirstId_;
-  serializer | arg.col1LastId_;
-  serializer | arg.col2LastId_;
+  serializer | arg.firstTriple_;
+  serializer | arg.lastTriple_;
 }
 
 // The metadata of a whole compressed "relation", where relation refers to a
@@ -272,18 +264,20 @@ class CompressedRelationReader {
   static std::array<std::vector<CompressedBlockMetadata>, 2> getBlocksForJoin(
       const CompressedRelationMetadata& md1,
       const CompressedRelationMetadata& md2,
+      std::optional<Id> col1Id1,
+      std::optional<Id> col1Id2,
       std::span<const CompressedBlockMetadata> blockMetadata1,
       std::span<const CompressedBlockMetadata> blockMetadata2);
 
   cppcoro::generator<IdTable> lazyScan(
-      const CompressedRelationMetadata& metadata,
-      std::span<const CompressedBlockMetadata> blockMetadata,
+      CompressedRelationMetadata metadata,
+      std::vector<CompressedBlockMetadata> blockMetadata,
       ad_utility::File& file, ad_utility::AllocatorWithLimit<Id> allocator,
       ad_utility::SharedConcurrentTimeoutTimer timer) const;
 
   cppcoro::generator<IdTable> lazyScan(
-      const CompressedRelationMetadata& metadata, Id col1Id,
-      std::span<const CompressedBlockMetadata> blockMetadata,
+      CompressedRelationMetadata metadata, Id col1Id,
+      std::vector<CompressedBlockMetadata> blockMetadata,
       ad_utility::File& file, ad_utility::AllocatorWithLimit<Id> allocator,
       ad_utility::SharedConcurrentTimeoutTimer timer) const;
 

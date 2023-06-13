@@ -283,8 +283,9 @@ std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
   const auto& index = s1.getExecutionContext()->getIndex().getImpl();
   AD_CONTRACT_CHECK(s1._numVariables < 3 && s2._numVariables < 3);
 
-  auto f =
-      [&](const IndexScan& s) -> std::optional<Permutation::MetaDataAndBlocks> {
+  auto f = [&](const IndexScan& s)
+      -> std::optional<
+          std::pair<Permutation::MetaDataAndBlocks, std::optional<Id>>> {
     auto permutedTriple = s.getPermutedTriple();
     std::optional<Id> optId = permutedTriple[0]->toValueId(index.getVocab());
     std::optional<Id> optId2 =
@@ -293,8 +294,12 @@ std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
     if (!optId.has_value() || (!optId2.has_value() && s._numVariables == 1)) {
       return std::nullopt;
     }
-    return index.getPermutation(s.permutation())
-        .getMetadataAndBlocks(optId.value(), optId2);
+    auto optionalBla = index.getPermutation(s.permutation())
+                           .getMetadataAndBlocks(optId.value(), optId2);
+    if (optionalBla.has_value()) {
+      return std::pair{std::move(optionalBla.value()), optId2};
+    }
+    return std::nullopt;
   };
 
   auto metaBlocks1 = f(s1);
@@ -304,9 +309,9 @@ std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
     return {{}};
   }
   auto [blocks1, blocks2] = CompressedRelationReader::getBlocksForJoin(
-      metaBlocks1.value().relationMetadata_,
-      metaBlocks2.value().relationMetadata_, metaBlocks1.value().blockMetadata_,
-      metaBlocks2.value().blockMetadata_);
+      metaBlocks1.value().first.relationMetadata_,
+      metaBlocks2.value().first.relationMetadata_, metaBlocks1.value().second, metaBlocks2.value().second,  metaBlocks1.value().first.blockMetadata_,
+      metaBlocks2.value().first.blockMetadata_);
 
   // TODO<joka921> include a timeout timer.
   auto getScan = [&index](const IndexScan& s, const auto& blocks) {

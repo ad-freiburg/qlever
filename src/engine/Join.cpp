@@ -644,9 +644,7 @@ void Join::computeResultForTwoIndexScans(IdTable* resultPtr) {
 
   auto [leftBlocks, rightBlocks] = IndexScan::lazyScanForJoinOfTwoScans(dynamic_cast<const IndexScan&>(*_left->getRootOperation()), dynamic_cast<const IndexScan&>(*_right->getRootOperation()));
 
-  LOG(WARN) << "num blocks in first: " << std::ranges::distance(leftBlocks) << std::endl;
-  LOG(WARN) << "num blocks in second: " << std::ranges::distance(rightBlocks) << std::endl;
-  AD_FAIL();
-
-  ad_utility::zipperJoinForBlocksWithoutUndef(std::move(leftBlocks), std::move(rightBlocks), lessThan, addResultRow);
+  //LOG(WARN) << "num blocks in first: " << std::ranges::distance(leftBlocks) << std::endl;
+  //LOG(WARN) << "num blocks in second: " << std::ranges::distance(rightBlocks) << std::endl;
+  ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks, lessThan, addResultRow);
 }

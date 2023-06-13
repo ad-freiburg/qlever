@@ -43,12 +43,12 @@ void CompressedRelationReader::scan(
   // actual scan result.
   bool firstBlockIsIncomplete =
       beginBlock < endBlock &&
-      (beginBlock->col0FirstId_ < col0Id || beginBlock->col0LastId_ > col0Id);
+      (beginBlock->firstTriple_[0] < col0Id || beginBlock->lastTriple_[0] > col0Id);
   auto lastBlock = endBlock - 1;
 
   bool lastBlockIsIncomplete =
       beginBlock < lastBlock &&
-      (lastBlock->col0FirstId_ < col0Id || lastBlock->col0LastId_ > col0Id);
+      (lastBlock->firstTriple_[0] < col0Id || lastBlock->lastTriple_[0] > col0Id);
 
   // Invariant: A relation spans multiple blocks exclusively or several
   // entities are stored completely in the same Block.
@@ -140,8 +140,8 @@ void CompressedRelationReader::scan(
 
 // _____________________________________________________________________________
 cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
-    const CompressedRelationMetadata& metadata,
-    std::span<const CompressedBlockMetadata> blockMetadata,
+    CompressedRelationMetadata metadata,
+    std::vector<CompressedBlockMetadata> blockMetadata,
     ad_utility::File& file, ad_utility::AllocatorWithLimit<Id> allocator,
     ad_utility::SharedConcurrentTimeoutTimer timer) const {
   auto relevantBlocks =
@@ -153,12 +153,12 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   // actual scan result.
   bool firstBlockIsIncomplete =
       beginBlock < endBlock &&
-      (beginBlock->col0FirstId_ < col0Id || beginBlock->col0LastId_ > col0Id);
+      (beginBlock->firstTriple_[0] < col0Id || beginBlock->lastTriple_[0] > col0Id);
   auto lastBlock = endBlock - 1;
 
   bool lastBlockIsIncomplete =
       beginBlock < lastBlock &&
-      (lastBlock->col0FirstId_ < col0Id || lastBlock->col0LastId_ > col0Id);
+      (lastBlock->firstTriple_[0] < col0Id || lastBlock->lastTriple_[0] > col0Id);
 
   // Invariant: A relation spans multiple blocks exclusively or several
   // entities are stored completely in the same Block.
@@ -223,8 +223,8 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
 }
 
 cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
-    const CompressedRelationMetadata& metadata, Id col1Id,
-    std::span<const CompressedBlockMetadata> blockMetadata,
+   CompressedRelationMetadata metadata, Id col1Id,
+    std::vector<CompressedBlockMetadata> blockMetadata,
     ad_utility::File& file, ad_utility::AllocatorWithLimit<Id> allocator,
     ad_utility::SharedConcurrentTimeoutTimer timer) const {
   auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blockMetadata);
@@ -330,10 +330,10 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   }
 
   auto idLessThanBlock = [](Id id, const CompressedBlockMetadata& block) {
-    return id < block.col1FirstId_;
+    return id < block.firstTriple_[1];
   };
   auto blockLessThanId = [](const CompressedBlockMetadata& block, Id id) {
-    return block.col1LastId_ < id;
+    return block.lastTriple_[1] < id;
   };
 
   auto lessThan =
@@ -355,6 +355,8 @@ std::array<std::vector<CompressedBlockMetadata>, 2>
 CompressedRelationReader::getBlocksForJoin(
     const CompressedRelationMetadata& md1,
     const CompressedRelationMetadata& md2,
+    std::optional<Id> col1Id1,
+    std::optional<Id> col1Id2,
     std::span<const CompressedBlockMetadata> blockMetadata1,
     std::span<const CompressedBlockMetadata> blockMetadata2) {
   // get all the blocks where col0FirstId_ <= col0Id <= col0LastId_
@@ -373,30 +375,58 @@ CompressedRelationReader::getBlocksForJoin(
   auto beginBlock2 = relevantBlocks2.begin();
   auto endBlock2 = relevantBlocks2.end();
 
-    for (size_t i = 0; i < relevantBlocks1.size(); ++i) {
-        LOG(WARN) << "firstIdOfBlockRel1 " << i << ':'
-                  << relevantBlocks1[i].col0FirstId_ << ' ' <<  relevantBlocks1[i].col0FirstId_ << std::endl;
-    }
-    for (size_t i = 0; i < relevantBlocks2.size(); ++i) {
-        LOG(WARN) << "firstIdOfBlockRel2 " << i << ':'
-                  << relevantBlocks2[i].col0FirstId_ << ' ' <<  relevantBlocks2[i].col0FirstId_ << std::endl;
-    }
+    auto getJoinColumnRangeValue = [](std::array<Id, 3> block, Id col0Id,
+                                      std::optional<Id> col1Id) {
+        auto minId = Id::makeUndefined();
+        auto maxId = Id::fromBits(std::numeric_limits<uint64_t>::max());
+        if (block[0] < col0Id) {
+            return minId;
+        }
+        if (block[0] > col0Id) {
+            return maxId;
+        }
+        if (!col1Id.has_value()) {
+            return block[1];
+        }
 
-    auto blockLessThanBlock = [](const CompressedBlockMetadata& block1,
-                               const CompressedBlockMetadata& block2) {
-                               return block1.col0LastId_ < block2.col0FirstId_;
+        if (block[1] < col1Id.value()) {
+            return minId;
+        }
+        if (block[1] > col1Id.value()) {
+            return maxId;
+        }
+        return block[2];
+    };
+    auto blocksToIdRanges = [&getJoinColumnRangeValue](const auto& blocks, Id col0Id,
+                               std::optional<Id> col1Id) {
+                               std::vector<std::pair<Id, Id>> result;
+                               for (const auto& block: blocks) {
+                                 result.emplace_back(
+                                     getJoinColumnRangeValue(block.firstTriple_,
+                                                             col0Id, col1Id),
+                                     getJoinColumnRangeValue(block.lastTriple_,
+                                                             col0Id, col1Id));
+                               }
+                               return result;
+                               };
+
+  auto blockLessThanBlock = [](
+                                const auto& block1,
+                                const auto& block2) {
+    return block1.second < block2.first;
   };
 
   std::array<std::vector<CompressedBlockMetadata>, 2> result;
-  auto addRow = [&result]([[maybe_unused]] auto it1, auto it2) {
-    result[0].push_back(*it1);
-    result[1].push_back(*it2);
+  auto idRanges1 = blocksToIdRanges(std::ranges::subrange{beginBlock1, endBlock1}, md1.col0Id_, col1Id1);
+  auto idRanges2 = blocksToIdRanges(std::ranges::subrange{beginBlock2, endBlock2}, md2.col0Id_, col1Id2);
+  auto addRow = [&result, &beginBlock1, &beginBlock2, &idRanges1, &idRanges2]([[maybe_unused]] auto it1, auto it2) {
+    result[0].push_back(*(beginBlock1 + (it1 - idRanges1.begin())));
+    result[1].push_back(*(beginBlock2 + (it2 - idRanges2.begin())));
   };
 
   auto noop = ad_utility::noop;
   [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef<false>(
-      std::span<const CompressedBlockMetadata>{beginBlock1, endBlock1},
-      std::span<const CompressedBlockMetadata>(beginBlock2, endBlock2),
+      idRanges1, idRanges2,
       blockLessThanBlock, addRow, noop, noop);
   for (auto& vec : result) {
     vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
@@ -592,12 +622,9 @@ CompressedRelationMetadata CompressedRelationWriter::addRelation(
     metaData.offsetInBlock_ = buffer_.numRows();
     static_assert(sizeof(col1And2Ids[0][0]) == sizeof(Id));
     if (buffer_.numRows() == 0) {
-      currentBlockData_.col0FirstId_ = col0Id;
-      currentBlockData_.col1FirstId_ = col1And2Ids(0, 0);
+      currentBlockData_.firstTriple_ = {col0Id, col1And2Ids(0, 0), col1And2Ids(0, 1)};
     }
-    currentBlockData_.col0LastId_ = col0Id;
-    currentBlockData_.col1LastId_ = col1And2Ids(col1And2Ids.numRows() - 1, 0);
-    currentBlockData_.col2LastId_ = col1And2Ids(col1And2Ids.numRows() - 1, 1);
+    currentBlockData_.lastTriple_ = {col0Id, col1And2Ids(col1And2Ids.numRows() - 1, 0), col1And2Ids(col1And2Ids.numRows() - 1, 1)};
     AD_CORRECTNESS_CHECK(buffer_.numColumns() == col1And2Ids.numColumns());
     auto bufferOldSize = buffer_.numRows();
     buffer_.resize(buffer_.numRows() + col1And2Ids.numRows());
@@ -625,10 +652,12 @@ void CompressedRelationWriter::writeRelationToExclusiveBlocks(
           {column.begin() + i, column.begin() + i + actualNumRowsPerBlock}));
     }
 
-    blockBuffer_.push_back(CompressedBlockMetadata{
-        std::move(offsets), actualNumRowsPerBlock, col0Id, col0Id, data[i][0],
-        data[i + actualNumRowsPerBlock - 1][0],
-        data[i + actualNumRowsPerBlock - 1][1]});
+    blockBuffer_.push_back(
+        CompressedBlockMetadata{std::move(offsets),
+                                actualNumRowsPerBlock,
+                                {col0Id, data[i][0], data[i][1]},
+                                {col0Id, data[i + actualNumRowsPerBlock - 1][0],
+                                 data[i + actualNumRowsPerBlock - 1][1]}});
   }
 }
 
@@ -755,11 +784,10 @@ CompressedRelationReader::getBlocksFromMetadata(
     std::span<const CompressedBlockMetadata> blockMetadata) {
   if (!col1Id.has_value()) {
     // get all the blocks where col0FirstId_ <= col0Id <= col0LastId_
-    struct KeyLhs {
-      Id col0FirstId_;
-      Id col0LastId_;
-    };
     Id col0Id = metadata.col0Id_;
+    CompressedBlockMetadata key;
+    key.firstTriple_[0] = col0Id;
+    key.lastTriple_[0] = col0Id;
     // TODO<joka921, Clang16> Use a structured binding. Structured bindings are
     // currently not supported by clang when using OpenMP because clang
     // internally transforms the `#pragma`s into lambdas, and capturing
@@ -769,37 +797,35 @@ CompressedRelationReader::getBlocksFromMetadata(
         // `std::ranges::equal_range`, find out why. Note: possibly it has
         // something to do with the limited support of ranges in clang with
         // versions < 16. Revisit this when we use clang 16.
-        blockMetadata.begin(), blockMetadata.end(), KeyLhs{col0Id, col0Id},
+        blockMetadata.begin(), blockMetadata.end(), key,
         [](const auto& a, const auto& b) {
-          return a.col0FirstId_ < b.col0FirstId_ &&
-                 a.col0LastId_ < b.col0LastId_;
+          return a.firstTriple_[0] < b.firstTriple_[0] &&
+                 a.lastTriple_[0] < b.lastTriple_[0];
         });
     return {beginBlock, endBlock};
   } else {
     // Get all the blocks  that possibly might contain our pair of col0Id and
     // col1Id
-    struct KeyLhs {
-      Id col0FirstId_;
-      Id col0LastId_;
-      Id col1FirstId_;
-      Id col1LastId_;
-    };
+    Id col0Id = metadata.col0Id_;
+    CompressedBlockMetadata key;
+    key.firstTriple_[0] = col0Id;
+    key.lastTriple_[0] = col0Id;
+    key.firstTriple_[1] = col1Id.value();
+    key.lastTriple_[1] = col1Id.value();
 
     auto comp = [](const auto& a, const auto& b) {
-      bool endBeforeBegin = a.col0LastId_ < b.col0FirstId_;
+      bool endBeforeBegin = a.lastTriple_[0] < b.firstTriple_[0];
       endBeforeBegin |=
-          (a.col0LastId_ == b.col0FirstId_ && a.col1LastId_ < b.col1FirstId_);
+          (a.lastTriple_[0] == b.firstTriple_[0] && a.lastTriple_[1] < b.firstTriple_[1]);
       return endBeforeBegin;
     };
 
-    Id col0Id = metadata.col0Id_;
 
     // Note: See the comment in the other overload for `scan` above for the
     // reason why we (currently) can't use a structured binding here.
     auto [beginBlock, endBlock] = std::equal_range(
         blockMetadata.begin(), blockMetadata.end(),
-        KeyLhs{col0Id, col0Id, col1Id.value(), col1Id.value()}, comp);
-    LOG(WARN) << "number of found blocks: " << endBlock - beginBlock << std::endl;
+        key, comp);
     return {beginBlock, endBlock};
   }
 }
