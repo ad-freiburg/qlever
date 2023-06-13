@@ -158,6 +158,10 @@ void MmapVector<T>::adaptCapacity(size_t newCapacity) {
   writeMetaDataToEnd();
   remapLinux(oldBytesize);
 #else
+  // The `unmap()` function requires that the `_bytesize` hasn't changed since
+  // the last call to `mapForWriting()`, so we have to restore the odl
+  // `_bytesize` temporarily. Otherwise we get a subtle bug that triggers the
+  // address sanitizers on all MacOs machines and segfaults on M1 machines.
   _bytesize = oldBytesize;
   unmap();
   _bytesize = realSize._bytesize;
