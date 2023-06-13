@@ -32,18 +32,12 @@ jobs:
 
     - name: Install ICU dependency for python (only needed for E2E test)
       run: |
-        brew uninstall --ignore-dependencies icu4c
         brew install pkg-config icu4c 
         echo PATH="/usr/local/opt/icu4c/bin:/usr/local/opt/icu4c/sbin:$PATH" >> $GITHUB_ENV
         echo PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/opt/icu4c/lib/pkgconfig" >> $GITHUB_ENV
-    - name: Python cache
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-        cache: 'pip'
     - name: Install python dependencies for E2E tests
       run: |
-        pip install pyaml pyicu
+        pip3 install pyaml pyicu
 
     - name: Install dependencies
       run:  |
