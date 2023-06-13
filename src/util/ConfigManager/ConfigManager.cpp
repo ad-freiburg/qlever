@@ -337,47 +337,9 @@ std::string ConfigManager::printConfigurationDoc() const {
     const ConfigOption& option =
         configurationOptions_.at(keyToLeaf.value().get<size_t>());
 
-    if (option.hasDefaultValue()) {
-      option.visitDefaultValue(
-          [&jsonOptionPointer,
-           &prettyKeyToConfigurationOptionIndex](const auto& defaultValue) {
-            prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
-                defaultValue.value();
-          });
-    } else {
-      option.visitDefaultValue(
-          [&jsonOptionPointer,
-           &prettyKeyToConfigurationOptionIndex]<typename T>(const T&) {
-            if constexpr (std::is_same_v<typename T::value_type, bool>) {
-              prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) = false;
-            } else if constexpr (std::is_same_v<typename T::value_type,
-                                                std::string>) {
-              prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
-                  "Example string";
-            } else if constexpr (std::is_same_v<typename T::value_type, int>) {
-              prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) = 42;
-            } else if constexpr (std::is_same_v<typename T::value_type,
-                                                float>) {
-              prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) = 4.2;
-            } else if constexpr (std::is_same_v<typename T::value_type,
-                                                std::vector<bool>>) {
-              prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
-                  std::vector{true, false};
-            } else if constexpr (std::is_same_v<typename T::value_type,
-                                                std::vector<std::string>>) {
-              prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
-                  std::vector{"Example", "string", "list"};
-            } else if constexpr (std::is_same_v<typename T::value_type,
-                                                std::vector<int>>) {
-              prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
-                  std::vector{40, 41, 42};
-            } else if constexpr (std::is_same_v<typename T::value_type,
-                                                std::vector<float>>) {
-              prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
-                  std::vector{40.0, 41.1, 42.2};
-            }
-          });
-    }
+    prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
+        option.hasDefaultValue() ? option.getDefaultValueAsJson()
+                                 : option.getDummyValueAsJson();
   }
 
   // List the configuration options themselves.

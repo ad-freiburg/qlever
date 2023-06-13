@@ -15,12 +15,6 @@
 namespace ad_utility {
 
 /*
-@brief Returns the content of a `ConfigOption::ValueType` object as a string
-representation.
-*/
-std::string configOptionValueTypeToString(const ConfigOption::ValueType& val);
-
-/*
 @brief Return a string, containing a list of all configuration options, that
 weren't set at runtime, with their default values.
 */

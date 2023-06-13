@@ -2,11 +2,10 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel February of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkToString.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
 
+#include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
 #include "util/ConfigManager/ConfigManager.h"
@@ -115,56 +114,6 @@ static void addMetadataToOStringstream(std::ostringstream* stream,
 }
 
 // ___________________________________________________________________________
-std::string benchmarkConfigurationOptionValueTypeToString(
-    const ad_utility::ConfigOption::ValueType& val) {
-  // Converts a type in `ValueType` to their string representation.
-  auto variantSubTypeToString = []<typename T>(
-                                    const std::optional<T>& variantEntry,
-                                    auto&& variantSubTypetoString) {
-    if (!variantEntry.has_value()) {
-      // Return a `None`, if the `optional` is empty.
-      return std::string{"None"};
-    } else {
-      // Return the internal value of the `std::optional`.
-      if constexpr (std::is_same_v<T, std::string>) {
-        // Add "", so that it's more obvious, that it's a string.
-        return absl::StrCat("\"", variantEntry.value(), "\"");
-      } else if constexpr (std::is_same_v<T, bool>) {
-        return variantEntry.value() ? std::string{"true"}
-                                    : std::string{"false"};
-      } else if constexpr (std::is_arithmetic_v<T>) {
-        return std::to_string(variantEntry.value());
-      } else if constexpr (ad_utility::isVector<T>) {
-        std::ostringstream stream;
-        stream << "{";
-        ad_utility::forEachExcludingTheLastOne(
-            variantEntry.value(),
-            [&stream, &variantSubTypetoString](const auto& entry) {
-              stream << variantSubTypetoString(std::optional{entry},
-                                               variantSubTypetoString)
-                     << ", ";
-            },
-            [&stream, &variantSubTypetoString](const auto& entry) {
-              stream << variantSubTypetoString(std::optional{entry},
-                                               variantSubTypetoString);
-            });
-        stream << "}";
-        return stream.str();
-      } else {
-        // A possible variant has no conversion.
-        AD_CONTRACT_CHECK(false);
-      }
-    }
-  };
-
-  return std::visit(
-      [&variantSubTypeToString](const auto& v) {
-        return variantSubTypeToString(v, variantSubTypeToString);
-      },
-      val);
-}
-
-// ___________________________________________________________________________
 std::string ConfigOptions(const ad_utility::ConfigManager& config) {
   /*
   Because we want to create a list, we don't know how many entries there will be
@@ -176,13 +125,9 @@ std::string ConfigOptions(const ad_utility::ConfigManager& config) {
   // text.
   auto defaultConfigurationOptionToString =
       [](const ad_utility::ConfigOption& option) {
-        return absl::StrCat(
-            "Configuration option '", option.getIdentifier(),
-            "' was not set at runtime, using default value '",
-            option.visitDefaultValue([](const auto& opt) {
-              return benchmarkConfigurationOptionValueTypeToString(opt);
-            }),
-            "'.");
+        return absl::StrCat("Configuration option '", option.getIdentifier(),
+                            "' was not set at runtime, using default value '",
+                            option.getDefaultValueAsString(), "'.");
       };
 
   ad_utility::forEachExcludingTheLastOne(

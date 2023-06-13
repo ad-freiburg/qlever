@@ -24,6 +24,7 @@ TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
 
     if (a.hasValue()) {
       ASSERT_EQ(a.getValue<T>(), b.getValue<T>());
+      ASSERT_EQ(a.getValueAsString(), b.getValueAsString());
     }
   };
 

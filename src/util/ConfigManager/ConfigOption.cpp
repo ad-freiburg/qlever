@@ -15,6 +15,8 @@
 #include <utility>
 #include <variant>
 
+#include "global/ValueId.h"
+#include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigToString.h"
 #include "util/ConstexprUtils.h"
@@ -25,8 +27,8 @@
 
 namespace ad_utility {
 // ____________________________________________________________________________
-std::string ConfigOption::valueTypeToString(const ValueType& value) {
-  auto toStringVisitor = []<typename T>(const std::optional<T>&) {
+std::string ConfigOption::availableTypesToString(const AvailableTypes& value) {
+  auto toStringVisitor = []<typename T>(const T&) {
     if constexpr (std::is_same_v<T, bool>) {
       return "boolean";
     } else if constexpr (std::is_same_v<T, std::string>) {
@@ -50,47 +52,21 @@ std::string ConfigOption::valueTypeToString(const ValueType& value) {
 }
 
 // ____________________________________________________________________________
-auto ConfigOption::createValueTypeWithEmptyOptional(const size_t& typeIndex)
-    -> ValueType {
-  ValueType toReturn;
-
-  /*
-  Set `toReturn` to a an empty `std::optional` of the type, that is at index
-  position `typeIndex` in `ValueType`.
-  */
-  ad_utility::RuntimeValueToCompileTimeValue<std::variant_size_v<ValueType> -
-                                             1>(
-      typeIndex,
-      [&toReturn]<size_t index,
-                  typename Type =
-                      std::variant_alternative_t<index, ValueType>>() {
-        toReturn = Type(std::nullopt);
-      });
-
-  return toReturn;
-}
-
-// ____________________________________________________________________________
-bool ConfigOption::wasSetAtRuntime() const {
-  return configurationOptionWasSet_;
-}
+bool ConfigOption::wasSetAtRuntime() const { return configurationOptionWasSet_; }
 
 // ____________________________________________________________________________
 bool ConfigOption::hasDefaultValue() const {
-  return std::visit([](const auto& optional) { return optional.has_value(); },
-                    defaultValue_);
+  return std::visit([](const auto& d) { return d.defaultValue_.has_value(); }, data_);
 }
 
 // ____________________________________________________________________________
-bool ConfigOption::hasValue() const {
-  return wasSetAtRuntime() || hasDefaultValue();
-}
+bool ConfigOption::hasValue() const { return wasSetAtRuntime() || hasDefaultValue(); }
 
 // ____________________________________________________________________________
 void ConfigOption::setValueWithJson(const nlohmann::json& json) {
   /*
   Manually checks, if the json represents one of the possibilites of
-  `ValueType`, without the `std::optional`.
+  `AvailableTypes`.
   */
   auto isValueTypeSubType = []<typename T>(const nlohmann::json& j,
                                            auto& isValueTypeSubType) -> bool {
@@ -103,13 +79,13 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
     } else if constexpr (std::is_same_v<T, float>) {
       return j.is_number_float();
     } else if constexpr (ad_utility::isVector<T>) {
-      return j.is_array() && [&j, &isValueTypeSubType]<typename InnerType>(
-                                 const std::vector<InnerType>&) {
-        return std::ranges::all_of(j, [&isValueTypeSubType](const auto& entry) {
-          return isValueTypeSubType.template operator()<InnerType>(
-              entry, AD_FWD(isValueTypeSubType));
-        });
-      }(T{});
+      return j.is_array() &&
+             [&j, &isValueTypeSubType]<typename InnerType>(const std::vector<InnerType>&) {
+               return std::ranges::all_of(j, [&isValueTypeSubType](const auto& entry) {
+                 return isValueTypeSubType.template operator()<InnerType>(
+                     entry, AD_FWD(isValueTypeSubType));
+               });
+             }(T{});
     }
   };
 
@@ -118,36 +94,28 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
   option is meant to hold?
   */
   if (!std::visit(
-          [&isValueTypeSubType, &json]<typename TypeInsideOptional>(
-              const std::optional<TypeInsideOptional>&) {
-            return isValueTypeSubType.operator()<TypeInsideOptional>(
-                json, isValueTypeSubType);
+          [&isValueTypeSubType, &json]<typename T>(const T&) {
+            return isValueTypeSubType.operator()<typename T::Type>(json, isValueTypeSubType);
           },
-          value_)) {
-    // Does the json represent one of the types in our `ValueType`? If yes, we
+          data_)) {
+    // Does the json represent one of the types in our `AvailableTypes`? If yes, we
     // can create a better exception message.
     ad_utility::ConstexprForLoop(
-        std::make_index_sequence<std::variant_size_v<ValueType>>{},
+        std::make_index_sequence<std::variant_size_v<AvailableTypes>>{},
         [&isValueTypeSubType, &json,
-         this ]<size_t TypeIndex,
-                typename TypeOptional =
-                    std::variant_alternative_t<TypeIndex, ValueType>>() {
-          if (isValueTypeSubType
-                  .template operator()<typename TypeOptional::value_type>(
-                      json, isValueTypeSubType)) {
-            throw ConfigOptionSetWrongJsonTypeException(
-                identifier_, valueTypeToString(value_),
-                valueTypeToString(TypeOptional(std::nullopt)));
+         this ]<size_t TypeIndex, typename AlternativeType =
+                                      std::variant_alternative_t<TypeIndex, AvailableTypes>>() {
+          if (isValueTypeSubType.template operator()<AlternativeType>(json, isValueTypeSubType)) {
+            throw ConfigOptionSetWrongJsonTypeException(identifier_, getActualValueTypeAsString(),
+                                                        availableTypesToString(AlternativeType{}));
           }
         });
 
-    throw ConfigOptionSetWrongJsonTypeException(
-        identifier_, valueTypeToString(value_), "unknown");
+    throw ConfigOptionSetWrongJsonTypeException(identifier_, getActualValueTypeAsString(),
+                                                "unknown");
   }
 
-  std::visit([&json, this]<typename T>(
-                 const std::optional<T>&) { setValue(json.get<T>()); },
-             value_);
+  std::visit([&json, this]<typename T>(const Data<T>&) { setValue(json.get<T>()); }, data_);
   configurationOptionWasSet_ = true;
   updateVariablePointer();
 }
@@ -158,42 +126,137 @@ std::string_view ConfigOption::getIdentifier() const {
 }
 
 // ____________________________________________________________________________
+std::string ConfigOption::contentOfAvailableTypesToString(const std::optional<AvailableTypes>& v) {
+  if (v.has_value()) {
+    // Converts a `AvailableTypes` to their string representation.
+    auto availableTypesToString = []<typename T>(const T& content, auto&& variantSubTypetoString) {
+      // Return the internal value of the `std::optional`.
+      if constexpr (std::is_same_v<T, std::string>) {
+        // Add "", so that it's more obvious, that it's a string.
+        return absl::StrCat("\"", content, "\"");
+      } else if constexpr (std::is_same_v<T, bool>) {
+        return content ? std::string{"true"} : std::string{"false"};
+      } else if constexpr (std::is_arithmetic_v<T>) {
+        return std::to_string(content);
+      } else if constexpr (ad_utility::isVector<T>) {
+        std::ostringstream stream;
+        stream << "{";
+        forEachExcludingTheLastOne(
+            content,
+            [&stream, &variantSubTypetoString](const auto& entry) {
+              stream << variantSubTypetoString(entry, variantSubTypetoString) << ", ";
+            },
+            [&stream, &variantSubTypetoString](const auto& entry) {
+              stream << variantSubTypetoString(entry, variantSubTypetoString);
+            });
+        stream << "}";
+        return stream.str();
+      } else {
+        // A possible alternative has no conversion.
+        AD_CONTRACT_CHECK(false);
+      }
+    };
+
+    return std::visit(
+        [&availableTypesToString](const auto& v) {
+          return availableTypesToString(v, availableTypesToString);
+        },
+        v.value());
+  } else {
+    return "None";
+  }
+}
+// ____________________________________________________________________________
+std::string ConfigOption::getValueAsString() const {
+  return std::visit(
+      [](const auto& d) {
+        return d.value_.has_value() ? contentOfAvailableTypesToString(d.value_.value())
+                                    : contentOfAvailableTypesToString(std::nullopt);
+      },
+      data_);
+}
+
+// ____________________________________________________________________________
+std::string ConfigOption::getDefaultValueAsString() const {
+  return std::visit(
+      [](const auto& d) {
+        return d.defaultValue_.has_value()
+                   ? contentOfAvailableTypesToString(d.defaultValue_.value())
+                   : contentOfAvailableTypesToString(std::nullopt);
+      },
+      data_);
+}
+
+// ____________________________________________________________________________
+nlohmann::json ConfigOption::getDefaultValueAsJson() const {
+  return std::visit(
+      [](const auto& d) {
+        return d.defaultValue_.has_value() ? nlohmann::json(d.defaultValue_.value())
+                                           : nlohmann::json(nlohmann::json::value_t::null);
+      },
+      data_);
+}
+
+// ____________________________________________________________________________
+nlohmann::json ConfigOption::getDummyValueAsJson() const {
+  return std::visit(
+      []<typename T>(const Data<T>&) {
+        if constexpr (std::is_same_v<T, bool>) {
+          return nlohmann::json(false);
+        } else if constexpr (std::is_same_v<T, std::string>) {
+          return nlohmann::json("Example string");
+        } else if constexpr (std::is_same_v<T, int>) {
+          return nlohmann::json(42);
+        } else if constexpr (std::is_same_v<T, float>) {
+          return nlohmann::json(4.2);
+        } else if constexpr (std::is_same_v<T, std::vector<bool>>) {
+          return nlohmann::json(std::vector{true, false});
+        } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
+          return nlohmann::json(std::vector{"Example", "string", "list"});
+        } else if constexpr (std::is_same_v<T, std::vector<int>>) {
+          return nlohmann::json(std::vector{40, 41, 42});
+        } else if constexpr (std::is_same_v<T, std::vector<float>>) {
+          return nlohmann::json(std::vector{40.0, 41.1, 42.2});
+        }
+      },
+      data_);
+}
+
+// ____________________________________________________________________________
 ConfigOption::operator std::string() const {
   return absl::StrCat(
       "Configuration option '", identifier_, "'\n",
-      ad_utility::addIndentation(
-          absl::StrCat("Value type: ", valueTypeToString(value_),
-                       "\nDefault value: ",
-                       ad_utility::configOptionValueTypeToString(defaultValue_),
-                       "\nCurrently held value: ",
-                       ad_utility::configOptionValueTypeToString(value_),
-                       "\nDescription: ", description_),
-          1));
+      ad_utility::addIndentation(absl::StrCat("Value type: ", getActualValueTypeAsString(),
+                                              "\nDefault value: ", getValueAsString(),
+                                              "\nCurrently held value: ", getDefaultValueAsString(),
+                                              "\nDescription: ", description_),
+                                 1));
 }
 
 // ____________________________________________________________________________
-auto ConfigOption::getActualValueType() const -> size_t {
-  return value_.index();
-}
+auto ConfigOption::getActualValueType() const -> size_t { return data_.index(); }
 
 // ____________________________________________________________________________
 void ConfigOption::updateVariablePointer() const {
-  visitValue([this]<typename T, typename PointerType = T*>(
-      const std::optional<T>& currentValue) {
-    // Nothing to do, if there is no value.
-    if (!currentValue.has_value()) {
-      return;
-    }
+  std::visit(
+      [](const auto& d) {
+        // Nothing to do, if there is no value.
+        if (!d.value_.has_value()) {
+          return;
+        }
 
-    // There should ALWAYS be a valid pointer, unless the whole `ConfigOption`
-    // object was created wrong.
-    (*std::get<T*>(variablePointer_)) = currentValue.value();
-  });
+        // There should ALWAYS be a valid pointer, unless the whole `ConfigOption`
+        // object was created wrong.
+        (*d.variablePointer_) = d.value_.value();
+      },
+      data_);
 }
 
 // ____________________________________________________________________________
 std::string ConfigOption::getActualValueTypeAsString() const {
-  return valueTypeToString(value_);
+  // There is no guarantee, that our `data_` actually contains a (default) value at this point in
+  // time, we have to create a dummy object, in order to use the helper function.
+  return std::visit([]<typename T>(const Data<T>&) { return availableTypesToString(T{}); }, data_);
 }
 
 }  // namespace ad_utility
