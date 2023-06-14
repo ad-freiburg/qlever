@@ -17,8 +17,8 @@
 #include "util/File.h"
 #include "util/Generator.h"
 #include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/SerializeArray.h"
+#include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
@@ -263,8 +263,7 @@ class CompressedRelationReader {
       std::span<const CompressedBlockMetadata> blockMetadata);
   static std::array<std::vector<CompressedBlockMetadata>, 2> getBlocksForJoin(
       const CompressedRelationMetadata& md1,
-      const CompressedRelationMetadata& md2,
-      std::optional<Id> col1Id1,
+      const CompressedRelationMetadata& md2, std::optional<Id> col1Id1,
       std::optional<Id> col1Id2,
       std::span<const CompressedBlockMetadata> blockMetadata1,
       std::span<const CompressedBlockMetadata> blockMetadata2);

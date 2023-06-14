@@ -310,7 +310,8 @@ std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
   }
   auto [blocks1, blocks2] = CompressedRelationReader::getBlocksForJoin(
       metaBlocks1.value().first.relationMetadata_,
-      metaBlocks2.value().first.relationMetadata_, metaBlocks1.value().second, metaBlocks2.value().second,  metaBlocks1.value().first.blockMetadata_,
+      metaBlocks2.value().first.relationMetadata_, metaBlocks1.value().second,
+      metaBlocks2.value().second, metaBlocks1.value().first.blockMetadata_,
       metaBlocks2.value().first.blockMetadata_);
 
   // TODO<joka921> include a timeout timer.

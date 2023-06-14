@@ -93,12 +93,11 @@ concept BinaryIteratorFunction =
  * described cases leads to two sorted ranges in the output, this can possibly
  * be exploited to fix the result in a cheaper way than a full sort.
  */
-template <
-    bool addDuplicatesFromLeft = true, bool returnIteratorsOfLastMatch = false,
-    std::ranges::random_access_range Range1,
-    std::ranges::random_access_range Range2, typename LessThan,
-    typename FindSmallerUndefRangesLeft, typename FindSmallerUndefRangesRight,
-    typename ElFromFirstNotFoundAction = decltype(noop)>
+template <std::ranges::random_access_range Range1,
+          std::ranges::random_access_range Range2, typename LessThan,
+          typename FindSmallerUndefRangesLeft,
+          typename FindSmallerUndefRangesRight,
+          typename ElFromFirstNotFoundAction = decltype(noop)>
 [[nodiscard]] auto zipperJoinWithUndef(
     const Range1& left, const Range2& right, const LessThan& lessThan,
     const auto& compatibleRowAction,
@@ -118,10 +117,6 @@ template <
   auto end1 = std::end(left);
   auto it2 = std::begin(right);
   auto end2 = std::end(right);
-
-  // Keep track of the last iterators that had an exact match
-  auto exactMatchIt1 = it1;
-  auto exactMatchIt2 = it2;
 
   // If this is an OPTIONAL join or a MINUS then we have to keep track of the
   // information for which elements from the left input we have already found a
@@ -231,7 +226,6 @@ template <
         mergeWithUndefRight(it1, std::begin(right), it2, true);
         ++it1;
         if (it1 >= end1) {
-          exactMatchIt2 = it2;
           return;
         }
       }
@@ -239,7 +233,6 @@ template <
         mergeWithUndefLeft(it2, std::begin(left), it1);
         ++it2;
         if (it2 >= end2) {
-          exactMatchIt1 = it1;
           return;
         }
       }
@@ -257,12 +250,6 @@ template <
       auto endSame2 = std::find_if_not(
           it2, end2, [&](const auto& row) { return eq(*it1, row); });
 
-      if constexpr (returnIteratorsOfLastMatch) {
-        if (endSame1 != it1) {
-          exactMatchIt1 = it1;
-          exactMatchIt2 = it2;
-        }
-      }
       for (auto it = it1; it != endSame1; ++it) {
         mergeWithUndefRight(it, std::begin(right), it2, false);
       }
@@ -274,9 +261,6 @@ template <
         cover(it1);
         for (auto innerIt2 = it2; innerIt2 != endSame2; ++innerIt2) {
           compatibleRowAction(it1, innerIt2);
-        }
-        if constexpr (!addDuplicatesFromLeft) {
-          break;
         }
       }
       it1 = endSame1;
@@ -313,11 +297,7 @@ template <
   // of which has length `returnValue`.
   size_t numOutOfOrder =
       outOfOrderFound ? std::numeric_limits<size_t>::max() : numOutOfOrderAtEnd;
-  if constexpr (returnIteratorsOfLastMatch) {
-    return std::tuple{numOutOfOrder, exactMatchIt1, exactMatchIt2};
-  } else {
-    return numOutOfOrder;
-  }
+  return numOutOfOrder;
 }
 
 /**
@@ -576,6 +556,11 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
                                      const auto& compatibleRowAction) {
   using LeftBlock = typename std::decay_t<LeftBlocks>::value_type;
   using RightBlock = typename std::decay_t<RightBlocks>::value_type;
+
+  using LeftEl =
+      typename std::iterator_traits<typename LeftBlock::iterator>::value_type;
+  using RightEl =
+      typename std::iterator_traits<typename RightBlock::iterator>::value_type;
   auto it1 = leftBlocks.begin();
   auto end1 = leftBlocks.end();
   auto it2 = rightBlocks.begin();
@@ -605,11 +590,12 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     if (sameBlocksLeft.empty() || sameBlocksRight.empty()) {
       return;
     }
-    const auto& lastLeft = sameBlocksLeft.front().back();
-    const auto& lastRight = sameBlocksRight.front().back();
+    LeftEl lastLeft = sameBlocksLeft.front().back();
+    RightEl lastRight = sameBlocksRight.front().back();
 
     if (!lessThan(lastRight, lastLeft)) {
-    // TODO<joka921> here and below: use `at`, but it needs to be implemented in the `Row` class.
+      // TODO<joka921> here and below: use `at`, but it needs to be implemented
+      // in the `Row` class.
       while (it1 != end1 && eq((*it1)[0], lastLeft)) {
         sameBlocksLeft.push_back(std::move(*it1));
         ++it1;
@@ -628,8 +614,7 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   };
 
   auto join = [&](const auto& l, const auto& r) {
-    return zipperJoinWithUndef<true, true>(l, r, lessThan, compatibleRowAction,
-                                           noop, noop);
+    return zipperJoinWithUndef(l, r, lessThan, compatibleRowAction, noop, noop);
   };
 
   auto addAll = [&](const auto& l, const auto& r) {
@@ -647,7 +632,8 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   auto joinAndRemoveBeginning = [&]() {
     auto& l = sameBlocksLeft.at(0);
     auto& r = sameBlocksRight.at(0);
-    typename std::iterator_traits<decltype(l.begin())>::value_type minEl = std::min(l.back(), r.back(), lessThan);
+    typename std::iterator_traits<decltype(l.begin())>::value_type minEl =
+        std::min(l.back(), r.back(), lessThan);
     auto itL = std::ranges::equal_range(l, minEl, lessThan);
     auto itR = std::ranges::equal_range(r, minEl, lessThan);
     join(std::ranges::subrange{l.begin(), itL.begin()},
@@ -658,11 +644,11 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   auto removeAllButUnjoined = [lessThan]<typename Blocks>(
                                   Blocks& blocks, auto lastHandledElement) {
     AD_CORRECTNESS_CHECK(!blocks.empty());
-      typename Blocks::value_type remainingBlock = std::move(blocks.back());
+    typename Blocks::value_type remainingBlock = std::move(blocks.back());
     auto beginningOfUnjoined =
         std::ranges::upper_bound(remainingBlock, lastHandledElement, lessThan);
-    // TODO<joka921> This is not the most efficient way, but currently necessary because of the
-    // interface of the `IdTable`.
+    // TODO<joka921> This is not the most efficient way, but currently necessary
+    // because of the interface of the `IdTable`.
     remainingBlock.erase(remainingBlock.begin(), beginningOfUnjoined);
     blocks.clear();
     if (!remainingBlock.empty()) {
@@ -693,7 +679,8 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
           sameBlocksRight.back(), sameBlocksRight.front().back(), lessThan));
     }
     addAll(l, r);
-    typename std::iterator_traits<decltype(sameBlocksLeft.front().begin())>::value_type minEl =
+    typename std::iterator_traits<
+        decltype(sameBlocksLeft.front().begin())>::value_type minEl =
         std::min(sameBlocksLeft.front().back(), sameBlocksRight.front().back(),
                  lessThan);
     removeAllButUnjoined(sameBlocksLeft, minEl);

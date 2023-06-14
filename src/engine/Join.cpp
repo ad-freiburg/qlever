@@ -632,19 +632,21 @@ void Join::computeResultForTwoIndexScans(IdTable* resultPtr) {
       lastRow[nextIndex] = l[i];
       ++nextIndex;
     }
-      for (size_t i = 1; i < r.size(); ++i) {
-          lastRow[nextIndex] = r[i];
-          ++nextIndex;
-      }
+    for (size_t i = 1; i < r.size(); ++i) {
+      lastRow[nextIndex] = r[i];
+      ++nextIndex;
+    }
   };
 
-  auto lessThan = [](const auto& a, const auto& b) {
-    return a[0] < b[0];
-  };
+  auto lessThan = [](const auto& a, const auto& b) { return a[0] < b[0]; };
 
-  auto [leftBlocks, rightBlocks] = IndexScan::lazyScanForJoinOfTwoScans(dynamic_cast<const IndexScan&>(*_left->getRootOperation()), dynamic_cast<const IndexScan&>(*_right->getRootOperation()));
+  auto [leftBlocks, rightBlocks] = IndexScan::lazyScanForJoinOfTwoScans(
+      dynamic_cast<const IndexScan&>(*_left->getRootOperation()),
+      dynamic_cast<const IndexScan&>(*_right->getRootOperation()));
 
-  //LOG(WARN) << "num blocks in first: " << std::ranges::distance(leftBlocks) << std::endl;
-  //LOG(WARN) << "num blocks in second: " << std::ranges::distance(rightBlocks) << std::endl;
-  ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks, lessThan, addResultRow);
+  // LOG(WARN) << "num blocks in first: " << std::ranges::distance(leftBlocks)
+  // << std::endl; LOG(WARN) << "num blocks in second: " <<
+  // std::ranges::distance(rightBlocks) << std::endl;
+  ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks, lessThan,
+                                              addResultRow);
 }
