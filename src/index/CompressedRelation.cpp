@@ -316,24 +316,66 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   }
 }
 
+// TODO<joka921> Comment those helpers. Should we register them in the header as
+// private static functions?
+namespace {
+auto getJoinColumnRangeValue = [](std::array<Id, 3> block, Id col0Id,
+                                  std::optional<Id> col1Id) {
+  auto minId = Id::makeUndefined();
+  auto maxId = Id::fromBits(std::numeric_limits<uint64_t>::max());
+  if (block[0] < col0Id) {
+    return minId;
+  }
+  if (block[0] > col0Id) {
+    return maxId;
+  }
+  if (!col1Id.has_value()) {
+    return block[1];
+  }
+
+  if (block[1] < col1Id.value()) {
+    return minId;
+  }
+  if (block[1] > col1Id.value()) {
+    return maxId;
+  }
+  return block[2];
+};
+
+using IdPair = std::pair<Id, Id>;
+auto blocksToIdRanges = [](std::span<const CompressedBlockMetadata> blocks,
+                           Id col0Id, std::optional<Id> col1Id) {
+  std::vector<IdPair> result;
+  for (const auto& block : blocks) {
+    result.emplace_back(
+        getJoinColumnRangeValue(block.firstTriple_, col0Id, col1Id),
+        getJoinColumnRangeValue(block.lastTriple_, col0Id, col1Id));
+  }
+  return result;
+};
+}  // namespace
+
 // _____________________________________________________________________________
 std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
     std::span<const Id> joinColum, const CompressedRelationMetadata& metadata,
+    std::optional<Id> col1Id,
     std::span<const CompressedBlockMetadata> blockMetadata) {
   // get all the blocks where col0FirstId_ <= col0Id <= col0LastId_
   auto relevantBlocks =
       getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
-  auto beginBlock = relevantBlocks.begin();
-  auto endBlock = relevantBlocks.end();
-  if (endBlock - beginBlock < 2) {
-    return {beginBlock, endBlock};
+  // TODO<joka921> Is this condition necessary?
+  if (relevantBlocks.size() < 2) {
+    return {relevantBlocks.begin(), relevantBlocks.end()};
   }
 
-  auto idLessThanBlock = [](Id id, const CompressedBlockMetadata& block) {
-    return id < block.firstTriple_[1];
+  auto idRanges = blocksToIdRanges(relevantBlocks, metadata.col0Id_, col1Id);
+
+  auto idLessThanBlock = [](Id id, const IdPair& block) {
+    return id < block.first;
   };
-  auto blockLessThanId = [](const CompressedBlockMetadata& block, Id id) {
-    return block.lastTriple_[1] < id;
+
+  auto blockLessThanId = [](const IdPair& block, Id id) {
+    return block.second < id;
   };
 
   auto idLessThanId = [](Id id, Id id2) { return id < id2; };
@@ -342,12 +384,16 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
       idLessThanBlock, blockLessThanId, idLessThanId};
 
   std::vector<CompressedBlockMetadata> result;
-  auto addRow = [&result]([[maybe_unused]] auto it1, auto it2) {
-    result.push_back(*it2);
+  auto addRow = [&result, begBlocks = relevantBlocks.begin(),
+                 begRanges = idRanges.begin()]([[maybe_unused]] auto it1,
+                                               auto it2) {
+    result.push_back(*(begBlocks + (it2 - begRanges)));
   };
 
   // TODO<joka921> is the copy really necessary?
   // TODO<joka921> Should we respect the memory limit?
+  // TODO<joka921> The correct way indeed WAS to remove the duplicates inside
+  // the `zipperJoinWithUndef` function.
   std::vector<Id> joinColumnUnique;
   joinColumnUnique.reserve(joinColum.size());
   std::ranges::unique_copy(joinColum, std::back_inserter(joinColumnUnique));
@@ -358,12 +404,11 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
 
   auto noop = ad_utility::noop;
   [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
-      joinColumnUnique,
-      std::span<const CompressedBlockMetadata>(beginBlock, endBlock), lessThan,
-      addRow, noop, noop);
+      joinColumnUnique, idRanges, lessThan, addRow, noop, noop);
   return result;
 }
 
+// _____________________________________________________________________________
 std::array<std::vector<CompressedBlockMetadata>, 2>
 CompressedRelationReader::getBlocksForJoin(
     const CompressedRelationMetadata& md1,
@@ -386,40 +431,6 @@ CompressedRelationReader::getBlocksForJoin(
       getBlocksFromMetadata(md2, std::nullopt, blockMetadata2);
   auto beginBlock2 = relevantBlocks2.begin();
   auto endBlock2 = relevantBlocks2.end();
-
-  auto getJoinColumnRangeValue = [](std::array<Id, 3> block, Id col0Id,
-                                    std::optional<Id> col1Id) {
-    auto minId = Id::makeUndefined();
-    auto maxId = Id::fromBits(std::numeric_limits<uint64_t>::max());
-    if (block[0] < col0Id) {
-      return minId;
-    }
-    if (block[0] > col0Id) {
-      return maxId;
-    }
-    if (!col1Id.has_value()) {
-      return block[1];
-    }
-
-    if (block[1] < col1Id.value()) {
-      return minId;
-    }
-    if (block[1] > col1Id.value()) {
-      return maxId;
-    }
-    return block[2];
-  };
-  auto blocksToIdRanges = [&getJoinColumnRangeValue](const auto& blocks,
-                                                     Id col0Id,
-                                                     std::optional<Id> col1Id) {
-    std::vector<std::pair<Id, Id>> result;
-    for (const auto& block : blocks) {
-      result.emplace_back(
-          getJoinColumnRangeValue(block.firstTriple_, col0Id, col1Id),
-          getJoinColumnRangeValue(block.lastTriple_, col0Id, col1Id));
-    }
-    return result;
-  };
 
   auto blockLessThanBlock = [](const auto& block1, const auto& block2) {
     return block1.second < block2.first;

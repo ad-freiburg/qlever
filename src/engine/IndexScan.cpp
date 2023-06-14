@@ -334,3 +334,59 @@ std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
 
   return {getScan(s1, blocks1), getScan(s2, blocks2)};
 }
+
+// TODO<joka921> There is a lot of duplication between this and the previous
+// function.
+// __________________________________________________________________________________________________________
+cppcoro::generator<IdTable> IndexScan::lazyScanForJoinOfColumnWithScan(
+    std::span<const Id> joinColumn, const IndexScan& s) {
+  const auto& index = s.getExecutionContext()->getIndex().getImpl();
+  AD_CONTRACT_CHECK(s._numVariables < 3);
+
+  auto f = [&](const IndexScan& s)
+      -> std::optional<
+          std::pair<Permutation::MetaDataAndBlocks, std::optional<Id>>> {
+    auto permutedTriple = s.getPermutedTriple();
+    std::optional<Id> optId = permutedTriple[0]->toValueId(index.getVocab());
+    std::optional<Id> optId2 =
+        s._numVariables == 2 ? std::nullopt
+                             : permutedTriple[1]->toValueId(index.getVocab());
+    if (!optId.has_value() || (!optId2.has_value() && s._numVariables == 1)) {
+      return std::nullopt;
+    }
+    auto optionalBla = index.getPermutation(s.permutation())
+                           .getMetadataAndBlocks(optId.value(), optId2);
+    if (optionalBla.has_value()) {
+      return std::pair{std::move(optionalBla.value()), optId2};
+    }
+    return std::nullopt;
+  };
+
+  auto metaBlocks1 = f(s);
+
+  if (!metaBlocks1.has_value()) {
+    return {};
+  }
+  auto blocks = CompressedRelationReader::getBlocksForJoin(
+      joinColumn, metaBlocks1.value().first.relationMetadata_,
+      metaBlocks1.value().second, metaBlocks1.value().first.blockMetadata_);
+
+  // TODO<joka921> include a timeout timer.
+  auto getScan = [&index](const IndexScan& s, const auto& blocks) {
+    // TODO<joka921> pass the IDs here.
+    Id col0Id = s.getPermutedTriple()[0]->toValueId(index.getVocab()).value();
+    std::optional<Id> col1Id;
+    if (s._numVariables == 1) {
+      col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
+    }
+    if (!col1Id.has_value()) {
+      return index.getPermutation(s.permutation())
+          .lazyScan(col0Id, blocks, s.getExecutionContext()->getAllocator());
+    } else {
+      return index.getPermutation(s.permutation())
+          .lazyScan(col0Id, col1Id.value(), blocks,
+                    s.getExecutionContext()->getAllocator());
+    }
+  };
+  return getScan(s, blocks);
+}

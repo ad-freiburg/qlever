@@ -650,3 +650,61 @@ void Join::computeResultForTwoIndexScans(IdTable* resultPtr) {
   ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks, lessThan,
                                               addResultRow);
 }
+
+// ______________________________________________________________________________________________________
+void Join::computeResultForIndexScanAndColumn(const IdTable& inputTable,
+                                              ColumnIndex joinColumnIndexTable,
+                                              const IndexScan& scan,
+                                              ColumnIndex joinColumnIndexScan,
+                                              IdTable* resultPtr) {
+  auto& result = *resultPtr;
+  result.setNumColumns(getResultWidth());
+
+  AD_CORRECTNESS_CHECK(joinColumnIndexScan == 0);
+
+  auto joinColumn = inputTable.getColumn(joinColumnIndexTable);
+  auto addResultRow = [&, beg = joinColumn.begin()](auto itLeft, auto itRight) {
+    const auto& l = *inputTable.begin() + (itLeft - beg);
+    const auto& r = *itRight;
+    result.emplace_back();
+    IdTable::row_reference lastRow = result.back();
+    size_t nextIndex = 0;
+    for (size_t i = 0; i < inputTable.numColumns(); ++i) {
+      lastRow[nextIndex] = l[i];
+      ++nextIndex;
+    }
+
+    for (size_t i = 0; i < r.size(); ++i) {
+      if (i != joinColumnIndexScan) {
+        lastRow[nextIndex] = r[i];
+        ++nextIndex;
+      }
+    }
+  };
+
+  auto lessThan = []<typename A, typename B>(const A& a, const B& b) {
+    static constexpr bool aIsId = ad_utility::isSimilar<A, Id>;
+    static constexpr bool bIsId = ad_utility::isSimilar<B, Id>;
+
+    if constexpr (aIsId && bIsId) {
+      return a < b;
+    } else if constexpr (aIsId) {
+      return a < b[0];
+    } else if constexpr (bIsId) {
+      return a[0] < b;
+    } else {
+      return a[0] < b[0];
+    }
+  };
+
+  auto rightBlocks =
+      IndexScan::lazyScanForJoinOfColumnWithScan(joinColumn, scan);
+
+  auto rightProjection = [](const auto& row) { return row[0]; };
+  // LOG(WARN) << "num blocks in first: " << std::ranges::distance(leftBlocks)
+  // << std::endl; LOG(WARN) << "num blocks in second: " <<
+  // std::ranges::distance(rightBlocks) << std::endl;
+  ad_utility::zipperJoinForBlocksWithoutUndef(
+      std::span{&joinColumn, 1}, rightBlocks, lessThan, addResultRow,
+      std::identity{}, rightProjection);
+}

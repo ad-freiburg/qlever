@@ -156,6 +156,8 @@ class IndexScan : public Operation {
 
   static std::array<cppcoro::generator<IdTable>, 2> lazyScanForJoinOfTwoScans(
       const IndexScan& s1, const IndexScan& s2);
+  static cppcoro::generator<IdTable> lazyScanForJoinOfColumnWithScan(
+      std::span<const Id> joinColumn, const IndexScan& s);
 
  private:
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for

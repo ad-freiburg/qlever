@@ -549,11 +549,38 @@ void specialOptionalJoin(
   }
 }
 
-template <typename LeftBlocks, typename RightBlocks, typename LessThan>
+// TODO<joka921> move to detail namespace
+using Range = std::pair<size_t, size_t>;
+template <typename Block>
+class BlockAndSubrange {
+ public:
+  BlockAndSubrange(Block block)
+      : block_{std::move(block)}, subrange_{0, block_.size()} {}
+  const auto& back() { return block_.at(subrange_.second - 1); }
+  auto subrange() {
+    return std::ranges::subrange{block_.begin() + subrange_.first,
+                                 block_.begin() + subrange_.second};
+  }
+  void setSubrange(auto it1, auto it2) {
+    // TODO<joka921> Add assertions that the iterators are valid.
+    subrange_.first = it1 - block_.begin();
+    subrange_.second = it2 - block_.begin();
+  }
+
+ private:
+  Block block_;
+  Range subrange_;
+};
+
+template <typename LeftBlocks, typename RightBlocks, typename LessThan,
+          typename LeftProjection = std::identity,
+          typename RightProjection = std::identity>
 void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
                                      RightBlocks&& rightBlocks,
                                      const LessThan& lessThan,
-                                     const auto& compatibleRowAction) {
+                                     const auto& compatibleRowAction,
+                                     LeftProjection leftProjection = {},
+                                     RightProjection rightProjection = {}) {
   using LeftBlock = typename std::decay_t<LeftBlocks>::value_type;
   using RightBlock = typename std::decay_t<RightBlocks>::value_type;
 
@@ -561,6 +588,12 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
       typename std::iterator_traits<typename LeftBlock::iterator>::value_type;
   using RightEl =
       typename std::iterator_traits<typename RightBlock::iterator>::value_type;
+
+  using ProjectedEl =
+      std::decay_t<std::invoke_result_t<LeftProjection, LeftEl>>;
+  static_assert(
+      ad_utility::isSimilar<ProjectedEl,
+                            std::invoke_result_t<RightProjection, RightEl>>);
   auto it1 = leftBlocks.begin();
   auto end1 = leftBlocks.end();
   auto it2 = rightBlocks.begin();
@@ -569,8 +602,9 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     return !lessThan(el1, el2) && !lessThan(el2, el1);
   };
 
-  std::vector<LeftBlock> sameBlocksLeft;
-  std::vector<RightBlock> sameBlocksRight;
+  std::vector<BlockAndSubrange<LeftBlock>> sameBlocksLeft;
+  std::vector<BlockAndSubrange<RightBlock>> sameBlocksRight;
+
   auto fillBuffer = [&]() {
     AD_CORRECTNESS_CHECK(sameBlocksLeft.size() <= 1);
     AD_CORRECTNESS_CHECK(sameBlocksRight.size() <= 1);
@@ -582,7 +616,7 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     }
     while (sameBlocksRight.empty() && it2 != end2) {
       if (!it2->empty()) {
-        sameBlocksRight.push_back(std::move(*it2));
+        sameBlocksRight.emplace_back(std::move(*it2));
       }
       ++it2;
     }
@@ -630,59 +664,64 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   };
 
   auto joinAndRemoveBeginning = [&]() {
-    auto& l = sameBlocksLeft.at(0);
-    auto& r = sameBlocksRight.at(0);
-    typename std::iterator_traits<decltype(l.begin())>::value_type minEl =
-        std::min(l.back(), r.back(), lessThan);
+    decltype(auto) l = sameBlocksLeft.at(0).subrange();
+    decltype(auto) r = sameBlocksRight.at(0).subrange();
+    ProjectedEl minEl =
+        std::min(leftProjection(l.back()), rightProjection(r.back()), lessThan);
     auto itL = std::ranges::equal_range(l, minEl, lessThan);
     auto itR = std::ranges::equal_range(r, minEl, lessThan);
     join(std::ranges::subrange{l.begin(), itL.begin()},
          std::ranges::subrange{r.begin(), itR.begin()});
-    return std::pair{itL, itR};
+    sameBlocksLeft.at(0).setSubrange(itL.begin(), l.end());
+    sameBlocksRight.at(0).setSubrange(itR.begin(), r.end());
   };
 
   auto removeAllButUnjoined = [lessThan]<typename Blocks>(
                                   Blocks& blocks, auto lastHandledElement) {
+    // TODO<joka921> This method can be incorporated into the calling code much
+    // more simply.
     AD_CORRECTNESS_CHECK(!blocks.empty());
-    typename Blocks::value_type remainingBlock = std::move(blocks.back());
+    blocks.erase(blocks.begin(), blocks.end() - 1);
+    decltype(auto) remainingBlock = blocks.at(0).subrange();
     auto beginningOfUnjoined =
         std::ranges::upper_bound(remainingBlock, lastHandledElement, lessThan);
     // TODO<joka921> This is not the most efficient way, but currently necessary
     // because of the interface of the `IdTable`.
-    remainingBlock.erase(remainingBlock.begin(), beginningOfUnjoined);
-    blocks.clear();
+    remainingBlock =
+        std::ranges::subrange{beginningOfUnjoined, remainingBlock.end()};
     if (!remainingBlock.empty()) {
-      blocks.push_back(std::move(remainingBlock));
+      blocks.at(0).setSubrange(remainingBlock.begin(), remainingBlock.end());
+    } else {
+      blocks.clear();
     }
   };
 
   auto joinBuffers = [&]() {
-    auto [subrangeLeft, subrangeRight] = joinAndRemoveBeginning();
-    using SubLeft = decltype(subrangeLeft);
-    using SubRight = decltype(subrangeRight);
+    joinAndRemoveBeginning();
+    using SubLeft = decltype(sameBlocksLeft.front().subrange());
+    using SubRight = decltype(sameBlocksRight.front().subrange());
     std::vector<SubLeft> l;
     std::vector<SubRight> r;
-    l.push_back(subrangeLeft);
-    for (size_t i = 1; i < sameBlocksLeft.size() - 1; ++i) {
-      l.push_back(sameBlocksLeft[i]);
+    for (size_t i = 0; i < sameBlocksLeft.size() - 1; ++i) {
+      l.push_back(sameBlocksLeft[i].subrange());
     }
     if (sameBlocksLeft.size() > 1) {
-      l.push_back(std::ranges::equal_range(
-          sameBlocksLeft.back(), sameBlocksLeft.front().back(), lessThan));
+      l.push_back(std::ranges::equal_range(sameBlocksLeft.back().subrange(),
+                                           sameBlocksLeft.front().back(),
+                                           lessThan));
     }
-    r.push_back(subrangeRight);
-    for (size_t i = 1; i < sameBlocksRight.size() - 1; ++i) {
-      r.push_back(sameBlocksRight[i]);
+    for (size_t i = 0; i < sameBlocksRight.size() - 1; ++i) {
+      r.push_back(sameBlocksRight[i].subrange());
     }
     if (sameBlocksRight.size() > 1) {
-      r.push_back(std::ranges::equal_range(
-          sameBlocksRight.back(), sameBlocksRight.front().back(), lessThan));
+      r.push_back(std::ranges::equal_range(sameBlocksRight.back().subrange(),
+                                           sameBlocksRight.front().back(),
+                                           lessThan));
     }
     addAll(l, r);
-    typename std::iterator_traits<
-        decltype(sameBlocksLeft.front().begin())>::value_type minEl =
-        std::min(sameBlocksLeft.front().back(), sameBlocksRight.front().back(),
-                 lessThan);
+    ProjectedEl minEl =
+        std::min(leftProjection(sameBlocksLeft.front().back()),
+                 rightProjection(sameBlocksRight.front().back()), lessThan);
     removeAllButUnjoined(sameBlocksLeft, minEl);
     removeAllButUnjoined(sameBlocksRight, minEl);
   };

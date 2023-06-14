@@ -260,7 +260,9 @@ class CompressedRelationReader {
   // TODO<joka921> Include a timeout check.
   static std::vector<CompressedBlockMetadata> getBlocksForJoin(
       std::span<const Id> joinColum, const CompressedRelationMetadata& metadata,
+      std::optional<Id> col1Id,
       std::span<const CompressedBlockMetadata> blockMetadata);
+
   static std::array<std::vector<CompressedBlockMetadata>, 2> getBlocksForJoin(
       const CompressedRelationMetadata& md1,
       const CompressedRelationMetadata& md2, std::optional<Id> col1Id1,
