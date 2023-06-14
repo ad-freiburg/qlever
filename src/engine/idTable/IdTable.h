@@ -308,6 +308,16 @@ class IdTable {
     return data().at(column).at(row);
   }
 
+  row_reference_restricted at(size_t row) requires(!isView) {
+    AD_CONTRACT_CHECK(row < numRows());
+    return operator[](row);
+  }
+
+  const_row_reference_restricted at(size_t row) const {
+    AD_CONTRACT_CHECK(row < numRows());
+    return operator[](row);
+  }
+
   // Get a reference to the `i`-th row. The returned proxy objects can be
   // implicitly and trivially converted to `row_reference`. For the design
   // rationale behind those proxy types see above for their definition.

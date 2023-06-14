@@ -8,6 +8,7 @@
 
 #include <list>
 
+#include "engine/IndexScan.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "util/HashMap.h"

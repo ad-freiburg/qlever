@@ -554,9 +554,11 @@ using Range = std::pair<size_t, size_t>;
 template <typename Block>
 class BlockAndSubrange {
  public:
-  BlockAndSubrange(Block block)
+  using reference_type =
+      std::iterator_traits<typename Block::iterator>::reference;
+  explicit BlockAndSubrange(Block block)
       : block_{std::move(block)}, subrange_{0, block_.size()} {}
-  const auto& back() { return block_.at(subrange_.second - 1); }
+  reference_type back() { return block_[subrange_.second - 1]; }
   auto subrange() {
     return std::ranges::subrange{block_.begin() + subrange_.first,
                                  block_.begin() + subrange_.second};
@@ -610,12 +612,14 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     AD_CORRECTNESS_CHECK(sameBlocksRight.size() <= 1);
     while (sameBlocksLeft.empty() && it1 != end1) {
       if (!it1->empty()) {
-        sameBlocksLeft.push_back(std::move(*it1));
+        AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it1, lessThan));
+        sameBlocksLeft.emplace_back(std::move(*it1));
       }
       ++it1;
     }
     while (sameBlocksRight.empty() && it2 != end2) {
       if (!it2->empty()) {
+        AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it2, lessThan));
         sameBlocksRight.emplace_back(std::move(*it2));
       }
       ++it2;
@@ -631,14 +635,16 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
       // TODO<joka921> here and below: use `at`, but it needs to be implemented
       // in the `Row` class.
       while (it1 != end1 && eq((*it1)[0], lastLeft)) {
-        sameBlocksLeft.push_back(std::move(*it1));
+        AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it1, lessThan));
+        sameBlocksLeft.emplace_back(std::move(*it1));
         ++it1;
       }
     }
 
     if (!lessThan(lastLeft, lastRight)) {
       while (it2 != end2 && eq((*it2)[0], lastRight)) {
-        sameBlocksRight.push_back(std::move(*it2));
+        AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it2, lessThan));
+        sameBlocksRight.emplace_back(std::move(*it2));
         ++it2;
         if (!eq(sameBlocksRight.back().back(), lastRight)) {
           break;
@@ -666,12 +672,26 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   auto joinAndRemoveBeginning = [&]() {
     decltype(auto) l = sameBlocksLeft.at(0).subrange();
     decltype(auto) r = sameBlocksRight.at(0).subrange();
+    auto lBack = l.back();
+    auto rBack = r.back();
+    const auto& lprof = std::move(leftProjection(std::move(l.back())));
+    const auto& rpoj = std::move(rightProjection(std::move(r.back())));
+    auto lf = l.front();
+    auto rf = r.front();
+    const auto& lfp = std::move(leftProjection(l.front()));
+    const auto& rfp = std::move(rightProjection(r.front()));
     ProjectedEl minEl =
         std::min(leftProjection(l.back()), rightProjection(r.back()), lessThan);
     auto itL = std::ranges::equal_range(l, minEl, lessThan);
     auto itR = std::ranges::equal_range(r, minEl, lessThan);
     join(std::ranges::subrange{l.begin(), itL.begin()},
          std::ranges::subrange{r.begin(), itR.begin()});
+    auto lBeg = itL.begin() - l.begin();
+    auto rBeg = itR.begin() - r.begin();
+    auto lEnd = itL.end() - l.begin();
+    auto rEnd = itR.end() - r.begin();
+    auto lSize = l.size();
+    auto rSize = r.size();
     sameBlocksLeft.at(0).setSubrange(itL.begin(), l.end());
     sameBlocksRight.at(0).setSubrange(itR.begin(), r.end());
   };
@@ -685,8 +705,6 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     decltype(auto) remainingBlock = blocks.at(0).subrange();
     auto beginningOfUnjoined =
         std::ranges::upper_bound(remainingBlock, lastHandledElement, lessThan);
-    // TODO<joka921> This is not the most efficient way, but currently necessary
-    // because of the interface of the `IdTable`.
     remainingBlock =
         std::ranges::subrange{beginningOfUnjoined, remainingBlock.end()};
     if (!remainingBlock.empty()) {
@@ -702,26 +720,26 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     using SubRight = decltype(sameBlocksRight.front().subrange());
     std::vector<SubLeft> l;
     std::vector<SubRight> r;
+
+    ProjectedEl minEl =
+        std::min(leftProjection(sameBlocksLeft.front().back()),
+                 rightProjection(sameBlocksRight.front().back()), lessThan);
+
     for (size_t i = 0; i < sameBlocksLeft.size() - 1; ++i) {
       l.push_back(sameBlocksLeft[i].subrange());
     }
-    if (sameBlocksLeft.size() > 1) {
+    if (sameBlocksLeft.size() > 0) {
       l.push_back(std::ranges::equal_range(sameBlocksLeft.back().subrange(),
-                                           sameBlocksLeft.front().back(),
-                                           lessThan));
+                                           minEl, lessThan));
     }
     for (size_t i = 0; i < sameBlocksRight.size() - 1; ++i) {
       r.push_back(sameBlocksRight[i].subrange());
     }
-    if (sameBlocksRight.size() > 1) {
+    if (sameBlocksRight.size() > 0) {
       r.push_back(std::ranges::equal_range(sameBlocksRight.back().subrange(),
-                                           sameBlocksRight.front().back(),
-                                           lessThan));
+                                           minEl, lessThan));
     }
     addAll(l, r);
-    ProjectedEl minEl =
-        std::min(leftProjection(sameBlocksLeft.front().back()),
-                 rightProjection(sameBlocksRight.front().back()), lessThan);
     removeAllButUnjoined(sameBlocksLeft, minEl);
     removeAllButUnjoined(sameBlocksRight, minEl);
   };

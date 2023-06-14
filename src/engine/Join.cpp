@@ -33,14 +33,19 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   t2 = QueryExecutionTree::createSortedTree(std::move(t2), {t2JoinCol});
 
   // Make sure subtrees are ordered so that identical queries can be identified.
-  if (t1->asString() > t2->asString()) {
+  auto swapChildren = [&]() {
     std::swap(t1, t2);
     std::swap(t1JoinCol, t2JoinCol);
+  };
+  if (t1->asString() > t2->asString()) {
+    swapChildren();
   }
   if (isFullScanDummy(t1)) {
     AD_CONTRACT_CHECK(!isFullScanDummy(t2));
-    std::swap(t1, t2);
-    std::swap(t1JoinCol, t2JoinCol);
+    swapChildren();
+  } else if (t1->getType() == QueryExecutionTree::SCAN &&
+             t2->getType() != QueryExecutionTree::SCAN) {
+    swapChildren();
   }
   _left = std::move(t1);
   _leftJoinCol = t1JoinCol;
@@ -119,9 +124,16 @@ ResultTable Join::computeResult() {
 
   LOG(DEBUG) << "Computing Join result..." << endl;
 
+  // TODO<joka921> For the specialized cases we don't need to materialize the
+  // results of the childdren...
   if (_left->getType() == QueryExecutionTree::SCAN &&
       _right->getType() == QueryExecutionTree::SCAN) {
     computeResultForTwoIndexScans(&idTable);
+  } else if (_right->getType() == QueryExecutionTree::SCAN) {
+    computeResultForIndexScanAndColumn(
+        leftRes->idTable(), _leftJoinCol,
+        dynamic_cast<const IndexScan&>(*_right->getRootOperation()),
+        _rightJoinCol, &idTable);
   } else {
     join(leftRes->idTable(), _leftJoinCol, rightRes->idTable(), _rightJoinCol,
          &idTable);
@@ -644,9 +656,6 @@ void Join::computeResultForTwoIndexScans(IdTable* resultPtr) {
       dynamic_cast<const IndexScan&>(*_left->getRootOperation()),
       dynamic_cast<const IndexScan&>(*_right->getRootOperation()));
 
-  // LOG(WARN) << "num blocks in first: " << std::ranges::distance(leftBlocks)
-  // << std::endl; LOG(WARN) << "num blocks in second: " <<
-  // std::ranges::distance(rightBlocks) << std::endl;
   ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks, lessThan,
                                               addResultRow);
 }
@@ -663,8 +672,8 @@ void Join::computeResultForIndexScanAndColumn(const IdTable& inputTable,
   AD_CORRECTNESS_CHECK(joinColumnIndexScan == 0);
 
   auto joinColumn = inputTable.getColumn(joinColumnIndexTable);
-  auto addResultRow = [&, beg = joinColumn.begin()](auto itLeft, auto itRight) {
-    const auto& l = *inputTable.begin() + (itLeft - beg);
+  auto addResultRow = [&, beg = joinColumn.data()](auto itLeft, auto itRight) {
+    const auto& l = *(inputTable.begin() + (&(*itLeft) - beg));
     const auto& r = *itRight;
     result.emplace_back();
     IdTable::row_reference lastRow = result.back();
