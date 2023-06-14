@@ -371,10 +371,6 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   // get all the blocks where col0FirstId_ <= col0Id <= col0LastId_
   auto relevantBlocks =
       getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
-  // TODO<joka921> Is this condition necessary?
-  if (relevantBlocks.size() < 2) {
-    return {relevantBlocks.begin(), relevantBlocks.end()};
-  }
 
   auto idRanges = blocksToIdRanges(relevantBlocks, metadata.col0Id_, col1Id);
 
@@ -398,23 +394,14 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
     result.push_back(*(begBlocks + (it2 - begRanges)));
   };
 
-  // TODO<joka921> is the copy really necessary?
-  // TODO<joka921> Should we respect the memory limit?
-  // TODO<joka921> The correct way indeed WAS to remove the duplicates inside
-  // the `zipperJoinWithUndef` function.
-  std::vector<Id> joinColumnUnique;
-  joinColumnUnique.reserve(joinColum.size());
-  std::ranges::unique_copy(joinColum, std::back_inserter(joinColumnUnique));
-
-  if (joinColum.empty()) {
-    return result;
-  }
-
   auto noop = ad_utility::noop;
-  [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
-      joinColumnUnique, idRanges, lessThan, addRow, noop, noop);
-  // TODO<joka921> This really has to be done inside the function
-  result.erase(std::unique(result.begin(), result.end()), result.end());
+  [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef<false>(
+      joinColum, idRanges, lessThan, addRow, noop, noop);
+
+  // The following check shouldn't be too expensive as there are only few
+  // blocks.
+  auto unique = std::unique(result.begin(), result.end());
+  AD_CORRECTNESS_CHECK(unique == result.end());
   return result;
 }
 

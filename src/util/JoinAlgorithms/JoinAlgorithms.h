@@ -85,6 +85,15 @@ concept BinaryIteratorFunction =
  * @param elFromFirstNotFoundAction This function is called for each iterator in
  * `left` for which no corresponding match in `right` was found. This is `noop`
  * for "normal` joins, but can be set to implement `OPTIONAL` or `MINUS`.
+ * @tparam addDuplicatesFromLeft If set to `false`, then if several inputs from
+ * `left` are compatible with several inputs from `right`, then only the matches
+ * for the first matching entry from `left` are added to the result. For example
+ * if `A` and `B` from left are both compatible with `C` and `D` from right,
+ * then the result for these elements will be `AC, AD`. With the default
+ * (`addDuplicatesFromLeft = true`) it would be `AC, AD, BC, BD`. Note that this
+ * currently only works for the exact matches and has no effects on the merging
+ * with undefined values. This is useful when there are no undefined values and
+ * we are only interested in the unique results from `right`.
  * @return 0 if the result is sorted, > 0 if the result is not sorted. `Sorted`
  * means that all the calls to `compatibleRowAction` were ordered wrt
  * `lessThan`. A result being out of order can happen if two rows with UNDEF
@@ -93,11 +102,11 @@ concept BinaryIteratorFunction =
  * described cases leads to two sorted ranges in the output, this can possibly
  * be exploited to fix the result in a cheaper way than a full sort.
  */
-template <std::ranges::random_access_range Range1,
-          std::ranges::random_access_range Range2, typename LessThan,
-          typename FindSmallerUndefRangesLeft,
-          typename FindSmallerUndefRangesRight,
-          typename ElFromFirstNotFoundAction = decltype(noop)>
+template <
+    bool addDuplicatesFromLeft = true, std::ranges::random_access_range Range1,
+    std::ranges::random_access_range Range2, typename LessThan,
+    typename FindSmallerUndefRangesLeft, typename FindSmallerUndefRangesRight,
+    typename ElFromFirstNotFoundAction = decltype(noop)>
 [[nodiscard]] auto zipperJoinWithUndef(
     const Range1& left, const Range2& right, const LessThan& lessThan,
     const auto& compatibleRowAction,
@@ -261,6 +270,9 @@ template <std::ranges::random_access_range Range1,
         cover(it1);
         for (auto innerIt2 = it2; innerIt2 != endSame2; ++innerIt2) {
           compatibleRowAction(it1, innerIt2);
+        }
+        if constexpr (!addDuplicatesFromLeft) {
+          break;
         }
       }
       it1 = endSame1;
@@ -563,6 +575,10 @@ class BlockAndSubrange {
     return std::ranges::subrange{block_.begin() + subrange_.first,
                                  block_.begin() + subrange_.second};
   }
+  auto subrange() const {
+    return std::ranges::subrange{block_.begin() + subrange_.first,
+                                 block_.begin() + subrange_.second};
+  }
   void setSubrange(auto it1, auto it2) {
     // TODO<joka921> Add assertions that the iterators are valid.
     subrange_.first = it1 - block_.begin();
@@ -574,6 +590,29 @@ class BlockAndSubrange {
   Range subrange_;
 };
 
+/**
+ * @brief Perform a zipper/merge join between two sorted inputs that are given
+ * as blocks of inputs, e.g. `std::vector<std::vector<int>>` or
+ * `ad_utility::generator<std::vector<int>>`. The blocks can be specified via a
+ * input range (e.g. a generator), but each single block must be a random access
+ * range (e.g. vector). The inputs will be moved from. The space complexity is
+ * `O(size of result)`. The result is only correct if none of the inputs
+ * contains UNDEF values.
+ * @param leftBlocks The left input to the join algorithm. Typically a range of
+ * blocks of rows of IDs (e.g.`std::vector<IdTable>` or
+ * `ad_utility::generator<IdTable>`).
+ * @param rightBlocks The right input to the join algorithm.
+ * @param lessThan This function is called with one element from one of the
+ * blocks of `leftBlocks` and `rightBlocks` each and must return `true` if the
+ * first argument comes before the second one. The concatenation of all blocks
+ * in `leftBlocks` must be sorted according to this function. The same
+ * requirement holds for `rightBlocks`.
+ * @param compatibleRowAction When an element from a block from `leftBlock` and
+ * an element from a block from `rightBlock` match (because they compare equal
+ * wrt the `lessThan` relation), this function is called with the two
+ * *iterators* to the  elements, i.e . `compatibleRowAction(itToLeft,
+ * itToRight)`
+ */
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
           typename LeftProjection = std::identity,
           typename RightProjection = std::identity>
@@ -583,74 +622,94 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
                                      const auto& compatibleRowAction,
                                      LeftProjection leftProjection = {},
                                      RightProjection rightProjection = {}) {
+  // Type aliases for a single block from the left/right input
   using LeftBlock = typename std::decay_t<LeftBlocks>::value_type;
   using RightBlock = typename std::decay_t<RightBlocks>::value_type;
 
+  // Type aliases for a single element from a block from the left/right input.
   using LeftEl =
       typename std::iterator_traits<typename LeftBlock::iterator>::value_type;
   using RightEl =
       typename std::iterator_traits<typename RightBlock::iterator>::value_type;
 
+  // Type alias for the result of the projection. Elements from the left and
+  // right input must be projected to the same type.
   using ProjectedEl =
       std::decay_t<std::invoke_result_t<LeftProjection, LeftEl>>;
   static_assert(
       ad_utility::isSimilar<ProjectedEl,
                             std::invoke_result_t<RightProjection, RightEl>>);
+  // Iterators for the two inputs. These iterators work on blocks.
   auto it1 = leftBlocks.begin();
   auto end1 = leftBlocks.end();
   auto it2 = rightBlocks.begin();
   auto end2 = rightBlocks.end();
+
+  // Create an equality comparison from the `lessThan` predicate.
   auto eq = [&lessThan](const auto& el1, const auto& el2) {
     return !lessThan(el1, el2) && !lessThan(el2, el1);
   };
 
+  // In these buffers we will store blocks that all contain the same elements
+  // and thus their cartesian products match.
   std::vector<BlockAndSubrange<LeftBlock>> sameBlocksLeft;
   std::vector<BlockAndSubrange<RightBlock>> sameBlocksRight;
 
+  // Read the minimal number of unread blocks from `leftBlocks` into
+  // `sameBlocksLeft` and from `rightBlocks` into `sameBlocksRight` until the
+  // following conditions hold:
+  // * at least one block is contained in `sameBlocksLeft` and `sameBlocksRight`
+  // each.
+  // * assume that the last element from sameBlocksLeft[0] is less than or equal
+  // to the last element of sameBlocksLeft[1] (otherwise the condition is
+  // switched)
+  // * Then all the blocks that contain elements less than or equal to this
+  // minimum are read into the respective buffers. For example the following
+  // scenario might occur:
+  //   sameBlocksLeft:  [0-3], [3-3], [3-5]
+  //   sameBlocksRight: [0-3], [3-7]
+  // The consequence of these postconditions is that we can always join at least
+  // on block from each input in the next step and can correctly handle the case
+  // that there are duplicates of the last element of the block in the adjacent
+  // blocks. If either of `sameBlocksLeft` or `sameBlocksRight` are empty after
+  // calling this function, then there are no more blocks to join and the
+  // algorithm can terminate.
   auto fillBuffer = [&]() {
     AD_CORRECTNESS_CHECK(sameBlocksLeft.size() <= 1);
     AD_CORRECTNESS_CHECK(sameBlocksRight.size() <= 1);
-    while (sameBlocksLeft.empty() && it1 != end1) {
-      if (!it1->empty()) {
-        AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it1, lessThan));
-        sameBlocksLeft.emplace_back(std::move(*it1));
+
+    auto fillWithAtLeastOne = [](auto& targetBuffer, auto& it,
+                                 const auto& end) {
+      while (targetBuffer.empty() && it != end) {
+        if (!it->empty()) {
+          AD_EXPENSIVE_CHECK(std::ranges::is_sorted(*it, lessThan));
+          targetBuffer.emplace_back(std::move(*it));
+        }
+        ++it;
       }
-      ++it1;
-    }
-    while (sameBlocksRight.empty() && it2 != end2) {
-      if (!it2->empty()) {
-        AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it2, lessThan));
-        sameBlocksRight.emplace_back(std::move(*it2));
-      }
-      ++it2;
-    }
+    };
+    fillWithAtLeastOne(sameBlocksLeft, it1, end1);
+    fillWithAtLeastOne(sameBlocksRight, it2, end2);
 
     if (sameBlocksLeft.empty() || sameBlocksRight.empty()) {
       return;
     }
     LeftEl lastLeft = sameBlocksLeft.front().back();
     RightEl lastRight = sameBlocksRight.front().back();
+    ProjectedEl minEl = std::min(leftProjection(lastLeft),
+                                 rightProjection(lastRight), lessThan);
 
-    if (!lessThan(lastRight, lastLeft)) {
-      // TODO<joka921> here and below: use `at`, but it needs to be implemented
-      // in the `Row` class.
-      while (it1 != end1 && eq((*it1)[0], lastLeft)) {
-        AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it1, lessThan));
-        sameBlocksLeft.emplace_back(std::move(*it1));
-        ++it1;
+    auto fillEqualToMinimum = [&minEl, &lessThan, &eq](auto& targetBuffer,
+                                                       auto& it,
+                                                       const auto& end) {
+      while (it != end && eq((*it)[0], minEl)) {
+        AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it, lessThan));
+        targetBuffer.emplace_back(std::move(*it));
+        ++it;
       }
-    }
-
-    if (!lessThan(lastLeft, lastRight)) {
-      while (it2 != end2 && eq((*it2)[0], lastRight)) {
-        AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it2, lessThan));
-        sameBlocksRight.emplace_back(std::move(*it2));
-        ++it2;
-        if (!eq(sameBlocksRight.back().back(), lastRight)) {
-          break;
-        }
-      }
-    }
+    };
+    fillEqualToMinimum(sameBlocksLeft, it1, end1);
+    fillEqualToMinimum(sameBlocksRight, it2, end2);
   };
 
   auto join = [&](const auto& l, const auto& r) {
@@ -672,26 +731,12 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   auto joinAndRemoveBeginning = [&]() {
     decltype(auto) l = sameBlocksLeft.at(0).subrange();
     decltype(auto) r = sameBlocksRight.at(0).subrange();
-    auto lBack = l.back();
-    auto rBack = r.back();
-    const auto& lprof = std::move(leftProjection(std::move(l.back())));
-    const auto& rpoj = std::move(rightProjection(std::move(r.back())));
-    auto lf = l.front();
-    auto rf = r.front();
-    const auto& lfp = std::move(leftProjection(l.front()));
-    const auto& rfp = std::move(rightProjection(r.front()));
     ProjectedEl minEl =
         std::min(leftProjection(l.back()), rightProjection(r.back()), lessThan);
     auto itL = std::ranges::equal_range(l, minEl, lessThan);
     auto itR = std::ranges::equal_range(r, minEl, lessThan);
     join(std::ranges::subrange{l.begin(), itL.begin()},
          std::ranges::subrange{r.begin(), itR.begin()});
-    auto lBeg = itL.begin() - l.begin();
-    auto rBeg = itR.begin() - r.begin();
-    auto lEnd = itL.end() - l.begin();
-    auto rEnd = itR.end() - r.begin();
-    auto lSize = l.size();
-    auto rSize = r.size();
     sameBlocksLeft.at(0).setSubrange(itL.begin(), l.end());
     sameBlocksRight.at(0).setSubrange(itR.begin(), r.end());
   };
@@ -716,8 +761,9 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
 
   auto joinBuffers = [&]() {
     joinAndRemoveBeginning();
-    using SubLeft = decltype(sameBlocksLeft.front().subrange());
-    using SubRight = decltype(sameBlocksRight.front().subrange());
+    using SubLeft = decltype(std::as_const(sameBlocksLeft.front()).subrange());
+    using SubRight =
+        decltype(std::as_const(sameBlocksRight.front()).subrange());
     std::vector<SubLeft> l;
     std::vector<SubRight> r;
 
@@ -725,20 +771,18 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
         std::min(leftProjection(sameBlocksLeft.front().back()),
                  rightProjection(sameBlocksRight.front().back()), lessThan);
 
-    for (size_t i = 0; i < sameBlocksLeft.size() - 1; ++i) {
-      l.push_back(sameBlocksLeft[i].subrange());
-    }
-    if (sameBlocksLeft.size() > 0) {
-      l.push_back(std::ranges::equal_range(sameBlocksLeft.back().subrange(),
-                                           minEl, lessThan));
-    }
-    for (size_t i = 0; i < sameBlocksRight.size() - 1; ++i) {
-      r.push_back(sameBlocksRight[i].subrange());
-    }
-    if (sameBlocksRight.size() > 0) {
-      r.push_back(std::ranges::equal_range(sameBlocksRight.back().subrange(),
-                                           minEl, lessThan));
-    }
+    auto pushRelevantSubranges = [&minEl, &lessThan](auto& target,
+                                                     const auto& input) {
+      for (size_t i = 0; i < input.size() - 1; ++i) {
+        target.push_back(input[i].subrange());
+      }
+      if (!input.empty()) {
+        target.push_back(
+            std::ranges::equal_range(input.back().subrange(), minEl, lessThan));
+      }
+    };
+    pushRelevantSubranges(l, sameBlocksLeft);
+    pushRelevantSubranges(r, sameBlocksRight);
     addAll(l, r);
     removeAllButUnjoined(sameBlocksLeft, minEl);
     removeAllButUnjoined(sameBlocksRight, minEl);
