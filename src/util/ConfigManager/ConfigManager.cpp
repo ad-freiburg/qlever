@@ -133,7 +133,7 @@ void ConfigManager::addConfigOption(const VectorOfKeysForJson& pathToOption,
   // same location?
   if (keyToConfigurationOptionIndex_.contains(ptr)) {
     throw ConfigManagerOptionPathAlreadyinUseException(
-        vectorOfKeysForJsonToString(pathToOption), printConfigurationDoc());
+        vectorOfKeysForJsonToString(pathToOption), printConfigurationDoc(true));
   }
 
   // Add the location of the configuration option to the json.
@@ -160,7 +160,7 @@ const ConfigOption& ConfigManager::getConfigurationOptionByNestedKeys(
         keyToConfigurationOptionIndex_.at(ptr).get<size_t>());
   } else {
     throw NoConfigOptionFoundException(vectorOfKeysForJsonToString(keys),
-                                       printConfigurationDoc());
+                                       printConfigurationDoc(true));
   }
 }
 
@@ -250,9 +250,9 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
         throw j.at(currentPtr.parent_pointer()).is_array()
             ? NoConfigOptionFoundException(
                   currentPtr.parent_pointer().to_string(),
-                  printConfigurationDoc())
+                  printConfigurationDoc(false))
             : NoConfigOptionFoundException(currentPtr.to_string(),
-                                           printConfigurationDoc());
+                                           printConfigurationDoc(false));
       }
     }
   }
@@ -293,7 +293,8 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
 }
 
 // ____________________________________________________________________________
-std::string ConfigManager::printConfigurationDoc() const {
+std::string ConfigManager::printConfigurationDoc(
+    bool printCurrentJsonConfiguration) const {
   // For listing all available configuration options.
   std::ostringstream stream;
 
@@ -311,9 +312,10 @@ std::string ConfigManager::printConfigurationDoc() const {
       keyToConfigurationOptionIndex_);
 
   /*
-  Replace the numbers in the 'leaves' of the 'tree' with the default value of
-  the option, or a random value of that type, if it doesn't have a
-  default value.
+  Replace the numbers in the 'leaves' of the 'tree' with either:
+  - The current value of the configuration option.
+  - The default value of the configuration option.
+  - An example value, of the correct type.
   Note: Users can indirectly create null values in
   `keyToConfigurationOptionIndex_`, by adding a configuration option with a path
   containing numbers, for arrays accesses, that are bigger than zero. Those
@@ -322,10 +324,10 @@ std::string ConfigManager::printConfigurationDoc() const {
   entries, if the numbers are bigger than `0` and the arrays don't already have
   entries in all positions lower than the numbers.
   Example: A configuration option with the path `"options", 3`, would create 3
-  empty array entries in `"options"`.
-  We will simply ignore those `null` entries, because they are signifiers, that
-  the user didn't think things through and should re-work some stuff. I mean,
-  there is never a good reason, to have empty array elements.
+  empty array entries in `"options"`. We will simply ignore those `null`
+  entries, because they are signifiers, that the user didn't think things
+  through and should re-work some stuff. I mean, there is never a good reason,
+  to have empty array elements.
   */
   for (const auto& keyToLeaf : flattendKeyToConfigurationOptionIndex.items()) {
     // Skip empty array 'leafs'.
@@ -340,9 +342,14 @@ std::string ConfigManager::printConfigurationDoc() const {
     const ConfigOption& option =
         configurationOptions_.at(keyToLeaf.value().get<size_t>());
 
-    prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
-        option.hasDefaultValue() ? option.getDefaultValueAsJson()
-                                 : option.getDummyValueAsJson();
+    if (printCurrentJsonConfiguration) {
+      prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
+          option.getValueAsJson();
+    } else {
+      prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
+          option.hasDefaultValue() ? option.getDefaultValueAsJson()
+                                   : option.getDummyValueAsJson();
+    }
   }
 
   // List the configuration options themselves.

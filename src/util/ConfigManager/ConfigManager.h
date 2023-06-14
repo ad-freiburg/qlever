@@ -182,10 +182,16 @@ class ConfigManager {
   static nlohmann::json parseShortHand(const std::string& shortHandString);
 
   /*
-  @brief Returns a string containing an example json configuration and the
+  @brief Returns a string containing a json configuration and the
   string representations of all added configuration options.
+
+  @param printCurrentJsonConfiguration If true, the current values of the
+  configuration options will be used for printing the json configuration. If
+  false, an example json configuration will be printed, that uses the default
+  values of the configuration options, and, if an option doesn't have a default
+  value, a dummy value.
   */
-  std::string printConfigurationDoc() const;
+  std::string printConfigurationDoc(bool printCurrentJsonConfiguration) const;
 
   /*
   @brief Return string representation of a `VectorOfKeysForJson`.

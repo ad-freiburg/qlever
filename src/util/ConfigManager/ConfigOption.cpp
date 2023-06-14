@@ -174,6 +174,11 @@ std::string ConfigOption::getValueAsString() const {
 }
 
 // ____________________________________________________________________________
+nlohmann::json ConfigOption::getValueAsJson() const {
+  return std::visit([](const auto& d) { return nlohmann::json(*d.variablePointer_); }, data_);
+}
+
+// ____________________________________________________________________________
 std::string ConfigOption::getDefaultValueAsString() const {
   return std::visit(
       [](const auto& d) {
@@ -224,8 +229,8 @@ ConfigOption::operator std::string() const {
   return absl::StrCat(
       "Configuration option '", identifier_, "'\n",
       ad_utility::addIndentation(absl::StrCat("Value type: ", getActualValueTypeAsString(),
-                                              "\nDefault value: ", getValueAsString(),
-                                              "\nCurrently held value: ", getDefaultValueAsString(),
+                                              "\nDefault value: ", getDefaultValueAsString(),
+                                              "\nCurrently held value: ", getValueAsString(),
                                               "\nDescription: ", description_),
                                  1));
 }

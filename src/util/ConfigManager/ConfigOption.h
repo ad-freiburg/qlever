@@ -176,6 +176,11 @@ class ConfigOption {
   std::string getValueAsString() const;
 
   /*
+  @brief Return json representation of the variable, that the internal pointer points to.
+  */
+  nlohmann::json getValueAsJson() const;
+
+  /*
   @brief Return json representation of a dummy value, that is of the same type, as the type, this
   configuration option was set to.
   */

@@ -141,7 +141,7 @@ int main(int argc, char** argv) {
         [](const BenchmarkInterface* bench) {
           std::cerr << "Configuration option of benchmark class '"
                     << bench->name() << "'\n"
-                    << bench->getConfigManager().printConfigurationDoc()
+                    << bench->getConfigManager().printConfigurationDoc(false)
                     << "\n\n";
         });
     exit(0);
