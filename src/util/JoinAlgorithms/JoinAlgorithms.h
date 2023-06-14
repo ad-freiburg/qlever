@@ -655,6 +655,12 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   std::vector<BlockAndSubrange<LeftBlock>> sameBlocksLeft;
   std::vector<BlockAndSubrange<RightBlock>> sameBlocksRight;
 
+  auto getMinEl = [&leftProjection, &rightProjection, &sameBlocksLeft,
+                   &sameBlocksRight, &lessThan]() -> ProjectedEl {
+    return std::min(leftProjection(sameBlocksLeft.front().back()),
+                    rightProjection(sameBlocksRight.front().back()), lessThan);
+  };
+
   // Read the minimal number of unread blocks from `leftBlocks` into
   // `sameBlocksLeft` and from `rightBlocks` into `sameBlocksRight` until the
   // following conditions hold:
@@ -694,14 +700,10 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     if (sameBlocksLeft.empty() || sameBlocksRight.empty()) {
       return;
     }
-    LeftEl lastLeft = sameBlocksLeft.front().back();
-    RightEl lastRight = sameBlocksRight.front().back();
-    ProjectedEl minEl = std::min(leftProjection(lastLeft),
-                                 rightProjection(lastRight), lessThan);
 
-    auto fillEqualToMinimum = [&minEl, &lessThan, &eq](auto& targetBuffer,
-                                                       auto& it,
-                                                       const auto& end) {
+    auto fillEqualToMinimum = [minEl = getMinEl(), &lessThan, &eq](
+                                  auto& targetBuffer, auto& it,
+                                  const auto& end) {
       while (it != end && eq((*it)[0], minEl)) {
         AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it, lessThan));
         targetBuffer.emplace_back(std::move(*it));
@@ -712,13 +714,13 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     fillEqualToMinimum(sameBlocksRight, it2, end2);
   };
 
-  auto join = [&](const auto& l, const auto& r) {
-    return zipperJoinWithUndef(l, r, lessThan, compatibleRowAction, noop, noop);
-  };
-
-  auto addAll = [&](const auto& l, const auto& r) {
-    for (const auto& lBlock : l) {
-      for (const auto& rBlock : r) {
+  // Call `compatibleRowAction` for all pairs of elements in the cartesian
+  // product of the blocks in `blocksLeft` and `blocksRight`.
+  auto addAll = [&compatibleRowAction](const auto& blocksLeft,
+                                       const auto& blocksRight) {
+    // TODO<C++23> use `std::views::cartesian_product`.
+    for (const auto& lBlock : blocksLeft) {
+      for (const auto& rBlock : blocksRight) {
         for (const auto& lEl : lBlock) {
           for (const auto& rEl : rBlock) {
             compatibleRowAction(&lEl, &rEl);
@@ -728,30 +730,51 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     }
   };
 
+  // Join the first block in `sameBlocksLeft` with the first block in
+  // `sameBlocksRight`, but leave the last element in each block untouched (it
+  // might have matches in subsequent blocks). The fully joined parts of the
+  // block are then removed from `sameBlocksLeft/Right`, as they are not needed
+  // anymore.
   auto joinAndRemoveBeginning = [&]() {
+    // Get the first blocks.
+    AD_CORRECTNESS_CHECK(!sameBlocksLeft.empty());
+    AD_CORRECTNESS_CHECK(!sameBlocksRight.empty());
     decltype(auto) l = sameBlocksLeft.at(0).subrange();
     decltype(auto) r = sameBlocksRight.at(0).subrange();
-    ProjectedEl minEl =
-        std::min(leftProjection(l.back()), rightProjection(r.back()), lessThan);
-    auto itL = std::ranges::equal_range(l, minEl, lessThan);
-    auto itR = std::ranges::equal_range(r, minEl, lessThan);
-    join(std::ranges::subrange{l.begin(), itL.begin()},
-         std::ranges::subrange{r.begin(), itR.begin()});
-    sameBlocksLeft.at(0).setSubrange(itL.begin(), l.end());
-    sameBlocksRight.at(0).setSubrange(itR.begin(), r.end());
+
+    // Compute the range that is safe to join and perform the join.
+    ProjectedEl minEl = getMinEl();
+    auto itL = std::ranges::lower_bound(l, minEl, lessThan);
+    auto itR = std::ranges::lower_bound(r, minEl, lessThan);
+    [[maybe_unused]] auto res =
+        zipperJoinWithUndef(std::ranges::subrange{l.begin(), itL},
+                            std::ranges::subrange{r.begin(), itR}, lessThan,
+                            compatibleRowAction, noop, noop);
+
+    // Remove the joined elements.
+    sameBlocksLeft.at(0).setSubrange(itL, l.end());
+    sameBlocksRight.at(0).setSubrange(itR, r.end());
   };
 
+  // Cleanup the `blocks` (either `sameBlocksLeft` or `sameBlocksRight`, by
+  // removing blocks and parts of blocks, s.t. only elements `>=
+  // lastHandledElement` remain. This function expects that all but the last
+  // block can completely be deleted.
   auto removeAllButUnjoined = [lessThan]<typename Blocks>(
-                                  Blocks& blocks, auto lastHandledElement) {
-    // TODO<joka921> This method can be incorporated into the calling code much
-    // more simply.
+                                  Blocks& blocks,
+                                  ProjectedEl lastHandledElement) {
+    // Erase all but the last block.
     AD_CORRECTNESS_CHECK(!blocks.empty());
     blocks.erase(blocks.begin(), blocks.end() - 1);
+
+    // Delete the part from the last block that is `<= lastHandledElement`.
     decltype(auto) remainingBlock = blocks.at(0).subrange();
     auto beginningOfUnjoined =
         std::ranges::upper_bound(remainingBlock, lastHandledElement, lessThan);
     remainingBlock =
         std::ranges::subrange{beginningOfUnjoined, remainingBlock.end()};
+    // If the last block also was already handled completely, delete it (this
+    // might happen at the very end).
     if (!remainingBlock.empty()) {
       blocks.at(0).setSubrange(remainingBlock.begin(), remainingBlock.end());
     } else {
@@ -759,30 +782,27 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     }
   };
 
+  // Combine the above functionality and perform one round of joining.
   auto joinBuffers = [&]() {
+    // Join the beginning of the first blocks and remove it from the input.
     joinAndRemoveBeginning();
-    using SubLeft = decltype(std::as_const(sameBlocksLeft.front()).subrange());
-    using SubRight =
-        decltype(std::as_const(sameBlocksRight.front()).subrange());
-    std::vector<SubLeft> l;
-    std::vector<SubRight> r;
-
-    ProjectedEl minEl =
-        std::min(leftProjection(sameBlocksLeft.front().back()),
-                 rightProjection(sameBlocksRight.front().back()), lessThan);
-
-    auto pushRelevantSubranges = [&minEl, &lessThan](auto& target,
-                                                     const auto& input) {
+    // Prepare the subranges of the loaded blocks that are equal to the
+    // last element that we can safely join.
+    ProjectedEl minEl = getMinEl();
+    auto pushRelevantSubranges = [&minEl, &lessThan](const auto& input) {
+      using Subrange = decltype(std::as_const(input.front()).subrange());
+      std::vector<Subrange> result;
       for (size_t i = 0; i < input.size() - 1; ++i) {
-        target.push_back(input[i].subrange());
+        result.push_back(input[i].subrange());
       }
       if (!input.empty()) {
-        target.push_back(
+        result.push_back(
             std::ranges::equal_range(input.back().subrange(), minEl, lessThan));
       }
+      return result;
     };
-    pushRelevantSubranges(l, sameBlocksLeft);
-    pushRelevantSubranges(r, sameBlocksRight);
+    auto l = pushRelevantSubranges(sameBlocksLeft);
+    auto r = pushRelevantSubranges(sameBlocksRight);
     addAll(l, r);
     removeAllButUnjoined(sameBlocksLeft, minEl);
     removeAllButUnjoined(sameBlocksRight, minEl);
