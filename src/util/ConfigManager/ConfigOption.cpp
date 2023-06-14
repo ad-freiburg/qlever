@@ -225,6 +225,36 @@ nlohmann::json ConfigOption::getDummyValueAsJson() const {
 }
 
 // ____________________________________________________________________________
+std::string ConfigOption::getDummyValueAsString() const {
+  return std::visit(
+      /*
+      We could directly return a string, but by converting a value, we don't have to keep an eye
+      on how the class represents it's values as strings.
+      */
+      []<typename T>(const Data<T>&) {
+        if constexpr (std::is_same_v<T, bool>) {
+          return contentOfAvailableTypesToString(false);
+        } else if constexpr (std::is_same_v<T, std::string>) {
+          return contentOfAvailableTypesToString("Example string");
+        } else if constexpr (std::is_same_v<T, int>) {
+          return contentOfAvailableTypesToString(42);
+        } else if constexpr (std::is_same_v<T, float>) {
+          return contentOfAvailableTypesToString(float{4.2});
+        } else if constexpr (std::is_same_v<T, std::vector<bool>>) {
+          return contentOfAvailableTypesToString(std::vector{true, false});
+        } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
+          return contentOfAvailableTypesToString(
+              std::vector<std::string>{"Example", "string", "list"});
+        } else if constexpr (std::is_same_v<T, std::vector<int>>) {
+          return contentOfAvailableTypesToString(std::vector{40, 41, 42});
+        } else if constexpr (std::is_same_v<T, std::vector<float>>) {
+          return contentOfAvailableTypesToString(std::vector<float>{40.0, 41.1, 42.2});
+        }
+      },
+      data_);
+}
+
+// ____________________________________________________________________________
 ConfigOption::operator std::string() const {
   return absl::StrCat(
       "Configuration option '", identifier_, "'\n",
