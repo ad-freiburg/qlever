@@ -125,6 +125,17 @@ ConfigOptionGetWrongTypeException::ConfigOptionGetWrongTypeException(
 }
 
 //_____________________________________________________________________________
+ConfigOptionConstructorNullPointerException::
+    ConfigOptionConstructorNullPointerException(
+        std::string_view optionIdentifier) {
+  message_ =
+      absl::StrCat("Error, while trying to construct configuration option '",
+                   optionIdentifier,
+                   "': The variable pointer must point to an actual variable. "
+                   "A null pointer is not allowed.");
+}
+
+//_____________________________________________________________________________
 ConfigManagerPathToConfigOptionDoesntEndWithConfigOptionNameException::
     ConfigManagerPathToConfigOptionDoesntEndWithConfigOptionNameException(
         std::string_view optionIdentifier, std::string_view pathToOption) {

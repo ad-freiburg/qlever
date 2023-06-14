@@ -190,6 +190,20 @@ class ConfigOptionGetWrongTypeException : public ExceptionWithMessage {
 };
 
 /*
+@brief A custom exception, for when somebody tries to construct a `ConfigOption`
+and gives the constructor a `nullptr`.
+*/
+class ConfigOptionConstructorNullPointerException
+    : public ExceptionWithMessage {
+ public:
+  /*
+  @param optionIdentifier The name of the option.
+  */
+  explicit ConfigOptionConstructorNullPointerException(
+      std::string_view optionIdentifier);
+};
+
+/*
 @brief A custom exception, for when somebody tries to add a `ConfigOption` to a
 `ConfigManager` with a path to the option, where the final key of the path isn't
 the name of the config option.

@@ -107,11 +107,18 @@ class ConfigManager {
                           OptionType* variableToPutValueOfTheOptionIn,
                           std::optional<OptionType> defaultValue =
                               std::optional<OptionType>(std::nullopt)) {
-    addConfigOption(
-        pathToOption,
-        makeConfigOption<OptionType>(
-            std::get<std::string>(pathToOption.back()), optionDescription,
-            variableToPutValueOfTheOptionIn, defaultValue));
+    if (defaultValue.has_value()) {
+      addConfigOption(
+          pathToOption,
+          ConfigOption(std::get<std::string>(pathToOption.back()),
+                       optionDescription, variableToPutValueOfTheOptionIn,
+                       defaultValue.value()));
+    } else {
+      addConfigOption(
+          pathToOption,
+          ConfigOption(std::get<std::string>(pathToOption.back()),
+                       optionDescription, variableToPutValueOfTheOptionIn));
+    }
   }
 
   /*

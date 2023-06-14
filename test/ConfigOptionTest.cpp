@@ -27,12 +27,17 @@ TEST(ConfigOptionTest, ConstructorException) {
   bool notUsed;
 
   // No name.
-  ASSERT_THROW(ad_utility::makeConfigOption<bool>("", "", &notUsed),
+  ASSERT_THROW(ad_utility::ConfigOption("", "", &notUsed),
                ad_utility::NotValidShortHandNameException);
 
   // Names with spaces.
-  ASSERT_THROW(ad_utility::makeConfigOption<bool>("Option 1", "", &notUsed),
+  ASSERT_THROW(ad_utility::ConfigOption("Option 1", "", &notUsed),
                ad_utility::NotValidShortHandNameException);
+
+  // The variable pointer is a null pointer.
+  int* ptr = nullptr;
+  ASSERT_THROW(ad_utility::ConfigOption("Option", "", ptr),
+               ad_utility::ConfigOptionConstructorNullPointerException);
 }
 
 /*
@@ -173,8 +178,8 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
         // The default value.
         const ConversionTestCase<Type> defaultCase{getConversionTestCase<Type>()};
 
-        ConfigOption option{ad_utility::makeConfigOption<Type>(
-            "With_default", "", &configurationOptionValue, defaultCase.value)};
+        ConfigOption option{ad_utility::ConfigOption("With_default", "", &configurationOptionValue,
+                                                     defaultCase.value)};
 
         // Can we use the default value correctly?
         ASSERT_TRUE(option.hasSetDereferencedVariablePointer() && option.hasDefaultValue());
@@ -192,36 +197,35 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
         ASSERT_EQ(defaultCase.jsonRepresentation, option.getDefaultValueAsJson());
       };
 
-  auto testCaseWithoutDefault =
-      [&setAndTest]<typename Type>(const ConversionTestCase<Type>& toSetTo) {
-        // Every configuration option keeps updating an external variable with
-        // the value, that it itself holds. This is the one.
-        Type configurationOptionValue;
+  auto testCaseWithoutDefault = [&setAndTest]<typename Type>(
+                                    const ConversionTestCase<Type>& toSetTo) {
+    // Every configuration option keeps updating an external variable with
+    // the value, that it itself holds. This is the one.
+    Type configurationOptionValue;
 
-        ConfigOption option{
-            ad_utility::makeConfigOption<Type>("Without_default", "", &configurationOptionValue)};
+    ConfigOption option{ad_utility::ConfigOption("Without_default", "", &configurationOptionValue)};
 
-        // Make sure, that we truly don't have a default value, that can be gotten.
-        ASSERT_TRUE(!option.hasSetDereferencedVariablePointer() && !option.hasDefaultValue());
-        ASSERT_THROW(option.getDefaultValue<Type>(), ad_utility::ConfigOptionValueNotSetException);
-        ASSERT_TRUE(option.getDefaultValueAsJson().empty());
-        ad_utility::ConstexprForLoop(
-            std::make_index_sequence<std::variant_size_v<ConfigOption::AvailableTypes>>{},
-            [&option]<size_t index,
-                      typename IndexType =
-                          std::variant_alternative_t<index, ConfigOption::AvailableTypes>>() {
-              ASSERT_THROW((option.getDefaultValue<IndexType>()),
-                           ad_utility::ConfigOptionValueNotSetException);
-            });
+    // Make sure, that we truly don't have a default value, that can be gotten.
+    ASSERT_TRUE(!option.hasSetDereferencedVariablePointer() && !option.hasDefaultValue());
+    ASSERT_THROW(option.getDefaultValue<Type>(), ad_utility::ConfigOptionValueNotSetException);
+    ASSERT_TRUE(option.getDefaultValueAsJson().empty());
+    ad_utility::ConstexprForLoop(
+        std::make_index_sequence<std::variant_size_v<ConfigOption::AvailableTypes>>{},
+        [&option]<size_t index,
+                  typename IndexType =
+                      std::variant_alternative_t<index, ConfigOption::AvailableTypes>>() {
+          ASSERT_THROW((option.getDefaultValue<IndexType>()),
+                       ad_utility::ConfigOptionValueNotSetException);
+        });
 
-        setAndTest.template operator()<Type>(option, &configurationOptionValue, toSetTo);
+    setAndTest.template operator()<Type>(option, &configurationOptionValue, toSetTo);
 
-        // Is it still the case, that we don't have a default value?
-        ASSERT_TRUE(!option.hasDefaultValue());
-        ASSERT_THROW(option.getDefaultValue<Type>(), ad_utility::ConfigOptionValueNotSetException);
-        ASSERT_TRUE(option.getDefaultValueAsJson().empty());
-        ASSERT_EQ("None", option.getDefaultValueAsString());
-      };
+    // Is it still the case, that we don't have a default value?
+    ASSERT_TRUE(!option.hasDefaultValue());
+    ASSERT_THROW(option.getDefaultValue<Type>(), ad_utility::ConfigOptionValueNotSetException);
+    ASSERT_TRUE(option.getDefaultValueAsJson().empty());
+    ASSERT_EQ("None", option.getDefaultValueAsString());
+  };
 
   // Do a test case for every possible type.
   testCaseWithDefault(ConversionTestCase<bool>{false, nlohmann::json::parse(R"--(false)--")});
@@ -264,7 +268,7 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
 TEST(ConfigOptionTest, ExceptionOnCreation) {
   // No identifier.
   bool notUsed;
-  ASSERT_THROW(ad_utility::makeConfigOption<bool>("", "", &notUsed);
+  ASSERT_THROW(ad_utility::ConfigOption("", "", &notUsed);
                , ad_utility::NotValidShortHandNameException);
 }
 
@@ -282,7 +286,7 @@ TEST(ConfigOptionTest, SetValueWithJson) {
     // value, that it itself holds. This is the one.
     Type configurationOptionValue;
 
-    ConfigOption option{ad_utility::makeConfigOption<Type>("t", "", &configurationOptionValue)};
+    ConfigOption option{ad_utility::ConfigOption("t", "", &configurationOptionValue)};
 
     const auto& currentTest = getConversionTestCase<Type>();
 

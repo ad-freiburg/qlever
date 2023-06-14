@@ -25,30 +25,22 @@
 #include "util/json.h"
 
 namespace ad_utility {
-// Forward declaration, so that `makeConfigOption` can be friend
-// of the class.
-class ConfigOption;
-
-template <typename T>
-ConfigOption makeConfigOption(
-    std::string_view identifier, std::string_view description, T* variablePointer,
-    const std::optional<T>& defaultValue = std::optional<T>(std::nullopt));
-
 /*
-Describes a configuration option. A configuration option can only hold/parse/set values of a
-specific type, decided when creating the object.
+Describes a configuration option. A configuration option can only hold/parse/set
+values of a specific type, decided when creating the object.
 */
 class ConfigOption {
  public:
   // All possible types, that an option can hold.
   using AvailableTypes =
-      std::variant<bool, std::string, int, float, std::vector<bool>, std::vector<std::string>,
-                   std::vector<int>, std::vector<float>>;
+      std::variant<bool, std::string, int, float, std::vector<bool>,
+                   std::vector<std::string>, std::vector<int>,
+                   std::vector<float>>;
 
  private:
   /*
-  Holds the type dependant data of the class, because the class is not a templated class, but
-  sometimes behaves like one.
+  Holds the type dependant data of the class, because the class is not a
+  templated class, but sometimes behaves like one.
   */
   template <typename T>
   struct Data {
@@ -59,8 +51,8 @@ class ConfigOption {
     std::optional<T> defaultValue_;
 
     /*
-    Whenever somebody sets the value of the configuration option, they, in actuallity, set the
-    variable, this points to.
+    Whenever somebody sets the value of the configuration option, they, in
+    actuallity, set the variable, this points to.
     */
     T* variablePointer_;
   };
@@ -90,20 +82,22 @@ class ConfigOption {
   bool hasDefaultValue() const;
 
   /*
-  @brief Was the variable, that the internal pointer points to, ever set by this configuration
-  option? Note: The answer is only yes, if there was a default value given at construction, or any
-  setter called.
+  @brief Was the variable, that the internal pointer points to, ever set by this
+  configuration option? Note: The answer is only yes, if there was a default
+  value given at construction, or any setter called.
   */
   bool hasSetDereferencedVariablePointer() const;
 
   /*
-  @brief Sets the variable, that the internal pointer points to. Throws an exception, should the
-  given value have a different type, than what the configuration option was set to.
+  @brief Sets the variable, that the internal pointer points to. Throws an
+  exception, should the given value have a different type, than what the
+  configuration option was set to.
   */
   template <typename T>
-  requires ad_utility::isTypeContainedIn<T, AvailableTypes> void setValue(const T& value) {
-    // Only set the variable, that our internal pointer points to, if the given value is of the
-    // right type.
+  requires ad_utility::isTypeContainedIn<T, AvailableTypes>
+  void setValue(const T& value) {
+    // Only set the variable, that our internal pointer points to, if the given
+    // value is of the right type.
     if (getActualValueType() == getIndexOfTypeInAvailableTypes<T>()) {
       std::visit(
           [&value]<typename D>(Data<D>& d) {
@@ -114,14 +108,16 @@ class ConfigOption {
           data_);
       configurationOptionWasSet_ = true;
     } else {
-      throw ConfigOptionSetWrongTypeException(identifier_, getActualValueTypeAsString(),
+      throw ConfigOptionSetWrongTypeException(identifier_,
+                                              getActualValueTypeAsString(),
                                               availableTypesToString(value));
     }
   }
 
   /*
-  @brief Interprets the value in the json as the type, that this configuration option is meant to
-  have, and sets the variable, that our internal variable pointer points to, to it.
+  @brief Interprets the value in the json as the type, that this configuration
+  option is meant to have, and sets the variable, that our internal variable
+  pointer points to, to it.
   */
   void setValueWithJson(const nlohmann::json& json);
 
@@ -139,14 +135,15 @@ class ConfigOption {
       throw ConfigOptionValueNotSetException(identifier_, "default value");
     } else {
       // They used the wrong type.
-      throw ConfigOptionGetWrongTypeException(identifier_, getActualValueTypeAsString(),
+      throw ConfigOptionGetWrongTypeException(identifier_,
+                                              getActualValueTypeAsString(),
                                               availableTypesToString<T>());
     }
   }
 
   /*
-  @brief Return string representation of the default value, if it was set. Otherwise, `None` will be
-  returned.
+  @brief Return string representation of the default value, if it was set.
+  Otherwise, `None` will be returned.
   */
   std::string getDefaultValueAsString() const;
 
@@ -156,8 +153,8 @@ class ConfigOption {
   nlohmann::json getDefaultValueAsJson() const;
 
   /*
-  @brief Return the content of the variable, that the internal pointer points to. If `T` is the
-  wrong type, then it will throw an exception.
+  @brief Return the content of the variable, that the internal pointer points
+  to. If `T` is the wrong type, then it will throw an exception.
   */
   template <typename T>
   requires ad_utility::isTypeContainedIn<T, AvailableTypes> T getValue() const {
@@ -165,30 +162,33 @@ class ConfigOption {
       return *(std::get<Data<T>>(data_).variablePointer_);
     } else {
       // They used the wrong type.
-      throw ConfigOptionGetWrongTypeException(identifier_, getActualValueTypeAsString(),
+      throw ConfigOptionGetWrongTypeException(identifier_,
+                                              getActualValueTypeAsString(),
                                               availableTypesToString<T>());
     }
   }
 
   /*
-  @brief Return string representation of the variable, that the internal pointer points to.
+  @brief Return string representation of the variable, that the internal pointer
+  points to.
   */
   std::string getValueAsString() const;
 
   /*
-  @brief Return json representation of the variable, that the internal pointer points to.
+  @brief Return json representation of the variable, that the internal pointer
+  points to.
   */
   nlohmann::json getValueAsJson() const;
 
   /*
-  @brief Return json representation of a dummy value, that is of the same type, as the type, this
-  configuration option was set to.
+  @brief Return json representation of a dummy value, that is of the same type,
+  as the type, this configuration option was set to.
   */
   nlohmann::json getDummyValueAsJson() const;
 
   /*
-  @brief Return string representation of a dummy value, that is of the same type, as the type, this
-  configuration option was set to.
+  @brief Return string representation of a dummy value, that is of the same
+  type, as the type, this configuration option was set to.
   */
   std::string getDummyValueAsString() const;
 
@@ -199,7 +199,8 @@ class ConfigOption {
   std::string_view getIdentifier() const;
 
   /*
-  @brief Returns the index of the variant in `ValueType`, that this configuration option was set to.
+  @brief Returns the index of the variant in `ValueType`, that this
+  configuration option was set to.
   */
   size_t getActualValueType() const;
 
@@ -212,10 +213,9 @@ class ConfigOption {
   ConfigOption(ConfigOption&&) noexcept = default;
   ConfigOption(const ConfigOption&) = default;
 
- private:
   /*
-  @brief Create a configuration option, whose internal value can only be set to
-  values of a specific type in a set of types.
+  @brief Create a configuration option with a default value, whose internal
+  value can only be set to values of a specific type in a set of types.
 
   @tparam T The value, this configuration holds.
 
@@ -223,50 +223,70 @@ class ConfigOption {
   identified later.
   @param description Describes, what the configuration option stands for. For
   example: "The amount of rows in the table. Has a default value of 3."
-  @param type The index number for the type of value, that you want to save
-  here. See `AvailableTypes`.
-  @param variablePointer The variable, this pointer points to, will always be overwritten by any of
-  the set functions of this class.
-  @param defaultValue The default value, if the option isn't set at runtime. An
-  empty `std::optional` of the right type signifies, that there is no default
-  value.
+  @param variablePointer The variable, this pointer points to, will always be
+  overwritten by any of the set functions of this class.
+  @param defaultValue The default value.
   */
   template <typename T>
   requires ad_utility::isTypeContainedIn<T, ConfigOption::AvailableTypes>
-  ConfigOption(std::string_view identifier, std::string_view description, const size_t& type,
-               T* variablePointer, const std::optional<T>& defaultValue)
-      : data_{Data<T>{defaultValue, variablePointer}},
+  ConfigOption(std::string_view identifier, std::string_view description,
+               T* variablePointer, const T& defaultValue)
+      : data_{Data<T>{std::optional<T>(defaultValue), variablePointer}},
         identifier_{identifier},
         description_{description} {
+    verifyConstructorArguments(identifier, variablePointer);
+
+    *variablePointer = defaultValue;
+  }
+
+  /*
+  @brief Create a configuration option without a default value, whose internal
+  value can only be set to values of a specific type in a set of types.
+
+  @tparam T The value, this configuration holds.
+
+  @param identifier The name of the configuration option, with which it can be
+  identified later.
+  @param description Describes, what the configuration option stands for. For
+  example: "The amount of rows in the table. Has a default value of 3."
+  @param variablePointer The variable, this pointer points to, will always be
+  overwritten by any of the set functions of this class.
+  */
+  template <typename T>
+  requires ad_utility::isTypeContainedIn<T, ConfigOption::AvailableTypes>
+  ConfigOption(std::string_view identifier, std::string_view description,
+               T* variablePointer)
+      : data_{Data<T>{std::optional<T>(std::nullopt), variablePointer}},
+        identifier_{identifier},
+        description_{description} {
+    verifyConstructorArguments(identifier, variablePointer);
+  }
+
+ private:
+  /*
+  @brief Verifies, that the constructor arguments are correct. That is, follow
+  all those little rules we made for them.
+  */
+  template <typename T>
+  requires ad_utility::isTypeContainedIn<T, ConfigOption::AvailableTypes>
+  static void verifyConstructorArguments(std::string_view identifier,
+                                         T* variablePointer) {
     // The `identifier` must be a valid `NAME` in the short hand for
     // configurations.
     if (!isNameInShortHand(identifier)) {
-      throw NotValidShortHandNameException(identifier,
-                                           "identifier parameter of ConfigOption constructor");
+      throw NotValidShortHandNameException(
+          identifier, "identifier parameter of ConfigOption constructor");
     }
 
-    // Is `type` the right number for `T`?
-    if (type != getIndexOfTypeInAvailableTypes<T>()) {
-      // Finding out, what type, the number of `type` stands for.
-      std::string typeString;
-      ad_utility::RuntimeValueToCompileTimeValue<std::variant_size_v<AvailableTypes> - 1>(
-          type, [&typeString]<size_t index,
-                              typename Type = std::variant_alternative_t<index, AvailableTypes>>() {
-            typeString = availableTypesToString<Type>();
-          });
-
-      throw ConfigOptionSetWrongTypeException(identifier_, typeString,
-                                              getActualValueTypeAsString());
-    }
-
-    // If `defaultValue` has a default value, than `variablePointer` must be set.
-    if (defaultValue.has_value()) {
-      *variablePointer = defaultValue.value();
+    // `variablePointer` MUST point to an actual value. `nullptr` isn't allowed.
+    if (variablePointer == nullptr) {
+      throw ConfigOptionConstructorNullPointerException(identifier);
     }
   }
 
   /*
-  @brief Return the string representation/name of the type, of the currently held alternative.
+  @brief Return the string representation/name of the type, of the currently
+  held alternative.
   */
   static std::string availableTypesToString(const AvailableTypes& value);
 
@@ -280,10 +300,11 @@ class ConfigOption {
   }
 
   /*
-  @brief Return string representation of values, whose type is in `AvailableTypes`. If no value is
-  given, returns `None`.
+  @brief Return string representation of values, whose type is in
+  `AvailableTypes`. If no value is given, returns `None`.
   */
-  static std::string contentOfAvailableTypesToString(const std::optional<AvailableTypes>& v);
+  static std::string contentOfAvailableTypesToString(
+      const std::optional<AvailableTypes>& v);
 
   /*
   @brief Returns the index position of a type in `AvailableTypes`.
@@ -292,33 +313,13 @@ class ConfigOption {
   template <typename T>
   requires ad_utility::isTypeContainedIn<T, AvailableTypes>
   static constexpr size_t getIndexOfTypeInAvailableTypes() {
-    // In order to get the types inside a `std::variant`, we have to cheat a bit.
+    // In order to get the types inside a `std::variant`, we have to cheat a
+    // bit.
     auto getIndex = []<typename... Ts>(const std::variant<Ts...>&) {
       return ad_utility::getIndexOfFirstTypeToPassCheck<
           []<typename D>() { return std::is_same_v<D, T>; }, Ts...>();
     };
     return getIndex(AvailableTypes{});
-  }
-
-  /*
-  @brief Create a configuration option.
-
-  @tparam T The type of value, that the configuration option can hold.
-
-  @param identifier The name of the configuration option, with which it can be
-  identified later.
-  @param description Describes, what the configuration option stands for. For
-  example: "The amount of rows in the table. Has a default value of 3."
-  @param variablePointer The variable, this pointer points to, will always be overwritten by any of
-  the set functions of this class.
-  @param defaultValue The default value, if the option isn't set at runtime. An
-  empty `std::optional<T>` signifies, that there is no default value.
-  */
-  template <typename T>
-  friend ConfigOption makeConfigOption(std::string_view identifier, std::string_view description,
-                                       T* variablePointer, const std::optional<T>& defaultValue) {
-    return ConfigOption(identifier, description, ConfigOption::getIndexOfTypeInAvailableTypes<T>(),
-                        variablePointer, defaultValue);
   }
 };
 

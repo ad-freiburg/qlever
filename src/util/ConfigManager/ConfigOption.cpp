@@ -273,5 +273,4 @@ std::string ConfigOption::getActualValueTypeAsString() const {
   return std::visit([](const auto& d) { return availableTypesToString(*d.variablePointer_); },
                     data_);
 }
-
 }  // namespace ad_utility
