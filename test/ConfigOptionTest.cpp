@@ -112,7 +112,7 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
   */
   auto otherGettersDontWork = []<typename WorkingType>(const ConfigOption& option) {
     doForTypeInValueType([&option]<typename CurrentType>() {
-      if (option.hasValue()) {
+      if (option.hasSetDereferencedVariablePointer()) {
         if constexpr (!std::is_same_v<WorkingType, CurrentType>) {
           ASSERT_THROW((option.getValue<CurrentType>()),
                        ad_utility::ConfigOptionGetWrongTypeException);
@@ -152,7 +152,7 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
 
     option.setValue(toSetTo.value);
 
-    ASSERT_TRUE(option.hasValue() && option.wasSetAtRuntime());
+    ASSERT_TRUE(option.hasSetDereferencedVariablePointer() && option.wasSetAtRuntime());
     ASSERT_EQ(toSetTo.value, option.getValue<Type>());
     ASSERT_EQ(toSetTo.value, *variablePointer);
 
@@ -177,7 +177,7 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
             "With_default", "", &configurationOptionValue, defaultCase.value)};
 
         // Can we use the default value correctly?
-        ASSERT_TRUE(option.hasValue() && option.hasDefaultValue());
+        ASSERT_TRUE(option.hasSetDereferencedVariablePointer() && option.hasDefaultValue());
         ASSERT_EQ(defaultCase.value, option.getDefaultValue<Type>());
         ASSERT_EQ(defaultCase.jsonRepresentation, option.getDefaultValueAsJson());
         ASSERT_EQ(defaultCase.value, option.getValue<Type>());
@@ -201,19 +201,15 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
         ConfigOption option{
             ad_utility::makeConfigOption<Type>("Without_default", "", &configurationOptionValue)};
 
-        // Make sure, that we truly don't have a value, that can be gotten.
-        ASSERT_TRUE(!option.hasValue() && !option.hasDefaultValue());
+        // Make sure, that we truly don't have a default value, that can be gotten.
+        ASSERT_TRUE(!option.hasSetDereferencedVariablePointer() && !option.hasDefaultValue());
         ASSERT_THROW(option.getDefaultValue<Type>(), ad_utility::ConfigOptionValueNotSetException);
         ASSERT_TRUE(option.getDefaultValueAsJson().empty());
-        ASSERT_EQ("None", option.getDefaultValueAsString());
-        ASSERT_EQ("None", option.getValueAsString());
         ad_utility::ConstexprForLoop(
             std::make_index_sequence<std::variant_size_v<ConfigOption::AvailableTypes>>{},
             [&option]<size_t index,
                       typename IndexType =
                           std::variant_alternative_t<index, ConfigOption::AvailableTypes>>() {
-              ASSERT_THROW((option.getValue<IndexType>()),
-                           ad_utility::ConfigOptionValueNotSetException);
               ASSERT_THROW((option.getDefaultValue<IndexType>()),
                            ad_utility::ConfigOptionValueNotSetException);
             });
@@ -293,7 +289,7 @@ TEST(ConfigOptionTest, SetValueWithJson) {
     option.setValueWithJson(currentTest.jsonRepresentation);
 
     // Is it set correctly?
-    ASSERT_TRUE(option.hasValue());
+    ASSERT_TRUE(option.hasSetDereferencedVariablePointer());
     ASSERT_EQ(currentTest.value, option.getValue<Type>());
     ASSERT_EQ(currentTest.value, configurationOptionValue);
 

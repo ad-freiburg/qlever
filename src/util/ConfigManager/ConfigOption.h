@@ -55,15 +55,12 @@ class ConfigOption {
     // The type, that `Data` is using.
     using Type = T;
 
-    // What this configuration option was set to. Can be empty.
-    std::optional<T> value_;
-
     // The default value of the configuration option, if there is one.
     std::optional<T> defaultValue_;
 
     /*
-    The variable, this points to, will be overwritten with `value_`, everytime `value_` is set. This
-    should allow for easier access of the configuration option value.
+    Whenever somebody sets the value of the configuration option, they, in actuallity, set the
+    variable, this points to.
     */
     T* variablePointer_;
   };
@@ -73,8 +70,7 @@ class ConfigOption {
   // The name of the configuration option.
   const std::string identifier_;
 
-  // Describes what the option does. Would also be a good place th write out the
-  // default value, if there is one.
+  // Describes what the option does.
   const std::string description_;
 
   // Has this option been set at runtime? Any `set` function will set this to
@@ -94,28 +90,28 @@ class ConfigOption {
   bool hasDefaultValue() const;
 
   /*
-  @brief Does the configuration option hold a value, regardless, if it's the
-  default value, or a value given at runtime?
+  @brief Was the variable, that the internal pointer points to, ever set by this configuration
+  option? Note: The answer is only yes, if there was a default value given at construction, or any
+  setter called.
   */
-  bool hasValue() const;
+  bool hasSetDereferencedVariablePointer() const;
 
   /*
-  @brief Sets the value held by the configuration option. Throws an exception,
-  should the given value have a different type, than what the configuration
-  option was set to.
+  @brief Sets the variable, that the internal pointer points to. Throws an exception, should the
+  given value have a different type, than what the configuration option was set to.
   */
   template <typename T>
   requires ad_utility::isTypeContainedIn<T, AvailableTypes> void setValue(const T& value) {
-    // Only set our value, if the given value is of the right type.
+    // Only set the variable, that our internal pointer points to, if the given value is of the
+    // right type.
     if (getActualValueType() == getIndexOfTypeInAvailableTypes<T>()) {
       std::visit(
           [&value]<typename D>(Data<D>& d) {
             if constexpr (std::is_same_v<T, D>) {
-              d.value_ = value;
+              *d.variablePointer_ = value;
             }
           },
           data_);
-      updateVariablePointer();
       configurationOptionWasSet_ = true;
     } else {
       throw ConfigOptionSetWrongTypeException(identifier_, getActualValueTypeAsString(),
@@ -124,8 +120,8 @@ class ConfigOption {
   }
 
   /*
-  @brief Interprets the value in the json as the type of the value, that this
-  configuration option is meant to hold, and sets the internal value to it.
+  @brief Interprets the value in the json as the type, that this configuration option is meant to
+  have, and sets the variable, that our internal variable pointer points to, to it.
   */
   void setValueWithJson(const nlohmann::json& json);
 
@@ -160,16 +156,13 @@ class ConfigOption {
   nlohmann::json getDefaultValueAsJson() const;
 
   /*
-  @brief Return the content of the value held by the configuration option. If
-  there is no value, or `T` is the wrong type, then it will throw an exception.
+  @brief Return the content of the variable, that the internal pointer points to. If `T` is the
+  wrong type, then it will throw an exception.
   */
   template <typename T>
   requires ad_utility::isTypeContainedIn<T, AvailableTypes> T getValue() const {
-    if (hasValue() && std::holds_alternative<Data<T>>(data_)) {
-      return std::get<Data<T>>(data_).value_.value();
-    } else if (!hasValue()) {
-      // The value was never set.
-      throw ConfigOptionValueNotSetException(identifier_, "held value");
+    if (std::holds_alternative<Data<T>>(data_)) {
+      return *(std::get<Data<T>>(data_).variablePointer_);
     } else {
       // They used the wrong type.
       throw ConfigOptionGetWrongTypeException(identifier_, getActualValueTypeAsString(),
@@ -178,14 +171,13 @@ class ConfigOption {
   }
 
   /*
-  @brief Return string representation of the held value, if it was set. Otherwise, `None` will be
-  returned.
+  @brief Return string representation of the variable, that the internal pointer points to.
   */
   std::string getValueAsString() const;
 
   /*
   @brief Return json representation of a dummy value, that is of the same type, as the type, this
-  configuration option can hold.
+  configuration option was set to.
   */
   nlohmann::json getDummyValueAsJson() const;
 
@@ -196,12 +188,12 @@ class ConfigOption {
   std::string_view getIdentifier() const;
 
   /*
-  @brief Returns the index of the variant in `ValueType`, that this configuration option holds.
+  @brief Returns the index of the variant in `ValueType`, that this configuration option was set to.
   */
   size_t getActualValueType() const;
 
   /*
-  @brief Returns the string representation of the current value type.
+  @brief Returns the string representation of the current type.
   */
   std::string getActualValueTypeAsString() const;
 
@@ -221,9 +213,9 @@ class ConfigOption {
   @param description Describes, what the configuration option stands for. For
   example: "The amount of rows in the table. Has a default value of 3."
   @param type The index number for the type of value, that you want to save
-  here. See `ValueType`.
-  @param variablePointer The variable, this pointer points to, will always be overwritten with the
-  value in this configuration option, when the values changes.
+  here. See `AvailableTypes`.
+  @param variablePointer The variable, this pointer points to, will always be overwritten by any of
+  the set functions of this class.
   @param defaultValue The default value, if the option isn't set at runtime. An
   empty `std::optional` of the right type signifies, that there is no default
   value.
@@ -232,7 +224,7 @@ class ConfigOption {
   requires ad_utility::isTypeContainedIn<T, ConfigOption::AvailableTypes>
   ConfigOption(std::string_view identifier, std::string_view description, const size_t& type,
                T* variablePointer, const std::optional<T>& defaultValue)
-      : data_{Data<T>{defaultValue, defaultValue, variablePointer}},
+      : data_{Data<T>{defaultValue, variablePointer}},
         identifier_{identifier},
         description_{description} {
     // The `identifier` must be a valid `NAME` in the short hand for
@@ -256,17 +248,12 @@ class ConfigOption {
                                               getActualValueTypeAsString());
     }
 
-    // If `defaultValue` has a default value, than `value_` has changed.
+    // If `defaultValue` has a default value, than `variablePointer` must be set.
     if (defaultValue.has_value()) {
-      updateVariablePointer();
+      *variablePointer = defaultValue.value();
     }
   }
 
-  /*
-  @brief Writes the currently held value to the variable, that `variablePointer_` points to. Doesn't
-  do anything, if the configuration option doesn't hold a value.
-  */
-  void updateVariablePointer() const;
   /*
   @brief Return the string representation/name of the type, of the currently held alternative.
   */
@@ -311,8 +298,8 @@ class ConfigOption {
   identified later.
   @param description Describes, what the configuration option stands for. For
   example: "The amount of rows in the table. Has a default value of 3."
-  @param variablePointer The variable, this pointer points to, will always be overwritten with the
-  value in this configuration option, when the values changes.
+  @param variablePointer The variable, this pointer points to, will always be overwritten by any of
+  the set functions of this class.
   @param defaultValue The default value, if the option isn't set at runtime. An
   empty `std::optional<T>` signifies, that there is no default value.
   */

@@ -280,9 +280,12 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
           j.at(configurationOptionJsonPosition));
     }
 
-    // If the option has no value now, that means, it didn't have a default
-    // value, and needs to be set by the user at runtime, but wasn't.
-    if (!configurationOption->hasValue()) {
+    /*
+    If the option hasn't set the variable, that it's internal variable pointer
+    points to, that means, it doesn't have a default value, and needs to be set
+    by the user at runtime, but wasn't.
+    */
+    if (!configurationOption->hasSetDereferencedVariablePointer()) {
       throw ConfigOptionWasntSetException(
           configurationOptionJsonPosition.to_string());
     }

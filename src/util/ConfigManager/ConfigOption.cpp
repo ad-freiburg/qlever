@@ -60,7 +60,9 @@ bool ConfigOption::hasDefaultValue() const {
 }
 
 // ____________________________________________________________________________
-bool ConfigOption::hasValue() const { return wasSetAtRuntime() || hasDefaultValue(); }
+bool ConfigOption::hasSetDereferencedVariablePointer() const {
+  return wasSetAtRuntime() || hasDefaultValue();
+}
 
 // ____________________________________________________________________________
 void ConfigOption::setValueWithJson(const nlohmann::json& json) {
@@ -117,7 +119,6 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
 
   std::visit([&json, this]<typename T>(const Data<T>&) { setValue(json.get<T>()); }, data_);
   configurationOptionWasSet_ = true;
-  updateVariablePointer();
 }
 
 // ____________________________________________________________________________
@@ -169,11 +170,7 @@ std::string ConfigOption::contentOfAvailableTypesToString(const std::optional<Av
 // ____________________________________________________________________________
 std::string ConfigOption::getValueAsString() const {
   return std::visit(
-      [](const auto& d) {
-        return d.value_.has_value() ? contentOfAvailableTypesToString(d.value_.value())
-                                    : contentOfAvailableTypesToString(std::nullopt);
-      },
-      data_);
+      [](const auto& d) { return contentOfAvailableTypesToString(*d.variablePointer_); }, data_);
 }
 
 // ____________________________________________________________________________
@@ -237,26 +234,9 @@ ConfigOption::operator std::string() const {
 auto ConfigOption::getActualValueType() const -> size_t { return data_.index(); }
 
 // ____________________________________________________________________________
-void ConfigOption::updateVariablePointer() const {
-  std::visit(
-      [](const auto& d) {
-        // Nothing to do, if there is no value.
-        if (!d.value_.has_value()) {
-          return;
-        }
-
-        // There should ALWAYS be a valid pointer, unless the whole `ConfigOption`
-        // object was created wrong.
-        (*d.variablePointer_) = d.value_.value();
-      },
-      data_);
-}
-
-// ____________________________________________________________________________
 std::string ConfigOption::getActualValueTypeAsString() const {
-  // There is no guarantee, that our `data_` actually contains a (default) value at this point in
-  // time, we have to create a dummy object, in order to use the helper function.
-  return std::visit([]<typename T>(const Data<T>&) { return availableTypesToString(T{}); }, data_);
+  return std::visit([](const auto& d) { return availableTypesToString(*d.variablePointer_); },
+                    data_);
 }
 
 }  // namespace ad_utility

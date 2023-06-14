@@ -20,9 +20,10 @@ TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
   auto compareConfigurationOptions = []<typename T>(
                                          const ad_utility::ConfigOption& a,
                                          const ad_utility::ConfigOption& b) {
-    ASSERT_EQ(a.hasValue(), b.hasValue());
+    ASSERT_EQ(a.hasSetDereferencedVariablePointer(),
+              b.hasSetDereferencedVariablePointer());
 
-    if (a.hasValue()) {
+    if (a.hasSetDereferencedVariablePointer()) {
       ASSERT_EQ(a.getValue<T>(), b.getValue<T>());
       ASSERT_EQ(a.getValueAsString(), b.getValueAsString());
     }
@@ -112,15 +113,17 @@ TEST(ConfigManagerTest, ParseConfig) {
   ad_utility::ConfigManager config{};
 
   // Adding the options.
-  int notUsed;
+  int firstInt;
+  int secondInt;
+  int thirdInt;
 
   config.createConfigOption<int>(
       ad_utility::ConfigManager::VectorOfKeysForJson{"depth_0", "Option_0"},
-      "Must be set. Has no default value.", &notUsed);
+      "Must be set. Has no default value.", &firstInt);
   config.createConfigOption<int>({"depth_0", "depth_1", "Option_1"},
                                  "Must be set. Has no default value.",
-                                 &notUsed);
-  config.createConfigOption<int>("Option_2", "Has a default value.", &notUsed,
+                                 &secondInt);
+  config.createConfigOption<int>("Option_2", "Has a default value.", &thirdInt,
                                  2);
 
   // For easier access to the options.
@@ -138,16 +141,17 @@ TEST(ConfigManagerTest, ParseConfig) {
   // For easier checking.
   auto checkOption = [](const ad_utility::ConfigOption& option,
                         const auto& content) {
-    ASSERT_TRUE(option.hasValue());
+    ASSERT_TRUE(option.hasSetDereferencedVariablePointer());
     ASSERT_EQ(content, option.getValue<std::decay_t<decltype(content)>>());
   };
 
   // Does the option with the default already have a value?
   checkOption(getOption(2), 2);
 
-  // The other two should have no value.
-  ASSERT_FALSE(getOption(0).hasValue());
-  ASSERT_FALSE(getOption(1).hasValue());
+  // The other two should never have set the variable, that the internal pointer
+  // points to.
+  ASSERT_FALSE(getOption(0).hasSetDereferencedVariablePointer());
+  ASSERT_FALSE(getOption(1).hasSetDereferencedVariablePointer());
 
   // The json for testing `parseConfig`. Sets all of the configuration
   // options.
@@ -203,65 +207,72 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
   ad_utility::ConfigManager config{};
 
   // Add integer options.
-  int notUsedInt;
-  config.createConfigOption<int>(
-      "somePositiveNumber", "Must be set. Has no default value.", &notUsedInt);
-  config.createConfigOption<int>(
-      "someNegativNumber", "Must be set. Has no default value.", &notUsedInt);
+  int somePositiveNumberInt;
+  config.createConfigOption<int>("somePositiveNumber",
+                                 "Must be set. Has no default value.",
+                                 &somePositiveNumberInt);
+  int someNegativNumberInt;
+  config.createConfigOption<int>("someNegativNumber",
+                                 "Must be set. Has no default value.",
+                                 &someNegativNumberInt);
 
   // Add integer list.
-  std::vector<int> notUsedIntVector;
+  std::vector<int> someIntegerlistIntVector;
   config.createConfigOption<std::vector<int>>(
       "someIntegerlist", "Must be set. Has no default value.",
-      &notUsedIntVector);
+      &someIntegerlistIntVector);
 
   // Add floating point options.
-  float notUsedFloat;
+  float somePositiveFloatingPointFloat;
   config.createConfigOption<float>("somePositiveFloatingPoint",
                                    "Must be set. Has no default value.",
-                                   &notUsedFloat);
+                                   &somePositiveFloatingPointFloat);
+  float someNegativFloatingPointFloat;
   config.createConfigOption<float>("someNegativFloatingPoint",
                                    "Must be set. Has no default value.",
-                                   &notUsedFloat);
+                                   &someNegativFloatingPointFloat);
 
   // Add floating point list.
-  std::vector<float> notUsedFloatVector;
+  std::vector<float> someFloatingPointListFloatVector;
   config.createConfigOption<std::vector<float>>(
       "someFloatingPointList", "Must be set. Has no default value.",
-      &notUsedFloatVector);
+      &someFloatingPointListFloatVector);
 
   // Add boolean options.
-  bool notUsedBool;
+  bool boolTrueBool;
   config.createConfigOption<bool>(
-      "boolTrue", "Must be set. Has no default value.", &notUsedBool);
+      "boolTrue", "Must be set. Has no default value.", &boolTrueBool);
+  bool boolFalseBool;
   config.createConfigOption<bool>(
-      "boolFalse", "Must be set. Has no default value.", &notUsedBool);
+      "boolFalse", "Must be set. Has no default value.", &boolFalseBool);
 
   // Add boolean list.
-  std::vector<bool> notUsedBoolVector;
+  std::vector<bool> someBooleanListBoolVector;
   config.createConfigOption<std::vector<bool>>(
       "someBooleanList", "Must be set. Has no default value.",
-      &notUsedBoolVector);
+      &someBooleanListBoolVector);
 
   // Add string option.
-  std::string notUsedString;
+  std::string myNameString;
   config.createConfigOption<std::string>(
-      "myName", "Must be set. Has no default value.", &notUsedString);
+      "myName", "Must be set. Has no default value.", &myNameString);
 
   // Add string list.
-  std::vector<std::string> notUsedStringVector;
+  std::vector<std::string> someStringListStringVector;
   config.createConfigOption<std::vector<std::string>>(
       "someStringList", "Must be set. Has no default value.",
-      &notUsedStringVector);
+      &someStringListStringVector);
 
   // Add option with deeper level.
+  std::vector<int> deeperIntVector;
   config.createConfigOption<std::vector<int>>(
       {"depth", size_t{0}, "list"}, "Must be set. Has no default value.",
-      &notUsedIntVector);
+      &deeperIntVector);
 
   // This one will not be changed, in order to test, that options, that are
   // not set at run time, are not changed.
-  config.createConfigOption<int>("No_change", "", &notUsedInt, 10);
+  int noChangeInt;
+  config.createConfigOption<int>("No_change", "", &noChangeInt, 10);
 
   // Set those.
   config.parseConfig(ad_utility::ConfigManager::parseShortHand(
@@ -272,7 +283,7 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
       [&config](const auto& content,
                 const ad_utility::ConfigManager::VectorOfKeysForJson& keys) {
         const auto& option = config.getConfigurationOptionByNestedKeys(keys);
-        ASSERT_TRUE(option.hasValue());
+        ASSERT_TRUE(option.hasSetDereferencedVariablePointer());
         ASSERT_EQ(content,
                   option.template getValue<std::decay_t<decltype(content)>>());
       };
