@@ -13,15 +13,15 @@ class SparqlTriple;
 
 class IndexScan : public Operation {
  private:
-  Permutation::Enum _permutation;
-  TripleComponent _subject;
-  TripleComponent _predicate;
-  TripleComponent _object;
-  size_t _numVariables;
-  size_t _sizeEstimate;
-  vector<float> _multiplicity;
+  Permutation::Enum permutation_;
+  TripleComponent subject_;
+  TripleComponent predicate_;
+  TripleComponent object_;
+  size_t numVariables_;
+  size_t sizeEstimate_;
+  vector<float> multiplicity_;
 
-  std::optional<std::shared_ptr<const ResultTable>> _precomputedResult =
+  std::optional<std::shared_ptr<const ResultTable>> precomputedResult_ =
       std::nullopt;
 
  public:
@@ -32,9 +32,9 @@ class IndexScan : public Operation {
 
   virtual ~IndexScan() = default;
 
-  const TripleComponent& getPredicate() const { return _predicate; }
-  const TripleComponent& getSubject() const { return _subject; }
-  const TripleComponent& getObject() const { return _object; }
+  const TripleComponent& getPredicate() const { return predicate_; }
+  const TripleComponent& getSubject() const { return subject_; }
+  const TripleComponent& getObject() const { return object_; }
 
   size_t getResultWidth() const override;
 
@@ -46,7 +46,7 @@ class IndexScan : public Operation {
 
   // Return the exact result size of the index scan. This is always known as it
   // can be read from the Metadata.
-  size_t getExactSize() const { return _sizeEstimate; }
+  size_t getExactSize() const { return sizeEstimate_; }
 
  private:
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for
@@ -59,14 +59,14 @@ class IndexScan : public Operation {
   void determineMultiplicities();
 
   float getMultiplicity(size_t col) override {
-    if (_multiplicity.empty()) {
+    if (multiplicity_.empty()) {
       determineMultiplicities();
     }
-    assert(col < _multiplicity.size());
-    return _multiplicity[col];
+    assert(col < multiplicity_.size());
+    return multiplicity_[col];
   }
 
-  void precomputeSizeEstimate() { _sizeEstimate = computeSizeEstimate(); }
+  void precomputeSizeEstimate() { sizeEstimate_ = computeSizeEstimate(); }
 
   bool knownEmptyResult() override { return getSizeEstimateBeforeLimit() == 0; }
 
@@ -75,7 +75,7 @@ class IndexScan : public Operation {
     return getResultWidth() == 3;
   }
 
-  Permutation::Enum permutation() const { return _permutation; }
+  Permutation::Enum permutation() const { return permutation_; }
 
  private:
   ResultTable computeResult() override;
@@ -92,11 +92,11 @@ class IndexScan : public Operation {
 
   std::optional<std::shared_ptr<const ResultTable>>
   getPrecomputedResultFromQueryPlanning() override {
-    return _precomputedResult;
+    return precomputedResult_;
   }
 
   // Return the stored triple in the order that corresponds to the
-  // `_permutation`. For example if `_permutation == PSO` then the result is
-  // {&_predicate, &_subject, &_object}
+  // `permutation_`. For example if `permutation_ == PSO` then the result is
+  // {&predicate_, &subject_, &object_}
   std::array<const TripleComponent* const, 3> getPermutedTriple() const;
 };

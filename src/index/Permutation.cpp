@@ -9,55 +9,57 @@
 
 // _____________________________________________________________________
 Permutation::Permutation(Enum permutation)
-    : _readableName(toString(permutation)),
-      _fileSuffix(
-          absl::StrCat(".", ad_utility::getLowercaseUtf8(_readableName))),
-      _keyOrder(toKeyOrder(permutation)) {}
+    : readableName_(toString(permutation)),
+      fileSuffix_(
+          absl::StrCat(".", ad_utility::getLowercaseUtf8(readableName_))),
+      keyOrder_(toKeyOrder(permutation)) {}
 
 // _____________________________________________________________________
 void Permutation::loadFromDisk(const std::string& onDiskBase) {
   if constexpr (MetaData::_isMmapBased) {
-    _meta.setup(onDiskBase + ".index" + _fileSuffix + MMAP_FILE_SUFFIX,
+    meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
                 ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
   }
-  auto filename = string(onDiskBase + ".index" + _fileSuffix);
+  auto filename = string(onDiskBase + ".index" + fileSuffix_);
   try {
-    _file.open(filename, "r");
+    file_.open(filename, "r");
   } catch (const std::runtime_error& e) {
     AD_THROW("Could not open the index file " + filename +
              " for reading. Please check that you have read access to "
-             "this file. If it does not exist, your index is broken.");
+             "this file. If it does not exist, your index is broken. The error "
+             "message was: " +
+             e.what());
   }
-  _meta.readFromFile(&_file);
-  LOG(INFO) << "Registered " << _readableName
-            << " permutation: " << _meta.statistics() << std::endl;
-  _isLoaded = true;
+  meta_.readFromFile(&file_);
+  LOG(INFO) << "Registered " << readableName_
+            << " permutation: " << meta_.statistics() << std::endl;
+  isLoaded_ = true;
 }
 
 // _____________________________________________________________________
 void Permutation::scan(Id col0Id, IdTable* result,
                        ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  if (!_isLoaded) {
+  if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
-                             _readableName + ", which was not loaded");
+                             readableName_ + ", which was not loaded");
   }
-  if (!_meta.col0IdExists(col0Id)) {
+  if (!meta_.col0IdExists(col0Id)) {
     return;
   }
-  const auto& metaData = _meta.getMetaData(col0Id);
-  return _reader.scan(metaData, _meta.blockData(), _file, result,
+  const auto& metaData = meta_.getMetaData(col0Id);
+  return reader_.scan(metaData, meta_.blockData(), file_, result,
                       std::move(timer));
 }
 
 // _____________________________________________________________________
 void Permutation::scan(Id col0Id, Id col1Id, IdTable* result,
                        ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  if (!_meta.col0IdExists(col0Id)) {
+  if (!meta_.col0IdExists(col0Id)) {
     return;
   }
-  const auto& metaData = _meta.getMetaData(col0Id);
+  const auto& metaData = meta_.getMetaData(col0Id);
 
-  return _reader.scan(metaData, col1Id, _meta.blockData(), _file, result,
+  return reader_.scan(metaData, col1Id, meta_.blockData(), file_, result,
                       timer);
 }
 

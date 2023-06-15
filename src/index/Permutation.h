@@ -57,23 +57,23 @@ class Permutation {
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   // _______________________________________________________
-  void setKbName(const string& name) { _meta.setName(name); }
+  void setKbName(const string& name) { meta_.setName(name); }
 
   // for Log output, e.g. "POS"
-  const std::string _readableName;
+  const std::string readableName_;
   // e.g. ".pos"
-  const std::string _fileSuffix;
+  const std::string fileSuffix_;
   // order of the 3 keys S(0), P(1), and O(2) for which this permutation is
   // sorted. Needed for the createPermutation function in the Index class
   // e.g. {1, 0, 2} for PsO
-  const array<size_t, 3> _keyOrder;
+  const array<size_t, 3> keyOrder_;
 
-  const MetaData& metaData() const { return _meta; }
-  MetaData _meta;
+  const MetaData& metaData() const { return meta_; }
+  MetaData meta_;
 
-  mutable ad_utility::File _file;
+  mutable ad_utility::File file_;
 
-  CompressedRelationReader _reader;
+  CompressedRelationReader reader_;
 
-  bool _isLoaded = false;
+  bool isLoaded_ = false;
 };

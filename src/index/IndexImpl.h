@@ -386,7 +386,7 @@ class IndexImpl {
     return textMeta_.getNofEntityPostings();
   }
 
-  bool hasAllPermutations() const { return SPO()._isLoaded; }
+  bool hasAllPermutations() const { return SPO().isLoaded_; }
 
   // _____________________________________________________________________________
   vector<float> getMultiplicities(const TripleComponent& key,
