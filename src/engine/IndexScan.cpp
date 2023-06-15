@@ -14,16 +14,17 @@
 using std::string;
 
 // _____________________________________________________________________________
-IndexScan::IndexScan(QueryExecutionContext* qec, ScanType type,
+IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      const SparqlTriple& triple)
     : Operation(qec),
-      _permutation(scanTypeToPermutation(type)),
-      _numVariables(scanTypeToNumVariables(type)),
+      _permutation(permutation),
       _subject(triple._s),
       _predicate(triple._p.getIri().starts_with("?")
                      ? TripleComponent(Variable{triple._p.getIri()})
                      : TripleComponent(triple._p.getIri())),
       _object(triple._o),
+      _numVariables(_subject.isVariable() + _predicate.isVariable() +
+                    _object.isVariable()),
       _sizeEstimate(std::numeric_limits<size_t>::max()) {
   precomputeSizeEstimate();
 
@@ -275,4 +276,13 @@ void IndexScan::computeFullScan(IdTable* result,
     ++i;
   }
   *result = std::move(table).toDynamic();
+}
+
+// ___________________________________________________________________________
+std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
+    const {
+  using Arr = std::array<const TripleComponent* const, 3>;
+  Arr inp{&_subject, &_predicate, &_object};
+  auto permutation = permutationToKeyOrder(_permutation);
+  return {inp[permutation[0]], inp[permutation[1]], inp[permutation[2]]};
 }

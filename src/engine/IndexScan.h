@@ -13,74 +13,6 @@ class SparqlTriple;
 
 class IndexScan : public Operation {
  public:
-  enum ScanType {
-    PSO_BOUND_S = 0,
-    POS_BOUND_O = 1,
-    PSO_FREE_S = 2,
-    POS_FREE_O = 3,
-    SPO_FREE_P = 4,
-    SOP_BOUND_O = 5,
-    SOP_FREE_O = 6,
-    OPS_FREE_P = 7,
-    OSP_FREE_S = 8,
-    FULL_INDEX_SCAN_SPO = 9,
-    FULL_INDEX_SCAN_SOP = 10,
-    FULL_INDEX_SCAN_PSO = 11,
-    FULL_INDEX_SCAN_POS = 12,
-    FULL_INDEX_SCAN_OSP = 13,
-    FULL_INDEX_SCAN_OPS = 14
-  };
-
-  static size_t scanTypeToNumVariables(ScanType scanType) {
-    switch (scanType) {
-      case PSO_BOUND_S:
-      case POS_BOUND_O:
-      case SOP_BOUND_O:
-        return 1;
-      case PSO_FREE_S:
-      case POS_FREE_O:
-      case SOP_FREE_O:
-      case SPO_FREE_P:
-      case OSP_FREE_S:
-      case OPS_FREE_P:
-        return 2;
-      case FULL_INDEX_SCAN_SPO:
-      case FULL_INDEX_SCAN_SOP:
-      case FULL_INDEX_SCAN_PSO:
-      case FULL_INDEX_SCAN_POS:
-      case FULL_INDEX_SCAN_OSP:
-      case FULL_INDEX_SCAN_OPS:
-        return 3;
-    }
-  }
-
-  static Permutation::Enum scanTypeToPermutation(ScanType scanType) {
-    using enum Permutation::Enum;
-    switch (scanType) {
-      case PSO_BOUND_S:
-      case PSO_FREE_S:
-      case FULL_INDEX_SCAN_PSO:
-        return PSO;
-      case POS_FREE_O:
-      case POS_BOUND_O:
-      case FULL_INDEX_SCAN_POS:
-        return POS;
-      case SPO_FREE_P:
-      case FULL_INDEX_SCAN_SPO:
-        return SPO;
-      case SOP_FREE_O:
-      case SOP_BOUND_O:
-      case FULL_INDEX_SCAN_SOP:
-        return SOP;
-      case OSP_FREE_S:
-      case FULL_INDEX_SCAN_OSP:
-        return OSP;
-      case OPS_FREE_P:
-      case FULL_INDEX_SCAN_OPS:
-        return OPS;
-    }
-  }
-
   static std::array<size_t, 3> permutationToKeyOrder(
       Permutation::Enum permutation) {
     using enum Permutation::Enum;
@@ -120,10 +52,10 @@ class IndexScan : public Operation {
 
  private:
   Permutation::Enum _permutation;
-  size_t _numVariables;
   TripleComponent _subject;
   TripleComponent _predicate;
   TripleComponent _object;
+  size_t _numVariables;
   size_t _sizeEstimate;
   vector<float> _multiplicity;
 
@@ -133,7 +65,7 @@ class IndexScan : public Operation {
  public:
   string getDescriptor() const override;
 
-  IndexScan(QueryExecutionContext* qec, ScanType type,
+  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTriple& triple);
 
   virtual ~IndexScan() = default;
@@ -201,10 +133,8 @@ class IndexScan : public Operation {
     return _precomputedResult;
   }
 
-  std::array<const TripleComponent* const, 3> getPermutedTriple() const {
-    using Arr = std::array<const TripleComponent* const, 3>;
-    Arr inp{&_subject, &_predicate, &_object};
-    auto permutation = permutationToKeyOrder(_permutation);
-    return {inp[permutation[0]], inp[permutation[1]], inp[permutation[2]]};
-  }
+  // Return the stored triple in the order that corresponds to the
+  // `_permutation`. For example if `_permutation == PSO` then the result is
+  // {&_predicate, &_subject, &_object}
+  std::array<const TripleComponent* const, 3> getPermutedTriple() const;
 };

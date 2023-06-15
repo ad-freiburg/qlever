@@ -14,7 +14,7 @@
 #include <index/IndexBuilderTypes.h>
 #include <index/IndexMetaData.h>
 #include <index/PatternCreator.h>
-#include <index/Permutations.h>
+#include <index/Permutation.h>
 #include <index/StxxlSortFunctors.h>
 #include <index/TextMetaData.h>
 #include <index/Vocabulary.h>

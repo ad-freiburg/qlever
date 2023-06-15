@@ -11,6 +11,9 @@
 #include "util/File.h"
 #include "util/Log.h"
 
+// Forward declaration of `IdTable`
+class IdTable;
+
 // Helper class to store static properties of the different permutations to
 // avoid code duplication. The first template parameter is a search functor for
 // STXXL.
@@ -27,62 +30,22 @@ class Permutation {
   static constexpr auto OPS = Enum::OPS;
   static constexpr auto OSP = Enum::OSP;
   using MetaData = IndexMetaDataMmapView;
-  Permutation(string name, string suffix, array<unsigned short, 3> order)
-      : _readableName(std::move(name)),
-        _fileSuffix(std::move(suffix)),
-        _keyOrder(order) {}
+  Permutation(string name, string suffix, array<unsigned short, 3> order);
 
   // everything that has to be done when reading an index from disk
-  void loadFromDisk(const std::string& onDiskBase) {
-    if constexpr (MetaData::_isMmapBased) {
-      _meta.setup(onDiskBase + ".index" + _fileSuffix + MMAP_FILE_SUFFIX,
-                  ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
-    }
-    auto filename = string(onDiskBase + ".index" + _fileSuffix);
-    try {
-      _file.open(filename, "r");
-    } catch (const std::runtime_error& e) {
-      AD_THROW("Could not open the index file " + filename +
-               " for reading. Please check that you have read access to "
-               "this file. If it does not exist, your index is broken.");
-    }
-    _meta.readFromFile(&_file);
-    LOG(INFO) << "Registered " << _readableName
-              << " permutation: " << _meta.statistics() << std::endl;
-    _isLoaded = true;
-  }
+  void loadFromDisk(const std::string& onDiskBase);
 
   /// For a given ID for the first column, retrieve all IDs of the second and
   /// third column, and store them in `result`. This is just a thin wrapper
   /// around `CompressedRelationMetaData::scan`.
-  template <typename IdTableImpl>
-  void scan(Id col0Id, IdTableImpl* result,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
-    if (!_isLoaded) {
-      throw std::runtime_error("This query requires the permutation " +
-                               _readableName + ", which was not loaded");
-    }
-    if (!_meta.col0IdExists(col0Id)) {
-      return;
-    }
-    const auto& metaData = _meta.getMetaData(col0Id);
-    return _reader.scan(metaData, _meta.blockData(), _file, result,
-                        std::move(timer));
-  }
+  void scan(Id col0Id, IdTable* result,
+            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+
   /// For given IDs for the first and second column, retrieve all IDs of the
   /// third column, and store them in `result`. This is just a thin wrapper
   /// around `CompressedRelationMetaData::scan`.
-  template <typename IdTableImpl>
-  void scan(Id col0Id, Id col1Id, IdTableImpl* result,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
-    if (!_meta.col0IdExists(col0Id)) {
-      return;
-    }
-    const auto& metaData = _meta.getMetaData(col0Id);
-
-    return _reader.scan(metaData, col1Id, _meta.blockData(), _file, result,
-                        timer);
-  }
+  void scan(Id col0Id, Id col1Id, IdTable* result,
+            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   // _______________________________________________________
   void setKbName(const string& name) { _meta.setName(name); }
