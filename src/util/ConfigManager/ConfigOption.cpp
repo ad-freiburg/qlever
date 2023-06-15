@@ -222,7 +222,9 @@ nlohmann::json ConfigOption::getDummyValueAsJson() const {
           return nlohmann::json(std::vector{"Example", "string", "list"});
         } else if constexpr (std::is_same_v<T, std::vector<int>>) {
           return nlohmann::json(std::vector{40, 41, 42});
-        } else if constexpr (std::is_same_v<T, std::vector<float>>) {
+        } else {
+          // Must be a vector of floats.
+          AD_CONTRACT_CHECK((std::is_same_v<T, std::vector<float>>));
           return nlohmann::json(std::vector{40.0, 41.1, 42.2});
         }
       },
