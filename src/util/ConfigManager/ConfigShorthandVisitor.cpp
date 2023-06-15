@@ -2,12 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "util/ConfigManager/ConfigShorthandVisitor.h"
+
 #include <absl/strings/str_cat.h>
 
 #include <exception>
 #include <utility>
 
-#include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/Exception.h"
 
 // __________________________________________________________________________
