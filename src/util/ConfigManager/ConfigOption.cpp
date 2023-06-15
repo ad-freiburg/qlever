@@ -18,7 +18,6 @@
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
-#include "util/ConfigManager/ConfigToString.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"
 #include "util/Forward.h"

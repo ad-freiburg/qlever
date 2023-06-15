@@ -222,6 +222,13 @@ class ConfigManager {
   */
   std::string printConfigurationDoc(bool printCurrentJsonConfiguration) const;
 
+  /*
+  @brief Return a string, containing a list of all configuration options, that:
+  - Have a default value.
+  - Weren't set at runtime.
+  */
+  std::string getListOfNotChangedConfigOptionsWithDefaultValues() const;
+
  private:
   /*
   @brief Return the underlying configuration option, if it's at the position

@@ -12,6 +12,7 @@
 #include <sstream>
 #include <string>
 
+#include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
@@ -401,5 +402,45 @@ std::string ConfigManager::vectorOfKeysForJsonToString(
         key);
   });
   return keysToString.str();
+}
+
+// ____________________________________________________________________________
+std::string ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValues()
+    const {
+  // Nothing to do here, if we have no configuration options.
+  if (configurationOptions_.size() == 0) {
+    return "";
+  }
+
+  /*
+  Because we want to create a list, we don't know how many entries there will be
+  and need a string stream.
+  */
+  std::ostringstream stream;
+
+  // Prints the default value of a configuration option and the accompanying
+  // text.
+  auto defaultConfigurationOptionToString = [](const ConfigOption& option) {
+    return absl::StrCat("Configuration option '", option.getIdentifier(),
+                        "' was not set at runtime, using default value '",
+                        option.getDefaultValueAsString(), "'.");
+  };
+
+  forEachExcludingTheLastOne(
+      configurationOptions_,
+      [&stream,
+       &defaultConfigurationOptionToString](const ConfigOption& option) {
+        if (option.hasDefaultValue() && !option.wasSetAtRuntime()) {
+          stream << defaultConfigurationOptionToString(option) << "\n";
+        }
+      },
+      [&stream,
+       &defaultConfigurationOptionToString](const ConfigOption& option) {
+        if (option.hasDefaultValue() && !option.wasSetAtRuntime()) {
+          stream << defaultConfigurationOptionToString(option);
+        }
+      });
+
+  return stream.str();
 }
 }  // namespace ad_utility

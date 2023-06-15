@@ -21,7 +21,6 @@
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigManager.h"
-#include "util/ConfigManager/ConfigToString.h"
 #include "util/File.h"
 #include "util/json.h"
 
@@ -169,8 +168,8 @@ int main(int argc, char** argv) {
         [](const BenchmarkInterface* bench) {
           if (const std::string &
                   defaultConfigurationOptionString{
-                      ad_utility::getDefaultValueConfigOptions(
-                          bench->getConfigManager())};
+                      bench->getConfigManager()
+                          .getListOfNotChangedConfigOptionsWithDefaultValues()};
               defaultConfigurationOptionString != "") {
             std::cout
                 << "Default configuration option values of benchmark class '"
