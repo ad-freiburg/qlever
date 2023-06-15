@@ -71,10 +71,13 @@ nlohmann::json::json_pointer ConfigManager::createJsonPointer(
 }
 
 // ____________________________________________________________________________
-void ConfigManager::addConfigOption(const VectorOfKeysForJson& pathToOption,
-                                    ConfigOption&& option) {
+void ConfigManager::verifyPathToConfigOption(
+    const VectorOfKeysForJson& pathToOption,
+    std::string_view optionName) const {
   // We need at least a name in the path.
-  AD_CONTRACT_CHECK(pathToOption.size() > 0);
+  if (pathToOption.size() == 0) {
+    throw EmptyVectorException("pathToOption");
+  }
 
   /*
   The first key must be a string, not a number. Having an array at the
@@ -93,10 +96,9 @@ void ConfigManager::addConfigOption(const VectorOfKeysForJson& pathToOption,
   if (!std::holds_alternative<std::string>(pathToOption.back())) {
     throw ConfigManagerOptionPathDoesntEndWithStringException(
         vectorOfKeysForJsonToString(pathToOption));
-  } else if (std::get<std::string>(pathToOption.back()) !=
-             option.getIdentifier()) {
+  } else if (std::get<std::string>(pathToOption.back()) != optionName) {
     throw ConfigManagerPathToConfigOptionDoesntEndWithConfigOptionNameException(
-        option.getIdentifier(), vectorOfKeysForJsonToString(pathToOption));
+        optionName, vectorOfKeysForJsonToString(pathToOption));
   }
 
   /*
@@ -126,15 +128,23 @@ void ConfigManager::addConfigOption(const VectorOfKeysForJson& pathToOption,
         vectorOfKeysForJsonToString(pathToOption));
   }
 
-  // The position in the json object literal, our `pathToOption` points to.
-  const nlohmann::json::json_pointer ptr{createJsonPointer(pathToOption)};
-
   // Is there already a configuration option with the same identifier at the
   // same location?
-  if (keyToConfigurationOptionIndex_.contains(ptr)) {
+  if (keyToConfigurationOptionIndex_.contains(
+          createJsonPointer(pathToOption))) {
     throw ConfigManagerOptionPathAlreadyinUseException(
         vectorOfKeysForJsonToString(pathToOption), printConfigurationDoc(true));
   }
+}
+
+// ____________________________________________________________________________
+void ConfigManager::addConfigOption(const VectorOfKeysForJson& pathToOption,
+                                    ConfigOption&& option) {
+  // Is the path valid?
+  verifyPathToConfigOption(pathToOption, option.getIdentifier());
+
+  // The position in the json object literal, our `pathToOption` points to.
+  const nlohmann::json::json_pointer ptr{createJsonPointer(pathToOption)};
 
   // Add the location of the configuration option to the json.
   keyToConfigurationOptionIndex_[ptr] = configurationOptions_.size();

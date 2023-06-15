@@ -65,7 +65,7 @@ TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
 /*
 The exceptions for adding configuration options.
 */
-TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
+TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
   ad_utility::ConfigManager config{};
 
   // Configuration options for testing.
@@ -94,6 +94,26 @@ TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
       config.createConfigOption<int>(
           {size_t{3}, "Shared_part", "Sense_of_existence"}, "", &notUsed, 42);
       , ad_utility::ConfigManagerOptionPathDoesntStartWithStringException);
+
+  /*
+  If the last key for the path given isn't a string, that should cause an
+  exception.
+  Reason: The last key is used as the name for the to be created `ConfigOption`.
+  A number, obviously, doesn't qualify.
+  */
+  ASSERT_THROW(config.createConfigOption<int>(
+      {"Shared_part", "Sense_of_existence", size_t{3}}, "", &notUsed, 42);
+               ,
+               ad_utility::ConfigManagerOptionPathDoesntEndWithStringException);
+
+  /*
+  An empty vector that should cause an exception.
+  Reason: The last key is used as the name for the to be created `ConfigOption`.
+  An empty vector doesn't work with that.
+  */
+  ASSERT_THROW(config.createConfigOption<int>(
+      ad_utility::ConfigManager::VectorOfKeysForJson{}, "", &notUsed, 42);
+               , ad_utility::EmptyVectorException);
 
   /*
   Trying to add a configuration option with a path containing strings with

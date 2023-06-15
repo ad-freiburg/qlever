@@ -219,4 +219,12 @@ class ConfigManagerPathToConfigOptionDoesntEndWithConfigOptionNameException
   explicit ConfigManagerPathToConfigOptionDoesntEndWithConfigOptionNameException(
       std::string_view optionIdentifier, std::string_view pathToOption);
 };
+
+/*
+@brief A custom exception, for when a function doesn't take empty vectors.
+*/
+class EmptyVectorException : public ExceptionWithMessage {
+ public:
+  explicit EmptyVectorException(std::string_view vectorName);
+};
 }  // namespace ad_utility

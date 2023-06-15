@@ -72,6 +72,17 @@ class ConfigManager {
       const VectorOfKeysForJson& keys);
 
   /*
+  @brief Verifies, that the given path is a valid path for an option, with this
+  name. If not, throws exceptions.
+
+  @param pathToOption Describes a path in json, that points to the value held by
+  the configuration option.
+  @param optionName The identifier of the `ConfigOption`.
+  */
+  void verifyPathToConfigOption(const VectorOfKeysForJson& pathToOption,
+                                std::string_view optionName) const;
+
+  /*
   @brief Adds a configuration option, that can be accessed with the given path.
 
   @param pathToOption Describes a path in json, that points to the value held by
@@ -107,6 +118,16 @@ class ConfigManager {
                           OptionType* variableToPutValueOfTheOptionIn,
                           std::optional<OptionType> defaultValue =
                               std::optional<OptionType>(std::nullopt)) {
+    // Checking, if we have a valid path. We have to cheat a bit with the call,
+    // because the name for our configuration option is inside `pathToOption`.
+    if (pathToOption.size() == 0 ||
+        !std::holds_alternative<std::string>(pathToOption.back())) {
+      verifyPathToConfigOption(pathToOption, "");
+    } else {
+      verifyPathToConfigOption(pathToOption,
+                               std::get<std::string>(pathToOption.back()));
+    }
+
     if (defaultValue.has_value()) {
       addConfigOption(
           pathToOption,

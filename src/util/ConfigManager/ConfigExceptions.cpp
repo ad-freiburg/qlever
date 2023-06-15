@@ -144,4 +144,10 @@ ConfigManagerPathToConfigOptionDoesntEndWithConfigOptionNameException::
       pathToOption, "' doesn't end with the name of ConfigOption '",
       optionIdentifier, "'.");
 }
+
+//_____________________________________________________________________________
+EmptyVectorException::EmptyVectorException(std::string_view vectorName) {
+  message_ = absl::StrCat("The vector '", vectorName,
+                          "' is empty, which is not allowed.");
+}
 }  // namespace ad_utility
