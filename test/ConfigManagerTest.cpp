@@ -13,6 +13,7 @@
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 
+namespace ad_utility {
 TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
   ad_utility::ConfigManager config{};
 
@@ -343,3 +344,4 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
   ASSERT_ANY_THROW(
       ad_utility::ConfigManager::parseShortHand(R"--("myName" = "Bernd";)--"));
 }
+}  // namespace ad_utility

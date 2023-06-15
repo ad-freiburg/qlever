@@ -8,6 +8,7 @@
 #include <absl/strings/str_replace.h>
 #include <bits/ranges_algo.h>
 #include <bits/ranges_util.h>
+#include <gtest/gtest.h>
 
 #include <any>
 #include <concepts>
@@ -92,6 +93,12 @@ class ConfigManager {
   void addConfigOption(const VectorOfKeysForJson& pathToOption,
                        ConfigOption&& option);
 
+  // For testing.
+  FRIEND_TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest);
+  FRIEND_TEST(ConfigManagerTest, ParseConfig);
+  FRIEND_TEST(ConfigManagerTest, ParseConfigExceptionTest);
+  FRIEND_TEST(ConfigManagerTest, ParseShortHandTest);
+
  public:
   /*
   @brief Creates and adds a new configuration option.
@@ -175,19 +182,9 @@ class ConfigManager {
   }
 
   /*
-  Get all the added configuration options.
+  @brief Get all the added configuration options.
   */
   const std::vector<ConfigOption>& getConfigurationOptions() const;
-
-  /*
-  @brief Return the underlying configuration option, if it's at the position
-  described by the `keys`. If there is no configuration option at that
-  place, an exception will be thrown.
-
-  @param keys The keys for looking up the configuration option.
-  */
-  const ConfigOption& getConfigurationOptionByNestedKeys(
-      const VectorOfKeysForJson& keys) const;
 
   /*
   @brief Sets the configuration options based on the given json. Note: This will
@@ -230,5 +227,16 @@ class ConfigManager {
   */
   static std::string vectorOfKeysForJsonToString(
       const VectorOfKeysForJson& keys);
+
+ private:
+  /*
+  @brief Return the underlying configuration option, if it's at the position
+  described by the `keys`. If there is no configuration option at that
+  place, an exception will be thrown.
+
+  @param keys The keys for looking up the configuration option.
+  */
+  const ConfigOption& getConfigurationOptionByNestedKeys(
+      const VectorOfKeysForJson& keys) const;
 };
 }  // namespace ad_utility
