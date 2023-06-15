@@ -222,12 +222,6 @@ class ConfigManager {
   */
   std::string printConfigurationDoc(bool printCurrentJsonConfiguration) const;
 
-  /*
-  @brief Return string representation of a `VectorOfKeysForJson`.
-  */
-  static std::string vectorOfKeysForJsonToString(
-      const VectorOfKeysForJson& keys);
-
  private:
   /*
   @brief Return the underlying configuration option, if it's at the position
@@ -238,5 +232,11 @@ class ConfigManager {
   */
   const ConfigOption& getConfigurationOptionByNestedKeys(
       const VectorOfKeysForJson& keys) const;
+
+  /*
+  @brief Return string representation of a `VectorOfKeysForJson`.
+  */
+  static std::string vectorOfKeysForJsonToString(
+      const VectorOfKeysForJson& keys);
 };
 }  // namespace ad_utility
