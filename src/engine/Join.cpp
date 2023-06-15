@@ -232,31 +232,8 @@ Join::ScanMethodType Join::getScanMethod(
     return
         [&idx, perm](Id id, IdTable* idTable) { idx.scan(id, idTable, perm); };
   };
-
-  using enum Permutation::Enum;
-  switch (scan.getType()) {
-    case IndexScan::FULL_INDEX_SCAN_SPO:
-      scanMethod = scanLambda(SPO);
-      break;
-    case IndexScan::FULL_INDEX_SCAN_SOP:
-      scanMethod = scanLambda(SOP);
-      break;
-    case IndexScan::FULL_INDEX_SCAN_PSO:
-      scanMethod = scanLambda(PSO);
-      break;
-    case IndexScan::FULL_INDEX_SCAN_POS:
-      scanMethod = scanLambda(POS);
-      break;
-    case IndexScan::FULL_INDEX_SCAN_OSP:
-      scanMethod = scanLambda(OSP);
-      break;
-    case IndexScan::FULL_INDEX_SCAN_OPS:
-      scanMethod = scanLambda(OPS);
-      break;
-    default:
-      AD_THROW("Found non-dummy scan where one was expected.");
-  }
-  return scanMethod;
+  AD_CORRECTNESS_CHECK(scan.getResultWidth() == 3);
+  return scanLambda(scan.permutation());
 }
 
 // _____________________________________________________________________________

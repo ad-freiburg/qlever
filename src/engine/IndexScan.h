@@ -31,10 +31,98 @@ class IndexScan : public Operation {
     FULL_INDEX_SCAN_OPS = 14
   };
 
+  static size_t scanTypeToNumVariables(ScanType scanType) {
+    switch (scanType) {
+      case PSO_BOUND_S:
+      case POS_BOUND_O:
+      case SOP_BOUND_O:
+        return 1;
+      case PSO_FREE_S:
+      case POS_FREE_O:
+      case SOP_FREE_O:
+      case SPO_FREE_P:
+      case OSP_FREE_S:
+      case OPS_FREE_P:
+        return 2;
+      case FULL_INDEX_SCAN_SPO:
+      case FULL_INDEX_SCAN_SOP:
+      case FULL_INDEX_SCAN_PSO:
+      case FULL_INDEX_SCAN_POS:
+      case FULL_INDEX_SCAN_OSP:
+      case FULL_INDEX_SCAN_OPS:
+        return 3;
+    }
+  }
+
+  static Permutation::Enum scanTypeToPermutation(ScanType scanType) {
+    using enum Permutation::Enum;
+    switch (scanType) {
+      case PSO_BOUND_S:
+      case PSO_FREE_S:
+      case FULL_INDEX_SCAN_PSO:
+        return PSO;
+      case POS_FREE_O:
+      case POS_BOUND_O:
+      case FULL_INDEX_SCAN_POS:
+        return POS;
+      case SPO_FREE_P:
+      case FULL_INDEX_SCAN_SPO:
+        return SPO;
+      case SOP_FREE_O:
+      case SOP_BOUND_O:
+      case FULL_INDEX_SCAN_SOP:
+        return SOP;
+      case OSP_FREE_S:
+      case FULL_INDEX_SCAN_OSP:
+        return OSP;
+      case OPS_FREE_P:
+      case FULL_INDEX_SCAN_OPS:
+        return OPS;
+    }
+  }
+
+  static std::array<size_t, 3> permutationToKeyOrder(
+      Permutation::Enum permutation) {
+    using enum Permutation::Enum;
+    switch (permutation) {
+      case POS:
+        return {1, 2, 0};
+      case PSO:
+        return {1, 0, 2};
+      case SOP:
+        return {0, 2, 1};
+      case SPO:
+        return {0, 1, 2};
+      case OPS:
+        return {2, 1, 0};
+      case OSP:
+        return {2, 0, 1};
+    }
+  }
+
+  static std::string_view permutationToString(Permutation::Enum permutation) {
+    using enum Permutation::Enum;
+    switch (permutation) {
+      case POS:
+        return "POS";
+      case PSO:
+        return "PSO";
+      case SOP:
+        return "SOP";
+      case SPO:
+        return "SPO";
+      case OPS:
+        return "OPS";
+      case OSP:
+        return "OSP";
+    }
+  }
+
  private:
-  ScanType _type;
+  Permutation::Enum _permutation;
+  size_t _numVariables;
   TripleComponent _subject;
-  string _predicate;
+  TripleComponent _predicate;
   TripleComponent _object;
   size_t _sizeEstimate;
   vector<float> _multiplicity;
@@ -50,7 +138,7 @@ class IndexScan : public Operation {
 
   virtual ~IndexScan() = default;
 
-  const string& getPredicate() const { return _predicate; }
+  const TripleComponent& getPredicate() const { return _predicate; }
   const TripleComponent& getSubject() const { return _subject; }
   const TripleComponent& getObject() const { return _object; }
 
@@ -90,43 +178,15 @@ class IndexScan : public Operation {
 
   // Currently only the full scans support a limit clause.
   [[nodiscard]] bool supportsLimit() const override {
-    switch (_type) {
-      case FULL_INDEX_SCAN_SPO:
-      case FULL_INDEX_SCAN_SOP:
-      case FULL_INDEX_SCAN_PSO:
-      case FULL_INDEX_SCAN_POS:
-      case FULL_INDEX_SCAN_OSP:
-      case FULL_INDEX_SCAN_OPS:
-        return true;
-      default:
-        return false;
-    }
+    return getResultWidth() == 3;
   }
 
-  ScanType getType() const { return _type; }
+  Permutation::Enum permutation() const { return _permutation; }
 
  private:
   ResultTable computeResult() override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
-
-  void computePSOboundS(IdTable* result) const;
-
-  void computePSOfreeS(IdTable* result) const;
-
-  void computePOSboundO(IdTable* result) const;
-
-  void computePOSfreeO(IdTable* result) const;
-
-  void computeSPOfreeP(IdTable* result) const;
-
-  void computeSOPboundO(IdTable* result) const;
-
-  void computeSOPfreeO(IdTable* result) const;
-
-  void computeOPSfreeP(IdTable* result) const;
-
-  void computeOSPfreeS(IdTable* result) const;
 
   void computeFullScan(IdTable* result, Permutation::Enum permutation) const;
 
@@ -139,5 +199,12 @@ class IndexScan : public Operation {
   std::optional<std::shared_ptr<const ResultTable>>
   getPrecomputedResultFromQueryPlanning() override {
     return _precomputedResult;
+  }
+
+  std::array<const TripleComponent* const, 3> getPermutedTriple() const {
+    using Arr = std::array<const TripleComponent* const, 3>;
+    Arr inp{&_subject, &_predicate, &_object};
+    auto permutation = permutationToKeyOrder(_permutation);
+    return {inp[permutation[0]], inp[permutation[1]], inp[permutation[2]]};
   }
 };
