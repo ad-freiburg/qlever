@@ -49,8 +49,8 @@ done
 
 if ! [ "$#" -eq 0 ] ; then
   echo "Unexpected command line arguments '$@'"
-  print_usage
-  exit 1
+  #print_usage
+  #exit 1
 fi
 
 # Fail on unset variables and any non zero return-codes
