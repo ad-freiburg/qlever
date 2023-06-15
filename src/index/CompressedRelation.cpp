@@ -40,13 +40,13 @@ void CompressedRelationReader::scan(
   // The first block might contain entries that are not part of our
   // actual scan result.
   bool firstBlockIsIncomplete =
-      beginBlock < endBlock && (beginBlock->firstTriple_[0] < col0Id ||
-                                beginBlock->lastTriple_[0] > col0Id);
+      beginBlock < endBlock && (beginBlock->firstTriple_.col0Id_ < col0Id ||
+                                beginBlock->lastTriple_.col0Id_ > col0Id);
   auto lastBlock = endBlock - 1;
 
   bool lastBlockIsIncomplete =
-      beginBlock < lastBlock && (lastBlock->firstTriple_[0] < col0Id ||
-                                 lastBlock->lastTriple_[0] > col0Id);
+      beginBlock < lastBlock && (lastBlock->firstTriple_.col0Id_ < col0Id ||
+                                 lastBlock->lastTriple_.col0Id_ > col0Id);
 
   // Invariant: A relation spans multiple blocks exclusively or several
   // entities are stored completely in the same Block.
@@ -492,15 +492,15 @@ CompressedRelationReader::getBlocksFromMetadata(
   // col1Id
   Id col0Id = metadata.col0Id_;
   CompressedBlockMetadata key;
-  key.firstTriple_[0] = col0Id;
-  key.lastTriple_[0] = col0Id;
-  key.firstTriple_[1] = col1Id.value_or(Id::min());
-  key.lastTriple_[1] = col1Id.value_or(Id::max());
+  key.firstTriple_.col0Id_ = col0Id;
+  key.lastTriple_.col0Id_ = col0Id;
+  key.firstTriple_.col1Id_ = col1Id.value_or(Id::min());
+  key.lastTriple_.col1Id_ = col1Id.value_or(Id::max());
 
   auto comp = [](const auto& a, const auto& b) {
-    bool endBeforeBegin = a.lastTriple_[0] < b.firstTriple_[0];
-    endBeforeBegin |= (a.lastTriple_[0] == b.firstTriple_[0] &&
-                       a.lastTriple_[1] < b.firstTriple_[1]);
+    bool endBeforeBegin = a.lastTriple_.col0Id_ < b.firstTriple_.col0Id_;
+    endBeforeBegin |= (a.lastTriple_.col0Id_ == b.firstTriple_.col0Id_ &&
+                       a.lastTriple_.col1Id_ < b.firstTriple_.col1Id_);
     return endBeforeBegin;
   };
 

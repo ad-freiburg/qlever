@@ -66,15 +66,22 @@ struct CompressedBlockMetadata {
   // the S and the third one is the O. Note that the first key of the
   // permutation (for example the P in the PSO permutation) is not stored in the
   // blocks, but has to be retrieved via the corresponding
-  // `CompressedRelationMetadata`. NOTE: Strictly speaking, storing one of
-  // `firstTriple_` or `lastTriple_` would probably suffice. However, they make
-  // several functions much easier to implement and don't really harm with
-  // respect to space efficiency. For example, for Wikidata, we have only around
-  // 50K blocks with block size 8M and around 5M blocks with block size 80K;
-  // even the latter takes only half a GB in total.
-  //
-  std::array<Id, 3> firstTriple_;
-  std::array<Id, 3> lastTriple_;
+  // `CompressedRelationMetadata`.
+  // NOTE: Strictly speaking, storing one of `firstTriple_` or `lastTriple_`
+  // would probably suffice. However, they make several functions much easier to
+  // implement and don't really harm with respect to space efficiency. For
+  // example, for Wikidata, we have only around 50K blocks with block size 8M
+  // and around 5M blocks with block size 80K; even the latter takes only half a
+  // GB in total.
+  struct PermutedTriple {
+    Id col0Id_;
+    Id col1Id_;
+    Id col2Id_;
+    bool operator==(const PermutedTriple&) const = default;
+    friend std::true_type allowTrivialSerialization(PermutedTriple, auto);
+  };
+  PermutedTriple firstTriple_;
+  PermutedTriple lastTriple_;
 
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadata&) const = default;
@@ -281,7 +288,7 @@ class CompressedRelationReader {
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   // Get the contiguous subrange of the given `blockMetadata` for the blocks
-  // that contain the triples that have the relation/col0Id that was specified
+  // that contain the triples that have the relationId/col0Id that was specified
   // by the `medata`. If the `col1Id` is specified (not `nullopt`), then the
   // blocks are additionally filtered by the given `col1Id`.
   static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
