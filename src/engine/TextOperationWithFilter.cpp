@@ -165,7 +165,7 @@ void TextOperationWithFilter::computeMultiplicities() {
 }
 
 // _____________________________________________________________________________
-size_t TextOperationWithFilter::getSizeEstimateBeforeLimit() {
+uint64_t TextOperationWithFilter::getSizeEstimateBeforeLimit() {
   if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
     if (_executionContext) {
       // NEW at 05 Dec 2016:

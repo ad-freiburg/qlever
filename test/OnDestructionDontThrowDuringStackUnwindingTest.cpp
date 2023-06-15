@@ -93,3 +93,19 @@ TEST(OnDestruction, OnDestructionDontThrowDuringStackUnwinding) {
   ASSERT_THROW(runCleanupNested2(), std::out_of_range);
   ASSERT_EQ(i, 18);
 }
+
+// ________________________________________________________________
+TEST(OnDestruction, cancel) {
+  int i = 12;
+  {
+    auto cl = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+        [&i] { i = 24; });
+  }
+  ASSERT_EQ(i, 24);
+  {
+    auto cl = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+        [&i] { i = 123; });
+    cl.cancel();
+  }
+  ASSERT_EQ(i, 24);
+}

@@ -20,6 +20,7 @@ double NumericValueGetter::operator()(ValueId id, EvaluationContext*) const {
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::TextRecordIndex:
+    case Datatype::Date:
       return std::numeric_limits<double>::quiet_NaN();
   }
   AD_FAIL();
@@ -51,6 +52,8 @@ bool EffectiveBooleanValueGetter::operator()(ValueId id,
       return !(context->_localVocab.getWord(id.getLocalVocabIndex()).empty());
     }
     case Datatype::TextRecordIndex:
+      return true;
+    case Datatype::Date:
       return true;
   }
   AD_FAIL();

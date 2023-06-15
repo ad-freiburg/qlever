@@ -65,7 +65,7 @@ class ValuesForTesting : public Operation {
   size_t getCostEstimate() override { return table_.numRows(); }
 
  private:
-  size_t getSizeEstimateBeforeLimit() override { return table_.numRows(); }
+  uint64_t getSizeEstimateBeforeLimit() override { return table_.numRows(); }
 
  public:
   // For unit testing purposes it is useful that the columns have different

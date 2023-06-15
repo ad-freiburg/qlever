@@ -94,6 +94,31 @@ struct StringValueGetter {
   string operator()(string s, EvaluationContext*) const { return s; }
 };
 
+/// This class can be used as the `ValueGetter` argument of Expression
+/// templates. It produces a `std::optional<DateOrLargeYear>`.
+struct DateValueGetter {
+  using Opt = std::optional<DateOrLargeYear>;
+  template <typename T>
+  requires(std::is_arithmetic_v<T>)
+  Opt operator()(T, const EvaluationContext*) const {
+    return std::nullopt;
+  }
+
+  Opt operator()(Bool, const EvaluationContext*) const { return std::nullopt; }
+
+  Opt operator()(ValueId id, const EvaluationContext*) const {
+    if (id.getDatatype() == Datatype::Date) {
+      return id.getDate();
+    } else {
+      return std::nullopt;
+    }
+  }
+
+  Opt operator()(const std::string&, const EvaluationContext*) const {
+    return std::nullopt;
+  }
+};
+
 // If the `id` points to a literal, return the contents of that literal (without
 // the quotation marks). For all other types (IRIs, numbers, etc.) return
 // `std::nullopt`. This is used for expressions that work on strings, but for

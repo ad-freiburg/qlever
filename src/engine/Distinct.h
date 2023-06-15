@@ -40,7 +40,7 @@ class Distinct : public Operation {
   }
 
  private:
-  size_t getSizeEstimateBeforeLimit() override {
+  uint64_t getSizeEstimateBeforeLimit() override {
     return _subtree->getSizeEstimate();
   }
 

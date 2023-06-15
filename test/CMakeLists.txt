@@ -80,11 +80,11 @@ function(addAndLinkTest basename)
     linkTest(${basename} ${ARGN})
 endfunction()
 
-addLinkAndDiscoverTest(ValueIdComparatorsTest)
+addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
-addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
 
-addLinkAndDiscoverTest(StringUtilsTest ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(StringUtilsTest)
 
 addLinkAndDiscoverTest(CacheTest)
 
@@ -95,7 +95,7 @@ addLinkAndDiscoverTestSerial(FileTest)
 
 addLinkAndDiscoverTest(Simple8bTest)
 
-addLinkAndDiscoverTest(ContextFileParserTest parser ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(ContextFileParserTest parser)
 
 addLinkAndDiscoverTest(IndexMetaDataTest index)
 
@@ -111,8 +111,6 @@ addLinkAndDiscoverTest(EngineTest engine)
 addLinkAndDiscoverTest(JoinTest engine)
 
 addLinkAndDiscoverTest(QueryPlannerTest engine)
-
-addLinkAndDiscoverTest(ConversionsTest util)
 
 addLinkAndDiscoverTest(HashMapTest)
 
@@ -133,17 +131,17 @@ addLinkAndDiscoverTest(UnionTest engine)
 
 if (SINGLE_TEST_BINARY)
     target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
-    qlever_target_link_libraries(QLeverAllUnitTestsMain parser re2 util ${ICU_LIBRARIES})
+    qlever_target_link_libraries(QLeverAllUnitTestsMain parser re2 util)
 else()
     add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
-    linkAndDiscoverTest(TokenTest parser re2 util ${ICU_LIBRARIES})
+    linkAndDiscoverTest(TokenTest parser re2 util)
 endif()
 
 addLinkAndDiscoverTest(TurtleParserTest parser re2)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
-addLinkAndDiscoverTest(IdTableTest)
+addLinkAndDiscoverTest(IdTableTest util)
 
 addLinkAndDiscoverTest(TransitivePathTest engine)
 
@@ -151,9 +149,9 @@ addLinkAndDiscoverTest(BatchedPipelineTest)
 
 addLinkAndDiscoverTest(TupleHelpersTest)
 
-addLinkAndDiscoverTest(StringSortComparatorTest ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(StringSortComparatorTest)
 
-addLinkAndDiscoverTest(PriorityQueueTest ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(PriorityQueueTest)
 
 addLinkAndDiscoverTest(SynchronizedTest)
 
@@ -205,7 +203,7 @@ addLinkAndDiscoverTest(VocabularyInMemoryTest vocabulary)
 
 addLinkAndDiscoverTest(CompressedVocabularyTest vocabulary)
 
-addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary)
 
 addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
 
@@ -238,7 +236,7 @@ addLinkAndDiscoverTest(CompressorStreamTest engine)
 
 addLinkAndDiscoverTest(AsyncStreamTest)
 
-addLinkAndDiscoverTest(TriplesViewTest)
+addLinkAndDiscoverTest(TriplesViewTest util)
 
 addLinkAndDiscoverTest(BitUtilsTest)
 
@@ -248,11 +246,11 @@ addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
 addLinkAndDiscoverTest(HttpUtilsTest util http)
 
-addLinkAndDiscoverTest(DateTest)
+addLinkAndDiscoverTest(DateTest util parser)
 
 addLinkAndDiscoverTest(TripleComponentTest parser)
 
-addLinkAndDiscoverTest(ValueIdTest)
+addLinkAndDiscoverTest(ValueIdTest util)
 
 addLinkAndDiscoverTest(LambdaHelpersTest)
 
@@ -306,7 +304,7 @@ addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 
 addLinkAndDiscoverTest(ExceptionHandlingTest)
 
-addLinkAndDiscoverTest(SparqlExpressionTypesTest)
+addLinkAndDiscoverTest(SparqlExpressionTypesTest util)
 
 addLinkAndDiscoverTest(LimitOffsetClauseTest)
 
@@ -314,7 +312,7 @@ addLinkAndDiscoverTest(OperationTest engine)
 
 addLinkAndDiscoverTest(RuntimeInformationTest engine)
 
-addLinkAndDiscoverTest(VariableToColumnMapTest engine)
+addLinkAndDiscoverTest(VariableToColumnMapTest parser)
 
 addLinkAndDiscoverTest(CopyableUniquePtrTest)
 
@@ -326,6 +324,10 @@ addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
 
 addLinkAndDiscoverTest(FindUndefRangesTest)
 
-addLinkAndDiscoverTest(AddCombinedRowToTableTest)
+addLinkAndDiscoverTest(AddCombinedRowToTableTest util)
+
+addLinkAndDiscoverTest(CtreHelpersTest)
+
+addLinkAndDiscoverTest(ComparisonWithNanTest)
 
 addLinkAndDiscoverTest(JoinAlgorithmsTest)

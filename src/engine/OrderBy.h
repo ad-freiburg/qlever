@@ -46,7 +46,7 @@ class OrderBy : public Operation {
   void setTextLimit(size_t limit) override { subtree_->setTextLimit(limit); }
 
  private:
-  size_t getSizeEstimateBeforeLimit() override {
+  uint64_t getSizeEstimateBeforeLimit() override {
     return subtree_->getSizeEstimate();
   }
 
