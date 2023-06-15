@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  Index i;
+  Index i{ad_utility::makeUnlimitedAllocator<Id>()};
   IndexImpl& impl = i.getImpl();
   std::string indexName{argv[1]};
   std::string p{argv[2]};

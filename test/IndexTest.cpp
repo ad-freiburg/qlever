@@ -338,7 +338,7 @@ MATCHER_P2(IsPossiblyExternalString, content, isExternal, "") {
 
 TEST(IndexTest, TripleToInternalRepresentation) {
   {
-    IndexImpl index;
+    IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     TurtleTriple turtleTriple{"<subject>", "<predicate>", lit("\"literal\"")};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
@@ -348,7 +348,7 @@ TEST(IndexTest, TripleToInternalRepresentation) {
     EXPECT_THAT(res._triple[2], IsPossiblyExternalString("\"literal\"", false));
   }
   {
-    IndexImpl index;
+    IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.getNonConstVocabForTesting().initializeExternalizePrefixes(
         std::vector{"<subj"s});
     TurtleTriple turtleTriple{"<subject>", "<predicate>",
@@ -363,7 +363,7 @@ TEST(IndexTest, TripleToInternalRepresentation) {
                 IsPossiblyExternalString("\"literal\"@fr", true));
   }
   {
-    IndexImpl index;
+    IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     TurtleTriple turtleTriple{"<subject>", "<predicate>", 42.0};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));

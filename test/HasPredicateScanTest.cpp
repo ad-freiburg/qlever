@@ -245,7 +245,7 @@ TEST(HasPredicateScan, subtreeS) {
   CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
   CompactVectorOfStrings<Id> patterns(patternsSrc);
 
-  Index index;
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   QueryResultCache cache{};
   QueryExecutionContext ctx(index, &cache, makeAllocator(),
                             SortPerformanceEstimator{});
