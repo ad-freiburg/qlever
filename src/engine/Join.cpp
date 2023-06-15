@@ -114,32 +114,37 @@ ResultTable Join::computeResult() {
     return computeResultForJoinWithFullScanDummy();
   }
 
-  shared_ptr<const ResultTable> leftRes = _left->getResult();
-  if (leftRes->size() == 0) {
-    _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
-    return {std::move(idTable), resultSortedOn(), LocalVocab()};
-  }
-
-  shared_ptr<const ResultTable> rightRes = _right->getResult();
-
-  LOG(DEBUG) << "Computing Join result..." << endl;
-
-  // TODO<joka921> For the specialized cases we don't need to materialize the
-  // results of the childdren...
   if (_left->getType() == QueryExecutionTree::SCAN &&
       _right->getType() == QueryExecutionTree::SCAN) {
     computeResultForTwoIndexScans(&idTable);
-  } else if (_right->getType() == QueryExecutionTree::SCAN) {
+    // TODO<joka921, hannahbast, SPARQL update> When we add triples to the
+    // index, the vocabularies of index scans will not necessarily be empty and
+    // we need a mechanism to still retrieve them when using the lazy scan.
+    return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+  }
+
+  shared_ptr<const ResultTable> leftRes = _left->getResult();
+  if (leftRes->size() == 0) {
+    _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
+    // TODO<joka921, hannahbast, SPARQL update> When we add triples to the
+    // index, the vocabularies of index scans will not necessarily be empty and
+    // we need a mechanism to still retrieve them when using the lazy scan.
+    return {std::move(idTable), resultSortedOn(), LocalVocab()};
+  }
+
+  // Note: If only one of the children is a scan, then we have made sure in the constructor that it is the right child.
+  if (_right->getType() == QueryExecutionTree::SCAN) {
     computeResultForIndexScanAndColumn(
         leftRes->idTable(), _leftJoinCol,
         dynamic_cast<const IndexScan&>(*_right->getRootOperation()),
         _rightJoinCol, &idTable);
-  } else {
-    join(leftRes->idTable(), _leftJoinCol, rightRes->idTable(), _rightJoinCol,
-         &idTable);
+    return {std::move(idTable), resultSortedOn(),
+            leftRes->getSharedLocalVocab()};
   }
 
-  LOG(DEBUG) << "Join result computation done" << endl;
+  shared_ptr<const ResultTable> rightRes = _right->getResult();
+  join(leftRes->idTable(), _leftJoinCol, rightRes->idTable(), _rightJoinCol,
+       &idTable);
 
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).

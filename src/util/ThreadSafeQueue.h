@@ -10,6 +10,8 @@
 #include <optional>
 #include <queue>
 
+#include "absl/synchronization/mutex.h"
+
 namespace ad_utility::data_structures {
 
 /// A thread safe, multi-consumer, multi-producer queue.
@@ -82,6 +84,26 @@ class ThreadSafeQueue {
     _popNotification.notify_one();
     return value;
   }
+};
+
+template <typename T>
+class OrderedThreadSafeQueue {
+  std::mutex mutex_;
+  std::condition_variable cv_;
+  ThreadSafeQueue<T> queue_;
+  size_t sequenceNumber_ = 0;
+  bool push(size_t sequenceNumber, T value) {
+    std::unique_lock lock{mutex_};
+    cv_.wait(
+        [this, sequenceNumber]() { return sequenceNumber == sequenceNumber_; });
+    ++sequenceNumber_;
+    bool result = queue_.push(std::move(value));
+    lock.unlock();
+    cv_.notify_all();
+    return result;
+  }
+
+  std::optional<T> pop() { return queue_.pop(); }
 };
 
 }  // namespace ad_utility::data_structures
