@@ -118,14 +118,18 @@ class ConfigManager {
                           OptionType* variableToPutValueOfTheOptionIn,
                           std::optional<OptionType> defaultValue =
                               std::optional<OptionType>(std::nullopt)) {
-    // Checking, if we have a valid path. We have to cheat a bit with the call,
-    // because the name for our configuration option is inside `pathToOption`.
+    /*
+    In this case, we have an invalid path and can't create a `ConfigOption`.
+    Because we don't want to copy the corresponding exception out of
+    `verifyPathToConfigOption`, that would be to much code duplication, we
+    instead call it in such a way, that it will throw the corresponding
+    exception instead.
+    If we don't have this case, then the actual path check will be done by
+    `addConfigOption`. No reason, to do it double.
+    */
     if (pathToOption.size() == 0 ||
         !std::holds_alternative<std::string>(pathToOption.back())) {
       verifyPathToConfigOption(pathToOption, "");
-    } else {
-      verifyPathToConfigOption(pathToOption,
-                               std::get<std::string>(pathToOption.back()));
     }
 
     if (defaultValue.has_value()) {
