@@ -141,8 +141,8 @@ std::string_view ConfigOption::getIdentifier() const {
 
 // ____________________________________________________________________________
 std::string ConfigOption::contentOfAvailableTypesToString(
-    const std::optional<AvailableTypes>& v) {
-  if (v.has_value()) {
+    const std::optional<AvailableTypes>& value) {
+  if (value.has_value()) {
     // Converts a `AvailableTypes` to their string representation.
     auto availableTypesToString = []<typename T>(
                                       const T& content,
@@ -179,7 +179,7 @@ std::string ConfigOption::contentOfAvailableTypesToString(
         [&availableTypesToString](const auto& v) {
           return availableTypesToString(v, availableTypesToString);
         },
-        v.value());
+        value.value());
   } else {
     return "None";
   }
@@ -263,7 +263,7 @@ std::string ConfigOption::getDummyValueAsString() const {
         } else if constexpr (std::is_same_v<T, int>) {
           return contentOfAvailableTypesToString(42);
         } else if constexpr (std::is_same_v<T, float>) {
-          return contentOfAvailableTypesToString(float{4.2});
+          return contentOfAvailableTypesToString(static_cast<float>(4.2));
         } else if constexpr (std::is_same_v<T, std::vector<bool>>) {
           return contentOfAvailableTypesToString(std::vector{true, false});
         } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
@@ -275,7 +275,8 @@ std::string ConfigOption::getDummyValueAsString() const {
           // Must be a vector of floats.
           AD_CONTRACT_CHECK((std::is_same_v<T, std::vector<float>>));
           return contentOfAvailableTypesToString(
-              std::vector<float>{40.0, 41.1, 42.2});
+              std::vector{static_cast<float>(40.0), static_cast<float>(41.1),
+                          static_cast<float>(42.2)});
         }
       },
       data_);

@@ -77,7 +77,7 @@ void ConfigManager::verifyPathToConfigOption(
     const VectorOfKeysForJson& pathToOption,
     std::string_view optionName) const {
   // We need at least a name in the path.
-  if (pathToOption.size() == 0) {
+  if (pathToOption.empty()) {
     throw EmptyVectorException("pathToOption");
   }
 
@@ -409,7 +409,7 @@ std::string ConfigManager::vectorOfKeysForJsonToString(
 std::string ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValues()
     const {
   // Nothing to do here, if we have no configuration options.
-  if (configurationOptions_.size() == 0) {
+  if (configurationOptions_.empty()) {
     return "";
   }
 

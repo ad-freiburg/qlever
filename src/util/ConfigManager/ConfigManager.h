@@ -134,7 +134,7 @@ class ConfigManager {
     If we don't have this case, then the actual path check will be done by
     `addConfigOption`. No reason, to do it double.
     */
-    if (pathToOption.size() == 0 ||
+    if (pathToOption.empty() ||
         !std::holds_alternative<std::string>(pathToOption.back())) {
       verifyPathToConfigOption(pathToOption, "");
     }
