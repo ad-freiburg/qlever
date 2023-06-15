@@ -503,9 +503,9 @@ queries:
         ?scientist <Height> ?height .
       }
       ORDER BY DESC(?height)
-      LIMIT 2
+      LIMIT 3
     checks:
-      - num_rows: 2
+      - num_rows: 3
       - num_cols: 2
       - selected: ["?scientist", "?height"]
       - contains_row: ["<Granville_Woods>", '2.1336']
