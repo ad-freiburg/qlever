@@ -12,7 +12,7 @@ using std::string;
 
 // _____________________________________________________________________________
 size_t TextOperationWithoutFilter::getResultWidth() const {
-  size_t width = 3 + getNofVars();
+  size_t width = 2 + 2 * getNofVars();
   return width;
 }
 
@@ -100,7 +100,7 @@ void TextOperationWithoutFilter::computeResultOneVar(IdTable* idTable) const {
 
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultMultVars(IdTable* idTable) const {
-  idTable->setNumColumns(getNofVars() + 2);
+  idTable->setNumColumns(2 * getNofVars() + 2);
   getExecutionContext()->getIndex().getECListForWords(_words, getNofVars(),
                                                       _textLimit, idTable);
 }

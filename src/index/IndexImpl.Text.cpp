@@ -881,13 +881,10 @@ void IndexImpl::getECListForWords(const string& words, size_t nofVars,
                                   size_t limit, IdTable* result) const {
   LOG(DEBUG) << "In getECListForWords...\n";
   Index::WordEntityPostings wep;
-  vector<TextRecordIndex> cids;
-  vector<Id> eids;
-  vector<Score> scores;
   wep = getContextEntityScoreListsForWords(words);
   int width = result->numColumns();
   CALL_FIXED_SIZE(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
-                  cids, eids, scores, nofVars, limit, result);
+                  wep, nofVars, limit, result);
   LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
              << "\n";
 }

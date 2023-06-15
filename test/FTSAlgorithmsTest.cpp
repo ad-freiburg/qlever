@@ -434,88 +434,70 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
     });
   };
 
-  vector<TextRecordIndex> cids;
-  vector<Id> eids;
-  vector<Score> scores;
+  Index::WordEntityPostings wep;
   size_t nofVars = 2;
   size_t k = 1;
-  IdTable resW4{4, makeAllocator()};
-  int width = resW4.numColumns();
-  callFixed(width, cids, eids, scores, nofVars, k, &resW4);
-  ASSERT_EQ(0u, resW4.size());
+  IdTable resW5{5, makeAllocator()};
+  int width = resW5.numColumns();
+  callFixed(width, wep, nofVars, k, &resW5);
+  ASSERT_EQ(0u, resW5.size());
   nofVars = 5;
   k = 10;
   IdTable resWV{13, makeAllocator()};
   width = resWV.numColumns();
-  callFixed(width, cids, eids, scores, nofVars, k, &resWV);
+  callFixed(width, wep, nofVars, k, &resWV);
   ASSERT_EQ(0u, resWV.size());
 
-  cids.push_back(T(0));
-  cids.push_back(T(1));
-  cids.push_back(T(1));
-  cids.push_back(T(2));
-  cids.push_back(T(2));
-  cids.push_back(T(2));
-
-  eids.push_back(V(0));
-  eids.push_back(V(0));
-  eids.push_back(V(1));
-  eids.push_back(V(0));
-  eids.push_back(V(1));
-  eids.push_back(V(2));
-
-  scores.push_back(10);
-  scores.push_back(1);
-  scores.push_back(3);
-  scores.push_back(1);
-  scores.push_back(1);
-  scores.push_back(1);
+  wep.cids_ = {T(0), T(1), T(1), T(2), T(2), T(2)};
+  wep.eids_ = {V(0), V(0), V(1), V(0), V(1), V(2)};
+  wep.scores_ = {10, 1, 3, 1, 1, 1};
+  wep.wids_ = {1, 1, 2, 1, 3, 5};
 
   nofVars = 2;
   k = 1;
-  width = resW4.numColumns();
-  callFixed(width, cids, eids, scores, nofVars, k, &resW4);
+  width = resW5.numColumns();
+  callFixed(width, wep, nofVars, k, &resW5);
 
   // Res 0-0-0 (3) | 0-1 1-0 1-1 (2) | 0-2 1-2 2-0 2-1 2-2 (1)
-  ASSERT_EQ(9u, resW4.size());
-  std::sort(std::begin(resW4), std::end(resW4),
+  ASSERT_EQ(9u, resW5.size());
+  std::sort(std::begin(resW5), std::end(resW5),
             [](const auto& a, const auto& b) { return a[1] > b[1]; });
-  ASSERT_EQ(TextRecordId(0), resW4(0, 0));
-  ASSERT_EQ(IntId(3), resW4(0, 1));
-  ASSERT_EQ(V(0), resW4(0, 2));
-  ASSERT_EQ(V(0), resW4(0, 3));
-  ASSERT_EQ(IntId(2), resW4(1, 1));
-  ASSERT_EQ(IntId(2), resW4(2, 1));
-  ASSERT_EQ(IntId(2), resW4(3, 1));
-  ASSERT_EQ(IntId(1), resW4(4, 1));
-  ASSERT_EQ(IntId(1), resW4(5, 1));
+  ASSERT_EQ(TextRecordId(0), resW5(0, 0));
+  ASSERT_EQ(IntId(3), resW5(0, 1));
+  ASSERT_EQ(V(0), resW5(0, 2));
+  ASSERT_EQ(V(0), resW5(0, 3));
+  ASSERT_EQ(IntId(2), resW5(1, 1));
+  ASSERT_EQ(IntId(2), resW5(2, 1));
+  ASSERT_EQ(IntId(2), resW5(3, 1));
+  ASSERT_EQ(IntId(1), resW5(4, 1));
+  ASSERT_EQ(IntId(1), resW5(5, 1));
   k = 2;
-  resW4.clear();
-  callFixed(width, cids, eids, scores, nofVars, k, &resW4);
-  ASSERT_EQ(13u, resW4.size());
-  std::sort(std::begin(resW4), std::end(resW4),
+  resW5.clear();
+  callFixed(width, wep, nofVars, k, &resW5);
+  ASSERT_EQ(13u, resW5.size());
+  std::sort(std::begin(resW5), std::end(resW5),
             [](const auto& a, const auto& b) {
               return a[1] != b[1] ? a[1] > b[1] : a[0] < b[0];
             });
-  ASSERT_EQ(TextRecordId(0), resW4(0, 0));
-  ASSERT_EQ(IntId(3), resW4(0, 1));
-  ASSERT_EQ(V(0), resW4(0, 2));
-  ASSERT_EQ(V(0), resW4(0, 3));
-  ASSERT_EQ(TextRecordId(1), resW4(1, 0));
-  ASSERT_EQ(IntId(3), resW4(1, 1));
-  ASSERT_EQ(V(0), resW4(1, 2));
-  ASSERT_EQ(V(0), resW4(1, 3));
+  ASSERT_EQ(TextRecordId(0), resW5(0, 0));
+  ASSERT_EQ(IntId(3), resW5(0, 1));
+  ASSERT_EQ(V(0), resW5(0, 2));
+  ASSERT_EQ(V(0), resW5(0, 3));
+  ASSERT_EQ(TextRecordId(1), resW5(1, 0));
+  ASSERT_EQ(IntId(3), resW5(1, 1));
+  ASSERT_EQ(V(0), resW5(1, 2));
+  ASSERT_EQ(V(0), resW5(1, 3));
 
   nofVars = 3;
   k = 1;
-  IdTable resW5{5, makeAllocator()};
-  width = resW5.numColumns();
-  callFixed(width, cids, eids, scores, nofVars, k, &resW5);
-  ASSERT_EQ(27u, resW5.size());  // Res size 3^3
+  IdTable resW6{6, makeAllocator()};
+  width = resW6.numColumns();
+  callFixed(width, wep, nofVars, k, &resW6);
+  ASSERT_EQ(27u, resW6.size());  // Res size 3^3
 
   nofVars = 10;
   width = resWV.numColumns();
-  callFixed(width, cids, eids, scores, nofVars, k, &resWV);
+  callFixed(width, wep, nofVars, k, &resWV);
   ASSERT_EQ(59049u, resWV.size());  // Res size: 3^10 = 59049
 }
 

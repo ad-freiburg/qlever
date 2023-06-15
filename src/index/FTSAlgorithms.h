@@ -56,15 +56,13 @@ class FTSAlgorithms {
 
   template <int WIDTH>
   static void multVarsAggScoresAndTakeTopKContexts(
-      const vector<TextRecordIndex>& cids, const vector<Id>& eids,
-      const vector<Score>& scores, size_t nofVars, size_t kLimit,
+      const Index::WordEntityPostings& wep, size_t nofVars, size_t kLimit,
       IdTable* dynResult);
 
   // Special case with only top-1 context(s).
   template <int WIDTH>
   static void multVarsAggScoresAndTakeTopContext(
-      const vector<TextRecordIndex>& cids, const vector<Id>& eids,
-      const vector<Score>& scores, size_t nofVars, IdTable* dynResult);
+      const Index::WordEntityPostings& wep, size_t nofVars, IdTable* dynResult);
 
   template <typename Row>
   static void aggScoresAndTakeTopKContexts(vector<Row>& nonAggRes, size_t k,
@@ -223,7 +221,7 @@ class FTSAlgorithms {
       const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>&,
       vector<vector<Id>>& res);
 
-  template <int WIDTH>  // TODO: rewrite so word id is considered
+  template <int WIDTH>
   static void oneVarFilterAggScoresAndTakeTopKContexts(
       const Index::WordEntityPostings& wep,
       const ad_utility::HashMap<Id, IdTable>& fMap, size_t k,
