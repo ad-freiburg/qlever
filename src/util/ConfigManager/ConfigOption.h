@@ -70,10 +70,13 @@ class ConfigOption {
   bool configurationOptionWasSet_ = false;
 
  public:
-  // No consturctor. Must be created using `makeConfigOption`.
+  // No default consturctor.
   ConfigOption() = delete;
 
-  // Was the configuration option set to a value at runtime?
+  /*
+  @brief Was the variable, that the internal pointer points to, ever set by this
+  configuration option at run time?
+  */
   bool wasSetAtRuntime() const;
 
   /*
@@ -214,8 +217,8 @@ class ConfigOption {
   ConfigOption(const ConfigOption&) = default;
 
   /*
-  @brief Create a configuration option with a default value, whose internal
-  value can only be set to values of a specific type in a set of types.
+  @brief Create a configuration option with a default value, who modifies the
+  variable, that the given variable pointer points to, when it's set.
 
   @tparam T The value, this configuration holds.
 
@@ -240,8 +243,8 @@ class ConfigOption {
   }
 
   /*
-  @brief Create a configuration option without a default value, whose internal
-  value can only be set to values of a specific type in a set of types.
+  @brief Create a configuration option without a default value, who modifies the
+  variable, that the given variable pointer points to, when it's set.
 
   @tparam T The value, this configuration holds.
 
@@ -271,8 +274,7 @@ class ConfigOption {
   requires ad_utility::isTypeContainedIn<T, ConfigOption::AvailableTypes>
   static void verifyConstructorArguments(std::string_view identifier,
                                          T* variablePointer) {
-    // The `identifier` must be a valid `NAME` in the short hand for
-    // configurations.
+    // The `identifier` must be a valid `NAME` in the configuration short hand.
     if (!isNameInShortHand(identifier)) {
       throw NotValidShortHandNameException(
           identifier, "identifier parameter of ConfigOption constructor");
@@ -286,7 +288,7 @@ class ConfigOption {
 
   /*
   @brief Return the string representation/name of the type, of the currently
-  held alternative.
+  held alternative in the given `value`.
   */
   static std::string availableTypesToString(const AvailableTypes& value);
 

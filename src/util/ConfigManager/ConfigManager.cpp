@@ -248,8 +248,7 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
       json literal arrays, we only have to to look at `currentPtr` and its
       father. If `currentPtr` points at a json literal primitive, then it's
       valid, if it's the exact path to a configuration option, or if its father
-      is the exact path to a configuration option, and in the `stringAsJson` it
-      points to an array.
+      is the exact path to a configuration option, and it points to an array.
       */
       const nlohmann::json::json_pointer currentPtr{item.key()};
 
@@ -278,6 +277,7 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
     const nlohmann::json::json_pointer configurationOptionJsonPosition{
         configurationOptionIndex.key()};
 
+    // The corresponding `ConfigOption`.
     ConfigOption* configurationOption = &(configurationOptions_.at(
         keyToConfigurationOptionIndex_.at(configurationOptionJsonPosition)
             .get<size_t>()));
@@ -365,7 +365,8 @@ std::string ConfigManager::printConfigurationDoc(
   // List the configuration options themselves.
   for (const auto& keyValuePair :
        flattendKeyToConfigurationOptionIndex.items()) {
-    // Skip empty array 'leafs'.
+    // Because user can cause arrays with empty entries to be created, we have
+    // to skip those `null` values.
     if (keyValuePair.value().is_null()) {
       continue;
     }

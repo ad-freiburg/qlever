@@ -43,7 +43,9 @@ std::string ConfigOption::availableTypesToString(const AvailableTypes& value) {
       return "list of strings";
     } else if constexpr (std::is_same_v<T, std::vector<int>>) {
       return "list of integers";
-    } else if constexpr (std::is_same_v<T, std::vector<float>>) {
+    } else {
+      // It must be a list of floats.
+      AD_CONTRACT_CHECK((std::is_same_v<T, std::vector<float>>));
       return "list of floats";
     }
   };
