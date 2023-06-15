@@ -44,12 +44,11 @@ string IndexScan::asStringImpl(size_t indent) const {
     os << ' ';
   }
 
-  auto permutationString = permutationToString(_permutation);
+  auto permutationString = Permutation::toString(_permutation);
 
   if (getResultWidth() == 3) {
     AD_CORRECTNESS_CHECK(getResultWidth() == 3);
-    os << "SCAN FOR FULL INDEX " << permutationToString(_permutation)
-       << " (DUMMY OPERATION)";
+    os << "SCAN FOR FULL INDEX " << permutationString << " (DUMMY OPERATION)";
 
   } else {
     auto firstKeyString = permutationString.at(0);
@@ -283,6 +282,6 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
     const {
   using Arr = std::array<const TripleComponent* const, 3>;
   Arr inp{&_subject, &_predicate, &_object};
-  auto permutation = permutationToKeyOrder(_permutation);
+  auto permutation = Permutation::toKeyOrder(_permutation);
   return {inp[permutation[0]], inp[permutation[1]], inp[permutation[2]]};
 }

@@ -160,12 +160,12 @@ class IndexImpl {
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
-  Permutation pos_{"POS", ".pos", {1, 2, 0}};
-  Permutation pso_{"PSO", ".pso", {1, 0, 2}};
-  Permutation sop_{"SOP", ".sop", {0, 2, 1}};
-  Permutation spo_{"SPO", ".spo", {0, 1, 2}};
-  Permutation ops_{"OPS", ".ops", {2, 1, 0}};
-  Permutation osp_{"OSP", ".osp", {2, 0, 1}};
+  Permutation pos_{Permutation::Enum::POS};
+  Permutation pso_{Permutation::Enum::PSO};
+  Permutation sop_{Permutation::Enum::SOP};
+  Permutation spo_{Permutation::Enum::SPO};
+  Permutation ops_{Permutation::Enum::OPS};
+  Permutation osp_{Permutation::Enum::OSP};
 
  public:
   IndexImpl();
@@ -348,12 +348,6 @@ class IndexImpl {
     }
     return docsDB_.getTextExcerpt(cid);
   }
-
-  // Only for debug reasons and external encoding tests.
-  // Supply an empty vector to dump all lists above a size threshold.
-  void dumpAsciiLists(const vector<string>& lists, bool decodeGapsFreq) const;
-
-  void dumpAsciiLists(const TextBlockMetaData& tbmd) const;
 
   float getAverageNofEntityContexts() const {
     return textMeta_.getAverageNofEntityContexts();
@@ -598,8 +592,6 @@ class IndexImpl {
   void calculateBlockBoundaries();
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
-
-  bool isEntityBlockId(TextBlockIndex blockIndex) const;
 
   //! Writes a list of elements (have to be able to be cast to unit64_t)
   //! to file.

@@ -12,44 +12,6 @@ using std::string;
 class SparqlTriple;
 
 class IndexScan : public Operation {
- public:
-  static std::array<size_t, 3> permutationToKeyOrder(
-      Permutation::Enum permutation) {
-    using enum Permutation::Enum;
-    switch (permutation) {
-      case POS:
-        return {1, 2, 0};
-      case PSO:
-        return {1, 0, 2};
-      case SOP:
-        return {0, 2, 1};
-      case SPO:
-        return {0, 1, 2};
-      case OPS:
-        return {2, 1, 0};
-      case OSP:
-        return {2, 0, 1};
-    }
-  }
-
-  static std::string_view permutationToString(Permutation::Enum permutation) {
-    using enum Permutation::Enum;
-    switch (permutation) {
-      case POS:
-        return "POS";
-      case PSO:
-        return "PSO";
-      case SOP:
-        return "SOP";
-      case SPO:
-        return "SPO";
-      case OPS:
-        return "OPS";
-      case OSP:
-        return "OSP";
-    }
-  }
-
  private:
   Permutation::Enum _permutation;
   TripleComponent _subject;

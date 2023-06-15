@@ -29,8 +29,17 @@ class Permutation {
   static constexpr auto SOP = Enum::SOP;
   static constexpr auto OPS = Enum::OPS;
   static constexpr auto OSP = Enum::OSP;
+
+  // Convert a permutation to the corresponding string, etc. `PSO` is converted
+  // to "PSO".
+  static std::string_view toString(Enum permutation);
+
+  // Convert a permutation to the corresponding permutation of [0, 1, 2], etc.
+  // `PSO` is converted to [1, 0, 2].
+  static std::array<size_t, 3> toKeyOrder(Enum permutation);
+
   using MetaData = IndexMetaDataMmapView;
-  Permutation(string name, string suffix, array<unsigned short, 3> order);
+  explicit Permutation(Enum permutation);
 
   // everything that has to be done when reading an index from disk
   void loadFromDisk(const std::string& onDiskBase);
@@ -57,7 +66,7 @@ class Permutation {
   // order of the 3 keys S(0), P(1), and O(2) for which this permutation is
   // sorted. Needed for the createPermutation function in the Index class
   // e.g. {1, 0, 2} for PsO
-  const array<unsigned short, 3> _keyOrder;
+  const array<size_t, 3> _keyOrder;
 
   const MetaData& metaData() const { return _meta; }
   MetaData _meta;
