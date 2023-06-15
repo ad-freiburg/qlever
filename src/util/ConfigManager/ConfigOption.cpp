@@ -82,7 +82,10 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
       return j.is_number_integer();
     } else if constexpr (std::is_same_v<T, float>) {
       return j.is_number_float();
-    } else if constexpr (ad_utility::isVector<T>) {
+    } else {
+      // Only the vector type remains.
+      AD_CONTRACT_CHECK(ad_utility::isVector<T>);
+
       return j.is_array() &&
              [&j, &isValueTypeSubType]<typename InnerType>(const std::vector<InnerType>&) {
                return std::ranges::all_of(j, [&isValueTypeSubType](const auto& entry) {
