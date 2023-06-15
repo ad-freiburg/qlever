@@ -561,34 +561,66 @@ void specialOptionalJoin(
   }
 }
 
-// TODO<joka921> move to detail namespace
+namespace detail {
 using Range = std::pair<size_t, size_t>;
+
+// Store a contiguous random-access range (e.g. `std::vector`or `std::span`,
+// together with a pair of indices
+// `[beginIndex, endIndex)` that denote a contiguous subrange of the container.
+// Note that this approach is more robust than storing iterators or subranges
+// directly instead of indices, because many containers have their iterators
+// invalidated when they are being moved (e.g. `std::string` or `IdTable`).
 template <typename Block>
 class BlockAndSubrange {
+ private:
+  Block block_;
+  Range subrange_;
+
  public:
-  using reference_type =
-      std::iterator_traits<typename Block::iterator>::reference;
+  // The reference type of the underlying container.
+  using reference = std::iterator_traits<typename Block::iterator>::reference;
+
+  // Construct from a container object, the initial subrange will represent the
+  // whole container.
   explicit BlockAndSubrange(Block block)
       : block_{std::move(block)}, subrange_{0, block_.size()} {}
-  reference_type back() { return block_[subrange_.second - 1]; }
+
+  // Return a reference to the last element of the currently specified subrange.
+  reference back() {
+    AD_CORRECTNESS_CHECK(subrange_.second - 1 < block_.size());
+    return block_[subrange_.second - 1];
+  }
+
+  // Return the currently specified subrange as a `std::ranges::subrange`
+  // object.
   auto subrange() {
     return std::ranges::subrange{block_.begin() + subrange_.first,
                                  block_.begin() + subrange_.second};
   }
+
+  // The const overload of the `subrange` method (see above).
   auto subrange() const {
     return std::ranges::subrange{block_.begin() + subrange_.first,
                                  block_.begin() + subrange_.second};
   }
-  void setSubrange(auto it1, auto it2) {
-    // TODO<joka921> Add assertions that the iterators are valid.
-    subrange_.first = it1 - block_.begin();
-    subrange_.second = it2 - block_.begin();
-  }
 
- private:
-  Block block_;
-  Range subrange_;
+  // Specify the subrange by using two iterators `begin` and `end`. The
+  // iterators must be valid iterators that point into the container, this is
+  // checked by an assertion. The only legal way to obtain such iterators is to
+  // call `subrange()` and then to extract valid iterators from the returned
+  // subrange.
+  void setSubrange(auto begin, auto end) {
+    auto checkIt = [this](const auto& it) {
+      AD_CONTRACT_CHECK(block_.begin() <= it && it <= block_.end());
+    };
+    checkIt(begin);
+    checkIt(end);
+    AD_CONTRACT_CHECK(begin <= end);
+    subrange_.first = begin - block_.begin();
+    subrange_.second = end - block_.begin();
+  }
 };
+}  // namespace detail
 
 /**
  * @brief Perform a zipper/merge join between two sorted inputs that are given
@@ -652,8 +684,8 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
 
   // In these buffers we will store blocks that all contain the same elements
   // and thus their cartesian products match.
-  std::vector<BlockAndSubrange<LeftBlock>> sameBlocksLeft;
-  std::vector<BlockAndSubrange<RightBlock>> sameBlocksRight;
+  std::vector<detail::BlockAndSubrange<LeftBlock>> sameBlocksLeft;
+  std::vector<detail::BlockAndSubrange<RightBlock>> sameBlocksRight;
 
   auto getMinEl = [&leftProjection, &rightProjection, &sameBlocksLeft,
                    &sameBlocksRight, &lessThan]() -> ProjectedEl {

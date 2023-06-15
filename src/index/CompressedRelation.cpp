@@ -240,14 +240,6 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
     AD_CORRECTNESS_CHECK(endBlock - beginBlock <= 1);
   }
 
-  LOG(WARN) << "col0 " << metadata.col0Id_ << " col1 " << col1Id << std::endl;
-  for (const auto& block : relevantBlocks) {
-    LOG(WARN) << "first " << block.firstTriple_[0] << block.firstTriple_[1]
-              << block.lastTriple_[2] << std::endl;
-    LOG(WARN) << "last " << block.lastTriple_[0] << block.lastTriple_[1]
-              << block.lastTriple_[2] << std::endl;
-  }
-
   // The first and the last block might be incomplete (that is, only
   // a part of these blocks is actually part of the result,
   // set up a lambda which allows us to read these blocks, and returns
