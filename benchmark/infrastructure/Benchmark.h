@@ -29,6 +29,16 @@ namespace ad_benchmark {
  * organizing those measured times.
  */
 class BenchmarkResults {
+  /*
+  A quick explanation, **why** this class uses pointers:
+  All the container for benchmark measurements are created in place and then a
+  reference to the new container returned. This returning of a reference is the
+  sole reason for the usage of pointers.
+  Otherwise adding more entries to the vectors, could lead to all previous
+  references being made invalid, because a vector had to re-allocate memory.
+  If the entries are pointers to the objects, the references to the object stay
+  valid and we don't have this problem.
+  */
   template <typename T>
   using PointerVector = std::vector<ad_utility::CopyableUniquePtr<T>>;
 

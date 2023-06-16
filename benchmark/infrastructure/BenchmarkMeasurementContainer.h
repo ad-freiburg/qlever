@@ -97,6 +97,17 @@ class ResultEntry : public BenchmarkMetadataGetter {
 class ResultGroup : public BenchmarkMetadataGetter {
   // Needed for identifying groups.
   std::string descriptor_;
+
+  /*
+  A quick explanation, **why** this class uses pointers:
+  New members are created in place and then a reference to the new member
+  returned. This returning of a reference is the sole reason for the usage of
+  pointers.
+  Otherwise adding more entries to the vectors, could lead to all
+  previous references being made invalid, because a vector had to re-allocate
+  memory. If the entries are pointers to the objects, the references to the
+  object stay valid and we don't have this problem.
+  */
   // Members of the group.
   std::vector<ad_utility::CopyableUniquePtr<ResultEntry>> entries_;
 
