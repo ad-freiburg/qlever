@@ -5,7 +5,6 @@
 #include "util/ConfigManager/ConfigOption.h"
 
 #include <absl/strings/str_cat.h>
-#include <bits/ranges_algo.h>
 
 #include <array>
 #include <optional>
