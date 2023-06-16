@@ -111,11 +111,15 @@ class BenchmarkResults {
   std::vector<ResultGroup> getGroups() const;
 
   /*
-   * @brief Creates and returns an empty table.
-   *
-   * @param descriptor The name/identifier of the table.
-   * @param rowNames,columnNames The names for the rows/columns.
-   */
+  @brief Creates and returns an empty table.
+
+  @param descriptor A string to identify this instance in json format later.
+  @param rowNames The names for the rows. The amount of rows in this table is
+  equal to the amount of row names. Important: This first column will be filled
+  with those names.
+  @param columnNames The names for the columns. The amount of columns in this
+  table is equal to the amount of column names.
+  */
   ResultTable& addTable(const std::string& descriptor,
                         const std::vector<std::string>& rowNames,
                         const std::vector<std::string>& columnNames);

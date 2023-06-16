@@ -48,12 +48,12 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
   ResultGroup group("group");
 
   ASSERT_EQ(group.descriptor_, "group");
-  ASSERT_EQ(group.entries_.size(), 0);
+  ASSERT_EQ(group.resultEntries_.size(), 0);
 
   // Adding a measurement and checking, if it was added correctly.
   ResultEntry& entry = group.addMeasurement("new entry", createWaitLambda(100));
 
-  ASSERT_EQ(group.entries_.size(), 1);
+  ASSERT_EQ(group.resultEntries_.size(), 1);
   ASSERT_EQ(entry.descriptor_, "new entry");
 
   // The time measurements can't be 100% accurat, so we give it a 'window'.

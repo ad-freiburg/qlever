@@ -2,11 +2,10 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel February of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkResultToString.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
 
+#include "../benchmark/infrastructure/BenchmarkResultToString.h"
 #include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
 #include "util/Exception.h"
@@ -136,14 +135,20 @@ void addGroupsToOStringstream(std::ostringstream* stream,
 }
 
 // ___________________________________________________________________________
+void addVectorOfResultTableToOStringstream(
+    std::ostringstream* stream, const std::vector<ResultTable>& tables) {
+  addListToOStringStream(
+      stream, tables,
+      [](const ResultTable& table) { return static_cast<std::string>(table); },
+      "\n\n");
+}
+
+// ___________________________________________________________________________
 void addTablesToOStringstream(std::ostringstream* stream,
                               const std::vector<ResultTable>& resultTables) {
   addCategoryTitleToOStringstream(stream, "Table benchmarks");
   (*stream) << "\n";
-  addListToOStringStream(
-      stream, resultTables,
-      [](const ResultTable& table) { return static_cast<std::string>(table); },
-      "\n\n");
+  addVectorOfResultTableToOStringstream(stream, resultTables);
 }
 
 // ___________________________________________________________________________
