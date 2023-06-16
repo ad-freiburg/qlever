@@ -9,7 +9,8 @@
 #include "./IndexImpl.h"
 
 // ____________________________________________________________
-Index::Index() : pimpl_{std::make_unique<IndexImpl>()} {}
+Index::Index(ad_utility::AllocatorWithLimit<Id> allocator)
+    : pimpl_{std::make_unique<IndexImpl>(std::move(allocator))} {}
 Index::Index(Index&&) noexcept = default;
 
 // Needs to be in the .cpp file because of the unique_ptr to a forwarded class.

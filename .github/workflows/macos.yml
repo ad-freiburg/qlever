@@ -1,4 +1,4 @@
-name: Native build with conan
+name: Native build with conan on MacOS
 
 on:
   push:
@@ -20,9 +20,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        warnings: [  "-Wall -Wextra -Werror " ]
+        warnings: [  "-Wall -Wextra -Werror -fsanitize=address -fno-omit-frame-pointer" ]
         build-type: [Release]
-    runs-on: ubuntu-22.04
+    runs-on: macos-12
 
 
     steps:
@@ -30,26 +30,42 @@ jobs:
       with:
         submodules: 'recursive'
 
+    - name: Install ICU dependency for python (only needed for E2E test)
+      run: |
+        brew install pkg-config icu4c 
+        echo PATH="/usr/local/opt/icu4c/bin:/usr/local/opt/icu4c/sbin:$PATH" >> $GITHUB_ENV
+        echo PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/opt/icu4c/lib/pkgconfig" >> $GITHUB_ENV
+    - name: Install python dependencies for E2E tests
+      run: |
+        pip3 install pyaml pyicu
+
     - name: Install dependencies
       run:  |
-        sudo gem install apt-spy2 && sudo apt-spy2 fix --commit --launchpad --country=US
-        sudo apt-get update
-        sudo apt-get install build-essential 
+        brew install llvm@16
+        brew install conan@2
+        echo 'export PATH="/usr/local/opt/llvm/bin:$PATH"' >> ~/.bash_profile
+        echo PATH="/usr/local/opt/llvm/bin:$PATH" >> $GITHUB_ENV 
+        source ~/.bash_profile
+    - name: Pring clang version
+      run: clang++ --version
 
-    - name: Python dependencies
-      run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
+    - name: Cache for conan
+      uses: actions/cache@v3
+      env:
+        cache-name: cache-conan-modules
+      with:
+        path: ~/.conan2
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('conanfile.txt') }}
     - name: Create build directory
       run: mkdir ${{github.workspace}}/build
     - name: Install and run conan
       working-directory: ${{github.workspace}}/build
       run: >
-        sudo pip3 install conan;
-        conan profile detect;
-        conan install .. -pr:b=default -of=. ;
+        conan install .. -pr:b=../conanprofiles/clang-16-macos -pr:h=../conanprofiles/clang-16-macos -of=. --build=missing;
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=DEBUG -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false -DENABLE_EXPENSIVE_CHECKS=true
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false -DENABLE_EXPENSIVE_CHECKS=true -DCMAKE_CXX_COMPILER=clang++
 
     - name: Build
         # Build your program with the given configuration
@@ -72,5 +88,4 @@ jobs:
     - name: E2E
       run: >
         source ${{github.workspace}}/build/conanrun.sh;
-        ${{github.workspace}}/e2e/e2e.sh
-
+        ${{github.workspace}}/e2e/e2e.sh;

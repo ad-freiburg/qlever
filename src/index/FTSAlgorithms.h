@@ -43,10 +43,6 @@ class FTSAlgorithms {
                                        vector<TextRecordIndex>& resultCids,
                                        vector<Score>& resultScores);
 
-  static void getTopKByScores(const vector<Id>& cids,
-                              const vector<Score>& scores, size_t k,
-                              WidthOneList* result);
-
   static void aggScoresAndTakeTopKContexts(const Index::WordEntityPostings& wep,
                                            size_t k, IdTable* dynResult);
 

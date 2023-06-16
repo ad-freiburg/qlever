@@ -157,18 +157,20 @@ class IndexImpl {
    */
   CompactVectorOfStrings<Id> hasPredicate_;
 
+  ad_utility::AllocatorWithLimit<Id> allocator_;
+
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
-  Permutation pos_{"POS", ".pos", {1, 2, 0}};
-  Permutation pso_{"PSO", ".pso", {1, 0, 2}};
-  Permutation sop_{"SOP", ".sop", {0, 2, 1}};
-  Permutation spo_{"SPO", ".spo", {0, 1, 2}};
-  Permutation ops_{"OPS", ".ops", {2, 1, 0}};
-  Permutation osp_{"OSP", ".osp", {2, 0, 1}};
+  Permutation pos_{"POS", ".pos", {1, 2, 0}, allocator_};
+  Permutation pso_{"PSO", ".pso", {1, 0, 2}, allocator_};
+  Permutation sop_{"SOP", ".sop", {0, 2, 1}, allocator_};
+  Permutation spo_{"SPO", ".spo", {0, 1, 2}, allocator_};
+  Permutation ops_{"OPS", ".ops", {2, 1, 0}, allocator_};
+  Permutation osp_{"OSP", ".osp", {2, 0, 1}, allocator_};
 
  public:
-  IndexImpl();
+  IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
 
   // Forbid copying.
   IndexImpl& operator=(const IndexImpl&) = delete;
