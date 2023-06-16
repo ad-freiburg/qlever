@@ -30,6 +30,8 @@ class Permutation {
   static constexpr auto OPS = Enum::OPS;
   static constexpr auto OSP = Enum::OSP;
 
+  using MetaData = IndexMetaDataMmapView;
+  using Allocator = ad_utility::AllocatorWithLimit<Id>;
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".
   static std::string_view toString(Enum permutation);
@@ -38,8 +40,7 @@ class Permutation {
   // `PSO` is converted to [1, 0, 2].
   static std::array<size_t, 3> toKeyOrder(Enum permutation);
 
-  using MetaData = IndexMetaDataMmapView;
-  explicit Permutation(Enum permutation);
+  explicit Permutation(Enum permutation, Allocator allocator);
 
   // everything that has to be done when reading an index from disk
   void loadFromDisk(const std::string& onDiskBase);

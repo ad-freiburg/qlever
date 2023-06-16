@@ -30,7 +30,8 @@
 using std::array;
 
 // _____________________________________________________________________________
-IndexImpl::IndexImpl() = default;
+IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
+    : allocator_{std::move(allocator)} {};
 
 // _____________________________________________________________________________
 template <class Parser>

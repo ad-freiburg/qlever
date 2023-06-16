@@ -8,11 +8,12 @@
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
-Permutation::Permutation(Enum permutation)
+Permutation::Permutation(Enum permutation, Allocator allocator)
     : readableName_(toString(permutation)),
       fileSuffix_(
           absl::StrCat(".", ad_utility::getLowercaseUtf8(readableName_))),
-      keyOrder_(toKeyOrder(permutation)) {}
+      keyOrder_(toKeyOrder(permutation)),
+      reader_{std::move(allocator)} {}
 
 // _____________________________________________________________________
 void Permutation::loadFromDisk(const std::string& onDiskBase) {
