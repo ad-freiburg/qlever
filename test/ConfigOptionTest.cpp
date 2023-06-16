@@ -97,13 +97,13 @@ ConversionTestCase<T> getConversionTestCase() {
   } else if constexpr (std::is_same_v<T, std::vector<int>>) {
     return ConversionTestCase<std::vector<int>>{
         std::vector{42, 42}, nlohmann::json::parse(R"--([42, 42])--")};
-  } else if constexpr (std::is_same_v<T, std::vector<float>>) {
+  } else {
+    // Must be a vector of floats.
+    AD_CONTRACT_CHECK((std::is_same_v<T, std::vector<float>>));
+
     return ConversionTestCase<std::vector<float>>{
         std::vector<float>{42.5, 42.5},
         nlohmann::json::parse(R"--([42.5, 42.5])--")};
-  } else {
-    // We got a type, for which we have no handeling.
-    AD_CONTRACT_CHECK(false);
   }
 }
 

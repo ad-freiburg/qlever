@@ -154,7 +154,10 @@ std::string ConfigOption::contentOfAvailableTypesToString(
         return content ? std::string{"true"} : std::string{"false"};
       } else if constexpr (std::is_arithmetic_v<T>) {
         return std::to_string(content);
-      } else if constexpr (ad_utility::isVector<T>) {
+      } else {
+        // Is must be a vector.
+        AD_CONTRACT_CHECK((ad_utility::isVector<T>));
+
         std::ostringstream stream;
         stream << "{";
         forEachExcludingTheLastOne(
@@ -168,9 +171,6 @@ std::string ConfigOption::contentOfAvailableTypesToString(
             });
         stream << "}";
         return stream.str();
-      } else {
-        // A possible alternative has no conversion.
-        AD_CONTRACT_CHECK(false);
       }
     };
 
