@@ -43,7 +43,7 @@ std::string ConfigOption::availableTypesToString(const AvailableTypes& value) {
       return "list of integers";
     } else {
       // It must be a list of floats.
-      AD_CONTRACT_CHECK((std::is_same_v<T, std::vector<float>>));
+      static_assert(std::is_same_v<T, std::vector<float>>);
       return "list of floats";
     }
   };
@@ -85,7 +85,7 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
       return j.is_number_float();
     } else {
       // Only the vector type remains.
-      AD_CONTRACT_CHECK(ad_utility::isVector<T>);
+      static_assert(ad_utility::isVector<T>);
 
       return j.is_array() && [&j, &isValueTypeSubType]<typename InnerType>(
                                  const std::vector<InnerType>&) {
@@ -156,17 +156,24 @@ std::string ConfigOption::contentOfAvailableTypesToString(
         return std::to_string(content);
       } else {
         // Is must be a vector.
-        AD_CONTRACT_CHECK((ad_utility::isVector<T>));
+        static_assert(ad_utility::isVector<T>);
+
+        /*
+        We have to use the EXPLICIT type, because a vector of bools uses a
+        special 1 bit data type for it's entry references, instead of a bool. So
+        an `auto` would land the recursive call right back in this else case.
+        */
+        using VectorEntryType = T::value_type;
 
         std::ostringstream stream;
         stream << "{";
         forEachExcludingTheLastOne(
             content,
-            [&stream, &variantSubTypetoString](const auto& entry) {
+            [&stream, &variantSubTypetoString](const VectorEntryType& entry) {
               stream << variantSubTypetoString(entry, variantSubTypetoString)
                      << ", ";
             },
-            [&stream, &variantSubTypetoString](const auto& entry) {
+            [&stream, &variantSubTypetoString](const VectorEntryType& entry) {
               stream << variantSubTypetoString(entry, variantSubTypetoString);
             });
         stream << "}";
@@ -240,7 +247,7 @@ nlohmann::json ConfigOption::getDummyValueAsJson() const {
           return nlohmann::json(std::vector{40, 41, 42});
         } else {
           // Must be a vector of floats.
-          AD_CONTRACT_CHECK((std::is_same_v<T, std::vector<float>>));
+          static_assert(std::is_same_v<T, std::vector<float>>);
           return nlohmann::json(std::vector{40.0, 41.1, 42.2});
         }
       },
@@ -272,7 +279,7 @@ std::string ConfigOption::getDummyValueAsString() const {
           return contentOfAvailableTypesToString(std::vector{40, 41, 42});
         } else {
           // Must be a vector of floats.
-          AD_CONTRACT_CHECK((std::is_same_v<T, std::vector<float>>));
+          static_assert(std::is_same_v<T, std::vector<float>>);
           return contentOfAvailableTypesToString(
               std::vector{static_cast<float>(40.0), static_cast<float>(41.1),
                           static_cast<float>(42.2)});

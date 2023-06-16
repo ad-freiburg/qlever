@@ -99,7 +99,7 @@ ConversionTestCase<T> getConversionTestCase() {
         std::vector{42, 42}, nlohmann::json::parse(R"--([42, 42])--")};
   } else {
     // Must be a vector of floats.
-    AD_CONTRACT_CHECK((std::is_same_v<T, std::vector<float>>));
+    static_assert(std::is_same_v<T, std::vector<float>>);
 
     return ConversionTestCase<std::vector<float>>{
         std::vector<float>{42.5, 42.5},
