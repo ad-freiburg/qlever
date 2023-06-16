@@ -106,6 +106,7 @@ class ResultTable : public BenchmarkMetadataGetter {
 
   // Needed for testing purposes.
   FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultTable);
+  FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultGroup);
 
  public:
   /*
