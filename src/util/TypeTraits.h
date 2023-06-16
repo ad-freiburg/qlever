@@ -97,6 +97,13 @@ constexpr static bool isTuple = isInstantiation<T, std::tuple>;
 template <typename T>
 constexpr static bool isVariant = isInstantiation<T, std::variant>;
 
+/// isArray<T> is true if and only if `T` is an instantiation of `std::array`.
+template <typename T>
+constexpr static bool isArray = false;
+
+template <typename T, size_t N>
+constexpr static bool isArray<std::array<T, N>> = true;
+
 /// Two types are similar, if they are the same when we remove all cv (const or
 /// volatile) qualifiers and all references
 template <typename T, typename U>

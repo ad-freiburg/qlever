@@ -67,7 +67,7 @@ class Index {
   /// Allow move construction, which is mostly used in unit tests.
   Index(Index&&) noexcept;
 
-  Index();
+  Index(ad_utility::AllocatorWithLimit<Id> allocator);
   ~Index();
 
   // Get underlying access to the Pimpl where necessary.
