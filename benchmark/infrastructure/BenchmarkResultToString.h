@@ -83,11 +83,10 @@ void addVectorOfResultEntryToOStringstream(
     const std::string& vectorEntryPrefix, const std::string& newLinePrefix);
 
 /*
-@brief Add a vector of `ResultTable` in their string form to the string stream
-in form of a list.
+@brief Return a vector of `ResultTable` in their string form in form of a list.
 */
-void addVectorOfResultTableToOStringstream(
-    std::ostringstream* stream, const std::vector<ResultTable>& tables);
+std::string vectorOfResultTableToListString(
+    const std::vector<ResultTable>& tables);
 
 // Visualization for single measurments.
 void addSingleMeasurementsToOStringstream(

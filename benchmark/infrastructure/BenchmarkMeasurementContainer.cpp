@@ -95,14 +95,10 @@ ResultGroup::operator std::string() const {
   // Listing all the `ResultTable`s, if there are any.
   stream << "\n\nTables:";
   addWithFunctionOrNone(resultTables_, [&stream, this]() {
-    // We have to convert things a bit, if we want to indent this list.
-    std::ostringstream tableList;
-    addVectorOfResultTableToOStringstream(
-        &tableList,
-        ad_utility::transform(resultTables_,
-                              [](const auto& pointer) { return (*pointer); }));
-
-    stream << addIndentation(tableList.str(), 1);
+    stream << addIndentation(
+        vectorOfResultTableToListString(ad_utility::transform(
+            resultTables_, [](const auto& pointer) { return (*pointer); })),
+        1);
   });
 
   return absl::StrCat(prefix, addIndentation(stream.str(), 1));
