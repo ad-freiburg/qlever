@@ -330,18 +330,18 @@ struct GroupBySpecialCount : ::testing::Test {
   Variable varA{"?a"};
   QueryExecutionContext* qec = getQec();
   SparqlTriple xyzTriple{Variable{"?x"}, "?y", Variable{"?z"}};
-  Tree xyzScanSortedByX = makeExecutionTree<IndexScan>(
-      qec, IndexScan::FULL_INDEX_SCAN_SOP, xyzTriple);
-  Tree xyzScanSortedByY = makeExecutionTree<IndexScan>(
-      qec, IndexScan::FULL_INDEX_SCAN_POS, xyzTriple);
+  Tree xyzScanSortedByX =
+      makeExecutionTree<IndexScan>(qec, Permutation::Enum::SOP, xyzTriple);
+  Tree xyzScanSortedByY =
+      makeExecutionTree<IndexScan>(qec, Permutation::Enum::POS, xyzTriple);
   Tree xScan = makeExecutionTree<IndexScan>(
-      qec, IndexScan::PSO_BOUND_S,
+      qec, Permutation::Enum::PSO,
       SparqlTriple{{"<x>"}, {"<label>"}, Variable{"?x"}});
   Tree xyScan = makeExecutionTree<IndexScan>(
-      qec, IndexScan::PSO_FREE_S,
+      qec, Permutation::Enum::PSO,
       SparqlTriple{Variable{"?x"}, {"<label>"}, Variable{"?y"}});
   Tree xScanEmptyResult = makeExecutionTree<IndexScan>(
-      qec, IndexScan::PSO_BOUND_S,
+      qec, Permutation::Enum::PSO,
       SparqlTriple{{"<x>"}, {"<notInKg>"}, Variable{"?x"}});
 
   Tree invalidJoin = makeExecutionTree<Join>(qec, xScan, xScan, 0, 0);
