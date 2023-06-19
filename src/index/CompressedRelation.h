@@ -351,7 +351,8 @@ class CompressedRelationReader {
   // else the behavior is undefined.
   DecompressedBlock readPossiblyIncompleteBlock(
       const CompressedRelationMetadata& metadata, Id col1Id,
-      ad_utility::File& file, const CompressedBlockMetadata& blockMetadata) const;
+      ad_utility::File& file,
+      const CompressedBlockMetadata& blockMetadata) const;
 };
 
 #endif  // QLEVER_COMPRESSEDRELATION_H
