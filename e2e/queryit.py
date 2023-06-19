@@ -50,7 +50,7 @@ def eprint(*args, color=Color.FAIL, **kwargs):
 
 
 def exec_query(endpoint_url: str, sparql: str, action,
-               max_send: int = 4096) -> [None, Dict[str, Any]]:
+               max_send: int = 5000) -> [None, Dict[str, Any]]:
     """
     Execute a single SPARQL query against the given endpoint
     """

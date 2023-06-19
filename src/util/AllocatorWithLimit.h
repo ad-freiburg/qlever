@@ -216,6 +216,18 @@ class AllocatorWithLimit {
   }
 };
 
+// Return a new allocator with the specified limit.
+template <typename T>
+AllocatorWithLimit<T> makeAllocatorWithLimit(size_t limit) {
+  return AllocatorWithLimit<T>{makeAllocationMemoryLeftThreadsafeObject(limit)};
+}
+
+// Return a new allocator with the maximal possible limit.
+template <typename T>
+AllocatorWithLimit<T> makeUnlimitedAllocator() {
+  return makeAllocatorWithLimit<T>(std::numeric_limits<size_t>::max());
+}
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_ALLOCATORWITHLIMIT_H

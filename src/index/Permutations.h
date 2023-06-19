@@ -27,10 +27,13 @@ class Permutation {
   static constexpr auto OPS = Enum::OPS;
   static constexpr auto OSP = Enum::OSP;
   using MetaData = IndexMetaDataMmapView;
-  Permutation(string name, string suffix, array<unsigned short, 3> order)
+  using Allocator = ad_utility::AllocatorWithLimit<Id>;
+  Permutation(string name, string suffix, array<unsigned short, 3> order,
+              Allocator allocator)
       : _readableName(std::move(name)),
         _fileSuffix(std::move(suffix)),
-        _keyOrder(order) {}
+        _keyOrder(order),
+        _reader(std::move(allocator)) {}
 
   // everything that has to be done when reading an index from disk
   void loadFromDisk(const std::string& onDiskBase) {

@@ -13,18 +13,21 @@ using ad_utility::TimeoutTimer;
 using ad_utility::Timer;
 using namespace std::chrono_literals;
 
+// On macOS the timer seems to work, but the `sleep_for` is too imprecise.
+#ifndef __APPLE__
+
 void testTime(Timer::Duration duration, size_t msecs,
               std::chrono::milliseconds expected) {
   auto lowerBound = 0.9 * expected;
   auto upperBound = 1.1 * expected + 3ms;
-  ASSERT_GE(duration, lowerBound);
-  ASSERT_LE(duration, upperBound);
+  EXPECT_GE(duration, lowerBound);
+  EXPECT_LE(duration, upperBound);
 
-  ASSERT_GE(msecs, lowerBound.count());
-  ASSERT_LE(msecs, upperBound.count());
+  EXPECT_GE(msecs, lowerBound.count());
+  EXPECT_LE(msecs, upperBound.count());
 
-  ASSERT_GE(Timer::toSeconds(duration), 0.001 * lowerBound.count());
-  ASSERT_LE(Timer::toSeconds(duration), 0.001 * upperBound.count());
+  EXPECT_GE(Timer::toSeconds(duration), 0.001 * lowerBound.count());
+  EXPECT_LE(Timer::toSeconds(duration), 0.001 * upperBound.count());
 }
 
 void testTime(const ad_utility::Timer& timer,
@@ -139,3 +142,5 @@ TEST(TimeBlockAndLog, TimeBlockAndLog) {
   }
   ASSERT_THAT(s, ::testing::MatchesRegex("message: 2[5-9]"));
 }
+
+#endif
