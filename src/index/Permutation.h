@@ -69,8 +69,7 @@ class Permutation {
   // e.g. ".pos"
   const std::string fileSuffix_;
   // order of the 3 keys S(0), P(1), and O(2) for which this permutation is
-  // sorted. Needed for the createPermutation function in the Index class
-  // e.g. {1, 0, 2} for PsO
+  // sorted, for example {1, 0, 2} for PSO.
   const array<size_t, 3> keyOrder_;
 
   const MetaData& metaData() const { return meta_; }

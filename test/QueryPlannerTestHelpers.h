@@ -39,7 +39,7 @@ auto IndexScan(TripleComponent subject, TripleComponent predicate,
                const std::vector<Permutation::Enum>& allowedPermutations = {})
     -> Matcher<const QueryExecutionTree&> {
   auto permutationMatcher = allowedPermutations.empty()
-                                ? A<Permutation::Enum>()
+                                ? ::testing::A<Permutation::Enum>()
                                 : AnyOfArray(allowedPermutations);
   return RootOperation<::IndexScan>(
       AllOf(Property(&IndexScan::permutation, permutationMatcher),
