@@ -27,7 +27,6 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                     static_cast<size_t>(predicate_.isVariable()) +
                     static_cast<size_t>(object_.isVariable())),
       sizeEstimate_(computeSizeEstimate()) {
-
   // Check the following invariant: The permuted input triple must contain at
   // least one variable, and all the variables must be at the end of the
   // permuted triple. For example in the PSO permutation, either only the O, or
