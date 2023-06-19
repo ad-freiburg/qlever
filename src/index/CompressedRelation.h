@@ -245,7 +245,7 @@ class CompressedRelationReader {
   mutable Allocator allocator_;
 
  public:
-  CompressedRelationReader(Allocator allocator)
+  explicit CompressedRelationReader(Allocator allocator)
       : allocator_{std::move(allocator)} {}
   /**
    * @brief For a permutation XYZ, retrieve all YZ for a given X.
@@ -340,8 +340,18 @@ class CompressedRelationReader {
   // If `columnIndices` is `nullopt`, then all columns of the block are read,
   // else only the specified columns are read.
   DecompressedBlock readAndDecompressBlock(
-      const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
+      const CompressedBlockMetadata& blockMetadata, ad_utility::File& file,
       std::optional<std::vector<size_t>> columnIndices) const;
+
+  // Read the block that is identified by the `blockMetadata` from the `file`,
+  // decompress and return it. Before returning, delete all rows where the col0
+  // ID / relation ID does not correspond with the `metadata`, or where the
+  // `col1Id` doesn't match. For this to work, the block has to be one of the
+  // blocks that actually store triples from the given `metadata`'s relation,
+  // else the behavior is undefined.
+  DecompressedBlock readPossiblyIncompleteBlock(
+      const CompressedRelationMetadata& metadata, Id col1Id,
+      ad_utility::File& file, const CompressedBlockMetadata& blockMetadata) const;
 };
 
 #endif  // QLEVER_COMPRESSEDRELATION_H

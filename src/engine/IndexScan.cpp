@@ -26,9 +26,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       numVariables_(static_cast<size_t>(subject_.isVariable()) +
                     static_cast<size_t>(predicate_.isVariable()) +
                     static_cast<size_t>(object_.isVariable())),
-      sizeEstimate_(std::numeric_limits<size_t>::max()) {
-  precomputeSizeEstimate();
-
+      sizeEstimate_(computeSizeEstimate()) {
   auto permutedTriple = getPermutedTriple();
   for (size_t i = 0; i < 3 - numVariables_; ++i) {
     AD_CONTRACT_CHECK(!permutedTriple.at(i)->isVariable());

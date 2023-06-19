@@ -63,9 +63,7 @@ class IndexScan : public Operation {
     return multiplicity_[col];
   }
 
-  void precomputeSizeEstimate() { sizeEstimate_ = computeSizeEstimate(); }
-
-  bool knownEmptyResult() override { return getSizeEstimateBeforeLimit() == 0; }
+  bool knownEmptyResult() override { return getExactSize() == 0; }
 
   // Currently only the full scans support a limit clause.
   [[nodiscard]] bool supportsLimit() const override {

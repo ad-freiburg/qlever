@@ -170,7 +170,7 @@ class IndexImpl {
   Permutation osp_{Permutation::Enum::OSP, allocator_};
 
  public:
-  IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
+  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
 
   // Forbid copying.
   IndexImpl& operator=(const IndexImpl&) = delete;
