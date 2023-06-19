@@ -29,6 +29,11 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       sizeEstimate_(std::numeric_limits<size_t>::max()) {
   precomputeSizeEstimate();
 
+  // Check the following invariant: The permuted input triple must contain at
+  // least one variable, and all the variables must be at the end of the
+  // permuted triple. For example in the PSO permutation, either only the O, or
+  // the S and O, or all three of P, S, O can be variables, all other
+  // combinations are not supported.
   auto permutedTriple = getPermutedTriple();
   for (size_t i = 0; i < 3 - numVariables_; ++i) {
     AD_CONTRACT_CHECK(!permutedTriple.at(i)->isVariable());
@@ -94,18 +99,18 @@ vector<ColumnIndex> IndexScan::resultSortedOn() const {
 
 // _____________________________________________________________________________
 VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
-  VariableToColumnMap res;
+  VariableToColumnMap variableToColumnMap;
   // All the columns of an index scan only contain defined values.
   auto makeCol = makeAlwaysDefinedColumn;
-  auto col = ColumnIndex{0};
+  auto nextColIdx = ColumnIndex{0};
 
   for (const TripleComponent* const ptr : getPermutedTriple()) {
     if (ptr->isVariable()) {
-      res[ptr->getVariable()] = makeCol(col);
-      ++col;
+      variableToColumnMap[ptr->getVariable()] = makeCol(nextColIdx);
+      ++nextColIdx;
     }
   }
-  return res;
+  return variableToColumnMap;
 }
 // _____________________________________________________________________________
 ResultTable IndexScan::computeResult() {
@@ -114,13 +119,13 @@ ResultTable IndexScan::computeResult() {
 
   using enum Permutation::Enum;
   idTable.setNumColumns(numVariables_);
-  const auto& idx = _executionContext->getIndex();
+  const auto& index = _executionContext->getIndex();
   const auto permutedTriple = getPermutedTriple();
   if (numVariables_ == 2) {
-    idx.scan(*permutedTriple[0], &idTable, permutation_, _timeoutTimer);
+    index.scan(*permutedTriple[0], &idTable, permutation_, _timeoutTimer);
   } else if (numVariables_ == 1) {
-    idx.scan(*permutedTriple[0], *permutedTriple[1], &idTable, permutation_,
-             _timeoutTimer);
+    index.scan(*permutedTriple[0], *permutedTriple[1], &idTable, permutation_,
+               _timeoutTimer);
   } else {
     AD_CORRECTNESS_CHECK(numVariables_ == 3);
     computeFullScan(&idTable, permutation_);
@@ -162,7 +167,7 @@ size_t IndexScan::computeSizeEstimate() {
         return sizeEstimate;
       }
     } else if (getResultWidth() == 2) {
-      const auto& firstKey = *getPermutedTriple()[0];
+      const TripleComponent& firstKey = *getPermutedTriple()[0];
       return getIndex().getCardinality(firstKey, permutation_);
     } else {
       // The triple consists of three variables.
@@ -281,8 +286,8 @@ void IndexScan::computeFullScan(IdTable* result,
 // ___________________________________________________________________________
 std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
     const {
-  using Arr = std::array<const TripleComponent* const, 3>;
-  Arr inp{&subject_, &predicate_, &object_};
+  std::array triple{&subject_, &predicate_, &object_};
   auto permutation = Permutation::toKeyOrder(permutation_);
-  return {inp[permutation[0]], inp[permutation[1]], inp[permutation[2]]};
+  return {triple[permutation[0]], triple[permutation[1]],
+          triple[permutation[2]]};
 }
