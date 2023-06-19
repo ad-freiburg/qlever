@@ -271,6 +271,65 @@ void CompressedRelationReader::scan(
 }
 
 // _____________________________________________________________________________
+size_t CompressedRelationReader::getResultSizeOfScan(
+    const CompressedRelationMetadata& metadata, Id col1Id,
+    const vector<CompressedBlockMetadata>& blocks,
+    ad_utility::File& file) const {
+  // Get all the blocks  that possibly might contain our pair of col0Id and
+  // col1Id
+  auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blocks);
+  auto beginBlock = relevantBlocks.begin();
+  auto endBlock = relevantBlocks.end();
+
+  // The first and the last block might be incomplete (that is, only
+  // a part of these blocks is actually part of the result,
+  // set up a lambda which allows us to read these blocks, and returns
+  // the size of the result.
+  auto readPossiblyIncompleteBlock = [&](const auto& block) {
+    DecompressedBlock uncompressedBuffer =
+        readAndDecompressBlock(block, file, std::nullopt);
+    AD_CORRECTNESS_CHECK(uncompressedBuffer.numColumns() == 2);
+    const auto& col1Column = uncompressedBuffer.getColumn(0);
+    const auto& col2Column = uncompressedBuffer.getColumn(1);
+    AD_CORRECTNESS_CHECK(col1Column.size() == col2Column.size());
+
+    // Find the range in the block, that belongs to the same relation `col0Id`
+    bool containedInOnlyOneBlock =
+        metadata.offsetInBlock_ != std::numeric_limits<uint64_t>::max();
+    auto begin = col1Column.begin();
+    if (containedInOnlyOneBlock) {
+      begin += metadata.offsetInBlock_;
+    }
+    auto end =
+        containedInOnlyOneBlock ? begin + metadata.numRows_ : col1Column.end();
+
+    // Find the range in the block, where also the col1Id matches (the second
+    // ID in the `std::array` does not matter).
+    return std::ranges::equal_range(begin, end, col1Id).size();
+  };
+
+  size_t numResults = 0;
+  // The first and the last block might be incomplete, compute
+  // and store the partial results from them.
+  if (beginBlock < endBlock) {
+    numResults += readPossiblyIncompleteBlock(*beginBlock);
+    ++beginBlock;
+  }
+  if (beginBlock < endBlock) {
+    numResults += readPossiblyIncompleteBlock(*(endBlock - 1));
+    --endBlock;
+  }
+
+  // Determine the total size of the result.
+  // First accumulate the complete blocks in the "middle"
+  numResults += std::accumulate(beginBlock, endBlock, 0ul,
+                                [](const auto& count, const auto& block) {
+                                  return count + block.numRows_;
+                                });
+  return numResults;
+}
+
+// _____________________________________________________________________________
 float CompressedRelationWriter::computeMultiplicity(
     size_t numElements, size_t numDistinctElements) {
   bool functional = numElements == numDistinctElements;
@@ -504,5 +563,15 @@ CompressedRelationReader::getBlocksFromMetadata(
     return endBeforeBegin;
   };
 
-  return std::ranges::equal_range(blockMetadata, key, comp);
+  auto result = std::ranges::equal_range(blockMetadata, key, comp);
+
+  // Invariant: The col0Id is completely stored in a single block, or it is
+  // contained in multiple blocks that only contain this col0Id,
+  bool col0IdHasExclusiveBlocks =
+      metadata.offsetInBlock_ == std::numeric_limits<uint64_t>::max();
+  if (!col0IdHasExclusiveBlocks) {
+    // This might also be zero if no block was found at all.
+    AD_CORRECTNESS_CHECK(result.size() <= 1);
+  }
+  return result;
 }

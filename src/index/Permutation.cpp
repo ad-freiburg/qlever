@@ -65,6 +65,17 @@ void Permutation::scan(Id col0Id, Id col1Id, IdTable* result,
 }
 
 // _____________________________________________________________________
+size_t Permutation::getResultSizeOfScan(Id col0Id, Id col1Id) const {
+  if (!meta_.col0IdExists(col0Id)) {
+    return 0;
+  }
+  const auto& metaData = meta_.getMetaData(col0Id);
+
+  return reader_.getResultSizeOfScan(metaData, col1Id, meta_.blockData(),
+                                     file_);
+}
+
+// _____________________________________________________________________
 std::array<size_t, 3> Permutation::toKeyOrder(Permutation::Enum permutation) {
   using enum Permutation::Enum;
   switch (permutation) {

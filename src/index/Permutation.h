@@ -57,6 +57,10 @@ class Permutation {
   void scan(Id col0Id, Id col1Id, IdTable* result,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
+  /// Similar to the previous `scan` function, but only get the size of the
+  /// result
+  size_t getResultSizeOfScan(Id col0Id, Id col1Id) const;
+
   // _______________________________________________________
   void setKbName(const string& name) { meta_.setName(name); }
 

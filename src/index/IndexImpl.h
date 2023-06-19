@@ -445,6 +445,11 @@ class IndexImpl {
             const Permutation::Enum& permutation,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
+  // _____________________________________________________________________________
+  size_t getResultSizeOfScan(const TripleComponent& col0String,
+                             const TripleComponent& col1String,
+                             const Permutation::Enum& permutation) const;
+
  private:
   // Private member functions
 
