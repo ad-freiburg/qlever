@@ -212,7 +212,7 @@ TEST(JoinTest, joinWithFullScanPSO) {
   // Expressions in HAVING clauses are converted to special internal aliases.
   // Test the combination of parsing and evaluating such queries.
   auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
-      qec, IndexScan::FULL_INDEX_SCAN_PSO,
+      qec, Permutation::Enum::PSO,
       SparqlTriple{Variable{"?s"}, "?p", Variable{"?o"}});
   parsedQuery::SparqlValues values;
   values._variables.emplace_back("?p");

@@ -474,7 +474,7 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
         getExecutionContext()->getIndex().getPimpl().getPermutation(
             permutationEnum.value());
     IdTableStatic<NUM_COLS> table = std::move(*idTable).toStatic<NUM_COLS>();
-    const auto& metaData = permutation._meta.data();
+    const auto& metaData = permutation.meta_.data();
     // TODO<joka921> the reserve is too large because of the ignored
     // triples. We would need to incorporate the information how many
     // added "relations" are in each permutationEnum during index building.
@@ -535,7 +535,7 @@ std::optional<Permutation::Enum> GroupBy::getPermutationForThreeVariableTriple(
   }
   {
     auto v = variableThatMustBeContained;
-    if (v != indexScan->getSubject() && v.name() != indexScan->getPredicate() &&
+    if (v != indexScan->getSubject() && v != indexScan->getPredicate() &&
         v != indexScan->getObject()) {
       return std::nullopt;
     }
@@ -543,7 +543,7 @@ std::optional<Permutation::Enum> GroupBy::getPermutationForThreeVariableTriple(
 
   if (variableByWhichToSort == indexScan->getSubject()) {
     return Permutation::SPO;
-  } else if (variableByWhichToSort.name() == indexScan->getPredicate()) {
+  } else if (variableByWhichToSort == indexScan->getPredicate()) {
     return Permutation::POS;
   } else if (variableByWhichToSort == indexScan->getObject()) {
     return Permutation::OSP;

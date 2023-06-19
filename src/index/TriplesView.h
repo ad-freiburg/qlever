@@ -37,7 +37,7 @@ cppcoro::generator<std::array<Id, 3>> TriplesView(
     IsTripleIgnored isTripleIgnored = IsTripleIgnored{}) {
   std::sort(ignoredRanges.begin(), ignoredRanges.end());
 
-  const auto& metaData = permutation._meta.data();
+  const auto& metaData = permutation.meta_.data();
   // The argument `ignoredRanges` specifies the ignored ranges, but we need to
   // compute the ranges that are allowed (the inverse).
   using Iterator = std::decay_t<decltype(metaData.ordered_begin())>;
