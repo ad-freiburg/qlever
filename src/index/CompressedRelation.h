@@ -274,6 +274,16 @@ class CompressedRelationReader {
             ad_utility::File& file, IdTable* result,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
+  // Only get the size of the result for a given permutation XYZ for a given X and Y.
+  // This can be done by scanning two blocks. Note: The overload of this function where
+  // only the X is given is not needed, as the size of these scans can be retrieved
+  // from the `CompressedRelationMetadata` directly.
+  void getResultSizeOfScan(const CompressedRelationMetadata& metaData, Id col1Id,
+            const vector<CompressedBlockMetadata>& blocks,
+            ad_utility::File& file, IdTable* result,
+            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+
+
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
   // If `columnIndices` is `nullopt`, then all columns of the block are read,
