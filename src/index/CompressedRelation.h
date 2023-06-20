@@ -288,9 +288,10 @@ class CompressedRelationReader {
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   // Only get the size of the result for a given permutation XYZ for a given X
-  // and Y. This can be done by scanning two blocks. Note: The overload of this
-  // function where only the X is given is not needed, as the size of these
-  // scans can be retrieved from the `CompressedRelationMetadata` directly.
+  // and Y. This can be done by scanning one or two blocks. Note: The overload
+  // of this function where only the X is given is not needed, as the size of
+  // these scans can be retrieved from the `CompressedRelationMetadata`
+  // directly.
   size_t getResultSizeOfScan(const CompressedRelationMetadata& metaData,
                              Id col1Id,
                              const vector<CompressedBlockMetadata>& blocks,
@@ -345,12 +346,12 @@ class CompressedRelationReader {
 
   // Read the block that is identified by the `blockMetadata` from the `file`,
   // decompress and return it. Before returning, delete all rows where the col0
-  // ID / relation ID does not correspond with the `metadata`, or where the
-  // `col1Id` doesn't match. For this to work, the block has to be one of the
-  // blocks that actually store triples from the given `metadata`'s relation,
-  // else the behavior is undefined.
+  // ID / relation ID does not correspond with the `relationMetadata`, or where
+  // the `col1Id` doesn't match. For this to work, the block has to be one of
+  // the blocks that actually store triples from the given `relationMetadata`'s
+  // relation, else the behavior is undefined.
   DecompressedBlock readPossiblyIncompleteBlock(
-      const CompressedRelationMetadata& metadata, Id col1Id,
+      const CompressedRelationMetadata& relationMetadata, Id col1Id,
       ad_utility::File& file,
       const CompressedBlockMetadata& blockMetadata) const;
 };

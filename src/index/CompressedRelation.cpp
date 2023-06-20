@@ -158,20 +158,13 @@ void CompressedRelationReader::scan(
     AD_CORRECTNESS_CHECK(endBlock - beginBlock <= 1);
   }
 
-  // The first and the last block might be incomplete (that is, only
-  // a part of these blocks is actually part of the result,
-  // set up a lambda which allows us to read these blocks, and returns
-  // the result as a vector.
-  auto readIncompleteBlock = [&](const auto& block) {
-    return readPossiblyIncompleteBlock(metadata, col1Id, file, block);
-  };
-
   // The first and the last block might be incomplete, compute
   // and store the partial results from them.
   std::optional<DecompressedBlock> firstBlockResult, lastBlockResult;
   size_t totalResultSize = 0;
   if (beginBlock < endBlock) {
-    firstBlockResult = readIncompleteBlock(*beginBlock);
+    firstBlockResult =
+        readPossiblyIncompleteBlock(metadata, col1Id, file, *beginBlock);
     totalResultSize += firstBlockResult.value().size();
     ++beginBlock;
     if (timer) {
@@ -179,7 +172,8 @@ void CompressedRelationReader::scan(
     }
   }
   if (beginBlock < endBlock) {
-    lastBlockResult = readIncompleteBlock(*(endBlock - 1));
+    lastBlockResult =
+        readPossiblyIncompleteBlock(metadata, col1Id, file, *(endBlock - 1));
     totalResultSize += lastBlockResult.value().size();
     endBlock--;
     if (timer) {
@@ -193,7 +187,6 @@ void CompressedRelationReader::scan(
                                      [](const auto& count, const auto& block) {
                                        return count + block.numRows_;
                                      });
-
   result->resize(totalResultSize);
 
   size_t rowIndexOfNextBlockStart = 0;
@@ -244,39 +237,39 @@ void CompressedRelationReader::scan(
   if (lastBlockResult.has_value()) {
     std::ranges::copy(lastBlockResult.value().getColumn(1),
                       result->getColumn(0).data() + rowIndexOfNextBlockStart);
-    AD_CORRECTNESS_CHECK(rowIndexOfNextBlockStart +
-                             lastBlockResult.value().size() ==
-                         result->size());
+    rowIndexOfNextBlockStart += lastBlockResult.value().size();
   }
+  AD_CORRECTNESS_CHECK(rowIndexOfNextBlockStart == result->size());
 }
 
 // _____________________________________________________________________________
 DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
-    const CompressedRelationMetadata& metadata, Id col1Id,
-    ad_utility::File& file, const CompressedBlockMetadata& block) const {
-  DecompressedBlock uncompressedBuffer =
-      readAndDecompressBlock(block, file, std::nullopt);
-  AD_CORRECTNESS_CHECK(uncompressedBuffer.numColumns() == 2);
-  const auto& col1Column = uncompressedBuffer.getColumn(0);
-  const auto& col2Column = uncompressedBuffer.getColumn(1);
+    const CompressedRelationMetadata& relationMetadata, Id col1Id,
+    ad_utility::File& file,
+    const CompressedBlockMetadata& blockMetadata) const {
+  DecompressedBlock block =
+      readAndDecompressBlock(blockMetadata, file, std::nullopt);
+  AD_CORRECTNESS_CHECK(block.numColumns() == 2);
+  const auto& col1Column = block.getColumn(0);
+  const auto& col2Column = block.getColumn(1);
   AD_CORRECTNESS_CHECK(col1Column.size() == col2Column.size());
 
-  // Find the range in the block, that belongs to the same relation `col0Id`
+  // Find the range in the blockMetadata, that belongs to the same relation
+  // `col0Id`
   bool containedInOnlyOneBlock =
-      metadata.offsetInBlock_ != std::numeric_limits<uint64_t>::max();
+      relationMetadata.offsetInBlock_ != std::numeric_limits<uint64_t>::max();
   auto begin = col1Column.begin();
   if (containedInOnlyOneBlock) {
-    begin += metadata.offsetInBlock_;
+    begin += relationMetadata.offsetInBlock_;
   }
-  auto end =
-      containedInOnlyOneBlock ? begin + metadata.numRows_ : col1Column.end();
+  auto end = containedInOnlyOneBlock ? begin + relationMetadata.numRows_
+                                     : col1Column.end();
   auto subBlock = std::ranges::equal_range(begin, end, col1Id);
   auto numResults = subBlock.size();
-  uncompressedBuffer.erase(
-      uncompressedBuffer.begin(),
-      uncompressedBuffer.begin() + (subBlock.begin() - col1Column.begin()));
-  uncompressedBuffer.resize(numResults);
-  return uncompressedBuffer;
+  block.erase(block.begin(),
+              block.begin() + (subBlock.begin() - col1Column.begin()));
+  block.resize(numResults);
+  return block;
 };
 
 // _____________________________________________________________________________

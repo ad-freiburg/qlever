@@ -446,8 +446,8 @@ class IndexImpl {
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   // _____________________________________________________________________________
-  size_t getResultSizeOfScan(const TripleComponent& col0String,
-                             const TripleComponent& col1String,
+  size_t getResultSizeOfScan(const TripleComponent& col0,
+                             const TripleComponent& col1,
                              const Permutation::Enum& permutation) const;
 
  private:
