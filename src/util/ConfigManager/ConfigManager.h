@@ -126,14 +126,14 @@ class ConfigManager {
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  void createConfigOption(std::string_view optionName,
+  void createConfigOption(std::string optionName,
                           std::string_view optionDescription,
                           OptionType* variableToPutValueOfTheOptionIn,
                           std::optional<OptionType> defaultValue =
                               std::optional<OptionType>(std::nullopt)) {
     createConfigOption<OptionType>(
-        VectorOfKeysForJson{std::string{optionName}}, optionDescription,
-        variableToPutValueOfTheOptionIn, defaultValue);
+        VectorOfKeysForJson{std::move(optionName)}, optionDescription,
+        variableToPutValueOfTheOptionIn, std::move(defaultValue));
   }
 
   /*
