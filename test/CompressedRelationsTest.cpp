@@ -6,7 +6,7 @@
 
 #include "./IndexTestHelpers.h"
 #include "index/CompressedRelation.h"
-#include "index/Permutations.h"
+#include "index/Permutation.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
 namespace {
