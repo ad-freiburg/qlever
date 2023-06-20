@@ -62,39 +62,21 @@ std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
   }
 }
 
-// Visualization for single measurments.
-static std::string singleMeasurementsToString(
-    const std::vector<ResultEntry>& resultEntries) {
-  return absl::StrCat(createCategoryTitle("Single measurement benchmarks"),
-                      "\n",
+/*
+@brief Return a string containing a titel version of `categoryName` and a string
+list representation of all the given category entries.
+Note: This function converts `CategoryType` objects by trying to case them as
+`std::string`.
+*/
+template <typename CategoryType>
+static std::string categoryToString(
+    std::string_view categoryName,
+    const std::vector<CategoryType>& categoryEntries) {
+  return absl::StrCat(createCategoryTitle(categoryName), "\n",
                       listToString(
-                          resultEntries,
-                          [](const ResultEntry& entry) {
+                          categoryEntries,
+                          [](const CategoryType& entry) {
                             return static_cast<std::string>(entry);
-                          },
-                          "\n\n"));
-}
-
-// Visualization for groups.
-static std::string groupsToString(
-    const std::vector<ResultGroup>& resultGroups) {
-  return absl::StrCat(createCategoryTitle("Group benchmarks"), "\n",
-                      listToString(
-                          resultGroups,
-                          [](const ResultGroup& group) {
-                            return static_cast<std::string>(group);
-                          },
-                          "\n\n"));
-}
-
-// Visualization for tables.
-static std::string tablesToString(
-    const std::vector<ResultTable>& resultTables) {
-  return absl::StrCat(createCategoryTitle("Table benchmarks"), "\n",
-                      listToString(
-                          resultTables,
-                          [](const ResultTable& table) {
-                            return static_cast<std::string>(table);
                           },
                           "\n\n"));
 }
@@ -129,19 +111,21 @@ std::string benchmarkResultsToString(
    exists for reducing code duplication.
 
   @param stringStream The stringstream where the text will get added.
+  @param categoryName The name of the category
   @param categoryResult The information needed, for printing the benchmark
   category. Should be a vector of ResultEntry, ResultGroup, or ResultTable.
-  @param translationFunction The function, which given the benchmark category
-  information, converts them to text.
+  @param translationFunction The function, which given the category name and the
+  benchmark category information, converts them to text.
   */
-  auto addNonEmptyCategorieToStringSteam = [](std::ostringstream* stringStream,
-                                              const auto& categoryResult,
-                                              const auto& translationFunction) {
-    if (categoryResult.size() > 0) {
-      // The separator between the printed categories.
-      (*stringStream) << "\n\n" << translationFunction(categoryResult);
-    }
-  };
+  auto addNonEmptyCategorieToStringSteam =
+      [](std::ostringstream* stringStream, std::string_view categoryName,
+         const auto& categoryResult, const auto& translationFunction) {
+        if (categoryResult.size() > 0) {
+          // The separator between the printed categories.
+          (*stringStream) << "\n\n"
+                          << translationFunction(categoryName, categoryResult);
+        }
+      };
 
   visualization << createCategoryTitle(absl::StrCat(
                        "Benchmark class '", benchmarkClass->name(), "'"))
@@ -151,16 +135,19 @@ std::string benchmarkResultsToString(
   visualization << metadataToString(benchmarkClass->getMetadata());
 
   // Visualization for single measurments, if there are any.
-  addNonEmptyCategorieToStringSteam(&visualization, singleMeasurements,
-                                    singleMeasurementsToString);
+  addNonEmptyCategorieToStringSteam(
+      &visualization, "Single measurement benchmarks", singleMeasurements,
+      categoryToString<ResultEntry>);
 
   // Visualization for groups, if there are any.
-  addNonEmptyCategorieToStringSteam(&visualization, resultGroups,
-                                    groupsToString);
+  addNonEmptyCategorieToStringSteam(&visualization, "Group benchmarks",
+                                    resultGroups,
+                                    categoryToString<ResultGroup>);
 
   // Visualization for tables, if there are any.
-  addNonEmptyCategorieToStringSteam(&visualization, resultTables,
-                                    tablesToString);
+  addNonEmptyCategorieToStringSteam(&visualization, "Table benchmarks",
+                                    resultTables,
+                                    categoryToString<ResultTable>);
 
   return visualization.str();
 }
