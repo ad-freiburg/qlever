@@ -91,13 +91,9 @@ class ConfigManager {
                           std::optional<OptionType> defaultValue =
                               std::optional<OptionType>(std::nullopt)) {
     /*
-    In this case, we have an invalid path and can't create a `ConfigOption`.
-    Because we don't want to copy the corresponding exception out of
-    `verifyPathToConfigOption`, that would be to much code duplication, we
-    instead call it in such a way, that it will throw the corresponding
-    exception instead.
-    If we don't have this case, then the actual path check will be done by
-    `addConfigOption`. No reason, to do it double.
+    We need a non-empty path that ends with a string to construct a ConfigOption
+    object, the `verify...` function always throws an exception for this case.
+    No need, to duplicate the code.
     */
     if (pathToOption.empty() ||
         !std::holds_alternative<std::string>(pathToOption.back())) {
@@ -142,16 +138,12 @@ class ConfigManager {
   const std::vector<ConfigOption>& getConfigurationOptions() const;
 
   /*
-  @brief Sets the configuration options based on the given json. Note: This will
-  overwrite values held by the configuration data, if there were values for them
-  given inside the string.
+  @brief Sets the configuration options based on the given json.
 
   @param j There will be an exception thrown, if:
   - `j` doesn't contain values for all configuration options, that must be set
   at runtime.
-
   - Same, if there are values for configuration options, that do not exist.
-
   - `j` is anything but a json object literal.
   */
   void parseConfig(const nlohmann::json& j);
@@ -161,7 +153,8 @@ class ConfigManager {
    that contains all the described configuration data.
 
   @param shortHandString The language of the short hand is defined in
-  `generated/ConfigShorthand.g4`.
+  `generated/ConfigShorthand.g4`. The short hand is a format similar to JSON
+  that is more suitable to be set directly from the command line
   */
   static nlohmann::json parseShortHand(const std::string& shortHandString);
 
