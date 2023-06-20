@@ -120,8 +120,8 @@ TEST(RuntimeInformation, toStringAndJson) {
   child.descriptor_ = "child";
   child.numCols_ = 2;
   child.numRows_ = 7;
-  child.columnNames_.push_back("?x");
-  child.columnNames_.push_back("?y");
+  child.columnNames_.emplace_back("?x");
+  child.columnNames_.emplace_back("?y");
   child.totalTime_ = 3.4;
   child.cacheStatus_ = ad_utility::CacheStatus::cachedPinned;
   child.status_ = RuntimeInformation::Status::optimizedOut;
