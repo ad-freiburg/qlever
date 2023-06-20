@@ -2,8 +2,10 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
 #include "engine/RuntimeInformation.h"
-#include "gtest/gtest.h"
 
 TEST(RuntimeInformation, addLimitOffsetRow) {
   RuntimeInformation rti;
@@ -30,4 +32,17 @@ TEST(RuntimeInformation, addLimitOffsetRow) {
 
   rti.addLimitOffsetRow(LimitOffsetClause{42, 1, 0}, 15, true);
   EXPECT_EQ(rti.descriptor_, "LIMIT 42");
+}
+
+TEST(RuntimeInformation, setColumnNames) {
+  RuntimeInformation rti;
+  rti.columnNames_.push_back("blimbim");
+  rti.setColumnNames({});
+  EXPECT_TRUE(rti.columnNames_.empty());
+
+  auto col = makeAlwaysDefinedColumn;
+  using V = Variable;
+  VariableToColumnMap m{{V{"?x"}, col(1)}, {V{"?y"}, col(0)}};
+  rti.setColumnNames(m);
+  EXPECT_THAT(rti.columnNames_, ::testing::ElementsAre("?y", "?x"));
 }
