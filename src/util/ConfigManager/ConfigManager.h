@@ -64,39 +64,6 @@ class ConfigManager {
   nlohmann::json keyToConfigurationOptionIndex_ =
       nlohmann::json(nlohmann::json::value_t::object);
 
-  /*
-  @brief Creates a valid `nlohmann::json` pointer based on  the given keys.
-  */
-  static nlohmann::json::json_pointer createJsonPointer(
-      const VectorOfKeysForJson& keys);
-
-  /*
-  @brief Verifies, that the given path is a valid path for an option, with this
-  name. If not, throws exceptions.
-
-  @param pathToOption Describes a path in json, that points to the value held by
-  the configuration option.
-  @param optionName The identifier of the `ConfigOption`.
-  */
-  void verifyPathToConfigOption(const VectorOfKeysForJson& pathToOption,
-                                std::string_view optionName) const;
-
-  /*
-  @brief Adds a configuration option, that can be accessed with the given path.
-
-  @param pathToOption Describes a path in json, that points to the value held by
-  the configuration option. NOTE: The first key must be a string, and the last
-  key must be string, equal to the name of the configuration option.
-  */
-  void addConfigOption(const VectorOfKeysForJson& pathToOption,
-                       ConfigOption&& option);
-
-  // For testing.
-  FRIEND_TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest);
-  FRIEND_TEST(ConfigManagerTest, ParseConfig);
-  FRIEND_TEST(ConfigManagerTest, ParseConfigExceptionTest);
-  FRIEND_TEST(ConfigManagerTest, ParseShortHandTest);
-
  public:
   /*
   @brief Creates and adds a new configuration option.
@@ -228,6 +195,39 @@ class ConfigManager {
   std::string getListOfNotChangedConfigOptionsWithDefaultValues() const;
 
  private:
+  // For testing.
+  FRIEND_TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest);
+  FRIEND_TEST(ConfigManagerTest, ParseConfig);
+  FRIEND_TEST(ConfigManagerTest, ParseConfigExceptionTest);
+  FRIEND_TEST(ConfigManagerTest, ParseShortHandTest);
+
+  /*
+  @brief Creates a valid `nlohmann::json` pointer based on  the given keys.
+  */
+  static nlohmann::json::json_pointer createJsonPointer(
+      const VectorOfKeysForJson& keys);
+
+  /*
+  @brief Verifies, that the given path is a valid path for an option, with this
+  name. If not, throws exceptions.
+
+  @param pathToOption Describes a path in json, that points to the value held by
+  the configuration option.
+  @param optionName The identifier of the `ConfigOption`.
+  */
+  void verifyPathToConfigOption(const VectorOfKeysForJson& pathToOption,
+                                std::string_view optionName) const;
+
+  /*
+  @brief Adds a configuration option, that can be accessed with the given path.
+
+  @param pathToOption Describes a path in json, that points to the value held by
+  the configuration option. NOTE: The first key must be a string, and the last
+  key must be string, equal to the name of the configuration option.
+  */
+  void addConfigOption(const VectorOfKeysForJson& pathToOption,
+                       ConfigOption&& option);
+
   /*
   @brief Return the underlying configuration option, if it's at the position
   described by the `keys`. If there is no configuration option at that
