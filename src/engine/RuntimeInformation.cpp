@@ -9,7 +9,7 @@
 
 #include <ranges>
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 std::string RuntimeInformation::toString() const {
   std::ostringstream buffer;
   // Imbue with the same locale as std::cout which uses for example
@@ -36,14 +36,14 @@ std::string indentStr(size_t indent, bool stripped = false) {
 }
 }  // namespace
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 void RuntimeInformation::formatDetailValue(std::ostream& out,
                                            std::string_view key,
                                            const nlohmann::json& value) {
   using nlohmann::json;
   // We want to print doubles with fixed precision and stream ints as their
   // native type so they get thousands separators. For everything else we
-  // let nlohmann::json handle it
+  // let nlohmann::json handle it.
   if (value.type() == json::value_t::number_float) {
     out << ad_utility::to_string(value.get<double>(), 2);
   } else if (value.type() == json::value_t::number_unsigned) {
@@ -58,7 +58,7 @@ void RuntimeInformation::formatDetailValue(std::ostream& out,
   }
 }
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
   out << indentStr(indent, true) << '\n';
   out << indentStr(indent - 1) << "├─ " << descriptor_ << '\n';
@@ -93,7 +93,7 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
   }
 }
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
   if (columnMap.empty()) {
     columnNames_.clear();
@@ -113,7 +113,7 @@ void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
   }
 }
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 double RuntimeInformation::getOperationTime() const {
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {
     return totalTime_;
@@ -131,7 +131,7 @@ double RuntimeInformation::getOperationTime() const {
   }
 }
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 size_t RuntimeInformation::getOperationCostEstimate() const {
   size_t result = costEstimate_;
   for (const auto& child : children_) {
@@ -140,7 +140,7 @@ size_t RuntimeInformation::getOperationCostEstimate() const {
   return result;
 }
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 std::string_view RuntimeInformation::toString(Status status) {
   switch (status) {
     case completed:
@@ -160,7 +160,7 @@ std::string_view RuntimeInformation::toString(Status status) {
   }
 }
 
-// _____________________________________________________________________________
+// __________________________________________________________________________
 double RuntimeInformation::getTotalTimeCorrected() const {
   double timeOfChildrenComputedDuringQueryPlanning = 0;
 
@@ -186,7 +186,7 @@ double RuntimeInformation::getTotalTimeCorrected() const {
   return totalTime_ + timeOfChildrenComputedDuringQueryPlanning;
 }
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
   j = nlohmann::ordered_json{
       {"description", rti.descriptor_},
@@ -207,7 +207,7 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
       {"children", rti.children_}};
 }
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 void to_json(nlohmann::ordered_json& j,
              const RuntimeInformationWholeQuery& rti) {
   j = nlohmann::ordered_json{
@@ -215,7 +215,7 @@ void to_json(nlohmann::ordered_json& j,
       {"time_index_scans_query_planning", rti.timeIndexScansQueryPlanning}};
 }
 
-// ___________________________________________________________________________________
+// __________________________________________________________________________
 void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
                                            size_t timeForLimit,
                                            bool fullResultIsNotCached) {

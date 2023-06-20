@@ -51,7 +51,10 @@ TEST(RuntimeInformation, getOperationTimeAndCostEstimate) {
   parent.children_.push_back(child1);
   parent.children_.push_back(child2);
 
+  // 2.5 == 10.0 - 4.5 - 3.0
   ASSERT_DOUBLE_EQ(parent.getOperationTime(), 2.5);
+
+  // 45 == 100 - 43 - 12
   ASSERT_EQ(parent.getOperationCostEstimate(), 45);
 }
 
