@@ -19,7 +19,8 @@ using std::pair;
 Index::WordEntityPostings FTSAlgorithms::filterByRange(
     const IdRange<WordVocabIndex>& idRange,
     const Index::WordEntityPostings& wepPreFilter) {
-  AD_CONTRACT_CHECK(wepPreFilter.cids_.size() == wepPreFilter.wids_.size());
+  AD_CONTRACT_CHECK(wepPreFilter.cids_.size() ==
+                    wepPreFilter.widsOneTerm_->size());
   AD_CONTRACT_CHECK(wepPreFilter.cids_.size() == wepPreFilter.scores_.size());
   LOG(DEBUG) << "Filtering " << wepPreFilter.cids_.size()
              << " elements by ID range...\n";
@@ -27,11 +28,11 @@ Index::WordEntityPostings FTSAlgorithms::filterByRange(
   Index::WordEntityPostings wepResult;
   wepResult.cids_.resize(wepPreFilter.cids_.size() + 2);
   wepResult.scores_.resize(wepPreFilter.cids_.size() + 2);
-  wepResult.wids_.resize(wepPreFilter.cids_.size() + 2);
+  wepResult.widsOneTerm_->resize(wepPreFilter.cids_.size() + 2);
 
   size_t nofResultElements = 0;
 
-  for (size_t i = 0; i < wepPreFilter.wids_.size(); ++i) {
+  for (size_t i = 0; i < wepPreFilter.widsOneTerm_->size(); ++i) {
     // TODO<joka921> proper Ids for the text stuff.
     // The mapping from words that appear in text records to `WordIndex`es is
     // stored in a `Vocabulary` that stores `VocabIndex`es, so we have to
@@ -39,20 +40,21 @@ Index::WordEntityPostings FTSAlgorithms::filterByRange(
     // TODO<joka921> Can we make the returned `IndexType` a template parameter
     // of the vocabulary, s.t. we have a vocabulary that stores `WordIndex`es
     // directly?
-    if (wepPreFilter.wids_[i] >= idRange._first.get() &&
-        wepPreFilter.wids_[i] <= idRange._last.get()) {
+    if (wepPreFilter.widsOneTerm_->at(i) >= idRange._first.get() &&
+        wepPreFilter.widsOneTerm_->at(i) <= idRange._last.get()) {
       wepResult.cids_[nofResultElements] = wepPreFilter.cids_[i];
       wepResult.scores_[nofResultElements] = wepPreFilter.scores_[i];
-      wepResult.wids_[nofResultElements++] = wepPreFilter.wids_[i];
+      wepResult.widsOneTerm_->at(nofResultElements++) =
+          wepPreFilter.widsOneTerm_->at(i);
     }
   }
 
   wepResult.cids_.resize(nofResultElements);
   wepResult.scores_.resize(nofResultElements);
-  wepResult.wids_.resize(nofResultElements);
+  wepResult.widsOneTerm_->resize(nofResultElements);
 
   AD_CONTRACT_CHECK(wepResult.cids_.size() == wepResult.scores_.size());
-  AD_CONTRACT_CHECK(wepResult.cids_.size() == wepResult.wids_.size());
+  AD_CONTRACT_CHECK(wepResult.cids_.size() == wepResult.widsOneTerm_->size());
   LOG(DEBUG) << "Filtering by ID range done. Result has "
              << wepResult.cids_.size() << " elements.\n";
   return wepResult;
@@ -120,14 +122,14 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersect(
     const Index::WordEntityPostings& matchingContextsWep,
     const Index::WordEntityPostings& eBlockWep) {
   // Example:
-  // matchingContextsWep.wids_: 3 4 3 4 3
+  // matchingContextsWep.widsOneTerm_: 3 4 3 4 3
   // matchingContextsWep.cids_: 1 4 5 5 7
   // -----------------------------------
   // eBlockWep.cids_          : 4 5 5 8
   // eBlockWep.eids_          : 2 1 2 1
   // ===================================
   // resultWep.cids_          : 4 5 5 5 5
-  // resultWep.wids_          : 4 3 4 3 4
+  // resultWep.widsOneTerm_          : 4 3 4 3 4
   // resultWep.eids_          : 2 1 2 2 1
   LOG(DEBUG)
       << "Intersection to filter the word-entity postings from a block so that "
@@ -141,8 +143,8 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersect(
   if (matchingContextsWep.cids_.empty() || eBlockWep.cids_.empty()) {
     return resultWep;
   }
-  resultWep.wids_.reserve(eBlockWep.cids_.size());
-  resultWep.wids_.clear();
+  resultWep.widsOneTerm_->reserve(eBlockWep.cids_.size());
+  resultWep.widsOneTerm_->clear();
   resultWep.cids_.reserve(eBlockWep.cids_.size());
   resultWep.cids_.clear();
   resultWep.eids_.reserve(eBlockWep.cids_.size());
@@ -174,7 +176,8 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersect(
       // later on.
       size_t k = 0;
       while (matchingContextsWep.cids_[i + k] == matchingContextsWep.cids_[i]) {
-        resultWep.wids_.push_back(matchingContextsWep.wids_[i + k]);
+        resultWep.widsOneTerm_->push_back(
+            matchingContextsWep.widsOneTerm_->at(i + k));
         resultWep.cids_.push_back(eBlockWep.cids_[j]);
         resultWep.eids_.push_back(eBlockWep.eids_[j]);
         resultWep.scores_.push_back(eBlockWep.scores_[j]);
@@ -329,7 +332,7 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
         size_t kIndex = k - 2;
         vector<size_t> currentIndices;
         currentIndices.reserve(k - 1);
-        for (int j = 0; j < k - 1; j++) {
+        for (size_t j = 0; j < k - 1; j++) {
           currentIndices[j] =
               currentList ? nextIndices[kIndex] : nextIndices[kIndex] - 1;
         }
@@ -354,11 +357,11 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
                   break;
                 }
                 kIndex = k - 2;
-                resultWep.wids_.push_back(
-                    wepVecs[kIndex]
-                        .wids_[currentIndices[kIndex] +
-                               offsets[kIndex]]);  // TODO: solution for writing
-                                                   // this
+                resultWep.widsOneTerm_->push_back(
+                    wepVecs[kIndex].widsOneTerm_->at(
+                        currentIndices[kIndex] +
+                        offsets[kIndex]));  // TODO: solution for writing
+                                            // this
                 offsets[kIndex]++;
               }
             }
@@ -382,10 +385,9 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
               break;
             }
             kIndex = k - 2;
-            resultWep.wids_.push_back(
-                wepVecs[kIndex].wids_[currentIndices[kIndex] +
-                                      offsets[kIndex]]);  // TODO: solution for
-                                                          // writing this
+            resultWep.widsOneTerm_->push_back(wepVecs[kIndex].widsOneTerm_->at(
+                currentIndices[kIndex] + offsets[kIndex]));  // TODO: solution
+                                                             // for writing this
             offsets[kIndex]++;
           }
           n++;
@@ -470,7 +472,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
   AggMapScore mapScore;
   AggMapSaCS mapSaCS;
   for (size_t i = 0; i < wep.eids_.size(); ++i) {
-    WordIndex wid = wep.wids_.empty() ? 0 : wep.wids_[i];
+    WordIndex wid = wep.widsOneTerm_->empty() ? 0 : wep.widsOneTerm_->at(i);
     if (!mapScore.contains(wep.eids_[i])) {
       ScoreAndContextSet inner;
       inner.emplace(wep.scores_[i], wep.cids_[i]);
@@ -603,7 +605,7 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
   AggMapSaCS mapSaCS;
 
   for (size_t i = 0; i < wep.eids_.size(); ++i) {
-    WordIndex wid = wep.wids_.empty() ? 0 : wep.wids_[i];
+    WordIndex wid = wep.widsOneTerm_->empty() ? 0 : wep.widsOneTerm_->at(i);
     if (!mapScore.contains(wep.eids_[i])) {
       mapScore[wep.eids_[i]] = 1;
       mapSaCS[std::pair(wep.eids_[i], wid)] =
@@ -685,7 +687,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     vector<Id> entitiesInContext;
     TextRecordIndex currentCid = wep.cids_[0];
     Score cscore = wep.scores_[0];
-    WordIndex cwid = wep.wids_.empty() ? 0 : wep.wids_[0];
+    WordIndex cwid = wep.widsOneTerm_->empty() ? 0 : wep.widsOneTerm_->at(0);
 
     for (size_t i = 0; i < wep.cids_.size(); ++i) {
       if (wep.cids_[i] == currentCid) {
@@ -730,7 +732,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
         entitiesInContext.clear();
         currentCid = wep.cids_[i];
         cscore = wep.scores_[i];
-        cwid = wep.wids_.empty() ? 0 : wep.wids_[i];
+        cwid = wep.widsOneTerm_->empty() ? 0 : wep.widsOneTerm_->at(i);
         entitiesInContext.push_back(wep.eids_[i]);
       }
     }
@@ -847,7 +849,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   vector<Id> entitiesInContext;
   TextRecordIndex currentCid = wep.cids_[0];
   Score cscore = wep.scores_[0];
-  WordIndex cwid = wep.wids_.empty() ? 0 : wep.wids_[0];
+  WordIndex cwid = wep.widsOneTerm_->empty() ? 0 : wep.widsOneTerm_->at(0);
 
   for (size_t i = 0; i < wep.cids_.size(); ++i) {
     if (wep.cids_[i] == currentCid) {
@@ -886,7 +888,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
       entitiesInContext.clear();
       currentCid = wep.cids_[i];
       cscore = wep.scores_[i];
-      cwid = wep.wids_.empty() ? 0 : wep.wids_[i];
+      cwid = wep.widsOneTerm_->empty() ? 0 : wep.widsOneTerm_->at(i);
       entitiesInContext.push_back(wep.eids_[i]);
     }
   }
@@ -1078,7 +1080,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   AggMapScore mapScore;
   AggMapSaCS mapSaCS;
   for (size_t i = 0; i < wep.eids_.size(); ++i) {
-    WordIndex wid = wep.wids_.empty() ? 0 : wep.wids_[i];
+    WordIndex wid = wep.widsOneTerm_->empty() ? 0 : wep.widsOneTerm_->at(i);
     if (fMap.contains(wep.eids_[i])) {
       if (!mapScore.contains(wep.eids_[i])) {
         ScoreAndContextSet inner;
@@ -1198,7 +1200,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   AggMapScore mapScore;
   AggMapSaCS mapSaCS;
   for (size_t i = 0; i < wep.eids_.size(); ++i) {
-    WordIndex wid = wep.wids_.empty() ? 0 : wep.wids_[i];
+    WordIndex wid = wep.widsOneTerm_->empty() ? 0 : wep.widsOneTerm_->at(i);
     if (fSet.contains(wep.eids_[i])) {
       if (!mapScore.contains(wep.eids_[i])) {
         ScoreAndContextSet inner;

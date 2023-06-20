@@ -30,7 +30,7 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
 
   // None
   wep.cids_ = {T(0)};
-  wep.wids_ = {2};
+  *wep.widsOneTerm_ = {2};
   wep.scores_ = {1};
 
   resultWep = FTSAlgorithms::filterByRange(idRange, wep);
@@ -38,22 +38,22 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
 
   // Match
   wep.cids_ = {T(0), T(0), T(1), T(2), T(3)};
-  wep.wids_ = {2, 5, 7, 5, 6};
+  *wep.widsOneTerm_ = {2, 5, 7, 5, 6};
   wep.scores_ = {1, 1, 1, 1, 1};
 
   resultWep = FTSAlgorithms::filterByRange(idRange, wep);
   ASSERT_EQ(4u, resultWep.cids_.size());
-  ASSERT_EQ(4u, resultWep.wids_.size());
+  ASSERT_EQ(4u, resultWep.widsOneTerm_->size());
   ASSERT_EQ(4u, resultWep.scores_.size());
 
   wep.cids_ = {T(0), T(0), T(1), T(2), T(3), T(4)};
-  wep.wids_ = {2, 5, 7, 5, 6, 8};
+  *wep.widsOneTerm_ = {2, 5, 7, 5, 6, 8};
   wep.scores_ = {1, 1, 1, 1, 1, 1};
 
   // Partial
   resultWep = FTSAlgorithms::filterByRange(idRange, wep);
   ASSERT_EQ(4u, resultWep.cids_.size());
-  ASSERT_EQ(4u, resultWep.wids_.size());
+  ASSERT_EQ(4u, resultWep.widsOneTerm_->size());
   ASSERT_EQ(4u, resultWep.scores_.size());
 };
 
@@ -62,17 +62,17 @@ TEST(FTSAlgorithmsTest, crossIntersectTest) {
   Index::WordEntityPostings eBlockWep;
   Index::WordEntityPostings resultWep;
   resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
-  ASSERT_EQ(0u, resultWep.wids_.size());
+  ASSERT_EQ(0u, resultWep.widsOneTerm_->size());
   ASSERT_EQ(0u, resultWep.cids_.size());
   ASSERT_EQ(0u, resultWep.eids_.size());
   ASSERT_EQ(0u, resultWep.scores_.size());
 
   matchingContextsWep.cids_ = {T(0), T(2)};
-  matchingContextsWep.wids_ = {1, 4};
+  *matchingContextsWep.widsOneTerm_ = {1, 4};
   matchingContextsWep.scores_ = {1, 1};
 
   resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
-  ASSERT_EQ(0u, resultWep.wids_.size());
+  ASSERT_EQ(0u, resultWep.widsOneTerm_->size());
   ASSERT_EQ(0u, resultWep.cids_.size());
   ASSERT_EQ(0u, resultWep.eids_.size());
   ASSERT_EQ(0u, resultWep.scores_.size());
@@ -82,21 +82,21 @@ TEST(FTSAlgorithmsTest, crossIntersectTest) {
   eBlockWep.scores_ = {1, 1, 1, 1};
 
   resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
-  ASSERT_EQ(2u, resultWep.wids_.size());
+  ASSERT_EQ(2u, resultWep.widsOneTerm_->size());
   ASSERT_EQ(2u, resultWep.cids_.size());
   ASSERT_EQ(2u, resultWep.eids_.size());
   ASSERT_EQ(2u, resultWep.scores_.size());
 
   matchingContextsWep.cids_ = {T(0), T(2), T(2)};
-  matchingContextsWep.wids_ = {1, 4, 8};
+  *matchingContextsWep.widsOneTerm_ = {1, 4, 8};
   matchingContextsWep.scores_ = {1, 1, 1};
 
   resultWep = FTSAlgorithms::crossIntersect(matchingContextsWep, eBlockWep);
-  ASSERT_EQ(4u, resultWep.wids_.size());
+  ASSERT_EQ(4u, resultWep.widsOneTerm_->size());
   ASSERT_EQ(4u, resultWep.cids_.size());
   ASSERT_EQ(4u, resultWep.eids_.size());
   ASSERT_EQ(4u, resultWep.scores_.size());
-  ASSERT_EQ(8u, resultWep.wids_[1]);
+  ASSERT_EQ(8u, resultWep.widsOneTerm_->at(1));
 };
 
 TEST(FTSAlgorithmsTest, intersectTest) {
@@ -250,7 +250,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
   wep.cids_ = {T(0), T(1), T(2)};
   wep.eids_ = {V(0), V(0), V(0)};
   wep.scores_ = {0, 1, 2};
-  wep.wids_ = {1, 1, 2};
+  *wep.widsOneTerm_ = {1, 1, 2};
 
   FTSAlgorithms::aggScoresAndTakeTopKContexts(wep, 2, &result);
   ASSERT_EQ(2u, result.size());
@@ -266,7 +266,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
   wep.cids_ = {T(0), T(1), T(2), T(4)};
   wep.eids_ = {V(0), V(0), V(0), V(1)};
   wep.scores_ = {0, 1, 2, 1};
-  wep.wids_ = {1, 1, 2, 4};
+  *wep.widsOneTerm_ = {1, 1, 2, 4};
 
   result.clear();
   FTSAlgorithms::aggScoresAndTakeTopKContexts(wep, 2, &result);
@@ -300,7 +300,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   wep.cids_ = {T(0), T(1), T(2)};
   wep.eids_ = {V(0), V(0), V(0)};
   wep.scores_ = {0, 1, 2};
-  wep.wids_ = {1, 1, 2};
+  *wep.widsOneTerm_ = {1, 1, 2};
 
   callFixed(width, wep, &result);
   ASSERT_EQ(1u, result.size());
@@ -312,7 +312,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   wep.cids_ = {T(0), T(1), T(2), T(3)};
   wep.eids_ = {V(0), V(0), V(0), V(1)};
   wep.scores_ = {0, 1, 2, 1};
-  wep.wids_ = {1, 1, 2, 4};
+  *wep.widsOneTerm_ = {1, 1, 2, 4};
 
   callFixed(width, wep, &result);
   ASSERT_EQ(2u, result.size());
@@ -330,7 +330,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   wep.cids_ = {T(0), T(1), T(2), T(3), T(4)};
   wep.eids_ = {V(0), V(0), V(0), V(1), V(0)};
   wep.scores_ = {0, 1, 2, 1, 10};
-  wep.wids_ = {1, 1, 2, 4, 4};
+  *wep.widsOneTerm_ = {1, 1, 2, 4, 4};
 
   ad_utility::callFixedSize(width, [&wep, &result]<int WIDTH>() mutable {
     FTSAlgorithms::aggScoresAndTakeTopContext<WIDTH>(wep, &result);
@@ -451,7 +451,7 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
   wep.cids_ = {T(0), T(1), T(1), T(2), T(2), T(2)};
   wep.eids_ = {V(0), V(0), V(1), V(0), V(1), V(2)};
   wep.scores_ = {10, 1, 3, 1, 1, 1};
-  wep.wids_ = {1, 1, 2, 1, 3, 5};
+  *wep.widsOneTerm_ = {1, 1, 2, 1, 3, 5};
 
   nofVars = 2;
   k = 1;
@@ -516,7 +516,7 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
   wep.cids_ = {T(0), T(1), T(1), T(2), T(2), T(2)};
   wep.eids_ = {V(0), V(0), V(1), V(0), V(1), V(2)};
   wep.scores_ = {10, 1, 3, 1, 1, 1};
-  wep.wids_ = {1, 1, 2, 1, 3, 5};
+  *wep.widsOneTerm_ = {1, 1, 2, 1, 3, 5};
 
   CALL_FIXED_SIZE(width,
                   FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts, wep,
