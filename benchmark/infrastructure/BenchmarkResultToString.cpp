@@ -15,8 +15,13 @@
 
 namespace ad_benchmark {
 
-// ___________________________________________________________________________
-std::string createCategoryTitle(std::string_view categoryTitle) {
+/*
+ * @brief Return a string of the form
+ * "#################
+ * # categoryTitle #
+ * #################"
+ */
+static std::string createCategoryTitle(std::string_view categoryTitle) {
   // The bar above and below the title.
   const size_t barLength = categoryTitle.size() + 4;
   const std::string bar(barLength, '#');
@@ -124,15 +129,16 @@ std::string vectorOfResultEntryToString(const std::vector<ResultEntry>& entries,
   return stream.str();
 };
 
-// ___________________________________________________________________________
-std::string singleMeasurementsToString(
+// Visualization for single measurments.
+static std::string singleMeasurementsToString(
     const std::vector<ResultEntry>& resultEntries) {
   return absl::StrCat(createCategoryTitle("Single measurement benchmarks"),
                       "\n", vectorOfResultEntryToString(resultEntries, "", ""));
 }
 
-// ___________________________________________________________________________
-std::string groupsToString(const std::vector<ResultGroup>& resultGroups) {
+// Visualization for groups.
+static std::string groupsToString(
+    const std::vector<ResultGroup>& resultGroups) {
   return absl::StrCat(createCategoryTitle("Group benchmarks"), "\n",
                       listToString(
                           resultGroups,
@@ -142,8 +148,9 @@ std::string groupsToString(const std::vector<ResultGroup>& resultGroups) {
                           "\n\n"));
 }
 
-// ___________________________________________________________________________
-std::string tablesToString(const std::vector<ResultTable>& resultTables) {
+// Visualization for tables.
+static std::string tablesToString(
+    const std::vector<ResultTable>& resultTables) {
   return absl::StrCat(createCategoryTitle("Table benchmarks"), "\n",
                       listToString(
                           resultTables,

@@ -21,14 +21,6 @@ namespace ad_benchmark {
 static constexpr std::string_view outputIndentation = "    ";
 
 /*
- * @brief Return a string of the form
- * "#################
- * # categoryTitle #
- * #################"
- */
-std::string createCategoryTitle(std::string_view categoryTitle);
-
-/*
 @brief Applies the given function `regularFunction` to all elements in `r`,
 except for the last one. Instead, `lastOneFunction` is applied to that one.
 
@@ -76,16 +68,6 @@ std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
 std::string vectorOfResultEntryToString(const std::vector<ResultEntry>& entries,
                                         const std::string& vectorEntryPrefix,
                                         const std::string& newLinePrefix);
-
-// Visualization for single measurments.
-std::string singleMeasurementsToString(
-    const std::vector<ResultEntry>& resultEntries);
-
-// Visualization for groups.
-std::string groupsToString(const std::vector<ResultGroup>& resultGroups);
-
-// Visualization for tables.
-std::string tablesToString(const std::vector<ResultTable>& resultTables);
 
 /*
  * @brief Returns a formated string containing all the benchmark information.
