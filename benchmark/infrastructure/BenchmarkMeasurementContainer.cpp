@@ -62,10 +62,15 @@ ResultGroup::operator std::string() const {
       "Measurements:\n\n");
 
   // Listing all the entries.
-  stream << vectorOfResultEntryToString(
-      ad_utility::transform(entries_,
-                            [](const auto& pointer) { return (*pointer); }),
-      std::string{outputIndentation}, std::string{outputIndentation});
+  stream << addIndentation(
+      listToString(
+          ad_utility::transform(entries_,
+                                [](const auto& pointer) { return (*pointer); }),
+          [](const ResultEntry& entry) {
+            return static_cast<std::string>(entry);
+          },
+          "\n\n"),
+      1);
 
   return absl::StrCat(prefix, addIndentation(stream.str(), 1));
 }

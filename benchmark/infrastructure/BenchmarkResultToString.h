@@ -60,14 +60,38 @@ std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
                                     std::string_view suffix);
 
 /*
-@brief Return a vector of `ResultEntry` in their string form in form of a list.
+@brief Return elements of the range in form of a list.
 
-@param vectorEntryPrefix A prefix added before every entry in the vector.
-@param newLinePrefix A prefix added before the start of a new line.
+@tparam TranslationFunction Must take the elements of the range and return a
+string.
+
+@param translationFunction Converts range elements into string.
+@param listItemSeparator Will be put between each of the string representations
+of the range elements.
 */
-std::string vectorOfResultEntryToString(const std::vector<ResultEntry>& entries,
-                                        const std::string& vectorEntryPrefix,
-                                        const std::string& newLinePrefix);
+template <typename Range, typename TranslationFunction>
+static std::string listToString(Range&& r,
+                                TranslationFunction translationFunction,
+                                std::string_view listItemSeparator = "\n") {
+  std::ostringstream stream;
+
+  /*
+  TODO<C++23>: This can be a combination of `std::views::transform` and
+  `std::views::join_with`. After that, we just have to insert all the elements
+  of the new view into the stream.
+  */
+  forEachExcludingTheLastOne(
+      AD_FWD(r),
+      [&stream, &translationFunction,
+       &listItemSeparator](const auto& listItem) {
+        stream << translationFunction(listItem) << listItemSeparator;
+      },
+      [&stream, &translationFunction](const auto& listItem) {
+        stream << translationFunction(listItem);
+      });
+
+  return stream.str();
+}
 
 /*
  * @brief Returns a formated string containing all the benchmark information.

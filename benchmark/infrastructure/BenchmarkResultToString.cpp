@@ -62,78 +62,17 @@ std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
   }
 }
 
-/*
-@brief Return elements of the range in form of a list.
-
-@tparam TranslationFunction Must take the elements of the range and return a
-string.
-
-@param translationFunction Converts range elements into string.
-@param listItemSeparator Will be put between each of the string representations
-of the range elements.
-*/
-template <typename Range, typename TranslationFunction>
-static std::string listToString(Range&& r,
-                                TranslationFunction translationFunction,
-                                std::string_view listItemSeparator = "\n") {
-  std::ostringstream stream;
-
-  /*
-  TODO<C++23>: This can be a combination of `std::views::transform` and
-  `std::views::join_with`. After that, we just have to insert all the elements
-  of the new view into the stream.
-  */
-  forEachExcludingTheLastOne(
-      AD_FWD(r),
-      [&stream, &translationFunction,
-       &listItemSeparator](const auto& listItem) {
-        stream << translationFunction(listItem) << listItemSeparator;
-      },
-      [&stream, &translationFunction](const auto& listItem) {
-        stream << translationFunction(listItem);
-      });
-
-  return stream.str();
-}
-
-// ___________________________________________________________________________
-std::string vectorOfResultEntryToString(const std::vector<ResultEntry>& entries,
-                                        const std::string& vectorEntryPrefix,
-                                        const std::string& newLinePrefix) {
-  std::ostringstream stream;
-
-  // What we use to seperat single vector entries.
-  std::string_view lineSeparator{"\n\n"};
-
-  // Adds a single `ResultEntry` to the stream.
-  auto addResultEntry = [&stream, &vectorEntryPrefix,
-                         &newLinePrefix](const ResultEntry& entry) {
-    stream << absl::StrCat(
-        vectorEntryPrefix,
-        absl::StrReplaceAll(static_cast<std::string>(entry),
-                            {{"\n", absl::StrCat("\n", newLinePrefix)}}));
-  };
-
-  /*
-  Adding the entries to the stream in such a way, that we don't have a line
-  separator at the end of that list.
-  */
-  forEachExcludingTheLastOne(
-      entries,
-      [&addResultEntry, &stream, &lineSeparator](const ResultEntry& entry) {
-        addResultEntry(entry);
-        stream << lineSeparator;
-      },
-      addResultEntry);
-
-  return stream.str();
-};
-
 // Visualization for single measurments.
 static std::string singleMeasurementsToString(
     const std::vector<ResultEntry>& resultEntries) {
   return absl::StrCat(createCategoryTitle("Single measurement benchmarks"),
-                      "\n", vectorOfResultEntryToString(resultEntries, "", ""));
+                      "\n",
+                      listToString(
+                          resultEntries,
+                          [](const ResultEntry& entry) {
+                            return static_cast<std::string>(entry);
+                          },
+                          "\n\n"));
 }
 
 // Visualization for groups.
