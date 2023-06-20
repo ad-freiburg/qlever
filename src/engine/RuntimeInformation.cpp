@@ -37,8 +37,29 @@ std::string indentStr(size_t indent, bool stripped = false) {
 }  // namespace
 
 // ________________________________________________________________________________________________________________
+void RuntimeInformation::formatDetailValue(std::ostream& out,
+                                           std::string_view key,
+                                           const nlohmann::json& value) {
+  using nlohmann::json;
+  // We want to print doubles with fixed precision and stream ints as their
+  // native type so they get thousands separators. For everything else we
+  // let nlohmann::json handle it
+  if (value.type() == json::value_t::number_float) {
+    out << ad_utility::to_string(value.get<double>(), 2);
+  } else if (value.type() == json::value_t::number_unsigned) {
+    out << value.template get<uint64_t>();
+  } else if (value.type() == json::value_t::number_integer) {
+    out << value.get<int64_t>();
+  } else {
+    out << value;
+  }
+  if (key.ends_with("Time")) {
+    out << " ms";
+  }
+}
+
+// ________________________________________________________________________________________________________________
 void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
-  using json = nlohmann::json;
   out << indentStr(indent, true) << '\n';
   out << indentStr(indent - 1) << "├─ " << descriptor_ << '\n';
   out << indentStr(indent) << "result_size: " << numRows_ << " x " << numCols_
@@ -61,21 +82,7 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
   }
   for (const auto& el : details_.items()) {
     out << indentStr(indent) << "  " << el.key() << ": ";
-    // We want to print doubles with fixed precision and stream ints as their
-    // native type so they get thousands separators. For everything else we
-    // let nlohmann::json handle it
-    if (el.value().type() == json::value_t::number_float) {
-      out << ad_utility::to_string(el.value().get<double>(), 2);
-    } else if (el.value().type() == json::value_t::number_unsigned) {
-      out << el.value().get<uint64_t>();
-    } else if (el.value().type() == json::value_t::number_integer) {
-      out << el.value().get<int64_t>();
-    } else {
-      out << el.value();
-    }
-    if (el.key().ends_with("Time")) {
-      out << " ms";
-    }
+    formatDetailValue(out, el.key(), el.value());
     out << '\n';
   }
   if (!children_.empty()) {

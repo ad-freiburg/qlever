@@ -70,7 +70,7 @@ TEST(RuntimeInformation, setColumnNames) {
 }
 
 // ________________________________________________________________
-TEST(RuntimeInformattion, statusToString) {
+TEST(RuntimeInformation, statusToString) {
   using enum RuntimeInformation::Status;
   using R = RuntimeInformation;
   EXPECT_EQ(R::toString(completed), "completed");
@@ -82,6 +82,36 @@ TEST(RuntimeInformattion, statusToString) {
   EXPECT_EQ(R::toString(failedBecauseChildFailed),
             "failed because child failed");
   EXPECT_ANY_THROW(R::toString(static_cast<RuntimeInformation::Status>(72)));
+}
+
+// ________________________________________________________________
+TEST(RuntimeInformation, formatDetailValue) {
+  std::ostringstream s;
+  // Imbue with the same locale as std::cout which uses for example
+  // thousands separators.
+  s.imbue(ad_utility::commaLocale);
+  // So floats use fixed precision
+  s << std::fixed << std::setprecision(2);
+  using R = RuntimeInformation;
+  R::formatDetailValue(s, "", 421234u);
+  EXPECT_EQ(s.str(), "421,234");
+  s.str("");
+
+  R::formatDetailValue(s, "", -421234);
+  EXPECT_EQ(s.str(), "-421,234");
+  s.str("");
+
+  R::formatDetailValue(s, "", -421.234);
+  EXPECT_EQ(s.str(), "-421.23");
+  s.str("");
+
+  R::formatDetailValue(s, "", true);
+  EXPECT_EQ(s.str(), "true");
+  s.str("");
+
+  R::formatDetailValue(s, "someTime", 48);
+  EXPECT_EQ(s.str(), "48 ms");
+  s.str("");
 }
 
 // ________________________________________________________________
