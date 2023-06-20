@@ -27,7 +27,6 @@ class RuntimeInformation {
   enum struct Status {
     notStarted,
     completed,
-    completedDuringQueryPlanning,
     optimizedOut,
     failed,
     failedBecauseChildFailed
@@ -92,12 +91,6 @@ class RuntimeInformation {
   /// the time spent computing the children.
   [[nodiscard]] double getOperationTime() const;
 
-  /// Get the total time including the time that this operation spent during
-  /// the query planning phase to compute itself or any of its children.
-  /// Note: This function has to traverse the whole tree recursively. Therefore,
-  ///       it should only be called once on a complete tree when exporting it.
-  [[nodiscard]] double getTotalTimeCorrected() const;
-
   /// Get the cost estimate for this operation. This is the total cost estimate
   /// minus the sum of the cost estimates of all children.
   [[nodiscard]] size_t getOperationCostEstimate() const;
@@ -129,7 +122,6 @@ struct RuntimeInformationWholeQuery {
   // The time spent during query planning (this does not include the time spent
   // on `IndexScan`s that were executed during the query planning).
   size_t timeQueryPlanning = 0;
-  size_t timeIndexScansQueryPlanning = 0;
   /// Output as json. The signature of this function is mandated by the json
   /// library to allow for implicit conversion.
   friend void to_json(nlohmann::ordered_json& j,
