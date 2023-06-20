@@ -21,14 +21,12 @@ namespace ad_benchmark {
 static constexpr std::string_view outputIndentation = "    ";
 
 /*
- * @brief Add a string of the form
+ * @brief Return a string of the form
  * "#################
  * # categoryTitle #
  * #################"
- *  to the stream.
  */
-void addCategoryTitleToOStringstream(std::ostringstream* stream,
-                                     std::string_view categoryTitle);
+std::string createCategoryTitle(std::string_view categoryTitle);
 
 /*
 @brief Applies the given function `regularFunction` to all elements in `r`,
@@ -70,29 +68,24 @@ std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
                                     std::string_view suffix);
 
 /*
-@brief Add a vector of `ResultEntry` in their string form to the string stream
-in form of a list.
+@brief Return a vector of `ResultEntry` in their string form in form of a list.
 
 @param vectorEntryPrefix A prefix added before every entry in the vector.
 @param newLinePrefix A prefix added before the start of a new line.
 */
-// Default way of adding a vector of ResultEntrys to a `ostringstream` with
-// optional prefix, which will be inserted at the start of every new line.
-void addVectorOfResultEntryToOStringstream(
-    std::ostringstream* stream, const std::vector<ResultEntry>& entries,
-    const std::string& vectorEntryPrefix, const std::string& newLinePrefix);
+std::string vectorOfResultEntryToString(const std::vector<ResultEntry>& entries,
+                                        const std::string& vectorEntryPrefix,
+                                        const std::string& newLinePrefix);
 
 // Visualization for single measurments.
-void addSingleMeasurementsToOStringstream(
-    std::ostringstream* stream, const std::vector<ResultEntry>& resultEntries);
+std::string singleMeasurementsToString(
+    const std::vector<ResultEntry>& resultEntries);
 
 // Visualization for groups.
-void addGroupsToOStringstream(std::ostringstream* stream,
-                              const std::vector<ResultGroup>& resultGroups);
+std::string groupsToString(const std::vector<ResultGroup>& resultGroups);
 
 // Visualization for tables.
-void addTablesToOStringstream(std::ostringstream* stream,
-                              const std::vector<ResultTable>& resultTables);
+std::string tablesToString(const std::vector<ResultTable>& resultTables);
 
 /*
  * @brief Returns a formated string containing all the benchmark information.

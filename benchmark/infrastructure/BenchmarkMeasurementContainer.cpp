@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/string_view.h>
@@ -14,6 +12,7 @@
 #include <string_view>
 #include <utility>
 
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkResultToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
@@ -63,8 +62,7 @@ ResultGroup::operator std::string() const {
       "Measurements:\n\n");
 
   // Listing all the entries.
-  addVectorOfResultEntryToOStringstream(
-      &stream,
+  stream << vectorOfResultEntryToString(
       ad_utility::transform(entries_,
                             [](const auto& pointer) { return (*pointer); }),
       std::string{outputIndentation}, std::string{outputIndentation});
