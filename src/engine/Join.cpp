@@ -16,7 +16,6 @@
 #include <functional>
 #include <sstream>
 #include <type_traits>
-#include <unordered_set>
 #include <vector>
 
 using std::string;

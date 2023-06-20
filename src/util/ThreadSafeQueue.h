@@ -94,7 +94,7 @@ class OrderedThreadSafeQueue {
   size_t sequenceNumber_ = 0;
   bool push(size_t sequenceNumber, T value) {
     std::unique_lock lock{mutex_};
-    cv_.wait(
+    cv_.wait(lock,
         [this, sequenceNumber]() { return sequenceNumber == sequenceNumber_; });
     ++sequenceNumber_;
     bool result = queue_.push(std::move(value));
