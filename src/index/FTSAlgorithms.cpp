@@ -240,7 +240,7 @@ void FTSAlgorithms::intersectTwoPostingLists(
 }
 
 // _____________________________________________________________________________
-Index::WordEntityPostings FTSAlgorithms::intersectKWay(
+Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
     const vector<Index::WordEntityPostings>& wepVecs,
     vector<Id>* lastListEids) {
   size_t k = wepVecs.size();
@@ -324,26 +324,70 @@ Index::WordEntityPostings FTSAlgorithms::intersectKWay(
           s += wepVecs[i].scores_[(i == currentList ? nextIndices[i]
                                                     : nextIndices[i] - 1)];
         }
+        vector<size_t> offsets;
+        offsets.resize(k - 1, 0);
+        size_t kIndex = k - 2;
+        vector<size_t> currentIndices;
+        currentIndices.reserve(k - 1);
+        for (int j = 0; j < k - 1; j++) {
+          currentIndices[j] =
+              currentList ? nextIndices[kIndex] : nextIndices[kIndex] - 1;
+        }
+        size_t matchInEL = (k - 1 == currentList ? nextIndices[k - 1]
+                                                 : nextIndices[k - 1] - 1);
         if (entityMode) {
-          // If entities are involved, there may be multiple postings
-          // for one context. Handle all matching the current context.
-          size_t matchInEL = (k - 1 == currentList ? nextIndices[k - 1]
-                                                   : nextIndices[k - 1] - 1);
           while (matchInEL < wepVecs[k - 1].cids_.size() &&
                  wepVecs[k - 1].cids_[matchInEL] == currentContext) {
             resultWep.cids_[n] = currentContext;
             resultWep.eids_[n] = (*lastListEids)[matchInEL];
             resultWep.scores_[n] = s + wepVecs[k - 1].scores_[matchInEL];
+            while (kIndex > 0) {
+              while (true) {
+                if (currentIndices[kIndex] + offsets[kIndex] >=
+                        wepVecs[kIndex].cids_.size() ||
+                    wepVecs[kIndex]
+                            .cids_[currentIndices[kIndex] + offsets[kIndex]] !=
+                        wepVecs[kIndex].cids_[currentIndices[kIndex]]) {
+                  offsets[kIndex] = 0;
+                  kIndex--;
+                  offsets[kIndex]++;
+                  break;
+                }
+                kIndex = k - 2;
+                resultWep.wids_.push_back(
+                    wepVecs[kIndex]
+                        .wids_[currentIndices[kIndex] +
+                               offsets[kIndex]]);  // TODO: solution for writing
+                                                   // this
+                offsets[kIndex]++;
+              }
+            }
             n++;
-            ++matchInEL;
           }
-          nextIndices[k - 1] = matchInEL;
         } else {
           resultWep.cids_[n] = currentContext;
           resultWep.scores_[n] =
               s + wepVecs[k - 1]
                       .scores_[(k - 1 == currentList ? nextIndices[k - 1]
                                                      : nextIndices[k - 1] - 1)];
+          while (true) {
+            if (currentIndices[kIndex] + offsets[kIndex] >=
+                    wepVecs[kIndex].cids_.size() ||
+                wepVecs[kIndex]
+                        .cids_[currentIndices[kIndex] + offsets[kIndex]] !=
+                    wepVecs[kIndex].cids_[currentIndices[kIndex]]) {
+              offsets[kIndex] = 0;
+              kIndex--;
+              offsets[kIndex]++;
+              break;
+            }
+            kIndex = k - 2;
+            resultWep.wids_.push_back(
+                wepVecs[kIndex].wids_[currentIndices[kIndex] +
+                                      offsets[kIndex]]);  // TODO: solution for
+                                                          // writing this
+            offsets[kIndex]++;
+          }
           n++;
         }
         // Optimization: The last list will feature the fewest different

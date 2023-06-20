@@ -78,7 +78,7 @@ class FTSAlgorithms {
   // That list (param: eids) can be given or null.
   // If it is null, resEids is left untouched, otherwise resEids
   // will contain word/entity for the matching contexts.
-  static Index::WordEntityPostings intersectKWay(
+  static Index::WordEntityPostings crossIntersectKWay(
       const vector<Index::WordEntityPostings>& wepVecs,
       vector<Id>* lastListEids);
 

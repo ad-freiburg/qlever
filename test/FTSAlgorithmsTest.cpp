@@ -189,7 +189,7 @@ TEST(FTSAlgorithmsTest, intersectKWayTest) {
   wepVecs.push_back(wep1);
 
   // No eids / no special case
-  resultWep = FTSAlgorithms::intersectKWay(wepVecs, nullptr);
+  resultWep = FTSAlgorithms::crossIntersectKWay(wepVecs, nullptr);
   ASSERT_EQ(2u, resultWep.cids_.size());
   ASSERT_EQ(0u, resultWep.eids_.size());
   ASSERT_EQ(2u, resultWep.scores_.size());
@@ -227,7 +227,7 @@ TEST(FTSAlgorithmsTest, intersectKWayTest) {
   wep2.scores_ = scores2;
   wepVecs.push_back(wep2);
 
-  resultWep = FTSAlgorithms::intersectKWay(wepVecs, &eids);
+  resultWep = FTSAlgorithms::crossIntersectKWay(wepVecs, &eids);
   ASSERT_EQ(2u, resultWep.cids_.size());
   ASSERT_EQ(2u, resultWep.eids_.size());
   ASSERT_EQ(2u, resultWep.scores_.size());

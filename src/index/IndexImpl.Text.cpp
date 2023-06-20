@@ -739,7 +739,7 @@ void IndexImpl::getContextListForWords(const string& words,
           wepVecs[0].cids_, wepVecs[1].scores_, wepVecs[1].cids_,
           wepVecs[1].scores_, wep.cids_, wep.scores_);
     } else {
-      wep = FTSAlgorithms::intersectKWay(wepVecs, nullptr);
+      wep = FTSAlgorithms::crossIntersectKWay(wepVecs, nullptr);
     }
   } else {
     wep = getWordPostingsForTerm(terms[0]);
@@ -852,7 +852,7 @@ Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
         }
       }
       wepVecs.push_back(getEntityPostingsForTerm(terms[useElFromTerm]));
-      resultWep = FTSAlgorithms::intersectKWay(
+      resultWep = FTSAlgorithms::crossIntersectKWay(
           wepVecs,
           &wepVecs.back().eids_);  // TODO: rewrite into crossIntersectKWay so
                                    // that word id  is also considered
