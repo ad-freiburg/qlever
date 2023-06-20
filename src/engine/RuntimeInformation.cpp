@@ -23,10 +23,14 @@ std::string RuntimeInformation::toString() const {
 
 namespace {
 // A small formatting helper used inside RuntimeInformation::writeToStream.
-std::string indentStr(size_t indent) {
+std::string indentStr(size_t indent, bool stripped = false) {
   std::string ind;
   for (size_t i = 0; i < indent; i++) {
-    ind += "│  ";
+    if (stripped && i == indent - 1) {
+      ind += "│";
+    } else {
+      ind += "│  ";
+    }
   }
   return ind;
 }
@@ -35,7 +39,7 @@ std::string indentStr(size_t indent) {
 // ________________________________________________________________________________________________________________
 void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
   using json = nlohmann::json;
-  out << indentStr(indent) << '\n';
+  out << indentStr(indent, true) << '\n';
   out << indentStr(indent - 1) << "├─ " << descriptor_ << '\n';
   out << indentStr(indent) << "result_size: " << numRows_ << " x " << numCols_
       << '\n';
@@ -45,6 +49,7 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
       << '\n';
   out << indentStr(indent) << "operation_time: " << getOperationTime() << " ms"
       << '\n';
+  out << indentStr(indent) << "status: " << toString(status_) << '\n';
   out << indentStr(indent)
       << "cache_status: " << ad_utility::toString(cacheStatus_) << '\n';
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {

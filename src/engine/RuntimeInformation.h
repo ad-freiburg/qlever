@@ -117,7 +117,6 @@ class RuntimeInformation {
   void addLimitOffsetRow(const LimitOffsetClause& l, size_t timeForLimit,
                          bool fullResultIsNotCached);
 
- private:
   static std::string_view toString(Status status);
 };
 
