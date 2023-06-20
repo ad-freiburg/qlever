@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
   std::optional<ad_utility::NonNegative> stxxlMemoryGB;
   optind = 1;
 
-  Index index;
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
 
   boost::program_options::options_description boostOptions(
       "Options for IndexBuilderMain");

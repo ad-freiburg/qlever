@@ -97,6 +97,7 @@ constexpr static bool isTuple = isInstantiation<T, std::tuple>;
 template <typename T>
 constexpr static bool isVariant = isInstantiation<T, std::variant>;
 
+/// isArray<T> is true if and only if `T` is an instantiation of `std::array`.
 template <typename T>
 constexpr static bool isArray = false;
 

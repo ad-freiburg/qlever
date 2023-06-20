@@ -9,7 +9,8 @@
 #include "./IndexImpl.h"
 
 // ____________________________________________________________
-Index::Index() : pimpl_{std::make_unique<IndexImpl>()} {}
+Index::Index(ad_utility::AllocatorWithLimit<Id> allocator)
+    : pimpl_{std::make_unique<IndexImpl>(std::move(allocator))} {}
 Index::Index(Index&&) noexcept = default;
 
 // Needs to be in the .cpp file because of the unique_ptr to a forwarded class.
@@ -364,4 +365,11 @@ void Index::scan(const TripleComponent& col0String,
                  Permutation::Enum p,
                  ad_utility::SharedConcurrentTimeoutTimer timer) const {
   return pimpl_->scan(col0String, col1String, result, p, std::move(timer));
+}
+
+// _____________________________________________________
+size_t Index::getResultSizeOfScan(const TripleComponent& col0String,
+                                  const TripleComponent& col1String,
+                                  const Permutation::Enum& permutation) const {
+  return pimpl_->getResultSizeOfScan(col0String, col1String, permutation);
 }

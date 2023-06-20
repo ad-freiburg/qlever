@@ -19,7 +19,7 @@ namespace ad_utility::testing {
 // such that very small indices, as they are typically used for unit tests,
 // can be built without a lot of time and memory overhead.
 inline Index makeIndexWithTestSettings() {
-  Index index;
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
   index.stxxlMemoryInBytes() = 1024ul * 1024ul * 50;
   return index;
@@ -88,7 +88,7 @@ inline Index makeTestIndex(const std::string& indexBasename,
     index.setPrefixCompression(usePrefixCompression);
     index.createFromFile<TurtleParserAuto>(inputFilename);
   }
-  Index index;
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setUsePatterns(usePatterns);
   index.setLoadAllPermutations(loadAllPermutations);
   index.createFromOnDiskIndex(indexBasename);

@@ -38,7 +38,7 @@ struct DummyPermutation {
     Data data() const { return {}; }
   };
 
-  Metadata _meta;
+  Metadata meta_;
 };
 
 std::vector<std::array<Id, 3>> expectedResult() {

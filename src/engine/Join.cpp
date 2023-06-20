@@ -254,7 +254,6 @@ Join::ScanMethodType Join::getScanMethod(
     return
         [&idx, perm](Id id, IdTable* idTable) { idx.scan(id, idTable, perm); };
   };
-
   AD_CORRECTNESS_CHECK(scan.getResultWidth() == 3);
   return scanLambda(scan.permutation());
 }
