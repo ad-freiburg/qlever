@@ -82,18 +82,6 @@ static std::string categoryToString(
 }
 
 // ___________________________________________________________________________
-static std::string metadataToString(const BenchmarkMetadata& meta) {
-  const std::string& metaString = getMetadataPrettyString(meta, "", "");
-
-  // Just print none, if there isn't any.
-  if (metaString.empty()) {
-    return absl::StrCat("General metadata: None");
-  } else {
-    return absl::StrCat("General metadata: ", metaString);
-  }
-}
-
-// ___________________________________________________________________________
 std::string benchmarkResultsToString(
     const BenchmarkInterface* const benchmarkClass,
     const BenchmarkResults& results) {
@@ -132,7 +120,13 @@ std::string benchmarkResultsToString(
                 << "\n";
 
   // Visualize the general metadata.
-  visualization << metadataToString(benchmarkClass->getMetadata());
+  if (const std::string& metadataString = getMetadataPrettyString(
+          benchmarkClass->getMetadata(), "General metadata: ", "");
+      !metadataString.empty()) {
+    visualization << metadataString;
+  } else {
+    visualization << "General metadata: None";
+  }
 
   // Visualization for single measurments, if there are any.
   addNonEmptyCategorieToStringSteam(
