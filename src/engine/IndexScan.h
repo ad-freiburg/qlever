@@ -12,47 +12,29 @@ using std::string;
 class SparqlTriple;
 
 class IndexScan : public Operation {
- public:
-  enum ScanType {
-    PSO_BOUND_S = 0,
-    POS_BOUND_O = 1,
-    PSO_FREE_S = 2,
-    POS_FREE_O = 3,
-    SPO_FREE_P = 4,
-    SOP_BOUND_O = 5,
-    SOP_FREE_O = 6,
-    OPS_FREE_P = 7,
-    OSP_FREE_S = 8,
-    FULL_INDEX_SCAN_SPO = 9,
-    FULL_INDEX_SCAN_SOP = 10,
-    FULL_INDEX_SCAN_PSO = 11,
-    FULL_INDEX_SCAN_POS = 12,
-    FULL_INDEX_SCAN_OSP = 13,
-    FULL_INDEX_SCAN_OPS = 14
-  };
-
  private:
-  ScanType _type;
-  TripleComponent _subject;
-  string _predicate;
-  TripleComponent _object;
-  size_t _sizeEstimate;
-  vector<float> _multiplicity;
+  Permutation::Enum permutation_;
+  TripleComponent subject_;
+  TripleComponent predicate_;
+  TripleComponent object_;
+  size_t numVariables_;
+  size_t sizeEstimate_;
+  vector<float> multiplicity_;
 
-  std::optional<std::shared_ptr<const ResultTable>> _precomputedResult =
+  std::optional<std::shared_ptr<const ResultTable>> precomputedResult_ =
       std::nullopt;
 
  public:
   string getDescriptor() const override;
 
-  IndexScan(QueryExecutionContext* qec, ScanType type,
+  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTriple& triple);
 
   virtual ~IndexScan() = default;
 
-  const string& getPredicate() const { return _predicate; }
-  const TripleComponent& getSubject() const { return _subject; }
-  const TripleComponent& getObject() const { return _object; }
+  const TripleComponent& getPredicate() const { return predicate_; }
+  const TripleComponent& getSubject() const { return subject_; }
+  const TripleComponent& getObject() const { return object_; }
 
   size_t getResultWidth() const override;
 
@@ -64,7 +46,7 @@ class IndexScan : public Operation {
 
   // Return the exact result size of the index scan. This is always known as it
   // can be read from the Metadata.
-  size_t getExactSize() const { return _sizeEstimate; }
+  size_t getExactSize() const { return sizeEstimate_; }
 
  private:
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for
@@ -77,56 +59,28 @@ class IndexScan : public Operation {
   void determineMultiplicities();
 
   float getMultiplicity(size_t col) override {
-    if (_multiplicity.empty()) {
+    if (multiplicity_.empty()) {
       determineMultiplicities();
     }
-    assert(col < _multiplicity.size());
-    return _multiplicity[col];
+    assert(col < multiplicity_.size());
+    return multiplicity_[col];
   }
 
-  void precomputeSizeEstimate() { _sizeEstimate = computeSizeEstimate(); }
+  void precomputeSizeEstimate() { sizeEstimate_ = computeSizeEstimate(); }
 
   bool knownEmptyResult() override { return getSizeEstimateBeforeLimit() == 0; }
 
   // Currently only the full scans support a limit clause.
   [[nodiscard]] bool supportsLimit() const override {
-    switch (_type) {
-      case FULL_INDEX_SCAN_SPO:
-      case FULL_INDEX_SCAN_SOP:
-      case FULL_INDEX_SCAN_PSO:
-      case FULL_INDEX_SCAN_POS:
-      case FULL_INDEX_SCAN_OSP:
-      case FULL_INDEX_SCAN_OPS:
-        return true;
-      default:
-        return false;
-    }
+    return getResultWidth() == 3;
   }
 
-  ScanType getType() const { return _type; }
+  Permutation::Enum permutation() const { return permutation_; }
 
  private:
   ResultTable computeResult() override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
-
-  void computePSOboundS(IdTable* result) const;
-
-  void computePSOfreeS(IdTable* result) const;
-
-  void computePOSboundO(IdTable* result) const;
-
-  void computePOSfreeO(IdTable* result) const;
-
-  void computeSPOfreeP(IdTable* result) const;
-
-  void computeSOPboundO(IdTable* result) const;
-
-  void computeSOPfreeO(IdTable* result) const;
-
-  void computeOPSfreeP(IdTable* result) const;
-
-  void computeOSPfreeS(IdTable* result) const;
 
   void computeFullScan(IdTable* result, Permutation::Enum permutation) const;
 
@@ -138,6 +92,11 @@ class IndexScan : public Operation {
 
   std::optional<std::shared_ptr<const ResultTable>>
   getPrecomputedResultFromQueryPlanning() override {
-    return _precomputedResult;
+    return precomputedResult_;
   }
+
+  // Return the stored triple in the order that corresponds to the
+  // `permutation_`. For example if `permutation_ == PSO` then the result is
+  // {&predicate_, &subject_, &object_}
+  std::array<const TripleComponent* const, 3> getPermutedTriple() const;
 };

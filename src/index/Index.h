@@ -12,7 +12,7 @@
 
 #include "global/Id.h"
 #include "index/CompressedString.h"
-#include "index/Permutations.h"
+#include "index/Permutation.h"
 #include "index/StringSortComparator.h"
 #include "index/Vocabulary.h"
 #include "parser/TripleComponent.h"

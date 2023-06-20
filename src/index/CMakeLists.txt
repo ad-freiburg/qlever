@@ -9,6 +9,7 @@ add_library(index
         IndexMetaData.h IndexMetaDataImpl.h
         MetaDataHandler.h
         StxxlSortFunctors.h
+        Permutation.cpp
         TextMetaData.cpp TextMetaData.h
         DocsDB.cpp DocsDB.h
         FTSAlgorithms.cpp FTSAlgorithms.h

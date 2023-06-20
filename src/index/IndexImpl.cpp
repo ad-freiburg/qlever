@@ -586,16 +586,16 @@ IndexImpl::createPermutations(auto&& sortedTriples, const Permutation& p1,
                               const Permutation& p2,
                               auto&&... perTripleCallbacks) {
   auto metaData = createPermutationPairImpl(
-      onDiskBase_ + ".index" + p1._fileSuffix,
-      onDiskBase_ + ".index" + p2._fileSuffix, AD_FWD(sortedTriples),
-      p1._keyOrder[0], p1._keyOrder[1], p1._keyOrder[2],
+      onDiskBase_ + ".index" + p1.fileSuffix_,
+      onDiskBase_ + ".index" + p2.fileSuffix_, AD_FWD(sortedTriples),
+      p1.keyOrder_[0], p1.keyOrder_[1], p1.keyOrder_[2],
       AD_FWD(perTripleCallbacks)...);
 
   if (metaData.has_value()) {
     auto& mdv = metaData.value();
-    LOG(INFO) << "Statistics for " << p1._readableName << ": "
+    LOG(INFO) << "Statistics for " << p1.readableName_ << ": "
               << mdv.first.statistics() << std::endl;
-    LOG(INFO) << "Statistics for " << p2._readableName << ": "
+    LOG(INFO) << "Statistics for " << p2.readableName_ << ": "
               << mdv.second.statistics() << std::endl;
   }
 
@@ -610,17 +610,17 @@ void IndexImpl::createPermutationPair(auto&& sortedTriples,
   auto metaData = createPermutations(AD_FWD(sortedTriples), p1, p2,
                                      AD_FWD(perTripleCallbacks)...);
   // Set the name of this newly created pair of `IndexMetaData` objects.
-  // NOTE: When `setKbName` was called, it set the name of pso_._meta,
-  // pso_._meta, ... which however are not used during index building.
+  // NOTE: When `setKbName` was called, it set the name of pso_.meta_,
+  // pso_.meta_, ... which however are not used during index building.
   // `getKbName` simple reads one of these names.
   metaData.value().first.setName(getKbName());
   metaData.value().second.setName(getKbName());
   if (metaData) {
-    LOG(INFO) << "Writing meta data for " << p1._readableName << " and "
-              << p2._readableName << " ..." << std::endl;
-    ad_utility::File f1(onDiskBase_ + ".index" + p1._fileSuffix, "r+");
+    LOG(INFO) << "Writing meta data for " << p1.readableName_ << " and "
+              << p2.readableName_ << " ..." << std::endl;
+    ad_utility::File f1(onDiskBase_ + ".index" + p1.fileSuffix_, "r+");
     metaData.value().first.appendToFile(&f1);
-    ad_utility::File f2(onDiskBase_ + ".index" + p2._fileSuffix, "r+");
+    ad_utility::File f2(onDiskBase_ + ".index" + p2.fileSuffix_, "r+");
     metaData.value().second.appendToFile(&f2);
   }
 }
@@ -1125,7 +1125,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
 
 // ____________________________________________________________________________
 IndexImpl::NumNormalAndInternal IndexImpl::numTriples() const {
-  return {numTriplesNormal_, PSO()._meta.getNofTriples() - numTriplesNormal_};
+  return {numTriplesNormal_, PSO().meta_.getNofTriples() - numTriplesNormal_};
 }
 
 // ____________________________________________________________________________
@@ -1258,8 +1258,8 @@ vector<float> IndexImpl::getMultiplicities(
   const auto& p = getPermutation(permutation);
   std::optional<Id> keyId = key.toValueId(getVocab());
   vector<float> res;
-  if (keyId.has_value() && p._meta.col0IdExists(keyId.value())) {
-    auto metaData = p._meta.getMetaData(keyId.value());
+  if (keyId.has_value() && p.meta_.col0IdExists(keyId.value())) {
+    auto metaData = p.meta_.getMetaData(keyId.value());
     res.push_back(metaData.getCol1Multiplicity());
     res.push_back(metaData.getCol2Multiplicity());
   } else {
@@ -1278,7 +1278,7 @@ vector<float> IndexImpl::getMultiplicities(
       numTriples / numDistinctSubjects().normalAndInternal_(),
       numTriples / numDistinctPredicates().normalAndInternal_(),
       numTriples / numDistinctObjects().normalAndInternal_()};
-  return {m[p._keyOrder[0]], m[p._keyOrder[1]], m[p._keyOrder[2]]};
+  return {m[p.keyOrder_[0]], m[p.keyOrder_[1]], m[p.keyOrder_[2]]};
 }
 
 // ___________________________________________________________________
@@ -1292,7 +1292,7 @@ void IndexImpl::scan(const TripleComponent& key, IdTable* result,
                      Permutation::Enum permutation,
                      ad_utility::SharedConcurrentTimeoutTimer timer) const {
   const auto& p = getPermutation(permutation);
-  LOG(DEBUG) << "Performing " << p._readableName
+  LOG(DEBUG) << "Performing " << p.readableName_
              << " scan for full list for: " << key << "\n";
 
   if (std::optional<Id> id = key.toValueId(getVocab()); id.has_value()) {
@@ -1316,7 +1316,7 @@ void IndexImpl::scan(const TripleComponent& col0String,
     return;
   }
 
-  LOG(DEBUG) << "Performing " << p._readableName << "  scan of relation "
+  LOG(DEBUG) << "Performing " << p.readableName_ << "  scan of relation "
              << col0String << " with fixed subject: " << col1String << "...\n";
 
   p.scan(col0Id.value(), col1Id.value(), result, timer);
