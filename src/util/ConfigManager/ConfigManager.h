@@ -119,19 +119,9 @@ class ConfigManager {
   }
 
   /*
-  @brief Creates and adds a new configuration option.
-
-  @tparam OptionType The type of value, the configuration option can hold.
-
-  @param optionName Name of the option. Additionally, this the one name is the
-  entire path in json, needed to address the value held by this option.
-  @param optionDescription A description for the configuration option.
-  @param variableToPutValueOfTheOptionIn The value held by the configuration
-  option will be copied into this variable, whenever the value in the
-  configuration option changes.
-  @param defaultValue A default value for the configuration option. If none is
-  given, signified by an empty optional, then a value for the configuration
-  option MUST be given at runtime.
+  @brief Creates and adds a new configuration option, just like in the other
+  `createConfigOption`. But instead of a `pathToOption`, there is only an
+  `optionName`, which describes a path only made out of this single string.
   */
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
