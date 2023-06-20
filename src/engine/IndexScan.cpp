@@ -271,7 +271,7 @@ void IndexScan::computeFullScan(IdTable* result,
 std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
     const IndexScan& s1, const IndexScan& s2) {
   const auto& index = s1.getExecutionContext()->getIndex().getImpl();
-  AD_CONTRACT_CHECK(s1._numVariables < 3 && s2._numVariables < 3);
+  AD_CONTRACT_CHECK(s1.numVariables_ < 3 && s2.numVariables_ < 3);
 
   auto f = [&](const IndexScan& s)
       -> std::optional<
@@ -279,9 +279,9 @@ std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
     auto permutedTriple = s.getPermutedTriple();
     std::optional<Id> optId = permutedTriple[0]->toValueId(index.getVocab());
     std::optional<Id> optId2 =
-        s._numVariables == 2 ? std::nullopt
+        s.numVariables_ == 2 ? std::nullopt
                              : permutedTriple[1]->toValueId(index.getVocab());
-    if (!optId.has_value() || (!optId2.has_value() && s._numVariables == 1)) {
+    if (!optId.has_value() || (!optId2.has_value() && s.numVariables_ == 1)) {
       return std::nullopt;
     }
     auto optionalBla = index.getPermutation(s.permutation())
@@ -309,7 +309,7 @@ std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
     // TODO<joka921> pass the IDs here.
     Id col0Id = s.getPermutedTriple()[0]->toValueId(index.getVocab()).value();
     std::optional<Id> col1Id;
-    if (s._numVariables == 1) {
+    if (s.numVariables_ == 1) {
       col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
     }
     if (!col1Id.has_value()) {
@@ -331,7 +331,7 @@ std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
 cppcoro::generator<IdTable> IndexScan::lazyScanForJoinOfColumnWithScan(
     std::span<const Id> joinColumn, const IndexScan& s) {
   const auto& index = s.getExecutionContext()->getIndex().getImpl();
-  AD_CONTRACT_CHECK(s._numVariables < 3);
+  AD_CONTRACT_CHECK(s.numVariables_ < 3);
 
   auto f = [&](const IndexScan& s)
       -> std::optional<
@@ -339,9 +339,9 @@ cppcoro::generator<IdTable> IndexScan::lazyScanForJoinOfColumnWithScan(
     auto permutedTriple = s.getPermutedTriple();
     std::optional<Id> optId = permutedTriple[0]->toValueId(index.getVocab());
     std::optional<Id> optId2 =
-        s._numVariables == 2 ? std::nullopt
+        s.numVariables_ == 2 ? std::nullopt
                              : permutedTriple[1]->toValueId(index.getVocab());
-    if (!optId.has_value() || (!optId2.has_value() && s._numVariables == 1)) {
+    if (!optId.has_value() || (!optId2.has_value() && s.numVariables_ == 1)) {
       return std::nullopt;
     }
     auto optionalBla = index.getPermutation(s.permutation())
@@ -366,7 +366,7 @@ cppcoro::generator<IdTable> IndexScan::lazyScanForJoinOfColumnWithScan(
     // TODO<joka921> pass the IDs here.
     Id col0Id = s.getPermutedTriple()[0]->toValueId(index.getVocab()).value();
     std::optional<Id> col1Id;
-    if (s._numVariables == 1) {
+    if (s.numVariables_ == 1) {
       col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
     }
     if (!col1Id.has_value()) {

@@ -152,13 +152,13 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   // The first block might contain entries that are not part of our
   // actual scan result.
   bool firstBlockIsIncomplete =
-      beginBlock < endBlock && (beginBlock->firstTriple_[0] < col0Id ||
-                                beginBlock->lastTriple_[0] > col0Id);
+      beginBlock < endBlock && (beginBlock->firstTriple_.col0Id_ < col0Id ||
+                                beginBlock->lastTriple_.col0Id_ > col0Id);
   auto lastBlock = endBlock - 1;
 
   bool lastBlockIsIncomplete =
-      beginBlock < lastBlock && (lastBlock->firstTriple_[0] < col0Id ||
-                                 lastBlock->lastTriple_[0] > col0Id);
+      beginBlock < lastBlock && (lastBlock->firstTriple_.col0Id_ < col0Id ||
+                                 lastBlock->lastTriple_.col0Id_> col0Id);
 
   // Invariant: A relation spans multiple blocks exclusively or several
   // entities are stored completely in the same Block.
@@ -319,27 +319,27 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
 // TODO<joka921> Comment those helpers. Should we register them in the header as
 // private static functions?
 namespace {
-auto getJoinColumnRangeValue = [](std::array<Id, 3> block, Id col0Id,
+auto getJoinColumnRangeValue = [](CompressedBlockMetadata::PermutedTriple block, Id col0Id,
                                   std::optional<Id> col1Id) {
   auto minId = Id::makeUndefined();
   auto maxId = Id::fromBits(std::numeric_limits<uint64_t>::max());
-  if (block[0] < col0Id) {
+  if (block.col0Id_ < col0Id) {
     return minId;
   }
-  if (block[0] > col0Id) {
+  if (block.col0Id_ > col0Id) {
     return maxId;
   }
   if (!col1Id.has_value()) {
-    return block[1];
+    return block.col1Id_;
   }
 
-  if (block[1] < col1Id.value()) {
+  if (block.col1Id_ < col1Id.value()) {
     return minId;
   }
-  if (block[1] > col1Id.value()) {
+  if (block.col1Id_ > col1Id.value()) {
     return maxId;
   }
-  return block[2];
+  return block.col2Id_;
 };
 
 using IdPair = std::pair<Id, Id>;

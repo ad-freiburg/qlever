@@ -45,6 +45,44 @@ class Permutation {
   // everything that has to be done when reading an index from disk
   void loadFromDisk(const std::string& onDiskBase);
 
+    struct MetaDataAndBlocks {
+        const CompressedRelationMetadata relationMetadata_;
+        std::span<const CompressedBlockMetadata> blockMetadata_;
+    };
+
+    std::optional<MetaDataAndBlocks> getMetadataAndBlocks(
+            Id col0Id, std::optional<Id> col1Id) const {
+        if (!meta_.col0IdExists(col0Id)) {
+            return std::nullopt;
+        }
+
+        auto metadata = meta_.getMetaData(col0Id);
+        return MetaDataAndBlocks{
+                meta_.getMetaData(col0Id),
+                reader_.getBlocksFromMetadata(metadata, col1Id, meta_.blockData())};
+    }
+
+    cppcoro::generator<IdTable> lazyScan(
+            Id col0Id, const std::vector<CompressedBlockMetadata>& blocks,
+            ad_utility::AllocatorWithLimit<Id> allocator,
+            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
+        if (!meta_.col0IdExists(col0Id)) {
+            return {};
+        }
+        return reader_.lazyScan(meta_.getMetaData(col0Id), blocks, file_,
+                                std::move(allocator), timer);
+    }
+
+    cppcoro::generator<IdTable> lazyScan(
+            Id col0Id, Id col1Id, const std::vector<CompressedBlockMetadata>& blocks,
+            ad_utility::AllocatorWithLimit<Id> allocator,
+            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
+        if (!meta_.col0IdExists(col0Id)) {
+            return {};
+        }
+        return reader_.lazyScan(meta_.getMetaData(col0Id), col1Id, blocks, file_,
+                                std::move(allocator), timer);
+    }
   /// For a given ID for the first column, retrieve all IDs of the second and
   /// third column, and store them in `result`. This is just a thin wrapper
   /// around `CompressedRelationMetaData::scan`.

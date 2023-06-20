@@ -268,10 +268,6 @@ class CompressedRelationReader {
             ad_utility::File& file, IdTable* result,
             ad_utility::SharedConcurrentTimeoutTimer timer) const;
 
-  static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
-      const CompressedRelationMetadata& metadata, std::optional<Id> col1Id,
-      std::span<const CompressedBlockMetadata> blockMetadata);
-
   // Get all the blocks that can contain an Id from the `joinColumn`.
   // TODO<joka921> Include a timeout check.
   static std::vector<CompressedBlockMetadata> getBlocksForJoin(

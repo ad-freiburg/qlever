@@ -716,8 +716,9 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     AD_CORRECTNESS_CHECK(sameBlocksLeft.size() <= 1);
     AD_CORRECTNESS_CHECK(sameBlocksRight.size() <= 1);
 
-    auto fillWithAtLeastOne = [](auto& targetBuffer, auto& it,
-                                 const auto& end) {
+    auto fillWithAtLeastOne = [&lessThan](auto& targetBuffer, auto& it,
+                                          const auto& end) {
+      (void)lessThan;  // only needed when expensive checks are enabled.
       while (targetBuffer.empty() && it != end) {
         if (!it->empty()) {
           AD_EXPENSIVE_CHECK(std::ranges::is_sorted(*it, lessThan));
