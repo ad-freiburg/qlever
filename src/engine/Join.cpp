@@ -132,7 +132,8 @@ ResultTable Join::computeResult() {
     return {std::move(idTable), resultSortedOn(), LocalVocab()};
   }
 
-  // Note: If only one of the children is a scan, then we have made sure in the constructor that it is the right child.
+  // Note: If only one of the children is a scan, then we have made sure in the
+  // constructor that it is the right child.
   if (_right->getType() == QueryExecutionTree::SCAN) {
     computeResultForIndexScanAndColumn(
         leftRes->idTable(), _leftJoinCol,

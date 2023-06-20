@@ -158,7 +158,7 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
 
   bool lastBlockIsIncomplete =
       beginBlock < lastBlock && (lastBlock->firstTriple_.col0Id_ < col0Id ||
-                                 lastBlock->lastTriple_.col0Id_> col0Id);
+                                 lastBlock->lastTriple_.col0Id_ > col0Id);
 
   // Invariant: A relation spans multiple blocks exclusively or several
   // entities are stored completely in the same Block.
@@ -319,8 +319,8 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
 // TODO<joka921> Comment those helpers. Should we register them in the header as
 // private static functions?
 namespace {
-auto getJoinColumnRangeValue = [](CompressedBlockMetadata::PermutedTriple block, Id col0Id,
-                                  std::optional<Id> col1Id) {
+auto getJoinColumnRangeValue = [](CompressedBlockMetadata::PermutedTriple block,
+                                  Id col0Id, std::optional<Id> col1Id) {
   auto minId = Id::makeUndefined();
   auto maxId = Id::fromBits(std::numeric_limits<uint64_t>::max());
   if (block.col0Id_ < col0Id) {
