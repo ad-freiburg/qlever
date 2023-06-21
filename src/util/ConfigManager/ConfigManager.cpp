@@ -262,15 +262,15 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
         configurationOptionIndex.key()};
 
     // The corresponding `ConfigOption`.
-    ConfigOption* configurationOption = &(configurationOptions_.at(
+    ConfigOption& configurationOption = configurationOptions_.at(
         keyToConfigurationOptionIndex_.at(configurationOptionJsonPosition)
-            .get<size_t>()));
+            .get<size_t>());
 
     // Set the option, if possible.
     if (j.contains(configurationOptionJsonPosition)) {
       // This will throw an exception, if the json object can't be interpreted
       // with the wanted type.
-      configurationOption->setValueWithJson(
+      configurationOption.setValueWithJson(
           j.at(configurationOptionJsonPosition));
     }
 
@@ -279,7 +279,7 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
     points to, that means, it doesn't have a default value, and needs to be set
     by the user at runtime, but wasn't.
     */
-    if (!configurationOption->hasSetDereferencedVariablePointer()) {
+    if (!configurationOption.hasSetDereferencedVariablePointer()) {
       throw ConfigOptionWasntSetException(
           configurationOptionJsonPosition.to_string());
     }
