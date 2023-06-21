@@ -26,9 +26,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       numVariables_(static_cast<size_t>(subject_.isVariable()) +
                     static_cast<size_t>(predicate_.isVariable()) +
                     static_cast<size_t>(object_.isVariable())),
-      sizeEstimate_(std::numeric_limits<size_t>::max()) {
-  precomputeSizeEstimate();
-
+      sizeEstimate_(computeSizeEstimate()) {
   // Check the following invariant: The permuted input triple must contain at
   // least one variable, and all the variables must be at the end of the
   // permuted triple. For example in the PSO permutation, either only the O, or
@@ -142,29 +140,18 @@ size_t IndexScan::computeSizeEstimate() {
 
     // We have to do a simple scan anyway so might as well do it now
     if (getResultWidth() == 1) {
+      // TODO<C++23> Use the monadic operation `std::optional::or_else`.
+      // Note: we cannot use `optional::value_or()` here, because the else
+      // case is expensive to compute, and we need it lazily evaluated.
       if (auto size = getExecutionContext()->getQueryTreeCache().getPinnedSize(
               asString());
           size.has_value()) {
         return size.value();
       } else {
-        // Explicitly store the result of the index scan. This make sure that
-        // 1. It is not evicted from the cache before this query needs it again.
-        // 2. We preserve the information whether this scan was computed during
-        // the query planning.
-        // TODO<joka921> We should only do this for small index scans. Even with
-        // only one variable, index scans can become arbitrary large (e.g.
-        // ?x rdf:type <someFixedType>. But this requires more information
-        // from the scanning, so I leave it open for another PR.
-        createRuntimeInfoFromEstimates();
-        precomputedResult_ = getResult();
-        if (getRuntimeInfo().status_ == RuntimeInformation::Status::completed) {
-          getRuntimeInfo().status_ =
-              RuntimeInformation::Status::completedDuringQueryPlanning;
-        }
-        auto sizeEstimate = precomputedResult_.value()->size();
-        getRuntimeInfo().sizeEstimate_ = sizeEstimate;
-        getRuntimeInfo().costEstimate_ = sizeEstimate;
-        return sizeEstimate;
+        // This call explicitly has to read two blocks of triples from memory to
+        // obtain an exact size estimate.
+        return getIndex().getResultSizeOfScan(
+            *getPermutedTriple()[0], *getPermutedTriple()[1], permutation_);
       }
     } else if (getResultWidth() == 2) {
       const TripleComponent& firstKey = *getPermutedTriple()[0];

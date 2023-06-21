@@ -21,9 +21,6 @@ class IndexScan : public Operation {
   size_t sizeEstimate_;
   vector<float> multiplicity_;
 
-  std::optional<std::shared_ptr<const ResultTable>> precomputedResult_ =
-      std::nullopt;
-
  public:
   string getDescriptor() const override;
 
@@ -66,9 +63,7 @@ class IndexScan : public Operation {
     return multiplicity_[col];
   }
 
-  void precomputeSizeEstimate() { sizeEstimate_ = computeSizeEstimate(); }
-
-  bool knownEmptyResult() override { return getSizeEstimateBeforeLimit() == 0; }
+  bool knownEmptyResult() override { return getExactSize() == 0; }
 
   // Currently only the full scans support a limit clause.
   [[nodiscard]] bool supportsLimit() const override {
@@ -89,11 +84,6 @@ class IndexScan : public Operation {
   string asStringImpl(size_t indent) const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
-
-  std::optional<std::shared_ptr<const ResultTable>>
-  getPrecomputedResultFromQueryPlanning() override {
-    return precomputedResult_;
-  }
 
   // Return the stored triple in the order that corresponds to the
   // `permutation_`. For example if `permutation_ == PSO` then the result is

@@ -154,16 +154,6 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       return CacheValue{std::move(result), getRuntimeInfo()};
     };
 
-    // If the result was already computed during the query planning, then
-    // we can simply return that result, but only if we don't have to pin
-    // it to the cache.
-    if (!pinResult) {
-      auto precomputedResult = getPrecomputedResultFromQueryPlanning();
-      if (precomputedResult.has_value()) {
-        return std::move(precomputedResult.value());
-      }
-    }
-
     auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda)
                               : cache.computeOnce(cacheKey, computeLambda);
 
@@ -267,23 +257,15 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   // The operation time is computed as
   // `totalTime_ - #sum of childrens' total time#` in `getOperationTime()`.
   // To set it to zero we thus have to set the `totalTime_` to that sum.
-  _runtimeInfo.totalTime_ = 0;
-  std::ranges::for_each(
-      _runtimeInfo.children_, [this](const RuntimeInformation& child) {
-        if (child.status_ !=
-            RuntimeInformation::Status::completedDuringQueryPlanning) {
-          _runtimeInfo.totalTime_ += child.totalTime_;
-        }
-      });
+  auto timesOfChildren = _runtimeInfo.children_ |
+                         std::views::transform(&RuntimeInformation::totalTime_);
+  _runtimeInfo.totalTime_ =
+      std::accumulate(timesOfChildren.begin(), timesOfChildren.end(), 0.0);
 }
 
 // _____________________________________________________________________________
 void Operation::updateRuntimeInformationWhenOptimizedOut() {
   auto setStatus = [](RuntimeInformation& rti, const auto& self) -> void {
-    if (rti.status_ ==
-        RuntimeInformation::Status::completedDuringQueryPlanning) {
-      return;
-    }
     rti.status_ = RuntimeInformation::Status::optimizedOut;
     rti.totalTime_ = 0;
     for (auto& child : rti.children_) {
@@ -306,21 +288,6 @@ void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
 
 // __________________________________________________________________
 void Operation::createRuntimeInfoFromEstimates() {
-  // Handle the case that the result was already computed during the query
-  // planning. In this case, `getResult()` was already called on this object and
-  // the runtime information is already correct.
-  if (getPrecomputedResultFromQueryPlanning().has_value()) {
-    return;
-  }
-  // TODO<joka921> If the above stuff works, this can be removed.
-  auto statusFromPrecomputedResult =
-      [this]() -> std::optional<RuntimeInformation::Status> {
-    if (getPrecomputedResultFromQueryPlanning().has_value()) {
-      return _runtimeInfo.status_;
-    } else {
-      return std::nullopt;
-    }
-  }();
   _runtimeInfo.setColumnNames(getInternallyVisibleVariableColumns());
   const auto numCols = getResultWidth();
   _runtimeInfo.numCols_ = numCols;
@@ -353,12 +320,6 @@ void Operation::createRuntimeInfoFromEstimates() {
     _runtimeInfo.numRows_ = rtiFromCache.numRows_;
     _runtimeInfo.originalTotalTime_ = rtiFromCache.totalTime_;
     _runtimeInfo.originalOperationTime_ = rtiFromCache.getOperationTime();
-  }
-  if (statusFromPrecomputedResult ==
-      RuntimeInformation::Status::completedDuringQueryPlanning) {
-    _runtimeInfo.status_ =
-        RuntimeInformation::Status::completedDuringQueryPlanning;
-    _runtimeInfo.cacheStatus_ = ad_utility::CacheStatus::computed;
   }
 }
 
@@ -430,17 +391,4 @@ const vector<ColumnIndex>& Operation::getResultSortedOn() const {
     _resultSortedColumns = resultSortedOn();
   }
   return _resultSortedColumns.value();
-}
-
-// ___________________________________________________________________________
-size_t Operation::getTotalExecutionTimeDuringQueryPlanning() const {
-  size_t totalTime = 0;
-  forAllDescendants([&totalTime](const QueryExecutionTree* tree) {
-    const auto& rti = tree->getRootOperation()->_runtimeInfo;
-    if (rti.status_ ==
-        RuntimeInformation::Status::completedDuringQueryPlanning) {
-      totalTime += rti.getOperationTime();
-    }
-  });
-  return totalTime;
 }

@@ -245,7 +245,7 @@ class CompressedRelationReader {
   mutable Allocator allocator_;
 
  public:
-  CompressedRelationReader(Allocator allocator)
+  explicit CompressedRelationReader(Allocator allocator)
       : allocator_{std::move(allocator)} {}
   /**
    * @brief For a permutation XYZ, retrieve all YZ for a given X.
@@ -286,6 +286,16 @@ class CompressedRelationReader {
             const vector<CompressedBlockMetadata>& blocks,
             ad_utility::File& file, IdTable* result,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+
+  // Only get the size of the result for a given permutation XYZ for a given X
+  // and Y. This can be done by scanning one or two blocks. Note: The overload
+  // of this function where only the X is given is not needed, as the size of
+  // these scans can be retrieved from the `CompressedRelationMetadata`
+  // directly.
+  size_t getResultSizeOfScan(const CompressedRelationMetadata& metaData,
+                             Id col1Id,
+                             const vector<CompressedBlockMetadata>& blocks,
+                             ad_utility::File& file) const;
 
   // Get the contiguous subrange of the given `blockMetadata` for the blocks
   // that contain the triples that have the relationId/col0Id that was specified
@@ -331,8 +341,19 @@ class CompressedRelationReader {
   // If `columnIndices` is `nullopt`, then all columns of the block are read,
   // else only the specified columns are read.
   DecompressedBlock readAndDecompressBlock(
-      const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
+      const CompressedBlockMetadata& blockMetadata, ad_utility::File& file,
       std::optional<std::vector<size_t>> columnIndices) const;
+
+  // Read the block that is identified by the `blockMetadata` from the `file`,
+  // decompress and return it. Before returning, delete all rows where the col0
+  // ID / relation ID does not correspond with the `relationMetadata`, or where
+  // the `col1Id` doesn't match. For this to work, the block has to be one of
+  // the blocks that actually store triples from the given `relationMetadata`'s
+  // relation, else the behavior is undefined.
+  DecompressedBlock readPossiblyIncompleteBlock(
+      const CompressedRelationMetadata& relationMetadata, Id col1Id,
+      ad_utility::File& file,
+      const CompressedBlockMetadata& blockMetadata) const;
 };
 
 #endif  // QLEVER_COMPRESSEDRELATION_H
