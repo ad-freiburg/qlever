@@ -1,6 +1,6 @@
 // Copyright 2021, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach (kalmbacj@informatik.uni-freiburg.de)
+//                 Chair of Algorithms and Data Structures.
+// Author: Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
 #include "CompressedRelation.h"
 
