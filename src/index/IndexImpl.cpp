@@ -1324,14 +1324,14 @@ void IndexImpl::scan(const TripleComponent& col0String,
 
 // _____________________________________________________________________________
 size_t IndexImpl::getResultSizeOfScan(
-    const TripleComponent& col0String, const TripleComponent& col1String,
+    const TripleComponent& col0, const TripleComponent& col1,
     const Permutation::Enum& permutation) const {
-  std::optional<Id> col0Id = col0String.toValueId(getVocab());
-  std::optional<Id> col1Id = col1String.toValueId(getVocab());
-  const Permutation& p = getPermutation(permutation);
+  std::optional<Id> col0Id = col0.toValueId(getVocab());
+  std::optional<Id> col1Id = col1.toValueId(getVocab());
   if (!col0Id.has_value() || !col1Id.has_value()) {
     return 0;
   }
+  const Permutation& p = getPermutation(permutation);
   return p.getResultSizeOfScan(col0Id.value(), col1Id.value());
 }
 

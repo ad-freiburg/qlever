@@ -41,8 +41,7 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
       << '\n';
   out << indentStr(indent) << "columns: " << absl::StrJoin(columnNames_, ", ")
       << '\n';
-  out << indentStr(indent) << "total_time: " << getTotalTimeCorrected() << " ms"
-      << '\n';
+  out << indentStr(indent) << "total_time: " << totalTime_ << " ms" << '\n';
   out << indentStr(indent) << "operation_time: " << getOperationTime() << " ms"
       << '\n';
   out << indentStr(indent)
@@ -108,13 +107,10 @@ double RuntimeInformation::getOperationTime() const {
     // If a child was computed during the query planning, the time spent
     // computing that child is *not* included in this operation's
     // `totalTime_`. That's why we skip such children in the following loop.
-    auto result = totalTime_;
-    for (const RuntimeInformation& child : children_) {
-      if (child.status_ != completedDuringQueryPlanning) {
-        result -= child.totalTime_;
-      }
-    }
-    return result;
+    auto timesOfChildren =
+        children_ | std::views::transform(&RuntimeInformation::totalTime_);
+    return totalTime_ -
+           std::accumulate(timesOfChildren.begin(), timesOfChildren.end(), 0.0);
   }
 }
 
@@ -132,8 +128,6 @@ std::string_view RuntimeInformation::toString(Status status) {
   switch (status) {
     case completed:
       return "completed";
-    case completedDuringQueryPlanning:
-      return "completed during query planning";
     case notStarted:
       return "not started";
     case optimizedOut:
@@ -147,32 +141,6 @@ std::string_view RuntimeInformation::toString(Status status) {
   }
 }
 
-// _____________________________________________________________________________
-double RuntimeInformation::getTotalTimeCorrected() const {
-  double timeOfChildrenComputedDuringQueryPlanning = 0;
-
-  // Recursively get the `totalTime_` of all descendants that were computed
-  // during the query planning and add it to
-  // `timeOfChildrenComputedDuringQueryPlanning`. The pattern of a lambda that
-  // is called with itself as an argument is required for requires lambdas up
-  // until C++20 (for a detailed read, see
-  // http://pedromelendez.com/blog/2015/07/16/recursive-lambdas-in-c14/
-  // TODO<joka921, C++23> Use `explicit object parameters` aka `deducing this`
-  // to simplify the recursive lambda.
-  auto recursiveImpl = [&](const auto& recursiveCall,
-                           const RuntimeInformation& child) -> void {
-    if (child.status_ ==
-        RuntimeInformation::Status::completedDuringQueryPlanning) {
-      timeOfChildrenComputedDuringQueryPlanning += child.totalTime_;
-    }
-    for (const auto& descendant : child.children_) {
-      recursiveCall(recursiveCall, descendant);
-    }
-  };
-  recursiveImpl(recursiveImpl, *this);
-  return totalTime_ + timeOfChildrenComputedDuringQueryPlanning;
-}
-
 // ________________________________________________________________________________________________________________
 void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
   j = nlohmann::ordered_json{
@@ -180,7 +148,7 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
       {"result_rows", rti.numRows_},
       {"result_cols", rti.numCols_},
       {"column_names", rti.columnNames_},
-      {"total_time", rti.getTotalTimeCorrected()},
+      {"total_time", rti.totalTime_},
       {"operation_time", rti.getOperationTime()},
       {"original_total_time", rti.originalTotalTime_},
       {"original_operation_time", rti.originalOperationTime_},
@@ -197,9 +165,7 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
 // ________________________________________________________________________________________________________________
 void to_json(nlohmann::ordered_json& j,
              const RuntimeInformationWholeQuery& rti) {
-  j = nlohmann::ordered_json{
-      {"time_query_planning", rti.timeQueryPlanning},
-      {"time_index_scans_query_planning", rti.timeIndexScansQueryPlanning}};
+  j = nlohmann::ordered_json{{"time_query_planning", rti.timeQueryPlanning}};
 }
 
 // ___________________________________________________________________________________

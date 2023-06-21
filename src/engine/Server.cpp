@@ -596,19 +596,12 @@ boost::asio::awaitable<void> Server::processQuery(
     qet.isRoot() = true;  // allow pinning of the final result
     qet.recursivelySetTimeoutTimer(timeoutTimer);
     qet.getRootOperation()->createRuntimeInfoFromEstimates();
-    size_t timeForIndexScansInQueryPlanning =
-        qet.getRootOperation()->getTotalExecutionTimeDuringQueryPlanning();
-    size_t timeForQueryPlanning =
-        requestTimer.msecs() - timeForIndexScansInQueryPlanning;
+    size_t timeForQueryPlanning = requestTimer.msecs();
     auto& runtimeInfoWholeQuery =
         qet.getRootOperation()->getRuntimeInfoWholeQuery();
     runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
-    runtimeInfoWholeQuery.timeIndexScansQueryPlanning =
-        timeForIndexScansInQueryPlanning;
-    LOG(INFO)
-        << "Query planning done in " << timeForQueryPlanning << " ms"
-        << ", additional time spend on index scans during query planning: "
-        << timeForIndexScansInQueryPlanning << " ms" << std::endl;
+    LOG(INFO) << "Query planning done in " << timeForQueryPlanning << " ms"
+              << std::endl;
     LOG(TRACE) << qet.asString() << std::endl;
 
     // Common code for sending responses for the streamable media types

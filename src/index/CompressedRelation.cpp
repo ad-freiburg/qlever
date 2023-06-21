@@ -282,55 +282,24 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
     AD_CORRECTNESS_CHECK(endBlock - beginBlock <= 1);
   }
 
-  // The first and the last block might be incomplete (that is, only
-  // a part of these blocks is actually part of the result,
-  // set up a lambda which allows us to read these blocks, and returns
-  // the result as a vector.
-  auto readPossiblyIncompleteBlock = [&](const auto& block) {
-    DecompressedBlock uncompressedBuffer =
-        readAndDecompressBlock(block, file, std::nullopt);
-    AD_CORRECTNESS_CHECK(uncompressedBuffer.numColumns() == 2);
-    const auto& col1Column = uncompressedBuffer.getColumn(0);
-    const auto& col2Column = uncompressedBuffer.getColumn(1);
-    AD_CORRECTNESS_CHECK(col1Column.size() == col2Column.size());
-
-    // Find the range in the block, that belongs to the same relation `col0Id`
-    bool containedInOnlyOneBlock =
-        metadata.offsetInBlock_ != std::numeric_limits<uint64_t>::max();
-    auto begin = col1Column.begin();
-    if (containedInOnlyOneBlock) {
-      begin += metadata.offsetInBlock_;
-    }
-    auto end =
-        containedInOnlyOneBlock ? begin + metadata.numRows_ : col1Column.end();
-
-    // Find the range in the block, where also the col1Id matches (the second
-    // ID in the `std::array` does not matter).
-    std::tie(begin, end) = std::equal_range(begin, end, col1Id);
-
-    size_t beginIndex = begin - col1Column.begin();
-    size_t endIndex = end - col1Column.begin();
-
-    // Only extract the relevant portion of the second column.
-    IdTable result{1, allocator};
-    result.resize(endIndex - beginIndex);
-    std::copy(col2Column.begin() + beginIndex, col2Column.begin() + endIndex,
-              result.getColumn(0).begin());
-    return result;
-  };
-
   // The first and the last block might be incomplete, compute
   // and store the partial results from them.
-  std::optional<IdTable> firstBlockResult, lastBlockResult;
+  std::optional<DecompressedBlock> firstBlockResult;
+  std::optional<DecompressedBlock> lastBlockResult;
+  size_t totalResultSize = 0;
   if (beginBlock < endBlock) {
-    firstBlockResult = readPossiblyIncompleteBlock(*beginBlock);
+    firstBlockResult =
+        readPossiblyIncompleteBlock(metadata, col1Id, file, *beginBlock);
+    totalResultSize += firstBlockResult.value().size();
     ++beginBlock;
     if (timer) {
       timer->wlock()->checkTimeoutAndThrow("IndexScan: ");
     }
   }
   if (beginBlock < endBlock) {
-    lastBlockResult = readPossiblyIncompleteBlock(*(endBlock - 1));
+    lastBlockResult =
+        readPossiblyIncompleteBlock(metadata, col1Id, file, *(endBlock - 1));
+    totalResultSize += lastBlockResult.value().size();
     endBlock--;
     if (timer) {
       timer->wlock()->checkTimeoutAndThrow("IndexScan: ");
@@ -591,7 +560,6 @@ void CompressedRelationReader::scan(
                                      [](const auto& count, const auto& block) {
                                        return count + block.numRows_;
                                      });
-
   result->resize(totalResultSize);
 
   size_t rowIndexOfNextBlockStart = 0;
@@ -642,10 +610,79 @@ void CompressedRelationReader::scan(
   if (lastBlockResult.has_value()) {
     std::ranges::copy(lastBlockResult.value().getColumn(1),
                       result->getColumn(0).data() + rowIndexOfNextBlockStart);
-    AD_CORRECTNESS_CHECK(rowIndexOfNextBlockStart +
-                             lastBlockResult.value().size() ==
-                         result->size());
+    rowIndexOfNextBlockStart += lastBlockResult.value().size();
   }
+  AD_CORRECTNESS_CHECK(rowIndexOfNextBlockStart == result->size());
+}
+
+// _____________________________________________________________________________
+DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
+    const CompressedRelationMetadata& relationMetadata, Id col1Id,
+    ad_utility::File& file,
+    const CompressedBlockMetadata& blockMetadata) const {
+  DecompressedBlock block =
+      readAndDecompressBlock(blockMetadata, file, std::nullopt);
+  AD_CORRECTNESS_CHECK(block.numColumns() == 2);
+  const auto& col1Column = block.getColumn(0);
+  const auto& col2Column = block.getColumn(1);
+  AD_CORRECTNESS_CHECK(col1Column.size() == col2Column.size());
+
+  // Find the range in the blockMetadata, that belongs to the same relation
+  // `col0Id`
+  bool containedInOnlyOneBlock =
+      relationMetadata.offsetInBlock_ != std::numeric_limits<uint64_t>::max();
+  auto begin = col1Column.begin();
+  if (containedInOnlyOneBlock) {
+    begin += relationMetadata.offsetInBlock_;
+  }
+  auto end = containedInOnlyOneBlock ? begin + relationMetadata.numRows_
+                                     : col1Column.end();
+  auto subBlock = std::ranges::equal_range(begin, end, col1Id);
+  auto numResults = subBlock.size();
+  block.erase(block.begin(),
+              block.begin() + (subBlock.begin() - col1Column.begin()));
+  block.resize(numResults);
+  return block;
+};
+
+// _____________________________________________________________________________
+size_t CompressedRelationReader::getResultSizeOfScan(
+    const CompressedRelationMetadata& metadata, Id col1Id,
+    const vector<CompressedBlockMetadata>& blocks,
+    ad_utility::File& file) const {
+  // Get all the blocks  that possibly might contain our pair of col0Id and
+  // col1Id
+  auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blocks);
+  auto beginBlock = relevantBlocks.begin();
+  auto endBlock = relevantBlocks.end();
+
+  // The first and the last block might be incomplete (that is, only
+  // a part of these blocks is actually part of the result,
+  // set up a lambda which allows us to read these blocks, and returns
+  // the size of the result.
+  auto readSizeOfPossiblyIncompleteBlock = [&](const auto& block) {
+    return readPossiblyIncompleteBlock(metadata, col1Id, file, block).numRows();
+  };
+
+  size_t numResults = 0;
+  // The first and the last block might be incomplete, compute
+  // and store the partial results from them.
+  if (beginBlock < endBlock) {
+    numResults += readSizeOfPossiblyIncompleteBlock(*beginBlock);
+    ++beginBlock;
+  }
+  if (beginBlock < endBlock) {
+    numResults += readSizeOfPossiblyIncompleteBlock(*(endBlock - 1));
+    --endBlock;
+  }
+
+  // Determine the total size of the result.
+  // First accumulate the complete blocks in the "middle"
+  numResults += std::accumulate(beginBlock, endBlock, 0UL,
+                                [](const auto& count, const auto& block) {
+                                  return count + block.numRows_;
+                                });
+  return numResults;
 }
 
 // _____________________________________________________________________________
