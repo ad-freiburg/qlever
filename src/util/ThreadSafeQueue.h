@@ -109,7 +109,7 @@ class OrderedThreadSafeQueue {
   bool pushWasDisabled_ = false;
 
  public:
-  OrderedThreadSafeQueue(size_t maxSize) : queue_{maxSize} {}
+  explicit OrderedThreadSafeQueue(size_t maxSize) : queue_{maxSize} {}
   bool push(size_t sequenceNumber, T value) {
     std::unique_lock lock{mutex_};
     cv_.wait(lock, [this, sequenceNumber]() {
