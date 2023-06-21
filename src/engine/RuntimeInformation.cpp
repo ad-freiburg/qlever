@@ -40,15 +40,15 @@ std::string indentStr(size_t indent, bool stripped = false) {
 void RuntimeInformation::formatDetailValue(std::ostream& out,
                                            std::string_view key,
                                            const nlohmann::json& value) {
-  using nlohmann::json;
+  using enum nlohmann::json::value_t;
   // We want to print doubles with fixed precision and stream ints as their
   // native type so they get thousands separators. For everything else we
   // let nlohmann::json handle it.
-  if (value.type() == json::value_t::number_float) {
+  if (value.type() == number_float) {
     out << ad_utility::to_string(value.get<double>(), 2);
-  } else if (value.type() == json::value_t::number_unsigned) {
+  } else if (value.type() == number_unsigned) {
     out << value.template get<uint64_t>();
-  } else if (value.type() == json::value_t::number_integer) {
+  } else if (value.type() == number_integer) {
     out << value.get<int64_t>();
   } else {
     out << value;
