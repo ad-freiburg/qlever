@@ -148,6 +148,9 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
       getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
   auto beginBlock = relevantBlocks.begin();
   auto endBlock = relevantBlocks.end();
+  if (beginBlock == endBlock) {
+   co_return;
+  }
   Id col0Id = metadata.col0Id_;
   // The first block might contain entries that are not part of our
   // actual scan result.
@@ -230,6 +233,10 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blockMetadata);
   auto beginBlock = relevantBlocks.begin();
   auto endBlock = relevantBlocks.end();
+
+  if (beginBlock == endBlock) {
+    co_return;
+  }
 
   // Invariant: The col0Id is completely stored in a single block, or it is
   // contained in multiple blocks that only contain this col0Id,
