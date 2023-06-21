@@ -11,6 +11,7 @@
 #include <iterator>
 #include <regex>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 
 #include "util/Algorithm.h"
@@ -65,30 +66,25 @@ void ConfigManager::verifyPathToConfigOption(
     std::string_view optionName) const {
   // We need at least a name in the path.
   if (pathToOption.empty()) {
-    throw EmptyVectorException("pathToOption");
+    throw std::runtime_error(
+        "The vector 'pathToOption' is empty, which is not allowed. We need at "
+        "least a name for a working path to a configuration option.");
   }
 
-  /*
-  The first key must be a string, not a number. Having an array at the
-  highest level, would be bad practice, because setting and reading options,
-  that are just identified with numbers, is rather difficult.
-  */
   if (!std::holds_alternative<std::string>(pathToOption.front())) {
-    throw ConfigManagerOptionPathDoesntStartWithStringException(
-        vectorOfKeysForJsonToString(pathToOption));
+    throw std::runtime_error(absl::StrCat(
+        "The first key in '", vectorOfKeysForJsonToString(pathToOption),
+        "' must be a string, not a number. Having an array at the highest "
+        "level, would be bad practice, because setting and reading options, "
+        "that are just identified with numbers, is rather difficult."));
   }
 
   /*
   The last entry in the path is the name of the configuration option. If it
   isn't, something has gone wrong.
   */
-  if (!std::holds_alternative<std::string>(pathToOption.back())) {
-    throw ConfigManagerOptionPathDoesntEndWithStringException(
-        vectorOfKeysForJsonToString(pathToOption));
-  } else if (std::get<std::string>(pathToOption.back()) != optionName) {
-    throw ConfigManagerPathToConfigOptionDoesntEndWithConfigOptionNameException(
-        optionName, vectorOfKeysForJsonToString(pathToOption));
-  }
+  AD_CONTRACT_CHECK(std::holds_alternative<std::string>(pathToOption.back()) &&
+                    std::get<std::string>(pathToOption.back()) == optionName);
 
   /*
   The string keys must be a valid `NAME` in the short hand. Otherwise, the

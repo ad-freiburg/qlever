@@ -8,11 +8,11 @@
 #include <cstddef>
 #include <vector>
 
-#include "nlohmann/json.hpp"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
+#include "util/json.h"
 
 namespace ad_utility {
 TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
@@ -88,14 +88,10 @@ TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
   object literal, so that user can easier find things. Ordering your options
   by just giving them numbers, would be bad practice, so we should prevent it.
   */
-  ASSERT_THROW(
-      config.createConfigOption<int>(
-          {size_t{0}, "Shared_part", "Sense_of_existence"}, "", &notUsed, 42);
-      , ad_utility::ConfigManagerOptionPathDoesntStartWithStringException);
-  ASSERT_THROW(
-      config.createConfigOption<int>(
-          {size_t{3}, "Shared_part", "Sense_of_existence"}, "", &notUsed, 42);
-      , ad_utility::ConfigManagerOptionPathDoesntStartWithStringException);
+  ASSERT_ANY_THROW(config.createConfigOption<int>(
+      {size_t{0}, "Shared_part", "Sense_of_existence"}, "", &notUsed, 42););
+  ASSERT_ANY_THROW(config.createConfigOption<int>(
+      {size_t{3}, "Shared_part", "Sense_of_existence"}, "", &notUsed, 42););
 
   /*
   If the last key for the path given isn't a string, that should cause an
@@ -103,19 +99,16 @@ TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
   Reason: The last key is used as the name for the to be created `ConfigOption`.
   A number, obviously, doesn't qualify.
   */
-  ASSERT_THROW(config.createConfigOption<int>(
-      {"Shared_part", "Sense_of_existence", size_t{3}}, "", &notUsed, 42);
-               ,
-               ad_utility::ConfigManagerOptionPathDoesntEndWithStringException);
+  ASSERT_ANY_THROW(config.createConfigOption<int>(
+      {"Shared_part", "Sense_of_existence", size_t{3}}, "", &notUsed, 42););
 
   /*
   An empty vector that should cause an exception.
   Reason: The last key is used as the name for the to be created `ConfigOption`.
   An empty vector doesn't work with that.
   */
-  ASSERT_THROW(config.createConfigOption<int>(
-      ad_utility::ConfigManager::VectorOfKeysForJson{}, "", &notUsed, 42);
-               , ad_utility::EmptyVectorException);
+  ASSERT_ANY_THROW(config.createConfigOption<int>(
+      ad_utility::ConfigManager::VectorOfKeysForJson{}, "", &notUsed, 42););
 
   /*
   Trying to add a configuration option with a path containing strings with
