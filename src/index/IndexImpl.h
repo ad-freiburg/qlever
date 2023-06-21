@@ -170,7 +170,7 @@ class IndexImpl {
   Permutation osp_{Permutation::Enum::OSP, allocator_};
 
  public:
-  IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
+  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
 
   // Forbid copying.
   IndexImpl& operator=(const IndexImpl&) = delete;
@@ -444,6 +444,11 @@ class IndexImpl {
             const TripleComponent& col1String, IdTable* result,
             const Permutation::Enum& permutation,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+
+  // _____________________________________________________________________________
+  size_t getResultSizeOfScan(const TripleComponent& col0,
+                             const TripleComponent& col1,
+                             const Permutation::Enum& permutation) const;
 
  private:
   // Private member functions
