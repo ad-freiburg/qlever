@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <vector>
 
+#include "nlohmann/json.hpp"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
@@ -343,5 +344,44 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
       R"--({"myName" : "Bernd")})--"));
   ASSERT_ANY_THROW(
       ad_utility::ConfigManager::parseShortHand(R"--("myName" = "Bernd";)--"));
+}
+
+TEST(ConfigManagerTest, getListOfNotChangedConfigOptionsWithDefaultValues) {
+  ConfigManager manager{};
+
+  ASSERT_EQ(0,
+            manager.getListOfNotChangedConfigOptionsWithDefaultValues().size());
+  ASSERT_EQ(
+      std::string{},
+      manager.getListOfNotChangedConfigOptionsWithDefaultValuesAsString());
+
+  // Create a new `ConfigOption`, that will be on the list and one, that won't
+  // be.
+  int notUsedInt;
+  manager.createConfigOption<int>("onList", "", &notUsedInt, 4);
+  manager.createConfigOption<int>("notOnList", "", &notUsedInt);
+
+  ASSERT_EQ(1,
+            manager.getListOfNotChangedConfigOptionsWithDefaultValues().size());
+
+  const ConfigOption firstEntry =
+      manager.getListOfNotChangedConfigOptionsWithDefaultValues().front();
+  ASSERT_EQ("onList", firstEntry.getIdentifier());
+  ASSERT_EQ(4, firstEntry.getDefaultValue<int>());
+  ASSERT_EQ(4, firstEntry.getValue<int>());
+
+  ASSERT_NE(
+      std::string{},
+      manager.getListOfNotChangedConfigOptionsWithDefaultValuesAsString());
+
+  // Changing `onList` via parsing should remove it from the list.
+  manager.parseConfig(
+      nlohmann::json::parse(R"--({"onList":10, "notOnList":27})--"));
+
+  ASSERT_EQ(0,
+            manager.getListOfNotChangedConfigOptionsWithDefaultValues().size());
+  ASSERT_EQ(
+      std::string{},
+      manager.getListOfNotChangedConfigOptionsWithDefaultValuesAsString());
 }
 }  // namespace ad_utility

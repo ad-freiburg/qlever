@@ -2,20 +2,20 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
 #include <antlr4-runtime.h>
 
 #include <iostream>
+#include <iterator>
 #include <regex>
 #include <sstream>
 #include <string>
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -406,11 +406,38 @@ std::string ConfigManager::vectorOfKeysForJsonToString(
 }
 
 // ____________________________________________________________________________
-std::string ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValues()
-    const {
+std::vector<ConfigOption>
+ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValues() const {
   // Nothing to do here, if we have no configuration options.
   if (configurationOptions_.empty()) {
-    return "";
+    return {};
+  }
+
+  // Returns true, if the `ConfigOption` has a default value and wasn't set at
+  // runtime.
+  auto valueIsUnchangedDefault = [](const ConfigOption& option) {
+    return option.hasDefaultValue() && !option.wasSetAtRuntime();
+  };
+
+  std::vector<ConfigOption> toReturn{};
+  toReturn.reserve(std::ranges::count_if(configurationOptions_,
+                                         valueIsUnchangedDefault, {}));
+  std::ranges::copy_if(configurationOptions_, std::back_inserter(toReturn),
+                       valueIsUnchangedDefault);
+
+  return toReturn;
+}
+
+// ____________________________________________________________________________
+std::string
+ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
+    const {
+  const std::vector<ConfigOption>& unchangedFromDefaultConfigOptions{
+      getListOfNotChangedConfigOptionsWithDefaultValues()};
+
+  // Nothing to do here, if we have no unchanged configuration options.
+  if (unchangedFromDefaultConfigOptions.empty()) {
+    return {};
   }
 
   /*
@@ -428,18 +455,14 @@ std::string ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValues()
   };
 
   forEachExcludingTheLastOne(
-      configurationOptions_,
+      unchangedFromDefaultConfigOptions,
       [&stream,
        &defaultConfigurationOptionToString](const ConfigOption& option) {
-        if (option.hasDefaultValue() && !option.wasSetAtRuntime()) {
-          stream << defaultConfigurationOptionToString(option) << "\n";
-        }
+        stream << defaultConfigurationOptionToString(option) << "\n";
       },
       [&stream,
        &defaultConfigurationOptionToString](const ConfigOption& option) {
-        if (option.hasDefaultValue() && !option.wasSetAtRuntime()) {
-          stream << defaultConfigurationOptionToString(option);
-        }
+        stream << defaultConfigurationOptionToString(option);
       });
 
   return stream.str();

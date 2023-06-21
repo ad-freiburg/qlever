@@ -17,6 +17,7 @@
 #include <type_traits>
 #include <typeinfo>
 #include <variant>
+#include <vector>
 
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigOption.h"
@@ -171,11 +172,19 @@ class ConfigManager {
   std::string printConfigurationDoc(bool printCurrentJsonConfiguration) const;
 
   /*
-  @brief Return a string, containing a list of all configuration options, that:
+  @brief Return a vector of all configuration options, that:
   - Have a default value.
   - Weren't set at runtime.
   */
-  std::string getListOfNotChangedConfigOptionsWithDefaultValues() const;
+  std::vector<ConfigOption> getListOfNotChangedConfigOptionsWithDefaultValues()
+      const;
+
+  /*
+  @brief Return a string, containing a list of all entries from
+  `getListOfNotChangedConfigOptionsWithDefaultValues`, in the form of
+  "Configuration option 'x' was not set at runtime, using default value 'y'.".
+  */
+  std::string getListOfNotChangedConfigOptionsWithDefaultValuesAsString() const;
 
  private:
   // For testing.

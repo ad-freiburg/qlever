@@ -169,7 +169,7 @@ int main(int argc, char** argv) {
           if (const std::string &
                   defaultConfigurationOptionString{
                       bench->getConfigManager()
-                          .getListOfNotChangedConfigOptionsWithDefaultValues()};
+                          .getListOfNotChangedConfigOptionsWithDefaultValuesAsString()};
               defaultConfigurationOptionString != "") {
             std::cout
                 << "Default configuration option values of benchmark class '"
