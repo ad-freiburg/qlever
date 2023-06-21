@@ -195,13 +195,12 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
   }
 
   /*
-  According to the documentation, when iterating over the entries of a
+  We can't write something along the lines of `for (const auto& bla :
+  j.flatten())` for iteration, because, when iterating over the entries of a
   `nlohmann::json` object using `items()`, there can be error/problems, IF the
   life time of the object, on which one called `items()` on, doesn't exceeds the
-  life time of the iteration. (See the documentation for more information.)
-
-  Because we iterate over the 'flattend' verions of two `nlohmann::json`
-  objects, I gave them const references here.
+  life time of the iteration. (See the nlohmann json documentation for more
+  information.)
   */
   const auto& jFlattend = j.flatten();
   const auto& keyToConfigurationOptionIndexFlattend =
