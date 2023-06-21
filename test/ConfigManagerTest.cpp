@@ -37,8 +37,8 @@ TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
   config.createConfigOption(
       {"Shared_part", "Unique_part_1", "Sense_of_existence"}, "", &notUsed,
       std::optional{42});
-  const ad_utility::ConfigOption& withDefault{
-      ad_utility::ConfigOption("Sense_of_existence", "", &notUsed, 42)};
+  const ad_utility::ConfigOption& withDefault{ad_utility::ConfigOption(
+      "Sense_of_existence", "", &notUsed, std::optional{42})};
 
   config.createConfigOption(
       {"Shared_part", "Unique_part_2", size_t{3}, "Sense_of_existence"}, "",

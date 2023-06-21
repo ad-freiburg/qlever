@@ -217,8 +217,8 @@ class ConfigOption {
   ConfigOption(const ConfigOption&) = default;
 
   /*
-  @brief Create a configuration option with a default value, who modifies the
-  variable, that the given variable pointer points to, when it's set.
+  @brief Create a configuration option, who modifies the variable, that the
+  given variable pointer points to, when it's set.
 
   @tparam T The value, this configuration holds.
 
@@ -228,52 +228,18 @@ class ConfigOption {
   example: "The amount of rows in the table. Has a default value of 3."
   @param variablePointer The variable, this pointer points to, will always be
   overwritten by any of the set functions of this class.
-  @param defaultValue The default value.
+  @param defaultValue The optional default value. An empty `std::optional` is
+  for no default value and a non empty for a default value.
   */
   template <typename T>
   requires ad_utility::isTypeContainedIn<T, ConfigOption::AvailableTypes>
-  ConfigOption(std::string_view identifier, std::string_view description,
-               T* variablePointer, const T& defaultValue)
-      : data_{Data<T>{std::optional<T>(defaultValue), variablePointer}},
+  ConfigOption(
+      std::string_view identifier, std::string_view description,
+      T* variablePointer,
+      const std::optional<T>& defaultValue = std::optional<T>(std::nullopt))
+      : data_{Data<T>{defaultValue, variablePointer}},
         identifier_{identifier},
         description_{description} {
-    verifyConstructorArguments(identifier, variablePointer);
-
-    *variablePointer = defaultValue;
-  }
-
-  /*
-  @brief Create a configuration option without a default value, who modifies the
-  variable, that the given variable pointer points to, when it's set.
-
-  @tparam T The value, this configuration holds.
-
-  @param identifier The name of the configuration option, with which it can be
-  identified later.
-  @param description Describes, what the configuration option stands for. For
-  example: "The amount of rows in the table. Has a default value of 3."
-  @param variablePointer The variable, this pointer points to, will always be
-  overwritten by any of the set functions of this class.
-  */
-  template <typename T>
-  requires ad_utility::isTypeContainedIn<T, ConfigOption::AvailableTypes>
-  ConfigOption(std::string_view identifier, std::string_view description,
-               T* variablePointer)
-      : data_{Data<T>{std::optional<T>(std::nullopt), variablePointer}},
-        identifier_{identifier},
-        description_{description} {
-    verifyConstructorArguments(identifier, variablePointer);
-  }
-
- private:
-  /*
-  @brief Verifies, that the constructor arguments are correct. That is, follow
-  all those little rules we made for them.
-  */
-  template <typename T>
-  requires ad_utility::isTypeContainedIn<T, ConfigOption::AvailableTypes>
-  static void verifyConstructorArguments(std::string_view identifier,
-                                         T* variablePointer) {
     // The `identifier` must be a valid `NAME` in the configuration short hand.
     if (!isNameInShortHand(identifier)) {
       throw NotValidShortHandNameException(
@@ -284,8 +250,13 @@ class ConfigOption {
     if (variablePointer == nullptr) {
       throw ConfigOptionConstructorNullPointerException(identifier);
     }
+
+    if (defaultValue.has_value()) {
+      *variablePointer = defaultValue.value();
+    }
   }
 
+ private:
   /*
   @brief Return the string representation/name of the type, of the currently
   held alternative in the given `value`.

@@ -94,25 +94,18 @@ class ConfigManager {
     /*
     We need a non-empty path that ends with a string to construct a ConfigOption
     object, the `verify...` function always throws an exception for this case.
-    No need, to duplicate the code.
+    No need to duplicate the code.
     */
     if (pathToOption.empty() ||
         !std::holds_alternative<std::string>(pathToOption.back())) {
       verifyPathToConfigOption(pathToOption, "");
     }
 
-    if (defaultValue.has_value()) {
-      addConfigOption(
-          pathToOption,
-          ConfigOption(std::get<std::string>(pathToOption.back()),
-                       optionDescription, variableToPutValueOfTheOptionIn,
-                       defaultValue.value()));
-    } else {
-      addConfigOption(
-          pathToOption,
-          ConfigOption(std::get<std::string>(pathToOption.back()),
-                       optionDescription, variableToPutValueOfTheOptionIn));
-    }
+    addConfigOption(
+        pathToOption,
+        ConfigOption(std::get<std::string>(pathToOption.back()),
+                     optionDescription, variableToPutValueOfTheOptionIn,
+                     defaultValue));
   }
 
   /*
