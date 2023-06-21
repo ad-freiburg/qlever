@@ -140,6 +140,9 @@ size_t IndexScan::computeSizeEstimate() {
 
     // We have to do a simple scan anyway so might as well do it now
     if (getResultWidth() == 1) {
+      // TODO<C++23> Use the monadic operation `std::optional::or_else`.
+      // Note: we cannot use `optional::value_or()` here, because the else
+      // case is expensive to compute, and we need it lazily evaluated.
       if (auto size = getExecutionContext()->getQueryTreeCache().getPinnedSize(
               asString());
           size.has_value()) {

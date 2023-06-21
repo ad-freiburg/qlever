@@ -160,7 +160,8 @@ void CompressedRelationReader::scan(
 
   // The first and the last block might be incomplete, compute
   // and store the partial results from them.
-  std::optional<DecompressedBlock> firstBlockResult, lastBlockResult;
+  std::optional<DecompressedBlock> firstBlockResult;
+  std::optional<DecompressedBlock> lastBlockResult;
   size_t totalResultSize = 0;
   if (beginBlock < endBlock) {
     firstBlockResult =
