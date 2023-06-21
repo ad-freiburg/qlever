@@ -285,13 +285,13 @@ class CompressedRelationReader {
   cppcoro::generator<IdTable> lazyScan(
       CompressedRelationMetadata metadata,
       std::vector<CompressedBlockMetadata> blockMetadata,
-      ad_utility::File& file, ad_utility::AllocatorWithLimit<Id> allocator,
+      ad_utility::File& file,
       ad_utility::SharedConcurrentTimeoutTimer timer) const;
 
   cppcoro::generator<IdTable> lazyScan(
       CompressedRelationMetadata metadata, Id col1Id,
       std::vector<CompressedBlockMetadata> blockMetadata,
-      ad_utility::File& file, ad_utility::AllocatorWithLimit<Id> allocator,
+      ad_utility::File& file,
       ad_utility::SharedConcurrentTimeoutTimer timer) const;
 
   /**

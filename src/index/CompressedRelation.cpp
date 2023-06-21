@@ -144,7 +144,6 @@ void CompressedRelationReader::scan(
 cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata,
     std::vector<CompressedBlockMetadata> blockMetadata, ad_utility::File& file,
-    ad_utility::AllocatorWithLimit<Id> allocator,
     ad_utility::SharedConcurrentTimeoutTimer timer) const {
   auto relevantBlocks =
       getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
@@ -192,7 +191,7 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
     auto numElements = metadata.numRows_;
     AD_CORRECTNESS_CHECK(uncompressedBuffer->numColumns() ==
                          metadata.numColumns());
-    IdTable result(uncompressedBuffer->numColumns(), allocator);
+    IdTable result(uncompressedBuffer->numColumns(), allocator_);
     result.resize(numElements);
     for (size_t i = 0; i < uncompressedBuffer->numColumns(); ++i) {
       const auto& inputCol = uncompressedBuffer->getColumn(i);
@@ -263,7 +262,6 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
 cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata, Id col1Id,
     std::vector<CompressedBlockMetadata> blockMetadata, ad_utility::File& file,
-    ad_utility::AllocatorWithLimit<Id> allocator,
     ad_utility::SharedConcurrentTimeoutTimer timer) const {
   auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blockMetadata);
   auto beginBlock = relevantBlocks.begin();

@@ -316,12 +316,10 @@ std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
       col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
     }
     if (!col1Id.has_value()) {
-      return index.getPermutation(s.permutation())
-          .lazyScan(col0Id, blocks, s.getExecutionContext()->getAllocator());
+      return index.getPermutation(s.permutation()).lazyScan(col0Id, blocks);
     } else {
       return index.getPermutation(s.permutation())
-          .lazyScan(col0Id, col1Id.value(), blocks,
-                    s.getExecutionContext()->getAllocator());
+          .lazyScan(col0Id, col1Id.value(), blocks);
     }
   };
 
@@ -373,12 +371,10 @@ cppcoro::generator<IdTable> IndexScan::lazyScanForJoinOfColumnWithScan(
       col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
     }
     if (!col1Id.has_value()) {
-      return index.getPermutation(s.permutation())
-          .lazyScan(col0Id, blocks, s.getExecutionContext()->getAllocator());
+      return index.getPermutation(s.permutation()).lazyScan(col0Id, blocks);
     } else {
       return index.getPermutation(s.permutation())
-          .lazyScan(col0Id, col1Id.value(), blocks,
-                    s.getExecutionContext()->getAllocator());
+          .lazyScan(col0Id, col1Id.value(), blocks);
     }
   };
   return getScan(s, blocks);
