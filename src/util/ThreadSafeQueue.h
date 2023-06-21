@@ -126,9 +126,10 @@ class OrderedThreadSafeQueue {
   // Construct from the maximal queue size (see `ThreadSafeQueue` for details).
   explicit OrderedThreadSafeQueue(size_t maxSize) : queue_{maxSize} {}
 
-  // Push the `value` to the queue that is associated with the `index`. This call blocks, until `push` has been called
-  // for all indices in `[0, ..., index - 1]` or until `disablePush` was called. The remaining behavior is equal to
-  // `ThreadSafeQueue::push`.
+  // Push the `value` to the queue that is associated with the `index`. This
+  // call blocks, until `push` has been called for all indices in `[0, ...,
+  // index - 1]` or until `disablePush` was called. The remaining behavior is
+  // equal to `ThreadSafeQueue::push`.
   bool push(size_t index, T value) {
     std::unique_lock lock{mutex_};
     cv_.wait(lock, [this, index]() {

@@ -55,7 +55,6 @@ constexpr std::string_view toString(Datatype type) {
     case Datatype::Date:
       return "Date";
   }
-  return "OutOfRange";
   // This line is reachable if we cast an arbitrary invalid int to this enum
   AD_FAIL();
 }
@@ -284,10 +283,6 @@ class ValueId {
   /// human-readable representation.
   friend std::ostream& operator<<(std::ostream& ostr, const ValueId& id) {
     ostr << toString(id.getDatatype()) << ':';
-    if (id.getDatatype() > Datatype::MaxValue) {
-      ostr << " MaxValue ";
-      return ostr;
-    }
     auto visitor = [&ostr]<typename T>(T&& value) {
       if constexpr (ad_utility::isSimilar<T, ValueId::UndefinedType>) {
         ostr << "Undefined";

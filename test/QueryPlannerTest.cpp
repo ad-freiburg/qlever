@@ -565,16 +565,15 @@ TEST(QueryPlannerTest, testActorsBornInEurope) {
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(27493u, qet.getCostEstimate());
   ASSERT_EQ(
-      "{\n  ORDER BY on columns:asc(0) \n  {\n    JOIN\n    {\n      SCAN "
-      "POS with P = \"<pre/profession>\", O = \"<pre/Actor>\"\n      "
-      "qet-width: 1 \n    } join-column: [0]\n    |X|\n    {\n      "
-      "SORT(internal) on columns:asc(1) \n      {\n        JOIN\n        {\n "
-      "         SCAN POS with P = \"<pre/born-in>\"\n          qet-width: 2 "
-      "\n        } join-column: [0]\n        |X|\n        {\n          SCAN "
-      "POS with P = \"<pre/in>\", O = \"<pre/Europe>\"\n          qet-width: "
-      "1 \n        } join-column: [0]\n        qet-width: 2 \n      }\n      "
-      "qet-width: 2 \n    } join-column: [1]\n    qet-width: 2 \n  }\n  "
-      "qet-width: 2 \n}",
+      "{\n  ORDER BY on columns:asc(0) \n  {\n    JOIN\n    {\n      "
+      "SORT(internal) on columns:asc(1) \n      {\n        JOIN\n        {\n   "
+      "       SCAN POS with P = \"<pre/profession>\", O = \"<pre/Actor>\"\n    "
+      "      qet-width: 1 \n        } join-column: [0]\n        |X|\n        "
+      "{\n          SCAN PSO with P = \"<pre/born-in>\"\n          qet-width: "
+      "2 \n        } join-column: [0]\n        qet-width: 2 \n      }\n      "
+      "qet-width: 2 \n    } join-column: [1]\n    |X|\n    {\n      SCAN POS "
+      "with P = \"<pre/in>\", O = \"<pre/Europe>\"\n      qet-width: 1 \n    } "
+      "join-column: [0]\n    qet-width: 2 \n  }\n  qet-width: 2 \n}",
       qet.asString());
 }
 
@@ -644,11 +643,11 @@ TEST(QueryPlannerTest, threeVarTriples) {
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SCAN PSO with P = \"<p>\", S = \"<s>\"\n    "
-        "qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n    SORT(internal) "
-        "on columns:asc(1) \n    {\n      SCAN FOR FULL INDEX OSP (DUMMY "
-        "OPERATION)\n      qet-width: 3 \n    }\n    qet-width: 3 \n  } "
-        "join-column: [1]\n  qet-width: 3 \n}",
+        "{\n  JOIN\n  {\n    SORT(internal) on columns:asc(1) \n    {\n      "
+        "SCAN FOR FULL INDEX OSP (DUMMY OPERATION)\n      qet-width: 3 \n    "
+        "}\n    qet-width: 3 \n  } join-column: [1]\n  |X|\n  {\n    SCAN PSO "
+        "with P = \"<p>\", S = \"<s>\"\n    qet-width: 1 \n  } join-column: "
+        "[0]\n  qet-width: 3 \n}",
         qet.asString());
   }
   {
@@ -658,11 +657,11 @@ TEST(QueryPlannerTest, threeVarTriples) {
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SCAN SOP with S = \"<s>\", O = \"<o>\"\n    "
-        "qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n    SORT(internal) "
-        "on columns:asc(1) \n    {\n      SCAN FOR FULL INDEX OSP (DUMMY "
-        "OPERATION)\n      qet-width: 3 \n    }\n    qet-width: 3 \n  } "
-        "join-column: [1]\n  qet-width: 3 \n}",
+        "{\n  JOIN\n  {\n    SORT(internal) on columns:asc(1) \n    {\n      "
+        "SCAN FOR FULL INDEX OSP (DUMMY OPERATION)\n      qet-width: 3 \n    "
+        "}\n    qet-width: 3 \n  } join-column: [1]\n  |X|\n  {\n    SCAN SOP "
+        "with S = \"<s>\", O = \"<o>\"\n    qet-width: 1 \n  } join-column: "
+        "[0]\n  qet-width: 3 \n}",
         qet.asString());
   }
   {
@@ -672,11 +671,11 @@ TEST(QueryPlannerTest, threeVarTriples) {
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SCAN PSO with P = \"<p>\", S = \"<s>\"\n    "
-        "qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n    SORT(internal) "
-        "on columns:asc(1) \n    {\n      SCAN FOR FULL INDEX OPS (DUMMY "
-        "OPERATION)\n      qet-width: 3 \n    }\n    qet-width: 3 \n  } "
-        "join-column: [1]\n  qet-width: 3 \n}",
+        "{\n  JOIN\n  {\n    SORT(internal) on columns:asc(1) \n    {\n      "
+        "SCAN FOR FULL INDEX OPS (DUMMY OPERATION)\n      qet-width: 3 \n    "
+        "}\n    qet-width: 3 \n  } join-column: [1]\n  |X|\n  {\n    SCAN PSO "
+        "with P = \"<p>\", S = \"<s>\"\n    qet-width: 1 \n  } join-column: "
+        "[0]\n  qet-width: 3 \n}",
         qet.asString());
   }
 }
@@ -841,19 +840,17 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
-
-      "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
-      "\"manhattan project\" and 1 variables with textLimit = 1 filtered "
-      "by\n  {\n    JOIN\n    {\n      SCAN POS with P = \"<is-a>\", O = "
-      "\"<Scientist>\"\n      qet-width: 1 \n    } join-column: [0]\n    "
-      "|X|\n    {\n      SORT(internal) on columns:asc(2) \n      {\n       "
-      " TEXT OPERATION "
-      "WITH FILTER: co-occurrence with words: \"friend*\" and 2 variables "
-      "with textLimit = 1 filtered by\n        {\n          SCAN POS with P "
-      "= \"<is-a>\", O = \"<Politician>\"\n          qet-width: 1 \n        "
-      "}\n         filtered on column 0\n        qet-width: 4 \n      }\n    "
-      "  qet-width: 4 \n    } join-column: [2]\n    qet-width: 4 \n  }\n   "
-      "filtered on column 0\n  qet-width: 6 \n}",
+      "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: \"manhattan "
+      "project\" and 1 variables with textLimit = 1 filtered by\n  {\n    "
+      "JOIN\n    {\n      SORT(internal) on columns:asc(2) \n      {\n        "
+      "TEXT OPERATION WITH FILTER: co-occurrence with words: \"friend*\" and 2 "
+      "variables with textLimit = 1 filtered by\n        {\n          SCAN POS "
+      "with P = \"<is-a>\", O = \"<Politician>\"\n          qet-width: 1 \n    "
+      "    }\n         filtered on column 0\n        qet-width: 4 \n      }\n  "
+      "    qet-width: 4 \n    } join-column: [2]\n    |X|\n    {\n      SCAN "
+      "POS with P = \"<is-a>\", O = \"<Scientist>\"\n      qet-width: 1 \n    "
+      "} join-column: [0]\n    qet-width: 4 \n  }\n   filtered on column 2\n  "
+      "qet-width: 6 \n}",
       qet.asString());
 }
 
