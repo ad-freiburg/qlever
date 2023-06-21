@@ -17,6 +17,7 @@ namespace ad_utility::data_structures {
 /// A thread safe, multi-consumer, multi-producer queue.
 template <typename T>
 class ThreadSafeQueue {
+  std::exception_ptr pushedException_;
   std::queue<T> _queue;
   std::mutex _mutex;
   std::condition_variable _pushNotification;
@@ -42,6 +43,14 @@ class ThreadSafeQueue {
     _queue.push(std::move(value));
     lock.unlock();
     _pushNotification.notify_one();
+    return true;
+  }
+
+  bool pushException(std::exception_ptr exception) {
+    std::unique_lock lock{_mutex};
+    pushedException_ = std::move(exception);
+    lock.unlock();
+    _pushNotification.notify_all();
     return true;
   }
 
@@ -73,8 +82,12 @@ class ThreadSafeQueue {
   /// empty optional, whatever happens first
   std::optional<T> pop() {
     std::unique_lock lock{_mutex};
-    _pushNotification.wait(
-        lock, [&] { return !_queue.empty() || _lastElementPushed; });
+    _pushNotification.wait(lock, [&] {
+      return !_queue.empty() || _lastElementPushed || pushedException_;
+    });
+    if (pushedException_) {
+      std::rethrow_exception(pushedException_);
+    }
     if (_lastElementPushed && _queue.empty()) {
       return {};
     }
@@ -88,20 +101,41 @@ class ThreadSafeQueue {
 
 template <typename T>
 class OrderedThreadSafeQueue {
+ private:
   std::mutex mutex_;
   std::condition_variable cv_;
   ThreadSafeQueue<T> queue_;
   size_t sequenceNumber_ = 0;
+  bool pushWasDisabled_ = false;
+
+ public:
+  OrderedThreadSafeQueue(size_t maxSize) : queue_{maxSize} {}
   bool push(size_t sequenceNumber, T value) {
     std::unique_lock lock{mutex_};
-    cv_.wait(lock,
-        [this, sequenceNumber]() { return sequenceNumber == sequenceNumber_; });
+    cv_.wait(lock, [this, sequenceNumber]() {
+      return sequenceNumber == sequenceNumber_ || pushWasDisabled_;
+    });
+    if (pushWasDisabled_) {
+      return false;
+    }
     ++sequenceNumber_;
     bool result = queue_.push(std::move(value));
     lock.unlock();
     cv_.notify_all();
     return result;
   }
+
+  void signalLastElementWasPushed() { queue_.signalLastElementWasPushed(); }
+
+  void disablePush() {
+    queue_.disablePush();
+    std::unique_lock lock{mutex_};
+    pushWasDisabled_ = true;
+    lock.unlock();
+    cv_.notify_all();
+  }
+
+  ~OrderedThreadSafeQueue() { disablePush(); }
 
   std::optional<T> pop() { return queue_.pop(); }
 };
