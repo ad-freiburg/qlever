@@ -36,27 +36,15 @@ nlohmann::json::json_pointer ConfigManager::createJsonPointer(
   characters `/` and `~` which have a special meaning inside JSON pointers.
   */
   auto toStringVisitor = []<typename T>(const T& key) {
-    // Our transformed key.
-    std::string transformedKey;
-
-    /*
-    Transforming the key. We simply check through the way, we can convert
-    them into a string and do the one, that works first.
-    */
     if constexpr (isString<std::decay_t<T>>) {
-      transformedKey = std::string(key);
+      // Replace special character `~` with `~0` and `/` with `~1`.
+      return absl::StrReplaceAll(key, {{"~", "~0"}, {"/", "~1"}});
     } else {
-      /*
-      Must have been a number. I mean, `KeyForJson` doesn't allow anything
-      else, than those 2 possibilities and this the the last one.
-      */
       static_assert(std::integral<std::decay_t<T>>);
-      transformedKey = std::to_string(key);
+      return std::to_string(key);
     }
-
-    // Replace special character `~` with `~0` and `/` with `~1`.
-    return absl::StrReplaceAll(transformedKey, {{"~", "~0"}, {"/", "~1"}});
   };
+
   auto toString = [&toStringVisitor](const KeyForJson& key) {
     return std::visit(toStringVisitor, key);
   };
