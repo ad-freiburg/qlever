@@ -32,9 +32,8 @@ namespace ad_utility {
 nlohmann::json::json_pointer ConfigManager::createJsonPointer(
     const VectorOfKeysForJson& keys) {
   /*
-  A json pointer needs special characters, if a `/`, or `~`, is used in a
-  key. So here a special conversion function for our keys, that adds those,
-  if needed.
+  Convert a `key` (a string-like or integral type) to a string and escape the
+  characters `/` and `~` which have a special meaning inside JSON pointers.
   */
   auto toStringVisitor = []<typename T>(const T& key) {
     // Our transformed key.
