@@ -54,11 +54,6 @@ BenchmarkResults runAllBenchmarks(){
   // Just saves the measured execution time.
   results.addMeasurement(identifier, dummyFunctionToMeasure);
 
-  // Creates an enpty group. Doesn't measure anything.
-  auto& group = results.addGroup(identifier);
-  // You add the measurements as group members.
-  group.addMeasurement(identifier, dummyFunctionToMeasure);
-
   /*
   Create an empty table with a set number of rows and columns. Doesn't
   measure anything.
@@ -76,6 +71,18 @@ BenchmarkResults runAllBenchmarks(){
 
   // Replacing a row name.
   table.setEntry(0, 0, "rowName1++");
+
+  /*
+  Creates an empty group. Doesn't measure anything, but groups and tables can be
+  added to better organize them.
+  */
+  auto& group = results.addGroup(identifier);
+  // Normal measurement.
+  group.addMeasurement(identifier, dummyFunctionToMeasure);
+  // Table.
+  group.addTable(identifier, {"rowName1", "rowName2", "etc."},
+    {"Column for row names", "columnName1", "columnName2", "etc."});
+
 
   return results;
 }
