@@ -26,7 +26,7 @@
 namespace ad_utility {
 // ____________________________________________________________________________
 std::string ConfigOption::availableTypesToString(const AvailableTypes& value) {
-  auto toStringVisitor = []<typename T>(const T&) {
+  auto toStringVisitor = []<typename T>(const T&) -> std::string {
     if constexpr (std::is_same_v<T, bool>) {
       return "boolean";
     } else if constexpr (std::is_same_v<T, std::string>) {
@@ -42,9 +42,9 @@ std::string ConfigOption::availableTypesToString(const AvailableTypes& value) {
     } else if constexpr (std::is_same_v<T, std::vector<int>>) {
       return "list of integers";
     } else {
-      // It must be a list of floats.
-      static_assert(std::is_same_v<T, std::vector<float>>);
-      return "list of floats";
+      // It must be a vector.
+      static_assert(ad_utility::isVector<T>);
+      return absl::StrCat("list of ", availableTypesToString<typename T::value_type>(), "s");
     }
   };
 
