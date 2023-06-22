@@ -308,6 +308,8 @@ std::string ConfigManager::printConfigurationDoc(
   /*
   Replace the numbers in the 'leaves' of the 'tree' with either:
   - The current value of the configuration option.
+  - A "value was never initialized", if we are not sure, the current value of
+    the configuration option was initialized.
   - The default value of the configuration option.
   - An example value, of the correct type.
   Note: Users can indirectly create null values in
@@ -336,8 +338,11 @@ std::string ConfigManager::printConfigurationDoc(
     const ConfigOption& option = configurationOptions_.at(val.get<size_t>());
 
     if (printCurrentJsonConfiguration) {
+      // We can only use the value, if we are sure, that the value was
+      // initialized.
       prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
-          option.getValueAsJson();
+          option.wasSet() ? option.getValueAsJson()
+                          : "value was never initialized";
     } else {
       prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
           option.hasDefaultValue() ? option.getDefaultValueAsJson()
@@ -364,13 +369,14 @@ std::string ConfigManager::printConfigurationDoc(
     }
   }
 
-  return absl::StrCat(
-      "Locations of available configuration options with example "
-      "values:\n",
-      ad_utility::addIndentation(prettyKeyToConfigurationOptionIndex.dump(2),
-                                 1),
-      "\n\nAvailable configuration options:\n",
-      ad_utility::addIndentation(stream.str(), 1));
+  return absl::StrCat("Locations of available configuration options with",
+                      (printCurrentJsonConfiguration ? " their current values"
+                                                     : " example values"),
+                      ":\n",
+                      ad_utility::addIndentation(
+                          prettyKeyToConfigurationOptionIndex.dump(2), 1),
+                      "\n\nAvailable configuration options:\n",
+                      ad_utility::addIndentation(stream.str(), 1));
 }
 
 // ____________________________________________________________________________

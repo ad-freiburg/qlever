@@ -186,12 +186,18 @@ std::string ConfigOption::contentOfAvailableTypesToString(
 }
 // ____________________________________________________________________________
 std::string ConfigOption::getValueAsString() const {
+  // Reading an uninitialized value is never a good idea.
+  AD_CONTRACT_CHECK(wasSet());
+
   return std::visit(
       [](const auto& d) { return contentOfAvailableTypesToString(*d.variablePointer_); }, data_);
 }
 
 // ____________________________________________________________________________
 nlohmann::json ConfigOption::getValueAsJson() const {
+  // Reading an uninitialized value is never a good idea.
+  AD_CONTRACT_CHECK(wasSet());
+
   return std::visit([](const auto& d) { return nlohmann::json(*d.variablePointer_); }, data_);
 }
 
@@ -280,11 +286,12 @@ std::string ConfigOption::getDummyValueAsString() const {
 ConfigOption::operator std::string() const {
   return absl::StrCat(
       "Configuration option '", identifier_, "'\n",
-      ad_utility::addIndentation(absl::StrCat("Value type: ", getActualValueTypeAsString(),
-                                              "\nDefault value: ", getDefaultValueAsString(),
-                                              "\nCurrently held value: ", getValueAsString(),
-                                              "\nDescription: ", description_),
-                                 1));
+      ad_utility::addIndentation(
+          absl::StrCat("Value type: ", getActualValueTypeAsString(),
+                       "\nDefault value: ", getDefaultValueAsString(), "\nCurrently held value: ",
+                       wasSet() ? getValueAsString() : "value was never initialized",
+                       "\nDescription: ", description_),
+          1));
 }
 
 // ____________________________________________________________________________
