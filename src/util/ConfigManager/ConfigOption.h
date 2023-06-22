@@ -268,22 +268,6 @@ class ConfigOption {
   */
   static std::string contentOfAvailableTypesToString(
       const std::optional<AvailableTypes>& v);
-
-  /*
-  @brief Returns the index position of a type in `AvailableTypes`.
-  Example: A call with `T = int` would return `2`.
-  */
-  template <typename T>
-  requires ad_utility::isTypeContainedIn<T, AvailableTypes>
-  static constexpr size_t getIndexOfTypeInAvailableTypes() {
-    // In order to get the types inside a `std::variant`, we have to cheat a
-    // bit.
-    auto getIndex = []<typename... Ts>(const std::variant<Ts...>&) {
-      return ad_utility::getIndexOfFirstTypeToPassCheck<
-          []<typename D>() { return std::is_same_v<D, T>; }, Ts...>();
-    };
-    return getIndex(AvailableTypes{});
-  }
 };
 
 }  // namespace ad_utility
