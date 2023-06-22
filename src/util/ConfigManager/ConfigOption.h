@@ -97,14 +97,8 @@ class ConfigOption {
   void setValue(const T& value) {
     // Only set the variable, that our internal pointer points to, if the given
     // value is of the right type.
-    if (getActualValueType() == getIndexOfTypeInAvailableTypes<T>()) {
-      std::visit(
-          [&value]<typename D>(Data<D>& d) {
-            if constexpr (std::is_same_v<T, D>) {
-              *d.variablePointer_ = value;
-            }
-          },
-          data_);
+    if (Data<T>* data = std::get_if<Data<T>>(&data_); data != nullptr) {
+      *(data->variablePointer_) = value;
       configurationOptionWasSet_ = true;
     } else {
       throw ConfigOptionSetWrongTypeException(identifier_,
