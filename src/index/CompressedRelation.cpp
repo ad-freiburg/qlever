@@ -302,49 +302,49 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   }
 
   if (firstBlockResult.has_value()) {
+    firstBlockResult.value().setColumnSubset(std::array<ColumnIndex, 1>{1});
     co_yield std::move(firstBlockResult.value());
   }
 
-  ad_utility::data_structures::OrderedThreadSafeQueue<DecompressedBlock> queue{
-      5};
-  // TODO<joka921> We can configure whether we want to allow async access to the
-  // file.
-  std::mutex fileMutex;
-  size_t blockIndex = 0;
-  auto readAndDecompressBlock = [&]() {
-    // LOG(WARN) << "Starting a thread" << std::endl;
-    while (true) {
-      std::unique_lock lock{fileMutex};
-      if (beginBlock == endBlock) {
-        queue.signalLastElementWasPushed();
-        return;
-      }
-      auto block = *beginBlock;
-      CompressedBlock compressedBuffer =
-          readCompressedBlockFromFile(block, file, std::vector{1ul});
-      ++beginBlock;
-      size_t myIndex = blockIndex;
-      ++blockIndex;
-      bool isLastBlock = beginBlock == endBlock;
-      lock.unlock();
-      bool success = queue.push(
-          myIndex, decompressBlock(compressedBuffer, block.numRows_));
-      if (!success) {
-        return;
-      }
-      if (isLastBlock) {
-        queue.signalLastElementWasPushed();
-      }
-    }
-  };
-
-  std::vector<ad_utility::JThread> threads;
-  // TODO<joka921> get the number of optimal threads from the operating system.
-  for (size_t j = 0; j < 5; ++j) {
-    threads.emplace_back(readAndDecompressBlock);
-  }
-
   if (beginBlock != endBlock) {
+    ad_utility::data_structures::OrderedThreadSafeQueue<DecompressedBlock>
+        queue{5};
+    // TODO<joka921> We can configure whether we want to allow async access to
+    // the file.
+    std::mutex fileMutex;
+    size_t blockIndex = 0;
+    auto readAndDecompressBlock = [&]() {
+      while (true) {
+        std::unique_lock lock{fileMutex};
+        if (beginBlock == endBlock) {
+          return;
+        }
+        auto block = *beginBlock;
+        CompressedBlock compressedBuffer =
+            readCompressedBlockFromFile(block, file, std::vector{1ul});
+        ++beginBlock;
+        size_t myIndex = blockIndex;
+        ++blockIndex;
+        bool isLastBlock = beginBlock == endBlock;
+        lock.unlock();
+        bool success = queue.push(
+            myIndex, decompressBlock(compressedBuffer, block.numRows_));
+        if (!success) {
+          return;
+        }
+        if (isLastBlock) {
+          queue.signalLastElementWasPushed();
+        }
+      }
+    };
+
+    std::vector<ad_utility::JThread> threads;
+    // TODO<joka921> get the number of optimal threads from the operating
+    // system.
+    for (size_t j = 0; j < 5; ++j) {
+      threads.emplace_back(readAndDecompressBlock);
+    }
+
     while (auto opt = queue.pop()) {
       co_yield opt.value();
     }
@@ -365,6 +365,7 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
     timer->wlock()->checkTimeoutAndThrow();
   }
   if (lastBlockResult.has_value()) {
+    lastBlockResult.value().setColumnSubset(std::array<ColumnIndex, 1>{1});
     co_yield lastBlockResult.value();
   }
 }

@@ -7,9 +7,14 @@
 #include "./IndexTestHelpers.h"
 #include "index/CompressedRelation.h"
 #include "index/Permutation.h"
+#include "util/GTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+#include "util/SourceLocation.h"
 
 namespace {
+
+using ad_utility::source_location;
+
 // Return an `ID` of type `VocabIndex` from `index`. Assert that `index`
 // is `>= 0`.
 Id V(int64_t index) {
@@ -31,8 +36,14 @@ struct RelationInput {
 template <size_t NumColumns>
 void checkThatTablesAreEqual(
     const std::vector<std::array<int, NumColumns>> expected,
-    const IdTable& actual) {
+    const IdTable& actual, source_location l = source_location::current()) {
+  auto trace = generateLocationTrace(l);
   ASSERT_EQ(NumColumns, actual.numColumns());
+  if (actual.numRows() != expected.size()) {
+    LOG(WARN) << actual.numRows() << "vs " << expected.size() << std::endl;
+    LOG(WARN) << "mismatch" << std::endl;
+  }
+  ASSERT_EQ(actual.numRows(), expected.size());
   for (size_t i = 0; i < actual.numRows(); ++i) {
     for (size_t j = 0; j < actual.numColumns(); ++j) {
       ASSERT_EQ(V(expected[i][j]), actual(i, j));
@@ -125,6 +136,13 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
 
+    table.clear();
+    for (const auto& block :
+         reader.lazyScan(metaData[i], blocks, file, timer)) {
+      table.insertAtEnd(block.begin(), block.end());
+    }
+    checkThatTablesAreEqual(col1And2, table);
+
     // Check for all distinct combinations of `(col0, col1)` and check that
     // we get the expected result.
     // TODO<joka921>, C++23 use views::chunk_by
@@ -138,6 +156,12 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
       reader.scan(metaData[i], V(lastCol1Id), blocks, file, &tableWidthOne,
                   timer);
       EXPECT_EQ(size, tableWidthOne.numRows());
+      checkThatTablesAreEqual(col3, tableWidthOne);
+      tableWidthOne.clear();
+      for (const auto& block :
+           reader.lazyScan(metaData[i], V(lastCol1Id), blocks, file, timer)) {
+        tableWidthOne.insertAtEnd(block.begin(), block.end());
+      }
       checkThatTablesAreEqual(col3, tableWidthOne);
       {
         IdTable wrongNumCols{2, ad_utility::testing::makeAllocator()};
