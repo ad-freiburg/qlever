@@ -68,47 +68,35 @@ ResultGroup::operator std::string() const {
   std::ostringstream stream;
 
   /*
-  If the given vector is empty, add ` None` to the stream. If it isn't, adds
-  "\n\n" and then calls the given function.
+  If the given vector is empty, return ` None`. If it isn't, return the
+  contacination of "\n\n" and then the string list representation of the vector.
   */
-  auto addWithFunctionOrNone = [&stream](const auto& vec, auto func) {
-    if (!vec.empty()) {
-      stream << "\n\n";
-      func();
-    } else {
-      stream << " None";
-    }
+  auto vectorToStringListOrNone = []<typename T>(const std::vector<T>& vec) {
+    return (vec.empty()
+                ? " None"
+                : absl::StrCat(
+                      "\n\n",
+                      addIndentation(
+                          ad_utility::listToString(
+                              ad_utility::transform(vec,
+                                                    [](const auto& pointer) {
+                                                      return (*pointer);
+                                                    }),
+                              [](const auto& entry) {
+                                return static_cast<std::string>(entry);
+                              },
+                              "\n\n"),
+                          1)));
   };
 
   stream << absl::StrCat(
       getMetadataPrettyString(metadata(), "metadata: ", "\n"), "Measurements:");
 
   // Listing all the `ResultEntry`s, if there are any.
-  addWithFunctionOrNone(resultEntries_, [&stream, this]() {
-    stream << addIndentation(
-        ad_utility::listToString(
-            ad_utility::transform(
-                resultEntries_, [](const auto& pointer) { return (*pointer); }),
-            [](const ResultEntry& entry) {
-              return static_cast<std::string>(entry);
-            },
-            "\n\n"),
-        1);
-  });
+  stream << vectorToStringListOrNone(resultEntries_);
 
   // Listing all the `ResultTable`s, if there are any.
-  stream << "\n\nTables:";
-  addWithFunctionOrNone(resultTables_, [&stream, this]() {
-    stream << addIndentation(
-        ad_utility::listToString(
-            ad_utility::transform(
-                resultTables_, [](const auto& pointer) { return (*pointer); }),
-            [](const ResultTable& entry) {
-              return static_cast<std::string>(entry);
-            },
-            "\n\n"),
-        1);
-  });
+  stream << "\n\nTables:" << vectorToStringListOrNone(resultEntries_);
 
   return absl::StrCat(prefix, addIndentation(stream.str(), 1));
 }
