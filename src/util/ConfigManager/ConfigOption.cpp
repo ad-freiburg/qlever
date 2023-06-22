@@ -64,6 +64,7 @@ bool ConfigOption::wasSet() const { return wasSetAtRuntime() || hasDefaultValue(
 
 // ____________________________________________________________________________
 void ConfigOption::setValueWithJson(const nlohmann::json& json) {
+  // TODO<C++23> Use "deducing this" for simpler recursive lambdas.
   /*
   Manually checks, if the json represents one of the possibilites of
   `AvailableTypes`.
@@ -136,51 +137,52 @@ std::string_view ConfigOption::getIdentifier() const {
 // ____________________________________________________________________________
 std::string ConfigOption::contentOfAvailableTypesToString(
     const std::optional<AvailableTypes>& value) {
-  if (value.has_value()) {
-    // Converts a `AvailableTypes` to their string representation.
-    auto availableTypesToString = []<typename T>(const T& content, auto&& variantSubTypetoString) {
-      // Return the internal value of the `std::optional`.
-      if constexpr (std::is_same_v<T, std::string>) {
-        // Add "", so that it's more obvious, that it's a string.
-        return absl::StrCat("\"", content, "\"");
-      } else if constexpr (std::is_same_v<T, bool>) {
-        return content ? std::string{"true"} : std::string{"false"};
-      } else if constexpr (std::is_arithmetic_v<T>) {
-        return std::to_string(content);
-      } else {
-        // Is must be a vector.
-        static_assert(ad_utility::isVector<T>);
-
-        /*
-        We have to use the EXPLICIT type, because a vector of bools uses a
-        special 1 bit data type for it's entry references, instead of a bool. So
-        an `auto` would land the recursive call right back in this else case.
-        */
-        using VectorEntryType = T::value_type;
-
-        std::ostringstream stream;
-        stream << "{";
-        forEachExcludingTheLastOne(
-            content,
-            [&stream, &variantSubTypetoString](const VectorEntryType& entry) {
-              stream << variantSubTypetoString(entry, variantSubTypetoString) << ", ";
-            },
-            [&stream, &variantSubTypetoString](const VectorEntryType& entry) {
-              stream << variantSubTypetoString(entry, variantSubTypetoString);
-            });
-        stream << "}";
-        return stream.str();
-      }
-    };
-
-    return std::visit(
-        [&availableTypesToString](const auto& v) {
-          return availableTypesToString(v, availableTypesToString);
-        },
-        value.value());
-  } else {
+  if (!value.has_value()) {
     return "None";
   }
+
+  // TODO<C++23> Use "deducing this" for simpler recursive lambdas.
+  // Converts a `AvailableTypes` to their string representation.
+  auto availableTypesToString = []<typename T>(const T& content, auto&& variantSubTypetoString) {
+    // Return the internal value of the `std::optional`.
+    if constexpr (std::is_same_v<T, std::string>) {
+      // Add "", so that it's more obvious, that it's a string.
+      return absl::StrCat("\"", content, "\"");
+    } else if constexpr (std::is_same_v<T, bool>) {
+      return content ? std::string{"true"} : std::string{"false"};
+    } else if constexpr (std::is_arithmetic_v<T>) {
+      return std::to_string(content);
+    } else {
+      // Is must be a vector.
+      static_assert(ad_utility::isVector<T>);
+
+      /*
+      We have to use the EXPLICIT type, because a vector of bools uses a
+      special 1 bit data type for it's entry references, instead of a bool. So
+      an `auto` would land the recursive call right back in this else case.
+      */
+      using VectorEntryType = T::value_type;
+
+      std::ostringstream stream;
+      stream << "{";
+      forEachExcludingTheLastOne(
+          content,
+          [&stream, &variantSubTypetoString](const VectorEntryType& entry) {
+            stream << variantSubTypetoString(entry, variantSubTypetoString) << ", ";
+          },
+          [&stream, &variantSubTypetoString](const VectorEntryType& entry) {
+            stream << variantSubTypetoString(entry, variantSubTypetoString);
+          });
+      stream << "}";
+      return stream.str();
+    }
+  };
+
+  return std::visit(
+      [&availableTypesToString](const auto& v) {
+        return availableTypesToString(v, availableTypesToString);
+      },
+      value.value());
 }
 // ____________________________________________________________________________
 std::string ConfigOption::getValueAsString() const {
