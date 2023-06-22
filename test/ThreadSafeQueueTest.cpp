@@ -2,9 +2,11 @@
 //                 Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <ranges>
 
 #include "util/ThreadSafeQueue.h"
 #include "util/TypeTraits.h"
@@ -14,6 +16,10 @@ using namespace ad_utility::data_structures;
 
 namespace {
 
+// Create a lambda, that pushes a given `size_t i` to the given `queue`. If the
+// `Queue` is a `OrderedThreadSafeQueue`, then `i` is also used as the index for
+// the call to `push`. This imposes requirements on the values that are pushed
+// to avoid deadlocks, see `ThreadSafeQueue.h` for details.
 template <typename Queue>
 auto makePush(Queue& queue) {
   return [&queue](size_t i) {
@@ -25,8 +31,14 @@ auto makePush(Queue& queue) {
   };
 }
 
+// Some constants that are used in almost every test case.
 constexpr size_t queueSize = 5;
+constexpr size_t numThreads = 20;
+constexpr size_t numValues = 200;
 
+// Run the `test` function with a `ThreadSafeQueue` and an
+// `OrderedThreadSafeQueue`. Both queues have a size of `queueSize` and `size_t`
+// as their value type.
 void runWithBothQueueTypes(const auto& testFunction) {
   testFunction(ThreadSafeQueue<size_t>{queueSize});
   testFunction(OrderedThreadSafeQueue<size_t>{queueSize});
@@ -39,6 +51,7 @@ TEST(ThreadSafeQueue, BufferSizeIsRespected) {
     std::atomic<int> numPushed = 0;
     auto push = makePush(queue);
 
+    // Asynchronous worker thread that pushes incremental values to the queue.
     ad_utility::JThread t([&numPushed, &push, &queue] {
       while (numPushed < 200) {
         push(numPushed++);
@@ -48,8 +61,14 @@ TEST(ThreadSafeQueue, BufferSizeIsRespected) {
 
     size_t numPopped = 0;
     while (auto opt = queue.pop()) {
+      // We have only one thread pushing, so the elements in the queue are
+      // ordered.
       EXPECT_EQ(opt.value(), numPopped);
       ++numPopped;
+      // Check that the size of the queue is respected. The pushing thread must
+      // only continue to push once enough elements have been `pop`ped. The `+1`
+      // is necessary because the calls to `pop` and `push` are not synchronized
+      // with the atomic value `numPushed`.
       EXPECT_LE(numPushed, numPopped + queueSize + 1);
     }
   };
@@ -60,6 +79,8 @@ TEST(ThreadSafeQueue, BufferSizeIsRespected) {
 TEST(ThreadSafeQueue, ReturnValueOfPush) {
   auto runTest = [](auto queue) {
     auto push = makePush(queue);
+    // Test that `push` always returns true until `disablePush()` has been
+    // called.
     EXPECT_TRUE(push(0));
     EXPECT_EQ(queue.pop(), 0);
     queue.disablePush();
@@ -68,17 +89,18 @@ TEST(ThreadSafeQueue, ReturnValueOfPush) {
   runWithBothQueueTypes(runTest);
 }
 
-// ________________________________________________________________
+// Test the case that multiple workers are pushing concurrently.
 TEST(ThreadSafeQueue, Concurrency) {
   auto runTest = []<typename Queue>(Queue queue) {
     std::atomic<size_t> numPushed = 0;
     std::atomic<size_t> numThreadsDone = 0;
     auto push = makePush(queue);
 
-    size_t numThreads = 20;
-    auto threadFunction = [&numPushed, &queue, numThreads, &push,
-                           &numThreadsDone] {
+    // Set up the worker threads.
+    auto threadFunction = [&numPushed, &queue, &push, &numThreadsDone] {
       for (size_t i = 0; i < 200; ++i) {
+        // push the next available value that hasn't been pushed yet by another
+        // thread.
         push(numPushed++);
       }
       numThreadsDone++;
@@ -92,22 +114,26 @@ TEST(ThreadSafeQueue, Concurrency) {
       threads.emplace_back(threadFunction);
     }
 
+    // Pop the values from the queue and store them.
     size_t numPopped = 0;
     std::vector<size_t> result;
     while (auto opt = queue.pop()) {
       ++numPopped;
       result.push_back(opt.value());
-      EXPECT_LE(numPushed, numPopped + 6 + numThreads);
+      // The ` + numThreads` is because the atomic increment of `numPushed` is
+      // done before the actual call to `push`. The `+ 1` is because another
+      // element might have been pushed since our last call to `pop()`.
+      EXPECT_LE(numPushed, numPopped + queueSize + 1 + numThreads);
     }
 
+    // For the `OrderedThreadSafeQueue` we expect the result to already be in
+    // order, for the `ThreadSafeQueue` the order is unspecified and we only
+    // check the content.
     if (ad_utility::isInstantiation<Queue, ThreadSafeQueue>) {
       std::ranges::sort(result);
     }
-    std::vector<size_t> expected;
-    for (size_t i = 0; i < 200 * numThreads; ++i) {
-      expected.push_back(i);
-    }
-    EXPECT_EQ(result, expected);
+    EXPECT_THAT(result, ::testing::ElementsAreArray(
+                            std::views::iota(0UL, 200UL * numThreads)));
   };
   runWithBothQueueTypes(runTest);
 }
@@ -121,24 +147,25 @@ TEST(ThreadSafeQueue, PushException) {
     auto push = makePush(queue);
 
     struct IntegerException : public std::exception {
-      int value_;
-      explicit IntegerException(int value) : value_{value} {}
+      size_t value_;
+      explicit IntegerException(size_t value) : value_{value} {}
     };
 
-    size_t numThreads = 20;
     auto threadFunction = [&numPushed, &queue, &threadIndex, &push] {
       bool hasThrown = false;
       for (size_t i = 0; i < 200; ++i) {
         if (numPushed > 300 && !hasThrown) {
           hasThrown = true;
-          try {
-            int idx = threadIndex++;
-            throw IntegerException(idx);
-          } catch (...) {
-            queue.pushException(std::current_exception());
-          }
+          // At some point, each thread pushes an Exception. After pushing the
+          // exception, all calls to `push` return false.
+          queue.pushException(
+              std::make_exception_ptr(IntegerException{threadIndex++}));
+          EXPECT_FALSE(push(numPushed++));
+        } else if (hasThrown) {
           EXPECT_FALSE(push(numPushed++));
         } else {
+          // We cannot know whether this returns true or false, because another
+          // thread already might have thrown an exception.
           push(numPushed++);
         }
       }
@@ -152,9 +179,11 @@ TEST(ThreadSafeQueue, PushException) {
     size_t numPopped = 0;
 
     try {
+      // The usual check as always, but at some point `pop` will throw, because
+      // exceptions were pushed to the queue.
       while (auto opt = queue.pop()) {
         ++numPopped;
-        EXPECT_LE(numPushed, numPopped + 6 + numThreads);
+        EXPECT_LE(numPushed, numPopped + queueSize + 1 + numThreads);
       }
       FAIL() << "Should have thrown" << std::endl;
     } catch (const IntegerException& i) {
@@ -166,13 +195,13 @@ TEST(ThreadSafeQueue, PushException) {
 
 // ________________________________________________________________
 TEST(ThreadSafeQueue, DisablePush) {
-  auto runTest = [](auto queue) {
+  auto runTest = []<typename Queue>(Queue queue) {
     std::atomic<size_t> numPushed = 0;
     auto push = makePush(queue);
 
-    size_t numThreads = 20;
     auto threadFunction = [&numPushed, &push] {
-      for (size_t i = 0; i < 200; ++i) {
+      while (true) {
+        // Push until the consumer calls `disablePush`.
         if (!push(numPushed++)) {
           return;
         }
@@ -191,15 +220,23 @@ TEST(ThreadSafeQueue, DisablePush) {
       result.push_back(opt.value());
       EXPECT_LE(numPushed, numPopped + 6 + numThreads);
 
+      // Disable the push, make the consumers finish.
       if (numPopped == 400) {
         queue.disablePush();
         break;
       }
     }
-
-    // When terminating early, we cannot actually say much about the result.
-    std::ranges::sort(result);
-    EXPECT_TRUE(std::unique(result.begin(), result.end()) == result.end());
+    if (ad_utility::similarToInstantiation<Queue, ThreadSafeQueue>) {
+      // When terminating early, we cannot actually say much about the result,
+      // other than that it contains no duplicate values
+      std::ranges::sort(result);
+      EXPECT_TRUE(std::unique(result.begin(), result.end()) == result.end());
+    } else {
+      // For the ordered queue we have the guarantee that all the pushed values
+      // were in order.
+      EXPECT_THAT(result,
+                  ::testing::ElementsAreArray(std::views::iota(0U, 400U)));
+    }
   };
   runWithBothQueueTypes(runTest);
 }
