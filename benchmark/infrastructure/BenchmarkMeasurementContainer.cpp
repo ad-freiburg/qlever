@@ -13,7 +13,7 @@
 #include <utility>
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-#include "../benchmark/infrastructure/BenchmarkResultToString.h"
+#include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"

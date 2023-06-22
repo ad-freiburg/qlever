@@ -11,7 +11,6 @@
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-#include "../benchmark/infrastructure/BenchmarkResultToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/json.h"
 

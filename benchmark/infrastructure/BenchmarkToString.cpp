@@ -7,7 +7,7 @@
 
 #include <sstream>
 
-#include "../benchmark/infrastructure/BenchmarkResultToString.h"
+#include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
 #include "util/Exception.h"
@@ -65,7 +65,7 @@ std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
 /*
 @brief Return a string containing a titel version of `categoryName` and a string
 list representation of all the given category entries.
-Note: This function converts `CategoryType` objects by trying to case them as
+Note: This function converts `CategoryType` objects by trying to cast them as
 `std::string`.
 */
 template <typename CategoryType>
