@@ -117,7 +117,7 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
   */
   auto otherGettersDontWork = []<typename WorkingType>(const ConfigOption& option) {
     doForTypeInValueType([&option]<typename CurrentType>() {
-      if (option.hasSetDereferencedVariablePointer()) {
+      if (option.wasSet()) {
         if constexpr (!std::is_same_v<WorkingType, CurrentType>) {
           ASSERT_THROW((option.getValue<CurrentType>()),
                        ad_utility::ConfigOptionGetWrongTypeException);
@@ -157,7 +157,7 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
 
     option.setValue(toSetTo.value);
 
-    ASSERT_TRUE(option.hasSetDereferencedVariablePointer() && option.wasSetAtRuntime());
+    ASSERT_TRUE(option.wasSet() && option.wasSetAtRuntime());
     ASSERT_EQ(toSetTo.value, option.getValue<Type>());
     ASSERT_EQ(toSetTo.value, *variablePointer);
 
@@ -182,7 +182,7 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
                                                      std::optional{defaultCase.value})};
 
         // Can we use the default value correctly?
-        ASSERT_TRUE(option.hasSetDereferencedVariablePointer() && option.hasDefaultValue());
+        ASSERT_TRUE(option.wasSet() && option.hasDefaultValue());
         ASSERT_EQ(defaultCase.value, option.getDefaultValue<Type>());
         ASSERT_EQ(defaultCase.jsonRepresentation, option.getDefaultValueAsJson());
         ASSERT_EQ(defaultCase.value, option.getValue<Type>());
@@ -206,7 +206,7 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
     ConfigOption option{ad_utility::ConfigOption("Without_default", "", &configurationOptionValue)};
 
     // Make sure, that we truly don't have a default value, that can be gotten.
-    ASSERT_TRUE(!option.hasSetDereferencedVariablePointer() && !option.hasDefaultValue());
+    ASSERT_TRUE(!option.wasSet() && !option.hasDefaultValue());
     ASSERT_THROW(option.getDefaultValue<Type>(), ad_utility::ConfigOptionValueNotSetException);
     ASSERT_TRUE(option.getDefaultValueAsJson().empty());
     ad_utility::ConstexprForLoop(
@@ -293,7 +293,7 @@ TEST(ConfigOptionTest, SetValueWithJson) {
     option.setValueWithJson(currentTest.jsonRepresentation);
 
     // Is it set correctly?
-    ASSERT_TRUE(option.hasSetDereferencedVariablePointer());
+    ASSERT_TRUE(option.wasSet());
     ASSERT_EQ(currentTest.value, option.getValue<Type>());
     ASSERT_EQ(currentTest.value, configurationOptionValue);
 

@@ -22,10 +22,9 @@ TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
   auto compareConfigurationOptions = []<typename T>(
                                          const ad_utility::ConfigOption& a,
                                          const ad_utility::ConfigOption& b) {
-    ASSERT_EQ(a.hasSetDereferencedVariablePointer(),
-              b.hasSetDereferencedVariablePointer());
+    ASSERT_EQ(a.wasSet(), b.wasSet());
 
-    if (a.hasSetDereferencedVariablePointer()) {
+    if (a.wasSet()) {
       ASSERT_EQ(a.getValue<T>(), b.getValue<T>());
       ASSERT_EQ(a.getValueAsString(), b.getValueAsString());
     }
@@ -156,7 +155,7 @@ TEST(ConfigManagerTest, ParseConfig) {
   // For easier checking.
   auto checkOption = [](const ad_utility::ConfigOption& option,
                         const auto& content) {
-    ASSERT_TRUE(option.hasSetDereferencedVariablePointer());
+    ASSERT_TRUE(option.wasSet());
     ASSERT_EQ(content, option.getValue<std::decay_t<decltype(content)>>());
   };
 
@@ -165,8 +164,8 @@ TEST(ConfigManagerTest, ParseConfig) {
 
   // The other two should never have set the variable, that the internal pointer
   // points to.
-  ASSERT_FALSE(getOption(0).hasSetDereferencedVariablePointer());
-  ASSERT_FALSE(getOption(1).hasSetDereferencedVariablePointer());
+  ASSERT_FALSE(getOption(0).wasSet());
+  ASSERT_FALSE(getOption(1).wasSet());
 
   // The json for testing `parseConfig`. Sets all of the configuration
   // options.
@@ -298,7 +297,7 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
       [&config](const auto& content,
                 const ad_utility::ConfigManager::VectorOfKeysForJson& keys) {
         const auto& option = config.getConfigurationOptionByNestedKeys(keys);
-        ASSERT_TRUE(option.hasSetDereferencedVariablePointer());
+        ASSERT_TRUE(option.wasSet());
         ASSERT_EQ(content,
                   option.template getValue<std::decay_t<decltype(content)>>());
       };

@@ -279,7 +279,7 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
     points to, that means, it doesn't have a default value, and needs to be set
     by the user at runtime, but wasn't.
     */
-    if (!configurationOption.hasSetDereferencedVariablePointer()) {
+    if (!configurationOption.wasSet()) {
       throw ConfigOptionWasntSetException(
           configurationOptionJsonPosition.to_string());
     }

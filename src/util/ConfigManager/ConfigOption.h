@@ -70,18 +70,14 @@ class ConfigOption {
   bool configurationOptionWasSet_ = false;
 
  public:
-  // No default consturctor.
+  // No default constructor.
   ConfigOption() = delete;
 
-  /*
-  @brief Was the variable, that the internal pointer points to, ever set by this
-  configuration option at run time?
-  */
+  // Was the variable, that the internal pointer points to, ever set by this
+  // configuration option at run time?
   bool wasSetAtRuntime() const;
 
-  /*
-  Does the configuration option hold a default value?
-  */
+  // Does the configuration option hold a default value?
   bool hasDefaultValue() const;
 
   /*
@@ -89,7 +85,7 @@ class ConfigOption {
   configuration option? Note: The answer is only yes, if there was a default
   value given at construction, or any setter called.
   */
-  bool hasSetDereferencedVariablePointer() const;
+  bool wasSet() const;
 
   /*
   @brief Sets the variable, that the internal pointer points to. Throws an
