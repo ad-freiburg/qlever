@@ -73,8 +73,8 @@ BenchmarkResults runAllBenchmarks(){
   table.setEntry(0, 0, "rowName1++");
 
   /*
-  Creates an enpty group. Doesn't measure anything, but groups and tables can be
-  added, to better organize them.
+  Creates an empty group. Doesn't measure anything, but groups and tables can be
+  added to better organize them.
   */
   auto& group = results.addGroup(identifier);
   // Normal measurement.
