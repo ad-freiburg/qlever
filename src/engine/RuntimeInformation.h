@@ -110,8 +110,11 @@ class RuntimeInformation {
   void addLimitOffsetRow(const LimitOffsetClause& l, size_t timeForLimit,
                          bool fullResultIsNotCached);
 
- private:
   static std::string_view toString(Status status);
+
+  // A helper function for printing the details as a string.
+  static void formatDetailValue(std::ostream& out, std::string_view key,
+                                const nlohmann::json& value);
 };
 
 // A class to store information about the execution of a complete query, e.g.
