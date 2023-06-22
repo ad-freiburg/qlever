@@ -82,6 +82,12 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
       // Only the vector type remains.
       static_assert(ad_utility::isVector<T>);
 
+      /*
+      The recursiv call needs to be a little more complicated, because the `std::vector<bool>`
+      doesn't actually contain booleans, but bits.
+      This causes the check to always fail for `std::vector<bool>`, if we don't pass the type
+      explicitly, because the bit type is not something, that this function allows.
+      */
       return j.is_array() &&
              [&j, &isValueTypeSubType]<typename InnerType>(const std::vector<InnerType>&) {
                return std::ranges::all_of(j, [&isValueTypeSubType](const auto& entry) {
