@@ -63,7 +63,7 @@ ResultGroup::operator std::string() const {
 
   // Listing all the entries.
   stream << addIndentation(
-      listToString(
+      ad_utility::listToString(
           ad_utility::transform(entries_,
                                 [](const auto& pointer) { return (*pointer); }),
           [](const ResultEntry& entry) {

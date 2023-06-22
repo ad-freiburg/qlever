@@ -9,6 +9,7 @@
 
 #include <cctype>
 #include <cstdint>
+#include <sstream>
 #include <string>
 #include <string_view>
 
@@ -43,6 +44,21 @@ inline string getLastPartOfString(const string& text, const char separator);
  */
 inline size_t findLiteralEnd(std::string_view input,
                              std::string_view literalEnd);
+
+/*
+@brief Return elements of the range in form of a list.
+
+@tparam TranslationFunction Must take the elements of the range and return a
+string.
+
+@param translationFunction Converts range elements into string.
+@param listItemSeparator Will be put between each of the string representations
+of the range elements.
+*/
+template <typename Range, typename TranslationFunction>
+static std::string listToString(Range&& r,
+                                TranslationFunction translationFunction,
+                                std::string_view listItemSeparator = "\n");
 
 // *****************************************************************************
 // Definitions:
@@ -242,6 +258,31 @@ constexpr bool constantTimeEquals(std::string_view view1,
         view.size()};
   };
   return impl(toVolatile(view1), toVolatile(view2));
+}
+
+// _________________________________________________________________________
+template <typename Range, typename TranslationFunction>
+static std::string listToString(Range&& r,
+                                TranslationFunction translationFunction,
+                                std::string_view listItemSeparator) {
+  std::ostringstream stream;
+
+  /*
+  TODO<C++23>: This can be a combination of `std::views::transform` and
+  `std::views::join_with`. After that, we just have to insert all the elements
+  of the new view into the stream.
+  */
+  forEachExcludingTheLastOne(
+      AD_FWD(r),
+      [&stream, &translationFunction,
+       &listItemSeparator](const auto& listItem) {
+        stream << translationFunction(listItem) << listItemSeparator;
+      },
+      [&stream, &translationFunction](const auto& listItem) {
+        stream << translationFunction(listItem);
+      });
+
+  return stream.str();
 }
 
 }  // namespace ad_utility
