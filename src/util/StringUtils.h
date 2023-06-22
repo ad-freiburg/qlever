@@ -265,6 +265,10 @@ template <typename Range, typename TranslationFunction>
 static std::string listToString(Range&& r,
                                 TranslationFunction translationFunction,
                                 std::string_view listItemSeparator) {
+  if (r.empty()) {
+    return "";
+  }
+
   std::ostringstream stream;
 
   /*
