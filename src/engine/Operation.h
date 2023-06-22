@@ -150,21 +150,6 @@ class Operation {
   // return nullopt.
   virtual std::optional<Variable> getPrimarySortKeyVariable() const final;
 
-  // `IndexScan`s with only one variable are often executed already during
-  // query planning. The result is stored in the cache as well as in the
-  // `IndexScan` object itself. This interface allows to ask an Operation
-  // explicitly whether it stores such a precomputed result. In this case we can
-  // call `computeResult` in O(1) to obtain the precomputed result. This has two
-  // advantages over implicitly reading the result from the cache:
-  // 1. The result might be not in the cache anymore, but the IndexScan still
-  //    stores it.
-  // 2. We can preserve the information, whether the computation was read from
-  //    the cache or actually computed during the query planning or processing.
-  virtual std::optional<std::shared_ptr<const ResultTable>>
-  getPrecomputedResultFromQueryPlanning() {
-    return std::nullopt;
-  }
-
   // Direct access to the `computeResult()` method. This should be only used for
   // testing, otherwise the `getResult()` function should be used which also
   // sets the runtime info and uses the cache.
@@ -264,12 +249,6 @@ class Operation {
   // empty, the result will be empty, and it is not necessary to evaluate the
   // other child.
   virtual void updateRuntimeInformationWhenOptimizedOut();
-
-  // Some operations (currently `IndexScans` with only one variable) are
-  // computed during query planning. Get the total time spent in such
-  // computations for this operation and all its descendants. This can be used
-  // to correct the time statistics for the query planning and execution.
-  size_t getTotalExecutionTimeDuringQueryPlanning() const;
 
  private:
   // Create the runtime information in case the evaluation of this operation has
