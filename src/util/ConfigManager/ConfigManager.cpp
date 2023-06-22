@@ -323,18 +323,17 @@ std::string ConfigManager::printConfigurationDoc(
   through and should re-work some stuff. I mean, there is never a good reason,
   to have empty array elements.
   */
-  for (const auto& keyToLeaf : flattendKeyToConfigurationOptionIndex.items()) {
+  for (const auto& [key, val] : flattendKeyToConfigurationOptionIndex.items()) {
     // Skip empty array 'leafs'.
-    if (keyToLeaf.value().is_null()) {
+    if (val.is_null()) {
       continue;
     }
 
     // Pointer to the position of this option in
     // `prettyKeyToConfigurationOptionIndex`.
-    const nlohmann::json::json_pointer jsonOptionPointer{keyToLeaf.key()};
+    const nlohmann::json::json_pointer jsonOptionPointer{key};
     // What configuration option are we currently, indirectly, looking at?
-    const ConfigOption& option =
-        configurationOptions_.at(keyToLeaf.value().get<size_t>());
+    const ConfigOption& option = configurationOptions_.at(val.get<size_t>());
 
     if (printCurrentJsonConfiguration) {
       prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
@@ -347,21 +346,20 @@ std::string ConfigManager::printConfigurationDoc(
   }
 
   // List the configuration options themselves.
-  for (const auto& keyValuePair :
-       flattendKeyToConfigurationOptionIndex.items()) {
+  for (const auto& [key, val] : flattendKeyToConfigurationOptionIndex.items()) {
     // Because user can cause arrays with empty entries to be created, we have
     // to skip those `null` values.
-    if (keyValuePair.value().is_null()) {
+    if (val.is_null()) {
       continue;
     }
 
     // Add the location of the option and the option itself.
-    stream << "Location : " << keyValuePair.key() << "\n"
+    stream << "Location : " << key << "\n"
            << static_cast<std::string>(
-                  configurationOptions_.at(keyValuePair.value().get<size_t>()));
+                  configurationOptions_.at(val.get<size_t>()));
 
     // The last entry doesn't get linebreaks.
-    if (keyValuePair.value() != flattendKeyToConfigurationOptionIndex.back()) {
+    if (val != flattendKeyToConfigurationOptionIndex.back()) {
       stream << "\n\n";
     }
   }
