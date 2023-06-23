@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <string>
+
 #include "util/StringUtils.h"
 
 using ad_utility::constantTimeEquals;
@@ -58,4 +60,19 @@ TEST(StringUtilsTest, constantTimeEquals) {
   EXPECT_FALSE(constantTimeEquals("", "Abcdefg"));
   EXPECT_FALSE(constantTimeEquals("Abcdefg", ""));
   EXPECT_FALSE(constantTimeEquals("Abc", "defg"));
+}
+
+TEST(StringUtilsTest, listToString) {
+  // Easy to use translation function.
+  auto numberToString = [](std::integral auto number) {
+    return std::to_string(number);
+  };
+
+  ASSERT_EQ("",
+            ad_utility::listToString(std::vector<int>{}, numberToString, "\n"));
+  ASSERT_EQ("42", ad_utility::listToString(std::vector<int>{42}, numberToString,
+                                           "\n"));
+  ASSERT_EQ("40,41,42,43",
+            ad_utility::listToString(std::vector<int>{40, 41, 42, 43},
+                                     numberToString, ","));
 }
