@@ -71,22 +71,23 @@ ResultGroup::operator std::string() const {
   If the given vector is empty, return ` None`. If it isn't, return the
   contacination of "\n\n" and then the string list representation of the vector.
   */
-  auto vectorToStringListOrNone = []<typename T>(const std::vector<T>& vec) {
-    return (vec.empty()
-                ? " None"
-                : absl::StrCat(
-                      "\n\n",
-                      addIndentation(
-                          ad_utility::listToString(
-                              ad_utility::transform(vec,
-                                                    [](const auto& pointer) {
-                                                      return (*pointer);
-                                                    }),
-                              [](const auto& entry) {
-                                return static_cast<std::string>(entry);
-                              },
-                              "\n\n"),
-                          1)));
+  auto vectorToStringListOrNone =
+      []<typename T>(const std::vector<T>& vec) -> std::string {
+    if (vec.empty()) {
+      return "None";
+    }
+
+    return absl::StrCat(
+        "\n\n",
+        addIndentation(
+            ad_utility::listToString(
+                ad_utility::transform(
+                    vec, [](const auto& pointer) { return (*pointer); }),
+                [](const auto& entry) {
+                  return static_cast<std::string>(entry);
+                },
+                "\n\n"),
+            1));
   };
 
   stream << absl::StrCat(
