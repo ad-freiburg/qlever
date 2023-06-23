@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/string_view.h>
@@ -14,12 +12,14 @@
 #include <string_view>
 #include <utility>
 
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/Iterators.h"
+#include "util/StringUtils.h"
 
 namespace ad_benchmark {
 
@@ -96,7 +96,7 @@ ResultGroup::operator std::string() const {
   stream << vectorToStringListOrNone(resultEntries_);
 
   // Listing all the `ResultTable`s, if there are any.
-  stream << "\n\nTables:" << vectorToStringListOrNone(resultEntries_);
+  stream << "\n\nTables:" << vectorToStringListOrNone(resultTables_);
 
   return absl::StrCat(prefix, addIndentation(stream.str(), 1));
 }
@@ -193,16 +193,16 @@ ResultTable::operator std::string() const {
       [&columnSeperator, &addStringWithPadding](
           std::ostringstream& stream,
           const std::vector<std::pair<std::string, size_t>>& rowEntries) {
-        forEachExcludingTheLastOne(
+        stream << ad_utility::listToString(
             rowEntries,
-            [&stream, &columnSeperator,
-             &addStringWithPadding](const auto& pair) {
-              addStringWithPadding(stream, pair.first, pair.second);
-              stream << columnSeperator;
+            [&addStringWithPadding](const auto& pair) {
+              // TODO Replace this fix, once `listToString` got it's overload
+              // for streams.
+              std::ostringstream s;
+              addStringWithPadding(s, pair.first, pair.second);
+              return s.str();
             },
-            [&stream, &addStringWithPadding](const auto& pair) {
-              addStringWithPadding(stream, pair.first, pair.second);
-            });
+            columnSeperator);
       };
 
   // The prefix. Everything after this will be indented, so it's better

@@ -7,8 +7,10 @@
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <ranges>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -56,9 +58,9 @@ string.
 of the range elements.
 */
 template <typename Range, typename TranslationFunction>
-static std::string listToString(Range&& r,
+static std::string listToString(const Range& r,
                                 TranslationFunction translationFunction,
-                                std::string_view listItemSeparator = "\n");
+                                std::string_view listItemSeparator);
 
 // *****************************************************************************
 // Definitions:
@@ -262,7 +264,7 @@ constexpr bool constantTimeEquals(std::string_view view1,
 
 // _________________________________________________________________________
 template <typename Range, typename TranslationFunction>
-static std::string listToString(Range&& r,
+static std::string listToString(const Range& r,
                                 TranslationFunction translationFunction,
                                 std::string_view listItemSeparator) {
   if (r.empty()) {
@@ -276,15 +278,24 @@ static std::string listToString(Range&& r,
   `std::views::join_with`. After that, we just have to insert all the elements
   of the new view into the stream.
   */
-  forEachExcludingTheLastOne(
-      AD_FWD(r),
-      [&stream, &translationFunction,
-       &listItemSeparator](const auto& listItem) {
-        stream << translationFunction(listItem) << listItemSeparator;
-      },
-      [&stream, &translationFunction](const auto& listItem) {
-        stream << translationFunction(listItem);
-      });
+  /*
+  Important: Because of a bug in `gcc-11`, `std::views::transform` doesn't
+  compile with r-value references.
+  Which is why function argument `r` needs to be a `const&`, instead of a
+  general reference `&&`.
+  Considering, that a `std::ranges::view` shouldn't change the underlying
+  container, this shouldn't really be a problem.
+  */
+  auto rAsString = std::views::transform(r, translationFunction);
+
+  // Add all the string representations to the stream with seperator betwenn
+  // them.
+  std::ranges::for_each_n(rAsString.begin(), rAsString.size() - 1,
+                          [&stream, &listItemSeparator](const auto& listItem) {
+                            stream << listItem << listItemSeparator;
+                          },
+                          {});
+  stream << rAsString.back();
 
   return stream.str();
 }
