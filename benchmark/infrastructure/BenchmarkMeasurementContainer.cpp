@@ -78,17 +78,15 @@ ResultGroup::operator std::string() const {
     }
 
     return absl::StrCat(
-        "\n\n",
-        addIndentation(
-            ad_utility::listToString(
-                ad_utility::transform(
-                    vec, [](const auto& pointer) { return (*pointer); }),
-
-                "\n\n",
-                [](const auto& entry) {
-                  return static_cast<std::string>(entry);
-                }),
-            1));
+        "\n\n", addIndentation(
+                    ad_utility::listToString(
+                        std::views::transform(vec,
+                                              [](const auto& pointer) {
+                                                return static_cast<std::string>(
+                                                    *pointer);
+                                              }),
+                        "\n\n"),
+                    1));
   };
 
   stream << absl::StrCat(
