@@ -69,7 +69,7 @@ ResultGroup::operator std::string() const {
 
   /*
   If the given vector is empty, return ` None`. If it isn't, return the
-  contacination of "\n\n" and then the string list representation of the vector.
+  contacination of "\n\n" with the string list representation of the vector.
   */
   auto vectorToStringListOrNone =
       []<typename T>(const std::vector<T>& vec) -> std::string {
