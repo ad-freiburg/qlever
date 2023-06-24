@@ -84,12 +84,6 @@ static std::string categoryToString(
 std::string benchmarkResultsToString(
     const BenchmarkInterface* const benchmarkClass,
     const BenchmarkResults& results) {
-  // The values for all the categories of benchmarks.
-  const std::vector<ResultEntry>& singleMeasurements =
-      results.getSingleMeasurements();
-  const std::vector<ResultGroup>& resultGroups = results.getGroups();
-  const std::vector<ResultTable>& resultTables = results.getTables();
-
   // Visualizes the measured times.
   std::ostringstream visualization;
 
@@ -129,17 +123,17 @@ std::string benchmarkResultsToString(
 
   // Visualization for single measurments, if there are any.
   addNonEmptyCategorieToStringSteam(
-      &visualization, "Single measurement benchmarks", singleMeasurements,
-      categoryToString<ResultEntry>);
+      &visualization, "Single measurement benchmarks",
+      results.getSingleMeasurements(), categoryToString<ResultEntry>);
 
   // Visualization for groups, if there are any.
   addNonEmptyCategorieToStringSteam(&visualization, "Group benchmarks",
-                                    resultGroups,
+                                    results.getGroups(),
                                     categoryToString<ResultGroup>);
 
   // Visualization for tables, if there are any.
   addNonEmptyCategorieToStringSteam(&visualization, "Table benchmarks",
-                                    resultTables,
+                                    results.getTables(),
                                     categoryToString<ResultTable>);
 
   return visualization.str();
