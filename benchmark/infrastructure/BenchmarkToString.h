@@ -16,14 +16,14 @@
 
 namespace ad_benchmark {
 
-// How the indention should look like.
+// How the indentation should look like.
 static constexpr std::string_view outputIndentation = "    ";
 
 /*
-@brief Adds indention before the given string and directly after new line
+@brief Adds indentation before the given string and directly after new line
 characters.
 
-@param indentionLevel How deep is the indention? `0` is no indention.
+@param indentationLevel How deep is the indentation? `0` is no indentation.
 */
 std::string addIndentation(const std::string_view str,
                            const size_t& indentationLevel);

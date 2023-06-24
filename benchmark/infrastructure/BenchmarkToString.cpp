@@ -32,10 +32,10 @@ static std::string createCategoryTitle(std::string_view categoryTitle) {
 // ___________________________________________________________________________
 std::string addIndentation(const std::string_view str,
                            const size_t& indentationLevel) {
-  // An indention level of 0 makes no sense. Must be an error.
+  // An indentation level of 0 makes no sense. Must be an error.
   AD_CONTRACT_CHECK(indentationLevel > 0);
 
-  // The indention symbols for this level of indention.
+  // The indentation symbols for this level of indentation.
   std::string indentationSymbols{""};
   indentationSymbols.reserve(outputIndentation.size() * indentationLevel);
   for (size_t i = 0; i < indentationLevel; i++) {
