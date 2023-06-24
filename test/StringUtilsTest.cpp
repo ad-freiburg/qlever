@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <functional>
+#include <sstream>
 #include <string>
 
 #include "util/StringUtils.h"
@@ -63,16 +65,29 @@ TEST(StringUtilsTest, constantTimeEquals) {
 }
 
 TEST(StringUtilsTest, listToString) {
-  // Easy to use translation function.
-  auto numberToString = [](std::integral auto number) {
-    return std::to_string(number);
+  // Do the test for all overloads of `listToString`.
+  auto doTestForAllOverloads = []<typename TranslationFunction = std::identity>(
+      std::string_view expectedResult, const auto& range,
+      std::string_view separator,
+      TranslationFunction translationFunction = {}) {
+    ASSERT_EQ(expectedResult,
+              ad_utility::listToString(range, separator, translationFunction));
+
+    std::ostringstream stream;
+    ad_utility::listToString(&stream, range, separator, translationFunction);
+    ASSERT_EQ(expectedResult, stream.str());
   };
 
-  ASSERT_EQ("",
-            ad_utility::listToString(std::vector<int>{}, numberToString, "\n"));
-  ASSERT_EQ("42", ad_utility::listToString(std::vector<int>{42}, numberToString,
-                                           "\n"));
-  ASSERT_EQ("40,41,42,43",
-            ad_utility::listToString(std::vector<int>{40, 41, 42, 43},
-                                     numberToString, ","));
+  doTestForAllOverloads("", std::vector<int>{}, "\n");
+  doTestForAllOverloads("42", std::vector<int>{42}, "\n");
+  doTestForAllOverloads("40,41,42,43", std::vector<int>{40, 41, 42, 43}, ",");
+
+  // Add 10 and translate to string.
+  auto add10ThenToString = [](std::integral auto& number) {
+    return std::to_string(number + 10);
+  };
+  doTestForAllOverloads("", std::vector<int>{}, "\n", add10ThenToString);
+  doTestForAllOverloads("52", std::vector<int>{42}, "\n", add10ThenToString);
+  doTestForAllOverloads("50,51,52,53", std::vector<int>{40, 41, 42, 43}, ",",
+                        add10ThenToString);
 }

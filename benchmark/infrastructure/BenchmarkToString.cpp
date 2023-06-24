@@ -2,13 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel February of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkToString.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
 
 #include <sstream>
 
+#include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
 #include "util/Exception.h"
@@ -73,13 +72,12 @@ template <typename CategoryType>
 static std::string categoryToString(
     std::string_view categoryName,
     const std::vector<CategoryType>& categoryEntries) {
-  return absl::StrCat(createCategoryTitle(categoryName), "\n",
-                      ad_utility::listToString(
-                          categoryEntries,
-                          [](const CategoryType& entry) {
-                            return static_cast<std::string>(entry);
-                          },
-                          "\n\n"));
+  return absl::StrCat(
+      createCategoryTitle(categoryName), "\n",
+      ad_utility::listToString(categoryEntries, "\n\n",
+                               [](const CategoryType& entry) {
+                                 return static_cast<std::string>(entry);
+                               }));
 }
 
 // ___________________________________________________________________________

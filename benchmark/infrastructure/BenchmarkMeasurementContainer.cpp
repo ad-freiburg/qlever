@@ -83,10 +83,11 @@ ResultGroup::operator std::string() const {
             ad_utility::listToString(
                 ad_utility::transform(
                     vec, [](const auto& pointer) { return (*pointer); }),
+
+                "\n\n",
                 [](const auto& entry) {
                   return static_cast<std::string>(entry);
-                },
-                "\n\n"),
+                }),
             1));
   };
 
@@ -194,16 +195,13 @@ ResultTable::operator std::string() const {
       [&columnSeperator, &addStringWithPadding](
           std::ostringstream& stream,
           const std::vector<std::pair<std::string, size_t>>& rowEntries) {
-        stream << ad_utility::listToString(
-            rowEntries,
-            [&addStringWithPadding](const auto& pair) {
-              // TODO Replace this fix, once `listToString` got it's overload
-              // for streams.
-              std::ostringstream s;
-              addStringWithPadding(s, pair.first, pair.second);
-              return s.str();
-            },
-            columnSeperator);
+        ad_utility::listToString(&stream, rowEntries, columnSeperator,
+                                 [&addStringWithPadding](const auto& pair) {
+                                   std::ostringstream s;
+                                   addStringWithPadding(s, pair.first,
+                                                        pair.second);
+                                   return s.str();
+                                 });
       };
 
   // The prefix. Everything after this will be indented, so it's better
