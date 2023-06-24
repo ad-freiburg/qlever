@@ -78,15 +78,13 @@ ResultGroup::operator std::string() const {
     }
 
     return absl::StrCat(
-        "\n\n", addIndentation(
-                    ad_utility::listToString(
-                        std::views::transform(vec,
-                                              [](const auto& pointer) {
-                                                return static_cast<std::string>(
-                                                    *pointer);
-                                              }),
-                        "\n\n"),
-                    1));
+        "\n\n",
+        addIndentation(
+            ad_utility::listToString(
+                std::views::transform(
+                    vec, [](const auto& pointer) { return (*pointer); }),
+                "\n\n"),
+            1));
   };
 
   stream << absl::StrCat(
@@ -291,6 +289,29 @@ void to_json(nlohmann::json& j, const ResultTable& resultTable) {
                      {"columnNames", resultTable.columnNames_},
                      {"entries", resultTable.entries_},
                      {"metadata", resultTable.metadata()}};
+}
+
+// The code for the string insertion operator of a class, that can be casted to
+// string.
+static std::ostream& streamInserterOperatorImplementation(std::ostream& os,
+                                                          const auto& obj) {
+  os << static_cast<std::string>(obj);
+  return os;
+}
+
+// ____________________________________________________________________________
+std::ostream& operator<<(std::ostream& os, const ResultEntry& resultEntry) {
+  return streamInserterOperatorImplementation(os, resultEntry);
+}
+
+// ____________________________________________________________________________
+std::ostream& operator<<(std::ostream& os, const ResultTable& resultTable) {
+  return streamInserterOperatorImplementation(os, resultTable);
+}
+
+// ____________________________________________________________________________
+std::ostream& operator<<(std::ostream& os, const ResultGroup& resultGroup) {
+  return streamInserterOperatorImplementation(os, resultGroup);
 }
 
 }  // namespace ad_benchmark

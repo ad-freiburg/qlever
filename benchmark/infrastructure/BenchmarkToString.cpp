@@ -72,12 +72,8 @@ template <typename CategoryType>
 static std::string categoryToString(
     std::string_view categoryName,
     const std::vector<CategoryType>& categoryEntries) {
-  return absl::StrCat(
-      createCategoryTitle(categoryName), "\n",
-      ad_utility::listToString(categoryEntries, "\n\n",
-                               [](const CategoryType& entry) {
-                                 return static_cast<std::string>(entry);
-                               }));
+  return absl::StrCat(createCategoryTitle(categoryName), "\n",
+                      ad_utility::listToString(categoryEntries, "\n\n"));
 }
 
 // ___________________________________________________________________________
