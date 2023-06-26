@@ -52,8 +52,8 @@ inline size_t findLiteralEnd(std::string_view input,
                              std::string_view literalEnd);
 
 /*
-@brief Add elements of the range to a character stream, in form of a string
-list.
+@brief Add elements of the range to a stream, with the `separator` between the
+elements.
 
 @tparam Range An input range, whos dereferenced iterators can be inserted into
 streams.
@@ -64,12 +64,12 @@ of the range elements.
 template <std::ranges::input_range Range>
 requires ad_utility::Streamable<
     std::iter_reference_t<std::ranges::iterator_t<Range>>>
-static void listToString(std::ostream* stream, const Range& r,
-                         std::string_view separator);
+static void lazyStrJoin(std::ostream* stream, const Range& r,
+                        std::string_view separator);
 
 /*
-@brief Add elements of the range to a character stream, in form of a string
-list.
+@brief Add elements of the range to a stream, with the `separator` between the
+elements.
 
 @tparam Range An input range, whos dereferenced iterators can be inserted into
 streams.
@@ -80,7 +80,7 @@ of the range elements.
 template <std::ranges::input_range Range>
 requires ad_utility::Streamable<
     std::iter_reference_t<std::ranges::iterator_t<Range>>>
-static std::string listToString(const Range& r, std::string_view separator);
+static std::string lazyStrJoin(const Range& r, std::string_view separator);
 
 // *****************************************************************************
 // Definitions:
@@ -286,8 +286,8 @@ constexpr bool constantTimeEquals(std::string_view view1,
 template <std::ranges::input_range Range>
 requires ad_utility::Streamable<
     std::iter_reference_t<std::ranges::iterator_t<Range>>>
-static void listToString(std::ostream* stream, const Range& r,
-                         std::string_view separator) {
+static void lazyStrJoin(std::ostream* stream, const Range& r,
+                        std::string_view separator) {
   if (r.empty()) {
     return;
   }
@@ -306,14 +306,14 @@ static void listToString(std::ostream* stream, const Range& r,
 template <std::ranges::input_range Range>
 requires ad_utility::Streamable<
     std::iter_reference_t<std::ranges::iterator_t<Range>>>
-static std::string listToString(const Range& r, std::string_view separator) {
+static std::string lazyStrJoin(const Range& r, std::string_view separator) {
   if (r.empty()) {
     return "";
   }
 
   std::ostringstream stream;
 
-  listToString(&stream, r, separator);
+  lazyStrJoin(&stream, r, separator);
 
   return stream.str();
 }

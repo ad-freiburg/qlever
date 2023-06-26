@@ -70,10 +70,10 @@ TEST(StringUtilsTest, listToString) {
   auto doTestForAllOverloads = [](std::string_view expectedResult,
                                   const auto& range,
                                   std::string_view separator) {
-    ASSERT_EQ(expectedResult, ad_utility::listToString(range, separator));
+    ASSERT_EQ(expectedResult, ad_utility::lazyStrJoin(range, separator));
 
     std::ostringstream stream;
-    ad_utility::listToString(&stream, range, separator);
+    ad_utility::lazyStrJoin(&stream, range, separator);
     ASSERT_EQ(expectedResult, stream.str());
   };
 

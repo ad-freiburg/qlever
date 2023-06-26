@@ -73,7 +73,7 @@ static std::string categoryToString(
     std::string_view categoryName,
     const std::vector<CategoryType>& categoryEntries) {
   return absl::StrCat(createCategoryTitle(categoryName), "\n",
-                      ad_utility::listToString(categoryEntries, "\n\n"));
+                      ad_utility::lazyStrJoin(categoryEntries, "\n\n"));
 }
 
 // ___________________________________________________________________________

@@ -81,7 +81,7 @@ ResultGroup::operator std::string() const {
     return absl::StrCat(
         "\n\n",
         addIndentation(
-            ad_utility::listToString(
+            ad_utility::lazyStrJoin(
                 std::views::transform(
                     vec, [](const auto& pointer) { return (*pointer); }),
                 "\n\n"),
@@ -192,7 +192,7 @@ ResultTable::operator std::string() const {
       [&columnSeperator, &addStringWithPadding](
           std::ostringstream& stream,
           const std::vector<std::pair<std::string, size_t>>& rowEntries) {
-        ad_utility::listToString(
+        ad_utility::lazyStrJoin(
             &stream,
             std::views::transform(rowEntries,
                                   [&addStringWithPadding](const auto& pair) {
