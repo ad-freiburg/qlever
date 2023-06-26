@@ -78,14 +78,12 @@ ResultGroup::operator std::string() const {
       return "None";
     }
 
-    return absl::StrCat(
-        "\n\n",
-        addIndentation(
-            ad_utility::lazyStrJoin(
-                std::views::transform(
-                    vec, [](const auto& pointer) { return (*pointer); }),
-                "\n\n"),
-            1));
+    const std::string& list = ad_utility::lazyStrJoin(
+        std::views::transform(vec,
+                              [](const auto& pointer) { return (*pointer); }),
+        "\n\n");
+
+    return absl::StrCat("\n\n", addIndentation(list, 1));
   };
 
   stream << absl::StrCat(
