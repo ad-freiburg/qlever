@@ -288,5 +288,5 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // The result that `zipperJoinWithUndef` produces has a different order of
   // columns than expected, permute them. See the documentation of
   // `JoinColumnMapping` for details.
-  result->permuteColumns(joinColumnData.permutationResult());
+  result->setColumnSubset(joinColumnData.permutationResult());
 }
