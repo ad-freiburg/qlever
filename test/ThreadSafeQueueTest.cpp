@@ -162,7 +162,15 @@ TEST(ThreadSafeQueue, PushException) {
               std::make_exception_ptr(IntegerException{threadIndex++}));
           EXPECT_FALSE(push(numPushed++));
         } else if (hasThrown) {
-          EXPECT_FALSE(push(numPushed++));
+          // In the case that we have previously thrown an exception, we know
+          // that the queue is disabled. This means that we can safely push an
+          // out-of-order value even to the ordered queue. Note that we
+          // deliberately do not push `numPushed++` as usual, because otherwise
+          // we cannot say much about the value of `numPushed` after throwing
+          // the first exception. Note that this pattern is only for testing,
+          // and that a thread that has pushed an exception to a queue should
+          // stop pushing to the same queue in real life.
+          EXPECT_FALSE(push(0));
         } else {
           // We cannot know whether this returns true or false, because another
           // thread already might have thrown an exception.
