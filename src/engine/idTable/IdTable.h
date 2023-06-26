@@ -318,8 +318,8 @@ class IdTable {
     return *(begin() + index);
   }
 
-  // Same as operator[], but throw an exception if the `row` is out of bounds. This is similar to the behavior of
-  // `std::vector::at`.
+  // Same as operator[], but throw an exception if the `row` is out of bounds.
+  // This is similar to the behavior of `std::vector::at`.
   row_reference_restricted at(size_t row) requires(!isView) {
     AD_CONTRACT_CHECK(row < numRows());
     return operator[](row);
@@ -545,7 +545,6 @@ class IdTable {
     return IdTable<T, 0, ColumnStorage, IsView::True>{
         std::move(viewSpans), columnIndices.size(), numRows_, allocator_};
   }
-
 
   // Modify the table, s.t. it contains only the specified `subset` of the
   // original columns in the specified order. Each index in the `subset`
