@@ -181,7 +181,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   std::vector<ad_utility::JThread> threads;
   // TODO<joka921> get the number of optimal threads from the operating
   // system.
-  for (size_t j = 0; j < 5; ++j) {
+  for (size_t j = 0; j < 10; ++j) {
     threads.emplace_back(readAndDecompressBlock);
   }
 
