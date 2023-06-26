@@ -226,7 +226,7 @@ TEST(ThreadSafeQueue, DisablePush) {
     while (auto opt = queue.pop()) {
       ++numPopped;
       result.push_back(opt.value());
-      EXPECT_LE(numPushed, numPopped + 6 + numThreads);
+      EXPECT_LE(numPushed, numPopped + queueSize + 1 + numThreads);
 
       // Disable the push, make the consumers finish.
       if (numPopped == 400) {

@@ -10,8 +10,6 @@
 #include <optional>
 #include <queue>
 
-#include "absl/synchronization/mutex.h"
-
 namespace ad_utility::data_structures {
 
 /// A thread safe, multi-consumer, multi-producer queue.
@@ -110,7 +108,7 @@ class ThreadSafeQueue {
 };
 
 // A thread safe queue that is similar (wrt the interface and the behavior) to
-// the `ThreadSafeQueue` above, with the following differente: Each element that
+// the `ThreadSafeQueue` above, with the following difference: Each element that
 // is pushed is associated with a unique index `n`. A call to `push(n,
 // someValue)` will block until other threads have pushed all indices in the
 // range [0, ..., n - 1]. This can be used to enforce the ordering of values
