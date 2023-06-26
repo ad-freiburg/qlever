@@ -55,39 +55,32 @@ inline size_t findLiteralEnd(std::string_view input,
 @brief Add elements of the range to a character stream, in form of a string
 list.
 
-@tparam TranslationFunction Must take the elements of the range and return
-something, that can be inserted into a ostream.
+@tparam Range An input range, whos dereferenced iterators can be inserted into
+streams.
 
-@param translationFunction Converts range elements into ostream insertable
-types.
 @param separator Will be put between each of the string representations
 of the range elements.
 */
-template <std::ranges::input_range Range,
-          typename TranslationFunction = std::identity>
-requires ad_utility::Streamable<std::indirect_result_t<
-    TranslationFunction&, std::ranges::iterator_t<Range>>>
+template <std::ranges::input_range Range>
+requires ad_utility::Streamable<
+    std::iter_reference_t<std::ranges::iterator_t<Range>>>
 static void listToString(std::ostream* stream, const Range& r,
-                         std::string_view separator,
-                         TranslationFunction translationFunction = {});
+                         std::string_view separator);
 
 /*
-@brief Return elements of the range in form of a list.
+@brief Add elements of the range to a character stream, in form of a string
+list.
 
-@tparam TranslationFunction Must take the elements of the range and return
-something, that can be inserted into a ostream.
+@tparam Range An input range, whos dereferenced iterators can be inserted into
+streams.
 
-@param translationFunction Converts range elements into string ostream
-insertable types.
 @param separator Will be put between each of the string representations
 of the range elements.
 */
-template <std::ranges::input_range Range,
-          typename TranslationFunction = std::identity>
-requires ad_utility::Streamable<std::indirect_result_t<
-    TranslationFunction&, std::ranges::iterator_t<Range>>>
-static std::string listToString(const Range& r, std::string_view separator,
-                                TranslationFunction translationFunction = {});
+template <std::ranges::input_range Range>
+requires ad_utility::Streamable<
+    std::iter_reference_t<std::ranges::iterator_t<Range>>>
+static std::string listToString(const Range& r, std::string_view separator);
 
 // *****************************************************************************
 // Definitions:
@@ -290,54 +283,37 @@ constexpr bool constantTimeEquals(std::string_view view1,
 }
 
 // _________________________________________________________________________
-template <std::ranges::input_range Range, typename TranslationFunction>
-requires ad_utility::Streamable<std::indirect_result_t<
-    TranslationFunction&, std::ranges::iterator_t<Range>>>
+template <std::ranges::input_range Range>
+requires ad_utility::Streamable<
+    std::iter_reference_t<std::ranges::iterator_t<Range>>>
 static void listToString(std::ostream* stream, const Range& r,
-                         std::string_view separator,
-                         TranslationFunction translationFunction) {
+                         std::string_view separator) {
   if (r.empty()) {
     return;
   }
 
-  /*
-  TODO<C++23>: This can be a combination of `std::views::transform` and
-  `std::views::join_with`. After that, we just have to insert all the elements
-  of the new view into the stream.
-  */
-  /*
-  Important: Because of a bug in `gcc-11`, `std::views::transform` doesn't
-  compile with r-value references.
-  Which is why function argument `r` needs to be a `const&`, instead of a
-  general reference `&&`.
-  Considering, that a `std::ranges::view` shouldn't change the underlying
-  container, this shouldn't really be a problem.
-  */
-  auto rAsString = std::views::transform(r, translationFunction);
-
   // Add all the string representations to the stream with seperator betwenn
   // them.
-  std::ranges::for_each_n(rAsString.begin(), rAsString.size() - 1,
+  std::ranges::for_each_n(r.begin(), r.size() - 1,
                           [&stream, &separator](const auto& listItem) {
                             (*stream) << listItem << separator;
                           },
                           {});
-  (*stream) << rAsString.back();
+  (*stream) << r.back();
 }
 
 // _________________________________________________________________________
-template <std::ranges::input_range Range, typename TranslationFunction>
-requires ad_utility::Streamable<std::indirect_result_t<
-    TranslationFunction&, std::ranges::iterator_t<Range>>>
-static std::string listToString(const Range& r, std::string_view separator,
-                                TranslationFunction translationFunction) {
+template <std::ranges::input_range Range>
+requires ad_utility::Streamable<
+    std::iter_reference_t<std::ranges::iterator_t<Range>>>
+static std::string listToString(const Range& r, std::string_view separator) {
   if (r.empty()) {
     return "";
   }
 
   std::ostringstream stream;
 
-  listToString(&stream, r, separator, translationFunction);
+  listToString(&stream, r, separator);
 
   return stream.str();
 }

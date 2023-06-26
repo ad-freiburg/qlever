@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <ranges>
 #include <sstream>
 #include <string_view>
 #include <utility>
@@ -191,13 +192,16 @@ ResultTable::operator std::string() const {
       [&columnSeperator, &addStringWithPadding](
           std::ostringstream& stream,
           const std::vector<std::pair<std::string, size_t>>& rowEntries) {
-        ad_utility::listToString(&stream, rowEntries, columnSeperator,
-                                 [&addStringWithPadding](const auto& pair) {
-                                   std::ostringstream s;
-                                   addStringWithPadding(s, pair.first,
-                                                        pair.second);
-                                   return s.str();
-                                 });
+        ad_utility::listToString(
+            &stream,
+            std::views::transform(rowEntries,
+                                  [&addStringWithPadding](const auto& pair) {
+                                    std::ostringstream s;
+                                    addStringWithPadding(s, pair.first,
+                                                         pair.second);
+                                    return s.str();
+                                  }),
+            columnSeperator);
       };
 
   // The prefix. Everything after this will be indented, so it's better

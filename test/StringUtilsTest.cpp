@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <functional>
+#include <ranges>
 #include <sstream>
 #include <string>
 
@@ -66,28 +67,40 @@ TEST(StringUtilsTest, constantTimeEquals) {
 
 TEST(StringUtilsTest, listToString) {
   // Do the test for all overloads of `listToString`.
-  auto doTestForAllOverloads = []<typename TranslationFunction = std::identity>(
-      std::string_view expectedResult, const auto& range,
-      std::string_view separator,
-      TranslationFunction translationFunction = {}) {
-    ASSERT_EQ(expectedResult,
-              ad_utility::listToString(range, separator, translationFunction));
+  auto doTestForAllOverloads = [](std::string_view expectedResult,
+                                  const auto& range,
+                                  std::string_view separator) {
+    ASSERT_EQ(expectedResult, ad_utility::listToString(range, separator));
 
     std::ostringstream stream;
-    ad_utility::listToString(&stream, range, separator, translationFunction);
+    ad_utility::listToString(&stream, range, separator);
     ASSERT_EQ(expectedResult, stream.str());
   };
 
+  // Vectors.
   doTestForAllOverloads("", std::vector<int>{}, "\n");
   doTestForAllOverloads("42", std::vector<int>{42}, "\n");
   doTestForAllOverloads("40,41,42,43", std::vector<int>{40, 41, 42, 43}, ",");
 
-  // Add 10 and translate to string.
-  auto add10ThenToString = [](std::integral auto& number) {
-    return std::to_string(number + 10);
-  };
-  doTestForAllOverloads("", std::vector<int>{}, "\n", add10ThenToString);
-  doTestForAllOverloads("52", std::vector<int>{42}, "\n", add10ThenToString);
-  doTestForAllOverloads("50,51,52,53", std::vector<int>{40, 41, 42, 43}, ",",
-                        add10ThenToString);
+  // Lazy evaluation with `std::ranges::views`.
+  /*
+  TODO Do a test, where the `std::views::transform` uses an r-value vector,
+  once we no longer support `gcc-11`. The compiler has a bug, where it
+  doesn't allow that code, even though it's correct.
+  */
+  std::vector<int> vec{40, 41, 42, 43};
+  doTestForAllOverloads(
+      "50,51,52,53",
+      std::views::transform(vec,
+                            [](const int& num) -> int { return num + 10; }),
+      ",");
+
+  doTestForAllOverloads(
+      "40,41,42,43",
+      std::views::transform(
+          vec, [](const int& num) -> decltype(auto) { return num; }),
+      ",");
+
+  // TODO Write a test, that uses an actual `std::ranges::input_range`. That is,
+  // a range who doesn't know it's own size.
 }
