@@ -48,12 +48,12 @@ void runWithBothQueueTypes(const auto& testFunction) {
 // ________________________________________________________________
 TEST(ThreadSafeQueue, BufferSizeIsRespected) {
   auto runTest = [](auto queue) {
-    std::atomic<int> numPushed = 0;
+    std::atomic<size_t> numPushed = 0;
     auto push = makePush(queue);
 
     // Asynchronous worker thread that pushes incremental values to the queue.
     ad_utility::JThread t([&numPushed, &push, &queue] {
-      while (numPushed < 200) {
+      while (numPushed < numValues) {
         push(numPushed++);
       }
       queue.signalLastElementWasPushed();
@@ -98,7 +98,7 @@ TEST(ThreadSafeQueue, Concurrency) {
 
     // Set up the worker threads.
     auto threadFunction = [&numPushed, &queue, &push, &numThreadsDone] {
-      for (size_t i = 0; i < 200; ++i) {
+      for (size_t i = 0; i < numValues; ++i) {
         // push the next available value that hasn't been pushed yet by another
         // thread.
         push(numPushed++);
@@ -133,7 +133,7 @@ TEST(ThreadSafeQueue, Concurrency) {
       std::ranges::sort(result);
     }
     EXPECT_THAT(result, ::testing::ElementsAreArray(
-                            std::views::iota(0UL, 200UL * numThreads)));
+                            std::views::iota(0UL, numValues * numThreads)));
   };
   runWithBothQueueTypes(runTest);
 }
@@ -153,7 +153,7 @@ TEST(ThreadSafeQueue, PushException) {
 
     auto threadFunction = [&numPushed, &queue, &threadIndex, &push] {
       bool hasThrown = false;
-      for (size_t i = 0; i < 200; ++i) {
+      for (size_t i = 0; i < numValues; ++i) {
         if (numPushed > 300 && !hasThrown) {
           hasThrown = true;
           // At some point, each thread pushes an Exception. After pushing the

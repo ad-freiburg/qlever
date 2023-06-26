@@ -20,7 +20,7 @@ endfunction()
 # if a test binary requires multiple sources
 function(linkAndDiscoverTest basename)
     linkTest(${basename} ${ARGN})
-    gtest_discover_tests(${basename} ${basename})
+    gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600)
 endfunction()
 
 # Usage: `linkAndDiscoverTestSerial(basename, [additionalLibraries...]`
