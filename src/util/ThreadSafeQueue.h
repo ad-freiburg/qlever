@@ -18,31 +18,37 @@ namespace ad_utility::data_structures {
 template <typename T>
 class ThreadSafeQueue {
   std::exception_ptr pushedException_;
-  std::queue<T> _queue;
-  std::mutex _mutex;
-  std::condition_variable _pushNotification;
-  std::condition_variable _popNotification;
-  bool _lastElementPushed = false;
-  bool _pushDisabled = false;
-  size_t _maxSize;
+  std::queue<T> queue_;
+  std::mutex mutex_;
+  std::condition_variable pushNotification_;
+  std::condition_variable popNotification_;
+  bool lastElementPushed_ = false;
+  bool pushDisabled_ = false;
+  size_t maxSize_;
 
  public:
-  explicit ThreadSafeQueue(size_t maxSize) : _maxSize{maxSize} {}
+  explicit ThreadSafeQueue(size_t maxSize) : maxSize_{maxSize} {}
+
+  // We can neither copy nor move this class
+  ThreadSafeQueue(const ThreadSafeQueue&) = delete;
+  const ThreadSafeQueue& operator=(const ThreadSafeQueue&) = delete;
+  ThreadSafeQueue(ThreadSafeQueue&&) = delete;
+  const ThreadSafeQueue& operator=(ThreadSafeQueue&&) = delete;
 
   /// Push an element into the queue. Block until there is free space in the
   /// queue or until disablePush() was called. Return false if disablePush()
   /// was called. In this case the current element element abd akk future
   /// elements are not added to the queue.
   bool push(T value) {
-    std::unique_lock lock{_mutex};
-    _popNotification.wait(
-        lock, [&] { return _queue.size() < _maxSize || _pushDisabled; });
-    if (_pushDisabled) {
+    std::unique_lock lock{mutex_};
+    popNotification_.wait(
+        lock, [this] { return queue_.size() < maxSize_ || pushDisabled_; });
+    if (pushDisabled_) {
       return false;
     }
-    _queue.push(std::move(value));
+    queue_.push(std::move(value));
     lock.unlock();
-    _pushNotification.notify_one();
+    pushNotification_.notify_one();
     return true;
   }
 
@@ -50,29 +56,29 @@ class ThreadSafeQueue {
   // to `pop` will throw the `exception`, and all subsequent calls to `push`
   // will return `false`.
   void pushException(std::exception_ptr exception) {
-    std::unique_lock lock{_mutex};
+    std::unique_lock lock{mutex_};
     pushedException_ = std::move(exception);
-    _pushDisabled = true;
+    pushDisabled_ = true;
     lock.unlock();
-    _pushNotification.notify_all();
-    _popNotification.notify_all();
+    pushNotification_.notify_all();
+    popNotification_.notify_all();
   }
 
   /// Signals all threads waiting for pop() to return that data transmission
   /// has ended and it should stop processing.
   void signalLastElementWasPushed() {
-    std::unique_lock lock{_mutex};
-    _lastElementPushed = true;
+    std::unique_lock lock{mutex_};
+    lastElementPushed_ = true;
     lock.unlock();
-    _pushNotification.notify_all();
+    pushNotification_.notify_all();
   }
 
   /// Wakes up all blocked threads waiting for push, cancelling execution
   void disablePush() {
-    std::unique_lock lock{_mutex};
-    _pushDisabled = true;
+    std::unique_lock lock{mutex_};
+    pushDisabled_ = true;
     lock.unlock();
-    _popNotification.notify_all();
+    popNotification_.notify_all();
   }
 
   /// Always call `disablePush` on destruction. This makes sure that worker
@@ -85,20 +91,20 @@ class ThreadSafeQueue {
   /// hen returned or signalLastElementWasPushed() is called resulting in an
   /// empty optional, whatever happens first
   std::optional<T> pop() {
-    std::unique_lock lock{_mutex};
-    _pushNotification.wait(lock, [&] {
-      return !_queue.empty() || _lastElementPushed || pushedException_;
+    std::unique_lock lock{mutex_};
+    pushNotification_.wait(lock, [this] {
+      return !queue_.empty() || lastElementPushed_ || pushedException_;
     });
     if (pushedException_) {
       std::rethrow_exception(pushedException_);
     }
-    if (_lastElementPushed && _queue.empty()) {
+    if (lastElementPushed_ && queue_.empty()) {
       return {};
     }
-    std::optional<T> value = std::move(_queue.front());
-    _queue.pop();
+    std::optional<T> value = std::move(queue_.front());
+    queue_.pop();
     lock.unlock();
-    _popNotification.notify_one();
+    popNotification_.notify_one();
     return value;
   }
 };
@@ -124,6 +130,13 @@ class OrderedThreadSafeQueue {
  public:
   // Construct from the maximal queue size (see `ThreadSafeQueue` for details).
   explicit OrderedThreadSafeQueue(size_t maxSize) : queue_{maxSize} {}
+
+  // We can neither copy nor move this class
+  OrderedThreadSafeQueue(const OrderedThreadSafeQueue&) = delete;
+  const OrderedThreadSafeQueue& operator=(const OrderedThreadSafeQueue&) =
+      delete;
+  OrderedThreadSafeQueue(OrderedThreadSafeQueue&&) = delete;
+  const OrderedThreadSafeQueue& operator=(OrderedThreadSafeQueue&&) = delete;
 
   // Push the `value` to the queue that is associated with the `index`. This
   // call blocks, until `push` has been called for all indices in `[0, ...,
