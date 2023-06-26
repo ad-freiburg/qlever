@@ -364,5 +364,5 @@ void OptionalJoin::optionalJoin(
     }
     Engine::sort(*result, cols);
   }
-  result->permuteColumns(joinColumnData.permutationResult());
+  result->setColumnSubset(joinColumnData.permutationResult());
 }

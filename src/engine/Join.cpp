@@ -469,7 +469,7 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
   // algorithms above easier), be the order that is expected by the rest of
   // the code is [columns-a, non-join-columns-b]. Permute the columns to fix
   // the order.
-  result->permuteColumns(joinColumnData.permutationResult());
+  result->setColumnSubset(joinColumnData.permutationResult());
 
   LOG(DEBUG) << "Join done.\n";
   LOG(DEBUG) << "Result: width = " << result->numColumns()
