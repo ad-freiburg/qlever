@@ -546,12 +546,12 @@ class IdTable {
         std::move(viewSpans), columnIndices.size(), numRows_, allocator_};
   }
 
-  // Modify the table, s.t. it contains only the specified `subset` of the
+  // Modify the table, such that it contains only the specified `subset` of the
   // original columns in the specified order. Each index in the `subset`
   // must be `< numColumns()` and must appear at most once in the subset.
   // The column with the old index `subset[i]` will become the `i`-th column
   // after the subset. For example `setColumnSubset({2, 1})` will result in a
-  // table with 2 columns,// with the original columns with index 2 and 1, with
+  // table with 2 columns, with the original columns with index 2 and 1, with
   // their order switched. The special case where `subset.size() ==
   // numColumns()` implies that the function applies a permutation to the table.
   // For example `setColumnSubset({1, 2, 0})` rotates the columns of a table
