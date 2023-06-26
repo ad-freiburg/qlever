@@ -45,10 +45,7 @@ class Permutation {
   // everything that has to be done when reading an index from disk
   void loadFromDisk(const std::string& onDiskBase);
 
-  struct MetaDataAndBlocks {
-    const CompressedRelationMetadata relationMetadata_;
-    std::span<const CompressedBlockMetadata> blockMetadata_;
-  };
+  using MetaDataAndBlocks = CompressedRelationReader::MetadataAndBlocks;
 
   std::optional<MetaDataAndBlocks> getMetadataAndBlocks(
       Id col0Id, std::optional<Id> col1Id) const {
@@ -59,7 +56,8 @@ class Permutation {
     auto metadata = meta_.getMetaData(col0Id);
     return MetaDataAndBlocks{
         meta_.getMetaData(col0Id),
-        reader_.getBlocksFromMetadata(metadata, col1Id, meta_.blockData())};
+        reader_.getBlocksFromMetadata(metadata, col1Id, meta_.blockData()),
+        col1Id};
   }
 
   cppcoro::generator<IdTable> lazyScan(

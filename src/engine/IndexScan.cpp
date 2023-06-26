@@ -270,116 +270,6 @@ void IndexScan::computeFullScan(IdTable* result,
   *result = std::move(table).toDynamic();
 }
 
-// __________________________________________________________________________________________________________
-std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
-    const IndexScan& s1, const IndexScan& s2) {
-  const auto& index = s1.getExecutionContext()->getIndex().getImpl();
-  AD_CONTRACT_CHECK(s1.numVariables_ < 3 && s2.numVariables_ < 3);
-
-  auto f = [&](const IndexScan& s)
-      -> std::optional<
-          std::pair<Permutation::MetaDataAndBlocks, std::optional<Id>>> {
-    auto permutedTriple = s.getPermutedTriple();
-    std::optional<Id> optId = permutedTriple[0]->toValueId(index.getVocab());
-    std::optional<Id> optId2 =
-        s.numVariables_ == 2 ? std::nullopt
-                             : permutedTriple[1]->toValueId(index.getVocab());
-    if (!optId.has_value() || (!optId2.has_value() && s.numVariables_ == 1)) {
-      return std::nullopt;
-    }
-    auto optionalBla = index.getPermutation(s.permutation())
-                           .getMetadataAndBlocks(optId.value(), optId2);
-    if (optionalBla.has_value()) {
-      return std::pair{std::move(optionalBla.value()), optId2};
-    }
-    return std::nullopt;
-  };
-
-  auto metaBlocks1 = f(s1);
-  auto metaBlocks2 = f(s2);
-
-  if (!metaBlocks1.has_value() || !metaBlocks2.has_value()) {
-    return {{}};
-  }
-  auto [blocks1, blocks2] = CompressedRelationReader::getBlocksForJoin(
-      metaBlocks1.value().first.relationMetadata_,
-      metaBlocks2.value().first.relationMetadata_, metaBlocks1.value().second,
-      metaBlocks2.value().second, metaBlocks1.value().first.blockMetadata_,
-      metaBlocks2.value().first.blockMetadata_);
-
-  // TODO<joka921> include a timeout timer.
-  auto getScan = [&index](const IndexScan& s, const auto& blocks) {
-    // TODO<joka921> pass the IDs here.
-    Id col0Id = s.getPermutedTriple()[0]->toValueId(index.getVocab()).value();
-    std::optional<Id> col1Id;
-    if (s.numVariables_ == 1) {
-      col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
-    }
-    if (!col1Id.has_value()) {
-      return index.getPermutation(s.permutation()).lazyScan(col0Id, blocks);
-    } else {
-      return index.getPermutation(s.permutation())
-          .lazyScan(col0Id, col1Id.value(), blocks);
-    }
-  };
-
-  return {getScan(s1, blocks1), getScan(s2, blocks2)};
-}
-
-// TODO<joka921> There is a lot of duplication between this and the previous
-// function.
-// __________________________________________________________________________________________________________
-cppcoro::generator<IdTable> IndexScan::lazyScanForJoinOfColumnWithScan(
-    std::span<const Id> joinColumn, const IndexScan& s) {
-  const auto& index = s.getExecutionContext()->getIndex().getImpl();
-  AD_CONTRACT_CHECK(s.numVariables_ < 3);
-
-  auto f = [&](const IndexScan& s)
-      -> std::optional<
-          std::pair<Permutation::MetaDataAndBlocks, std::optional<Id>>> {
-    auto permutedTriple = s.getPermutedTriple();
-    std::optional<Id> optId = permutedTriple[0]->toValueId(index.getVocab());
-    std::optional<Id> optId2 =
-        s.numVariables_ == 2 ? std::nullopt
-                             : permutedTriple[1]->toValueId(index.getVocab());
-    if (!optId.has_value() || (!optId2.has_value() && s.numVariables_ == 1)) {
-      return std::nullopt;
-    }
-    auto optionalBla = index.getPermutation(s.permutation())
-                           .getMetadataAndBlocks(optId.value(), optId2);
-    if (optionalBla.has_value()) {
-      return std::pair{std::move(optionalBla.value()), optId2};
-    }
-    return std::nullopt;
-  };
-
-  auto metaBlocks1 = f(s);
-
-  if (!metaBlocks1.has_value()) {
-    return {};
-  }
-  auto blocks = CompressedRelationReader::getBlocksForJoin(
-      joinColumn, metaBlocks1.value().first.relationMetadata_,
-      metaBlocks1.value().second, metaBlocks1.value().first.blockMetadata_);
-
-  // TODO<joka921> include a timeout timer.
-  auto getScan = [&index](const IndexScan& s, const auto& blocks) {
-    // TODO<joka921> pass the IDs here.
-    Id col0Id = s.getPermutedTriple()[0]->toValueId(index.getVocab()).value();
-    std::optional<Id> col1Id;
-    if (s.numVariables_ == 1) {
-      col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
-    }
-    if (!col1Id.has_value()) {
-      return index.getPermutation(s.permutation()).lazyScan(col0Id, blocks);
-    } else {
-      return index.getPermutation(s.permutation())
-          .lazyScan(col0Id, col1Id.value(), blocks);
-    }
-  };
-  return getScan(s, blocks);
-}
-
 // ___________________________________________________________________________
 std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
     const {
@@ -387,4 +277,71 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
   auto permutation = Permutation::toKeyOrder(permutation_);
   return {triple[permutation[0]], triple[permutation[1]],
           triple[permutation[2]]};
+}
+
+// TODO<joka921> include a timeout timer.
+cppcoro::generator<IdTable> IndexScan::getLazyScan(const IndexScan& s,
+                                                   const auto& blocks) {
+  const IndexImpl& index = s.getIndex().getImpl();
+  Id col0Id = s.getPermutedTriple()[0]->toValueId(index.getVocab()).value();
+  std::optional<Id> col1Id;
+  if (s.numVariables_ == 1) {
+    col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
+  }
+  if (!col1Id.has_value()) {
+    return index.getPermutation(s.permutation()).lazyScan(col0Id, blocks);
+  } else {
+    return index.getPermutation(s.permutation())
+        .lazyScan(col0Id, col1Id.value(), blocks);
+  }
+};
+
+// ________________________________________________________________
+auto IndexScan::getMetadataForScan(const IndexScan& s)
+    -> std::optional<Permutation::MetaDataAndBlocks> {
+  auto permutedTriple = s.getPermutedTriple();
+  const IndexImpl& index = s.getIndex().getImpl();
+  std::optional<Id> optId = permutedTriple[0]->toValueId(index.getVocab());
+  std::optional<Id> optId2 =
+      s.numVariables_ == 2 ? std::nullopt
+                           : permutedTriple[1]->toValueId(index.getVocab());
+  if (!optId.has_value() || (!optId2.has_value() && s.numVariables_ == 1)) {
+    return std::nullopt;
+  }
+
+  return index.getPermutation(s.permutation())
+      .getMetadataAndBlocks(optId.value(), optId2);
+};
+
+// ________________________________________________________________
+std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
+    const IndexScan& s1, const IndexScan& s2) {
+  AD_CONTRACT_CHECK(s1.numVariables_ < 3 && s2.numVariables_ < 3);
+
+  auto metaBlocks1 = getMetadataForScan(s1);
+  auto metaBlocks2 = getMetadataForScan(s2);
+
+  if (!metaBlocks1.has_value() || !metaBlocks2.has_value()) {
+    return {{}};
+  }
+  auto [blocks1, blocks2] = CompressedRelationReader::getBlocksForJoin(
+      metaBlocks1.value(), metaBlocks2.value());
+
+  return {getLazyScan(s1, blocks1), getLazyScan(s2, blocks2)};
+}
+
+// ________________________________________________________________
+cppcoro::generator<IdTable> IndexScan::lazyScanForJoinOfColumnWithScan(
+    std::span<const Id> joinColumn, const IndexScan& s) {
+  AD_CONTRACT_CHECK(s.numVariables_ < 3);
+
+  auto metaBlocks1 = getMetadataForScan(s);
+
+  if (!metaBlocks1.has_value()) {
+    return {};
+  }
+  auto blocks = CompressedRelationReader::getBlocksForJoin(joinColumn,
+                                                           metaBlocks1.value());
+
+  return getLazyScan(s, blocks);
 }

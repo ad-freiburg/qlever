@@ -270,17 +270,18 @@ class CompressedRelationReader {
 
   // Get all the blocks that can contain an Id from the `joinColumn`.
   // TODO<joka921> Include a timeout check.
+
+  struct MetadataAndBlocks {
+    const CompressedRelationMetadata relationMetadata_;
+    std::span<const CompressedBlockMetadata> blockMetadata_;
+    std::optional<Id> col1Id_;
+  };
   static std::vector<CompressedBlockMetadata> getBlocksForJoin(
-      std::span<const Id> joinColum, const CompressedRelationMetadata& metadata,
-      std::optional<Id> col1Id,
-      std::span<const CompressedBlockMetadata> blockMetadata);
+      std::span<const Id> joinColum, const MetadataAndBlocks& scanMetadata);
 
   static std::array<std::vector<CompressedBlockMetadata>, 2> getBlocksForJoin(
-      const CompressedRelationMetadata& md1,
-      const CompressedRelationMetadata& md2, std::optional<Id> col1Id1,
-      std::optional<Id> col1Id2,
-      std::span<const CompressedBlockMetadata> blockMetadata1,
-      std::span<const CompressedBlockMetadata> blockMetadata2);
+      const MetadataAndBlocks& scanMetadata1,
+      const MetadataAndBlocks& scanMetadata2);
 
   cppcoro::generator<IdTable> lazyScan(
       CompressedRelationMetadata metadata,
@@ -293,6 +294,9 @@ class CompressedRelationReader {
       std::vector<CompressedBlockMetadata> blockMetadata,
       ad_utility::File& file,
       ad_utility::SharedConcurrentTimeoutTimer timer) const;
+  cppcoro::generator<IdTable> asyncParallelBlockGenerator(
+      auto beginBlock, auto endBlock, ad_utility::File& file,
+      std::optional<std::vector<size_t>> columnIndices) const;
 
   /**
    * @brief For a permutation XYZ, retrieve all Z for given X and Y.

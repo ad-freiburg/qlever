@@ -140,6 +140,56 @@ void CompressedRelationReader::scan(
   }
 }
 
+cppcoro::generator<IdTable>
+CompressedRelationReader::asyncParallelBlockGenerator(
+    auto beginBlock, auto endBlock, ad_utility::File& file,
+    std::optional<std::vector<size_t>> columnIndices) const {
+  if (beginBlock == endBlock) {
+    co_return;
+  }
+  ad_utility::data_structures::OrderedThreadSafeQueue<DecompressedBlock> queue{
+      5};
+  // TODO<joka921> We can configure whether we want to allow async access to
+  // the file.
+  std::mutex fileMutex;
+  size_t blockIndex = 0;
+  auto readAndDecompressBlock = [&]() {
+    while (true) {
+      std::unique_lock lock{fileMutex};
+      if (beginBlock == endBlock) {
+        return;
+      }
+      auto block = *beginBlock;
+      CompressedBlock compressedBuffer =
+          readCompressedBlockFromFile(block, file, columnIndices);
+      ++beginBlock;
+      size_t myIndex = blockIndex;
+      ++blockIndex;
+      bool isLastBlock = beginBlock == endBlock;
+      lock.unlock();
+      bool success = queue.push(
+          myIndex, decompressBlock(compressedBuffer, block.numRows_));
+      if (!success) {
+        return;
+      }
+      if (isLastBlock) {
+        queue.signalLastElementWasPushed();
+      }
+    }
+  };
+
+  std::vector<ad_utility::JThread> threads;
+  // TODO<joka921> get the number of optimal threads from the operating
+  // system.
+  for (size_t j = 0; j < 5; ++j) {
+    threads.emplace_back(readAndDecompressBlock);
+  }
+
+  while (auto opt = queue.pop()) {
+    co_yield opt.value();
+  }
+}
+
 // _____________________________________________________________________________
 cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata,
@@ -211,49 +261,9 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
     }
   }
 
-  if (beginBlock == endBlock) {
-    co_return;
-  }
-
-  ad_utility::data_structures::OrderedThreadSafeQueue<DecompressedBlock> queue{
-      5};
-  // TODO<joka921> We can configure whether we want to allow async access to the
-  // file.
-  std::mutex fileMutex;
-  size_t blockIndex = 0;
-  auto readAndDecompressBlock = [&]() {
-    while (true) {
-      std::unique_lock lock{fileMutex};
-      if (beginBlock == endBlock) {
-        return;
-      }
-      auto block = *beginBlock;
-      CompressedBlock compressedBuffer =
-          readCompressedBlockFromFile(block, file, std::nullopt);
-      ++beginBlock;
-      size_t myIndex = blockIndex;
-      ++blockIndex;
-      bool isLastBlock = beginBlock == endBlock;
-      lock.unlock();
-      bool success = queue.push(
-          myIndex, decompressBlock(compressedBuffer, block.numRows_));
-      if (!success) {
-        return;
-      }
-      if (isLastBlock) {
-        queue.signalLastElementWasPushed();
-      }
-    }
-  };
-
-  std::vector<ad_utility::JThread> threads;
-  // TODO<joka921> get the number of optimal threads from the operating system.
-  for (size_t j = 0; j < 5; ++j) {
-    threads.emplace_back(readAndDecompressBlock);
-  }
-
-  while (auto opt = queue.pop()) {
-    co_yield opt.value();
+  for (auto& block :
+       asyncParallelBlockGenerator(beginBlock, endBlock, file, std::nullopt)) {
+    co_yield block;
   }
 
   // TODO<joka921> Timeout checks.
@@ -306,61 +316,11 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
     co_yield std::move(firstBlockResult.value());
   }
 
-  if (beginBlock != endBlock) {
-    ad_utility::data_structures::OrderedThreadSafeQueue<DecompressedBlock>
-        queue{5};
-    // TODO<joka921> We can configure whether we want to allow async access to
-    // the file.
-    std::mutex fileMutex;
-    size_t blockIndex = 0;
-    auto readAndDecompressBlock = [&]() {
-      while (true) {
-        std::unique_lock lock{fileMutex};
-        if (beginBlock == endBlock) {
-          return;
-        }
-        auto block = *beginBlock;
-        CompressedBlock compressedBuffer =
-            readCompressedBlockFromFile(block, file, std::vector{1ul});
-        ++beginBlock;
-        size_t myIndex = blockIndex;
-        ++blockIndex;
-        bool isLastBlock = beginBlock == endBlock;
-        lock.unlock();
-        bool success = queue.push(
-            myIndex, decompressBlock(compressedBuffer, block.numRows_));
-        if (!success) {
-          return;
-        }
-        if (isLastBlock) {
-          queue.signalLastElementWasPushed();
-        }
-      }
-    };
-
-    std::vector<ad_utility::JThread> threads;
-    // TODO<joka921> get the number of optimal threads from the operating
-    // system.
-    for (size_t j = 0; j < 5; ++j) {
-      threads.emplace_back(readAndDecompressBlock);
-    }
-
-    while (auto opt = queue.pop()) {
-      co_yield opt.value();
-    }
+  for (auto& block : asyncParallelBlockGenerator(beginBlock, endBlock, file,
+                                                 std::vector{1ul})) {
+    co_yield block;
   }
 
-  /*
-  for (; beginBlock < endBlock; ++beginBlock) {
-    const auto& block = *beginBlock;
-
-    // Read the block serially, only read the second column.
-    AD_CORRECTNESS_CHECK(block.offsetsAndCompressedSize_.size() == 2);
-    CompressedBlock compressedBuffer =
-        readCompressedBlockFromFile(block, file, std::vector{1ul});
-    co_yield decompressBlock(compressedBuffer, block.numRows_);
-  }
-   */
   if (timer) {
     timer->wlock()->checkTimeoutAndThrow();
   }
@@ -411,14 +371,14 @@ auto blocksToIdRanges = [](std::span<const CompressedBlockMetadata> blocks,
 
 // _____________________________________________________________________________
 std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
-    std::span<const Id> joinColum, const CompressedRelationMetadata& metadata,
-    std::optional<Id> col1Id,
-    std::span<const CompressedBlockMetadata> blockMetadata) {
+    std::span<const Id> joinColum, const MetadataAndBlocks& scanMetadata) {
   // get all the blocks where col0FirstId_ <= col0Id <= col0LastId_
+  const auto& [relationMetadata, blockMetadata, col1Id] = scanMetadata;
   auto relevantBlocks =
-      getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
+      getBlocksFromMetadata(relationMetadata, std::nullopt, blockMetadata);
 
-  auto idRanges = blocksToIdRanges(relevantBlocks, metadata.col0Id_, col1Id);
+  auto idRanges =
+      blocksToIdRanges(relevantBlocks, relationMetadata.col0Id_, col1Id);
 
   auto idLessThanBlock = [](Id id, const IdPair& block) {
     return id < block.first;
@@ -454,11 +414,8 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
 // _____________________________________________________________________________
 std::array<std::vector<CompressedBlockMetadata>, 2>
 CompressedRelationReader::getBlocksForJoin(
-    const CompressedRelationMetadata& md1,
-    const CompressedRelationMetadata& md2, std::optional<Id> col1Id1,
-    std::optional<Id> col1Id2,
-    std::span<const CompressedBlockMetadata> blockMetadata1,
-    std::span<const CompressedBlockMetadata> blockMetadata2) {
+    const MetadataAndBlocks& scanMetadata1,
+    const MetadataAndBlocks& scanMetadata2) {
   // get all the blocks where col0FirstId_ <= col0Id <= col0LastId_
   struct KeyLhs {
     Id col0FirstId_;
@@ -466,28 +423,27 @@ CompressedRelationReader::getBlocksForJoin(
   };
 
   auto relevantBlocks1 =
-      getBlocksFromMetadata(md1, std::nullopt, blockMetadata1);
-  auto beginBlock1 = relevantBlocks1.begin();
-  auto endBlock1 = relevantBlocks1.end();
-
+      getBlocksFromMetadata(scanMetadata1.relationMetadata_, std::nullopt,
+                            scanMetadata1.blockMetadata_);
   auto relevantBlocks2 =
-      getBlocksFromMetadata(md2, std::nullopt, blockMetadata2);
-  auto beginBlock2 = relevantBlocks2.begin();
-  auto endBlock2 = relevantBlocks2.end();
+      getBlocksFromMetadata(scanMetadata2.relationMetadata_, std::nullopt,
+                            scanMetadata2.blockMetadata_);
 
   auto blockLessThanBlock = [](const auto& block1, const auto& block2) {
     return block1.second < block2.first;
   };
 
   std::array<std::vector<CompressedBlockMetadata>, 2> result;
-  auto idRanges1 = blocksToIdRanges(
-      std::ranges::subrange{beginBlock1, endBlock1}, md1.col0Id_, col1Id1);
-  auto idRanges2 = blocksToIdRanges(
-      std::ranges::subrange{beginBlock2, endBlock2}, md2.col0Id_, col1Id2);
-  auto addRow = [&result, &beginBlock1, &beginBlock2, &idRanges1, &idRanges2](
-                    [[maybe_unused]] auto it1, auto it2) {
-    result[0].push_back(*(beginBlock1 + (it1 - idRanges1.begin())));
-    result[1].push_back(*(beginBlock2 + (it2 - idRanges2.begin())));
+  auto idRanges1 =
+      blocksToIdRanges(relevantBlocks1, scanMetadata1.relationMetadata_.col0Id_,
+                       scanMetadata1.col1Id_);
+  auto idRanges2 =
+      blocksToIdRanges(relevantBlocks2, scanMetadata2.relationMetadata_.col0Id_,
+                       scanMetadata2.col1Id_);
+  auto addRow = [&result, &relevantBlocks1, &relevantBlocks2, &idRanges1,
+                 &idRanges2]([[maybe_unused]] auto it1, auto it2) {
+    result[0].push_back(*(relevantBlocks1.begin() + (it1 - idRanges1.begin())));
+    result[1].push_back(*(relevantBlocks2.begin() + (it2 - idRanges2.begin())));
   };
 
   auto noop = ad_utility::noop;

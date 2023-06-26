@@ -49,6 +49,10 @@ class IndexScan : public Operation {
       const IndexScan& s1, const IndexScan& s2);
   static cppcoro::generator<IdTable> lazyScanForJoinOfColumnWithScan(
       std::span<const Id> joinColumn, const IndexScan& s);
+  static cppcoro::generator<IdTable> getLazyScan(const IndexScan& s,
+                                                 const auto& blocks);
+  static auto getMetadataForScan(const IndexScan& s)
+      -> std::optional<Permutation::MetaDataAndBlocks>;
 
  private:
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for
