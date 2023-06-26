@@ -162,7 +162,7 @@ TEST(ThreadSafeQueue, PushException) {
               std::make_exception_ptr(IntegerException{threadIndex++}));
           EXPECT_FALSE(push(numPushed++));
         } else if (hasThrown) {
-          EXPECT_FALSE(push(numPushed++));
+          EXPECT_FALSE(push(0));
         } else {
           // We cannot know whether this returns true or false, because another
           // thread already might have thrown an exception.
