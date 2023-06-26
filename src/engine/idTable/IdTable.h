@@ -566,9 +566,9 @@ class IdTable {
 
     Data newData;
     newData.reserve(subset.size());
-    for (auto colIdx : subset) {
+    std::ranges::for_each(subset, [this, &newData](ColumnIndex colIdx) {
       newData.push_back(std::move(data().at(colIdx)));
-    }
+    });
     data() = std::move(newData);
     numColumns_ = subset.size();
   }

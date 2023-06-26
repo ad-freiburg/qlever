@@ -881,13 +881,23 @@ TEST(IdTable, frontAndBack) {
   ASSERT_EQ(43, std::as_const(t).back()[0]);
 }
 
-TEST(IdTable, columnSubset) {
+TEST(IdTable, setColumnSubset) {
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
   IntTable t{3};  // three columns.
   t.push_back({0, 10, 20});
   t.push_back({1, 11, 21});
   t.push_back({2, 12, 22});
-  t.setColumnSubset(std::array{2ul, 0ul});
+  {
+    auto view =
+        t.asColumnSubsetView(std::array{ColumnIndex(2), ColumnIndex(0)});
+    ASSERT_EQ(2, view.numColumns());
+    ASSERT_EQ(3, view.numRows());
+    ASSERT_THAT(view.getColumn(0), ::testing::ElementsAre(20, 21, 22));
+    ASSERT_THAT(view.getColumn(1), ::testing::ElementsAre(0, 1, 2));
+    // Column index too large
+    ASSERT_ANY_THROW(t.asColumnSubsetView(std::array{ColumnIndex{3}}));
+  }
+  t.setColumnSubset(std::array{ColumnIndex(2), ColumnIndex(0)});
   ASSERT_EQ(2, t.numColumns());
   ASSERT_EQ(3, t.numRows());
   ASSERT_THAT(t.getColumn(0), ::testing::ElementsAre(20, 21, 22));
@@ -985,15 +995,7 @@ TEST(IdTable, staticAsserts) {
 // Check that we can completely instantiate `IdTable`s with a different value
 // type and a different underlying storage.
 
-// Note: Clang 13 and 14 don't handle the `requires` clauses in the `clone`
-// member function correctly, so we have to disable these checks for those
-// compiler versions.
-// TODO<joka921> throw these checks out as soon as we don't support these
-// compiler versions anymore.
-
-#if not(defined(__clang__)) || (__clang_major__ != 13 && __clang_major__ != 14)
 template class columnBasedIdTable::IdTable<char, 0>;
 static_assert(!std::is_copy_constructible_v<ad_utility::BufferedVector<char>>);
 template class columnBasedIdTable::IdTable<char, 0,
                                            ad_utility::BufferedVector<char>>;
-#endif
