@@ -18,7 +18,6 @@
 
 #include "../util/Concepts.h"
 #include "../util/Forward.h"
-#include "../util/Iterators.h"
 
 using std::string;
 using std::string_view;
@@ -288,17 +287,18 @@ requires ad_utility::Streamable<
     std::iter_reference_t<std::ranges::iterator_t<Range>>>
 void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator) {
   // Is the range empty?
-  auto start = ad_utility::makeForwardingIterator<Range>(r.begin());
-  if (start == ad_utility::makeForwardingIterator<Range>(r.end())) {
+  auto begin = r.begin();
+  auto end = r.end();
+  if (begin == end) {
     return;
   }
 
   // Add the first entry without a seperator.
-  *stream << *start;
+  *stream << *begin;
 
   // Add the remaining entries.
-  std::ranges::for_each(++start,
-                        ad_utility::makeForwardingIterator<Range>(r.end()),
+  ++begin;
+  std::ranges::for_each(begin, end,
                         [&stream, &separator](const auto& listItem) {
                           *stream << separator << listItem;
                         },
@@ -311,10 +311,8 @@ requires ad_utility::Streamable<
     std::iter_reference_t<std::ranges::iterator_t<Range>>>
 std::string lazyStrJoin(Range&& r, std::string_view separator) {
   std::ostringstream stream;
-
   lazyStrJoin(&stream, AD_FWD(r), separator);
-
-  return stream.str();
+  return std::move(stream).str();
 }
 
 }  // namespace ad_utility

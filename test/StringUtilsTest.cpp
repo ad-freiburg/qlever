@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string>
 
+#include "util/Forward.h"
 #include "util/Generator.h"
 #include "util/StringUtils.h"
 
@@ -68,13 +69,13 @@ TEST(StringUtilsTest, constantTimeEquals) {
 
 TEST(StringUtilsTest, listToString) {
   // Do the test for all overloads of `listToString`.
-  auto doTestForAllOverloads = [](std::string_view expectedResult,
-                                  const auto& range,
+  auto doTestForAllOverloads = [](std::string_view expectedResult, auto&& range,
                                   std::string_view separator) {
-    ASSERT_EQ(expectedResult, ad_utility::lazyStrJoin(range, separator));
+    ASSERT_EQ(expectedResult,
+              ad_utility::lazyStrJoin(AD_FWD(range), separator));
 
     std::ostringstream stream;
-    ad_utility::lazyStrJoin(&stream, range, separator);
+    ad_utility::lazyStrJoin(&stream, AD_FWD(range), separator);
     ASSERT_EQ(expectedResult, stream.str());
   };
 
@@ -110,8 +111,8 @@ TEST(StringUtilsTest, listToString) {
 
   // Returns the content of a given vector, element by element.
   auto goThroughVectorGenerator =
-      []<typename T>(const std::vector<T>& vec) -> cppcoro::generator<T> {
-    for (T entry : vec) {
+      []<typename T>(std::vector<T> vec) -> cppcoro::generator<T> {
+    for (T& entry : vec) {
       co_yield entry;
     }
   };
