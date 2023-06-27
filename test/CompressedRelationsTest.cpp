@@ -298,8 +298,6 @@ TEST(CompressedRelationMetadata, GettersAndSetters) {
 }
 
 TEST(CompressedRelationReader, getBlocksForJoin) {
-  std::vector<Id> joinColumn{V(1), V(3), V(17), V(29)};
-
   CompressedBlockMetadata block1{
       {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
   CompressedBlockMetadata block2{
@@ -307,6 +305,7 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   CompressedBlockMetadata block3{
       {}, 0, {V(42), V(4), V(13)}, {V(42), V(6), V(9)}};
 
+  // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relation;
   relation.col0Id_ = V(42);
 
@@ -314,7 +313,26 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
       relation, blocks, std::nullopt};
 
-  auto result =
-      CompressedRelationReader::getBlocksForJoin(joinColumn, metadataAndBlocks);
-  ASSERT_THAT(result, ::testing::ElementsAre(block2));
+  auto test = [&metadataAndBlocks](
+                  const std::vector<Id>& joinColumn,
+                  const std::vector<CompressedBlockMetadata> expectedBlocks,
+                  source_location l = source_location::current()) {
+    auto t = generateLocationTrace(l);
+    auto result = CompressedRelationReader::getBlocksForJoin(joinColumn,
+                                                             metadataAndBlocks);
+    EXPECT_THAT(result, ::testing::ElementsAreArray(expectedBlocks));
+  };
+
+  // Tests for a fixed col0Id, so the join is on the middle column.
+  test({V(1), V(3), V(17), V(29)}, {block2});
+  test({V(2), V(3), V(4), V(5)}, {block2, block3});
+  test({V(4)}, {block2, block3});
+  test({V(6)}, {block3});
+
+  // Test with a fixed col1Id. We now join on the last column, the first column
+  // is fixed (42), and the second column is also fixed (4).
+  metadataAndBlocks.col1Id_ = V(4);
+  test({V(11), V(27), V(30)}, {block2, block3});
+  test({V(12)}, {block2});
+  test({V(13)}, {block3});
 }

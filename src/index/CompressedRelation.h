@@ -273,7 +273,7 @@ class CompressedRelationReader {
 
   struct MetadataAndBlocks {
     const CompressedRelationMetadata relationMetadata_;
-    std::span<const CompressedBlockMetadata> blockMetadata_;
+    const std::span<const CompressedBlockMetadata> blockMetadata_;
     std::optional<Id> col1Id_;
   };
   static std::vector<CompressedBlockMetadata> getBlocksForJoin(
