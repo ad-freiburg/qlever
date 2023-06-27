@@ -113,16 +113,31 @@ ResultTable Join::computeResult() {
     return computeResultForJoinWithFullScanDummy();
   }
 
+  auto leftResIfCached = _left->getRootOperation()->getResult(false, true);
+  auto rightResIfCached = _right->getRootOperation()->getResult(false, true);
+
   if (_left->getType() == QueryExecutionTree::SCAN &&
       _right->getType() == QueryExecutionTree::SCAN) {
-    computeResultForTwoIndexScans(&idTable);
-    // TODO<joka921, hannahbast, SPARQL update> When we add triples to the
-    // index, the vocabularies of index scans will not necessarily be empty and
-    // we need a mechanism to still retrieve them when using the lazy scan.
-    return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+    if (rightResIfCached && !leftResIfCached) {
+      computeResultForIndexScanAndColumn<true>(
+          rightResIfCached->idTable(), _rightJoinCol,
+          dynamic_cast<const IndexScan&>(*_left->getRootOperation()),
+          _leftJoinCol, &idTable);
+      // TODO<joka921> This still has the wrong column order
+      return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+
+    } else if (!leftResIfCached) {
+      computeResultForTwoIndexScans(&idTable);
+      // TODO<joka921, hannahbast, SPARQL update> When we add triples to the
+      // index, the vocabularies of index scans will not necessarily be empty
+      // and we need a mechanism to still retrieve them when using the lazy
+      // scan.
+      return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+    }
   }
 
-  shared_ptr<const ResultTable> leftRes = _left->getResult();
+  shared_ptr<const ResultTable> leftRes =
+      leftResIfCached ? leftResIfCached : _left->getResult();
   if (leftRes->size() == 0) {
     _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     // TODO<joka921, hannahbast, SPARQL update> When we add triples to the
@@ -133,8 +148,8 @@ ResultTable Join::computeResult() {
 
   // Note: If only one of the children is a scan, then we have made sure in the
   // constructor that it is the right child.
-  if (_right->getType() == QueryExecutionTree::SCAN) {
-    computeResultForIndexScanAndColumn(
+  if (_right->getType() == QueryExecutionTree::SCAN && !rightResIfCached) {
+    computeResultForIndexScanAndColumn<false>(
         leftRes->idTable(), _leftJoinCol,
         dynamic_cast<const IndexScan&>(*_right->getRootOperation()),
         _rightJoinCol, &idTable);
@@ -142,7 +157,8 @@ ResultTable Join::computeResult() {
             leftRes->getSharedLocalVocab()};
   }
 
-  shared_ptr<const ResultTable> rightRes = _right->getResult();
+  shared_ptr<const ResultTable> rightRes =
+      rightResIfCached ? rightResIfCached : _right->getResult();
   join(leftRes->idTable(), _leftJoinCol, rightRes->idTable(), _rightJoinCol,
        &idTable);
 
@@ -665,6 +681,7 @@ void Join::computeResultForTwoIndexScans(IdTable* resultPtr) const {
 }
 
 // ______________________________________________________________________________________________________
+template <bool firstIsRight>
 void Join::computeResultForIndexScanAndColumn(const IdTable& inputTable,
                                               ColumnIndex joinColumnIndexTable,
                                               const IndexScan& scan,
@@ -683,15 +700,29 @@ void Join::computeResultForIndexScanAndColumn(const IdTable& inputTable,
     result.emplace_back();
     IdTable::row_reference lastRow = result.back();
     size_t nextIndex = 0;
-    for (size_t i = 0; i < inputTable.numColumns(); ++i) {
-      lastRow[nextIndex] = l[i];
-      ++nextIndex;
-    }
 
-    for (size_t i = 0; i < r.size(); ++i) {
-      if (i != joinColumnIndexScan) {
+    if constexpr (firstIsRight) {
+      for (size_t i = 0; i < r.size(); ++i) {
         lastRow[nextIndex] = r[i];
         ++nextIndex;
+      }
+      for (size_t i = 0; i < inputTable.numColumns(); ++i) {
+        if (i != joinColumnIndexScan) {
+          lastRow[nextIndex] = l[i];
+          ++nextIndex;
+        }
+      }
+    } else {
+      for (size_t i = 0; i < inputTable.numColumns(); ++i) {
+        lastRow[nextIndex] = l[i];
+        ++nextIndex;
+      }
+
+      for (size_t i = 0; i < r.size(); ++i) {
+        if (i != joinColumnIndexScan) {
+          lastRow[nextIndex] = r[i];
+          ++nextIndex;
+        }
       }
     }
   };

@@ -135,6 +135,7 @@ class Join : public Operation {
   ResultTable computeResultForJoinWithFullScanDummy();
 
   void computeResultForTwoIndexScans(IdTable* tablePtr) const;
+  template <bool firstIsRight>
   void computeResultForIndexScanAndColumn(const IdTable& inputTable,
                                           ColumnIndex joinColumnIndexTable,
                                           const IndexScan& scan,
