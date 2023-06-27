@@ -318,6 +318,17 @@ class IdTable {
     return *(begin() + index);
   }
 
+  // Same as operator[], but throw an exception if the `row` is out of bounds.
+  // This is similar to the behavior of `std::vector::at`.
+  row_reference_restricted at(size_t row) requires(!isView) {
+    AD_CONTRACT_CHECK(row < numRows());
+    return operator[](row);
+  }
+  const_row_reference_restricted at(size_t row) const {
+    AD_CONTRACT_CHECK(row < numRows());
+    return operator[](row);
+  }
+
   // The usual `front` and `back` functions to make the interface similar to
   // `std::vector` aand other containers.
   // TODO<C++23, joka921> Remove the duplicates via explicit object parameters
@@ -535,26 +546,31 @@ class IdTable {
         std::move(viewSpans), columnIndices.size(), numRows_, allocator_};
   }
 
-  // Apply the `permutation` to the columns of the table. The permutation must
-  // be a permutation of the values `[0, 1, ..., numColumns - 1 ]`. The column
-  // with the old index `permutation[i]` will become the `i`-th column after the
-  // permutation. For example, `permuteColumns({1, 2, 0})` rotates the columns
-  // of a table with three columns left by one element.
-  void permuteColumns(std::span<const ColumnIndex> permutation) {
-    // First check that the `permutation` is indeed a permutation of the column
+  // Modify the table, such that it contains only the specified `subset` of the
+  // original columns in the specified order. Each index in the `subset`
+  // must be `< numColumns()` and must appear at most once in the subset.
+  // The column with the old index `subset[i]` will become the `i`-th column
+  // after the subset. For example `setColumnSubset({2, 1})` will result in a
+  // table with 2 columns, with the original columns with index 2 and 1, with
+  // their order switched. The special case where `subset.size() ==
+  // numColumns()` implies that the function applies a permutation to the table.
+  // For example `setColumnSubset({1, 2, 0})` rotates the columns of a table
+  // with three columns left by one element.
+  void setColumnSubset(std::span<const ColumnIndex> subset) requires isDynamic {
+    // First check that the `subset` is indeed a subset of the column
     // indices.
-    std::vector<ColumnIndex> check{permutation.begin(), permutation.end()};
+    std::vector<ColumnIndex> check{subset.begin(), subset.end()};
     std::ranges::sort(check);
-    std::vector<ColumnIndex> expected(numColumns());
-    std::iota(expected.begin(), expected.end(), ColumnIndex{0});
-    AD_CONTRACT_CHECK(check == expected);
+    AD_CONTRACT_CHECK(std::unique(check.begin(), check.end()) == check.end());
+    AD_CONTRACT_CHECK(!subset.empty() && subset.back() < numColumns());
 
     Data newData;
-    newData.reserve(numColumns());
-    for (auto colIdx : permutation) {
+    newData.reserve(subset.size());
+    std::ranges::for_each(subset, [this, &newData](ColumnIndex colIdx) {
       newData.push_back(std::move(data().at(colIdx)));
-    }
+    });
     data() = std::move(newData);
+    numColumns_ = subset.size();
   }
 
   // Helper `struct` that stores a pointer to this table and has an `operator()`
