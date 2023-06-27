@@ -134,12 +134,12 @@ class Join : public Operation {
 
   ResultTable computeResultForJoinWithFullScanDummy();
 
-  void computeResultForTwoIndexScans(IdTable* tablePtr);
+  void computeResultForTwoIndexScans(IdTable* tablePtr) const;
   void computeResultForIndexScanAndColumn(const IdTable& inputTable,
                                           ColumnIndex joinColumnIndexTable,
                                           const IndexScan& scan,
                                           ColumnIndex joinColumnIndexScan,
-                                          IdTable* resultPtr);
+                                          IdTable* resultPtr) const;
 
   using ScanMethodType = std::function<void(Id, IdTable*)>;
 

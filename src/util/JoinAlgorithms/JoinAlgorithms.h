@@ -113,8 +113,6 @@ template <
     const FindSmallerUndefRangesLeft& findSmallerUndefRangesLeft,
     const FindSmallerUndefRangesRight& findSmallerUndefRangesRight,
     ElFromFirstNotFoundAction elFromFirstNotFoundAction = {}) {
-  // using Iterator = std::ranges::iterator_t<Range>;
-
   // If this is not an OPTIONAL join or a MINUS we can apply several
   // optimizations, so we store this information.
   static constexpr bool hasNotFoundAction =

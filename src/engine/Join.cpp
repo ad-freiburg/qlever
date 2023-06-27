@@ -630,13 +630,13 @@ void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
 }
 
 // ______________________________________________________________________________________________________
-void Join::computeResultForTwoIndexScans(IdTable* resultPtr) {
+void Join::computeResultForTwoIndexScans(IdTable* resultPtr) const {
   AD_CORRECTNESS_CHECK(_left->getType() == QueryExecutionTree::SCAN &&
                        _right->getType() == QueryExecutionTree::SCAN);
   auto& result = *resultPtr;
   result.setNumColumns(getResultWidth());
 
-  auto addResultRow = [&](auto itLeft, auto itRight) {
+  auto addResultRow = [&result](auto itLeft, auto itRight) {
     const auto& l = *itLeft;
     const auto& r = *itRight;
     AD_CORRECTNESS_CHECK(l[0] == r[0]);
@@ -669,14 +669,15 @@ void Join::computeResultForIndexScanAndColumn(const IdTable& inputTable,
                                               ColumnIndex joinColumnIndexTable,
                                               const IndexScan& scan,
                                               ColumnIndex joinColumnIndexScan,
-                                              IdTable* resultPtr) {
+                                              IdTable* resultPtr) const {
   auto& result = *resultPtr;
   result.setNumColumns(getResultWidth());
 
   AD_CORRECTNESS_CHECK(joinColumnIndexScan == 0);
 
   auto joinColumn = inputTable.getColumn(joinColumnIndexTable);
-  auto addResultRow = [&, beg = joinColumn.data()](auto itLeft, auto itRight) {
+  auto addResultRow = [&result, &inputTable, &joinColumnIndexScan,
+                       beg = joinColumn.data()](auto itLeft, auto itRight) {
     const auto& l = *(inputTable.begin() + (&(*itLeft) - beg));
     const auto& r = *itRight;
     result.emplace_back();
@@ -714,9 +715,6 @@ void Join::computeResultForIndexScanAndColumn(const IdTable& inputTable,
       IndexScan::lazyScanForJoinOfColumnWithScan(joinColumn, scan);
 
   auto rightProjection = [](const auto& row) { return row[0]; };
-  // LOG(WARN) << "num blocks in first: " << std::ranges::distance(leftBlocks)
-  // << std::endl; LOG(WARN) << "num blocks in second: " <<
-  // std::ranges::distance(rightBlocks) << std::endl;
   ad_utility::zipperJoinForBlocksWithoutUndef(
       std::span{&joinColumn, 1}, rightBlocks, lessThan, addResultRow,
       std::identity{}, rightProjection);

@@ -148,13 +148,12 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     co_return;
   }
   // Note: It is important to define the `threads` before the `queue`. That way
-  // the joining destructor of the threads will see that the queue is finished and join.
+  // the joining destructor of the threads will see that the queue is finished
+  // and join.
+  std::mutex fileMutex;
   std::vector<ad_utility::JThread> threads;
   ad_utility::data_structures::OrderedThreadSafeQueue<DecompressedBlock> queue{
       5};
-  // TODO<joka921> We can configure whether we want to allow async access to
-  // the file.
-  std::mutex fileMutex;
   size_t blockIndex = 0;
   auto readAndDecompressBlock = [&]() {
     while (true) {
@@ -170,9 +169,8 @@ CompressedRelationReader::asyncParallelBlockGenerator(
       ++blockIndex;
       bool isLastBlock = beginBlock == endBlock;
       lock.unlock();
-      bool success = queue.push(
-          myIndex, decompressBlock(compressedBuffer, block.numRows_));
-      if (!success) {
+      if (!queue.push(myIndex,
+                      decompressBlock(compressedBuffer, block.numRows_))) {
         return;
       }
       if (isLastBlock) {
@@ -319,7 +317,7 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   }
 
   for (auto& block : asyncParallelBlockGenerator(beginBlock, endBlock, file,
-                                                 std::vector{1ul})) {
+                                                 std::vector{1UL})) {
     co_yield block;
   }
 
@@ -408,8 +406,7 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
 
   // The following check shouldn't be too expensive as there are only few
   // blocks.
-  auto unique = std::unique(result.begin(), result.end());
-  AD_CORRECTNESS_CHECK(unique == result.end());
+  AD_CORRECTNESS_CHECK(std::ranges::unique(result).begin() == result.end());
   return result;
 }
 
@@ -452,7 +449,7 @@ CompressedRelationReader::getBlocksForJoin(
   [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
       idRanges1, idRanges2, blockLessThanBlock, addRow, noop, noop);
   for (auto& vec : result) {
-    vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
+    vec.erase(std::ranges::unique(vec).begin(), vec.end());
   }
   return result;
 }
@@ -489,7 +486,8 @@ void CompressedRelationReader::scan(
 
   // The first and the last block might be incomplete, compute
   // and store the partial results from them.
-  std::optional<DecompressedBlock> firstBlockResult, lastBlockResult;
+  std::optional<DecompressedBlock> firstBlockResult;
+  std::optional<DecompressedBlock> lastBlockResult;
   size_t totalResultSize = 0;
   if (beginBlock < endBlock) {
     firstBlockResult = readIncompleteBlock(*beginBlock);
@@ -534,7 +532,7 @@ void CompressedRelationReader::scan(
       // Read the block serially, only read the second column.
       AD_CORRECTNESS_CHECK(block.offsetsAndCompressedSize_.size() == 2);
       CompressedBlock compressedBuffer =
-          readCompressedBlockFromFile(block, file, std::vector{1ul});
+          readCompressedBlockFromFile(block, file, std::vector{1UL});
 
       // A lambda that owns the compressed block decompresses it to the
       // correct position in the result. It may safely be run in parallel

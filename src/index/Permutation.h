@@ -54,10 +54,10 @@ class Permutation {
     }
 
     auto metadata = meta_.getMetaData(col0Id);
-    return MetaDataAndBlocks{
-        meta_.getMetaData(col0Id),
-        reader_.getBlocksFromMetadata(metadata, col1Id, meta_.blockData()),
-        col1Id};
+    return MetaDataAndBlocks{meta_.getMetaData(col0Id),
+                             CompressedRelationReader::getBlocksFromMetadata(
+                                 metadata, col1Id, meta_.blockData()),
+                             col1Id};
   }
 
   cppcoro::generator<IdTable> lazyScan(
