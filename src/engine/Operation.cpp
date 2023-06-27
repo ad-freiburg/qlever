@@ -154,6 +154,8 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       return CacheValue{std::move(result), getRuntimeInfo()};
     };
 
+    // Handle the case that we only want the result if it was contained in the
+    // cache, and `nullptr` else.
     if (onlyReadFromCache) {
       AD_CORRECTNESS_CHECK(!pinResult);
       auto optionalResult = cache.getIfContained(cacheKey);
