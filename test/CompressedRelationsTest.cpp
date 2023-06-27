@@ -296,3 +296,25 @@ TEST(CompressedRelationMetadata, GettersAndSetters) {
   m.numRows_ = 43;
   ASSERT_EQ(43, m.numRows_);
 }
+
+TEST(CompressedRelationReader, getBlocksForJoin) {
+  std::vector<Id> joinColumn{V(1), V(3), V(17), V(29)};
+
+  CompressedBlockMetadata block1{
+      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
+  CompressedBlockMetadata block2{
+      {}, 0, {V(39), V(0), V(0)}, {V(42), V(4), V(12)}};
+  CompressedBlockMetadata block3{
+      {}, 0, {V(42), V(4), V(13)}, {V(42), V(6), V(9)}};
+
+  CompressedRelationMetadata relation;
+  relation.col0Id_ = V(42);
+
+  std::vector blocks{block1, block2, block3};
+  CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
+      relation, blocks, std::nullopt};
+
+  auto result =
+      CompressedRelationReader::getBlocksForJoin(joinColumn, metadataAndBlocks);
+  ASSERT_THAT(result, ::testing::ElementsAre(block2));
+}
