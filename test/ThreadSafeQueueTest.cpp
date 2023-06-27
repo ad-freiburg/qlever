@@ -56,7 +56,7 @@ TEST(ThreadSafeQueue, BufferSizeIsRespected) {
       while (numPushed < numValues) {
         push(numPushed++);
       }
-      queue.signalLastElementWasPushed();
+      queue.disableQueue();
     });
 
     size_t numPopped = 0;
@@ -83,7 +83,7 @@ TEST(ThreadSafeQueue, ReturnValueOfPush) {
     // called.
     EXPECT_TRUE(push(0));
     EXPECT_EQ(queue.pop(), 0);
-    queue.disablePush();
+    queue.disableQueue();
     EXPECT_FALSE(push(1));
   };
   runWithBothQueueTypes(runTest);
@@ -105,7 +105,7 @@ TEST(ThreadSafeQueue, Concurrency) {
       }
       numThreadsDone++;
       if (numThreadsDone == numThreads) {
-        queue.signalLastElementWasPushed();
+        queue.disableQueue();
       }
     };
 
@@ -189,7 +189,7 @@ TEST(ThreadSafeQueue, PushException) {
     try {
       // The usual check as always, but at some point `pop` will throw, because
       // exceptions were pushed to the queue.
-      while (auto opt = queue.pop()) {
+      while (queue.pop()) {
         ++numPopped;
         EXPECT_LE(numPushed, numPopped + queueSize + 1 + numThreads);
       }
@@ -230,7 +230,7 @@ TEST(ThreadSafeQueue, DisablePush) {
 
       // Disable the push, make the consumers finish.
       if (numPopped == 400) {
-        queue.disablePush();
+        queue.disableQueue();
         break;
       }
     }

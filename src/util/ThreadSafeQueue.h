@@ -20,8 +20,7 @@ class ThreadSafeQueue {
   std::mutex mutex_;
   std::condition_variable pushNotification_;
   std::condition_variable popNotification_;
-  bool lastElementPushed_ = false;
-  bool pushDisabled_ = false;
+  bool queueDisabled_ = false;
   size_t maxSize_;
 
  public:
@@ -34,14 +33,14 @@ class ThreadSafeQueue {
   const ThreadSafeQueue& operator=(ThreadSafeQueue&&) = delete;
 
   /// Push an element into the queue. Block until there is free space in the
-  /// queue or until disablePush() was called. Return false if disablePush()
-  /// was called. In this case the current element element abd akk future
+  /// queue or until disableQueue() was called. Return false if disableQueue()
+  /// was called. In this case the current element element and all future
   /// elements are not added to the queue.
   bool push(T value) {
     std::unique_lock lock{mutex_};
     popNotification_.wait(
-        lock, [this] { return queue_.size() < maxSize_ || pushDisabled_; });
-    if (pushDisabled_) {
+        lock, [this] { return queue_.size() < maxSize_ || queueDisabled_; });
+    if (queueDisabled_) {
       return false;
     }
     queue_.push(std::move(value));
@@ -56,34 +55,32 @@ class ThreadSafeQueue {
   void pushException(std::exception_ptr exception) {
     std::unique_lock lock{mutex_};
     pushedException_ = std::move(exception);
-    pushDisabled_ = true;
+    queueDisabled_ = true;
     lock.unlock();
     pushNotification_.notify_all();
     popNotification_.notify_all();
   }
 
-  /// Signals all threads waiting for pop() to return that data transmission
-  /// has ended and it should stop processing.
-  void signalLastElementWasPushed() {
+  // After calling this function, all calls to `push` will return `false` and no
+  // further elements will be added to the queue. Calls to `pop` will yield the
+  // elements that were already stored in the queue before the call to
+  // `disableQueue`, after those were drained, `pop` will return `nullopt`. This
+  // function can be called from the producing/pushing threads to signal that
+  // all elements have been pushed, or from the consumers to signal that they
+  // will not pop further elements from the queue.
+  void disableQueue() {
     std::unique_lock lock{mutex_};
-    lastElementPushed_ = true;
+    queueDisabled_ = true;
     lock.unlock();
     pushNotification_.notify_all();
-  }
-
-  /// Wakes up all blocked threads waiting for push, cancelling execution
-  void disablePush() {
-    std::unique_lock lock{mutex_};
-    pushDisabled_ = true;
-    lock.unlock();
     popNotification_.notify_all();
   }
 
-  /// Always call `disablePush` on destruction. This makes sure that worker
+  /// Always call `disableQueue` on destruction. This makes sure that worker
   /// threads that pop from the queue always see std::nullopt, even if the
   /// threads that push to the queue exit via an exception or if the explicit
-  /// call to `disablePush` is missing.
-  ~ThreadSafeQueue() { disablePush(); }
+  /// call to `disableQueue` is missing.
+  ~ThreadSafeQueue() { disableQueue(); }
 
   /// Blocks until another thread pushes an element via push() which is
   /// hen returned or signalLastElementWasPushed() is called resulting in an
@@ -91,12 +88,12 @@ class ThreadSafeQueue {
   std::optional<T> pop() {
     std::unique_lock lock{mutex_};
     pushNotification_.wait(lock, [this] {
-      return !queue_.empty() || lastElementPushed_ || pushedException_;
+      return !queue_.empty() || queueDisabled_ || pushedException_;
     });
     if (pushedException_) {
       std::rethrow_exception(pushedException_);
     }
-    if (lastElementPushed_ && queue_.empty()) {
+    if (queueDisabled_ && queue_.empty()) {
       return {};
     }
     std::optional<T> value = std::move(queue_.front());
@@ -138,7 +135,7 @@ class OrderedThreadSafeQueue {
 
   // Push the `value` to the queue that is associated with the `index`. This
   // call blocks, until `push` has been called for all indices in `[0, ...,
-  // index - 1]` or until `disablePush` was called. The remaining behavior is
+  // index - 1]` or until `disableQueue` was called. The remaining behavior is
   // equal to `ThreadSafeQueue::push`.
   bool push(size_t index, T value) {
     std::unique_lock lock{mutex_};
@@ -165,11 +162,8 @@ class OrderedThreadSafeQueue {
   }
 
   // See `ThreadSafeQueue` for details.
-  void signalLastElementWasPushed() { queue_.signalLastElementWasPushed(); }
-
-  // See `ThreadSafeQueue` for details.
-  void disablePush() {
-    queue_.disablePush();
+  void disableQueue() {
+    queue_.disableQueue();
     std::unique_lock lock{mutex_};
     pushWasDisabled_ = true;
     lock.unlock();
@@ -177,7 +171,7 @@ class OrderedThreadSafeQueue {
   }
 
   // See `ThreadSafeQueue` for details.
-  ~OrderedThreadSafeQueue() { disablePush(); }
+  ~OrderedThreadSafeQueue() { disableQueue(); }
 
   // See `ThreadSafeQueue` for details. All the returned values will be in
   // ascending consecutive order wrt the index with which they were pushed.
