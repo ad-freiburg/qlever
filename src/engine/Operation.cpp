@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach  (johannes.kalmbach@gmail.com)
 
-#include "./Operation.h"
+#include "engine/Operation.h"
 
 #include "engine/QueryExecutionTree.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -58,9 +58,9 @@ void Operation::recursivelySetTimeoutTimer(
   }
 }
 
-// Get the result for the subtree rooted at this element. Use existing results
-// if they are already available, otherwise trigger computation.
-shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
+// ________________________________________________________________________
+shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
+                                                   bool onlyReadFromCache) {
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {
@@ -154,6 +154,17 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       return CacheValue{std::move(result), getRuntimeInfo()};
     };
 
+    // Handle the case that we only want the result if it was contained in the
+    // cache, and `nullptr` else.
+    if (onlyReadFromCache) {
+      AD_CORRECTNESS_CHECK(!pinResult);
+      auto optionalResult = cache.getIfContained(cacheKey);
+      if (!optionalResult.has_value()) {
+        return nullptr;
+      }
+      updateRuntimeInformationOnSuccess(optionalResult.value(), timer.msecs());
+      return optionalResult.value()._resultPointer->resultTable();
+    }
     auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda)
                               : cache.computeOnce(cacheKey, computeLambda);
 
