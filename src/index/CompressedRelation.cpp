@@ -147,6 +147,9 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   if (beginBlock == endBlock) {
     co_return;
   }
+  // Note: It is important to define the `threads` before the `queue`. That way
+  // the joining destructor of the threads will see that the queue is finished and join.
+  std::vector<ad_utility::JThread> threads;
   ad_utility::data_structures::OrderedThreadSafeQueue<DecompressedBlock> queue{
       5};
   // TODO<joka921> We can configure whether we want to allow async access to
@@ -178,7 +181,6 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     }
   };
 
-  std::vector<ad_utility::JThread> threads;
   // TODO<joka921> get the number of optimal threads from the operating
   // system.
   for (size_t j = 0; j < 10; ++j) {
