@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include <bits/iterator_concepts.h>
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
 
@@ -18,6 +17,8 @@
 #include <string_view>
 
 #include "../util/Concepts.h"
+#include "../util/Forward.h"
+#include "../util/Iterators.h"
 
 using std::string;
 using std::string_view;
@@ -64,8 +65,7 @@ of the range elements.
 template <std::ranges::input_range Range>
 requires ad_utility::Streamable<
     std::iter_reference_t<std::ranges::iterator_t<Range>>>
-static void lazyStrJoin(std::ostream* stream, const Range& r,
-                        std::string_view separator);
+void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator);
 
 /*
 @brief Add elements of the range to a stream, with the `separator` between the
@@ -80,7 +80,7 @@ of the range elements.
 template <std::ranges::input_range Range>
 requires ad_utility::Streamable<
     std::iter_reference_t<std::ranges::iterator_t<Range>>>
-static std::string lazyStrJoin(const Range& r, std::string_view separator);
+std::string lazyStrJoin(Range&& r, std::string_view separator);
 
 // *****************************************************************************
 // Definitions:
@@ -286,34 +286,33 @@ constexpr bool constantTimeEquals(std::string_view view1,
 template <std::ranges::input_range Range>
 requires ad_utility::Streamable<
     std::iter_reference_t<std::ranges::iterator_t<Range>>>
-static void lazyStrJoin(std::ostream* stream, const Range& r,
-                        std::string_view separator) {
-  if (r.empty()) {
+void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator) {
+  // Is the range empty?
+  auto start = ad_utility::makeForwardingIterator<Range>(r.begin());
+  if (start == ad_utility::makeForwardingIterator<Range>(r.end())) {
     return;
   }
 
-  // Add all the string representations to the stream with seperator betwenn
-  // them.
-  std::ranges::for_each_n(r.begin(), r.size() - 1,
-                          [&stream, &separator](const auto& listItem) {
-                            (*stream) << listItem << separator;
-                          },
-                          {});
-  (*stream) << r.back();
+  // Add the first entry without a seperator.
+  *stream << *start;
+
+  // Add the remaining entries.
+  std::ranges::for_each(++start,
+                        ad_utility::makeForwardingIterator<Range>(r.end()),
+                        [&stream, &separator](const auto& listItem) {
+                          *stream << separator << listItem;
+                        },
+                        {});
 }
 
 // _________________________________________________________________________
 template <std::ranges::input_range Range>
 requires ad_utility::Streamable<
     std::iter_reference_t<std::ranges::iterator_t<Range>>>
-static std::string lazyStrJoin(const Range& r, std::string_view separator) {
-  if (r.empty()) {
-    return "";
-  }
-
+std::string lazyStrJoin(Range&& r, std::string_view separator) {
   std::ostringstream stream;
 
-  lazyStrJoin(&stream, r, separator);
+  lazyStrJoin(&stream, AD_FWD(r), separator);
 
   return stream.str();
 }

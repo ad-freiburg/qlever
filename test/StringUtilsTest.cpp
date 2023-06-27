@@ -9,6 +9,7 @@
 #include <sstream>
 #include <string>
 
+#include "util/Generator.h"
 #include "util/StringUtils.h"
 
 using ad_utility::constantTimeEquals;
@@ -82,7 +83,10 @@ TEST(StringUtilsTest, listToString) {
   doTestForAllOverloads("42", std::vector<int>{42}, "\n");
   doTestForAllOverloads("40,41,42,43", std::vector<int>{40, 41, 42, 43}, ",");
 
-  // Lazy evaluation with `std::ranges::views`.
+  /*
+  `std::ranges::views` can cause dangling pointers, if a `std::identity` is
+  called with one, that returns r-values.
+  */
   /*
   TODO Do a test, where the `std::views::transform` uses an r-value vector,
   once we no longer support `gcc-11`. The compiler has a bug, where it
@@ -101,6 +105,21 @@ TEST(StringUtilsTest, listToString) {
           vec, [](const int& num) -> decltype(auto) { return num; }),
       ",");
 
-  // TODO Write a test, that uses an actual `std::ranges::input_range`. That is,
-  // a range who doesn't know it's own size.
+  // Test, that uses an actual `std::ranges::input_range`. That is, a range who
+  // doesn't know it's own size.
+
+  // Returns the content of a given vector, element by element.
+  auto goThroughVectorGenerator =
+      []<typename T>(const std::vector<T>& vec) -> cppcoro::generator<T> {
+    for (T entry : vec) {
+      co_yield entry;
+    }
+  };
+
+  doTestForAllOverloads("", goThroughVectorGenerator(std::vector<int>{}), "\n");
+  doTestForAllOverloads("42", goThroughVectorGenerator(std::vector<int>{42}),
+                        "\n");
+  doTestForAllOverloads(
+      "40,41,42,43", goThroughVectorGenerator(std::vector<int>{40, 41, 42, 43}),
+      ",");
 }
