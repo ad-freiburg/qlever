@@ -33,7 +33,7 @@ class ThreadSafeQueue {
   const ThreadSafeQueue& operator=(ThreadSafeQueue&&) = delete;
 
   /// Push an element into the queue. Block until there is free space in the
-  /// queue or until disableQueue() was called. Return false if disableQueue()
+  /// queue or until disableQueue() was called. Return false if finish()
   /// was called. In this case the current element element and all future
   /// elements are not added to the queue.
   bool push(T value) {
@@ -64,11 +64,11 @@ class ThreadSafeQueue {
   // After calling this function, all calls to `push` will return `false` and no
   // further elements will be added to the queue. Calls to `pop` will yield the
   // elements that were already stored in the queue before the call to
-  // `disableQueue`, after those were drained, `pop` will return `nullopt`. This
+  // `finish`, after those were drained, `pop` will return `nullopt`. This
   // function can be called from the producing/pushing threads to signal that
   // all elements have been pushed, or from the consumers to signal that they
   // will not pop further elements from the queue.
-  void disableQueue() {
+  void finish() {
     std::unique_lock lock{mutex_};
     queueDisabled_ = true;
     lock.unlock();
@@ -76,11 +76,11 @@ class ThreadSafeQueue {
     popNotification_.notify_all();
   }
 
-  /// Always call `disableQueue` on destruction. This makes sure that worker
+  /// Always call `finish` on destruction. This makes sure that worker
   /// threads that pop from the queue always see std::nullopt, even if the
   /// threads that push to the queue exit via an exception or if the explicit
-  /// call to `disableQueue` is missing.
-  ~ThreadSafeQueue() { disableQueue(); }
+  /// call to `finish` is missing.
+  ~ThreadSafeQueue() { finish(); }
 
   /// Blocks until another thread pushes an element via push() which is
   /// hen returned or signalLastElementWasPushed() is called resulting in an
@@ -135,7 +135,7 @@ class OrderedThreadSafeQueue {
 
   // Push the `value` to the queue that is associated with the `index`. This
   // call blocks, until `push` has been called for all indices in `[0, ...,
-  // index - 1]` or until `disableQueue` was called. The remaining behavior is
+  // index - 1]` or until `finish` was called. The remaining behavior is
   // equal to `ThreadSafeQueue::push`.
   bool push(size_t index, T value) {
     std::unique_lock lock{mutex_};
@@ -163,7 +163,7 @@ class OrderedThreadSafeQueue {
 
   // See `ThreadSafeQueue` for details.
   void disableQueue() {
-    queue_.disableQueue();
+    queue_.finish();
     std::unique_lock lock{mutex_};
     pushWasDisabled_ = true;
     lock.unlock();

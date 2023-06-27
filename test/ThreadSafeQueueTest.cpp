@@ -56,7 +56,7 @@ TEST(ThreadSafeQueue, BufferSizeIsRespected) {
       while (numPushed < numValues) {
         push(numPushed++);
       }
-      queue.disableQueue();
+      queue.finish();
     });
 
     size_t numPopped = 0;
@@ -83,7 +83,7 @@ TEST(ThreadSafeQueue, ReturnValueOfPush) {
     // called.
     EXPECT_TRUE(push(0));
     EXPECT_EQ(queue.pop(), 0);
-    queue.disableQueue();
+    queue.finish();
     EXPECT_FALSE(push(1));
   };
   runWithBothQueueTypes(runTest);
@@ -105,7 +105,7 @@ TEST(ThreadSafeQueue, Concurrency) {
       }
       numThreadsDone++;
       if (numThreadsDone == numThreads) {
-        queue.disableQueue();
+        queue.finish();
       }
     };
 
@@ -230,7 +230,7 @@ TEST(ThreadSafeQueue, DisablePush) {
 
       // Disable the push, make the consumers finish.
       if (numPopped == 400) {
-        queue.disableQueue();
+        queue.finish();
         break;
       }
     }
