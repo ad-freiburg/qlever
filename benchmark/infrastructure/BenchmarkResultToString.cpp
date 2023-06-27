@@ -136,14 +136,21 @@ void addGroupsToOStringstream(std::ostringstream* stream,
 }
 
 // ___________________________________________________________________________
+std::string vectorOfResultTableToListString(
+    const std::vector<ResultTable>& tables) {
+  std::ostringstream dummyStream;
+  addListToOStringStream(
+      &dummyStream, tables,
+      [](const ResultTable& table) { return static_cast<std::string>(table); },
+      "\n\n");
+  return dummyStream.str();
+}
+
+// ___________________________________________________________________________
 void addTablesToOStringstream(std::ostringstream* stream,
                               const std::vector<ResultTable>& resultTables) {
   addCategoryTitleToOStringstream(stream, "Table benchmarks");
-  (*stream) << "\n";
-  addListToOStringStream(
-      stream, resultTables,
-      [](const ResultTable& table) { return static_cast<std::string>(table); },
-      "\n\n");
+  (*stream) << "\n" << vectorOfResultTableToListString(resultTables);
 }
 
 // ___________________________________________________________________________

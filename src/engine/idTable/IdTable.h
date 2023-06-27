@@ -308,16 +308,6 @@ class IdTable {
     return data().at(column).at(row);
   }
 
-  row_reference_restricted at(size_t row) requires(!isView) {
-    AD_CONTRACT_CHECK(row < numRows());
-    return operator[](row);
-  }
-
-  const_row_reference_restricted at(size_t row) const {
-    AD_CONTRACT_CHECK(row < numRows());
-    return operator[](row);
-  }
-
   // Get a reference to the `i`-th row. The returned proxy objects can be
   // implicitly and trivially converted to `row_reference`. For the design
   // rationale behind those proxy types see above for their definition.
@@ -326,6 +316,17 @@ class IdTable {
   }
   const_row_reference_restricted operator[](size_t index) const {
     return *(begin() + index);
+  }
+
+  // Same as operator[], but throw an exception if the `row` is out of bounds.
+  // This is similar to the behavior of `std::vector::at`.
+  row_reference_restricted at(size_t row) requires(!isView) {
+    AD_CONTRACT_CHECK(row < numRows());
+    return operator[](row);
+  }
+  const_row_reference_restricted at(size_t row) const {
+    AD_CONTRACT_CHECK(row < numRows());
+    return operator[](row);
   }
 
   // The usual `front` and `back` functions to make the interface similar to
@@ -545,12 +546,12 @@ class IdTable {
         std::move(viewSpans), columnIndices.size(), numRows_, allocator_};
   }
 
-  // Modify the table, s.t. it contains only the specified `subset` of the
+  // Modify the table, such that it contains only the specified `subset` of the
   // original columns in the specified order. Each index in the `subset`
   // must be `< numColumns()` and must appear at most once in the subset.
   // The column with the old index `subset[i]` will become the `i`-th column
   // after the subset. For example `setColumnSubset({2, 1})` will result in a
-  // table with 2 columns,// with the original columns with index 2 and 1, with
+  // table with 2 columns, with the original columns with index 2 and 1, with
   // their order switched. The special case where `subset.size() ==
   // numColumns()` implies that the function applies a permutation to the table.
   // For example `setColumnSubset({1, 2, 0})` rotates the columns of a table
@@ -565,9 +566,9 @@ class IdTable {
 
     Data newData;
     newData.reserve(subset.size());
-    for (auto colIdx : subset) {
+    std::ranges::for_each(subset, [this, &newData](ColumnIndex colIdx) {
       newData.push_back(std::move(data().at(colIdx)));
-    }
+    });
     data() = std::move(newData);
     numColumns_ = subset.size();
   }

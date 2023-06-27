@@ -3,6 +3,7 @@
 // Authors : 2018      Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 //           2022-     Johannes Kalmbach(kalmbach@cs.uni-freiburg.de)
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <array>
@@ -32,6 +33,7 @@ TEST(IdTable, DocumentationOfIteratorUsage) {
   // `IdTable::row_reference_restricted`. The table is not changed, as there is
   // no write access.
   ASSERT_EQ(V(42), t[0][0]);
+  ASSERT_EQ(V(42), t.at(0)[0]);
   ASSERT_EQ(V(42), t(0, 0));
   ASSERT_EQ(V(42), (*t.begin())[0]);
 
@@ -529,7 +531,9 @@ TEST(IdTable, sortTest) {
   IdTable::iterator i2 = i1 + 2;
   std::iter_swap(i1, i2);
   ASSERT_EQ(orig[0], test[2]);
+  ASSERT_EQ(orig.at(0), test.at(2));
   ASSERT_EQ(orig[2], test[0]);
+  ASSERT_EQ(orig.at(2), test.at(0));
 
   // The value is move Assignable : create a temporary copy of 3 and move it to
   // 1
@@ -559,6 +563,21 @@ TEST(IdTable, sortTest) {
   ASSERT_EQ(orig[4], test[3]);
   ASSERT_EQ(orig[5], test[4]);
   ASSERT_EQ(orig[1], test[5]);
+
+  // The same tests for the const and mutable overloads of `at()`.
+  ASSERT_EQ(orig.at(3), test.at(0));
+  ASSERT_EQ(orig.at(2), test.at(1));
+  ASSERT_EQ(orig.at(0), test.at(2));
+  ASSERT_EQ(orig.at(4), test.at(3));
+  ASSERT_EQ(orig.at(5), test.at(4));
+  ASSERT_EQ(orig.at(1), test.at(5));
+
+  ASSERT_EQ(std::as_const(orig).at(3), std::as_const(test).at(0));
+  ASSERT_EQ(std::as_const(orig).at(2), std::as_const(test).at(1));
+  ASSERT_EQ(std::as_const(orig).at(0), std::as_const(test).at(2));
+  ASSERT_EQ(std::as_const(orig).at(4), std::as_const(test).at(3));
+  ASSERT_EQ(std::as_const(orig).at(5), std::as_const(test).at(4));
+  ASSERT_EQ(std::as_const(orig).at(1), std::as_const(test).at(5));
 }
 
 // =============================================================================
@@ -862,6 +881,36 @@ TEST(IdTable, frontAndBack) {
   ASSERT_EQ(43, std::as_const(t).back()[0]);
 }
 
+TEST(IdTable, setColumnSubset) {
+  using IntTable = columnBasedIdTable::IdTable<int, 0>;
+  IntTable t{3};  // three columns.
+  t.push_back({0, 10, 20});
+  t.push_back({1, 11, 21});
+  t.push_back({2, 12, 22});
+  {
+    auto view =
+        t.asColumnSubsetView(std::array{ColumnIndex(2), ColumnIndex(0)});
+    ASSERT_EQ(2, view.numColumns());
+    ASSERT_EQ(3, view.numRows());
+    ASSERT_THAT(view.getColumn(0), ::testing::ElementsAre(20, 21, 22));
+    ASSERT_THAT(view.getColumn(1), ::testing::ElementsAre(0, 1, 2));
+    // Column index too large
+    ASSERT_ANY_THROW(t.asColumnSubsetView(std::array{ColumnIndex{3}}));
+  }
+  t.setColumnSubset(std::array{ColumnIndex(2), ColumnIndex(0)});
+  ASSERT_EQ(2, t.numColumns());
+  ASSERT_EQ(3, t.numRows());
+  ASSERT_THAT(t.getColumn(0), ::testing::ElementsAre(20, 21, 22));
+  ASSERT_THAT(t.getColumn(1), ::testing::ElementsAre(0, 1, 2));
+
+  // Empty column subset is not allowed.
+  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{}));
+  // Duplicate columns are not allowed.
+  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{0, 0, 1}));
+  // A column index is out of range.
+  ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{1, 2}));
+}
+
 TEST(IdTable, cornerCases) {
   using Dynamic = columnBasedIdTable::IdTable<int, 0>;
   {
@@ -870,6 +919,12 @@ TEST(IdTable, cornerCases) {
     ASSERT_NO_THROW(dynamic.asStaticView<12>());
     ASSERT_NO_THROW(dynamic.asStaticView<0>());
     ASSERT_ANY_THROW(dynamic.asStaticView<6>());
+  }
+  {
+    Dynamic dynamic;
+    // dynamic has 0 rows;
+    ASSERT_ANY_THROW(dynamic.at(0));
+    ASSERT_ANY_THROW(std::as_const(dynamic).at(0));
   }
   {
     Dynamic dynamic;
@@ -940,15 +995,7 @@ TEST(IdTable, staticAsserts) {
 // Check that we can completely instantiate `IdTable`s with a different value
 // type and a different underlying storage.
 
-// Note: Clang 13 and 14 don't handle the `requires` clauses in the `clone`
-// member function correctly, so we have to disable these checks for those
-// compiler versions.
-// TODO<joka921> throw these checks out as soon as we don't support these
-// compiler versions anymore.
-
-#if not(defined(__clang__)) || (__clang_major__ != 13 && __clang_major__ != 14)
 template class columnBasedIdTable::IdTable<char, 0>;
 static_assert(!std::is_copy_constructible_v<ad_utility::BufferedVector<char>>);
 template class columnBasedIdTable::IdTable<char, 0,
                                            ad_utility::BufferedVector<char>>;
-#endif

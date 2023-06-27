@@ -310,7 +310,7 @@ addLinkAndDiscoverTest(LimitOffsetClauseTest)
 
 addLinkAndDiscoverTest(OperationTest engine)
 
-addLinkAndDiscoverTest(RuntimeInformationTest engine)
+addLinkAndDiscoverTest(RuntimeInformationTest engine index)
 
 addLinkAndDiscoverTest(VariableToColumnMapTest parser)
 

@@ -9,7 +9,7 @@
 
 #include <ranges>
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 std::string RuntimeInformation::toString() const {
   std::ostringstream buffer;
   // Imbue with the same locale as std::cout which uses for example
@@ -23,19 +23,44 @@ std::string RuntimeInformation::toString() const {
 
 namespace {
 // A small formatting helper used inside RuntimeInformation::writeToStream.
-std::string indentStr(size_t indent) {
+std::string indentStr(size_t indent, bool stripped = false) {
   std::string ind;
   for (size_t i = 0; i < indent; i++) {
-    ind += "│  ";
+    if (stripped && i == indent - 1) {
+      ind += "│";
+    } else {
+      ind += "│  ";
+    }
   }
   return ind;
 }
 }  // namespace
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
+void RuntimeInformation::formatDetailValue(std::ostream& out,
+                                           std::string_view key,
+                                           const nlohmann::json& value) {
+  using enum nlohmann::json::value_t;
+  // We want to print doubles with fixed precision and stream ints as their
+  // native type so they get thousands separators. For everything else we
+  // let nlohmann::json handle it.
+  if (value.type() == number_float) {
+    out << ad_utility::to_string(value.get<double>(), 2);
+  } else if (value.type() == number_unsigned) {
+    out << value.template get<uint64_t>();
+  } else if (value.type() == number_integer) {
+    out << value.get<int64_t>();
+  } else {
+    out << value;
+  }
+  if (key.ends_with("Time")) {
+    out << " ms";
+  }
+}
+
+// __________________________________________________________________________
 void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
-  using json = nlohmann::json;
-  out << indentStr(indent) << '\n';
+  out << indentStr(indent, true) << '\n';
   out << indentStr(indent - 1) << "├─ " << descriptor_ << '\n';
   out << indentStr(indent) << "result_size: " << numRows_ << " x " << numCols_
       << '\n';
@@ -44,6 +69,7 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
   out << indentStr(indent) << "total_time: " << totalTime_ << " ms" << '\n';
   out << indentStr(indent) << "operation_time: " << getOperationTime() << " ms"
       << '\n';
+  out << indentStr(indent) << "status: " << toString(status_) << '\n';
   out << indentStr(indent)
       << "cache_status: " << ad_utility::toString(cacheStatus_) << '\n';
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {
@@ -55,21 +81,7 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
   }
   for (const auto& el : details_.items()) {
     out << indentStr(indent) << "  " << el.key() << ": ";
-    // We want to print doubles with fixed precision and stream ints as their
-    // native type so they get thousands separators. For everything else we
-    // let nlohmann::json handle it
-    if (el.value().type() == json::value_t::number_float) {
-      out << ad_utility::to_string(el.value().get<double>(), 2);
-    } else if (el.value().type() == json::value_t::number_unsigned) {
-      out << el.value().get<uint64_t>();
-    } else if (el.value().type() == json::value_t::number_integer) {
-      out << el.value().get<int64_t>();
-    } else {
-      out << el.value();
-    }
-    if (el.key().ends_with("Time")) {
-      out << " ms";
-    }
+    formatDetailValue(out, el.key(), el.value());
     out << '\n';
   }
   if (!children_.empty()) {
@@ -80,9 +92,10 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
   }
 }
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
   if (columnMap.empty()) {
+    columnNames_.clear();
     return;
   }
 
@@ -99,7 +112,7 @@ void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
   }
 }
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 double RuntimeInformation::getOperationTime() const {
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {
     return totalTime_;
@@ -114,7 +127,7 @@ double RuntimeInformation::getOperationTime() const {
   }
 }
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 size_t RuntimeInformation::getOperationCostEstimate() const {
   size_t result = costEstimate_;
   for (const auto& child : children_) {
@@ -123,7 +136,7 @@ size_t RuntimeInformation::getOperationCostEstimate() const {
   return result;
 }
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 std::string_view RuntimeInformation::toString(Status status) {
   switch (status) {
     case completed:
@@ -162,13 +175,13 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
       {"children", rti.children_}};
 }
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 void to_json(nlohmann::ordered_json& j,
              const RuntimeInformationWholeQuery& rti) {
   j = nlohmann::ordered_json{{"time_query_planning", rti.timeQueryPlanning}};
 }
 
-// ___________________________________________________________________________________
+// __________________________________________________________________________
 void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
                                            size_t timeForLimit,
                                            bool fullResultIsNotCached) {
