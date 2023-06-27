@@ -764,7 +764,7 @@ Index::WordEntityPostings IndexImpl::readWordCl(
       tbmd._cl._nofElements, tbmd._cl._startContextlist,
       static_cast<size_t>(tbmd._cl._startWordlist - tbmd._cl._startContextlist),
       &TextRecordIndex::make);
-  *wep.widsOneTerm_ = readFreqComprList<WordIndex>(
+  wep.widsOneTerm_ = readFreqComprList<WordIndex>(
       tbmd._cl._nofElements, tbmd._cl._startWordlist,
       static_cast<size_t>(tbmd._cl._startScorelist - tbmd._cl._startWordlist));
   wep.scores_ = readFreqComprList<Score>(
