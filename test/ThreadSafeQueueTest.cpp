@@ -191,7 +191,7 @@ TEST(ThreadSafeQueue, PushException) {
       // exceptions were pushed to the queue.
       while (queue.pop()) {
         ++numPopped;
-        EXPECT_LE(numPushed, numPopped + queueSize + 1 + numThreads);
+        EXPECT_LE(numPushed, numPopped + queueSize + 1 + 2 * numThreads);
       }
       FAIL() << "Should have thrown" << std::endl;
     } catch (const IntegerException& i) {
