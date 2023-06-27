@@ -68,21 +68,31 @@ TEST(StringUtilsTest, constantTimeEquals) {
 }
 
 TEST(StringUtilsTest, listToString) {
-  // Do the test for all overloads of `listToString`.
-  auto doTestForAllOverloads = [](std::string_view expectedResult, auto&& range,
+  /*
+  Do the test for all overloads of `lazyStrJoin`.
+  Every overload needs it's own `range`, because ranges like, for example,
+  generators, change, when read and also don't allow copying.
+  */
+  auto doTestForAllOverloads = [](std::string_view expectedResult,
+                                  auto&& rangeForStreamOverload,
+                                  auto&& rangeForStringReturnOverload,
                                   std::string_view separator) {
     ASSERT_EQ(expectedResult,
-              ad_utility::lazyStrJoin(AD_FWD(range), separator));
+              ad_utility::lazyStrJoin(AD_FWD(rangeForStringReturnOverload),
+                                      separator));
 
     std::ostringstream stream;
-    ad_utility::lazyStrJoin(&stream, AD_FWD(range), separator);
+    ad_utility::lazyStrJoin(&stream, AD_FWD(rangeForStreamOverload), separator);
     ASSERT_EQ(expectedResult, stream.str());
   };
 
   // Vectors.
-  doTestForAllOverloads("", std::vector<int>{}, "\n");
-  doTestForAllOverloads("42", std::vector<int>{42}, "\n");
-  doTestForAllOverloads("40,41,42,43", std::vector<int>{40, 41, 42, 43}, ",");
+  const std::vector<int> emptyVector;
+  const std::vector<int> singleValueVector{42};
+  const std::vector<int> multiValueVector{40, 41, 42, 43};
+  doTestForAllOverloads("", emptyVector, emptyVector, "\n");
+  doTestForAllOverloads("42", singleValueVector, singleValueVector, "\n");
+  doTestForAllOverloads("40,41,42,43", multiValueVector, multiValueVector, ",");
 
   /*
   `std::ranges::views` can cause dangling pointers, if a `std::identity` is
@@ -93,34 +103,30 @@ TEST(StringUtilsTest, listToString) {
   once we no longer support `gcc-11`. The compiler has a bug, where it
   doesn't allow that code, even though it's correct.
   */
-  std::vector<int> vec{40, 41, 42, 43};
-  doTestForAllOverloads(
-      "50,51,52,53",
-      std::views::transform(vec,
-                            [](const int& num) -> int { return num + 10; }),
-      ",");
+  auto plus10View = std::views::transform(
+      multiValueVector, [](const int& num) -> int { return num + 10; });
+  doTestForAllOverloads("50,51,52,53", plus10View, plus10View, ",");
 
-  doTestForAllOverloads(
-      "40,41,42,43",
-      std::views::transform(
-          vec, [](const int& num) -> decltype(auto) { return num; }),
-      ",");
+  auto identityView = std::views::transform(
+      multiValueVector, [](const int& num) -> decltype(auto) { return num; });
+  doTestForAllOverloads("40,41,42,43", identityView, identityView, ",");
 
   // Test, that uses an actual `std::ranges::input_range`. That is, a range who
   // doesn't know it's own size.
 
   // Returns the content of a given vector, element by element.
   auto goThroughVectorGenerator =
-      []<typename T>(std::vector<T> vec) -> cppcoro::generator<T> {
-    for (T& entry : vec) {
+      []<typename T>(const std::vector<T>& vec) -> cppcoro::generator<T> {
+    for (T entry : vec) {
       co_yield entry;
     }
   };
 
-  doTestForAllOverloads("", goThroughVectorGenerator(std::vector<int>{}), "\n");
-  doTestForAllOverloads("42", goThroughVectorGenerator(std::vector<int>{42}),
-                        "\n");
-  doTestForAllOverloads(
-      "40,41,42,43", goThroughVectorGenerator(std::vector<int>{40, 41, 42, 43}),
-      ",");
+  doTestForAllOverloads("", goThroughVectorGenerator(emptyVector),
+                        goThroughVectorGenerator(emptyVector), "\n");
+  doTestForAllOverloads("42", goThroughVectorGenerator(singleValueVector),
+                        goThroughVectorGenerator(singleValueVector), "\n");
+  doTestForAllOverloads("40,41,42,43",
+                        goThroughVectorGenerator(multiValueVector),
+                        goThroughVectorGenerator(multiValueVector), ",");
 }
