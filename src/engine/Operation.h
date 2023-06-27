@@ -119,7 +119,8 @@ class Operation {
   // Get the result for the subtree rooted at this element.
   // Use existing results if they are already available, otherwise
   // trigger computation.
-  shared_ptr<const ResultTable> getResult(bool isRoot = false);
+  shared_ptr<const ResultTable> getResult(bool isRoot = false,
+                                          bool onlyReadFromCache = false);
 
   // Use the same timeout timer for all children of an operation (= query plan
   // rooted at that operation). As soon as one child times out, the whole
