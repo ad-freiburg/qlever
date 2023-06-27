@@ -20,7 +20,7 @@ class ThreadSafeQueue {
   std::mutex mutex_;
   std::condition_variable pushNotification_;
   std::condition_variable popNotification_;
-  bool queueDisabled_ = false;
+  bool finish_ = false;
   size_t maxSize_;
 
  public:
@@ -33,14 +33,14 @@ class ThreadSafeQueue {
   const ThreadSafeQueue& operator=(ThreadSafeQueue&&) = delete;
 
   /// Push an element into the queue. Block until there is free space in the
-  /// queue or until disableQueue() was called. Return false if finish()
+  /// queue or until finish() was called. Return false if finish()
   /// was called. In this case the current element element and all future
   /// elements are not added to the queue.
   bool push(T value) {
     std::unique_lock lock{mutex_};
     popNotification_.wait(
-        lock, [this] { return queue_.size() < maxSize_ || queueDisabled_; });
-    if (queueDisabled_) {
+        lock, [this] { return queue_.size() < maxSize_ || finish_; });
+    if (finish_) {
       return false;
     }
     queue_.push(std::move(value));
@@ -55,7 +55,7 @@ class ThreadSafeQueue {
   void pushException(std::exception_ptr exception) {
     std::unique_lock lock{mutex_};
     pushedException_ = std::move(exception);
-    queueDisabled_ = true;
+    finish_ = true;
     lock.unlock();
     pushNotification_.notify_all();
     popNotification_.notify_all();
@@ -70,7 +70,7 @@ class ThreadSafeQueue {
   // will not pop further elements from the queue.
   void finish() {
     std::unique_lock lock{mutex_};
-    queueDisabled_ = true;
+    finish_ = true;
     lock.unlock();
     pushNotification_.notify_all();
     popNotification_.notify_all();
@@ -88,12 +88,12 @@ class ThreadSafeQueue {
   std::optional<T> pop() {
     std::unique_lock lock{mutex_};
     pushNotification_.wait(lock, [this] {
-      return !queue_.empty() || queueDisabled_ || pushedException_;
+      return !queue_.empty() || finish_ || pushedException_;
     });
     if (pushedException_) {
       std::rethrow_exception(pushedException_);
     }
-    if (queueDisabled_ && queue_.empty()) {
+    if (finish_ && queue_.empty()) {
       return {};
     }
     std::optional<T> value = std::move(queue_.front());
@@ -120,7 +120,7 @@ class OrderedThreadSafeQueue {
   std::condition_variable cv_;
   ThreadSafeQueue<T> queue_;
   size_t nextIndex_ = 0;
-  bool pushWasDisabled_ = false;
+  bool finish_ = false;
 
  public:
   // Construct from the maximal queue size (see `ThreadSafeQueue` for details).
@@ -139,10 +139,8 @@ class OrderedThreadSafeQueue {
   // equal to `ThreadSafeQueue::push`.
   bool push(size_t index, T value) {
     std::unique_lock lock{mutex_};
-    cv_.wait(lock, [this, index]() {
-      return index == nextIndex_ || pushWasDisabled_;
-    });
-    if (pushWasDisabled_) {
+    cv_.wait(lock, [this, index]() { return index == nextIndex_ || finish_; });
+    if (finish_) {
       return false;
     }
     ++nextIndex_;
@@ -156,22 +154,22 @@ class OrderedThreadSafeQueue {
   void pushException(std::exception_ptr exception) {
     std::unique_lock l{mutex_};
     queue_.pushException(std::move(exception));
-    pushWasDisabled_ = true;
+    finish_ = true;
     l.unlock();
     cv_.notify_all();
   }
 
   // See `ThreadSafeQueue` for details.
-  void disableQueue() {
+  void finish() {
     queue_.finish();
     std::unique_lock lock{mutex_};
-    pushWasDisabled_ = true;
+    finish_ = true;
     lock.unlock();
     cv_.notify_all();
   }
 
   // See `ThreadSafeQueue` for details.
-  ~OrderedThreadSafeQueue() { disableQueue(); }
+  ~OrderedThreadSafeQueue() { finish(); }
 
   // See `ThreadSafeQueue` for details. All the returned values will be in
   // ascending consecutive order wrt the index with which they were pushed.
