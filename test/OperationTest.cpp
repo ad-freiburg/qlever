@@ -30,7 +30,7 @@ TEST(OperationTest, getResultOnlyCached) {
   qec->getQueryTreeCache().clearAll();
   NeutralElementOperation n{qec};
   // The second `true` means "only read the result if it was cached".
-  // We have just cleared the cache, and so this should return false.
+  // We have just cleared the cache, and so this should return `nullptr`.
   EXPECT_EQ(n.getResult(true, true), nullptr);
   EXPECT_EQ(n.getRuntimeInfo().status_, RuntimeInformation::Status::notStarted);
   // Nothing has been stored in the cache by this call.

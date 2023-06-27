@@ -154,19 +154,15 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       return CacheValue{std::move(result), getRuntimeInfo()};
     };
 
-    // Handle the case that we only want the result if it was contained in the
-    // cache, and `nullptr` else.
-    if (onlyReadFromCache) {
-      AD_CORRECTNESS_CHECK(!pinResult);
-      auto optionalResult = cache.getIfContained(cacheKey);
-      if (!optionalResult.has_value()) {
-        return nullptr;
-      }
-      updateRuntimeInformationOnSuccess(optionalResult.value(), timer.msecs());
-      return optionalResult.value()._resultPointer->resultTable();
+    auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda,
+                                                        onlyReadFromCache)
+                              : cache.computeOnce(cacheKey, computeLambda,
+                                                  onlyReadFromCache);
+
+    if (result._resultPointer == nullptr) {
+      AD_CORRECTNESS_CHECK(onlyReadFromCache);
+      return nullptr;
     }
-    auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda)
-                              : cache.computeOnce(cacheKey, computeLambda);
 
     updateRuntimeInformationOnSuccess(result, timer.msecs());
     auto resultNumRows = result._resultPointer->resultTable()->size();
