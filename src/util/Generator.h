@@ -19,6 +19,11 @@ namespace cppcoro {
 template <typename T>
 class generator;
 
+struct AddDetail {
+  std::string key_;
+  nlohmann::json value_;
+};
+
 namespace detail {
 template <typename T>
 class generator_promise {
