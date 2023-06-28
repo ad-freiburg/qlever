@@ -62,13 +62,13 @@ TEST(OperationTest, getResultOnlyCached) {
   EXPECT_EQ(n4.getResult(true, true), result);
 
   // The cache status is `cachedNotPinned` because we found the element cached
-  // but not pinned (it does reflect the status BEFORE the operation.
+  // but not pinned (it does reflect the status BEFORE the operation).
   EXPECT_EQ(n4.getRuntimeInfo().cacheStatus_,
             ad_utility::CacheStatus::cachedNotPinned);
   EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 0);
   EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 1);
 
-  // We have pinned the result, so requesting it again should returned a pinned
+  // We have pinned the result, so requesting it again should return a pinned
   // result.
   qecCopy._pinResult = false;
   EXPECT_EQ(n4.getResult(true, true), result);
