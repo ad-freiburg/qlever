@@ -9,11 +9,13 @@
 #include <absl/strings/string_view.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <ranges>
 #include <sstream>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
@@ -61,10 +63,6 @@ ResultTable& ResultGroup::addTable(
 
 // ____________________________________________________________________________
 ResultGroup::operator std::string() const {
-  // The prefix. Everything after this will be indented, so it's better
-  // to only combine them at the end.
-  std::string prefix = absl::StrCat("Group '", descriptor_, "'\n");
-
   // We need to add all the string representations of the group members,
   // so  using a stream is the best idea.
   std::ostringstream stream;
@@ -76,7 +74,7 @@ ResultGroup::operator std::string() const {
   auto vectorToStringListOrNone =
       []<typename T>(const std::vector<T>& vec) -> std::string {
     if (vec.empty()) {
-      return "None";
+      return " None";
     }
 
     const std::string& list = ad_utility::lazyStrJoin(
@@ -87,16 +85,16 @@ ResultGroup::operator std::string() const {
     return absl::StrCat("\n\n", addIndentation(list, 1));
   };
 
-  stream << absl::StrCat(
-      getMetadataPrettyString(metadata(), "metadata: ", "\n"), "Measurements:");
+  stream << getMetadataPrettyString(metadata(), "metadata: ", "\n");
 
   // Listing all the `ResultEntry`s, if there are any.
-  stream << vectorToStringListOrNone(resultEntries_);
+  stream << "Measurements:" << vectorToStringListOrNone(resultEntries_);
 
   // Listing all the `ResultTable`s, if there are any.
   stream << "\n\nTables:" << vectorToStringListOrNone(resultTables_);
 
-  return absl::StrCat(prefix, addIndentation(stream.str(), 1));
+  return absl::StrCat("Group '", descriptor_, "'\n",
+                      addIndentation(stream.str(), 1));
 }
 
 // ____________________________________________________________________________
@@ -168,40 +166,46 @@ ResultTable::operator std::string() const {
   };
 
   /*
-  Add a string to a stringstream with enough padding, empty spaces to the
-  right of the string, to reach the wanted length. Doesn't shorten the
-  given string.
+  Return a string with enough padding, empty spaces to the right of the string,
+  to reach the wanted length. Doesn't shorten the given string.
   */
-  auto addStringWithPadding = [](std::ostringstream& stream,
-                                 const std::string& text,
-                                 const size_t wantedLength) {
+  auto addPaddingToString = [](std::string_view text,
+                               const size_t wantedLength) {
     const std::string padding(
         wantedLength >= text.length() ? wantedLength - text.length() : 0, ' ');
-    stream << text << padding;
+    return absl::StrCat(text, padding);
   };
 
   /*
-  @brief Adds a row of the table to the stream.
+  @brief Creates the string representation of a row.
 
-  @param stream The string stream, it will add to.
-  @param rowEntries The entries for the rows. The `size_t` says, how long the
-  printed string should be and the string is the string, that will printed.
+  @param rowEntries The entries for the row.
+  @param rowEntryWidth The size, that the string representation of one entry in
+  the row should take up. If the corresponding `rowEntries` string
+  representation (same index in the vector) is to small, it will be padded out
+  with empty spaces.
   */
-  auto addRow =
-      [&columnSeperator, &addStringWithPadding](
-          std::ostringstream& stream,
-          const std::vector<std::pair<std::string, size_t>>& rowEntries) {
-        ad_utility::lazyStrJoin(
-            &stream,
-            std::views::transform(rowEntries,
-                                  [&addStringWithPadding](const auto& pair) {
-                                    std::ostringstream s;
-                                    addStringWithPadding(s, pair.first,
-                                                         pair.second);
-                                    return s.str();
-                                  }),
-            columnSeperator);
-      };
+  auto createRowString = [&columnSeperator, &addPaddingToString,
+                          &entryToString](
+                             const std::vector<EntryType>& rowEntries,
+                             const std::vector<size_t>& rowEntryWidth) {
+    AD_CONTRACT_CHECK(rowEntries.size() == rowEntryWidth.size());
+
+    // The `rowEntryAsString` padded to the wanted width.
+    /*
+    TODO Can be replaced with `std::ranges::views::zip` and
+    `std::ranges::view::transform`, once we have support for
+    `std::ranges::views::zip`.
+    */
+    std::vector<std::string> rowEntryAsString;
+    rowEntryAsString.reserve(rowEntries.size());
+    for (size_t i = 0; i < rowEntries.size(); i++) {
+      rowEntryAsString.push_back(addPaddingToString(
+          entryToString(rowEntries.at(i)), rowEntryWidth.at(i)));
+    }
+
+    return ad_utility::lazyStrJoin(rowEntryAsString, columnSeperator);
+  };
 
   // The prefix. Everything after this will be indented, so it's better
   // to only combine them at the end.
@@ -213,13 +217,19 @@ ResultTable::operator std::string() const {
   // Adding the metadata.
   stream << getMetadataPrettyString(metadata(), "metadata: ", "\n");
 
+  // Transforming the column names into the table entry types, so that they can
+  // share helper functions.
+  auto columnNamesAsEntryType = ad_utility::transform(
+      columnNames_, [](const std::string& name) { return EntryType{name}; });
+
   // It's allowed to have tables without rows. In that case, we are already
   // nearly done, cause we only to have add the column names.
   if (numRows() == 0) {
     // Adding the column names. We don't need any padding.
-    addRow(stream, ad_utility::transform(columnNames_, [](const auto& name) {
-             return std::make_pair(name, name.length());
-           }));
+    stream << createRowString(
+        columnNamesAsEntryType,
+        ad_utility::transform(columnNames_,
+                              [](const auto& name) { return name.length(); }));
 
     // Signal, that the table is empty.
     stream << "\n## Empty Table (0 rows) ##";
@@ -227,43 +237,41 @@ ResultTable::operator std::string() const {
     return absl::StrCat(prefix, addIndentation(stream.str(), 1));
   }
 
-  // For easier usage.
-  const size_t numberColumns = numColumns();
-  const size_t numberRows = numRows();
-
   // For formating: What is the maximum string width of a column, if you
   // compare all it's entries?
-  std::vector<size_t> columnMaxStringWidth(numberColumns, 0);
-  for (size_t column = 0; column < numberColumns; column++) {
+  std::vector<size_t> columnMaxStringWidth(numColumns(), 0);
+  for (size_t column = 0; column < numColumns(); column++) {
+    // How long is the string representation of a colum entry in a wanted row?
+    auto stringWidthOfRow = std::views::transform(
+        entries_, [&column, &entryToString](const std::vector<EntryType>& row) {
+          return entryToString(row.at(column)).length();
+        });
+
     // Which of the entries is the longest?
-    const std::vector<EntryType>& rowWithTheWidestColumnEntry =
-        std::ranges::max(
-            entries_, {},
-            [&column, &entryToString](const std::vector<EntryType>& row) {
-              return entryToString(row[column]).length();
-            });
-    columnMaxStringWidth[column] =
-        entryToString(rowWithTheWidestColumnEntry[column]).length();
+    columnMaxStringWidth.at(column) = std::ranges::max(stringWidthOfRow);
+
     // Is the name of the column bigger?
-    columnMaxStringWidth[column] =
-        (columnMaxStringWidth[column] > columnNames_[column].length())
-            ? columnMaxStringWidth[column]
-            : columnNames_[column].length();
+    columnMaxStringWidth.at(column) = std::ranges::max(
+        columnMaxStringWidth.at(column), columnNames_.at(column).length());
   }
 
-  // Print the top row of names.
-  addRow(stream, ad_utility::zipVectors(columnNames_, columnMaxStringWidth));
+  // Combining the column names and the table entries, so that printing is
+  // easier.
+  std::vector<const std::vector<EntryType>*> wholeTable;
+  wholeTable.push_back(&columnNamesAsEntryType);
+  ad_utility::appendVector(
+      wholeTable,
+      ad_utility::transform(entries_, [](const auto& row) { return &row; }));
 
-  // Print the rows.
-  for (size_t row = 0; row < numberRows; row++) {
-    // Line break between rows.
-    stream << "\n";
-
-    // Actually printing the row.
-    addRow(stream, ad_utility::zipVectors(
-                       ad_utility::transform(entries_.at(row), entryToString),
-                       columnMaxStringWidth));
-  }
+  // Printing the table.
+  ad_utility::lazyStrJoin(
+      &stream,
+      std::views::transform(
+          wholeTable,
+          [&createRowString, &columnMaxStringWidth](const auto& ptr) {
+            return createRowString(*ptr, columnMaxStringWidth);
+          }),
+      "\n");
 
   return absl::StrCat(prefix, addIndentation(stream.str(), 1));
 }
