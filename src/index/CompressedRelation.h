@@ -383,8 +383,8 @@ class CompressedRelationReader {
   // the blocks that actually store triples from the given `relationMetadata`'s
   // relation, else the behavior is undefined.
   DecompressedBlock readPossiblyIncompleteBlock(
-      const CompressedRelationMetadata& relationMetadata, Id col1Id,
-      ad_utility::File& file,
+      const CompressedRelationMetadata& relationMetadata,
+      std::optional<Id> col1Id, ad_utility::File& file,
       const CompressedBlockMetadata& blockMetadata) const;
 };
 

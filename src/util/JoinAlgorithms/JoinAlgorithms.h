@@ -670,10 +670,10 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
       ad_utility::isSimilar<ProjectedEl,
                             std::invoke_result_t<RightProjection, RightEl>>);
   // Iterators for the two inputs. These iterators work on blocks.
-  auto it1 = leftBlocks.begin();
-  auto end1 = leftBlocks.end();
-  auto it2 = rightBlocks.begin();
-  auto end2 = rightBlocks.end();
+  auto it1 = std::begin(leftBlocks);
+  auto end1 = std::end(leftBlocks);
+  auto it2 = std::begin(rightBlocks);
+  auto end2 = std::end(rightBlocks);
 
   // Create an equality comparison from the `lessThan` predicate.
   auto eq = [&lessThan](const auto& el1, const auto& el2) {

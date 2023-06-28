@@ -65,29 +65,16 @@ void CompressedRelationReader::scan(
   // Set up a lambda, that reads this block and decompresses it to
   // the result.
   auto readIncompleteBlock = [&](const auto& block) mutable {
-    // A block is uniquely identified by its start position in the file.
-    auto cacheKey = block.offsetsAndCompressedSize_.at(0).offsetInFile_;
-    auto uncompressedBuffer = blockCache_
-                                  .computeOnce(cacheKey,
-                                               [&]() {
-                                                 return readAndDecompressBlock(
-                                                     block, file, std::nullopt);
-                                               })
-                                  ._resultPointer;
-
-    // Extract the part of the block that actually belongs to the relation
-    auto numElements = metadata.numRows_;
-    AD_CORRECTNESS_CHECK(uncompressedBuffer->numColumns() ==
-                         metadata.numColumns());
-    for (size_t i = 0; i < uncompressedBuffer->numColumns(); ++i) {
-      const auto& inputCol = uncompressedBuffer->getColumn(i);
-      auto begin = inputCol.begin() + metadata.offsetInBlock_;
+    auto trimmedBlock =
+        readPossiblyIncompleteBlock(metadata, std::nullopt, file, block);
+    for (size_t i = 0; i < trimmedBlock.numColumns(); ++i) {
+      const auto& inputCol = trimmedBlock.getColumn(i);
       auto resultColumn = result->getColumn(i);
-      AD_CORRECTNESS_CHECK(numElements <= spaceLeft);
-      std::copy(begin, begin + numElements, resultColumn.begin());
+      AD_CORRECTNESS_CHECK(inputCol.size() <= resultColumn.size());
+      std::ranges::copy(inputCol, resultColumn.begin());
     }
-    rowIndexOfNextBlock += numElements;
-    spaceLeft -= numElements;
+    rowIndexOfNextBlock += trimmedBlock.size();
+    spaceLeft -= trimmedBlock.size();
   };
 
   // Read the first block if it is incomplete
@@ -174,7 +161,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
         return;
       }
       if (isLastBlock) {
-        queue.signalLastElementWasPushed();
+        queue.finish();
       }
     }
   };
@@ -223,38 +210,10 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
                          std::numeric_limits<uint64_t>::max());
   }
 
-  // We have at most one block that is incomplete and thus requires trimming.
-  // Set up a lambda, that reads this block and decompresses it to
-  // the result.
-  auto readIncompleteBlock = [&](const auto& block) {
-    // A block is uniquely identified by its start position in the file.
-    auto cacheKey = block.offsetsAndCompressedSize_.at(0).offsetInFile_;
-    auto uncompressedBuffer = blockCache_
-                                  .computeOnce(cacheKey,
-                                               [&]() {
-                                                 return readAndDecompressBlock(
-                                                     block, file, std::nullopt);
-                                               })
-                                  ._resultPointer;
-
-    // Extract the part of the block that actually belongs to the relation
-    auto numElements = metadata.numRows_;
-    AD_CORRECTNESS_CHECK(uncompressedBuffer->numColumns() ==
-                         metadata.numColumns());
-    IdTable result(uncompressedBuffer->numColumns(), allocator_);
-    result.resize(numElements);
-    for (size_t i = 0; i < uncompressedBuffer->numColumns(); ++i) {
-      const auto& inputCol = uncompressedBuffer->getColumn(i);
-      auto begin = inputCol.begin() + metadata.offsetInBlock_;
-      decltype(auto) resultColumn = result.getColumn(i);
-      std::copy(begin, begin + numElements, resultColumn.begin());
-    }
-    return result;
-  };
-
   // Read the first block if it is incomplete
   if (firstBlockIsIncomplete) {
-    co_yield readIncompleteBlock(*beginBlock);
+    co_yield readPossiblyIncompleteBlock(metadata, std::nullopt, file,
+                                         *beginBlock);
     ++beginBlock;
     if (timer) {
       timer->wlock()->checkTimeoutAndThrow("IndexScan :");
@@ -269,6 +228,7 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   // TODO<joka921> Timeout checks.
 }
 
+// _____________________________________________________________________________
 cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata, Id col1Id,
     std::vector<CompressedBlockMetadata> blockMetadata, ad_utility::File& file,
@@ -290,43 +250,29 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
     AD_CORRECTNESS_CHECK(endBlock - beginBlock <= 1);
   }
 
-  // The first and the last block might be incomplete, compute
-  // and store the partial results from them.
-  std::optional<DecompressedBlock> firstBlockResult;
-  std::optional<DecompressedBlock> lastBlockResult;
+  auto getIncompleteBlock = [&](auto it) {
+    auto result = readPossiblyIncompleteBlock(metadata, col1Id, file, *it);
+    result.setColumnSubset(std::array<ColumnIndex, 1>{1});
+    if (timer) {
+      timer->wlock()->checkTimeoutAndThrow("IndexScan: ");
+    }
+    return result;
+  };
+
   if (beginBlock < endBlock) {
-    firstBlockResult =
-        readPossiblyIncompleteBlock(metadata, col1Id, file, *beginBlock);
+    co_yield getIncompleteBlock(beginBlock);
     ++beginBlock;
-    if (timer) {
-      timer->wlock()->checkTimeoutAndThrow("IndexScan: ");
-    }
   }
+
   if (beginBlock < endBlock) {
-    lastBlockResult =
-        readPossiblyIncompleteBlock(metadata, col1Id, file, *(endBlock - 1));
-    endBlock--;
-    if (timer) {
-      timer->wlock()->checkTimeoutAndThrow("IndexScan: ");
+    for (auto& block : asyncParallelBlockGenerator(beginBlock, endBlock - 1,
+                                                   file, std::vector{1UL})) {
+      co_yield block;
     }
   }
 
-  if (firstBlockResult.has_value()) {
-    firstBlockResult.value().setColumnSubset(std::array<ColumnIndex, 1>{1});
-    co_yield std::move(firstBlockResult.value());
-  }
-
-  for (auto& block : asyncParallelBlockGenerator(beginBlock, endBlock, file,
-                                                 std::vector{1UL})) {
-    co_yield block;
-  }
-
-  if (timer) {
-    timer->wlock()->checkTimeoutAndThrow();
-  }
-  if (lastBlockResult.has_value()) {
-    lastBlockResult.value().setColumnSubset(std::array<ColumnIndex, 1>{1});
-    co_yield lastBlockResult.value();
+  if (beginBlock < endBlock) {
+    co_yield getIncompleteBlock(endBlock - 1);
   }
 }
 
@@ -569,11 +515,19 @@ void CompressedRelationReader::scan(
 
 // _____________________________________________________________________________
 DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
-    const CompressedRelationMetadata& relationMetadata, Id col1Id,
-    ad_utility::File& file,
+    const CompressedRelationMetadata& relationMetadata,
+    std::optional<Id> col1Id, ad_utility::File& file,
     const CompressedBlockMetadata& blockMetadata) const {
+  // A block is uniquely identified by its start position in the file.
+  auto cacheKey = blockMetadata.offsetsAndCompressedSize_.at(0).offsetInFile_;
   DecompressedBlock block =
-      readAndDecompressBlock(blockMetadata, file, std::nullopt);
+      blockCache_
+          .computeOnce(cacheKey,
+                       [&]() {
+                         return readAndDecompressBlock(blockMetadata, file,
+                                                       std::nullopt);
+                       })
+          ._resultPointer->clone();
   AD_CORRECTNESS_CHECK(block.numColumns() == 2);
   const auto& col1Column = block.getColumn(0);
   const auto& col2Column = block.getColumn(1);
@@ -589,7 +543,14 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   }
   auto end = containedInOnlyOneBlock ? begin + relationMetadata.numRows_
                                      : col1Column.end();
-  auto subBlock = std::ranges::equal_range(begin, end, col1Id);
+
+  auto subBlock = [&]() {
+    if (col1Id.has_value()) {
+      return std::ranges::equal_range(begin, end, col1Id.value());
+    } else {
+      return std::ranges::subrange{begin, end};
+    }
+  }();
   auto numResults = subBlock.size();
   block.erase(block.begin(),
               block.begin() + (subBlock.begin() - col1Column.begin()));
