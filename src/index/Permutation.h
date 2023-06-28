@@ -45,7 +45,6 @@ class Permutation {
   // everything that has to be done when reading an index from disk
   void loadFromDisk(const std::string& onDiskBase);
 
-
   /// For a given ID for the first column, retrieve all IDs of the second and
   /// third column, and store them in `result`. This is just a thin wrapper
   /// around `CompressedRelationMetaData::scan`.
@@ -61,14 +60,18 @@ class Permutation {
   // Typedef to propagate the `MetadataAndblocks` type.
   using MetadataAndBlocks = CompressedRelationReader::MetadataAndBlocks;
 
-
-  // The overloaded function `lazyScan` is similar to `scan` (see above) with the following differences:
+  // The overloaded function `lazyScan` is similar to `scan` (see above) with
+  // the following differences:
   // - The result is returned as a lazy generator of blocks.
-  // - The block metadata must be passed in manually. It can be obtained via the `getMetadataAndBlocks` function below
-  //   and then be prefiltered. The blocks must be passed in in ascending order and must only contain blocks that contain
-  //   the given `col0Id` (combined with the `col1Id` for the second overload), else the behavior is undefined.
-  // TODO<joka921> We should only communicate these interface via the `MetadataAndBlocks` class and make this a
-  // strong class that always maintains its invariants.
+  // - The block metadata must be passed in manually. It can be obtained via the
+  // `getMetadataAndBlocks` function below
+  //   and then be prefiltered. The blocks must be passed in in ascending order
+  //   and must only contain blocks that contain the given `col0Id` (combined
+  //   with the `col1Id` for the second overload), else the behavior is
+  //   undefined.
+  // TODO<joka921> We should only communicate these interface via the
+  // `MetadataAndBlocks` class and make this a strong class that always
+  // maintains its invariants.
   cppcoro::generator<IdTable> lazyScan(
       Id col0Id, std::vector<CompressedBlockMetadata> blocks,
       ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
@@ -77,8 +80,9 @@ class Permutation {
       Id col0Id, Id col1Id, const std::vector<CompressedBlockMetadata>& blocks,
       ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
-  // Return the relation metadata for the relation specified by the `col0Id` along with the metadata of all the
-  // blocks that contain this relation (also prefiltered by the `col1Id` if specified). If the `col0Id` does not exist
+  // Return the relation metadata for the relation specified by the `col0Id`
+  // along with the metadata of all the blocks that contain this relation (also
+  // prefiltered by the `col1Id` if specified). If the `col0Id` does not exist
   // in this permutation, `nullopt` is returned.
   std::optional<MetadataAndBlocks> getMetadataAndBlocks(
       Id col0Id, std::optional<Id> col1Id) const;

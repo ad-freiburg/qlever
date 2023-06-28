@@ -290,7 +290,8 @@ cppcoro::generator<IdTable> IndexScan::getLazyScan(
     col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
   }
   if (!col1Id.has_value()) {
-    return index.getPermutation(s.permutation()).lazyScan(col0Id, std::move(blocks));
+    return index.getPermutation(s.permutation())
+        .lazyScan(col0Id, std::move(blocks));
   } else {
     return index.getPermutation(s.permutation())
         .lazyScan(col0Id, col1Id.value(), std::move(blocks));
@@ -298,8 +299,8 @@ cppcoro::generator<IdTable> IndexScan::getLazyScan(
 };
 
 // ________________________________________________________________
-std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan(const IndexScan& s)
-     {
+std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan(
+    const IndexScan& s) {
   auto permutedTriple = s.getPermutedTriple();
   const IndexImpl& index = s.getIndex().getImpl();
   std::optional<Id> optId = permutedTriple[0]->toValueId(index.getVocab());
@@ -334,6 +335,7 @@ std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
 // ________________________________________________________________
 cppcoro::generator<IdTable> IndexScan::lazyScanForJoinOfColumnWithScan(
     std::span<const Id> joinColumn, const IndexScan& s) {
+  AD_EXPENSIVE_CHECK(std::ranges::is_sorted(joinColumn));
   AD_CONTRACT_CHECK(s.numVariables_ < 3);
 
   auto metaBlocks1 = getMetadataForScan(s);

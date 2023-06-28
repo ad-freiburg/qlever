@@ -134,8 +134,16 @@ class Join : public Operation {
 
   ResultTable computeResultForJoinWithFullScanDummy();
 
+  // A special implementation that is called when both children are
+  // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the
+  // `IndexScan`s that is actually needed without fully materializing them.
   void computeResultForTwoIndexScans(IdTable* resultPtr);
-  template <bool firstIsRight>
+
+  // A special implementation that is called when one of the children is an
+  // `IndexScan`. The argument `scanIsLeft` determines whether the `IndexScan`
+  // is the left or the right child of this `Join`. This needs to be known to
+  // determine the correct order of the columns in the result.
+  template <bool scanIsLeft>
   void computeResultForIndexScanAndColumn(const IdTable& inputTable,
                                           ColumnIndex joinColumnIndexTable,
                                           const IndexScan& scan,

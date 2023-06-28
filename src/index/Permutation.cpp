@@ -136,7 +136,8 @@ cppcoro::generator<IdTable> Permutation::lazyScan(
   if (!meta_.col0IdExists(col0Id)) {
     return {};
   }
-  return reader_.lazyScan(meta_.getMetaData(col0Id), std::move(blocks), file_, timer);
+  return reader_.lazyScan(meta_.getMetaData(col0Id), std::move(blocks), file_,
+                          timer);
 }
 
 // _____________________________________________________________________
