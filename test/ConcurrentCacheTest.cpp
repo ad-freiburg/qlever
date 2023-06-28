@@ -302,3 +302,15 @@ TEST(ConcurrentCache, abortPinned) {
   ASSERT_EQ(0ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_THROW(fut.get(), std::runtime_error);
 }
+
+TEST(ConcurrentCache, cacheStatusToString) {
+  using enum ad_utility::CacheStatus;
+  EXPECT_EQ(toString(cachedNotPinned), "cached_not_pinned");
+  EXPECT_EQ(toString(cachedPinned), "cached_pinned");
+  EXPECT_EQ(toString(computed), "computed");
+  EXPECT_EQ(toString(notInCacheAndNotComputed), "not_in_cache_not_computed");
+
+  auto outOfBounds = static_cast<ad_utility::CacheStatus>(
+      static_cast<int>(notInCacheAndNotComputed) + 1);
+  EXPECT_ANY_THROW(toString(outOfBounds));
+}

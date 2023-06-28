@@ -53,4 +53,29 @@ TEST(OperationTest, getResultOnlyCached) {
   EXPECT_EQ(n3.getResult(true, true), result);
   EXPECT_EQ(n3.getRuntimeInfo().cacheStatus_,
             ad_utility::CacheStatus::cachedNotPinned);
+
+  // We can even use the `onlyReadFromCache` case to upgrade a non-pinned
+  // cache-entry to a pinned cache entry
+  QueryExecutionContext qecCopy{*qec};
+  qecCopy._pinResult = true;
+  NeutralElementOperation n4{&qecCopy};
+  EXPECT_EQ(n4.getResult(true, true), result);
+
+  // The cache status is `cachedNotPinned` because we found the element cached
+  // but not pinned (it does reflect the status BEFORE the operation.
+  EXPECT_EQ(n4.getRuntimeInfo().cacheStatus_,
+            ad_utility::CacheStatus::cachedNotPinned);
+  EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 0);
+  EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 1);
+
+  // We have pinned the result, so requesting it again should returned a pinned
+  // result.
+  qecCopy._pinResult = false;
+  EXPECT_EQ(n4.getResult(true, true), result);
+  EXPECT_EQ(n4.getRuntimeInfo().cacheStatus_,
+            ad_utility::CacheStatus::cachedPinned);
+
+  // Clear the (global) cache again to not possibly interfere with other unit
+  // tests.
+  qec->getQueryTreeCache().clearAll();
 }
