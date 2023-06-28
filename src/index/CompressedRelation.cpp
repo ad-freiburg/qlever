@@ -29,7 +29,6 @@ void CompressedRelationReader::scan(
       getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
   auto beginBlock = relevantBlocks.begin();
   auto endBlock = relevantBlocks.end();
-  Id col0Id = metadata.col0Id_;
   // The total size of the result is now known.
   result->resize(metadata.getNofElements());
 
@@ -40,26 +39,6 @@ void CompressedRelationReader::scan(
   // The number of rows for which we still have space
   // in the result (only needed for checking of invariants).
   size_t spaceLeft = result->size();
-
-  // The first block might contain entries that are not part of our
-  // actual scan result.
-  bool firstBlockIsIncomplete =
-      beginBlock < endBlock && (beginBlock->firstTriple_.col0Id_ < col0Id ||
-                                beginBlock->lastTriple_.col0Id_ > col0Id);
-  auto lastBlock = endBlock - 1;
-
-  bool lastBlockIsIncomplete =
-      beginBlock < lastBlock && (lastBlock->firstTriple_.col0Id_ < col0Id ||
-                                 lastBlock->lastTriple_.col0Id_ > col0Id);
-
-  // Invariant: A relation spans multiple blocks exclusively or several
-  // entities are stored completely in the same Block.
-  AD_CORRECTNESS_CHECK(!firstBlockIsIncomplete || (beginBlock == lastBlock));
-  AD_CORRECTNESS_CHECK(!lastBlockIsIncomplete);
-  if (firstBlockIsIncomplete) {
-    AD_CORRECTNESS_CHECK(metadata.offsetInBlock_ !=
-                         std::numeric_limits<uint64_t>::max());
-  }
 
   // We have at most one block that is incomplete and thus requires trimming.
   // Set up a lambda, that reads this block and decompresses it to
@@ -77,13 +56,11 @@ void CompressedRelationReader::scan(
     spaceLeft -= trimmedBlock.size();
   };
 
-  // Read the first block if it is incomplete
-  if (firstBlockIsIncomplete) {
-    readIncompleteBlock(*beginBlock);
-    ++beginBlock;
-    if (timer) {
-      timer->wlock()->checkTimeoutAndThrow("IndexScan :");
-    }
+  // Read the first block (it might be incomplete)
+  readIncompleteBlock(*beginBlock);
+  ++beginBlock;
+  if (timer) {
+    timer->wlock()->checkTimeoutAndThrow("IndexScan :");
   }
 
   // Read all the other (complete!) blocks in parallel
@@ -127,6 +104,7 @@ void CompressedRelationReader::scan(
   }
 }
 
+// ____________________________________________________________________________
 cppcoro::generator<IdTable>
 CompressedRelationReader::asyncParallelBlockGenerator(
     auto beginBlock, auto endBlock, ad_utility::File& file,
@@ -189,35 +167,13 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   if (beginBlock == endBlock) {
     co_return;
   }
-  Id col0Id = metadata.col0Id_;
-  // The first block might contain entries that are not part of our
-  // actual scan result.
-  bool firstBlockIsIncomplete =
-      beginBlock < endBlock && (beginBlock->firstTriple_.col0Id_ < col0Id ||
-                                beginBlock->lastTriple_.col0Id_ > col0Id);
-  auto lastBlock = endBlock - 1;
 
-  bool lastBlockIsIncomplete =
-      beginBlock < lastBlock && (lastBlock->firstTriple_.col0Id_ < col0Id ||
-                                 lastBlock->lastTriple_.col0Id_ > col0Id);
-
-  // Invariant: A relation spans multiple blocks exclusively or several
-  // entities are stored completely in the same Block.
-  AD_CORRECTNESS_CHECK(!firstBlockIsIncomplete || (beginBlock == lastBlock));
-  AD_CORRECTNESS_CHECK(!lastBlockIsIncomplete);
-  if (firstBlockIsIncomplete) {
-    AD_CORRECTNESS_CHECK(metadata.offsetInBlock_ !=
-                         std::numeric_limits<uint64_t>::max());
-  }
-
-  // Read the first block if it is incomplete
-  if (firstBlockIsIncomplete) {
-    co_yield readPossiblyIncompleteBlock(metadata, std::nullopt, file,
-                                         *beginBlock);
-    ++beginBlock;
-    if (timer) {
-      timer->wlock()->checkTimeoutAndThrow("IndexScan :");
-    }
+  // Read the first block, it might be incomplete
+  co_yield readPossiblyIncompleteBlock(metadata, std::nullopt, file,
+                                       *beginBlock);
+  ++beginBlock;
+  if (timer) {
+    timer->wlock()->checkTimeoutAndThrow("IndexScan :");
   }
 
   for (auto& block :
@@ -371,7 +327,6 @@ std::array<std::vector<CompressedBlockMetadata>, 2>
 CompressedRelationReader::getBlocksForJoin(
     const MetadataAndBlocks& scanMetadata1,
     const MetadataAndBlocks& scanMetadata2) {
-  // Get the
   auto relevantBlocks1 = getBlocksFromMetadata(scanMetadata1);
   auto relevantBlocks2 = getBlocksFromMetadata(scanMetadata2);
 
@@ -849,6 +804,29 @@ CompressedRelationReader::getBlocksFromMetadata(
       metadata.offsetInBlock_ == std::numeric_limits<uint64_t>::max();
   // `result` might also be empty if no block was found at all.
   AD_CORRECTNESS_CHECK(col0IdHasExclusiveBlocks || result.size() <= 1);
+
+  if (!result.empty()) {
+    // Check some invariants of the splitting of the relations.
+    bool firstIncomplete = result.front().firstTriple_.col0Id_ < col0Id ||
+                           result.front().lastTriple_.col0Id_ > col0Id;
+
+    auto lastBlock = result.end() - 1;
+
+    bool lastIncomplete = result.begin() < lastBlock &&
+                          (lastBlock->firstTriple_.col0Id_ < col0Id ||
+                           lastBlock->lastTriple_.col0Id_ > col0Id);
+
+    // Invariant: A relation spans multiple blocks exclusively or several
+    // entities are stored completely in the same Block.
+    if (!col1Id.has_value()) {
+      AD_CORRECTNESS_CHECK(!firstIncomplete || (result.begin() == lastBlock));
+      AD_CORRECTNESS_CHECK(!lastIncomplete);
+    }
+    if (firstIncomplete) {
+      AD_CORRECTNESS_CHECK(!col0IdHasExclusiveBlocks);
+    }
+    // AD_CORRECTNESS_CHECK(firstIncomplete || !col0IdHasExclusiveBlocks);
+  }
   return result;
 }
 

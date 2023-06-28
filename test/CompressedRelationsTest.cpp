@@ -6,7 +6,6 @@
 
 #include "./IndexTestHelpers.h"
 #include "index/CompressedRelation.h"
-#include "index/Permutation.h"
 #include "util/GTestHelpers.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/SourceLocation.h"
@@ -301,7 +300,7 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   CompressedBlockMetadata block1{
       {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
   CompressedBlockMetadata block2{
-      {}, 0, {V(39), V(0), V(0)}, {V(42), V(4), V(12)}};
+      {}, 0, {V(42), V(3), V(0)}, {V(42), V(4), V(12)}};
   CompressedBlockMetadata block3{
       {}, 0, {V(42), V(4), V(13)}, {V(42), V(6), V(9)}};
 
@@ -315,7 +314,7 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
 
   auto test = [&metadataAndBlocks](
                   const std::vector<Id>& joinColumn,
-                  const std::vector<CompressedBlockMetadata> expectedBlocks,
+                  const std::vector<CompressedBlockMetadata>& expectedBlocks,
                   source_location l = source_location::current()) {
     auto t = generateLocationTrace(l);
     auto result = CompressedRelationReader::getBlocksForJoin(joinColumn,
