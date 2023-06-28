@@ -276,35 +276,43 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   }
 }
 
-// TODO<joka921> Comment those helpers. Should we register them in the header as
-// private static functions?
+// Some internal helper functions for the `getBlocksForJoin` functions below.
 namespace {
-auto getJoinColumnRangeValue = [](CompressedBlockMetadata::PermutedTriple block,
-                                  Id col0Id, std::optional<Id> col1Id) {
+// If the combination of `col0Id, col1Id` is strictly smaller than the `triple`
+// return the smallest possible ID (which is the undefined ID which never is
+// contained in a triple). If the combination is stictly larger than the triple,
+// the greatest possible ID (which is greater than all valid IDs) is returned.
+// Else, the `col2Id` is returned if  a `col1Id` is specified, otherwise the
+// `col1Id`.
+Id getJoinColumnRangeValue(CompressedBlockMetadata::PermutedTriple triple,
+                           Id col0Id, std::optional<Id> col1Id) {
   auto minId = Id::makeUndefined();
   auto maxId = Id::fromBits(std::numeric_limits<uint64_t>::max());
-  if (block.col0Id_ < col0Id) {
+  if (triple.col0Id_ < col0Id) {
     return minId;
   }
-  if (block.col0Id_ > col0Id) {
+  if (triple.col0Id_ > col0Id) {
     return maxId;
   }
   if (!col1Id.has_value()) {
-    return block.col1Id_;
+    return triple.col1Id_;
   }
 
-  if (block.col1Id_ < col1Id.value()) {
+  if (triple.col1Id_ < col1Id.value()) {
     return minId;
   }
-  if (block.col1Id_ > col1Id.value()) {
+  if (triple.col1Id_ > col1Id.value()) {
     return maxId;
   }
-  return block.col2Id_;
-};
+  return triple.col2Id_;
+}
 
 using IdPair = std::pair<Id, Id>;
-auto blocksToIdRanges = [](std::span<const CompressedBlockMetadata> blocks,
-                           Id col0Id, std::optional<Id> col1Id) {
+// Convert each of the `blocks` to an `IdPair` by calling
+// `getJoinColumnRangeValue` for the first and last triple of the block.
+std::vector<IdPair> blocksToIdRanges(
+    std::span<const CompressedBlockMetadata> blocks, Id col0Id,
+    std::optional<Id> col1Id) {
   std::vector<IdPair> result;
   for (const auto& block : blocks) {
     result.emplace_back(
@@ -312,7 +320,7 @@ auto blocksToIdRanges = [](std::span<const CompressedBlockMetadata> blocks,
         getJoinColumnRangeValue(block.lastTriple_, col0Id, col1Id));
   }
   return result;
-};
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -320,33 +328,35 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
     std::span<const Id> joinColum, const MetadataAndBlocks& scanMetadata) {
   // get all the blocks where col0FirstId_ <= col0Id <= col0LastId_
   const auto& [relationMetadata, blockMetadata, col1Id] = scanMetadata;
-  auto relevantBlocks =
-      getBlocksFromMetadata(relationMetadata, std::nullopt, blockMetadata);
+  auto relevantBlocks = getBlocksFromMetadata(scanMetadata);
 
   auto idRanges =
       blocksToIdRanges(relevantBlocks, relationMetadata.col0Id_, col1Id);
 
+  // We need symmetric comparisons between `Id` and `IdPair` as well as between
+  // Ids.
   auto idLessThanBlock = [](Id id, const IdPair& block) {
     return id < block.first;
   };
-
   auto blockLessThanId = [](const IdPair& block, Id id) {
     return block.second < id;
   };
-
   auto idLessThanId = [](Id id, Id id2) { return id < id2; };
 
   auto lessThan = ad_utility::OverloadCallOperator{
       idLessThanBlock, blockLessThanId, idLessThanId};
 
+  // When we have found a matching block, we have to convert it back.
   std::vector<CompressedBlockMetadata> result;
   auto addRow = [&result, begBlocks = relevantBlocks.begin(),
-                 begRanges = idRanges.begin()]([[maybe_unused]] auto it1,
-                                               auto it2) {
-    result.push_back(*(begBlocks + (it2 - begRanges)));
+                 begRanges = idRanges.begin()]([[maybe_unused]] auto idIterator,
+                                               auto blockIterator) {
+    result.push_back(*(begBlocks + (blockIterator - begRanges)));
   };
 
   auto noop = ad_utility::noop;
+
+  // Actually perform the join.
   [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef<false>(
       joinColum, idRanges, lessThan, addRow, noop, noop);
 
@@ -361,18 +371,9 @@ std::array<std::vector<CompressedBlockMetadata>, 2>
 CompressedRelationReader::getBlocksForJoin(
     const MetadataAndBlocks& scanMetadata1,
     const MetadataAndBlocks& scanMetadata2) {
-  // get all the blocks where col0FirstId_ <= col0Id <= col0LastId_
-  struct KeyLhs {
-    Id col0FirstId_;
-    Id col0LastId_;
-  };
-
-  auto relevantBlocks1 =
-      getBlocksFromMetadata(scanMetadata1.relationMetadata_, std::nullopt,
-                            scanMetadata1.blockMetadata_);
-  auto relevantBlocks2 =
-      getBlocksFromMetadata(scanMetadata2.relationMetadata_, std::nullopt,
-                            scanMetadata2.blockMetadata_);
+  // Get the
+  auto relevantBlocks1 = getBlocksFromMetadata(scanMetadata1);
+  auto relevantBlocks2 = getBlocksFromMetadata(scanMetadata2);
 
   auto blockLessThanBlock = [](const auto& block1, const auto& block2) {
     return block1.second < block2.first;
@@ -385,6 +386,8 @@ CompressedRelationReader::getBlocksForJoin(
   auto idRanges2 =
       blocksToIdRanges(relevantBlocks2, scanMetadata2.relationMetadata_.col0Id_,
                        scanMetadata2.col1Id_);
+  // When a result is found, we have to convert back from the `IdRanges` to the
+  // corresponding blocks.
   auto addRow = [&result, &relevantBlocks1, &relevantBlocks2, &idRanges1,
                  &idRanges2]([[maybe_unused]] auto it1, auto it2) {
     result[0].push_back(*(relevantBlocks1.begin() + (it1 - idRanges1.begin())));
@@ -394,6 +397,10 @@ CompressedRelationReader::getBlocksForJoin(
   auto noop = ad_utility::noop;
   [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
       idRanges1, idRanges2, blockLessThanBlock, addRow, noop, noop);
+
+  // There might be duplicates in the blocks that we have to eliminate.
+  // TODO<joka921> We should be able to eliminate those directly in the
+  // `zipperJoinWithUndef` routine.
   for (auto& vec : result) {
     vec.erase(std::ranges::unique(vec).begin(), vec.end());
   }
@@ -544,6 +551,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   auto end = containedInOnlyOneBlock ? begin + relationMetadata.numRows_
                                      : col1Column.end();
 
+  // If the `col1Id` was specified, we additionally have to filter by it.
   auto subBlock = [&]() {
     if (col1Id.has_value()) {
       return std::ranges::equal_range(begin, end, col1Id.value());
@@ -842,4 +850,12 @@ CompressedRelationReader::getBlocksFromMetadata(
   // `result` might also be empty if no block was found at all.
   AD_CORRECTNESS_CHECK(col0IdHasExclusiveBlocks || result.size() <= 1);
   return result;
+}
+
+// _____________________________________________________________________________
+std::span<const CompressedBlockMetadata>
+CompressedRelationReader::getBlocksFromMetadata(
+    const MetadataAndBlocks& metadata) {
+  return getBlocksFromMetadata(metadata.relationMetadata_, metadata.col1Id_,
+                               metadata.blockMetadata_);
 }

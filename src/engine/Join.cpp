@@ -646,7 +646,7 @@ void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
 }
 
 // ______________________________________________________________________________________________________
-void Join::computeResultForTwoIndexScans(IdTable* resultPtr) const {
+void Join::computeResultForTwoIndexScans(IdTable* resultPtr) {
   AD_CORRECTNESS_CHECK(_left->getType() == QueryExecutionTree::SCAN &&
                        _right->getType() == QueryExecutionTree::SCAN);
   auto& result = *resultPtr;
@@ -672,12 +672,17 @@ void Join::computeResultForTwoIndexScans(IdTable* resultPtr) const {
 
   auto lessThan = [](const auto& a, const auto& b) { return a[0] < b[0]; };
 
+  ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
   auto [leftBlocks, rightBlocks] = IndexScan::lazyScanForJoinOfTwoScans(
       dynamic_cast<const IndexScan&>(*_left->getRootOperation()),
       dynamic_cast<const IndexScan&>(*_right->getRootOperation()));
+  getRuntimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
   ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks, lessThan,
                                               addResultRow);
+
+  _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
+  _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
 }
 
 // ______________________________________________________________________________________________________
@@ -686,7 +691,7 @@ void Join::computeResultForIndexScanAndColumn(const IdTable& inputTable,
                                               ColumnIndex joinColumnIndexTable,
                                               const IndexScan& scan,
                                               ColumnIndex joinColumnIndexScan,
-                                              IdTable* resultPtr) const {
+                                              IdTable* resultPtr) {
   auto& result = *resultPtr;
   result.setNumColumns(getResultWidth());
 
@@ -742,11 +747,20 @@ void Join::computeResultForIndexScanAndColumn(const IdTable& inputTable,
     }
   };
 
+  ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
   auto rightBlocks =
       IndexScan::lazyScanForJoinOfColumnWithScan(joinColumn, scan);
+
+  getRuntimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
   auto rightProjection = [](const auto& row) { return row[0]; };
   ad_utility::zipperJoinForBlocksWithoutUndef(
       std::span{&joinColumn, 1}, rightBlocks, lessThan, addResultRow,
       std::identity{}, rightProjection);
+
+  if (firstIsRight) {
+    _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
+  } else {
+    _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
+  }
 }

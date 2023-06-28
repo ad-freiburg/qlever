@@ -231,6 +231,15 @@ class CompressedRelationReader {
  public:
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
 
+  // Combine the metadata of a single relation with a subset of its blocks and
+  // possibly a `col1Id` for additional filtering. This is used as the input to
+  // several functions below that take such an input.
+  struct MetadataAndBlocks {
+    const CompressedRelationMetadata relationMetadata_;
+    const std::span<const CompressedBlockMetadata> blockMetadata_;
+    std::optional<Id> col1Id_;
+  };
+
  private:
   // This cache stores a small number of decompressed blocks. Its current
   // purpose is to make the e2e-tests run fast. They contain many SPARQL queries
@@ -268,35 +277,34 @@ class CompressedRelationReader {
             ad_utility::File& file, IdTable* result,
             ad_utility::SharedConcurrentTimeoutTimer timer) const;
 
-  // Get all the blocks that can contain an Id from the `joinColumn`.
-  // TODO<joka921> Include a timeout check.
-
-  struct MetadataAndBlocks {
-    const CompressedRelationMetadata relationMetadata_;
-    const std::span<const CompressedBlockMetadata> blockMetadata_;
-    std::optional<Id> col1Id_;
-  };
-  static std::vector<CompressedBlockMetadata> getBlocksForJoin(
-      std::span<const Id> joinColum, const MetadataAndBlocks& scanMetadata);
-
-  static std::array<std::vector<CompressedBlockMetadata>, 2> getBlocksForJoin(
-      const MetadataAndBlocks& scanMetadata1,
-      const MetadataAndBlocks& scanMetadata2);
-
+  // Similar to `scan` (directly above), but the result of the scan is lazily
+  // computed and returned as a generator of the single blocks that are scanned.
+  // The blocks are guaranteed to be in order.
   cppcoro::generator<IdTable> lazyScan(
       CompressedRelationMetadata metadata,
       std::vector<CompressedBlockMetadata> blockMetadata,
       ad_utility::File& file,
       ad_utility::SharedConcurrentTimeoutTimer timer) const;
 
-  cppcoro::generator<IdTable> lazyScan(
-      CompressedRelationMetadata metadata, Id col1Id,
-      std::vector<CompressedBlockMetadata> blockMetadata,
-      ad_utility::File& file,
-      ad_utility::SharedConcurrentTimeoutTimer timer) const;
-  cppcoro::generator<IdTable> asyncParallelBlockGenerator(
-      auto beginBlock, auto endBlock, ad_utility::File& file,
-      std::optional<std::vector<size_t>> columnIndices) const;
+  // Get the blocks (an ordered subset of the blocks that are passed in via the
+  // `blockIterator`) where the `col1Id` can theoretically match one of the
+  // elements in the `idIterator` (The col0Id is fixed and specified by the
+  // `blockIterator`). The join column of the scan is the first column that is
+  // not fixed by the `blockIterator`, so the middle column (col1) in case the
+  // `blockIterator` doesn't contain a `col1Id`, or the last column (col2) else.
+  static std::vector<CompressedBlockMetadata> getBlocksForJoin(
+      std::span<const Id> idIterator, const MetadataAndBlocks& blockIterator);
+
+  // For each of `scanMetadata1, scanMetadata2` get the blocks (an ordered
+  // subset of the blocks in the `scanMetadata` that might contain matching
+  // elements in the following scenario: The result of `scanMetadata1` is joined
+  // with the result of `scanMetadata2`. For each of the inputs the join column
+  // is the first column that is not fixed by the metadata, so the middle column
+  // (col1) in case the `scanMetadata` doesn't contain a `col1Id`, or the last
+  // column (col2) else.
+  static std::array<std::vector<CompressedBlockMetadata>, 2> getBlocksForJoin(
+      const MetadataAndBlocks& scanMetadata1,
+      const MetadataAndBlocks& scanMetadata2);
 
   /**
    * @brief For a permutation XYZ, retrieve all Z for given X and Y.
@@ -319,6 +327,15 @@ class CompressedRelationReader {
             ad_utility::File& file, IdTable* result,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
+  // Similar to `scan` (directly above), but the result of the scan is lazily
+  // computed and returned as a generator of the single blocks that are scanned.
+  // The blocks are guaranteed to be in order.
+  cppcoro::generator<IdTable> lazyScan(
+      CompressedRelationMetadata metadata, Id col1Id,
+      std::vector<CompressedBlockMetadata> blockMetadata,
+      ad_utility::File& file,
+      ad_utility::SharedConcurrentTimeoutTimer timer) const;
+
   // Only get the size of the result for a given permutation XYZ for a given X
   // and Y. This can be done by scanning one or two blocks. Note: The overload
   // of this function where only the X is given is not needed, as the size of
@@ -336,6 +353,11 @@ class CompressedRelationReader {
   static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
       const CompressedRelationMetadata& metadata, std::optional<Id> col1Id,
       std::span<const CompressedBlockMetadata> blockMetadata);
+
+  // The same function, but specify the arguments as the `MetadataAndBlocks`
+  // struct.
+  static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
+      const MetadataAndBlocks& metadataAndBlocks);
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
@@ -386,6 +408,15 @@ class CompressedRelationReader {
       const CompressedRelationMetadata& relationMetadata,
       std::optional<Id> col1Id, ad_utility::File& file,
       const CompressedBlockMetadata& blockMetadata) const;
+
+  // Yield all the blocks in the range `[beginBlock, endBlock)`. If the
+  // `columnIndices` are set, that only the specified columns from the blocks
+  // are yielded, else the complete blocks are yielded. The blocks are yielded
+  // in the correct order, but asynchronously read and decompressed using
+  // multiple worker threads.
+  cppcoro::generator<IdTable> asyncParallelBlockGenerator(
+      auto beginBlock, auto endBlock, ad_utility::File& file,
+      std::optional<std::vector<size_t>> columnIndices) const;
 };
 
 #endif  // QLEVER_COMPRESSEDRELATION_H
