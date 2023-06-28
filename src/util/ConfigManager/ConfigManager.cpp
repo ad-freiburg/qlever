@@ -197,7 +197,11 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
   */
   const auto& jFlattend = j.flatten();
 
-  // We can skip the following check, if `j` is empty.
+  /*
+  We can skip the following check, if `j` is empty. Note: Even if the JSON
+  object is empty, its flattened version contains a single dummy entry, so
+  this check is necessary.
+  */
   if (!j.empty()) {
     /*
     Does `j` only contain valid configuration options? That is, does it only
