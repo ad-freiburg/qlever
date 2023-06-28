@@ -67,7 +67,7 @@ class Index {
   /// Allow move construction, which is mostly used in unit tests.
   Index(Index&&) noexcept;
 
-  Index(ad_utility::AllocatorWithLimit<Id> allocator);
+  explicit Index(ad_utility::AllocatorWithLimit<Id> allocator);
   ~Index();
 
   // Get underlying access to the Pimpl where necessary.
@@ -311,6 +311,12 @@ class Index {
             const TripleComponent& col1String, IdTable* result,
             Permutation::Enum p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+
+  // Similar to the previous overload of `scan`, but only get the exact size of
+  // the scan result.
+  size_t getResultSizeOfScan(const TripleComponent& col0String,
+                             const TripleComponent& col1String,
+                             const Permutation::Enum& permutation) const;
 
   // Get access to the implementation. This should be used rarely as it
   // requires including the rather expensive `IndexImpl.h` header

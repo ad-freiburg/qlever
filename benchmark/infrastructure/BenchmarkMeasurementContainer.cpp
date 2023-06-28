@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/string_view.h>
@@ -14,6 +12,7 @@
 #include <string_view>
 #include <utility>
 
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
@@ -50,6 +49,15 @@ void to_json(nlohmann::json& j, const ResultEntry& resultEntry) {
 }
 
 // ____________________________________________________________________________
+ResultTable& ResultGroup::addTable(
+    const std::string& descriptor, const std::vector<std::string>& rowNames,
+    const std::vector<std::string>& columnNames) {
+  resultTables_.push_back(ad_utility::make_copyable_unique<ResultTable>(
+      descriptor, rowNames, columnNames));
+  return (*resultTables_.back());
+}
+
+// ____________________________________________________________________________
 ResultGroup::operator std::string() const {
   // The prefix. Everything after this will be indented, so it's better
   // to only combine them at the end.
@@ -59,16 +67,39 @@ ResultGroup::operator std::string() const {
   // so  using a stream is the best idea.
   std::ostringstream stream;
 
-  stream << absl::StrCat(
-      getMetadataPrettyString(metadata(), "metadata: ", "\n"),
-      "Measurements:\n\n");
+  /*
+  If the given vector is empty, add ` None` to the stream. If it isn't, adds
+  "\n\n" and then calls the given function.
+  */
+  auto addWithFunctionOrNone = [&stream](const auto& vec, auto func) {
+    if (!vec.empty()) {
+      stream << "\n\n";
+      func();
+    } else {
+      stream << " None";
+    }
+  };
 
-  // Listing all the entries.
-  addVectorOfResultEntryToOStringstream(
-      &stream,
-      ad_utility::transform(entries_,
-                            [](const auto& pointer) { return (*pointer); }),
-      ad_utility::addIndentation("", 1), ad_utility::addIndentation("", 1));
+  stream << absl::StrCat(
+      getMetadataPrettyString(metadata(), "metadata: ", "\n"), "Measurements:");
+
+  // Listing all the `ResultEntry`s, if there are any.
+  addWithFunctionOrNone(resultEntries_, [&stream, this]() {
+    addVectorOfResultEntryToOStringstream(
+        &stream,
+        ad_utility::transform(resultEntries_,
+                              [](const auto& pointer) { return (*pointer); }),
+        ad_utility::addIndentation("", 1), ad_utility::addIndentation("", 1));
+  });
+
+  // Listing all the `ResultTable`s, if there are any.
+  stream << "\n\nTables:";
+  addWithFunctionOrNone(resultTables_, [&stream, this]() {
+    stream << ad_utility::addIndentation(
+        vectorOfResultTableToListString(ad_utility::transform(
+            resultTables_, [](const auto& pointer) { return (*pointer); })),
+        1);
+  });
 
   return absl::StrCat(prefix, ad_utility::addIndentation(stream.str(), 1));
 }
@@ -76,7 +107,8 @@ ResultGroup::operator std::string() const {
 // ____________________________________________________________________________
 void to_json(nlohmann::json& j, const ResultGroup& resultGroup) {
   j = nlohmann::json{{"descriptor", resultGroup.descriptor_},
-                     {"entries", resultGroup.entries_},
+                     {"resultEntries", resultGroup.resultEntries_},
+                     {"resultTables", resultGroup.resultTables_},
                      {"metadata", resultGroup.metadata()}};
 }
 

@@ -166,6 +166,25 @@ class BMGroups : public ConfigOptions {
         "10775*24502", [&loopMultiply]() { loopMultiply(10775, 24502); });
     multiplicationMember3.metadata().addKeyValuePair("Result", 10775 * 24502);
 
+    // Addtables.
+    ResultTable& addTable =
+        loopAddGroup.addTable("Addition", {"42", "24"}, {"+", "42", "24"});
+    addTable.addMeasurement(0, 1, [&loopAdd]() { loopAdd(42, 42); });
+    addTable.addMeasurement(0, 2, [&loopAdd]() { loopAdd(42, 24); });
+    addTable.addMeasurement(1, 1, [&loopAdd]() { loopAdd(24, 42); });
+    addTable.addMeasurement(1, 2, [&loopAdd]() { loopAdd(24, 24); });
+
+    ResultTable& multiplyTable = loopMultiplyGroup.addTable(
+        "Multiplication", {"42", "24"}, {"*", "42", "24"});
+    multiplyTable.addMeasurement(0, 1,
+                                 [&loopMultiply]() { loopMultiply(42, 42); });
+    multiplyTable.addMeasurement(0, 2,
+                                 [&loopMultiply]() { loopMultiply(42, 24); });
+    multiplyTable.addMeasurement(1, 1,
+                                 [&loopMultiply]() { loopMultiply(24, 42); });
+    multiplyTable.addMeasurement(1, 2,
+                                 [&loopMultiply]() { loopMultiply(24, 24); });
+
     return results;
   }
 };

@@ -93,50 +93,6 @@ class ResultEntry : public BenchmarkMetadataGetter {
   friend void to_json(nlohmann::json& j, const ResultEntry& resultEntry);
 };
 
-// Describes a group of `ResultEntry`.
-class ResultGroup : public BenchmarkMetadataGetter {
-  // Needed for identifying groups.
-  std::string descriptor_;
-  // Members of the group.
-  std::vector<ad_utility::CopyableUniquePtr<ResultEntry>> entries_;
-
-  // Needed for testing purposes.
-  FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultGroup);
-
- public:
-  /*
-  @brief Creates an empty group of `ResultEntry`s.
-
-  @param descriptor A string to identify this instance in json format later.
-  */
-  explicit ResultGroup(const std::string& descriptor)
-      : descriptor_{descriptor} {}
-
-  /*
-  @brief Adds a new instance of `ResultEntry` to the group.
-
-  @tparam Function Lambda function with no function arguments and returns void.
-
-  @param descriptor A string to identify this instance in json format later.
-  @param functionToMeasure The function, who's execution time will be
-  measured and saved.
-  */
-  template <typename Function>
-  requires std::invocable<Function>
-  ResultEntry& addMeasurement(const std::string& descriptor,
-                              const Function& functionToMeasure) {
-    entries_.push_back(ad_utility::make_copyable_unique<ResultEntry>(
-        descriptor, functionToMeasure));
-    return (*entries_.back());
-  }
-
-  // User defined conversion to `std::string`.
-  explicit operator std::string() const;
-
-  // JSON serialization.
-  friend void to_json(nlohmann::json& j, const ResultGroup& resultGroup);
-};
-
 // Describes a table of measured execution times of functions.
 class ResultTable : public BenchmarkMetadataGetter {
   // For identification.
@@ -150,6 +106,7 @@ class ResultTable : public BenchmarkMetadataGetter {
 
   // Needed for testing purposes.
   FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultTable);
+  FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultGroup);
 
  public:
   /*
@@ -235,6 +192,76 @@ class ResultTable : public BenchmarkMetadataGetter {
 
   // JSON serialization.
   friend void to_json(nlohmann::json& j, const ResultTable& resultTable);
+};
+
+// Describes a group of `ResultEntry` and `ResultTable`.
+class ResultGroup : public BenchmarkMetadataGetter {
+  // Needed for identifying groups.
+  std::string descriptor_;
+
+  /*
+  A quick explanation, **why** this class uses pointers:
+  New members are created in place and then a reference to the new member
+  returned. This returning of a reference is the sole reason for the usage of
+  pointers.
+  Otherwise adding more entries to the vectors, could lead to all
+  previous references being made invalid, because a vector had to re-allocate
+  memory. If the entries are pointers to the objects, the references to the
+  object stay valid and we don't have this problem.
+  */
+  // Members of the group.
+  std::vector<ad_utility::CopyableUniquePtr<ResultEntry>> resultEntries_;
+  std::vector<ad_utility::CopyableUniquePtr<ResultTable>> resultTables_;
+
+  // Needed for testing purposes.
+  FRIEND_TEST(BenchmarkMeasurementContainerTest, ResultGroup);
+
+ public:
+  /*
+  @brief Creates an empty group of `ResultEntry`s.
+
+  @param descriptor A string to identify this instance in json format later.
+  */
+  explicit ResultGroup(const std::string& descriptor)
+      : descriptor_{descriptor} {}
+
+  /*
+  @brief Adds a new instance of `ResultEntry` to the group.
+
+  @tparam Function Lambda function with no function arguments and returns void.
+
+  @param descriptor A string to identify this instance in json format later.
+  @param functionToMeasure The function, who's execution time will be
+  measured and saved.
+  */
+  template <typename Function>
+  requires std::invocable<Function>
+  ResultEntry& addMeasurement(const std::string& descriptor,
+                              const Function& functionToMeasure) {
+    resultEntries_.push_back(ad_utility::make_copyable_unique<ResultEntry>(
+        descriptor, functionToMeasure));
+    return (*resultEntries_.back());
+  }
+
+  /*
+  @brief Adds a new instance of `ResultTable` to the group.
+
+  @param descriptor A string to identify this instance in json format later.
+  @param rowNames The names for the rows. The amount of rows in this table is
+  equal to the amount of row names. Important: This first column will be filled
+  with those names.
+  @param columnNames The names for the columns. The amount of columns in this
+  table is equal to the amount of column names.
+  */
+  ResultTable& addTable(const std::string& descriptor,
+                        const std::vector<std::string>& rowNames,
+                        const std::vector<std::string>& columnNames);
+
+  // User defined conversion to `std::string`.
+  explicit operator std::string() const;
+
+  // JSON serialization.
+  friend void to_json(nlohmann::json& j, const ResultGroup& resultGroup);
 };
 
 }  // namespace ad_benchmark
