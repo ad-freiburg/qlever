@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <absl/container/flat_hash_map.h>
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
 #include <gtest/gtest.h>
@@ -45,25 +46,17 @@ class ConfigManager {
   using VectorOfKeysForJson = std::vector<KeyForJson>;
 
  private:
-  // The added configuration options.
-  std::vector<ConfigOption> configurationOptions_;
-
   /*
+  The added configuration options.
+
   A configuration option tends to be placed like a key value pair in a json
   object. For example: `{"object 1" : [{"object 2" : { "The configuration option
   identifier" : "Configuration information"} }]}`
 
-  That is, only accesable through the usage of multiple keys in the form of
-  strings and numbers. Like in a container modeling a tree, with the
-  configuration option in the leaves.
-
-  This `nlohmann::json` object describes their `position` inside those trees, by
-  having their `path` end in a key value pair, with the key being the
-  configuration options identifier and the value their index inside
-  `configurationOptions_`.
+  The string key describes their location in the json object literal, by
+  representing a json pointer in string form.
   */
-  nlohmann::json keyToConfigurationOptionIndex_ =
-      nlohmann::json(nlohmann::json::value_t::object);
+  absl::flat_hash_map<std::string, ConfigOption> configurationOptions_;
 
  public:
   /*
@@ -127,11 +120,6 @@ class ConfigManager {
   }
 
   /*
-  @brief Get all the added configuration options.
-  */
-  const std::vector<ConfigOption>& getConfigurationOptions() const;
-
-  /*
   @brief Sets the configuration options based on the given json.
 
   @param j There will be an exception thrown, if:
@@ -144,7 +132,7 @@ class ConfigManager {
 
   /*
   @brief Parses the given short hand and returns it as a json object,
-   that contains all the described configuration data.
+  that contains all the described configuration data.
 
   @param shortHandString The language of the short hand is defined in
   `generated/ConfigShorthand.g4`. The short hand is a format similar to JSON
@@ -187,10 +175,10 @@ class ConfigManager {
   FRIEND_TEST(ConfigManagerTest, ParseShortHandTest);
 
   /*
-  @brief Creates a valid `nlohmann::json` pointer based on  the given keys.
+  @brief Creates the string representation of a valid `nlohmann::json` pointer
+  based on the given keys.
   */
-  static nlohmann::json::json_pointer createJsonPointer(
-      const VectorOfKeysForJson& keys);
+  static std::string createJsonPointerString(const VectorOfKeysForJson& keys);
 
   /*
   @brief Verifies, that the given path is a valid path for an option, with this

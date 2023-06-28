@@ -46,7 +46,7 @@ TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
                                                 &notUsed);
 
   // Where those two options added?
-  ASSERT_EQ(config.getConfigurationOptions().size(), 2);
+  ASSERT_EQ(config.configurationOptions_.size(), 2);
 
   compareConfigurationOptions.template operator()<int>(
       withDefault, config.getConfigurationOptionByNestedKeys(

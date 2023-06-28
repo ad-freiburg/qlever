@@ -9,6 +9,7 @@
 
 #include <iostream>
 #include <iterator>
+#include <ranges>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
@@ -30,8 +31,12 @@
 namespace ad_utility {
 
 // ____________________________________________________________________________
-nlohmann::json::json_pointer ConfigManager::createJsonPointer(
+std::string ConfigManager::createJsonPointerString(
     const VectorOfKeysForJson& keys) {
+  if (keys.empty()) {
+    return "";
+  }
+
   /*
   Convert a `key` (a string-like or integral type) to a string and escape the
   characters `/` and `~` which have a special meaning inside JSON pointers.
@@ -57,7 +62,7 @@ nlohmann::json::json_pointer ConfigManager::createJsonPointer(
                           pointerString << "/" << toString(key);
                         });
 
-  return nlohmann::json::json_pointer(pointerString.str());
+  return pointerString.str();
 }
 
 // ____________________________________________________________________________
@@ -115,8 +120,7 @@ void ConfigManager::verifyPathToConfigOption(
 
   // Is there already a configuration option with the same identifier at the
   // same location?
-  if (keyToConfigurationOptionIndex_.contains(
-          createJsonPointer(pathToOption))) {
+  if (configurationOptions_.contains(createJsonPointerString(pathToOption))) {
     throw ConfigManagerOptionPathAlreadyinUseException(
         vectorOfKeysForJsonToString(pathToOption), printConfigurationDoc(true));
   }
@@ -128,31 +132,20 @@ void ConfigManager::addConfigOption(const VectorOfKeysForJson& pathToOption,
   // Is the path valid?
   verifyPathToConfigOption(pathToOption, option.getIdentifier());
 
-  // The position in the json object literal, our `pathToOption` points to.
-  const nlohmann::json::json_pointer ptr{createJsonPointer(pathToOption)};
-
-  // Add the location of the configuration option to the json.
-  keyToConfigurationOptionIndex_[ptr] = configurationOptions_.size();
   // Add the configuration option.
-  configurationOptions_.push_back(std::move(option));
-}
-
-// ____________________________________________________________________________
-const std::vector<ConfigOption>& ConfigManager::getConfigurationOptions()
-    const {
-  return configurationOptions_;
+  configurationOptions_.insert(
+      {createJsonPointerString(pathToOption), std::move(option)});
 }
 
 // ____________________________________________________________________________
 const ConfigOption& ConfigManager::getConfigurationOptionByNestedKeys(
     const VectorOfKeysForJson& keys) const {
-  // If there is an entry at the described location, this should point to the
-  // index number of the configuration option in `configurationOptions_`.
-  const nlohmann::json::json_pointer ptr{createJsonPointer(keys)};
+  // If there is an config option with that described location, then this should
+  // point to the configuration option.
+  const std::string ptr{createJsonPointerString(keys)};
 
-  if (keyToConfigurationOptionIndex_.contains(ptr)) {
-    return configurationOptions_.at(
-        keyToConfigurationOptionIndex_.at(ptr).get<size_t>());
+  if (configurationOptions_.contains(ptr)) {
+    return configurationOptions_.at(ptr);
   } else {
     throw NoConfigOptionFoundException(vectorOfKeysForJsonToString(keys),
                                        printConfigurationDoc(true));
@@ -203,28 +196,23 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
   information.)
   */
   const auto& jFlattend = j.flatten();
-  const auto& keyToConfigurationOptionIndexFlattend =
-      keyToConfigurationOptionIndex_.flatten();
 
   // We can skip the following check, if `j` is empty.
   if (!j.empty()) {
     /*
     Does `j` only contain valid configuration options? That is, does it only
-    contain paths to entries, that are the same paths as we have saved there?
+    contain paths to entries, that are the same paths as we have saved here?
 
-    For example: If on of our paths in `keyToConfigurationOptionIndex_` was
-    `{"classA": [..., {"entryNumber5" : 5}]}`, then a path like `{"clasA": [...,
-    {"entryNumber5" : 5}]}` would be invalid, because of the typo.
+    For example: If on of our paths in `configurationOptions` was
+    `/classA/5/entryNumber5`, then a path like `/clasA/5/entryNumber5`` would be
+    invalid, because of the typo.
     */
     for (const auto& item : jFlattend.items()) {
-      // Only returns true, if the given pointer is the EXACT path to a
-      // configuration option. Partial doesn't count!
+      // Only returns true, if the given pointer is the path to a
+      // configuration option.
       auto isPointerToConfigurationOption =
           [this](const nlohmann::json::json_pointer& ptr) {
-            // We only have numbers at the end of paths to configuration
-            // options.
-            return keyToConfigurationOptionIndex_.contains(ptr) &&
-                   keyToConfigurationOptionIndex_.at(ptr).is_number_integer();
+            return configurationOptions_.contains(ptr.to_string());
           };
 
       /*
@@ -255,23 +243,15 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
   an exception, if a configuration option was given a value of the wrong type,
   or if it HAD to be set, but wasn't.
   */
-  for (const auto& configurationOptionIndex :
-       keyToConfigurationOptionIndexFlattend.items()) {
+  for (auto& [key, option] : configurationOptions_) {
     // Pointer to the position of the current configuration in json.
-    const nlohmann::json::json_pointer configurationOptionJsonPosition{
-        configurationOptionIndex.key()};
-
-    // The corresponding `ConfigOption`.
-    ConfigOption& configurationOption = configurationOptions_.at(
-        keyToConfigurationOptionIndex_.at(configurationOptionJsonPosition)
-            .get<size_t>());
+    const nlohmann::json::json_pointer configurationOptionJsonPosition{key};
 
     // Set the option, if possible.
     if (j.contains(configurationOptionJsonPosition)) {
       // This will throw an exception, if the json object can't be interpreted
       // with the wanted type.
-      configurationOption.setValueWithJson(
-          j.at(configurationOptionJsonPosition));
+      option.setValueWithJson(j.at(configurationOptionJsonPosition));
     }
 
     /*
@@ -279,9 +259,8 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
     points to, that means, it doesn't have a default value, and needs to be set
     by the user at runtime, but wasn't.
     */
-    if (!configurationOption.wasSet()) {
-      throw ConfigOptionWasntSetException(
-          configurationOptionJsonPosition.to_string());
+    if (!option.wasSet()) {
+      throw ConfigOptionWasntSetException(key);
     }
   }
 }
@@ -292,29 +271,20 @@ std::string ConfigManager::printConfigurationDoc(
   // For listing all available configuration options.
   std::ostringstream stream;
 
-  /*
-  `nlohmann::json` has a weird bug with iterating over `items()`, where there
-  will be bugs/glitches, if the object, one called `items()` with, doesn't
-  have a longer life time than the iteration itself.
-  */
-  const nlohmann::json& flattendKeyToConfigurationOptionIndex{
-      keyToConfigurationOptionIndex_.flatten()};
-
   // Setup for printing the locations of the option in json format, so that
   // people can easier understand, where everything is.
-  nlohmann::json prettyKeyToConfigurationOptionIndex(
-      keyToConfigurationOptionIndex_);
+  nlohmann::json configuratioOptionsVisualization;
 
   /*
-  Replace the numbers in the 'leaves' of the 'tree' with either:
+  Add the paths of `configOptions_` and have them point to either:
   - The current value of the configuration option.
   - A "value was never initialized", if we are not sure, the current value of
     the configuration option was initialized.
   - The default value of the configuration option.
   - An example value, of the correct type.
   Note: Users can indirectly create null values in
-  `keyToConfigurationOptionIndex_`, by adding a configuration option with a path
-  containing numbers, for arrays accesses, that are bigger than zero. Those
+  `configuratioOptionsVisualization`, by adding a configuration option with a
+  path containing numbers, for arrays accesses, that are bigger than zero. Those
   indirectly declared arrays, will always be created/modified in such a way,
   that the used index numbers are valid. Which means creating empty array
   entries, if the numbers are bigger than `0` and the arrays don't already have
@@ -325,58 +295,46 @@ std::string ConfigManager::printConfigurationDoc(
   through and should re-work some stuff. I mean, there is never a good reason,
   to have empty array elements.
   */
-  for (const auto& [key, val] : flattendKeyToConfigurationOptionIndex.items()) {
-    // Skip empty array 'leafs'.
-    if (val.is_null()) {
-      continue;
-    }
-
+  for (const auto& [path, option] : configurationOptions_) {
     // Pointer to the position of this option in
-    // `prettyKeyToConfigurationOptionIndex`.
-    const nlohmann::json::json_pointer jsonOptionPointer{key};
-    // What configuration option are we currently, indirectly, looking at?
-    const ConfigOption& option = configurationOptions_.at(val.get<size_t>());
+    // `configuratioOptionsVisualization`.
+    const nlohmann::json::json_pointer jsonOptionPointer{path};
 
     if (printCurrentJsonConfiguration) {
       // We can only use the value, if we are sure, that the value was
       // initialized.
-      prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
+      configuratioOptionsVisualization[jsonOptionPointer] =
           option.wasSet() ? option.getValueAsJson()
                           : "value was never initialized";
     } else {
-      prettyKeyToConfigurationOptionIndex.at(jsonOptionPointer) =
+      configuratioOptionsVisualization[jsonOptionPointer] =
           option.hasDefaultValue() ? option.getDefaultValueAsJson()
                                    : option.getDummyValueAsJson();
     }
   }
 
   // List the configuration options themselves.
-  for (const auto& [key, val] : flattendKeyToConfigurationOptionIndex.items()) {
-    // Because user can cause arrays with empty entries to be created, we have
-    // to skip those `null` values.
-    if (val.is_null()) {
-      continue;
-    }
-
+  // TODO Use `lazyStrJoin` for this, once it was merged to master.
+  for (auto it = configurationOptions_.begin();
+       it != configurationOptions_.end(); it++) {
     // Add the location of the option and the option itself.
-    stream << "Location : " << key << "\n"
-           << static_cast<std::string>(
-                  configurationOptions_.at(val.get<size_t>()));
+    stream << "Location : " << it->first << "\n"
+           << static_cast<std::string>(it->second);
 
     // The last entry doesn't get linebreaks.
-    if (val != flattendKeyToConfigurationOptionIndex.back()) {
+    if (auto nextRound = it; ++nextRound != configurationOptions_.end()) {
       stream << "\n\n";
     }
   }
 
-  return absl::StrCat("Locations of available configuration options with",
-                      (printCurrentJsonConfiguration ? " their current values"
-                                                     : " example values"),
-                      ":\n",
-                      ad_utility::addIndentation(
-                          prettyKeyToConfigurationOptionIndex.dump(2), 1),
-                      "\n\nAvailable configuration options:\n",
-                      ad_utility::addIndentation(stream.str(), 1));
+  return absl::StrCat(
+      "Locations of available configuration options with",
+      (printCurrentJsonConfiguration ? " their current values"
+                                     : " example values"),
+      ":\n",
+      ad_utility::addIndentation(configuratioOptionsVisualization.dump(2), 1),
+      "\n\nAvailable configuration options:\n",
+      ad_utility::addIndentation(stream.str(), 1));
 }
 
 // ____________________________________________________________________________
@@ -405,10 +363,14 @@ ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValues() const {
     return option.hasDefaultValue() && !option.wasSetAtRuntime();
   };
 
+  // For only looking at the configuration options in our map.
+  auto onlyConfigurationOptions = std::views::transform(
+      configurationOptions_, [](const auto& pair) { return pair.second; });
+
   std::vector<ConfigOption> toReturn{};
-  toReturn.reserve(std::ranges::count_if(configurationOptions_,
+  toReturn.reserve(std::ranges::count_if(onlyConfigurationOptions,
                                          valueIsUnchangedDefault, {}));
-  std::ranges::copy_if(configurationOptions_, std::back_inserter(toReturn),
+  std::ranges::copy_if(onlyConfigurationOptions, std::back_inserter(toReturn),
                        valueIsUnchangedDefault);
 
   return toReturn;
@@ -426,6 +388,7 @@ ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
     return {};
   }
 
+  // TODO Use `lazyStrJoin` for this, once it gets merged.
   /*
   Because we want to create a list, we don't know how many entries there will be
   and need a string stream.
