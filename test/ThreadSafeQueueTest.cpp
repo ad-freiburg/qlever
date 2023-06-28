@@ -56,7 +56,7 @@ TEST(ThreadSafeQueue, BufferSizeIsRespected) {
       while (numPushed < numValues) {
         push(numPushed++);
       }
-      queue.signalLastElementWasPushed();
+      queue.finish();
     });
 
     size_t numPopped = 0;
@@ -83,7 +83,7 @@ TEST(ThreadSafeQueue, ReturnValueOfPush) {
     // called.
     EXPECT_TRUE(push(0));
     EXPECT_EQ(queue.pop(), 0);
-    queue.disablePush();
+    queue.finish();
     EXPECT_FALSE(push(1));
   };
   runWithBothQueueTypes(runTest);
@@ -105,7 +105,7 @@ TEST(ThreadSafeQueue, Concurrency) {
       }
       numThreadsDone++;
       if (numThreadsDone == numThreads) {
-        queue.signalLastElementWasPushed();
+        queue.finish();
       }
     };
 
@@ -162,6 +162,14 @@ TEST(ThreadSafeQueue, PushException) {
               std::make_exception_ptr(IntegerException{threadIndex++}));
           EXPECT_FALSE(push(numPushed++));
         } else if (hasThrown) {
+          // In the case that we have previously thrown an exception, we know
+          // that the queue is disabled. This means that we can safely push an
+          // out-of-order value even to the ordered queue. Note that we
+          // deliberately do not push `numPushed++` as usual, because otherwise
+          // we cannot say much about the value of `numPushed` after throwing
+          // the first exception. Note that this pattern is only for testing,
+          // and that a thread that has pushed an exception to a queue should
+          // stop pushing to the same queue in real life.
           EXPECT_FALSE(push(0));
         } else {
           // We cannot know whether this returns true or false, because another
@@ -181,9 +189,9 @@ TEST(ThreadSafeQueue, PushException) {
     try {
       // The usual check as always, but at some point `pop` will throw, because
       // exceptions were pushed to the queue.
-      while (auto opt = queue.pop()) {
+      while (queue.pop()) {
         ++numPopped;
-        EXPECT_LE(numPushed, numPopped + queueSize + 1 + numThreads);
+        EXPECT_LE(numPushed, numPopped + queueSize + 1 + 2 * numThreads);
       }
       FAIL() << "Should have thrown" << std::endl;
     } catch (const IntegerException& i) {
@@ -218,11 +226,11 @@ TEST(ThreadSafeQueue, DisablePush) {
     while (auto opt = queue.pop()) {
       ++numPopped;
       result.push_back(opt.value());
-      EXPECT_LE(numPushed, numPopped + 6 + numThreads);
+      EXPECT_LE(numPushed, numPopped + queueSize + 1 + numThreads);
 
       // Disable the push, make the consumers finish.
       if (numPopped == 400) {
-        queue.disablePush();
+        queue.finish();
         break;
       }
     }

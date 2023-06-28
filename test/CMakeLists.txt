@@ -330,6 +330,6 @@ addLinkAndDiscoverTest(CtreHelpersTest)
 
 addLinkAndDiscoverTest(ComparisonWithNanTest)
 
-addLinkAndDiscoverTest(JoinAlgorithmsTest)
-
 addLinkAndDiscoverTest(ThreadSafeQueueTest)
+
+addLinkAndDiscoverTest(JoinAlgorithmsTest)
