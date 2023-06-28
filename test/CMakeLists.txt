@@ -329,3 +329,5 @@ addLinkAndDiscoverTest(AddCombinedRowToTableTest util)
 addLinkAndDiscoverTest(CtreHelpersTest)
 
 addLinkAndDiscoverTest(ComparisonWithNanTest)
+
+addLinkAndDiscoverTest(ThreadSafeQueueTest)
