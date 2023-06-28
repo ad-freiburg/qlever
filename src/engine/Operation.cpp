@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach  (johannes.kalmbach@gmail.com)
 
-#include "./Operation.h"
+#include "engine/Operation.h"
 
 #include "engine/QueryExecutionTree.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -58,9 +58,9 @@ void Operation::recursivelySetTimeoutTimer(
   }
 }
 
-// Get the result for the subtree rooted at this element. Use existing results
-// if they are already available, otherwise trigger computation.
-shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
+// ________________________________________________________________________
+shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
+                                                   bool onlyReadFromCache) {
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {
@@ -154,8 +154,15 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       return CacheValue{std::move(result), getRuntimeInfo()};
     };
 
-    auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda)
-                              : cache.computeOnce(cacheKey, computeLambda);
+    auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda,
+                                                        onlyReadFromCache)
+                              : cache.computeOnce(cacheKey, computeLambda,
+                                                  onlyReadFromCache);
+
+    if (result._resultPointer == nullptr) {
+      AD_CORRECTNESS_CHECK(onlyReadFromCache);
+      return nullptr;
+    }
 
     updateRuntimeInformationOnSuccess(result, timer.msecs());
     auto resultNumRows = result._resultPointer->resultTable()->size();
