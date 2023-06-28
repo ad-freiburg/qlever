@@ -11,6 +11,7 @@
 #include <cctype>
 #include <cstdint>
 #include <functional>
+#include <iterator>
 #include <ranges>
 #include <sstream>
 #include <string>
@@ -287,8 +288,8 @@ requires ad_utility::Streamable<
     std::iter_reference_t<std::ranges::iterator_t<Range>>>
 void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator) {
   // Is the range empty?
-  auto begin = r.begin();
-  auto end = r.end();
+  auto begin = std::begin(r);
+  auto end = std::end(r);
   if (begin == end) {
     return;
   }
