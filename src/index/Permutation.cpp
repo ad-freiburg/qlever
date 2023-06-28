@@ -114,3 +114,38 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
   }
   AD_FAIL();
 }
+
+// _____________________________________________________________________
+std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
+    Id col0Id, std::optional<Id> col1Id) const {
+  if (!meta_.col0IdExists(col0Id)) {
+    return std::nullopt;
+  }
+
+  auto metadata = meta_.getMetaData(col0Id);
+  return MetadataAndBlocks{meta_.getMetaData(col0Id),
+                           CompressedRelationReader::getBlocksFromMetadata(
+                               metadata, col1Id, meta_.blockData()),
+                           col1Id};
+}
+
+// _____________________________________________________________________
+cppcoro::generator<IdTable> Permutation::lazyScan(
+    Id col0Id, std::vector<CompressedBlockMetadata> blocks,
+    ad_utility::SharedConcurrentTimeoutTimer timer) const {
+  if (!meta_.col0IdExists(col0Id)) {
+    return {};
+  }
+  return reader_.lazyScan(meta_.getMetaData(col0Id), std::move(blocks), file_, timer);
+}
+
+// _____________________________________________________________________
+cppcoro::generator<IdTable> Permutation::lazyScan(
+    Id col0Id, Id col1Id, const std::vector<CompressedBlockMetadata>& blocks,
+    ad_utility::SharedConcurrentTimeoutTimer timer) const {
+  if (!meta_.col0IdExists(col0Id)) {
+    return {};
+  }
+  return reader_.lazyScan(meta_.getMetaData(col0Id), col1Id, blocks, file_,
+                          timer);
+}

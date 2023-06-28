@@ -279,9 +279,10 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
           triple[permutation[2]]};
 }
 
+// ___________________________________________________________________________
 // TODO<joka921> include a timeout timer.
-cppcoro::generator<IdTable> IndexScan::getLazyScan(const IndexScan& s,
-                                                   const auto& blocks) {
+cppcoro::generator<IdTable> IndexScan::getLazyScan(
+    const IndexScan& s, std::vector<CompressedBlockMetadata> blocks) {
   const IndexImpl& index = s.getIndex().getImpl();
   Id col0Id = s.getPermutedTriple()[0]->toValueId(index.getVocab()).value();
   std::optional<Id> col1Id;
@@ -289,16 +290,16 @@ cppcoro::generator<IdTable> IndexScan::getLazyScan(const IndexScan& s,
     col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
   }
   if (!col1Id.has_value()) {
-    return index.getPermutation(s.permutation()).lazyScan(col0Id, blocks);
+    return index.getPermutation(s.permutation()).lazyScan(col0Id, std::move(blocks));
   } else {
     return index.getPermutation(s.permutation())
-        .lazyScan(col0Id, col1Id.value(), blocks);
+        .lazyScan(col0Id, col1Id.value(), std::move(blocks));
   }
 };
 
 // ________________________________________________________________
-auto IndexScan::getMetadataForScan(const IndexScan& s)
-    -> std::optional<Permutation::MetaDataAndBlocks> {
+std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan(const IndexScan& s)
+     {
   auto permutedTriple = s.getPermutedTriple();
   const IndexImpl& index = s.getIndex().getImpl();
   std::optional<Id> optId = permutedTriple[0]->toValueId(index.getVocab());
