@@ -2,13 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel February of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkToString.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
 
 #include <sstream>
 
+#include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
 #include "util/Exception.h"
@@ -84,27 +83,6 @@ std::string benchmarkResultsToString(
   // Visualizes the measured times.
   std::ostringstream visualization;
 
-  /*
-  @brief Adds a category to the string steam, if it is not empty. Mainly
-   exists for reducing code duplication.
-
-  @param stringStream The stringstream where the text will get added.
-  @param categoryName The name of the category
-  @param categoryResult The information needed, for printing the benchmark
-  category. Should be a vector of ResultEntry, ResultGroup, or ResultTable.
-  @param translationFunction The function, which given the category name and the
-  benchmark category information, converts them to text.
-  */
-  auto addNonEmptyCategorieToStringSteam =
-      [](std::ostringstream* stringStream, std::string_view categoryName,
-         const auto& categoryResult, const auto& translationFunction) {
-        if (categoryResult.size() > 0) {
-          // The separator between the printed categories.
-          (*stringStream) << "\n\n"
-                          << translationFunction(categoryName, categoryResult);
-        }
-      };
-
   visualization << createCategoryTitle(absl::StrCat(
                        "Benchmark class '", benchmarkClass->name(), "'"))
                 << "\n";
@@ -118,20 +96,32 @@ std::string benchmarkResultsToString(
     visualization << "General metadata: None";
   }
 
+  /*
+  @brief Adds a category to the string steam, if it is not empty. Mainly
+   exists for reducing code duplication.
+
+  @param categoryName The name of the category
+  @param categoryResult The information needed, for printing the benchmark
+  category. Should be a vector of ResultEntry, ResultGroup, or ResultTable.
+  */
+  auto addNonEmptyCategorieToStringSteam = [&visualization](
+                                               std::string_view categoryName,
+                                               const auto& categoryResult) {
+    if (categoryResult.size() > 0) {
+      // The separator between the printed categories.
+      visualization << "\n\n" << categoryToString(categoryName, categoryResult);
+    }
+  };
+
   // Visualization for single measurments, if there are any.
-  addNonEmptyCategorieToStringSteam(
-      &visualization, "Single measurement benchmarks",
-      results.getSingleMeasurements(), categoryToString<ResultEntry>);
+  addNonEmptyCategorieToStringSteam("Single measurement benchmarks",
+                                    results.getSingleMeasurements());
 
   // Visualization for groups, if there are any.
-  addNonEmptyCategorieToStringSteam(&visualization, "Group benchmarks",
-                                    results.getGroups(),
-                                    categoryToString<ResultGroup>);
+  addNonEmptyCategorieToStringSteam("Group benchmarks", results.getGroups());
 
   // Visualization for tables, if there are any.
-  addNonEmptyCategorieToStringSteam(&visualization, "Table benchmarks",
-                                    results.getTables(),
-                                    categoryToString<ResultTable>);
+  addNonEmptyCategorieToStringSteam("Table benchmarks", results.getTables());
 
   return visualization.str();
 }
