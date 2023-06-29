@@ -51,6 +51,7 @@ class FTSAlgorithms {
                               const vector<Score>& scores, size_t k,
                               WidthOneList* result);
 
+  template <int WIDTH>
   static void aggScoresAndTakeTopKContexts(const Index::WordEntityPostings& wep,
                                            size_t k, IdTable* dynResult);
 

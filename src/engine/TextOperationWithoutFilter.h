@@ -3,6 +3,8 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <absl/strings/str_split.h>
+
 #include <set>
 #include <utility>
 #include <vector>
@@ -65,6 +67,10 @@ class TextOperationWithoutFilter : public Operation {
   size_t getNofVars() const {
     // -1 because _variables also contains the context var
     return _variables.size() - 1;
+  }
+
+  size_t getNofTerms() const {
+    return std::vector<std::string>(absl::StrSplit(_words, ' ')).size();
   }
 
   const SetOfVariables& getVars() const { return _variables; }

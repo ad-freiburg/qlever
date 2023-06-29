@@ -834,29 +834,13 @@ Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
     LOG(TRACE) << "Best term to take entity list from: " << terms[useElFromTerm]
                << std::endl;
 
-    if (terms.size() == 2) {
-      // Special case of two terms: no k-way intersect needed.
-      size_t onlyWordsFrom = 1 - useElFromTerm;
-      Index::WordEntityPostings wWep =
-          getWordPostingsForTerm(terms[onlyWordsFrom]);
-      Index::WordEntityPostings eWep =
-          getEntityPostingsForTerm(terms[useElFromTerm]);
-      resultWep = FTSAlgorithms::crossIntersect(wWep, eWep);
-    } else {
-      // Generic case: Use a k-way intersect whereas the entity postings
-      // play a special role.
-      vector<Index::WordEntityPostings> wepVecs;
-      for (size_t i = 0; i < terms.size(); ++i) {
-        if (i != useElFromTerm) {
-          wepVecs.push_back(getWordPostingsForTerm(terms[i]));
-        }
-      }
-      wepVecs.push_back(getEntityPostingsForTerm(terms[useElFromTerm]));
-      resultWep = FTSAlgorithms::crossIntersectKWay(
-          wepVecs,
-          &wepVecs.back().eids_);  // TODO: rewrite into crossIntersectKWay so
-                                   // that word id  is also considered
+    vector<Index::WordEntityPostings> wepVecs;
+    for (size_t i = 0; i < terms.size(); ++i) {
+      wepVecs.push_back(getWordPostingsForTerm(terms[i]));
     }
+    wepVecs.push_back(getEntityPostingsForTerm(terms[useElFromTerm]));
+    resultWep =
+        FTSAlgorithms::crossIntersectKWay(wepVecs, &wepVecs.back().eids_);
   } else {
     // Special case: Just one word to deal with.
     resultWep = getEntityPostingsForTerm(terms[0]);
@@ -871,7 +855,9 @@ void IndexImpl::getECListForWordsOneVar(const string& words, size_t limit,
                                         IdTable* result) const {
   LOG(DEBUG) << "In getECListForWords...\n";
   Index::WordEntityPostings wep = getContextEntityScoreListsForWords(words);
-  FTSAlgorithms::aggScoresAndTakeTopKContexts(wep, limit, result);
+  int width = result->numColumns();
+  CALL_FIXED_SIZE(width, FTSAlgorithms::aggScoresAndTakeTopKContexts,
+                  wep, limit, result);
   LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
              << "\n";
 }

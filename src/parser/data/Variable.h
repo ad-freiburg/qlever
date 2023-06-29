@@ -39,8 +39,8 @@ class Variable {
   // Convert `?someVariable` into `?ql_textscore_someVariable`
   Variable getTextScoreVariable() const;
 
-  // Convert `?someVariable` into `?ql_matchingword_someVariable`
-  Variable getMatchingWordVariable() const;
+  // Convert `?someVariable` into `?ql_matchingword_someVariable_someTerm`
+  Variable getMatchingWordVariable(std::string term) const;
 
   bool operator==(const Variable&) const = default;
 

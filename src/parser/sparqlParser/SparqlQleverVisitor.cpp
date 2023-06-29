@@ -1002,12 +1002,19 @@ vector<TripleWithPropertyPath> Visitor::visit(
   // query, then the variable `ql_matchingword_var` is implicitly created and
   // visible in the query body.
   auto setMatchingWordAndTextscoreVisibleIfPresent =
-      [this](VarOrTerm& subject, VarOrPath& predicate) {
+      [this](VarOrTerm& subject, VarOrPath& predicate, VarOrTerm& object) {
         if (auto* var = std::get_if<Variable>(&subject)) {
           if (auto* propertyPath = std::get_if<PropertyPath>(&predicate)) {
             if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
               addVisibleVariable(var->getTextScoreVariable());
-              addVisibleVariable(var->getMatchingWordVariable());
+              string name = object.toSparql();
+              for (std::string s : std::vector<std::string>(
+                       absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
+                if (s.back() == '*') {
+                  s.pop_back();
+                }
+                addVisibleVariable(var->getMatchingWordVariable(s));
+              }
             } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
               addVisibleVariable(var->getTextScoreVariable());
             }
@@ -1020,7 +1027,7 @@ vector<TripleWithPropertyPath> Visitor::visit(
     auto subject = visit(ctx->varOrTerm());
     auto tuples = visit(ctx->propertyListPathNotEmpty());
     for (auto& [predicate, object] : tuples) {
-      setMatchingWordAndTextscoreVisibleIfPresent(subject, predicate);
+      setMatchingWordAndTextscoreVisibleIfPresent(subject, predicate, object);
       triples.emplace_back(subject, std::move(predicate), std::move(object));
     }
     return triples;

@@ -57,6 +57,7 @@ Variable Variable::getTextScoreVariable() const {
 }
 
 // _____________________________________________________________________________
-Variable Variable::getMatchingWordVariable() const {
-  return Variable{absl::StrCat(MATCHINGWORD_VARIABLE_PREFIX, name().substr(1))};
+Variable Variable::getMatchingWordVariable(std::string term) const {
+  return Variable{
+      absl::StrCat(MATCHINGWORD_VARIABLE_PREFIX, name().substr(1), "_", term)};
 }

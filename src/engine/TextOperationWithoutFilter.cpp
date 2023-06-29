@@ -12,7 +12,7 @@ using std::string;
 
 // _____________________________________________________________________________
 size_t TextOperationWithoutFilter::getResultWidth() const {
-  size_t width = 2 + 2 * getNofVars();
+  size_t width = 2 + getNofVars() + getNofTerms();
   return width;
 }
 
@@ -48,7 +48,12 @@ VariableToColumnMap TextOperationWithoutFilter::computeVariableToColumnMap()
       addDefinedVar(var);
     }
   }
-  addDefinedVar(_cvar.getMatchingWordVariable());
+  for (std::string s : std::vector<std::string>(absl::StrSplit(_words, ' '))) {
+    if (s.back() == '*') {
+      s.pop_back();
+    }
+    addDefinedVar(_cvar.getMatchingWordVariable(s));
+  }
   return vcmap;
 }
 // _____________________________________________________________________________
@@ -72,7 +77,7 @@ string TextOperationWithoutFilter::getDescriptor() const {
 
 // _____________________________________________________________________________
 ResultTable TextOperationWithoutFilter::computeResult() {
-  LOG(DEBUG) << "TextOperationWithoutFilter result computation..." << endl;
+  LOG(INFO) << "TextOperationWithoutFilter result computation..." << endl;
   IdTable table{getExecutionContext()->getAllocator()};
   if (getNofVars() == 0) {
     computeResultNoVar(&table);
@@ -87,20 +92,21 @@ ResultTable TextOperationWithoutFilter::computeResult() {
 
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultNoVar(IdTable* idTable) const {
-  idTable->setNumColumns(2);
+  idTable->setNumColumns(2 + getNofTerms());
   getExecutionContext()->getIndex().getContextListForWords(_words, idTable);
 }
 
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultOneVar(IdTable* idTable) const {
-  idTable->setNumColumns(4);
+  idTable->setNumColumns(3 + getNofTerms());
+  LOG(INFO) << "num of columns: " << idTable->numColumns() << endl;
   getExecutionContext()->getIndex().getECListForWordsOneVar(_words, _textLimit,
                                                             idTable);
 }
 
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultMultVars(IdTable* idTable) const {
-  idTable->setNumColumns(2 * getNofVars() + 2);
+  idTable->setNumColumns(2 + getNofVars() + getNofTerms());
   getExecutionContext()->getIndex().getECListForWords(_words, getNofVars(),
                                                       _textLimit, idTable);
 }
