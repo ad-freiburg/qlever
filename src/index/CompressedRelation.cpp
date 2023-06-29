@@ -22,7 +22,6 @@ IdTable CompressedRelationReader::scan(
     const CompressedRelationMetadata& metadata,
     std::span<const CompressedBlockMetadata> blockMetadata,
     ad_utility::File& file, const TimeoutTimer& timer) const {
-
   IdTable result(NumColumns, allocator_);
 
   auto relevantBlocks =
@@ -117,7 +116,8 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   // and join.
   std::mutex blockIteratorMutex;
   std::vector<ad_utility::JThread> threads;
-  const size_t queueSize = RuntimeParameters().get<"lazy-index-scan-queue-size">();
+  const size_t queueSize =
+      RuntimeParameters().get<"lazy-index-scan-queue-size">();
   ad_utility::data_structures::OrderedThreadSafeQueue<DecompressedBlock> queue{
       queueSize};
   auto blockIterator = beginBlock;
@@ -132,8 +132,9 @@ CompressedRelationReader::asyncParallelBlockGenerator(
         auto myIndex = static_cast<size_t>(blockIterator - beginBlock);
         ++blockIterator;
         bool isLastBlock = blockIterator == endBlock;
-        // Note: the reading of the block could also happen without holding the lock. We still perform it inside the
-        // lock to avoid contention of the file. On a fast SSD we could possibly change this, but this has to be
+        // Note: the reading of the block could also happen without holding the
+        // lock. We still perform it inside the lock to avoid contention of the
+        // file. On a fast SSD we could possibly change this, but this has to be
         // investigated.
         CompressedBlock compressedBlock =
             readCompressedBlockFromFile(block, file, columnIndices);
@@ -153,8 +154,9 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     }
   };
 
-  const size_t numThreads = RuntimeParameters().get<"lazy-index-scan-num-threads">();
-  for ([[maybe_unused]] auto j : std::views::iota(0u,numThreads)) {
+  const size_t numThreads =
+      RuntimeParameters().get<"lazy-index-scan-num-threads">();
+  for ([[maybe_unused]] auto j : std::views::iota(0u, numThreads)) {
     threads.emplace_back(readAndDecompressBlock);
   }
 
@@ -168,11 +170,12 @@ CompressedRelationReader::asyncParallelBlockGenerator(
 cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata,
     std::vector<CompressedBlockMetadata> blockMetadata, ad_utility::File& file,
-    const TimeoutTimer& timer) const {
+    TimeoutTimer timer) const {
   auto relevantBlocks =
       getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
   const auto beginBlock = relevantBlocks.begin();
   const auto endBlock = relevantBlocks.end();
+
   if (beginBlock == endBlock) {
     co_return;
   }
@@ -182,8 +185,8 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
                                        *beginBlock);
   checkTimeout(timer);
 
-  for (auto& block : asyncParallelBlockGenerator(
-           beginBlock + 1, endBlock, file, std::nullopt, timer)) {
+  for (auto& block : asyncParallelBlockGenerator(beginBlock + 1, endBlock, file,
+                                                 std::nullopt, timer)) {
     co_yield block;
   }
 }
@@ -192,7 +195,7 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
 cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata, Id col1Id,
     std::vector<CompressedBlockMetadata> blockMetadata, ad_utility::File& file,
-    const TimeoutTimer& timer) const {
+    TimeoutTimer timer) const {
   auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blockMetadata);
   auto beginBlock = relevantBlocks.begin();
   auto endBlock = relevantBlocks.end();
@@ -222,9 +225,8 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   }
 
   if (beginBlock + 1 < endBlock) {
-    for (auto& block :
-         asyncParallelBlockGenerator(beginBlock + 1, endBlock - 1, file,
-                                     std::vector{1UL}, timer)) {
+    for (auto& block : asyncParallelBlockGenerator(
+             beginBlock + 1, endBlock - 1, file, std::vector{1UL}, timer)) {
       co_yield block;
     }
     co_yield getIncompleteBlock(endBlock - 1);
@@ -239,9 +241,10 @@ namespace {
 // the greatest possible ID (which is greater than all valid IDs) is returned.
 // Else, the `col2Id` is returned if  a `col1Id` is specified, otherwise the
 // `col1Id`.
-auto  getRelevantIdFromTriple(CompressedBlockMetadata::PermutedTriple triple, const CompressedRelationReader::MetadataAndBlocks& metadataAndBlocks
-                           ) {
-  auto idForNonMatchingBlock = [](Id fromTriple, Id key)-> std::optional<Id> {
+auto getRelevantIdFromTriple(
+    CompressedBlockMetadata::PermutedTriple triple,
+    const CompressedRelationReader::MetadataAndBlocks& metadataAndBlocks) {
+  auto idForNonMatchingBlock = [](Id fromTriple, Id key) -> std::optional<Id> {
     if (fromTriple < key) {
       return Id::min();
     }
@@ -251,14 +254,17 @@ auto  getRelevantIdFromTriple(CompressedBlockMetadata::PermutedTriple triple, co
     return std::nullopt;
   };
 
-  if (auto optId = idForNonMatchingBlock(triple.col0Id_, metadataAndBlocks.relationMetadata_.col0Id_)) {
+  if (auto optId = idForNonMatchingBlock(
+          triple.col0Id_, metadataAndBlocks.relationMetadata_.col0Id_)) {
     return optId.value();
   }
   if (!metadataAndBlocks.col1Id_.has_value()) {
     return triple.col1Id_;
   }
 
-  return idForNonMatchingBlock(triple.col1Id_, metadataAndBlocks.col1Id_.value()).value_or(triple.col2Id_);
+  return idForNonMatchingBlock(triple.col1Id_,
+                               metadataAndBlocks.col1Id_.value())
+      .value_or(triple.col2Id_);
 
   return triple.col2Id_;
 }
@@ -272,21 +278,23 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
 
   // We need symmetric comparisons between `Id` and `IdPair`. as well as between
   // Ids.
-  auto idLessThanBlock = [&metadataAndBlocks](Id id, const CompressedBlockMetadata& block) {
+  auto idLessThanBlock = [&metadataAndBlocks](
+                             Id id, const CompressedBlockMetadata& block) {
     return id < getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks);
   };
 
-  auto blockLessThanId = [&metadataAndBlocks](const CompressedBlockMetadata& block, Id id) {
+  auto blockLessThanId = [&metadataAndBlocks](
+                             const CompressedBlockMetadata& block, Id id) {
     return getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks) < id;
   };
 
-  auto lessThan = ad_utility::OverloadCallOperator{
-      idLessThanBlock, blockLessThanId};
+  auto lessThan =
+      ad_utility::OverloadCallOperator{idLessThanBlock, blockLessThanId};
 
   // When we have found a matching block, we have to convert it back.
   std::vector<CompressedBlockMetadata> result;
   auto addRow = [&result]([[maybe_unused]] auto idIterator,
-                                               auto blockIterator) {
+                          auto blockIterator) {
     result.push_back(*blockIterator);
   };
 
@@ -310,8 +318,22 @@ CompressedRelationReader::getBlocksForJoin(
   auto relevantBlocks1 = getBlocksFromMetadata(metadataAndBlocks1);
   auto relevantBlocks2 = getBlocksFromMetadata(metadataAndBlocks2);
 
-  auto blockLessThanBlock = [&](const CompressedBlockMetadata& block1, const CompressedBlockMetadata& block2) {
-    return getRelevantIdFromTriple(block1.lastTriple_, metadataAndBlocks1) < getRelevantIdFromTriple(block2.firstTriple_, metadataAndBlocks2);
+  auto metadataForBlock =
+      [&](const CompressedBlockMetadata& block) -> decltype(auto) {
+    if (relevantBlocks1.data() <= &block &&
+        &block < relevantBlocks1.data() + relevantBlocks1.size()) {
+      return metadataAndBlocks1;
+    } else {
+      return metadataAndBlocks2;
+    }
+  };
+
+  auto blockLessThanBlock = [&](const CompressedBlockMetadata& block1,
+                                const CompressedBlockMetadata& block2) {
+    return getRelevantIdFromTriple(block1.lastTriple_,
+                                   metadataForBlock(block1)) <
+           getRelevantIdFromTriple(block2.firstTriple_,
+                                   metadataForBlock(block2));
   };
 
   std::array<std::vector<CompressedBlockMetadata>, 2> result;
@@ -326,10 +348,11 @@ CompressedRelationReader::getBlocksForJoin(
   [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
       relevantBlocks1, relevantBlocks2, blockLessThanBlock, addRow, noop, noop);
 
-  // There might be duplicates in the blocks that we have to eliminate. We could in theory eliminate them directly
-  // in the `zipperJoinWithUndef` routine more efficiently, but this would make this already very complex method even
-  // harder to read. The joining of the blocks doesn't seem to be a significant time factor, so we leave it like this
-  // for now.
+  // There might be duplicates in the blocks that we have to eliminate. We could
+  // in theory eliminate them directly in the `zipperJoinWithUndef` routine more
+  // efficiently, but this would make this already very complex method even
+  // harder to read. The joining of the blocks doesn't seem to be a significant
+  // time factor, so we leave it like this for now.
   for (auto& vec : result) {
     vec.erase(std::ranges::unique(vec).begin(), vec.end());
   }
@@ -341,7 +364,6 @@ IdTable CompressedRelationReader::scan(
     const CompressedRelationMetadata& metadata, Id col1Id,
     const vector<CompressedBlockMetadata>& blocks, ad_utility::File& file,
     const TimeoutTimer& timer) const {
-
   IdTable result(1, allocator_);
 
   // Get all the blocks  that possibly might contain our pair of col0Id and

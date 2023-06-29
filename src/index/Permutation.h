@@ -53,8 +53,8 @@ class Permutation {
   /// For given IDs for the first and second column, retrieve all IDs of the
   /// third column, and store them in `result`. This is just a thin wrapper
   /// around `CompressedRelationMetaData::scan`.
-  void scan(Id col0Id, std::optional<Id> col1Id, IdTable* result,
-            const TimeoutTimer& timer = nullptr) const;
+  IdTable scan(Id col0Id, std::optional<Id> col1Id,
+               const TimeoutTimer& timer = nullptr) const;
 
   // Typedef to propagate the `MetadataAndblocks` type.
   using MetadataAndBlocks = CompressedRelationReader::MetadataAndBlocks;

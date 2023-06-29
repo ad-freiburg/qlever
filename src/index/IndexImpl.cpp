@@ -1284,21 +1284,23 @@ vector<float> IndexImpl::getMultiplicities(
 // _____________________________________________________________________________
 void IndexImpl::scan(
     const TripleComponent& col0String,
-    std::optional<std::reference_wrapper<const TripleComponent>> col1String, IdTable* result, const Permutation::Enum& permutation,
-                     ad_utility::SharedConcurrentTimeoutTimer timer) const {
+    std::optional<std::reference_wrapper<const TripleComponent>> col1String,
+    IdTable* result, const Permutation::Enum& permutation,
+    ad_utility::SharedConcurrentTimeoutTimer timer) const {
   std::optional<Id> col0Id = col0String.toValueId(getVocab());
-  std::optional<Id> col1Id = col1String.has_value() ? col1String.value().get().toValueId(getVocab()) : std::nullopt;
+  std::optional<Id> col1Id =
+      col1String.has_value() ? col1String.value().get().toValueId(getVocab())
+                             : std::nullopt;
   if (!col0Id.has_value() || (col1String.has_value() && !col1Id.has_value())) {
     return;
   }
-  return scan(col0Id.value(), col1Id, result, permutation,  timer);
+  return scan(col0Id.value(), col1Id, result, permutation, timer);
 }
 // _____________________________________________________________________________
-void IndexImpl::scan(Id col0Id,
-          std::optional<Id> col1Id, IdTable* result,
-          Permutation::Enum p,
-          ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  getPermutation(p).scan(col0Id, col1Id, result, timer);
+void IndexImpl::scan(Id col0Id, std::optional<Id> col1Id, IdTable* result,
+                     Permutation::Enum p,
+                     ad_utility::SharedConcurrentTimeoutTimer timer) const {
+  *result = getPermutation(p).scan(col0Id, col1Id, timer);
 }
 
 // _____________________________________________________________________________

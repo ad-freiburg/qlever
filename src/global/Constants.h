@@ -179,11 +179,11 @@ inline auto& RuntimeParameters() {
       // factor than the remaining time, then the sort is canceled with a
       // timeout exception.
       Double<"sort-estimate-cancellation-factor">{3.0},
-      SizeT<"cache-max-num-entries">{1000}, SizeT<"cache-max-size-gb">{30},
+      SizeT<"cache-max-num-entries">{1000},
+      SizeT<"cache-max-size-gb">{30},
       SizeT<"cache-max-size-gb-single-entry">{5},
       SizeT<"lazy-index-scan-queue-size">{5},
-      SizeT<"lazy-index-scan-num-threads">{10}
-  };
+      SizeT<"lazy-index-scan-num-threads">{10}};
   return params;
 }
 

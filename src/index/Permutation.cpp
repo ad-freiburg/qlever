@@ -38,24 +38,24 @@ void Permutation::loadFromDisk(const std::string& onDiskBase) {
 }
 
 // _____________________________________________________________________
-void Permutation::scan(Id col0Id, std::optional<Id> col1Id, IdTable* result,
-                       const TimeoutTimer& timer) const {
+IdTable Permutation::scan(Id col0Id, std::optional<Id> col1Id,
+                          const TimeoutTimer& timer) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
                              readableName_ + ", which was not loaded");
   }
 
   if (!meta_.col0IdExists(col0Id)) {
-    return;
+    size_t numColumns = col1Id.has_value() ? 1 : 2;
+    return IdTable{numColumns, reader_.allocator()};
   }
   const auto& metaData = meta_.getMetaData(col0Id);
 
   if (col1Id.has_value()) {
-    *result = reader_.scan(metaData, col1Id.value(), meta_.blockData(), file_,
+    return reader_.scan(metaData, col1Id.value(), meta_.blockData(), file_,
                         timer);
   } else {
-    *result =  reader_.scan(metaData, meta_.blockData(), file_,
-                        timer);
+    return reader_.scan(metaData, meta_.blockData(), file_, timer);
   }
 }
 
@@ -133,8 +133,8 @@ cppcoro::generator<IdTable> Permutation::lazyScan(
     return {};
   }
   if (col1Id.has_value()) {
-    return reader_.lazyScan(meta_.getMetaData(col0Id), col1Id.value(), blocks, file_,
-                            timer);
+    return reader_.lazyScan(meta_.getMetaData(col0Id), col1Id.value(), blocks,
+                            file_, timer);
   } else {
     return reader_.lazyScan(meta_.getMetaData(col0Id), std::move(blocks), file_,
                             timer);

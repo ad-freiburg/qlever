@@ -145,8 +145,8 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
     auto scanAndCheck = [&]() {
       auto size =
           reader.getResultSizeOfScan(metaData[i], V(lastCol1Id), blocks, file);
-      IdTable tableWidthOne = reader.scan(metaData[i], V(lastCol1Id), blocks, file,
-                  timer);
+      IdTable tableWidthOne =
+          reader.scan(metaData[i], V(lastCol1Id), blocks, file, timer);
       ASSERT_EQ(tableWidthOne.numColumns(), 1);
       EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);

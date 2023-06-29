@@ -280,14 +280,14 @@ class Index {
    * members of Index class).
    */
   // _____________________________________________________________________________
-  void scan(const TripleComponent& col0String,
-            std::optional<std::reference_wrapper<const TripleComponent>> col1String, IdTable* result,
-            Permutation::Enum p,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+  void scan(
+      const TripleComponent& col0String,
+      std::optional<std::reference_wrapper<const TripleComponent>> col1String,
+      IdTable* result, Permutation::Enum p,
+      ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   // _____________________________________________________________________________
-  void scan(Id col0Id,
-            std::optional<Id> col1Id, IdTable* result,
+  void scan(Id col0Id, std::optional<Id> col1Id, IdTable* result,
             Permutation::Enum p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 

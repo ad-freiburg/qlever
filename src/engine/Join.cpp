@@ -267,8 +267,9 @@ Join::ScanMethodType Join::getScanMethod(
   // during its lifetime
   const auto& idx = _executionContext->getIndex();
   const auto scanLambda = [&idx](const Permutation::Enum perm) {
-    return
-        [&idx, perm](Id id, IdTable* idTable) { idx.scan(id, std::nullopt, idTable, perm); };
+    return [&idx, perm](Id id, IdTable* idTable) {
+      idx.scan(id, std::nullopt, idTable, perm);
+    };
   };
   AD_CORRECTNESS_CHECK(scan.getResultWidth() == 3);
   return scanLambda(scan.permutation());

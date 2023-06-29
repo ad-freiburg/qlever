@@ -71,15 +71,12 @@ cppcoro::generator<std::array<Id, 3>> TriplesView(
   // specified memory limit.
   // TODO<joka921> Implement the scanning of large relations lazily and in
   // blocks, making the limit here unnecessary.
-  using Tuple = std::array<Id, 2>;
-  auto tupleAllocator = allocator.as<Tuple>();
-  IdTable col1And2{2, allocator};
   for (auto& [begin, end] : allowedRanges) {
     for (auto it = begin; it != end; ++it) {
-      col1And2.clear();
       Id id = it.getId();
       // TODO<joka921> We could also pass a timeout pointer here.
-      permutation.scan(id, std::nullopt, &col1And2);
+      IdTable col1And2 = permutation.scan(id, std::nullopt);
+      AD_CORRECTNESS_CHECK(col1And2.numColumns() == 2);
       for (const auto& row : col1And2) {
         std::array<Id, 3> triple{id, row[0], row[1]};
         if (isTripleIgnored(triple)) [[unlikely]] {

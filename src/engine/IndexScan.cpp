@@ -120,7 +120,8 @@ ResultTable IndexScan::computeResult() {
   const auto& index = _executionContext->getIndex();
   const auto permutedTriple = getPermutedTriple();
   if (numVariables_ == 2) {
-    index.scan(*permutedTriple[0], std::nullopt, &idTable, permutation_, _timeoutTimer);
+    index.scan(*permutedTriple[0], std::nullopt, &idTable, permutation_,
+               _timeoutTimer);
   } else if (numVariables_ == 1) {
     index.scan(*permutedTriple[0], *permutedTriple[1], &idTable, permutation_,
                _timeoutTimer);
