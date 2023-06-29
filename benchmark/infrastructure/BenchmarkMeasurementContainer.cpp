@@ -229,8 +229,7 @@ ResultTable::operator std::string() const {
     // Adding the column names. We don't need any padding.
     stream << createRowString(
         columnNamesAsEntryType,
-        ad_utility::transform(columnNames_,
-                              [](const auto& name) { return name.length(); }));
+        ad_utility::transform(columnNames_, &std::string::length));
 
     // Signal, that the table is empty.
     stream << "\n## Empty Table (0 rows) ##";
