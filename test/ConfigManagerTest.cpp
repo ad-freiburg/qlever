@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include <cstddef>
+#include <type_traits>
 #include <vector>
 
 #include "util/ConfigManager/ConfigExceptions.h"
@@ -15,20 +16,30 @@
 #include "util/json.h"
 
 namespace ad_utility {
+
+/*
+@brief Checks, if the given configuration option was set correctly.
+
+@param externalVariable The variable, that the given configuration option writes
+to.
+@param wasSet Was the given configuration option set?
+@param wantedValue The value, that the configuration option should have been set
+to.
+*/
+template <typename T, typename DecayedT = std::decay_t<T>>
+void checkOption(const ad_utility::ConfigOption& option,
+                 const DecayedT& externalVariable, const bool wasSet,
+                 const DecayedT& wantedValue) {
+  ASSERT_EQ(wasSet, option.wasSet());
+
+  if (wasSet) {
+    ASSERT_EQ(wantedValue, option.getValue<DecayedT>());
+    ASSERT_EQ(wantedValue, externalVariable);
+  }
+}
+
 TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
   ad_utility::ConfigManager config{};
-
-  // 'Compare' two configuration options
-  auto compareConfigurationOptions = []<typename T>(
-                                         const ad_utility::ConfigOption& a,
-                                         const ad_utility::ConfigOption& b) {
-    ASSERT_EQ(a.wasSet(), b.wasSet());
-
-    if (a.wasSet()) {
-      ASSERT_EQ(a.getValue<T>(), b.getValue<T>());
-      ASSERT_EQ(a.getValueAsString(), b.getValueAsString());
-    }
-  };
 
   // Configuration options for testing.
   int notUsed;
@@ -36,24 +47,19 @@ TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
   config.createConfigOption(
       {"Shared_part", "Unique_part_1", "Sense_of_existence"}, "", &notUsed,
       std::optional{42});
-  const ad_utility::ConfigOption withDefault("Sense_of_existence", "", &notUsed,
-                                             std::optional{42});
 
   config.createConfigOption(
       {"Shared_part", "Unique_part_2", "Sense_of_existence"}, "", &notUsed);
-  const ad_utility::ConfigOption withoutDefault("Sense_of_existence", "",
-                                                &notUsed);
 
   // Where those two options added?
   ASSERT_EQ(config.configurationOptions_.size(), 2);
 
-  compareConfigurationOptions.template operator()<int>(
-      withDefault, config.getConfigurationOptionByNestedKeys(
-                       {"Shared_part", "Unique_part_1", "Sense_of_existence"}));
-  compareConfigurationOptions.template operator()<int>(
-      withoutDefault,
-      config.getConfigurationOptionByNestedKeys(
-          {"Shared_part", "Unique_part_2", "Sense_of_existence"}));
+  checkOption<int>(config.getConfigurationOptionByNestedKeys(
+                       {"Shared_part", "Unique_part_1", "Sense_of_existence"}),
+                   notUsed, true, 42);
+  checkOption<int>(config.getConfigurationOptionByNestedKeys(
+                       {"Shared_part", "Unique_part_2", "Sense_of_existence"}),
+                   notUsed, false, 42);
 
   // Trying to get a configuration option, that does not exist, should cause
   // an exception.
@@ -129,20 +135,13 @@ TEST(ConfigManagerTest, ParseConfig) {
     }
   };
 
-  // For easier checking.
-  auto checkOption = [](const ad_utility::ConfigOption& option,
-                        const auto& content) {
-    ASSERT_TRUE(option.wasSet());
-    ASSERT_EQ(content, option.getValue<std::decay_t<decltype(content)>>());
-  };
-
   // Does the option with the default already have a value?
-  checkOption(getOption(2), 2);
+  checkOption<int>(getOption(2), thirdInt, true, 2);
 
   // The other two should never have set the variable, that the internal pointer
   // points to.
-  ASSERT_FALSE(getOption(0).wasSet());
-  ASSERT_FALSE(getOption(1).wasSet());
+  checkOption<int>(getOption(0), firstInt, false, 2);
+  checkOption<int>(getOption(1), secondInt, false, 2);
 
   // The json for testing `parseConfig`. Sets all of the configuration
   // options.
@@ -159,9 +158,9 @@ TEST(ConfigManagerTest, ParseConfig) {
   // Set and check.
   config.parseConfig(testJson);
 
-  checkOption(getOption(0), 10);
-  checkOption(getOption(1), 11);
-  checkOption(getOption(2), 12);
+  checkOption<int>(getOption(0), firstInt, true, 10);
+  checkOption<int>(getOption(1), secondInt, true, 11);
+  checkOption<int>(getOption(2), thirdInt, true, 12);
 }
 
 TEST(ConfigManagerTest, ParseConfigExceptionTest) {
@@ -268,38 +267,52 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
   config.parseConfig(ad_utility::ConfigManager::parseShortHand(
       R"--(somePositiveNumber : 42, someNegativNumber : -42, someIntegerlist : [40, 41], somePositiveFloatingPoint : 4.2, someNegativFloatingPoint : -4.2, someFloatingPointList : [4.1, 4.2], boolTrue : true, boolFalse : false, someBooleanList : [true, false, true], myName : "Bernd", someStringList : ["t1", "t2"], depth : { here : {list : [7,8]}})--"));
 
-  // Check, if an option was set to the value, you wanted.
-  auto checkOption = [&config](const auto& content,
-                               const std::vector<std::string>& keys) {
-    const auto& option = config.getConfigurationOptionByNestedKeys(keys);
-    ASSERT_TRUE(option.wasSet());
-    ASSERT_EQ(content,
-              option.template getValue<std::decay_t<decltype(content)>>());
-  };
+  checkOption<int>(
+      config.getConfigurationOptionByNestedKeys({"somePositiveNumber"}),
+      somePositiveNumberInt, true, 42);
+  checkOption<int>(
+      config.getConfigurationOptionByNestedKeys({"someNegativNumber"}),
+      someNegativNumberInt, true, -42);
 
-  checkOption(static_cast<int>(42), {"somePositiveNumber"});
-  checkOption(static_cast<int>(-42), {"someNegativNumber"});
+  checkOption<std::vector<int>>(
+      config.getConfigurationOptionByNestedKeys({"someIntegerlist"}),
+      someIntegerlistIntVector, true, std::vector{40, 41});
 
-  checkOption(std::vector{40, 41}, {"someIntegerlist"});
+  checkOption<float>(
+      config.getConfigurationOptionByNestedKeys({"somePositiveFloatingPoint"}),
+      somePositiveFloatingPointFloat, true, static_cast<float>(4.2));
+  checkOption<float>(
+      config.getConfigurationOptionByNestedKeys({"someNegativFloatingPoint"}),
+      someNegativFloatingPointFloat, true, static_cast<float>(-4.2));
 
-  checkOption(static_cast<float>(4.2), {"somePositiveFloatingPoint"});
-  checkOption(static_cast<float>(-4.2), {"someNegativFloatingPoint"});
+  checkOption<std::vector<float>>(
+      config.getConfigurationOptionByNestedKeys({"someFloatingPointList"}),
+      someFloatingPointListFloatVector, true, std::vector<float>{4.1, 4.2});
 
-  checkOption(std::vector<float>{4.1, 4.2}, {"someFloatingPointList"});
+  checkOption<bool>(config.getConfigurationOptionByNestedKeys({"boolTrue"}),
+                    boolTrueBool, true, true);
+  checkOption<bool>(config.getConfigurationOptionByNestedKeys({"boolFalse"}),
+                    boolFalseBool, true, false);
 
-  checkOption(true, {"boolTrue"});
-  checkOption(false, {"boolFalse"});
+  checkOption<std::vector<bool>>(
+      config.getConfigurationOptionByNestedKeys({"someBooleanList"}),
+      someBooleanListBoolVector, true, std::vector{true, false, true});
 
-  checkOption(std::vector{true, false, true}, {"someBooleanList"});
+  checkOption<std::string>(
+      config.getConfigurationOptionByNestedKeys({"myName"}), myNameString, true,
+      std::string{"Bernd"});
 
-  checkOption(std::string{"Bernd"}, {"myName"});
+  checkOption<std::vector<std::string>>(
+      config.getConfigurationOptionByNestedKeys({"someStringList"}),
+      someStringListStringVector, true, std::vector<std::string>{"t1", "t2"});
 
-  checkOption(std::vector<std::string>{"t1", "t2"}, {"someStringList"});
-
-  checkOption(std::vector{7, 8}, {"depth", "here", "list"});
+  checkOption<std::vector<int>>(
+      config.getConfigurationOptionByNestedKeys({"depth", "here", "list"}),
+      deeperIntVector, true, std::vector{7, 8});
 
   // Is the "No Change" unchanged?
-  checkOption(static_cast<int>(10), {"No_change"});
+  checkOption<int>(config.getConfigurationOptionByNestedKeys({"No_change"}),
+                   noChangeInt, true, 10);
 
   // Multiple key value pairs with the same key are not allowed.
   ASSERT_THROW(ad_utility::ConfigManager::parseShortHand(R"(a:42, a:43)");
