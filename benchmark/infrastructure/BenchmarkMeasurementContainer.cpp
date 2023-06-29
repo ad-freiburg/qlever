@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/string_view.h>
@@ -17,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
@@ -41,8 +40,7 @@ ResultEntry::operator std::string() const {
       "Single measurement '", descriptor_, "'\n",
       ad_utility::addIndentation(
           absl::StrCat(getMetadataPrettyString(metadata(), "metadata: ", "\n"),
-                       "time: ", measuredTime_, "s"),
-          1));
+                       "time: ", measuredTime_, "s")));
 }
 
 // ____________________________________________________________________________
@@ -83,7 +81,7 @@ ResultGroup::operator std::string() const {
             [](const auto& pointer) -> decltype(auto) { return (*pointer); }),
         "\n\n");
 
-    return absl::StrCat("\n\n", ad_utility::addIndentation(list, 1));
+    return absl::StrCat("\n\n", ad_utility::addIndentation(list));
   };
 
   stream << getMetadataPrettyString(metadata(), "metadata: ", "\n");
@@ -95,7 +93,7 @@ ResultGroup::operator std::string() const {
   stream << "\n\nTables:" << vectorToStringListOrNone(resultTables_);
 
   return absl::StrCat("Group '", descriptor_, "'\n",
-                      ad_utility::addIndentation(stream.str(), 1));
+                      ad_utility::addIndentation(stream.str()));
 }
 
 // ____________________________________________________________________________
@@ -235,7 +233,7 @@ ResultTable::operator std::string() const {
     // Signal, that the table is empty.
     stream << "\n## Empty Table (0 rows) ##";
 
-    return absl::StrCat(prefix, ad_utility::addIndentation(stream.str(), 1));
+    return absl::StrCat(prefix, ad_utility::addIndentation(stream.str()));
   }
 
   // For formating: What is the maximum string width of a column, if you
@@ -274,7 +272,7 @@ ResultTable::operator std::string() const {
           }),
       "\n");
 
-  return absl::StrCat(prefix, ad_utility::addIndentation(stream.str(), 1));
+  return absl::StrCat(prefix, ad_utility::addIndentation(stream.str()));
 }
 
 // ____________________________________________________________________________

@@ -81,10 +81,10 @@ std::string lazyStrJoin(Range&& r, std::string_view separator);
 @brief Adds indentation before the given string and directly after new line
 characters.
 
-@param indentationLevel How deep is the indentation? `0` is no indentation.
+@param indentationSymbol What the indentation should look like..
 */
 inline std::string addIndentation(std::string_view str,
-                                  size_t indentationLevel);
+                                  std::string_view indentationSymbol = "    ");
 
 // *****************************************************************************
 // Definitions:
@@ -322,26 +322,17 @@ std::string lazyStrJoin(Range&& r, std::string_view separator) {
 }
 
 // ___________________________________________________________________________
-std::string addIndentation(std::string_view str, size_t indentationLevel) {
-  // An indentation level of 0 makes no sense. Must be an error.
-  AD_CONTRACT_CHECK(indentationLevel > 0);
-
-  // How the indentation should look like.
-  static constexpr std::string_view outputIndentation = "    ";
-
-  // The indentation symbols for this level of indentation.
-  std::string indentationSymbols{""};
-  indentationSymbols.reserve(outputIndentation.size() * indentationLevel);
-  for (size_t i = 0; i < indentationLevel; i++) {
-    indentationSymbols.append(outputIndentation);
-  }
+std::string addIndentation(std::string_view str,
+                           std::string_view indentationSymbol) {
+  // An empty indentation makes no sense. Must be an error.
+  AD_CONTRACT_CHECK(!indentationSymbol.empty());
 
   // Add an indentation to the beginning and replace a new line with a new line,
   // directly followed by the indentation.
   return absl::StrCat(
-      indentationSymbols,
+      indentationSymbol,
       absl::StrReplaceAll(str,
-                          {{"\n", absl::StrCat("\n", indentationSymbols)}}));
+                          {{"\n", absl::StrCat("\n", indentationSymbol)}}));
 }
 
 }  // namespace ad_utility

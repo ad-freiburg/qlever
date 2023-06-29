@@ -138,25 +138,19 @@ TEST(StringUtilsTest, addIndentation) {
   static constexpr std::string_view withLineBreaks = "\nHello\nworld\n!";
 
   // No indentation wanted, should cause an error.
-  ASSERT_ANY_THROW(ad_utility::addIndentation(withoutLineBreaks, 0));
+  ASSERT_ANY_THROW(ad_utility::addIndentation(withoutLineBreaks, ""));
 
-  // Testing identation level 1, 5 and 10.
-  ASSERT_EQ("    Hello\tworld!",
-            ad_utility::addIndentation(withoutLineBreaks, 1));
-  ASSERT_EQ("                    Hello\tworld!",
-            ad_utility::addIndentation(withoutLineBreaks, 5));
-  ASSERT_EQ("                                        Hello\tworld!",
-            ad_utility::addIndentation(withoutLineBreaks, 10));
+  // Testing a few different indentation symbols.
+  ASSERT_EQ("    Hello\tworld!", ad_utility::addIndentation(withoutLineBreaks));
+  ASSERT_EQ("\tHello\tworld!",
+            ad_utility::addIndentation(withoutLineBreaks, "\t"));
+  ASSERT_EQ("Not Hello\tworld!",
+            ad_utility::addIndentation(withoutLineBreaks, "Not "));
 
   ASSERT_EQ("    \n    Hello\n    world\n    !",
-            ad_utility::addIndentation(withLineBreaks, 1));
-  ASSERT_EQ(
-      "                    \n                    Hello\n                    "
-      "world\n                    !",
-      ad_utility::addIndentation(withLineBreaks, 5));
-  ASSERT_EQ(
-      "                                        \n                              "
-      "          Hello\n                                        world\n        "
-      "                                !",
-      ad_utility::addIndentation(withLineBreaks, 10));
+            ad_utility::addIndentation(withLineBreaks));
+  ASSERT_EQ("\t\n\tHello\n\tworld\n\t!",
+            ad_utility::addIndentation(withLineBreaks, "\t"));
+  ASSERT_EQ("Not \nNot Hello\nNot world\nNot !",
+            ad_utility::addIndentation(withLineBreaks, "Not "));
 }
