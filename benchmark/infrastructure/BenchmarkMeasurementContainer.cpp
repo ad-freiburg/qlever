@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/string_view.h>
@@ -17,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
@@ -68,8 +67,8 @@ ResultGroup::operator std::string() const {
   std::ostringstream stream;
 
   /*
-  If the given vector is empty, return ` None`. If it isn't, return the
-  contacination of "\n\n" with the string list representation of the vector.
+  If the given vector is empty, return " None". Else, return the concatenation
+  of "\n\n" with the string list representation of the vector.
   */
   auto vectorToStringListOrNone =
       []<typename T>(const std::vector<T>& vec) -> std::string {
