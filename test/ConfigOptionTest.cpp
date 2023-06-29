@@ -150,9 +150,6 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
   auto setAndTest = [&otherGettersDontWork]<typename Type>(
                         ConfigOption& option, Type* variablePointer,
                         const ConversionTestCase<Type>& toSetTo) {
-    // Do we even have the right type for this option?
-    ASSERT_EQ(ConfigOption::AvailableTypes{Type{}}.index(), option.getActualValueType());
-
     ASSERT_FALSE(option.wasSetAtRuntime());
 
     option.setValue(toSetTo.value);

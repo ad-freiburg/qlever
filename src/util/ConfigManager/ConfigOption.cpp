@@ -295,11 +295,7 @@ ConfigOption::operator std::string() const {
 }
 
 // ____________________________________________________________________________
-auto ConfigOption::getActualValueType() const -> size_t { return data_.index(); }
-
-// ____________________________________________________________________________
 std::string ConfigOption::getActualValueTypeAsString() const {
-  return std::visit([](const auto& d) { return availableTypesToString(*d.variablePointer_); },
-                    data_);
+  return std::visit([]<typename T>(const Data<T>&) { return availableTypesToString<T>(); }, data_);
 }
 }  // namespace ad_utility

@@ -192,12 +192,6 @@ class ConfigOption {
   std::string_view getIdentifier() const;
 
   /*
-  @brief Returns the index of the variant in `ValueType`, that this
-  configuration option was set to.
-  */
-  size_t getActualValueType() const;
-
-  /*
   @brief Returns the string representation of the current type.
   */
   std::string getActualValueTypeAsString() const;
