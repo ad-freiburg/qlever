@@ -93,6 +93,8 @@ TEST(StringUtilsTest, listToString) {
   doTestForAllOverloads("", emptyVector, emptyVector, "\n");
   doTestForAllOverloads("42", singleValueVector, singleValueVector, "\n");
   doTestForAllOverloads("40,41,42,43", multiValueVector, multiValueVector, ",");
+  doTestForAllOverloads("40 -> 41 -> 42 -> 43", multiValueVector,
+                        multiValueVector, " -> ");
 
   /*
   `std::ranges::views` can cause dangling pointers, if a `std::identity` is
@@ -107,12 +109,11 @@ TEST(StringUtilsTest, listToString) {
       multiValueVector, [](const int& num) -> int { return num + 10; });
   doTestForAllOverloads("50,51,52,53", plus10View, plus10View, ",");
 
-  auto identityView = std::views::transform(
-      multiValueVector, [](const int& num) -> decltype(auto) { return num; });
+  auto identityView = std::views::transform(multiValueVector, std::identity{});
   doTestForAllOverloads("40,41,42,43", identityView, identityView, ",");
 
   // Test, that uses an actual `std::ranges::input_range`. That is, a range who
-  // doesn't know it's own size.
+  // doesn't know it's own size and can only be iterated once.
 
   // Returns the content of a given vector, element by element.
   auto goThroughVectorGenerator =
