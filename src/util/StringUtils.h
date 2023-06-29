@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
 
@@ -19,6 +21,7 @@
 
 #include "../util/Concepts.h"
 #include "../util/Forward.h"
+#include "util/Exception.h"
 
 using std::string;
 using std::string_view;
@@ -73,6 +76,15 @@ template <std::ranges::input_range Range>
 requires ad_utility::Streamable<
     std::iter_reference_t<std::ranges::iterator_t<Range>>>
 std::string lazyStrJoin(Range&& r, std::string_view separator);
+
+/*
+@brief Adds indentation before the given string and directly after new line
+characters.
+
+@param indentationLevel How deep is the indentation? `0` is no indentation.
+*/
+inline std::string addIndentation(std::string_view str,
+                                  size_t indentationLevel);
 
 // *****************************************************************************
 // Definitions:
@@ -307,6 +319,29 @@ std::string lazyStrJoin(Range&& r, std::string_view separator) {
   std::ostringstream stream;
   lazyStrJoin(&stream, AD_FWD(r), separator);
   return std::move(stream).str();
+}
+
+// ___________________________________________________________________________
+std::string addIndentation(std::string_view str, size_t indentationLevel) {
+  // An indentation level of 0 makes no sense. Must be an error.
+  AD_CONTRACT_CHECK(indentationLevel > 0);
+
+  // How the indentation should look like.
+  static constexpr std::string_view outputIndentation = "    ";
+
+  // The indentation symbols for this level of indentation.
+  std::string indentationSymbols{""};
+  indentationSymbols.reserve(outputIndentation.size() * indentationLevel);
+  for (size_t i = 0; i < indentationLevel; i++) {
+    indentationSymbols.append(outputIndentation);
+  }
+
+  // Add an indentation to the beginning and replace a new line with a new line,
+  // directly followed by the indentation.
+  return absl::StrCat(
+      indentationSymbols,
+      absl::StrReplaceAll(str,
+                          {{"\n", absl::StrCat("\n", indentationSymbols)}}));
 }
 
 }  // namespace ad_utility

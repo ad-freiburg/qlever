@@ -38,7 +38,7 @@ const BenchmarkMetadata& BenchmarkMetadataGetter::metadata() const {
 ResultEntry::operator std::string() const {
   return absl::StrCat(
       "Single measurement '", descriptor_, "'\n",
-      addIndentation(
+      ad_utility::addIndentation(
           absl::StrCat(getMetadataPrettyString(metadata(), "metadata: ", "\n"),
                        "time: ", measuredTime_, "s"),
           1));
@@ -82,7 +82,7 @@ ResultGroup::operator std::string() const {
             [](const auto& pointer) -> decltype(auto) { return (*pointer); }),
         "\n\n");
 
-    return absl::StrCat("\n\n", addIndentation(list, 1));
+    return absl::StrCat("\n\n", ad_utility::addIndentation(list, 1));
   };
 
   stream << getMetadataPrettyString(metadata(), "metadata: ", "\n");
@@ -94,7 +94,7 @@ ResultGroup::operator std::string() const {
   stream << "\n\nTables:" << vectorToStringListOrNone(resultTables_);
 
   return absl::StrCat("Group '", descriptor_, "'\n",
-                      addIndentation(stream.str(), 1));
+                      ad_utility::addIndentation(stream.str(), 1));
 }
 
 // ____________________________________________________________________________
@@ -235,7 +235,7 @@ ResultTable::operator std::string() const {
     // Signal, that the table is empty.
     stream << "\n## Empty Table (0 rows) ##";
 
-    return absl::StrCat(prefix, addIndentation(stream.str(), 1));
+    return absl::StrCat(prefix, ad_utility::addIndentation(stream.str(), 1));
   }
 
   // For formating: What is the maximum string width of a column, if you
@@ -274,7 +274,7 @@ ResultTable::operator std::string() const {
           }),
       "\n");
 
-  return absl::StrCat(prefix, addIndentation(stream.str(), 1));
+  return absl::StrCat(prefix, ad_utility::addIndentation(stream.str(), 1));
 }
 
 // ____________________________________________________________________________

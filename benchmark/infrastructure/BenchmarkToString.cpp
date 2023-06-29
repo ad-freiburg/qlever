@@ -30,27 +30,6 @@ static std::string createCategoryTitle(std::string_view categoryTitle) {
 }
 
 // ___________________________________________________________________________
-std::string addIndentation(const std::string_view str,
-                           const size_t& indentationLevel) {
-  // An indentation level of 0 makes no sense. Must be an error.
-  AD_CONTRACT_CHECK(indentationLevel > 0);
-
-  // The indentation symbols for this level of indentation.
-  std::string indentationSymbols{""};
-  indentationSymbols.reserve(outputIndentation.size() * indentationLevel);
-  for (size_t i = 0; i < indentationLevel; i++) {
-    indentationSymbols.append(outputIndentation);
-  }
-
-  // Add an indentation to the beginning and replace a new line with a new line,
-  // directly followed by the indentation.
-  return absl::StrCat(
-      indentationSymbols,
-      absl::StrReplaceAll(str,
-                          {{"\n", absl::StrCat("\n", indentationSymbols)}}));
-}
-
-// ___________________________________________________________________________
 std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
                                     std::string_view prefix,
                                     std::string_view suffix) {
