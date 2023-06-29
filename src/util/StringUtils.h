@@ -19,9 +19,9 @@
 #include <string>
 #include <string_view>
 
-#include "../util/Concepts.h"
-#include "../util/Forward.h"
+#include "util/Concepts.h"
 #include "util/Exception.h"
+#include "util/Forward.h"
 
 using std::string;
 using std::string_view;

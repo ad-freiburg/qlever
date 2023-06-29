@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
+
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 #include <absl/strings/string_view.h>
@@ -15,7 +17,6 @@
 #include <utility>
 #include <vector>
 
-#include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
