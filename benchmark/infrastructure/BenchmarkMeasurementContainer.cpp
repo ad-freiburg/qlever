@@ -220,7 +220,8 @@ ResultTable::operator std::string() const {
   // Transforming the column names into the table entry types, so that they can
   // share helper functions.
   auto columnNamesAsEntryType = ad_utility::transform(
-      columnNames_, [](const std::string& name) { return EntryType{name}; });
+      columnNames_,
+      [](const std::string& name) { return static_cast<EntryType>(name); });
 
   // It's allowed to have tables without rows. In that case, we are already
   // nearly done, cause we only to have add the column names.
