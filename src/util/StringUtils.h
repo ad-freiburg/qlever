@@ -67,16 +67,8 @@ requires ad_utility::Streamable<
     std::iter_reference_t<std::ranges::iterator_t<Range>>>
 void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator);
 
-/*
-@brief Add elements of the range to a stream, with the `separator` between the
-elements.
-
-@tparam Range An input range, whos dereferenced iterators can be inserted into
-streams.
-
-@param separator Will be put between each of the string representations
-of the range elements.
-*/
+// Similar to the overload of `lazyStrJoin` above, but the result is returned as
+// a string.
 template <std::ranges::input_range Range>
 requires ad_utility::Streamable<
     std::iter_reference_t<std::ranges::iterator_t<Range>>>
@@ -287,9 +279,10 @@ template <std::ranges::input_range Range>
 requires ad_utility::Streamable<
     std::iter_reference_t<std::ranges::iterator_t<Range>>>
 void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator) {
-  // Is the range empty?
   auto begin = std::begin(r);
   auto end = std::end(r);
+
+  // Is the range empty?
   if (begin == end) {
     return;
   }
