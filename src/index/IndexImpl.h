@@ -411,14 +411,14 @@ class IndexImpl {
    * members of IndexImpl class).
    */
   // _____________________________________________________________________________
-  void scan(
+  IdTable scan(
       const TripleComponent& col0String,
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
-      IdTable* result, const Permutation::Enum& permutation,
+      const Permutation::Enum& permutation,
       ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   // _____________________________________________________________________________
-  void scan(Id col0Id, std::optional<Id> col1Id, IdTable* result,
+  IdTable scan(Id col0Id, std::optional<Id> col1Id,
             Permutation::Enum p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 

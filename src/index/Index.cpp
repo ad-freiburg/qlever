@@ -347,18 +347,19 @@ vector<float> Index::getMultiplicities(const TripleComponent& key,
 }
 
 // _____________________________________________________
-void Index::scan(
+IdTable Index::scan(
     const TripleComponent& col0String,
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
-    IdTable* result, Permutation::Enum p,
+    Permutation::Enum p,
     ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  return pimpl_->scan(col0String, col1String, result, p, std::move(timer));
+  return pimpl_->scan(col0String, col1String, p, std::move(timer));
 }
+
 // _____________________________________________________________________________
-void Index::scan(Id col0Id, std::optional<Id> col1Id, IdTable* result,
+IdTable Index::scan(Id col0Id, std::optional<Id> col1Id,
                  Permutation::Enum p,
                  ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  return pimpl_->scan(col0Id, col1Id, result, p, std::move(timer));
+  return pimpl_->scan(col0Id, col1Id, p, std::move(timer));
 }
 
 // _____________________________________________________

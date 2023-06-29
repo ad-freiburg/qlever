@@ -267,8 +267,8 @@ Join::ScanMethodType Join::getScanMethod(
   // during its lifetime
   const auto& idx = _executionContext->getIndex();
   const auto scanLambda = [&idx](const Permutation::Enum perm) {
-    return [&idx, perm](Id id, IdTable* idTable) {
-      idx.scan(id, std::nullopt, idTable, perm);
+    return [&idx, perm](Id id){
+      return idx.scan(id, std::nullopt, perm);
     };
   };
   AD_CORRECTNESS_CHECK(scan.getResultWidth() == 3);
@@ -297,8 +297,7 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
       // The scan is a relatively expensive disk operation, so we can afford to
       // check for timeouts before each call.
       checkTimeout();
-      IdTable jr(2, _executionContext->getAllocator());
-      scan(currentJoinId, &jr);
+      IdTable jr = scan(currentJoinId);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
       appendCrossProduct(joinItemFrom, joinItemEnd, jr.cbegin(), jr.cend(),
@@ -311,8 +310,7 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
   }
   // Do the scan for the final element.
   LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
-  IdTable jr(2, _executionContext->getAllocator());
-  scan(currentJoinId, &jr);
+  IdTable jr = scan(currentJoinId);
   LOG(TRACE) << "Got #items: " << jr.size() << endl;
   // Build the cross product.
   appendCrossProduct(joinItemFrom, joinItemEnd, jr.cbegin(), jr.cend(), res);

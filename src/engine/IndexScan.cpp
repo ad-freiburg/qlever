@@ -120,15 +120,16 @@ ResultTable IndexScan::computeResult() {
   const auto& index = _executionContext->getIndex();
   const auto permutedTriple = getPermutedTriple();
   if (numVariables_ == 2) {
-    index.scan(*permutedTriple[0], std::nullopt, &idTable, permutation_,
+    idTable = index.scan(*permutedTriple[0], std::nullopt, permutation_,
                _timeoutTimer);
   } else if (numVariables_ == 1) {
-    index.scan(*permutedTriple[0], *permutedTriple[1], &idTable, permutation_,
+    idTable = index.scan(*permutedTriple[0], *permutedTriple[1], permutation_,
                _timeoutTimer);
   } else {
     AD_CORRECTNESS_CHECK(numVariables_ == 3);
     computeFullScan(&idTable, permutation_);
   }
+  AD_CORRECTNESS_CHECK(idTable.numColumns() == numVariables_);
   LOG(DEBUG) << "IndexScan result computation done.\n";
 
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};

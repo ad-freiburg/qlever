@@ -150,7 +150,7 @@ class Join : public Operation {
                                           ColumnIndex joinColumnIndexScan,
                                           IdTable* resultPtr);
 
-  using ScanMethodType = std::function<void(Id, IdTable*)>;
+  using ScanMethodType = std::function<IdTable(Id)>;
 
   ScanMethodType getScanMethod(
       std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const;
