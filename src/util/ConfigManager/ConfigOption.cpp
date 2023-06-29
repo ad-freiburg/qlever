@@ -15,6 +15,7 @@
 #include <variant>
 
 #include "global/ValueId.h"
+#include "nlohmann/json.hpp"
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConstexprUtils.h"
@@ -222,31 +223,34 @@ nlohmann::json ConfigOption::getDefaultValueAsJson() const {
       data_);
 }
 
+// The dummy values.
+template <typename DummyType>
+static std::decay_t<DummyType> getDummyValue() {
+  if constexpr (std::is_same_v<std::decay_t<DummyType>, bool>) {
+    return false;
+  } else if constexpr (std::is_same_v<std::decay_t<DummyType>, std::string>) {
+    return "Example string";
+  } else if constexpr (std::is_same_v<std::decay_t<DummyType>, int>) {
+    return 42;
+  } else if constexpr (std::is_same_v<std::decay_t<DummyType>, float>) {
+    return 4.2;
+  } else if constexpr (std::is_same_v<std::decay_t<DummyType>, std::vector<bool>>) {
+    return std::vector{true, false};
+  } else if constexpr (std::is_same_v<std::decay_t<DummyType>, std::vector<std::string>>) {
+    return std::vector<std::string>{"Example", "string", "list"};
+  } else if constexpr (std::is_same_v<std::decay_t<DummyType>, std::vector<int>>) {
+    return std::vector<int>{40, 41, 42};
+  } else {
+    // Must be a vector of floats.
+    static_assert(std::is_same_v<std::decay_t<DummyType>, std::vector<float>>);
+    return std::vector<float>{40.0, 41.1, 42.2};
+  }
+}
+
 // ____________________________________________________________________________
 nlohmann::json ConfigOption::getDummyValueAsJson() const {
-  return std::visit(
-      []<typename T>(const Data<T>&) {
-        if constexpr (std::is_same_v<T, bool>) {
-          return nlohmann::json(false);
-        } else if constexpr (std::is_same_v<T, std::string>) {
-          return nlohmann::json("Example string");
-        } else if constexpr (std::is_same_v<T, int>) {
-          return nlohmann::json(42);
-        } else if constexpr (std::is_same_v<T, float>) {
-          return nlohmann::json(4.2);
-        } else if constexpr (std::is_same_v<T, std::vector<bool>>) {
-          return nlohmann::json(std::vector{true, false});
-        } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
-          return nlohmann::json(std::vector{"Example", "string", "list"});
-        } else if constexpr (std::is_same_v<T, std::vector<int>>) {
-          return nlohmann::json(std::vector{40, 41, 42});
-        } else {
-          // Must be a vector of floats.
-          static_assert(std::is_same_v<T, std::vector<float>>);
-          return nlohmann::json(std::vector{40.0, 41.1, 42.2});
-        }
-      },
-      data_);
+  return std::visit([]<typename T>(const Data<T>&) { return nlohmann::json(getDummyValue<T>()); },
+                    data_);
 }
 
 // ____________________________________________________________________________
@@ -257,27 +261,7 @@ std::string ConfigOption::getDummyValueAsString() const {
       have to keep an eye on how the class represents it's values as strings.
       */
       []<typename T>(const Data<T>&) {
-        if constexpr (std::is_same_v<T, bool>) {
-          return contentOfAvailableTypesToString(false);
-        } else if constexpr (std::is_same_v<T, std::string>) {
-          return contentOfAvailableTypesToString("Example string");
-        } else if constexpr (std::is_same_v<T, int>) {
-          return contentOfAvailableTypesToString(42);
-        } else if constexpr (std::is_same_v<T, float>) {
-          return contentOfAvailableTypesToString(static_cast<float>(4.2));
-        } else if constexpr (std::is_same_v<T, std::vector<bool>>) {
-          return contentOfAvailableTypesToString(std::vector{true, false});
-        } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
-          return contentOfAvailableTypesToString(
-              std::vector<std::string>{"Example", "string", "list"});
-        } else if constexpr (std::is_same_v<T, std::vector<int>>) {
-          return contentOfAvailableTypesToString(std::vector{40, 41, 42});
-        } else {
-          // Must be a vector of floats.
-          static_assert(std::is_same_v<T, std::vector<float>>);
-          return contentOfAvailableTypesToString(std::vector{
-              static_cast<float>(40.0), static_cast<float>(41.1), static_cast<float>(42.2)});
-        }
+        return contentOfAvailableTypesToString(getDummyValue<T>());
       },
       data_);
 }
