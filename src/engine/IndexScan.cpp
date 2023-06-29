@@ -121,10 +121,10 @@ ResultTable IndexScan::computeResult() {
   const auto permutedTriple = getPermutedTriple();
   if (numVariables_ == 2) {
     idTable = index.scan(*permutedTriple[0], std::nullopt, permutation_,
-               _timeoutTimer);
+                         _timeoutTimer);
   } else if (numVariables_ == 1) {
     idTable = index.scan(*permutedTriple[0], *permutedTriple[1], permutation_,
-               _timeoutTimer);
+                         _timeoutTimer);
   } else {
     AD_CORRECTNESS_CHECK(numVariables_ == 3);
     computeFullScan(&idTable, permutation_);

@@ -93,7 +93,9 @@ concept BinaryIteratorFunction =
  * (`addDuplicatesFromLeft = true`) it would be `AC, AD, BC, BD`. Note that this
  * currently only works for the exact matches and has no effects on the merging
  * with undefined values. This is useful when there are no undefined values and
- * we are only interested in the unique results from `right`.
+ * we are only interested in the unique results from `right`. This is used in
+ * `CompressedRelations.cpp` where we intersect a column of IDs with a set of
+ * block metadata and are only interested in the matching blocks.
  * @return 0 if the result is sorted, > 0 if the result is not sorted. `Sorted`
  * means that all the calls to `compatibleRowAction` were ordered wrt
  * `lessThan`. A result being out of order can happen if two rows with UNDEF
@@ -563,11 +565,11 @@ namespace detail {
 using Range = std::pair<size_t, size_t>;
 
 // Store a contiguous random-access range (e.g. `std::vector`or `std::span`,
-// together with a pair of indices
-// `[beginIndex, endIndex)` that denote a contiguous subrange of the container.
-// Note that this approach is more robust than storing iterators or subranges
-// directly instead of indices, because many containers have their iterators
-// invalidated when they are being moved (e.g. `std::string` or `IdTable`).
+// together with a pair of indices `[beginIndex, endIndex)` that denote a
+// contiguous subrange of the range. Note that this approach is more robust
+// than storing iterators or subranges directly instead of indices, because many
+// containers have their iterators invalidated when they are being moved (e.g.
+// `std::string` or `IdTable`).
 template <typename Block>
 class BlockAndSubrange {
  private:
@@ -578,8 +580,8 @@ class BlockAndSubrange {
   // The reference type of the underlying container.
   using reference = std::iterator_traits<typename Block::iterator>::reference;
 
-  // Construct from a container object, the initial subrange will represent the
-  // whole container.
+  // Construct from a container object, where the initial subrange will
+  // represent the whole container.
   explicit BlockAndSubrange(Block block)
       : block_{std::move(block)}, subrange_{0, block_.size()} {}
 
@@ -623,15 +625,16 @@ class BlockAndSubrange {
 /**
  * @brief Perform a zipper/merge join between two sorted inputs that are given
  * as blocks of inputs, e.g. `std::vector<std::vector<int>>` or
- * `ad_utility::generator<std::vector<int>>`. The blocks can be specified via a
+ * `ad_utility::generator<std::vector<int>>`. The blocks can be specified via an
  * input range (e.g. a generator), but each single block must be a random access
- * range (e.g. vector). The inputs will be moved from. The space complexity is
+ * range (e.g. vector). The blocks will be moved from. The space complexity is
  * `O(size of result)`. The result is only correct if none of the inputs
  * contains UNDEF values.
- * @param leftBlocks The left input to the join algorithm. Typically a range of
- * blocks of rows of IDs (e.g.`std::vector<IdTable>` or
- * `ad_utility::generator<IdTable>`).
- * @param rightBlocks The right input to the join algorithm.
+ * @param leftBlocks The left input range to the join algorithm. We use this for
+ * a range of blocks of rows of IDs (e.g.`std::vector<IdTable>` or
+ * `ad_utility::generator<IdTable>`). Each element will be moved from.
+ * @param rightBlocks The right input range to the join algorithm. Each element
+ * will be moved from.
  * @param lessThan This function is called with one element from one of the
  * blocks of `leftBlocks` and `rightBlocks` each and must return `true` if the
  * first argument comes before the second one. The concatenation of all blocks
@@ -692,31 +695,41 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   };
 
   // Read the minimal number of unread blocks from `leftBlocks` into
-  // `sameBlocksLeft` and from `rightBlocks` into `sameBlocksRight` until the
-  // following conditions hold:
-  // * at least one block is contained in `sameBlocksLeft` and `sameBlocksRight`
-  // each.
-  // * assume that the last element from sameBlocksLeft[0] is less than or equal
-  // to the last element of sameBlocksLeft[1] (otherwise the condition is
-  // switched)
-  // * Then all the blocks that contain elements less than or equal to this
-  // minimum are read into the respective buffers. For example the following
-  // scenario might occur:
-  //   sameBlocksLeft:  [0-3], [3-3], [3-5]
-  //   sameBlocksRight: [0-3], [3-7]
-  // The consequence of these postconditions is that we can always join at least
-  // on block from each input in the next step and can correctly handle the case
-  // that there are duplicates of the last element of the block in the adjacent
-  // blocks. If either of `sameBlocksLeft` or `sameBlocksRight` are empty after
-  // calling this function, then there are no more blocks to join and the
-  // algorithm can terminate.
+  // `sameBlocksLeft` and from `rightBlocks` into `sameBlocksRight` s.t. at
+  // least one of these blocks can be fully processed. For example consider the
+  // inputs:
+  //   leftBlocks:  [0-3], [3-3], [3-5], ...
+  //   rightBlocks: [0-3], [3-7], ...
+  // All of these five blocks have to be processed at once to fully process at
+  // least one block. Afterwards we have fully processed all blocks except for
+  // the [3-7] block which has to stay in `sameBlocksRight` before the next call
+  // to `fillBuffer`. To ensure this, all the following conditions must hold. 0.
+  // All blocks that were previously read into `sameBlocksLeft/Right` but have
+  // not yet been fully processed are still stored in those buffers. This
+  // precondition is enforced by the `joinBuffers` lambda below.
+  // 1. At least one block is contained in `sameBlocksLeft` and
+  // `sameBlocksRight` each.
+  // 2. Consider the minimum of the last element in `sameBlocksLeft[0]` and the
+  // last element of `sameBlocksRight[0]` after condition 1 is fulfilled. All
+  // blocks that contain elements equal to this minimum are read into the
+  // respective buffers. No blocks that don't fulfill this condition are read
+  // into the buffers.
+  //
+  // The only exception to these conditions can happen if we are at the end of
+  // one of the inputs. In that case either of `sameBlocksLeft` or
+  // `sameBlocksRight` is empty after calling this function. Then we have
+  // finished processing all blocks and can finish the overall algorithm.
   auto fillBuffer = [&]() {
     AD_CORRECTNESS_CHECK(sameBlocksLeft.size() <= 1);
     AD_CORRECTNESS_CHECK(sameBlocksRight.size() <= 1);
 
+    // If the `targetBuffer` is empty, read the next nonempty block from `[it,
+    // end)` if there is one.
     auto fillWithAtLeastOne = [&lessThan](auto& targetBuffer, auto& it,
                                           const auto& end) {
-      (void)lessThan;  // only needed when expensive checks are enabled.
+      // `lessThan` is only needed when compiling with expensive checks enabled,
+      // so we suppress the warning about `lessThan` being unused.
+      (void)lessThan;
       while (targetBuffer.empty() && it != end) {
         if (!it->empty()) {
           AD_EXPENSIVE_CHECK(std::ranges::is_sorted(*it, lessThan));
@@ -729,9 +742,11 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     fillWithAtLeastOne(sameBlocksRight, it2, end2);
 
     if (sameBlocksLeft.empty() || sameBlocksRight.empty()) {
+      // One of the inputs was exhausted, we are done.
       return;
     }
 
+    // Add the remaining blocks such that condition 2 from above is fulfilled.
     auto fillEqualToMinimum = [minEl = getMinEl(), &lessThan, &eq](
                                   auto& targetBuffer, auto& it,
                                   const auto& end) {
@@ -762,10 +777,10 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   };
 
   // Join the first block in `sameBlocksLeft` with the first block in
-  // `sameBlocksRight`, but leave the last element in each block untouched (it
-  // might have matches in subsequent blocks). The fully joined parts of the
-  // block are then removed from `sameBlocksLeft/Right`, as they are not needed
-  // anymore.
+  // `sameBlocksRight`, but ignore all elements that >= min(lastL, lastR) where
+  // `lastL` is the last element of `sameBlocksLeft[0]`, lastR similarly. The
+  // fully joined parts of the block are then removed from
+  // `sameBlocksLeft/Right`, as they are not needed anymore.
   auto joinAndRemoveBeginning = [&]() {
     // Get the first blocks.
     AD_CORRECTNESS_CHECK(!sameBlocksLeft.empty());
@@ -787,21 +802,20 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     sameBlocksRight.at(0).setSubrange(itR, r.end());
   };
 
-  // Cleanup the `blocks` (either `sameBlocksLeft` or `sameBlocksRight`, by
-  // removing blocks and parts of blocks, s.t. only elements `>=
-  // lastHandledElement` remain. This function expects that all but the last
-  // block can completely be deleted.
+  // Remove all elements from blocks (either `sameBlocksLeft` or
+  // `sameBlocksRight`) s.t. only elements `> lastProcessedElement` remain. This
+  // effectively deletes all blocks completely, except maybe the last one.
   auto removeAllButUnjoined = [lessThan]<typename Blocks>(
                                   Blocks& blocks,
-                                  ProjectedEl lastHandledElement) {
+                                  ProjectedEl lastProcessedElement) {
     // Erase all but the last block.
     AD_CORRECTNESS_CHECK(!blocks.empty());
     blocks.erase(blocks.begin(), blocks.end() - 1);
 
-    // Delete the part from the last block that is `<= lastHandledElement`.
+    // Delete the part from the last block that is `<= lastProcessedElement`.
     decltype(auto) remainingBlock = blocks.at(0).subrange();
-    auto beginningOfUnjoined =
-        std::ranges::upper_bound(remainingBlock, lastHandledElement, lessThan);
+    auto beginningOfUnjoined = std::ranges::upper_bound(
+        remainingBlock, lastProcessedElement, lessThan);
     remainingBlock =
         std::ranges::subrange{beginningOfUnjoined, remainingBlock.end()};
     // If the last block also was already handled completely, delete it (this
@@ -817,9 +831,12 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   auto joinBuffers = [&]() {
     // Join the beginning of the first blocks and remove it from the input.
     joinAndRemoveBeginning();
-    // Prepare the subranges of the loaded blocks that are equal to the
-    // last element that we can safely join.
+
     ProjectedEl minEl = getMinEl();
+    // Return a vector of subranges of all elements in `input` that are equal to
+    // the last element that we can safely join (this is the `minEl`).
+    // Effectively these are all the blocks completely except maybe for the last
+    // one, of which we can only get a prefix.
     auto pushRelevantSubranges = [&minEl, &lessThan](const auto& input) {
       using Subrange = decltype(std::as_const(input.front()).subrange());
       std::vector<Subrange> result;

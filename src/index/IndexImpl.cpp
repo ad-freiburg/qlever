@@ -1299,8 +1299,8 @@ IdTable IndexImpl::scan(
 }
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(Id col0Id, std::optional<Id> col1Id,
-                     Permutation::Enum p,
-                     ad_utility::SharedConcurrentTimeoutTimer timer) const {
+                        Permutation::Enum p,
+                        ad_utility::SharedConcurrentTimeoutTimer timer) const {
   return getPermutation(p).scan(col0Id, col1Id, timer);
 }
 

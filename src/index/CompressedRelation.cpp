@@ -22,7 +22,7 @@ IdTable CompressedRelationReader::scan(
     const CompressedRelationMetadata& metadata,
     std::span<const CompressedBlockMetadata> blockMetadata,
     ad_utility::File& file, const TimeoutTimer& timer) const {
-  IdTable result(NumColumns, allocator_);
+  IdTable result(2, allocator_);
 
   auto relevantBlocks =
       getBlocksFromMetadata(metadata, std::nullopt, blockMetadata);
@@ -126,9 +126,18 @@ CompressedRelationReader::asyncParallelBlockGenerator(
       while (true) {
         std::unique_lock lock{blockIteratorMutex};
         if (blockIterator == endBlock) {
+          // Note: We cannot call `queue.finish()` here, as the last block might
+          // not yet be pushed because it is handled by another thread.
           return;
         }
+        // Note: taking a copy here is probably not necessary (the lifetime of
+        // all the blocks is long enough, so a `const&` would suffice), but the
+        // copy is cheap and makes the code more robust.
         auto block = *blockIterator;
+        // Note: The order of the following three lines is important: The index
+        // of the current block depends on the current value of `blockIterator`,
+        // but we have to increment `blockIterator` to determine whether this
+        // was the last block.
         auto myIndex = static_cast<size_t>(blockIterator - beginBlock);
         ++blockIterator;
         bool isLastBlock = blockIterator == endBlock;
@@ -145,6 +154,9 @@ CompressedRelationReader::asyncParallelBlockGenerator(
         if (!pushWasSuccessful) {
           return;
         }
+        // Note: Only the thread that actually pushes the last block knows when
+        // it is safe to call `finish` to signal that all blocks have been
+        // succesfully pushed to the queue.
         if (isLastBlock) {
           queue.finish();
         }
@@ -233,14 +245,14 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   }
 }
 
-// Some internal helper functions for the `getBlocksForJoin` functions below.
 namespace {
-// If the combination of `col0Id, col1Id` is strictly smaller than the `triple`
-// return the smallest possible ID (which is the undefined ID which never is
-// contained in a triple). If the combination is stictly larger than the triple,
-// the greatest possible ID (which is greater than all valid IDs) is returned.
-// Else, the `col2Id` is returned if  a `col1Id` is specified, otherwise the
-// `col1Id`.
+// An internal helper function for the `getBlocksForJoin` functions below.
+// Get the ID from the `triple` that pertains to the join column (the col2 if
+// the col1 is specified, else the col1). There are two special cases: If the
+// triple doesn't match the `col0` and (if specified) the `col1` then a sentinel
+// value is returned that is `Id::min` if the triple is lower than all matching
+// triples, and `Id::max` if is higher. That way we can consistently compare a
+// single ID from a join column with a complete triple from a block.
 auto getRelevantIdFromTriple(
     CompressedBlockMetadata::PermutedTriple triple,
     const CompressedRelationReader::MetadataAndBlocks& metadataAndBlocks) {
@@ -265,15 +277,13 @@ auto getRelevantIdFromTriple(
   return idForNonMatchingBlock(triple.col1Id_,
                                metadataAndBlocks.col1Id_.value())
       .value_or(triple.col2Id_);
-
-  return triple.col2Id_;
 }
 }  // namespace
 
 // _____________________________________________________________________________
 std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
     std::span<const Id> joinColum, const MetadataAndBlocks& metadataAndBlocks) {
-  // get all the blocks where col0FirstId_ <= col0Id <= col0LastId_
+  // Get all the blocks where `col0FirstId_ <= col0Id <= col0LastId_`.
   auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
 
   // We need symmetric comparisons between `Id` and `IdPair`. as well as between
