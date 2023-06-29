@@ -31,21 +31,10 @@
 
 namespace ad_utility {
 
-// Only returns true, if the given type can be seen as a string.
-template <typename T>
-inline constexpr bool isString =
-    std::is_constructible_v<std::string, std::decay_t<T>>;
-
 /*
 Manages a bunch of `ConfigOption`s.
 */
 class ConfigManager {
- public:
-  // A list of keys, that are valid keys in json.
-  using KeyForJson = std::variant<nlohmann::json::size_type, std::string>;
-  using VectorOfKeysForJson = std::vector<KeyForJson>;
-
- private:
   /*
   The added configuration options.
 
@@ -66,8 +55,7 @@ class ConfigManager {
 
   @param pathToOption Describes a path in json, that points to the value held by
   the configuration option. The last key in the vector is the name of the
-  configuration option. NOTE: Both the first, and the last key have to be
-  strings.
+  configuration option.
   @param optionDescription A description for the configuration option.
   @param variableToPutValueOfTheOptionIn The value held by the configuration
   option will be copied into this variable, whenever the value in the
@@ -79,26 +67,24 @@ class ConfigManager {
   template <typename OptionType>
   requires ad_utility::isTypeContainedIn<OptionType,
                                          ConfigOption::AvailableTypes>
-  void createConfigOption(const VectorOfKeysForJson& pathToOption,
+  void createConfigOption(const std::vector<std::string>& pathToOption,
                           std::string_view optionDescription,
                           OptionType* variableToPutValueOfTheOptionIn,
                           std::optional<OptionType> defaultValue =
                               std::optional<OptionType>(std::nullopt)) {
     /*
-    We need a non-empty path that ends with a string to construct a ConfigOption
-    object, the `verify...` function always throws an exception for this case.
-    No need to duplicate the code.
+    We need a non-empty path to construct a ConfigOption object, the `verify...`
+    function always throws an exception for this case. No need to duplicate the
+    error code.
     */
-    if (pathToOption.empty() ||
-        !std::holds_alternative<std::string>(pathToOption.back())) {
+    if (pathToOption.empty()) {
       verifyPathToConfigOption(pathToOption, "");
     }
 
     addConfigOption(
         pathToOption,
-        ConfigOption(std::get<std::string>(pathToOption.back()),
-                     optionDescription, variableToPutValueOfTheOptionIn,
-                     defaultValue));
+        ConfigOption(pathToOption.back(), optionDescription,
+                     variableToPutValueOfTheOptionIn, defaultValue));
   }
 
   /*
@@ -115,7 +101,7 @@ class ConfigManager {
                           std::optional<OptionType> defaultValue =
                               std::optional<OptionType>(std::nullopt)) {
     createConfigOption<OptionType>(
-        VectorOfKeysForJson{std::move(optionName)}, optionDescription,
+        std::vector<std::string>{std::move(optionName)}, optionDescription,
         variableToPutValueOfTheOptionIn, std::move(defaultValue));
   }
 
@@ -178,7 +164,8 @@ class ConfigManager {
   @brief Creates the string representation of a valid `nlohmann::json` pointer
   based on the given keys.
   */
-  static std::string createJsonPointerString(const VectorOfKeysForJson& keys);
+  static std::string createJsonPointerString(
+      const std::vector<std::string>& keys);
 
   /*
   @brief Verifies, that the given path is a valid path for an option, with this
@@ -188,17 +175,16 @@ class ConfigManager {
   the configuration option.
   @param optionName The identifier of the `ConfigOption`.
   */
-  void verifyPathToConfigOption(const VectorOfKeysForJson& pathToOption,
+  void verifyPathToConfigOption(const std::vector<std::string>& pathToOption,
                                 std::string_view optionName) const;
 
   /*
   @brief Adds a configuration option, that can be accessed with the given path.
 
   @param pathToOption Describes a path in json, that points to the value held by
-  the configuration option. NOTE: The first key must be a string, and the last
-  key must be string, equal to the name of the configuration option.
+  the configuration option.
   */
-  void addConfigOption(const VectorOfKeysForJson& pathToOption,
+  void addConfigOption(const std::vector<std::string>& pathToOption,
                        ConfigOption&& option);
 
   /*
@@ -209,12 +195,12 @@ class ConfigManager {
   @param keys The keys for looking up the configuration option.
   */
   const ConfigOption& getConfigurationOptionByNestedKeys(
-      const VectorOfKeysForJson& keys) const;
+      const std::vector<std::string>& keys) const;
 
   /*
-  @brief Return string representation of a `VectorOfKeysForJson`.
+  @brief Return string representation of a `std::vector<std::string>`.
   */
   static std::string vectorOfKeysForJsonToString(
-      const VectorOfKeysForJson& keys);
+      const std::vector<std::string>& keys);
 };
 }  // namespace ad_utility

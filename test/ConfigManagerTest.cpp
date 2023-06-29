@@ -40,8 +40,7 @@ TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
                                              std::optional{42});
 
   config.createConfigOption(
-      {"Shared_part", "Unique_part_2", size_t{3}, "Sense_of_existence"}, "",
-      &notUsed);
+      {"Shared_part", "Unique_part_2", "Sense_of_existence"}, "", &notUsed);
   const ad_utility::ConfigOption withoutDefault("Sense_of_existence", "",
                                                 &notUsed);
 
@@ -54,7 +53,7 @@ TEST(ConfigManagerTest, GetConfigurationOptionByNestedKeysTest) {
   compareConfigurationOptions.template operator()<int>(
       withoutDefault,
       config.getConfigurationOptionByNestedKeys(
-          {"Shared_part", "Unique_part_2", size_t{3}, "Sense_of_existence"}));
+          {"Shared_part", "Unique_part_2", "Sense_of_existence"}));
 
   // Trying to get a configuration option, that does not exist, should cause
   // an exception.
@@ -81,33 +80,12 @@ TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
                , ad_utility::ConfigManagerOptionPathAlreadyinUseException);
 
   /*
-  If the first key for the path given is a number, that should cause an
-  exception.
-  Reason: We want our `tree` (a `nlohmann::json` object) to be a json
-  object literal, so that user can easier find things. Ordering your options
-  by just giving them numbers, would be bad practice, so we should prevent it.
-  */
-  ASSERT_ANY_THROW(config.createConfigOption<int>(
-      {size_t{0}, "Shared_part", "Sense_of_existence"}, "", &notUsed, 42););
-  ASSERT_ANY_THROW(config.createConfigOption<int>(
-      {size_t{3}, "Shared_part", "Sense_of_existence"}, "", &notUsed, 42););
-
-  /*
-  If the last key for the path given isn't a string, that should cause an
-  exception.
-  Reason: The last key is used as the name for the to be created `ConfigOption`.
-  A number, obviously, doesn't qualify.
-  */
-  ASSERT_ANY_THROW(config.createConfigOption<int>(
-      {"Shared_part", "Sense_of_existence", size_t{3}}, "", &notUsed, 42););
-
-  /*
   An empty vector that should cause an exception.
   Reason: The last key is used as the name for the to be created `ConfigOption`.
   An empty vector doesn't work with that.
   */
-  ASSERT_ANY_THROW(config.createConfigOption<int>(
-      ad_utility::ConfigManager::VectorOfKeysForJson{}, "", &notUsed, 42););
+  ASSERT_ANY_THROW(config.createConfigOption<int>(std::vector<std::string>{},
+                                                  "", &notUsed, 42););
 
   /*
   Trying to add a configuration option with a path containing strings with
@@ -117,9 +95,8 @@ TEST(ConfigManagerTest, CreateConfigurationOptionExceptionTest) {
   hand, which we don't want.
   */
   ASSERT_THROW(config.createConfigOption<int>(
-      ad_utility::ConfigManager::VectorOfKeysForJson{"Shared part",
-                                                     "Sense_of_existence"},
-      "", &notUsed, 42);
+      std::vector<std::string>{"Shared part", "Sense_of_existence"}, "",
+      &notUsed, 42);
                , ad_utility::NotValidShortHandNameException);
 }
 
@@ -132,7 +109,7 @@ TEST(ConfigManagerTest, ParseConfig) {
   int thirdInt;
 
   config.createConfigOption<int>(
-      ad_utility::ConfigManager::VectorOfKeysForJson{"depth_0", "Option_0"},
+      std::vector<std::string>{"depth_0", "Option_0"},
       "Must be set. Has no default value.", &firstInt);
   config.createConfigOption<int>({"depth_0", "depth_1", "Option_1"},
                                  "Must be set. Has no default value.",
@@ -194,11 +171,10 @@ TEST(ConfigManagerTest, ParseConfigExceptionTest) {
   int notUsedInt;
   std::vector<int> notUsedVector;
   config.createConfigOption<int>(
-      ad_utility::ConfigManager::VectorOfKeysForJson{"depth_0",
-                                                     "Without_default"},
+      std::vector<std::string>{"depth_0", "Without_default"},
       "Must be set. Has no default value.", &notUsedInt);
   config.createConfigOption<std::vector<int>>(
-      ad_utility::ConfigManager::VectorOfKeysForJson{"depth_0", "With_default"},
+      std::vector<std::string>{"depth_0", "With_default"},
       "Must not be set. Has default value.", &notUsedVector,
       std::vector{40, 41});
 
@@ -280,7 +256,7 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
   // Add option with deeper level.
   std::vector<int> deeperIntVector;
   config.createConfigOption<std::vector<int>>(
-      {"depth", size_t{0}, "list"}, "Must be set. Has no default value.",
+      {"depth", "here", "list"}, "Must be set. Has no default value.",
       &deeperIntVector);
 
   // This one will not be changed, in order to test, that options, that are
@@ -290,17 +266,16 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
 
   // Set those.
   config.parseConfig(ad_utility::ConfigManager::parseShortHand(
-      R"--(somePositiveNumber : 42, someNegativNumber : -42, someIntegerlist : [40, 41], somePositiveFloatingPoint : 4.2, someNegativFloatingPoint : -4.2, someFloatingPointList : [4.1, 4.2], boolTrue : true, boolFalse : false, someBooleanList : [true, false, true], myName : "Bernd", someStringList : ["t1", "t2"], depth : [{list : [7,8]}])--"));
+      R"--(somePositiveNumber : 42, someNegativNumber : -42, someIntegerlist : [40, 41], somePositiveFloatingPoint : 4.2, someNegativFloatingPoint : -4.2, someFloatingPointList : [4.1, 4.2], boolTrue : true, boolFalse : false, someBooleanList : [true, false, true], myName : "Bernd", someStringList : ["t1", "t2"], depth : { here : {list : [7,8]}})--"));
 
   // Check, if an option was set to the value, you wanted.
-  auto checkOption =
-      [&config](const auto& content,
-                const ad_utility::ConfigManager::VectorOfKeysForJson& keys) {
-        const auto& option = config.getConfigurationOptionByNestedKeys(keys);
-        ASSERT_TRUE(option.wasSet());
-        ASSERT_EQ(content,
-                  option.template getValue<std::decay_t<decltype(content)>>());
-      };
+  auto checkOption = [&config](const auto& content,
+                               const std::vector<std::string>& keys) {
+    const auto& option = config.getConfigurationOptionByNestedKeys(keys);
+    ASSERT_TRUE(option.wasSet());
+    ASSERT_EQ(content,
+              option.template getValue<std::decay_t<decltype(content)>>());
+  };
 
   checkOption(static_cast<int>(42), {"somePositiveNumber"});
   checkOption(static_cast<int>(-42), {"someNegativNumber"});
@@ -321,7 +296,7 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
 
   checkOption(std::vector<std::string>{"t1", "t2"}, {"someStringList"});
 
-  checkOption(std::vector{7, 8}, {"depth", size_t{0}, "list"});
+  checkOption(std::vector{7, 8}, {"depth", "here", "list"});
 
   // Is the "No Change" unchanged?
   checkOption(static_cast<int>(10), {"No_change"});

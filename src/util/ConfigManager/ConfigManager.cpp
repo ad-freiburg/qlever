@@ -32,42 +32,33 @@ namespace ad_utility {
 
 // ____________________________________________________________________________
 std::string ConfigManager::createJsonPointerString(
-    const VectorOfKeysForJson& keys) {
+    const std::vector<std::string>& keys) {
   if (keys.empty()) {
     return "";
   }
 
   /*
-  Convert a `key` (a string-like or integral type) to a string and escape the
-  characters `/` and `~` which have a special meaning inside JSON pointers.
+  Escape the characters `/` and `~`, which have a special meaning inside JSON
+  pointers, inside the given string.
   */
-  auto toStringVisitor = []<typename T>(const T& key) {
-    if constexpr (isString<std::decay_t<T>>) {
-      // Replace special character `~` with `~0` and `/` with `~1`.
-      return absl::StrReplaceAll(key, {{"~", "~0"}, {"/", "~1"}});
-    } else {
-      static_assert(std::integral<std::decay_t<T>>);
-      return std::to_string(key);
-    }
-  };
-
-  auto toString = [&toStringVisitor](const KeyForJson& key) {
-    return std::visit(toStringVisitor, key);
+  auto escapeSpecialCharacters = [](std::string_view key) {
+    // Replace special character `~` with `~0` and `/` with `~1`.
+    return absl::StrReplaceAll(key, {{"~", "~0"}, {"/", "~1"}});
   };
 
   // Creating the string for the pointer.
   std::ostringstream pointerString;
-  std::ranges::for_each(keys,
-                        [&toString, &pointerString](const KeyForJson& key) {
-                          pointerString << "/" << toString(key);
-                        });
+  std::ranges::for_each(
+      keys, [&escapeSpecialCharacters, &pointerString](std::string_view key) {
+        pointerString << "/" << escapeSpecialCharacters(key);
+      });
 
   return pointerString.str();
 }
 
 // ____________________________________________________________________________
 void ConfigManager::verifyPathToConfigOption(
-    const VectorOfKeysForJson& pathToOption,
+    const std::vector<std::string>& pathToOption,
     std::string_view optionName) const {
   // We need at least a name in the path.
   if (pathToOption.empty()) {
@@ -76,46 +67,24 @@ void ConfigManager::verifyPathToConfigOption(
         "least a name for a working path to a configuration option.");
   }
 
-  if (!std::holds_alternative<std::string>(pathToOption.front())) {
-    throw std::runtime_error(absl::StrCat(
-        "The first key in '", vectorOfKeysForJsonToString(pathToOption),
-        "' must be a string, not a number. Having an array at the highest "
-        "level, would be bad practice, because setting and reading options, "
-        "that are just identified with numbers, is rather difficult."));
-  }
-
   /*
   The last entry in the path is the name of the configuration option. If it
   isn't, something has gone wrong.
   */
-  AD_CONTRACT_CHECK(std::holds_alternative<std::string>(pathToOption.back()) &&
-                    std::get<std::string>(pathToOption.back()) == optionName);
+  AD_CONTRACT_CHECK(pathToOption.back() == optionName);
 
   /*
-  The string keys must be a valid `NAME` in the short hand. Otherwise, the
-  option can't get accessed with the short hand.
+  A string must be a valid `NAME` in the short hand. Otherwise, the option can't
+  get accessed with the short hand.
   */
-  auto checkIfValidNameVisitor = []<typename T>(const T& key) {
-    // Only actually check, if we have a string.
-    if constexpr (isString<std::decay_t<T>>) {
-      return isNameInShortHand(AD_FWD(key));
-    } else {
-      return true;
-    }
-  };
-
-  if (auto failedKey = std::ranges::find_if_not(
-          pathToOption,
-          [&checkIfValidNameVisitor](const KeyForJson& key) {
-            return std::visit(checkIfValidNameVisitor, key);
-          });
+  if (auto failedKey =
+          std::ranges::find_if_not(pathToOption, isNameInShortHand);
       failedKey != pathToOption.end()) {
     /*
     One of the keys failed. `failedKey` is an iterator pointing to the key.
     */
     throw NotValidShortHandNameException(
-        std::get<std::string>(*failedKey),
-        vectorOfKeysForJsonToString(pathToOption));
+        *failedKey, vectorOfKeysForJsonToString(pathToOption));
   }
 
   // Is there already a configuration option with the same identifier at the
@@ -127,8 +96,8 @@ void ConfigManager::verifyPathToConfigOption(
 }
 
 // ____________________________________________________________________________
-void ConfigManager::addConfigOption(const VectorOfKeysForJson& pathToOption,
-                                    ConfigOption&& option) {
+void ConfigManager::addConfigOption(
+    const std::vector<std::string>& pathToOption, ConfigOption&& option) {
   // Is the path valid?
   verifyPathToConfigOption(pathToOption, option.getIdentifier());
 
@@ -139,7 +108,7 @@ void ConfigManager::addConfigOption(const VectorOfKeysForJson& pathToOption,
 
 // ____________________________________________________________________________
 const ConfigOption& ConfigManager::getConfigurationOptionByNestedKeys(
-    const VectorOfKeysForJson& keys) const {
+    const std::vector<std::string>& keys) const {
   // If there is an config option with that described location, then this should
   // point to the configuration option.
   const std::string ptr{createJsonPointerString(keys)};
@@ -189,10 +158,10 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
 
   /*
   We can't write something along the lines of `for (const auto& bla :
-  j.flatten())` for iteration, because, when iterating over the entries of a
-  `nlohmann::json` object using `items()`, there can be error/problems, IF the
-  life time of the object, on which one called `items()` on, doesn't exceeds the
-  life time of the iteration. (See the nlohmann json documentation for more
+  j.flatten().items())` for iteration, because, when iterating over the entries
+  of a `nlohmann::json` object using `items()`, there can be error/problems, IF
+  the life time of the object, on which one called `items()` on, doesn't exceeds
+  the life time of the iteration. (See the nlohmann json documentation for more
   information.)
   */
   const auto& jFlattend = j.flatten();
@@ -286,18 +255,6 @@ std::string ConfigManager::printConfigurationDoc(
     the configuration option was initialized.
   - The default value of the configuration option.
   - An example value, of the correct type.
-  Note: Users can indirectly create null values in
-  `configuratioOptionsVisualization`, by adding a configuration option with a
-  path containing numbers, for arrays accesses, that are bigger than zero. Those
-  indirectly declared arrays, will always be created/modified in such a way,
-  that the used index numbers are valid. Which means creating empty array
-  entries, if the numbers are bigger than `0` and the arrays don't already have
-  entries in all positions lower than the numbers.
-  Example: A configuration option with the path `"options", 3`, would create 3
-  empty array entries in `"options"`. We will simply ignore those `null`
-  entries, because they are signifiers, that the user didn't think things
-  through and should re-work some stuff. I mean, there is never a good reason,
-  to have empty array elements.
   */
   for (const auto& [path, option] : configurationOptions_) {
     // Pointer to the position of this option in
@@ -343,12 +300,10 @@ std::string ConfigManager::printConfigurationDoc(
 
 // ____________________________________________________________________________
 std::string ConfigManager::vectorOfKeysForJsonToString(
-    const VectorOfKeysForJson& keys) {
+    const std::vector<std::string>& keys) {
   std::ostringstream keysToString;
-  std::ranges::for_each(keys, [&keysToString](const auto& key) {
-    std::visit(
-        [&keysToString](const auto& k) { keysToString << "[" << k << "]"; },
-        key);
+  std::ranges::for_each(keys, [&keysToString](std::string_view key) {
+    keysToString << "[" << key << "]";
   });
   return keysToString.str();
 }
