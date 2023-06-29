@@ -38,30 +38,25 @@ void Permutation::loadFromDisk(const std::string& onDiskBase) {
 }
 
 // _____________________________________________________________________
-void Permutation::scan(Id col0Id, IdTable* result,
-                       ad_utility::SharedConcurrentTimeoutTimer timer) const {
+void Permutation::scan(Id col0Id, std::optional<Id> col1Id, IdTable* result,
+                       const TimeoutTimer& timer) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
                              readableName_ + ", which was not loaded");
   }
-  if (!meta_.col0IdExists(col0Id)) {
-    return;
-  }
-  const auto& metaData = meta_.getMetaData(col0Id);
-  return reader_.scan(metaData, meta_.blockData(), file_, result,
-                      std::move(timer));
-}
 
-// _____________________________________________________________________
-void Permutation::scan(Id col0Id, Id col1Id, IdTable* result,
-                       ad_utility::SharedConcurrentTimeoutTimer timer) const {
   if (!meta_.col0IdExists(col0Id)) {
     return;
   }
   const auto& metaData = meta_.getMetaData(col0Id);
 
-  return reader_.scan(metaData, col1Id, meta_.blockData(), file_, result,
-                      timer);
+  if (col1Id.has_value()) {
+    *result = reader_.scan(metaData, col1Id.value(), meta_.blockData(), file_,
+                        timer);
+  } else {
+    *result =  reader_.scan(metaData, meta_.blockData(), file_,
+                        timer);
+  }
 }
 
 // _____________________________________________________________________
@@ -131,22 +126,17 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
 
 // _____________________________________________________________________
 cppcoro::generator<IdTable> Permutation::lazyScan(
-    Id col0Id, std::vector<CompressedBlockMetadata> blocks,
-    ad_utility::SharedConcurrentTimeoutTimer timer) const {
+    Id col0Id, std::optional<Id> col1Id,
+    const std::vector<CompressedBlockMetadata>& blocks,
+    const TimeoutTimer& timer) const {
   if (!meta_.col0IdExists(col0Id)) {
     return {};
   }
-  return reader_.lazyScan(meta_.getMetaData(col0Id), std::move(blocks), file_,
-                          timer);
-}
-
-// _____________________________________________________________________
-cppcoro::generator<IdTable> Permutation::lazyScan(
-    Id col0Id, Id col1Id, const std::vector<CompressedBlockMetadata>& blocks,
-    ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  if (!meta_.col0IdExists(col0Id)) {
-    return {};
+  if (col1Id.has_value()) {
+    return reader_.lazyScan(meta_.getMetaData(col0Id), col1Id.value(), blocks, file_,
+                            timer);
+  } else {
+    return reader_.lazyScan(meta_.getMetaData(col0Id), std::move(blocks), file_,
+                            timer);
   }
-  return reader_.lazyScan(meta_.getMetaData(col0Id), col1Id, blocks, file_,
-                          timer);
 }

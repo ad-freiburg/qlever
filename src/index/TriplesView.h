@@ -79,7 +79,7 @@ cppcoro::generator<std::array<Id, 3>> TriplesView(
       col1And2.clear();
       Id id = it.getId();
       // TODO<joka921> We could also pass a timeout pointer here.
-      permutation.scan(id, &col1And2);
+      permutation.scan(id, std::nullopt, &col1And2);
       for (const auto& row : col1And2) {
         std::array<Id, 3> triple{id, row[0], row[1]};
         if (isTripleIgnored(triple)) [[unlikely]] {

@@ -125,13 +125,7 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
     ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
                     m.multiplicityCol1_);
     // Scan for all distinct `col0` and check that we get the expected result.
-    IdTable table{2, ad_utility::testing::makeAllocator()};
-    reader.scan(metaData[i], blocks, file, &table, timer);
-    {
-      IdTable wrongNumCols{3, ad_utility::testing::makeAllocator()};
-      ASSERT_THROW(reader.scan(metaData[i], blocks, file, &wrongNumCols, timer),
-                   ad_utility::Exception);
-    }
+    IdTable table = reader.scan(metaData[i], blocks, file, timer);
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
 
@@ -149,11 +143,11 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
     std::vector<std::array<int, 1>> col3;
 
     auto scanAndCheck = [&]() {
-      IdTable tableWidthOne{1, ad_utility::testing::makeAllocator()};
       auto size =
           reader.getResultSizeOfScan(metaData[i], V(lastCol1Id), blocks, file);
-      reader.scan(metaData[i], V(lastCol1Id), blocks, file, &tableWidthOne,
+      IdTable tableWidthOne = reader.scan(metaData[i], V(lastCol1Id), blocks, file,
                   timer);
+      ASSERT_EQ(tableWidthOne.numColumns(), 1);
       EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
       tableWidthOne.clear();
@@ -162,12 +156,6 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
         tableWidthOne.insertAtEnd(block.begin(), block.end());
       }
       checkThatTablesAreEqual(col3, tableWidthOne);
-      {
-        IdTable wrongNumCols{2, ad_utility::testing::makeAllocator()};
-        ASSERT_THROW(reader.scan(metaData[i], V(lastCol1Id), blocks, file,
-                                 &wrongNumCols, timer),
-                     ad_utility::Exception);
-      }
     };
     for (size_t j = 0; j < col1And2.size(); ++j) {
       if (col1And2[j][0] == lastCol1Id) {

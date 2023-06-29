@@ -1281,45 +1281,24 @@ vector<float> IndexImpl::getMultiplicities(
   return {m[p.keyOrder_[0]], m[p.keyOrder_[1]], m[p.keyOrder_[2]]};
 }
 
-// ___________________________________________________________________
-void IndexImpl::scan(Id key, IdTable* result, const Permutation::Enum& p,
-                     ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  getPermutation(p).scan(key, result, std::move(timer));
-}
-
-// ___________________________________________________________________
-void IndexImpl::scan(const TripleComponent& key, IdTable* result,
-                     Permutation::Enum permutation,
-                     ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  const auto& p = getPermutation(permutation);
-  LOG(DEBUG) << "Performing " << p.readableName_
-             << " scan for full list for: " << key << "\n";
-
-  if (std::optional<Id> id = key.toValueId(getVocab()); id.has_value()) {
-    LOG(TRACE) << "Successfully got key ID.\n";
-    scan(id.value(), result, permutation, std::move(timer));
-  }
-  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
-}
-
 // _____________________________________________________________________________
-void IndexImpl::scan(const TripleComponent& col0String,
-                     const TripleComponent& col1String, IdTable* result,
-                     const Permutation::Enum& permutation,
+void IndexImpl::scan(
+    const TripleComponent& col0String,
+    std::optional<std::reference_wrapper<const TripleComponent>> col1String, IdTable* result, const Permutation::Enum& permutation,
                      ad_utility::SharedConcurrentTimeoutTimer timer) const {
   std::optional<Id> col0Id = col0String.toValueId(getVocab());
-  std::optional<Id> col1Id = col1String.toValueId(getVocab());
-  const auto& p = getPermutation(permutation);
-  if (!col0Id.has_value() || !col1Id.has_value()) {
-    LOG(DEBUG) << "Key " << col0String << " or key " << col1String
-               << " were not found in the vocabulary \n";
+  std::optional<Id> col1Id = col1String.has_value() ? col1String.value().get().toValueId(getVocab()) : std::nullopt;
+  if (!col0Id.has_value() || (col1String.has_value() && !col1Id.has_value())) {
     return;
   }
-
-  LOG(DEBUG) << "Performing " << p.readableName_ << "  scan of relation "
-             << col0String << " with fixed subject: " << col1String << "...\n";
-
-  p.scan(col0Id.value(), col1Id.value(), result, timer);
+  return scan(col0Id.value(), col1Id, result, permutation,  timer);
+}
+// _____________________________________________________________________________
+void IndexImpl::scan(Id col0Id,
+          std::optional<Id> col1Id, IdTable* result,
+          Permutation::Enum p,
+          ad_utility::SharedConcurrentTimeoutTimer timer) const {
+  getPermutation(p).scan(col0Id, col1Id, result, timer);
 }
 
 // _____________________________________________________________________________

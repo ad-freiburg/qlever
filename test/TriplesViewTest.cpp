@@ -15,7 +15,8 @@ auto V = ad_utility::testing::VocabId;
 // This struct mocks the structure of the actual `Permutation::Enum` types used
 // in QLever for testing the `TriplesView`.
 struct DummyPermutation {
-  void scan(Id col0Id, auto* result) const {
+  void scan(Id col0Id, std::optional<Id> col1Id,  auto* result) const {
+    AD_CORRECTNESS_CHECK(!col1Id.has_value());
     result->reserve(col0Id.getVocabIndex().get());
     for (size_t i = 0; i < col0Id.getVocabIndex().get(); ++i) {
       result->push_back(std::array{V((i + 1) * col0Id.getVocabIndex().get()),

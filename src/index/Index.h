@@ -266,33 +266,6 @@ class Index {
   vector<float> getMultiplicities(Permutation::Enum p) const;
 
   /**
-   * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
-   * permutation for a specific key value of X
-   * @tparam Permutation The permutations Index::POS()... have different types
-   * @param key The key (in Id space) for which to search, e.g. fixed value for
-   * O in OSP permutation.
-   * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
-   * members of Index class).
-   */
-  void scan(Id key, IdTable* result, Permutation::Enum p,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
-
-  /**
-   * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
-   * permutation for a specific key value of X
-   * @tparam Permutation The permutations Index::POS()... have different types
-   * @param key The key (as a raw string that is yet to be transformed to index
-   * space) for which to search, e.g. fixed value for O in OSP permutation.
-   * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
-   * members of Index class).
-   */
-  void scan(const TripleComponent& key, IdTable* result,
-            const Permutation::Enum& p,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
-
-  /**
    * @brief Perform a scan for two keys i.e. retrieve all Z from the XYZ
    * permutation for specific key values of X and Y.
    * @tparam Permutation The permutations Index::POS()... have different types
@@ -308,7 +281,13 @@ class Index {
    */
   // _____________________________________________________________________________
   void scan(const TripleComponent& col0String,
-            const TripleComponent& col1String, IdTable* result,
+            std::optional<std::reference_wrapper<const TripleComponent>> col1String, IdTable* result,
+            Permutation::Enum p,
+            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+
+  // _____________________________________________________________________________
+  void scan(Id col0Id,
+            std::optional<Id> col1Id, IdTable* result,
             Permutation::Enum p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 

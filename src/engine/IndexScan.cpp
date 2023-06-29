@@ -120,7 +120,7 @@ ResultTable IndexScan::computeResult() {
   const auto& index = _executionContext->getIndex();
   const auto permutedTriple = getPermutedTriple();
   if (numVariables_ == 2) {
-    index.scan(*permutedTriple[0], &idTable, permutation_, _timeoutTimer);
+    index.scan(*permutedTriple[0], std::nullopt, &idTable, permutation_, _timeoutTimer);
   } else if (numVariables_ == 1) {
     index.scan(*permutedTriple[0], *permutedTriple[1], &idTable, permutation_,
                _timeoutTimer);
@@ -289,13 +289,8 @@ cppcoro::generator<IdTable> IndexScan::getLazyScan(
   if (s.numVariables_ == 1) {
     col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
   }
-  if (!col1Id.has_value()) {
-    return index.getPermutation(s.permutation())
-        .lazyScan(col0Id, std::move(blocks));
-  } else {
-    return index.getPermutation(s.permutation())
-        .lazyScan(col0Id, col1Id.value(), std::move(blocks));
-  }
+  return index.getPermutation(s.permutation())
+      .lazyScan(col0Id, col1Id, std::move(blocks));
 };
 
 // ________________________________________________________________

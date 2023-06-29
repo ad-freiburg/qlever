@@ -32,6 +32,7 @@ class Permutation {
 
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
+  using TimeoutTimer = ad_utility::SharedConcurrentTimeoutTimer;
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".
   static std::string_view toString(Enum permutation);
@@ -48,14 +49,12 @@ class Permutation {
   /// For a given ID for the first column, retrieve all IDs of the second and
   /// third column, and store them in `result`. This is just a thin wrapper
   /// around `CompressedRelationMetaData::scan`.
-  void scan(Id col0Id, IdTable* result,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
-
+  /// TODO<joka921> unify the comments.
   /// For given IDs for the first and second column, retrieve all IDs of the
   /// third column, and store them in `result`. This is just a thin wrapper
   /// around `CompressedRelationMetaData::scan`.
-  void scan(Id col0Id, Id col1Id, IdTable* result,
-            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+  void scan(Id col0Id, std::optional<Id> col1Id, IdTable* result,
+            const TimeoutTimer& timer = nullptr) const;
 
   // Typedef to propagate the `MetadataAndblocks` type.
   using MetadataAndBlocks = CompressedRelationReader::MetadataAndBlocks;
@@ -73,12 +72,9 @@ class Permutation {
   // `MetadataAndBlocks` class and make this a strong class that always
   // maintains its invariants.
   cppcoro::generator<IdTable> lazyScan(
-      Id col0Id, std::vector<CompressedBlockMetadata> blocks,
-      ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
-
-  cppcoro::generator<IdTable> lazyScan(
-      Id col0Id, Id col1Id, const std::vector<CompressedBlockMetadata>& blocks,
-      ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+      Id col0Id, std::optional<Id> col1Id,
+      const std::vector<CompressedBlockMetadata>& blocks,
+      const TimeoutTimer& timer = nullptr) const;
 
   // Return the relation metadata for the relation specified by the `col0Id`
   // along with the metadata of all the blocks that contain this relation (also
