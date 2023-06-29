@@ -34,7 +34,12 @@ class WaitedForResultWhichThenFailedException : public std::exception {
 // a result was stored in the cache, but not cachedPinned. A result was stored
 // in the cache and cachedPinned, a result was not in the cache and therefore
 // had to be computed.
-enum struct CacheStatus { cachedNotPinned, cachedPinned, computed };
+enum struct CacheStatus {
+  cachedNotPinned,
+  cachedPinned,
+  computed,
+  notInCacheAndNotComputed
+};
 
 // Convert a `CacheStatus` to a human-readable string. We mostly use it for
 // JSON exports, so we use a hyphenated format.
@@ -46,6 +51,8 @@ constexpr std::string_view toString(CacheStatus status) {
       return "cached_pinned";
     case CacheStatus::computed:
       return "computed";
+    case CacheStatus::notInCacheAndNotComputed:
+      return "not_in_cache_not_computed";
     default:
       throw std::runtime_error(
           "Unknown enum value was encountered in `toString(CacheStatus)`");
@@ -168,21 +175,28 @@ class ConcurrentCache {
    * the associated computeFunctions must yield the same results.
    * @param computeFunction The actual computation. If the result has to be
    * computed, computeFunction() is called.
+   * @param onlyReadFromCache If true, then the result will only be returned if
+   * it is contained in the cache. Otherwise `nullptr` with a cache status of
+   * `notInCacheNotComputed` will be returned.
    * @return A shared_ptr to the computation result.
    *
    */
   template <class ComputeFunction>
   ResultAndCacheStatus computeOnce(const Key& key,
-                                   ComputeFunction computeFunction) {
-    return computeOnceImpl(false, key, std::move(computeFunction));
+                                   ComputeFunction computeFunction,
+                                   bool onlyReadFromCache = false) {
+    return computeOnceImpl(false, key, std::move(computeFunction),
+                           onlyReadFromCache);
   }
 
   /// Similar to computeOnce, with the following addition: After the call
   /// completes, the result will be pinned in the underlying cache.
   template <class ComputeFunction>
   ResultAndCacheStatus computeOncePinned(const Key& key,
-                                         ComputeFunction computeFunction) {
-    return computeOnceImpl(true, key, std::move(computeFunction));
+                                         ComputeFunction computeFunction,
+                                         bool onlyReadFromCache = false) {
+    return computeOnceImpl(true, key, std::move(computeFunction),
+                           onlyReadFromCache);
   }
 
   /// Clear the cache (but not the pinned entries)
@@ -298,7 +312,8 @@ class ConcurrentCache {
   // implementation for computeOnce (pinned and normal variant).
   template <class ComputeFunction>
   ResultAndCacheStatus computeOnceImpl(bool pinned, const Key& key,
-                                       ComputeFunction computeFunction) {
+                                       ComputeFunction computeFunction,
+                                       bool onlyReadFromCache) {
     bool mustCompute;
     shared_ptr<ResultInProgress> resultInProgress;
     // first determine whether we have to compute the result,
@@ -314,6 +329,8 @@ class ConcurrentCache {
       if (contained) {
         // the result is in the cache, simply return it.
         return {cache[key], cacheStatus};
+      } else if (onlyReadFromCache) {
+        return {nullptr, CacheStatus::notInCacheAndNotComputed};
       } else if (lockPtr->_inProgress.contains(key)) {
         // the result is not cached, but someone else is computing it.
         // it is important, that we do not immediately call getResult() since
