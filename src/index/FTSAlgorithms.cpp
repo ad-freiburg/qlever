@@ -19,20 +19,21 @@ using std::pair;
 Index::WordEntityPostings FTSAlgorithms::filterByRange(
     const IdRange<WordVocabIndex>& idRange,
     const Index::WordEntityPostings& wepPreFilter) {
-  AD_CONTRACT_CHECK(wepPreFilter.cids_.size() ==
-                    wepPreFilter.widsOneTerm_.size());
+  AD_CONTRACT_CHECK(wepPreFilter.wids_.size() == 1);
+  AD_CONTRACT_CHECK(wepPreFilter.cids_.size() == wepPreFilter.wids_[0].size());
   AD_CONTRACT_CHECK(wepPreFilter.cids_.size() == wepPreFilter.scores_.size());
   LOG(DEBUG) << "Filtering " << wepPreFilter.cids_.size()
              << " elements by ID range...\n";
 
   Index::WordEntityPostings wepResult;
+  wepResult.wids_.resize(1);
   wepResult.cids_.resize(wepPreFilter.cids_.size() + 2);
   wepResult.scores_.resize(wepPreFilter.cids_.size() + 2);
-  wepResult.widsOneTerm_.resize(wepPreFilter.cids_.size() + 2);
+  wepResult.wids_[0].resize(wepPreFilter.cids_.size() + 2);
 
   size_t nofResultElements = 0;
 
-  for (size_t i = 0; i < wepPreFilter.widsOneTerm_.size(); ++i) {
+  for (size_t i = 0; i < wepPreFilter.wids_[0].size(); ++i) {
     // TODO<joka921> proper Ids for the text stuff.
     // The mapping from words that appear in text records to `WordIndex`es is
     // stored in a `Vocabulary` that stores `VocabIndex`es, so we have to
@@ -40,81 +41,23 @@ Index::WordEntityPostings FTSAlgorithms::filterByRange(
     // TODO<joka921> Can we make the returned `IndexType` a template parameter
     // of the vocabulary, s.t. we have a vocabulary that stores `WordIndex`es
     // directly?
-    if (wepPreFilter.widsOneTerm_[i] >= idRange._first.get() &&
-        wepPreFilter.widsOneTerm_[i] <= idRange._last.get()) {
+    if (wepPreFilter.wids_[0][i] >= idRange._first.get() &&
+        wepPreFilter.wids_[0][i] <= idRange._last.get()) {
       wepResult.cids_[nofResultElements] = wepPreFilter.cids_[i];
       wepResult.scores_[nofResultElements] = wepPreFilter.scores_[i];
-      wepResult.widsOneTerm_[nofResultElements++] =
-          wepPreFilter.widsOneTerm_[i];
+      wepResult.wids_[0][nofResultElements++] = wepPreFilter.wids_[0][i];
     }
   }
 
   wepResult.cids_.resize(nofResultElements);
   wepResult.scores_.resize(nofResultElements);
-  wepResult.widsOneTerm_.resize(nofResultElements);
+  wepResult.wids_[0].resize(nofResultElements);
 
   AD_CONTRACT_CHECK(wepResult.cids_.size() == wepResult.scores_.size());
-  AD_CONTRACT_CHECK(wepResult.cids_.size() == wepResult.widsOneTerm_.size());
+  AD_CONTRACT_CHECK(wepResult.cids_.size() == wepResult.wids_[0].size());
   LOG(DEBUG) << "Filtering by ID range done. Result has "
              << wepResult.cids_.size() << " elements.\n";
   return wepResult;
-}
-
-// _____________________________________________________________________________
-Index::WordEntityPostings FTSAlgorithms::intersect(
-    const Index::WordEntityPostings& matchingContextsWep,
-    const Index::WordEntityPostings& eBlockWep) {
-  LOG(DEBUG) << "Intersection to filter the entity postings from a block "
-             << "so that only matching ones remain\n";
-  LOG(DEBUG) << "matchingContextsWep.cids_ size: "
-             << matchingContextsWep.cids_.size() << '\n';
-  LOG(DEBUG) << "eBlockWep.cids_ size: " << eBlockWep.cids_.size() << '\n';
-  Index::WordEntityPostings resultWep;
-  // Handle trivial empty case
-  if (matchingContextsWep.cids_.empty() || eBlockWep.cids_.empty()) {
-    return resultWep;
-  }
-
-  resultWep.cids_.reserve(eBlockWep.cids_.size());
-  resultWep.cids_.clear();
-  resultWep.eids_.reserve(eBlockWep.cids_.size());
-  resultWep.eids_.clear();
-  resultWep.scores_.reserve(eBlockWep.cids_.size());
-  resultWep.scores_.clear();
-
-  size_t i = 0;
-  size_t j = 0;
-
-  while (i < matchingContextsWep.cids_.size() && j < eBlockWep.cids_.size()) {
-    while (matchingContextsWep.cids_[i] < eBlockWep.cids_[j]) {
-      ++i;
-      if (i >= matchingContextsWep.cids_.size()) {
-        return resultWep;
-      }
-    }
-    while (eBlockWep.cids_[j] < matchingContextsWep.cids_[i]) {
-      ++j;
-      if (j >= eBlockWep.cids_.size()) {
-        return resultWep;
-      }
-    }
-    while (matchingContextsWep.cids_[i] == eBlockWep.cids_[j]) {
-      // Make sure we get all matching elements from the entity list (l2)
-      // that match the current context.
-      // If there are multiple elements for that context in l1,
-      // we can safely skip them unless we want to incorporate the scores
-      // later on.
-      resultWep.cids_.push_back(eBlockWep.cids_[j]);
-      resultWep.eids_.push_back(eBlockWep.eids_[j]);
-      resultWep.scores_.push_back(eBlockWep.scores_[j]);
-      j++;
-      if (j >= eBlockWep.cids_.size()) {
-        break;
-      }
-    }
-    ++i;
-  }
-  return resultWep;
 }
 
 // _____________________________________________________________________________
@@ -122,15 +65,16 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersect(
     const Index::WordEntityPostings& matchingContextsWep,
     const Index::WordEntityPostings& eBlockWep) {
   // Example:
-  // matchingContextsWep.widsOneTerm_: 3 4 3 4 3
+  // matchingContextsWep.wids_[0]: 3 4 3 4 3
   // matchingContextsWep.cids_: 1 4 5 5 7
   // -----------------------------------
   // eBlockWep.cids_          : 4 5 5 8
   // eBlockWep.eids_          : 2 1 2 1
   // ===================================
   // resultWep.cids_          : 4 5 5 5 5
-  // resultWep.widsOneTerm_          : 4 3 4 3 4
+  // resultWep.wids_[0]          : 4 3 4 3 4
   // resultWep.eids_          : 2 1 2 2 1
+  AD_CONTRACT_CHECK(matchingContextsWep.wids_.size() == 1);
   LOG(DEBUG)
       << "Intersection to filter the word-entity postings from a block so that "
       << "only entries remain where the entity matches. If there are multiple "
@@ -139,12 +83,13 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersect(
              << matchingContextsWep.cids_.size() << '\n';
   LOG(DEBUG) << "eBlockWep.cids_ size: " << eBlockWep.cids_.size() << '\n';
   Index::WordEntityPostings resultWep;
+  resultWep.wids_.resize(1);
   // Handle trivial empty case
   if (matchingContextsWep.cids_.empty() || eBlockWep.cids_.empty()) {
     return resultWep;
   }
-  resultWep.widsOneTerm_.reserve(eBlockWep.cids_.size());
-  resultWep.widsOneTerm_.clear();
+  resultWep.wids_[0].reserve(eBlockWep.cids_.size());
+  resultWep.wids_[0].clear();
   resultWep.cids_.reserve(eBlockWep.cids_.size());
   resultWep.cids_.clear();
   resultWep.eids_.reserve(eBlockWep.cids_.size());
@@ -176,8 +121,7 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersect(
       // later on.
       size_t k = 0;
       while (matchingContextsWep.cids_[i + k] == matchingContextsWep.cids_[i]) {
-        resultWep.widsOneTerm_.push_back(
-            matchingContextsWep.widsOneTerm_[i + k]);
+        resultWep.wids_[0].push_back(matchingContextsWep.wids_[0][i + k]);
         resultWep.cids_.push_back(eBlockWep.cids_[j]);
         resultWep.eids_.push_back(eBlockWep.eids_[j]);
         resultWep.scores_.push_back(eBlockWep.scores_[j]);
@@ -285,11 +229,12 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
     resultWep.eids_.reserve(minSize + 2);
     resultWep.eids_.resize(minSize);
   }
-  resultWep.widsMultTerms_.reserve(k);
-  resultWep.widsMultTerms_.resize(k);
+  resultWep.wids_.reserve(k);
+  resultWep.wids_.resize(k);
   for (size_t j = 0; j < k; j++) {
-    resultWep.widsMultTerms_[j].reserve(minSize + 2);
-    resultWep.widsMultTerms_[j].resize(minSize);
+    AD_CONTRACT_CHECK(wepVecs[j].wids_.size() == 1);
+    resultWep.wids_[j].reserve(minSize + 2);
+    resultWep.wids_[j].resize(minSize);
   }
 
   // For intersection, we don't need a PQ.
@@ -365,8 +310,8 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
                 resultWep.eids_[n] = (*lastListEids)[matchInEL];
                 resultWep.scores_[n] = s + wepVecs[k].scores_[matchInEL];
                 for (int c = k - 1; c >= 0; c--) {
-                  resultWep.widsMultTerms_[c][n] =
-                      wepVecs[c].widsOneTerm_[currentIndices[c] + offsets[c]];
+                  resultWep.wids_[c][n] =
+                      wepVecs[c].wids_[0][currentIndices[c] + offsets[c]];
                 }
                 n++;
                 offsets[kIndex]++;
@@ -397,8 +342,8 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
                   wepVecs[k].scores_[(k == currentList ? nextIndices[k]
                                                        : nextIndices[k] - 1)];
               for (int c = k - 1; c >= 0; c--) {
-                resultWep.widsMultTerms_[c][n] =
-                    wepVecs[c].widsOneTerm_[currentIndices[c] + offsets[c]];
+                resultWep.wids_[c][n] =
+                    wepVecs[c].wids_[0][currentIndices[c] + offsets[c]];
               }
               n++;
               offsets[kIndex]++;
@@ -427,7 +372,7 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
     resultWep.eids_.resize(n);
   }
   for (size_t j = 0; j < k; j++) {
-    resultWep.widsMultTerms_[j].resize(n);
+    resultWep.wids_[j].resize(n);
   }
   LOG(DEBUG) << "Intersection done. Size: " << resultWep.cids_.size() << "\n";
 
@@ -464,6 +409,7 @@ void FTSAlgorithms::getTopKByScores(const vector<Id>& cids,
 template <int WIDTH>
 void FTSAlgorithms::aggScoresAndTakeTopKContexts(
     const Index::WordEntityPostings& wep, size_t k, IdTable* dynResult) {
+  AD_CONTRACT_CHECK(wep.wids_.size() >= 1);
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.eids_.size());
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.scores_.size());
   LOG(DEBUG)
@@ -472,7 +418,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
       << " elements to a table with distinct entities "
       << "and at most " << k << " contexts per entity.\n";
 
-  size_t numOfTerms = std::max((int)wep.widsMultTerms_.size(), 1);
+  size_t numOfTerms = wep.wids_.size();
 
   // The default case where k == 1 can use a map for a O(n) solution
   if (k == 1) {
@@ -492,14 +438,10 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
   AggMapSaCS mapSaCS;
   for (size_t i = 0; i < wep.eids_.size(); ++i) {
     vector<WordIndex> wids;
-    wids.resize(numOfTerms);
     wids.reserve(numOfTerms);
-    if (numOfTerms > 1) {
-      for (size_t l = 0; l < numOfTerms; l++) {
-        wids[l] = wep.widsMultTerms_[l].empty() ? 0 : wep.widsMultTerms_[l][i];
-      }
-    } else {
-      wids[0] = wep.widsOneTerm_.empty() ? 0 : wep.widsOneTerm_[i];
+    wids.resize(numOfTerms);
+    for (size_t l = 0; l < numOfTerms; l++) {
+      wids[l] = wep.wids_[l].empty() ? 0 : wep.wids_[l][i];
     }
     if (!mapScore.contains(wep.eids_[i])) {
       ScoreAndContextSet inner;
@@ -550,7 +492,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
   // Benefit 1) it's not always necessary to sort.
   // Benefit 2) The result size can be MUCH smaller than n.
   LOG(DEBUG) << "Done. There are " << dynResult->size()
-            << " entity-word-score-context tuples now.\n";
+             << " entity-word-score-context tuples now.\n";
 }
 
 template void FTSAlgorithms::aggScoresAndTakeTopKContexts<0>(
@@ -661,18 +603,14 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
   AggMapScore mapScore;
   AggMapSaCS mapSaCS;
 
-  size_t numOfTerms = std::max((int)wep.widsMultTerms_.size(), 1);
+  size_t numOfTerms = wep.wids_.size();
 
   for (size_t i = 0; i < wep.eids_.size(); ++i) {
     vector<WordIndex> wids;
-    wids.resize(numOfTerms);
     wids.reserve(numOfTerms);
-    if (numOfTerms > 1) {
-      for (size_t l = 0; l < numOfTerms; l++) {
-        wids[l] = wep.widsMultTerms_[l].empty() ? 0 : wep.widsMultTerms_[l][i];
-      }
-    } else {
-      wids[0] = wep.widsOneTerm_.empty() ? 0 : wep.widsOneTerm_[i];
+    wids.resize(numOfTerms);
+    for (size_t l = 0; l < numOfTerms; l++) {
+      wids[l] = wep.wids_[l].empty() ? 0 : wep.wids_[l][i];
     }
     if (!mapScore.contains(wep.eids_[i])) {
       mapScore[wep.eids_[i]] = 1;
@@ -1246,6 +1184,7 @@ template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<10>(
 void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
     IdTable* dynResult) {
+  AD_CONTRACT_CHECK(wep.wids_.size() == 1);
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.eids_.size());
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.scores_.size());
   LOG(DEBUG) << "Going from an entity, context and score list of size: "
@@ -1270,7 +1209,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   AggMapScore mapScore;
   AggMapSaCS mapSaCS;
   for (size_t i = 0; i < wep.eids_.size(); ++i) {
-    WordIndex wid = wep.widsOneTerm_.empty() ? 0 : wep.widsOneTerm_[i];
+    WordIndex wid = wep.wids_[0].empty() ? 0 : wep.wids_[0][i];
     if (fSet.contains(wep.eids_[i])) {
       if (!mapScore.contains(wep.eids_[i])) {
         ScoreAndContextSet inner;

@@ -52,9 +52,8 @@ class Index {
   struct WordEntityPostings {
     vector<TextRecordIndex>
         cids_;  // Stores the index of the TextRecord of each result.
-    vector<WordIndex> widsOneTerm_;
-    vector<vector<WordIndex>> widsMultTerms_;
-    // For prefix-queries stores for each result the index of
+    vector<vector<WordIndex>> wids_;
+    // For prefix-queries stores for each term and result the index of
     // the Word the prefixed-word was completed to.
     vector<Id> eids_;       // Stores the index of the entity of each result.
     vector<Score> scores_;  // Stores for each result how often an entity

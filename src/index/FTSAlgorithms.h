@@ -32,10 +32,6 @@ class FTSAlgorithms {
       const IdRange<WordVocabIndex>& idRange,
       const Index::WordEntityPostings& wepPreFilter);
 
-  static Index::WordEntityPostings intersect(
-      const Index::WordEntityPostings& matchingContextsWep,
-      const Index::WordEntityPostings& eBlockWep);
-
   static Index::WordEntityPostings crossIntersect(
       const Index::WordEntityPostings& matchingContextsWep,
       const Index::WordEntityPostings& eBlockWep);
