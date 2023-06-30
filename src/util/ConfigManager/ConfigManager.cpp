@@ -320,12 +320,12 @@ std::string
 ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
     const {
   // For only looking at the configuration options in our map.
-  auto onlyConfigurationOptions = std::views::transform(
+  auto onlyConfigurationOptionsView = std::views::transform(
       configurationOptions_, [](const auto& pair) { return pair.second; });
 
   // Returns true, if the `ConfigOption` has a default value and wasn't set at
   // runtime.
-  auto valueIsUnchangedDefault = [](const ConfigOption& option) {
+  auto valueIsUnchangedFromDefault = [](const ConfigOption& option) {
     return option.hasDefaultValue() && !option.wasSetAtRuntime();
   };
 
@@ -340,7 +340,8 @@ ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
   // A string vector view of all our unchanged configuration options in the
   // string form from `defaultConfigurationOptionToString`.
   auto unchangedFromDefaultConfigOptions =
-      onlyConfigurationOptions | std::views::filter(valueIsUnchangedDefault) |
+      onlyConfigurationOptionsView |
+      std::views::filter(valueIsUnchangedFromDefault) |
       std::views::transform(defaultConfigurationOptionToString);
 
   return ad_utility::lazyStrJoin(unchangedFromDefaultConfigOptions, "\n");
