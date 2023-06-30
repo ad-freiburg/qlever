@@ -287,14 +287,18 @@ std::string ConfigManager::printConfigurationDoc(
     }
   }
 
-  return absl::StrCat("Locations of available configuration options with",
-                      (printCurrentJsonConfiguration ? " their current values"
-                                                     : " example values"),
-                      ":\n",
-                      ad_utility::addIndentation(
-                          configuratioOptionsVisualization.dump(2), "    "),
-                      "\n\nAvailable configuration options:\n",
-                      ad_utility::addIndentation(stream.str(), "    "));
+  return absl::StrCat(
+      "Locations of available configuration options with",
+      (printCurrentJsonConfiguration ? " their current values"
+                                     : " example values"),
+      ":\n",
+      ad_utility::addIndentation(configuratioOptionsVisualization.dump(2),
+                                 "    "),
+      "\n\nAvailable configuration options:\n",
+      ad_utility::addIndentation(stream.str(), "    "),
+      "\n\nConfiguration options, that kept their default values:\n",
+      ad_utility::addIndentation(
+          getListOfNotChangedConfigOptionsWithDefaultValuesAsString(), "    "));
 }
 
 // ____________________________________________________________________________
@@ -308,50 +312,18 @@ std::string ConfigManager::vectorOfKeysForJsonToString(
 }
 
 // ____________________________________________________________________________
-std::vector<ConfigOption>
-ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValues() const {
-  // Nothing to do here, if we have no configuration options.
-  if (configurationOptions_.empty()) {
-    return {};
-  }
+std::string
+ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
+    const {
+  // For only looking at the configuration options in our map.
+  auto onlyConfigurationOptions = std::views::transform(
+      configurationOptions_, [](const auto& pair) { return pair.second; });
 
   // Returns true, if the `ConfigOption` has a default value and wasn't set at
   // runtime.
   auto valueIsUnchangedDefault = [](const ConfigOption& option) {
     return option.hasDefaultValue() && !option.wasSetAtRuntime();
   };
-
-  // For only looking at the configuration options in our map.
-  auto onlyConfigurationOptions = std::views::transform(
-      configurationOptions_, [](const auto& pair) { return pair.second; });
-
-  std::vector<ConfigOption> toReturn{};
-  toReturn.reserve(std::ranges::count_if(onlyConfigurationOptions,
-                                         valueIsUnchangedDefault, {}));
-  std::ranges::copy_if(onlyConfigurationOptions, std::back_inserter(toReturn),
-                       valueIsUnchangedDefault);
-
-  return toReturn;
-}
-
-// ____________________________________________________________________________
-std::string
-ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
-    const {
-  const std::vector<ConfigOption>& unchangedFromDefaultConfigOptions{
-      getListOfNotChangedConfigOptionsWithDefaultValues()};
-
-  // Nothing to do here, if we have no unchanged configuration options.
-  if (unchangedFromDefaultConfigOptions.empty()) {
-    return {};
-  }
-
-  // TODO Use `lazyStrJoin` for this, once it gets merged.
-  /*
-  Because we want to create a list, we don't know how many entries there will be
-  and need a string stream.
-  */
-  std::ostringstream stream;
 
   // Prints the default value of a configuration option and the accompanying
   // text.
@@ -361,17 +333,12 @@ ConfigManager::getListOfNotChangedConfigOptionsWithDefaultValuesAsString()
                         option.getDefaultValueAsString(), "'.");
   };
 
-  forEachExcludingTheLastOne(
-      unchangedFromDefaultConfigOptions,
-      [&stream,
-       &defaultConfigurationOptionToString](const ConfigOption& option) {
-        stream << defaultConfigurationOptionToString(option) << "\n";
-      },
-      [&stream,
-       &defaultConfigurationOptionToString](const ConfigOption& option) {
-        stream << defaultConfigurationOptionToString(option);
-      });
+  // A string vector view of all our unchanged configuration options in the
+  // string form from `defaultConfigurationOptionToString`.
+  auto unchangedFromDefaultConfigOptions =
+      onlyConfigurationOptions | std::views::filter(valueIsUnchangedDefault) |
+      std::views::transform(defaultConfigurationOptionToString);
 
-  return stream.str();
+  return ad_utility::lazyStrJoin(unchangedFromDefaultConfigOptions, "\n");
 }
 }  // namespace ad_utility

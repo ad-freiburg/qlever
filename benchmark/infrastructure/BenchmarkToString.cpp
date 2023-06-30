@@ -79,6 +79,13 @@ std::string benchmarkResultsToString(
     visualization << "General metadata: None";
   }
 
+  // Visualize the configuration options of this class.
+  if (const std::string& config =
+          benchmarkClass->getConfigManager().printConfigurationDoc(true);
+      !config.empty()) {
+    visualization << "\n\n" << config;
+  }
+
   /*
   @brief Adds a category to the string steam, if it is not empty. Mainly
    exists for reducing code duplication.

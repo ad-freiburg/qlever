@@ -162,22 +162,6 @@ int main(int argc, char** argv) {
 
   // Actually processing the arguments.
   if (vm.count("print")) {
-    // Print the configuration options with default values, if there were any.
-    std::ranges::for_each(
-        BenchmarkRegister::getAllRegisteredBenchmarks(),
-        [](const BenchmarkInterface* bench) {
-          if (const std::string &
-                  defaultConfigurationOptionString{
-                      bench->getConfigManager()
-                          .getListOfNotChangedConfigOptionsWithDefaultValuesAsString()};
-              defaultConfigurationOptionString != "") {
-            std::cout
-                << "Default configuration option values of benchmark class '"
-                << bench->name() << "'\n"
-                << defaultConfigurationOptionString << "\n\n";
-          }
-        });
-
     // Print the results and metadata.
     std::ranges::for_each(benchmarkClassAndResults,
                           [](const auto& pair) {

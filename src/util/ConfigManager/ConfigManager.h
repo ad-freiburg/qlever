@@ -128,7 +128,8 @@ class ConfigManager {
 
   /*
   @brief Returns a string containing a json configuration and the
-  string representations of all added configuration options.
+  string representations of all added configuration options. Followed by a list
+  of all the configuration options, that kept their default values.
 
   @param printCurrentJsonConfiguration If true, the current values of the
   configuration options will be used for printing the json configuration. If
@@ -137,21 +138,6 @@ class ConfigManager {
   value, a dummy value.
   */
   std::string printConfigurationDoc(bool printCurrentJsonConfiguration) const;
-
-  /*
-  @brief Return a vector of all configuration options, that:
-  - Have a default value.
-  - Weren't set at runtime.
-  */
-  std::vector<ConfigOption> getListOfNotChangedConfigOptionsWithDefaultValues()
-      const;
-
-  /*
-  @brief Return a string, containing a list of all entries from
-  `getListOfNotChangedConfigOptionsWithDefaultValues`, in the form of
-  "Configuration option 'x' was not set at runtime, using default value 'y'.".
-  */
-  std::string getListOfNotChangedConfigOptionsWithDefaultValuesAsString() const;
 
  private:
   // For testing.
@@ -202,5 +188,12 @@ class ConfigManager {
   */
   static std::string vectorOfKeysForJsonToString(
       const std::vector<std::string>& keys);
+
+  /*
+  @brief Return a string, containing a list of all entries from
+  `getListOfNotChangedConfigOptionsWithDefaultValues`, in the form of
+  "Configuration option 'x' was not set at runtime, using default value 'y'.".
+  */
+  std::string getListOfNotChangedConfigOptionsWithDefaultValuesAsString() const;
 };
 }  // namespace ad_utility
