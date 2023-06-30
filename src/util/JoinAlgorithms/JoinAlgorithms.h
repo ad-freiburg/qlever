@@ -333,12 +333,13 @@ template <
  * implement very efficient OPTIONAL or MINUS if neither of the inputs contains
  * UNDEF values, and if the left operand is much smaller.
  */
-template <std::ranges::random_access_range Range,
+template <bool addDuplicatesFromLarge = true,
+          std::ranges::random_access_range RangeSmaller,
+          std::ranges::random_access_range RangeLarger,
           typename ElementFromSmallerNotFoundAction = Noop>
 void gallopingJoin(
-    const Range& smaller, const Range& larger,
-    BinaryRangePredicate<Range> auto const& lessThan,
-    BinaryIteratorFunction<Range> auto const& action,
+    const RangeSmaller& smaller, const RangeLarger& larger,
+    auto const& lessThan, auto const& action,
     ElementFromSmallerNotFoundAction elementFromSmallerNotFoundAction = {}) {
   auto itSmall = std::begin(smaller);
   auto endSmall = std::end(smaller);
@@ -403,9 +404,13 @@ void gallopingJoin(
         itLarge, endLarge, [&](const auto& row) { return eq(row, *itSmall); });
 
     for (; itSmall != endSameSmall; ++itSmall) {
-      for (auto innerItLarge = itLarge; innerItLarge != endSameLarge;
-           ++innerItLarge) {
-        action(itSmall, innerItLarge);
+      if constexpr (!addDuplicatesFromLarge) {
+        action(itSmall, itLarge);
+      } else {
+        for (auto innerItLarge = itLarge; innerItLarge != endSameLarge;
+             ++innerItLarge) {
+          action(itSmall, innerItLarge);
+        }
       }
     }
     itSmall = endSameSmall;

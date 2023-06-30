@@ -285,13 +285,13 @@ class CompressedRelationReader {
 
   // Get the blocks (an ordered subset of the blocks that are passed in via the
   // `metadataAndBlocks`) where the `col1Id` can theoretically match one of the
-  // elements in the `idIterator` (The col0Id is fixed and specified by the
+  // elements in the `joinColumn` (The col0Id is fixed and specified by the
   // `metadataAndBlocks`). The join column of the scan is the first column that
   // is not fixed by the `metadataAndBlocks`, so the middle column (col1) in
   // case the `metadataAndBlocks` doesn't contain a `col1Id`, or the last column
   // (col2) else.
   static std::vector<CompressedBlockMetadata> getBlocksForJoin(
-      std::span<const Id> idIterator,
+      std::span<const Id> joinColumn,
       const MetadataAndBlocks& metadataAndBlocks);
 
   // For each of `metadataAndBlocks1, metadataAndBlocks2` get the blocks (an

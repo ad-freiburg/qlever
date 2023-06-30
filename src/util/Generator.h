@@ -13,8 +13,9 @@
 
 // Coroutines are still experimental in clang libcpp, therefore adapt the
 // appropriate namespaces by including the convenience header.
-#include "nlohmann/json.hpp"
 #include "util/Coroutines.h"
+#include "util/HashMap.h"
+#include "util/json.h"
 
 namespace cppcoro {
 template <typename T>
@@ -23,9 +24,13 @@ class generator;
 // This struct can be `co_await`ed inside a `generator` to add a value to a
 // dictionary, that can then be accessed from outside via the `details()`
 // function of the generator object. For an example see `GeneratorTest.cpp`.
+using Details = ad_utility::HashMap<std::string, nlohmann::json>;
 struct AddDetail {
-  std::string key_;
-  nlohmann::json value_;
+  Details details_;
+  AddDetail(std::string key, nlohmann::json value) {
+    details_[std::move(key)] = value;
+  }
+  AddDetail(Details details) : details_{std::move(details)} {}
 };
 
 namespace detail {
@@ -43,7 +48,9 @@ class generator_promise {
     generator_promise& promise_;
     AddDetail detail_;
     bool await_ready() {
-      promise_.details()[detail_.key_] = detail_.value_;
+      for (auto& [key, value] : detail_.details_) {
+        promise_.details()[std::move(key)] = std::move(value);
+      }
       return true;
     }
     bool await_suspend(std::coroutine_handle<>) noexcept { return false; }
@@ -91,12 +98,12 @@ class generator_promise {
     return {*this, std::move(detail)};
   }
 
-  nlohmann::json& details() { return m_details; }
+  Details& details() { return m_details; }
 
  private:
   pointer_type m_value;
   std::exception_ptr m_exception;
-  nlohmann::json m_details;
+  Details m_details;
 };
 
 struct generator_sentinel {};
@@ -206,7 +213,7 @@ class [[nodiscard]] generator {
     std::swap(m_coroutine, other.m_coroutine);
   }
 
-  const nlohmann::json& details() { return m_coroutine.promise().details(); }
+  const Details& details() { return m_coroutine.promise().details(); }
 
  private:
   friend class detail::generator_promise<T>;

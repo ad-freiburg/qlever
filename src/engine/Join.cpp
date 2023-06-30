@@ -756,9 +756,8 @@ void Join::computeResultForIndexScanAndIdTable(
       std::span{&joinColumn, 1}, rightBlocks, lessThan, addResultRow,
       std::identity{}, rightProjection);
 
-  if (firstIsRight) {
-    _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
-  } else {
-    _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
-  }
+  auto& scanTree = firstIsRight ? _left : _right;
+  scanTree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
+  scanTree->getRootOperation()->getRuntimeInfo().details_.update(
+      rightBlocks.details());
 }

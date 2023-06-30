@@ -172,10 +172,14 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     threads.emplace_back(readAndDecompressBlock);
   }
 
+  ad_utility::Timer popTimer{ad_utility::timer::Timer::InitialStatus::Started};
   while (auto opt = queue.pop()) {
+    popTimer.stop();
     checkTimeout(timer);
     co_yield opt.value();
+    popTimer.cont();
   }
+  co_await cppcoro::AddDetail{"blocking-time-block-reading", popTimer.msecs()};
 }
 
 // _____________________________________________________________________________
@@ -188,7 +192,12 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   const auto beginBlock = relevantBlocks.begin();
   const auto endBlock = relevantBlocks.end();
 
+  size_t numBlocks = 0;
+  size_t numElements = 0;
+
   if (beginBlock == endBlock) {
+    co_await cppcoro::AddDetail{"num-blocks", numBlocks};
+    co_await cppcoro::AddDetail{"num-elements", numElements};
     co_return;
   }
 
@@ -197,10 +206,16 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
                                        *beginBlock);
   checkTimeout(timer);
 
-  for (auto& block : asyncParallelBlockGenerator(beginBlock + 1, endBlock, file,
-                                                 std::nullopt, timer)) {
+  auto blockGenerator = asyncParallelBlockGenerator(beginBlock + 1, endBlock,
+                                                    file, std::nullopt, timer);
+  for (auto& block : blockGenerator) {
+    numElements += block.numRows();
+    ++numBlocks;
     co_yield block;
   }
+  co_await cppcoro::AddDetail{blockGenerator.details()};
+  co_await cppcoro::AddDetail{"num-blocks", numBlocks};
+  co_await cppcoro::AddDetail{"num-elements", numElements};
 }
 
 // _____________________________________________________________________________
@@ -282,7 +297,8 @@ auto getRelevantIdFromTriple(
 
 // _____________________________________________________________________________
 std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
-    std::span<const Id> joinColum, const MetadataAndBlocks& metadataAndBlocks) {
+    std::span<const Id> joinColumn,
+    const MetadataAndBlocks& metadataAndBlocks) {
   // Get all the blocks where `col0FirstId_ <= col0Id <= col0LastId_`.
   auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
 
@@ -303,16 +319,26 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
 
   // When we have found a matching block, we have to convert it back.
   std::vector<CompressedBlockMetadata> result;
-  auto addRow = [&result]([[maybe_unused]] auto idIterator,
-                          auto blockIterator) {
+  auto addRowZipper = [&result]([[maybe_unused]] auto idIterator,
+                                auto blockIterator) {
+    result.push_back(*blockIterator);
+  };
+  auto addRowGallop = [&result](auto blockIterator,
+                                [[maybe_unused]] auto idIterator) {
     result.push_back(*blockIterator);
   };
 
   auto noop = ad_utility::noop;
 
   // Actually perform the join.
-  [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef<false>(
-      joinColum, relevantBlocks, lessThan, addRow, noop, noop);
+  if (joinColumn.size() / relevantBlocks.size() > GALLOP_THRESHOLD) {
+    ad_utility::gallopingJoin<false>(relevantBlocks, joinColumn, lessThan,
+                                     addRowGallop);
+  } else {
+    [[maybe_unused]] auto numOutOfOrder =
+        ad_utility::zipperJoinWithUndef<false>(
+            joinColumn, relevantBlocks, lessThan, addRowZipper, noop, noop);
+  }
 
   // The following check shouldn't be too expensive as there are only few
   // blocks.

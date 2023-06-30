@@ -27,9 +27,9 @@ TEST(Generator, details) {
     result += i;
     // The detail is only
     ASSERT_EQ(gen.details().size(), 1);
-    ASSERT_TRUE(gen.details()["started"]);
+    ASSERT_TRUE(gen.details().at("started"));
   }
   ASSERT_EQ(result, 86);
   ASSERT_EQ(gen.details().size(), 2);
-  ASSERT_EQ(gen.details()["detail"], 17.3);
+  ASSERT_EQ(gen.details().at("detail"), 17.3);
 }
