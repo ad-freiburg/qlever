@@ -700,7 +700,7 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   // inputs:
   //   leftBlocks:  [0-3], [3-3], [3-5], ...
   //   rightBlocks: [0-3], [3-7], ...
-  // All of these five blocks have to be processed at once in ordere to be able
+  // All of these five blocks have to be processed at once in order to be able
   // to fully process at least one block. Afterwards we have fully processed all
   // blocks except for the [3-7] block, which has to stay in `sameBlocksRight`
   // before the next call to `fillBuffer`. To ensure this, all the following

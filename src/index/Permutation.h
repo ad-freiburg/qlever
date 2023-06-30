@@ -33,6 +33,7 @@ class Permutation {
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
   using TimeoutTimer = ad_utility::SharedConcurrentTimeoutTimer;
+
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".
   static std::string_view toString(Enum permutation);
@@ -46,10 +47,10 @@ class Permutation {
   // everything that has to be done when reading an index from disk
   void loadFromDisk(const std::string& onDiskBase);
 
-  /// For a given ID for the col0, retrieve all IDs of the col1 and col2.
-  /// If `col1Id` is specified, only the col2 is returned for triples that
-  /// additionally have the specified col1. .This is just a thin wrapper around
-  /// `CompressedRelationMetaData::scan`.
+  // For a given ID for the col0, retrieve all IDs of the col1 and col2.
+  // If `col1Id` is specified, only the col2 is returned for triples that
+  // additionally have the specified col1. .This is just a thin wrapper around
+  // `CompressedRelationMetaData::scan`.
   IdTable scan(Id col0Id, std::optional<Id> col1Id,
                const TimeoutTimer& timer = nullptr) const;
 
@@ -59,13 +60,13 @@ class Permutation {
   // The function `lazyScan` is similar to `scan` (see above) with
   // the following differences:
   // - The result is returned as a lazy generator of blocks.
-  // - The block metadata must be passed in manually. It can be obtained via the
+  // - The block metadata must be given manually. It can be obtained via the
   // `getMetadataAndBlocks` function below
-  //   and then be prefiltered. The blocks must be passed in in ascending order
+  //   and then be prefiltered. The blocks must be given in ascending order
   //   and must only contain blocks that contain the given `col0Id` (combined
   //   with the `col1Id` if specified), else the behavior is
   //   undefined.
-  // TODO<joka921> We should only communicate these interface via the
+  // TODO<joka921> We should only communicate this interface via the
   // `MetadataAndBlocks` class and make this a strong class that always
   // maintains its invariants.
   cppcoro::generator<IdTable> lazyScan(
@@ -73,8 +74,8 @@ class Permutation {
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
       const TimeoutTimer& timer = nullptr) const;
 
-  // Return the relation metadata for the relation specified by the `col0Id`
-  // along with the metadata of all the blocks that contain this relation (also
+  // Return the metadata for the relation specified by the `col0Id`
+  // along with the metadata for all the blocks that contain this relation (also
   // prefiltered by the `col1Id` if specified). If the `col0Id` does not exist
   // in this permutation, `nullopt` is returned.
   std::optional<MetadataAndBlocks> getMetadataAndBlocks(

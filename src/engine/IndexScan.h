@@ -47,15 +47,15 @@ class IndexScan : public Operation {
 
   // Return two generators that lazily yield the results of `s1` and `s2` in
   // blocks, but only the blocks that can theoretically contain matching rows
-  // when performing a join on the first variable of `s1` with the first
-  // variable of `s2`.
+  // when performing a join on the first column of the result of `s1` with the
+  // first column of the result of `s2`.
   static std::array<cppcoro::generator<IdTable>, 2> lazyScanForJoinOfTwoScans(
       const IndexScan& s1, const IndexScan& s2);
 
   // Return a generator that lazily yields the result of `s` in blocks, but only
   // the blocks that can theoretically contain matching rows when performing a
-  // join between the first variable of `s`  with the `joinColumn`. Requires
-  // that the `joinColumn` is sorted, else the behavior is undefined.
+  // join between the first column of the result of `s`  with the `joinColumn`.
+  // Requires that the `joinColumn` is sorted, else the behavior is undefined.
   static cppcoro::generator<IdTable> lazyScanForJoinOfColumnWithScan(
       std::span<const Id> joinColumn, const IndexScan& s);
 

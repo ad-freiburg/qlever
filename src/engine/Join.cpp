@@ -31,7 +31,8 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   t1 = QueryExecutionTree::createSortedTree(std::move(t1), {t1JoinCol});
   t2 = QueryExecutionTree::createSortedTree(std::move(t2), {t2JoinCol});
 
-  // Make sure subtrees are ordered so that identical queries can be identified.
+  // Make sure that the subtrees are ordered so that identical queries can be
+  // identified.
   auto swapChildren = [&]() {
     std::swap(t1, t2);
     std::swap(t1JoinCol, t2JoinCol);
@@ -119,11 +120,10 @@ ResultTable Join::computeResult() {
   if (_left->getType() == QueryExecutionTree::SCAN &&
       _right->getType() == QueryExecutionTree::SCAN) {
     if (rightResIfCached && !leftResIfCached) {
-      computeResultForIndexScanAndColumn<true>(
+      computeResultForIndexScanAndIdTable<true>(
           rightResIfCached->idTable(), _rightJoinCol,
           dynamic_cast<const IndexScan&>(*_left->getRootOperation()),
           _leftJoinCol, &idTable);
-      // TODO<joka921> This still has the wrong column order
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 
     } else if (!leftResIfCached) {
@@ -149,7 +149,7 @@ ResultTable Join::computeResult() {
   // Note: If only one of the children is a scan, then we have made sure in the
   // constructor that it is the right child.
   if (_right->getType() == QueryExecutionTree::SCAN && !rightResIfCached) {
-    computeResultForIndexScanAndColumn<false>(
+    computeResultForIndexScanAndIdTable<false>(
         leftRes->idTable(), _leftJoinCol,
         dynamic_cast<const IndexScan&>(*_right->getRootOperation()),
         _rightJoinCol, &idTable);
@@ -283,6 +283,7 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
   const ScanMethodType scan = getScanMethod(_right);
   // Iterate through non-dummy.
   Id currentJoinId = ndr(0, _leftJoinCol);
+  // TODO<C++23> This can be simplified using `std::views::chunk_by`.
   auto joinItemFrom = ndr.begin();
   auto joinItemEnd = ndr.begin();
   for (size_t i = 0; i < ndr.size(); ++i) {
@@ -684,45 +685,45 @@ void Join::computeResultForTwoIndexScans(IdTable* resultPtr) {
 
 // ______________________________________________________________________________________________________
 template <bool firstIsRight>
-void Join::computeResultForIndexScanAndColumn(const IdTable& inputTable,
-                                              ColumnIndex joinColumnIndexTable,
-                                              const IndexScan& scan,
-                                              ColumnIndex joinColumnIndexScan,
-                                              IdTable* resultPtr) {
+void Join::computeResultForIndexScanAndIdTable(
+    const IdTable& idTable, ColumnIndex joinColumnIndexIdTable,
+    const IndexScan& scan, ColumnIndex joinColumnIndexScan,
+    IdTable* resultPtr) {
   auto& result = *resultPtr;
   result.setNumColumns(getResultWidth());
 
   AD_CORRECTNESS_CHECK(joinColumnIndexScan == 0);
 
-  auto joinColumn = inputTable.getColumn(joinColumnIndexTable);
-  auto addResultRow = [&result, &inputTable, &joinColumnIndexScan,
-                       beg = joinColumn.data()](auto itLeft, auto itRight) {
-    const auto& l = *(inputTable.begin() + (&(*itLeft) - beg));
-    const auto& r = *itRight;
+  auto joinColumn = idTable.getColumn(joinColumnIndexIdTable);
+  auto addResultRow = [&result, &idTable, &joinColumnIndexScan,
+                       beg = joinColumn.data()](auto itIdTable,
+                                                auto itIndexScan) {
+    const auto& idTableRow = *(idTable.begin() + (&(*itIdTable) - beg));
+    const auto& indexScanRow = *itIndexScan;
     result.emplace_back();
     IdTable::row_reference lastRow = result.back();
     size_t nextIndex = 0;
 
     if constexpr (firstIsRight) {
-      for (size_t i = 0; i < r.size(); ++i) {
-        lastRow[nextIndex] = r[i];
+      for (size_t i = 0; i < indexScanRow.size(); ++i) {
+        lastRow[nextIndex] = indexScanRow[i];
         ++nextIndex;
       }
-      for (size_t i = 0; i < inputTable.numColumns(); ++i) {
+      for (size_t i = 0; i < idTable.numColumns(); ++i) {
         if (i != joinColumnIndexScan) {
-          lastRow[nextIndex] = l[i];
+          lastRow[nextIndex] = idTableRow[i];
           ++nextIndex;
         }
       }
     } else {
-      for (size_t i = 0; i < inputTable.numColumns(); ++i) {
-        lastRow[nextIndex] = l[i];
+      for (size_t i = 0; i < idTable.numColumns(); ++i) {
+        lastRow[nextIndex] = idTableRow[i];
         ++nextIndex;
       }
 
-      for (size_t i = 0; i < r.size(); ++i) {
+      for (size_t i = 0; i < indexScanRow.size(); ++i) {
         if (i != joinColumnIndexScan) {
-          lastRow[nextIndex] = r[i];
+          lastRow[nextIndex] = indexScanRow[i];
           ++nextIndex;
         }
       }
