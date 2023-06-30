@@ -77,7 +77,7 @@ string TextOperationWithoutFilter::getDescriptor() const {
 
 // _____________________________________________________________________________
 ResultTable TextOperationWithoutFilter::computeResult() {
-  LOG(INFO) << "TextOperationWithoutFilter result computation..." << endl;
+  LOG(DEBUG) << "TextOperationWithoutFilter result computation..." << endl;
   IdTable table{getExecutionContext()->getAllocator()};
   if (getNofVars() == 0) {
     computeResultNoVar(&table);
@@ -86,7 +86,7 @@ ResultTable TextOperationWithoutFilter::computeResult() {
   } else {
     computeResultMultVars(&table);
   }
-  LOG(INFO) << "TextOperationWithoutFilter result computation done." << endl;
+  LOG(DEBUG) << "TextOperationWithoutFilter result computation done." << endl;
   return {std::move(table), resultSortedOn(), LocalVocab{}};
 }
 
@@ -99,7 +99,6 @@ void TextOperationWithoutFilter::computeResultNoVar(IdTable* idTable) const {
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultOneVar(IdTable* idTable) const {
   idTable->setNumColumns(3 + getNofTerms());
-  LOG(INFO) << "num of columns: " << idTable->numColumns() << endl;
   getExecutionContext()->getIndex().getECListForWordsOneVar(_words, _textLimit,
                                                             idTable);
 }

@@ -143,7 +143,6 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersect(
   if (matchingContextsWep.cids_.empty() || eBlockWep.cids_.empty()) {
     return resultWep;
   }
-  // TODO: sizes anpassen zu n*m???
   resultWep.widsOneTerm_.reserve(eBlockWep.cids_.size());
   resultWep.widsOneTerm_.clear();
   resultWep.cids_.reserve(eBlockWep.cids_.size());
@@ -277,7 +276,7 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
     }
   }
 
-  // TODO: sizes anpassen???
+  // TODO: sizes anpassen??? --> push_back
   resultWep.cids_.reserve(minSize + 2);
   resultWep.cids_.resize(minSize);
   resultWep.scores_.reserve(minSize + 2);
@@ -474,7 +473,6 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
       << "and at most " << k << " contexts per entity.\n";
 
   size_t numOfTerms = std::max((int)wep.widsMultTerms_.size(), 1);
-  AD_CONTRACT_CHECK(WIDTH >= 3 + numOfTerms);
 
   // The default case where k == 1 can use a map for a O(n) solution
   if (k == 1) {
@@ -529,7 +527,8 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
   IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
   result.reserve(mapSaCS.size() * k + 2);
   for (auto it = mapSaCS.begin(); it != mapSaCS.end(); ++it) {
-    std::array<ValueId, WIDTH> row;
+    std::vector<ValueId> row;
+    row.resize(result.numColumns());
     const Id eid = it->first.first;
     const Id entityScore = Id::makeFromInt(mapScore[eid]);
     const ScoreAndContextSet& sacs = it->second;
