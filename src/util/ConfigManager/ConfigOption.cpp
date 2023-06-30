@@ -45,7 +45,8 @@ std::string ConfigOption::availableTypesToString(const AvailableTypes& value) {
     } else {
       // It must be a vector.
       static_assert(ad_utility::isVector<T>);
-      return absl::StrCat("list of ", availableTypesToString<typename T::value_type>(), "s");
+      return absl::StrCat(
+          "list of ", availableTypesToString<typename T::value_type>(), "s");
     }
   };
 
@@ -53,15 +54,20 @@ std::string ConfigOption::availableTypesToString(const AvailableTypes& value) {
 }
 
 // ____________________________________________________________________________
-bool ConfigOption::wasSetAtRuntime() const { return configurationOptionWasSet_; }
-
-// ____________________________________________________________________________
-bool ConfigOption::hasDefaultValue() const {
-  return std::visit([](const auto& d) { return d.defaultValue_.has_value(); }, data_);
+bool ConfigOption::wasSetAtRuntime() const {
+  return configurationOptionWasSet_;
 }
 
 // ____________________________________________________________________________
-bool ConfigOption::wasSet() const { return wasSetAtRuntime() || hasDefaultValue(); }
+bool ConfigOption::hasDefaultValue() const {
+  return std::visit([](const auto& d) { return d.defaultValue_.has_value(); },
+                    data_);
+}
+
+// ____________________________________________________________________________
+bool ConfigOption::wasSet() const {
+  return wasSetAtRuntime() || hasDefaultValue();
+}
 
 // ____________________________________________________________________________
 void ConfigOption::setValueWithJson(const nlohmann::json& json) {
@@ -85,18 +91,19 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
       static_assert(ad_utility::isVector<T>);
 
       /*
-      The recursiv call needs to be a little more complicated, because the `std::vector<bool>`
-      doesn't actually contain booleans, but bits.
-      This causes the check to always fail for `std::vector<bool>`, if we don't pass the type
-      explicitly, because the bit type is not something, that this function allows.
+      The recursiv call needs to be a little more complicated, because the
+      `std::vector<bool>` doesn't actually contain booleans, but bits. This
+      causes the check to always fail for `std::vector<bool>`, if we don't pass
+      the type explicitly, because the bit type is not something, that this
+      function allows.
       */
-      return j.is_array() &&
-             [&j, &isValueTypeSubType]<typename InnerType>(const std::vector<InnerType>&) {
-               return std::ranges::all_of(j, [&isValueTypeSubType](const auto& entry) {
-                 return isValueTypeSubType.template operator()<InnerType>(
-                     entry, AD_FWD(isValueTypeSubType));
-               });
-             }(T{});
+      return j.is_array() && [&j, &isValueTypeSubType]<typename InnerType>(
+                                 const std::vector<InnerType>&) {
+        return std::ranges::all_of(j, [&isValueTypeSubType](const auto& entry) {
+          return isValueTypeSubType.template operator()<InnerType>(
+              entry, AD_FWD(isValueTypeSubType));
+        });
+      }(T{});
     }
   };
 
@@ -106,7 +113,8 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
   */
   if (!std::visit(
           [&isValueTypeSubType, &json]<typename T>(const T&) {
-            return isValueTypeSubType.operator()<typename T::Type>(json, isValueTypeSubType);
+            return isValueTypeSubType.operator()<typename T::Type>(
+                json, isValueTypeSubType);
           },
           data_)) {
     // Does the json represent one of the types in our `AvailableTypes`? If yes,
@@ -114,19 +122,24 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
     ad_utility::ConstexprForLoop(
         std::make_index_sequence<std::variant_size_v<AvailableTypes>>{},
         [&isValueTypeSubType, &json,
-         this ]<size_t TypeIndex, typename AlternativeType =
-                                      std::variant_alternative_t<TypeIndex, AvailableTypes>>() {
-          if (isValueTypeSubType.template operator()<AlternativeType>(json, isValueTypeSubType)) {
-            throw ConfigOptionSetWrongJsonTypeException(identifier_, getActualValueTypeAsString(),
-                                                        availableTypesToString(AlternativeType{}));
+         this ]<size_t TypeIndex,
+                typename AlternativeType =
+                    std::variant_alternative_t<TypeIndex, AvailableTypes>>() {
+          if (isValueTypeSubType.template operator()<AlternativeType>(
+                  json, isValueTypeSubType)) {
+            throw ConfigOptionSetWrongJsonTypeException(
+                identifier_, getActualValueTypeAsString(),
+                availableTypesToString(AlternativeType{}));
           }
         });
 
-    throw ConfigOptionSetWrongJsonTypeException(identifier_, getActualValueTypeAsString(),
-                                                "unknown");
+    throw ConfigOptionSetWrongJsonTypeException(
+        identifier_, getActualValueTypeAsString(), "unknown");
   }
 
-  std::visit([&json, this]<typename T>(const Data<T>&) { setValue(json.get<T>()); }, data_);
+  std::visit(
+      [&json, this]<typename T>(const Data<T>&) { setValue(json.get<T>()); },
+      data_);
   configurationOptionWasSet_ = true;
 }
 
@@ -144,7 +157,8 @@ std::string ConfigOption::contentOfAvailableTypesToString(
 
   // TODO<C++23> Use "deducing this" for simpler recursive lambdas.
   // Converts a `AvailableTypes` to their string representation.
-  auto availableTypesToString = []<typename T>(const T& content, auto&& variantSubTypetoString) {
+  auto availableTypesToString = []<typename T>(const T& content,
+                                               auto&& variantSubTypetoString) {
     // Return the internal value of the `std::optional`.
     if constexpr (std::is_same_v<T, std::string>) {
       // Add "", so that it's more obvious, that it's a string.
@@ -169,7 +183,8 @@ std::string ConfigOption::contentOfAvailableTypesToString(
       forEachExcludingTheLastOne(
           content,
           [&stream, &variantSubTypetoString](const VectorEntryType& entry) {
-            stream << variantSubTypetoString(entry, variantSubTypetoString) << ", ";
+            stream << variantSubTypetoString(entry, variantSubTypetoString)
+                   << ", ";
           },
           [&stream, &variantSubTypetoString](const VectorEntryType& entry) {
             stream << variantSubTypetoString(entry, variantSubTypetoString);
@@ -191,7 +206,10 @@ std::string ConfigOption::getValueAsString() const {
   AD_CONTRACT_CHECK(wasSet());
 
   return std::visit(
-      [](const auto& d) { return contentOfAvailableTypesToString(*d.variablePointer_); }, data_);
+      [](const auto& d) {
+        return contentOfAvailableTypesToString(*d.variablePointer_);
+      },
+      data_);
 }
 
 // ____________________________________________________________________________
@@ -199,7 +217,8 @@ nlohmann::json ConfigOption::getValueAsJson() const {
   // Reading an uninitialized value is never a good idea.
   AD_CONTRACT_CHECK(wasSet());
 
-  return std::visit([](const auto& d) { return nlohmann::json(*d.variablePointer_); }, data_);
+  return std::visit(
+      [](const auto& d) { return nlohmann::json(*d.variablePointer_); }, data_);
 }
 
 // ____________________________________________________________________________
@@ -217,8 +236,9 @@ std::string ConfigOption::getDefaultValueAsString() const {
 nlohmann::json ConfigOption::getDefaultValueAsJson() const {
   return std::visit(
       [](const auto& d) {
-        return d.defaultValue_.has_value() ? nlohmann::json(d.defaultValue_.value())
-                                           : nlohmann::json(nlohmann::json::value_t::null);
+        return d.defaultValue_.has_value()
+                   ? nlohmann::json(d.defaultValue_.value())
+                   : nlohmann::json(nlohmann::json::value_t::null);
       },
       data_);
 }
@@ -233,24 +253,32 @@ static std::decay_t<DummyType> getDummyValue() {
   } else if constexpr (std::is_same_v<std::decay_t<DummyType>, int>) {
     return 42;
   } else if constexpr (std::is_same_v<std::decay_t<DummyType>, float>) {
-    return 4.2;
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>, std::vector<bool>>) {
+    return static_cast<float>(4.2);
+  } else if constexpr (std::is_same_v<std::decay_t<DummyType>,
+                                      std::vector<bool>>) {
     return std::vector{true, false};
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>, std::vector<std::string>>) {
+  } else if constexpr (std::is_same_v<std::decay_t<DummyType>,
+                                      std::vector<std::string>>) {
     return std::vector<std::string>{"Example", "string", "list"};
-  } else if constexpr (std::is_same_v<std::decay_t<DummyType>, std::vector<int>>) {
+  } else if constexpr (std::is_same_v<std::decay_t<DummyType>,
+                                      std::vector<int>>) {
     return std::vector<int>{40, 41, 42};
   } else {
     // Must be a vector of floats.
     static_assert(std::is_same_v<std::decay_t<DummyType>, std::vector<float>>);
-    return std::vector<float>{40.0, 41.1, 42.2};
+    return std::vector<float>{static_cast<float>(40.0),
+                              static_cast<float>(41.1),
+                              static_cast<float>(42.2)};
   }
 }
 
 // ____________________________________________________________________________
 nlohmann::json ConfigOption::getDummyValueAsJson() const {
-  return std::visit([]<typename T>(const Data<T>&) { return nlohmann::json(getDummyValue<T>()); },
-                    data_);
+  return std::visit(
+      []<typename T>(const Data<T>&) {
+        return nlohmann::json(getDummyValue<T>());
+      },
+      data_);
 }
 
 // ____________________________________________________________________________
@@ -271,15 +299,18 @@ ConfigOption::operator std::string() const {
   return absl::StrCat(
       "Configuration option '", identifier_, "'\n",
       ad_utility::addIndentation(
-          absl::StrCat("Value type: ", getActualValueTypeAsString(),
-                       "\nDefault value: ", getDefaultValueAsString(), "\nCurrently held value: ",
-                       wasSet() ? getValueAsString() : "value was never initialized",
-                       "\nDescription: ", description_),
+          absl::StrCat(
+              "Value type: ", getActualValueTypeAsString(), "\nDefault value: ",
+              getDefaultValueAsString(), "\nCurrently held value: ",
+              wasSet() ? getValueAsString() : "value was never initialized",
+              "\nDescription: ", description_),
           1));
 }
 
 // ____________________________________________________________________________
 std::string ConfigOption::getActualValueTypeAsString() const {
-  return std::visit([]<typename T>(const Data<T>&) { return availableTypesToString<T>(); }, data_);
+  return std::visit(
+      []<typename T>(const Data<T>&) { return availableTypesToString<T>(); },
+      data_);
 }
 }  // namespace ad_utility

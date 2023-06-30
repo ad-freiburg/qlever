@@ -51,10 +51,10 @@ arguments. Should be passed per deduction.
 template <typename Function>
 static void doForTypeInValueType(Function function) {
   ad_utility::ConstexprForLoop(
-      std::make_index_sequence<std::variant_size_v<ConfigOption::AvailableTypes>>{},
-      [&function]<size_t index,
-                  typename IndexType =
-                      std::variant_alternative_t<index, ConfigOption::AvailableTypes>>() {
+      std::make_index_sequence<
+          std::variant_size_v<ConfigOption::AvailableTypes>>{},
+      [&function]<size_t index, typename IndexType = std::variant_alternative_t<
+                                    index, ConfigOption::AvailableTypes>>() {
         function.template operator()<IndexType>();
       });
 }
@@ -80,28 +80,30 @@ ConversionTestCase<T> getConversionTestCase() {
         nlohmann::json::parse(R"--(true)--"),
     };
   } else if constexpr (std::is_same_v<T, std::string>) {
-    return ConversionTestCase<std::string>{std::string{"set"},
-                                           nlohmann::json::parse(R"--("set")--")};
+    return ConversionTestCase<std::string>{
+        std::string{"set"}, nlohmann::json::parse(R"--("set")--")};
   } else if constexpr (std::is_same_v<T, int>) {
     return ConversionTestCase<int>{42, nlohmann::json::parse(R"--(42)--")};
   } else if constexpr (std::is_same_v<T, float>) {
-    return ConversionTestCase<float>{42.5, nlohmann::json::parse(R"--(42.5)--")};
+    return ConversionTestCase<float>{42.5,
+                                     nlohmann::json::parse(R"--(42.5)--")};
   } else if constexpr (std::is_same_v<T, std::vector<bool>>) {
-    return ConversionTestCase<std::vector<bool>>{std::vector{true, true},
-                                                 nlohmann::json::parse(R"--([true, true])--")};
+    return ConversionTestCase<std::vector<bool>>{
+        std::vector{true, true}, nlohmann::json::parse(R"--([true, true])--")};
   } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
     return ConversionTestCase<std::vector<std::string>>{
         std::vector{std::string{"str"}, std::string{"str"}},
         nlohmann::json::parse(R"--(["str", "str"])--")};
   } else if constexpr (std::is_same_v<T, std::vector<int>>) {
-    return ConversionTestCase<std::vector<int>>{std::vector{42, 42},
-                                                nlohmann::json::parse(R"--([42, 42])--")};
+    return ConversionTestCase<std::vector<int>>{
+        std::vector{42, 42}, nlohmann::json::parse(R"--([42, 42])--")};
   } else {
     // Must be a vector of floats.
     static_assert(std::is_same_v<T, std::vector<float>>);
 
-    return ConversionTestCase<std::vector<float>>{std::vector<float>{42.5, 42.5},
-                                                  nlohmann::json::parse(R"--([42.5, 42.5])--")};
+    return ConversionTestCase<std::vector<float>>{
+        std::vector<float>{42.5, 42.5},
+        nlohmann::json::parse(R"--([42.5, 42.5])--")};
   }
 }
 
@@ -115,33 +117,34 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
   of the value in the configuration option. All the other types should cause an
   exception.
   */
-  auto otherGettersDontWork = []<typename WorkingType>(const ConfigOption& option) {
-    doForTypeInValueType([&option]<typename CurrentType>() {
-      if (option.wasSet()) {
-        if constexpr (!std::is_same_v<WorkingType, CurrentType>) {
-          ASSERT_THROW((option.getValue<CurrentType>()),
-                       ad_utility::ConfigOptionGetWrongTypeException);
-        } else {
-          ASSERT_NO_THROW((option.getValue<CurrentType>()));
-        }
-      } else {
-        ASSERT_THROW((option.getValue<CurrentType>()),
-                     ad_utility::ConfigOptionValueNotSetException);
-      }
+  auto otherGettersDontWork =
+      []<typename WorkingType>(const ConfigOption& option) {
+        doForTypeInValueType([&option]<typename CurrentType>() {
+          if (option.wasSet()) {
+            if constexpr (!std::is_same_v<WorkingType, CurrentType>) {
+              ASSERT_THROW((option.getValue<CurrentType>()),
+                           ad_utility::ConfigOptionGetWrongTypeException);
+            } else {
+              ASSERT_NO_THROW((option.getValue<CurrentType>()));
+            }
+          } else {
+            ASSERT_THROW((option.getValue<CurrentType>()),
+                         ad_utility::ConfigOptionValueNotSetException);
+          }
 
-      if (option.hasDefaultValue()) {
-        if constexpr (!std::is_same_v<WorkingType, CurrentType>) {
-          ASSERT_THROW((option.getDefaultValue<CurrentType>()),
-                       ad_utility::ConfigOptionGetWrongTypeException);
-        } else {
-          ASSERT_NO_THROW((option.getDefaultValue<CurrentType>()));
-        }
-      } else {
-        ASSERT_THROW((option.getDefaultValue<CurrentType>()),
-                     ad_utility::ConfigOptionValueNotSetException);
-      }
-    });
-  };
+          if (option.hasDefaultValue()) {
+            if constexpr (!std::is_same_v<WorkingType, CurrentType>) {
+              ASSERT_THROW((option.getDefaultValue<CurrentType>()),
+                           ad_utility::ConfigOptionGetWrongTypeException);
+            } else {
+              ASSERT_NO_THROW((option.getDefaultValue<CurrentType>()));
+            }
+          } else {
+            ASSERT_THROW((option.getDefaultValue<CurrentType>()),
+                         ad_utility::ConfigOptionValueNotSetException);
+          }
+        });
+      };
 
   /*
   Set the value of a configuration option and check, that it was set
@@ -166,33 +169,36 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
   Run a normal test case of creating a configuration option, checking it and
   setting it. With or without a default value.
   */
-  auto testCaseWithDefault =
-      [&setAndTest, &otherGettersDontWork]<typename Type>(const ConversionTestCase<Type>& toSetTo) {
-        // Every configuration option keeps updating an external variable with
-        // the value, that it itself holds. This is the one.
-        Type configurationOptionValue;
+  auto testCaseWithDefault = [&setAndTest,
+                              &otherGettersDontWork]<typename Type>(
+                                 const ConversionTestCase<Type>& toSetTo) {
+    // Every configuration option keeps updating an external variable with
+    // the value, that it itself holds. This is the one.
+    Type configurationOptionValue;
 
-        // The default value.
-        const ConversionTestCase<Type> defaultCase{getConversionTestCase<Type>()};
+    // The default value.
+    const ConversionTestCase<Type> defaultCase{getConversionTestCase<Type>()};
 
-        ConfigOption option{ad_utility::ConfigOption("With_default", "", &configurationOptionValue,
-                                                     std::optional{defaultCase.value})};
+    ConfigOption option{
+        ad_utility::ConfigOption("With_default", "", &configurationOptionValue,
+                                 std::optional{defaultCase.value})};
 
-        // Can we use the default value correctly?
-        ASSERT_TRUE(option.wasSet() && option.hasDefaultValue());
-        ASSERT_EQ(defaultCase.value, option.getDefaultValue<Type>());
-        ASSERT_EQ(defaultCase.jsonRepresentation, option.getDefaultValueAsJson());
-        ASSERT_EQ(defaultCase.value, option.getValue<Type>());
-        ASSERT_EQ(defaultCase.value, configurationOptionValue);
-        otherGettersDontWork.template operator()<Type>(option);
+    // Can we use the default value correctly?
+    ASSERT_TRUE(option.wasSet() && option.hasDefaultValue());
+    ASSERT_EQ(defaultCase.value, option.getDefaultValue<Type>());
+    ASSERT_EQ(defaultCase.jsonRepresentation, option.getDefaultValueAsJson());
+    ASSERT_EQ(defaultCase.value, option.getValue<Type>());
+    ASSERT_EQ(defaultCase.value, configurationOptionValue);
+    otherGettersDontWork.template operator()<Type>(option);
 
-        setAndTest.template operator()<Type>(option, &configurationOptionValue, toSetTo);
+    setAndTest.template operator()<Type>(option, &configurationOptionValue,
+                                         toSetTo);
 
-        // Is the default value unchanged?
-        ASSERT_TRUE(option.hasDefaultValue());
-        ASSERT_EQ(defaultCase.value, option.getDefaultValue<Type>());
-        ASSERT_EQ(defaultCase.jsonRepresentation, option.getDefaultValueAsJson());
-      };
+    // Is the default value unchanged?
+    ASSERT_TRUE(option.hasDefaultValue());
+    ASSERT_EQ(defaultCase.value, option.getDefaultValue<Type>());
+    ASSERT_EQ(defaultCase.jsonRepresentation, option.getDefaultValueAsJson());
+  };
 
   auto testCaseWithoutDefault = [&setAndTest]<typename Type>(
                                     const ConversionTestCase<Type>& toSetTo) {
@@ -200,44 +206,54 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
     // the value, that it itself holds. This is the one.
     Type configurationOptionValue;
 
-    ConfigOption option{ad_utility::ConfigOption("Without_default", "", &configurationOptionValue)};
+    ConfigOption option{ad_utility::ConfigOption("Without_default", "",
+                                                 &configurationOptionValue)};
 
     // Make sure, that we truly don't have a default value, that can be gotten.
     ASSERT_TRUE(!option.wasSet() && !option.hasDefaultValue());
-    ASSERT_THROW(option.getDefaultValue<Type>(), ad_utility::ConfigOptionValueNotSetException);
+    ASSERT_THROW(option.getDefaultValue<Type>(),
+                 ad_utility::ConfigOptionValueNotSetException);
     ASSERT_TRUE(option.getDefaultValueAsJson().empty());
     ad_utility::ConstexprForLoop(
-        std::make_index_sequence<std::variant_size_v<ConfigOption::AvailableTypes>>{},
-        [&option]<size_t index,
-                  typename IndexType =
-                      std::variant_alternative_t<index, ConfigOption::AvailableTypes>>() {
+        std::make_index_sequence<
+            std::variant_size_v<ConfigOption::AvailableTypes>>{},
+        [&option]<size_t index, typename IndexType = std::variant_alternative_t<
+                                    index, ConfigOption::AvailableTypes>>() {
           ASSERT_THROW((option.getDefaultValue<IndexType>()),
                        ad_utility::ConfigOptionValueNotSetException);
         });
 
-    setAndTest.template operator()<Type>(option, &configurationOptionValue, toSetTo);
+    setAndTest.template operator()<Type>(option, &configurationOptionValue,
+                                         toSetTo);
 
     // Is it still the case, that we don't have a default value?
     ASSERT_TRUE(!option.hasDefaultValue());
-    ASSERT_THROW(option.getDefaultValue<Type>(), ad_utility::ConfigOptionValueNotSetException);
+    ASSERT_THROW(option.getDefaultValue<Type>(),
+                 ad_utility::ConfigOptionValueNotSetException);
     ASSERT_TRUE(option.getDefaultValueAsJson().empty());
     ASSERT_EQ("None", option.getDefaultValueAsString());
   };
 
   // Do a test case for every possible type.
-  testCaseWithDefault(ConversionTestCase<bool>{false, nlohmann::json::parse(R"--(false)--")});
-  testCaseWithoutDefault(ConversionTestCase<bool>{false, nlohmann::json::parse(R"--(false)--")});
+  testCaseWithDefault(
+      ConversionTestCase<bool>{false, nlohmann::json::parse(R"--(false)--")});
+  testCaseWithoutDefault(
+      ConversionTestCase<bool>{false, nlohmann::json::parse(R"--(false)--")});
+
+  testCaseWithDefault(ConversionTestCase<std::string>{
+      "unset", nlohmann::json::parse(R"--("unset")--")});
+  testCaseWithoutDefault(ConversionTestCase<std::string>{
+      "unset", nlohmann::json::parse(R"--("unset")--")});
 
   testCaseWithDefault(
-      ConversionTestCase<std::string>{"unset", nlohmann::json::parse(R"--("unset")--")});
+      ConversionTestCase<int>{40, nlohmann::json::parse(R"--(40)--")});
   testCaseWithoutDefault(
-      ConversionTestCase<std::string>{"unset", nlohmann::json::parse(R"--("unset")--")});
+      ConversionTestCase<int>{40, nlohmann::json::parse(R"--(40)--")});
 
-  testCaseWithDefault(ConversionTestCase<int>{40, nlohmann::json::parse(R"--(40)--")});
-  testCaseWithoutDefault(ConversionTestCase<int>{40, nlohmann::json::parse(R"--(40)--")});
-
-  testCaseWithDefault(ConversionTestCase<float>{40.5, nlohmann::json::parse(R"--(40.5)--")});
-  testCaseWithoutDefault(ConversionTestCase<float>{40.5, nlohmann::json::parse(R"--(40.5)--")});
+  testCaseWithDefault(
+      ConversionTestCase<float>{40.5, nlohmann::json::parse(R"--(40.5)--")});
+  testCaseWithoutDefault(
+      ConversionTestCase<float>{40.5, nlohmann::json::parse(R"--(40.5)--")});
 
   testCaseWithDefault(ConversionTestCase<std::vector<bool>>{
       std::vector{false, true}, nlohmann::json::parse(R"--([false, true])--")});
@@ -245,14 +261,16 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
       std::vector{false, true}, nlohmann::json::parse(R"--([false, true])--")});
 
   testCaseWithDefault(ConversionTestCase<std::vector<std::string>>{
-      std::vector<std::string>{"str1", "str2"}, nlohmann::json::parse(R"--(["str1", "str2"])--")});
+      std::vector<std::string>{"str1", "str2"},
+      nlohmann::json::parse(R"--(["str1", "str2"])--")});
   testCaseWithoutDefault(ConversionTestCase<std::vector<std::string>>{
-      std::vector<std::string>{"str1", "str2"}, nlohmann::json::parse(R"--(["str1", "str2"])--")});
+      std::vector<std::string>{"str1", "str2"},
+      nlohmann::json::parse(R"--(["str1", "str2"])--")});
 
-  testCaseWithDefault(
-      ConversionTestCase<std::vector<int>>{{40, 41}, nlohmann::json::parse(R"--([40, 41])--")});
-  testCaseWithoutDefault(
-      ConversionTestCase<std::vector<int>>{{40, 41}, nlohmann::json::parse(R"--([40, 41])--")});
+  testCaseWithDefault(ConversionTestCase<std::vector<int>>{
+      {40, 41}, nlohmann::json::parse(R"--([40, 41])--")});
+  testCaseWithoutDefault(ConversionTestCase<std::vector<int>>{
+      {40, 41}, nlohmann::json::parse(R"--([40, 41])--")});
 
   testCaseWithDefault(ConversionTestCase<std::vector<float>>{
       {40.7, 40.913}, nlohmann::json::parse(R"--([40.7, 40.913])--")});
@@ -283,7 +301,8 @@ TEST(ConfigOptionTest, SetValueWithJson) {
     // value, that it itself holds. This is the one.
     Type configurationOptionValue;
 
-    ConfigOption option{ad_utility::ConfigOption("t", "", &configurationOptionValue)};
+    ConfigOption option{
+        ad_utility::ConfigOption("t", "", &configurationOptionValue)};
 
     const auto& currentTest = getConversionTestCase<Type>();
 
@@ -298,14 +317,14 @@ TEST(ConfigOptionTest, SetValueWithJson) {
     // interpreted as the wanted type?
     doForTypeInValueType([&option]<typename CurrentType>() {
       if constexpr (!std::is_same_v<Type, CurrentType>) {
-        ASSERT_THROW(
-            option.setValueWithJson(getConversionTestCase<CurrentType>().jsonRepresentation);
-            , ad_utility::ConfigOptionSetWrongJsonTypeException);
+        ASSERT_THROW(option.setValueWithJson(
+            getConversionTestCase<CurrentType>().jsonRepresentation);
+                     , ad_utility::ConfigOptionSetWrongJsonTypeException);
       }
     });
 
-    ASSERT_ANY_THROW(option.setValueWithJson(
-        nlohmann::json::parse(R"--("the value is in here " : [true, 4, 4.2])--")));
+    ASSERT_ANY_THROW(option.setValueWithJson(nlohmann::json::parse(
+        R"--("the value is in here " : [true, 4, 4.2])--")));
   };
 
   // Do the test case for every possible type.

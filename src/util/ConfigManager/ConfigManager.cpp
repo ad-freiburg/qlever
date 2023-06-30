@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "util/ConfigManager/ConfigManager.h"
+
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -17,7 +19,6 @@
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
-#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -217,11 +218,10 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
   or if it HAD to be set, but wasn't.
   */
   for (auto& [key, option] : configurationOptions_) {
-    // Pointer to the position of the current configuration in json.
-    const nlohmann::json::json_pointer configurationOptionJsonPosition{key};
-
-    // Set the option, if possible.
-    if (j.contains(configurationOptionJsonPosition)) {
+    // Set the option, if possible, with the pointer to the position of the
+    // current configuration in json.
+    if (const nlohmann::json::json_pointer configurationOptionJsonPosition{key};
+        j.contains(configurationOptionJsonPosition)) {
       // This will throw an exception, if the json object can't be interpreted
       // with the wanted type.
       option.setValueWithJson(j.at(configurationOptionJsonPosition));
