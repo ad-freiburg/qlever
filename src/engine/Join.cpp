@@ -681,6 +681,18 @@ void Join::computeResultForTwoIndexScans(IdTable* resultPtr) {
 
   _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
   _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
+  _right->getRootOperation()->getRuntimeInfo().details_.update(
+      rightBlocks.details());
+  _left->getRootOperation()->getRuntimeInfo().details_.update(
+      leftBlocks.details());
+  if (rightBlocks.details().contains("num-elements")) {
+    _right->getRootOperation()->getRuntimeInfo().numRows_ =
+        static_cast<size_t>(rightBlocks.details().at("num-elements"));
+  }
+  if (leftBlocks.details().contains("num-elements")) {
+    _left->getRootOperation()->getRuntimeInfo().numRows_ =
+        static_cast<size_t>(leftBlocks.details().at("num-elements"));
+  }
 }
 
 // ______________________________________________________________________________________________________
@@ -760,4 +772,8 @@ void Join::computeResultForIndexScanAndIdTable(
   scanTree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
   scanTree->getRootOperation()->getRuntimeInfo().details_.update(
       rightBlocks.details());
+  if (rightBlocks.details().contains("num-elements")) {
+    scanTree->getRootOperation()->getRuntimeInfo().numRows_ =
+        static_cast<size_t>(rightBlocks.details().at("num-elements"));
+  }
 }
