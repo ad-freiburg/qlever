@@ -127,16 +127,22 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
 // _____________________________________________________________________
 cppcoro::generator<IdTable> Permutation::lazyScan(
     Id col0Id, std::optional<Id> col1Id,
-    const std::vector<CompressedBlockMetadata>& blocks,
+    std::optional<std::vector<CompressedBlockMetadata>> blocks,
     const TimeoutTimer& timer) const {
   if (!meta_.col0IdExists(col0Id)) {
     return {};
   }
+  auto relationMetadata = meta_.getMetaData(col0Id);
+  if (!blocks.has_value()) {
+    auto blockSpan = CompressedRelationReader::getBlocksFromMetadata(
+        relationMetadata, col1Id, meta_.blockData());
+    blocks = std::vector(blockSpan.begin(), blockSpan.end());
+  }
   if (col1Id.has_value()) {
-    return reader_.lazyScan(meta_.getMetaData(col0Id), col1Id.value(), blocks,
-                            file_, timer);
+    return reader_.lazyScan(meta_.getMetaData(col0Id), col1Id.value(),
+                            std::move(blocks.value()), file_, timer);
   } else {
-    return reader_.lazyScan(meta_.getMetaData(col0Id), std::move(blocks), file_,
-                            timer);
+    return reader_.lazyScan(meta_.getMetaData(col0Id),
+                            std::move(blocks.value()), file_, timer);
   }
 }

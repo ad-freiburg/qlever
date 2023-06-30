@@ -397,19 +397,6 @@ class IndexImpl {
   // ___________________________________________________________________
   vector<float> getMultiplicities(Permutation::Enum permutation) const;
 
-  /**
-   * @brief Perform a scan for two keys i.e. retrieve all Z from the XYZ
-   * permutation for specific key values of X and Y.
-   * @param col0String The first key (as a raw string that is yet to be
-   * transformed to index space) for which to search, e.g. fixed value for O in
-   * OSP permutation.
-   * @param col1String The second key (as a raw string that is yet to be
-   * transformed to index space) for which to search, e.g. fixed value for S in
-   * OSP permutation.
-   * @param result The Id table to which we will write. Must have 2 columns.
-   * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
-   * members of IndexImpl class).
-   */
   // _____________________________________________________________________________
   IdTable scan(
       const TripleComponent& col0String,

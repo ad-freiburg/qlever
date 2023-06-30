@@ -12,7 +12,7 @@ void dumpToStdout(const Permutation& permutation) {
   ad_utility::AllocatorWithLimit<Id> allocator{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
           std::numeric_limits<uint64_t>::max())};
-  auto triples = TriplesView(permutation, allocator);
+  auto triples = TriplesView(permutation);
   size_t i = 0;
   for (auto triple : triples) {
     std::cout << triple[0] << " " << triple[1] << " " << triple[2] << std::endl;

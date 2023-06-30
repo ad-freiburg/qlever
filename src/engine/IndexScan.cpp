@@ -259,9 +259,8 @@ void IndexScan::computeFullScan(IdTable* result,
   size_t i = 0;
   const auto& permutationImpl =
       getExecutionContext()->getIndex().getImpl().getPermutation(permutation);
-  auto triplesView =
-      TriplesView(permutationImpl, getExecutionContext()->getAllocator(),
-                  ignoredRanges, isTripleIgnored);
+  auto triplesView = TriplesView(permutationImpl, ignoredRanges,
+                                 isTripleIgnored, _timeoutTimer);
   for (const auto& triple : triplesView) {
     if (i >= resultSize) {
       break;
@@ -282,7 +281,6 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
 }
 
 // ___________________________________________________________________________
-// TODO<joka921> include a timeout timer.
 cppcoro::generator<IdTable> IndexScan::getLazyScan(
     const IndexScan& s, std::vector<CompressedBlockMetadata> blocks) {
   const IndexImpl& index = s.getIndex().getImpl();
@@ -292,7 +290,7 @@ cppcoro::generator<IdTable> IndexScan::getLazyScan(
     col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
   }
   return index.getPermutation(s.permutation())
-      .lazyScan(col0Id, col1Id, std::move(blocks));
+      .lazyScan(col0Id, col1Id, std::move(blocks), s._timeoutTimer);
 };
 
 // ________________________________________________________________
