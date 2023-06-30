@@ -228,8 +228,10 @@ std::vector<string> calculatePrefixes(const string& filename,
   if (alwaysAddCode) {
     totalSavings -= codelength * numWords;
   }
-  int reductionInPercent =
-      static_cast<size_t>(0.5 + 100.0 * totalSavings / totalChars);
+  int64_t reductionInPercent =
+      totalChars > 0
+          ? static_cast<int64_t>(0.5 + 100.0 * totalSavings / totalChars)
+          : 0;
   LOG(DEBUG) << "Total number of bytes : " << totalChars << std::endl;
   LOG(DEBUG) << "Total chars compressed : " << totalSavings << '\n';
   LOG(INFO) << "Reduction of size of internal vocabulary: "
