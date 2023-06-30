@@ -116,10 +116,22 @@ class Operation {
     return _runtimeInfoWholeQuery;
   }
 
-  // Get the result for the subtree rooted at this element.
-  // Use existing results if they are already available, otherwise
-  // trigger computation.
-  shared_ptr<const ResultTable> getResult(bool isRoot = false);
+  /**
+   * @brief Get the result for the subtree rooted at this element. Use existing
+   * results if they are already available, otherwise trigger computation.
+   * Always returns a non-null pointer, except for when `onlyReadFromCache` is
+   * true (see below).
+   * @param isRoot Has be set to `true` iff this is the root operation of a
+   * complete query to obtain the expected behavior wrt cache pinning and
+   * runtime information in error cases.
+   * @param onlyReadFromCache If set to true the result is only returned if it
+   * can be read from the cache without any computation. If the result is not in
+   * the cache, `nullptr` will be returned.
+   * @return A shared pointer to the result. May only be `nullptr` if
+   * `onlyReadFromCache` is true.
+   */
+  shared_ptr<const ResultTable> getResult(bool isRoot = false,
+                                          bool onlyReadFromCache = false);
 
   // Use the same timeout timer for all children of an operation (= query plan
   // rooted at that operation). As soon as one child times out, the whole
