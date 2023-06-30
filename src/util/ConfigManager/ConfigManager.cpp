@@ -240,9 +240,6 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
 // ____________________________________________________________________________
 std::string ConfigManager::printConfigurationDoc(
     bool printCurrentJsonConfiguration) const {
-  // For listing all available configuration options.
-  std::ostringstream stream;
-
   // Setup for printing the locations of the option in json format, so that
   // people can easier understand, where everything is.
   nlohmann::json configuratioOptionsVisualization;
@@ -273,29 +270,30 @@ std::string ConfigManager::printConfigurationDoc(
     }
   }
 
-  // List the configuration options themselves.
-  // TODO Use `lazyStrJoin` for this, once it was merged to master.
-  for (auto it = configurationOptions_.begin();
-       it != configurationOptions_.end(); it++) {
-    // Add the location of the option and the option itself.
-    stream << "Location : " << it->first << "\n"
-           << static_cast<std::string>(it->second);
+  const std::string& configuratioOptionsVisualizationAsString =
+      configuratioOptionsVisualization.dump(2);
 
-    // The last entry doesn't get linebreaks.
-    if (auto nextRound = it; ++nextRound != configurationOptions_.end()) {
-      stream << "\n\n";
-    }
-  }
+  // List the configuration options themselves.
+  const std::string& listOfConfigurationOptions = ad_utility::lazyStrJoin(
+      std::views::transform(configurationOptions_,
+                            [](const auto& pair) {
+                              // Add the location of the option and the option
+                              // itself.
+                              return absl::StrCat(
+                                  "Location : ", pair.first, "\n",
+                                  static_cast<std::string>(pair.second));
+                            }),
+      "\n\n");
 
   return absl::StrCat(
       "Locations of available configuration options with",
       (printCurrentJsonConfiguration ? " their current values"
                                      : " example values"),
       ":\n",
-      ad_utility::addIndentation(configuratioOptionsVisualization.dump(2),
+      ad_utility::addIndentation(configuratioOptionsVisualizationAsString,
                                  "    "),
       "\n\nAvailable configuration options:\n",
-      ad_utility::addIndentation(stream.str(), "    "),
+      ad_utility::addIndentation(listOfConfigurationOptions, "    "),
       "\n\nConfiguration options, that kept their default values:\n",
       ad_utility::addIndentation(
           getListOfNotChangedConfigOptionsWithDefaultValuesAsString(), "    "));

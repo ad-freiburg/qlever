@@ -8,6 +8,7 @@
 
 #include <array>
 #include <optional>
+#include <ranges>
 #include <sstream>
 #include <string>
 #include <type_traits>
@@ -119,7 +120,7 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
                                       std::variant_alternative_t<TypeIndex, AvailableTypes>>() {
           if (isValueTypeSubType.template operator()<AlternativeType>(json, isValueTypeSubType)) {
             throw ConfigOptionSetWrongJsonTypeException(identifier_, getActualValueTypeAsString(),
-                                                        availableTypesToString(AlternativeType{}));
+                                                        availableTypesToString<AlternativeType>());
           }
         });
 
@@ -167,14 +168,13 @@ std::string ConfigOption::contentOfAvailableTypesToString(
 
       std::ostringstream stream;
       stream << "{";
-      forEachExcludingTheLastOne(
-          content,
-          [&stream, &variantSubTypetoString](const VectorEntryType& entry) {
-            stream << variantSubTypetoString(entry, variantSubTypetoString) << ", ";
-          },
-          [&stream, &variantSubTypetoString](const VectorEntryType& entry) {
-            stream << variantSubTypetoString(entry, variantSubTypetoString);
-          });
+      ad_utility::lazyStrJoin(
+          &stream,
+          std::views::transform(content,
+                                [&variantSubTypetoString](const VectorEntryType& entry) {
+                                  return variantSubTypetoString(entry, variantSubTypetoString);
+                                }),
+          ", ");
       stream << "}";
       return stream.str();
     }
