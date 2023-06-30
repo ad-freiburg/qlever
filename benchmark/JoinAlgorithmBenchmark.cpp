@@ -164,7 +164,7 @@ static void addMeasurementsToRowOfBenchmarkTable(
   // Hash join first, because merge/galloping join sorts all tables, if
   // needed, before joining them.
   table->addMeasurement(
-      row, 3,
+      row, 4,
       [&numberRowsOfResult, &smallerTable, &biggerTable, &hashJoinLambda]() {
         numberRowsOfResult =
             useJoinFunctionOnIdTables(smallerTable, biggerTable, hashJoinLambda)
@@ -177,7 +177,7 @@ static void addMeasurementsToRowOfBenchmarkTable(
   result.
   */
   table->addMeasurement(
-      row, 0,
+      row, 1,
       [&smallerTable, &smallerTableSorted, &biggerTable, &biggerTableSorted]() {
         if (!smallerTableSorted) {
           sortIdTableByJoinColumnInPlace(smallerTable);
@@ -189,7 +189,7 @@ static void addMeasurementsToRowOfBenchmarkTable(
 
   // The merge/galloping join.
   table->addMeasurement(
-      row, 1,
+      row, 2,
       [&numberRowsOfResult, &smallerTable, &biggerTable, &joinLambda]() {
         numberRowsOfResult =
             useJoinFunctionOnIdTables(smallerTable, biggerTable, joinLambda)
@@ -197,7 +197,7 @@ static void addMeasurementsToRowOfBenchmarkTable(
       });
 
   // Adding the number of rows of the result.
-  table->setEntry(row, 4, std::to_string(numberRowsOfResult));
+  table->setEntry(row, 5, std::to_string(numberRowsOfResult));
 }
 
 // Is the given type `T` of type `Type`, or is it a vector, containing
@@ -214,6 +214,7 @@ concept exactlyOneVector = (ad_utility::isVector<Ts> + ...) == 1;
  * @brief Create a benchmark table for join algorithm, with the given
  *  parameters for the IdTables. The rows will be the parameter, you gave
  *  a list for, and the columns will be:
+ *  - The parameter, you gave a list for.
  *  - Time needed for sorting `IdTable`s.
  *  - Time needed for merge/galloping join.
  *  - Time needed for sorting and merge/galloping added togehter.
@@ -311,7 +312,7 @@ static ResultTable& makeBenchmarkTable(
       std::string{tableDescriptor},
       ad_utility::transform(
           vec, [](const auto& entry) { return std::to_string(entry); }),
-      {"Time for sorting", "Merge/Galloping join",
+      {"Parameter value", "Time for sorting", "Merge/Galloping join",
        "Sorting + merge/galloping join", "Hash join",
        "Number of rows in resulting IdTable", "Speedup of hash join"}));
 
@@ -334,11 +335,11 @@ static ResultTable& makeBenchmarkTable(
 
   // Adding together the time for sorting the `IdTables` and then joining
   // them using merge/galloping join.
-  sumUpColumns(table, 2, static_cast<size_t>(0), static_cast<size_t>(1));
+  sumUpColumns(table, 3, static_cast<size_t>(1), static_cast<size_t>(2));
 
   // Calculate, how much of a speedup the hash join algorithm has in comparison
   // to the merge/galloping join algrithm.
-  calculateSpeedupOfColumn(table, 3, 2, 5);
+  calculateSpeedupOfColumn(table, 4, 3, 6);
 
   // For more specific adjustments.
   return (*table);
@@ -368,6 +369,7 @@ concept exactlyOneGrowthFunction =
 parameters for the IdTables, which will keep getting more rows, until the stop
 function decides, that there are enough rows. The rows will be the return values
 of the parameter, you gave a function for, and the columns will be:
+- Return values of the parameter, you gave a function for.
 - Time needed for sorting `IdTable`s.
 - Time needed for merge/galloping join.
 - Time needed for sorting and merge/galloping added togehter.
@@ -379,10 +381,10 @@ of the parameter, you gave a function for, and the columns will be:
 `ResultTable` as `const ResultTable&` and returns a bool.
 @tparam T1, T6, T7 Must be a float, or a function, that takes the row number of
 the next to be generated row as `const size_t&`, and returns a float. Can only
-be a function, if all other template `T` parameter are not vectors.
+be a function, if all other template `T` parameter are vectors.
 @tparam T2, T3, T4, T5 Must be a size_t, or a function, that takes the row
 number of the next to be generated row as `const size_t&`, and returns a size_t.
-Can only be a function, if all other template `T` parameter are not vectors.
+Can only be a function, if all other template `T` parameter are vectors.
 
 @param results The BenchmarkResults, in which you want to create a new
 benchmark table.
@@ -449,7 +451,7 @@ static ResultTable& makeGrowingBenchmarkTable(
     // Put them into a tuple, so that we can easly look them up.
     auto tup = std::tuple<Ts&...>{AD_FWD(args)...};
 
-    // Get the index of the first vector.
+    // Get the index of the first function.
     constexpr static size_t idx =
         ad_utility::getIndexOfFirstTypeToPassCheck<isFunction, Ts...>();
 
@@ -480,7 +482,7 @@ static ResultTable& makeGrowingBenchmarkTable(
   */
   ResultTable* table = &(results->addTable(
       std::string{tableDescriptor}, {},
-      {"Time for sorting", "Merge/Galloping join",
+      {"Parameter value", "Time for sorting", "Merge/Galloping join",
        "Sorting + merge/galloping join", "Hash join",
        "Number of rows in resulting IdTable", "Speedup of hash join"}));
   /*
@@ -492,10 +494,13 @@ static ResultTable& makeGrowingBenchmarkTable(
     const size_t rowNumber = table->numRows();
 
     // Add a new row without content.
-    table->addRow(std::to_string(returnFirstFunction(
-        overlap, ratioRows, smallerTableAmountRows, smallerTableAmountColumns,
-        biggerTableAmountColumns, smallerTableJoinColumnSampleSizeRatio,
-        biggerTableJoinColumnSampleSizeRatio)(rowNumber)));
+    table->addRow();
+    table->setEntry(rowNumber, 0,
+                    std::to_string(returnFirstFunction(
+                        overlap, ratioRows, smallerTableAmountRows,
+                        smallerTableAmountColumns, biggerTableAmountColumns,
+                        smallerTableJoinColumnSampleSizeRatio,
+                        biggerTableJoinColumnSampleSizeRatio)(rowNumber)));
 
     // Converting all our function parameters to non functions.
     addMeasurementsToRowOfBenchmarkTable(
@@ -514,11 +519,11 @@ static ResultTable& makeGrowingBenchmarkTable(
 
   // Adding together the time for sorting the `IdTables` and then joining
   // them using merge/galloping join.
-  sumUpColumns(table, 2, static_cast<size_t>(0), static_cast<size_t>(1));
+  sumUpColumns(table, 3, static_cast<size_t>(1), static_cast<size_t>(2));
 
   // Calculate, how much of a speedup the hash join algorithm has in comparison
   // to the merge/galloping join algrithm.
-  calculateSpeedupOfColumn(table, 3, 2, 5);
+  calculateSpeedupOfColumn(table, 4, 3, 6);
 
   // For more specific adjustments.
   return (*table);
@@ -535,8 +540,8 @@ static bool checkIfFunctionMeasurementOfRowUnderMaxtime(
     return table.getEntry<float>(row, column) <= maxTime;
   };
 
-  // We measure the functions in column 0, 1 and 3.
-  return checkTime(0) && checkTime(1) && checkTime(3);
+  // We measure the functions in column 1, 2 and 4.
+  return checkTime(1) && checkTime(2) && checkTime(4);
 }
 
 /*
@@ -932,7 +937,7 @@ auto createDefaultStoppingLambda(
                   maxMemoryInByte.value()) &&
                  (approximateMemoryNeededByIdTable(
                       std::stoull(table.getEntry<std::string>(
-                          benchmarkTableRowNumber, 4)),
+                          benchmarkTableRowNumber, 5)),
                       resultTableAmountColumns) <= maxMemoryInByte.value());
         };
 

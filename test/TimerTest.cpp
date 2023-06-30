@@ -5,22 +5,29 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <thread>
+
 #include "util/Timer.h"
 
 using ad_utility::TimeoutTimer;
 using ad_utility::Timer;
 using namespace std::chrono_literals;
 
+// On macOS the timer seems to work, but the `sleep_for` is too imprecise.
+#ifndef __APPLE__
+
 void testTime(Timer::Duration duration, size_t msecs,
               std::chrono::milliseconds expected) {
-  ASSERT_GE(duration, 0.9 * expected);
-  ASSERT_LE(duration, 1.1 * (expected + 1ms));
+  auto lowerBound = 0.9 * expected;
+  auto upperBound = 1.1 * expected + 3ms;
+  EXPECT_GE(duration, lowerBound);
+  EXPECT_LE(duration, upperBound);
 
-  ASSERT_GE(msecs, 0.9 * expected.count());
-  ASSERT_LE(msecs, 1.1 * (expected.count() + 1));
+  EXPECT_GE(msecs, lowerBound.count());
+  EXPECT_LE(msecs, upperBound.count());
 
-  ASSERT_GE(Timer::toSeconds(duration), 0.0009 * expected.count());
-  ASSERT_LE(Timer::toSeconds(duration), 0.0011 * (expected.count() + 1));
+  EXPECT_GE(Timer::toSeconds(duration), 0.001 * lowerBound.count());
+  EXPECT_LE(Timer::toSeconds(duration), 0.001 * upperBound.count());
 }
 
 void testTime(const ad_utility::Timer& timer,
@@ -135,3 +142,5 @@ TEST(TimeBlockAndLog, TimeBlockAndLog) {
   }
   ASSERT_THAT(s, ::testing::MatchesRegex("message: 2[5-9]"));
 }
+
+#endif

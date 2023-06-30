@@ -7,6 +7,10 @@ on:
     branches: [ master ]
   merge_group:
 
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
 jobs:
   build:
     # The CMake configure and build commands are platform-agnostic and should work equally
@@ -17,20 +21,18 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
-        compiler-version: [11, 12, 14, 15, 16]
+        compiler-version: [11, 12, 13, 16]
         warnings: [  "-Wall -Wextra -Werror " ]
         build-type: [Release]
         exclude:
-          - compiler: gcc
-            compiler-version: 14
-          - compiler: gcc
-            compiler-version: 15
           - compiler: gcc
             compiler-version: 16
           - compiler: clang
             compiler-version: 11
           - compiler: clang
             compiler-version: 12
+          - compiler: clang
+            compiler-version: 13
         include:
           - compiler: clang
             asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
@@ -47,7 +49,10 @@ jobs:
         submodules: 'recursive'
 
     - name: Install dependencies
-      run:  sudo apt update && sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
+      run:  |
+        sudo gem install apt-spy2 && sudo apt-spy2 fix --commit --launchpad --country=US
+        sudo apt-get update
+        sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
     - name: Install boost Ubuntu 22.04
       run : sudo apt update && sudo apt install -y libboost-all-dev
     - name: Install gcc 11
@@ -56,20 +61,11 @@ jobs:
     - name: Install gcc 12
       run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-12 g++-12
       if :  matrix.compiler == 'gcc' && matrix.compiler-version == 12
-    - name: Install clang 14
-      run : sudo apt install clang-14
-      if :  matrix.compiler == 'clang' && matrix.compiler-version == 14
-    - name: Install clang 15
-      # The sed command fixes a bug in `llvm.sh` in combination with the latest version of
-      # `apt-key`. Without it the GPG key for the llvm repository is downloaded but deleted
-      # immediately after.
-      run:  | 
-        wget https://apt.llvm.org/llvm.sh
-        sudo chmod +x llvm.sh
-        sed   's/apt-key del/echo/' llvm.sh -iy
-        sudo ./llvm.sh 15
-        sudo apt install clang-15
-      if :  matrix.compiler == 'clang' && matrix.compiler-version == 15
+
+    - name: Install gcc 13
+      run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-13 g++-13
+      if :  matrix.compiler == 'gcc' && matrix.compiler-version == 13
+      
     - name: Install clang 16
       # The sed command fixes a bug in `llvm.sh` in combination with the latest version of
       # `apt-key`. Without it the GPG key for the llvm repository is downloaded but deleted

@@ -16,6 +16,7 @@
 #include "util/ConcurrentCache.h"
 #include "util/File.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/SerializeArray.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/Timer.h"
@@ -40,7 +41,7 @@ using SmallRelationsBuffer = columnBasedIdTable::IdTable<Id, NumColumns>;
 
 // Sometimes we do not read/decompress  all the columns of a block, so we have
 // to use a dynamic `IdTable`.
-using DecompressedBlock = columnBasedIdTable::IdTable<Id, 0>;
+using DecompressedBlock = IdTable;
 
 // After compression the columns have different sizes, so we cannot use an
 // `IdTable`.
@@ -57,23 +58,30 @@ struct CompressedBlockMetadata {
   };
   std::vector<OffsetAndCompressedSize> offsetsAndCompressedSize_;
   size_t numRows_;
-  // For example, in the PSO permutation, col0 is the P and col1 is the S. The
-  // col0 ID is not stored in the block. First and last are meant inclusively,
-  // that is, they are both part of the block.
-  //
-  // NOTE: Strictly speaking, we don't need `col0FirstId_` and `col1FirstId_`.
-  // However, they are convenient to have and don't really harm with respect to
-  // space efficiency. For example, for Wikidata, we have only around 50K blocks
-  // with block size 8M and around 5M blocks with block size 80K; even the
-  // latter takes only half a GB in total.
-  Id col0FirstId_;
-  Id col0LastId_;
-  Id col1FirstId_;
-  Id col1LastId_;
 
-  // For our `DeltaTriples` (https://github.com/ad-freiburg/qlever/pull/916), we
-  // need to know the least significant `Id` of the last triple as well.
-  Id col2LastId_;
+  // Store the first and the last triple of the block. First and last are meant
+  // inclusively, that is, they are both part of the block. The order of the
+  // triples depends on the stored permutation: For example, in the PSO
+  // permutation, the first element of the triples is the P, the second one is
+  // the S and the third one is the O. Note that the first key of the
+  // permutation (for example the P in the PSO permutation) is not stored in the
+  // blocks, but has to be retrieved via the corresponding
+  // `CompressedRelationMetadata`.
+  // NOTE: Strictly speaking, storing one of `firstTriple_` or `lastTriple_`
+  // would probably suffice. However, they make several functions much easier to
+  // implement and don't really harm with respect to space efficiency. For
+  // example, for Wikidata, we have only around 50K blocks with block size 8M
+  // and around 5M blocks with block size 80K; even the latter takes only half a
+  // GB in total.
+  struct PermutedTriple {
+    Id col0Id_;
+    Id col1Id_;
+    Id col2Id_;
+    bool operator==(const PermutedTriple&) const = default;
+    friend std::true_type allowTrivialSerialization(PermutedTriple, auto);
+  };
+  PermutedTriple firstTriple_;
+  PermutedTriple lastTriple_;
 
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadata&) const = default;
@@ -89,11 +97,8 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata::OffsetAndCompressedSize) {
 AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
   serializer | arg.offsetsAndCompressedSize_;
   serializer | arg.numRows_;
-  serializer | arg.col0FirstId_;
-  serializer | arg.col0LastId_;
-  serializer | arg.col1FirstId_;
-  serializer | arg.col1LastId_;
-  serializer | arg.col2LastId_;
+  serializer | arg.firstTriple_;
+  serializer | arg.lastTriple_;
 }
 
 // The metadata of a whole compressed "relation", where relation refers to a
@@ -222,6 +227,9 @@ class CompressedRelationWriter {
 /// Manage the reading of relations from disk that have been previously written
 /// using the `CompressedRelationWriter`.
 class CompressedRelationReader {
+ public:
+  using Allocator = ad_utility::AllocatorWithLimit<Id>;
+
  private:
   // This cache stores a small number of decompressed blocks. Its current
   // purpose is to make the e2e-tests run fast. They contain many SPARQL queries
@@ -233,7 +241,12 @@ class CompressedRelationReader {
       ad_utility::HeapBasedLRUCache<off_t, DecompressedBlock>>
       blockCache_{20ul};
 
+  // The allocator used to allocate intermediate buffers.
+  mutable Allocator allocator_;
+
  public:
+  explicit CompressedRelationReader(Allocator allocator)
+      : allocator_{std::move(allocator)} {}
   /**
    * @brief For a permutation XYZ, retrieve all YZ for a given X.
    *
@@ -246,7 +259,7 @@ class CompressedRelationReader {
    * @param timer If specified (!= nullptr) a `TimeoutException` will be thrown
    *          if the timer runs out during the exeuction of this function.
    *
-   * The arguments `metaData`, `blocks`, and `file` must all be obtained from
+   * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).
    */
   void scan(const CompressedRelationMetadata& metadata,
@@ -257,7 +270,7 @@ class CompressedRelationReader {
   /**
    * @brief For a permutation XYZ, retrieve all Z for given X and Y.
    *
-   * @param metaData The metadata of the given X.
+   * @param metadata The metadata of the given X.
    * @param col1Id The ID for Y.
    * @param blocks The metadata of the on-disk blocks for the given permutation.
    * @param file The file in which the permutation is stored.
@@ -266,13 +279,31 @@ class CompressedRelationReader {
    * @param timer If specified (!= nullptr) a `TimeoutException` will be thrown
    *              if the timer runs out during the exeuction of this function.
    *
-   * The arguments `metaData`, `blocks`, and `file` must all be obtained from
+   * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).
    */
-  void scan(const CompressedRelationMetadata& metaData, Id col1Id,
+  void scan(const CompressedRelationMetadata& metadata, Id col1Id,
             const vector<CompressedBlockMetadata>& blocks,
             ad_utility::File& file, IdTable* result,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+
+  // Only get the size of the result for a given permutation XYZ for a given X
+  // and Y. This can be done by scanning one or two blocks. Note: The overload
+  // of this function where only the X is given is not needed, as the size of
+  // these scans can be retrieved from the `CompressedRelationMetadata`
+  // directly.
+  size_t getResultSizeOfScan(const CompressedRelationMetadata& metaData,
+                             Id col1Id,
+                             const vector<CompressedBlockMetadata>& blocks,
+                             ad_utility::File& file) const;
+
+  // Get the contiguous subrange of the given `blockMetadata` for the blocks
+  // that contain the triples that have the relationId/col0Id that was specified
+  // by the `medata`. If the `col1Id` is specified (not `nullopt`), then the
+  // blocks are additionally filtered by the given `col1Id`.
+  static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
+      const CompressedRelationMetadata& metadata, std::optional<Id> col1Id,
+      std::span<const CompressedBlockMetadata> blockMetadata);
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
@@ -286,8 +317,8 @@ class CompressedRelationReader {
   // have after decompression must be passed in via the `numRowsToRead`
   // argument. It is typically obtained from the corresponding
   // `CompressedBlockMetaData`.
-  static DecompressedBlock decompressBlock(
-      const CompressedBlock& compressedBlock, size_t numRowsToRead);
+  DecompressedBlock decompressBlock(const CompressedBlock& compressedBlock,
+                                    size_t numRowsToRead) const;
 
   // Similar to `decompressBlock`, but the block is directly decompressed into
   // the `table`, starting at the `offsetInTable`-th row. The `table` and the
@@ -309,9 +340,20 @@ class CompressedRelationReader {
   // decompress and return it.
   // If `columnIndices` is `nullopt`, then all columns of the block are read,
   // else only the specified columns are read.
-  static DecompressedBlock readAndDecompressBlock(
-      const CompressedBlockMetadata& blockMetaData, ad_utility::File& file,
-      std::optional<std::vector<size_t>> columnIndices);
+  DecompressedBlock readAndDecompressBlock(
+      const CompressedBlockMetadata& blockMetadata, ad_utility::File& file,
+      std::optional<std::vector<size_t>> columnIndices) const;
+
+  // Read the block that is identified by the `blockMetadata` from the `file`,
+  // decompress and return it. Before returning, delete all rows where the col0
+  // ID / relation ID does not correspond with the `relationMetadata`, or where
+  // the `col1Id` doesn't match. For this to work, the block has to be one of
+  // the blocks that actually store triples from the given `relationMetadata`'s
+  // relation, else the behavior is undefined.
+  DecompressedBlock readPossiblyIncompleteBlock(
+      const CompressedRelationMetadata& relationMetadata, Id col1Id,
+      ad_utility::File& file,
+      const CompressedBlockMetadata& blockMetadata) const;
 };
 
 #endif  // QLEVER_COMPRESSEDRELATION_H

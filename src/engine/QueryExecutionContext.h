@@ -122,8 +122,8 @@ class QueryExecutionContext {
 
   ad_utility::AllocatorWithLimit<Id> getAllocator() { return _allocator; }
 
-  const bool _pinSubtrees;
-  const bool _pinResult;
+  bool _pinSubtrees;
+  bool _pinResult;
 
  private:
   const Index& _index;

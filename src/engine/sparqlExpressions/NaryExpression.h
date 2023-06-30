@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <charconv>
 #include <concepts>
 #include <cstdlib>
 
@@ -180,41 +181,47 @@ using DistExpression =
 
 // Date functions.
 //
-// TODO: These are currently inefficient because they still operate on our old
-// ":v:date:..." strings. It will be easy to make more efficient, once we switch
-// to representing dates directly in an `Id`, see `util/Date.h`.
-const size_t yearIndexBegin = sizeof(VALUE_DATE_PREFIX) - 1;
-const size_t yearIndexEnd = yearIndexBegin + DEFAULT_NOF_DATE_YEAR_DIGITS;
-const size_t monthIndex = yearIndexEnd + 1;
-const size_t dayIndex = monthIndex + 3;
-// Helper function that extracts a part of a date string. Note the extra work
-// for year because of the potential two's complement.
-template <size_t pos1, size_t pos2>
-inline auto extractNumberFromDate = [](const auto& dateAsString) -> long int {
-  static_assert(pos2 > pos1);
-  if (dateAsString.size() < pos2) {
-    return 0;
-  } else if (pos1 == yearIndexBegin && dateAsString[pos1] == '-') {
-    static_assert(pos2 > pos1 + 1);
-    return -std::atol(ad_utility::getBase10ComplementOfIntegerString(
-                          dateAsString.substr(pos1 + 1, pos2 - pos1 - 1))
-                          .data());
+inline auto extractYear = [](std::optional<DateOrLargeYear> d) {
+  if (!d.has_value()) {
+    return Id::makeUndefined();
   } else {
-    return std::atol(dateAsString.data() + pos1);
+    return Id::makeFromInt(d->getYear());
   }
 };
-inline auto extractYear = extractNumberFromDate<yearIndexBegin, yearIndexEnd>;
-inline auto extractMonth = extractNumberFromDate<monthIndex, monthIndex + 2>;
-inline auto extractDay = extractNumberFromDate<dayIndex, dayIndex + 2>;
-using YearExpression = NARY<1, FV<decltype(extractYear), StringValueGetter>>;
-using MonthExpression = NARY<1, FV<decltype(extractMonth), StringValueGetter>>;
-using DayExpression = NARY<1, FV<decltype(extractDay), StringValueGetter>>;
+
+inline auto extractMonth = [](std::optional<DateOrLargeYear> d) {
+  // TODO<C++23> Use the monadic operations for std::optional
+  if (!d.has_value()) {
+    return Id::makeUndefined();
+  }
+  auto optionalMonth = d.value().getMonth();
+  if (!optionalMonth.has_value()) {
+    return Id::makeUndefined();
+  }
+  return Id::makeFromInt(optionalMonth.value());
+};
+
+inline auto extractDay = [](std::optional<DateOrLargeYear> d) {
+  // TODO<C++23> Use the monadic operations for `std::optional`.
+  if (!d.has_value()) {
+    return Id::makeUndefined();
+  }
+  auto optionalDay = d.value().getDay();
+  if (!optionalDay.has_value()) {
+    return Id::makeUndefined();
+  }
+  return Id::makeFromInt(optionalDay.value());
+};
+
+using YearExpression = NARY<1, FV<decltype(extractYear), DateValueGetter>>;
+using MonthExpression = NARY<1, FV<decltype(extractMonth), DateValueGetter>>;
+using DayExpression = NARY<1, FV<decltype(extractDay), DateValueGetter>>;
 
 // String functions.
 using StrExpression = NARY<1, FV<std::identity, StringValueGetter>>;
 
 // Compute string length.
-inline auto strlen = [](const auto& s) -> long int { return s.size(); };
+inline auto strlen = [](const auto& s) -> int64_t { return s.size(); };
 using StrlenExpression = NARY<1, FV<decltype(strlen), StringValueGetter>>;
 
 }  // namespace detail

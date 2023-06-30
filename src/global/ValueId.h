@@ -13,11 +13,12 @@
 #include <limits>
 #include <sstream>
 
-#include "../util/BitUtils.h"
-#include "../util/NBitInteger.h"
-#include "../util/Serializer/Serializer.h"
-#include "../util/SourceLocation.h"
-#include "./IndexTypes.h"
+#include "global/IndexTypes.h"
+#include "util/BitUtils.h"
+#include "util/Date.h"
+#include "util/NBitInteger.h"
+#include "util/Serializer/Serializer.h"
+#include "util/SourceLocation.h"
 
 /// The different Datatypes that a `ValueId` (see below) can encode.
 enum struct Datatype {
@@ -27,7 +28,8 @@ enum struct Datatype {
   VocabIndex,
   LocalVocabIndex,
   TextRecordIndex,
-  MaxValue = TextRecordIndex
+  Date,
+  MaxValue = Date
   // TODO<joka921> At least "date" is missing and not yet folded.
   // Note: Unfortunately we cannot easily get the size of an enum.
   // If members are added to this enum, then the `MaxValue`
@@ -50,6 +52,8 @@ constexpr std::string_view toString(Datatype type) {
       return "LocalVocabIndex";
     case Datatype::TextRecordIndex:
       return "TextRecordIndex";
+    case Datatype::Date:
+      return "Date";
   }
   // This line is reachable if we cast an arbitrary invalid int to this enum
   AD_FAIL();
@@ -201,6 +205,15 @@ class ValueId {
     return LocalVocabIndex::make(removeDatatypeBits(_bits));
   }
 
+  // Store or load a `Date` object.
+  static ValueId makeFromDate(DateOrLargeYear d) noexcept {
+    return addDatatypeBits(std::bit_cast<uint64_t>(d), Datatype::Date);
+  }
+
+  DateOrLargeYear getDate() const noexcept {
+    return std::bit_cast<DateOrLargeYear>(removeDatatypeBits(_bits));
+  }
+
   // TODO<joka921> implement dates
 
   /// Return the smallest and largest possible `ValueId` wrt the underlying
@@ -247,9 +260,10 @@ class ValueId {
         return std::invoke(visitor, getLocalVocabIndex());
       case Datatype::TextRecordIndex:
         return std::invoke(visitor, getTextRecordIndex());
-      default:
-        AD_FAIL();
+      case Datatype::Date:
+        return std::invoke(visitor, getDate());
     }
+    AD_FAIL();
   }
 
   /// Similar to `visit` (see above). Extracts the values from `a` and `b` and
@@ -275,6 +289,8 @@ class ValueId {
       } else if constexpr (ad_utility::isSimilar<T, double> ||
                            ad_utility::isSimilar<T, int64_t>) {
         ostr << std::to_string(value);
+      } else if constexpr (ad_utility::isSimilar<T, DateOrLargeYear>) {
+        ostr << value.toStringAndType().first;
       } else {
         // T is `VocabIndex || LocalVocabIndex || TextRecordIndex`
         ostr << std::to_string(value.get());

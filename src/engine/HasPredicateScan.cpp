@@ -93,7 +93,7 @@ size_t HasPredicateScan::getResultWidth() const {
   return -1;
 }
 
-vector<size_t> HasPredicateScan::resultSortedOn() const {
+vector<ColumnIndex> HasPredicateScan::resultSortedOn() const {
   switch (_type) {
     case ScanType::FREE_S:
       // is the lack of sorting here a problem?
@@ -180,7 +180,7 @@ float HasPredicateScan::getMultiplicity(size_t col) {
   return 1;
 }
 
-size_t HasPredicateScan::getSizeEstimateBeforeLimit() {
+uint64_t HasPredicateScan::getSizeEstimateBeforeLimit() {
   switch (_type) {
     case ScanType::FREE_S:
       return static_cast<size_t>(

@@ -10,6 +10,7 @@
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
+#include "engine/ResultTable.h"
 #include "util/Random.h"
 
 namespace ad_benchmark {
@@ -139,6 +140,25 @@ class BMGroups : public BenchmarkInterface {
         "10775*24502", [&loopMultiply]() { loopMultiply(10775, 24502); });
     multiplicationMember3.metadata().addKeyValuePair("Result", 10775 * 24502);
 
+    // Addtables.
+    ResultTable& addTable =
+        loopAddGroup.addTable("Addition", {"42", "24"}, {"+", "42", "24"});
+    addTable.addMeasurement(0, 1, [&loopAdd]() { loopAdd(42, 42); });
+    addTable.addMeasurement(0, 2, [&loopAdd]() { loopAdd(42, 24); });
+    addTable.addMeasurement(1, 1, [&loopAdd]() { loopAdd(24, 42); });
+    addTable.addMeasurement(1, 2, [&loopAdd]() { loopAdd(24, 24); });
+
+    ResultTable& multiplyTable = loopMultiplyGroup.addTable(
+        "Multiplication", {"42", "24"}, {"*", "42", "24"});
+    multiplyTable.addMeasurement(0, 1,
+                                 [&loopMultiply]() { loopMultiply(42, 42); });
+    multiplyTable.addMeasurement(0, 2,
+                                 [&loopMultiply]() { loopMultiply(42, 24); });
+    multiplyTable.addMeasurement(1, 1,
+                                 [&loopMultiply]() { loopMultiply(24, 42); });
+    multiplyTable.addMeasurement(1, 2,
+                                 [&loopMultiply]() { loopMultiply(24, 24); });
+
     return results;
   }
 };
@@ -172,11 +192,11 @@ class BMTables : public BenchmarkInterface {
     // Measuring functions.
     auto& tableExponentsWithBasis = results.addTable(
         "Exponents with the given basis", {"2", "3", "Time difference"},
-        {"0", "1", "2", "3", "4"});
+        {"Basis", "0", "1", "2", "3", "4"});
 
     auto& tableAddingExponents = results.addTable(
         "Adding exponents", {"2^10", "2^11", "Values written out"},
-        {"2^10", "2^11"});
+        {"", "2^10", "2^11"});
     // Adding some metadata.
     tableAddingExponents.metadata().addKeyValuePair("Manually set fields",
                                                     "Row 2");
@@ -184,28 +204,28 @@ class BMTables : public BenchmarkInterface {
     // Measure the calculating of the exponents.
     for (int i = 0; i < 5; i++) {
       tableExponentsWithBasis.addMeasurement(
-          0, i, [&exponentiateNTimes, &i]() { exponentiateNTimes(2, i); });
+          0, i + 1, [&exponentiateNTimes, &i]() { exponentiateNTimes(2, i); });
     }
     for (int i = 0; i < 5; i++) {
       tableExponentsWithBasis.addMeasurement(
-          1, i, [&exponentiateNTimes, &i]() { exponentiateNTimes(3, i); });
+          1, i + 1, [&exponentiateNTimes, &i]() { exponentiateNTimes(3, i); });
     }
     // Manually adding the entries of the third column by computing the timing
     // difference between the first two columns.
     for (size_t column = 0; column < 5; column++) {
       float entryWithBasis2 =
-          tableExponentsWithBasis.getEntry<float>(0, column);
+          tableExponentsWithBasis.getEntry<float>(0, column + 1);
       float entryWithBasis3 =
-          tableExponentsWithBasis.getEntry<float>(1, column);
+          tableExponentsWithBasis.getEntry<float>(1, column + 1);
       tableExponentsWithBasis.setEntry(
-          2, column, std::abs(entryWithBasis3 - entryWithBasis2));
+          2, column + 1, std::abs(entryWithBasis3 - entryWithBasis2));
     }
 
     // Measuers for calculating and adding the exponents.
     for (int row = 0; row < 2; row++) {
       for (int column = 0; column < 2; column++) {
         tableAddingExponents.addMeasurement(
-            row, column, [&exponentiateNTimes, &row, &column]() {
+            row, column + 1, [&exponentiateNTimes, &row, &column]() {
               size_t temp __attribute__((unused));
               temp = exponentiateNTimes(2, row + 10) +
                      exponentiateNTimes(2, column + 10);
@@ -214,8 +234,8 @@ class BMTables : public BenchmarkInterface {
     }
 
     // Manually setting strings.
-    tableAddingExponents.setEntry(2, 0, "1024+1024 and 1024+2048");
-    tableAddingExponents.setEntry(2, 1, "1024+2048 and 2048+2048");
+    tableAddingExponents.setEntry(2, 1, "1024+1024 and 1024+2048");
+    tableAddingExponents.setEntry(2, 2, "1024+2048 and 2048+2048");
 
     return results;
   }

@@ -76,27 +76,15 @@ class TextMetaData {
   const TextBlockMetaData& getBlockInfoByWordRange(const uint64_t lower,
                                                    const uint64_t upper) const;
 
-  const TextBlockMetaData& getBlockInfoByEntityId(const uint64_t eid) const;
-
-  bool existsTextBlockForEntityId(const uint64_t eid) const;
-
   size_t getBlockCount() const;
 
   string statistics() const;
 
-  void addBlock(const TextBlockMetaData& md, bool isEntityBlock);
+  void addBlock(const TextBlockMetaData& md);
 
   off_t getOffsetAfter();
 
   const TextBlockMetaData& getBlockById(size_t id) const { return _blocks[id]; }
-
-  size_t getNofEntities() const { return _nofEntities; }
-
-  void setNofEntities(size_t nofEntities) { _nofEntities = nofEntities; }
-
-  size_t getNofEntityContexts() const { return _nofEntityContexts; }
-
-  void setNofEntityContexts(size_t n) { _nofEntityContexts = n; }
 
   size_t getNofTextRecords() const { return _nofTextRecords; }
 
@@ -114,15 +102,10 @@ class TextMetaData {
 
   void setName(const string& name) { _name = name; }
 
-  float getAverageNofEntityContexts() const {
-    return float(_nofEntityContexts) / _nofEntities;
-  };
+  float getAverageNofEntityContexts() const { return 1.0f; };
 
  private:
   vector<uint64_t> _blockUpperBoundWordIds;
-  vector<uint64_t> _blockUpperBoundEntityIds;
-  size_t _nofEntities = 0;
-  size_t _nofEntityContexts = 0;
   size_t _nofTextRecords = 0;
   size_t _nofWordPostings = 0;
   size_t _nofEntityPostings = 0;
@@ -132,9 +115,6 @@ class TextMetaData {
   // ___________________________________________________________________________
   AD_SERIALIZE_FRIEND_FUNCTION(TextMetaData) {
     serializer | arg._blockUpperBoundWordIds;
-    serializer | arg._blockUpperBoundEntityIds;
-    serializer | arg._nofEntities;
-    serializer | arg._nofEntityContexts;
     serializer | arg._nofTextRecords;
     serializer | arg._nofWordPostings;
     serializer | arg._nofEntityPostings;

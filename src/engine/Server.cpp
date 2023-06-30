@@ -11,10 +11,10 @@
 #include <string>
 #include <vector>
 
-#include "absl/cleanup/cleanup.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "util/BoostHelpers/AsyncWaitForFuture.h"
+#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
@@ -32,6 +32,7 @@ Server::Server(unsigned short port, int numThreads, size_t maxMemGB,
             cache_.makeRoomAsMuchAsPossible(MAKE_ROOM_SLACK_FACTOR *
                                             numBytesToAllocate / sizeof(Id));
           }},
+      index_{allocator_},
       enablePatternTrick_(usePatternTrick),
       // The number of server threads currently also is the number of queries
       // that can be processed simultaneously.
@@ -595,19 +596,12 @@ boost::asio::awaitable<void> Server::processQuery(
     qet.isRoot() = true;  // allow pinning of the final result
     qet.recursivelySetTimeoutTimer(timeoutTimer);
     qet.getRootOperation()->createRuntimeInfoFromEstimates();
-    size_t timeForIndexScansInQueryPlanning =
-        qet.getRootOperation()->getTotalExecutionTimeDuringQueryPlanning();
-    size_t timeForQueryPlanning =
-        requestTimer.msecs() - timeForIndexScansInQueryPlanning;
+    size_t timeForQueryPlanning = requestTimer.msecs();
     auto& runtimeInfoWholeQuery =
         qet.getRootOperation()->getRuntimeInfoWholeQuery();
     runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
-    runtimeInfoWholeQuery.timeIndexScansQueryPlanning =
-        timeForIndexScansInQueryPlanning;
-    LOG(INFO)
-        << "Query planning done in " << timeForQueryPlanning << " ms"
-        << ", additional time spend on index scans during query planning: "
-        << timeForIndexScansInQueryPlanning << " ms" << std::endl;
+    LOG(INFO) << "Query planning done in " << timeForQueryPlanning << " ms"
+              << std::endl;
     LOG(TRACE) << qet.asString() << std::endl;
 
     // Common code for sending responses for the streamable media types
@@ -720,12 +714,8 @@ Awaitable<T> Server::computeInNewThread(Function function) const {
   auto acquireComputeRelease = [this, function = std::move(function)] {
     LOG(DEBUG) << "Acquiring new thread for query processing\n";
     queryProcessingSemaphore_.acquire();
-    absl::Cleanup f{[this]() noexcept {
-      try {
-        queryProcessingSemaphore_.release();
-      } catch (...) {
-      }
-    }};
+    auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+        [this]() { queryProcessingSemaphore_.release(); });
     return function();
   };
   co_return co_await ad_utility::asio_helpers::async_on_external_thread(

@@ -9,6 +9,7 @@ add_library(index
         IndexMetaData.h IndexMetaDataImpl.h
         MetaDataHandler.h
         StxxlSortFunctors.h
+        Permutation.cpp
         TextMetaData.cpp TextMetaData.h
         DocsDB.cpp DocsDB.h
         FTSAlgorithms.cpp FTSAlgorithms.h
@@ -16,4 +17,4 @@ add_library(index
         CompressedRelation.h CompressedRelation.cpp
         PatternCreator.h PatternCreator.cpp)
 
-qlever_target_link_libraries(index parser vocabulary compilationInfo ${STXXL_LIBRARIES} ${ICU_LIBRARIES} zstd)
+qlever_target_link_libraries(index util parser vocabulary compilationInfo ${STXXL_LIBRARIES})

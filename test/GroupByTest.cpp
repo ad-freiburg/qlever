@@ -98,9 +98,6 @@ TEST_F(GroupByTest, doGroupBy) {
   s.insert("<entity1>");
   s.insert("<entity2>");
   s.insert("<entity3>");
-  s.insert(ad_utility::convertFloatStringToIndexWord("1.1231"));
-  s.insert(ad_utility::convertFloatStringToIndexWord("-5"));
-  s.insert(ad_utility::convertFloatStringToIndexWord("17"));
   vocab.createFromSet(s);
 
   // Create an input result table with a local vocabulary.
@@ -333,18 +330,18 @@ struct GroupBySpecialCount : ::testing::Test {
   Variable varA{"?a"};
   QueryExecutionContext* qec = getQec();
   SparqlTriple xyzTriple{Variable{"?x"}, "?y", Variable{"?z"}};
-  Tree xyzScanSortedByX = makeExecutionTree<IndexScan>(
-      qec, IndexScan::FULL_INDEX_SCAN_SOP, xyzTriple);
-  Tree xyzScanSortedByY = makeExecutionTree<IndexScan>(
-      qec, IndexScan::FULL_INDEX_SCAN_POS, xyzTriple);
+  Tree xyzScanSortedByX =
+      makeExecutionTree<IndexScan>(qec, Permutation::Enum::SOP, xyzTriple);
+  Tree xyzScanSortedByY =
+      makeExecutionTree<IndexScan>(qec, Permutation::Enum::POS, xyzTriple);
   Tree xScan = makeExecutionTree<IndexScan>(
-      qec, IndexScan::PSO_BOUND_S,
+      qec, Permutation::Enum::PSO,
       SparqlTriple{{"<x>"}, {"<label>"}, Variable{"?x"}});
   Tree xyScan = makeExecutionTree<IndexScan>(
-      qec, IndexScan::PSO_FREE_S,
+      qec, Permutation::Enum::PSO,
       SparqlTriple{Variable{"?x"}, {"<label>"}, Variable{"?y"}});
   Tree xScanEmptyResult = makeExecutionTree<IndexScan>(
-      qec, IndexScan::PSO_BOUND_S,
+      qec, Permutation::Enum::PSO,
       SparqlTriple{{"<x>"}, {"<notInKg>"}, Variable{"?x"}});
 
   Tree invalidJoin = makeExecutionTree<Join>(qec, xScan, xScan, 0, 0);
@@ -399,7 +396,7 @@ struct GroupBySpecialCount : ::testing::Test {
 
 // _____________________________________________________________________________
 TEST_F(GroupBySpecialCount, getPermutationForThreeVariableTriple) {
-  using enum Index::Permutation;
+  using enum Permutation::Enum;
   const QueryExecutionTree& xyzScan = *xyzScanSortedByX;
 
   // Valid inputs.
@@ -454,7 +451,7 @@ TEST_F(GroupBySpecialCount, checkIfJoinWithFullScan) {
       groupBy.checkIfJoinWithFullScan(getJoinPtr(validJoinWhenGroupingByX));
   ASSERT_TRUE(optimizedAggregateData.has_value());
   ASSERT_EQ(&optimizedAggregateData->otherSubtree_, xScan.get());
-  ASSERT_EQ(optimizedAggregateData->permutation_, Index::Permutation::SPO);
+  ASSERT_EQ(optimizedAggregateData->permutation_, Permutation::SPO);
   ASSERT_EQ(optimizedAggregateData->subtreeColumnIndex_, 0);
 }
 

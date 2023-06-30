@@ -29,7 +29,8 @@ class FTSAlgorithms {
   typedef vector<vector<Id>> VarWidthList;
 
   static Index::WordEntityPostings filterByRange(
-      const IdRange& idRange, const Index::WordEntityPostings& wepPreFilter);
+      const IdRange<WordVocabIndex>& idRange,
+      const Index::WordEntityPostings& wepPreFilter);
 
   static Index::WordEntityPostings intersect(
       const Index::WordEntityPostings& matchingContextsWep,
@@ -41,10 +42,6 @@ class FTSAlgorithms {
                                        const vector<Score>& scores2,
                                        vector<TextRecordIndex>& resultCids,
                                        vector<Score>& resultScores);
-
-  static void getTopKByScores(const vector<Id>& cids,
-                              const vector<Score>& scores, size_t k,
-                              WidthOneList* result);
 
   static void aggScoresAndTakeTopKContexts(const Index::WordEntityPostings& wep,
                                            size_t k, IdTable* dynResult);

@@ -6,7 +6,7 @@
 
 #include "./IndexTestHelpers.h"
 #include "index/CompressedRelation.h"
-#include "index/Permutations.h"
+#include "index/Permutation.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 
 namespace {
@@ -105,7 +105,7 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
       ad_utility::TimeoutTimer::unlimited());
   // Check the contents of the metadata.
 
-  CompressedRelationReader reader;
+  CompressedRelationReader reader{ad_utility::makeUnlimitedAllocator<Id>()};
   for (size_t i = 0; i < metaData.size(); ++i) {
     const auto& m = metaData[i];
     ASSERT_EQ(V(inputs[i].col0_), m.col0Id_);
@@ -133,8 +133,11 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
 
     auto scanAndCheck = [&]() {
       IdTable tableWidthOne{1, ad_utility::testing::makeAllocator()};
+      auto size =
+          reader.getResultSizeOfScan(metaData[i], V(lastCol1Id), blocks, file);
       reader.scan(metaData[i], V(lastCol1Id), blocks, file, &tableWidthOne,
                   timer);
+      EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
       {
         IdTable wrongNumCols{2, ad_utility::testing::makeAllocator()};

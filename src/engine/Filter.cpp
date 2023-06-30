@@ -134,7 +134,7 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
 }
 
 // _____________________________________________________________________________
-size_t Filter::getSizeEstimateBeforeLimit() {
+uint64_t Filter::getSizeEstimateBeforeLimit() {
   return _expression
       .getEstimatesForFilterExpression(
           _subtree->getSizeEstimate(),

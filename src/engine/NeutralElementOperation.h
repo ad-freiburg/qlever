@@ -29,14 +29,16 @@ class NeutralElementOperation : public Operation {
   size_t getCostEstimate() override { return 0; }
 
  private:
-  size_t getSizeEstimateBeforeLimit() override { return 1; }
+  uint64_t getSizeEstimateBeforeLimit() override { return 1; }
 
  public:
   float getMultiplicity(size_t) override { return 0; };
   bool knownEmptyResult() override { return false; };
 
  protected:
-  [[nodiscard]] vector<size_t> resultSortedOn() const override { return {}; };
+  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override {
+    return {};
+  };
 
  private:
   ResultTable computeResult() override {

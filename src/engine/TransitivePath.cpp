@@ -7,6 +7,7 @@
 #include <limits>
 
 #include "engine/CallFixedSize.h"
+#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "util/Exception.h"
 
@@ -75,13 +76,20 @@ std::string TransitivePath::getDescriptor() const {
   if (_minDist > 1 || _maxDist < std::numeric_limits<size_t>::max()) {
     os << "[" << _minDist << ", " << _maxDist << "] ";
   }
+  auto getName = [this](ValueId id) {
+    auto optStringAndType =
+        ExportQueryExecutionTrees::idToStringAndType(getIndex(), id, {});
+    if (optStringAndType.has_value()) {
+      return optStringAndType.value().first;
+    } else {
+      return absl::StrCat("#", id.getBits());
+    }
+  };
   // Left variable or entity name.
   if (_leftIsVar) {
     os << _leftColName;
   } else {
-    os << getIndex()
-              .idToOptionalString(_leftValue)
-              .value_or("#" + std::to_string(_leftValue.getBits()));
+    os << getName(_leftValue);
   }
   // The predicate.
   auto scanOperation =
@@ -90,15 +98,13 @@ std::string TransitivePath::getDescriptor() const {
     os << " " << scanOperation->getPredicate() << " ";
   } else {
     // Escaped the question marks to avoid a warning about ignored trigraphs.
-    os << " <\?\?\?> ";
+    os << R"( <???> )";
   }
   // Right variable or entity name.
   if (_rightIsVar) {
     os << _rightColName;
   } else {
-    os << getIndex()
-              .idToOptionalString(_rightValue)
-              .value_or("#" + std::to_string(_rightValue.getBits()));
+    os << getName(_rightValue);
   }
   return std::move(os).str();
 }
@@ -107,8 +113,8 @@ std::string TransitivePath::getDescriptor() const {
 size_t TransitivePath::getResultWidth() const { return _resultWidth; }
 
 // _____________________________________________________________________________
-vector<size_t> TransitivePath::resultSortedOn() const {
-  const std::vector<size_t>& subSortedOn =
+vector<ColumnIndex> TransitivePath::resultSortedOn() const {
+  const std::vector<ColumnIndex>& subSortedOn =
       _subtree->getRootOperation()->getResultSortedOn();
   if (_leftSideTree == nullptr && _rightSideTree == nullptr && _leftIsVar &&
       _rightIsVar && subSortedOn.size() > 0 && subSortedOn[0] == _leftSubCol) {
@@ -116,14 +122,14 @@ vector<size_t> TransitivePath::resultSortedOn() const {
     return {0};
   }
   if (_leftSideTree != nullptr) {
-    const std::vector<size_t>& leftSortedOn =
+    const std::vector<ColumnIndex>& leftSortedOn =
         _leftSideTree->getRootOperation()->getResultSortedOn();
     if (leftSortedOn.size() > 0 && leftSortedOn[0] == _leftSideCol) {
       return {0};
     }
   }
   if (_rightSideTree != nullptr) {
-    const std::vector<size_t>& rightSortedOn =
+    const std::vector<ColumnIndex>& rightSortedOn =
         _rightSideTree->getRootOperation()->getResultSortedOn();
     if (rightSortedOn.size() > 0 && rightSortedOn[0] == _rightSideCol) {
       return {1};
@@ -159,7 +165,7 @@ float TransitivePath::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t TransitivePath::getSizeEstimateBeforeLimit() {
+uint64_t TransitivePath::getSizeEstimateBeforeLimit() {
   if (!_leftIsVar || !_rightIsVar) {
     // If the subject or object is fixed, assume that the number of matching
     // triples is 1000. This will usually be an overestimate, but it will do the

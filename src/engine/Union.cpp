@@ -66,7 +66,7 @@ size_t Union::getResultWidth() const {
   return _columnOrigins.size();
 }
 
-vector<size_t> Union::resultSortedOn() const { return {}; }
+vector<ColumnIndex> Union::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
 VariableToColumnMap Union::computeVariableToColumnMap() const {
@@ -157,7 +157,7 @@ float Union::getMultiplicity(size_t col) {
   return 1;
 }
 
-size_t Union::getSizeEstimateBeforeLimit() {
+uint64_t Union::getSizeEstimateBeforeLimit() {
   return _subtrees[0]->getSizeEstimate() + _subtrees[1]->getSizeEstimate();
 }
 

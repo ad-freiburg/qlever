@@ -48,16 +48,29 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
   ResultGroup group("group");
 
   ASSERT_EQ(group.descriptor_, "group");
-  ASSERT_EQ(group.entries_.size(), 0);
+  ASSERT_EQ(group.resultEntries_.size(), 0);
+  ASSERT_EQ(group.resultTables_.size(), 0);
 
   // Adding a measurement and checking, if it was added correctly.
   ResultEntry& entry = group.addMeasurement("new entry", createWaitLambda(100));
 
-  ASSERT_EQ(group.entries_.size(), 1);
+  ASSERT_EQ(group.resultEntries_.size(), 1);
   ASSERT_EQ(entry.descriptor_, "new entry");
 
   // The time measurements can't be 100% accurat, so we give it a 'window'.
   ASSERT_NEAR(0.1, entry.measuredTime_, 0.01);
+
+  // Adding a table and checking, if it was added correctly.
+  const std::vector<std::string> rowNames = {"row1", "row2"};
+  const std::vector<std::string> columnNames = {"column1"};
+  ResultTable& table = group.addTable("table", rowNames, columnNames);
+
+  ASSERT_EQ(group.resultTables_.size(), 1);
+  ASSERT_EQ(table.descriptor_, "table");
+  ASSERT_EQ(table.numRows(), 2);
+  ASSERT_EQ(table.numColumns(), 1);
+  ASSERT_EQ(table.getEntry<std::string>(0, 0), rowNames.at(0));
+  ASSERT_EQ(table.getEntry<std::string>(1, 0), rowNames.at(1));
 }
 
 TEST(BenchmarkMeasurementContainerTest, ResultTable) {
@@ -66,10 +79,14 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
                       const std::vector<std::string>& rowNames,
                       const std::vector<std::string>& columnNames) {
     ASSERT_EQ(name, table.descriptor_);
-    ASSERT_EQ(rowNames, table.rowNames_);
     ASSERT_EQ(columnNames, table.columnNames_);
     ASSERT_EQ(rowNames.size(), table.numRows());
     ASSERT_EQ(columnNames.size(), table.numColumns());
+
+    // Row names in the first column.
+    for (size_t row = 0; row < rowNames.size(); row++) {
+      ASSERT_EQ(rowNames.at(row), table.getEntry<std::string>(row, 0));
+    }
   };
 
   // Calls the correct assert function based on type.
@@ -124,41 +141,45 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
 
   // Normal case.
   const std::vector<std::string> rowNames{"row1", "row2"};
-  const std::vector<std::string> columnNames{"column1", "column2"};
+  const std::vector<std::string> columnNames{"rowNames", "column1", "column2"};
   ResultTable table("My table", rowNames, columnNames);
 
   // Was it created correctly?
   checkForm(table, "My table", rowNames, columnNames);
 
   // Add measured function to it.
-  table.addMeasurement(0, 0, createWaitLambda(100));
+  table.addMeasurement(0, 1, createWaitLambda(100));
 
   // Set custom entries.
-  table.setEntry(0, 1, (float)4.9);
-  table.setEntry(1, 0, "Custom entry");
+  table.setEntry(0, 2, (float)4.9);
+  table.setEntry(1, 1, "Custom entry");
 
   // Check the entries.
-  checkRow(table, 0, static_cast<float>(0.1), static_cast<float>(4.9));
-  checkRow(table, 1, std::string{"Custom entry"});
-  checkNeverSet(table, 1, 1);
+  checkRow(table, 0, std::string{"row1"}, static_cast<float>(0.1),
+           static_cast<float>(4.9));
+  checkRow(table, 1, std::string{"row2"}, std::string{"Custom entry"});
+  checkNeverSet(table, 1, 2);
 
   // Trying to get entries with the wrong type, should cause an error.
-  ASSERT_ANY_THROW(table.getEntry<std::string>(0, 1));
-  ASSERT_ANY_THROW(table.getEntry<float>(1, 0));
+  ASSERT_ANY_THROW(table.getEntry<std::string>(0, 2));
+  ASSERT_ANY_THROW(table.getEntry<float>(1, 1));
 
   // Can we add a new row, without changing things?
-  table.addRow("row3");
+  table.addRow();
+  table.setEntry(2, 0, std::string{"row3"});
   checkForm(table, "My table", {"row1", "row2", "row3"}, columnNames);
-  checkRow(table, 0, static_cast<float>(0.1), static_cast<float>(4.9));
-  checkRow(table, 1, std::string{"Custom entry"});
+  checkRow(table, 0, std::string{"row1"}, static_cast<float>(0.1),
+           static_cast<float>(4.9));
+  checkRow(table, 1, std::string{"row2"}, std::string{"Custom entry"});
 
   // Are the entries of the new row empty?
-  checkNeverSet(table, 2, 0);
   checkNeverSet(table, 2, 1);
+  checkNeverSet(table, 2, 2);
 
   // To those new fields work like the old ones?
-  table.addMeasurement(2, 0, createWaitLambda(290));
-  table.setEntry(2, 1, "Custom entry #2");
-  checkRow(table, 2, static_cast<float>(0.29), std::string{"Custom entry #2"});
+  table.addMeasurement(2, 1, createWaitLambda(290));
+  table.setEntry(2, 2, "Custom entry #2");
+  checkRow(table, 2, std::string{"row3"}, static_cast<float>(0.29),
+           std::string{"Custom entry #2"});
 }
 }  // namespace ad_benchmark

@@ -512,8 +512,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
   added.reserve(previous.size());
   for (const auto& parent : previous) {
     SubtreePlan distinctPlan(_qec);
-    vector<size_t> keepIndices;
-    ad_utility::HashSet<size_t> indDone;
+    vector<ColumnIndex> keepIndices;
+    ad_utility::HashSet<ColumnIndex> indDone;
     const auto& colMap = parent._qet->getVariableColumns();
     for (const auto& var : selectClause.getSelectedVariables()) {
       // There used to be a special treatment for `?ql_textscore_` variables
@@ -526,7 +526,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
         }
       }
     }
-    const std::vector<size_t>& resultSortedOn =
+    const std::vector<ColumnIndex>& resultSortedOn =
         parent._qet->getRootOperation()->getResultSortedOn();
     // check if the current result is sorted on all columns of the distinct
     // with the order of the sorting
@@ -635,14 +635,14 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     auto& tree = plan._qet;
     plan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
     plan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
-    vector<pair<size_t, bool>> sortIndices;
+    vector<pair<ColumnIndex, bool>> sortIndices;
     for (auto& ord : pq._orderBy) {
       sortIndices.emplace_back(parent._qet->getVariableColumn(ord.variable_),
                                ord.isDescending_);
     }
 
     if (pq._isInternalSort == IsInternalSort::True) {
-      std::vector<size_t> sortColumns;
+      std::vector<ColumnIndex> sortColumns;
       for (auto& [index, isDescending] : sortIndices) {
         AD_CONTRACT_CHECK(!isDescending);
         sortColumns.push_back(index);
@@ -715,11 +715,11 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
       seeds.push_back(std::move(plan));
     };
 
-    auto addIndexScan = [&](IndexScan::ScanType type) {
-      pushPlan(makeSubtreePlan<IndexScan>(_qec, type, node._triple));
+    auto addIndexScan = [&](Permutation::Enum permutation) {
+      pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation, node._triple));
     };
 
-    using enum IndexScan::ScanType;
+    using enum Permutation::Enum;
 
     if (node._cvar.has_value()) {
       seeds.push_back(getTextLeafPlan(node));
@@ -768,8 +768,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         Variable filterVar = generateUniqueVarName();
         auto scanTriple = node._triple;
         scanTriple._o = filterVar;
-        auto scanTree =
-            makeExecutionTree<IndexScan>(_qec, PSO_FREE_S, scanTriple);
+        auto scanTree = makeExecutionTree<IndexScan>(_qec, PSO, scanTriple);
         // The simplest way to set up the filtering expression is to use the
         // parser.
         std::string filterString =
@@ -782,35 +781,35 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                                             std::move(filter.expression_));
         pushPlan(std::move(plan));
       } else if (isVariable(node._triple._s)) {
-        addIndexScan(POS_BOUND_O);
+        addIndexScan(POS);
       } else if (isVariable(node._triple._o)) {
-        addIndexScan(PSO_BOUND_S);
+        addIndexScan(PSO);
       } else {
         AD_CONTRACT_CHECK(isVariable(node._triple._p));
-        addIndexScan(SOP_BOUND_O);
+        addIndexScan(SOP);
       }
     } else if (node._variables.size() == 2) {
       // Add plans for both possible scan directions.
       if (!isVariable(node._triple._p._iri)) {
-        addIndexScan(PSO_FREE_S);
-        addIndexScan(POS_FREE_O);
+        addIndexScan(PSO);
+        addIndexScan(POS);
       } else if (!isVariable(node._triple._s)) {
-        addIndexScan(SPO_FREE_P);
-        addIndexScan(SOP_FREE_O);
+        addIndexScan(SPO);
+        addIndexScan(SOP);
       } else if (!isVariable(node._triple._o)) {
-        addIndexScan(OSP_FREE_S);
-        addIndexScan(OPS_FREE_P);
+        addIndexScan(OSP);
+        addIndexScan(OPS);
       }
     } else {
       // The current triple contains three distinct variables.
       if (!_qec || _qec->getIndex().hasAllPermutations()) {
         // Add plans for all six permutations.
-        addIndexScan(FULL_INDEX_SCAN_OPS);
-        addIndexScan(FULL_INDEX_SCAN_OSP);
-        addIndexScan(FULL_INDEX_SCAN_PSO);
-        addIndexScan(FULL_INDEX_SCAN_POS);
-        addIndexScan(FULL_INDEX_SCAN_SPO);
-        addIndexScan(FULL_INDEX_SCAN_SOP);
+        addIndexScan(OPS);
+        addIndexScan(OSP);
+        addIndexScan(PSO);
+        addIndexScan(POS);
+        addIndexScan(SPO);
+        addIndexScan(SOP);
       } else {
         AD_THROW(
             "With only 2 permutations registered (no -a option), "
@@ -1366,11 +1365,11 @@ std::vector<std::array<ColumnIndex, 2>> QueryPlanner::getJoinColumns(
 // _____________________________________________________________________________
 string QueryPlanner::getPruningKey(
     const QueryPlanner::SubtreePlan& plan,
-    const vector<size_t>& orderedOnColumns) const {
+    const vector<ColumnIndex>& orderedOnColumns) const {
   // Get the ordered var
   std::ostringstream os;
   const auto& varCols = plan._qet->getVariableColumns();
-  for (size_t orderedOnCol : orderedOnColumns) {
+  for (ColumnIndex orderedOnCol : orderedOnColumns) {
     for (const auto& [variable, columnIndexWithType] : varCols) {
       if (columnIndexWithType.columnIndex_ == orderedOnCol) {
         os << variable.name() << ", ";
