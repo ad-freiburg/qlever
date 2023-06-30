@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
-// Copyright (c) Lewis Baker
+// Copyright (c) Lewis Baker, Johannes Kalmbach (functionality to add details).
 // Licenced under MIT license. See LICENSE.txt for details.
 ///////////////////////////////////////////////////////////////////////////////
 #ifndef CPPCORO_GENERATOR_HPP_INCLUDED
@@ -13,12 +13,16 @@
 
 // Coroutines are still experimental in clang libcpp, therefore adapt the
 // appropriate namespaces by including the convenience header.
-#include "./Coroutines.h"
+#include "nlohmann/json.hpp"
+#include "util/Coroutines.h"
 
 namespace cppcoro {
 template <typename T>
 class generator;
 
+// This struct can be `co_await`ed inside a `generator` to add a value to a
+// dictionary, that can then be accessed from outside via the `details()`
+// function of the generator object. For an example see `GeneratorTest.cpp`.
 struct AddDetail {
   std::string key_;
   nlohmann::json value_;
@@ -34,6 +38,17 @@ class generator_promise {
   using value_type = std::remove_cvref_t<T>;
   using reference_type = std::conditional_t<std::is_reference_v<T>, T, T&>;
   using pointer_type = std::remove_reference_t<T>*;
+
+  struct DetailAwaiter {
+    generator_promise& promise_;
+    AddDetail detail_;
+    bool await_ready() {
+      promise_.details()[detail_.key_] = detail_.value_;
+      return true;
+    }
+    bool await_suspend(std::coroutine_handle<>) noexcept { return false; }
+    void await_resume() noexcept {}
+  };
 
   generator_promise() = default;
 
@@ -72,9 +87,16 @@ class generator_promise {
     }
   }
 
+  DetailAwaiter await_transform(AddDetail detail) {
+    return {*this, std::move(detail)};
+  }
+
+  nlohmann::json& details() { return m_details; }
+
  private:
   pointer_type m_value;
   std::exception_ptr m_exception;
+  nlohmann::json m_details;
 };
 
 struct generator_sentinel {};
@@ -183,6 +205,8 @@ class [[nodiscard]] generator {
   void swap(generator& other) noexcept {
     std::swap(m_coroutine, other.m_coroutine);
   }
+
+  const nlohmann::json& details() { return m_coroutine.promise().details(); }
 
  private:
   friend class detail::generator_promise<T>;
