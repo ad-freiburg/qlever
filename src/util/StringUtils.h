@@ -84,7 +84,7 @@ characters.
 @param indentationSymbol What the indentation should look like..
 */
 inline std::string addIndentation(std::string_view str,
-                                  std::string_view indentationSymbol = "    ");
+                                  std::string_view indentationSymbol);
 
 // *****************************************************************************
 // Definitions:

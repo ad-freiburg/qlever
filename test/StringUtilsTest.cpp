@@ -141,14 +141,15 @@ TEST(StringUtilsTest, addIndentation) {
   ASSERT_ANY_THROW(ad_utility::addIndentation(withoutLineBreaks, ""));
 
   // Testing a few different indentation symbols.
-  ASSERT_EQ("    Hello\tworld!", ad_utility::addIndentation(withoutLineBreaks));
+  ASSERT_EQ("    Hello\tworld!",
+            ad_utility::addIndentation(withoutLineBreaks, "    "));
   ASSERT_EQ("\tHello\tworld!",
             ad_utility::addIndentation(withoutLineBreaks, "\t"));
   ASSERT_EQ("Not Hello\tworld!",
             ad_utility::addIndentation(withoutLineBreaks, "Not "));
 
   ASSERT_EQ("    \n    Hello\n    world\n    !",
-            ad_utility::addIndentation(withLineBreaks));
+            ad_utility::addIndentation(withLineBreaks, "    "));
   ASSERT_EQ("\t\n\tHello\n\tworld\n\t!",
             ad_utility::addIndentation(withLineBreaks, "\t"));
   ASSERT_EQ("Not \nNot Hello\nNot world\nNot !",
