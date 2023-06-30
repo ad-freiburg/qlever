@@ -2,12 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel February of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "../benchmark/infrastructure/BenchmarkToString.h"
+
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
 
 #include <sstream>
 
-#include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
 #include "util/ConfigManager/ConfigManager.h"
@@ -19,13 +20,8 @@
 
 namespace ad_benchmark {
 
-/*
- * @brief Return a string of the form
- * "#################
- * # categoryTitle #
- * #################"
- */
-static std::string createCategoryTitle(std::string_view categoryTitle) {
+// ___________________________________________________________________________
+std::string createCategoryTitle(std::string_view categoryTitle) {
   // The bar above and below the title.
   const size_t barLength = categoryTitle.size() + 4;
   const std::string bar(barLength, '#');
@@ -80,11 +76,9 @@ std::string benchmarkResultsToString(
   }
 
   // Visualize the configuration options of this class.
-  if (const std::string& config =
-          benchmarkClass->getConfigManager().printConfigurationDoc(true);
-      !config.empty()) {
-    visualization << "\n\n" << config;
-  }
+  visualization << "\n\n"
+                << benchmarkClass->getConfigManager().printConfigurationDoc(
+                       true);
 
   /*
   @brief Adds a category to the string steam, if it is not empty. Mainly

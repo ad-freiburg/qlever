@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "util/ConfigManager/ConfigManager.h"
+
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -17,7 +19,6 @@
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
-#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -240,6 +241,11 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
 // ____________________________________________________________________________
 std::string ConfigManager::printConfigurationDoc(
     bool printCurrentJsonConfiguration) const {
+  // Handeling, for when there are no configuration options.
+  if (configurationOptions_.empty()) {
+    return "No configuration options were defined.";
+  }
+
   // Setup for printing the locations of the option in json format, so that
   // people can easier understand, where everything is.
   nlohmann::json configuratioOptionsVisualization;

@@ -138,8 +138,9 @@ int main(int argc, char** argv) {
     std::ranges::for_each(
         BenchmarkRegister::getAllRegisteredBenchmarks(),
         [](const BenchmarkInterface* bench) {
-          std::cerr << "Configuration option of benchmark class '"
-                    << bench->name() << "'\n"
+          std::cerr << createCategoryTitle(absl::StrCat("Benchmark class '",
+                                                        bench->name(), "'"))
+                    << "\n"
                     << bench->getConfigManager().printConfigurationDoc(false)
                     << "\n\n";
         });
