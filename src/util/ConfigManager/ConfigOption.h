@@ -151,8 +151,10 @@ class ConfigOption {
   */
   template <typename T>
   requires ad_utility::isTypeContainedIn<T, AvailableTypes> T getValue() const {
-    if (std::holds_alternative<Data<T>>(data_)) {
+    if (wasSet() && std::holds_alternative<Data<T>>(data_)) {
       return *(std::get<Data<T>>(data_).variablePointer_);
+    } else if (!wasSet()) {
+      throw ConfigOptionValueNotSetException(identifier_, "value");
     } else {
       // They used the wrong type.
       throw ConfigOptionGetWrongTypeException(identifier_,
