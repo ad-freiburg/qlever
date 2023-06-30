@@ -220,7 +220,6 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
     }
   }
 
-  // TODO: sizes anpassen??? --> push_back
   resultWep.cids_.reserve(minSize + 2);
   resultWep.cids_.resize(minSize);
   resultWep.scores_.reserve(minSize + 2);
@@ -306,12 +305,12 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
                 }
               } else {
                 kIndex = k - 1;
-                resultWep.cids_[n] = currentContext;
-                resultWep.eids_[n] = (*lastListEids)[matchInEL];
-                resultWep.scores_[n] = s + wepVecs[k].scores_[matchInEL];
+                resultWep.cids_.push_back(currentContext);
+                resultWep.eids_.push_back((*lastListEids)[matchInEL]);
+                resultWep.scores_.push_back(s + wepVecs[k].scores_[matchInEL]);
                 for (int c = k - 1; c >= 0; c--) {
-                  resultWep.wids_[c][n] =
-                      wepVecs[c].wids_[0][currentIndices[c] + offsets[c]];
+                  resultWep.wids_[c].push_back(
+                      wepVecs[c].wids_[0][currentIndices[c] + offsets[c]]);
                 }
                 n++;
                 offsets[kIndex]++;
@@ -336,14 +335,14 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
               }
             } else {
               kIndex = k - 1;
-              resultWep.cids_[n] = currentContext;
-              resultWep.scores_[n] =
+              resultWep.cids_.push_back(currentContext);
+              resultWep.scores_.push_back(
                   s +
                   wepVecs[k].scores_[(k == currentList ? nextIndices[k]
-                                                       : nextIndices[k] - 1)];
+                                                       : nextIndices[k] - 1)]);
               for (int c = k - 1; c >= 0; c--) {
-                resultWep.wids_[c][n] =
-                    wepVecs[c].wids_[0][currentIndices[c] + offsets[c]];
+                resultWep.wids_[c].push_back(
+                    wepVecs[c].wids_[0][currentIndices[c] + offsets[c]]);
               }
               n++;
               offsets[kIndex]++;
@@ -672,6 +671,10 @@ template <int WIDTH>
 void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     const Index::WordEntityPostings& wep, size_t nofVars, size_t kLimit,
     IdTable* dynResult) {
+  AD_CONTRACT_CHECK(wep.wids_.size() >= 1);
+
+  size_t numOfTerms = wep.wids_.size();
+
   if (wep.cids_.empty()) {
     return;
   }
@@ -688,14 +691,20 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
                << " contexts per entity...\n";
     using ScoreAndContextSet = std::set<std::pair<Score, TextRecordIndex>>;
     using AggMapScore = ad_utility::HashMap<vector<Id>, Score>;
-    using AggMapSaCS = ad_utility::HashMap<std::pair<vector<Id>, WordIndex>,
-                                           ScoreAndContextSet>;
+    using AggMapSaCS =
+        ad_utility::HashMap<std::pair<vector<Id>, vector<WordIndex>>,
+                            ScoreAndContextSet>;
     AggMapScore mapScore;
     AggMapSaCS mapSaCS;
     vector<Id> entitiesInContext;
     TextRecordIndex currentCid = wep.cids_[0];
     Score cscore = wep.scores_[0];
-    WordIndex cwid = wep.widsOneTerm_.empty() ? 0 : wep.widsOneTerm_[0];
+    vector<WordIndex> cwids;
+    cwids.reserve(numOfTerms);
+    cwids.resize(numOfTerms);
+    for (size_t l = 0; l < numOfTerms; l++) {
+      cwids[l] = wep.wids_[l].empty() ? 0 : wep.wids_[l][0];
+    }
 
     for (size_t i = 0; i < wep.cids_.size(); ++i) {
       if (wep.cids_[i] == currentCid) {
@@ -716,17 +725,17 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
           if (!mapScore.contains(key)) {
             ScoreAndContextSet inner;
             inner.emplace(cscore, currentCid);
-            mapSaCS[std::make_pair(key, cwid)] = inner;
+            mapSaCS[std::make_pair(key, cwids)] = inner;
             mapScore[key] = 1;
           } else {
-            if (!mapSaCS.contains(std::make_pair(key, cwid))) {
+            if (!mapSaCS.contains(std::make_pair(key, cwids))) {
               ScoreAndContextSet inner;
               inner.emplace(cscore, currentCid);
-              mapSaCS[std::make_pair(key, cwid)] = inner;
+              mapSaCS[std::make_pair(key, cwids)] = inner;
               mapScore[key] = ++mapScore[key];
             } else {
               mapScore[key]++;
-              ScoreAndContextSet& sacs = mapSaCS[std::make_pair(key, cwid)];
+              ScoreAndContextSet& sacs = mapSaCS[std::make_pair(key, cwids)];
               if (sacs.size() < kLimit ||
                   std::get<0>(*(sacs.begin())) < cscore) {
                 if (sacs.size() == kLimit) {
@@ -740,7 +749,9 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
         entitiesInContext.clear();
         currentCid = wep.cids_[i];
         cscore = wep.scores_[i];
-        cwid = wep.widsOneTerm_.empty() ? 0 : wep.widsOneTerm_[i];
+        for (size_t l = 0; l < numOfTerms; l++) {
+          cwids[l] = wep.wids_[l].empty() ? 0 : wep.wids_[l][i];
+        }
         entitiesInContext.push_back(wep.eids_[i]);
       }
     }
@@ -759,17 +770,17 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
       if (!mapScore.contains(key)) {
         ScoreAndContextSet inner;
         inner.emplace(cscore, currentCid);
-        mapSaCS[std::make_pair(key, cwid)] = inner;
+        mapSaCS[std::make_pair(key, cwids)] = inner;
         mapScore[key] = 1;
       } else {
-        if (!mapSaCS.contains(std::make_pair(key, cwid))) {
+        if (!mapSaCS.contains(std::make_pair(key, cwids))) {
           ScoreAndContextSet inner;
           inner.emplace(cscore, currentCid);
-          mapSaCS[std::make_pair(key, cwid)] = inner;
+          mapSaCS[std::make_pair(key, cwids)] = inner;
           mapScore[key] = ++mapScore[key];
         } else {
           mapScore[key]++;
-          ScoreAndContextSet& sacs = mapSaCS[std::make_pair(key, cwid)];
+          ScoreAndContextSet& sacs = mapSaCS[std::make_pair(key, cwids)];
           if (sacs.size() < kLimit || std::get<0>(*(sacs.begin())) < cscore) {
             if (sacs.size() == kLimit) {
               sacs.erase(*sacs.begin());
@@ -791,8 +802,10 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
         for (size_t k = 0; k < nofVars; ++k) {
           result(n, k + 2) = it->first.first[k];  // eid
         }
-        result(n, nofVars + 2) =
-            Id::makeFromWordVocabIndex(WordVocabIndex::make(it->first.second));
+        for (size_t l = 0; l < numOfTerms; l++) {
+          result(n, nofVars + 2 + l) = Id::makeFromWordVocabIndex(
+              WordVocabIndex::make(it->first.second[l]));
+        }
       }
     }
     *dynResult = std::move(result).toDynamic();
@@ -838,15 +851,20 @@ template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<10>(
 template <int WIDTH>
 void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
     const Index::WordEntityPostings& wep, size_t nofVars, IdTable* dynResult) {
+  AD_CONTRACT_CHECK(wep.wids_.size() >= 1);
   LOG(DEBUG) << "Special case with 1 contexts per entity...\n";
+
+  size_t numOfTerms = wep.wids_.size();
+
   // Go over contexts.
   // For each context build a cross product of width 2.
   // Store them in a map, use a pair of id's as key and
   // an appropriate hash function.
   using ScoreAndContext = std::pair<Score, TextRecordIndex>;
   using AggMapScore = ad_utility::HashMap<std::vector<Id>, Score>;
-  using AggmapSaC = ad_utility::HashMap<std::pair<std::vector<Id>, WordIndex>,
-                                        ScoreAndContext>;
+  using AggmapSaC =
+      ad_utility::HashMap<std::pair<std::vector<Id>, vector<WordIndex>>,
+                          ScoreAndContext>;
   AggMapScore mapScore;
   AggmapSaC mapSaC;
   // Note: vector{k} initializes with a single value k, as opposed to
@@ -857,8 +875,12 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   vector<Id> entitiesInContext;
   TextRecordIndex currentCid = wep.cids_[0];
   Score cscore = wep.scores_[0];
-  WordIndex cwid = wep.widsOneTerm_.empty() ? 0 : wep.widsOneTerm_[0];
-
+  vector<WordIndex> cwids;
+  cwids.reserve(numOfTerms);
+  cwids.resize(numOfTerms);
+  for (size_t l = 0; l < numOfTerms; l++) {
+    cwids[l] = wep.wids_[l].empty() ? 0 : wep.wids_[l][0];
+  }
   for (size_t i = 0; i < wep.cids_.size(); ++i) {
     if (wep.cids_[i] == currentCid) {
       entitiesInContext.push_back(wep.eids_[i]);
@@ -876,17 +898,17 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
           n /= entitiesInContext.size();
         }
         if (!mapScore.contains(key)) {
-          mapSaC[std::make_pair(key, cwid)] =
+          mapSaC[std::make_pair(key, cwids)] =
               std::make_pair(cscore, currentCid);
           mapScore[key] = 1;
         } else {
-          if (!mapSaC.contains(std::make_pair(key, cwid))) {
-            mapSaC[std::make_pair(key, cwid)] =
+          if (!mapSaC.contains(std::make_pair(key, cwids))) {
+            mapSaC[std::make_pair(key, cwids)] =
                 std::make_pair(cscore, currentCid);
             mapScore[key] = ++mapScore[key];
           } else {
             mapScore[key]++;
-            ScoreAndContext& sac = mapSaC[std::make_pair(key, cwid)];
+            ScoreAndContext& sac = mapSaC[std::make_pair(key, cwids)];
             if (sac.first < cscore) {
               sac = std::make_pair(cscore, currentCid);
             }
@@ -896,7 +918,9 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
       entitiesInContext.clear();
       currentCid = wep.cids_[i];
       cscore = wep.scores_[i];
-      cwid = wep.widsOneTerm_.empty() ? 0 : wep.widsOneTerm_[i];
+      for (size_t l = 0; l < numOfTerms; l++) {
+        cwids[l] = wep.wids_[l].empty() ? 0 : wep.wids_[l][i];
+      }
       entitiesInContext.push_back(wep.eids_[i]);
     }
   }
@@ -912,15 +936,15 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
       n /= entitiesInContext.size();
     }
     if (!mapScore.contains(key)) {
-      mapSaC[std::make_pair(key, cwid)] = std::make_pair(cscore, currentCid);
+      mapSaC[std::make_pair(key, cwids)] = std::make_pair(cscore, currentCid);
       mapScore[key] = 1;
     } else {
-      if (!mapSaC.contains(std::make_pair(key, cwid))) {
-        mapSaC[std::make_pair(key, cwid)] = std::make_pair(cscore, currentCid);
+      if (!mapSaC.contains(std::make_pair(key, cwids))) {
+        mapSaC[std::make_pair(key, cwids)] = std::make_pair(cscore, currentCid);
         mapScore[key] = ++mapScore[key];
       } else {
         mapScore[key]++;
-        ScoreAndContext& sac = mapSaC[std::make_pair(key, cwid)];
+        ScoreAndContext& sac = mapSaC[std::make_pair(key, cwids)];
         if (sac.first < cscore) {
           sac = std::make_pair(cscore, currentCid);
         }
@@ -939,8 +963,10 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
     for (size_t k = 0; k < nofVars; ++k) {
       result(n, k + 2) = it->first.first[k];
     }
-    result(n, nofVars + 2) =
-        Id::makeFromWordVocabIndex(WordVocabIndex::make(it->first.second));
+    for (size_t l = 0; l < numOfTerms; l++) {
+      result(n, nofVars + 2 + l) =
+          Id::makeFromWordVocabIndex(WordVocabIndex::make(it->first.second[l]));
+    }
     n++;
   }
   AD_CONTRACT_CHECK(n == result.size());
@@ -1065,6 +1091,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const Index::WordEntityPostings& wep,
     const ad_utility::HashMap<Id, IdTable>& fMap, size_t k,
     IdTable* dynResult) {
+  AD_CONTRACT_CHECK(wep.wids_.size() >= 1);
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.eids_.size());
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.scores_.size());
   LOG(DEBUG)
@@ -1075,6 +1102,9 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   if (wep.cids_.empty() || fMap.empty()) {
     return;
   }
+
+  size_t numOfTerms = wep.wids_.size();
+
   // TODO: add code to speed up for k==1
 
   // Use a set (ordered) and keep it at size k for the context scores
@@ -1084,26 +1114,32 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   using ScoreAndContextSet = std::set<std::pair<Score, TextRecordIndex>>;
   using AggMapScore = ad_utility::HashMap<Id, Score>;
   using AggMapSaCS =
-      ad_utility::HashMap<std::pair<Id, WordIndex>, ScoreAndContextSet>;
+      ad_utility::HashMap<std::pair<Id, vector<WordIndex>>, ScoreAndContextSet>;
   AggMapScore mapScore;
   AggMapSaCS mapSaCS;
   for (size_t i = 0; i < wep.eids_.size(); ++i) {
-    WordIndex wid = wep.widsOneTerm_.empty() ? 0 : wep.widsOneTerm_[i];
+    vector<WordIndex> wids;
+    wids.reserve(numOfTerms);
+    wids.resize(numOfTerms);
+    for (size_t l = 0; l < numOfTerms; l++) {
+      wids[l] = wep.wids_[l].empty() ? 0 : wep.wids_[l][i];
+    }
     if (fMap.contains(wep.eids_[i])) {
       if (!mapScore.contains(wep.eids_[i])) {
         ScoreAndContextSet inner;
         inner.emplace(wep.scores_[i], wep.cids_[i]);
-        mapSaCS[std::make_pair(wep.eids_[i], wid)] = inner;
+        mapSaCS[std::make_pair(wep.eids_[i], wids)] = inner;
         mapScore[wep.eids_[i]] = 1;
       } else {
-        if (!mapSaCS.contains(std::make_pair(wep.eids_[i], wid))) {
+        if (!mapSaCS.contains(std::make_pair(wep.eids_[i], wids))) {
           ScoreAndContextSet inner;
           inner.emplace(wep.scores_[i], wep.cids_[i]);
-          mapSaCS[std::make_pair(wep.eids_[i], wid)] = inner;
+          mapSaCS[std::make_pair(wep.eids_[i], wids)] = inner;
           mapScore[wep.eids_[i]] = ++mapScore[wep.eids_[i]];
         } else {
           mapScore[wep.eids_[i]]++;
-          ScoreAndContextSet& sacs = mapSaCS[std::make_pair(wep.eids_[i], wid)];
+          ScoreAndContextSet& sacs =
+              mapSaCS[std::make_pair(wep.eids_[i], wids)];
           if (sacs.size() < k ||
               std::get<0>(*(sacs.begin())) < wep.scores_[i]) {
             if (sacs.size() == k) {
@@ -1120,8 +1156,6 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   for (auto it = mapSaCS.begin(); it != mapSaCS.end(); ++it) {
     const Id eid = it->first.first;
     const Id score = Id::makeFromInt(mapScore[eid]);
-    const Id wid =
-        Id::makeFromWordVocabIndex(WordVocabIndex::make(it->first.second));
     const ScoreAndContextSet& sacs = it->second;
     for (auto itt = sacs.rbegin(); itt != sacs.rend(); ++itt) {
       for (auto fRow : fMap.find(eid)->second) {
@@ -1133,7 +1167,10 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
         for (i = 0; i < fRow.numColumns(); i++) {
           result(n, 2 + i) = fRow[i];
         }
-        result(n, 2 + i) = wid;
+        for (size_t l = 0; l < numOfTerms; l++) {
+          result(n, 2 + i + l) = Id::makeFromWordVocabIndex(
+              WordVocabIndex::make(it->first.second[l]));
+        }
       }
     }
   }
@@ -1196,6 +1233,8 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     return;
   }
 
+  size_t numOfTerms = wep.wids_.size();
+
   // TODO: add code to speed up for k==1
 
   // Use a set (ordered) and keep it at size k for the context scores
@@ -1205,26 +1244,32 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   using ScoreAndContextSet = std::set<std::pair<Score, TextRecordIndex>>;
   using AggMapScore = ad_utility::HashMap<Id, Score>;
   using AggMapSaCS =
-      ad_utility::HashMap<std::pair<Id, WordIndex>, ScoreAndContextSet>;
+      ad_utility::HashMap<std::pair<Id, vector<WordIndex>>, ScoreAndContextSet>;
   AggMapScore mapScore;
   AggMapSaCS mapSaCS;
   for (size_t i = 0; i < wep.eids_.size(); ++i) {
-    WordIndex wid = wep.wids_[0].empty() ? 0 : wep.wids_[0][i];
+    vector<WordIndex> wids;
+    wids.reserve(numOfTerms);
+    wids.resize(numOfTerms);
+    for (size_t l = 0; l < numOfTerms; l++) {
+      wids[l] = wep.wids_[l].empty() ? 0 : wep.wids_[l][i];
+    }
     if (fSet.contains(wep.eids_[i])) {
       if (!mapScore.contains(wep.eids_[i])) {
         ScoreAndContextSet inner;
         inner.emplace(wep.scores_[i], wep.cids_[i]);
-        mapSaCS[std::make_pair(wep.eids_[i], wid)] = inner;
+        mapSaCS[std::make_pair(wep.eids_[i], wids)] = inner;
         mapScore[wep.eids_[i]] = 1;
       } else {
-        if (!mapSaCS.contains(std::make_pair(wep.eids_[i], wid))) {
+        if (!mapSaCS.contains(std::make_pair(wep.eids_[i], wids))) {
           ScoreAndContextSet inner;
           inner.emplace(wep.scores_[i], wep.cids_[i]);
-          mapSaCS[std::make_pair(wep.eids_[i], wid)] = inner;
+          mapSaCS[std::make_pair(wep.eids_[i], wids)] = inner;
           mapScore[wep.eids_[i]] = ++mapScore[wep.eids_[i]];
         } else {
           mapScore[wep.eids_[i]]++;
-          ScoreAndContextSet& sacs = mapSaCS[std::make_pair(wep.eids_[i], wid)];
+          ScoreAndContextSet& sacs =
+              mapSaCS[std::make_pair(wep.eids_[i], wids)];
           if (sacs.size() < k ||
               std::get<0>(*(sacs.begin())) < wep.scores_[i]) {
             if (sacs.size() == k) {
@@ -1239,14 +1284,20 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   IdTableStatic<4> result = std::move(*dynResult).toStatic<4>();
   result.reserve(mapSaCS.size() * k + 2);
   for (auto it = mapSaCS.begin(); it != mapSaCS.end(); ++it) {
+    std::vector<ValueId> row;
+    row.resize(4);
     const Id eid = it->first.first;
     const Id entityScore = Id::makeFromInt(mapScore[eid]);
-    const Id wid =
-        Id::makeFromWordVocabIndex(WordVocabIndex::make(it->first.second));
     const ScoreAndContextSet& sacs = it->second;
+    row[1] = entityScore;
+    row[2] = eid;
     for (auto itt = sacs.rbegin(); itt != sacs.rend(); ++itt) {
-      result.push_back(
-          {Id::makeFromTextRecordIndex(itt->second), entityScore, eid, wid});
+      row[0] = Id::makeFromTextRecordIndex(itt->second);
+      for (size_t l = 0; l < numOfTerms; l++) {
+        row[3 + l] = Id::makeFromWordVocabIndex(
+            WordVocabIndex::make(it->first.second[l]));
+      }
+      result.push_back(row);
     }
   }
   *dynResult = std::move(result).toDynamic();
@@ -1259,9 +1310,13 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const Index::WordEntityPostings& wep,
     const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
     IdTable* dynResult) {
+  AD_CONTRACT_CHECK(wep.wids_.size() >= 1);
   if (wep.cids_.empty() || fMap.empty()) {
     return;
   }
+
+  size_t numOfTerms = wep.wids_.size();
+
   // Go over contexts.
   // For each context build a cross product with one part being from the filter.
   // Store them in a map, use a pair of id's as key and
