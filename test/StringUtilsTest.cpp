@@ -4,6 +4,13 @@
 
 #include <gtest/gtest.h>
 
+#include <functional>
+#include <ranges>
+#include <sstream>
+#include <string>
+
+#include "util/Forward.h"
+#include "util/Generator.h"
 #include "util/StringUtils.h"
 
 using ad_utility::constantTimeEquals;
@@ -58,4 +65,93 @@ TEST(StringUtilsTest, constantTimeEquals) {
   EXPECT_FALSE(constantTimeEquals("", "Abcdefg"));
   EXPECT_FALSE(constantTimeEquals("Abcdefg", ""));
   EXPECT_FALSE(constantTimeEquals("Abc", "defg"));
+}
+
+TEST(StringUtilsTest, listToString) {
+  /*
+  Do the test for all overloads of `lazyStrJoin`.
+  Every overload needs it's own `range`, because ranges like, for example,
+  generators, change, when read and also don't allow copying.
+  */
+  auto doTestForAllOverloads = [](std::string_view expectedResult,
+                                  auto&& rangeForStreamOverload,
+                                  auto&& rangeForStringReturnOverload,
+                                  std::string_view separator) {
+    ASSERT_EQ(expectedResult,
+              ad_utility::lazyStrJoin(AD_FWD(rangeForStringReturnOverload),
+                                      separator));
+
+    std::ostringstream stream;
+    ad_utility::lazyStrJoin(&stream, AD_FWD(rangeForStreamOverload), separator);
+    ASSERT_EQ(expectedResult, stream.str());
+  };
+
+  // Vectors.
+  const std::vector<int> emptyVector;
+  const std::vector<int> singleValueVector{42};
+  const std::vector<int> multiValueVector{40, 41, 42, 43};
+  doTestForAllOverloads("", emptyVector, emptyVector, "\n");
+  doTestForAllOverloads("42", singleValueVector, singleValueVector, "\n");
+  doTestForAllOverloads("40,41,42,43", multiValueVector, multiValueVector, ",");
+  doTestForAllOverloads("40 -> 41 -> 42 -> 43", multiValueVector,
+                        multiValueVector, " -> ");
+
+  /*
+  `std::ranges::views` can cause dangling pointers, if a `std::identity` is
+  called with one, that returns r-values.
+  */
+  /*
+  TODO Do a test, where the `std::views::transform` uses an r-value vector,
+  once we no longer support `gcc-11`. The compiler has a bug, where it
+  doesn't allow that code, even though it's correct.
+  */
+  auto plus10View = std::views::transform(
+      multiValueVector, [](const int& num) -> int { return num + 10; });
+  doTestForAllOverloads("50,51,52,53", plus10View, plus10View, ",");
+
+  auto identityView = std::views::transform(multiValueVector, std::identity{});
+  doTestForAllOverloads("40,41,42,43", identityView, identityView, ",");
+
+  // Test, that uses an actual `std::ranges::input_range`. That is, a range who
+  // doesn't know it's own size and can only be iterated once.
+
+  // Returns the content of a given vector, element by element.
+  auto goThroughVectorGenerator =
+      []<typename T>(const std::vector<T>& vec) -> cppcoro::generator<T> {
+    for (T entry : vec) {
+      co_yield entry;
+    }
+  };
+
+  doTestForAllOverloads("", goThroughVectorGenerator(emptyVector),
+                        goThroughVectorGenerator(emptyVector), "\n");
+  doTestForAllOverloads("42", goThroughVectorGenerator(singleValueVector),
+                        goThroughVectorGenerator(singleValueVector), "\n");
+  doTestForAllOverloads("40,41,42,43",
+                        goThroughVectorGenerator(multiValueVector),
+                        goThroughVectorGenerator(multiValueVector), ",");
+}
+
+TEST(StringUtilsTest, addIndentation) {
+  // The input strings for testing.
+  static constexpr std::string_view withoutLineBreaks = "Hello\tworld!";
+  static constexpr std::string_view withLineBreaks = "\nHello\nworld\n!";
+
+  // No indentation wanted, should cause an error.
+  ASSERT_ANY_THROW(ad_utility::addIndentation(withoutLineBreaks, ""));
+
+  // Testing a few different indentation symbols.
+  ASSERT_EQ("    Hello\tworld!",
+            ad_utility::addIndentation(withoutLineBreaks, "    "));
+  ASSERT_EQ("\tHello\tworld!",
+            ad_utility::addIndentation(withoutLineBreaks, "\t"));
+  ASSERT_EQ("Not Hello\tworld!",
+            ad_utility::addIndentation(withoutLineBreaks, "Not "));
+
+  ASSERT_EQ("    \n    Hello\n    world\n    !",
+            ad_utility::addIndentation(withLineBreaks, "    "));
+  ASSERT_EQ("\t\n\tHello\n\tworld\n\t!",
+            ad_utility::addIndentation(withLineBreaks, "\t"));
+  ASSERT_EQ("Not \nNot Hello\nNot world\nNot !",
+            ad_utility::addIndentation(withLineBreaks, "Not "));
 }
