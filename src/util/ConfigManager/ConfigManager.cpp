@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -19,6 +17,7 @@
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -288,14 +287,14 @@ std::string ConfigManager::printConfigurationDoc(
     }
   }
 
-  return absl::StrCat(
-      "Locations of available configuration options with",
-      (printCurrentJsonConfiguration ? " their current values"
-                                     : " example values"),
-      ":\n",
-      ad_utility::addIndentation(configuratioOptionsVisualization.dump(2), 1),
-      "\n\nAvailable configuration options:\n",
-      ad_utility::addIndentation(stream.str(), 1));
+  return absl::StrCat("Locations of available configuration options with",
+                      (printCurrentJsonConfiguration ? " their current values"
+                                                     : " example values"),
+                      ":\n",
+                      ad_utility::addIndentation(
+                          configuratioOptionsVisualization.dump(2), "    "),
+                      "\n\nAvailable configuration options:\n",
+                      ad_utility::addIndentation(stream.str(), "    "));
 }
 
 // ____________________________________________________________________________

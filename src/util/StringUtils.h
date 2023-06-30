@@ -9,10 +9,19 @@
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <functional>
+#include <iterator>
+#include <ranges>
+#include <sstream>
 #include <string>
 #include <string_view>
+
+#include "util/Concepts.h"
+#include "util/Exception.h"
+#include "util/Forward.h"
 
 using std::string;
 using std::string_view;
@@ -45,6 +54,37 @@ inline string getLastPartOfString(const string& text, const char separator);
  */
 inline size_t findLiteralEnd(std::string_view input,
                              std::string_view literalEnd);
+
+/*
+@brief Add elements of the range to a stream, with the `separator` between the
+elements.
+
+@tparam Range An input range, whos dereferenced iterators can be inserted into
+streams.
+
+@param separator Will be put between each of the string representations
+of the range elements.
+*/
+template <std::ranges::input_range Range>
+requires ad_utility::Streamable<
+    std::iter_reference_t<std::ranges::iterator_t<Range>>>
+void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator);
+
+// Similar to the overload of `lazyStrJoin` above, but the result is returned as
+// a string.
+template <std::ranges::input_range Range>
+requires ad_utility::Streamable<
+    std::iter_reference_t<std::ranges::iterator_t<Range>>>
+std::string lazyStrJoin(Range&& r, std::string_view separator);
+
+/*
+@brief Adds indentation before the given string and directly after new line
+characters.
+
+@param indentationSymbol What the indentation should look like..
+*/
+inline std::string addIndentation(std::string_view str,
+                                  std::string_view indentationSymbol);
 
 // *****************************************************************************
 // Definitions:
@@ -246,35 +286,53 @@ constexpr bool constantTimeEquals(std::string_view view1,
   return impl(toVolatile(view1), toVolatile(view2));
 }
 
-/*
-@brief Adds indentation before the given string and directly after each new line
-character.
+// _________________________________________________________________________
+template <std::ranges::input_range Range>
+requires ad_utility::Streamable<
+    std::iter_reference_t<std::ranges::iterator_t<Range>>>
+void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator) {
+  auto begin = std::begin(r);
+  auto end = std::end(r);
 
-@param indentationLevel How deep is the indentation? `0` is no indentation.
-*/
-inline std::string addIndentation(const std::string_view str,
-                                  const size_t& indentationLevel) {
-  // An indentation level of 0 is trivial.
-  if (indentationLevel == 0) {
-    return std::string{str};
+  // Is the range empty?
+  if (begin == end) {
+    return;
   }
 
-  // How a single level of indentation should look like.
-  static constexpr std::string_view outputIndentation = "    ";
+  // Add the first entry without a seperator.
+  *stream << *begin;
 
-  // The indentation symbols for this level of indentation.
-  std::string indentationSymbols{""};
-  indentationSymbols.reserve(outputIndentation.size() * indentationLevel);
-  for (size_t i = 0; i < indentationLevel; i++) {
-    indentationSymbols.append(outputIndentation);
-  }
+  // Add the remaining entries.
+  ++begin;
+  std::ranges::for_each(begin, end,
+                        [&stream, &separator](const auto& listItem) {
+                          *stream << separator << listItem;
+                        },
+                        {});
+}
+
+// _________________________________________________________________________
+template <std::ranges::input_range Range>
+requires ad_utility::Streamable<
+    std::iter_reference_t<std::ranges::iterator_t<Range>>>
+std::string lazyStrJoin(Range&& r, std::string_view separator) {
+  std::ostringstream stream;
+  lazyStrJoin(&stream, AD_FWD(r), separator);
+  return std::move(stream).str();
+}
+
+// ___________________________________________________________________________
+std::string addIndentation(std::string_view str,
+                           std::string_view indentationSymbol) {
+  // An empty indentation makes no sense. Must be an error.
+  AD_CONTRACT_CHECK(!indentationSymbol.empty());
 
   // Add an indentation to the beginning and replace a new line with a new line,
   // directly followed by the indentation.
   return absl::StrCat(
-      indentationSymbols,
+      indentationSymbol,
       absl::StrReplaceAll(str,
-                          {{"\n", absl::StrCat("\n", indentationSymbols)}}));
+                          {{"\n", absl::StrCat("\n", indentationSymbol)}}));
 }
 
 }  // namespace ad_utility

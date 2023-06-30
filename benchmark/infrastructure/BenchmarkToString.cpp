@@ -2,11 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel February of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "../benchmark/infrastructure/BenchmarkToString.h"
-
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
 
+#include <sstream>
+
+#include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMeasurementContainer.h"
 #include "BenchmarkMetadata.h"
 #include "util/ConfigManager/ConfigManager.h"
@@ -18,14 +19,18 @@
 
 namespace ad_benchmark {
 
-// ___________________________________________________________________________
-void addCategoryTitleToOStringstream(std::ostringstream* stream,
-                                     std::string_view categoryTitle) {
+/*
+ * @brief Return a string of the form
+ * "#################
+ * # categoryTitle #
+ * #################"
+ */
+static std::string createCategoryTitle(std::string_view categoryTitle) {
   // The bar above and below the title.
   const size_t barLength = categoryTitle.size() + 4;
   const std::string bar(barLength, '#');
 
-  (*stream) << bar << "\n# " << categoryTitle << " #\n" << bar;
+  return absl::StrCat(bar, "\n# ", categoryTitle, " #\n", bar);
 }
 
 // ___________________________________________________________________________
@@ -40,139 +45,66 @@ std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
   }
 }
 
-// ___________________________________________________________________________
-void addVectorOfResultEntryToOStringstream(
-    std::ostringstream* stream, const std::vector<ResultEntry>& entries,
-    const std::string& vectorEntryPrefix, const std::string& newLinePrefix) {
-  // What we use to seperat single vector entries.
-  std::string_view lineSeparator{"\n\n"};
-
-  // Adds a single `ResultEntry` to the stream.
-  auto addResultEntry = [&stream, &vectorEntryPrefix,
-                         &newLinePrefix](const ResultEntry& entry) {
-    (*stream) << absl::StrCat(
-        vectorEntryPrefix,
-        absl::StrReplaceAll(static_cast<std::string>(entry),
-                            {{"\n", absl::StrCat("\n", newLinePrefix)}}));
-  };
-
-  /*
-  Adding the entries to the stream in such a way, that we don't have a line
-  separator at the end of that list.
-  */
-  ad_utility::forEachExcludingTheLastOne(
-      entries,
-      [&addResultEntry, &stream, &lineSeparator](const ResultEntry& entry) {
-        addResultEntry(entry);
-        (*stream) << lineSeparator;
-      },
-      addResultEntry);
-};
-
-// ___________________________________________________________________________
-void addSingleMeasurementsToOStringstream(
-    std::ostringstream* stream, const std::vector<ResultEntry>& resultEntries) {
-  addCategoryTitleToOStringstream(stream, "Single measurement benchmarks");
-  (*stream) << "\n";
-  addVectorOfResultEntryToOStringstream(stream, resultEntries, "", "");
-}
-
-// ___________________________________________________________________________
-void addGroupsToOStringstream(std::ostringstream* stream,
-                              const std::vector<ResultGroup>& resultGroups) {
-  addCategoryTitleToOStringstream(stream, "Group benchmarks");
-  (*stream) << "\n";
-  addListToOStringStream(
-      stream, resultGroups,
-      [](const ResultGroup& group) { return static_cast<std::string>(group); },
-      "\n\n");
-}
-
-// ___________________________________________________________________________
-std::string vectorOfResultTableToListString(
-    const std::vector<ResultTable>& tables) {
-  std::ostringstream dummyStream;
-  addListToOStringStream(
-      &dummyStream, tables,
-      [](const ResultTable& table) { return static_cast<std::string>(table); },
-      "\n\n");
-  return dummyStream.str();
-}
-
-// ___________________________________________________________________________
-void addTablesToOStringstream(std::ostringstream* stream,
-                              const std::vector<ResultTable>& resultTables) {
-  addCategoryTitleToOStringstream(stream, "Table benchmarks");
-  (*stream) << "\n" << vectorOfResultTableToListString(resultTables);
-}
-
-// ___________________________________________________________________________
-static void addMetadataToOStringstream(std::ostringstream* stream,
-                                       const BenchmarkMetadata& meta) {
-  (*stream) << "General metadata: ";
-
-  const std::string& metaString = getMetadataPrettyString(meta, "", "");
-
-  // Just add none, if there isn't any.
-  if (metaString == "") {
-    (*stream) << "None";
-  } else {
-    (*stream) << metaString;
-  }
+/*
+@brief Return a string containing a titel version of `categoryName` and a string
+list representation of all the given category entries.
+Note: This function converts `CategoryType` objects by trying to cast them as
+`std::string`.
+*/
+template <typename CategoryType>
+static std::string categoryToString(
+    std::string_view categoryName,
+    const std::vector<CategoryType>& categoryEntries) {
+  return absl::StrCat(createCategoryTitle(categoryName), "\n",
+                      ad_utility::lazyStrJoin(categoryEntries, "\n\n"));
 }
 
 // ___________________________________________________________________________
 std::string benchmarkResultsToString(
     const BenchmarkInterface* const benchmarkClass,
     const BenchmarkResults& results) {
-  // The values for all the categories of benchmarks.
-  const std::vector<ResultEntry>& singleMeasurements =
-      results.getSingleMeasurements();
-  const std::vector<ResultGroup>& resultGroups = results.getGroups();
-  const std::vector<ResultTable>& resultTables = results.getTables();
-
   // Visualizes the measured times.
   std::ostringstream visualization;
 
-  // @brief Adds a category to the string steam, if it is not empty. Mainly
-  //  exists for reducing code duplication.
-  //
-  // @param stringStream The stringstream where the text will get added.
-  // @param categoryResult The information needed, for printing the benchmark
-  //  category. Should be a vector of ResultEntry, ResultGroup, or ResultTable.
-  // @param categoryAddPrintStreamFunction The function, which given the
-  //  benchmark category information, converts them to text, and adds that text
-  //  to the stringstream.
-  auto addNonEmptyCategorieToStringSteam =
-      [](std::ostringstream* stringStream, const auto& categoryResult,
-         const auto& categoryAddPrintStreamFunction) {
-        if (categoryResult.size() > 0) {
-          // The separator between the printed categories.
-          (*stringStream) << "\n\n";
-
-          categoryAddPrintStreamFunction(stringStream, categoryResult);
-        }
-      };
-
-  addCategoryTitleToOStringstream(
-      &visualization,
-      absl::StrCat("Benchmark class '", benchmarkClass->name(), "'"));
-  visualization << "\n";
+  visualization << createCategoryTitle(absl::StrCat(
+                       "Benchmark class '", benchmarkClass->name(), "'"))
+                << "\n";
 
   // Visualize the general metadata.
-  addMetadataToOStringstream(&visualization, benchmarkClass->getMetadata());
+  if (const std::string& metadataString = getMetadataPrettyString(
+          benchmarkClass->getMetadata(), "General metadata: ", "");
+      !metadataString.empty()) {
+    visualization << metadataString;
+  } else {
+    visualization << "General metadata: None";
+  }
+
+  /*
+  @brief Adds a category to the string steam, if it is not empty. Mainly
+   exists for reducing code duplication.
+
+  @param categoryName The name of the category
+  @param categoryResult The information needed, for printing the benchmark
+  category. Should be a vector of ResultEntry, ResultGroup, or ResultTable.
+  */
+  auto addNonEmptyCategoryToStringSteam = [&visualization](
+                                              std::string_view categoryName,
+                                              const auto& categoryResult) {
+    if (categoryResult.size() > 0) {
+      // The separator between the printed categories.
+      visualization << "\n\n" << categoryToString(categoryName, categoryResult);
+    }
+  };
 
   // Visualization for single measurments, if there are any.
-  addNonEmptyCategorieToStringSteam(&visualization, singleMeasurements,
-                                    addSingleMeasurementsToOStringstream);
+  addNonEmptyCategoryToStringSteam("Single measurement benchmarks",
+                                   results.getSingleMeasurements());
 
   // Visualization for groups, if there are any.
-  addNonEmptyCategorieToStringSteam(&visualization, resultGroups,
-                                    addGroupsToOStringstream);
+  addNonEmptyCategoryToStringSteam("Group benchmarks", results.getGroups());
 
   // Visualization for tables, if there are any.
-  addNonEmptyCategorieToStringSteam(&visualization, resultTables,
-                                    addTablesToOStringstream);
+  addNonEmptyCategoryToStringSteam("Table benchmarks", results.getTables());
 
   return visualization.str();
 }
