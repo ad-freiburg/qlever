@@ -126,7 +126,7 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersect(
         resultWep.eids_.push_back(eBlockWep.eids_[j]);
         resultWep.scores_.push_back(eBlockWep.scores_[j]);
         k++;
-        if (k >= matchingContextsWep.cids_.size()) {
+        if (i + k >= matchingContextsWep.cids_.size()) {
           break;
         }
       }
@@ -220,20 +220,15 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
     }
   }
 
-  resultWep.cids_.reserve(minSize + 2);
-  resultWep.cids_.resize(minSize);
-  resultWep.scores_.reserve(minSize + 2);
-  resultWep.scores_.resize(minSize);
+  resultWep.cids_.reserve(minSize);
+  resultWep.scores_.reserve(minSize);
   if (lastListEids) {
-    resultWep.eids_.reserve(minSize + 2);
-    resultWep.eids_.resize(minSize);
+    resultWep.eids_.reserve(minSize);
   }
-  resultWep.wids_.reserve(k);
   resultWep.wids_.resize(k);
   for (size_t j = 0; j < k; j++) {
     AD_CONTRACT_CHECK(wepVecs[j].wids_.size() == 1);
-    resultWep.wids_[j].reserve(minSize + 2);
-    resultWep.wids_[j].resize(minSize);
+    resultWep.wids_[j].reserve(minSize);
   }
 
   // For intersection, we don't need a PQ.
@@ -274,15 +269,13 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
     if (atId == currentContext) {
       if (++streak == k + 1) {
         Score s = 0;
-        for (size_t i = 0; i < k; ++i) {
-          s += wepVecs[i].scores_[(i == currentList ? nextIndices[i]
-                                                    : nextIndices[i] - 1)];
-        }
-
         vector<size_t> currentIndices;
         currentIndices.reserve(k);
-        for (size_t j = 0; j < k; j++) {
-          currentIndices[j] = currentList ? nextIndices[j] : nextIndices[j] - 1;
+        for (size_t i = 0; i < k; ++i) {
+          size_t index =
+              (i == currentList ? nextIndices[i] : nextIndices[i] - 1);
+          s += wepVecs[i].scores_[index];
+          currentIndices[i] = index;
         }
         size_t matchInEL =
             (k == currentList ? nextIndices[k] : nextIndices[k] - 1);
