@@ -857,8 +857,8 @@ void IndexImpl::getECListForWordsOneVar(const string& words, size_t limit,
   LOG(DEBUG) << "In getECListForWords...\n";
   Index::WordEntityPostings wep = getContextEntityScoreListsForWords(words);
   int width = result->numColumns();
-  CALL_FIXED_SIZE(width, FTSAlgorithms::aggScoresAndTakeTopKContexts,
-                  wep, limit, result);
+  CALL_FIXED_SIZE(width, FTSAlgorithms::aggScoresAndTakeTopKContexts, wep,
+                  limit, result);
   LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
              << "\n";
 }
@@ -900,9 +900,13 @@ void IndexImpl::getFilteredECListForWords(const string& words,
     Index::WordEntityPostings wep = getContextEntityScoreListsForWords(words);
     int width = result->numColumns();
     if (nofVars == 1) {
-      CALL_FIXED_SIZE(width,
-                      FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
-                      wep, fMap, limit, result);
+      ad_utility::callFixedSize(
+          width,
+          []<int I>(auto&&... args) {
+            FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<I>(
+                AD_FWD(args)...);
+          },
+          wep, fMap, limit, result);
     } else {
       ad_utility::callFixedSize(
           width,
@@ -933,8 +937,13 @@ void IndexImpl::getFilteredECListForWordsWidthOne(const string& words,
   Index::WordEntityPostings wep = getContextEntityScoreListsForWords(words);
   int width = result->numColumns();
   if (nofVars == 1) {
-    FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(wep, fSet, limit,
-                                                            result);
+    ad_utility::callFixedSize(
+        width,
+        []<int I>(auto&&... args) {
+          FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<I>(
+              AD_FWD(args)...);
+        },
+        wep, fSet, limit, result);
   } else {
     ad_utility::callFixedSize(
         width,

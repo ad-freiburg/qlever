@@ -224,11 +224,12 @@ class FTSAlgorithms {
       const ad_utility::HashMap<Id, IdTable>& fMap, size_t k,
       IdTable* dynResult);
 
+  template <int WIDTH>
   static void oneVarFilterAggScoresAndTakeTopKContexts(
       const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
       IdTable* dynResult);
 
-  template <int WIDTH>  // TODO: rewrite so word id is considered
+  template <int WIDTH>
   static void multVarsFilterAggScoresAndTakeTopKContexts(
       const Index::WordEntityPostings& wep,
       const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars,
