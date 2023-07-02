@@ -442,7 +442,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
       mapEtSaCS[wep.eids_[i]].second.emplace(wep.scores_[i], wep.cids_[i]);
       mapEtSaCS[wep.eids_[i]].first = 1;
     } else {
-      if (mapEaCtW[std::make_pair(wep.eids_[i], wep.cids_[i])].size() > 1) {
+      if (mapEaCtW[std::make_pair(wep.eids_[i], wep.cids_[i])].size() >= 1) {
         continue;
       }
       mapEtSaCS[wep.eids_[i]].first++;
@@ -614,7 +614,7 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
           std::make_pair(wep.scores_[i], wep.cids_[i]);
       mapEtSaC[wep.eids_[i]].first = 1;
     } else {
-      if (mapEaCtW[std::make_pair(wep.eids_[i], wep.cids_[i])].size() > 1) {
+      if (mapEaCtW[std::make_pair(wep.eids_[i], wep.cids_[i])].size() >= 1) {
         continue;
       }
       mapEtSaC[wep.eids_[i]].first++;
@@ -735,7 +735,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
             mapEtSaCS[key].second.emplace(cscore, currentCid);
             mapEtSaCS[key].first = 1;
           } else {
-            if (mapEaCtW[std::make_pair(key, currentCid)].size() > 1) {
+            if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 1) {
               continue;
             }
             mapEtSaCS[key].first++;
@@ -774,7 +774,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
         mapEtSaCS[key].second.emplace(cscore, currentCid);
         mapEtSaCS[key].first = 1;
       } else {
-        if (mapEaCtW[std::make_pair(key, currentCid)].size() > 1) {
+        if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 1) {
           continue;
         }
         mapEtSaCS[key].first++;
@@ -907,7 +907,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
           mapEtSaC[key].second = std::make_pair(cscore, currentCid);
           mapEtSaC[key].first = 1;
         } else {
-          if (mapEaCtW[std::make_pair(key, currentCid)].size() > 1) {
+          if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 1) {
             continue;
           }
           mapEtSaC[key].first++;
@@ -942,7 +942,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
       mapEtSaC[key].second = std::make_pair(cscore, currentCid);
       mapEtSaC[key].first = 1;
     } else {
-      if (mapEaCtW[std::make_pair(key, currentCid)].size() > 1) {
+      if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 1) {
         continue;
       }
       mapEtSaC[key].first++;
@@ -1136,7 +1136,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
         mapEtSaCS[wep.eids_[i]].second.emplace(wep.scores_[i], wep.cids_[i]);
         mapEtSaCS[wep.eids_[i]].first = 1;
       } else {
-        if (mapEaCtW[std::make_pair(wep.eids_[i], wep.cids_[i])].size() > 1) {
+        if (mapEaCtW[std::make_pair(wep.eids_[i], wep.cids_[i])].size() >= 1) {
           continue;
         }
         mapEtSaCS[wep.eids_[i]].first++;
@@ -1268,7 +1268,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
         mapEtSaCS[wep.eids_[i]].second.emplace(wep.scores_[i], wep.cids_[i]);
         mapEtSaCS[wep.eids_[i]].first = 1;
       } else {
-        if (mapEaCtW[std::make_pair(wep.eids_[i], wep.cids_[i])].size() > 1) {
+        if (mapEaCtW[std::make_pair(wep.eids_[i], wep.cids_[i])].size() >= 1) {
           continue;
         }
         mapEtSaCS[wep.eids_[i]].first++;
@@ -1411,7 +1411,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
             mapEtSaCS[key].second.emplace(cscore, currentCid);
             mapEtSaCS[key].first = 1;
           } else {
-            if (mapEaCtW[std::make_pair(key, currentCid)].size() > 1) {
+            if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 1) {
               continue;
             }
             mapEtSaCS[key].first++;
@@ -1460,7 +1460,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
         mapEtSaCS[key].second.emplace(cscore, currentCid);
         mapEtSaCS[key].first = 1;
       } else {
-        if (mapEaCtW[std::make_pair(key, currentCid)].size() > 1) {
+        if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 1) {
           continue;
         }
         mapEtSaCS[key].first++;
@@ -1631,7 +1631,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
             mapEtSaCS[key].second.emplace(cscore, currentCid);
             mapEtSaCS[key].first = 1;
           } else {
-            if (mapEaCtW[std::make_pair(key, currentCid)].size() > 1) {
+            if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 1) {
               continue;
             }
             mapEtSaCS[key].first++;
@@ -1680,7 +1680,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
         mapEtSaCS[key].second.emplace(cscore, currentCid);
         mapEtSaCS[key].first = 1;
       } else {
-        if (mapEaCtW[std::make_pair(key, currentCid)].size() > 1) {
+        if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 1) {
           continue;
         }
         mapEtSaCS[key].first++;
