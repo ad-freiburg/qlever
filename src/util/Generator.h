@@ -13,23 +13,21 @@
 
 // Coroutines are still experimental in clang libcpp, therefore adapt the
 // appropriate namespaces by including the convenience header.
-#include "nlohmann/json.hpp"
 #include "util/Coroutines.h"
+#include "util/TypeTraits.h"
 
 namespace cppcoro {
-template <typename T>
+template <typename T, typename Details>
 class generator;
 
-// This struct can be `co_await`ed inside a `generator` to add a value to a
-// dictionary, that can then be accessed from outside via the `details()`
-// function of the generator object. For an example see `GeneratorTest.cpp`.
-struct AddDetail {
-  std::string key_;
-  nlohmann::json value_;
-};
+// This struct can be `co_await`ed inside a `generator` to obtain a reference to
+// the details object ( the value of which is a template parameter to the
+// generator). For an example see `GeneratorTest.cpp`.
+struct GetDetails {};
+static constexpr GetDetails getDetails;
 
 namespace detail {
-template <typename T>
+template <typename T, typename Details = int>
 class generator_promise {
  public:
   // Even if the generator only yields `const` values, the `value_type`
@@ -39,20 +37,9 @@ class generator_promise {
   using reference_type = std::conditional_t<std::is_reference_v<T>, T, T&>;
   using pointer_type = std::remove_reference_t<T>*;
 
-  struct DetailAwaiter {
-    generator_promise& promise_;
-    AddDetail detail_;
-    bool await_ready() {
-      promise_.details()[detail_.key_] = detail_.value_;
-      return true;
-    }
-    bool await_suspend(std::coroutine_handle<>) noexcept { return false; }
-    void await_resume() noexcept {}
-  };
-
   generator_promise() = default;
 
-  generator<T> get_return_object() noexcept;
+  generator<T, Details> get_return_object() noexcept;
 
   constexpr std::suspend_always initial_suspend() const noexcept { return {}; }
   constexpr std::suspend_always final_suspend() const noexcept { return {}; }
@@ -87,32 +74,43 @@ class generator_promise {
     }
   }
 
-  DetailAwaiter await_transform(AddDetail detail) {
-    return {*this, std::move(detail)};
+  // The machinery to expose the stored `Details` via
+  // `co_await cppcoro::getDetails`.
+  struct DetailAwaiter {
+    generator_promise& promise_;
+    bool await_ready() { return true; }
+    bool await_suspend(std::coroutine_handle<>) noexcept { return false; }
+    Details& await_resume() noexcept { return promise_.details(); }
+  };
+
+  DetailAwaiter await_transform(
+      [[maybe_unused]] ad_utility::SimilarTo<GetDetails> auto&& detail) {
+    return {*this};
   }
 
-  nlohmann::json& details() { return m_details; }
+  Details& details() { return m_details; }
 
  private:
   pointer_type m_value;
   std::exception_ptr m_exception;
-  nlohmann::json m_details;
+  Details m_details{};
 };
 
 struct generator_sentinel {};
 
-template <typename T>
+template <typename T, typename Details>
 class generator_iterator {
-  using coroutine_handle = std::coroutine_handle<generator_promise<T>>;
+  using promise_type = generator_promise<T, Details>;
+  using coroutine_handle = std::coroutine_handle<promise_type>;
 
  public:
   using iterator_category = std::input_iterator_tag;
   // What type should we use for counting elements of a potentially infinite
   // sequence?
   using difference_type = std::ptrdiff_t;
-  using value_type = typename generator_promise<T>::value_type;
-  using reference = typename generator_promise<T>::reference_type;
-  using pointer = typename generator_promise<T>::pointer_type;
+  using value_type = typename promise_type::value_type;
+  using reference = typename promise_type::reference_type;
+  using pointer = typename promise_type::pointer_type;
 
   // Iterator needs to be default-constructible to satisfy the Range concept.
   generator_iterator() noexcept : m_coroutine(nullptr) {}
@@ -161,11 +159,11 @@ class generator_iterator {
 };
 }  // namespace detail
 
-template <typename T>
+template <typename T, typename Details = int>
 class [[nodiscard]] generator {
  public:
-  using promise_type = detail::generator_promise<T>;
-  using iterator = detail::generator_iterator<T>;
+  using promise_type = detail::generator_promise<T, Details>;
+  using iterator = detail::generator_iterator<T, Details>;
   using value_type = typename iterator::value_type;
 
   generator() noexcept : m_coroutine(nullptr) {}
@@ -206,10 +204,10 @@ class [[nodiscard]] generator {
     std::swap(m_coroutine, other.m_coroutine);
   }
 
-  const nlohmann::json& details() { return m_coroutine.promise().details(); }
+  const Details& details() { return m_coroutine.promise().details(); }
 
  private:
-  friend class detail::generator_promise<T>;
+  friend class detail::generator_promise<T, Details>;
 
   explicit generator(std::coroutine_handle<promise_type> coroutine) noexcept
       : m_coroutine(coroutine) {}
@@ -223,10 +221,11 @@ void swap(generator<T>& a, generator<T>& b) {
 }
 
 namespace detail {
-template <typename T>
-generator<T> generator_promise<T>::get_return_object() noexcept {
-  using coroutine_handle = std::coroutine_handle<generator_promise<T>>;
-  return generator<T>{coroutine_handle::from_promise(*this)};
+template <typename T, typename Details>
+generator<T, Details>
+generator_promise<T, Details>::get_return_object() noexcept {
+  using coroutine_handle = std::coroutine_handle<generator_promise<T, Details>>;
+  return generator<T, Details>{coroutine_handle::from_promise(*this)};
 }
 }  // namespace detail
 
