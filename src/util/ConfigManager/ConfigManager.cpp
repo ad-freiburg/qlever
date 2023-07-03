@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -19,6 +17,7 @@
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -34,10 +33,6 @@ namespace ad_utility {
 // ____________________________________________________________________________
 std::string ConfigManager::createJsonPointerString(
     const std::vector<std::string>& keys) {
-  if (keys.empty()) {
-    return "";
-  }
-
   /*
   Escape the characters `/` and `~`, which have a special meaning inside JSON
   pointers, inside the given string.
@@ -49,6 +44,9 @@ std::string ConfigManager::createJsonPointerString(
 
   // Creating the string for the pointer.
   std::ostringstream pointerString;
+
+  // We don't use a `lazyStrJoin` here, so that an empty `keys` produces an
+  // emptry string.
   std::ranges::for_each(
       keys, [&escapeSpecialCharacters, &pointerString](std::string_view key) {
         pointerString << "/" << escapeSpecialCharacters(key);
