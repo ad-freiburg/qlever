@@ -37,12 +37,6 @@ std::string ConfigOption::availableTypesToString(const AvailableTypes& value) {
       return "integer";
     } else if constexpr (std::is_same_v<T, float>) {
       return "float";
-    } else if constexpr (std::is_same_v<T, std::vector<bool>>) {
-      return "list of booleans";
-    } else if constexpr (std::is_same_v<T, std::vector<std::string>>) {
-      return "list of strings";
-    } else if constexpr (std::is_same_v<T, std::vector<int>>) {
-      return "list of integers";
     } else {
       // It must be a vector.
       static_assert(ad_utility::isVector<T>);
