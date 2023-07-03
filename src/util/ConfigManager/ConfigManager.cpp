@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
+#include "util/ConfigManager/ConfigManager.h"
+
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -17,7 +19,6 @@
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
-#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -52,7 +53,7 @@ std::string ConfigManager::createJsonPointerString(
         pointerString << "/" << escapeSpecialCharacters(key);
       });
 
-  return pointerString.str();
+  return std::move(pointerString).str();
 }
 
 // ____________________________________________________________________________
@@ -310,7 +311,7 @@ std::string ConfigManager::vectorOfKeysForJsonToString(
   std::ranges::for_each(keys, [&keysToString](std::string_view key) {
     keysToString << "[" << key << "]";
   });
-  return keysToString.str();
+  return std::move(keysToString).str();
 }
 
 // ____________________________________________________________________________
