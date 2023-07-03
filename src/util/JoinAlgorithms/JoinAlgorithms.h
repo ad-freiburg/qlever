@@ -578,7 +578,7 @@ using Range = std::pair<size_t, size_t>;
 template <typename Block>
 class BlockAndSubrange {
  private:
-  Block block_;
+  std::shared_ptr<Block> block_;
   Range subrange_;
 
  public:
@@ -588,32 +588,36 @@ class BlockAndSubrange {
   // Construct from a container object, where the initial subrange will
   // represent the whole container.
   explicit BlockAndSubrange(Block block)
-      : block_{std::move(block)}, subrange_{0, block_.size()} {}
+      : block_{std::make_shared<Block>(std::move(block))}, subrange_{0, block_->size()} {}
 
   // Return a reference to the last element of the currently specified subrange.
   reference back() {
-    AD_CORRECTNESS_CHECK(subrange_.second - 1 < block_.size());
-    return block_[subrange_.second - 1];
+    AD_CORRECTNESS_CHECK(subrange_.second - 1 < block_->size());
+    return (*block_)[subrange_.second - 1];
   }
 
   // Return the currently specified subrange as a `std::ranges::subrange`
   // object.
   auto subrange() {
-    return std::ranges::subrange{block_.begin() + subrange_.first,
-                                 block_.begin() + subrange_.second};
+    return std::ranges::subrange{fullBlock().begin() + subrange_.first,
+                                 fullBlock().begin() + subrange_.second};
   }
 
   // The const overload of the `subrange` method (see above).
   auto subrange() const {
-    return std::ranges::subrange{block_.begin() + subrange_.first,
-                                 block_.begin() + subrange_.second};
+    return std::ranges::subrange{fullBlock().begin() + subrange_.first,
+                                 fullBlock().begin() + subrange_.second};
+  }
+
+  Range getIndices() {
+    return subrange_;
   }
 
   const auto& fullBlock() const {
-    return block_;
+    return *block_;
   }
   auto& fullBlock() {
-    return block_;
+    return *block_;
   }
 
   // Specify the subrange by using two iterators `begin` and `end`. The
@@ -623,13 +627,13 @@ class BlockAndSubrange {
   // subrange.
   void setSubrange(auto begin, auto end) {
     auto checkIt = [this](const auto& it) {
-      AD_CONTRACT_CHECK(block_.begin() <= it && it <= block_.end());
+      AD_CONTRACT_CHECK(block_.begin() <= it && it <= fullBlock().end());
     };
     checkIt(begin);
     checkIt(end);
     AD_CONTRACT_CHECK(begin <= end);
-    subrange_.first = begin - block_.begin();
-    subrange_.second = end - block_.begin();
+    subrange_.first = begin - fullBlock().begin();
+    subrange_.second = end - fullBlock().begin();
   }
 };
 }  // namespace detail
@@ -697,8 +701,11 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
 
   // In these buffers we will store blocks that all contain the same elements
   // and thus their cartesian products match.
-  std::vector<detail::BlockAndSubrange<LeftBlock>> sameBlocksLeft;
-  std::vector<detail::BlockAndSubrange<RightBlock>> sameBlocksRight;
+  using LeftBlockVec = std::vector<detail::BlockAndSubrange<LeftBlock>>;
+  using RightBlockVec = std::vector<detail::BlockAndSubrange<RightBlock>>;
+  LeftBlockVec sameBlocksLeft;
+  using RightBlockVec = std::vector<detail::BlockAndSubrange<RightBlock>>;
+  RightBlockVec sameBlocksRight;
 
   auto getMinEl = [&leftProjection, &rightProjection, &sameBlocksLeft,
                    &sameBlocksRight, &lessThan]() -> ProjectedEl {
@@ -779,6 +786,8 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     // TODO<C++23> use `std::views::cartesian_product`.
     for (const auto& lBlock : blocksLeft) {
       for (const auto& rBlock : blocksRight) {
+        compatibleRowAction.setInput(lBlock.fullBlock(), rBlock.fullBlock());
+
         for (const auto& lEl : lBlock) {
           for (const auto& rEl : rBlock) {
             compatibleRowAction(&lEl, &rEl);
@@ -799,6 +808,8 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     AD_CORRECTNESS_CHECK(!sameBlocksRight.empty());
     decltype(auto) l = sameBlocksLeft.at(0).subrange();
     decltype(auto) r = sameBlocksRight.at(0).subrange();
+    auto& fullBlockLeft = sameBlocksLeft.at(0).fullBlock();
+    auto& fullBlockRight = sameBlocksRight.at(0).fullBlock();
 
     // Compute the range that is safe to join and perform the join.
     ProjectedEl minEl = getMinEl();
@@ -806,7 +817,7 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     auto itR = std::ranges::lower_bound(r, minEl, lessThan);
 
     std::vector<std::pair<int64_t, int64_t>> matchingIndices;
-    auto addRowIndex = [&matchingIndices, begL = sameBlocksLeft.at(0).fullBlock().begin(), begR = sameBlocksRight.at(0).fullBlock().begin()](auto itFromL, auto itFromR) {
+    auto addRowIndex = [&matchingIndices, begL = fullBlockLeft.begin(), begR = fullBlockRight.begin()](auto itFromL, auto itFromR) {
       matchingIndices.emplace_back(itFromL - begL, itFromR - begR);
     };
 
@@ -814,6 +825,8 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
         zipperJoinWithUndef(std::ranges::subrange{l.begin(), itL},
                             std::ranges::subrange{r.begin(), itR}, lessThan,
                             addRowIndex, noop, noop);
+
+    compatibleRowAction(fullBlockLeft, fullBlockRight, matchingIndices);
 
     // Remove the joined elements.
     sameBlocksLeft.at(0).setSubrange(itL, l.end());
@@ -856,15 +869,14 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     // Effectively, these subranges cover all the blocks completely except maybe
     // the last one, which might contain elements `> minEl` at the end.
     auto pushRelevantSubranges = [&minEl, &lessThan](const auto& input) {
-      using Subrange = decltype(std::as_const(input.front()).subrange());
-      std::vector<Subrange> result;
-      for (size_t i = 0; i < input.size() - 1; ++i) {
-        result.push_back(input[i].subrange());
+      using Subrange = std::decay_t<decltype(input.front())>;
+      auto result = input;
+      if (result.empty()) {
+        return result;
       }
-      if (!input.empty()) {
-        result.push_back(
-            std::ranges::equal_range(input.back().subrange(), minEl, lessThan));
-      }
+      auto& last = result.back();
+      auto range = std::ranges::equal_range(last.subrange(), minEl, lessThan);
+      last.setSubrange(range.begin(), range.end());
       return result;
     };
     auto l = pushRelevantSubranges(sameBlocksLeft);

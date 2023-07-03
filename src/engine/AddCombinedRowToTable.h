@@ -93,6 +93,16 @@ class AddCombinedRowToIdTable {
     }
   }
 
+  void addRows(const std::vector<std::pair<size_t, size_t>>& indices) {
+    flush();
+    indexBuffer_.reserve(indices.size());
+    // TODO<joka921> This is rather ineffective.
+    for (auto [l, r] : indices) {
+      indexBuffer_.push_back(TargetIndexAndRowIndices{nextIndex_, {l, r}});
+    }
+    flush();
+  }
+
   // The next free row in the output will be created from
   // `inputLeft_[rowIndexA]`. The columns from `inputRight_` will all be set to
   // UNDEF
