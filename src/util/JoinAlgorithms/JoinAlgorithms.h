@@ -609,6 +609,13 @@ class BlockAndSubrange {
                                  block_.begin() + subrange_.second};
   }
 
+  const auto& fullBlock() const {
+    return block_;
+  }
+  auto& fullBlock() {
+    return block_;
+  }
+
   // Specify the subrange by using two iterators `begin` and `end`. The
   // iterators must be valid iterators that point into the container, this is
   // checked by an assertion. The only legal way to obtain such iterators is to
@@ -797,10 +804,16 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     ProjectedEl minEl = getMinEl();
     auto itL = std::ranges::lower_bound(l, minEl, lessThan);
     auto itR = std::ranges::lower_bound(r, minEl, lessThan);
+
+    std::vector<std::pair<int64_t, int64_t>> matchingIndices;
+    auto addRowIndex = [&matchingIndices, begL = sameBlocksLeft.at(0).fullBlock().begin(), begR = sameBlocksRight.at(0).fullBlock().begin()](auto itFromL, auto itFromR) {
+      matchingIndices.emplace_back(itFromL - begL, itFromR - begR);
+    };
+
     [[maybe_unused]] auto res =
         zipperJoinWithUndef(std::ranges::subrange{l.begin(), itL},
                             std::ranges::subrange{r.begin(), itR}, lessThan,
-                            compatibleRowAction, noop, noop);
+                            addRowIndex, noop, noop);
 
     // Remove the joined elements.
     sameBlocksLeft.at(0).setSubrange(itL, l.end());
