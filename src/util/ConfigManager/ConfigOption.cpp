@@ -140,7 +140,7 @@ std::string ConfigOption::contentOfAvailableTypesToString(
 
   // TODO<C++23> Use "deducing this" for simpler recursive lambdas.
   // Converts a `AvailableTypes` to their string representation.
-  auto availableTypesToString = []<typename T>(const T& content, auto&& variantSubTypetoString) {
+  auto availableTypesToString = []<typename T>(const T& content, auto&& variantSubTypeToString) {
     // Return the internal value of the `std::optional`.
     if constexpr (std::is_same_v<T, std::string>) {
       // Add "", so that it's more obvious, that it's a string.
@@ -165,8 +165,8 @@ std::string ConfigOption::contentOfAvailableTypesToString(
       ad_utility::lazyStrJoin(
           &stream,
           std::views::transform(content,
-                                [&variantSubTypetoString](const VectorEntryType& entry) {
-                                  return variantSubTypetoString(entry, variantSubTypetoString);
+                                [&variantSubTypeToString](const VectorEntryType& entry) {
+                                  return variantSubTypeToString(entry, variantSubTypeToString);
                                 }),
           ", ");
       stream << "}";
