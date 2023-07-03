@@ -110,7 +110,7 @@ struct dbl {
   double operator()(const auto& s) const { return std::stod(s); }
 };
 struct szt {
-  double operator()(const auto& s) const { return std::stoull(s); }
+  size_t operator()(const auto& s) const { return std::stoull(s); }
 };
 
 struct toString {
