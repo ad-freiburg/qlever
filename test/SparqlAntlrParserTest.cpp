@@ -18,6 +18,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
+#include "global/Constants.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
@@ -467,12 +468,14 @@ TEST(SparqlParser, Integer) {
 TEST(SparqlParser, LimitOffsetClause) {
   auto expectLimitOffset = ExpectCompleteParse<&Parser::limitOffsetClauses>{};
   auto expectLimitOffsetFails = ExpectParseFails<&Parser::limitOffsetClauses>();
-  expectLimitOffset("LIMIT 10", m::LimitOffset(10, 1, 0));
+  expectLimitOffset("LIMIT 10", m::LimitOffset(10, TEXT_LIMIT_DEFAULT, 0));
   expectLimitOffset("OFFSET 31 LIMIT 12 TEXTLIMIT 14",
                     m::LimitOffset(12, 14, 31));
   expectLimitOffset("textlimit 999", m::LimitOffset(std::nullopt, 999, 0));
-  expectLimitOffset("LIMIT      999", m::LimitOffset(999, 1, 0));
-  expectLimitOffset("OFFSET 43", m::LimitOffset(std::nullopt, 1, 43));
+  expectLimitOffset("LIMIT      999",
+                    m::LimitOffset(999, TEXT_LIMIT_DEFAULT, 0));
+  expectLimitOffset("OFFSET 43",
+                    m::LimitOffset(std::nullopt, TEXT_LIMIT_DEFAULT, 43));
   expectLimitOffset("TEXTLIMIT 43 LIMIT 19", m::LimitOffset(19, 43, 0));
   expectLimitOffsetFails("LIMIT20");
   expectIncompleteParse(parse<&Parser::limitOffsetClauses>(
@@ -582,11 +585,11 @@ TEST(SparqlParser, SolutionModifier) {
   // The following are no valid solution modifiers, because ORDER BY
   // has to appear before LIMIT.
   expectIncompleteParse("GROUP BY ?var LIMIT 10 ORDER BY ?var");
-  expectSolutionModifier("LIMIT 10",
+  expectSolutionModifier("TEXTLIMIT 1 LIMIT 10",
                          m::SolutionModifier({}, {}, {}, {10, 1, 0}));
   expectSolutionModifier(
-      "GROUP BY ?var (?b - 10) HAVING (?var != 10) ORDER BY ?var LIMIT 10 "
-      "OFFSET 2",
+      "GROUP BY ?var (?b - 10) HAVING (?var != 10) ORDER BY ?var TEXTLIMIT 1 "
+      "LIMIT 10 OFFSET 2",
       m::SolutionModifier({Var{"?var"}, "?b - 10"}, {{"(?var != 10)"}},
                           {VOK{Var{"?var"}, false}}, {10, 1, 2}));
   expectSolutionModifier(

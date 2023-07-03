@@ -629,11 +629,6 @@ TextBlockIndex IndexImpl::getWordBlockId(WordIndex wordIndex) const {
 }
 
 // _____________________________________________________________________________
-bool IndexImpl::isEntityBlockId(TextBlockIndex blockIndex) const {
-  return blockIndex >= blockBoundaries_.size();
-}
-
-// _____________________________________________________________________________
 template <typename Numeric>
 size_t IndexImpl::writeList(Numeric* data, size_t nofElements,
                             ad_utility::File& file) const {

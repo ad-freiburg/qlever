@@ -1,8 +1,13 @@
-// Copyright 2015, University of Freiburg,
+// Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//
+// Authors: Björn Buchhold <buchhold@gmail.com>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
+
 #pragma once
 
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -26,6 +31,7 @@ static const size_t DISTINCT_LHS_PER_BLOCK = 10'000;
 static const size_t USE_BLOCKS_INDEX_SIZE_TRESHOLD = 20'000;
 
 static const size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
+static const size_t TEXT_LIMIT_DEFAULT = std::numeric_limits<size_t>::max();
 
 static const size_t GALLOP_THRESHOLD = 1000;
 

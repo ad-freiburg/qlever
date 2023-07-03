@@ -219,6 +219,7 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
       }
     }
   }
+  AD_CORRECTNESS_CHECK(minSize != std::numeric_limits<size_t>::max());
 
   resultWep.cids_.reserve(minSize);
   resultWep.scores_.reserve(minSize);
@@ -369,32 +370,6 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
   LOG(DEBUG) << "Intersection done. Size: " << resultWep.cids_.size() << "\n";
 
   return resultWep;
-}
-
-// _____________________________________________________________________________
-void FTSAlgorithms::getTopKByScores(const vector<Id>& cids,
-                                    const vector<Score>& scores, size_t k,
-                                    WidthOneList* result) {
-  AD_CONTRACT_CHECK(cids.size() == scores.size());
-  k = std::min(k, cids.size());
-  LOG(DEBUG) << "Call getTopKByScores (partial sort of " << cids.size()
-             << " contexts by score)...\n";
-  vector<size_t> indices;
-  indices.resize(scores.size());
-  for (size_t i = 0; i < indices.size(); ++i) {
-    indices[i] = i;
-  }
-  LOG(DEBUG) << "Doing the partial sort...\n";
-  std::partial_sort(
-      indices.begin(), indices.begin() + k, indices.end(),
-      [&scores](size_t a, size_t b) { return scores[a] > scores[b]; });
-  LOG(DEBUG) << "Packing the final WidthOneList of cIds...\n";
-  result->reserve(k + 2);
-  result->resize(k);
-  for (size_t i = 0; i < k; ++i) {
-    (*result)[i] = {{cids[indices[i]]}};
-  }
-  LOG(DEBUG) << "Done with getTopKByScores.\n";
 }
 
 // _____________________________________________________________________________

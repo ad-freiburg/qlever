@@ -10,10 +10,10 @@ queries:
           ?t ql:contains-entity ?x .
           ?t ql:contains-word "relati*"
       }
-          ORDER BY DESC(?ql_textscore_t)
+      ORDER BY DESC(?ql_textscore_t)
     checks:
       - num_cols: 3
-      - num_rows: 1653
+      - num_rows: 4265
       - selected: [ "?x", "?t", "?ql_textscore_t"]
       - contains_row:
           - "<Albert_Einstein>"
@@ -35,7 +35,8 @@ queries:
           ?t ql:contains-entity ?x .
           ?t ql:contains-word "relati*"
       }
-          ORDER BY DESC(?ql_textscore_t)
+      ORDER BY DESC(?ql_textscore_t)
+      TEXTLIMIT 1
     checks:
       - num_cols: 3
       - num_rows: 1
@@ -57,10 +58,10 @@ queries:
           ?t ql:contains-entity ?x .
           ?t ql:contains-word "algo*"
       }
-          ORDER BY DESC(?ql_textscore_t)
+      ORDER BY DESC(?ql_textscore_t)
     checks:
       - num_cols: 2
-      - num_rows: 11
+      - num_rows: 27
       - selected: [ "?x", "?ql_textscore_t" ]
       - contains_row: [ "<Grete_Hermann>", null ]
       - order_numeric: {"dir": "DESC", "var" : "?ql_textscore_t"}
@@ -76,17 +77,21 @@ queries:
         ?x <Gender> <Female> .
         ?t ql:contains-entity ?x .
         ?t ql:contains-word "algor*" .
-
         FILTER (?date < "1940-01-01"^^xsd:date)
       }
       ORDER BY DESC(?ql_textscore_t)
     checks:
       - num_cols: 4
-      - num_rows: 3
+      - num_rows: 4
       - contains_row:
         - "<Grete_Hermann>"
         - "1901-03-02"
         - "Hermann's algorithm for primary decomposition is still in use now."
+        - null
+      - contains_row:
+        - "<Ada_Lovelace>"
+        - "1815-12-10"
+        - "Her notes on the engine include what is recognised as the first algorithm intended to be carried out by a machine."
         - null
       - order_numeric: {"dir": "DESC", "var" : "?ql_textscore_t"}
 
@@ -1142,7 +1147,7 @@ queries:
           ?x <Gender> <Female> .
           ?t ql:contains-entity ?x .
           ?t ql:contains-word "algo*"
-      }
+      } TEXTLIMIT 1
     checks:
       - num_cols: 3
       - num_rows: 11

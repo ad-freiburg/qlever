@@ -13,7 +13,7 @@ using enum PositionInTriple;
 
 namespace {
 struct ContextWrapper {
-  Index _index{};
+  Index _index{ad_utility::makeUnlimitedAllocator<Id>()};
   ResultTable _resultTable{
       IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}};
   // TODO<joka921> `VariableToColumnMap`

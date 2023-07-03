@@ -32,15 +32,18 @@ auto RootOperation(auto matcher) -> Matcher<const QueryExecutionTree&> {
 
 /// Return a matcher that checks that a given `QueryExecutionTree` consists of a
 /// single `IndexScan` with the given `subject`, `predicate`, and `object`, and
-/// that the `ScanType` of this `IndexScan` is any of the given `scanTypes`.
-auto IndexScan(TripleComponent subject, std::string predicate,
-               TripleComponent object,
-               const std::vector<IndexScan::ScanType>& scanTypes = {})
+/// that the `ScanType` of this `IndexScan` is any of the given
+/// `allowedPermutations`.
+auto IndexScan(TripleComponent subject, TripleComponent predicate,
+               TripleComponent object, size_t numVariables,
+               const std::vector<Permutation::Enum>& allowedPermutations = {})
     -> Matcher<const QueryExecutionTree&> {
-  auto typeMatcher =
-      scanTypes.empty() ? A<IndexScan::ScanType>() : AnyOfArray(scanTypes);
+  auto permutationMatcher = allowedPermutations.empty()
+                                ? ::testing::A<Permutation::Enum>()
+                                : AnyOfArray(allowedPermutations);
   return RootOperation<::IndexScan>(
-      AllOf(Property(&IndexScan::getType, typeMatcher),
+      AllOf(Property(&IndexScan::permutation, permutationMatcher),
+            Property(&IndexScan::getResultWidth, Eq(numVariables)),
             Property(&IndexScan::getSubject, Eq(subject)),
             Property(&IndexScan::getPredicate, Eq(predicate)),
             Property(&IndexScan::getObject, Eq(object))));

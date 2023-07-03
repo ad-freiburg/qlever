@@ -9,7 +9,7 @@
 
 #include <ranges>
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 std::string RuntimeInformation::toString() const {
   std::ostringstream buffer;
   // Imbue with the same locale as std::cout which uses for example
@@ -23,28 +23,53 @@ std::string RuntimeInformation::toString() const {
 
 namespace {
 // A small formatting helper used inside RuntimeInformation::writeToStream.
-std::string indentStr(size_t indent) {
+std::string indentStr(size_t indent, bool stripped = false) {
   std::string ind;
   for (size_t i = 0; i < indent; i++) {
-    ind += "│  ";
+    if (stripped && i == indent - 1) {
+      ind += "│";
+    } else {
+      ind += "│  ";
+    }
   }
   return ind;
 }
 }  // namespace
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
+void RuntimeInformation::formatDetailValue(std::ostream& out,
+                                           std::string_view key,
+                                           const nlohmann::json& value) {
+  using enum nlohmann::json::value_t;
+  // We want to print doubles with fixed precision and stream ints as their
+  // native type so they get thousands separators. For everything else we
+  // let nlohmann::json handle it.
+  if (value.type() == number_float) {
+    out << ad_utility::to_string(value.get<double>(), 2);
+  } else if (value.type() == number_unsigned) {
+    out << value.template get<uint64_t>();
+  } else if (value.type() == number_integer) {
+    out << value.get<int64_t>();
+  } else {
+    out << value;
+  }
+  if (key.ends_with("Time")) {
+    out << " ms";
+  }
+}
+
+// __________________________________________________________________________
 void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
-  using json = nlohmann::json;
-  out << indentStr(indent) << '\n';
+  out << indentStr(indent, true) << '\n';
   out << indentStr(indent - 1) << "├─ " << descriptor_ << '\n';
   out << indentStr(indent) << "result_size: " << numRows_ << " x " << numCols_
       << '\n';
   out << indentStr(indent) << "columns: " << absl::StrJoin(columnNames_, ", ")
       << '\n';
-  out << indentStr(indent) << "total_time: " << getTotalTimeCorrected() << " ms"
-      << '\n';
+  out << indentStr(indent) << "total_time: " << totalTime_ << " ms" << '\n';
   out << indentStr(indent) << "operation_time: " << getOperationTime() << " ms"
       << '\n';
+  out << indentStr(indent) << "status: " << toString(status_) << '\n';
   out << indentStr(indent)
       << "cache_status: " << ad_utility::toString(cacheStatus_) << '\n';
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {
@@ -56,21 +81,7 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
   }
   for (const auto& el : details_.items()) {
     out << indentStr(indent) << "  " << el.key() << ": ";
-    // We want to print doubles with fixed precision and stream ints as their
-    // native type so they get thousands separators. For everything else we
-    // let nlohmann::json handle it
-    if (el.value().type() == json::value_t::number_float) {
-      out << ad_utility::to_string(el.value().get<double>(), 2);
-    } else if (el.value().type() == json::value_t::number_unsigned) {
-      out << el.value().get<uint64_t>();
-    } else if (el.value().type() == json::value_t::number_integer) {
-      out << el.value().get<int64_t>();
-    } else {
-      out << el.value();
-    }
-    if (el.key().ends_with("Time")) {
-      out << " ms";
-    }
+    formatDetailValue(out, el.key(), el.value());
     out << '\n';
   }
   if (!children_.empty()) {
@@ -81,9 +92,10 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
   }
 }
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
   if (columnMap.empty()) {
+    columnNames_.clear();
     return;
   }
 
@@ -100,7 +112,7 @@ void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
   }
 }
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 double RuntimeInformation::getOperationTime() const {
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {
     return totalTime_;
@@ -108,17 +120,14 @@ double RuntimeInformation::getOperationTime() const {
     // If a child was computed during the query planning, the time spent
     // computing that child is *not* included in this operation's
     // `totalTime_`. That's why we skip such children in the following loop.
-    auto result = totalTime_;
-    for (const RuntimeInformation& child : children_) {
-      if (child.status_ != completedDuringQueryPlanning) {
-        result -= child.totalTime_;
-      }
-    }
-    return result;
+    auto timesOfChildren =
+        children_ | std::views::transform(&RuntimeInformation::totalTime_);
+    return totalTime_ -
+           std::accumulate(timesOfChildren.begin(), timesOfChildren.end(), 0.0);
   }
 }
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 size_t RuntimeInformation::getOperationCostEstimate() const {
   size_t result = costEstimate_;
   for (const auto& child : children_) {
@@ -127,13 +136,11 @@ size_t RuntimeInformation::getOperationCostEstimate() const {
   return result;
 }
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 std::string_view RuntimeInformation::toString(Status status) {
   switch (status) {
     case completed:
       return "completed";
-    case completedDuringQueryPlanning:
-      return "completed during query planning";
     case notStarted:
       return "not started";
     case optimizedOut:
@@ -147,32 +154,6 @@ std::string_view RuntimeInformation::toString(Status status) {
   }
 }
 
-// _____________________________________________________________________________
-double RuntimeInformation::getTotalTimeCorrected() const {
-  double timeOfChildrenComputedDuringQueryPlanning = 0;
-
-  // Recursively get the `totalTime_` of all descendants that were computed
-  // during the query planning and add it to
-  // `timeOfChildrenComputedDuringQueryPlanning`. The pattern of a lambda that
-  // is called with itself as an argument is required for requires lambdas up
-  // until C++20 (for a detailed read, see
-  // http://pedromelendez.com/blog/2015/07/16/recursive-lambdas-in-c14/
-  // TODO<joka921, C++23> Use `explicit object parameters` aka `deducing this`
-  // to simplify the recursive lambda.
-  auto recursiveImpl = [&](const auto& recursiveCall,
-                           const RuntimeInformation& child) -> void {
-    if (child.status_ ==
-        RuntimeInformation::Status::completedDuringQueryPlanning) {
-      timeOfChildrenComputedDuringQueryPlanning += child.totalTime_;
-    }
-    for (const auto& descendant : child.children_) {
-      recursiveCall(recursiveCall, descendant);
-    }
-  };
-  recursiveImpl(recursiveImpl, *this);
-  return totalTime_ + timeOfChildrenComputedDuringQueryPlanning;
-}
-
 // ________________________________________________________________________________________________________________
 void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
   j = nlohmann::ordered_json{
@@ -180,7 +161,7 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
       {"result_rows", rti.numRows_},
       {"result_cols", rti.numCols_},
       {"column_names", rti.columnNames_},
-      {"total_time", rti.getTotalTimeCorrected()},
+      {"total_time", rti.totalTime_},
       {"operation_time", rti.getOperationTime()},
       {"original_total_time", rti.originalTotalTime_},
       {"original_operation_time", rti.originalOperationTime_},
@@ -194,15 +175,13 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
       {"children", rti.children_}};
 }
 
-// ________________________________________________________________________________________________________________
+// __________________________________________________________________________
 void to_json(nlohmann::ordered_json& j,
              const RuntimeInformationWholeQuery& rti) {
-  j = nlohmann::ordered_json{
-      {"time_query_planning", rti.timeQueryPlanning},
-      {"time_index_scans_query_planning", rti.timeIndexScansQueryPlanning}};
+  j = nlohmann::ordered_json{{"time_query_planning", rti.timeQueryPlanning}};
 }
 
-// ___________________________________________________________________________________
+// __________________________________________________________________________
 void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
                                            size_t timeForLimit,
                                            bool fullResultIsNotCached) {

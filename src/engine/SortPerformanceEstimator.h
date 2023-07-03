@@ -53,11 +53,11 @@ class SortPerformanceEstimator {
   // The number of columns for which we will sample the sorting time as a base
   // for the estimates. It is crucial that we have values for 5 and 6, because
   // at this point the IdTableImplementation changes.
-  static constexpr std::array<size_t, 6> sampleValuesCols{1, 3, 5, 6, 8, 10};
+  static constexpr std::array<size_t, 4> sampleValuesCols{1, 3, 5, 6};
   // The number of rows for which we will sample the sorting time as a base for
   // the estimates.
-  static constexpr std::array<size_t, 5> sampleValuesRows{
-      10'000, 100'000, 1'000'000, 10'000'000, 100'000'000};
+  static constexpr std::array<size_t, 4> sampleValuesRows{
+      10'000, 100'000, 1'000'000, 10'000'000};
   static constexpr size_t NUM_SAMPLES_COLS = sampleValuesCols.size();
   static constexpr size_t NUM_SAMPLES_ROWS = sampleValuesRows.size();
 
