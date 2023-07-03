@@ -228,7 +228,7 @@ static std::decay_t<DummyType> getDummyValue() {
   } else if constexpr (std::is_same_v<std::decay_t<DummyType>, int>) {
     return 42;
   } else if constexpr (std::is_same_v<std::decay_t<DummyType>, float>) {
-    return static_cast<float>(4.2);
+    return 4.2f;
   } else if constexpr (std::is_same_v<std::decay_t<DummyType>, std::vector<bool>>) {
     return std::vector{true, false};
   } else if constexpr (std::is_same_v<std::decay_t<DummyType>, std::vector<std::string>>) {
@@ -238,8 +238,7 @@ static std::decay_t<DummyType> getDummyValue() {
   } else {
     // Must be a vector of floats.
     static_assert(std::is_same_v<std::decay_t<DummyType>, std::vector<float>>);
-    return std::vector<float>{static_cast<float>(40.0), static_cast<float>(41.1),
-                              static_cast<float>(42.2)};
+    return {40.0f, 41.1f, 42.2f};
   }
 }
 

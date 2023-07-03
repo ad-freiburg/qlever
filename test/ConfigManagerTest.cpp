@@ -280,14 +280,14 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
 
   checkOption<float>(
       config.getConfigurationOptionByNestedKeys({"somePositiveFloatingPoint"}),
-      somePositiveFloatingPointFloat, true, static_cast<float>(4.2));
+      somePositiveFloatingPointFloat, true, 4.2f);
   checkOption<float>(
       config.getConfigurationOptionByNestedKeys({"someNegativFloatingPoint"}),
-      someNegativFloatingPointFloat, true, static_cast<float>(-4.2));
+      someNegativFloatingPointFloat, true, -4.2f);
 
   checkOption<std::vector<float>>(
       config.getConfigurationOptionByNestedKeys({"someFloatingPointList"}),
-      someFloatingPointListFloatVector, true, std::vector<float>{4.1, 4.2});
+      someFloatingPointListFloatVector, true, {4.1f, 4.2f});
 
   checkOption<bool>(config.getConfigurationOptionByNestedKeys({"boolTrue"}),
                     boolTrueBool, true, true);
