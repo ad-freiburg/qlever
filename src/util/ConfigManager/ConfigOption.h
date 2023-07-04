@@ -219,11 +219,9 @@ class ConfigOption {
   */
   template <typename T>
   requires ad_utility::isTypeContainedIn<T, ConfigOption::AvailableTypes>
-  ConfigOption(
-      std::string_view identifier, std::string_view description,
-      T* variablePointer,
-      const std::optional<T>& defaultValue = std::optional<T>(std::nullopt))
-      : data_{Data<T>{defaultValue, variablePointer}},
+  ConfigOption(std::string_view identifier, std::string_view description,
+               T* variablePointer, std::optional<T> defaultValue = std::nullopt)
+      : data_{Data<T>{std::move(defaultValue), variablePointer}},
         identifier_{identifier},
         description_{description} {
     // The `identifier` must be a valid `NAME` in the configuration short hand.
@@ -237,8 +235,8 @@ class ConfigOption {
       throw ConfigOptionConstructorNullPointerException(identifier);
     }
 
-    if (defaultValue.has_value()) {
-      *variablePointer = defaultValue.value();
+    if (auto& data = std::get<Data<T>>(data_); data.defaultValue_.has_value()) {
+      *data.variablePointer_ = data.defaultValue_.value();
     }
   }
 
