@@ -307,17 +307,4 @@ std::ofstream makeOfstream(const std::filesystem::path& path, auto&&... args) {
   return detail::makeFilestream<std::ofstream, true>(path, AD_FWD(args)...);
 }
 
-// Return file content as string.
-inline std::string readFileToString(std::string_view fileName) {
-  // The string gets build using a string stream.
-  std::ostringstream transcribedString{};
-
-  // Adding a buffer using `<<` causes the content of the buffer to be
-  // individually added to the string stream. In other words: The entire
-  // content of the opened file will be added.
-  transcribedString << ad_utility::makeIfstream(fileName).rdbuf();
-
-  return transcribedString.str();
-}
-
 }  // namespace ad_utility
