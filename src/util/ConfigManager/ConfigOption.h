@@ -33,9 +33,9 @@ class ConfigOption {
  public:
   // All possible types, that an option can hold.
   using AvailableTypes =
-      std::variant<bool, std::string, int, float, std::vector<bool>,
+      std::variant<bool, std::string, int, size_t, float, std::vector<bool>,
                    std::vector<std::string>, std::vector<int>,
-                   std::vector<float>>;
+                   std::vector<size_t>, std::vector<float>>;
 
  private:
   /*
