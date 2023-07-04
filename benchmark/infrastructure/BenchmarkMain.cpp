@@ -15,8 +15,8 @@
 
 #include "../benchmark/infrastructure/Benchmark.h"
 #include "../benchmark/infrastructure/BenchmarkConfiguration.h"
-#include "../benchmark/infrastructure/BenchmarkResultToString.h"
 #include "../benchmark/infrastructure/BenchmarkToJson.h"
+#include "../benchmark/infrastructure/BenchmarkToString.h"
 #include "BenchmarkMetadata.h"
 #include "util/Algorithm.h"
 #include "util/File.h"
