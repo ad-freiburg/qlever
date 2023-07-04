@@ -21,7 +21,7 @@ template <typename T, typename Details>
 class generator;
 
 // This struct can be `co_await`ed inside a `generator` to obtain a reference to
-// the details object ( the value of which is a template parameter to the
+// the details object (the value of which is a template parameter to the
 // generator). For an example see `GeneratorTest.cpp`.
 struct GetDetails {};
 static constexpr GetDetails getDetails;

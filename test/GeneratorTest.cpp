@@ -14,7 +14,7 @@ struct Details {
 // A simple generator that first yields three numbers and then adds a detail
 // value, that we can then extract after iterating over it.
 cppcoro::generator<int, Details> simpleGen() {
-  auto& details = co_await cppcoro::getDetails;
+  Details& details = co_await cppcoro::getDetails;
   details.begin_ = true;
   co_yield 1;
   co_yield 42;
@@ -22,7 +22,7 @@ cppcoro::generator<int, Details> simpleGen() {
   details.end_ = true;
 };
 
-// Test the behavior of the `simpleGen` above
+// Test the behavior of the `simpleGen` above.
 TEST(Generator, details) {
   auto gen = simpleGen();
   int result{};
