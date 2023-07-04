@@ -17,14 +17,26 @@ using Block = std::vector<std::array<size_t, 2>>;
 using NestedBlock = std::vector<Block>;
 using JoinResult = std::vector<std::array<size_t, 3>>;
 
-auto makeRowAdder(JoinResult& target) {
-  // `it1, it2` must be (const) iterators to a `Block`.
-  return [&target](auto it1, auto it2) {
-    auto [x1, x2] = *it1;
-    auto [y1, y2] = *it2;
+struct RowAdder {
+  const Block* left_{};
+  const Block* right_{};
+  JoinResult* target_{};
+
+  void setInput(const Block& left, const Block& right) {
+    left_ = &left;
+    right_ = &right;
+  }
+
+  void addRow(size_t leftIndex, size_t rightIndex) {
+    auto [x1, x2] = (*left_)[leftIndex];
+    auto [y1, y2] = (*right_)[rightIndex];
     AD_CONTRACT_CHECK(x1 == y1);
-    target.push_back(std::array{x1, x2, y2});
-  };
+    target_->push_back(std::array{x1, x2, y2});
+  }
+};
+
+auto makeRowAdder(JoinResult& target) {
+  return RowAdder{nullptr, nullptr, &target};
 }
 
 using ad_utility::source_location;
@@ -37,7 +49,8 @@ void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
   auto trace = generateLocationTrace(l);
   JoinResult result;
   auto compare = [](auto l, auto r) { return l[0] < r[0]; };
-  zipperJoinForBlocksWithoutUndef(a, b, compare, makeRowAdder(result));
+  auto adder = makeRowAdder(result);
+  zipperJoinForBlocksWithoutUndef(a, b, compare, adder);
   // The result must be sorted on the first column
   EXPECT_TRUE(std::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
   // The exact order of the elements with the same first column is not important
@@ -47,9 +60,13 @@ void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
   for (auto& [x, y, z] : expected) {
     std::swap(y, z);
   }
-  zipperJoinForBlocksWithoutUndef(b, a, compare, makeRowAdder(result));
-  EXPECT_TRUE(std::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
-  EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
+  {
+    auto adder = makeRowAdder(result);
+    zipperJoinForBlocksWithoutUndef(b, a, compare, adder);
+    EXPECT_TRUE(
+        std::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
+    EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
+  }
 }
 }  // namespace
 

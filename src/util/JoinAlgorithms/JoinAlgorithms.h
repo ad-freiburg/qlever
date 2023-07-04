@@ -583,12 +583,15 @@ class BlockAndSubrange {
 
  public:
   // The reference type of the underlying container.
-  using reference = std::iterator_traits<typename Block::iterator>::reference;
+  // using reference = std::iterator_traits<typename
+  // Block::iterator>::reference;
+  using reference = std::iterator_traits<typename Block::iterator>::value_type;
 
   // Construct from a container object, where the initial subrange will
   // represent the whole container.
   explicit BlockAndSubrange(Block block)
-      : block_{std::make_shared<Block>(std::move(block))}, subrange_{0, block_->size()} {}
+      : block_{std::make_shared<Block>(std::move(block))},
+        subrange_{0, block_->size()} {}
 
   // Return a reference to the last element of the currently specified subrange.
   reference back() {
@@ -609,16 +612,10 @@ class BlockAndSubrange {
                                  fullBlock().begin() + subrange_.second};
   }
 
-  Range getIndices() {
-    return subrange_;
-  }
+  Range getIndices() const { return subrange_; }
 
-  const auto& fullBlock() const {
-    return *block_;
-  }
-  auto& fullBlock() {
-    return *block_;
-  }
+  const auto& fullBlock() const { return *block_; }
+  auto& fullBlock() { return *block_; }
 
   // Specify the subrange by using two iterators `begin` and `end`. The
   // iterators must be valid iterators that point into the container, this is
@@ -627,7 +624,7 @@ class BlockAndSubrange {
   // subrange.
   void setSubrange(auto begin, auto end) {
     auto checkIt = [this](const auto& it) {
-      AD_CONTRACT_CHECK(block_.begin() <= it && it <= fullBlock().end());
+      AD_CONTRACT_CHECK(fullBlock().begin() <= it && it <= fullBlock().end());
     };
     checkIt(begin);
     checkIt(end);
@@ -668,7 +665,7 @@ template <typename LeftBlocks, typename RightBlocks, typename LessThan,
 void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
                                      RightBlocks&& rightBlocks,
                                      const LessThan& lessThan,
-                                     const auto& compatibleRowAction,
+                                     auto& compatibleRowAction,
                                      LeftProjection leftProjection = {},
                                      RightProjection rightProjection = {}) {
   // Type aliases for a single block from the left/right input
@@ -703,6 +700,8 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   // and thus their cartesian products match.
   using LeftBlockVec = std::vector<detail::BlockAndSubrange<LeftBlock>>;
   using RightBlockVec = std::vector<detail::BlockAndSubrange<RightBlock>>;
+  // TODO<joka921> The sameBlocksLeft/Right can possibly become very large.
+  // They should respect the memory limit.
   LeftBlockVec sameBlocksLeft;
   using RightBlockVec = std::vector<detail::BlockAndSubrange<RightBlock>>;
   RightBlockVec sameBlocksRight;
@@ -788,9 +787,11 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
       for (const auto& rBlock : blocksRight) {
         compatibleRowAction.setInput(lBlock.fullBlock(), rBlock.fullBlock());
 
-        for (const auto& lEl : lBlock) {
-          for (const auto& rEl : rBlock) {
-            compatibleRowAction(&lEl, &rEl);
+        for (size_t i : std::views::iota(lBlock.getIndices().first,
+                                         lBlock.getIndices().second)) {
+          for (size_t j : std::views::iota(rBlock.getIndices().first,
+                                           rBlock.getIndices().second)) {
+            compatibleRowAction.addRow(i, j);
           }
         }
       }
@@ -816,17 +817,17 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     auto itL = std::ranges::lower_bound(l, minEl, lessThan);
     auto itR = std::ranges::lower_bound(r, minEl, lessThan);
 
-    std::vector<std::pair<int64_t, int64_t>> matchingIndices;
-    auto addRowIndex = [&matchingIndices, begL = fullBlockLeft.begin(), begR = fullBlockRight.begin()](auto itFromL, auto itFromR) {
-      matchingIndices.emplace_back(itFromL - begL, itFromR - begR);
+    compatibleRowAction.setInput(fullBlockLeft, fullBlockRight);
+    auto addRowIndex = [begL = fullBlockLeft.begin(),
+                        begR = fullBlockRight.begin(),
+                        &compatibleRowAction](auto itFromL, auto itFromR) {
+      compatibleRowAction.addRow(itFromL - begL, itFromR - begR);
     };
 
     [[maybe_unused]] auto res =
         zipperJoinWithUndef(std::ranges::subrange{l.begin(), itL},
                             std::ranges::subrange{r.begin(), itR}, lessThan,
                             addRowIndex, noop, noop);
-
-    compatibleRowAction(fullBlockLeft, fullBlockRight, matchingIndices);
 
     // Remove the joined elements.
     sameBlocksLeft.at(0).setSubrange(itL, l.end());
@@ -869,7 +870,6 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     // Effectively, these subranges cover all the blocks completely except maybe
     // the last one, which might contain elements `> minEl` at the end.
     auto pushRelevantSubranges = [&minEl, &lessThan](const auto& input) {
-      using Subrange = std::decay_t<decltype(input.front())>;
       auto result = input;
       if (result.empty()) {
         return result;

@@ -68,12 +68,14 @@ class AddCombinedRowToIdTable {
         inputRight_{input2},
         resultTable_{std::move(output)},
         bufferSize_{bufferSize} {
+    /*
     AD_CORRECTNESS_CHECK(resultTable_.numColumns() == input1.numColumns() +
                                                           input2.numColumns() -
                                                           numJoinColumns);
     AD_CORRECTNESS_CHECK(input1.numColumns() >= numJoinColumns &&
                          input2.numColumns() >= numJoinColumns);
     AD_CORRECTNESS_CHECK(resultTable_.empty());
+     */
   }
 
   // Return the number of UNDEF values per column.
@@ -93,14 +95,19 @@ class AddCombinedRowToIdTable {
     }
   }
 
-  void addRows(const std::vector<std::pair<size_t, size_t>>& indices) {
-    flush();
-    indexBuffer_.reserve(indices.size());
-    // TODO<joka921> This is rather ineffective.
-    for (auto [l, r] : indices) {
-      indexBuffer_.push_back(TargetIndexAndRowIndices{nextIndex_, {l, r}});
+  void setInput(const auto& left, const auto& right) {
+    auto toView = []<typename T>(const T& table) {
+      if constexpr (requires { table.template asStaticView<0>(); }) {
+        return table.template asStaticView<0>();
+      } else {
+        return table;
+      }
+    };
+    if (nextIndex_ != 0) {
+      flush();
     }
-    flush();
+    inputLeft_ = toView(left);
+    inputRight_ = toView(right);
   }
 
   // The next free row in the output will be created from

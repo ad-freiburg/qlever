@@ -325,6 +325,14 @@ std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
       metaBlocks1.value(), metaBlocks2.value());
 
   return {getLazyScan(s1, blocks1), getLazyScan(s2, blocks2)};
+  /*
+  std::vector<CompressedBlockMetadata>
+  bl1(metaBlocks1.value().blockMetadata_.begin(),metaBlocks1.value().blockMetadata_.end());
+  std::vector<CompressedBlockMetadata>
+  bl2(metaBlocks2.value().blockMetadata_.begin(),metaBlocks2.value().blockMetadata_.end());
+
+  return {getLazyScan(s1,bl1), getLazyScan(s2, bl2)};
+   */
 }
 
 // ________________________________________________________________

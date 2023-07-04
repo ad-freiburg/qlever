@@ -182,7 +182,7 @@ inline auto& RuntimeParameters() {
       SizeT<"cache-max-num-entries">{1000},
       SizeT<"cache-max-size-gb">{30},
       SizeT<"cache-max-size-gb-single-entry">{5},
-      SizeT<"lazy-index-scan-queue-size">{5},
+      SizeT<"lazy-index-scan-queue-size">{20},
       SizeT<"lazy-index-scan-num-threads">{10}};
   return params;
 }

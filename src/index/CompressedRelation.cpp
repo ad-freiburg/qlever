@@ -145,9 +145,9 @@ CompressedRelationReader::asyncParallelBlockGenerator(
         // lock. We still perform it inside the lock to avoid contention of the
         // file. On a fast SSD we could possibly change this, but this has to be
         // investigated.
+        lock.unlock();
         CompressedBlock compressedBlock =
             readCompressedBlockFromFile(block, file, columnIndices);
-        lock.unlock();
         bool pushWasSuccessful = queue.push(
             myIndex, decompressBlock(compressedBlock, block.numRows_));
         checkTimeout(timer);
@@ -195,6 +195,9 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   size_t numBlocks = 0;
   size_t numElements = 0;
 
+  co_await cppcoro::AddDetail{"num-blocks-before-yielding",
+                              endBlock - beginBlock};
+
   if (beginBlock == endBlock) {
     co_await cppcoro::AddDetail{"num-blocks", numBlocks};
     co_await cppcoro::AddDetail{"num-elements", numElements};
@@ -202,8 +205,11 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   }
 
   // Read the first block, it might be incomplete
-  co_yield readPossiblyIncompleteBlock(metadata, std::nullopt, file,
-                                       *beginBlock);
+  auto firstBlock =
+      readPossiblyIncompleteBlock(metadata, std::nullopt, file, *beginBlock);
+  ++numBlocks;
+  numElements += firstBlock.numRows();
+  co_yield firstBlock;
   checkTimeout(timer);
 
   auto blockGenerator = asyncParallelBlockGenerator(beginBlock + 1, endBlock,
@@ -330,6 +336,21 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
 
   auto noop = ad_utility::noop;
 
+  for (const auto& block : relevantBlocks) {
+    auto rng =
+        std::equal_range(joinColumn.begin(), joinColumn.end(), block, lessThan);
+    if (rng.first != rng.second) {
+      result.push_back(block);
+    }
+  }
+  /*
+  for (const auto& block : relevantBlocks2) {
+    if (!std::ranges::equal_range(relevantBlocks1, block, blockLessThanBlock)
+        .empty()) {
+      result[1].push_back(block);
+    }
+  }
+
   // Actually perform the join.
   if (joinColumn.size() / relevantBlocks.size() > GALLOP_THRESHOLD) {
     ad_utility::gallopingJoin<false>(relevantBlocks, joinColumn, lessThan,
@@ -339,6 +360,7 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
         ad_utility::zipperJoinWithUndef<false>(
             joinColumn, relevantBlocks, lessThan, addRowZipper, noop, noop);
   }
+   */
 
   // The following check shouldn't be too expensive as there are only few
   // blocks.
@@ -373,16 +395,30 @@ CompressedRelationReader::getBlocksForJoin(
   };
 
   std::array<std::vector<CompressedBlockMetadata>, 2> result;
-  // When a result is found, we have to convert back from the `IdRanges` to the
-  // corresponding blocks.
-  auto addRow = [&result](auto it1, auto it2) {
-    result[0].push_back(*it1);
-    result[1].push_back(*it2);
-  };
 
+  AD_CONTRACT_CHECK(
+      std::ranges::is_sorted(relevantBlocks1, blockLessThanBlock));
+  AD_CONTRACT_CHECK(
+      std::ranges::is_sorted(relevantBlocks2, blockLessThanBlock));
+
+  /*
   auto noop = ad_utility::noop;
   [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
       relevantBlocks1, relevantBlocks2, blockLessThanBlock, addRow, noop, noop);
+      */
+
+  for (const auto& block : relevantBlocks1) {
+    if (!std::ranges::equal_range(relevantBlocks2, block, blockLessThanBlock)
+             .empty()) {
+      result[0].push_back(block);
+    }
+  }
+  for (const auto& block : relevantBlocks2) {
+    if (!std::ranges::equal_range(relevantBlocks1, block, blockLessThanBlock)
+             .empty()) {
+      result[1].push_back(block);
+    }
+  }
 
   // There might be duplicates in the blocks that we have to eliminate. We could
   // in theory eliminate them directly in the `zipperJoinWithUndef` routine more
@@ -390,6 +426,9 @@ CompressedRelationReader::getBlocksForJoin(
   // harder to read. The joining of the blocks doesn't seem to be a significant
   // time factor, so we leave it like this for now.
   for (auto& vec : result) {
+    std::ranges::sort(vec, {}, [](const CompressedBlockMetadata& b) {
+      return b.offsetsAndCompressedSize_.at(0).offsetInFile_;
+    });
     vec.erase(std::ranges::unique(vec).begin(), vec.end());
   }
   return result;
