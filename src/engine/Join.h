@@ -137,18 +137,17 @@ class Join : public Operation {
   // A special implementation that is called when both children are
   // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the
   // `IndexScan`s that is actually needed without fully materializing them.
-  void computeResultForTwoIndexScans(IdTable* resultPtr);
+  IdTable computeResultForTwoIndexScans();
 
   // A special implementation that is called when one of the children is an
   // `IndexScan`. The argument `scanIsLeft` determines whether the `IndexScan`
   // is the left or the right child of this `Join`. This needs to be known to
   // determine the correct order of the columns in the result.
   template <bool scanIsLeft>
-  void computeResultForIndexScanAndIdTable(const IdTable& itIdTable,
-                                           ColumnIndex itIndexScan,
-                                           const IndexScan& scan,
-                                           ColumnIndex joinColumnIndexScan,
-                                           IdTable* resultPtr);
+  IdTable computeResultForIndexScanAndIdTable(const IdTable& itIdTable,
+                                              ColumnIndex itIndexScan,
+                                              const IndexScan& scan,
+                                              ColumnIndex joinColumnIndexScan);
 
   using ScanMethodType = std::function<IdTable(Id)>;
 

@@ -192,14 +192,11 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   const auto beginBlock = relevantBlocks.begin();
   const auto endBlock = relevantBlocks.end();
 
-  size_t numBlocks = 0;
   size_t numElements = 0;
 
-  co_await cppcoro::AddDetail{"num-blocks-before-yielding",
-                              endBlock - beginBlock};
+  co_await cppcoro::AddDetail{"num-blocks", endBlock - beginBlock};
 
   if (beginBlock == endBlock) {
-    co_await cppcoro::AddDetail{"num-blocks", numBlocks};
     co_await cppcoro::AddDetail{"num-elements", numElements};
     co_return;
   }
@@ -207,7 +204,6 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   // Read the first block, it might be incomplete
   auto firstBlock =
       readPossiblyIncompleteBlock(metadata, std::nullopt, file, *beginBlock);
-  ++numBlocks;
   numElements += firstBlock.numRows();
   co_yield firstBlock;
   checkTimeout(timer);
@@ -216,11 +212,9 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
                                                     file, std::nullopt, timer);
   for (auto& block : blockGenerator) {
     numElements += block.numRows();
-    ++numBlocks;
     co_yield block;
   }
   co_await cppcoro::AddDetail{blockGenerator.details()};
-  co_await cppcoro::AddDetail{"num-blocks", numBlocks};
   co_await cppcoro::AddDetail{"num-elements", numElements};
 }
 
@@ -233,7 +227,10 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   auto beginBlock = relevantBlocks.begin();
   auto endBlock = relevantBlocks.end();
 
+  co_await cppcoro::AddDetail{"num-blocks", endBlock - beginBlock};
+  size_t numElements = 0;
   if (beginBlock == endBlock) {
+    co_await cppcoro::AddDetail{"num-elements", numElements};
     co_return;
   }
 
@@ -258,12 +255,18 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   }
 
   if (beginBlock + 1 < endBlock) {
-    for (auto& block : asyncParallelBlockGenerator(
-             beginBlock + 1, endBlock - 1, file, std::vector{1UL}, timer)) {
+    auto blockGenerator = asyncParallelBlockGenerator(
+        beginBlock + 1, endBlock - 1, file, std::vector{1UL}, timer);
+    for (auto& block : blockGenerator) {
+      numElements += block.numRows();
       co_yield block;
     }
-    co_yield getIncompleteBlock(endBlock - 1);
+    co_await cppcoro::AddDetail{blockGenerator.details()};
+    auto lastBlock = getIncompleteBlock(endBlock - 1);
+    numElements += lastBlock.numRows();
+    co_yield lastBlock;
   }
+  co_await cppcoro::AddDetail{"num-elements", numElements};
 }
 
 namespace {
@@ -308,8 +311,7 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   // Get all the blocks where `col0FirstId_ <= col0Id <= col0LastId_`.
   auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
 
-  // We need symmetric comparisons between `Id` and `IdPair`. as well as between
-  // Ids.
+  // We need symmetric comparisons between Ids and blocks.
   auto idLessThanBlock = [&metadataAndBlocks](
                              Id id, const CompressedBlockMetadata& block) {
     return id < getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks);
@@ -319,23 +321,14 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
                              const CompressedBlockMetadata& block, Id id) {
     return getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks) < id;
   };
-
   auto lessThan =
       ad_utility::OverloadCallOperator{idLessThanBlock, blockLessThanId};
 
-  // When we have found a matching block, we have to convert it back.
+  // Find the matching blocks by performing binary search on the `joinColumn`.
+  // Note that it is tempting to reuse the `zipperJoinWithUndef` routine, but
+  // this doesn't work because the implicit equality defined by `!lessThan(a,b)
+  // && !lessThan(b, a)` is not transitive.
   std::vector<CompressedBlockMetadata> result;
-  auto addRowZipper = [&result]([[maybe_unused]] auto idIterator,
-                                auto blockIterator) {
-    result.push_back(*blockIterator);
-  };
-  auto addRowGallop = [&result](auto blockIterator,
-                                [[maybe_unused]] auto idIterator) {
-    result.push_back(*blockIterator);
-  };
-
-  auto noop = ad_utility::noop;
-
   for (const auto& block : relevantBlocks) {
     auto rng =
         std::equal_range(joinColumn.begin(), joinColumn.end(), block, lessThan);
@@ -343,25 +336,6 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
       result.push_back(block);
     }
   }
-  /*
-  for (const auto& block : relevantBlocks2) {
-    if (!std::ranges::equal_range(relevantBlocks1, block, blockLessThanBlock)
-        .empty()) {
-      result[1].push_back(block);
-    }
-  }
-
-  // Actually perform the join.
-  if (joinColumn.size() / relevantBlocks.size() > GALLOP_THRESHOLD) {
-    ad_utility::gallopingJoin<false>(relevantBlocks, joinColumn, lessThan,
-                                     addRowGallop);
-  } else {
-    [[maybe_unused]] auto numOutOfOrder =
-        ad_utility::zipperJoinWithUndef<false>(
-            joinColumn, relevantBlocks, lessThan, addRowZipper, noop, noop);
-  }
-   */
-
   // The following check shouldn't be too expensive as there are only few
   // blocks.
   AD_CORRECTNESS_CHECK(std::ranges::unique(result).begin() == result.end());
@@ -401,12 +375,10 @@ CompressedRelationReader::getBlocksForJoin(
   AD_CONTRACT_CHECK(
       std::ranges::is_sorted(relevantBlocks2, blockLessThanBlock));
 
-  /*
-  auto noop = ad_utility::noop;
-  [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
-      relevantBlocks1, relevantBlocks2, blockLessThanBlock, addRow, noop, noop);
-      */
-
+  // Find the matching blocks on each side by performing binary search on the
+  // other side. Note that it is tempting to reuse the `zipperJoinWithUndef`
+  // routine, but this doesn't work because the implicit equality defined by
+  // `!lessThan(a,b) && !lessThan(b, a)` is not transitive.
   for (const auto& block : relevantBlocks1) {
     if (!std::ranges::equal_range(relevantBlocks2, block, blockLessThanBlock)
              .empty()) {
@@ -420,16 +392,10 @@ CompressedRelationReader::getBlocksForJoin(
     }
   }
 
-  // There might be duplicates in the blocks that we have to eliminate. We could
-  // in theory eliminate them directly in the `zipperJoinWithUndef` routine more
-  // efficiently, but this would make this already very complex method even
-  // harder to read. The joining of the blocks doesn't seem to be a significant
-  // time factor, so we leave it like this for now.
+  // The following check shouldn't be too expensive as there are only few
+  // blocks.
   for (auto& vec : result) {
-    std::ranges::sort(vec, {}, [](const CompressedBlockMetadata& b) {
-      return b.offsetsAndCompressedSize_.at(0).offsetInFile_;
-    });
-    vec.erase(std::ranges::unique(vec).begin(), vec.end());
+    AD_CORRECTNESS_CHECK(std::ranges::unique(vec).begin() == vec.end());
   }
   return result;
 }

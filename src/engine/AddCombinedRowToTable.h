@@ -19,8 +19,8 @@ namespace ad_utility {
 class AddCombinedRowToIdTable {
   std::vector<size_t> numUndefinedPerColumn_;
   size_t numJoinColumns_;
-  IdTableView<0> inputLeft_;
-  IdTableView<0> inputRight_;
+  std::optional<IdTableView<0>> inputLeft_;
+  std::optional<IdTableView<0>> inputRight_;
   IdTable resultTable_;
 
   // This struct stores the information, which row indices from the input are
@@ -57,25 +57,24 @@ class AddCombinedRowToIdTable {
 
  public:
   // Construct from the number of join columns, the two inputs, and the output.
-  // The `bufferSize` can be configured for testing.
+  // The `bufferSize` can be configured for testing. If the inputs are
+  // `std::nullopt`, this means that the inputs have to be set to an explicit
+  // call to `setInput` before adding rows. This is used for the lazy join
+  // operations (see Join.cpp) where the input changes over time.
   explicit AddCombinedRowToIdTable(size_t numJoinColumns,
-                                   const IdTableView<0>& input1,
-                                   const IdTableView<0>& input2, IdTable output,
-                                   size_t bufferSize = 100'000)
+                                   std::optional<IdTableView<0>> input1,
+                                   std::optional<IdTableView<0>> input2,
+                                   IdTable output, size_t bufferSize = 100'000)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
-        inputLeft_{input1},
-        inputRight_{input2},
+        inputLeft_{std::move(input1)},
+        inputRight_{std::move(input2)},
         resultTable_{std::move(output)},
         bufferSize_{bufferSize} {
-    /*
-    AD_CORRECTNESS_CHECK(resultTable_.numColumns() == input1.numColumns() +
-                                                          input2.numColumns() -
-                                                          numJoinColumns);
-    AD_CORRECTNESS_CHECK(input1.numColumns() >= numJoinColumns &&
-                         input2.numColumns() >= numJoinColumns);
+    if (inputLeft_.has_value() && inputRight_.has_value()) {
+      checkNumColumns();
+    }
     AD_CORRECTNESS_CHECK(resultTable_.empty());
-     */
   }
 
   // Return the number of UNDEF values per column.
@@ -87,6 +86,7 @@ class AddCombinedRowToIdTable {
   // The next free row in the output will be created from
   // `inputLeft_[rowIndexA]` and `inputRight_[rowIndexB]`.
   void addRow(size_t rowIndexA, size_t rowIndexB) {
+    AD_EXPENSIVE_CHECK(inputLeft_.has_value() && inputRight_.has_value());
     indexBuffer_.push_back(
         TargetIndexAndRowIndices{nextIndex_, {rowIndexA, rowIndexB}});
     ++nextIndex_;
@@ -95,7 +95,11 @@ class AddCombinedRowToIdTable {
     }
   }
 
-  void setInput(const auto& left, const auto& right) {
+  // Set or reset the input. All following calls to `addRow` then refer to
+  // indices in the new input. Before resetting, `flush()` is called, so all the
+  // rows from the previous inputs get materialized before deleting the old
+  // inputs.
+  void setInput(const auto& inputLeft, const auto& inputRight) {
     auto toView = []<typename T>(const T& table) {
       if constexpr (requires { table.template asStaticView<0>(); }) {
         return table.template asStaticView<0>();
@@ -104,16 +108,19 @@ class AddCombinedRowToIdTable {
       }
     };
     if (nextIndex_ != 0) {
+      AD_CORRECTNESS_CHECK(inputLeft_.has_value() && inputRight_.has_value());
       flush();
     }
-    inputLeft_ = toView(left);
-    inputRight_ = toView(right);
+    inputLeft_ = toView(inputLeft);
+    inputRight_ = toView(inputRight);
+    checkNumColumns();
   }
 
   // The next free row in the output will be created from
   // `inputLeft_[rowIndexA]`. The columns from `inputRight_` will all be set to
   // UNDEF
   void addOptionalRow(size_t rowIndexA) {
+    AD_EXPENSIVE_CHECK(inputLeft_.has_value() && inputRight_.has_value());
     optionalIndexBuffer_.push_back(
         TargetIndexAndRowIndex{nextIndex_, rowIndexA});
     ++nextIndex_;
@@ -142,6 +149,7 @@ class AddCombinedRowToIdTable {
   // have to call it manually after adding the last row, else the destructor
   // will throw an exception.
   void flush() {
+    AD_CONTRACT_CHECK(inputLeft_.has_value() && inputRight_.has_value());
     auto& result = resultTable_;
     size_t oldSize = result.size();
     AD_CORRECTNESS_CHECK(nextIndex_ ==
@@ -164,8 +172,8 @@ class AddCombinedRowToIdTable {
     // `nextResultColIdx`-th column of the result.
     auto writeJoinColumn = [&result, &mergeWithUndefined, oldSize, this](
                                size_t colIdx, size_t resultColIdx) {
-      const auto& colLeft = inputLeft_.getColumn(colIdx);
-      const auto& colRight = inputRight_.getColumn(colIdx);
+      const auto& colLeft = inputLeft().getColumn(colIdx);
+      const auto& colRight = inputRight().getColumn(colIdx);
       // TODO<joka921> Implement prefetching.
       decltype(auto) resultCol = result.getColumn(resultColIdx);
       size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
@@ -195,8 +203,8 @@ class AddCombinedRowToIdTable {
     // code that was very hard to read for humans.
     auto writeNonJoinColumn = [&result, oldSize, this]<bool isColFromLeft>(
                                   size_t colIdx, size_t resultColIdx) {
-      decltype(auto) col = isColFromLeft ? inputLeft_.getColumn(colIdx)
-                                         : inputRight_.getColumn(colIdx);
+      decltype(auto) col = isColFromLeft ? inputLeft().getColumn(colIdx)
+                                         : inputRight().getColumn(colIdx);
       // TODO<joka921> Implement prefetching.
       decltype(auto) resultCol = result.getColumn(resultColIdx);
       size_t& numUndef = numUndefinedPerColumn_.at(resultColIdx);
@@ -234,13 +242,13 @@ class AddCombinedRowToIdTable {
     }
 
     // Then the remaining columns from the first input.
-    for (size_t col = numJoinColumns_; col < inputLeft_.numColumns(); ++col) {
+    for (size_t col = numJoinColumns_; col < inputLeft().numColumns(); ++col) {
       writeNonJoinColumn.operator()<true>(col, nextResultColIdx);
       ++nextResultColIdx;
     }
 
     // Then the remaining columns from the second input.
-    for (size_t col = numJoinColumns_; col < inputRight_.numColumns(); col++) {
+    for (size_t col = numJoinColumns_; col < inputRight().numColumns(); col++) {
       writeNonJoinColumn.operator()<false>(col, nextResultColIdx);
       ++nextResultColIdx;
     }
@@ -248,6 +256,17 @@ class AddCombinedRowToIdTable {
     indexBuffer_.clear();
     optionalIndexBuffer_.clear();
     nextIndex_ = 0;
+  }
+  const IdTableView<0>& inputLeft() const { return inputLeft_.value(); }
+
+  const IdTableView<0>& inputRight() const { return inputRight_.value(); }
+
+  void checkNumColumns() const {
+    AD_CORRECTNESS_CHECK(resultTable_.numColumns() ==
+                         inputLeft().numColumns() + inputRight().numColumns() -
+                             numJoinColumns_);
+    AD_CORRECTNESS_CHECK(inputLeft().numColumns() >= numJoinColumns_ &&
+                         inputRight().numColumns() >= numJoinColumns_);
   }
 };
 }  // namespace ad_utility
