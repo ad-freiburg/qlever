@@ -284,7 +284,7 @@ TEST(CompressedRelationMetadata, GettersAndSetters) {
   ASSERT_EQ(43, m.numRows_);
 }
 
-TEST(CompressedRelationReader, getBlocksForJoin) {
+TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   CompressedBlockMetadata block1{
       {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
   CompressedBlockMetadata block2{
@@ -309,6 +309,9 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
                                                              metadataAndBlocks);
     EXPECT_THAT(result, ::testing::ElementsAreArray(expectedBlocks));
   };
+  // We have fixed the `col0Id` to be 42. The col1/2Ids of the matching blocks
+  // are as follows (starting at `block2`)
+  // [(3, 0)-(4, 12)], [(4, 13)-(6, 9)]
 
   // Tests for a fixed col0Id, so the join is on the middle column.
   test({V(1), V(3), V(17), V(29)}, {block2});
@@ -322,4 +325,89 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   test({V(11), V(27), V(30)}, {block2, block3});
   test({V(12)}, {block2});
   test({V(13)}, {block3});
+}
+TEST(CompressedRelationReader, getBlocksForJoin) {
+  CompressedBlockMetadata block1{
+      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
+  CompressedBlockMetadata block2{
+      {}, 0, {V(42), V(3), V(0)}, {V(42), V(4), V(12)}};
+  CompressedBlockMetadata block3{
+      {}, 0, {V(42), V(5), V(13)}, {V(42), V(8), V(9)}};
+  CompressedBlockMetadata block4{
+      {}, 0, {V(42), V(8), V(16)}, {V(42), V(20), V(9)}};
+  CompressedBlockMetadata block5{
+      {}, 0, {V(42), V(20), V(16)}, {V(42), V(20), V(63)}};
+
+  // We are only interested in blocks with a col0 of `42`.
+  CompressedRelationMetadata relation;
+  relation.col0Id_ = V(42);
+
+  std::vector blocks{block1, block2, block3, block4, block5};
+  CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
+      relation, blocks, std::nullopt};
+
+  CompressedBlockMetadata blockB1{
+      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
+  CompressedBlockMetadata blockB2{
+      {}, 0, {V(47), V(3), V(0)}, {V(47), V(6), V(12)}};
+  CompressedBlockMetadata blockB3{
+      {}, 0, {V(47), V(7), V(13)}, {V(47), V(9), V(9)}};
+  CompressedBlockMetadata blockB4{
+      {}, 0, {V(47), V(38), V(7)}, {V(47), V(38), V(8)}};
+  CompressedBlockMetadata blockB5{
+      {}, 0, {V(47), V(38), V(9)}, {V(47), V(38), V(12)}};
+  CompressedBlockMetadata blockB6{
+      {}, 0, {V(47), V(38), V(13)}, {V(47), V(38), V(15)}};
+
+  // We are only interested in blocks with a col0 of `42`.
+  CompressedRelationMetadata relationB;
+  relationB.col0Id_ = V(47);
+
+  std::vector blocksB{blockB1, blockB2, blockB3, blockB4, blockB5, blockB6};
+  CompressedRelationReader::MetadataAndBlocks metadataAndBlocksB{
+      relationB, blocksB, std::nullopt};
+
+  auto test = [&metadataAndBlocks, &metadataAndBlocksB](
+                  const std::array<std::vector<CompressedBlockMetadata>, 2>&
+                      expectedBlocks,
+                  source_location l = source_location::current()) {
+    auto t = generateLocationTrace(l);
+    auto result = CompressedRelationReader::getBlocksForJoin(
+        metadataAndBlocks, metadataAndBlocksB);
+    EXPECT_THAT(result[0], ::testing::ElementsAreArray(expectedBlocks[0]));
+    EXPECT_THAT(result[1], ::testing::ElementsAreArray(expectedBlocks[1]));
+
+    result = CompressedRelationReader::getBlocksForJoin(metadataAndBlocksB,
+                                                        metadataAndBlocks);
+    EXPECT_THAT(result[1], ::testing::ElementsAreArray(expectedBlocks[0]));
+    EXPECT_THAT(result[0], ::testing::ElementsAreArray(expectedBlocks[1]));
+  };
+
+  // We have fixed the `col0Id` to be 42 for the left input and 47 for the right
+  // input. The col1/2Ids of the blocks that have this col0Id are as follows:
+
+  // (starting at `block2`.
+  // [(3, 0)- (4, 12)], [(5, 13) - (8, 9)], [(8, 16) - (20, 9)], [(20, 16) -
+  // (20, 63)]
+
+  // Starting at `blockB2`.
+  // [(3, 0)-(6, 12)], [(7, 13)-(9, 9)], [(38, 7)-(38, 8)], [(38, 9)-(38, 12)],
+  // [(38, 13)-(38, 15)]
+
+  // Test for only the `col0Id` fixed.
+  test({std::vector{block2, block3, block4}, std::vector{blockB2, blockB3}});
+  // Test with a fixed col1Id on both sides. We now join on the last column.
+  metadataAndBlocks.col1Id_ = V(20);
+  metadataAndBlocksB.col1Id_ = V(38);
+  test({std::vector{block4}, std::vector{blockB4, blockB5}});
+
+  // Fix only the col1Id of the left input.
+  metadataAndBlocks.col1Id_ = V(4);
+  metadataAndBlocksB.col1Id_ = std::nullopt;
+  test({std::vector{block2}, std::vector{blockB2, blockB3}});
+
+  // Fix only the col1Id of the right input.
+  metadataAndBlocks.col1Id_ = std::nullopt;
+  metadataAndBlocksB.col1Id_ = V(7);
+  test({std::vector{block4, block5}, std::vector{blockB3}});
 }
