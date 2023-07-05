@@ -649,6 +649,7 @@ namespace {
 cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>,
                    CompressedRelationReader::LazyScanMetadata>
 convertGenerator(Permutation::IdTableGenerator gen) {
+  co_await cppcoro::getDetails = gen.details();
   gen.setDetailsPointer(&co_await cppcoro::getDetails);
   for (auto& table : gen) {
     ad_utility::IdTableAndFirstCol t{std::move(table)};
