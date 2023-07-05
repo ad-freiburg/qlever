@@ -40,7 +40,8 @@ TEST(Generator, details) {
   ASSERT_TRUE(gen.details().end_);
 }
 
-// Test the behavior of the `simpleGen` with an explicit external details object
+// Test the behavior of the `simpleGen` with an explicit external details
+// object.
 TEST(Generator, externalDetails) {
   auto gen = simpleGen();
   Details details{};
@@ -67,4 +68,7 @@ TEST(Generator, externalDetails) {
   ASSERT_TRUE(gen.details().end_);
   ASSERT_TRUE(details.end_);
   ASSERT_EQ(&details, &gen.details());
+
+  // Setting a `nullptr` is illegal
+  ASSERT_ANY_THROW(gen.setDetailsPointer(nullptr));
 }

@@ -100,7 +100,7 @@ class generator_promise {
                : *std::get<Details*>(m_details);
   }
 
-  void setDetailsPointer(Details* pointer) {
+  void setDetailsPointer(Details* pointer) requires hasDetails {
     AD_CONTRACT_CHECK(pointer != nullptr);
     m_details = pointer;
   }
