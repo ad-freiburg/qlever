@@ -17,17 +17,21 @@
 #include "util/TypeTraits.h"
 
 namespace cppcoro {
-template <typename T, typename Details>
-class generator;
-
 // This struct can be `co_await`ed inside a `generator` to obtain a reference to
 // the details object (the value of which is a template parameter to the
 // generator). For an example see `GeneratorTest.cpp`.
 struct GetDetails {};
 static constexpr GetDetails getDetails;
 
+// This struct is used as the default of the details object for the case that
+// there are no details
+struct NoDetails {};
+
+template <typename T, typename Details = NoDetails>
+class generator;
+
 namespace detail {
-template <typename T, typename Details = int>
+template <typename T, typename Details = NoDetails>
 class generator_promise {
  public:
   // Even if the generator only yields `const` values, the `value_type`
@@ -93,7 +97,8 @@ class generator_promise {
  private:
   pointer_type m_value;
   std::exception_ptr m_exception;
-  Details m_details{};
+  // If the `Details` type is empty, we don't need it to occupy any space.
+  [[no_unique_address]] Details m_details{};
 };
 
 struct generator_sentinel {};
@@ -159,7 +164,7 @@ class generator_iterator {
 };
 }  // namespace detail
 
-template <typename T, typename Details = int>
+template <typename T, typename Details>
 class [[nodiscard]] generator {
  public:
   using promise_type = detail::generator_promise<T, Details>;
