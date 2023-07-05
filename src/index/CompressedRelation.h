@@ -243,6 +243,7 @@ class CompressedRelationReader {
 
   struct LazyScanMetadata {
     size_t numBlocksRead_ = 0;
+    size_t numBlocksTotal_ = 0;
     size_t numElementsRead_ = 0;
     size_t blockingTimeMs_ = 0;
   };

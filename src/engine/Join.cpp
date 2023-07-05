@@ -648,14 +648,15 @@ namespace {
 // efficient access in the join columns below.
 cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>,
                    CompressedRelationReader::LazyScanMetadata>
-liftGenerator(Permutation::IdTableGenerator gen) {
+convertGenerator(Permutation::IdTableGenerator gen) {
+  gen.setDetailsPointer(&co_await cppcoro::getDetails);
   for (auto& table : gen) {
     ad_utility::IdTableAndFirstCol t{std::move(table)};
     co_yield t;
   }
-  co_await cppcoro::getDetails = gen.details();
 }
 
+// TODO<joka921> Add the information about the total number of blocks.
 void updateRuntimeInfoForLazyScan(
     QueryExecutionTree& scanTree,
     const CompressedRelationReader::LazyScanMetadata& metadata) {
@@ -664,6 +665,7 @@ void updateRuntimeInfoForLazyScan(
   rti.numRows_ = metadata.numElementsRead_;
   rti.totalTime_ = static_cast<double>(metadata.blockingTimeMs_);
   rti.addDetail("num-blocks-read", metadata.numBlocksRead_);
+  rti.addDetail("num-blocks-total", metadata.numBlocksTotal_);
 }
 }  // namespace
 
@@ -686,8 +688,8 @@ IdTable Join::computeResultForTwoIndexScans() {
           dynamic_cast<const IndexScan&>(*_right->getRootOperation()));
   getRuntimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
-  auto leftBlocks = liftGenerator(std::move(leftBlocksInternal));
-  auto rightBlocks = liftGenerator(std::move(rightBlocksInternal));
+  auto leftBlocks = convertGenerator(std::move(leftBlocksInternal));
+  auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
 
   ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
                                               std::less{}, rowAdder);
@@ -735,7 +737,7 @@ IdTable Join::computeResultForIndexScanAndIdTable(
   ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
   auto rightBlocksInternal =
       IndexScan::lazyScanForJoinOfColumnWithScan(permutation.col(), scan);
-  auto rightBlocks = liftGenerator(std::move(rightBlocksInternal));
+  auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
 
   getRuntimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 

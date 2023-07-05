@@ -99,7 +99,7 @@ class JoinColumnMapping {
 // A class that stores a complete `IdTable`, but when being treated as a range
 // via the `begin/end/operator[]` functions, then it only gives access to the
 // first column. This is very useful for the lazy join implementations
-// (currently used in `Join.cpp`, where we need very efficient access to the
+// (currently used in `Join.cpp`), where we need very efficient access to the
 // join column for comparing rows, but also need to store the complete table to
 // be able to write the other columns of a matching row to the result.
 // This class is templated so we can use it for `IdTable` as well as for

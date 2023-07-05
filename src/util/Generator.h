@@ -223,7 +223,8 @@ class [[nodiscard]] generator {
     std::swap(m_coroutine, other.m_coroutine);
   }
 
-  const Details& details() { return m_coroutine.promise().details(); }
+  const Details& details() const { return m_coroutine.promise().details(); }
+  Details& details() { return m_coroutine.promise().details(); }
 
   void setDetailsPointer(Details* pointer) {
     m_coroutine.promise().setDetailsPointer(pointer);

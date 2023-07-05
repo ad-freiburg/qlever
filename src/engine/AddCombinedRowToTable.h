@@ -15,7 +15,10 @@
 namespace ad_utility {
 // This class handles the efficient writing of the results of a JOIN operation
 // to a column-based `IdTable`. The underlying assumption is that in both inputs
-// the join columns are the first columns.
+// the join columns are the first columns. On each call to `addRow`, we only
+// store the indices of the matching rows. When a certain buffer size
+// (configurable, default value 100'000) is reached, the results are actually
+// written to the table.
 class AddCombinedRowToIdTable {
   std::vector<size_t> numUndefinedPerColumn_;
   size_t numJoinColumns_;
@@ -98,7 +101,9 @@ class AddCombinedRowToIdTable {
   // Set or reset the input. All following calls to `addRow` then refer to
   // indices in the new input. Before resetting, `flush()` is called, so all the
   // rows from the previous inputs get materialized before deleting the old
-  // inputs.
+  // inputs. The arguments to `inputLeft` and `inputRight` can either be
+  // `IdTable` or `IdTableView<0>`, or any other type that has a
+  // `asStaticView<0>` method that returns an `IdTableView<0>`.
   void setInput(const auto& inputLeft, const auto& inputRight) {
     auto toView = []<typename T>(const T& table) {
       if constexpr (requires { table.template asStaticView<0>(); }) {
@@ -155,9 +160,10 @@ class AddCombinedRowToIdTable {
                          indexBuffer_.size() + optionalIndexBuffer_.size());
     // Sometimes the left input and right input are not valid anymore, because
     // the `IdTable`s they point to have already been destroyed. This case is
-    // okay, as long as there was a manual call to `flush` before the inputs
-    // went out of scope. However, the call to `resultTable()` will still
-    // unconditionally flush. The following check makes this behavior defined.
+    // okay, as long as there was a manual call to `flush` (after which
+    // `nextIndex_ == 0`) before the inputs went out of scope. However, the call
+    // to `resultTable()` will still unconditionally flush. The following check
+    // makes this behavior defined.
     if (nextIndex_ == 0) {
       return;
     }

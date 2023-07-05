@@ -85,17 +85,6 @@ concept BinaryIteratorFunction =
  * @param elFromFirstNotFoundAction This function is called for each iterator in
  * `left` for which no corresponding match in `right` was found. This is `noop`
  * for "normal` joins, but can be set to implement `OPTIONAL` or `MINUS`.
- * @tparam addDuplicatesFromLeft If set to `false`, then if several inputs from
- * `left` are compatible with several inputs from `right`, then only the matches
- * for the first matching entry from `left` are added to the result. For example
- * if `A` and `B` from left are both compatible with `C` and `D` from right,
- * then the result for these elements will be `AC, AD`. With the default
- * (`addDuplicatesFromLeft = true`) it would be `AC, AD, BC, BD`. Note that this
- * currently only works for the exact matches and has no effects on the merging
- * with undefined values. This is useful when there are no undefined values and
- * we are only interested in the unique results from `right`. This is used in
- * `CompressedRelations.cpp` where we intersect a column of IDs with a set of
- * block metadata and are only interested in the matching blocks.
  * @return 0 if the result is sorted, > 0 if the result is not sorted. `Sorted`
  * means that all the calls to `compatibleRowAction` were ordered wrt
  * `lessThan`. A result being out of order can happen if two rows with UNDEF
@@ -104,11 +93,11 @@ concept BinaryIteratorFunction =
  * described cases leads to two sorted ranges in the output, this can possibly
  * be exploited to fix the result in a cheaper way than a full sort.
  */
-template <
-    bool addDuplicatesFromLeft = true, std::ranges::random_access_range Range1,
-    std::ranges::random_access_range Range2, typename LessThan,
-    typename FindSmallerUndefRangesLeft, typename FindSmallerUndefRangesRight,
-    typename ElFromFirstNotFoundAction = decltype(noop)>
+template <std::ranges::random_access_range Range1,
+          std::ranges::random_access_range Range2, typename LessThan,
+          typename FindSmallerUndefRangesLeft,
+          typename FindSmallerUndefRangesRight,
+          typename ElFromFirstNotFoundAction = decltype(noop)>
 [[nodiscard]] auto zipperJoinWithUndef(
     const Range1& left, const Range2& right, const LessThan& lessThan,
     const auto& compatibleRowAction,
@@ -271,9 +260,6 @@ template <
         for (auto innerIt2 = it2; innerIt2 != endSame2; ++innerIt2) {
           compatibleRowAction(it1, innerIt2);
         }
-        if constexpr (!addDuplicatesFromLeft) {
-          break;
-        }
       }
       it1 = endSame1;
       it2 = endSame2;
@@ -333,8 +319,7 @@ template <
  * implement very efficient OPTIONAL or MINUS if neither of the inputs contains
  * UNDEF values, and if the left operand is much smaller.
  */
-template <bool addDuplicatesFromLarge = true,
-          std::ranges::random_access_range RangeSmaller,
+template <std::ranges::random_access_range RangeSmaller,
           std::ranges::random_access_range RangeLarger,
           typename ElementFromSmallerNotFoundAction = Noop>
 void gallopingJoin(
@@ -404,13 +389,9 @@ void gallopingJoin(
         itLarge, endLarge, [&](const auto& row) { return eq(row, *itSmall); });
 
     for (; itSmall != endSameSmall; ++itSmall) {
-      if constexpr (!addDuplicatesFromLarge) {
-        action(itSmall, itLarge);
-      } else {
-        for (auto innerItLarge = itLarge; innerItLarge != endSameLarge;
-             ++innerItLarge) {
-          action(itSmall, innerItLarge);
-        }
+      for (auto innerItLarge = itLarge; innerItLarge != endSameLarge;
+           ++innerItLarge) {
+        action(itSmall, innerItLarge);
       }
     }
     itSmall = endSameSmall;

@@ -324,7 +324,12 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   auto [blocks1, blocks2] = CompressedRelationReader::getBlocksForJoin(
       metaBlocks1.value(), metaBlocks2.value());
 
-  return {getLazyScan(s1, blocks1), getLazyScan(s2, blocks2)};
+  std::array result{getLazyScan(s1, blocks1), getLazyScan(s2, blocks2)};
+  result[0].details().numBlocksTotal_ =
+      metaBlocks1.value().blockMetadata_.size();
+  result[1].details().numBlocksTotal_ =
+      metaBlocks2.value().blockMetadata_.size();
+  return result;
 }
 
 // ________________________________________________________________
@@ -341,5 +346,7 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
   auto blocks = CompressedRelationReader::getBlocksForJoin(joinColumn,
                                                            metaBlocks1.value());
 
-  return getLazyScan(s, blocks);
+  auto result = getLazyScan(s, blocks);
+  result.details().numBlocksTotal_ = metaBlocks1.value().blockMetadata_.size();
+  return result;
 }
