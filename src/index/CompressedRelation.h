@@ -414,7 +414,9 @@ class CompressedRelationReader {
   DecompressedBlock readPossiblyIncompleteBlock(
       const CompressedRelationMetadata& relationMetadata,
       std::optional<Id> col1Id, ad_utility::File& file,
-      const CompressedBlockMetadata& blockMetadata) const;
+      const CompressedBlockMetadata& blockMetadata,
+      std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata)
+      const;
 
   // Yield all the blocks in the range `[beginBlock, endBlock)`. If the
   // `columnIndices` are set, that only the specified columns from the blocks

@@ -10,6 +10,7 @@
 #include "util/ConcurrentCache.h"
 #include "util/Generator.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/OverloadCallOperator.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/TypeTraits.h"
@@ -43,8 +44,8 @@ IdTable CompressedRelationReader::scan(
   // Set up a lambda, that reads this block and decompresses it to
   // the result.
   auto readIncompleteBlock = [&](const auto& block) mutable {
-    auto trimmedBlock =
-        readPossiblyIncompleteBlock(metadata, std::nullopt, file, block);
+    auto trimmedBlock = readPossiblyIncompleteBlock(metadata, std::nullopt,
+                                                    file, block, std::nullopt);
     for (size_t i = 0; i < trimmedBlock.numColumns(); ++i) {
       const auto& inputCol = trimmedBlock.getColumn(i);
       auto resultColumn = result.getColumn(i);
@@ -108,6 +109,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     auto beginBlock, auto endBlock, ad_utility::File& file,
     std::optional<std::vector<size_t>> columnIndices,
     const TimeoutTimer& timer) const {
+  LazyScanMetadata& details = co_await cppcoro::getDetails;
   if (beginBlock == endBlock) {
     co_return;
   }
@@ -173,13 +175,20 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   }
 
   ad_utility::Timer popTimer{ad_utility::timer::Timer::InitialStatus::Started};
+  // In case the coroutine is destroyed early we still want to have this
+  // information.
+  auto setTimer = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+      [&details, &popTimer]() { details.blockingTimeMs_ = popTimer.msecs(); });
   while (auto opt = queue.pop()) {
     popTimer.stop();
     checkTimeout(timer);
+    ++details.numBlocksRead_;
+    details.numElementsRead_ += opt.value().numRows();
     co_yield opt.value();
     popTimer.cont();
   }
-  LazyScanMetadata& details = co_await cppcoro::getDetails;
+  // The `OnDestruction...` above might be called too late, so we manually set
+  // the timer again.
   details.blockingTimeMs_ = popTimer.msecs();
 }
 
@@ -194,26 +203,25 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   const auto endBlock = relevantBlocks.end();
 
   LazyScanMetadata& details = co_await cppcoro::getDetails;
-  details.numBlocksRead_ = endBlock - beginBlock;
+  size_t numBlocksTotal = endBlock - beginBlock;
 
   if (beginBlock == endBlock) {
     co_return;
   }
 
   // Read the first block, it might be incomplete
-  auto firstBlock =
-      readPossiblyIncompleteBlock(metadata, std::nullopt, file, *beginBlock);
-  details.numElementsRead_ += firstBlock.numRows();
+  auto firstBlock = readPossiblyIncompleteBlock(metadata, std::nullopt, file,
+                                                *beginBlock, std::ref(details));
   co_yield firstBlock;
   checkTimeout(timer);
 
   auto blockGenerator = asyncParallelBlockGenerator(beginBlock + 1, endBlock,
                                                     file, std::nullopt, timer);
+  blockGenerator.setDetailsPointer(&details);
   for (auto& block : blockGenerator) {
-    details.numElementsRead_ += block.numRows();
     co_yield block;
   }
-  details.blockingTimeMs_ = blockGenerator.details().blockingTimeMs_;
+  AD_CORRECTNESS_CHECK(numBlocksTotal == details.numBlocksRead_);
 }
 
 // _____________________________________________________________________________
@@ -226,7 +234,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   auto endBlock = relevantBlocks.end();
 
   LazyScanMetadata& details = co_await cppcoro::getDetails;
-  details.numBlocksRead_ = endBlock - beginBlock;
+  size_t numBlocksTotal = endBlock - beginBlock;
 
   if (beginBlock == endBlock) {
     co_return;
@@ -242,7 +250,8 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   }
 
   auto getIncompleteBlock = [&](auto it) {
-    auto result = readPossiblyIncompleteBlock(metadata, col1Id, file, *it);
+    auto result = readPossiblyIncompleteBlock(metadata, col1Id, file, *it,
+                                              std::ref(details));
     result.setColumnSubset(std::array<ColumnIndex, 1>{1});
     checkTimeout(timer);
     return result;
@@ -250,22 +259,20 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
 
   if (beginBlock < endBlock) {
     auto block = getIncompleteBlock(beginBlock);
-    details.numElementsRead_ += block.numRows();
     co_yield block;
   }
 
   if (beginBlock + 1 < endBlock) {
     auto blockGenerator = asyncParallelBlockGenerator(
         beginBlock + 1, endBlock - 1, file, std::vector{1UL}, timer);
+    blockGenerator.setDetailsPointer(&details);
     for (auto& block : blockGenerator) {
-      details.numElementsRead_ += block.numRows();
       co_yield block;
     }
-    details.blockingTimeMs_ = blockGenerator.details().blockingTimeMs_;
     auto lastBlock = getIncompleteBlock(endBlock - 1);
-    details.numElementsRead_ += lastBlock.numRows();
     co_yield lastBlock;
   }
+  AD_CORRECTNESS_CHECK(numBlocksTotal == details.numBlocksRead_);
 }
 
 namespace {
@@ -426,7 +433,8 @@ IdTable CompressedRelationReader::scan(
   // set up a lambda which allows us to read these blocks, and returns
   // the result as a vector.
   auto readIncompleteBlock = [&](const auto& block) {
-    return readPossiblyIncompleteBlock(metadata, col1Id, file, block);
+    return readPossiblyIncompleteBlock(metadata, col1Id, file, block,
+                                       std::nullopt);
   };
 
   // The first and the last block might be incomplete, compute
@@ -513,7 +521,9 @@ IdTable CompressedRelationReader::scan(
 DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     const CompressedRelationMetadata& relationMetadata,
     std::optional<Id> col1Id, ad_utility::File& file,
-    const CompressedBlockMetadata& blockMetadata) const {
+    const CompressedBlockMetadata& blockMetadata,
+    std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata)
+    const {
   // A block is uniquely identified by its start position in the file.
   auto cacheKey = blockMetadata.offsetsAndCompressedSize_.at(0).offsetInFile_;
   DecompressedBlock block =
@@ -552,6 +562,12 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   block.erase(block.begin(),
               block.begin() + (subBlock.begin() - col1Column.begin()));
   block.resize(numResults);
+
+  if (scanMetadata.has_value()) {
+    auto& details = scanMetadata.value().get();
+    ++details.numBlocksRead_;
+    details.numElementsRead_ += block.numRows();
+  }
   return block;
 };
 
@@ -571,7 +587,9 @@ size_t CompressedRelationReader::getResultSizeOfScan(
   // set up a lambda which allows us to read these blocks, and returns
   // the size of the result.
   auto readSizeOfPossiblyIncompleteBlock = [&](const auto& block) {
-    return readPossiblyIncompleteBlock(metadata, col1Id, file, block).numRows();
+    return readPossiblyIncompleteBlock(metadata, col1Id, file, block,
+                                       std::nullopt)
+        .numRows();
   };
 
   size_t numResults = 0;

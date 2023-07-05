@@ -149,11 +149,19 @@ class AddCombinedRowToIdTable {
   // have to call it manually after adding the last row, else the destructor
   // will throw an exception.
   void flush() {
-    AD_CONTRACT_CHECK(inputLeft_.has_value() && inputRight_.has_value());
     auto& result = resultTable_;
     size_t oldSize = result.size();
     AD_CORRECTNESS_CHECK(nextIndex_ ==
                          indexBuffer_.size() + optionalIndexBuffer_.size());
+    // Sometimes the left input and right input are not valid anymore, because
+    // the `IdTable`s they point to have already been destroyed. This case is
+    // okay, as long as there was a manual call to `flush` before the inputs
+    // went out of scope. However, the call to `resultTable()` will still
+    // unconditionally flush. The following check makes this behavior defined.
+    if (nextIndex_ == 0) {
+      return;
+    }
+    AD_CONTRACT_CHECK(inputLeft_.has_value() && inputRight_.has_value());
     result.resize(oldSize + nextIndex_);
 
     // Sometimes columns are combined where one value is UNDEF and the other one

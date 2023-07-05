@@ -653,13 +653,15 @@ class BlockAndSubrange {
  * first argument comes before the second one. The concatenation of all blocks
  * in `leftBlocks` must be sorted according to this function. The same
  * requirement holds for `rightBlocks`.
- * @param compatibleRowAction Needs to have two member functions:
- * `setInput(leftBlock, rightBlock)` and `addRow(size_t, size_t)`. When the
- * `i`-th element of a `leftBlock` and the `j`-th element `rightBlock` match
- * (because they compare equal wrt the `lessThan` relation), then first
- * `setInput(leftBlock, rightBlock)` and then `addRow(i, j)` is called. Of
- * course `setInput` is only called once if there are several matching pairs of
- * elements from the same pair of blocks.
+ * @param compatibleRowAction Needs to have three member functions:
+ * `setInput(leftBlock, rightBlock)`, `addRow(size_t, size_t)`, and `flush()`.
+ * When the `i`-th element of a `leftBlock` and the `j`-th element `rightBlock`
+ * match (because they compare equal wrt the `lessThan` relation), then first
+ * `setInput(leftBlock, rightBlock)` then `addRow(i, j)`, and finally `flush()`
+ * is called. Of course `setInput` and `flush()` are only called once if there
+ * are several matching pairs of elements from the same pair of blocks. The
+ * calls to `addRow` will then all be between the calls to `setInput` and
+ * `flush`.
  */
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
           typename LeftProjection = std::identity,
@@ -796,6 +798,7 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
             compatibleRowAction.addRow(i, j);
           }
         }
+        compatibleRowAction.flush();
       }
     }
   };
@@ -830,6 +833,7 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
         zipperJoinWithUndef(std::ranges::subrange{l.begin(), itL},
                             std::ranges::subrange{r.begin(), itR}, lessThan,
                             addRowIndex, noop, noop);
+    compatibleRowAction.flush();
 
     // Remove the joined elements.
     sameBlocksLeft.at(0).setSubrange(itL, l.end());

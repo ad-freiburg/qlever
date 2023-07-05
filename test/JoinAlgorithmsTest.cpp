@@ -33,6 +33,10 @@ struct RowAdder {
     AD_CONTRACT_CHECK(x1 == y1);
     target_->push_back(std::array{x1, x2, y2});
   }
+
+  void flush() const {
+    // Does nothing, but is required for the interface.
+  }
 };
 
 auto makeRowAdder(JoinResult& target) {
