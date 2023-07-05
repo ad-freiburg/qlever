@@ -103,7 +103,7 @@ IdTable CompressedRelationReader::scan(
 }
 
 // ____________________________________________________________________________
-cppcoro::generator<IdTable>
+CompressedRelationReader::IdTableGenerator
 CompressedRelationReader::asyncParallelBlockGenerator(
     auto beginBlock, auto endBlock, ad_utility::File& file,
     std::optional<std::vector<size_t>> columnIndices,
@@ -179,11 +179,12 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     co_yield opt.value();
     popTimer.cont();
   }
-  co_await cppcoro::AddDetail{"blocking-time-block-reading", popTimer.msecs()};
+  LazyScanMetadata& details = co_await cppcoro::getDetails;
+  details.blockingTimeMs_ = popTimer.msecs();
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
+CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata,
     std::vector<CompressedBlockMetadata> blockMetadata, ad_utility::File& file,
     TimeoutTimer timer) const {
@@ -192,34 +193,31 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   const auto beginBlock = relevantBlocks.begin();
   const auto endBlock = relevantBlocks.end();
 
-  size_t numElements = 0;
-
-  co_await cppcoro::AddDetail{"num-blocks", endBlock - beginBlock};
+  LazyScanMetadata& details = co_await cppcoro::getDetails;
+  details.numBlocksRead_ = endBlock - beginBlock;
 
   if (beginBlock == endBlock) {
-    co_await cppcoro::AddDetail{"num-elements", numElements};
     co_return;
   }
 
   // Read the first block, it might be incomplete
   auto firstBlock =
       readPossiblyIncompleteBlock(metadata, std::nullopt, file, *beginBlock);
-  numElements += firstBlock.numRows();
+  details.numElementsRead_ += firstBlock.numRows();
   co_yield firstBlock;
   checkTimeout(timer);
 
   auto blockGenerator = asyncParallelBlockGenerator(beginBlock + 1, endBlock,
                                                     file, std::nullopt, timer);
   for (auto& block : blockGenerator) {
-    numElements += block.numRows();
+    details.numElementsRead_ += block.numRows();
     co_yield block;
   }
-  co_await cppcoro::AddDetail{blockGenerator.details()};
-  co_await cppcoro::AddDetail{"num-elements", numElements};
+  details.blockingTimeMs_ = blockGenerator.details().blockingTimeMs_;
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
+CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     CompressedRelationMetadata metadata, Id col1Id,
     std::vector<CompressedBlockMetadata> blockMetadata, ad_utility::File& file,
     TimeoutTimer timer) const {
@@ -227,10 +225,10 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   auto beginBlock = relevantBlocks.begin();
   auto endBlock = relevantBlocks.end();
 
-  co_await cppcoro::AddDetail{"num-blocks", endBlock - beginBlock};
-  size_t numElements = 0;
+  LazyScanMetadata& details = co_await cppcoro::getDetails;
+  details.numBlocksRead_ = endBlock - beginBlock;
+
   if (beginBlock == endBlock) {
-    co_await cppcoro::AddDetail{"num-elements", numElements};
     co_return;
   }
 
@@ -251,22 +249,23 @@ cppcoro::generator<IdTable> CompressedRelationReader::lazyScan(
   };
 
   if (beginBlock < endBlock) {
-    co_yield getIncompleteBlock(beginBlock);
+    auto block = getIncompleteBlock(beginBlock);
+    details.numElementsRead_ += block.numRows();
+    co_yield block;
   }
 
   if (beginBlock + 1 < endBlock) {
     auto blockGenerator = asyncParallelBlockGenerator(
         beginBlock + 1, endBlock - 1, file, std::vector{1UL}, timer);
     for (auto& block : blockGenerator) {
-      numElements += block.numRows();
+      details.numElementsRead_ += block.numRows();
       co_yield block;
     }
-    co_await cppcoro::AddDetail{blockGenerator.details()};
+    details.blockingTimeMs_ = blockGenerator.details().blockingTimeMs_;
     auto lastBlock = getIncompleteBlock(endBlock - 1);
-    numElements += lastBlock.numRows();
+    details.numElementsRead_ += lastBlock.numRows();
     co_yield lastBlock;
   }
-  co_await cppcoro::AddDetail{"num-elements", numElements};
 }
 
 namespace {

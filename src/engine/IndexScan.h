@@ -49,14 +49,14 @@ class IndexScan : public Operation {
   // blocks, but only the blocks that can theoretically contain matching rows
   // when performing a join on the first column of the result of `s1` with the
   // first column of the result of `s2`.
-  static std::array<cppcoro::generator<IdTable>, 2> lazyScanForJoinOfTwoScans(
+  static std::array<Permutation::IdTableGenerator, 2> lazyScanForJoinOfTwoScans(
       const IndexScan& s1, const IndexScan& s2);
 
   // Return a generator that lazily yields the result of `s` in blocks, but only
   // the blocks that can theoretically contain matching rows when performing a
   // join between the first column of the result of `s`  with the `joinColumn`.
   // Requires that the `joinColumn` is sorted, else the behavior is undefined.
-  static cppcoro::generator<IdTable> lazyScanForJoinOfColumnWithScan(
+  static Permutation::IdTableGenerator lazyScanForJoinOfColumnWithScan(
       std::span<const Id> joinColumn, const IndexScan& s);
 
  private:
@@ -105,7 +105,7 @@ class IndexScan : public Operation {
   std::array<const TripleComponent* const, 3> getPermutedTriple() const;
 
   //  Helper functions for the public `getLazyScanFor...` functions (see above).
-  static cppcoro::generator<IdTable> getLazyScan(
+  static Permutation::IdTableGenerator getLazyScan(
       const IndexScan& s, std::vector<CompressedBlockMetadata> blocks);
   static std::optional<Permutation::MetadataAndBlocks> getMetadataForScan(
       const IndexScan& s);

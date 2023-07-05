@@ -241,6 +241,14 @@ class CompressedRelationReader {
     std::optional<Id> col1Id_;
   };
 
+  struct LazyScanMetadata {
+    size_t numBlocksRead_ = 0;
+    size_t numElementsRead_ = 0;
+    size_t blockingTimeMs_ = 0;
+  };
+
+  using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;
+
  private:
   // This cache stores a small number of decompressed blocks. Its current
   // purpose is to make the e2e-tests run fast. They contain many SPARQL queries
@@ -278,10 +286,9 @@ class CompressedRelationReader {
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
   // The blocks are guaranteed to be in order.
-  cppcoro::generator<IdTable> lazyScan(
-      CompressedRelationMetadata metadata,
-      std::vector<CompressedBlockMetadata> blockMetadata,
-      ad_utility::File& file, TimeoutTimer timer) const;
+  IdTableGenerator lazyScan(CompressedRelationMetadata metadata,
+                            std::vector<CompressedBlockMetadata> blockMetadata,
+                            ad_utility::File& file, TimeoutTimer timer) const;
 
   // Get the blocks (an ordered subset of the blocks that are passed in via the
   // `metadataAndBlocks`) where the `col1Id` can theoretically match one of the
@@ -329,10 +336,9 @@ class CompressedRelationReader {
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
   // The blocks are guaranteed to be in order.
-  cppcoro::generator<IdTable> lazyScan(
-      CompressedRelationMetadata metadata, Id col1Id,
-      std::vector<CompressedBlockMetadata> blockMetadata,
-      ad_utility::File& file, TimeoutTimer timer) const;
+  IdTableGenerator lazyScan(CompressedRelationMetadata metadata, Id col1Id,
+                            std::vector<CompressedBlockMetadata> blockMetadata,
+                            ad_utility::File& file, TimeoutTimer timer) const;
 
   // Only get the size of the result for a given permutation XYZ for a given X
   // and Y. This can be done by scanning one or two blocks. Note: The overload
@@ -415,7 +421,7 @@ class CompressedRelationReader {
   // are yielded, else the complete blocks are yielded. The blocks are yielded
   // in the correct order, but asynchronously read and decompressed using
   // multiple worker threads.
-  cppcoro::generator<IdTable> asyncParallelBlockGenerator(
+  IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ad_utility::File& file,
       std::optional<std::vector<size_t>> columnIndices,
       const TimeoutTimer& timer) const;

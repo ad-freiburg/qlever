@@ -646,13 +646,24 @@ void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
 namespace {
 // Convert a `generator<IdTable` to a `generator<IdTableAndFirstCol>` for more
 // efficient access in the join columns below.
-cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>> liftGenerator(
-    cppcoro::generator<IdTable> gen) {
+cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>,
+                   CompressedRelationReader::LazyScanMetadata>
+liftGenerator(Permutation::IdTableGenerator gen) {
   for (auto& table : gen) {
     ad_utility::IdTableAndFirstCol t{std::move(table)};
     co_yield t;
   }
-  co_await cppcoro::AddDetail{gen.details()};
+  co_await cppcoro::getDetails = gen.details();
+}
+
+void updateRuntimeInfoForLazyScan(
+    QueryExecutionTree& scanTree,
+    const CompressedRelationReader::LazyScanMetadata& metadata) {
+  scanTree.getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
+  auto& rti = scanTree.getRootOperation()->getRuntimeInfo();
+  rti.numRows_ = metadata.numElementsRead_;
+  rti.totalTime_ = static_cast<double>(metadata.blockingTimeMs_);
+  rti.addDetail("num-blocks-read", metadata.numBlocksRead_);
 }
 }  // namespace
 
@@ -681,20 +692,9 @@ IdTable Join::computeResultForTwoIndexScans() {
   ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
                                               std::less{}, rowAdder);
 
-  _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
-  _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
-  _right->getRootOperation()->getRuntimeInfo().details_.update(
-      rightBlocks.details());
-  _left->getRootOperation()->getRuntimeInfo().details_.update(
-      leftBlocks.details());
-  if (rightBlocks.details().contains("num-elements")) {
-    _right->getRootOperation()->getRuntimeInfo().numRows_ =
-        static_cast<size_t>(rightBlocks.details().at("num-elements"));
-  }
-  if (leftBlocks.details().contains("num-elements")) {
-    _left->getRootOperation()->getRuntimeInfo().numRows_ =
-        static_cast<size_t>(leftBlocks.details().at("num-elements"));
-  }
+  updateRuntimeInfoForLazyScan(*_left, leftBlocks.details());
+  updateRuntimeInfoForLazyScan(*_right, rightBlocks.details());
+
   return std::move(rowAdder).resultTable();
 }
 
@@ -753,12 +753,6 @@ IdTable Join::computeResultForIndexScanAndIdTable(
   result.setColumnSubset(joinColMap.permutationResult());
 
   auto& scanTree = idTableIsRightInput ? _left : _right;
-  scanTree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
-  scanTree->getRootOperation()->getRuntimeInfo().details_.update(
-      rightBlocks.details());
-  if (rightBlocks.details().contains("num-elements")) {
-    scanTree->getRootOperation()->getRuntimeInfo().numRows_ =
-        static_cast<size_t>(rightBlocks.details().at("num-elements"));
-  }
+  updateRuntimeInfoForLazyScan(*scanTree, rightBlocks.details());
   return result;
 }

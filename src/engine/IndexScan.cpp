@@ -281,7 +281,7 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
 }
 
 // ___________________________________________________________________________
-cppcoro::generator<IdTable> IndexScan::getLazyScan(
+Permutation::IdTableGenerator IndexScan::getLazyScan(
     const IndexScan& s, std::vector<CompressedBlockMetadata> blocks) {
   const IndexImpl& index = s.getIndex().getImpl();
   Id col0Id = s.getPermutedTriple()[0]->toValueId(index.getVocab()).value();
@@ -311,8 +311,8 @@ std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan(
 };
 
 // ________________________________________________________________
-std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
-    const IndexScan& s1, const IndexScan& s2) {
+std::array<Permutation::IdTableGenerator, 2>
+IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   AD_CONTRACT_CHECK(s1.numVariables_ < 3 && s2.numVariables_ < 3);
 
   auto metaBlocks1 = getMetadataForScan(s1);
@@ -325,18 +325,10 @@ std::array<cppcoro::generator<IdTable>, 2> IndexScan::lazyScanForJoinOfTwoScans(
       metaBlocks1.value(), metaBlocks2.value());
 
   return {getLazyScan(s1, blocks1), getLazyScan(s2, blocks2)};
-  /*
-  std::vector<CompressedBlockMetadata>
-  bl1(metaBlocks1.value().blockMetadata_.begin(),metaBlocks1.value().blockMetadata_.end());
-  std::vector<CompressedBlockMetadata>
-  bl2(metaBlocks2.value().blockMetadata_.begin(),metaBlocks2.value().blockMetadata_.end());
-
-  return {getLazyScan(s1,bl1), getLazyScan(s2, bl2)};
-   */
 }
 
 // ________________________________________________________________
-cppcoro::generator<IdTable> IndexScan::lazyScanForJoinOfColumnWithScan(
+Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
     std::span<const Id> joinColumn, const IndexScan& s) {
   AD_EXPENSIVE_CHECK(std::ranges::is_sorted(joinColumn));
   AD_CONTRACT_CHECK(s.numVariables_ == 1 || s.numVariables_ == 2);

@@ -125,7 +125,7 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
 }
 
 // _____________________________________________________________________
-cppcoro::generator<IdTable> Permutation::lazyScan(
+Permutation::IdTableGenerator Permutation::lazyScan(
     Id col0Id, std::optional<Id> col1Id,
     std::optional<std::vector<CompressedBlockMetadata>> blocks,
     const TimeoutTimer& timer) const {

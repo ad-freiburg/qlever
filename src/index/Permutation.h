@@ -54,8 +54,10 @@ class Permutation {
   IdTable scan(Id col0Id, std::optional<Id> col1Id,
                const TimeoutTimer& timer = nullptr) const;
 
-  // Typedef to propagate the `MetadataAndblocks` type.
+  // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks = CompressedRelationReader::MetadataAndBlocks;
+
+  using IdTableGenerator = CompressedRelationReader::IdTableGenerator;
 
   // The function `lazyScan` is similar to `scan` (see above) with
   // the following differences:
@@ -69,7 +71,7 @@ class Permutation {
   // TODO<joka921> We should only communicate this interface via the
   // `MetadataAndBlocks` class and make this a strong class that always
   // maintains its invariants.
-  cppcoro::generator<IdTable> lazyScan(
+  IdTableGenerator lazyScan(
       Id col0Id, std::optional<Id> col1Id,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
       const TimeoutTimer& timer = nullptr) const;
