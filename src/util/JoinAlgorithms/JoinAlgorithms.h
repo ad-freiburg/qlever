@@ -653,11 +653,13 @@ class BlockAndSubrange {
  * first argument comes before the second one. The concatenation of all blocks
  * in `leftBlocks` must be sorted according to this function. The same
  * requirement holds for `rightBlocks`.
- * @param compatibleRowAction When an element from a block from `leftBlock` and
- * an element from a block from `rightBlock` match (because they compare equal
- * wrt the `lessThan` relation), this function is called with the two
- * *iterators* to the  elements, i.e . `compatibleRowAction(itToLeft,
- * itToRight)`
+ * @param compatibleRowAction Needs to have two member functions:
+ * `setInput(leftBlock, rightBlock)` and `addRow(size_t, size_t)`. When the
+ * `i`-th element of a `leftBlock` and the `j`-th element `rightBlock` match
+ * (because they compare equal wrt the `lessThan` relation), then first
+ * `setInput(leftBlock, rightBlock)` and then `addRow(i, j)` is called. Of
+ * course `setInput` is only called once if there are several matching pairs of
+ * elements from the same pair of blocks.
  */
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
           typename LeftProjection = std::identity,
