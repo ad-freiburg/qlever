@@ -80,6 +80,8 @@ function(addAndLinkTest basename)
     linkTest(${basename} ${ARGN})
 endfunction()
 
+add_subdirectory(engine)
+
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
 addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
