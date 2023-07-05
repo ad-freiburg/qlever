@@ -6,14 +6,20 @@
 
 #include "util/Generator.h"
 
+struct Details {
+  bool begin_ = false;
+  bool end_ = false;
+};
+
 // A simple generator that first yields three numbers and then adds a detail
 // value, that we can then extract after iterating over it.
-cppcoro::generator<int> simpleGen(double detailValue) {
-  co_await cppcoro::AddDetail{"started", true};
+cppcoro::generator<int, Details> simpleGen(double detailValue) {
+  auto& details = co_await cppcoro::getDetails;
+  details.begin_ = true;
   co_yield 1;
   co_yield 42;
   co_yield 43;
-  co_await cppcoro::AddDetail{"detail", detailValue};
+  details.end_ = true;
 };
 
 // Test the behavior of the `simpleGen` above
@@ -22,14 +28,14 @@ TEST(Generator, details) {
   int result{};
   // The first detail is only added after the call to `begin()` in the for loop
   // below
-  ASSERT_TRUE(gen.details().empty());
+  ASSERT_FALSE(gen.details().begin_);
+  ASSERT_FALSE(gen.details().end_);
   for (int i : gen) {
     result += i;
-    // The detail is only
-    ASSERT_EQ(gen.details().size(), 1);
-    ASSERT_TRUE(gen.details().at("started"));
+    ASSERT_TRUE(gen.details().begin_);
+    ASSERT_FALSE(gen.details().end_);
   }
   ASSERT_EQ(result, 86);
-  ASSERT_EQ(gen.details().size(), 2);
-  ASSERT_EQ(gen.details().at("detail"), 17.3);
+  ASSERT_FALSE(gen.details().begin_);
+  ASSERT_TRUE(gen.details().end_);
 }
