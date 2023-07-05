@@ -14,6 +14,7 @@
 // Coroutines are still experimental in clang libcpp, therefore adapt the
 // appropriate namespaces by including the convenience header.
 #include "util/Coroutines.h"
+#include "util/Exception.h"
 #include "util/TypeTraits.h"
 
 namespace cppcoro {
@@ -92,13 +93,26 @@ class generator_promise {
     return {*this};
   }
 
-  Details& details() { return m_details; }
+  static constexpr bool hasDetails = !std::is_same_v<Details, NoDetails>;
+  Details& details() requires hasDetails {
+    return std::holds_alternative<Details>(m_details)
+               ? std::get<Details>(m_details)
+               : *std::get<Details*>(m_details);
+  }
+
+  void setDetailsPointer(Details* pointer) {
+    AD_CONTRACT_CHECK(pointer != nullptr);
+    m_details = pointer;
+  }
 
  private:
   pointer_type m_value;
   std::exception_ptr m_exception;
+
+  using DetailStorage =
+      std::conditional_t<hasDetails, std::variant<Details, Details*>, Details>;
   // If the `Details` type is empty, we don't need it to occupy any space.
-  [[no_unique_address]] Details m_details{};
+  [[no_unique_address]] DetailStorage m_details{};
 };
 
 struct generator_sentinel {};
@@ -210,6 +224,10 @@ class [[nodiscard]] generator {
   }
 
   const Details& details() { return m_coroutine.promise().details(); }
+
+  void setDetailsPointer(Details* pointer) {
+    m_coroutine.promise().setDetailsPointer(pointer);
+  }
 
  private:
   friend class detail::generator_promise<T, Details>;

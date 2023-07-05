@@ -39,3 +39,32 @@ TEST(Generator, details) {
   ASSERT_TRUE(gen.details().begin_);
   ASSERT_TRUE(gen.details().end_);
 }
+
+// Test the behavior of the `simpleGen` with an explicit external details object
+TEST(Generator, externalDetails) {
+  auto gen = simpleGen();
+  Details details{};
+  ASSERT_NE(&details, &gen.details());
+  gen.setDetailsPointer(&details);
+  ASSERT_EQ(&details, &gen.details());
+  int result{};
+  // `details().begin_` is only set to true after the call to `begin()` in the
+  // for loop below
+  ASSERT_FALSE(gen.details().begin_);
+  ASSERT_FALSE(details.begin_);
+  ASSERT_FALSE(gen.details().end_);
+  ASSERT_FALSE(details.end_);
+  for (int i : gen) {
+    result += i;
+    ASSERT_TRUE(gen.details().begin_);
+    ASSERT_TRUE(details.begin_);
+    ASSERT_FALSE(gen.details().end_);
+    ASSERT_FALSE(details.end_);
+  }
+  ASSERT_EQ(result, 86);
+  ASSERT_TRUE(gen.details().begin_);
+  ASSERT_TRUE(details.begin_);
+  ASSERT_TRUE(gen.details().end_);
+  ASSERT_TRUE(details.end_);
+  ASSERT_EQ(&details, &gen.details());
+}
