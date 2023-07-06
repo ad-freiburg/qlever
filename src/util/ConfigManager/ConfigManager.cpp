@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -19,6 +17,7 @@
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -191,14 +190,15 @@ void ConfigManager::parseConfig(const nlohmann::json& j) {
       /*
       Because a configuration option can only hold json literal primitives, or
       json literal arrays, we only have to to look at `currentPtr` and its
-      father. If `currentPtr` points at a json literal primitive, then it's
-      valid, if it's the exact path to a configuration option, or if its father
-      is the exact path to a configuration option, and it points to an array.
+      father.
+      `currentPtr` is valid if either:
+      - It's the exact path to a configuration option
+      - Its father is the exact path to a configuration option, and it points to
+      an array.
       */
       const nlohmann::json::json_pointer currentPtr{item.key()};
 
-      if ((!isPointerToConfigurationOption(currentPtr) ||
-           !j.at(currentPtr).is_primitive()) &&
+      if (!isPointerToConfigurationOption(currentPtr) &&
           (!isPointerToConfigurationOption(currentPtr.parent_pointer()) ||
            !j.at(currentPtr.parent_pointer()).is_array())) {
         throw j.at(currentPtr.parent_pointer()).is_array()

@@ -191,6 +191,16 @@ TEST(ConfigManagerTest, ParseConfigExceptionTest) {
           R"--({"depth 0":{"Without_default":42, "test_string" : "test"}})--")),
       ad_utility::NoConfigOptionFoundException);
 
+  /*
+  Should throw an exception, if we try set an option with a value, that we
+  already know, can't be valid, regardless of the actual internal type of the
+  configuration option. That is, it's neither an array, or a primitive.
+  */
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json::parse(
+          R"--({"depth 0":{"Without_default":42, "With_default" : {"value" : 4}}})--")),
+      ad_utility::NoConfigOptionFoundException);
+
   // Parsing with a non json object literal is not allowed.
   ASSERT_THROW(
       config.parseConfig(nlohmann::json(nlohmann::json::value_t::array)),
