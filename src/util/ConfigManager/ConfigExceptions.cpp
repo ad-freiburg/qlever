@@ -109,20 +109,4 @@ ConfigOptionConstructorNullPointerException::
                    "': The variable pointer must point to an actual variable. "
                    "A null pointer is not allowed.");
 }
-
-//_____________________________________________________________________________
-ConfigManagerPathToConfigOptionDoesntEndWithConfigOptionNameException::
-    ConfigManagerPathToConfigOptionDoesntEndWithConfigOptionNameException(
-        std::string_view optionIdentifier, std::string_view pathToOption) {
-  message_ = absl::StrCat(
-      "Error while trying to add a ConfigOption to a ConfigManager: The path '",
-      pathToOption, "' doesn't end with the name of ConfigOption '",
-      optionIdentifier, "'.");
-}
-
-//_____________________________________________________________________________
-EmptyVectorException::EmptyVectorException(std::string_view vectorName) {
-  message_ = absl::StrCat("The vector '", vectorName,
-                          "' is empty, which is not allowed.");
-}
 }  // namespace ad_utility
