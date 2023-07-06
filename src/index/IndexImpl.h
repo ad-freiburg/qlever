@@ -114,6 +114,7 @@ class IndexImpl {
   bool turtleParserSkipIllegalLiterals_ = false;
   bool keepTempFiles_ = false;
   uint64_t stxxlMemoryInBytes_ = DEFAULT_STXXL_MEMORY_IN_BYTES;
+  uint64_t blocksizePermutationInBytes_ = BLOCKSIZE_COMPRESSED_METADATA;
   json configurationJson_;
   Index::Vocab vocab_;
   size_t totalVocabularySize_ = 0;
@@ -367,6 +368,10 @@ class IndexImpl {
 
   uint64_t& stxxlMemoryInBytes() { return stxxlMemoryInBytes_; }
   const uint64_t& stxxlMemoryInBytes() const { return stxxlMemoryInBytes_; }
+
+  uint64_t& blocksizePermutationInBytes() {
+    return blocksizePermutationInBytes_;
+  }
 
   void setOnDiskBase(const std::string& onDiskBase);
 

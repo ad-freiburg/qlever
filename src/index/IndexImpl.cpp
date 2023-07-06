@@ -497,8 +497,10 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
     metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
   }
 
-  CompressedRelationWriter writer1{ad_utility::File(fileName1, "w")};
-  CompressedRelationWriter writer2{ad_utility::File(fileName2, "w")};
+  CompressedRelationWriter writer1{ad_utility::File(fileName1, "w"),
+                                   blocksizePermutationInBytes_};
+  CompressedRelationWriter writer2{ad_utility::File(fileName2, "w"),
+                                   blocksizePermutationInBytes_};
 
   // Iterate over the vector and identify "relation" boundaries, where a
   // "relation" is the sequence of sortedTriples equal first component. For PSO

@@ -269,6 +269,11 @@ void Index::setKeepTempFiles(bool keepTempFiles) {
 uint64_t& Index::stxxlMemoryInBytes() { return pimpl_->stxxlMemoryInBytes(); }
 
 // ____________________________________________________________________________
+uint64_t& Index::blocksizePermutationsInBytes() {
+  return pimpl_->blocksizePermutationInBytes();
+}
+
+// ____________________________________________________________________________
 const uint64_t& Index::stxxlMemoryInBytes() const {
   return pimpl_->stxxlMemoryInBytes();
 }

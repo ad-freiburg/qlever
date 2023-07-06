@@ -234,6 +234,8 @@ class Index {
   uint64_t& stxxlMemoryInBytes();
   const uint64_t& stxxlMemoryInBytes() const;
 
+  uint64_t& blocksizePermutationsInBytes();
+
   void setOnDiskBase(const std::string& onDiskBase);
 
   void setSettingsFile(const std::string& filename);
