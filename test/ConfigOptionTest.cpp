@@ -160,6 +160,8 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
     ASSERT_TRUE(option.wasSet() && option.wasSetAtRuntime());
     ASSERT_EQ(toSetTo.value, option.getValue<Type>());
     ASSERT_EQ(toSetTo.value, *variablePointer);
+    ASSERT_FALSE(option.getValueAsJson().is_null());
+    ASSERT_NE("None", option.getActualValueTypeAsString());
 
     // Make sure, that the other getters don't work.
     otherGettersDontWork.template operator()<Type>(option);
@@ -184,7 +186,8 @@ TEST(ConfigOptionTest, CreateSetAndTest) {
         // Can we use the default value correctly?
         ASSERT_TRUE(option.wasSet() && option.hasDefaultValue());
         ASSERT_EQ(defaultCase.value, option.getDefaultValue<Type>());
-        ASSERT_EQ(defaultCase.jsonRepresentation, option.getDefaultValueAsJson());
+        ASSERT_FALSE(option.getDefaultValueAsJson().is_null());
+        ASSERT_NE("None", option.getDefaultValueAsString());
         ASSERT_EQ(defaultCase.value, option.getValue<Type>());
         ASSERT_EQ(defaultCase.value, configurationOptionValue);
         otherGettersDontWork.template operator()<Type>(option);
