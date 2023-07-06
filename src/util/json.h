@@ -30,7 +30,7 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 
 /*
 @brief Returns the string representation of the type of the given
-`nlohmann::json`.
+`nlohmann::json`. Only supports official json types.
 */
 inline std::string jsonToTypeString(const nlohmann::json& j) {
   if (j.is_array()) {
@@ -39,10 +39,8 @@ inline std::string jsonToTypeString(const nlohmann::json& j) {
     return "boolean";
   } else if (j.is_null()) {
     return "null";
-  } else if (j.is_number_float()) {
-    return "float";
-  } else if (j.is_number_integer()) {
-    return "integer";
+  } else if (j.is_number()) {
+    return "number";
   } else if (j.is_object()) {
     return "object";
   } else {
