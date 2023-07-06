@@ -146,11 +146,11 @@ In our system a configuration option is described by a handful of characteristic
 
 4. What **type** of values it takes. The following types are available:
    
-   - Boolean.
+   - `bool`.
    - `std::string`.
-   - Integer.
+   - `int`.
    - `size_t`
-   - Floating point.
+   - `float`.
    - A `std::vector` of the previous options.
 
 However, unlike the default value, the value it takes, isn't saved internally.  
