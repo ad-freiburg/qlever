@@ -9,6 +9,7 @@
 struct Details {
   bool begin_ = false;
   bool end_ = false;
+  bool operator==(const Details&) const = default;
 };
 
 // A simple generator that first yields three numbers and then adds a detail
@@ -71,4 +72,11 @@ TEST(Generator, externalDetails) {
 
   // Setting a `nullptr` is illegal
   ASSERT_ANY_THROW(gen.setDetailsPointer(nullptr));
+}
+
+// Test that a default-constructed generator still has a valid `Details` object.
+TEST(Generator, detailsForDefaultConstructedGenerator) {
+  cppcoro::generator<int, Details> gen;
+  ASSERT_EQ(gen.details(), Details());
+  ASSERT_EQ(std::as_const(gen).details(), Details());
 }

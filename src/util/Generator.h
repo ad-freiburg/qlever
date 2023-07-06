@@ -223,8 +223,8 @@ class [[nodiscard]] generator {
     std::swap(m_coroutine, other.m_coroutine);
   }
 
-  const Details& details() const { return m_coroutine.promise().details(); }
-  Details& details() { return m_coroutine.promise().details(); }
+  const Details& details() const { return m_coroutine ? m_coroutine.promise().details() : m_details_if_default_constructed; }
+  Details& details() { return m_coroutine ? m_coroutine.promise().details() : m_details_if_default_constructed; }
 
   void setDetailsPointer(Details* pointer) {
     m_coroutine.promise().setDetailsPointer(pointer);
@@ -232,6 +232,10 @@ class [[nodiscard]] generator {
 
  private:
   friend class detail::generator_promise<T, Details>;
+
+  // In the case of an empty, default-constructed `generator` object we still want the call to `details`
+  // to return a valid object that in this case is owned directly by the generator itself.
+  [[no_unique_address]] Details m_details_if_default_constructed;
 
   explicit generator(std::coroutine_handle<promise_type> coroutine) noexcept
       : m_coroutine(coroutine) {}
