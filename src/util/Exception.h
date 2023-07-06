@@ -125,10 +125,22 @@ inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
 // `AD_ENABLE_EXPENSIVE_CHECKS` is enabled (which can be set via cmake). This
 // check should be used when checking has a significant and measurable runtime
 // overhead, but is still feasible for a release build on a large dataset.
+namespace ad_utility {
+static constexpr bool areExpensiveChecksEnabled() {
 #if (!defined(NDEBUG) || defined(AD_ENABLE_EXPENSIVE_CHECKS))
-#define AD_EXPENSIVE_CHECK(condition) \
-  AD_CORRECTNESS_CHECK(condition);    \
+  return true;
+#else
+  return false;
+#endif
+}
+}  // namespace ad_utility
+#if (!defined(NDEBUG) || defined(AD_ENABLE_EXPENSIVE_CHECKS))
+#define AD_EXPENSIVE_CHECK(condition)                     \
+  static_assert(ad_utility::areExpensiveChecksEnabled()); \
+  AD_CORRECTNESS_CHECK(condition);                        \
   void(0)
 #else
-#define AD_EXPENSIVE_CHECK(condition) void(0)
+#define AD_EXPENSIVE_CHECK(condition)                      \
+  static_assert(!ad_utility::areExpensiveChecksEnabled()); \
+  void(0)
 #endif

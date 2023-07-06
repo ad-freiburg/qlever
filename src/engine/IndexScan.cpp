@@ -315,6 +315,19 @@ std::array<Permutation::IdTableGenerator, 2>
 IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   AD_CONTRACT_CHECK(s1.numVariables_ < 3 && s2.numVariables_ < 3);
 
+  // This function only works for single column joins. This means that the first
+  // variable of both scans must be equal, but the second variables of the scans
+  // (if present) must be different.
+  const auto& getFirstVariable = [](const IndexScan& scan) {
+    return scan.numVariables_ == 2 ? *scan.getPermutedTriple()[1]
+                                   : *scan.getPermutedTriple()[2];
+  };
+
+  AD_CONTRACT_CHECK(getFirstVariable(s1) == getFirstVariable(s2));
+  if (s1.numVariables_ == 2 && s1.numVariables_ == 2) {
+    AD_CONTRACT_CHECK(*s1.getPermutedTriple()[2] != *s2.getPermutedTriple()[2]);
+  }
+
   auto metaBlocks1 = getMetadataForScan(s1);
   auto metaBlocks2 = getMetadataForScan(s2);
 
