@@ -190,6 +190,29 @@ TEST(ConfigManagerTest, ParseConfigExceptionTest) {
       config.parseConfig(nlohmann::json::parse(
           R"--({"depth 0":{"Without_default":42, "test_string" : "test"}})--")),
       ad_utility::NoConfigOptionFoundException);
+
+  // Parsing with a non json object literal is not allowed.
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json(nlohmann::json::value_t::array)),
+      ConfigManagerParseConfigNotJsonObjectLiteralException);
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json(nlohmann::json::value_t::boolean)),
+      ConfigManagerParseConfigNotJsonObjectLiteralException);
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json(nlohmann::json::value_t::null)),
+      ConfigManagerParseConfigNotJsonObjectLiteralException);
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json(nlohmann::json::value_t::number_float)),
+      ConfigManagerParseConfigNotJsonObjectLiteralException);
+  ASSERT_THROW(config.parseConfig(
+                   nlohmann::json(nlohmann::json::value_t::number_integer)),
+               ConfigManagerParseConfigNotJsonObjectLiteralException);
+  ASSERT_THROW(config.parseConfig(
+                   nlohmann::json(nlohmann::json::value_t::number_unsigned)),
+               ConfigManagerParseConfigNotJsonObjectLiteralException);
+  ASSERT_THROW(
+      config.parseConfig(nlohmann::json(nlohmann::json::value_t::string)),
+      ConfigManagerParseConfigNotJsonObjectLiteralException);
 }
 
 TEST(ConfigManagerTest, ParseShortHandTest) {
