@@ -99,3 +99,49 @@ TEST(AddCombinedRowToTable, UndefInInput) {
   testWithBufferSize(1);
   testWithBufferSize(2);
 }
+
+// _______________________________________________________________________________
+TEST(AddCombinedRowToTable, setInput) {
+  auto testWithBufferSize = [](size_t bufferSize) {
+    auto result = makeIdTableFromVector({});
+    result.setNumColumns(2);
+    {
+      auto adder = ad_utility::AddCombinedRowToIdTable(
+          1, std::nullopt, std::nullopt, std::move(result), bufferSize);
+      // It is okay to flush even if no inputs were specified, as long as we haven't pushed any rows yet.
+      EXPECT_NO_THROW(adder.flush());
+      if constexpr (ad_utility::areExpensiveChecksEnabled()) {
+        EXPECT_ANY_THROW(adder.addRow(0, 0));
+      } else {
+        adder.addRow(0, 0);
+        EXPECT_ANY_THROW(adder.flush());
+      }
+    }
+    auto adder = ad_utility::AddCombinedRowToIdTable(
+        1, std::nullopt, std::nullopt, std::move(result), bufferSize);
+    auto left = makeIdTableFromVector({{U, 5}, {2, U}, {3, U}, {4, U}});
+    auto right = makeIdTableFromVector({{1}, {3}, {4}, {U}});
+    adder.setInput(left, right);
+    adder.addRow(0, 0);
+    adder.addRow(0, 1);
+    adder.addRow(2, 1);
+    adder.addRow(0, 2);
+    adder.addRow(3, 2);
+    adder.addRow(0, 3);
+    adder.setInput(right, left);
+    adder.addRow(0, 0);
+    adder.addRow(1, 0);
+    adder.addRow(1, 2);
+    adder.addRow(2, 0);
+    adder.addRow(2, 3);
+    adder.addRow(3, 0);
+    result = std::move(adder).resultTable();
+
+    auto expected =
+        makeIdTableFromVector({{1, 5}, {3, 5}, {3, U}, {4, 5}, {4, U}, {U, 5}});
+    ASSERT_EQ(result, expected);
+  };
+  testWithBufferSize(100'000);
+  testWithBufferSize(1);
+  testWithBufferSize(2);
+}

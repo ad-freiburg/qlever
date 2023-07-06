@@ -17,7 +17,7 @@ using Tc = TripleComponent;
 using Var = Variable;
 
 using IndexPair = std::pair<size_t, size_t>;
-void testLazyScan(auto lazyScan, IndexScan& scanOp,
+void testLazyScan(Permutation::IdTableGenerator lazyScan, IndexScan& scanOp,
                   const std::vector<IndexPair>& expectedRows,
                   source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
@@ -31,6 +31,9 @@ void testLazyScan(auto lazyScan, IndexScan& scanOp,
     lazyScanRes.insertAtEnd(block.begin(), block.end());
     ++numBlocks;
   }
+
+  EXPECT_EQ(numBlocks, lazyScan.details().numBlocksRead_);
+  EXPECT_EQ(lazyScanRes.size(), lazyScan.details().numElementsRead_);
 
   auto resFullScan = scanOp.getResult()->idTable().clone();
   IdTable expected{resFullScan.numColumns(), alloc};
@@ -104,7 +107,12 @@ void testLazyScanWithColumnThrows(
     column.push_back(
         TripleComponent{entry}.toValueId(qec->getIndex().getVocab()).value());
   }
-  EXPECT_ANY_THROW(IndexScan::lazyScanForJoinOfColumnWithScan(column, s1));
+
+  // We need this to suppress the warning about a [[nodiscard]] return value being unused.
+  auto makeScan = [&column, &s1]() {
+    [[maybe_unused]] auto scan = IndexScan::lazyScanForJoinOfColumnWithScan(column, s1);
+  };
+  EXPECT_ANY_THROW(makeScan());
 }
 }  // namespace
 
