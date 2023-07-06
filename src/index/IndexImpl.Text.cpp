@@ -832,7 +832,9 @@ Index::WordEntityPostings IndexImpl::getContextEntityScoreListsForWords(
 
     vector<Index::WordEntityPostings> wepVecs;
     for (size_t i = 0; i < terms.size(); ++i) {
-      wepVecs.push_back(getWordPostingsForTerm(terms[i]));
+      if (i != useElFromTerm) {
+        wepVecs.push_back(getWordPostingsForTerm(terms[i]));
+      }
     }
     wepVecs.push_back(getEntityPostingsForTerm(terms[useElFromTerm]));
     resultWep =

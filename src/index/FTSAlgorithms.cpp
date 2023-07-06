@@ -190,10 +190,10 @@ void FTSAlgorithms::intersectTwoPostingLists(
 Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
     const vector<Index::WordEntityPostings>& wepVecs,
     vector<Id>* lastListEids) {
-  size_t k = wepVecs.size() - 1;
+  size_t k = wepVecs.size();
   Index::WordEntityPostings resultWep;
   {
-    if (wepVecs[k].cids_.empty()) {
+    if (wepVecs[k - 1].cids_.empty()) {
       LOG(DEBUG) << "Empty list involved, no intersect necessary.\n";
       return resultWep;
     }
@@ -247,8 +247,8 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
 
   vector<size_t> nextIndices;
   nextIndices.resize(wepVecs.size(), 0);
-  TextRecordIndex currentContext = wepVecs[k].cids_[0];
-  size_t currentList = k;  // Has the fewest different contexts. Start here.
+  TextRecordIndex currentContext = wepVecs[k - 1].cids_[0];
+  size_t currentList = k - 1;  // Has the fewest different contexts. Start here.
   size_t streak = 0;
   size_t n = 0;
   while (true) {  // break when one list cannot advance
@@ -268,7 +268,7 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
     }
     TextRecordIndex atId = wepVecs[currentList].cids_[nextIndices[currentList]];
     if (atId == currentContext) {
-      if (++streak == k + 1) {
+      if (++streak == k) {
         Score s = 0;
         vector<size_t> currentIndices;
         currentIndices.reserve(k);
@@ -278,74 +278,41 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
           s += wepVecs[i].scores_[index];
           currentIndices[i] = index;
         }
-        size_t matchInEL =
-            (k == currentList ? nextIndices[k] : nextIndices[k] - 1);
-        if (entityMode) {
-          while (matchInEL < wepVecs[k].cids_.size() &&
-                 wepVecs[k].cids_[matchInEL] == currentContext) {
-            int kIndex = k - 1;
-            vector<size_t> offsets;
-            offsets.reserve(k);
-            offsets.resize(k, 0);
-            while (kIndex >= 0) {
-              if (currentIndices[kIndex] + offsets[kIndex] >=
-                      wepVecs[kIndex].cids_.size() ||
-                  wepVecs[kIndex].cids_[currentIndices[kIndex] +
-                                        offsets[kIndex]] != currentContext) {
-                offsets[kIndex] = 0;
-                kIndex--;
-                if (kIndex >= 0) {
-                  offsets[kIndex]++;
-                }
-              } else {
-                kIndex = k - 1;
-                resultWep.cids_.push_back(currentContext);
-                resultWep.eids_.push_back((*lastListEids)[matchInEL]);
-                resultWep.scores_.push_back(s + wepVecs[k].scores_[matchInEL]);
-                for (int c = k - 1; c >= 0; c--) {
-                  resultWep.wids_[c].push_back(
-                      wepVecs[c].wids_[0][currentIndices[c] + offsets[c]]);
-                }
-                n++;
-                offsets[kIndex]++;
-              }
-            }
-            matchInEL++;
-          }
-        } else {
-          int kIndex = k - 1;
-          vector<size_t> offsets;
-          offsets.resize(k, 0);
-          while (kIndex >= 0) {
-            if (currentIndices[kIndex] + offsets[kIndex] >=
-                    wepVecs[kIndex].cids_.size() ||
-                wepVecs[kIndex]
-                        .cids_[currentIndices[kIndex] + offsets[kIndex]] !=
-                    wepVecs[kIndex].cids_[currentIndices[kIndex]]) {
-              offsets[kIndex] = 0;
-              kIndex--;
-              if (kIndex >= 0) {
-                offsets[kIndex]++;
-              }
-            } else {
-              kIndex = k - 1;
-              resultWep.cids_.push_back(currentContext);
-              resultWep.scores_.push_back(
-                  s +
-                  wepVecs[k].scores_[(k == currentList ? nextIndices[k]
-                                                       : nextIndices[k] - 1)]);
-              for (int c = k - 1; c >= 0; c--) {
-                resultWep.wids_[c].push_back(
-                    wepVecs[c].wids_[0][currentIndices[c] + offsets[c]]);
-              }
-              n++;
+        int kIndex = k - 1;
+        vector<size_t> offsets;
+        offsets.reserve(k);
+        offsets.resize(k, 0);
+        while (kIndex >= 0) {
+          if (currentIndices[kIndex] + offsets[kIndex] >=
+                  wepVecs[kIndex].cids_.size() ||
+              wepVecs[kIndex].cids_[currentIndices[kIndex] + offsets[kIndex]] !=
+                  currentContext) {
+            offsets[kIndex] = 0;
+            kIndex--;
+            if (kIndex >= 0) {
               offsets[kIndex]++;
             }
+          } else {
+            kIndex = k - 1;
+            resultWep.cids_.push_back(currentContext);
+            if (entityMode) {
+              resultWep.eids_.push_back(
+                  (*lastListEids)[currentIndices[k - 1] + offsets[k - 1]]);
+            }
+            resultWep.scores_.push_back(
+                s +
+                wepVecs[k - 1].scores_[currentIndices[k - 1] + offsets[k - 1]]);
+            for (int c = k - 1; c >= 0; c--) {
+              resultWep.wids_[c].push_back(
+                  wepVecs[c].wids_[0][currentIndices[c] + offsets[c]]);
+            }
+            n++;
+            offsets[kIndex]++;
           }
         }
         // Optimization: The last list will feature the fewest different
         // contexts. After a match, always advance in that list
-        currentList = k;
+        currentList = k - 1;
         continue;
       }
     } else {
@@ -354,7 +321,7 @@ Index::WordEntityPostings FTSAlgorithms::crossIntersectKWay(
     }
     nextIndices[currentList] += 1;
     currentList++;
-    if (currentList == k + 1) {
+    if (currentList == k) {
       currentList = 0;
     }  // wrap around
   }
@@ -417,7 +384,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
       mapEtSaCS[wep.eids_[i]].second.emplace(wep.scores_[i], wep.cids_[i]);
       mapEtSaCS[wep.eids_[i]].first = 1;
     } else {
-      if (mapEaCtW[std::make_pair(wep.eids_[i], wep.cids_[i])].size() >= 1) {
+      if (mapEaCtW[std::make_pair(wep.eids_[i], wep.cids_[i])].size() >= 2) {
         continue;
       }
       mapEtSaCS[wep.eids_[i]].first++;
@@ -431,7 +398,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
     }
   }
   IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
-  result.reserve(mapEtSaCS.size() * k + 2);
+  result.reserve(mapEtSaCS.size() + 2);
   for (auto it = mapEtSaCS.begin(); it != mapEtSaCS.end(); ++it) {
     std::vector<ValueId> row;
     row.resize(result.numColumns());
@@ -589,7 +556,7 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
           std::make_pair(wep.scores_[i], wep.cids_[i]);
       mapEtSaC[wep.eids_[i]].first = 1;
     } else {
-      if (mapEaCtW[std::make_pair(wep.eids_[i], wep.cids_[i])].size() >= 1) {
+      if (mapEaCtW[std::make_pair(wep.eids_[i], wep.cids_[i])].size() >= 2) {
         continue;
       }
       mapEtSaC[wep.eids_[i]].first++;
@@ -615,7 +582,7 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
     for (size_t j = 0; j < widsVec.size(); j++) {
       for (size_t l = 0; l < numOfTerms; l++) {
         row[3 + l] =
-            Id::makeFromWordVocabIndex(WordVocabIndex::make(widsVec[j][l]));
+            Id::makeFromWordVocabIndex(WordVocabIndex::make(widsVec[l][j]));
       }
       result.push_back(row);
     }
@@ -710,7 +677,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
             mapEtSaCS[key].second.emplace(cscore, currentCid);
             mapEtSaCS[key].first = 1;
           } else {
-            if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 1) {
+            if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 2) {
               continue;
             }
             mapEtSaCS[key].first++;
@@ -749,7 +716,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
         mapEtSaCS[key].second.emplace(cscore, currentCid);
         mapEtSaCS[key].first = 1;
       } else {
-        if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 1) {
+        if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 2) {
           continue;
         }
         mapEtSaCS[key].first++;
@@ -764,7 +731,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     }
     // Iterate over the map and populate the result.
     IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
-    result.reserve(mapEtSaCS.size() * kLimit + 2);
+    result.reserve(mapEtSaCS.size() + 2);
     for (auto it = mapEtSaCS.begin(); it != mapEtSaCS.end(); ++it) {
       std::vector<ValueId> row;
       row.resize(result.numColumns());
@@ -882,7 +849,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
           mapEtSaC[key].second = std::make_pair(cscore, currentCid);
           mapEtSaC[key].first = 1;
         } else {
-          if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 1) {
+          if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 2) {
             continue;
           }
           mapEtSaC[key].first++;
@@ -917,7 +884,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
       mapEtSaC[key].second = std::make_pair(cscore, currentCid);
       mapEtSaC[key].first = 1;
     } else {
-      if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 1) {
+      if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 2) {
         continue;
       }
       mapEtSaC[key].first++;
@@ -1111,7 +1078,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
         mapEtSaCS[wep.eids_[i]].second.emplace(wep.scores_[i], wep.cids_[i]);
         mapEtSaCS[wep.eids_[i]].first = 1;
       } else {
-        if (mapEaCtW[std::make_pair(wep.eids_[i], wep.cids_[i])].size() >= 1) {
+        if (mapEaCtW[std::make_pair(wep.eids_[i], wep.cids_[i])].size() >= 2) {
           continue;
         }
         mapEtSaCS[wep.eids_[i]].first++;
@@ -1126,7 +1093,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     }
   }
   IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
-  result.reserve(mapEtSaCS.size() * k + 2);
+  result.reserve(mapEtSaCS.size() + 2);
   for (auto it = mapEtSaCS.begin(); it != mapEtSaCS.end(); ++it) {
     std::vector<ValueId> row;
     row.resize(result.numColumns());
@@ -1202,7 +1169,7 @@ template <int WIDTH>
 void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const Index::WordEntityPostings& wep, const HashSet<Id>& fSet, size_t k,
     IdTable* dynResult) {
-  AD_CONTRACT_CHECK(wep.wids_.size() == 1);
+  AD_CONTRACT_CHECK(wep.wids_.size() >= 1);
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.eids_.size());
   AD_CONTRACT_CHECK(wep.cids_.size() == wep.scores_.size());
   LOG(DEBUG) << "Going from an entity, context and score list of size: "
@@ -1243,7 +1210,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
         mapEtSaCS[wep.eids_[i]].second.emplace(wep.scores_[i], wep.cids_[i]);
         mapEtSaCS[wep.eids_[i]].first = 1;
       } else {
-        if (mapEaCtW[std::make_pair(wep.eids_[i], wep.cids_[i])].size() >= 1) {
+        if (mapEaCtW[std::make_pair(wep.eids_[i], wep.cids_[i])].size() >= 2) {
           continue;
         }
         mapEtSaCS[wep.eids_[i]].first++;
@@ -1258,7 +1225,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     }
   }
   IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
-  result.reserve(mapEtSaCS.size() * k + 2);
+  result.reserve(mapEtSaCS.size() + 2);
   for (auto it = mapEtSaCS.begin(); it != mapEtSaCS.end(); ++it) {
     std::vector<ValueId> row;
     row.resize(result.numColumns());
@@ -1386,7 +1353,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
             mapEtSaCS[key].second.emplace(cscore, currentCid);
             mapEtSaCS[key].first = 1;
           } else {
-            if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 1) {
+            if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 2) {
               continue;
             }
             mapEtSaCS[key].first++;
@@ -1435,7 +1402,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
         mapEtSaCS[key].second.emplace(cscore, currentCid);
         mapEtSaCS[key].first = 1;
       } else {
-        if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 1) {
+        if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 2) {
           continue;
         }
         mapEtSaCS[key].first++;
@@ -1452,7 +1419,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
 
   // Iterate over the map and populate the result.
   IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
-  result.reserve(mapEtSaCS.size() * kLimit + 2);
+  result.reserve(mapEtSaCS.size() + 2);
   for (auto it = mapEtSaCS.begin(); it != mapEtSaCS.end(); ++it) {
     std::vector<ValueId> row;
     row.resize(result.numColumns());
@@ -1606,7 +1573,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
             mapEtSaCS[key].second.emplace(cscore, currentCid);
             mapEtSaCS[key].first = 1;
           } else {
-            if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 1) {
+            if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 2) {
               continue;
             }
             mapEtSaCS[key].first++;
@@ -1655,7 +1622,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
         mapEtSaCS[key].second.emplace(cscore, currentCid);
         mapEtSaCS[key].first = 1;
       } else {
-        if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 1) {
+        if (mapEaCtW[std::make_pair(key, currentCid)].size() >= 2) {
           continue;
         }
         mapEtSaCS[key].first++;
@@ -1672,7 +1639,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
 
   // Iterate over the map and populate the result.
   IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
-  result.reserve(mapEtSaCS.size() * kLimit + 2);
+  result.reserve(mapEtSaCS.size() + 2);
   for (auto it = mapEtSaCS.begin(); it != mapEtSaCS.end(); ++it) {
     std::vector<ValueId> row;
     row.resize(result.numColumns());
