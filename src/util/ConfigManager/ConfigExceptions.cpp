@@ -2,12 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (June of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigExceptions.h"
-
 #include <absl/strings/str_cat.h>
 
 #include <exception>
 #include <string>
+
+#include "util/ConfigManager/ConfigExceptions.h"
 
 namespace ad_utility {
 //_____________________________________________________________________________
@@ -40,31 +40,6 @@ ConfigOptionWasntSetException::ConfigOptionWasntSetException(
   message_ = absl::StrCat(
       "Parsing error: The configuration option at '", pathToOption,
       "' has no default value, yet no value was set at runtime.\n");
-}
-
-//_____________________________________________________________________________
-ConfigManagerOptionPathDoesntStartWithStringException::
-    ConfigManagerOptionPathDoesntStartWithStringException(
-        std::string_view pathToOption) {
-  message_ = absl::StrCat(
-      "Key error, while trying to add a configuration "
-      "option: The first key in '",
-      pathToOption,
-      "' isn't a string. It needs to be a string, because "
-      "internally we save locations in a json format, more "
-      "specificly in a json object literal.");
-}
-
-//_____________________________________________________________________________
-ConfigManagerOptionPathDoesntEndWithStringException::
-    ConfigManagerOptionPathDoesntEndWithStringException(
-        std::string_view pathToOption) {
-  message_ = absl::StrCat(
-      "Key error, while trying to add a configuration "
-      "option: The last key in '",
-      pathToOption,
-      "' isn't a string. It needs to be a string, because it will be used as "
-      "the name of the configuration option.");
 }
 
 //_____________________________________________________________________________

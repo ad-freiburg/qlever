@@ -66,34 +66,6 @@ class ConfigOptionWasntSetException : public ExceptionWithMessage {
 };
 
 /*
-@brief A custom exception, for when `ConfigManager::createConfigOption` gets a
-path, that doesn't start with a string.
-*/
-class ConfigManagerOptionPathDoesntStartWithStringException
-    : public ExceptionWithMessage {
- public:
-  /*
-  @param pathToOption The path to the option.
-  */
-  explicit ConfigManagerOptionPathDoesntStartWithStringException(
-      std::string_view pathToOption);
-};
-
-/*
-@brief A custom exception, for when `ConfigManager::createConfigOption` gets a
-path, that doesn't end with a string.
-*/
-class ConfigManagerOptionPathDoesntEndWithStringException
-    : public ExceptionWithMessage {
- public:
-  /*
-  @param pathToOption The path to the option.
-  */
-  explicit ConfigManagerOptionPathDoesntEndWithStringException(
-      std::string_view pathToOption);
-};
-
-/*
 @brief A custom exception, for when the content of a string describes a name,
 that is not allowed by the short hand grammar.
 */
