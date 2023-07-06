@@ -7,7 +7,9 @@
 #include <algorithm>
 #include <cstdio>
 #include <fstream>
+#include <ranges>
 #include <sstream>
+#include <stdexcept>
 #include <tuple>
 
 #include "./AllocatorTestHelpers.h"
@@ -19,6 +21,7 @@
 #include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
+#include "util/Algorithm.h"
 #include "util/Forward.h"
 #include "util/Random.h"
 
@@ -180,4 +183,81 @@ inline IdTable createRandomlyFilledIdTable(const size_t numberRows,
 inline void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table) {
   CALL_FIXED_SIZE((std::array{table.idTable.numColumns()}), &Engine::sort,
                   &table.idTable, table.joinColumn);
+}
+
+/*
+@brief Creates a `IdTable`, where the content of the join column is given via
+functions and all other columns are randomly filled with numbers.
+
+@param numberRows numberColumns The number of rows and columns, the table should
+have.
+@param joinColumnWithGenerator Every pair describes the position of a join
+column and the function, which will be called, to generate it's entries.
+*/
+inline IdTable createRandomlyFilledIdTable(
+    const size_t numberRows, const size_t numberColumns,
+    const std::vector<std::pair<size_t, std::function<ValueId()>>>&
+        joinColumnWithGenerator) {
+  AD_CONTRACT_CHECK(numberRows > 0 && numberColumns > 0);
+
+  // Views for clearer access.
+  auto joinColumnNumberView = std::views::keys(joinColumnWithGenerator);
+  auto joinColumnGeneratorView = std::views::values(joinColumnWithGenerator);
+
+  // Are all the join column numbers within the max column number?
+  if (std::ranges::any_of(joinColumnNumberView,
+                          [&numberColumns](const size_t& num) {
+                            return num >= numberColumns;
+                          })) {
+    throw std::runtime_error(
+        "At least one of the join columns is out of bounds.");
+  }
+
+  // Are there no duplicates in the join column numbers?
+  for (auto it = joinColumnNumberView.begin(); it != joinColumnNumberView.end();
+       it++) {
+    if (std::ranges::any_of(it + 1, joinColumnNumberView.end(),
+                            [&it](const size_t& num) { return *it == num; })) {
+      throw std::runtime_error(
+          "A join column got at least two generator assigned to it.");
+    }
+  }
+
+  // Are all the functions for generating join column entries not nullptr?
+  if (std::ranges::any_of(joinColumnGeneratorView,
+                          [](auto func) { return func == nullptr; })) {
+    throw std::runtime_error(
+        "At least one of the generator function pointer was a nullptr.");
+  }
+
+  // Entries in IdTables have a max size.
+  constexpr size_t maxIdSize = ValueId::maxIndex;
+
+  // The random number generators for normal entries.
+  SlowRandomIntGenerator<size_t> randomNumberGenerator(0, maxIdSize);
+  auto normalEntryGenerator = [&randomNumberGenerator]() {
+    // `IdTable`s don't take raw numbers, you have to transform them first.
+    return ad_utility::testing::VocabId(randomNumberGenerator());
+  };
+
+  // Creating the table and setting it to the wanted size.
+  IdTable table{numberColumns, ad_utility::testing::makeAllocator()};
+  table.resize(numberRows);
+
+  // Assiging the column number to a generator function.
+  std::vector<std::function<ValueId()>> columnToGenerator(numberColumns,
+                                                          normalEntryGenerator);
+  std::ranges::for_each(joinColumnWithGenerator,
+                        [&columnToGenerator](auto& pair) {
+                          columnToGenerator.at(pair.first) = pair.second;
+                        });
+
+  // Fill the table.
+  for (size_t row = 0; row < numberRows; row++) {
+    for (size_t column = 0; column < numberColumns; column++) {
+      table[row][column] = columnToGenerator.at(column)();
+    }
+  }
+
+  return table;
 }
