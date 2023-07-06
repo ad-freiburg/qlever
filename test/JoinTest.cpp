@@ -242,3 +242,62 @@ TEST(JoinTest, joinWithFullScanPSO) {
   // A `Join` of two full scans is not supported.
   EXPECT_ANY_THROW(Join(qec, fullScanPSO, fullScanPSO, 0, 0));
 }
+
+TEST(JoinTest, joinWithColumnAndScan) {
+  // TODO<joka921> Add further tests and reduce the code duplication.
+  auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
+  auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTriple{Variable{"?s"}, "<p>", Variable{"?o"}});
+  parsedQuery::SparqlValues values;
+  values._variables.emplace_back("?s");
+  values._values.push_back({TripleComponent{"<x>"}});
+  auto valuesTree = ad_utility::makeExecutionTree<Values>(qec, values);
+
+  auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
+
+  auto res = join.getResult();
+
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto idX = getId("<x>");
+  auto I = ad_utility::testing::IntId;
+  auto expected = makeIdTableFromVector({{idX, I(1)}});
+  EXPECT_EQ(res->idTable(), expected);
+  VariableToColumnMap expectedVariables{
+      {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
+      {Variable{"?o"}, makeAlwaysDefinedColumn(1)}};
+  EXPECT_THAT(join.getExternallyVisibleVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVariables));
+}
+
+TEST(JoinTest, joinTwoScans) {
+  // TODO<joka921> Add further tests and reduce the code duplication.
+  auto qec = ad_utility::testing::getQec(
+      "<x> <p> 1. <x2> <p> 2. <x> <p2> 3 . <x2> <p2> 4. ");
+  auto scanP = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTriple{Variable{"?s"}, "<p>", Variable{"?o"}});
+  // TODO<joka921> Who should catch the case that there are too many variables
+  // in common?
+  auto scanP2 = ad_utility::makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTriple{Variable{"?s"}, "<p2>", Variable{"?q"}});
+  // TODO<joka921> Also test the switched versions of everything.
+  // The arguments are automatically switched inside.
+  auto join = Join{qec, scanP2, scanP, 0, 0};
+  auto res = join.getResult();
+
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  auto idX = getId("<x>");
+  auto idX2 = getId("<x2>");
+  auto I = ad_utility::testing::IntId;
+  auto expected =
+      makeIdTableFromVector({{idX, I(3), I(1)}, {idX2, I(4), I(2)}});
+  EXPECT_EQ(res->idTable(), expected);
+  VariableToColumnMap expectedVariables{
+      {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
+      {Variable{"?q"}, makeAlwaysDefinedColumn(1)},
+      {Variable{"?o"}, makeAlwaysDefinedColumn(2)}};
+  EXPECT_THAT(join.getExternallyVisibleVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVariables));
+}

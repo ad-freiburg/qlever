@@ -679,8 +679,7 @@ IdTable Join::computeResultForTwoIndexScans() {
   // class to work correctly.
   AD_CORRECTNESS_CHECK(_leftJoinCol == 0 && _rightJoinCol == 0);
   ad_utility::AddCombinedRowToIdTable rowAdder{
-      1, std::nullopt, std::nullopt,
-      IdTable{getResultWidth(), getExecutionContext()->getAllocator()}};
+      1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()}};
 
   ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
   auto [leftBlocksInternal, rightBlocksInternal] =
@@ -721,8 +720,7 @@ IdTable Join::computeResultForIndexScanAndIdTable(
   auto joinColMap = ad_utility::JoinColumnMapping{
       {{jcLeft, jcRight}}, numColsLeft, numColsRight};
   ad_utility::AddCombinedRowToIdTable rowAdder{
-      1, std::nullopt, std::nullopt,
-      IdTable{getResultWidth(), getExecutionContext()->getAllocator()}};
+      1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()}};
 
   AD_CORRECTNESS_CHECK(joinColumnIndexScan == 0);
   auto permutation = [&]() {

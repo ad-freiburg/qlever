@@ -103,12 +103,13 @@ TEST(AddCombinedRowToTable, UndefInInput) {
 // _______________________________________________________________________________
 TEST(AddCombinedRowToTable, setInput) {
   auto testWithBufferSize = [](size_t bufferSize) {
-    auto result = makeIdTableFromVector({});
-    result.setNumColumns(2);
     {
-      auto adder = ad_utility::AddCombinedRowToIdTable(
-          1, std::nullopt, std::nullopt, std::move(result), bufferSize);
-      // It is okay to flush even if no inputs were specified, as long as we haven't pushed any rows yet.
+      auto result = makeIdTableFromVector({});
+      result.setNumColumns(2);
+      auto adder =
+          ad_utility::AddCombinedRowToIdTable(1, std::move(result), bufferSize);
+      // It is okay to flush even if no inputs were specified, as long as we
+      // haven't pushed any rows yet.
       EXPECT_NO_THROW(adder.flush());
       if constexpr (ad_utility::areExpensiveChecksEnabled()) {
         EXPECT_ANY_THROW(adder.addRow(0, 0));
@@ -117,10 +118,13 @@ TEST(AddCombinedRowToTable, setInput) {
         EXPECT_ANY_THROW(adder.flush());
       }
     }
-    auto adder = ad_utility::AddCombinedRowToIdTable(
-        1, std::nullopt, std::nullopt, std::move(result), bufferSize);
+
+    auto result = makeIdTableFromVector({});
+    result.setNumColumns(3);
+    auto adder =
+        ad_utility::AddCombinedRowToIdTable(1, std::move(result), bufferSize);
     auto left = makeIdTableFromVector({{U, 5}, {2, U}, {3, U}, {4, U}});
-    auto right = makeIdTableFromVector({{1}, {3}, {4}, {U}});
+    auto right = makeIdTableFromVector({{1, 2}, {3, 4}, {4, 7}, {U, 8}});
     adder.setInput(left, right);
     adder.addRow(0, 0);
     adder.addRow(0, 1);
@@ -137,9 +141,44 @@ TEST(AddCombinedRowToTable, setInput) {
     adder.addRow(3, 0);
     result = std::move(adder).resultTable();
 
-    auto expected =
-        makeIdTableFromVector({{1, 5}, {3, 5}, {3, U}, {4, 5}, {4, U}, {U, 5}});
+    auto expected = makeIdTableFromVector({{1, 5, 2},
+                                           {3, 5, 4},
+                                           {3, U, 4},
+                                           {4, 5, 7},
+                                           {4, U, 7},
+                                           {U, 5, 8},
+                                           {1, 2, 5},
+                                           {3, 4, 5},
+                                           {3, 4, U},
+                                           {4, 7, 5},
+                                           {4, 7, U},
+                                           {U, 8, 5}});
     ASSERT_EQ(result, expected);
+  };
+  testWithBufferSize(100'000);
+  testWithBufferSize(1);
+  testWithBufferSize(2);
+}
+
+// _______________________________________________________________________________
+TEST(AddCombinedRowToTable, cornerCases) {
+  auto testWithBufferSize = [](size_t bufferSize) {
+    auto result = makeIdTableFromVector({});
+    result.setNumColumns(3);
+    auto adder =
+        ad_utility::AddCombinedRowToIdTable(2, std::move(result), bufferSize);
+    auto left = makeIdTableFromVector({{U, 5}, {2, U}, {3, U}, {4, U}});
+    auto right = makeIdTableFromVector({{1, 2}, {3, 4}, {4, 7}, {U, 8}});
+    // We have specified two join columns and our inputs have two columns each,
+    // so the result should also have two columns, but it has three.
+    EXPECT_ANY_THROW(adder.setInput(left, right));
+
+    left = makeIdTableFromVector({{1}, {2}, {3}});
+
+    // Left has only one column, but we have specified two join columns.
+    EXPECT_ANY_THROW(adder.setInput(left, right));
+    // The same test with the arguments switched.
+    EXPECT_ANY_THROW(adder.setInput(right, left));
   };
   testWithBufferSize(100'000);
   testWithBufferSize(1);
