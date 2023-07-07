@@ -244,7 +244,7 @@ ResultTable Join::computeResultForJoinWithFullScanDummy() {
   LOG(DEBUG) << "Join by making multiple scans..." << endl;
   AD_CORRECTNESS_CHECK(!isFullScanDummy(_left) && isFullScanDummy(_right));
   _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
-      {}, RuntimeInformation::Status::optimizedOut);
+      {}, RuntimeInformation::Status::lazilyCompleted);
   idTable.setNumColumns(_left->getResultWidth() + 2);
 
   shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
@@ -661,7 +661,8 @@ convertGenerator(Permutation::IdTableGenerator gen) {
 void updateRuntimeInfoForLazyScan(
     IndexScan& scanTree,
     const CompressedRelationReader::LazyScanMetadata& metadata) {
-  scanTree.updateRuntimeInformationWhenOptimizedOut();
+  scanTree.updateRuntimeInformationWhenOptimizedOut(
+      RuntimeInformation::Status::lazilyCompleted);
   auto& rti = scanTree.getRuntimeInfo();
   rti.numRows_ = metadata.numElementsRead_;
   rti.totalTime_ = static_cast<double>(metadata.blockingTimeMs_);
