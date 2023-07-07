@@ -350,9 +350,9 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
                    noChangeInt, true, 10);
 
   // Multiple key value pairs with the same key are not allowed.
-  ASSERT_THROW(ad_utility::ConfigManager::parseShortHand(R"(a:42, a:43)");
-               , ToJsonConfigShorthandVisitor::
-                     ConfigShortHandVisitorKeyCollisionException);
+  AD_EXPECT_THROW_WITH_MESSAGE(ad_utility::ConfigManager::parseShortHand(
+                                   R"(complicatedKey:42, complicatedKey:43)");
+                               , ::testing::ContainsRegex("'complicatedKey'"));
 
   // Final test: Is there an exception, if we try to parse the wrong syntax?
   ASSERT_ANY_THROW(ad_utility::ConfigManager::parseShortHand(
