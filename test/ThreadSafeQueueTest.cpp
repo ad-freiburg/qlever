@@ -301,8 +301,8 @@ TEST(ThreadSafeQueue, SafeExceptionHandling) {
           return;
         }
       }
-      // When throwing, the `Cleanup` calls `finish` and the producers can run to
-      // completion because their calls to `push` will return false.
+      // When throwing, the `Cleanup` calls `finish` and the producers can run
+      // to completion because their calls to `push` will return false.
       throw std::runtime_error{"Consumer died"};
     };
     if (workerThrows) {
