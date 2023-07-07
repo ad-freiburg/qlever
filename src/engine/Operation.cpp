@@ -216,7 +216,7 @@ void Operation::updateRuntimeInformationOnSuccess(
   _runtimeInfo.numRows_ = resultTable.size();
   _runtimeInfo.cacheStatus_ = cacheStatus;
 
-  _runtimeInfo.status_ = RuntimeInformation::Status::completed;
+  _runtimeInfo.status_ = RuntimeInformation::Status::fullyMaterialized;
 
   bool wasCached = cacheStatus != ad_utility::CacheStatus::computed;
   // If the result was read from the cache, then we need the additional
