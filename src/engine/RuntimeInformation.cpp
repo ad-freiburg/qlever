@@ -141,6 +141,8 @@ std::string_view RuntimeInformation::toString(Status status) {
   switch (status) {
     case completed:
       return "completed";
+    case lazilyCompleted:
+      return "lazily completed";
     case notStarted:
       return "not started";
     case optimizedOut:
@@ -149,9 +151,8 @@ std::string_view RuntimeInformation::toString(Status status) {
       return "failed";
     case failedBecauseChildFailed:
       return "failed because child failed";
-    default:
-      AD_FAIL();
   }
+  AD_FAIL();
 }
 
 // ________________________________________________________________________________________________________________

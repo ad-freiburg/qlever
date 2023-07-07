@@ -27,6 +27,7 @@ class RuntimeInformation {
   enum struct Status {
     notStarted,
     completed,
+    lazilyCompleted,
     optimizedOut,
     failed,
     failedBecauseChildFailed
