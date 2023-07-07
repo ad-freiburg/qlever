@@ -41,7 +41,7 @@ constexpr size_t numValues = 200;
 // Run the `test` function with a `ThreadSafeQueue` and an
 // `OrderedThreadSafeQueue`. Both queues have a size of `queueSize` and `size_t`
 // as their value type.
-void runWithBothQueueTypes(auto&& testFunction) {
+void runWithBothQueueTypes(const auto& testFunction) {
   testFunction(ThreadSafeQueue<size_t>{queueSize});
   testFunction(OrderedThreadSafeQueue<size_t>{queueSize});
 }
@@ -301,7 +301,7 @@ TEST(ThreadSafeQueue, SafeExceptionHandling) {
           return;
         }
       }
-      // When trowing, the `Cleanup` calls `finish` and the producers can run to
+      // When throwing, the `Cleanup` calls `finish` and the producers can run to
       // completion because their calls to `push` will return false.
       throw std::runtime_error{"Consumer died"};
     };
