@@ -122,8 +122,7 @@ ResultTable Join::computeResult() {
     if (rightResIfCached && !leftResIfCached) {
       idTable = computeResultForIndexScanAndIdTable<true>(
           rightResIfCached->idTable(), _rightJoinCol,
-          dynamic_cast<const IndexScan&>(*_left->getRootOperation()),
-          _leftJoinCol);
+          dynamic_cast<IndexScan&>(*_left->getRootOperation()), _leftJoinCol);
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 
     } else if (!leftResIfCached) {
@@ -151,8 +150,7 @@ ResultTable Join::computeResult() {
   if (_right->getType() == QueryExecutionTree::SCAN && !rightResIfCached) {
     idTable = computeResultForIndexScanAndIdTable<false>(
         leftRes->idTable(), _leftJoinCol,
-        dynamic_cast<const IndexScan&>(*_right->getRootOperation()),
-        _rightJoinCol);
+        dynamic_cast<IndexScan&>(*_right->getRootOperation()), _rightJoinCol);
     return {std::move(idTable), resultSortedOn(),
             leftRes->getSharedLocalVocab()};
   }
@@ -245,7 +243,8 @@ ResultTable Join::computeResultForJoinWithFullScanDummy() {
   IdTable idTable{getExecutionContext()->getAllocator()};
   LOG(DEBUG) << "Join by making multiple scans..." << endl;
   AD_CORRECTNESS_CHECK(!isFullScanDummy(_left) && isFullScanDummy(_right));
-  _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
+  _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
+      {}, RuntimeInformation::Status::optimizedOut);
   idTable.setNumColumns(_left->getResultWidth() + 2);
 
   shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
@@ -657,16 +656,17 @@ convertGenerator(Permutation::IdTableGenerator gen) {
   }
 }
 
-// TODO<joka921> Add the information about the total number of blocks.
+// Set the runtime info of the `scanTree` when it was lazily executed during a
+// join.
 void updateRuntimeInfoForLazyScan(
-    QueryExecutionTree& scanTree,
+    IndexScan& scanTree,
     const CompressedRelationReader::LazyScanMetadata& metadata) {
-  scanTree.getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
-  auto& rti = scanTree.getRootOperation()->getRuntimeInfo();
+  scanTree.updateRuntimeInformationWhenOptimizedOut();
+  auto& rti = scanTree.getRuntimeInfo();
   rti.numRows_ = metadata.numElementsRead_;
   rti.totalTime_ = static_cast<double>(metadata.blockingTimeMs_);
   rti.addDetail("num-blocks-read", metadata.numBlocksRead_);
-  rti.addDetail("num-blocks-total", metadata.numBlocksTotal_);
+  rti.addDetail("num-blocks-all", metadata.numBlocksAll_);
 }
 }  // namespace
 
@@ -681,11 +681,12 @@ IdTable Join::computeResultForTwoIndexScans() {
   ad_utility::AddCombinedRowToIdTable rowAdder{
       1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()}};
 
+  auto& leftScan = dynamic_cast<IndexScan&>(*_left->getRootOperation());
+  auto& rightScan = dynamic_cast<IndexScan&>(*_right->getRootOperation());
+
   ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
   auto [leftBlocksInternal, rightBlocksInternal] =
-      IndexScan::lazyScanForJoinOfTwoScans(
-          dynamic_cast<const IndexScan&>(*_left->getRootOperation()),
-          dynamic_cast<const IndexScan&>(*_right->getRootOperation()));
+      IndexScan::lazyScanForJoinOfTwoScans(leftScan, rightScan);
   getRuntimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
   auto leftBlocks = convertGenerator(std::move(leftBlocksInternal));
@@ -694,66 +695,58 @@ IdTable Join::computeResultForTwoIndexScans() {
   ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
                                               std::less{}, rowAdder);
 
-  updateRuntimeInfoForLazyScan(*_left, leftBlocks.details());
-  updateRuntimeInfoForLazyScan(*_right, rightBlocks.details());
+  updateRuntimeInfoForLazyScan(leftScan, leftBlocks.details());
+  updateRuntimeInfoForLazyScan(rightScan, rightBlocks.details());
 
   return std::move(rowAdder).resultTable();
 }
 
 // ______________________________________________________________________________________________________
 template <bool idTableIsRightInput>
-IdTable Join::computeResultForIndexScanAndIdTable(
-    const IdTable& idTable, ColumnIndex joinColumnIndexIdTable,
-    const IndexScan& scan, ColumnIndex joinColumnIndexScan) {
+IdTable Join::computeResultForIndexScanAndIdTable(const IdTable& idTable,
+                                                  ColumnIndex joinColTable,
+                                                  IndexScan& scan,
+                                                  ColumnIndex joinColScan) {
   // We first have to permute the columns.
-  // TODO<joka921> Maybe we can reduce the complexity for the
-  // `idTableIsRightInput` switch.
-  auto jcLeft =
-      idTableIsRightInput ? joinColumnIndexScan : joinColumnIndexIdTable;
-  auto jcRight =
-      idTableIsRightInput ? joinColumnIndexIdTable : joinColumnIndexScan;
-  size_t numColsLeft =
-      idTableIsRightInput ? scan.getResultWidth() : idTable.numColumns();
-  size_t numColsRight =
-      idTableIsRightInput ? idTable.numColumns() : scan.getResultWidth();
+  auto [jcLeft, jcRight, numColsLeft, numColsRight] = [&]() {
+    return idTableIsRightInput
+               ? std::tuple{joinColScan, joinColTable, scan.getResultWidth(),
+                            idTable.numColumns()}
+               : std::tuple{joinColTable, joinColScan, idTable.numColumns(),
+                            scan.getResultWidth()};
+  }();
 
   auto joinColMap = ad_utility::JoinColumnMapping{
       {{jcLeft, jcRight}}, numColsLeft, numColsRight};
   ad_utility::AddCombinedRowToIdTable rowAdder{
       1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()}};
 
-  AD_CORRECTNESS_CHECK(joinColumnIndexScan == 0);
-  auto permutation = [&]() {
-    if (idTableIsRightInput) {
-      return ad_utility::IdTableAndFirstCol{
-          idTable.asColumnSubsetView(joinColMap.permutationRight())};
-    } else {
-      return ad_utility::IdTableAndFirstCol{
-          idTable.asColumnSubsetView(joinColMap.permutationLeft())};
-    }
-  }();
+  AD_CORRECTNESS_CHECK(joinColScan == 0);
+  auto permutationIdTable =
+      ad_utility::IdTableAndFirstCol{idTable.asColumnSubsetView(
+          idTableIsRightInput ? joinColMap.permutationRight()
+                              : joinColMap.permutationLeft())};
 
   ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
-  auto rightBlocksInternal =
-      IndexScan::lazyScanForJoinOfColumnWithScan(permutation.col(), scan);
+  auto rightBlocksInternal = IndexScan::lazyScanForJoinOfColumnWithScan(
+      permutationIdTable.col(), scan);
   auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
 
   getRuntimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
-  auto projection = std::identity{};
+  auto doJoin = [&rowAdder](auto& left, auto& right) mutable {
+    ad_utility::zipperJoinForBlocksWithoutUndef(left, right, std::less{},
+                                                rowAdder);
+  };
+  auto blockForIdTable = std::span{&permutationIdTable, 1};
   if (idTableIsRightInput) {
-    ad_utility::zipperJoinForBlocksWithoutUndef(
-        rightBlocks, std::span{&permutation, 1}, std::less{}, rowAdder,
-        projection, projection);
+    doJoin(rightBlocks, blockForIdTable);
   } else {
-    ad_utility::zipperJoinForBlocksWithoutUndef(
-        std::span{&permutation, 1}, rightBlocks, std::less{}, rowAdder,
-        projection, projection);
+    doJoin(blockForIdTable, rightBlocks);
   }
   auto result = std::move(rowAdder).resultTable();
   result.setColumnSubset(joinColMap.permutationResult());
 
-  auto& scanTree = idTableIsRightInput ? _left : _right;
-  updateRuntimeInfoForLazyScan(*scanTree, rightBlocks.details());
+  updateRuntimeInfoForLazyScan(scan, rightBlocks.details());
   return result;
 }

@@ -241,7 +241,7 @@ class CompressedRelationReader {
 
   struct LazyScanMetadata {
     size_t numBlocksRead_ = 0;
-    size_t numBlocksTotal_ = 0;
+    size_t numBlocksAll_ = 0;
     size_t numElementsRead_ = 0;
     size_t blockingTimeMs_ = 0;
   };
@@ -425,7 +425,7 @@ class CompressedRelationReader {
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ad_utility::File& file,
       std::optional<std::vector<size_t>> columnIndices,
-      const TimeoutTimer& timer) const;
+      TimeoutTimer timer) const;
 
   // A helper function to abstract away the timeout check:
   static void checkTimeout(

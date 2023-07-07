@@ -324,7 +324,7 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   };
 
   AD_CONTRACT_CHECK(getFirstVariable(s1) == getFirstVariable(s2));
-  if (s1.numVariables_ == 2 && s1.numVariables_ == 2) {
+  if (s1.numVariables_ == 2 && s2.numVariables_ == 2) {
     AD_CONTRACT_CHECK(*s1.getPermutedTriple()[2] != *s2.getPermutedTriple()[2]);
   }
 
@@ -338,10 +338,8 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
       metaBlocks1.value(), metaBlocks2.value());
 
   std::array result{getLazyScan(s1, blocks1), getLazyScan(s2, blocks2)};
-  result[0].details().numBlocksTotal_ =
-      metaBlocks1.value().blockMetadata_.size();
-  result[1].details().numBlocksTotal_ =
-      metaBlocks2.value().blockMetadata_.size();
+  result[0].details().numBlocksAll_ = metaBlocks1.value().blockMetadata_.size();
+  result[1].details().numBlocksAll_ = metaBlocks2.value().blockMetadata_.size();
   return result;
 }
 
@@ -360,6 +358,6 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
                                                            metaBlocks1.value());
 
   auto result = getLazyScan(s, blocks);
-  result.details().numBlocksTotal_ = metaBlocks1.value().blockMetadata_.size();
+  result.details().numBlocksAll_ = metaBlocks1.value().blockMetadata_.size();
   return result;
 }

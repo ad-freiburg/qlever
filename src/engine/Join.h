@@ -144,10 +144,10 @@ class Join : public Operation {
   // is the left or the right child of this `Join`. This needs to be known to
   // determine the correct order of the columns in the result.
   template <bool scanIsLeft>
-  IdTable computeResultForIndexScanAndIdTable(const IdTable& itIdTable,
-                                              ColumnIndex itIndexScan,
-                                              const IndexScan& scan,
-                                              ColumnIndex joinColumnIndexScan);
+  IdTable computeResultForIndexScanAndIdTable(const IdTable& idTable,
+                                              ColumnIndex joinColTable,
+                                              IndexScan& scan,
+                                              ColumnIndex joinColScan);
 
   using ScanMethodType = std::function<IdTable(Id)>;
 

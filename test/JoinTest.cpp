@@ -207,97 +207,121 @@ TEST(JoinTest, joinTest) {
   runTestCasesForAllJoinAlgorithms(createJoinTestSet());
 };
 
+namespace {
+
+using ExpectedColumns = ad_utility::HashMap<
+    Variable,
+    std::pair<std::span<const Id>, ColumnIndexAndTypeInfo::UndefStatus>>;
+void testJoinOperation(Join& join, const ExpectedColumns& expected) {
+  auto res = join.getResult();
+  const auto& varToCols = join.getExternallyVisibleVariableColumns();
+  EXPECT_EQ(varToCols.size(), expected.size());
+  const auto& table = res->idTable();
+  ASSERT_EQ(table.numColumns(), expected.size());
+  for (const auto& [var, columnAndStatus] : expected) {
+    const auto& [colIndex, undefStatus] = varToCols.at(var);
+    decltype(auto) column = table.getColumn(colIndex);
+    EXPECT_EQ(undefStatus, columnAndStatus.second);
+    EXPECT_THAT(column, ::testing::ElementsAreArray(columnAndStatus.first))
+        << "Columns for variable " << var.name() << " did not match";
+  }
+}
+
+ExpectedColumns makeExpectedColumns(const VariableToColumnMap& varToColMap,
+                                    const IdTable& table) {
+  ExpectedColumns result;
+  for (const auto& [var, colIndexAndStatus] : varToColMap) {
+    result[var] = {table.getColumn(colIndexAndStatus.columnIndex_),
+                   colIndexAndStatus.mightContainUndef_};
+  }
+  return result;
+}
+
+std::shared_ptr<QueryExecutionTree> makeValuesForSingleVariable(
+    QueryExecutionContext* qec, std::string var,
+    std::vector<std::string> values) {
+  parsedQuery::SparqlValues sparqlValues;
+  sparqlValues._variables.emplace_back(var);
+  for (const auto& value : values) {
+    sparqlValues._values.push_back({TripleComponent{value}});
+  }
+  return ad_utility::makeExecutionTree<Values>(qec, sparqlValues);
+}
+
+using enum Permutation::Enum;
+auto I = ad_utility::testing::IntId;
+using Var = Variable;
+}  // namespace
+
 TEST(JoinTest, joinWithFullScanPSO) {
   auto qec = ad_utility::testing::getQec("<x> <p> 1. <x> <o> 2. <x> <a> 3.");
   // Expressions in HAVING clauses are converted to special internal aliases.
   // Test the combination of parsing and evaluating such queries.
   auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::PSO,
-      SparqlTriple{Variable{"?s"}, "?p", Variable{"?o"}});
-  parsedQuery::SparqlValues values;
-  values._variables.emplace_back("?p");
-  values._values.push_back({TripleComponent{"<o>"}});
-  values._values.push_back({TripleComponent{"<a>"}});
-  auto valuesTree = ad_utility::makeExecutionTree<Values>(qec, values);
+      qec, PSO, SparqlTriple{Var{"?s"}, "?p", Var{"?o"}});
+  auto valuesTree = makeValuesForSingleVariable(qec, "?p", {"<o>", "<a>"});
 
   auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
 
-  auto res = join.getResult();
-
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-
-  auto idX = getId("<x>");
-  auto idA = getId("<a>");
-  auto idO = getId("<o>");
-  auto I = ad_utility::testing::IntId;
-  auto expected = makeIdTableFromVector({{idA, idX, I(3)}, {idO, idX, I(2)}});
-  EXPECT_EQ(res->idTable(), expected);
+  auto id = ad_utility::testing::makeGetId(qec->getIndex());
+  auto expected = makeIdTableFromVector(
+      {{id("<a>"), id("<x>"), I(3)}, {id("<o>"), id("<x>"), I(2)}});
   VariableToColumnMap expectedVariables{
       {Variable{"?p"}, makeAlwaysDefinedColumn(0)},
       {Variable{"?s"}, makeAlwaysDefinedColumn(1)},
       {Variable{"?o"}, makeAlwaysDefinedColumn(2)}};
-  EXPECT_THAT(join.getExternallyVisibleVariableColumns(),
-              ::testing::UnorderedElementsAreArray(expectedVariables));
+  testJoinOperation(join, makeExpectedColumns(expectedVariables, expected));
+
+  auto joinSwitched = Join{qec, valuesTree, fullScanPSO, 0, 0};
+  testJoinOperation(joinSwitched,
+                    makeExpectedColumns(expectedVariables, expected));
 
   // A `Join` of two full scans is not supported.
   EXPECT_ANY_THROW(Join(qec, fullScanPSO, fullScanPSO, 0, 0));
 }
 
 TEST(JoinTest, joinWithColumnAndScan) {
-  // TODO<joka921> Add further tests and reduce the code duplication.
   auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
   auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::PSO,
-      SparqlTriple{Variable{"?s"}, "<p>", Variable{"?o"}});
-  parsedQuery::SparqlValues values;
-  values._variables.emplace_back("?s");
-  values._values.push_back({TripleComponent{"<x>"}});
-  auto valuesTree = ad_utility::makeExecutionTree<Values>(qec, values);
+      qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
+  auto valuesTree = makeValuesForSingleVariable(qec, "?s", {"<x>"});
 
   auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
 
-  auto res = join.getResult();
-
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   auto idX = getId("<x>");
-  auto I = ad_utility::testing::IntId;
   auto expected = makeIdTableFromVector({{idX, I(1)}});
-  EXPECT_EQ(res->idTable(), expected);
   VariableToColumnMap expectedVariables{
       {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
       {Variable{"?o"}, makeAlwaysDefinedColumn(1)}};
-  EXPECT_THAT(join.getExternallyVisibleVariableColumns(),
-              ::testing::UnorderedElementsAreArray(expectedVariables));
+  testJoinOperation(join, makeExpectedColumns(expectedVariables, expected));
+
+  auto joinSwitched = Join{qec, valuesTree, fullScanPSO, 0, 0};
+  testJoinOperation(joinSwitched,
+                    makeExpectedColumns(expectedVariables, expected));
 }
 
 TEST(JoinTest, joinTwoScans) {
-  // TODO<joka921> Add further tests and reduce the code duplication.
   auto qec = ad_utility::testing::getQec(
       "<x> <p> 1. <x2> <p> 2. <x> <p2> 3 . <x2> <p2> 4. ");
   auto scanP = ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::PSO,
-      SparqlTriple{Variable{"?s"}, "<p>", Variable{"?o"}});
+      qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
   // TODO<joka921> Who should catch the case that there are too many variables
   // in common?
   auto scanP2 = ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::PSO,
-      SparqlTriple{Variable{"?s"}, "<p2>", Variable{"?q"}});
-  // TODO<joka921> Also test the switched versions of everything.
-  // The arguments are automatically switched inside.
+      qec, PSO, SparqlTriple{Var{"?s"}, "<p2>", Var{"?q"}});
   auto join = Join{qec, scanP2, scanP, 0, 0};
-  auto res = join.getResult();
 
-  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
-  auto idX = getId("<x>");
-  auto idX2 = getId("<x2>");
-  auto I = ad_utility::testing::IntId;
-  auto expected =
-      makeIdTableFromVector({{idX, I(3), I(1)}, {idX2, I(4), I(2)}});
-  EXPECT_EQ(res->idTable(), expected);
+  auto id = ad_utility::testing::makeGetId(qec->getIndex());
+  auto expected = makeIdTableFromVector(
+      {{id("<x>"), I(3), I(1)}, {id("<x2>"), I(4), I(2)}});
   VariableToColumnMap expectedVariables{
       {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
       {Variable{"?q"}, makeAlwaysDefinedColumn(1)},
       {Variable{"?o"}, makeAlwaysDefinedColumn(2)}};
-  EXPECT_THAT(join.getExternallyVisibleVariableColumns(),
-              ::testing::UnorderedElementsAreArray(expectedVariables));
+  testJoinOperation(join, makeExpectedColumns(expectedVariables, expected));
+
+  auto joinSwitched = Join{qec, scanP2, scanP, 0, 0};
+  testJoinOperation(joinSwitched,
+                    makeExpectedColumns(expectedVariables, expected));
 }

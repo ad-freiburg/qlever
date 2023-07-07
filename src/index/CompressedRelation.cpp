@@ -108,7 +108,7 @@ CompressedRelationReader::IdTableGenerator
 CompressedRelationReader::asyncParallelBlockGenerator(
     auto beginBlock, auto endBlock, ad_utility::File& file,
     std::optional<std::vector<size_t>> columnIndices,
-    const TimeoutTimer& timer) const {
+    TimeoutTimer timer) const {
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   if (beginBlock == endBlock) {
     co_return;
@@ -334,24 +334,31 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
                              const CompressedBlockMetadata& block, Id id) {
     return getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks) < id;
   };
-  auto lessThan =
-      ad_utility::OverloadCallOperator{idLessThanBlock, blockLessThanId};
+
+  // `blockLessThanBlock` (a dummy) and `std::less<Id>` are only needed to
+  // fulfill a concept for the `std::ranges` algorithms.
+  auto blockLessThanBlock =
+      []<typename T = void>(const CompressedBlockMetadata&,
+                            const CompressedBlockMetadata&)
+          ->bool {
+    static_assert(ad_utility::alwaysFalse<T>);
+  };
+  auto lessThan = ad_utility::OverloadCallOperator{
+      idLessThanBlock, blockLessThanId, blockLessThanBlock, std::less<Id>{}};
 
   // Find the matching blocks by performing binary search on the `joinColumn`.
   // Note that it is tempting to reuse the `zipperJoinWithUndef` routine, but
   // this doesn't work because the implicit equality defined by `!lessThan(a,b)
   // && !lessThan(b, a)` is not transitive.
   std::vector<CompressedBlockMetadata> result;
-  for (const auto& block : relevantBlocks) {
-    auto rng =
-        std::equal_range(joinColumn.begin(), joinColumn.end(), block, lessThan);
-    if (rng.first != rng.second) {
-      result.push_back(block);
-    }
-  }
-  // The following check shouldn't be too expensive as there are only few
-  // blocks.
-  AD_CORRECTNESS_CHECK(std::ranges::unique(result).begin() == result.end());
+
+  auto blockIsNeeded = [&joinColumn, &lessThan](const auto& block) {
+    return !std::ranges::equal_range(joinColumn, block, lessThan).empty();
+  };
+  std::ranges::copy(relevantBlocks | std::views::filter(blockIsNeeded),
+                    std::back_inserter(result));
+  // The following check is cheap as there are only few blocks.
+  AD_CORRECTNESS_CHECK(std::ranges::unique(result).empty());
   return result;
 }
 
