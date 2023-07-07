@@ -28,10 +28,16 @@
   ::testing::Field(#Member, &Class::Member, Matcher)
 #endif
 
-// Similar to Gtest's `EXPECT_THROW`. Expect that executing `statement` throws
-// an exception that inherits from `std::exception`, and that the error message
-// of that exception, obtained by the `what()` member function, matches the
-// given `errorMessageMatcher`.
+/*
+Similar to Gtest's `EXPECT_THROW`. Expect that executing `statement` throws
+an exception that inherits from `std::exception`, and that the error message
+of that exception, obtained by the `what()` member function, matches the
+given `errorMessageMatcher`.
+
+A `errorMessageMatcher` is a google test matcher. More information can be found
+here:
+https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matchers-reference
+*/
 #define AD_EXPECT_THROW_WITH_MESSAGE(statement, errorMessageMatcher)      \
   try {                                                                   \
     statement;                                                            \
