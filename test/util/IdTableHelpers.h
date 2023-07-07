@@ -266,34 +266,31 @@ inline IdTable createRandomlyFilledIdTable(
         "At least one of the generator function pointer was a nullptr.");
   }
 
-  // Entries in IdTables have a max size.
-  constexpr size_t maxIdSize = ValueId::maxIndex;
-
   // The random number generators for normal entries.
-  SlowRandomIntGenerator<size_t> randomNumberGenerator(0, maxIdSize);
-  auto normalEntryGenerator = [&randomNumberGenerator]() {
+  SlowRandomIntGenerator<size_t> randomNumberGenerator(0, ValueId::maxIndex);
+  std::function<ValueId()> normalEntryGenerator = [&randomNumberGenerator]() {
     // `IdTable`s don't take raw numbers, you have to transform them first.
     return ad_utility::testing::VocabId(randomNumberGenerator());
   };
 
-  // Creating the table and setting it to the wanted size.
-  IdTable table{numberColumns, ad_utility::testing::makeAllocator()};
-  table.resize(numberRows);
-
   // Assiging the column number to a generator function.
-  std::vector<std::function<ValueId()>> columnToGenerator(numberColumns,
-                                                          normalEntryGenerator);
+  std::vector<const std::function<ValueId()>*> columnToGenerator(
+      numberColumns, &normalEntryGenerator);
   std::ranges::for_each(joinColumnWithGenerator,
                         [&columnToGenerator](auto& pair) {
-                          columnToGenerator.at(pair.first) = pair.second;
+                          columnToGenerator.at(pair.first) = &pair.second;
                         });
 
-  // Fill the table.
-  for (size_t row = 0; row < numberRows; row++) {
-    for (size_t column = 0; column < numberColumns; column++) {
-      table[row][column] = columnToGenerator.at(column)();
-    }
-  }
+  // Creating the table.
+  return generateIdTable(
+      numberRows, numberColumns, [&numberColumns, &columnToGenerator]() {
+        IdTable::row_type row(numberColumns);
 
-  return table;
+        // Filling the row.
+        for (size_t column = 0; column < numberColumns; column++) {
+          row[column] = (*columnToGenerator.at(column))();
+        }
+
+        return row;
+      });
 }
