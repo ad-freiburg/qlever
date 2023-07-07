@@ -113,16 +113,12 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   if (beginBlock == endBlock) {
     co_return;
   }
-  // Note: It is important to define the `threads` before the `queue`. That way
-  // the joining destructor of the threads will see that the queue is finished
-  // and join.
-  std::mutex blockIteratorMutex;
-  std::vector<ad_utility::JThread> threads;
   const size_t queueSize =
       RuntimeParameters().get<"lazy-index-scan-queue-size">();
   ad_utility::data_structures::OrderedThreadSafeQueue<DecompressedBlock> queue{
       queueSize};
   auto blockIterator = beginBlock;
+  std::mutex blockIteratorMutex;
   auto readAndDecompressBlock = [&]() {
     try {
       while (true) {
@@ -147,9 +143,9 @@ CompressedRelationReader::asyncParallelBlockGenerator(
         // lock. We still perform it inside the lock to avoid contention of the
         // file. On a fast SSD we could possibly change this, but this has to be
         // investigated.
-        lock.unlock();
         CompressedBlock compressedBlock =
             readCompressedBlockFromFile(block, file, columnIndices);
+        lock.unlock();
         bool pushWasSuccessful = queue.push(
             myIndex, decompressBlock(compressedBlock, block.numRows_));
         checkTimeout(timer);
@@ -164,10 +160,21 @@ CompressedRelationReader::asyncParallelBlockGenerator(
         }
       }
     } catch (...) {
-      queue.pushException(std::current_exception());
+      try {
+        queue.pushException(std::current_exception());
+      } catch (...) {
+        queue.finish();
+      }
     }
   };
-
+  // Note: The order of the following declarations is very important at the time
+  // of destruction: First, the `Cleanup` is destroyed, which finishes the
+  // queue. This allows the destructor of `threads` to join the threads, as the
+  // threads are able to complete once they cannot access the queue anymore.
+  // Only then the `blockIteratorMutex` and the `queue` can be safely destroyed,
+  // as the threads which were using them have already been destroyed.
+  std::vector<ad_utility::JThread> threads;
+  absl::Cleanup finishQueue{[&queue] { queue.finish(); }};
   const size_t numThreads =
       RuntimeParameters().get<"lazy-index-scan-num-threads">();
   for ([[maybe_unused]] auto j : std::views::iota(0u, numThreads)) {
