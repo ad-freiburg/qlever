@@ -17,14 +17,24 @@ using Tc = TripleComponent;
 using Var = Variable;
 
 using IndexPair = std::pair<size_t, size_t>;
-void testLazyScan(Permutation::IdTableGenerator lazyScan, IndexScan& scanOp,
+
+// NOTE: All the following helper functions always use the `PSO` permutation to
+// set up index scans unless explicitly stated otherwise.
+
+// Test that the `partialLazyScanResult` when being materialized to a single
+// `IdTable` yields a subset of the full result of the `fullScan`. The `subset`
+// is specified via the `expectedRows`, for example {{1, 3}, {7, 8}} means that
+// the partialLazyScanResult shall contain the rows number `1, 2, 7` of the full
+// scan (upper bounds are not included).
+void testLazyScan(Permutation::IdTableGenerator partialLazyScanResult,
+                  IndexScan& fullScan,
                   const std::vector<IndexPair>& expectedRows,
                   source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
   auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
   IdTable lazyScanRes{0, alloc};
   size_t numBlocks = 0;
-  for (const auto& block : lazyScan) {
+  for (const auto& block : partialLazyScanResult) {
     if (lazyScanRes.empty()) {
       lazyScanRes.setNumColumns(block.numColumns());
     }
@@ -32,10 +42,11 @@ void testLazyScan(Permutation::IdTableGenerator lazyScan, IndexScan& scanOp,
     ++numBlocks;
   }
 
-  EXPECT_EQ(numBlocks, lazyScan.details().numBlocksRead_);
-  EXPECT_EQ(lazyScanRes.size(), lazyScan.details().numElementsRead_);
+  EXPECT_EQ(numBlocks, partialLazyScanResult.details().numBlocksRead_);
+  EXPECT_EQ(lazyScanRes.size(),
+            partialLazyScanResult.details().numElementsRead_);
 
-  auto resFullScan = scanOp.getResult()->idTable().clone();
+  auto resFullScan = fullScan.getResult()->idTable().clone();
   IdTable expected{resFullScan.numColumns(), alloc};
 
   for (auto [lower, upper] : expectedRows) {
@@ -47,13 +58,19 @@ void testLazyScan(Permutation::IdTableGenerator lazyScan, IndexScan& scanOp,
   EXPECT_EQ(lazyScanRes, expected);
 }
 
+// Test that when two scans are set up (specified by `tripleLeft` and
+// `tripleRight`) on the given knowledge graph), and each scan is lazily
+// executed and only contains the blocks that are needed to join both scans,
+// then the resulting lazy partial scans only contain the subset of the
+// respective full scans as specified by `leftRows` and `rightRows`. For the
+// specification of the subset see above.
 void testLazyScanForJoinOfTwoScans(
-    const std::string& kg, const SparqlTriple& tripleLeft,
+    const std::string& kgTurtle, const SparqlTriple& tripleLeft,
     const SparqlTriple& tripleRight, const std::vector<IndexPair>& leftRows,
     const std::vector<IndexPair>& rightRows,
     source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  auto qec = getQec(kg);
+  auto qec = getQec(kgTurtle);
   IndexScan s1{qec, Permutation::PSO, tripleLeft};
   IndexScan s2{qec, Permutation::PSO, tripleRight};
   auto implForSwitch = [](IndexScan& l, IndexScan& r, const auto& expectedL,
@@ -67,6 +84,8 @@ void testLazyScanForJoinOfTwoScans(
   implForSwitch(s2, s1, rightRows, leftRows);
 }
 
+// Test that setting up the lazy partial scans between `tripleLeft` and
+// `tripleRight` on the given `kg` throws an exception.
 void testLazyScanThrows(const std::string& kg, const SparqlTriple& tripleLeft,
                         const SparqlTriple& tripleRight,
                         source_location l = source_location::current()) {
@@ -77,6 +96,9 @@ void testLazyScanThrows(const std::string& kg, const SparqlTriple& tripleLeft,
   EXPECT_ANY_THROW(IndexScan::lazyScanForJoinOfTwoScans(s1, s2));
 }
 
+// Test that a lazy partial scan for a join of the `scanTriple` with a
+// materialized join column result that is specified by the `columnEntries`
+// yields only the subsets specified by the `expectedRows`.
 void testLazyScanForJoinWithColumn(
     const std::string& kg, const SparqlTriple& scanTriple,
     std::vector<std::string> columnEntries,
@@ -95,6 +117,8 @@ void testLazyScanForJoinWithColumn(
   testLazyScan(std::move(lazyScan), scan, expectedRows);
 }
 
+// Tests the same scenario as the previous function, but assumes that the
+// setting up of the lazy scan fails with an exception.
 void testLazyScanWithColumnThrows(
     const std::string& kg, const SparqlTriple& scanTriple,
     std::vector<std::string> columnEntries,
