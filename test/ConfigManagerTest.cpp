@@ -9,6 +9,8 @@
 #include <type_traits>
 #include <vector>
 
+#include "./util/GTestHelpers.h"
+#include "gtest/gtest.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
@@ -182,24 +184,24 @@ TEST(ConfigManagerTest, ParseConfigExceptionTest) {
                ad_utility::ConfigOptionWasntSetException);
 
   // Should throw an exception, if we try set an option, that isn't there.
-  ASSERT_THROW(
+  AD_EXPECT_THROW_WITH_MESSAGE(
       config.parseConfig(nlohmann::json::parse(
-          R"--({"depth 0":{"Without_default":42, "with_default" : [39]}})--")),
-      ad_utility::NoConfigOptionFoundException);
-  ASSERT_THROW(
+          R"--({"depth_0":{"Without_default":42, "with_default" : [39]}})--")),
+      ::testing::ContainsRegex(R"('/depth_0/with_default')"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
       config.parseConfig(nlohmann::json::parse(
-          R"--({"depth 0":{"Without_default":42, "test_string" : "test"}})--")),
-      ad_utility::NoConfigOptionFoundException);
+          R"--({"depth_0":{"Without_default":42, "test_string" : "test"}})--")),
+      ::testing::ContainsRegex(R"('/depth_0/test_string')"));
 
   /*
   Should throw an exception, if we try set an option with a value, that we
   already know, can't be valid, regardless of the actual internal type of the
   configuration option. That is, it's neither an array, or a primitive.
   */
-  ASSERT_THROW(
+  AD_EXPECT_THROW_WITH_MESSAGE(
       config.parseConfig(nlohmann::json::parse(
-          R"--({"depth 0":{"Without_default":42, "With_default" : {"value" : 4}}})--")),
-      ad_utility::NoConfigOptionFoundException);
+          R"--({"depth_0":{"Without_default":42, "With_default" : {"value" : 4}}})--")),
+      ::testing::ContainsRegex(R"('/depth_0/With_default/value')"));
 
   // Parsing with a non json object literal is not allowed.
   ASSERT_THROW(
@@ -359,4 +361,18 @@ TEST(ConfigManagerTest, ParseShortHandTest) {
       ad_utility::ConfigManager::parseShortHand(R"--("myName" = "Bernd";)--"));
 }
 
+TEST(ConfigManagerTest, PrintConfigurationDocExistence) {
+  ConfigManager config{};
+
+  // Can you print an empty one?
+  ASSERT_NO_THROW(config.printConfigurationDoc(false));
+  ASSERT_NO_THROW(config.printConfigurationDoc(true));
+
+  // Can you print a non-empty one?
+  int notUsed;
+  config.createConfigOption<int>("WithDefault", "", &notUsed, 42);
+  config.createConfigOption<int>("WithoutDefault", "", &notUsed);
+  ASSERT_NO_THROW(config.printConfigurationDoc(false));
+  ASSERT_NO_THROW(config.printConfigurationDoc(true));
+}
 }  // namespace ad_utility

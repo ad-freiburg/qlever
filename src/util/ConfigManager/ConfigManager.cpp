@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 
-#include "util/ConfigManager/ConfigManager.h"
-
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
@@ -19,6 +17,7 @@
 
 #include "util/Algorithm.h"
 #include "util/ConfigManager/ConfigExceptions.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigShorthandVisitor.h"
 #include "util/ConfigManager/ConfigUtil.h"
@@ -71,7 +70,7 @@ void ConfigManager::verifyPathToConfigOption(
   The last entry in the path is the name of the configuration option. If it
   isn't, something has gone wrong.
   */
-  AD_CONTRACT_CHECK(pathToOption.back() == optionName);
+  AD_CORRECTNESS_CHECK(pathToOption.back() == optionName);
 
   /*
   A string must be a valid `NAME` in the short hand. Otherwise, the option can't
