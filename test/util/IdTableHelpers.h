@@ -196,7 +196,7 @@ be thrown.
 */
 inline IdTable generateIdTable(
     const size_t numberRows, const size_t numberColumns,
-    std::function<IdTable::row_type()> rowGenerator) {
+    const std::function<IdTable::row_type()>& rowGenerator) {
   AD_CONTRACT_CHECK(numberRows > 0 && numberColumns > 0);
 
   // Creating the table and setting it to the wanted size.
@@ -293,4 +293,39 @@ inline IdTable createRandomlyFilledIdTable(
 
         return row;
       });
+}
+
+/*
+@brief Creates a `IdTable`, where the content of the join columns is given via
+a function and all other columns are randomly filled with numbers.
+
+@param numberRows numberColumns The number of rows and columns, the table should
+have.
+@param joinColumns The join columns.
+@param generator The generator for the join columns. Order of calls: Row per
+row, starting from row 0, and in a row for every join column, with the join
+columns ordered by their column. Starting from column 0.
+*/
+inline IdTable createRandomlyFilledIdTable(
+    const size_t numberRows, const size_t numberColumns,
+    const std::vector<size_t>& joinColumns,
+    const std::function<ValueId()>& generator) {
+  // Is the generator not empty?
+  if (generator == nullptr) {
+    throw std::runtime_error("The generator function was empty.");
+  }
+
+  // Creating the table.
+  return createRandomlyFilledIdTable(
+      numberRows, numberColumns,
+      ad_utility::transform(joinColumns, [&generator](const size_t& num) {
+        /*
+        Simply passing `generator` doesn't work, because it would be copied,
+        which would lead to different behavior. After all, the columns would no
+        longer share a function with one internal state, but each have their own
+        separate function with its own internal state.
+        */
+        return std::make_pair(
+            num, std::function{[&generator]() { return generator(); }});
+      }));
 }

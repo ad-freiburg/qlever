@@ -87,11 +87,7 @@ TEST(IdTableHelpersHelpersTest, calculateAllSubSets) {
 }
 
 // Overload, who multiple join columns each have their own generators.
-TEST(IdTableHelpersTest,
-     createRandomlyFilledIdTableEachJoinColumnOwnGenerator) {
-  IdTable result{10, ad_utility::testing::makeAllocator()};
-  result.resize(10);
-
+TEST(IdTableHelpersTest, createRandomlyFilledIdTable) {
   // Creates a 'generator', that counts one up, everytime it's called.
   auto createCountUpGenerator = []() {
     return [i = 0]() mutable { return ad_utility::testing::VocabId(i++); };
@@ -121,47 +117,71 @@ TEST(IdTableHelpersTest,
   // Assigning a generator to a column outside of the table size.
   ASSERT_ANY_THROW(
       createRandomlyFilledIdTable(10, 10, {{10, createCountUpGenerator()}}));
+  ASSERT_ANY_THROW(
+      createRandomlyFilledIdTable(10, 10, {10}, createCountUpGenerator()));
 
   // Assigning a generator to the same column twice.
   ASSERT_ANY_THROW(createRandomlyFilledIdTable(
       10, 10, {{1, createCountUpGenerator()}, {1, createCountUpGenerator()}}));
+  ASSERT_ANY_THROW(
+      createRandomlyFilledIdTable(10, 10, {1, 1}, createCountUpGenerator()));
 
   // Giving an empty function.
   ASSERT_ANY_THROW(createRandomlyFilledIdTable(
       10, 10, {{1, createCountUpGenerator()}, {1, {}}}));
+  ASSERT_ANY_THROW(createRandomlyFilledIdTable(10, 10, {1}, {}));
 
   // Creating an empty table of size (0,0).
   ASSERT_ANY_THROW(createRandomlyFilledIdTable(
       0, 0, std::vector<std::pair<size_t, std::function<ValueId()>>>{}));
+  ASSERT_ANY_THROW(createRandomlyFilledIdTable(0, 0, {}, {}));
 
   // Exhaustive test, if the creation of a randomly filled table works,
   // regardless of the amount of join columns and their position.
   std::ranges::for_each(
       calculateAllSubSets(std::vector<size_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}),
-      [&result, &createCountUpGenerator, &compareColumnsWithVectors,
+      [&createCountUpGenerator, &compareColumnsWithVectors,
        &checkIfAllEntriesSet](const std::vector<size_t>& joinColumns) {
-        result = createRandomlyFilledIdTable(
+        IdTable resultMultiGenerator = createRandomlyFilledIdTable(
             10, 10,
             ad_utility::transform(
                 joinColumns, [&createCountUpGenerator](const size_t& num) {
                   return std::make_pair(
                       num, std::function<ValueId()>{createCountUpGenerator()});
                 }));
+        IdTable resultSingleGenerator = createRandomlyFilledIdTable(
+            10, 10, joinColumns, createCountUpGenerator());
 
-        // Check, if every entry of the table was set and if the join columns
+        // Check, if every entry of the tables was set and if the join columns
         // have the correct content.
-        checkIfAllEntriesSet(result);
+        checkIfAllEntriesSet(resultMultiGenerator);
+        checkIfAllEntriesSet(resultSingleGenerator);
         std::ranges::for_each(
             joinColumns,
-            [&result, &compareColumnsWithVectors](const size_t& num) {
-              compareColumnsWithVectors(result, num,
+            [&resultMultiGenerator, &resultSingleGenerator, &joinColumns,
+             &compareColumnsWithVectors](const size_t& num) {
+              compareColumnsWithVectors(resultMultiGenerator, num,
                                         {0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
+
+              const size_t indexOfTheColumn =
+                  std::ranges::find(joinColumns, num) - joinColumns.begin();
+              compareColumnsWithVectors(
+                  resultSingleGenerator, num,
+                  {indexOfTheColumn, indexOfTheColumn + joinColumns.size(),
+                   indexOfTheColumn + joinColumns.size() * 2,
+                   indexOfTheColumn + joinColumns.size() * 3,
+                   indexOfTheColumn + joinColumns.size() * 4,
+                   indexOfTheColumn + joinColumns.size() * 5,
+                   indexOfTheColumn + joinColumns.size() * 6,
+                   indexOfTheColumn + joinColumns.size() * 7,
+                   indexOfTheColumn + joinColumns.size() * 8,
+                   indexOfTheColumn + joinColumns.size() * 9});
             });
       });
 
   // Simple test, if the function actually uses different generators, if told
   // to.
-  result = createRandomlyFilledIdTable(
+  IdTable result = createRandomlyFilledIdTable(
       10, 10,
       {{0, createCountUpGenerator()},
        {1, []() { return ad_utility::testing::VocabId(42); }}});
