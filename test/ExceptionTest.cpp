@@ -95,8 +95,7 @@ TEST(Excpetion, AD_EXPENSIVE_CHECK) {
 #else
   ASSERT_NO_THROW(AD_EXPENSIVE_CHECK(3 > 5));
 #endif
-
-  if (ad_utility::areExpensiveChecksEnabled()) {
+  if (ad_utility::areExpensiveChecksEnabled) {
     ASSERT_ANY_THROW(AD_EXPENSIVE_CHECK(3 > 5));
   } else {
     ASSERT_NO_THROW(AD_EXPENSIVE_CHECK(3 > 5));

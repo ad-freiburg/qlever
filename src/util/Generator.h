@@ -73,7 +73,7 @@ class generator_promise {
   template <typename U>
   std::suspend_never await_transform(U&& value) = delete;
 
-  void rethrow_if_exception() {
+  void rethrow_if_exception() const {
     if (m_exception) {
       std::rethrow_exception(m_exception);
     }
@@ -83,8 +83,8 @@ class generator_promise {
   // `co_await cppcoro::getDetails`.
   struct DetailAwaiter {
     generator_promise& promise_;
-    bool await_ready() { return true; }
-    bool await_suspend(std::coroutine_handle<>) noexcept { return false; }
+    bool await_ready() const { return true; }
+    bool await_suspend(std::coroutine_handle<>) const noexcept { return false; }
     Details& await_resume() noexcept { return promise_.details(); }
   };
 
