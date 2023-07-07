@@ -172,7 +172,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   // queue. This allows the destructor of `threads` to join the threads, as the
   // threads are able to complete once they cannot access the queue anymore.
   // Only then the `blockIteratorMutex` and the `queue` can be safely destroyed,
-  // as the threads which were using them have already been destroyed.
+  // as the threads that were using them have already been destroyed.
   std::vector<ad_utility::JThread> threads;
   absl::Cleanup finishQueue{[&queue] { queue.finish(); }};
   const size_t numThreads =

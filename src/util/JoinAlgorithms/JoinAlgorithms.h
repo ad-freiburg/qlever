@@ -605,6 +605,8 @@ class BlockAndSubrange {
   // subrange.
   template <typename It>
   void setSubrange(It begin, It end) {
+    // We need this function to work with `iterator` as well as
+    // `const_iterator`, so we template the actual implementation.
     auto impl = [&begin, &end, this](auto blockBegin, auto blockEnd) {
       auto checkIt = [&blockBegin, &blockEnd](const auto& it) {
         AD_CONTRACT_CHECK(blockBegin <= it && it <= blockEnd);
@@ -616,7 +618,6 @@ class BlockAndSubrange {
       subrange_.second = end - blockBegin;
     };
     auto& block = fullBlock();
-    // impl(block.begin(), block.end());
     if constexpr (requires { begin - block.begin(); }) {
       impl(block.begin(), block.end());
     } else {
@@ -873,7 +874,8 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     // the last one, which might contain elements `> minEl` at the end.
     auto pushRelevantSubranges = [&minEl, &lessThan](const auto& input) {
       auto result = input;
-      // If one of the inputs
+      // If one of the inputs is empty, this function shouldn't have been called
+      // in the first place.
       AD_CORRECTNESS_CHECK(!result.empty());
       auto& last = result.back();
       auto range = std::ranges::equal_range(last.subrange(), minEl, lessThan);

@@ -9,7 +9,14 @@
 
 namespace {
 static constexpr auto U = Id::makeUndefined();
+
+void testWithAllBuffersizes(const auto& testFunction) {
+  for (auto bufferSize : std::views::iota(0, 10)) {
+    testFunction(bufferSize);
+  }
+  testFunction(100'000);
 }
+}  // namespace
 
 // _______________________________________________________________________________
 TEST(AddCombinedRowToTable, OneJoinColumn) {
@@ -35,9 +42,7 @@ TEST(AddCombinedRowToTable, OneJoinColumn) {
     auto expectedUndefined = std::vector<size_t>{0, 0, 1, 1};
     ASSERT_EQ(numUndefined, expectedUndefined);
   };
-  testWithBufferSize(100'000);
-  testWithBufferSize(1);
-  testWithBufferSize(2);
+  testWithAllBuffersizes(testWithBufferSize);
 }
 
 // _______________________________________________________________________________
@@ -64,9 +69,7 @@ TEST(AddCombinedRowToTable, TwoJoinColumns) {
     auto expectedUndefined = std::vector<size_t>{0, 0, 1};
     ASSERT_EQ(numUndefined, expectedUndefined);
   };
-  testWithBufferSize(100'000);
-  testWithBufferSize(1);
-  testWithBufferSize(2);
+  testWithAllBuffersizes(testWithBufferSize);
 }
 
 // _______________________________________________________________________________
@@ -95,9 +98,7 @@ TEST(AddCombinedRowToTable, UndefInInput) {
     auto expectedUndefined = std::vector<size_t>{1, 2};
     ASSERT_EQ(numUndefined, expectedUndefined);
   };
-  testWithBufferSize(100'000);
-  testWithBufferSize(1);
-  testWithBufferSize(2);
+  testWithAllBuffersizes(testWithBufferSize);
 }
 
 // _______________________________________________________________________________
@@ -155,9 +156,7 @@ TEST(AddCombinedRowToTable, setInput) {
                                            {U, 8, 5}});
     ASSERT_EQ(result, expected);
   };
-  testWithBufferSize(100'000);
-  testWithBufferSize(1);
-  testWithBufferSize(2);
+  testWithAllBuffersizes(testWithBufferSize);
 }
 
 // _______________________________________________________________________________
@@ -180,7 +179,5 @@ TEST(AddCombinedRowToTable, cornerCases) {
     // The same test with the arguments switched.
     EXPECT_ANY_THROW(adder.setInput(right, left));
   };
-  testWithBufferSize(100'000);
-  testWithBufferSize(1);
-  testWithBufferSize(2);
+  testWithAllBuffersizes(testWithBufferSize);
 }
