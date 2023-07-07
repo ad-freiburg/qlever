@@ -86,7 +86,9 @@ TEST(IdTableHelpersHelpersTest, calculateAllSubSets) {
                            {4uL, 2uL}});
 }
 
-TEST(IdTableHelpersTest, createRandomlyFilledIdTable) {
+// Overload, who multiple join columns each have their own generators.
+TEST(IdTableHelpersTest,
+     createRandomlyFilledIdTableEachJoinColumnOwnGenerator) {
   IdTable result{10, ad_utility::testing::makeAllocator()};
   result.resize(10);
 
@@ -129,7 +131,8 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTable) {
       10, 10, {{1, createCountUpGenerator()}, {1, {}}}));
 
   // Creating an empty table of size (0,0).
-  ASSERT_ANY_THROW(createRandomlyFilledIdTable(0, 0, {}));
+  ASSERT_ANY_THROW(createRandomlyFilledIdTable(
+      0, 0, std::vector<std::pair<size_t, std::function<ValueId()>>>{}));
 
   // Exhaustive test, if the creation of a randomly filled table works,
   // regardless of the amount of join columns and their position.
@@ -166,4 +169,49 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTable) {
   compareColumnsWithVectors(result, 0, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
   compareColumnsWithVectors(result, 1,
                             {42, 42, 42, 42, 42, 42, 42, 42, 42, 42});
+}
+
+TEST(IdTableHelpersTest, generateIdTable) {
+  /*
+  Creates a 'generator', that returns a row of the given lenght, were every
+  entry contains the same number. The number starts with 0 and goes on up
+  with every call.
+  */
+  auto createCountUpGenerator = [](const size_t& width) {
+    return [width, i = 0]() mutable {
+      // Create the row.
+      IdTable::row_type row(width);
+
+      // Fill the row.
+      std::ranges::fill(row, ad_utility::testing::VocabId(i));
+
+      i++;
+      return row;
+    };
+  };
+
+  // Creating an empty table of size (0,0).
+  ASSERT_ANY_THROW(generateIdTable(0, 0, createCountUpGenerator(0)));
+
+  // A row generator should always have the correct width.
+  ASSERT_ANY_THROW(generateIdTable(5, 5, createCountUpGenerator(0)));
+  ASSERT_ANY_THROW(generateIdTable(5, 5, createCountUpGenerator(4)));
+  ASSERT_ANY_THROW(generateIdTable(5, 5, [i = 0]() mutable {
+    // Create the row.
+    IdTable::row_type row(i < 3 ? 5 : 20);
+
+    // Fill the row.
+    std::ranges::fill(row, ad_utility::testing::VocabId(4));
+
+    i++;
+    return row;
+  }));
+
+  // Create a `IdTable` and check it's content.
+  IdTable table{generateIdTable(5, 5, createCountUpGenerator(5))};
+  for (size_t row = 0; row < 5; row++) {
+    ASSERT_TRUE(std::ranges::all_of(table[row], [&row](const auto& entry) {
+      return entry == ad_utility::testing::VocabId(row);
+    }));
+  }
 }

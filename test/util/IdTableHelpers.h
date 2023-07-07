@@ -186,6 +186,42 @@ inline void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table) {
 }
 
 /*
+@brief Creates a `IdTable`, where the rows are created via generator.
+
+@param numberRows numberColumns The number of rows and columns, the table should
+have.
+@param rowGenerator Creates the rows for the to be returned `IdTable`. The
+generated row must ALWAYS have size `numberColumns`. Otherwise an exception will
+be thrown.
+*/
+inline IdTable generateIdTable(
+    const size_t numberRows, const size_t numberColumns,
+    std::function<IdTable::row_type()> rowGenerator) {
+  AD_CONTRACT_CHECK(numberRows > 0 && numberColumns > 0);
+
+  // Creating the table and setting it to the wanted size.
+  IdTable table{numberColumns, ad_utility::testing::makeAllocator()};
+  table.resize(numberRows);
+
+  // Fill the table.
+  std::ranges::generate(table, [&numberColumns, &rowGenerator]() {
+    // Make sure, that the generated row has the right size, before passing it
+    // on.
+    IdTable::row_type row = rowGenerator();
+
+    if (row.numColumns() != numberColumns) {
+      throw std::runtime_error(
+          "The row generator generated a IdTable::row_type, which didn't have "
+          "the wanted size.");
+    }
+
+    return row;
+  });
+
+  return table;
+}
+
+/*
 @brief Creates a `IdTable`, where the content of the join column is given via
 functions and all other columns are randomly filled with numbers.
 
