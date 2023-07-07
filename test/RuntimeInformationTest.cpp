@@ -77,6 +77,7 @@ TEST(RuntimeInformation, statusToString) {
   using enum RuntimeInformation::Status;
   using R = RuntimeInformation;
   EXPECT_EQ(R::toString(completed), "completed");
+  EXPECT_EQ(R::toString(lazilyCompleted), "lazily completed");
   EXPECT_EQ(R::toString(notStarted), "not started");
   EXPECT_EQ(R::toString(optimizedOut), "optimized out");
   EXPECT_EQ(R::toString(failed), "failed");
