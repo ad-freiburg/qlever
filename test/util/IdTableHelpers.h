@@ -302,30 +302,13 @@ inline IdTable createRandomlyFilledIdTable(const size_t numberRows,
   // entry?
   AD_CONTRACT_CHECK(joinColumnUpperBound <= maxIdSize);
 
-  // The random number generators for normal entries and join column entries.
-  // Both can be found in util/Random.h
-  SlowRandomIntGenerator<size_t> normalEntryGenerator(
-      0, maxIdSize);  // Entries in IdTables have a max size.
+  // The random number generators for join column entries.
   SlowRandomIntGenerator<size_t> joinColumnEntryGenerator(joinColumnLowerBound,
                                                           joinColumnUpperBound);
 
-  // Creating the table and setting it to the wanted size.
-  IdTable table{numberColumns, ad_utility::testing::makeAllocator()};
-  table.resize(numberRows);
-
-  // `IdTable`s don't take raw numbers, you have to transform them first.
-  auto transform = ad_utility::testing::VocabId;
-
-  // Fill table with random content.
-  for (size_t row = 0; row < numberRows; row++) {
-    for (size_t i = 0; i < joinColumn; i++) {
-      table[row][i] = transform(normalEntryGenerator());
-    }
-    table[row][joinColumn] = transform(joinColumnEntryGenerator());
-    for (size_t i = joinColumn + 1; i < numberColumns; i++) {
-      table[row][i] = transform(normalEntryGenerator());
-    }
-  }
-
-  return table;
+  return createRandomlyFilledIdTable(
+      numberRows, numberColumns, {joinColumn}, [&joinColumnEntryGenerator]() {
+        // `IdTable`s don't take raw numbers, you have to transform them first.
+        return ad_utility::testing::VocabId(joinColumnEntryGenerator());
+      });
 }

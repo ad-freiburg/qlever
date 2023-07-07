@@ -134,7 +134,7 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGeneratos) {
   checkColumn(result, 0, 0, 10);
 
   result = createRandomlyFilledIdTable(50, 58, 0, 30, 42);
-  generalIdTableCheck(result, 5, 5, true);
+  generalIdTableCheck(result, 50, 58, true);
   checkColumn(result, 0, 30, 42);
 }
 
