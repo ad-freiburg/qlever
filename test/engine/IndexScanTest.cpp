@@ -298,7 +298,7 @@ TEST(IndexScan, lazyScanForJoinOfColumnWithScanCornerCases) {
   testLazyScanWithColumnThrows(kg, threeVars, column);
 
   // The join column must be sorted.
-  if constexpr (ad_utility::areExpensiveChecksEnabled()) {
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
     std::vector<std::string> unsortedColumn{"<a>", "<b>", "<a>"};
     SparqlTriple xpy{Tc{Var{"?x"}}, "<p>", Tc{Var{"?y"}}};
     testLazyScanWithColumnThrows(kg, xpy, unsortedColumn);
