@@ -342,6 +342,7 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
                             const CompressedBlockMetadata&)
           ->bool {
     static_assert(ad_utility::alwaysFalse<T>);
+    AD_FAIL();
   };
   auto lessThan = ad_utility::OverloadCallOperator{
       idLessThanBlock, blockLessThanId, blockLessThanBlock, std::less<Id>{}};

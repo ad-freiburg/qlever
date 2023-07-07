@@ -123,6 +123,8 @@ struct IdTableAndFirstCol {
   // The following functions all refer to the same column.
   auto begin() { return col().begin(); }
   auto end() { return col().end(); }
+  auto begin() const { return col().begin(); }
+  auto end() const { return col().end(); }
 
   bool empty() { return col().empty(); }
 

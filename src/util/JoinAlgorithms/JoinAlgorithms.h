@@ -603,15 +603,25 @@ class BlockAndSubrange {
   // checked by an assertion. The only legal way to obtain such iterators is to
   // call `subrange()` and then to extract valid iterators from the returned
   // subrange.
-  void setSubrange(auto begin, auto end) {
-    auto checkIt = [this](const auto& it) {
-      AD_CONTRACT_CHECK(fullBlock().begin() <= it && it <= fullBlock().end());
+  template <typename It>
+  void setSubrange(It begin, It end) {
+    auto impl = [&begin, &end, this](auto blockBegin, auto blockEnd) {
+      auto checkIt = [&blockBegin, &blockEnd](const auto& it) {
+        AD_CONTRACT_CHECK(blockBegin <= it && it <= blockEnd);
+      };
+      checkIt(begin);
+      checkIt(end);
+      AD_CONTRACT_CHECK(begin <= end);
+      subrange_.first = begin - blockBegin;
+      subrange_.second = end - blockBegin;
     };
-    checkIt(begin);
-    checkIt(end);
-    AD_CONTRACT_CHECK(begin <= end);
-    subrange_.first = begin - fullBlock().begin();
-    subrange_.second = end - fullBlock().begin();
+    auto& block = fullBlock();
+    // impl(block.begin(), block.end());
+    if constexpr (requires { begin - block.begin(); }) {
+      impl(block.begin(), block.end());
+    } else {
+      impl(std::as_const(block).begin(), std::as_const(block).end());
+    }
   }
 };
 }  // namespace detail
@@ -791,34 +801,39 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   // `sameBlocksLeft/Right`, as they are not needed anymore.
   auto joinAndRemoveBeginning = [&]() {
     // Get the first blocks.
-    AD_CORRECTNESS_CHECK(!sameBlocksLeft.empty());
-    AD_CORRECTNESS_CHECK(!sameBlocksRight.empty());
-    decltype(auto) l = sameBlocksLeft.at(0).subrange();
-    decltype(auto) r = sameBlocksRight.at(0).subrange();
-    auto& fullBlockLeft = sameBlocksLeft.at(0).fullBlock();
-    auto& fullBlockRight = sameBlocksRight.at(0).fullBlock();
-
-    // Compute the range that is safe to join and perform the join.
     ProjectedEl minEl = getMinEl();
-    auto itL = std::ranges::lower_bound(l, minEl, lessThan);
-    auto itR = std::ranges::lower_bound(r, minEl, lessThan);
+    // For one of the inputs (`sameBlocksLeft` or `sameBlocksRight`) obtain a
+    // tuple of the following elements:
+    // * A reference to the first full block
+    // * The currently active subrange of that block
+    // * An iterator pointing to the position of the `minEl` in the block.
+    auto getFirstBlock = [&minEl, &lessThan](auto& sameBlocks) {
+      AD_CORRECTNESS_CHECK(!sameBlocks.empty());
+      const auto& first = sameBlocks.at(0);
+      auto it = std::ranges::lower_bound(first.subrange(), minEl, lessThan);
+      return std::tuple{std::ref(first.fullBlock()), first.subrange(), it};
+    };
+    auto [fullBlockLeft, subrangeLeft, minElItL] =
+        getFirstBlock(sameBlocksLeft);
+    auto [fullBlockRight, subrangeRight, minElItR] =
+        getFirstBlock(sameBlocksRight);
 
-    compatibleRowAction.setInput(fullBlockLeft, fullBlockRight);
-    auto addRowIndex = [begL = fullBlockLeft.begin(),
-                        begR = fullBlockRight.begin(),
+    compatibleRowAction.setInput(fullBlockLeft.get(), fullBlockRight.get());
+    auto addRowIndex = [begL = fullBlockLeft.get().begin(),
+                        begR = fullBlockRight.get().begin(),
                         &compatibleRowAction](auto itFromL, auto itFromR) {
       compatibleRowAction.addRow(itFromL - begL, itFromR - begR);
     };
 
-    [[maybe_unused]] auto res =
-        zipperJoinWithUndef(std::ranges::subrange{l.begin(), itL},
-                            std::ranges::subrange{r.begin(), itR}, lessThan,
-                            addRowIndex, noop, noop);
+    [[maybe_unused]] auto res = zipperJoinWithUndef(
+        std::ranges::subrange{subrangeLeft.begin(), minElItL},
+        std::ranges::subrange{subrangeRight.begin(), minElItR}, lessThan,
+        addRowIndex, noop, noop);
     compatibleRowAction.flush();
 
     // Remove the joined elements.
-    sameBlocksLeft.at(0).setSubrange(itL, l.end());
-    sameBlocksRight.at(0).setSubrange(itR, r.end());
+    sameBlocksLeft.at(0).setSubrange(minElItL, subrangeLeft.end());
+    sameBlocksRight.at(0).setSubrange(minElItR, subrangeRight.end());
   };
 
   // Remove all elements from `blocks` (either `sameBlocksLeft` or
@@ -858,9 +873,8 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
     // the last one, which might contain elements `> minEl` at the end.
     auto pushRelevantSubranges = [&minEl, &lessThan](const auto& input) {
       auto result = input;
-      if (result.empty()) {
-        return result;
-      }
+      // If one of the inputs
+      AD_CORRECTNESS_CHECK(!result.empty());
       auto& last = result.back();
       auto range = std::ranges::equal_range(last.subrange(), minEl, lessThan);
       last.setSubrange(range.begin(), range.end());
