@@ -18,7 +18,7 @@ const std::string& ExceptionWithMessage::getMessage() const { return message_; }
 
 //_____________________________________________________________________________
 const char* ExceptionWithMessage::what() const throw() {
-  return message_.c_str();
+  return getMessage().c_str();
 }
 
 //_____________________________________________________________________________
